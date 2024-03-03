@@ -1,0 +1,11 @@
+/target
+/Cargo.lock
+/testdata/vallado*
+/testdata/testpo*
+.vscode
+*.whl
+build
+*.egg-info
+__pycache__
+/satkit-testvecs
+/astro-data

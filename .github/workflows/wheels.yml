@@ -1,0 +1,92 @@
+name: Wheel
+
+on:
+  push:
+    branches: ["satkit"]
+
+jobs:
+  build_python:
+    name: build python bindings on ${{ matrix.platform || matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos
+          - ubuntu
+          - windows
+        include:
+          - os: ubuntu
+            platform: linux
+            testvec_path: satkit-testvecs
+            data_path: astro-data
+          - os: windows
+            ls: dir
+            testvec_path: satkit-testvecs
+            data_path: astro-data
+          - os: macos
+            testvec_path: satkit-testvecs
+            data_path: astro-data
+
+    runs-on: ${{ format('{0}-latest', matrix.os) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set up python
+        uses: actions/setup-python@v5
+
+      - name: install requests package
+        run: pip install -U setuptools wheel requests build
+
+      - name: set up rust
+        if: matrix.os != 'ubuntu'
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # Try to recover satkit data from cache
+      - name: Cache Satkit Data
+        id: cache-satkit-data
+        uses: actions/cache@v4
+        with:
+          path: ${{matrix.data_path}}
+          enableCrossOsArchive: True
+          key: satkit-data-cache
+
+      # Download data if it is not in the cache
+      - name: Download Satkit Data
+        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+        run: python pytest/download_data.py ${{matrix.data_path}}
+
+      # Try to recover satkit test vectors from cache
+      - name: Cache Satkit Test Vectors
+        id: cache-satkit-testvecs
+        uses: actions/cache@v4
+        with:
+          path: ${{matrix.testvec_path}}
+          enableCrossOsArchive: True
+          key: satkit-testvecs-cache
+
+      # Download test vectors if they are not in the cache
+      - name: Download Satkit Test Vectors
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
+        run: python pytest/download_testvecs.py ${{matrix.testvec_path}}
+
+      # Details of cibuildwheel are set in pyproject.toml
+      - name: Build ${{ matrix.platform || matrix.os }} wheels
+        uses: pypa/cibuildwheel@v2.16.5
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+          config-file: "{package}/pyproject.toml"
+
+      - name: Create sdist
+        if: matrix.os == 'ubuntu'
+        run: python -m build --sdist . -o wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*

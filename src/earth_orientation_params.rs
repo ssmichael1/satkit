@@ -1,0 +1,268 @@
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::PathBuf;
+use std::sync::RwLock;
+
+use super::astrotime;
+use crate::utils::{datadir, testdirs};
+use crate::utils::{download_file, download_if_not_exist};
+
+use crate::{skerror, SKResult};
+
+use once_cell::sync::OnceCell;
+
+#[derive(Debug)]
+#[allow(non_snake_case)]
+struct EOPEntry {
+    mjd_utc: f64,
+    xp: f64,
+    yp: f64,
+    dut1: f64,
+    lod: f64,
+    dX: f64,
+    dY: f64,
+}
+
+fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
+    let path: PathBuf = match filename {
+        Some(pb) => pb,
+        None => datadir().unwrap_or(PathBuf::from(".")).join("EOP-All.csv"),
+    };
+    // Download EOP data from celetrak.org
+    download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
+
+    let file = File::open(&path)?;
+
+    io::BufReader::new(file)
+        .lines()
+        .skip(1)
+        .map(|rline| {
+            let line = rline.unwrap();
+            let lvals: Vec<&str> = line.split(",").collect();
+            if lvals.len() < 12 {
+                return skerror!("Invalid entry in EOP file");
+            }
+            Ok(EOPEntry {
+                mjd_utc: lvals[1].parse()?,
+                xp: lvals[2].parse()?,
+                yp: lvals[3].parse()?,
+                dut1: lvals[4].parse()?,
+                lod: lvals[5].parse()?,
+                dX: lvals[8].parse()?,
+                dY: lvals[9].parse()?,
+            })
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
+    let path: PathBuf = match filename {
+        Some(pb) => pb,
+        None => datadir()
+            .unwrap_or(PathBuf::from("."))
+            .join("finals2000A.all"),
+    };
+
+    if !path.is_file() {
+        panic!(
+            "Cannot open earth orientation parameters file: {}",
+            path.to_str().unwrap()
+        );
+    }
+
+    let file = match File::open(&path) {
+        Err(why) => panic!("Couldn't open {}: {}", path.display(), why),
+        Ok(file) => file,
+    };
+
+    let mut eopvec = Vec::<EOPEntry>::new();
+    for line in io::BufReader::new(file).lines() {
+        match &line.unwrap() {
+            v if v.len() < 100 => (),
+            v if !v.is_ascii() => (),
+            v if {
+                let c: String = v.chars().skip(16).take(1).collect();
+                c != "I" && c != "P"
+            } =>
+            {
+                ()
+            }
+            v => {
+                // Pull from "Bulliten A"
+                let mjd_str: String = v.chars().skip(7).take(8).collect();
+                let xp_str: String = v.chars().skip(18).take(9).collect();
+                let yp_str: String = v.chars().skip(37).take(9).collect();
+                let dut1_str: String = v.chars().skip(58).take(10).collect();
+                let lod_str: String = v.chars().skip(49).take(7).collect();
+                let dx_str: String = v.chars().skip(97).take(9).collect();
+                let dy_str: String = v.chars().skip(116).take(9).collect();
+
+                eopvec.push(EOPEntry {
+                    mjd_utc: {
+                        match mjd_str.trim().parse() {
+                            Ok(v) => v,
+                            Err(_) => panic!("Could not extract mjd from file"),
+                        }
+                    },
+                    xp: {
+                        match xp_str.trim().parse() {
+                            Ok(v) => v,
+                            Err(_) => panic!("Could not extract x polar motion from file"),
+                        }
+                    },
+                    yp: {
+                        match yp_str.trim().parse() {
+                            Ok(v) => v,
+                            Err(_) => panic!("Could not extract y polar motion from file"),
+                        }
+                    },
+                    dut1: {
+                        match dut1_str.trim().parse() {
+                            Ok(v) => v,
+                            Err(_) => panic!("Could not extract dut1 from file"),
+                        }
+                    },
+                    lod: lod_str.trim().parse().unwrap_or(0.0),
+                    dX: {
+                        match dx_str.trim().parse() {
+                            Ok(v) => v,
+                            Err(_) => 0.0,
+                        }
+                    },
+                    dY: {
+                        match dy_str.trim().parse() {
+                            Ok(v) => v,
+                            Err(_) => 0.0,
+                        }
+                    },
+                })
+            }
+        }
+    }
+    eopvec
+}
+
+fn eop_params_singleton() -> &'static RwLock<Vec<EOPEntry>> {
+    static INSTANCE: OnceCell<RwLock<Vec<EOPEntry>>> = OnceCell::new();
+    INSTANCE.get_or_init(|| RwLock::new(load_eop_file_csv(None).unwrap_or(Vec::<EOPEntry>::new())))
+}
+
+/// Download new Earth Orientation Parameters file, and load it.
+/// By default, tries to download into writeable directory where
+/// data files for this crate are stored: crate::datadir::get()
+pub fn update() -> SKResult<()> {
+    // Find writeabld data directory
+    let d: Vec<PathBuf> = testdirs()
+        .into_iter()
+        .filter(|x| x.is_dir())
+        .filter(|x| x.metadata().unwrap().permissions().readonly() == false)
+        .collect();
+    if d.len() == 0 {
+        return skerror!("Cannot find writable data directory");
+    }
+
+    // Download most-recent EOP
+    //let url = "https://datacenter.iers.org/data/9/finals2000A.all";
+    let url = "http://celestrak.org/SpaceData/EOP-All.csv";
+    download_file(url, &d[0], true)?;
+
+    // Re-load the params
+    *eop_params_singleton().write().unwrap() = load_eop_file_csv(None).unwrap();
+
+    Ok(())
+}
+
+pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
+    let eop = eop_params_singleton().read().unwrap();
+
+    let idx = eop.iter().position(|x| x.mjd_utc > mjd_utc);
+    match idx {
+        None => None,
+        Some(v) => {
+            if v == 0 as usize {
+                return None;
+            }
+            // Linear interpolation
+            let g1: f64 = (mjd_utc - eop[v - 1].mjd_utc) / (eop[v].mjd_utc - eop[v - 1].mjd_utc);
+            let g0: f64 = 1.0 - g1;
+            let v1: &EOPEntry = &eop[v];
+            let v0: &EOPEntry = &eop[v - 1];
+            Some([
+                g0 * v0.dut1 + g1 * v1.dut1,
+                g0 * v0.xp + g1 * v1.xp,
+                g0 * v0.yp + g1 * v1.yp,
+                g0 * v0.lod + g1 * v1.lod,
+                g0 * v0.dX + g1 * v1.dX,
+                g0 * v0.dY + g1 * v1.dY,
+            ])
+        }
+    }
+}
+
+///
+/// Get Earth Orientation Parameters at given instant
+///
+/// # Arguments:
+///
+/// * tm: Instant at which to query parameters
+///
+/// # Return:
+///
+/// * Vector [f64; 4] with following elements:
+///   * 0 : (UT1 - UTC) in seconds
+///   * 1 : X polar motion in arcsecs
+///   * 2 : Y polar motion in arcsecs
+///   * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
+///   * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
+///   * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
+///
+#[inline]
+pub fn get(tm: &astrotime::AstroTime) -> Option<[f64; 6]> {
+    eop_from_mjd_utc(tm.to_mjd(astrotime::Scale::UTC))
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    /// Check that data is loaded
+    #[test]
+    fn loaded() {
+        assert_eq!(
+            eop_params_singleton().read().unwrap()[0].mjd_utc >= 0.0,
+            true
+        );
+    }
+
+    /// Check value against manual value from file
+    #[test]
+    fn checkval() {
+        let v = eop_from_mjd_utc(59464.00).unwrap();
+        const TRUTH: [f64; 4] = [-0.1145667, 0.241155, 0.317274, -0.0002255];
+        for it in v.iter().zip(TRUTH.iter()) {
+            let (a, b) = it;
+            assert!(((a - b) / b).abs() < 1.0e-3);
+        }
+    }
+
+    /// Check interpolation between points
+    #[test]
+    fn checkinterp() {
+        let mjd0: f64 = 57909.00;
+        const TRUTH0: [f64; 4] = [0.3754421, 0.102693, 0.458455, 0.0011699];
+        const TRUTH1: [f64; 4] = [0.3743358, 0.104031, 0.458373, 0.0010383];
+        for x in 0..101 {
+            let dt: f64 = x as f64 / 100.0;
+            let vt = eop_from_mjd_utc(mjd0 + dt).unwrap();
+            let g0: f64 = 1.0 - dt;
+            let g1: f64 = dt;
+            for it in vt.iter().zip(TRUTH0.iter().zip(TRUTH1.iter())) {
+                let (v, (v0, v1)) = it;
+                let vtest: f64 = g0 * v0 + g1 * v1;
+                assert!(((v - vtest) / v).abs() < 1.0e-5);
+            }
+        }
+    }
+}

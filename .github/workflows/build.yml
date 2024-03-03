@@ -1,0 +1,89 @@
+name: Build
+
+on:
+  push:
+    branches: ["satkit"]
+
+jobs:
+  build:
+    name: build and test satkit
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos
+          - ubuntu
+          - windows
+        include:
+          - os: ubuntu
+            testvec_path: satkit-testvecs
+            data_path: astro-data
+            platform: linux
+          - os: macos
+            testvec_path: satkit-testvecs
+            data_path: astro-data
+          - os: windows
+            ls: dir
+            testvec_path: satkit-testvecs
+            data_path: astro-data
+
+    runs-on: ${{ format('{0}-latest', matrix.os) }}
+
+    env:
+      ASTRO_DATA: ${{matrix.data_path}}
+      SATKIT_TESTVEC_ROOT: ${{matrix.testvec_path}}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+
+      # Download the data and the test vectors
+      - run: pip install requests
+
+      # Try to recover satkit data from cache
+      - name: Cache Satkit Data
+        id: cache-satkit-data
+        uses: actions/cache@v4
+        with:
+          path: ${{matrix.data_path}}
+          enableCrossOsArchive: True
+          key: satkit-data-cache
+
+      # Download data if it is not in the cache
+      - name: Download Satkit Data
+        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+        run: python pytest/download_data.py ${{matrix.data_path}}
+
+      # Try to recover satkit test vectors from cache
+      - name: Cache Satkit Test Vectors
+        id: cache-satkit-testvecs
+        uses: actions/cache@v4
+        with:
+          path: ${{matrix.testvec_path}}
+          enableCrossOsArchive: True
+          key: satkit-testvecs-cache
+
+      # Download test vectors if they are not in the cache
+      - name: Download Satkit Test Vectors
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
+        run: python pytest/download_testvecs.py ${{matrix.testvec_path}}
+
+      # Run cargo tests
+      - name: Run Cargo Tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+      # Run cargo docs
+      - name: Build Rust Documentation
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
