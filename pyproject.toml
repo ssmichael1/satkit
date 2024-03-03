@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "satkit"
-version = "0.2"
+version = "0.2.0"
 dependencies = ["numpy>=1.20.0"]
 requires-python = ">= 3.8"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
@@ -40,7 +40,7 @@ environment = { PATH = "$PATH:$HOME/.cargo/bin" }
 test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
 test-requires = "pytest"
 test-command = [
-    "ASTRO_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/pytest/test.py",
+    "ASTRO_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
 ]
 
 
@@ -55,7 +55,7 @@ before-build = [
 ]
 test-requires = "pytest"
 test-command = [
-    "ASTRO_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/pytest/test.py",
+    "ASTRO_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
 ]
 
 [tool.cibuildwheel.windows]
@@ -75,7 +75,7 @@ before-test = [
     "set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs",
 ]
 test-command = [
-    "set ASTRO_DATA={package}\\astro-data&&set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs&&pytest {project}\\pytest\\test.py",
+    "set ASTRO_DATA={package}\\astro-data&&set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs&&pytest {project}\\python\\test\\test.py",
 ]
 
 

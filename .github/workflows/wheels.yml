@@ -2,7 +2,7 @@ name: Wheel
 
 on:
   push:
-    branches: ["satkit"]
+    branches: ["main"]
 
 jobs:
   build_python:
@@ -58,7 +58,7 @@ jobs:
       # Download data if it is not in the cache
       - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'
-        run: python pytest/download_data.py ${{matrix.data_path}}
+        run: python python/test/download_data.py ${{matrix.data_path}}
 
       # Try to recover satkit test vectors from cache
       - name: Cache Satkit Test Vectors
@@ -72,7 +72,7 @@ jobs:
       # Download test vectors if they are not in the cache
       - name: Download Satkit Test Vectors
         if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
-        run: python pytest/download_testvecs.py ${{matrix.testvec_path}}
+        run: python python/test/download_testvecs.py ${{matrix.testvec_path}}
 
       # Details of cibuildwheel are set in pyproject.toml
       - name: Build ${{ matrix.platform || matrix.os }} wheels
