@@ -90,3 +90,15 @@ jobs:
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*
+
+  publish_wheels:
+    needs: build_python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: wheels
+          pattern: cibw-wheels-*
+          merge-multiple: true
+      - run: ls -R wheels
