@@ -95,6 +95,7 @@ jobs:
   publish_wheels:
     needs: build_python
     runs-on: ubuntu-latest
+    environment: TestPyPiPublish
 
     permissions:
       id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
