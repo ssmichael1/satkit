@@ -86,7 +86,8 @@ jobs:
         if: matrix.os == 'ubuntu'
         run: python -m build --sdist . -o wheelhouse
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*
@@ -94,11 +95,19 @@ jobs:
   publish_wheels:
     needs: build_python
     runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
-          path: wheels
+          path: dist
           pattern: cibw-wheels-*
           merge-multiple: true
-      - run: ls -R wheels
+
+      - name: Publish packages to TestPyPi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
