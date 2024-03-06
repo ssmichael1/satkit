@@ -110,7 +110,7 @@ impl TLE {
         let mut line2: &String;
 
         for line in lines {
-            if line.len() < 10 {
+            if line.len() < 2 {
                 continue;
             }
             if line.chars().nth(0).unwrap() == '0' {
@@ -236,7 +236,7 @@ impl TLE {
         Ok(TLE {
             name: "none".to_string(),
             sat_num: {
-                match line1[2..7].parse() {
+                match line1[2..7].trim().parse() {
                     Ok(y) => y,
                     Err(_) => return Err("Could not parse sat number".to_string()),
                 }

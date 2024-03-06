@@ -42,6 +42,8 @@ impl Quaternion {
         })
     }
 
+    /// Quaternion representing rotation about
+    /// xhat axis by `theta-rad` degrees
     #[staticmethod]
     fn rotx(theta_rad: f64) -> PyResult<Self> {
         Ok(Quaternion {
@@ -49,6 +51,8 @@ impl Quaternion {
         })
     }
 
+    /// Quaternion representing rotation about
+    /// yhat axis by `theta-rad` degrees
     #[staticmethod]
     fn roty(theta_rad: f64) -> PyResult<Self> {
         Ok(Quaternion {
@@ -56,13 +60,21 @@ impl Quaternion {
         })
     }
 
+    /// Quaternion representing rotation about
+    /// zhat axis by `theta-rad` degrees
     #[staticmethod]
     fn rotz(theta_rad: f64) -> PyResult<Self> {
         Ok(Quaternion {
             inner: Quat::from_axis_angle(&Vec3::z_axis(), theta_rad),
         })
     }
-
+    /// Quaternion representing rotation about given axis by
+    /// given angle in radians
+    ///
+    /// # Arguments:
+    ///
+    /// * `axis` - 3-element numpy array representing axis about which to rotate
+    /// * 'angle`  - Angle in radians to rotate about axis (right-handed rotation of vector)
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> PyResult<Self> {
         let v = Vec3::from_row_slice(axis.as_slice().unwrap());
@@ -85,7 +97,7 @@ impl Quaternion {
         let rot = self.inner.to_rotation_matrix();
 
         pyo3::Python::with_gil(|py| -> PyObject {
-            let phi = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
+            let phi = unsafe { np::PyArray2::<f64>::new(py, [3, 3], true) };
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     rot.matrix().as_ptr(),
@@ -150,6 +162,34 @@ impl Quaternion {
     fn conjugate(&self) -> PyResult<Quaternion> {
         Ok(Quaternion {
             inner: self.inner.conjugate(),
+        })
+    }
+
+    ///
+    /// Spherical linear interpolation between self and other quaternion
+    ///
+    /// # Arguments:
+    ///
+    /// * `other` - Quaternion to perform interpolation to
+    /// * `frac` - Number in range [0,1] representing fractional distance
+    ///            from self to other of result quaternion
+    /// * `epsilon` - Value below which the sin of the angle separating both quaternion must be to return an error.  Default is 1.0e-6
+    ///
+    /// # Returns:
+    ///
+    /// * Quaterion represention fracional spherical interpolation between self and other
+    ///
+    #[pyo3(signature=(other, frac,  epsilon=1.0e-6))]
+    fn slerp(&self, other: &Quaternion, frac: f64, epsilon: f64) -> PyResult<Quaternion> {
+        Ok(Quaternion {
+            inner: match self.inner.try_slerp(&other.inner, frac, epsilon) {
+                Some(v) => v,
+                None => {
+                    return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                        "Quaternions cannot be 180 deg apart",
+                    ))
+                }
+            },
         })
     }
 

@@ -89,6 +89,7 @@ const DELTAAT_OLD: [[f64; 4]; 15] = [
 
 /// Time Scales
 ///
+#[derive(PartialEq)]
 pub enum Scale {
     /// Invalid
     INVALID = -1,
@@ -369,10 +370,10 @@ impl AstroTime {
             },
             Scale::GPS => AstroTime {
                 mjd_tai: {
-                    if val > UTCGPS0 {
+                    if val >= UTCGPS0 - f64::EPSILON {
                         val + 19.0 / 86400.0
                     } else {
-                        0.0
+                        val
                     }
                 },
             },
@@ -420,6 +421,34 @@ impl AstroTime {
         mjd_utc2date(self.to_mjd(Scale::UTC))
     }
 
+    /// Convert AstroTime to Gregorian date and timewith given scale
+    ///
+    /// # Arguments
+    ///
+    /// * `scale` - Time scale of returned Gregorian date, e.g. UTC, GPS,
+    ///
+    /// # Returns
+    ///
+    /// * 6-element tuple with following values:
+    ///   * `year` - the year
+    ///   * `month` - the month, 1 based (1=January, 2=February, ...)
+    ///   * `day` - Day of month, starting from 1
+    ///   * `hour` - Hour of day, in range \[0,23\]
+    ///   * `min` - Minute of hour, in range \[0,59\]
+    ///   * `sec` - Second of minute, including fractions for subsecond, in range \[0,1)
+    ///
+    pub fn to_datetime_with_scale(&self, scale: Scale) -> (u32, u32, u32, u32, u32, f64) {
+        let mjd_utc = self.to_mjd(scale);
+        let (year, month, day) = mjd_utc2date(mjd_utc);
+        let fracofday: f64 = mjd_utc - mjd_utc.floor();
+        let mut sec: f64 = fracofday * 86400.0;
+        let hour: u32 = std::cmp::min((sec / 3600.0).floor() as u32, 23);
+        let min: u32 = std::cmp::min((sec as u32 - hour * 3600) / 60 as u32, 59);
+        sec = sec - hour as f64 * 3600.0 - min as f64 * 60.0;
+
+        (year, month, day, hour, min, sec)
+    }
+
     /// Convert AstroTime to UTC Gregorian date and time
     ///
     /// # Returns
@@ -432,16 +461,9 @@ impl AstroTime {
     ///   * `min` - Minute of hour, in range \[0,59\]
     ///   * `sec` - Second of minute, including fractions for subsecond, in range \[0,1)
     ///
+    #[inline]
     pub fn to_datetime(&self) -> (u32, u32, u32, u32, u32, f64) {
-        let mjd_utc = self.to_mjd(Scale::UTC);
-        let (year, month, day) = mjd_utc2date(mjd_utc);
-        let fracofday: f64 = mjd_utc - mjd_utc.floor();
-        let mut sec: f64 = fracofday * 86400.0;
-        let hour: u32 = std::cmp::min((sec / 3600.0).floor() as u32, 23);
-        let min: u32 = std::cmp::min((sec as u32 - hour * 3600) / 60 as u32, 59);
-        sec = sec - hour as f64 * 3600.0 - min as f64 * 60.0;
-
-        (year, month, day, hour, min, sec)
+        self.to_datetime_with_scale(Scale::UTC)
     }
 
     /// Convert UTC Gregorian date and time to AstroTime
@@ -458,7 +480,7 @@ impl AstroTime {
     /// # Return
     ///
     /// * AstroTime object
-    ///
+    #[inline]
     pub fn from_datetime(
         year: u32,
         month: u32,
@@ -467,9 +489,36 @@ impl AstroTime {
         min: u32,
         sec: f64,
     ) -> AstroTime {
+        AstroTime::from_datetime_with_scale(year, month, day, hour, min, sec, Scale::UTC)
+    }
+
+    /// Convert UTC Gregorian date and time to AstroTime
+    ///
+    /// # Arguments
+    ///
+    /// * `year` - the year (u32)
+    /// * `month` - the month, 1 based (1=January, 2=February, ...)
+    /// * `day` - Day of month, starting from 1
+    /// * `hour` - Hour of day, in range \[0,23\]
+    /// * `min` - Minute of hour, in range \[0,59\]
+    /// * `sec` - Second of minute, including fractions for subsecond, in range \[0,1)
+    /// * `scale` - Time Scale represented by input time, e.g. UTC, GPS
+    ///
+    /// # Return
+    ///
+    /// * AstroTime object
+    pub fn from_datetime_with_scale(
+        year: u32,
+        month: u32,
+        day: u32,
+        hour: u32,
+        min: u32,
+        sec: f64,
+        scale: Scale,
+    ) -> AstroTime {
         let mut mjd: f64 = date2mjd_utc(year, month, day) as f64;
         mjd = mjd + (((min + (hour * 60)) * 60) as f64 + sec) / 86400.0;
-        AstroTime::from_mjd(mjd, Scale::UTC)
+        AstroTime::from_mjd(mjd, scale)
     }
 
     /// Convert to modified Julian day (MJD), with given scale

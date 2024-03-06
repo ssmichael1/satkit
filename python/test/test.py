@@ -308,6 +308,37 @@ class TestSun:
             assert 1 == 0
 
 
+class TestQuaternion:
+    def test_rotations(self):
+        """
+        Test coordinate rotations with quaternions
+        """
+        xhat = np.array([1.0, 0.0, 0.0])
+        yhat = np.array([0.0, 1.0, 0.0])
+        zhat = np.array([0.0, 0.0, 1.0])
+
+        # Test rotations of 90 degrees with right-hande rule of 3 coordinate axes
+        assert sk.quaternion.rotz(m.pi / 2) * xhat == pytest.approx(yhat, 1.0e-10)
+        assert sk.quaternion.rotx(m.pi / 2) * yhat == pytest.approx(zhat, 1.0e-10)
+        assert sk.quaternion.roty(m.pi / 2) * zhat == pytest.approx(xhat, 1.0e-10)
+
+    def test_dcm_conversion(self):
+        xhat = np.array([1.0, 0.0, 0.0])
+        yhat = np.array([0.0, 1.0, 0.0])
+        zhat = np.array([0.0, 0.0, 1.0])
+
+        # Test rotations of 90 degrees with right-hande rule of 3 coordinate axes
+        assert sk.quaternion.rotz(
+            m.pi / 2
+        ).to_rotation_matrix() @ xhat == pytest.approx(yhat, 1.0e-10)
+        assert sk.quaternion.rotx(
+            m.pi / 2
+        ).to_rotation_matrix() @ yhat == pytest.approx(zhat, 1.0e-10)
+        assert sk.quaternion.roty(
+            m.pi / 2
+        ).to_rotation_matrix() @ zhat == pytest.approx(xhat, 1.0e-10)
+
+
 class TestSGP4:
     def test_sgp4_multiple(self):
         """

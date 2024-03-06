@@ -1,6 +1,8 @@
 use pyo3::prelude::*;
 
 use crate::tle::TLE;
+use std::fs::File;
+use std::io::{self, BufRead};
 
 #[pyclass(name = "TLE")]
 pub struct PyTLE {
@@ -9,46 +11,36 @@ pub struct PyTLE {
 
 #[pymethods]
 impl PyTLE {
+    #[staticmethod]
+    fn from_file(filename: String) -> PyResult<PyObject> {
+        let file = File::open(&std::path::PathBuf::from(filename))?;
+
+        let lines: Vec<String> = io::BufReader::new(file)
+            .lines()
+            .into_iter()
+            .map(|v| -> String { v.unwrap() })
+            .collect();
+
+        PyTLE::from_lines(lines)
+    }
+
     /// Return list of TLEs from input lines
     /// lines is a list of strings
+    /// If list is only a single TLE, the TLE will be returned instead of a single-element list
     #[staticmethod]
-    fn from_lines(lines: Vec<String>) -> PyResult<Vec<TLE>> {
+    fn from_lines(lines: Vec<String>) -> PyResult<PyObject> {
         match TLE::from_lines(&lines) {
-            Ok(v) => Ok(v),
+            Ok(v) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                if v.len() > 1 {
+                    Ok(v.into_py(py))
+                } else {
+                    Ok(v[0].clone().into_py(py))
+                }
+            }),
             Err(e) => {
                 let serr = format!("Error loading TLEs: {}", e.to_string());
                 Err(pyo3::exceptions::PyImportError::new_err(serr))
             }
-        }
-    }
-
-    /// Return a single TLE from input lines
-    /// lines is list of strings
-    ///
-    /// If additional lines represent more than a single TLE,
-    /// they will be ignored
-    #[staticmethod]
-    fn single_from_lines(lines: Vec<String>) -> PyResult<Self> {
-        if lines.len() == 3 {
-            match TLE::load_3line(&lines[0], &lines[1], &lines[2]) {
-                Ok(v) => return Ok(PyTLE { inner: v }),
-                Err(e) => {
-                    let serr = format!("Error loading TLE: {}", e);
-                    return Err(pyo3::exceptions::PyImportError::new_err(serr));
-                }
-            }
-        } else if lines.len() == 2 {
-            match TLE::load_2line(&lines[0], &lines[1]) {
-                Ok(v) => return Ok(PyTLE { inner: v }),
-                Err(e) => {
-                    let serr = format!("Error loading TLE: {}", e);
-                    return Err(pyo3::exceptions::PyImportError::new_err(serr));
-                }
-            }
-        } else {
-            Err(pyo3::exceptions::PyImportError::new_err(
-                "Invalid number of lines",
-            ))
         }
     }
 

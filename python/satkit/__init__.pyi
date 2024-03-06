@@ -62,18 +62,22 @@ class TLE:
     """
 
     @staticmethod
-    def from_lines(lines: list[str]) -> list[satkit.TLE]:
+    def from_file(fname: str) -> list[satkit.TLE] | satkit.TLE:
         """
-        Return a list of TLEs from input lines, represented as a
-        list of strings
+        Return a list of TLES loaded from input text file.
+
+        If the lines only represent a single TLE, the TLE will
+        be output, rather than a list with a single TLE element
         """
 
     @staticmethod
-    def single_from_lines(lines: list[str]) -> satkit.TLE:
+    def from_lines(lines: list[str]) -> list[satkit.TLE] | satkit.TLE:
         """
-        Return a single TLE from a 2 or 3-element list of lines
+        Return a list of TLEs from input lines, represented as a
+        list of strings, one string per TLE input line
 
-        If additional lines are included, they are ignored.
+        If the lines only represent a single TLE, the TLE will be
+        output, rather than a list with a single TLE element
         """
 
     @property
@@ -580,7 +584,14 @@ class time:
 
     @staticmethod
     def from_gregorian(
-        self, year: int, month: int, day: int, hour: int, min: int, sec: float
+        self,
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        min: int,
+        sec: float,
+        scale: satkit.timescale = satkit.timescale.UTC,
     ) -> satkit.time:
         """
         Create time object from 6 input arguments representing
@@ -593,13 +604,16 @@ class time:
         4 : Hour of day, in range [0,23]
         5 : Minute of hour, in range [0,59]
         6 : floating point second of minute, in range [0,60)
+        7 : Time scale. Optional, default is satkit.timescale.UTC
 
         Example:
         print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
         2023-03-05 11:03:45.453Z
         """
 
-    def to_gregorian(self) -> (int, int, int, int, int, float):
+    def to_gregorian(
+        self, scale=satkit.timescale.UTC
+    ) -> (int, int, int, int, int, float):
         """
         Return tuple representing as UTC Gegorian date and time of the
         time object.  Tuple has 6 elements:
@@ -609,6 +623,9 @@ class time:
         4 : Hour of day, in range [0,23]
         5 : Minute of hour, in range [0,59]
         6 : floating point second of minute, in range [0,60)
+
+        Optional single input is satkit.timescale representing time scale of gregorian
+        output.  Default is satkit.timescale.UTC
         """
 
     @staticmethod
@@ -935,6 +952,26 @@ class quaternion:
         If the array is 2 dimensionsl and the dimensions are Nx3,
         each of the "N" vectors is rotated by the quaternion and a
         Nx3 array is returned
+        """
+
+    def slerp(
+        self, other: satkit.quaternion, frac: float, epsilon: float = 1.0e-6
+    ) -> satkit.quaternion:
+        """
+        Spherical linear interpolation between self and other
+
+        # Arguments:
+
+        * `other` - Quaternion to perform interpolation to
+        * `frac` - fractional amount of interpolation, in range [0,1]
+        * `epsilon` - Value below which the sin of the angle separating both
+                    quaternions must be to return an error.
+                    Default is 1.0e-6
+
+        # Returns
+
+         * Quaternion representing interpolation between self and other
+
         """
 
 class itrfcoord:

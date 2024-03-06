@@ -127,7 +127,7 @@ pub fn sgp4(tle: &PyAny, time: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObje
                         Ok((ep.into_py(py), e.1).to_object(py))
                     })
                 } else {
-                    let estr = format!("Error running sgp4: {}", e.1);
+                    let estr = format!("Error running sgp4: {:?}", e.0);
                     Err(pyo3::exceptions::PyRuntimeError::new_err(estr))
                 }
             }

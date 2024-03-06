@@ -13,6 +13,7 @@ use numpy as np;
 ///
 /// Enum specifying time epoch or scale
 ///
+#[derive(Clone)]
 #[pyclass(name = "timescale")]
 pub enum PyTimeScale {
     /// Invalid time scale
@@ -33,6 +34,20 @@ pub enum PyTimeScale {
 
 impl From<&PyTimeScale> for astrotime::Scale {
     fn from(s: &PyTimeScale) -> astrotime::Scale {
+        match s {
+            PyTimeScale::Invalid => Scale::INVALID,
+            PyTimeScale::UTC => Scale::UTC,
+            PyTimeScale::TT => Scale::TT,
+            PyTimeScale::UT1 => Scale::UT1,
+            PyTimeScale::TAI => Scale::TAI,
+            PyTimeScale::GPS => Scale::GPS,
+            PyTimeScale::TDB => Scale::TDB,
+        }
+    }
+}
+
+impl From<PyTimeScale> for astrotime::Scale {
+    fn from(s: PyTimeScale) -> astrotime::Scale {
         match s {
             PyTimeScale::Invalid => Scale::INVALID,
             PyTimeScale::UTC => Scale::UTC,
@@ -94,9 +109,10 @@ impl PyAstroTime {
     ///              Output object representing associated date
     ///              (same as "fromdate" method)
     ///    
-    ///    3:  Year, Month, Day, Hour, Minute, Second:
+    ///    3:  Year, Month, Day, Hour, Minute, Second, Scale
     ///              Output object representing associated date & time
     ///              (same as "fromgregorian" method)
+    ///              with optional time scale, default is UTC
     ///
     #[new]
     #[pyo3(signature=(*py_args))]
@@ -113,14 +129,18 @@ impl PyAstroTime {
             let month = py_args.get_item(1)?.extract::<u32>()?;
             let day = py_args.get_item(2)?.extract::<u32>()?;
             Self::from_date(year, month, day)
-        } else if py_args.len() == 6 {
+        } else if py_args.len() >= 6 {
             let year = py_args.get_item(0)?.extract::<u32>()?;
             let month = py_args.get_item(1)?.extract::<u32>()?;
             let day = py_args.get_item(2)?.extract::<u32>()?;
             let hour = py_args.get_item(3)?.extract::<u32>()?;
             let min = py_args.get_item(4)?.extract::<u32>()?;
             let sec = py_args.get_item(5)?.extract::<f64>()?;
-            Self::from_gregorian(year, month, day, hour, min, sec)
+            let mut pyscale = PyTimeScale::UTC;
+            if py_args.len() > 6 {
+                pyscale = py_args.get_item(6)?.extract::<PyTimeScale>()?;
+            }
+            Self::from_gregorian(year, month, day, hour, min, sec, pyscale)
         } else {
             Err(pyo3::exceptions::PyTypeError::new_err(
                 "Must pass in year, month, day or year, month, day, hour, min, sec",
@@ -198,8 +218,10 @@ impl PyAstroTime {
     /// 4 : Hour of day, in range [0,23]
     /// 5 : Minute of hour, in range [0,59]
     /// 6 : floating point second of minute, in range [0,60)
+    /// 7 : Time scale (optional), default is satkit.timescale.UTC
     ///
     #[staticmethod]
+    #[pyo3(signature=(year, month, day, hour, min, sec, scale=PyTimeScale::UTC))]
     fn from_gregorian(
         year: u32,
         month: u32,
@@ -207,9 +229,18 @@ impl PyAstroTime {
         hour: u32,
         min: u32,
         sec: f64,
+        scale: PyTimeScale,
     ) -> PyResult<Self> {
         Ok(PyAstroTime {
-            inner: AstroTime::from_datetime(year, month, day, hour, min, sec),
+            inner: AstroTime::from_datetime_with_scale(
+                year,
+                month,
+                day,
+                hour,
+                min,
+                sec,
+                scale.into(),
+            ),
         })
     }
 
