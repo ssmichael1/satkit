@@ -85,4 +85,5 @@ jobs:
       - name: Build Rust Documentation
         uses: actions-rs/cargo@v1
         with:
-          command: doc --no-deps
+          command: doc
+          args: --no-deps
