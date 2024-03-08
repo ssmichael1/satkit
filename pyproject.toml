@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "satkit"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = ["numpy>=1.20.0"]
 requires-python = ">= 3.8"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
@@ -25,7 +25,7 @@ keywords = [
 find = { where = ["python"] }
 
 [tool.cibuildwheel]
-build = ["cp312-*", "cp311-*"]
+build = ["cp312-*", "cp311-* cp310-* cp39-* cp38-*"]
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]

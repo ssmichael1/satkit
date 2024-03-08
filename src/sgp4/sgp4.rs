@@ -5,14 +5,23 @@ use crate::astrotime::{AstroTime, Scale};
 use crate::tle::TLE;
 use nalgebra::{Const, Dyn, OMatrix};
 
-#[derive(Debug, Clone)]
+use thiserror::Error;
+
+#[derive(Debug, Clone, Error)]
 pub enum SGP4Error {
+    #[error("Success")]
     SGP4Success = 0,
+    #[error("Eccentricity > 1 or < 0")]
     SGP4ErrorEccen = 1,
+    #[error("Mean motion < 0")]
     SGP4ErrorMeanMotion = 2,
+    #[error("Perturbed Eccentricity > 1 or < 0")]
     SGP4ErrorPerturbEccen = 3,
+    #[error("Semi-Latus Rectum < 0")]
     SGP4ErrorSemiLatusRectum = 4,
+    #[error("Unused")]
     SGP4ErrorUnused = 5,
+    #[error("Orbit Decayed")]
     SGP4ErrorOrbitDecay = 6,
 }
 impl From<i32> for SGP4Error {

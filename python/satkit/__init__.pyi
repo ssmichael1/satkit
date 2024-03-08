@@ -898,6 +898,23 @@ class quaternion:
         |           0               0   1|
         """
 
+    @staticmethod
+    def rotation_between(
+        v1: npt.ArrayLike[np.float64], v2: npt.ArrayLike[np.float64]
+    ) -> satkit.quaternion:
+        """
+        Return quaternion represention rotation from V1 to V2
+
+        # Arguments:
+
+        * `v1` - vector rotating from
+        * `v2` - vector rotating to
+
+        # Returns:
+
+        * Quaternion that rotates from v1 to v2
+        """
+
     def to_rotation_matrix(self) -> npt.ArrayLike[np.float64]:
         """
         Return 3x3 rotation matrix representing equivalent rotation
@@ -906,10 +923,11 @@ class quaternion:
     def to_euler(self) -> (float, float, float):
         """
         Return equivalent rotation angle represented as rotation angles:
-        ("roll", "pitch", "yaw") in radians
-        roll = rotation about x axis
-        pitch = rotation about y axis
-        yaw = rotation about z axis
+        ("roll", "pitch", "yaw") in radians:
+
+        * roll = rotation about x axis
+        * pitch = rotation about y axis
+        * yaw = rotation about z axis
         """
 
     def angle(self) -> float:

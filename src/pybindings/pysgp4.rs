@@ -161,7 +161,15 @@ pub fn sgp4(tle: &PyAny, time: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObje
 
                 Err(_e) => {}
             });
-            let dims = vec![tles.len(), ntimes, 3];
+
+            // Set dimensions of output to remove singleton dimensions
+            let dims = match (tles.len() > 1, ntimes > 1) {
+                (true, true) => vec![tles.len(), ntimes, 3],
+                (true, false) => vec![tles.len(), 3],
+                (false, true) => vec![ntimes, 3],
+                (false, false) => vec![3],
+            };
+
             Ok((
                 parr.reshape(dims.clone()).unwrap(),
                 varr.reshape(dims).unwrap(),

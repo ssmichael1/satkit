@@ -93,6 +93,9 @@ jobs:
           path: ./wheelhouse/*
 
   publish_wheels:
+    # Only publish on tagged releases
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+
     needs: build_python
     runs-on: ubuntu-latest
     environment: TestPyPiPublish

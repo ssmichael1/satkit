@@ -77,7 +77,7 @@ impl Quaternion {
     /// * 'angle`  - Angle in radians to rotate about axis (right-handed rotation of vector)
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> PyResult<Self> {
-        let v = Vec3::from_row_slice(axis.as_slice().unwrap());
+        let v = Vec3::from_row_slice(axis.as_slice()?);
         let u = na::UnitVector3::try_new(v, 1.0e-9);
         match u {
             Some(ax) => Ok(Quaternion {
@@ -85,6 +85,33 @@ impl Quaternion {
             }),
             None => Err(pyo3::exceptions::PyArithmeticError::new_err(
                 "Axis norm is 0",
+            )),
+        }
+    }
+
+    ///
+    /// Return quaternion represention rotation from V1 to V2
+    ///
+    /// # Arguments:
+    ///
+    /// * `v1` - vector rotating from
+    /// * `v2` - vector rotating to
+    ///
+    /// # Returns:
+    ///
+    /// * Quaternion that rotates from v1 to v2
+    ///
+    #[staticmethod]
+    fn rotation_between(
+        v1: np::PyReadonlyArray1<f64>,
+        v2: np::PyReadonlyArray1<f64>,
+    ) -> PyResult<Self> {
+        let v1 = Vec3::from_row_slice(v1.as_slice()?);
+        let v2 = Vec3::from_row_slice(v2.as_slice()?);
+        match Quat::rotation_between(&v1, &v2) {
+            Some(q) => Ok(Quaternion { inner: q }),
+            None => Err(pyo3::exceptions::PyArithmeticError::new_err(
+                "Norms are 0 or vectors are 180° apart",
             )),
         }
     }
