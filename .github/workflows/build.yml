@@ -1,8 +1,7 @@
 name: Build
 
 on:
-  push:
-    branches: ["main"]
+  push
 
 jobs:
   build:
@@ -86,4 +85,4 @@ jobs:
       - name: Build Rust Documentation
         uses: actions-rs/cargo@v1
         with:
-          command: doc
+          command: doc --no-deps
