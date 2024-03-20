@@ -30,8 +30,7 @@
 //!
 //! ## Additional Info
 //!
-//! For a good description, see
-//!   [here](https://www.stjarnhimlen.se/comp/time.html)
+//! For a good description, see [here](https://www.stjarnhimlen.se/comp/time.html)
 //!
 #[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
 pub struct AstroTime {
@@ -254,8 +253,8 @@ impl<T: chrono::TimeZone> std::convert::From<chrono::DateTime<T>> for AstroTime 
 
 impl std::convert::From<&chrono::NaiveDateTime> for AstroTime {
     fn from(c: &chrono::NaiveDateTime) -> Self {
-        let mut t = AstroTime::from_unixtime(c.timestamp() as f64);
-        t = t + c.timestamp_subsec_micros() as f64 / 86400.0e6;
+        let mut t = AstroTime::from_unixtime(c.and_utc().timestamp() as f64);
+        t = t + c.and_utc().timestamp_subsec_micros() as f64 / 86400.0e6;
         t
     }
 }
@@ -264,7 +263,9 @@ impl std::convert::From<AstroTime> for chrono::NaiveDateTime {
     fn from(s: AstroTime) -> chrono::NaiveDateTime {
         let secs: i64 = s.to_unixtime() as i64;
         let nsecs: u32 = (((s.to_mjd(Scale::UTC) * 86400.0) % 1.0) * 1.0e9) as u32;
-        chrono::NaiveDateTime::from_timestamp_opt(secs, nsecs).unwrap()
+        chrono::DateTime::from_timestamp(secs, nsecs)
+            .unwrap()
+            .naive_utc()
     }
 }
 

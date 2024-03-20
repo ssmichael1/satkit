@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "satkit"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = ["numpy>=1.20.0"]
 requires-python = ">= 3.8"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]

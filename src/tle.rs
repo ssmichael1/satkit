@@ -37,7 +37,7 @@ use crate::utils::SKResult;
 /// let tm = AstroTime::from_datetime(2006, 5, 1, 11, 0, 0.0);
 ///
 /// // Use SGP4 to get position,
-/// let (pTEME, vTEME) = sgp4(&mut tle, &[tm]).unwrap();
+/// let (pTEME, vTEME, errs) = sgp4(&mut tle, &[tm]);
 ///
 /// println!("pTEME = {}", pTEME);
 /// // Rotate the position to the ITRF frame (Earth-fixed)

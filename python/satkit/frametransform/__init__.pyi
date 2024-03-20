@@ -105,6 +105,75 @@ def qtirs2cirs(
     rotations from itrf to tirs matched element-wise to the input times
     """
 
+def qgcrf2itrf_approx(
+    tm: satkit.time | npt.ArrayLike[satkit.time],
+) -> satkit.quaternion | npt.ArrayLike[satkit.quaternion]:
+    """
+    Quaternion representing approximate rotation from the
+    Geocentric Celestial Reference Frame (GCRF)
+    to the International Terrestrial Reference Frame (ITRF)
+
+    # Notes:
+
+    * Accurate to approx. 1 arcsec
+
+    # Arguments:
+
+    * `tm` - satkit.time object or list or numpy array of satkit.time objects.
+
+    # Outputs:
+
+        * satkit.quaternion or numpy array of satkit.quaternion representiong
+        rotations from gcrf to itrf matched element-wise to the input times
+    """
+
+def qitrf2gcrf_approx(
+    tm: satkit.time | npt.ArrayLike[satkit.time],
+) -> satkit.quaternion | npt.ArrayLike[satkit.quaternion]:
+    """
+    Quaternion representing approximate rotation from the
+    International Terrestrial Reference Frame (ITRF)
+    to the Geocentric Celestial Reference Frame (GCRF)
+
+    # Notes:
+
+    * Accurate to approx. 1 arcsec
+
+    # Arguments:
+
+    * `tm` - satkit.time object or list or numpy array of satkit.time objects.
+
+    # Outputs:
+
+        * satkit.quaternion or numpy array of satkit.quaternion representiong
+        rotations from itrf to gcrf matched element-wise to the input times
+    """
+
+def qgcrf2itrf(
+    tm: satkit.time | npt.ArrayLike[satkit.time],
+) -> satkit.quaternion | npt.ArrayLike[satkit.quaternion]:
+    """
+    Quaternion representing rotation from the
+    Geocentric Celestial Reference Frame (GCRF)
+    to the International Terrestrial Reference Frame (ITRF)
+
+    Uses full IAU2006 Reduction
+    See IERS Technical Note 36, Chapter 5
+
+    but does not include solid tides, ocean tides
+
+    Note: Very computationally expensive
+
+    # Arguments:
+
+    * `tm` - satkit.time object or list or numpy array of satkit.time objects.
+
+    # Outputs:
+
+        * satkit.quaternion or numpy array of satkit.quaternion representiong
+        rotations from gcrf to itrf matched element-wise to the input times
+    """
+
 def qitrf2gcrf(
     tm: satkit.time | npt.ArrayLike[satkit.time],
 ) -> satkit.quaternion | npt.ArrayLike[satkit.quaternion]:
@@ -120,10 +189,14 @@ def qitrf2gcrf(
 
     Note: Very computationally expensive
 
-    Input is satkit.time object or list or numpy array of satkit.time objects.
+    # Arguments:
 
-    Output is satkit.quaternion or numpy array of satkit.quaternion representiong
-    rotations from itrf to gcrf matched element-wise to the input times
+    * `tm` - satkit.time object or list or numpy array of satkit.time objects.
+
+    # Outputs:
+
+        * satkit.quaternion or numpy array of satkit.quaternion representiong
+        rotations from itrf to gcrf matched element-wise to the input times
     """
 
 def qteme2itrf(
@@ -139,13 +212,17 @@ def qteme2itrf(
     Note: TEME is the output frame of the SGP4 propagator used to
     compute position from two-line element sets.
 
-    Input is satkit.time object or list or numpy array of satkit.time objects.
+    # Arguments:
 
-    Output is satkit.quaternion or numpy array of satkit.quaternion representiong
-    rotations from TEME to ITRF matched element-wise to the input times
+    * `tm` - satkit.time object or list or numpy array of satkit.time objects.
+
+    # Outputs:
+
+        * satkit.quaternion or numpy array of satkit.quaternion representiong
+        rotations from teme to itrf matched element-wise to the input times
     """
 
-def earth_orientation_params(time: satkit.time) -> (float, float, float, float) | None:
+def earth_orientation_params(time: satkit.time) -> tuple[float, float, float, float] | None:
     """
     Get Earth Orientation Parameters at given instant
 

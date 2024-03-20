@@ -52,7 +52,13 @@ impl PySatState {
         Ok(PySatState { inner: state })
     }
 
-    fn set_pvh_pos_uncertainty(&mut self, sigma_pvh: &np::PyArray1<f64>) -> PyResult<()> {
+    /// Set position uncertainty (1-sigma, meters) in the
+    /// lvlh (local-vertical, local-horizontal) frame
+    ///
+    /// # Arguments
+    ///
+    /// * `sigma_lvlh` - 3-vector with 1-sigma position uncertainty in LVLH frame
+    fn set_lvlh_pos_uncertainty(&mut self, sigma_pvh: &np::PyArray1<f64>) -> PyResult<()> {
         if sigma_pvh.len() != 3 {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
                 "Position uncertainty must be 1-d numpy array with length 3",
@@ -61,11 +67,18 @@ impl PySatState {
         let na_sigma_pvh =
             na::Vector3::<f64>::from_row_slice(unsafe { sigma_pvh.as_slice().unwrap() });
 
-        self.inner.set_pvh_pos_uncertainty(&na_sigma_pvh);
+        self.inner.set_lvlh_pos_uncertainty(&na_sigma_pvh);
         Ok(())
     }
 
-    fn set_cartesian_pos_uncertainty(&mut self, sigma_cart: &np::PyArray1<f64>) -> PyResult<()> {
+    /// Set position uncertainty (1-sigma, meters) in the
+    /// gcrf (Geocentric Celestial Reference Frame)
+    ///
+    /// # Arguments
+    ///
+    /// * `sigma_gcrf` - 3-vector with 1-sigma position uncertainty in GCRF frame    
+    ///
+    fn set_gcrf_pos_uncertainty(&mut self, sigma_cart: &np::PyArray1<f64>) -> PyResult<()> {
         if sigma_cart.len() != 3 {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
                 "Position uncertainty must be 1-d numpy array with length 3",
@@ -74,7 +87,7 @@ impl PySatState {
         let na_sigma_cart =
             na::Vector3::<f64>::from_row_slice(unsafe { sigma_cart.as_slice().unwrap() });
 
-        self.inner.set_cartesian_pos_uncertainty(&na_sigma_cart);
+        self.inner.set_gcrf_pos_uncertainty(&na_sigma_cart);
         Ok(())
     }
 
@@ -113,10 +126,17 @@ impl PySatState {
         })
     }
 
+    /// Quaternion to go from gcrf (Geocentric Celestial Reference Frame)
+    /// to lvlh (Local-Vertical, Local-Horizontal) frame
+    ///
+    /// Note: lvlh:
+    ///       z axis = -r (nadir)
+    ///       y axis = -h (h = p cross v)
+    ///       x axis such that x cross y = z
     #[getter]
-    fn get_qgcrf2pvh(&self) -> Quaternion {
+    fn get_qgcrf2lvlh(&self) -> Quaternion {
         Quaternion {
-            inner: self.inner.qgcrf2pvh(),
+            inner: self.inner.qgcrf2lvlh(),
         }
     }
 
@@ -135,8 +155,16 @@ impl PySatState {
         })
     }
 
-    #[pyo3(signature=(tm, **kwargs))]
-    fn propagate(&self, tm: &PyAstroTime, kwargs: Option<&PyDict>) -> PyResult<Self> {
+    ///
+    /// Propagate state to a new time
+    ///
+    /// # Arguments:
+    ///
+    /// * `time` - Time for which to compute new state
+    /// * `propsettings` - optional Settings for the propagator
+    ///
+    #[pyo3(signature=(time, **kwargs))]
+    fn propagate(&self, time: &PyAstroTime, kwargs: Option<&PyDict>) -> PyResult<Self> {
         let propsettings: Option<PropSettings> = match kwargs.is_some() {
             true => {
                 let kw = kwargs.unwrap();
@@ -148,7 +176,7 @@ impl PySatState {
             false => None,
         };
 
-        match self.inner.propagate(&tm.inner, propsettings.as_ref()) {
+        match self.inner.propagate(&time.inner, propsettings.as_ref()) {
             Ok(s) => Ok(PySatState { inner: s }),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Error propagating state: {}",

@@ -4,7 +4,12 @@ import pytest
 import numpy as np
 import math as m
 import os
+from sp3file import read_sp3file
 
+
+testvec_dir = os.getenv(
+            "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
+        )
 
 class TestJPLEphem:
     def test_jplephem_testvecs(self):
@@ -13,10 +18,8 @@ class TestJPLEphem:
         """
 
         # File contains test calculation vectors provided by NASA
-        basedir = os.getenv(
-            "SATKIT_TESTVEC_ROOT", default=".." + os.path.sep + "satkit-testvecs"
-        )
-        fname = basedir + os.path.sep + "jplephem" + os.path.sep + "testpo.440"
+
+        fname = testvec_dir + "jplephem" + os.path.sep + "testpo.440"
 
         # Read in the test vectors
         with open(fname, "r") as fd:
@@ -339,6 +342,111 @@ class TestQuaternion:
         ).to_rotation_matrix() @ zhat == pytest.approx(xhat, 1.0e-10)
 
 
+class TestGeodesicDistance:
+
+    newyork = sk.itrfcoord(latitude_deg=40.6446, longitude_deg=-73.7797)
+    london = sk.itrfcoord(latitude_deg=51.4680, longitude_deg=0.4551)
+
+    def test_geodesic_distance(self):
+        """
+        Check distances between two locations
+        """
+
+        [dist, heading_start, heading_end] = self.newyork.geodesic_distance(self.london)
+        [dist2, heading2_start, heading2_end] = self.london.geodesic_distance(
+            self.newyork
+        )
+
+        # Check that distances and headings match going in reverse direction
+        assert dist == pytest.approx(dist2, 1.0e-8)
+        assert heading_start - m.pi == pytest.approx(heading2_end, 1.0e-6)
+        assert heading_end - m.pi == pytest.approx(heading2_start, 1.0e-6)
+
+        # per google new york to london distance is 3,459 miles
+        # Convert to meters
+        print(f"dist = {dist}")
+        dist_ref = 3459 * 5280 * 12 * 2.54 / 100
+        assert dist == pytest.approx(dist_ref, 1.0e-2)
+
+    def test_heading_dist(self):
+        """
+        test that moving a distance at a given heading along surface of
+        Earth calculation is correct
+        """
+        [dist, heading_start, heading_end] = self.newyork.geodesic_distance(self.london)
+        loc2 = self.newyork.move_with_heading(dist, heading_start)
+        diff = self.london - loc2
+        assert np.linalg.norm(diff) < 1e-8
+
+
+class TestHighPrecisionPropagation:
+
+    def test_gps(self):
+
+        # File contains test calculation vectors provided by NASA
+
+        fname = (
+            testvec_dir
+            + "orbitprop"
+            + os.path.sep
+            + "ESA0OPSFIN_20233640000_01D_05M_ORB.SP3"
+        )
+
+        [pitrf, timearr] = read_sp3file(fname)
+        pgcrf = np.stack(
+            np.fromiter(
+                (q * p for q, p in zip(sk.frametransform.qitrf2gcrf(timearr), pitrf)),
+                list,
+            ),
+            axis=0,
+        )
+        settings = sk.satprop.propsettings()
+        settings.use_jplephem = False
+
+        # Values for craoverm and velocity come from orbitprop_gps_fit.py
+        satprops = sk.satprop.satproperties_static()
+        satprops.craoverm = 2.13018578e-2
+        print(satprops)
+        res = sk.satprop.propagate(
+            pgcrf[0, :],
+            np.array([2.47130555e03, 2.94682777e03, -5.34171918e02]),
+            timearr[0],
+            stoptime=timearr[-1],
+            dt=sk.duration.from_minutes(5),
+            propsettings=settings,
+            satproperties=satprops,
+        )
+
+        # See if propagator is accurate to < 10 meters over 1 day on
+        # each Cartesian axis
+        for iv in range(pgcrf.shape[0]):
+            for ix in range(0, 3):
+                assert m.fabs(res["pos"][iv, ix] - pgcrf[iv, ix]) < 10
+
+class TestSatState:
+    def test_lvlh(self):
+        """ 
+        Test rotations of satellite state into the LVLH frame
+        """
+        time = sk.time(2015, 3, 20, 0, 0, 0)
+        satstate = sk.satprop.satstate(time,
+                                       np.array([sk.consts.geo_r, 0, 0]),
+        np.array([0, m.sqrt(sk.consts.mu_earth/sk.consts.geo_r), 0]))
+        state2 = satstate.propagate(time + sk.duration.from_hours(3.5))
+        h =np.cross(state2.pos, state2.vel)
+        rz = -1.0/np.linalg.norm(state2.pos) * (state2.qgcrf2lvlh * state2.pos)
+        ry = -1.0/np.linalg.norm(h) * (state2.qgcrf2lvlh * h)
+        rx = 1.0/np.linalg.norm(state2.vel) * (state2.qgcrf2lvlh * state2.vel)
+    
+        # Since p & v are not quite orthoginal, we allow for more tolerance
+        # on this one (v is not exactly along xhat)
+        assert np.array([1.0, 0.0, 0.0]) == pytest.approx(rx, abs=1.0e-4)
+        # Two tests below should be exact
+        assert np.array([0.0, 1.0, 0.0]) == pytest.approx(ry, abs=1e-10)
+        assert np.array([0.0, 0.0, 1.0]) == pytest.approx(rz, abs=1e-10)
+
+
+
 class TestSGP4:
     def test_sgp4_multiple(self):
         """
@@ -375,10 +483,7 @@ class TestSGP4:
         SGP4 Test Vectors from vallado
         """
 
-        basedir = os.getenv(
-            "SATKIT_TESTVEC_ROOT", default=".." + os.path.sep + "satkit-testvecs"
-        )
-        basedir = basedir + os.path.sep + "sgp4"
+        basedir = testvec_dir + "sgp4"
 
         tlefile = basedir + os.path.sep + "SGP4-VER.TLE"
         with open(tlefile, "r") as fh:
@@ -403,20 +508,24 @@ class TestSGP4:
                     continue
                 time = tle.epoch + sk.duration.from_seconds(vals[0])
                 try:
-                    [p, v] = sk.sgp4(
+                    [p, v, eflag] = sk.sgp4(
                         tle,
                         time,
-                        opsmode=sk.opsmode.afspc,
-                        gravconst=sk.gravconst.wgs72,
+                        opsmode=sk.sgp4_opsmode.afspc,
+                        gravconst=sk.sgp4_gravconst.wgs72,
+                        errflag=True,
                     )
-                    ptest = np.array([vals[1], vals[2], vals[3]]) * 1e3
-                    vtest = np.array([vals[4], vals[5], vals[6]]) * 1e3
-                    print(f"p = {p} ;: ptest = {ptest}")
-                    print(f"v = {v} :: vtest = {vtest}")
-                    assert p == pytest.approx(ptest, rel=1e-4)
-                    assert v == pytest.approx(vtest, rel=1e-2)
+
+                    if eflag == sk.sgp4_error.success:
+                        ptest = np.array([vals[1], vals[2], vals[3]]) * 1e3
+                        vtest = np.array([vals[4], vals[5], vals[6]]) * 1e3
+                        assert p == pytest.approx(ptest, rel=1e-4)
+                        assert v == pytest.approx(vtest, rel=1e-2)
+                    else:
+                        # We know which one is supposed to fail in the test vectors
+                        # Make sure we pick the correcxt one
+                        assert tle.satnum == 33334
+                        assert eflag == sk.sgp4_error.perturb_eccen
                 except RuntimeError:
                     print("Caught runtime error; this is expected in test vectors")
 
-
-# %%

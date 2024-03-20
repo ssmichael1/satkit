@@ -338,6 +338,10 @@ mod tests {
     use crate::{consts, orbitprop::SatPropertiesStatic};
     use std::f64::consts::PI;
 
+    use std::fs::File;
+
+    use std::io::{self, BufRead};
+
     #[test]
     fn test_propagate() -> SKResult<()> {
         let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
@@ -461,7 +465,7 @@ mod tests {
         settings.gravity_interp_dt_secs = 300.0;
         settings.use_jplephem = false;
 
-        let satprops = SatPropertiesStatic::new(2.0 * 0.3 * 0.1 / 5.0, 0.0);
+        let satprops: SatPropertiesStatic = SatPropertiesStatic::new(2.0 * 0.3 * 0.1 / 5.0, 0.0);
 
         // Made-up small variations in the state
         let dstate = na::vector![2.0, -4.0, 20.5, 0.05, 0.02, -0.01];
@@ -499,6 +503,107 @@ mod tests {
         // Are differences within 1%?
         for ix in 0..6 as usize {
             assert!((dstate_prop[ix] - dstate_phi[ix]).abs() / dstate_prop[ix] < 0.1);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_gps() -> SKResult<()> {
+        let testvecfile = crate::utils::test::get_testvec_dir()
+            .unwrap()
+            .join("orbitprop")
+            .join("ESA0OPSFIN_20233640000_01D_05M_ORB.SP3");
+
+        if !testvecfile.is_file() {
+            panic!(
+                "Required GPS SP3 File: \"{}\" does not exist
+                clone test vectors repo at
+                https://github.com/StevenSamirMichael/satkit-testvecs.git
+                from root of repo or set \"SATKIT_TESTVEC_ROOT\"
+                to point to directory",
+                testvecfile.to_string_lossy()
+            );
+        }
+        let file: File = File::open(testvecfile.clone())?;
+
+        let times: Vec<crate::AstroTime> = match io::BufReader::new(file)
+            .lines()
+            .filter(|x: &Result<String, io::Error>| {
+                x.as_ref().unwrap().chars().nth(0).unwrap() == '*'
+            })
+            .map(|rline| -> SKResult<crate::AstroTime> {
+                let line = rline.unwrap();
+                let lvals: Vec<&str> = line.split_whitespace().collect();
+                let year: u32 = lvals[1].parse()?;
+                let mon: u32 = lvals[2].parse()?;
+                let day: u32 = lvals[3].parse()?;
+                let hour: u32 = lvals[4].parse()?;
+                let min: u32 = lvals[5].parse()?;
+                let sec: f64 = lvals[6].parse()?;
+                Ok(AstroTime::from_datetime(year, mon, day, hour, min, sec))
+            })
+            .collect()
+        {
+            Ok(v) => v,
+            Err(e) => return Err(e),
+        };
+
+        let file: File = File::open(testvecfile)?;
+
+        let satnum: usize = 20;
+        let satstr = format!("PG{}", satnum);
+        let pitrf: Vec<na::Vector3<f64>> = match io::BufReader::new(file)
+            .lines()
+            .filter(|x| {
+                let rline = &x.as_ref().unwrap()[0..4];
+                rline == satstr
+            })
+            .map(|rline| -> SKResult<na::Vector3<f64>> {
+                let line = rline.unwrap();
+                let lvals: Vec<&str> = line.split_whitespace().collect();
+                let px: f64 = lvals[1].parse()?;
+                let py: f64 = lvals[2].parse()?;
+                let pz: f64 = lvals[3].parse()?;
+                Ok(na::vector![px, py, pz] * 1.0e3)
+            })
+            .collect()
+        {
+            Ok(v) => v,
+            Err(e) => return Err(e),
+        };
+
+        assert!(times.len() == pitrf.len());
+        let pgcrf: Vec<na::Vector3<f64>> = pitrf
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| {
+                let q = crate::frametransform::qitrf2gcrf(&times[idx]);
+                q * p
+            })
+            .collect();
+
+        let v0 = na::vector![2.47130555e03, 2.94682777e03, -5.34171918e02, 2.13018578e-02];
+        let dt = times[1] - times[0];
+        let state0 = na::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
+        let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, 2.13018578e-2);
+        let settings = PropSettings::default();
+
+        let res = propagate(
+            &state0,
+            &times[0],
+            &times[times.len() - 1],
+            Some(dt.seconds()),
+            &settings,
+            Some(&satprops),
+        )?;
+
+        // We've propagated over a day; assert that the difference in position on all three coordinate axes
+        // is less than 10 meters for all 5-minute intervals
+        for iv in 0..pgcrf.len() {
+            for ix in 0..3 {
+                assert!((pgcrf[iv][ix] - res.state[iv][ix]).abs() < 10.0);
+            }
         }
 
         Ok(())

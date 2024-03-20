@@ -74,25 +74,29 @@ class satstate:
         3. Velocity, meters / second in GCRF frame (3-element numpy array)
         4. Optionally, covariance in GCRF frame (numpy array, 6x6)
         """
+
     @property
     def pos(self) -> npt.ArrayLike[np.float64]:
         """
         Return this state position in meters in GCRF frame as 3-element numpy array
         """
+
     @property
     def vel(self) -> npt.ArrayLike[np.float64]:
         """
         Return this state velocity in meters / second in GCRF frame
         as 3-element numpy array
         """
+
     @property
-    def qgcrf2pvh(self) -> satkit.quaternion:
+    def qgcrf2lvlh(self) -> satkit.quaternion:
         """
         Return quaternion that rotates from the
         Geocentric Celestrial Reference Frame (GCRF)
-        to the local position-velocity-angular momentum
-        (PVH) frame for the current state
+        to the local-vertical-local-horizonal
+        (LVLH) frame for the current state
         """
+
     @property
     def cov(self) -> npt.ArrayLike[np.float64] | None:
         """
@@ -101,11 +105,13 @@ class satstate:
 
         or None if no covariance is set
         """
+
     @property
     def time(self) -> satkit.astrotime:
         """
         Return instant in time of this satellite state
         """
+
     def propagate(self, time: satkit.time, propsettings=None) -> satstate:
         """
         Propagate this state to a new time, specified by the "time" input,
@@ -158,6 +164,7 @@ class satproperties_static:
 
             Units are m^2/kg
             """
+
         @property
         def craoverm() -> float:
             """
@@ -182,6 +189,7 @@ class propsettings:
         use_spaceweather: True
         use_jplephem: True
         """
+
     @property
     def abs_error() -> float:
         """
@@ -190,6 +198,7 @@ class propsettings:
 
         Default: 1e-8
         """
+
     @property
     def rel_error() -> float:
         """
@@ -198,6 +207,7 @@ class propsettings:
 
         Default: 1e-8
         """
+
     @property
     def gravity_order() -> int:
         """
@@ -205,6 +215,7 @@ class propsettings:
 
         Default: 4
         """
+
     @property
     def use_spaceweather() -> bool:
         """
@@ -213,6 +224,7 @@ class propsettings:
 
         Default: true
         """
+
     @property
     def use_jplephem() -> bool:
         """

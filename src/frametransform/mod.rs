@@ -188,14 +188,57 @@ pub fn qmod2gcrf(tm: &AstroTime) -> Quat {
 /// Geocentric Celestrial Reference Frame to
 /// International Terrestrial Reference Frame
 ///
-/// This uses an approximation of the IAU-76/FK5 Reduction
+///
+///  Arguments
+///
+/// * `tm` -  Time at which to compute rotation
+///
+/// # Returns
+///
+/// * Quaternion representing approximate rotation from GCRF to ITRF
+///
+/// # Notes
+///
+/// * Accurate to approx. 1 arcsec
+///
+/// * This uses an approximation of the IAU-76/FK5 Reduction
 /// See Vallado section 3.7.3
+///
+/// * For a reference, see "Eplanatory Supplement to the
+/// Astronomical Almanac", 2013, Ch. 6
 ///
 pub fn qgcrf2itrf_approx(tm: &AstroTime) -> Quat {
     // Neglecting polar motion
     let qitrf2tod_approx: Quat = qrot_zcoord(-gast(tm));
 
     qmod2gcrf(tm) * qtod2mod_approx(tm) * qitrf2tod_approx
+}
+
+///
+/// Approximate rotation from
+/// International Terrestrial Reference Frame to
+/// Geocentric Celestrial Reference Frame
+///
+///
+///  Arguments
+///
+/// * `tm` -  Time at which to compute rotation
+///
+/// # Returns
+///
+/// * Quaternion representing approximate rotation from ITRF to GCRF
+///
+/// # Notes
+///
+/// * Accurate to approx. 1 arcsec
+///
+/// * This uses an approximation of the IAU-76/FK5 Reduction
+/// See Vallado section 3.7.3
+///
+/// * For a reference, see "Eplanatory Supplement to the
+/// Astronomical Almanac", 2013, Ch. 6
+pub fn qitrf2gcrf_approx(tm: &AstroTime) -> Quat {
+    qgcrf2itrf_approx(tm).conjugate()
 }
 
 /// Approximate rotation from
@@ -252,7 +295,7 @@ pub fn qtod2mod_approx(tm: &AstroTime) -> Quat {
 ///  * This is **very** computationally expensive; for most
 /// applications, the approximate rotation will work just fine
 ///
-/// * **Note** this computatation **does not** include impact of the
+/// * This computatation **does not** include impact of the
 ///       Earth solid tides, but it does include polar motion,
 ///       precession, and nutation
 ///

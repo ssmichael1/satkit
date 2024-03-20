@@ -82,6 +82,12 @@ fn frametransform(_py: Python, m: &PyModule) -> PyResult<()> {
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::qitrf2gcrf, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::qgcrf2itrf, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::qitrf2gcrf_approx, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::qgcrf2itrf_approx, m)?)
+        .unwrap();
     m.add_function(wrap_pyfunction!(pyft::qteme2itrf, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::qcirs2gcrf, m)?)
@@ -113,6 +119,7 @@ pub fn satkit(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<pygravity::GravModel>()?;
     m.add_class::<pysgp4::GravConst>()?;
     m.add_class::<pysgp4::OpsMode>()?;
+    m.add_class::<pysgp4::PySGP4Error>()?;
 
     m.add_function(wrap_pyfunction!(pygravity::gravity, m)?)
         .unwrap();

@@ -156,7 +156,7 @@ class TLE:
         """
 
 def sgp4(
-    tle: satkit.TLE,
+    tle: satkit.TLE | list[satkit.tle],
     tm: satkit.time | list[satkit.time] | npt.ArrayLike[satkit.time],
     **kwargs,
 ) -> (npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]):
@@ -172,7 +172,7 @@ def sgp4(
 
     # Arguments
 
-    tle: The TLE on which top operate.
+    tle: The TLE (or a list of TLES) on which to operate
 
     tm: satkit.time object or list of objects or numpy array of
         objects representimg time(s) at which to compute
@@ -181,21 +181,31 @@ def sgp4(
 
     # Optional keyword arguments:
 
-    gravconst: satkit.gravconst object indicating gravity constant to use (default is gravconst.wgs72)
+    `gravconst` -  satkit.sgp4_gravconst object indicating gravity constant to use
+                   default is gravconst.wgs72
 
-    opsmode:   satkit.opsmode to use: opsmode.afspc (Air Force Space Command) or opsmode.improved
-               Default is opsmode.afspc
+    `opsmode` -  satkit.sgp4_opsmode to use: opsmode.afspc (Air Force Space Command) or opsmode.improved
+                 Default is opsmode.afspc
+
+    `errflag` - bool indicating whether or not to output error conditions for each TLE and time output
+                Default is false
 
     # Return
 
     tuple with the following elements:
 
-    0 : a Nx3 numpy array representing position in meters in the TEME frame at
-        each of the "N" input times (or 3-element array for a single time)
+    * `0` - Ntle X Ntime X 3 numpy array representing position in meters in the TEME frame at
+            each of the "Ntime" input times and each of the "Ntle" tles
+            Singleton dimensions (single time or single TLE) are removed
 
-    1 : a Nx3 numpy array representing velocity in meters / second in the TEME
-        frame at each of the "N" input times
-        (or 3-element array for a single time)
+    * `1` - Ntle X Ntime X 3 numpy array representing velocity in meters / second in the TEME
+            frame at each of the "Ntime" input times and each of the "Ntle" tles
+            Singleton dimensions (single time or single TLE) are removed
+
+    * `2`   Only output if `errflag` keyword is set to `True`:
+            Ntle X Ntime numpy array represetnting error codes for each TLE and time
+            Error codes are of type `satkit.sgp4_error`
+            Singleton dimensions (single time or single TLE) are removed
 
     Example usage: show Geodetic position of satellite at TLE epoch
 
@@ -227,7 +237,7 @@ def sgp4(
 
     """
 
-class gravconst:
+class sgp4_gravconst:
     """
     Gravity constant to use for SGP4 propagation
     """
@@ -250,7 +260,7 @@ class gravconst:
         WGS-84
         """
 
-class opsmode:
+class sgp4_opsmode:
     """
     Ops Mode for SGP4 Propagation
     """
@@ -452,6 +462,53 @@ class solarsystem:
     def Sun() -> int:
         """
         Sun
+        """
+
+class sgp4error:
+    """
+    Represent errors from SGP-4 propagation of two-line element sets (TLEs)
+    """
+
+    @property
+    def success() -> int:
+        """
+        Success
+        """
+
+    @property
+    def eccen() -> int:
+        """
+        Eccentricity < 0 or > 1
+        """
+
+    @property
+    def mean_motion() -> int:
+        """
+        Mean motion (revs / day) < 0
+        """
+
+    @property
+    def perturb_eccen() -> int:
+        """
+        Perturbed eccentricity < 0 or > 1
+        """
+
+    @property
+    def semi_latus_rectum() -> int:
+        """
+        Semi-Latus Rectum < 0
+        """
+
+    @property
+    def unused() -> int:
+        """
+        Unused, but in base code, so keeping for completeness
+        """
+
+    @property
+    def orbit_decay() -> int:
+        """
+        Orbit decayed
         """
 
 class timescale:

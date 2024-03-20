@@ -38,56 +38,61 @@ impl SatState {
     }
 
     /// set covariance
+    ///
+    /// # Arguments
+    ///
+    /// * `cov` -  Covariance matrix.  6x6 or larger if including terms like drag.
+    ///            Upper-left 6x6 is covariance for position & velocity, in units of
+    ///            meters and meters / second
+    ///
     pub fn set_cov(&mut self, cov: StateCov) {
         self.cov = cov;
     }
 
-    /// Quaternion to go from gcrf to position, velocity, angular momentum frame
-    pub fn qgcrf2pvh(&self) -> na::UnitQuaternion<f64> {
+    /// Return Quaternion to go from gcrf (Geocentric Celestial Reference Frame)
+    /// to lvlh (Local-Vertical, Local-Horizontal) frame
+    ///
+    /// Note: lvlh:
+    ///       z axis = -r (nadir)
+    ///       y axis = -h (h = p cross v)
+    ///       x axis such that x cross y = z
+    pub fn qgcrf2lvlh(&self) -> na::UnitQuaternion<f64> {
         type Quat = na::UnitQuaternion<f64>;
 
-        // position and velocity might not be orthogonal ; orbits are not perfect
-        // 2-body problems, so remove any position component of velocity
         let p = self.pos();
-        let mut v = self.vel();
-        v = v - p * (p.dot(&v)) / p.norm_squared();
-        let q1 = Quat::rotation_between(&na::Vector3::x_axis(), &p).unwrap();
-        let q2 = Quat::rotation_between(&(q1 * na::Vector3::y_axis()), &v).unwrap();
+        let v = self.vel();
+        let h = p.cross(&v);
+        let q1 = Quat::rotation_between(&(-1.0 * p), &na::Vector3::z_axis()).unwrap();
+        let q2 = Quat::rotation_between(&(-1.0 * (q1 * h)), &na::Vector3::y_axis()).unwrap();
         q2 * q1
     }
 
-    /// Set position uncertainty (1-sigma) in the
-    /// position, velocity, angular momentum frame
-    pub fn set_pvh_pos_uncertainty(&mut self, sigma_pvh: &na::Vector3<f64>) {
-        self.cov = StateCov::PVCov({
-            // Compute rotation from pvh to cartesian frame
-            let q1 = na::UnitQuaternion::<f64>::rotation_between(
-                &self.pv.fixed_view::<3, 1>(0, 0),
-                &na::Vector3::x_axis(),
-            )
-            .unwrap();
-            let q2 = na::UnitQuaternion::<f64>::rotation_between(
-                &self.pv.fixed_view::<3, 1>(3, 0),
-                &na::Vector3::y_axis(),
-            )
-            .unwrap();
-            let q = q2 * q1;
-            let rot = q.to_rotation_matrix();
+    /// Set position uncertainty (1-sigma, meters) in the
+    /// lvlh (local-vertical, local-horizontal) frame
+    ///
+    /// # Arguments
+    ///
+    /// * `sigma_lvlh` - 3-vector with 1-sigma position uncertainty in LVLH frame
+    pub fn set_lvlh_pos_uncertainty(&mut self, sigma_lvlh: &na::Vector3<f64>) {
+        let dcm = self.qgcrf2lvlh().to_rotation_matrix();
 
-            // 3x3 covariance in pvh frame
-            let mut pcov = na::Matrix3::<f64>::zeros();
-            pcov.set_diagonal(&sigma_pvh.map(|x| x * x));
+        let mut pcov = na::Matrix3::<f64>::zeros();
+        pcov.set_diagonal(&sigma_lvlh.map(|x| x * x));
 
-            let mut m = na::Matrix6::<f64>::zeros();
-            m.fixed_view_mut::<3, 3>(0, 0)
-                .copy_from(&(rot * pcov * rot.transpose()));
-
-            m
-        })
+        let mut m = na::Matrix6::<f64>::zeros();
+        m.fixed_view_mut::<3, 3>(0, 0)
+            .copy_from(&(dcm.transpose() * pcov * dcm));
+        self.cov = StateCov::PVCov(m);
     }
 
-    // Set 1-sigma position undertainty in the Cartesian frame
-    pub fn set_cartesian_pos_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
+    /// Set position uncertainty (1-sigma, meters) in the
+    /// gcrf (Geocentric Celestial Reference Frame)
+    ///
+    /// # Arguments
+    ///
+    /// * `sigma_gcrf` - 3-vector with 1-sigma position uncertainty in GCRF frame    
+    ///
+    pub fn set_gcrf_pos_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
         self.cov = StateCov::PVCov({
             let mut m = PVCovType::zeros();
             let mut diag = na::Vector6::<f64>::zeros();
@@ -101,6 +106,12 @@ impl SatState {
 
     ///
     /// Propagate state to a new time
+    ///
+    /// # Arguments:
+    ///
+    /// * `time` - Time for which to compute new state
+    /// * `settings` - Settings for the propagator
+    ///
     pub fn propagate(
         &self,
         time: &AstroTime,
@@ -183,9 +194,10 @@ impl std::fmt::Display for SatState {
 mod test {
     use super::*;
     use crate::consts;
+    use approx::assert_relative_eq;
 
     #[test]
-    fn test_qgcrf2pvh() -> SKResult<()> {
+    fn test_qgcrf2lvlh() -> SKResult<()> {
         let satstate = SatState::from_pv(
             &AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],
@@ -194,13 +206,14 @@ mod test {
 
         let state2 = satstate.propagate(&(satstate.time + crate::Duration::Hours(3.56)), None)?;
 
-        let rx = state2.qgcrf2pvh().conjugate() * state2.pos();
-        let ry = state2.qgcrf2pvh().conjugate() * state2.vel();
-        let rz = state2.qgcrf2pvh().conjugate() * (state2.pos().cross(&state2.vel()));
+        let rz = -1.0 / state2.pos().norm() * (state2.qgcrf2lvlh() * state2.pos());
+        let h = state2.pos().cross(&state2.vel());
+        let ry = -1.0 / h.norm() * (state2.qgcrf2lvlh() * h);
+        let rx = 1.0 / state2.vel().norm() * (state2.qgcrf2lvlh() * state2.vel());
 
-        assert!((rx.dot(&na::Vector3::<f64>::x_axis()) / rx.norm() - 1.0).abs() < 1.0e-6);
-        assert!((ry.dot(&na::Vector3::<f64>::y_axis()) / ry.norm() - 1.0).abs() < 1.0e-6);
-        assert!((rz.dot(&na::Vector3::<f64>::z_axis()) / rz.norm() - 1.0).abs() < 1.0e-6);
+        assert_relative_eq!(rz, na::Vector3::z_axis(), epsilon = 1.0e-6);
+        assert_relative_eq!(ry, na::Vector3::y_axis(), epsilon = 1.0e-6);
+        assert_relative_eq!(rx, na::Vector3::x_axis(), epsilon = 1.0e-4);
 
         Ok(())
     }
@@ -230,7 +243,7 @@ mod test {
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_pvh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
+        satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
         println!("state orig = {:?}", satstate.cov);
 
         let state2 = satstate.propagate(&(satstate.time + 1.0), None)?;

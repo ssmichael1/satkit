@@ -7,7 +7,7 @@ use nalgebra::{Const, Dyn, OMatrix};
 
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, PartialEq)]
 pub enum SGP4Error {
     #[error("Success")]
     SGP4Success = 0,
@@ -39,7 +39,7 @@ impl From<i32> for SGP4Error {
 }
 
 type StateArr = OMatrix<f64, Const<3>, Dyn>;
-pub type SGP4State = (StateArr, StateArr);
+pub type SGP4State = (StateArr, StateArr, Vec<SGP4Error>);
 pub type SGP4Result = Result<SGP4State, (SGP4Error, usize)>;
 
 use std::f64::consts::PI;
@@ -47,7 +47,7 @@ use std::f64::consts::PI;
 use super::{GravConst, OpsMode};
 
 #[inline]
-pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4Result {
+pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4State {
     sgp4_full(tle, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
@@ -63,14 +63,16 @@ pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4Result {
 ///
 /// # Arguments
 ///
-/// * tle: The TLE on which top operate.  Note that a mutable reference
-///   is passed, as SGP-4 metadata is stored after each propagation
-/// * tm: The time at which to compute position and velocity
+/// * `tle` - The TLE on which top operate.  Note that a mutable reference
+///           is passed, as SGP-4 metadata is stored after each propagation
+/// * `tm` -  The time at which to compute position and velocity
+///           Input as a slice for convenience.
 ///
 /// # Return
 ///
 /// Result object containing either an OK value containing a tuple with
-/// position (m) and velocity (m/s) 3-vectors or an Err value containing
+/// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
+/// times in the slice) or an Err value containing
 /// a tuple with error code and error string
 ///
 /// # Example
@@ -96,11 +98,11 @@ pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4Result {
 /// let tm = tle.epoch;
 ///
 /// // SGP4 runs on a slice of times
-/// let (pteme, vteme) = sgp4_full(&mut tle,
+/// let (pteme, vteme, errs) = sgp4_full(&mut tle,
 ///     &[tm],
 ///     GravConst::WGS84,
 ///     OpsMode::IMPROVED
-///     ).unwrap();
+///     );
 ///
 /// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * pteme;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
@@ -113,7 +115,7 @@ pub fn sgp4_full<'a>(
     tm: &[AstroTime],
     gravconst: GravConst,
     opsmode: OpsMode,
-) -> SGP4Result {
+) -> SGP4State {
     const TWOPI: f64 = PI * 2.0;
 
     if tle.satrec.is_none() {
@@ -144,7 +146,14 @@ pub fn sgp4_full<'a>(
             nodeo,
         ) {
             Ok(sr) => tle.satrec = Some(sr),
-            Err(e) => return Err((e.into(), 0)),
+            Err(e) => {
+                let n = tm.len();
+
+                let rarr = StateArr::zeros(n);
+                let varr = StateArr::zeros(n);
+                let earr = Vec::<SGP4Error>::from_iter((0..n).map(|_x| SGP4Error::from(e)));
+                return (rarr, varr, earr);
+            }
         }
     }
 
@@ -153,6 +162,8 @@ pub fn sgp4_full<'a>(
     let n = tm.len();
     let mut rarr = StateArr::zeros(n);
     let mut varr = StateArr::zeros(n);
+    let mut earr = Vec::<SGP4Error>::new();
+    earr.reserve(n);
 
     for (pos, thetime) in tm.iter().enumerate() {
         let tsince = (*thetime - tle.epoch).days() * 1440.0;
@@ -161,11 +172,12 @@ pub fn sgp4_full<'a>(
             Ok((r, v)) => {
                 rarr.index_mut((.., pos)).copy_from_slice(&r);
                 varr.index_mut((.., pos)).copy_from_slice(&v);
+                earr.push(SGP4Error::SGP4Success)
             }
-            Err(e) => return Err((e.into(), pos)),
+            Err(e) => earr.push(e.into()),
         }
     }
-    Ok((rarr * 1.0e3, varr * 1.0e3))
+    (rarr * 1.0e3, varr * 1.0e3, earr)
 }
 
 #[cfg(test)]
@@ -186,13 +198,8 @@ mod tests {
             TLE::load_3line(&line0.to_string(), &line1.to_string(), &line2.to_string()).unwrap();
         let tm = tle.epoch;
 
-        match sgp4(&mut tle, &[tm]) {
-            Ok((_pos, _vel)) => {}
-
-            Err(e) => {
-                panic!("Error running sgp4: \"{}\"", e.1);
-            }
-        }
+        let (_pos, _vel, err) = sgp4(&mut tle, &[tm]);
+        assert!(err[0] == SGP4Error::SGP4Success);
     }
 
     #[test]
@@ -248,29 +255,22 @@ mod tests {
                 let tm = tle.epoch + testvec[0] / 86400.0;
 
                 // Test vectors assume WGS72 gravity model and AFSPC ops mode
-                match sgp4_full(&mut tle, &[tm], GravConst::WGS72, OpsMode::AFSPC) {
-                    Ok((pos, vel)) => {
-                        for idx in 0..3 {
-                            // Account for truncation in truth data
-                            if testvec[idx + 4].abs() < 1.0e-4 {
-                                maxvelerr = 1.0e-4;
-                            }
-                            if testvec[idx + 4].abs() < 1.0e-6 {
-                                maxvelerr = 1.0e-2;
-                            }
-                            let poserr =
-                                ((pos[idx] * 1.0e-3 - testvec[idx + 1]) / testvec[idx + 1]).abs();
-                            let velerr =
-                                ((vel[idx] * 1.0e-3 - testvec[idx + 4]) / testvec[idx + 4]).abs();
-                            assert!(poserr < maxposerr);
-                            assert!(velerr < maxvelerr);
-                        }
+                let (pos, vel, err) = sgp4_full(&mut tle, &[tm], GravConst::WGS72, OpsMode::AFSPC);
+                if err[0] != SGP4Error::SGP4Success {
+                    continue;
+                }
+                for idx in 0..3 {
+                    // Account for truncation in truth data
+                    if testvec[idx + 4].abs() < 1.0e-4 {
+                        maxvelerr = 1.0e-4;
                     }
-                    // Note: some errors are part of test vectors
-                    Err(e) => {
-                        println!("SGP4 Error: \"{:?}\"", e.0);
-                        println!("TLE = {}", tle)
+                    if testvec[idx + 4].abs() < 1.0e-6 {
+                        maxvelerr = 1.0e-2;
                     }
+                    let poserr = ((pos[idx] * 1.0e-3 - testvec[idx + 1]) / testvec[idx + 1]).abs();
+                    let velerr = ((vel[idx] * 1.0e-3 - testvec[idx + 4]) / testvec[idx + 4]).abs();
+                    assert!(poserr < maxposerr);
+                    assert!(velerr < maxvelerr);
                 }
             }
         }

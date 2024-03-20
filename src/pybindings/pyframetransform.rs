@@ -114,7 +114,7 @@ pub fn qcirs2gcrf(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * tm: astro.time struct representing input time
+///   * `tm` - astro.time struct representing input time
 ///
 /// # Returns:
 ///
@@ -123,6 +123,55 @@ pub fn qcirs2gcrf(tm: &PyAny) -> PyResult<PyObject> {
 #[pyfunction]
 pub fn qitrf2gcrf(tm: &PyAny) -> PyResult<PyObject> {
     py_quat_from_time_arr(ft::qitrf2gcrf, tm)
+}
+
+///
+/// Quaternion representing rotation from the
+/// Geocentric Celestial Reference Frame (GCRF)
+/// to the International Terrestrial Reference Frame (ITRF)
+///
+/// Uses full IAU2006 Reduction
+/// See IERS Technical Note 36, Chapter 5
+///
+/// Note: Very computationally expensive
+///
+/// # Arguments:
+///
+///   * `tm` - astro.time struct representing input time
+///
+/// # Returns:
+///
+///  * Quaternion representing rotation from GCRF to ITRF
+///
+#[pyfunction]
+pub fn qgcrf2itrf(tm: &PyAny) -> PyResult<PyObject> {
+    py_quat_from_time_arr(ft::qgcrf2itrf, tm)
+}
+
+///
+/// Approximate rotation from
+/// Geocentric Celestrial Reference Frame to
+/// International Terrestrial Reference Frame
+///
+/// This uses an approximation of the IAU-76/FK5 Reduction
+/// See Vallado section 3.7.3
+///
+/// # Arguments:
+///
+///   * `tm` - astro.time struct representing input time
+///
+/// # Returns:
+///
+///  * Quaternion representing rotation from GCRF to ITRF
+///
+#[pyfunction]
+pub fn qgcrf2itrf_approx(tm: &PyAny) -> PyResult<PyObject> {
+    py_quat_from_time_arr(ft::qgcrf2itrf_approx, tm)
+}
+
+#[pyfunction]
+pub fn qitrf2gcrf_approx(tm: &PyAny) -> PyResult<PyObject> {
+    py_quat_from_time_arr(ft::qitrf2gcrf_approx, tm)
 }
 
 ///

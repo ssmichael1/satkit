@@ -4,12 +4,12 @@ use pyo3::types::{PyDict, PyList};
 use super::pyastrotime::ToTimeVec;
 use super::pytle::PyTLE;
 use crate::sgp4 as psgp4;
-use numpy::PyArray1;
+use numpy::{PyArray, PyArray1};
 
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
-#[pyclass(name = "sgp4error")]
-#[derive(Clone)]
+#[pyclass(name = "sgp4_error")]
+#[derive(Clone, Copy)]
 pub enum PySGP4Error {
     success = psgp4::SGP4Error::SGP4Success as isize,
     eccen = psgp4::SGP4Error::SGP4ErrorEccen as isize,
@@ -21,7 +21,7 @@ pub enum PySGP4Error {
 }
 
 #[allow(non_camel_case_types)]
-#[pyclass(name = "gravconst")]
+#[pyclass(name = "sgp4_gravconst")]
 #[derive(Clone)]
 pub enum GravConst {
     wgs72 = psgp4::GravConst::WGS72 as isize,
@@ -40,7 +40,7 @@ impl From<GravConst> for psgp4::GravConst {
 }
 
 #[allow(non_camel_case_types)]
-#[pyclass(name = "opsmode")]
+#[pyclass(name = "sgp4_opsmode")]
 #[derive(Clone)]
 pub enum OpsMode {
     afspc = psgp4::OpsMode::AFSPC as isize,
@@ -70,6 +70,80 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
     }
 }
 
+/// Run Simplified General Perturbations (SGP)-4 propagator on
+/// Two-Line Element Set to
+/// output satellite position and velocity at given time
+/// in the "TEME" coordinate system
+///
+/// A detailed description is at:
+/// https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
+///
+///
+/// # Arguments
+///
+/// tle: The TLE (or a list of TLES) on which to operate
+///
+/// tm: satkit.time object or list of objects or numpy array of
+///     objects representimg time(s) at which to compute
+///     position and velocity
+///
+///
+/// # Optional keyword arguments:
+///
+/// `gravconst` -  satkit.sgp4_gravconst object indicating gravity constant to use
+///                default is gravconst.wgs72
+///
+/// `opsmode` -  satkit.sgp4_opsmode to use: opsmode.afspc (Air Force Space Command) or opsmode.improved
+///              Default is opsmode.afspc
+///
+/// `errflag` - bool indicating whether or not to output error conditions for each TLE and time output
+///             Default is false
+///
+/// # Return
+///
+/// tuple with the following elements:
+///
+/// * `0` - Ntle X Ntime X 3 numpy array representing position in meters in the TEME frame at
+///         each of the "Ntime" input times and each of the "Ntle" tles
+///         Singleton dimensions (single time or single TLE) are removed
+///
+/// * `1` - Ntle X Ntime X 3 numpy array representing velocity in meters / second in the TEME
+///         frame at each of the "Ntime" input times and each of the "Ntle" tles
+///         Singleton dimensions (single time or single TLE) are removed
+///
+/// * `2`   Only output if `errflag` keyword is set to `True`:
+///         Ntle X Ntime numpy array represetnting error codes for each TLE and time
+///         Error codes are of type `satkit.sgp4_error`
+///         Singleton dimensions (single time or single TLE) are removed
+///
+/// Example usage: show Geodetic position of satellite at TLE epoch
+///
+/// lines = [
+///     "0 INTELSAT 902",
+///     "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
+///     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
+/// ]
+///
+///
+/// tle = satkit.TLE.single_from_lines(lines)
+///
+/// # Compute TEME position & velocity at epoch
+/// pteme, vteme = satkit.sgp4(tle, tle.epoch)
+///
+/// # Rotate to ITRF frame
+/// q = satkit.frametransform.qteme2itrf(tm)
+/// pitrf = q * pteme
+/// vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
+///
+/// # convert to ITRF coordinate object
+/// coord = satkit.itrfcoord.from_vector(pitrf)
+/// # Print ITRF coordinate object location
+/// print(coord)
+///
+/// Output:
+///
+/// ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
+
 #[pyfunction]
 #[pyo3(signature=(tle, time, **kwds))]
 pub fn sgp4(tle: &PyAny, time: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObject> {
@@ -93,21 +167,22 @@ pub fn sgp4(tle: &PyAny, time: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObje
     }
     if tle.is_instance_of::<PyTLE>() {
         let mut stle: PyRefMut<PyTLE> = tle.extract()?;
-        match psgp4::sgp4_full(
+        let (r, v, e) = psgp4::sgp4_full(
             &mut stle.inner,
             time.to_time_vec()?.as_slice(),
             gravconst.into(),
             opsmode.into(),
-        ) {
-            Ok((r, v)) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                let mut dims = vec![r.len()];
-                if r.nrows() > 1 && r.ncols() > 1 {
-                    dims = vec![r.ncols(), r.nrows()];
-                }
+        );
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            let mut dims = vec![r.len()];
+            if r.nrows() > 1 && r.ncols() > 1 {
+                dims = vec![r.ncols(), r.nrows()];
+            }
 
-                // Note: this is a little confusing: ndarray uses
-                // row major, nalgebra and numpy use column major,
-                // hence the switch
+            // Note: this is a little confusing: ndarray uses
+            // row major, nalgebra and numpy use column major,
+            // hence the switch
+            if output_err == false {
                 Ok((
                     PyArray1::from_slice(py, r.data.as_slice())
                         .reshape(dims.clone())
@@ -119,34 +194,48 @@ pub fn sgp4(tle: &PyAny, time: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObje
                         .to_object(py),
                 )
                     .to_object(py))
-            }),
-            Err(e) => {
-                if output_err == true {
-                    let ep: PySGP4Error = e.0.into();
-                    pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                        Ok((ep.into_py(py), e.1).to_object(py))
-                    })
-                } else {
-                    let estr = format!("Error running sgp4: {:?}", e.0);
-                    Err(pyo3::exceptions::PyRuntimeError::new_err(estr))
-                }
+            } else {
+                Ok((
+                    PyArray1::from_slice(py, r.data.as_slice())
+                        .reshape(dims.clone())
+                        .unwrap(),
+                    PyArray1::from_slice(py, v.data.as_slice())
+                        .reshape(dims)
+                        .unwrap(),
+                    PyArray::from_owned_object_array(
+                        py,
+                        ndarray::Array::from_iter(e.iter().map(|x| {
+                            let y: PySGP4Error = x.clone().into();
+                            y.into_py(py)
+                        })),
+                    ),
+                )
+                    .to_object(py))
             }
-        }
+        })
     } else if tle.is_instance_of::<PyList>() {
         let mut tles = tle.extract::<Vec<PyRefMut<PyTLE>>>()?;
         let tmarray = time.to_time_vec()?;
-        let results: Vec<psgp4::SGP4Result> = tles
+        let results: Vec<psgp4::SGP4State> = tles
             .iter_mut()
             .map(|tle| psgp4::sgp4(&mut tle.inner, tmarray.as_slice()))
             .collect();
+
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             let n = tles.len() * tmarray.len() * 3;
             let parr: &PyArray1<f64> = PyArray1::zeros(py, [n], false);
             let varr: &PyArray1<f64> = PyArray1::zeros(py, [n], false);
             let ntimes = tmarray.len();
 
-            results.iter().enumerate().for_each(|(idx, r)| match r {
-                Ok((p, v)) => unsafe {
+            // I'd prefer to create this uninitialized, which would probably be a bit faster,
+            // but I can't figure out how...
+            let mut earr = ndarray::Array::from_elem(
+                (tles.len(), tmarray.len()),
+                PySGP4Error::success.into_py(py),
+            );
+
+            results.iter().enumerate().for_each(|(idx, (p, v, e))| {
+                unsafe {
                     std::ptr::copy_nonoverlapping(
                         p.as_ptr(),
                         parr.data().add(idx * ntimes * 3),
@@ -157,9 +246,12 @@ pub fn sgp4(tle: &PyAny, time: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObje
                         varr.data().add(idx * ntimes * 3),
                         ntimes * 3,
                     );
-                },
-
-                Err(_e) => {}
+                }
+                let e1 = ndarray::Array1::from_iter(e.iter().map(|x| {
+                    let y: PySGP4Error = x.clone().into();
+                    y.into_py(py)
+                }));
+                earr.slice_mut(ndarray::s![idx, ..]).assign(&e1);
             });
 
             // Set dimensions of output to remove singleton dimensions
@@ -169,12 +261,30 @@ pub fn sgp4(tle: &PyAny, time: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObje
                 (false, true) => vec![ntimes, 3],
                 (false, false) => vec![3],
             };
+            // Dims for error output
+            let edims = match (tles.len() > 1, ntimes > 1) {
+                (true, true) => vec![tles.len(), ntimes],
+                (true, false) => vec![tles.len()],
+                (false, true) => vec![ntimes],
+                (false, false) => vec![1],
+            };
 
-            Ok((
-                parr.reshape(dims.clone()).unwrap(),
-                varr.reshape(dims).unwrap(),
-            )
-                .to_object(py))
+            if !output_err {
+                Ok((
+                    parr.reshape(dims.clone()).unwrap(),
+                    varr.reshape(dims).unwrap(),
+                )
+                    .to_object(py))
+            } else {
+                Ok((
+                    parr.reshape(dims.clone()).unwrap(),
+                    varr.reshape(dims).unwrap(),
+                    PyArray::from_owned_object_array(py, earr)
+                        .reshape(edims)
+                        .unwrap(),
+                )
+                    .to_object(py))
+            }
         })
     } else {
         Err(pyo3::exceptions::PyRuntimeError::new_err(

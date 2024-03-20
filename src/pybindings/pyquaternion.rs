@@ -6,12 +6,6 @@ use pyo3::prelude::*;
 type Quat = na::UnitQuaternion<f64>;
 type Vec3 = na::Vector3<f64>;
 
-#[pyclass(name = "quaternion")]
-#[derive(PartialEq, Copy, Clone, Debug)]
-pub struct Quaternion {
-    pub inner: Quat,
-}
-
 ///
 /// Quaternion representing rotation of 3D Cartesian axes
 ///
@@ -33,6 +27,18 @@ pub struct Quaternion {
 /// https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation
 ///
 ///
+#[pyclass(name = "quaternion")]
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub struct Quaternion {
+    pub inner: Quat,
+}
+
+#[pyclass(name = "quaternion_array")]
+#[derive(PartialEq, Clone, Debug)]
+pub struct QuaternionVec {
+    pub inner: Vec<Quat>,
+}
+
 #[pymethods]
 impl Quaternion {
     #[new]
