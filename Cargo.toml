@@ -2,7 +2,27 @@
 name = "satkit"
 version = "0.2.2"
 edition = "2021"
-
+description = "Satellite Toolkit"
+readme = "README.md"
+licence = "MIT"
+homepage = "https://github.com/ssmichael1/satkit"
+repository = "https://github.com/ssmichael1/satkit"
+keywords = ["satellite", 
+    "orbit",
+    "kinematics",
+    "ephemeris",
+    "sgp4", 
+    "tle",
+    "astrodynamics",
+    "jpl",
+    "geodesy", 
+]
+categories = [
+    "aerospace",
+    "algorithms",
+    "mathematics",
+    "science",
+]
 # See more keys and their definitions at 
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
