@@ -19,7 +19,7 @@ class TestJPLEphem:
 
         # File contains test calculation vectors provided by NASA
 
-        fname = testvec_dir + "jplephem" + os.path.sep + "testpo.440"
+        fname = testvec_dir + os.path.sep + "jplephem" + os.path.sep + "testpo.440"
 
         # Read in the test vectors
         with open(fname, "r") as fd:
@@ -387,6 +387,7 @@ class TestHighPrecisionPropagation:
 
         fname = (
             testvec_dir
+            + os.path.sep
             + "orbitprop"
             + os.path.sep
             + "ESA0OPSFIN_20233640000_01D_05M_ORB.SP3"
@@ -483,7 +484,7 @@ class TestSGP4:
         SGP4 Test Vectors from vallado
         """
 
-        basedir = testvec_dir + "sgp4"
+        basedir = testvec_dir + os.path.sep + "sgp4"
 
         tlefile = basedir + os.path.sep + "SGP4-VER.TLE"
         with open(tlefile, "r") as fh:
