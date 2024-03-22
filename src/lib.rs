@@ -45,6 +45,7 @@ pub mod frametransform;
 pub mod itrfcoord;
 /// Solar system body ephemerides, as published by JPL
 pub mod jplephem;
+/// Low-precision ephemeris for sun and moon
 pub mod lpephem;
 /// NRL-MISE00 Density model
 pub mod nrlmsise;

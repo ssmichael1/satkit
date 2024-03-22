@@ -58,10 +58,7 @@ pub fn gmst(tm: &AstroTime) -> f64 {
     return gmst;
 }
 
-///
 /// Equation of Equinoxes
-///
-/// Vallado al
 pub fn eqeq(tm: &AstroTime) -> f64 {
     let d: f64 = tm.to_mjd(Scale::TT) - 51544.5;
     let omega = PI / 180.0 * (125.04 - 0.052954 * d);
@@ -71,6 +68,7 @@ pub fn eqeq(tm: &AstroTime) -> f64 {
     d_psi * f64::cos(epsilon)
 }
 
+/// Greenwich Apparent Sidereal Time
 pub fn gast(tm: &AstroTime) -> f64 {
     gmst(tm) + eqeq(tm)
 }
