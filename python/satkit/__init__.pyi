@@ -587,6 +587,31 @@ class time:
     the ability to convert to an from the "datetime" object.  However, a separate
     time representation is needed as the "datetime" object does not allow for
     conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
+
+    Initialization arguments:
+
+    If no arguments are passed in, the created object represents
+    the current time, i.e. the time at which the function was called
+
+
+    If 3 integers are passed in, they represent a UTC date specified
+    by the standard Gregorian year, month (1-based), and day of month
+    (1-based)
+
+    if 5 integers and a float are passed in, they represent a UTC
+    date and time.  The 1st 3 numbers represent the standard
+    Gregorian year, month, and day as above.  The last 3 represent the
+    hour of the day [0,23], the minute of the hour [0,59], and the
+    second (including fractional component) of the minute
+
+    Example 1:
+    print(satkit.time(2023, 3, 5, 11, 3,45.453))
+    2023-03-05 11:03:45.453Z
+
+    Example 2:
+    print(satkit.time(2023, 3, 5))
+    2023-03-05 00:00:00.000Z
+
     """
 
     def __init__(self, *args):

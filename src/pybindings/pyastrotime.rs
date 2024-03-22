@@ -10,8 +10,22 @@ use super::pyduration::PyDuration;
 
 use numpy as np;
 
+/// Specify time scale used to represent or convert between the "satkit.time"
+/// representation of time
 ///
-/// Enum specifying time epoch or scale
+/// Most of the time, these are not needed directly, but various time scales
+/// are needed to compute precise rotations between various inertial and
+/// Earth-fixed coordinate frames
+///
+/// For details, see:
+/// https://stjarnhimlen.se/comp/time.html
+///
+/// UTC = Universal Time Coordinate
+/// TT = Terrestrial Time
+/// UT1 = Universal time, corrected for polar wandering
+/// TAI = International Atomic Time
+/// GPS = Global Positioning System Time (epoch = 1/6/1980 00:00:00)
+/// TDB = Barycentric Dynamical Time
 ///
 #[derive(Clone)]
 #[pyclass(name = "timescale")]
@@ -80,14 +94,27 @@ impl IntoPy<PyObject> for astrotime::Scale {
 ///
 /// Used for orbit propagation, frame transformations, etc..
 ///
-/// Includes function for conversion to various time representations
+/// * Includes function for conversion to various time representations
 /// (e.g., julian date, modified julian date, gps time, ...)
 ///
-/// Also includes conversions between various scales
+/// * Also includes conversions between various scales
 /// (e.g., UTC, Terrestrial Time, GPS, ...)
 ///
-/// Methods also included for conversion to & from the more-standard
+/// * Methods also included for conversion to & from the more-standard
 /// "datetime" object used in Python
+///
+///  # Constructor argument options:
+///
+///    1:  None: Output current date / time
+///
+///    2:  Year, Month, Day:
+///              Output object representing associated date
+///              (same as "fromdate" method)
+///    
+///    3:  Year, Month, Day, Hour, Minute, Second, Scale
+///              Output object representing associated date & time
+///              (same as "fromgregorian" method)
+///   
 ///
 #[pyclass(name = "time")]
 #[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]

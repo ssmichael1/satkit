@@ -1,15 +1,32 @@
 # Satellite Toolkit with Rust
 
+An accurate, high-performance satellite orbital kinematics toolkit, written in Rust with a sensible interface.
+<br/>
+
+### Github
+
 ![Build Passing?](https://github.com/ssmichael1/satkit/actions/workflows/build.yml/badge.svg)
 ![Wheel Passing?](https://github.com/ssmichael1/satkit/actions/workflows/wheels.yml/badge.svg)
 ![GitHub License](https://img.shields.io/github/license/ssmichael1/satkit)
-<br/>
-An accurate, high-performance satellite orbital kinematics toolkit, written in Rust with a sensible interface.
+
+### Crates.io
+
+![Crates.io Version](https://img.shields.io/crates/v/satkit)
+![Crates.io Downloads (recent)](https://img.shields.io/crates/dr/satkit)
+
+### PyPi
+
+![PyPI - Version](https://img.shields.io/pypi/v/satkit)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/satkit)
+![PyPI - Implementation](https://img.shields.io/pypi/implementation/satkit)
+![PyPI - Status](https://img.shields.io/pypi/status/satkit)
 
 ## Language Bindings
 
 - **Native Rust** bindings
-- **Python bindings** for compiled rust code ... speed of Rust with convenience of Python
+- **Python bindings** for compiled rust code ... speed of Rust with convenience of Python<br/>
+  Install with `pip install satkit`<br/>
+  PyPi includes binaries for windows, macos (Intel & arm), and linux
 
 ## Features
 
