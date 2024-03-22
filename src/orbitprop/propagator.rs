@@ -468,10 +468,6 @@ mod tests {
         state[0] = consts::GEO_R;
         state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
 
-        // initialize state transition matrix to zero
-        state
-            .fixed_view_mut::<6, 6>(0, 1)
-            .copy_from(&na::Matrix6::<f64>::identity());
         let mut settings = PropSettings::default();
         settings.abs_error = 1.0e-9;
         settings.rel_error = 1.0e-14;
