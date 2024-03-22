@@ -1,2 +1,5 @@
 include Cargo.toml
-recursive-include src *.rs
+recursive-include src *.rs python extern
+include LICENSE
+include README.md
+include pyproject.toml
