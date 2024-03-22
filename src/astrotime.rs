@@ -2,9 +2,12 @@
 //! # AstroTime
 //!
 //! A representation of time that allows for conversion between
-//!  various scales or epochs. Epoch conversion is an often necessary for
+//! various scales or epochs. Epoch conversion is an often necessary for
 //! calculation of astronomic phenomenon, e.g.the exact rotation between
 //! Earth-centered inertial and fixed coordinate frames.
+//!
+//! The conversion between epochs necessitates the use of this struct rather
+//! than using one from the standard rust or chrono
 //!
 //! ## Scales include:
 //!
@@ -88,7 +91,7 @@ const DELTAAT_OLD: [[f64; 4]; 15] = [
 
 /// Time Scales
 ///
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Scale {
     /// Invalid
     INVALID = -1,
@@ -290,6 +293,10 @@ impl AstroTime {
 
     /// Construct new AstroTime object, representing given unixtime
     /// (seconds since midnight Jan 1 1970, UTC)
+    ///
+    /// # Arguments:
+    ///
+    /// * `t` - The unixtime (seconds since midnight, Jan 1, 1970, UTC)
     pub fn from_unixtime(t: f64) -> AstroTime {
         AstroTime::from_mjd(t / 86400.0 + UTC1970, Scale::UTC)
     }
@@ -353,7 +360,7 @@ impl AstroTime {
     /// # Arguments:
     ///
     /// * `mjd` - The modified Julian day
-    /// * `scale`` - The time scale of the input date
+    /// * `scale` - The time scale of the input date
     ///
     /// # Returns
     ///

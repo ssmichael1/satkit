@@ -1,6 +1,12 @@
 use crate::AstroTime;
 
-#[derive(Clone)]
+/// Enum representing durations of times, allowing for representation
+/// via common measures of duration (years, days, hours, minutes, seconds)
+///
+/// This enum can be added to and subtracted from "astrotime" objects to
+/// represent new "astrotime" objects, and is also returned when
+/// two "astrotime" objects are subtracted from one anothre
+#[derive(Clone, Debug)]
 pub enum Duration {
     Days(f64),
     Seconds(f64),
@@ -11,6 +17,9 @@ pub enum Duration {
 
 impl Duration {
     #[inline]
+    /// Return duration represented as days
+    /// Note: a day is defined as being exactly equal to 86400 seconds
+    /// (leap-seconds are neglected)
     pub fn days(&self) -> f64 {
         match self {
             Duration::Days(v) => *v,
@@ -20,6 +29,8 @@ impl Duration {
             Duration::Hours(v) => *v / 24.0,
         }
     }
+
+    /// Return duration represented as seconds
     #[inline]
     pub fn seconds(&self) -> f64 {
         match self {
@@ -30,6 +41,8 @@ impl Duration {
             Duration::Hours(v) => *v * 3600.0,
         }
     }
+
+    /// Return duration represented as hours (3600 seconds)
     #[inline]
     pub fn hours(&self) -> f64 {
         match self {
@@ -40,6 +53,8 @@ impl Duration {
             Duration::Years(v) => *v * 24.0 * 365.25,
         }
     }
+
+    // Return duration represented as minutes (60 seconds)
     #[inline]
     pub fn minutes(&self) -> f64 {
         match self {

@@ -62,22 +62,39 @@ class TLE:
     """
 
     @staticmethod
-    def from_file(fname: str) -> list[satkit.TLE] | satkit.TLE:
+    def from_file(filename: str) -> list[satkit.TLE] | satkit.TLE:
         """
         Return a list of TLES loaded from input text file.
 
-        If the lines only represent a single TLE, the TLE will
+        If the file contains lines only represent a single TLE, the TLE will
         be output, rather than a list with a single TLE element
+
+        # Arguments:
+
+        * `filename` - name of textfile lines for TLE(s) to load
+
+        # Returns:
+
+        * `tle` - a list of TLE objects or a single TLE of lines for
+                only 1 are passed in
         """
 
     @staticmethod
     def from_lines(lines: list[str]) -> list[satkit.TLE] | satkit.TLE:
         """
-        Return a list of TLEs from input lines, represented as a
-        list of strings, one string per TLE input line
+        Return a list of TLES loaded from input list of lines
 
-        If the lines only represent a single TLE, the TLE will be
-        output, rather than a list with a single TLE element
+        If the file contains lines only represent a single TLE, the TLE will
+        be output, rather than a list with a single TLE element
+
+        # Arguments:
+
+        * `lines` - list of strings with lines for TLE(s) to load
+
+        # Returns:
+
+        * `tle` - a list of TLE objects or a single TLE of lines for
+                only 1 are passed in
         """
 
     @property

@@ -162,6 +162,12 @@ impl PyAstroTime {
     /// Return time object representing input
     /// Gregorian year, month (1=January, 2=February, ...), and
     /// day of month, beginning with 1.  Inputs assumed to be UTC
+    ///
+    /// # Arguments:
+    ///
+    /// * `year` - The year
+    /// * `month` - The month (1=January, 2 = February, ...)
+    /// * `day` - The day of the month, starting with "1"
     #[staticmethod]
     fn from_date(year: u32, month: u32, day: u32) -> PyResult<Self> {
         Ok(PyAstroTime {
@@ -170,7 +176,16 @@ impl PyAstroTime {
     }
 
     /// Return time object representing input
-    /// modified Julian date an dtime scale
+    /// modified Julian date and time scale
+    ///
+    /// # Arguments:
+    ///
+    /// * `mjd` - The modified Julian Date
+    /// * `scale` - The time scale
+    ///
+    /// # Returns:
+    ///
+    /// Time object representing instant of modified julian date with given scale
     #[staticmethod]
     fn from_mjd(mjd: f64, scale: &PyTimeScale) -> Self {
         PyAstroTime {
@@ -180,6 +195,15 @@ impl PyAstroTime {
 
     /// Return time object representing input
     /// Julian date and time scale
+    ///
+    /// # Arguments:
+    ///
+    /// * `jd` - The Julian Date
+    /// * `scale` - The time scale
+    ///
+    /// # Returns:
+    ///
+    /// Time object representing instant of julian date with given scale
     #[staticmethod]
     fn from_jd(jd: f64, scale: &PyTimeScale) -> Self {
         PyAstroTime {
@@ -259,10 +283,10 @@ impl PyAstroTime {
 
     /// Convert to Python datetime object
     ///
-    /// Inputs:
+    /// # Arguments:
     ///   
-    ///    utc_timezone: Optional bool indicating use UTC as timezone
-    ///                  if not passed in, defaults to true
+    /// # `utc_timezone` - Optional bool indicating use UTC as timezone
+    ///                    if not passed in, defaults to true
     ///
     #[pyo3(signature = (utc=true))]
     fn datetime(&self, utc: bool) -> PyResult<PyObject> {

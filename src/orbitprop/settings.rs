@@ -1,5 +1,16 @@
 //! Orbit Propagation Settings
 
+/// Propagation settings
+///
+/// These include
+///
+/// * `gravity_order` - integer gravity order to use when computing Earth gravity.  Default is 4
+/// * `gravity_interp_dt_seconds` - Interpolation interval for rotation to ITRF frame for gravity calc.  Default is 60 seconds
+/// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
+/// * `rel_error` - the maximum relative error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
+/// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
+/// * `use_jplephem` -  Use very high precision JPL ephemerides when computing force of sun & moon.  Default is true
+///
 #[derive(Debug, Clone)]
 pub struct PropSettings {
     pub gravity_order: u16,

@@ -24,7 +24,7 @@ use crate::SKResult;
 /// quaternions to the East-North-Up frame
 /// and North-East-Down frame at this coordinate
 ///
-#[derive(PartialEq, PartialOrd, Copy, Clone)]
+#[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
 pub struct ITRFCoord {
     pub itrf: Vec3,
 }

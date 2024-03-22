@@ -245,6 +245,121 @@ impl<'a, const C: usize> ode::ODESystem for Propagation<'a, C> {
     }
 }
 
+///
+/// High-precision Propagation a satellite state from a given start time
+/// to a given stop time, with input settings and
+/// satellite properties
+///
+/// Uses Runga-kutta methods for integrating the force equations
+///
+/// The default propagator uses a Runga-Kutta 9(8) integrator
+/// with coefficients computed by Verner:
+/// https://www.sfu.a/~jverner/
+///
+/// This works much better than lower-order Runga-Kutta solvers such as
+/// Dorumund-Prince, and I don't know why it isn't more popular in
+/// numerical packages
+///
+/// # Forces included in the propagator:
+///
+/// * Earth gravity with higher-order zonal terms
+/// * Gravitational pull of sun, moon
+/// * Solar radiation pressure
+/// * Atmospheric drag: NRL-MSISE 2000 model, with option to include space weather
+///   (effects can be large)
+///
+/// # Arguments:
+///
+/// * `state` - The satellite state, represented as:
+///    * `SimpleState` - a 6x1 matrix where the 1st three elements represent GCRF position in meters,
+///       and the 2nd three elements represent GCRF velocity in meters / second
+///    * `CovState` - a 6x7 matrix where the first column is the same as SimpleState above, and columns
+///       2-7 represent the 6x6 state transition matrix, dS/dS0
+///       The state transition matrix should be initialized to identity when running
+///       The output of the state transition matrix can be used to compute the evolution of the
+///       state covariance  (see Montenbruck and Gill for details)
+///  * `start` - The time at the initial state
+///  * `stop` - The time at which to propagate for computing new states
+///  * `step_seconds` - An optional value representing intervals between `start` and `stop` at which
+///     the new state will be computed
+///  * `settings` - Settings for the Runga-Kutta propagator
+///  * `satprops` - Properties of the satellite, such as ballistic coefficient & susceptibility to
+///     radiation pressure
+///
+/// # Output:
+///
+/// * `PropagationResult` object with details of the propagation compute, the final state, and intermediate states if step size
+///    is set
+///
+/// # Example:
+///
+/// ```
+/// // Setup a simple Geosynchronous orbit with initial position along the x axis
+/// // and initial velocity along the y axis
+/// let mut state = satkit::orbitprop::SimpleState::zeros();
+/// state[0] = satkit::consts::GEO_R;
+/// state[4] = (satkit::consts::MU_EARTH / satkit::consts::GEO_R).sqrt();
+///
+/// // Setup the details of the propagation
+/// let mut settings = satkit::orbitprop::PropSettings::default();
+/// settings.abs_error = 1.0e-9;
+/// settings.rel_error = 1.0e-14;
+/// settings.gravity_order = 4;
+/// settings.gravity_interp_dt_secs = 300.0;
+/// settings.use_jplephem = false;
+///
+/// // Pick an arbitrary start time
+/// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// // Propagate to 1/2 day ahead
+/// let stoptime = starttime + satkit::Duration::Days(0.5);
+///
+/// // Look at the results
+/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, None, &settings, None).unwrap();
+///
+/// println!("results = {:?}", res);
+/// // Expect:
+/// // res = PropagationResult { time: [AstroTime { mjd_tai: 57101.50040509259 }],
+/// //                           state: [[[-42153870.84175911, -379423.6616440884, -26.239180898423687,
+/// //                                     27.66411233952899, -3075.146656613106, 0.0020580348953689828]]],
+/// //                           accepted_steps: 45, rejected_steps: 0, num_eval: 722
+/// //                          }
+/// ```
+///
+/// # Example 2:
+///
+/// ```
+/// // Now, propagate the state transition matrix
+///
+/// // Setup a simple Geosynchronous orbit with initial position along the x axis
+/// // and initial velocity along the y axis
+/// use nalgebra as na;
+/// let mut state = satkit::orbitprop::CovState::zeros();
+/// state.fixed_view_mut::<3, 1>(0, 0).copy_from(&na::vector![satkit::consts::GEO_R, 0.0, 0.0]);
+/// state.fixed_view_mut::<3, 1>(3, 0).copy_from(&na::vector![0.0, (satkit::consts::MU_EARTH/satkit::consts::GEO_R).sqrt(), 0.0]);
+/// // initialize state transition matrix to zero
+/// state.fixed_view_mut::<6, 6>(0, 1).copy_from(&na::Matrix6::<f64>::identity());
+///
+///
+/// // Setup the details of the propagation
+/// let mut settings = satkit::orbitprop::PropSettings::default();
+/// settings.abs_error = 1.0e-9;
+/// settings.rel_error = 1.0e-14;
+/// settings.gravity_order = 4;
+/// settings.gravity_interp_dt_secs = 300.0;
+/// settings.use_jplephem = false;
+///
+/// // Pick an arbitrary start time
+/// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// // Propagate to 1/2 day ahead
+/// let stoptime = starttime + satkit::Duration::Days(0.5);
+///
+/// // Look at the results
+/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, None, &settings, None).unwrap();
+///
+/// println!("results = {:?}", res);
+/// ```
+///
+///
 pub fn propagate<const C: usize>(
     state: &StateType<C>,
     start: &AstroTime,
@@ -340,19 +455,23 @@ mod tests {
 
     use std::fs::File;
 
+    use crate::Duration;
     use std::io::{self, BufRead};
 
     #[test]
     fn test_propagate() -> SKResult<()> {
         let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
-        let stoptime = starttime + 1.0;
+        let stoptime = starttime + Duration::Days(0.5);
 
         let mut state: SimpleState = SimpleState::zeros();
-        // Inclination
 
         state[0] = consts::GEO_R;
         state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
 
+        // initialize state transition matrix to zero
+        state
+            .fixed_view_mut::<6, 6>(0, 1)
+            .copy_from(&na::Matrix6::<f64>::identity());
         let mut settings = PropSettings::default();
         settings.abs_error = 1.0e-9;
         settings.rel_error = 1.0e-14;
@@ -361,6 +480,7 @@ mod tests {
         settings.use_jplephem = false;
 
         let res = propagate(&state, &starttime, &stoptime, None, &settings, None)?;
+        println!("res = {:?}", res);
 
         // Try to propagate back to original time
         let res2 = propagate(&res.state[0], &stoptime, &starttime, None, &settings, None)?;

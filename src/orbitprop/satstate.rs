@@ -13,6 +13,23 @@ pub enum StateCov {
     PVCov(PVCovType),
 }
 
+///
+/// A Satellite State object
+///
+/// This is a convenience structure for representing
+/// a satellite state and state uncertainty, where a state is
+/// represented as a position (meters) and velocity (meters) in the
+/// Geocentric Celestial Reference Frame (GCRS)
+///
+/// The structure allows for propagation of the state to a new time
+/// using the high-precision orbit propagator associated with this package
+///
+/// The satellite state can also include a 6x6 covariance matrix representing
+/// the uncertainty in position and velocity.
+///
+/// If the state is propagated, the state uncertainty will be propagated as well
+/// via the state transition matrix
+///
 #[derive(Clone, Debug)]
 pub struct SatState {
     pub time: AstroTime,
@@ -37,7 +54,7 @@ impl SatState {
         self.pv.fixed_view::<3, 1>(3, 0).into()
     }
 
-    /// set covariance
+    /// Set covariance
     ///
     /// # Arguments
     ///
@@ -67,12 +84,17 @@ impl SatState {
         q2 * q1
     }
 
+    pub fn cov(&self) -> StateCov {
+        self.cov.clone()
+    }
+
     /// Set position uncertainty (1-sigma, meters) in the
     /// lvlh (local-vertical, local-horizontal) frame
     ///
     /// # Arguments
     ///
     /// * `sigma_lvlh` - 3-vector with 1-sigma position uncertainty in LVLH frame
+    ///
     pub fn set_lvlh_pos_uncertainty(&mut self, sigma_lvlh: &na::Vector3<f64>) {
         let dcm = self.qgcrf2lvlh().to_rotation_matrix();
 
@@ -81,6 +103,25 @@ impl SatState {
 
         let mut m = na::Matrix6::<f64>::zeros();
         m.fixed_view_mut::<3, 3>(0, 0)
+            .copy_from(&(dcm.transpose() * pcov * dcm));
+        self.cov = StateCov::PVCov(m);
+    }
+
+    /// Set velocity uncertainty (1-sigma, meters/second) in the
+    /// lvlh (local-vertical, local-horizontal) frame
+    ///
+    /// # Arguments
+    ///
+    /// * `sigma_lvlh` - 3-vector with 1-sigma velocity uncertainty in LVLH frame
+    ///
+    pub fn set_lvlh_vel_uncertainty(&mut self, sigma_lvlh: &na::Vector3<f64>) {
+        let dcm = self.qgcrf2lvlh().to_rotation_matrix();
+
+        let mut pcov = na::Matrix3::<f64>::zeros();
+        pcov.set_diagonal(&sigma_lvlh.map(|x| x * x));
+
+        let mut m = na::Matrix6::<f64>::zeros();
+        m.fixed_view_mut::<3, 3>(3, 3)
             .copy_from(&(dcm.transpose() * pcov * dcm));
         self.cov = StateCov::PVCov(m);
     }
@@ -95,11 +136,34 @@ impl SatState {
     pub fn set_gcrf_pos_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
         self.cov = StateCov::PVCov({
             let mut m = PVCovType::zeros();
-            let mut diag = na::Vector6::<f64>::zeros();
+            let mut diag = na::Vector3::<f64>::zeros();
             diag[0] = sigma_cart[0] * sigma_cart[0];
             diag[1] = sigma_cart[1] * sigma_cart[1];
             diag[2] = sigma_cart[2] * sigma_cart[2];
-            m.set_diagonal(&diag);
+            let mut pcov = na::Matrix3::<f64>::zeros();
+            pcov.set_diagonal(&diag);
+            m.fixed_view_mut::<3, 3>(0, 0).copy_from(&pcov);
+            m
+        })
+    }
+
+    /// Set velocity uncertainty (1-sigma, meters / second) in the
+    /// gcrf (Geocentric Celestial Reference Frame)
+    ///
+    /// # Arguments
+    ///
+    /// * `sigma_gcrf` - 3-vector with 1-sigma velocity uncertainty in GCRF frame    
+    ///
+    pub fn set_gcrf_vel_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
+        self.cov = StateCov::PVCov({
+            let mut m = PVCovType::zeros();
+            let mut diag = na::Vector3::<f64>::zeros();
+            diag[0] = sigma_cart[0] * sigma_cart[0];
+            diag[1] = sigma_cart[1] * sigma_cart[1];
+            diag[2] = sigma_cart[2] * sigma_cart[2];
+            let mut pcov = na::Matrix3::<f64>::zeros();
+            pcov.set_diagonal(&diag);
+            m.fixed_view_mut::<3, 3>(3, 3).copy_from(&pcov);
             m
         })
     }
@@ -111,6 +175,10 @@ impl SatState {
     ///
     /// * `time` - Time for which to compute new state
     /// * `settings` - Settings for the propagator
+    ///
+    /// # Returns:
+    ///
+    /// New satellite state representing ballistic propgation to new time
     ///
     pub fn propagate(
         &self,
@@ -194,7 +262,7 @@ impl std::fmt::Display for SatState {
 mod test {
     use super::*;
     use crate::consts;
-    use approx::assert_relative_eq;
+    use approx::{assert_abs_diff_eq, assert_relative_eq};
 
     #[test]
     fn test_qgcrf2lvlh() -> SKResult<()> {
@@ -220,19 +288,32 @@ mod test {
 
     #[test]
     fn test_satstate() -> SKResult<()> {
-        let satstate = SatState::from_pv(
+        let mut satstate = SatState::from_pv(
             &AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        println!("state orig = {:?}", satstate);
+        satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
+        satstate.set_lvlh_vel_uncertainty(&na::vector![0.01, 0.02, 0.03]);
 
-        let state2 = satstate.propagate(&(satstate.time + 1.0), None)?;
+        let state2 = satstate.propagate(&(satstate.time + 0.5), None)?;
 
-        println!("state 2 = {:?}", state2);
+        // Propagate back to original time
+        let state0 = state2.propagate(&satstate.time, None)?;
 
-        let state0 = state2.propagate(&satstate.time, None);
-        println!("state 0 = {:?}", state0);
+        // Check that propagating backwards in time results in the original state
+        assert_abs_diff_eq!(satstate.pos(), state0.pos(), epsilon = 0.1);
+        assert_abs_diff_eq!(satstate.vel(), state0.vel(), epsilon = 0.001);
+        let cov1 = match satstate.cov() {
+            StateCov::PVCov(v) => v,
+            StateCov::None => panic!("cov is not none"),
+        };
+        let cov2 = match state0.cov() {
+            StateCov::PVCov(v) => v,
+            StateCov::None => panic!("cov is not none"),
+        };
+        assert_abs_diff_eq!(cov1, cov2, epsilon = 0.001);
+
         Ok(())
     }
 
@@ -244,11 +325,8 @@ mod test {
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
         satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
-        println!("state orig = {:?}", satstate.cov);
 
-        let state2 = satstate.propagate(&(satstate.time + 1.0), None)?;
-
-        println!("state 2 = {:?}", state2.cov);
+        let _state2 = satstate.propagate(&(satstate.time + 1.0), None)?;
 
         Ok(())
     }

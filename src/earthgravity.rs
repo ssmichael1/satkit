@@ -530,12 +530,12 @@ impl Gravity {
 #[cfg(test)]
 
 mod tests {
-
     use super::*;
 
     use crate::consts::OMEGA_EARTH;
     use crate::itrfcoord::ITRFCoord;
     use crate::types::Vec3;
+    use approx::assert_relative_eq;
     use std::f64::consts::PI;
 
     #[test]
@@ -546,7 +546,8 @@ mod tests {
         let altitude: f64 = 0.0;
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
         let gaccel: Vec3 = jgm3().accel(&coord.into(), 6);
-        println!("gaccel = {}", gaccel);
+        let gaccel_truth = na::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
+        assert_relative_eq!(gaccel, gaccel_truth, max_relative = 1.0e-6);
     }
 
     #[test]
@@ -589,8 +590,16 @@ mod tests {
         let ns_deflection: f64 = -f64::atan2(g_enu[1], -g_enu[2]) * 180.0 / PI * 3600.0;
 
         // Compare with reference values
-        assert!(f64::abs(ew_deflection / reference_ew_deflection_asec - 1.0) < 1.0e-5);
-        assert!(f64::abs(ns_deflection / reference_ns_deflection_asec - 1.0) < 1.0e-5);
+        assert_relative_eq!(
+            ew_deflection,
+            reference_ew_deflection_asec,
+            max_relative = 1.0e-5
+        );
+        assert_relative_eq!(
+            ns_deflection,
+            reference_ns_deflection_asec,
+            max_relative = 1.0e-5
+        );
     }
 
     #[test]
@@ -625,10 +634,7 @@ mod tests {
             let accel3 = accel1 + partials * dpos;
 
             // show that they are approximately equal
-            for idx in 0..3 {
-                let fracdiff = (accel3[idx] / accel2[idx] - 1.0).abs();
-                assert!(fracdiff < 1.0e-5);
-            }
+            assert_relative_eq!(accel2, accel3, max_relative = 1.0e-5);
         }
     }
 }

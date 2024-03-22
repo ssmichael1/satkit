@@ -132,6 +132,9 @@ impl TLE {
         Ok(tles)
     }
 
+    ///
+    /// Return a default empty TLE.  Note that values are invalid.
+    ///
     pub fn new() -> TLE {
         TLE {
             name: "none".to_string(),
@@ -207,6 +210,37 @@ impl TLE {
         }
     }
 
+    /// Load 2 lines as strings into a structure representing
+    /// a Two-Line Element Set  (TLE)
+    ///
+    /// The TLE can then be used to compute satellite position and
+    /// velocity as a function of time.
+    ///
+    /// For details, see [here](https://en.wikipedia.org/wiki/Two-line_element_set)
+    ///
+    /// # Arguments:
+    ///
+    ///   * `line1` - the 1st line of TLE
+    ///   * `line2` - the 2nd line of the TLE
+    ///
+    /// # Returns:
+    ///
+    ///  * A TLE object or string indicating error condition
+    ///
+    /// # Example
+    ///
+    /// ```
+    ///
+    /// use satkit::TLE;
+    /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
+    /// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
+    /// let tle = TLE::load_2line(
+    ///     &line1.to_string(),
+    ///     &line2.to_string()
+    ///     ).unwrap();
+    ///
+    /// ```
+    ///
     pub fn load_2line(line1: &str, line2: &str) -> Result<TLE, String> {
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
@@ -417,14 +451,16 @@ mod tests {
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
         let line0: &str = "0 INTELSAT 902";
         match TLE::load_3line(&line0.to_string(), &line1.to_string(), &line2.to_string()) {
-            Ok(t) => {
-                assert_eq!(1, 1);
-                println!("TLE = {}", t);
-            }
+            Ok(_t) => {}
 
             Err(s) => {
-                println!("Err = \"{}\"", s);
-                assert_eq!(1, 0);
+                panic!("load_3line: Err = \"{}\"", s);
+            }
+        }
+        match TLE::load_2line(&line1.to_string(), &line2.to_string()) {
+            Ok(_t) => {}
+            Err(s) => {
+                panic!("load_2line: Err = \"{}\"", s);
             }
         }
     }

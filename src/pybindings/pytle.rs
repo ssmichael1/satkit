@@ -11,6 +11,19 @@ pub struct PyTLE {
 
 #[pymethods]
 impl PyTLE {
+    /// Return a list of TLES loaded from input text file.
+    ///
+    /// If the file contains lines only represent a single TLE, the TLE will
+    /// be output, rather than a list with a single TLE element
+    ///
+    /// # Arguments:
+    ///
+    /// * `filename` - name of textfile lines for TLE(s) to load
+    ///
+    /// # Returns:
+    ///
+    /// * `tle` - a list of TLE objects or a single TLE if lines for
+    ///           only 1 are passed in
     #[staticmethod]
     fn from_file(filename: String) -> PyResult<PyObject> {
         let file = File::open(&std::path::PathBuf::from(filename))?;
@@ -24,9 +37,19 @@ impl PyTLE {
         PyTLE::from_lines(lines)
     }
 
-    /// Return list of TLEs from input lines
-    /// lines is a list of strings
-    /// If list is only a single TLE, the TLE will be returned instead of a single-element list
+    /// Return a list of TLES loaded from input list of lines
+    ///
+    /// If the file contains lines only represent a single TLE, the TLE will
+    /// be output, rather than a list with a single TLE element
+    ///
+    /// # Arguments:
+    ///
+    /// * `lines` - list of strings lines for TLE(s) to load
+    ///
+    /// # Returns:
+    ///
+    /// * `tle` - a list of TLE objects or a single TLE if lines for
+    ///           only 1 are passed in
     #[staticmethod]
     fn from_lines(lines: Vec<String>) -> PyResult<PyObject> {
         match TLE::from_lines(&lines) {
