@@ -9,22 +9,8 @@ license-file = "LICENSE"
 homepage = "https://github.com/ssmichael1/satkit"
 repository = "https://github.com/ssmichael1/satkit"
 documentation = "https://docs.rs/satkit"
-keywords = ["satellite", 
-    "orbit",
-    "kinematics",
-    "ephemeris",
-    "sgp4", 
-    "tle",
-    "astrodynamics",
-    "jpl",
-    "geodesy", 
-]
-categories = [
-    "aerospace",
-    "algorithms",
-    "mathematics",
-    "science",
-]
+keywords = ["satellite", "orbit", "ephemeris", "tle", "astrodynamics"]
+categories = ["aerospace", "algorithms", "mathematics", "science"]
 
 
 # See more keys and their definitions at 
