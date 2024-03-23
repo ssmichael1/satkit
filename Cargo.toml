@@ -1,6 +1,6 @@
 [package]
 name = "satkit"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
