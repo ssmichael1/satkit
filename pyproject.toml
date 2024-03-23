@@ -43,6 +43,9 @@ find = { where = ["python"] }
 
 [tool.cibuildwheel]
 build = ["cp312-*", "cp311-* cp310-* cp39-* cp38-*"]
+test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
+skip = ["pp*", "*_i686", "*_s390x", "*_aarch64", "*_ppc64le", "*-musllinux*"]
+
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
@@ -54,7 +57,6 @@ before-build = [
 ]
 environment = { PATH = "$PATH:$HOME/.cargo/bin" }
 # Skip trying to test arm64 builds on Intel Macs
-test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
 test-requires = "pytest"
 test-command = [
     "ASTRO_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
@@ -64,7 +66,6 @@ test-command = [
 [tool.cibuildwheel.linux]
 environment = { PATH = "$PATH:$HOME/.cargo/bin" }
 archs = ["x86_64"]
-skip = ["pp*", "*_i686", "*_s390x", "*_aarch64", "*_ppc64le", "*-musllinux*"]
 before-build = [
     "pip install -U setuptools-rust",
     "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y",
@@ -85,7 +86,6 @@ before-build = [
     "rustup show",
 ]
 archs = ["AMD64"]
-skip = ["pp*"]
 test-requires = "pytest"
 before-test = [
     "set ASTRO_DATA={package}\\astro-data",
