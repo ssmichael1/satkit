@@ -173,6 +173,25 @@ pub fn update() -> SKResult<()> {
     Ok(())
 }
 
+
+///
+/// Get Earth Orientation Parameters at given Modified Julian Date (UTC)
+/// Returns None if no data is available for the given date
+/// 
+/// # Arguments:
+/// 
+/// * `mjd_utc` - Modified Julian Date (UTC)
+/// 
+/// # Returns:
+/// 
+/// * Vector [f64; 6] with following elements:
+/// * 0 : (UT1 - UTC) in seconds
+/// * 1 : X polar motion in arcsecs
+/// * 2 : Y polar motion in arcsecs
+/// * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
+/// * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
+/// * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
+/// 
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     let eop = eop_params_singleton().read().unwrap();
 
@@ -207,9 +226,9 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 ///
 /// * tm: Instant at which to query parameters
 ///
-/// # Return:
+/// # Returns:
 ///
-/// * Vector [f64; 4] with following elements:
+/// * Vector [f64; 6] with following elements:
 ///   * 0 : (UT1 - UTC) in seconds
 ///   * 1 : X polar motion in arcsecs
 ///   * 2 : Y polar motion in arcsecs

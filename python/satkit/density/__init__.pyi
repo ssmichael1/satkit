@@ -13,7 +13,7 @@ import satkit
 
 
 @typing.overload
-def nrlmsise(itrf: satkit.itrfcoord, time: satkit.time | None) -> (float, float):
+def nrlmsise(itrf: satkit.itrfcoord, time: satkit.time | None) -> typing.Tuple[float, float]:
     """
     NRL MSISE-00 Atmosphere Density Model
     
@@ -44,7 +44,7 @@ def nrlmsise(itrf: satkit.itrfcoord, time: satkit.time | None) -> (float, float)
 def nrlmsise(altitude_meters: float,
              latitude_rad: float,
              longitude_rad: float,
-             time: satkit.time | None) -> (float, float):
+             time: satkit.time | None) -> typing.Tuple[float, float]:
     """
     NRL MSISE-00 Atmosphere Density Model
     

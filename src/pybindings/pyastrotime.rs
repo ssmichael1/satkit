@@ -163,10 +163,10 @@ impl PyAstroTime {
             let hour = py_args.get_item(3)?.extract::<u32>()?;
             let min = py_args.get_item(4)?.extract::<u32>()?;
             let sec = py_args.get_item(5)?.extract::<f64>()?;
-            let mut pyscale = PyTimeScale::UTC;
-            if py_args.len() > 6 {
-                pyscale = py_args.get_item(6)?.extract::<PyTimeScale>()?;
-            }
+            let pyscale = match py_args.len() > 6 {
+                false => PyTimeScale::UTC,
+                true => py_args.get_item(6)?.extract::<PyTimeScale>()?,
+            };
             Self::from_gregorian(year, month, day, hour, min, sec, pyscale)
         } else {
             Err(pyo3::exceptions::PyTypeError::new_err(
@@ -296,6 +296,14 @@ impl PyAstroTime {
     }
 
     /// Convert from Python datetime object
+    /// 
+    /// # Arguments:
+    /// 
+    /// * `tm` - Python datetime object
+    /// 
+    /// # Returns:
+    /// 
+    /// SatKit Time object representing input datetime
     #[staticmethod]
     fn from_datetime(tm: &PyDateTime) -> PyResult<Self> {
         let ts: f64 = tm
@@ -327,10 +335,31 @@ impl PyAstroTime {
         })
     }
 
+    /// Convert to Modified Julian date
+    /// 
+    /// # Arguments:
+    /// 
+    /// * `scale` - Time scale to use for conversion
+    ///             default is UTC
+    /// # Returns:
+    /// 
+    /// Modified Julian Date
+    #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn to_mjd(&self, scale: &PyTimeScale) -> f64 {
         self.inner.to_mjd(scale.into())
     }
 
+    /// Convert to Julian date
+    /// 
+    /// # Arguments:
+    /// 
+    /// * `scale` - Time scale to use for conversion
+    ///             default is UTC
+    ///
+    /// # Returns:
+    ///    
+    /// Julian Date
+    #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn to_jd(&self, scale: &PyTimeScale) -> f64 {
         self.inner.to_jd(scale.into())
     }
@@ -507,6 +536,67 @@ impl PyAstroTime {
         }
     }
 
+    fn __eq__(&self, other: &PyAny) -> PyResult<bool> {
+        if other.is_instance_of::<PyAstroTime>() {
+            let tm2 = other.extract::<PyAstroTime>().unwrap();
+            Ok(self.inner == tm2.inner)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn __lt__(&self, other: &PyAny) -> PyResult<bool> {
+        if other.is_instance_of::<PyAstroTime>() {
+            let tm2 = other.extract::<PyAstroTime>().unwrap();
+            Ok(self.inner < tm2.inner)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn __le__(&self, other: &PyAny) -> PyResult<bool> {
+        if other.is_instance_of::<PyAstroTime>() {
+            let tm2 = other.extract::<PyAstroTime>().unwrap();
+            Ok(self.inner <= tm2.inner)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn __gt__(&self, other: &PyAny) -> PyResult<bool> {
+        if other.is_instance_of::<PyAstroTime>() {
+            let tm2 = other.extract::<PyAstroTime>().unwrap();
+            Ok(self.inner > tm2.inner)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn __ge__(&self, other: &PyAny) -> PyResult<bool> {
+        if other.is_instance_of::<PyAstroTime>() {
+            let tm2 = other.extract::<PyAstroTime>().unwrap();
+            Ok(self.inner >= tm2.inner)
+        } else {
+            Ok(false)
+        }
+    }
+
+
+    ///
+    /// Add given number of UTC days to a time object, and return the result
+    /// 
+    /// # Arguments:
+    /// 
+    /// * `days` - Number of days to add
+    /// 
+    /// # Returns:
+    /// 
+    /// Time object representing input time plus given number of days
+    /// 
+    /// # Note:
+    /// 
+    /// A UTC days is defined as being exactly 86400 seconds long.  This
+    /// avoids the ambiguity of adding a "day" to a time that has a leap second
     fn add_utc_days(&self, days: f64) -> PyAstroTime {
         PyAstroTime {
             inner: self.inner.add_utc_days(days),

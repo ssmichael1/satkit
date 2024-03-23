@@ -176,7 +176,7 @@ def sgp4(
     tle: satkit.TLE | list[satkit.tle],
     tm: satkit.time | list[satkit.time] | npt.ArrayLike[satkit.time],
     **kwargs,
-) -> (npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]):
+) -> tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]:
     """
     Run Simplified General Perturbations (SGP)-4 propagator on
     Two-Line Element Set to
@@ -369,7 +369,7 @@ def gravity(
 
 def gravity_and_partials(
     pos: satkit.itrfcoord | npt.ArrayLike[np.float], **kwargs
-) -> (npt.ArrayLike[np.float], np.arrayLike[np.float]):
+) -> typing.Tuple[npt.ArrayLike[np.float], np.arrayLike[np.float]]:
     """
     gravity_and_partials(pos)
     --
@@ -539,6 +539,16 @@ class timescale:
 
     For details, see:
     https://stjarnhimlen.se/comp/time.html
+
+    # Options:
+
+    * Invalid: Invalid time scale
+    * UTC: Universal Time Coordinate
+    * TT: Terrestrial Time
+    * UT1: UT1
+    * TAI: International Atomic Time
+    * GPS: Global Positioning System (GPS) time
+    * TDB: Barycentric Dynamical Time    
     """
 
     @property
@@ -670,7 +680,7 @@ class time:
         Return a time object representing input modified Julian date and time scale
         """
 
-    def to_date(self) -> (int, int, int):
+    def to_date(self) -> typing.Tuple[int, int, int]:
         """
         Return tuple representing as UTC Gegorian date of the
         time object.  Tuple has 6 elements:
@@ -712,7 +722,7 @@ class time:
 
     def to_gregorian(
         self, scale=satkit.timescale.UTC
-    ) -> (int, int, int, int, int, float):
+    ) -> typing.Tuple[int, int, int, int, int, float]:
         """
         Return tuple representing as UTC Gegorian date and time of the
         time object.  Tuple has 6 elements:
@@ -755,16 +765,20 @@ class time:
         2023-06-03 02:19:34
         """
 
-    def to_mjd(self, scale: satkit.timescale) -> float:
+    def to_mjd(self, scale: satkit.timescale = satkit.timescale.UTC) -> float:
         """
         Represent time instance as a Modified Julian Date
         with the provided time scale
+
+        If no time scale is provided, default is satkit.timescale.UTC
         """
 
-    def to_jd(self, scale: satkit.timescale) -> float:
+    def to_jd(self, scale: satkit.timescale = satkit.timescale.UTC) -> float:
         """
         Represent time instance as Julian Date with
         the provided time scale
+
+        If no time scale is provided, default is satkit.timescale.UTC
         """
 
     def to_unixtime(self) -> float:
@@ -790,15 +804,15 @@ class time:
         Return an satkit.time object or nunpy array of satkit.time objects
         representing the input "added to" the current object
 
-        Possible inputs and corresponding outputs:
+        # Possible inputs and corresponding outputs:
 
-        1. float: return satkit.time object incremented by input number of days
-        2. satkit.duration: return satkit.time object incremented by duration
-        3. list[float]: return numpy array of satkit.time objects, representing
+        *  `float` - return satkit.time object incremented by input number of days
+        * `satkit.duration` - return satkit.time object incremented by duration
+        * `list[float]`  - return numpy array of satkit.time objects, representing
            an element-wise addition of days to the "self"
-        4. list[duration]: reuturn numpy array of satkit.time objects, with each
+        * `list[duration]` -  reuturn numpy array of satkit.time objects, with each
            object representing an element-wise addition of "duration" to the "self"
-        5. numpy.array(float): return numpy array of satkit.time objects, with each
+        * `numpy.array(float)` - return numpy array of satkit.time objects, with each
            object representing an element-wise addition of days to the "self"
         """
 
@@ -816,17 +830,17 @@ class time:
         Return an satkit.time object or numpy array of satkit.time objects
         representing the input "subtracted from" the current object
 
-        Possible inputs and corresponding outputs:
+        # Possible inputs and corresponding outputs:
 
-        1. satkit.time: output is duration representing the difference
+        * `satkit.time` - output is duration representing the difference
            between the "other" time and "self"
-        2. satkit.duration: output is satkit.time object representing time minus
+        * `satkit.duration` - output is satkit.time object representing time minus
            the input duration
-        3. list[float]: return numpy array of satkit.time objects, representing
+        * `list[float]` - return numpy array of satkit.time objects, representing
            an element-wise subtraction of days to the "self"
-        4. list[duration]: return numpy array of satkit.time objects, representing
+        * `list[duration]` - return numpy array of satkit.time objects, representing
            an element-wise subtraction of "duration" from the "self"
-        5. numpy.array(float): return numpy array of satkit.time objects, with
+        * `numpy.array(float)` - return numpy array of satkit.time objects, with
            each object representing an element-wise subtraction of days from
            the "self".
 
@@ -872,11 +886,13 @@ class duration:
         if "other" is a time, output is a time representing the input
         time plus the duration
 
-        Example 1:
+        # Example 1:
+        
         print(duration.from_hours(1) + duration.from_minutes(1))
         Duration: 1 hours, 1 minutes, 0.000 seconds
 
-        Example 2:
+        # Example 2:
+        
         print(duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
         2023-06-04 13:30:00.000Z
 
@@ -962,6 +978,15 @@ class quaternion:
         """
 
     @staticmethod
+    def from_rotation_matrix(
+        mat: npt.ArrayLike[np.float64],
+    ) -> satkit.quaternion:
+        """
+        Return quaternion representing right-handed rotation
+        represented by input 3x3 rotation matrix
+        """
+
+    @staticmethod
     def rotx(theta) -> satkit.quaternion:
         """
         Return quaternion representing right-handed rotation of vector
@@ -1019,7 +1044,7 @@ class quaternion:
         Return 3x3 rotation matrix representing equivalent rotation
         """
 
-    def to_euler(self) -> (float, float, float):
+    def to_euler(self) -> typing.Tuple[float, float, float]:
         """
         Return equivalent rotation angle represented as rotation angles:
         ("roll", "pitch", "yaw") in radians:
@@ -1034,7 +1059,7 @@ class quaternion:
         Return the angle in radians of the rotation
         """
 
-    def axis(self) -> npt.ArrayLike(np.float64):
+    def axis(self) -> npt.ArrayLike[np.float64]:
         """
         Return the axis of rotation as a unit vector
         """
@@ -1221,13 +1246,13 @@ class itrfcoord:
         """
 
     @property
-    def geodetic_rad(self) -> (float, float, float):
+    def geodetic_rad(self) -> typing.Tuple[float, float, float]:
         """
         Tuple with: (latitude_rad, longitude_rad, altitude)
         """
 
     @property
-    def geodetic_deg(self) -> (float, float, float):
+    def geodetic_deg(self) -> typing.Tuple[float, float, float]:
         """
         Tuple with (latitude_deg, longitude_deg, altitude)
         """
@@ -1252,7 +1277,7 @@ class itrfcoord:
         to ITRF at this location
         """
 
-    def geodesic_distance(self, other: itrfcoord) -> (float, float, float):
+    def geodesic_distance(self, other: itrfcoord) -> typing.Tuple[float, float, float]:
         """
         Use Vincenty formula to compute geodesic distance:
         https://en.wikipedia.org/wiki/Vincenty%27s_formulae

@@ -60,7 +60,7 @@ def barycentric_pos(body: satkit.solarsystem, tm: satkit.time|list[satkit.time]|
     """    
 
 def geocentric_state(body: satkit.solarsystem, 
-                     tm: satkit.time|list[satkit.time]|npt.ArrayLike[satkit.time]) -> (npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]):
+                     tm: satkit.time|list[satkit.time]|npt.ArrayLike[satkit.time]) -> typing.Tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]:
     """
     Return geocentric (Earth-centered) state (position and velocity) for a given solar-system body
     at the given time or times in the GCRF frame 
@@ -88,7 +88,7 @@ def geocentric_state(body: satkit.solarsystem,
     """
     
 def barycentric_state(body: satkit.solarsystem, 
-                     tm: satkit.time|list[satkit.time]|npt.ArrayLike[satkit.time]) -> (npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]):
+                     tm: satkit.time|list[satkit.time]|npt.ArrayLike[satkit.time]) -> typing.Tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]:
     """
     Return barycentric position and velocity for a given solar-system body
     at the given time or times.  The barycentric coordinate system origin 

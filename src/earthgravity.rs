@@ -24,26 +24,42 @@ pub enum GravityModel {
     ITUGrace16,
 }
 
+
+/// 
+/// Singleton for JGM3 gravity model
+/// 
 pub fn jgm3() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("JGM3.gfc").unwrap())
 }
 
+///
+/// Singleton for JGM2 gravity model
+/// 
 pub fn jgm2() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("JGM2.gfc").unwrap())
 }
 
+///
+/// Singleton for EGM96 gravity model
+/// 
 pub fn egm96() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("EGM96.gfc").unwrap())
 }
 
+///
+/// Singleton for ITU GRACE16 gravity model
+/// 
 pub fn itu_grace16() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("ITU_GRACE16.gfc").unwrap())
 }
 
+///
+/// Singleton for gravity model hash
+/// 
 pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
     static INSTANCE: OnceCell<HashMap<GravityModel, &'static Gravity>> = OnceCell::new();
     INSTANCE.get_or_init(|| {
@@ -63,7 +79,7 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 ///
 /// # Arguments
 ///
-/// * `pos` - Position as nalgebra 3-vecotr
+/// * `pos` - nalgebra 3-vector representing ITRF position in meters
 ///
 /// * `order` - The order of the gravity model to use.
 ///             Maximum is 16
@@ -92,7 +108,7 @@ pub fn accel(pos_itrf: &Vec3, order: usize, model: GravityModel) -> Vec3 {
 ///
 /// # Inputs Arguments
 ///
-/// * `pos` - Position as nalgebra 3-vecotr
+/// * `pos` - nalgebra 3-vector representing ITRF position in meters
 ///
 /// * `order` - The order of the gravity model to use.
 ///               Maximum is 16

@@ -11,6 +11,78 @@ testvec_dir = os.getenv(
             "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
         )
 
+class TestTime:
+    def test_mjd(self):
+        """
+        Test MJD conversion
+        """
+        t = sk.time(2021, 1, 1, 0, 0, 0)
+        mjd = t.to_mjd(sk.timescale.UTC)
+        assert mjd == pytest.approx(59215.0)
+
+    def test_jd(self):
+        """
+        Test JD conversion
+        """
+        t = sk.time(2021, 1, 1, 0, 0, 0)
+        jd = t.to_jd(sk.timescale.UTC)
+        assert jd == pytest.approx(2459215.5)
+
+    def test_duration(self):
+        """
+        Test duration conversion
+        """
+        d = sk.duration.from_seconds(86400)
+        assert d.seconds() == 86400
+        assert d.days() == 1.0
+
+    def test_time_diff(self):
+        """
+        Test time difference
+        """
+        t1 = sk.time(2021, 1, 1, 0, 0, 0)
+        t2 = sk.time(2021, 1, 2, 0, 0, 0)
+        d = t2 - t1
+        assert d.days() == 1.0
+
+    def test_time_add(self):
+        """
+        Test time addition
+        """
+        t1 = sk.time(2021, 1, 1, 0, 0, 0)
+        d = sk.duration.from_days(1)
+        t2 = t1 + d
+        assert t2 == sk.time(2021, 1, 2, 0, 0, 0)
+
+    def test_time_sub(self):
+        """
+        Test time subtraction
+        """
+        t1 = sk.time(2021, 1, 1, 0, 0, 0)
+        d = sk.duration.from_days(1)
+        t2 = t1 - d
+        assert t2 == sk.time(2020, 12, 31, 0, 0, 0)
+
+    def test_time_str(self):
+        """
+        Test string conversion of time
+        """
+        t = sk.time(2021, 1, 1, 0, 0, 0)
+        assert str(t) == "2021-01-01 00:00:00.000Z"
+
+    def test_time_gregorian(self):
+        """
+        Test conversion to Gregorian calendar
+        """
+        t = sk.time(2021, 1, 1, 0, 0, 0)
+        (year, mon, day, hour, minute, sec) = t.to_gregorian()
+        assert year == 2021
+        assert mon == 1
+        assert day == 1
+        assert hour == 0
+        assert minute == 0
+        assert sec == 0
+
 class TestJPLEphem:
     def test_jplephem_testvecs(self):
         """
@@ -106,7 +178,6 @@ class TestJPLEphem:
                 else:
                     calc = (tvel - svel)[coord - 4] / sk.consts.au * 86400.0
                     assert calc == pytest.approx(truth, rel=1e-12)
-
 
 class TestGravity:
     def test_gravity(self):
@@ -340,6 +411,53 @@ class TestQuaternion:
         assert sk.quaternion.roty(
             m.pi / 2
         ).to_rotation_matrix() @ zhat == pytest.approx(xhat, 1.0e-10)
+
+    def test_dcm2quaternion(self):
+        """
+        Test conversion of DCM to quaternion
+        """
+        xhat = np.array([1.0, 0.0, 0.0])
+        yhat = np.array([0.0, 1.0, 0.0])
+        zhat = np.array([0.0, 0.0, 1.0])
+
+        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).to_rotation_matrix())
+        assert q * xhat == pytest.approx(yhat, 1.0e-10)
+
+
+    def test_quaternion2dcm(self):
+        """
+        Test conversion of quaternion to DCM
+        """
+        xhat = np.array([1.0, 0.0, 0.0])
+        yhat = np.array([0.0, 1.0, 0.0])
+        zhat = np.array([0.0, 0.0, 1.0])
+        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).to_rotation_matrix())
+        dcm = q.to_rotation_matrix()
+        assert dcm @ xhat == pytest.approx(yhat, 1.0e-10)
+
+    def test_quaternion2euler(self):
+        """
+        Test conversion of quaternion to Euler angles
+        """
+        q = sk.quaternion.rotz(m.pi/3)
+        euler = q.to_euler()
+        assert euler[0] == pytest.approx(0.0)
+        assert euler[1] == pytest.approx(0.0)
+        assert euler[2] == pytest.approx(m.pi/3)
+
+        q = sk.quaternion.rotx(m.pi/3)
+        euler = q.to_euler()
+        assert euler[0] == pytest.approx(m.pi/3)
+        assert euler[1] == pytest.approx(0.0)
+        assert euler[2] == pytest.approx(0.0)
+
+        q = sk.quaternion.roty(m.pi/3)
+        euler = q.to_euler()
+        assert euler[0] == pytest.approx(0.0)
+        assert euler[1] == pytest.approx(m.pi/3)
+        assert euler[2] == pytest.approx(0.0)
+        
+
 
 
 class TestGeodesicDistance:

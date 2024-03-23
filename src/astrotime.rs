@@ -91,6 +91,16 @@ const DELTAAT_OLD: [[f64; 4]; 15] = [
 
 /// Time Scales
 ///
+/// # Enum Values:
+/// 
+/// * `UTC` - Univeral Time Coordiante
+/// * `TT` - Terrestrial Time
+/// * `UT1` - UT1
+/// * `TAI` - International Atomic Time
+/// * `GPS` - Global Positioning System
+/// * `TDB` - Barycentric Dynamical Time
+/// * `INVALID` - Invalid
+///    
 #[derive(PartialEq, Debug)]
 pub enum Scale {
     /// Invalid

@@ -125,7 +125,7 @@ def pos_mod(
 def rise_set(time: satkit.time,
              coord: satkit.itrfcoord,
              sigma: float = 90.0 + 50.0/60.0
-             ) -> (satkit.time, satkit.time):
+             ) -> typing.Tuple[satkit.time, satkit.time]:
     """
     Sunrise and sunset times on the day given by input time
     and at the given location.  

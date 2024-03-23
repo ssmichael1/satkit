@@ -234,8 +234,8 @@ class propsettings:
         """
 
 def propagate(
-    pos: npt.ArrayLike(np.float64),
-    vel: npt.ArrayLike(np.float64),
+    pos: npt.ArrayLike[float],
+    vel: npt.ArrayLike[float],
     start: satkit.time,
     **kwargs,
 ) -> PropResult:

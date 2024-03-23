@@ -2,6 +2,14 @@
 /// A pure-rust implementation of SGP4
 ///
 /// manually and painstakingly converted from C++
+/// in as straightforward a manner as possible
+/// 
+/// Note: generates correct results that match test vectors
+/// provided by C++ implementation
+/// 
+/// Original C++ code by David Vallado, et al.
+/// https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
+/// 
 ///
 pub use self::satrec::SatRec;
 

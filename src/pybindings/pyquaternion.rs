@@ -74,12 +74,16 @@ impl Quaternion {
             inner: Quat::from_axis_angle(&Vec3::z_axis(), theta_rad),
         })
     }
+
+    
     /// Quaternion representing rotation about given axis by
     /// given angle in radians
     ///
     /// # Arguments:
     ///
     /// * `axis` - 3-element numpy array representing axis about which to rotate
+    ///            (does not need to be normalized)
+    /// 
     /// * 'angle`  - Angle in radians to rotate about axis (right-handed rotation of vector)
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> PyResult<Self> {
@@ -122,9 +126,34 @@ impl Quaternion {
         }
     }
 
+
+    /// Return quaternion representing same rotation as input
+    /// direction cosine matrix (3x3 rotation matrix)
+    /// 
+    /// # Arguments:
+    /// 
+    /// * `dcm` - 3x3 numpy array representing rotation matrix
+    /// 
+    /// # Returns:
+    /// 
+    /// * Quaternion representing same rotation as input matrix
+    /// 
+    #[staticmethod]
+    fn from_rotation_matrix(dcm: np::PyReadonlyArray2<f64>) -> PyResult<Self> {
+        if dcm.dims() != [3, 3] {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Invalid DCM. Must be 3x3",
+            ));
+        }
+        let dcm = dcm.as_array();
+        let mat = na::Matrix3::from_iterator(dcm.iter().cloned());
+        let rot = na::Rotation3::from_matrix(&mat.transpose());
+        Ok(Quaternion{inner: Quat::from_rotation_matrix(&rot) })
+    }
+
     ///    
-    /// Return 3x3 rotation matrix representing rotation
-    /// identical to this quaternion
+    /// Return 3x3 rotation matrix (also called direction cosine matrix)
+    /// representing rotation identical to this quaternion
     ///
     fn to_rotation_matrix(&self) -> PyObject {
         let rot = self.inner.to_rotation_matrix();
