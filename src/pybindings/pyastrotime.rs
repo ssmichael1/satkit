@@ -327,10 +327,10 @@ impl PyAstroTime {
     fn datetime(&self, utc: bool) -> PyResult<PyObject> {
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             let timestamp: f64 = self.to_unixtime();
-            let mut tz: Option<&PyTzInfo> = Some(timezone_utc(py));
-            if utc == false {
-                tz = None;
-            }
+            let tz = match utc {
+                false => None,
+                true => Some(timezone_utc(py)),
+            };
             Ok(PyDateTime::from_timestamp(py, timestamp, tz)?.into_py(py))
         })
     }
