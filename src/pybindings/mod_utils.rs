@@ -76,6 +76,13 @@ fn githash() -> PyResult<String> {
     Ok(String::from(crate::utils::githash()))
 }
 
+// Version of satkit
+#[pyfunction]
+fn version() -> PyResult<String> {
+    Ok(String::from(crate::utils::gittag()))
+}
+
+
 #[pyfunction]
 fn dylib_path() -> PyResult<PyObject> {
     pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
@@ -100,6 +107,7 @@ pub fn utils(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(update_datafiles, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(githash, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(version, m)?).unwrap();
     m.add_function(wrap_pyfunction!(build_date, m)?).unwrap();
     Ok(())
 }
