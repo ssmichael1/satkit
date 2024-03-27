@@ -16,8 +16,8 @@ use numpy as np;
 /// are needed to compute precise rotations between various inertial and
 /// Earth-fixed coordinate frames
 ///
-/// For details, see:
-/// https://stjarnhimlen.se/comp/time.html
+/// For an excellent overview, see:
+/// https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/MPG%20Book/Release/Chapter2-TimeScales.pdf
 ///
 /// UTC = Universal Time Coordinate
 /// TT = Terrestrial Time

@@ -187,6 +187,8 @@ where
         _ => {
             let mut pout = ndarray::Array2::<f64>::zeros([tm.len(), 3]);
             let mut vout = ndarray::Array2::<f64>::zeros([tm.len(), 3]);
+
+            
             for (i, tm) in tm.iter().enumerate() {
                 match cfunc(tm) {
                     Ok(r) => {
