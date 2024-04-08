@@ -18,7 +18,7 @@ impl Consts {
     /// WGS-84 Earth radius, meters
     const earth_radius: f64 = cconsts::EARTH_RADIUS;
 
-    ///  Gravitational parameter of Earth, m^3/s^2 */
+    ///  Gravitational parameter of Earth, m^3/s^2
     #[classattr]
     const mu_earth: f64 = cconsts::MU_EARTH;
     /// Gravitational parameter of moon, m^3/s^2

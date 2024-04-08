@@ -59,6 +59,7 @@ pub fn gmst(tm: &AstroTime) -> f64 {
 }
 
 /// Equation of Equinoxes
+/// Equation of the equinoxes
 pub fn eqeq(tm: &AstroTime) -> f64 {
     let d: f64 = tm.to_mjd(Scale::TT) - 51544.5;
     let omega = PI / 180.0 * (125.04 - 0.052954 * d);

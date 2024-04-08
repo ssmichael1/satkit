@@ -77,7 +77,9 @@ impl Duration {
         // e.g. if seconds = 59.999..., rather than round up and
         // display "seconds" in second field, show 0 and increment
         // minutes...
-        secs = secs + 5.0e-4;
+        if secs % 60.0  > 59.9995 {
+            secs = secs + 5.0e-4;
+        }
 
         if secs < 1.0 {
             format!("Duration: {}{:.3} microseconds", sign, (secs % 1.0) * 1.0e6)

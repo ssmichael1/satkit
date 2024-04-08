@@ -13,11 +13,12 @@ use pyo3::prelude::*;
 ///
 /// # Arguments
 ///
-/// * tm: AstroTime object representing input time
-///
+///   * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///           representing time at which to calculate output
+/// 
 /// # Returns
 ///
-/// * Greenwich Mean Sideral Time,  radians
+/// * Greenwich Mean Sideral Time, radians, at intput time(s)
 ///
 #[pyfunction]
 pub fn gmst(tm: &PyAny) -> PyResult<PyObject> {
@@ -37,11 +38,12 @@ pub fn eqeq(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * tm: astro.time struct representing input time
+///   * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///           representing time at which to calculate output
 ///
 /// # Returns:
 ///
-///  * Greenwich apparant sidereal time, radians
+///  * Greenwich apparant sidereal time, radians, at input time(s)
 ///
 #[pyfunction]
 pub fn gast(tm: &PyAny) -> PyResult<PyObject> {
@@ -57,18 +59,18 @@ pub fn gast(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * tm: AstroTime struct representing input time
+///  * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///          representing time at which to calculate output
 ///
 /// # Returns:
 ///
-///  * Earth rotation angle, in radians
+///  * Earth rotation angle, in radians, at input time(s)
 ///
 /// # Calculation Details
 ///
 /// * Let t be UT1 Julian date
 /// * let f be fractional component of t (fraction of day)
 /// * ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t − 2451545.0))
-///
 ///
 #[pyfunction]
 pub fn earth_rotation_angle(tm: &PyAny) -> PyResult<PyObject> {
@@ -81,22 +83,49 @@ pub fn earth_rotation_angle(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * tm: astro.time struct representing input time
-///
+///  * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///          representing time at which to calculate output
+/// 
 /// # Returns:
 ///
-///  * Quaternion representing rotation from ITRF to TIRS
+///  * Quaternion representing rotation from ITRF to TIRS at input time(s)
 ///
 #[pyfunction]
 pub fn qitrf2tirs(tm: &PyAny) -> PyResult<PyObject> {
     py_quat_from_time_arr(ft::qitrf2tirs, tm)
 }
 
+///
+/// Rotation from Terrestrial Intermediate Reference System to
+/// Celestial Intermediate Reference Systems
+///
+/// # Arguments:
+///
+///  * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///          representing time at which to calculate output
+/// 
+/// # Returns:
+///
+///  * Quaternion representing rotation from TIRS to CIRS at input time(s)
+///
 #[pyfunction]
 pub fn qtirs2cirs(tm: &PyAny) -> PyResult<PyObject> {
     py_quat_from_time_arr(ft::qtirs2cirs, tm)
 }
 
+///
+/// Rotation from Celestial Intermediate Reference System
+/// to Geocentric Celestial Reference Frame
+///
+/// # Arguments:
+///
+///  * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///          representing time at which to calculate output
+/// 
+/// # Returns:
+///
+///  * Quaternion representing rotation from CIRS to GCRF at input time(s)
+///
 #[pyfunction]
 pub fn qcirs2gcrf(tm: &PyAny) -> PyResult<PyObject> {
     py_quat_from_time_arr(ft::qcirs2gcrs, tm)
@@ -114,11 +143,12 @@ pub fn qcirs2gcrf(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * `tm` - astro.time struct representing input time
+///  * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///          representing time at which to calculate output
 ///
 /// # Returns:
 ///
-///  * Quaternion representing rotation from ITRF to GCRF
+///  * Quaternion representing rotation from ITRF to GCRF at input time(s)
 ///
 #[pyfunction]
 pub fn qitrf2gcrf(tm: &PyAny) -> PyResult<PyObject> {
@@ -137,11 +167,12 @@ pub fn qitrf2gcrf(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * `tm` - astro.time struct representing input time
+///  * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///          representing time at which to calculate output
 ///
 /// # Returns:
 ///
-///  * Quaternion representing rotation from GCRF to ITRF
+///  * Quaternion representing rotation from GCRF to ITRF at input time(s)
 ///
 #[pyfunction]
 pub fn qgcrf2itrf(tm: &PyAny) -> PyResult<PyObject> {
@@ -158,11 +189,12 @@ pub fn qgcrf2itrf(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * `tm` - astro.time struct representing input time
+///  * `tm`: scalar, list, or numpy array of astro.time or datetime.datetime 
+///          representing time at which to calculate output
 ///
 /// # Returns:
 ///
-///  * Quaternion representing rotation from GCRF to ITRF
+///  * Quaternion representing rotation from GCRF to ITRF at input time(s)
 ///
 #[pyfunction]
 pub fn qgcrf2itrf_approx(tm: &PyAny) -> PyResult<PyObject> {
@@ -184,7 +216,7 @@ pub fn qitrf2gcrf_approx(tm: &PyAny) -> PyResult<PyObject> {
 ///
 /// # Arguments:
 ///
-///   * tm: astro.time struct representing input time
+///  * tm: astro.time struct representing input time
 ///
 /// # Returns:
 ///

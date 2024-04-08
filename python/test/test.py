@@ -5,11 +5,49 @@ import numpy as np
 import math as m
 import os
 from sp3file import read_sp3file
-
+from datetime import datetime, timezone
 
 testvec_dir = os.getenv(
             "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
         )
+
+class TestDateTime:
+    """
+    Check that function calls with satkit.time and datetime.datetime return 
+    the same result
+    """
+    def test_scalar_times(self):
+
+        # Create times and show that they are equal
+        tm1 = sk.time(2023, 3, 4, 12, 5, 6)
+        tm2 = datetime(2023, 3, 4, 12, 5, 6, tzinfo=timezone.utc)
+
+
+        assert(tm1.datetime() == tm2)
+        # Check that function calls work
+        # Pick gmst as the test function call for time
+        # it can be anything since under the hood the same function call is used
+        # to get time inputs for all python functions in package
+        g1 = sk.frametransform.gmst(tm1)
+        g2 = sk.frametransform.gmst(tm2)
+        assert g1 == pytest.approx(g2, rel=1e-10)
+
+    def test_list_times(self):
+        timearr = range(10)
+        tm1 = [sk.time(2023, 3, x+1, 12, 0, 0) for x in timearr]
+        tm2 = [datetime(2023, 3, x+1, 12, 0, 0, tzinfo=timezone.utc) for x in timearr]
+        g1 = sk.frametransform.gmst(tm1)
+        g2 = sk.frametransform.gmst(tm2)
+        assert g1 == pytest.approx(g2)
+
+    def test_numpy_times(self):
+        timearr = range(10)
+        tm1 = np.array([sk.time(2023, 3, x+1, 12, 0, 0) for x in timearr])
+        tm2 = np.array([datetime(2023, 3, x+1, 12, 0, 0, tzinfo=timezone.utc) for x in timearr])
+        g1 = sk.frametransform.gmst(tm1)
+        g2 = sk.frametransform.gmst(tm2)
+        assert g1 == pytest.approx(g2)   
+
 
 class TestTime:
     def test_mjd(self):

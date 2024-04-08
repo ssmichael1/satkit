@@ -27,6 +27,13 @@ pub fn githash<'a>() -> &'a str {
 }
 
 ///
+/// Return git tag of compiled library
+/// 
+pub fn gittag<'a>() -> &'a str {
+    env!("GIT_TAG")
+}
+
+///
 /// Return libary compile date
 ///
 pub fn build_date<'a>() -> &'a str {

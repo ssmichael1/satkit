@@ -10,7 +10,7 @@ pub fn testdirs() -> Vec<PathBuf> {
     let mut testdirs: Vec<PathBuf> = Vec::new();
 
     // Look for paths in environment variable
-    match std::env::var(&"ASTRO_DATA") {
+    match std::env::var(&"SATKIT_DATA") {
         Ok(val) => testdirs.push(Path::new(&val).to_path_buf()),
         Err(_) => (),
     }
@@ -64,7 +64,7 @@ pub fn testdirs() -> Vec<PathBuf> {
 /// Tries the following paths in order, and stops when the
 /// files are found
 ///
-/// *  "ASTRO_DATA" environment variable
+/// *  "SATKIT_DATA" environment variable
 /// *  ${HOME}/astro-data
 /// *  ${HOME}
 /// *  /usr/share/astro-data

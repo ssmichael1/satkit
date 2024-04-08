@@ -52,7 +52,7 @@ def datadir() -> str:
 
     MacOS:
 
-    1. Directory pointed to by "ASTRO_DATA" environment variable
+    1. Directory pointed to by "SATKIT_DATA" environment variable
     2. $HOME/LIBRARY/Application\ Support/astro-data
     3. $HOME/.astro-data
     4. $HOME

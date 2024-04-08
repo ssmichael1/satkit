@@ -54,11 +54,22 @@ fn update_datafiles(kwds: Option<&PyDict>) -> PyResult<()> {
     }
 }
 
-/// Return directory currently used to hold
-/// necessary data files for the directory
+/// Get directory where astronomy data is stored
 ///
-/// e.g., Earth Orientation Parameters, gravity coefficients,
-/// JPL Ephemeris, etc..
+/// Tries the following paths in order, and stops when the
+/// files are found
+///
+/// *  "SATKIT_DATA" environment variable
+/// *  ${HOME}/astro-data
+/// *  ${HOME}
+/// *  /usr/share/astro-data
+/// *  On Mac Only:
+///    * /Library/Application Support/astro-data
+///    * ${Home}/Library/Application Support/astro-data
+///
+/// Returns:
+///
+///  * string representing directory where files are stored
 ///
 #[pyfunction]
 fn datadir() -> PyResult<PyObject> {
@@ -75,6 +86,13 @@ fn datadir() -> PyResult<PyObject> {
 fn githash() -> PyResult<String> {
     Ok(String::from(crate::utils::githash()))
 }
+
+// Version of satkit
+#[pyfunction]
+fn version() -> PyResult<String> {
+    Ok(String::from(crate::utils::gittag()))
+}
+
 
 #[pyfunction]
 fn dylib_path() -> PyResult<PyObject> {
@@ -100,6 +118,7 @@ pub fn utils(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(update_datafiles, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(githash, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(version, m)?).unwrap();
     m.add_function(wrap_pyfunction!(build_date, m)?).unwrap();
     Ok(())
 }

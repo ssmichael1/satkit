@@ -2,7 +2,6 @@ use pyo3::prelude::*;
 use pyo3::types::timezone_utc;
 use pyo3::types::PyDateTime;
 use pyo3::types::PyTuple;
-use pyo3::types::PyTzInfo;
 
 use crate::astrotime::{self, AstroTime, Scale};
 
@@ -17,8 +16,8 @@ use numpy as np;
 /// are needed to compute precise rotations between various inertial and
 /// Earth-fixed coordinate frames
 ///
-/// For details, see:
-/// https://stjarnhimlen.se/comp/time.html
+/// For an excellent overview, see:
+/// https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/MPG%20Book/Release/Chapter2-TimeScales.pdf
 ///
 /// UTC = Universal Time Coordinate
 /// TT = Terrestrial Time
@@ -327,10 +326,10 @@ impl PyAstroTime {
     fn datetime(&self, utc: bool) -> PyResult<PyObject> {
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             let timestamp: f64 = self.to_unixtime();
-            let mut tz: Option<&PyTzInfo> = Some(timezone_utc(py));
-            if utc == false {
-                tz = None;
-            }
+            let tz = match utc {
+                false => None,
+                true => Some(timezone_utc(py)),
+            };
             Ok(PyDateTime::from_timestamp(py, timestamp, tz)?.into_py(py))
         })
     }
@@ -636,13 +635,27 @@ impl ToTimeVec for &PyAny {
             let tm: PyAstroTime = self.extract().unwrap();
             Ok(vec![tm.inner.clone()])
         }
+        else if self.is_instance_of::<PyDateTime>() {
+            let dt: &PyDateTime = self.extract().unwrap();
+            Ok(vec![PyAstroTime::from_datetime(dt).unwrap().inner])
+        }
         // List case
         else if self.is_instance_of::<pyo3::types::PyList>() {
             match self.extract::<Vec<PyAstroTime>>() {
                 Ok(v) => Ok(v.iter().map(|x| x.inner).collect::<Vec<_>>()),
-                Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
-                    "Not a list of astro::AstroTime: {e}"
-                ))),
+                Err(e) => {
+                    match self.extract::<Vec<&PyDateTime>>() {
+                        Ok(v) => Ok(v.iter().map(|x| 
+                            PyAstroTime::from_datetime(x.extract().unwrap()).unwrap().inner)
+                            .collect::<Vec<_>>()),
+                        Err(e) => {
+                            Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                                "Not a list of satkit.time or datetime.datetime: {e}"
+                            )))
+                        }
+                    }
+                }
+               
             }
         }
         // numpy array case
@@ -656,13 +669,18 @@ impl ToTimeVec for &PyAny {
                         .map(|p| -> Result<AstroTime, _> {
                             match p.extract::<PyAstroTime>(py) {
                                 Ok(v2) => Ok(v2.inner),
-                                Err(v2) => Err(v2),
+                                Err(_) => match p.extract::<&PyDateTime>(py) {
+                                    Ok(v3) => Ok(PyAstroTime::from_datetime(v3.extract().unwrap()).unwrap().inner),
+                                    Err(_) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                                        "Input numpy array must contain satkit.time elements or datetime.datetime elements"
+                                    ))),
                             }
+                        }
                         })
                         .collect();
                     if !tmarray.is_ok() {
                         Err(pyo3::exceptions::PyRuntimeError::new_err(
-                            "Invalid AstroTime input",
+                            "Invalid satkit.time input",
                         ))
                     } else {
                         Ok(tmarray.unwrap())
@@ -670,12 +688,12 @@ impl ToTimeVec for &PyAny {
                 }),
 
                 Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
-                    "Invalid AstroTime input: {e}"
+                    "Invalid satkit.time or datetime.datetime input: {e}"
                 ))),
             }
         } else {
             Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Invalid AstroTime input",
+                "Invalid satkit.time or datetime.datetime input",
             ))
         }
     }

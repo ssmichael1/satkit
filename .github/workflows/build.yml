@@ -31,7 +31,7 @@ jobs:
     runs-on: ${{ format('{0}-latest', matrix.os) }}
 
     env:
-      ASTRO_DATA: ${{matrix.data_path}}
+      SATKIT_DATA: ${{matrix.data_path}}
       SATKIT_TESTVEC_ROOT: ${{matrix.testvec_path}}
 
     steps:
