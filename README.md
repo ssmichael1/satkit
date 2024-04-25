@@ -30,7 +30,7 @@ Also includes python bindings for *all* functions via via [pyo3](https://pyo3.rs
 - **Native Rust** bindings
 - **Python bindings** for compiled rust code ... speed of Rust with convenience of Python<br/>
   Install with `pip install satkit`<br/>
-  PyPi includes binary packages for windows, macos (Intel & ARM), and linux.  Python documentation is at: <https://satellite-toolkit.readthedocs.io/en/latest/>
+  PyPi includes binary packages for windows, macos (Intel & ARM), and linux.  Python documentation is at: <https://satellite-toolkit.readthedocs.io/latest/>
 
 ## Features
 
