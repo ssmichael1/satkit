@@ -17,7 +17,7 @@ With the following definitions:
 * $\vec{v}_r$  : Velocity of satellite relative to the surrounding air
 
 
-# Air Density Model
+## Air Density Model
 
 There are multiple models describing the air density.  The ``satkit`` package uses the [NRL MSISE-00](https://ccmc.gsfc.nasa.gov/models/NRLMSIS~00/) empirical air density model that predicts density as a function of altitude, latitude, longitude, and solar activity. The solar radio flux at 10.7 cm wavelength (2800 MHz) is used as an indicator of solar activity in the model.  The flux is measured multiple times a day and recorded in a "space weather" file that is downloaded on-demand by the ``satkit`` package.
 
