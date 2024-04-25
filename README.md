@@ -21,6 +21,9 @@ An accurate, high-performance satellite orbital kinematics toolkit, written in R
 ![PyPI - Implementation](https://img.shields.io/pypi/implementation/satkit)
 ![PyPI - Status](https://img.shields.io/pypi/status/satkit)
 
+
+![Read the Docs](https://img.shields.io/readthedocs/satellite-toolkit)
+
 ## Language Bindings
 
 - **Native Rust** bindings
@@ -30,7 +33,6 @@ An accurate, high-performance satellite orbital kinematics toolkit, written in R
 
 ## Features
 
-- Timescale transformations (UTC, GPS, UT1, TBD, TT, ...)
 - High-precision coordinate transforms between:
   - International Terrestrial Reference Frame (ITRF)
   - Geocentric Celestial Reference Frame (GCRF) using IAU-2000 reduction

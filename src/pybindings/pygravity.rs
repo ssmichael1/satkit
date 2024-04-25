@@ -6,6 +6,7 @@ use super::pyitrfcoord::PyITRFCoord;
 use crate::itrfcoord::ITRFCoord;
 use nalgebra as na;
 use numpy as np;
+use numpy::PyArrayMethods;
 
 use pyo3::types::PyDict;
 
@@ -48,43 +49,24 @@ impl IntoPy<PyObject> for &GravityModel {
     }
 }
 
-///
-/// gravity(pos)
-/// --
-///
-/// Return acceleration due to Earth gravity at the input position. The
-/// acceleration does not include the centrifugal force, and is output
-/// in m/s^2 in the International Terrestrial Reference Frame (ITRF)
-///
-/// Inputs:
-///
-///       pos:   Position as ITRF coordinate (satkit.itrfcoord) or numpy
-///              3-vector representing ITRF position in meters
-///
-/// Kwargs:
-///     
-///     model:   The gravity model to use.  Options are:
-///                   satkit.gravmodel.jgm3
-///                   satkit.gravmodel.jgm2
-///                   satkit.gravmodel.egm96
-///                   satkit.gravmodel.itugrace16
-///
-///               Default is satkit.gravmodel.jgm3
-///
-///               For details of models, see:
-///               http://icgem.gfz-potsdam.de/tom_longtime
-///
-///     order:    The order of the gravity model to use.
-///               Default is 6, maximum is 16
-///
-///
-///               For details of calculation, see Chapter 3.2 of:
-///               "Satellite Orbits: Models, Methods, Applications",
-///               O. Montenbruck and B. Gill, Springer, 2012.
-///
+/// Acceleration vector due to Earth gravity 
+/// 
+/// 
+/// Args:
+///     pos (numpy.ndarray|satkit.itrfcoord): position at which to compute acceleration.  itrfcoord or 3-element numpy array with Cartesian ITRF position in meters
+/// 
+/// Returns:
+///     numpy.ndarray: 3-element numpy array representing acceleration due to Earth gravity at input position.  Units are m/s^2
+/// 
+/// Keyword Args:
+///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.jgm3
+///     order (int): order of gravity model to use.  Default is 6, maximum is 16
+/// 
+/// Notes:
+///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 #[pyfunction]
 #[pyo3(signature=(pos, **kwds))]
-pub fn gravity(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObject> {
+pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyResult<PyObject> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
     if kwds.is_some() {
@@ -104,12 +86,12 @@ pub fn gravity(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObject> {
         let itrf: ITRFCoord = pyitrf.inner.into();
         let v = accel(&itrf.itrf, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            let vpy: &np::PyArray1<f64> = np::PyArray1::<f64>::from_slice(py, v.as_slice());
+            let vpy = np::PyArray1::<f64>::from_slice_bound(py, v.as_slice());
             Ok(vpy.into_py(py))
         })
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
         let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
-        if vpy.len() != 3 {
+        if vpy.len().unwrap() != 3 {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "input must have 3 elements",
             ));
@@ -117,7 +99,7 @@ pub fn gravity(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObject> {
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let a = accel(&v, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            let vpy = np::PyArray1::<f64>::from_slice(py, a.as_slice());
+            let vpy = np::PyArray1::<f64>::from_slice_bound(py, a.as_slice());
             Ok(vpy.into_py(py))
         })
     } else {
@@ -127,58 +109,25 @@ pub fn gravity(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<PyObject> {
     }
 }
 
-///
-/// gravity_and_partials(pos)
-/// --
-///
-/// Return acceleration due to Earth gravity at the input position.
-/// and partials with respect to position at input position The
-/// acceleration does not include the centrifugal force, and is output
-/// in m/s^2 in the International Terrestrial Reference Frame (ITRF)
-///
-/// The partials are with respect to the ITRF frame in meters, and are
-/// returned in m/s^2 / m
-///
-/// partials are necessary when integrating state transition matrix with
-/// orbit propagator, but I can't think of too many uses for them
-/// otherwise (though I'm sure there are plenty)
-///
-/// Inputs:
-///
-///       pos:   Position as ITRF coordinate (satkit.itrfcoord) or numpy
-///              3-vector representing ITRF position in meters
-///
-/// Kwargs:
-///     
-///     model:   The gravity model to use.  Options are:
-///                   satkit.gravmodel.jgm3
-///                   satkit.gravmodel.jgm2
-///                   satkit.gravmodel.egm96
-///                   satkit.gravmodel.itugrace16
-///
-///               Default is satkit.gravmodel.jgm3
-///
-///               For details of models, see:
-///               http://icgem.gfz-potsdam.de/tom_longtime
-///
-///     order:    The order of the gravity model to use.
-///               Default is 6, maximum is 16
-///
-///
-///               For details of calculation, see Chapter 3.2 of:
-///               "Satellite Orbits: Models, Methods, Applications",
-///               O. Montenbruck and B. Gill, Springer, 2012.
-///
-/// Outputs:
-///
-///   gravity:  3-vector gravity in ITRF frame in m/s^2
-///
-///   partials: 3x3 matrix representing partial derivative of gravity vector with
-///             respect to ITRF position
-///
+/// Acceleration vector due to Earth gravity and partials with respect to position
+/// 
+/// 
+/// Args:
+///     pos (numpy.ndarray|satkit.itrfcoord): position at which to compute acceleration.  itrfcoord or 3-element numpy array with Cartesian ITRF position in meters
+/// 
+/// Returns:
+///     (numpy.ndarray, numpy.ndarray): tuple of 3-element numpy array representing acceleration due to Earth gravity at input position and 3x3 numpy array of partials of acceleration with respect to position.  Units are m/s^2 for gravity and m/s^2/m for partials
+/// 
+/// Keyword Args:
+///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.jgm3
+///     order (int): order of gravity model to use.  Default is 6, maximum is 16
+/// 
+/// Notes:
+///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
+/// 
 #[pyfunction]
 #[pyo3(signature=(pos, **kwds))]
-pub fn gravity_and_partials(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<(PyObject, PyObject)> {
+pub fn gravity_and_partials(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyResult<(PyObject, PyObject)> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
     if kwds.is_some() {
@@ -198,8 +147,8 @@ pub fn gravity_and_partials(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<(PyO
         let itrf: ITRFCoord = pyitrf.inner.into();
         let (g, p) = accel_and_partials(&itrf.itrf, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
-            let gpy: &np::PyArray1<f64> = np::PyArray1::<f64>::from_slice(py, g.as_slice());
-            let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
+            let gpy = np::PyArray1::<f64>::from_slice_bound(py, g.as_slice());
+            let ppy = unsafe { np::PyArray2::<f64>::new_bound(py, [3, 3], false) };
             unsafe {
                 std::ptr::copy_nonoverlapping(p.as_ptr(), ppy.as_raw_array_mut().as_mut_ptr(), 9);
             }
@@ -207,7 +156,7 @@ pub fn gravity_and_partials(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<(PyO
         })
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
         let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
-        if vpy.len() != 3 {
+        if vpy.len().unwrap() != 3 {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "input must have 3 elements",
             ));
@@ -215,8 +164,8 @@ pub fn gravity_and_partials(pos: &PyAny, kwds: Option<&PyDict>) -> PyResult<(PyO
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let (g, p) = accel_and_partials(&v, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
-            let gpy: &np::PyArray1<f64> = np::PyArray1::<f64>::from_slice(py, g.as_slice());
-            let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
+            let gpy = np::PyArray1::<f64>::from_slice_bound(py, g.as_slice());
+            let ppy = unsafe { np::PyArray2::<f64>::new_bound(py, [3, 3], false) };
             unsafe {
                 std::ptr::copy_nonoverlapping(p.as_ptr(), ppy.as_raw_array_mut().as_mut_ptr(), 9);
             }

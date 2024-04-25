@@ -26,10 +26,11 @@ impl PySatProperties {
     ///
     #[new]
     #[pyo3(signature=(*args, **kwargs))]
-    fn new(args: &PyTuple, mut kwargs: Option<&PyDict>) -> PyResult<Self> {
+    fn new(args: &Bound<'_, PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut craoverm: f64 = 0.0;
         let mut cdaoverm: f64 = 0.0;
 
+        let args = args.as_gil_ref();
         if args.len() > 0 {
             craoverm = args[0].extract::<f64>()?;
         }
@@ -61,22 +62,38 @@ impl PySatProperties {
         })
     }
 
+    /// Get the satellite's susceptibility to radiation pressure
+    /// 
+    /// Returns:
+    ///     float: Cr A / m (m^2/kg)
     #[getter]
     fn get_craoverm(&self) -> f64 {
         self.inner.craoverm
     }
 
+    /// Get the satellite's susceptibility to drag
+    /// 
+    /// Returns:
+    ///     float: Cd A / m (m^2/kg)
     #[getter]
     fn get_cdaoverm(&self) -> f64 {
         self.inner.cdaoverm
     }
 
+    /// Set the satellite's susceptibility to radiation pressure
+    /// 
+    /// Args:
+    ///     craoverm (float): Cr A / m (m^2/kg)
     #[setter]
     fn set_craoverm(&mut self, craoverm: f64) -> PyResult<()> {
         self.inner.craoverm = craoverm;
         Ok(())
     }
 
+    /// Set the satellite's susceptibility to drag
+    /// 
+    /// Args:
+    ///     cdaoverm (float): Cd A / m (m^2/kg)
     #[setter]
     fn set_cdaoverm(&mut self, cdaoverm: f64) -> PyResult<()> {
         self.inner.cdaoverm = cdaoverm;

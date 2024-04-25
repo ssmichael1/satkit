@@ -5,7 +5,7 @@
 //! * Timescale transformations (UTC, GPS, UT1, TBD, TT, ...)
 //! * High-precision coordinate transforms between:
 //!   * International Terrestrial Reference Frame (ITRF)
-//!   * Geocentric Celestial Reference Frame (GCRF) using IAU-2000 reduction
+//!   * Geocentric Celestial Reference Frame (GCRF) using IAU-2006 reduction
 //!   * True-Equinox Mean Equator (TEME) frame used in SGP4 propagation of TLEs
 //!   * Celestial Intermediate Reference Frame (CIRF)
 //!   * Terrestrial Intermediate Reference Frame (TIRF)
@@ -43,13 +43,13 @@ pub mod frametransform;
 /// Internation Terrestrial Reference Frame coordinates &
 /// transformations to Geodetic, East-North-Up, North-East-Down
 pub mod itrfcoord;
-/// Solar system body ephemerides, as published by JPL
+/// Solar system body ephemerides, as published by the Jet Propulsion Laboratory (JPL)
 pub mod jplephem;
 /// Low-precision ephemeris for sun and moon
 pub mod lpephem;
 /// NRL-MISE00 Density model
 pub mod nrlmsise;
-/// High-Precision Orbit Propagation via Runga-Kutta Integration
+/// High-Precision Orbit Propagation via Runga-Kutta 9(8) Integration
 pub mod orbitprop;
 /// SGP-4 Orbit Propagator
 pub mod sgp4;

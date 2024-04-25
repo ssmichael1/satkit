@@ -46,6 +46,70 @@ use std::f64::consts::PI;
 
 use super::{GravConst, OpsMode};
 
+///
+/// Run Simplified General Perturbations (SGP)-4 propagator on
+/// Two-Line Element Set to
+/// output satellite position and velocity at given time
+/// in the "TEME" coordinate system
+/// 
+/// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
+///
+/// A detailed description is
+/// [here](https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf)
+///
+///
+/// # Arguments
+///
+/// * `tle` - The TLE on which top operate.  Note that a mutable reference
+///           is passed, as SGP-4 metadata is stored after each propagation
+/// * `tm` -  The time at which to compute position and velocity
+///           Input as a slice for convenience.
+/// 
+///
+/// # Return
+///
+/// Result object containing either an OK value containing a tuple with
+/// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
+/// times in the slice) or an Err value containing
+/// a tuple with error code and error string
+/// 
+/// # Note:
+/// 
+/// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
+///
+/// # Example
+///
+/// ```
+/// // Compute the Geodetic position of a satellite at
+/// // the TLE epoch time
+///     
+/// use satkit::TLE;
+/// use satkit::sgp4::{sgp4, GravConst, OpsMode};
+/// use satkit::frametransform::qteme2itrf;
+/// use satkit::itrfcoord::ITRFCoord;
+/// use nalgebra as na;
+///
+/// let line0: &str = "0 INTELSAT 902";
+/// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
+/// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
+/// let mut tle = TLE::load_3line(&line0.to_string(),
+///     &line1.to_string(),
+///     &line2.to_string()
+///     ).unwrap();
+///
+/// let tm = tle.epoch;
+///
+/// // SGP4 runs on a slice of times
+/// let (pteme, vteme, errs) = sgp4(&mut tle,
+///     &[tm]
+///     );
+///
+/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * pteme;
+/// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
+/// println!("Satellite position is: {}", itrf);
+///
+/// ```
+///
 #[inline]
 pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4State {
     sgp4_full(tle, tm, GravConst::WGS84, OpsMode::IMPROVED)
@@ -67,6 +131,11 @@ pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4State {
 ///           is passed, as SGP-4 metadata is stored after each propagation
 /// * `tm` -  The time at which to compute position and velocity
 ///           Input as a slice for convenience.
+/// 
+/// * `gravconst` - The gravitational constant to use.
+/// 
+/// * `opsmode` - The operational mode to use.
+/// 
 ///
 /// # Return
 ///

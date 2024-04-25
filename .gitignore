@@ -9,3 +9,8 @@ build
 __pycache__
 /satkit-testvecs
 /astro-data
+iframe_figures
+*.so
+.DS_Store
+_build
+html

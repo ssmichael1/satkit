@@ -4,7 +4,6 @@ use super::pyastrotime::PyAstroTime;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-
 /// Class representing durations of times, allowing for representation
 /// via common measures of duration (years, days, hours, minutes, seconds)
 ///
@@ -12,15 +11,23 @@ use pyo3::types::PyDict;
 /// represent new "satkit" objects, and is also returned when
 /// two "satkit" objects are subtracted from one anothre
 /// 
-/// # Example
+/// Keyword Arguments: 
+///     days (float): Duration in days
+///     seconds (float): Duration in seconds
+///     minutes (float): Duration in minutes
+///     hours (float): Duration in hours 
 /// 
-/// ```python
-/// from satkit import duration
-/// d = duration(seconds=3.0)
-/// d2 = duration(minutes=4.0)
-/// print(d + d2)
-/// # Output: Duration: 4 minutes, 3.000 seconds
-/// ```
+/// Example:
+/// 
+/// >>> from satkit import duration
+/// >>> d = duration(seconds=3.0)
+/// >>> d2 = duration(minutes=4.0)
+/// >>> print(d + d2)
+/// Duration: 4 minutes, 3.000 seconds
+/// 
+/// >>> from satkit import duration, time
+/// >>> instant = satkit.time(2023, 3, 5)
+/// >>> plus1day = instant + duration(days=1.0)
 /// 
 #[pyclass(name = "duration")]
 #[derive(Clone)]
@@ -31,7 +38,6 @@ pub struct PyDuration {
 #[pymethods]
 impl PyDuration {
 
-    ///
     /// Create a new Duration object.
     /// 
     /// The duration can be created by passing the number of days, seconds, minutes, and hours.
@@ -41,26 +47,24 @@ impl PyDuration {
     /// 
     /// If no arguments are passed, the duration will be 0
     /// 
-    /// # Keyword Arguments
+    /// Keyword Arguments: 
+    ///     days (float): Duration in days
+    ///     seconds (float): Duration in seconds
+    ///     minutes (float): Duration in minutes
+    ///     hours (float): Duration in hours
+    ///
+    /// Example:
     /// 
-    /// * `days` - The number of days
-    /// * `seconds` - The number of seconds
-    /// * `minutes` - The number of minutes
     /// 
+    /// >>> from satkit import duration
+    /// >>> 
+    /// >>> # Create a duration of 1 day
+    /// >>> dur = duration(days=1)
     /// 
-    /// # Example
-    /// 
-    /// ```python
-    /// from satkit import duration
-    /// 
-    /// # Create a duration of 1 day
-    /// dur = duration(days=1)
-    /// 
-    /// ```
     /// 
     #[new]
     #[pyo3(signature=(**kwargs))]
-    fn py_new(kwargs: Option<&PyDict>) -> PyResult<Self> {
+    fn py_new(kwargs: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut days = 0.0;
         let mut seconds = 0.0;
         let mut minutes = 0.0;
@@ -87,20 +91,13 @@ impl PyDuration {
     }
 
 
-    ///
-    /// Create a new Duration object from the number of days
+    /// Create new duration object from the number of days
     /// 
-    /// # Arguments
+    /// Args:
+    ///     d (float): The number of days
     /// 
-    /// * `d` - The number of days
-    /// 
-    /// # Example
-    /// 
-    /// ```python
-    /// from satkit import duration
-    /// dur = duration.from_days(1)
-    /// ```
-    /// 
+    /// Returns:
+    ///     duration: New duration object
     #[staticmethod]
     fn from_days(d: f64) -> PyDuration {
         PyDuration {
@@ -108,20 +105,13 @@ impl PyDuration {
         }
     }
 
-    ///
-    /// Create a new Duration object from the number of seconds
+    /// Create new duration object from the number of seconds
     /// 
-    /// # Arguments
+    /// Args:
+    ///     d (float): The number of seconds
     /// 
-    /// * `s` - The number of seconds
-    ///
-    /// # Example
-    /// 
-    /// ```python
-    /// from satkit import duration
-    /// dur = duration.from_seconds(1)
-    /// ````
-    /// 
+    /// Returns:
+    ///     duration: New duration object
     #[staticmethod]
     fn from_seconds(d: f64) -> PyDuration {
         PyDuration {
@@ -129,20 +119,13 @@ impl PyDuration {
         }
     }
 
-    ///
-    /// Create a new Duration object from the number of minutes
+    /// Create new duration object from the number of minutes
     /// 
-    /// # Arguments
+    /// Args:
+    ///     d (float): The number of minutes
     /// 
-    /// * `m` - The number of minutes
-    /// 
-    /// # Example
-    /// 
-    /// ```python
-    /// from satkit import duration
-    /// dur = duration.from_minutes(1)
-    /// ```
-    /// 
+    /// Returns:
+    ///     duration: New duration object
     #[staticmethod]
     fn from_minutes(d: f64) -> PyDuration {
         PyDuration {
@@ -150,20 +133,13 @@ impl PyDuration {
         }
     }
 
-    ///
-    /// Create a new Duration object from the number of hours
+    /// Create new duration object from number of hours
     /// 
-    /// # Arguments
+    /// Args:
+    ///     d (float): The number of hours
     /// 
-    /// * `h` - The number of hours
-    /// 
-    /// # Example
-    /// 
-    /// ```python
-    /// from satkit import duration
-    /// dur = duration.from_hours(1)
-    /// ```
-    /// 
+    /// Returns:
+    ///     duration: New duration object
     #[staticmethod]
     fn from_hours(d: f64) -> PyDuration {
         PyDuration {
@@ -171,7 +147,14 @@ impl PyDuration {
         }
     }
 
-    fn __add__(&self, other: &PyAny) -> PyResult<PyObject> {
+    /// Add durations or add duration to satkit.time
+    /// 
+    /// Args: 
+    ///     other (duration|satkit.time): Duration or time object to add
+    /// 
+    /// Returns:
+    ///     duration|satkit.time: New duration or time object
+    fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         if other.is_instance_of::<PyDuration>() {
             let dur = other.extract::<PyDuration>()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
@@ -195,34 +178,60 @@ impl PyDuration {
         }
     }
 
+    /// Subtract durations
+    /// 
+    /// Args:
+    ///     other (duration): Duration to subtract
+    /// 
+    /// Returns:
+    ///     duration: New duration object representing the difference
     fn __sub__(&self, other: &PyDuration) -> PyDuration {
         PyDuration {
             inner: self.inner.clone() - other.inner.clone(),
         }
     }
 
+    /// Multiply duration by a scalar (scale duration)
+    /// 
+    /// Args:
+    ///     other (float): Scalar to multiply duration by
+    /// 
+    /// Returns:
+    ///     duration: New duration object representing the scaled duration
     fn __mul__(&self, other: f64) -> PyDuration {
         PyDuration {
             inner: Duration::Seconds(self.inner.seconds() * other),
         }
     }
 
-    /// Return duration in units of days, where 1 day = 86,400 seconds
+    /// Duration in units of days, where 1 day = 86,400 seconds
+    /// 
+    /// Returns:
+    ///     float: Duration in days
     fn days(&self) -> f64 {
         self.inner.days()
     }
 
-    /// Return duration in units of seconds
+    /// Duration in units of seconds
+    /// 
+    /// Returns:
+    ///     float: Duration in seconds
     fn seconds(&self) -> f64 {
         self.inner.seconds()
     }
 
-    /// Return duration in units of minutes
+    /// Duration in units of minutes
+    /// 
+    /// Returns:
+    ///     float: Duration in minutes
     fn minutes(&self) -> f64 {
         self.inner.minutes()
     }
 
-    /// Return duration in units of hours
+    /// Duration in units of hours
+    /// 
+    /// Returns:
+    ///     float: Duration in hours
     fn hours(&self) -> f64 {
         self.inner.hours()
     }

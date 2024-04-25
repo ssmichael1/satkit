@@ -170,7 +170,7 @@ impl ITRFCoord {
     /// 
     /// # Arguments:
     /// 
-    /// * `v` - nalgebra::Vector3<f64> representing ITRF coordinates in meters
+    /// * `v` - `nalgebra::Vector3<f64>` representing ITRF coordinates in meters
     /// 
     /// # Examples:
     /// 
@@ -299,7 +299,7 @@ impl ITRFCoord {
         (lat_rad * RAD2DEG, lon_rad * RAD2DEG, hae)
     }
 
-    /// Return geodetic longitude in radians, [-pi, pi]
+    /// Return geodetic longitude in radians, [-π, π]
     ///
     #[inline]
     pub fn longitude_rad(&self) -> f64 {
@@ -312,7 +312,7 @@ impl ITRFCoord {
         self.longitude_rad() * RAD2DEG
     }
 
-    /// return geodetic latitude in radians, [-pi/2, pi/2]
+    /// return geodetic latitude in radians, [-π/2, π/2]
     #[inline]
     pub fn latitude_rad(&self) -> f64 {
         let (lat, _a, _b) = self.to_geodetic_rad();

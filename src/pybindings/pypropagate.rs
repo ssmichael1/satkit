@@ -6,6 +6,7 @@ use super::pyutils::*;
 
 use nalgebra as na;
 use numpy as np;
+use numpy::PyArrayMethods;
 
 use crate::orbitprop;
 
@@ -48,9 +49,8 @@ fn lowlevel_propagate<const C: usize>(
         };
 
     pyo3::Python::with_gil(|py| -> PyResult<Py<PyAny>> {
-        let r = PyDict::new(py);
-
-        let d = PyDict::new(py);
+        let r = PyDict::new_bound(py);
+        let d = PyDict::new_bound(py);
         d.set_item("num_eval", res.num_eval)?;
         d.set_item("accepted_steps", res.accepted_steps)?;
         d.set_item("rejected_steps", res.rejected_steps)?;
@@ -62,7 +62,7 @@ fn lowlevel_propagate<const C: usize>(
             .collect();
 
         let n = res.state.len();
-        let pos = unsafe { np::PyArray2::<f64>::new(py, [n, 3], false) };
+        let pos = unsafe { np::PyArray2::<f64>::new_bound(py, [n, 3], false) };
         for idx in 0..n {
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -72,7 +72,7 @@ fn lowlevel_propagate<const C: usize>(
                 );
             }
         }
-        let vel = unsafe { np::PyArray2::<f64>::new(py, [n, 3], false) };
+        let vel = unsafe { np::PyArray2::<f64>::new_bound(py, [n, 3], false) };
         for idx in 0..n {
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -89,7 +89,7 @@ fn lowlevel_propagate<const C: usize>(
         r.set_item("vel", vel)?;
 
         if C > 1 {
-            let phi = unsafe { np::PyArray3::<f64>::new(py, [n, 6, 6], false) };
+            let phi = unsafe { np::PyArray3::<f64>::new_bound(py, [n, 6, 6], false) };
             for idx in 0..n {
                 unsafe {
                     std::ptr::copy_nonoverlapping(
@@ -196,12 +196,12 @@ fn lowlevel_propagate<const C: usize>(
 ///
 #[pyfunction(signature=(pos, vel, start, **kwargs))]
 pub fn propagate(
-    pos: &np::PyArray1<f64>,
-    vel: &np::PyArray1<f64>,
+    pos: &Bound<'_, np::PyArray1<f64>>,
+    vel: &Bound<'_, np::PyArray1<f64>>,
     start: &PyAstroTime,
-    mut kwargs: Option<&PyDict>,
+    mut kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
-    if pos.len() != 3 || vel.len() != 3 {
+    if pos.len().unwrap() != 3 || vel.len().unwrap() != 3 {
         return Err(pyo3::exceptions::PyRuntimeError::new_err(
             "Position and velocity must be 1-d numpy arrays with length 3",
         ));
@@ -274,8 +274,8 @@ pub fn propagate(
     // Simple sate propagation
     if output_phi == false {
         lowlevel_propagate::<1>(
-            pos,
-            vel,
+            pos.as_gil_ref(),
+            vel.as_gil_ref(),
             &start.inner,
             &stoptime,
             dt_secs,
@@ -286,8 +286,8 @@ pub fn propagate(
     // Propagate with state transition matrix
     else {
         lowlevel_propagate::<7>(
-            pos,
-            vel,
+            pos.as_gil_ref(),
+            vel.as_gil_ref(),
             &start.inner,
             &stoptime,
             dt_secs,

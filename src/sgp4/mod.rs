@@ -8,7 +8,7 @@
 /// provided by C++ implementation
 /// 
 /// Original C++ code by David Vallado, et al.
-/// https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
+/// <https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf/>
 /// 
 ///
 pub use self::satrec::SatRec;

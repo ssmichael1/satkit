@@ -254,7 +254,7 @@ impl<'a, const C: usize> ode::ODESystem for Propagation<'a, C> {
 ///
 /// The default propagator uses a Runga-Kutta 9(8) integrator
 /// with coefficients computed by Verner:
-/// https://www.sfu.a/~jverner/
+/// <https://www.sfu.a/~jverner//>
 ///
 /// This works much better than lower-order Runga-Kutta solvers such as
 /// Dorumund-Prince, and I don't know why it isn't more popular in

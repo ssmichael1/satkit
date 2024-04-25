@@ -7,6 +7,7 @@ use crate::utils::SKResult;
 use nalgebra as na;
 use numpy as np;
 use numpy::ndarray;
+use numpy::PyArrayMethods;
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -14,7 +15,7 @@ use pyo3::types::PyDict;
 use crate::types::Vec3;
 
 pub fn kwargs_or_default<'a, T>(
-    kwargs: &mut Option<&'a PyDict>,
+    kwargs: &mut Option<&Bound<'a, PyDict>>,
     name: &str,
     default: T,
 ) -> PyResult<T>
@@ -36,7 +37,7 @@ where
     }
 }
 
-pub fn kwargs_or_none<'a, T>(kwargs: &mut Option<&'a PyDict>, name: &str) -> PyResult<Option<T>>
+pub fn kwargs_or_none<'a, T>(kwargs: &mut Option<&Bound<'a, PyDict>>, name: &str) -> PyResult<Option<T>>
 where
     T: FromPyObject<'a>,
 {
@@ -57,20 +58,20 @@ where
 
 pub fn py_vec3_of_time_arr(
     cfunc: &dyn Fn(&AstroTime) -> Vec3,
-    tmarr: &PyAny,
+    tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
         1 => {
             let v: Vec3 = cfunc(&tm[0]);
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Ok(np::PyArray1::from_slice(py, &v.as_slice()).to_object(py))
+                Ok(np::PyArray1::from_slice_bound(py, &v.as_slice()).to_object(py))
             })
         }
         _ => {
             let n = tm.len();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                let out = np::PyArray2::<f64>::zeros(py, (n, 3), false);
+                let out = np::PyArray2::<f64>::zeros_bound(py, (n, 3), false);
                 for idx in 0..n {
                     let v: Vec3 = cfunc(&tm[idx]);
                     // I cannot figure out how to do this with a "safe" function,
@@ -92,21 +93,21 @@ pub fn py_vec3_of_time_arr(
 
 pub fn py_vec3_of_time_result_arr(
     cfunc: &dyn Fn(&AstroTime) -> SKResult<Vec3>,
-    tmarr: &PyAny,
+    tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
 
     match tm.len() {
         1 => match cfunc(&tm[0]) {
             Ok(v) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Ok(np::PyArray1::from_slice(py, &v.as_slice()).to_object(py))
+                Ok(np::PyArray1::from_slice_bound(py, &v.as_slice()).to_object(py))
             }),
             Err(_) => Err(pyo3::exceptions::PyTypeError::new_err("Invalid time")),
         },
         _ => {
             let n = tm.len();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                let out = np::PyArray2::<f64>::zeros(py, (n, 3), false);
+                let out = np::PyArray2::<f64>::zeros_bound(py, (n, 3), false);
                 for idx in 0..n {
                     match cfunc(&tm[idx]) {
                         Ok(v) => {
@@ -134,7 +135,7 @@ pub fn py_vec3_of_time_result_arr(
 
 pub fn py_func_of_time_arr<T: ToPyObject>(
     cfunc: fn(&AstroTime) -> T,
-    tmarr: &PyAny,
+    tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
 
@@ -148,7 +149,7 @@ pub fn py_func_of_time_arr<T: ToPyObject>(
 }
 
 #[inline]
-pub fn py_quat_from_time_arr(cfunc: fn(&AstroTime) -> Quat, tmarr: &PyAny) -> PyResult<PyObject> {
+pub fn py_quat_from_time_arr(cfunc: fn(&AstroTime) -> Quat, tmarr: &Bound<'_, PyAny>) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
         1 => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
@@ -168,7 +169,7 @@ pub fn py_quat_from_time_arr(cfunc: fn(&AstroTime) -> Quat, tmarr: &PyAny) -> Py
 }
 
 #[inline]
-pub fn tuple_func_of_time_arr<F>(cfunc: F, tmarr: &PyAny) -> PyResult<PyObject>
+pub fn tuple_func_of_time_arr<F>(cfunc: F, tmarr: &Bound<'_, PyAny>) -> PyResult<PyObject>
 where
     F: Fn(&AstroTime) -> SKResult<(na::Vector3<f64>, na::Vector3<f64>)>,
 {
@@ -177,8 +178,8 @@ where
         1 => match cfunc(&tm[0]) {
             Ok(r) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 Ok((
-                    PyArray1::from_slice(py, r.0.as_slice()),
-                    PyArray1::from_slice(py, r.1.as_slice()),
+                    PyArray1::from_slice_bound(py, r.0.as_slice()),
+                    PyArray1::from_slice_bound(py, r.1.as_slice()),
                 )
                     .to_object(py))
             }),
@@ -202,8 +203,8 @@ where
             }
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 Ok((
-                    PyArray2::from_array(py, &pout),
-                    PyArray2::from_array(py, &vout),
+                    PyArray2::from_array_bound(py, &pout),
+                    PyArray2::from_array_bound(py, &vout),
                 )
                     .to_object(py))
             })

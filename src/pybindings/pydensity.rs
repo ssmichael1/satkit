@@ -11,34 +11,17 @@ use super::PyITRFCoord;
 ///
 /// NRL MSISE-00 Density Model
 ///
-/// Inputs:
-///
-///   ITRFCoord:   coord at which to compute density & temperature
-///        Time:   Optional satkit.time object
-///                representing instant at which to compute
-///                density & temperature using space weather
-///                data file as input to model
-///
-/// 2nd option for inputs:
-///
-///    altitude:   altitude in meters,
-///    Latitude:   Optional latitude in radians
-///   Longitude:   Optional longitude in radians
-///        Time:   Optional satkit.time object
-///                representing instant at which to compute
-///                density & temperature using space weather
-///                data file as input to model
-///
-/// Outputs:
-///    
-///    Tuple:   (rho, T) where
-///   
-///       rho: Atmosphere mass density in kg / m^3
-///         T: Temperature in Kelvin
-///
+/// Args:
+///     coord (itrfcoord): ITRF coordinate at which to compute density & temperature
+///     time (satkit.time): Optional time object representing instant at which to compute
+/// 
+/// Returns:
+///     tuple: (rho, T) where rho is atmosphere mass density in kg / m^3 and T is temperature in Kelvin
 #[pyfunction(name = "nrlmsise")]
 #[pyo3(signature=(*args))]
-fn pynrlmsise(args: &PyTuple) -> PyResult<(f64, f64)> {
+fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
+    
+    let args = args.as_gil_ref();
     if args.len() == 0 {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "Invalid number of arguments",
@@ -89,7 +72,7 @@ fn pynrlmsise(args: &PyTuple) -> PyResult<(f64, f64)> {
 }
 
 #[pymodule]
-pub fn density(_py: Python, m: &PyModule) -> PyResult<()> {
+pub fn density(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pynrlmsise, m)?).unwrap();
     Ok(())
 }

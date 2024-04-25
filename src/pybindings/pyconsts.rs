@@ -11,9 +11,11 @@ impl Consts {
     #[classattr]
     ///  WGS-84 semiparameter, in meters
     const wgs84_a: f64 = cconsts::WGS84_A;
+    
     #[classattr]
     ///  WGS-84 flattening
     const wgs84_f: f64 = cconsts::WGS84_F;
+    
     #[classattr]
     /// WGS-84 Earth radius, meters
     const earth_radius: f64 = cconsts::EARTH_RADIUS;
@@ -21,6 +23,7 @@ impl Consts {
     ///  Gravitational parameter of Earth, m^3/s^2
     #[classattr]
     const mu_earth: f64 = cconsts::MU_EARTH;
+    
     /// Gravitational parameter of moon, m^3/s^2
     #[classattr]
     const mu_moon: f64 = cconsts::MU_MOON;

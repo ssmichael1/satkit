@@ -1,7 +1,8 @@
 use pyo3::prelude::*;
-use pyo3::types::timezone_utc;
+use pyo3::types::timezone_utc_bound;
 use pyo3::types::PyDateTime;
 use pyo3::types::PyTuple;
+use pyo3::types::PyDict;
 
 use crate::astrotime::{self, AstroTime, Scale};
 
@@ -19,12 +20,12 @@ use numpy as np;
 /// For an excellent overview, see:
 /// https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/MPG%20Book/Release/Chapter2-TimeScales.pdf
 ///
-/// UTC = Universal Time Coordinate
-/// TT = Terrestrial Time
-/// UT1 = Universal time, corrected for polar wandering
-/// TAI = International Atomic Time
-/// GPS = Global Positioning System Time (epoch = 1/6/1980 00:00:00)
-/// TDB = Barycentric Dynamical Time
+/// * UTC = Universal Time Coordinate
+/// * TT = Terrestrial Time
+/// * UT1 = Universal time, corrected for polar wandering
+/// * TAI = International Atomic Time
+/// * GPS = Global Positioning System Time (epoch = 1/6/1980 00:00:00)
+/// * TDB = Barycentric Dynamical Time
 ///
 #[derive(Clone)]
 #[pyclass(name = "timescale")]
@@ -88,33 +89,27 @@ impl IntoPy<PyObject> for astrotime::Scale {
     }
 }
 
+
+/// Representation of an instant in time
 ///
-/// Object representing an instant in time
+/// This has functionality similar to the "datetime" object, and in fact has
+/// the ability to convert to an from the "datetime" object.  However, a separate
+/// time representation is needed as the "datetime" object does not allow for
+/// conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
 ///
-/// Used for orbit propagation, frame transformations, etc..
-///
-/// * Includes function for conversion to various time representations
-/// (e.g., julian date, modified julian date, gps time, ...)
-///
-/// * Also includes conversions between various scales
-/// (e.g., UTC, Terrestrial Time, GPS, ...)
-///
-/// * Methods also included for conversion to & from the more-standard
-/// "datetime" object used in Python
-///
-///  # Constructor argument options:
-///
-///    1:  None: Output current date / time
-///
-///    2:  Year, Month, Day:
-///              Output object representing associated date
-///              (same as "fromdate" method)
-///    
-///    3:  Year, Month, Day, Hour, Minute, Second, Scale
-///              Output object representing associated date & time
-///              (same as "fromgregorian" method)
-///   
-///
+/// Note: If no arguments are passed in, the created object represents the current time
+/// 
+/// Args:
+///     year (int): Gregorian year (e.g., 2024) (optional)
+///     month (int): Gregorian month (1 = January, 2 = February, ...) (optional)
+///     day (int): Day of month, beginning with 1 (optional)
+///     hour (int): Hour of day, in range [0,23] (optional), default is 0
+///     min (int): Minute of hour, in range [0,59] (optional), default is 0
+///     sec (float): floating point second of minute, in range [0,60) (optional), defialt is 0
+///     scale (satkit.timescale): Time scale (optional), default is satkit.timescale.UTC    
+/// 
+/// Returns:
+///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
 #[pyclass(name = "time")]
 #[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyAstroTime {
@@ -123,26 +118,39 @@ pub struct PyAstroTime {
 
 #[pymethods]
 impl PyAstroTime {
+    /// Representation of an instant in time
     ///
-    /// Create a new time object
+    /// This has functionality similar to the "datetime" object, and in fact has
+    /// the ability to convert to an from the "datetime" object.  However, a separate
+    /// time representation is needed as the "datetime" object does not allow for
+    /// conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
     ///
-    ///
-    /// Inputs Options:
-    ///
-    ///    1:  None: Output current date / time
-    ///
-    ///    2:  Year, Month, Day:
-    ///              Output object representing associated date
-    ///              (same as "fromdate" method)
-    ///    
-    ///    3:  Year, Month, Day, Hour, Minute, Second, Scale
-    ///              Output object representing associated date & time
-    ///              (same as "fromgregorian" method)
-    ///              with optional time scale, default is UTC
-    ///
+    /// Args:
+    ///     year (int, optional): Gregorian year (e.g., 2024) (optional)
+    ///    month (int, optional): Gregorian month (1 = January, 2 = February, ...) (optional)
+    ///     day (int, optional): Day of month, beginning with 1 (optional)
+    ///    hour (int, optional): Hour of day, in range [0,23] (optional), default is 0
+    ///     min (int, optional): Minute of hour, in range [0,59] (optional), default is 0
+    ///     sec (float, optional): floating point second of minute, in range [0,60) (optional), defialt is 0
+    ///     scale (satkit.timescale, optional): Time scale (optional), default is satkit.timescale.UTC    
+    /// 
+    /// Note: If no arguments are passed in, the created object represents the current time
+    /// 
+    /// Returns:
+    ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
     #[new]
-    #[pyo3(signature=(*py_args))]
-    fn py_new(py_args: &PyTuple) -> PyResult<Self> {
+    #[pyo3(signature=(*py_args, **py_kwargs))]
+    fn py_new(py_args: &Bound<'_, PyTuple>, py_kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let pyscale = match py_kwargs {
+            None => PyTimeScale::UTC,
+            Some(v) => {
+                match v.get_item("scale")? {
+                    None => PyTimeScale::UTC,
+                    Some(v2) => v2.extract::<PyTimeScale>()?,
+                }
+            } 
+        }; 
+        
         if py_args.is_empty() {
             match AstroTime::now() {
                 Ok(v) => Ok(PyAstroTime { inner: v }),
@@ -163,7 +171,7 @@ impl PyAstroTime {
             let min = py_args.get_item(4)?.extract::<u32>()?;
             let sec = py_args.get_item(5)?.extract::<f64>()?;
             let pyscale = match py_args.len() > 6 {
-                false => PyTimeScale::UTC,
+                false => pyscale,
                 true => py_args.get_item(6)?.extract::<PyTimeScale>()?,
             };
             Self::from_gregorian(year, month, day, hour, min, sec, pyscale)
@@ -175,6 +183,9 @@ impl PyAstroTime {
     }
 
     /// Return current time
+    /// 
+    /// Returns:
+    ///     satkit.time: Time object representing current time
     #[staticmethod]
     fn now() -> PyResult<Self> {
         match AstroTime::now() {
@@ -185,15 +196,15 @@ impl PyAstroTime {
         }
     }
 
-    /// Return time object representing input
-    /// Gregorian year, month (1=January, 2=February, ...), and
-    /// day of month, beginning with 1.  Inputs assumed to be UTC
-    ///
-    /// # Arguments:
-    ///
-    /// * `year` - The year
-    /// * `month` - The month (1=January, 2 = February, ...)
-    /// * `day` - The day of the month, starting with "1"
+    /// Return time object representing input date
+    /// 
+    /// Args:
+    ///     year (int): Gregorian year (e.g., 2024)
+    ///     month (int): Gregorian month (1 = January, 2 = February, ...)
+    ///     day (int): Day of month, beginning with 1
+    /// 
+    /// Returns:
+    ///     satkit.time: Time object representing instant of input date
     #[staticmethod]
     fn from_date(year: u32, month: u32, day: u32) -> PyResult<Self> {
         Ok(PyAstroTime {
@@ -201,17 +212,14 @@ impl PyAstroTime {
         })
     }
 
-    /// Return time object representing input
-    /// modified Julian date and time scale
+    /// Return time object representing input modified Julian date and time scale
     ///
-    /// # Arguments:
-    ///
-    /// * `mjd` - The modified Julian Date
-    /// * `scale` - The time scale
-    ///
-    /// # Returns:
-    ///
-    /// Time object representing instant of modified julian date with given scale
+    /// Args:
+    ///   mjd (float): The Modified Julian Date
+    ///     scale (satkit.timescale): The time scale
+    /// 
+    /// Returns:
+    ///     satkit.time: Time object representing instant of modified julian date with given scale    
     #[staticmethod]
     fn from_mjd(mjd: f64, scale: &PyTimeScale) -> Self {
         PyAstroTime {
@@ -219,17 +227,14 @@ impl PyAstroTime {
         }
     }
 
-    /// Return time object representing input
-    /// Julian date and time scale
+    /// Return time object representing input Julian date and time scale
     ///
-    /// # Arguments:
-    ///
-    /// * `jd` - The Julian Date
-    /// * `scale` - The time scale
-    ///
-    /// # Returns:
-    ///
-    /// Time object representing instant of julian date with given scale
+    /// Args:
+    ///    jd (float): The Julian Date
+    ///   scale (satkit.timescale): The time scale
+    /// 
+    /// Returns:
+    ///     satkit.time: Time object representing instant of julian date with given scale
     #[staticmethod]
     fn from_jd(jd: f64, scale: &PyTimeScale) -> Self {
         PyAstroTime {
@@ -237,39 +242,36 @@ impl PyAstroTime {
         }
     }
 
-    /// Convert time object to UTC Gegorian date, with
-    /// returns tuple with 3 elements:
-    /// 1 : Gregorian Year
-    /// 2 : Gregorian month (1 = January, 2 = February, ...)
-    /// 3 : Day of month, beginning with 1
-    ///
+    /// Convert time object to UTC Gegorian date
+    /// 
+    /// Returns:
+    ///    (int, int, int): Tuple with 3 elements representing Gregorian year, month, and day
     fn to_date(&self) -> (u32, u32, u32) {
         self.inner.to_date()
     }
 
-    /// Convert time object to UTC Gegorian date and time, with
-    /// returns tuple with 6 elements:
-    /// 1 : Gregorian Year
-    /// 2 : Gregorian month (1 = January, 2 = February, ...)
-    /// 3 : Day of month, beginning with 1
-    /// 4 : Hour of day, in range [0,23]
-    /// 5 : Minute of hour, in range [0,59]
-    /// 6 : floating point second of minute, in range [0,60)
+    /// Convert time object to UTC Gegorian date and time, with fractional seconds
+    /// 
+    /// Returns:
+    ///     (int, int, int, int, int, float): Tuple with 6 elements representing Gregorian year, month, day, hour, minute, and second
     ///
     fn to_gregorian(&self) -> (u32, u32, u32, u32, u32, f64) {
         self.inner.to_datetime()
     }
 
-    /// Convert UTC Gegorian date and time to time object with
-    /// 6-element input:
-    /// 1 : Gregorian Year
-    /// 2 : Gregorian month (1 = January, 2 = February, ...)
-    /// 3 : Day of month, beginning with 1
-    /// 4 : Hour of day, in range [0,23]
-    /// 5 : Minute of hour, in range [0,59]
-    /// 6 : floating point second of minute, in range [0,60)
-    /// 7 : Time scale (optional), default is satkit.timescale.UTC
-    ///
+    /// Create satkit.time representing input UTC Gegorian date and time
+    /// 
+    /// Args:
+    ///     year (int): Gregorian year (e.g., 2024)
+    ///     month (int): Gregorian month (1 = January, 2 = February, ...)
+    ///     day (int): Day of month, beginning with 1
+    ///     hour (int): Hour of day, in range [0,23]
+    ///     min (int): Minute of hour, in range [0,59]
+    ///     sec (float): floating point second of minute, in range [0,60)
+    ///     scale (satkit.timescale, optional): Time scale, default is satkit.timescale.UTC
+    /// 
+    /// Returns:
+    ///    satkit.time: satkit.time object representing input Gregorian date and time
     #[staticmethod]
     #[pyo3(signature=(year, month, day, hour, min, sec, scale=PyTimeScale::UTC))]
     fn from_gregorian(
@@ -296,15 +298,14 @@ impl PyAstroTime {
 
     /// Convert from Python datetime object
     /// 
-    /// # Arguments:
+    /// Args:
+    ///     datetime (datetime.datetime): datetime object to convert
     /// 
-    /// * `tm` - Python datetime object
-    /// 
-    /// # Returns:
-    /// 
+    /// Returns:
+    ///     satkit.time: satkit.time object that matches input datetime
     /// SatKit Time object representing input datetime
     #[staticmethod]
-    fn from_datetime(tm: &PyDateTime) -> PyResult<Self> {
+    fn from_datetime(tm: &Bound<'_,PyDateTime>) -> PyResult<Self> {
         let ts: f64 = tm
             .call_method("timestamp", (), None)
             .unwrap()
@@ -317,10 +318,11 @@ impl PyAstroTime {
 
     /// Convert to Python datetime object
     ///
-    /// # Arguments:
-    ///   
-    /// # `utc_timezone` - Optional bool indicating use UTC as timezone
-    ///                    if not passed in, defaults to true
+    /// Args:
+    ///     utc (bool, optional): Use UTC as timezone; if not passed in, defaults to true
+    ///
+    /// Returns:
+    ///     datetime.datetime:  datetime object matching the input satkit.time
     ///
     #[pyo3(signature = (utc=true))]
     fn datetime(&self, utc: bool) -> PyResult<PyObject> {
@@ -328,21 +330,19 @@ impl PyAstroTime {
             let timestamp: f64 = self.to_unixtime();
             let tz = match utc {
                 false => None,
-                true => Some(timezone_utc(py)),
+                true => Some(timezone_utc_bound(py)),
             };
-            Ok(PyDateTime::from_timestamp(py, timestamp, tz)?.into_py(py))
+            Ok(PyDateTime::from_timestamp_bound(py, timestamp, tz.as_ref())?.into_py(py))
         })
     }
 
     /// Convert to Modified Julian date
     /// 
-    /// # Arguments:
+    /// Args:
+    ///     scale (satkit.timescale, optional): Time scale to use for conversion, default is satkit.timescale.UTC
     /// 
-    /// * `scale` - Time scale to use for conversion
-    ///             default is UTC
-    /// # Returns:
-    /// 
-    /// Modified Julian Date
+    /// Returns:
+    ///     float: Modified Julian Date
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn to_mjd(&self, scale: &PyTimeScale) -> f64 {
         self.inner.to_mjd(scale.into())
@@ -350,24 +350,33 @@ impl PyAstroTime {
 
     /// Convert to Julian date
     /// 
-    /// # Arguments:
+    /// Args:
+    ///     scale (satkit.timescale, optional: Time scale to use for conversion, default is satkit.timescale.UTC
     /// 
-    /// * `scale` - Time scale to use for conversion
-    ///             default is UTC
-    ///
-    /// # Returns:
-    ///    
-    /// Julian Date
+    /// Returns:
+    ///     float: Julian Date
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn to_jd(&self, scale: &PyTimeScale) -> f64 {
         self.inner.to_jd(scale.into())
     }
 
+    /// Convert to Unix time (seconds since 1970-01-01 00:00:00 UTC)
+    /// 
+    /// Returns:
+    ///     float: Unix time (seconds since 1970-01-01 00:00:00 UTC)
     fn to_unixtime(&self) -> f64 {
         self.inner.to_unixtime()
     }
 
-    fn __add__(&self, other: &PyAny) -> PyResult<PyObject> {
+    /// Add to satkit time a duration or list or numpy array of durations
+    /// 
+    /// Args:
+    ///     other (duration|list|numpy.ndarray|float): Duration or list of durations to add.
+    ///         If type is float, units are days
+    /// 
+    /// Returns:
+    ///     satkit.time|numpy.ndarray: New time object or numpy array of time objects representing input time plus input duration(s)
+    fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         // Numpy array of floats
         if other.is_instance_of::<np::PyArray1<f64>>() {
             let parr = other.extract::<np::PyReadonlyArray1<f64>>()?;
@@ -382,7 +391,7 @@ impl PyAstroTime {
                         obj.into_py(py)
                     })
                     .into_iter();
-                let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                 Ok(parr.into_py(py))
             })
         }
@@ -400,7 +409,7 @@ impl PyAstroTime {
                         })
                         .into_iter();
 
-                    let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                    let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
                 })
             } else if let Ok(v) = other.extract::<Vec<PyDuration>>() {
@@ -415,7 +424,7 @@ impl PyAstroTime {
                         })
                         .into_iter();
 
-                    let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                    let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
                 })
             } else {
@@ -449,7 +458,15 @@ impl PyAstroTime {
         }
     }
 
-    fn __sub__(&self, other: &PyAny) -> PyResult<PyObject> {
+
+    /// Subtract duration or take difference in times
+    /// 
+    /// Args:
+    ///     other (duration|list|numpy.ndarray|float|satkit.time): Duration or list of durations to subtract, or time object to take difference
+    /// 
+    /// Returns:
+    ///     satkit.time|numpy.ndarray|satkit.duration: New time object or numpy array of time objects representing input time minus input duration(s), or duration object representing difference between two time objects
+    fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         // Numpy array of floats
         if other.is_instance_of::<np::PyArray1<f64>>() {
             let parr: np::PyReadonlyArray1<f64> = other.extract().unwrap();
@@ -464,7 +481,7 @@ impl PyAstroTime {
                         obj.into_py(py)
                     })
                     .into_iter();
-                let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                 Ok(parr.into_py(py))
             })
         }
@@ -482,7 +499,7 @@ impl PyAstroTime {
                         })
                         .into_iter();
 
-                    let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                    let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
                 })
             } else if let Ok(v) = other.extract::<Vec<PyDuration>>() {
@@ -497,7 +514,7 @@ impl PyAstroTime {
                         })
                         .into_iter();
 
-                    let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                    let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
                 })
             } else {
@@ -535,7 +552,14 @@ impl PyAstroTime {
         }
     }
 
-    fn __eq__(&self, other: &PyAny) -> PyResult<bool> {
+    /// Check for equality
+    /// 
+    /// Args:
+    ///     other (satkit.time): Time object to compare
+    /// 
+    /// Returns:
+    ///     bool: True if equal, False otherwise
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         if other.is_instance_of::<PyAstroTime>() {
             let tm2 = other.extract::<PyAstroTime>().unwrap();
             Ok(self.inner == tm2.inner)
@@ -544,7 +568,14 @@ impl PyAstroTime {
         }
     }
 
-    fn __lt__(&self, other: &PyAny) -> PyResult<bool> {
+    /// Less than comparison
+    /// 
+    /// Args:
+    ///     other (satkit.time): Time object to compare
+    /// 
+    /// Returns:
+    ///     bool: True if less than, False otherwise
+    fn __lt__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         if other.is_instance_of::<PyAstroTime>() {
             let tm2 = other.extract::<PyAstroTime>().unwrap();
             Ok(self.inner < tm2.inner)
@@ -553,7 +584,14 @@ impl PyAstroTime {
         }
     }
 
-    fn __le__(&self, other: &PyAny) -> PyResult<bool> {
+    /// Less than or equal comparison
+    /// 
+    /// Args:
+    ///     other (satkit.time): Time object to compare
+    /// 
+    /// Returns:
+    ///     bool: True if less than or equal, False otherwise
+    fn __le__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         if other.is_instance_of::<PyAstroTime>() {
             let tm2 = other.extract::<PyAstroTime>().unwrap();
             Ok(self.inner <= tm2.inner)
@@ -562,7 +600,14 @@ impl PyAstroTime {
         }
     }
 
-    fn __gt__(&self, other: &PyAny) -> PyResult<bool> {
+    /// Greater than comparison
+    /// 
+    /// Args:
+    ///     other (satkit.time): Time object to compare
+    /// 
+    /// Returns:
+    ///     bool: True if greater than, False otherwise
+    fn __gt__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         if other.is_instance_of::<PyAstroTime>() {
             let tm2 = other.extract::<PyAstroTime>().unwrap();
             Ok(self.inner > tm2.inner)
@@ -571,7 +616,14 @@ impl PyAstroTime {
         }
     }
 
-    fn __ge__(&self, other: &PyAny) -> PyResult<bool> {
+    /// Greater than or equal comparison
+    /// 
+    /// Args:
+    ///     other (satkit.time): Time object to compare
+    /// 
+    /// Returns:
+    ///     
+    fn __ge__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         if other.is_instance_of::<PyAstroTime>() {
             let tm2 = other.extract::<PyAstroTime>().unwrap();
             Ok(self.inner >= tm2.inner)
@@ -584,15 +636,13 @@ impl PyAstroTime {
     ///
     /// Add given number of UTC days to a time object, and return the result
     /// 
-    /// # Arguments:
+    /// Args:
+    ///     days (float): Number of days to add
     /// 
-    /// * `days` - Number of days to add
-    /// 
-    /// # Returns:
-    /// 
-    /// Time object representing input time plus given number of days
-    /// 
-    /// # Note:
+    /// Returns:
+    ///     satkit.time: Time object representing input time plus given number of days
+    ///  
+    /// Note:
     /// 
     /// A UTC days is defined as being exactly 86400 seconds long.  This
     /// avoids the ambiguity of adding a "day" to a time that has a leap second
@@ -624,11 +674,20 @@ impl<'b> From<&'b PyAstroTime> for &'b astrotime::AstroTime {
     }
 }
 
+fn datetime2astrotime(tm: &PyDateTime) -> PyResult<AstroTime> {
+    let ts: f64 = tm
+        .call_method("timestamp", (), None)
+        .unwrap()
+        .extract::<f64>()
+        .unwrap();
+    Ok(AstroTime::from_unixtime(ts))
+}
+
 pub trait ToTimeVec {
     fn to_time_vec(&self) -> PyResult<Vec<AstroTime>>;
 }
 
-impl ToTimeVec for &PyAny {
+impl ToTimeVec for &Bound<'_, PyAny> {
     fn to_time_vec(&self) -> PyResult<Vec<AstroTime>> {
         // "Scalar" time input case
         if self.is_instance_of::<PyAstroTime>() {
@@ -637,16 +696,16 @@ impl ToTimeVec for &PyAny {
         }
         else if self.is_instance_of::<PyDateTime>() {
             let dt: &PyDateTime = self.extract().unwrap();
-            Ok(vec![PyAstroTime::from_datetime(dt).unwrap().inner])
+            Ok(vec![datetime2astrotime(dt).unwrap()])
         }
         // List case
         else if self.is_instance_of::<pyo3::types::PyList>() {
             match self.extract::<Vec<PyAstroTime>>() {
                 Ok(v) => Ok(v.iter().map(|x| x.inner).collect::<Vec<_>>()),
-                Err(e) => {
+                Err(_e) => {
                     match self.extract::<Vec<&PyDateTime>>() {
                         Ok(v) => Ok(v.iter().map(|x| 
-                            PyAstroTime::from_datetime(x.extract().unwrap()).unwrap().inner)
+                            datetime2astrotime(*x).unwrap())
                             .collect::<Vec<_>>()),
                         Err(e) => {
                             Err(pyo3::exceptions::PyTypeError::new_err(format!(
@@ -670,7 +729,7 @@ impl ToTimeVec for &PyAny {
                             match p.extract::<PyAstroTime>(py) {
                                 Ok(v2) => Ok(v2.inner),
                                 Err(_) => match p.extract::<&PyDateTime>(py) {
-                                    Ok(v3) => Ok(PyAstroTime::from_datetime(v3.extract().unwrap()).unwrap().inner),
+                                    Ok(v3) => Ok(datetime2astrotime(v3).unwrap()),
                                     Err(_) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
                                         "Input numpy array must contain satkit.time elements or datetime.datetime elements"
                                     ))),

@@ -1,0 +1,27 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+sphinx = "*"
+numpy = "*"
+ipython = "*"
+nbsphinx = "*"
+myst-parser = "*"
+sphinx-rtd-theme = "*"
+plotly = "*"
+pandas = "*"
+dash = "*"
+mypy = "*"
+commonmark = "*"
+sphinx-autoapi = "*"
+ipykernel = "*"
+satkit = "*"
+furo = "*"
+kaleido = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

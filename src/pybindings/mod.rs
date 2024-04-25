@@ -37,7 +37,7 @@ use pysatstate::PySatState;
 
 /// JPL Ephemeris Sub-Module
 #[pymodule]
-fn jplephem(_py: Python, m: &PyModule) -> PyResult<()> {
+fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyjplephem::geocentric_pos, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pyjplephem::geocentric_state, m)?)
@@ -51,7 +51,7 @@ fn jplephem(_py: Python, m: &PyModule) -> PyResult<()> {
 }
 
 #[pymodule]
-fn sun(_py: Python, m: &PyModule) -> PyResult<()> {
+fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_sun::pos_gcrf, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pylpephem_sun::pos_mod, m)?)
@@ -62,7 +62,7 @@ fn sun(_py: Python, m: &PyModule) -> PyResult<()> {
 }
 
 #[pymodule]
-fn moon(_py: Python, m: &PyModule) -> PyResult<()> {
+fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_moon::pos_gcrf, m)?)
         .unwrap();
     Ok(())
@@ -70,7 +70,7 @@ fn moon(_py: Python, m: &PyModule) -> PyResult<()> {
 
 /// Frame transform module: transform between varias coordinate frames
 #[pymodule]
-fn frametransform(_py: Python, m: &PyModule) -> PyResult<()> {
+fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyft::earth_rotation_angle, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::gast, m)?).unwrap();
@@ -98,7 +98,7 @@ fn frametransform(_py: Python, m: &PyModule) -> PyResult<()> {
 }
 
 #[pymodule]
-fn satprop(_py: Python, m: &PyModule) -> PyResult<()> {
+fn satprop(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPropSettings>()?;
     m.add_class::<PySatState>()?;
     m.add_class::<pysatproperties::PySatProperties>()?;
@@ -109,7 +109,7 @@ fn satprop(_py: Python, m: &PyModule) -> PyResult<()> {
 }
 
 #[pymodule]
-pub fn satkit(_py: Python, m: &PyModule) -> PyResult<()> {
+pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAstroTime>()?;
     m.add_class::<PyDuration>()?;
     m.add_class::<pyastrotime::PyTimeScale>()?;

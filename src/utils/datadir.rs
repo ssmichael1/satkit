@@ -19,15 +19,7 @@ pub fn testdirs() -> Vec<PathBuf> {
     #[cfg(feature = "pybindings")]
     match get_dylib_path() {
         Some(v) => {
-            testdirs.push(Path::new(&v).parent().unwrap().join("astro-data"));
-            testdirs.push(
-                Path::new(&v)
-                    .parent()
-                    .unwrap()
-                    .join("share")
-                    .join("astro-data"),
-            );
-            testdirs.push(v);
+            testdirs.push(Path::new(&v).parent().unwrap().join("satkit-data"));
         }
         None => (),
     }
@@ -42,19 +34,19 @@ pub fn testdirs() -> Vec<PathBuf> {
                 Path::new(vstr)
                     .join("Library")
                     .join("Application Support")
-                    .join("astro-data"),
+                    .join("satkit-data"),
             );
-            testdirs.push(Path::new(vstr).join("astro-data"));
+            testdirs.push(Path::new(vstr).join(".satkit-data"));
             testdirs.push(Path::new(vstr).to_path_buf());
         }
         Err(_e) => (),
     }
 
-    testdirs.push(Path::new(&"/usr/share/astrodata").to_path_buf());
+    testdirs.push(Path::new(&"/usr/share/satkit-data").to_path_buf());
 
     // On mac, look in root library directory
     #[cfg(target_os = "macos")]
-    testdirs.push(Path::new(&"/Library/Application Support/astro-data").to_path_buf());
+    testdirs.push(Path::new(&"/Library/Application Support/satkit-data").to_path_buf());
 
     testdirs
 }
@@ -65,12 +57,11 @@ pub fn testdirs() -> Vec<PathBuf> {
 /// files are found
 ///
 /// *  "SATKIT_DATA" environment variable
-/// *  ${HOME}/astro-data
+/// *  ${HOME}/Library/Application Support/satkit-data (on MacOS only)
+/// *  ${HOME}/.satkit-data
 /// *  ${HOME}
-/// *  /usr/share/astro-data
-/// *  On Mac Only:
-///    * /Library/Application Support/astro-data
-///    * ${Home}/Library/Application Support/astro-data
+/// *  /usr/share/satkit-data
+/// *  /Library/Application Support/satkit-data (on MacOS only)
 ///
 /// Returns:
 ///
