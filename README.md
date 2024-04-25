@@ -2,6 +2,7 @@
 
 An accurate, high-performance satellite orbital kinematics toolkit, written in Rust with a sensible interface.
 <br/>
+Also includes python bindings for *all* functions via via [pyo3](https://pyo3.rs/)
 
 ### Github
 
@@ -29,7 +30,7 @@ An accurate, high-performance satellite orbital kinematics toolkit, written in R
 - **Native Rust** bindings
 - **Python bindings** for compiled rust code ... speed of Rust with convenience of Python<br/>
   Install with `pip install satkit`<br/>
-  PyPi includes binaries for windows, macos (Intel & arm), and linux
+  PyPi includes binary packages for windows, macos (Intel & ARM), and linux.  Python documentation is at: <https://img.shields.io/readthedocs/satellite-toolkit>
 
 ## Features
 

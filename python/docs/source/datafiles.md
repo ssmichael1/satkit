@@ -42,19 +42,19 @@ The ``satkit`` package will search for the data files in the following locations
 
 * Directory pointed to by the ``SATKIT_DATA`` environment variable
 
-* ``$HOME/astro-data``<br/>
+* ``$HOME/.satkit-data``<br/>
 
-* ``$DYLIB_PATH/share/astro-data`` where ``$DYLIB_PATH`` is the location of the satkit shared library called by python.
+* ``$DYLIB_PATH/share/satkit-data`` where ``$DYLIB_PATH`` is the location of the satkit shared library called by python.
 <br/>
-* *For Mac users only* : ``$HOME/Libary/Application Support/astro-data``
+* *For Mac users only* : ``$HOME/Libary/Application Support/satkit-data``
 <br/>
-* ``$HOME/astro-data``
+* ``$HOME/satkit-data``
 <br/>
 * ``$HOME``
 <br/>
-* ``/usr/share/astro-data``
+* ``/usr/share/satkit-data``
 <br/>
-* *For Mac users only* : ``/Library/Application Support/astro-data``
+* *For Mac users only* : ``/Library/Application Support/satkit-data``
 <br/>
 
 If no files are found, the ``satkit`` package will go through the above list of directories in order, stopping when a directory either exists and is writable, or can be created and is writable.  The files will then be downloaded to that location.
