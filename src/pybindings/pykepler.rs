@@ -5,7 +5,7 @@ use numpy as np;
 use nalgebra::Vector3;
 type Vec3 = Vector3<f64>;
 
-use crate::kepler::Kepler;
+use crate::kepler::{Kepler, Anomaly};
 
 ///
 /// Representation of Keplerian orbital elements
@@ -28,7 +28,7 @@ impl PyKepler {
         let w = args.get_item(4)?.extract::<f64>().unwrap();
         let nu = args.get_item(5)?.extract::<f64>().unwrap();
         Ok(PyKepler {
-            inner: Kepler::new(a, e, i, raan, w, nu),
+            inner: Kepler::new(a, e, i, raan, w, Anomaly::True(nu)),
         })
     }
 
@@ -86,7 +86,7 @@ impl PyKepler {
         let r = Vec3::from_row_slice(r.as_slice().unwrap());
         let v = Vec3::from_row_slice(v.as_slice().unwrap());
         Ok(PyKepler {
-            inner: Kepler::from_pv(r, v),
+            inner: Kepler::from_pv(r, v).unwrap(),
         })
     }
 
