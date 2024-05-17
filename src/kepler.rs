@@ -130,17 +130,75 @@ impl Kepler {
         }
     }
 
+    /// Return the semiparameter of the satellite orbit
+    ///
+    /// The semiparameter is also known as the semi-latus rectum
+    /// # Returns
+    /// 
+    /// * `f64` - Semiparameter, meters
+    pub fn semiparameter(&self) -> f64 {
+        self.a * (1.0 - self.eccen.powi(2))
+    }
+    
+    /// Propagate the orbit forward (or backward) in time
+    /// by givend duration
+    /// 
+    /// # Arguments
+    /// 
+    /// * `dt` - `satkit.Duration` object representing the time to propagate
+    /// 
+    /// # Returns
+    /// 
+    /// * `Kepler` - A new Keplerian orbital element object
+    pub fn propagate(&self, dt: &crate::Duration) -> Kepler {
+        let n = self.mean_motion();
+        let ma = self.mean_anomaly() + n*dt.seconds();
+        let nu = mean2true(ma, self.eccen);
+        Kepler {
+            a: self.a,
+            eccen: self.eccen,
+            incl: self.incl,
+            raan: self.raan,
+            w: self.w,
+            nu: nu
+        }
+    }
+
+    /// Return the eccentric anomaly of the satellite in radians
     pub fn eccentric_anomaly(&self) -> f64 {
         f64::atan2(
             self.nu.sin()*(1.0-self.eccen.powi(2)).sqrt(),
         1.0 + self.eccen * self.nu.cos())
     }
 
+    /// Return the mean anomaly of the satellite in radians
     pub fn mean_anomaly(&self) -> f64 {
         let ea = self.eccentric_anomaly();
         ea - self.eccen*ea.sin()
     }
 
+    /// Return the true anomaly of the satellite in radians
+    pub fn true_anomaly(&self) -> f64 {
+        self.nu
+    }
+
+    /// Return the mean motion of the satellite in radians/second
+    /// 
+    /// # Returns
+    /// 
+    /// * `f64` - Mean motion, radians/second
+    pub fn mean_motion(&self) -> f64 {
+        (crate::consts::MU_EARTH / self.a.powi(3)).sqrt()
+    }
+
+    /// Return the period of the satellite in seconds
+    ///
+    /// # Returns
+    /// 
+    /// * `f64` - Period, seconds
+    pub fn period(&self) -> f64 {
+        2.0 * std::f64::consts::PI / self.mean_motion()
+    }
 
 
     /// Convert Cartesian coordinates to Keplerian orbital elements
@@ -179,7 +237,7 @@ impl Kepler {
         if r.dot(&v) < 0.0 {
             nu = 2.0 * std::f64::consts::PI - nu;
         }  
-        Ok(Kepler::new(a, eccen, incl, raan, w, Anomaly::Mean(nu)))
+        Ok(Kepler::new(a, eccen, incl, raan, w, Anomaly::True(nu)))
     }
 
     /// Convert Keplerian orbital elements to Cartesian coordinates
