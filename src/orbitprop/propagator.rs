@@ -82,8 +82,8 @@ impl<'a, const C: usize> ode::ODESystem for Propagation<'a, C> {
         // Moon position
         let (sun_gcrf, moon_gcrf) = match self.settings.use_jplephem {
             true => (
-                jplephem::geocentric_pos(SolarSystem::SUN, &time)?,
-                jplephem::geocentric_pos(SolarSystem::MOON, &time)?,
+                jplephem::geocentric_pos(SolarSystem::Sun, &time)?,
+                jplephem::geocentric_pos(SolarSystem::Moon, &time)?,
             ),
             false => (
                 lpephem::sun::pos_gcrf(&time),
@@ -100,7 +100,6 @@ impl<'a, const C: usize> ode::ODESystem for Propagation<'a, C> {
         let q2 = &self.qgcrs2itrf_table[grav_idx as usize + 1];
         // Quaternion to go from inertial to terrestrial frame
         let qgcrf2itrf = q1.slerp(q2, t);
-        //let qgcrf2itrf = frametransform::qgcrf2itrf_approx(&tm);
         let qitrf2gcrf = qgcrf2itrf.conjugate();
 
         // Position in ITRF coordinates
@@ -390,7 +389,7 @@ pub fn propagate<const C: usize>(
                 .map(|x| {
                     let tm: AstroTime =
                         *start + x as f64 * tdir * settings.gravity_interp_dt_secs / 86400.0; // Use high-precision transform
-                    frametransform::qgcrf2itrf(&tm)
+                    frametransform::qgcrf2itrf_approx(&tm)
                 })
                 .collect()
         },
@@ -651,7 +650,7 @@ mod tests {
             .map(|rline| -> SKResult<crate::AstroTime> {
                 let line = rline.unwrap();
                 let lvals: Vec<&str> = line.split_whitespace().collect();
-                let year: u32 = lvals[1].parse()?;
+                let year: i32 = lvals[1].parse()?;
                 let mon: u32 = lvals[2].parse()?;
                 let day: u32 = lvals[3].parse()?;
                 let hour: u32 = lvals[4].parse()?;

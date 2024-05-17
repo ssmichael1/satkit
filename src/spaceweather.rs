@@ -101,7 +101,7 @@ fn load_space_weather_csv() -> SKResult<Vec<SpaceWeatherRecord>> {
                 None => return skerror!("invalid day in file"),
             };
             Ok(SpaceWeatherRecord {
-                date: (AstroTime::from_date(year, mon, day)),
+                date: (AstroTime::from_date(year as i32, mon, day)),
                 bsrn: lvals[1].parse().unwrap_or(-1),
                 nd: lvals[2].parse().unwrap_or(-1),
                 kp: {
@@ -168,7 +168,7 @@ fn load_space_weather_legacy() -> SKResult<Vec<SpaceWeatherRecord>> {
             None => continue,
         };
         sw.push(SpaceWeatherRecord {
-            date: (AstroTime::from_date(year, mon, day)),
+            date: (AstroTime::from_date(year as i32, mon, day)),
             bsrn: (str2num(&vline, 11, 15).unwrap_or(-1)),
             nd: (str2num(&vline, 16, 18).unwrap_or(-1)),
             kp: {

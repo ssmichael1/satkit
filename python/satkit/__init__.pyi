@@ -21,6 +21,7 @@ __all__ = [
     "solarsystem",
     "TLE",
     "itrfcoord",
+    "kepler",
     "consts",
     "frametransform",
     "jplephem",

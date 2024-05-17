@@ -38,17 +38,17 @@ impl TryFrom<i32> for SolarSystem {
     type Error = ();
     fn try_from(v: i32) -> Result<Self, Self::Error> {
         match v {
-            x if x == SolarSystem::MERCURY as i32 => Ok(SolarSystem::MERCURY),
-            x if x == SolarSystem::VENUS as i32 => Ok(SolarSystem::VENUS),
+            x if x == SolarSystem::Mercury as i32 => Ok(SolarSystem::Mercury),
+            x if x == SolarSystem::Venus as i32 => Ok(SolarSystem::Venus),
             x if x == SolarSystem::EMB as i32 => Ok(SolarSystem::EMB),
-            x if x == SolarSystem::MARS as i32 => Ok(SolarSystem::MARS),
-            x if x == SolarSystem::JUPITER as i32 => Ok(SolarSystem::JUPITER),
-            x if x == SolarSystem::SATURN as i32 => Ok(SolarSystem::SATURN),
-            x if x == SolarSystem::URANUS as i32 => Ok(SolarSystem::URANUS),
-            x if x == SolarSystem::NEPTUNE as i32 => Ok(SolarSystem::NEPTUNE),
-            x if x == SolarSystem::PLUTO as i32 => Ok(SolarSystem::PLUTO),
-            x if x == SolarSystem::MOON as i32 => Ok(SolarSystem::MOON),
-            x if x == SolarSystem::SUN as i32 => Ok(SolarSystem::SUN),
+            x if x == SolarSystem::Mars as i32 => Ok(SolarSystem::Mars),
+            x if x == SolarSystem::Jupiter as i32 => Ok(SolarSystem::Jupiter),
+            x if x == SolarSystem::Saturn as i32 => Ok(SolarSystem::Saturn),
+            x if x == SolarSystem::Uranus as i32 => Ok(SolarSystem::Uranus),
+            x if x == SolarSystem::Neptune as i32 => Ok(SolarSystem::Neptune),
+            x if x == SolarSystem::Pluto as i32 => Ok(SolarSystem::Pluto),
+            x if x == SolarSystem::Moon as i32 => Ok(SolarSystem::Moon),
+            x if x == SolarSystem::Sun as i32 => Ok(SolarSystem::Sun),
             _ => Err(()),
         }
     }
@@ -130,7 +130,7 @@ impl JPLEphem {
     /// let t = AstroTime::from_datetime(2021, 3, 1, 12, 0, 0.0);
     ///
     /// // Find geocentric moon position at this time in the GCRF frame
-    /// let p = jplephem::geocentric_pos(SolarSystem::MOON, &t).unwrap();
+    /// let p = jplephem::geocentric_pos(SolarSystem::Moon, &t).unwrap();
     /// println!("p = {}", p);
     /// ```
     ///
@@ -453,11 +453,11 @@ impl JPLEphem {
     ///    3-vector of cartesian Geocentric position in meters
     ///
     fn geocentric_pos(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
-        if body == SolarSystem::MOON {
+        if body == SolarSystem::Moon {
             return self.barycentric_pos(body, tm);
         } else {
             let emb: Vec3 = self.barycentric_pos(SolarSystem::EMB, tm)?;
-            let moon: Vec3 = self.barycentric_pos(SolarSystem::MOON, tm)?;
+            let moon: Vec3 = self.barycentric_pos(SolarSystem::Moon, tm)?;
             let b: Vec3 = self.barycentric_pos(body, tm)?;
 
             // Compute the position of the body relative to the Earth-moon
@@ -483,11 +483,11 @@ impl JPLEphem {
     ///       Note: velocity is relative to Earth
     ///
     fn geocentric_state(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<(Vec3, Vec3)> {
-        if body == SolarSystem::MOON {
+        if body == SolarSystem::Moon {
             return self.barycentric_state(body, tm);
         } else {
             let emb: (Vec3, Vec3) = self.barycentric_state(SolarSystem::EMB, tm)?;
-            let moon: (Vec3, Vec3) = self.barycentric_state(SolarSystem::MOON, tm)?;
+            let moon: (Vec3, Vec3) = self.barycentric_state(SolarSystem::Moon, tm)?;
             let b: (Vec3, Vec3) = self.barycentric_state(body, tm)?;
 
             // Compute the position of the body relative to the Earth-moon
@@ -613,7 +613,7 @@ mod tests {
 
         let tm = AstroTime::from_jd(2451545.0, Scale::TT);
         //let tm = &AstroTime::from_jd(2451545.0, Scale::UTC);
-        let (_, _): (Vec3, Vec3) = jpl.geocentric_state(SolarSystem::MOON, &tm).unwrap();
+        let (_, _): (Vec3, Vec3) = jpl.geocentric_state(SolarSystem::Moon, &tm).unwrap();
         println!("au = {:.20}", jpl._au);
     }
 
@@ -672,7 +672,7 @@ mod tests {
                     let (_mpos, mvel): (Vec3, Vec3) = jplephem_singleton()
                         .as_ref()
                         .unwrap()
-                        .geocentric_state(SolarSystem::MOON, &tm)
+                        .geocentric_state(SolarSystem::Moon, &tm)
                         .unwrap();
                     // Scale Earth velocity
                     tvel = tvel - mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
@@ -682,7 +682,7 @@ mod tests {
                     let (_mpos, mvel): (Vec3, Vec3) = jplephem_singleton()
                         .as_ref()
                         .unwrap()
-                        .geocentric_state(SolarSystem::MOON, &tm)
+                        .geocentric_state(SolarSystem::Moon, &tm)
                         .unwrap();
                     //Scale Earth velocity
                     svel = svel - mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);

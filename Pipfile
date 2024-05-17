@@ -20,6 +20,8 @@ ipykernel = "*"
 satkit = "*"
 furo = "*"
 kaleido = "*"
+scipy = "*"
+pytest = "*"
 
 [dev-packages]
 

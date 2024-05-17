@@ -14,3 +14,4 @@ iframe_figures
 .DS_Store
 _build
 html
+Pipfile.lock

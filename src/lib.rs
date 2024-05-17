@@ -61,6 +61,8 @@ pub mod spaceweather;
 pub mod tle;
 /// Utility functions
 pub mod utils;
+/// Keplerian orbital elements
+pub mod kepler;
 
 // Integrate ordinary differential equations
 mod ode;

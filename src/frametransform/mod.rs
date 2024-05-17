@@ -210,7 +210,7 @@ pub fn qgcrf2itrf_approx(tm: &AstroTime) -> Quat {
     // Neglecting polar motion
     let qitrf2tod_approx: Quat = qrot_zcoord(-gast(tm));
 
-    qmod2gcrf(tm) * qtod2mod_approx(tm) * qitrf2tod_approx
+    (qmod2gcrf(tm) * qtod2mod_approx(tm) * qitrf2tod_approx).conjugate()
 }
 
 ///

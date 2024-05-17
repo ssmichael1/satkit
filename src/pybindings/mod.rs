@@ -18,6 +18,7 @@ mod pysatstate;
 mod pysgp4;
 mod pysolarsystem;
 mod pytle;
+mod pykepler;
 
 mod pypropagate;
 mod pypropsettings;
@@ -29,6 +30,7 @@ use pyastrotime::PyAstroTime;
 use pyduration::PyDuration;
 use pyframetransform as pyft;
 use pyitrfcoord::PyITRFCoord;
+use pykepler::PyKepler;
 use pyquaternion::Quaternion;
 use pysolarsystem::SolarSystem;
 
@@ -134,6 +136,8 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pytle::PyTLE>()?;
 
     m.add_class::<PyITRFCoord>()?;
+
+    m.add_class::<PyKepler>()?;
 
     m.add_wrapped(wrap_pymodule!(frametransform))?;
     m.add_wrapped(wrap_pymodule!(jplephem))?;

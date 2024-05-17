@@ -37,7 +37,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         if sol.x < dense.x[0] {
             return Err(Box::new(ODEError::InterpExceedsSolutionBounds));
         }
-        let n = ((xend - xstart) / dx).ceil() as usize + 1;
+        let n = ((xend - xstart) / dx) as usize + 1;
         let mut xarr: Vec<f64> = (0..n).map(|v| v as f64 * dx + xstart).collect();
         if *xarr.last().unwrap() > xend {
             xarr.pop();

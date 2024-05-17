@@ -15,33 +15,33 @@ use crate::SolarSystem as SS;
 ///     (it will be close to origin)
 #[pyclass(name = "solarsystem")]
 pub enum SolarSystem {
-    Mercury = SS::MERCURY as isize,
-    Venus = SS::VENUS as isize,
+    Mercury = SS::Mercury as isize,
+    Venus = SS::Venus as isize,
     EMB = SS::EMB as isize,
-    Mars = SS::MARS as isize,
-    Jupiter = SS::JUPITER as isize,
-    Saturn = SS::SATURN as isize,
-    Uranus = SS::URANUS as isize,
-    Neptune = SS::NEPTUNE as isize,
-    Pluto = SS::PLUTO as isize,
-    Moon = SS::MOON as isize,
-    Sun = SS::SUN as isize,
+    Mars = SS::Mars as isize,
+    Jupiter = SS::Jupiter as isize,
+    Saturn = SS::Saturn as isize,
+    Uranus = SS::Uranus as isize,
+    Neptune = SS::Neptune as isize,
+    Pluto = SS::Pluto as isize,
+    Moon = SS::Moon as isize,
+    Sun = SS::Sun as isize,
 }
 
 impl From<&SolarSystem> for SS {
     fn from(s: &SolarSystem) -> SS {
         match s {
-            &SolarSystem::Mercury => SS::MERCURY,
-            &SolarSystem::Venus => SS::VENUS,
+            &SolarSystem::Mercury => SS::Mercury,
+            &SolarSystem::Venus => SS::Venus,
             &SolarSystem::EMB => SS::EMB,
-            &SolarSystem::Mars => SS::MARS,
-            &SolarSystem::Jupiter => SS::JUPITER,
-            &SolarSystem::Saturn => SS::SATURN,
-            &SolarSystem::Uranus => SS::URANUS,
-            &SolarSystem::Neptune => SS::NEPTUNE,
-            &SolarSystem::Pluto => SS::PLUTO,
-            &SolarSystem::Moon => SS::MOON,
-            &SolarSystem::Sun => SS::SUN,
+            &SolarSystem::Mars => SS::Mars,
+            &SolarSystem::Jupiter => SS::Jupiter,
+            &SolarSystem::Saturn => SS::Saturn,
+            &SolarSystem::Uranus => SS::Uranus,
+            &SolarSystem::Neptune => SS::Neptune,
+            &SolarSystem::Pluto => SS::Pluto,
+            &SolarSystem::Moon => SS::Moon,
+            &SolarSystem::Sun => SS::Sun,
         }
     }
 }
@@ -49,17 +49,17 @@ impl From<&SolarSystem> for SS {
 impl IntoPy<PyObject> for SS {
     fn into_py(self, py: Python<'_>) -> PyObject {
         let ss: SolarSystem = match self {
-            SS::MERCURY => SolarSystem::Mercury,
-            SS::VENUS => SolarSystem::Venus,
+            SS::Mercury => SolarSystem::Mercury,
+            SS::Venus => SolarSystem::Venus,
             SS::EMB => SolarSystem::EMB,
-            SS::MARS => SolarSystem::Mars,
-            SS::JUPITER => SolarSystem::Jupiter,
-            SS::SATURN => SolarSystem::Saturn,
-            SS::URANUS => SolarSystem::Uranus,
-            SS::NEPTUNE => SolarSystem::Neptune,
-            SS::PLUTO => SolarSystem::Pluto,
-            SS::MOON => SolarSystem::Moon,
-            SS::SUN => SolarSystem::Sun,
+            SS::Mars => SolarSystem::Mars,
+            SS::Jupiter => SolarSystem::Jupiter,
+            SS::Saturn => SolarSystem::Saturn,
+            SS::Uranus => SolarSystem::Uranus,
+            SS::Neptune => SolarSystem::Neptune,
+            SS::Pluto => SolarSystem::Pluto,
+            SS::Moon => SolarSystem::Moon,
+            SS::Sun => SolarSystem::Sun,
         };
         ss.into_py(py)
     }

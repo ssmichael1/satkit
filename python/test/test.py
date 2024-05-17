@@ -121,6 +121,44 @@ class TestTime:
         assert minute == 0
         assert sec == 0
 
+class TestKepler:
+    def test_kepler_from_pv(self):
+        """
+        Test creation of Kepler elements from position and velocity
+        """
+    
+        # Test case from Vallado, example 2-6
+        r = np.array([6524.834, 6862.875, 6448.296])*1.0e3
+        v = np.array([4.901327, 5.533756, -1.976341])*1.0e3
+        kep = sk.kepler.from_pv(r, v)
+        rad2deg = 180.0/m.pi
+        print(kep)
+        assert kep.a == pytest.approx(36127343, 1.0e-3)
+        assert kep.eccen == pytest.approx(0.83285, 1.0e-5)
+        assert kep.inclination*rad2deg == pytest.approx(87.87, 1.0e-3)
+        assert kep.raan*rad2deg == pytest.approx(227.89, 1.0e-3)
+        assert kep.w*rad2deg == pytest.approx(53.38, 1.0e-3)
+        assert kep.nu*rad2deg == pytest.approx(92.335, 1.0e-3)
+
+    def test_kepler_to_pv(self):
+        """
+        Test conversion of Kepler elements to position and velocity
+        """
+        p = 11067790
+        eccen = 0.83285
+        incl = 87.87*m.pi/180
+        raan = 227.89*m.pi/180
+        w = 53.38*m.pi/180
+        nu = 92.335*m.pi/180
+
+        a = p/(1-eccen**2)
+        kep = sk.kepler(a, eccen, incl, raan, w, nu)
+        pos, vel = kep.to_pv()
+        assert pos == pytest.approx(np.array([6525.368, 6861.532, 6449.119])*1.0e3, 1.0e-3)
+        assert vel == pytest.approx(np.array([4.902279, 5.533140, -1.975710])*1.0e3, 1.0e-3)
+
+
+
 class TestJPLEphem:
     def test_jplephem_testvecs(self):
         """

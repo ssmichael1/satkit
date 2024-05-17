@@ -13,6 +13,7 @@ use crate::AstroTime;
 ///           prior to current time
 ///   6 : Average of eight 3 hr AP indicies from 36 to 57 hrs
 ///           prior to current time
+#[allow(non_camel_case_types)]
 #[repr(C)]
 struct ap_array {
     a: [cty::c_double; 7],
@@ -26,6 +27,7 @@ struct ap_array {
 ///   array "switches" needs to be set accordingly by the calling program.
 //   The arrays sw and swc are set internally.
 #[repr(C)]
+#[allow(non_camel_case_types)]
 struct nrlmsise_flags {
     switches: [cty::c_int; 24],
     sw: [cty::c_double; 24],
@@ -33,6 +35,7 @@ struct nrlmsise_flags {
 }
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 struct nrlmsise_input {
     year: cty::c_int,     /* Year, currently ignored */
     day: cty::c_int,      /* day of year */
@@ -60,6 +63,7 @@ struct nrlmsise_input {
 ///      t[0] - EXOSPHERIC TEMPERATURE
 ///      t[1] - TEMPERATURE AT ALT
 #[repr(C)]
+#[allow(non_camel_case_types)]
 struct nrlmsise_output {
     d: [cty::c_double; 9],
     t: [cty::c_double; 2],
@@ -109,7 +113,7 @@ pub fn nrlmsise(
     if time_option.is_some() {
         let time = time_option.unwrap();
         let (year, _mon, _day, dhour, dmin, dsec) = time.to_datetime();
-        let fday: f64 = (time - AstroTime::from_date(year, 1, 1)).days() + 1.0;
+        let fday: f64 = (time - AstroTime::from_date(year as i32, 1, 1)).days() + 1.0;
         day_of_year = fday.floor() as i32;
         sec_of_day = dhour as f64 * 3600.0 + dmin as f64 * 60.0 + dsec;
 

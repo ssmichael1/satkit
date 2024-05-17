@@ -1050,6 +1050,53 @@ class quaternion:
             quaternion: Quaternion representing interpolation between self and other
         """
 
+class kepler:
+    """ Represent Keplerian element sets and convert between cartesian
+    
+    
+    Notes:
+        * This class is used to represent Keplerian elements and convert between Cartesian coordinates
+        * The class uses the semi-major axis (a), not the semiparameter
+        * All angle units are radians
+        * All length units are meters
+        * All velocity units are meters / second
+    """
+
+    def __init__(self, *args):
+        """Create Keplerian element set object from input elements
+
+        # Args:
+            a (float) : Semi-major axis, meters
+            e (float) : Eccentricity, unitless
+            i (float) : Inclination, radians
+            raan (float) : Right ascension of ascending node, radians
+            argp (float) : Argument of perigee, radians
+            nu (float) : True anomaly, radians
+
+        # Returns:
+            satkit.kepler: Keplerian element set object
+        """
+
+    def to_pv(self) -> typing.Tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]:
+        """Convert Keplerian element set to position and velocity vectors
+
+        Returns:
+            tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: Tuple with two elements representing the position and velocity vectors
+        """
+
+    def from_pv(
+        pos: npt.ArrayLike[np.float64], vel: npt.ArrayLike[np.float64]
+    ) -> kepler:
+        """Create Keplerian element set from input position and velocity vectors
+
+        Args:
+            pos (npt.ArrayLike[np.float64]): 3-element array representing position vector
+            vel (npt.ArrayLike[np.float64]): 3-element array representing velocity vector
+
+        Returns:
+            satkit.kepler: Keplerian element set object
+        """
+
 class itrfcoord:
     """ Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 

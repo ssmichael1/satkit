@@ -265,7 +265,7 @@ impl TLE {
         // Note: day_of_year starts from 1, not zero,
         // also, go from Jan 2 to avoid leap-second
         // issues, hence the "-2" at end
-        let epoch = AstroTime::from_date(year, 1, 2).add_utc_days(day_of_year - 2.0);
+        let epoch = AstroTime::from_date(year as i32, 1, 2).add_utc_days(day_of_year - 2.0);
 
         Ok(TLE {
             name: "none".to_string(),

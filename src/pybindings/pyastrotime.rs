@@ -159,12 +159,12 @@ impl PyAstroTime {
                 )),
             }
         } else if py_args.len() == 3 {
-            let year = py_args.get_item(0)?.extract::<u32>()?;
+            let year = py_args.get_item(0)?.extract::<i32>()?;
             let month = py_args.get_item(1)?.extract::<u32>()?;
             let day = py_args.get_item(2)?.extract::<u32>()?;
             Self::from_date(year, month, day)
         } else if py_args.len() >= 6 {
-            let year = py_args.get_item(0)?.extract::<u32>()?;
+            let year = py_args.get_item(0)?.extract::<i32>()?;
             let month = py_args.get_item(1)?.extract::<u32>()?;
             let day = py_args.get_item(2)?.extract::<u32>()?;
             let hour = py_args.get_item(3)?.extract::<u32>()?;
@@ -206,7 +206,7 @@ impl PyAstroTime {
     /// Returns:
     ///     satkit.time: Time object representing instant of input date
     #[staticmethod]
-    fn from_date(year: u32, month: u32, day: u32) -> PyResult<Self> {
+    fn from_date(year: i32, month: u32, day: u32) -> PyResult<Self> {
         Ok(PyAstroTime {
             inner: AstroTime::from_date(year, month, day),
         })
@@ -275,7 +275,7 @@ impl PyAstroTime {
     #[staticmethod]
     #[pyo3(signature=(year, month, day, hour, min, sec, scale=PyTimeScale::UTC))]
     fn from_gregorian(
-        year: u32,
+        year: i32,
         month: u32,
         day: u32,
         hour: u32,

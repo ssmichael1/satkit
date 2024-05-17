@@ -423,7 +423,7 @@ impl AstroTime {
     /// # Returns
     ///
     /// * AstroTime Object
-    pub fn from_date(year: u32, month: u32, day: u32) -> AstroTime {
+    pub fn from_date(year: i32, month: u32, day: u32) -> AstroTime {
         AstroTime::from_mjd(date2mjd_utc(year, month, day) as f64, Scale::UTC)
     }
 
@@ -500,7 +500,7 @@ impl AstroTime {
     /// * AstroTime object
     #[inline]
     pub fn from_datetime(
-        year: u32,
+        year: i32,
         month: u32,
         day: u32,
         hour: u32,
@@ -526,7 +526,7 @@ impl AstroTime {
     ///
     /// * AstroTime object
     pub fn from_datetime_with_scale(
-        year: u32,
+        year: i32,
         month: u32,
         day: u32,
         hour: u32,
@@ -649,7 +649,7 @@ fn mjd_utc2date(mjd_utc: f64) -> (u32, u32, u32) {
     (year as u32, month as u32, day as u32)
 }
 
-fn date2mjd_utc(year: u32, month: u32, day: u32) -> i32 {
+fn date2mjd_utc(year: i32, month: u32, day: u32) -> i32 {
     // Chapter 15 "Calendars" section 15.11.3 of the
     // Explanatory Suppliment to the Astronomical Almanac
     // Algorithm 3
