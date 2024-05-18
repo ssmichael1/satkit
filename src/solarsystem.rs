@@ -35,3 +35,22 @@ pub enum SolarSystem {
     /// Sun
     Sun = 10,
 }
+
+impl std::fmt::Display for SolarSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let name = match self {
+            SolarSystem::Mercury => "Mercury",
+            SolarSystem::Venus => "Venus",
+            SolarSystem::EMB => "Earth-Moon Barycenter",
+            SolarSystem::Mars => "Mars",
+            SolarSystem::Jupiter => "Jupiter",
+            SolarSystem::Saturn => "Saturn",
+            SolarSystem::Uranus => "Uranus",
+            SolarSystem::Neptune => "Neptune",
+            SolarSystem::Pluto => "Pluto",
+            SolarSystem::Moon => "Moon",
+            SolarSystem::Sun => "Sun",
+        };
+        write!(f, "{}", name)
+    }
+}

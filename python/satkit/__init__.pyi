@@ -8,6 +8,7 @@ from . import sun
 from . import satprop
 from . import density
 from . import utils
+from . import planets
 
 __all__ = [
     "time",
@@ -28,6 +29,7 @@ __all__ = [
     "utils",
     "moon",
     "sun",
+    "planets",
     "satprop",
     "density",
     "utils"

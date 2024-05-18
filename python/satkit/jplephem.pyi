@@ -1,7 +1,7 @@
 """
 High-precision JPL ephemerides for solar-system bodies
 
-For details, see:
+For details, see: https://ssd.jpl.nasa.gov/
 """
 
 from __future__ import annotations

@@ -52,7 +52,7 @@ impl PyKepler {
         let raan = args.get_item(3)?.extract::<f64>().unwrap();
         let w = args.get_item(4)?.extract::<f64>().unwrap();
         
-        let mut nu: Option<f64> = None;
+        let nu: Option<f64>;
         let mut ea: Option<f64> = None;
         let mut ma: Option<f64> = None;
         if args.len() > 5 {

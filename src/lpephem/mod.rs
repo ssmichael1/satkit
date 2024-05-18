@@ -4,6 +4,6 @@ pub mod moon;
 pub mod sun;
 
 // This part isn't working yet...
-// mod planets;
-// pub use planets::barycentric_pos;
+mod planets;
+pub use planets::heliocentric_pos;
 

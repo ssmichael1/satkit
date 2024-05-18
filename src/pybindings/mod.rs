@@ -12,6 +12,7 @@ mod pyitrfcoord;
 mod pyjplephem;
 mod pylpephem_moon;
 mod pylpephem_sun;
+mod pylpephem_planets;
 mod pynrlmsise;
 mod pyquaternion;
 mod pysatstate;
@@ -69,6 +70,15 @@ fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         .unwrap();
     Ok(())
 }
+
+#[pymodule]
+fn planets(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(pylpephem_planets::heliocentric_pos, m)?)
+        .unwrap();
+    Ok(())
+}
+
+
 
 /// Frame transform module: transform between varias coordinate frames
 #[pymodule]
@@ -143,6 +153,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pymodule!(jplephem))?;
     m.add_wrapped(wrap_pymodule!(sun))?;
     m.add_wrapped(wrap_pymodule!(moon))?;
+    m.add_wrapped(wrap_pymodule!(planets))?;
     m.add_wrapped(wrap_pymodule!(satprop))?;
 
     m.add_wrapped(wrap_pymodule!(mod_utils::utils))?;
