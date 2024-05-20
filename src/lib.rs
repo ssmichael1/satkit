@@ -64,6 +64,9 @@ pub mod utils;
 /// Keplerian orbital elements
 pub mod kepler;
 
+/// Coordinate frames
+mod frames;
+
 // Integrate ordinary differential equations
 mod ode;
 
@@ -78,6 +81,7 @@ pub use solarsystem::SolarSystem;
 pub use tle::TLE;
 pub use utils::SKErr;
 pub use utils::SKResult;
+pub use frames::Frame;
 
 #[cfg(feature = "pybindings")]
 pub mod pybindings;

@@ -20,6 +20,7 @@ mod pysgp4;
 mod pysolarsystem;
 mod pytle;
 mod pykepler;
+mod pyframes;
 
 mod pypropagate;
 mod pypropsettings;

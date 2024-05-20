@@ -126,6 +126,22 @@ impl PySatState {
         }
     }
 
+    #[getter]
+    fn get_pos_gcrf(&self) -> Py<PyAny> {
+        pyo3::Python::with_gil(|py| -> Py<PyAny> {
+            np::PyArray1::from_slice_bound(py, self.inner.pv.fixed_view::<3, 1>(0, 0).as_slice())
+                .to_object(py)
+        })
+    }
+
+    #[getter]
+    fn get_vel_gcrf(&self) -> Py<PyAny> {
+        pyo3::Python::with_gil(|py| -> Py<PyAny> {
+            np::PyArray1::from_slice_bound(py, self.inner.pv.fixed_view::<3, 1>(3, 0).as_slice())
+                .to_object(py)
+        })
+    }
+
     /// Get full 6x6 state covariance matrix
     /// 
     /// Returns:

@@ -46,11 +46,11 @@ impl SatState {
         }
     }
 
-    pub fn pos(&self) -> na::Vector3<f64> {
+    pub fn pos_gcrf(&self) -> na::Vector3<f64> {
         self.pv.fixed_view::<3, 1>(0, 0).into()
     }
 
-    pub fn vel(&self) -> na::Vector3<f64> {
+    pub fn vel_gcrf(&self) -> na::Vector3<f64> {
         self.pv.fixed_view::<3, 1>(3, 0).into()
     }
 
@@ -76,8 +76,8 @@ impl SatState {
     pub fn qgcrf2lvlh(&self) -> na::UnitQuaternion<f64> {
         type Quat = na::UnitQuaternion<f64>;
 
-        let p = self.pos();
-        let v = self.vel();
+        let p = self.pos_gcrf();
+        let v = self.vel_gcrf();
         let h = p.cross(&v);
         let q1 = Quat::rotation_between(&(-1.0 * p), &na::Vector3::z_axis()).unwrap();
         let q2 = Quat::rotation_between(&(-1.0 * (q1 * h)), &na::Vector3::y_axis()).unwrap();
@@ -231,9 +231,9 @@ impl SatState {
     pub fn to_string(&self) -> String {
         let mut s1 = format!(
             r#"Satellite State
-                Time: {}
-            Position: [{:+8.0}, {:+8.0}, {:+8.0}] m,
-            Velocity: [{:+8.3}, {:+8.3}, {:+8.3}] m/s"#,
+                       Time: {}
+              GCRF Position: [{:+8.0}, {:+8.0}, {:+8.0}] m,
+              GCRF Velocity: [{:+8.3}, {:+8.3}, {:+8.3}] m/s"#,
             self.time, self.pv[0], self.pv[1], self.pv[2], self.pv[3], self.pv[4], self.pv[5],
         );
         match self.cov {
@@ -274,10 +274,10 @@ mod test {
 
         let state2 = satstate.propagate(&(satstate.time + crate::Duration::Hours(3.56)), None)?;
 
-        let rz = -1.0 / state2.pos().norm() * (state2.qgcrf2lvlh() * state2.pos());
-        let h = state2.pos().cross(&state2.vel());
+        let rz = -1.0 / state2.pos_gcrf().norm() * (state2.qgcrf2lvlh() * state2.pos_gcrf());
+        let h = state2.pos_gcrf().cross(&state2.vel_gcrf());
         let ry = -1.0 / h.norm() * (state2.qgcrf2lvlh() * h);
-        let rx = 1.0 / state2.vel().norm() * (state2.qgcrf2lvlh() * state2.vel());
+        let rx = 1.0 / state2.vel_gcrf().norm() * (state2.qgcrf2lvlh() * state2.vel_gcrf());
 
         assert_relative_eq!(rz, na::Vector3::z_axis(), epsilon = 1.0e-6);
         assert_relative_eq!(ry, na::Vector3::y_axis(), epsilon = 1.0e-6);
@@ -302,8 +302,8 @@ mod test {
         let state0 = state2.propagate(&satstate.time, None)?;
 
         // Check that propagating backwards in time results in the original state
-        assert_abs_diff_eq!(satstate.pos(), state0.pos(), epsilon = 0.1);
-        assert_abs_diff_eq!(satstate.vel(), state0.vel(), epsilon = 0.001);
+        assert_abs_diff_eq!(satstate.pos_gcrf(), state0.pos_gcrf(), epsilon = 0.1);
+        assert_abs_diff_eq!(satstate.vel_gcrf(), state0.vel_gcrf(), epsilon = 0.001);
         let cov1 = match satstate.cov() {
             StateCov::PVCov(v) => v,
             StateCov::None => panic!("cov is not none"),
