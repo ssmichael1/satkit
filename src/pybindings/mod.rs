@@ -54,6 +54,7 @@ fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Solar calculations
 #[pymodule]
 fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_sun::pos_gcrf, m)?)
@@ -65,6 +66,7 @@ fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Lunar calculations
 #[pymodule]
 fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_moon::pos_gcrf, m)?)
@@ -72,6 +74,7 @@ fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Low-precision planetary ephemerides
 #[pymodule]
 fn planets(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_planets::heliocentric_pos, m)?)
@@ -127,6 +130,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDuration>()?;
     m.add_class::<pyastrotime::PyTimeScale>()?;
     m.add_class::<Quaternion>()?;
+    m.add_class::<pyframes::PyFrame>()?;
     m.add_function(wrap_pyfunction!(pysgp4::sgp4, m)?).unwrap();
 
     m.add_class::<pygravity::GravModel>()?;
