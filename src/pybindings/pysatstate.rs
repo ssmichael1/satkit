@@ -11,6 +11,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyNone};
 
 use crate::orbitprop::{PropSettings, SatState, StateCov};
+use crate::AstroTime;
+use crate::pybindings::PyDuration;
 
 #[pyclass(name = "satstate")]
 #[derive(Clone, Debug)]
@@ -202,12 +204,29 @@ impl PySatState {
     /// Propagate state to a new time
     ///
     /// Args:
-    ///     time (satkit.time): Time for which to compute new state
+    ///     time (satkit.time|satkit.duration): Time for which to compute new state or alternatively
+    ///     a duration to propagate from the current time
     /// 
     /// Returns:
     ///     satkit.satstate: New state at input time
-    #[pyo3(signature=(time, **kwargs))]
-    fn propagate(&self, time: &PyAstroTime, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+    #[pyo3(signature=(timedur, **kwargs))]
+    fn propagate(&self, timedur: &Bound<'_, PyAny>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let time: AstroTime = {
+            if timedur.is_instance_of::<PyAstroTime>() {
+                timedur.extract::<PyAstroTime>()?.inner
+            }
+            else if timedur.is_instance_of::<PyDuration>() {
+                let dur = timedur.extract::<PyDuration>()?;
+                self.inner.time + dur.inner
+            }
+            else {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "timedur must be satkit.time or satkit.duration"
+                ));
+            
+            }
+        };
+        
         let propsettings: Option<PropSettings> = match kwargs.is_some() {
             true => {
                 let kw = kwargs.unwrap();
@@ -219,7 +238,7 @@ impl PySatState {
             false => None,
         };
 
-        match self.inner.propagate(&time.inner, propsettings.as_ref()) {
+        match self.inner.propagate(&time, propsettings.as_ref()) {
             Ok(s) => Ok(PySatState { inner: s }),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Error propagating state: {}",
