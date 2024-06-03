@@ -4,7 +4,7 @@ use crate::tle::TLE;
 use std::fs::File;
 use std::io::{self, BufRead};
 
-#[pyclass(name = "TLE")]
+#[pyclass(name = "TLE", module="satkit")]
 pub struct PyTLE {
     pub inner: TLE,
 }

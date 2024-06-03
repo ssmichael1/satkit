@@ -660,6 +660,12 @@ impl PyAstroTime {
         self.__str__()
     }
 
+    fn __getnewargs_ex__(&self, py: Python) -> (Py<PyAny>, Py<PyAny>) {
+        let d = PyDict::new_bound(py).to_object(py);
+        let tp = PyTuple::new_bound(py, vec![1900, 1, 1]).to_object(py);
+        (tp, d)
+    }
+
     fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
         match state.extract::<&pyo3::types::PyBytes>(py) {
             Ok(s) => {
