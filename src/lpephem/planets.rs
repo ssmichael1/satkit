@@ -58,7 +58,7 @@ type Quat = na::UnitQuaternion<f64>;
 /// # Example
 /// 
 /// ```
-/// use satkit::planets::heliocentric_pos;
+/// use satkit::lpephem::heliocentric_pos;
 /// use satkit::SolarSystem;
 /// use satkit::AstroTime;
 /// 
