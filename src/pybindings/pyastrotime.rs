@@ -3,6 +3,7 @@ use pyo3::types::timezone_utc_bound;
 use pyo3::types::PyDateTime;
 use pyo3::types::PyTuple;
 use pyo3::types::PyDict;
+use pyo3::types::PyBytes;
 
 use crate::astrotime::{self, AstroTime, Scale};
 
@@ -28,7 +29,7 @@ use numpy as np;
 /// * TDB = Barycentric Dynamical Time
 ///
 #[derive(Clone)]
-#[pyclass(name = "timescale")]
+#[pyclass(name = "timescale", module="satkit")]
 pub enum PyTimeScale {
     /// Invalid time scale
     Invalid = Scale::INVALID as isize,
@@ -358,7 +359,7 @@ impl PyAstroTime {
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn to_jd(&self, scale: &PyTimeScale) -> f64 {
         self.inner.to_jd(scale.into())
-    }
+    }    
 
     /// Convert to Unix time (seconds since 1970-01-01 00:00:00 UTC)
     /// 
@@ -457,7 +458,6 @@ impl PyAstroTime {
             ))
         }
     }
-
 
     /// Subtract duration or take difference in times
     /// 
@@ -658,6 +658,31 @@ impl PyAstroTime {
 
     fn __repr__(&self) -> PyResult<String> {
         self.__str__()
+    }
+
+    fn __getnewargs_ex__(&self, py: Python) -> (Py<PyAny>, Py<PyAny>) {
+        let d = PyDict::new_bound(py).to_object(py);
+        let tp = PyTuple::new_bound(py, vec![1900, 1, 1]).to_object(py);
+        (tp, d)
+    }
+
+    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+        match state.extract::<&pyo3::types::PyBytes>(py) {
+            Ok(s) => {
+                if s.len().unwrap() != 8 {
+                    return Err(pyo3::exceptions::PyTypeError::new_err("Invalid serialization length"));
+                }
+                let t = f64::from_le_bytes(s.as_bytes().try_into()?);
+                self.inner = AstroTime::from_mjd(t, astrotime::Scale::TAI);
+                Ok(())   
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {    
+        Ok(PyBytes::new_bound(py, 
+            f64::to_le_bytes(self.inner.to_mjd(astrotime::Scale::TAI)).as_slice()).to_object(py))
     }
 }
 

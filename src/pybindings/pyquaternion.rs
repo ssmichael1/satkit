@@ -3,6 +3,7 @@ use numpy as np;
 use numpy::ToPyArray;
 use numpy::PyArrayMethods;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 type Quat = na::UnitQuaternion<f64>;
 type Vec3 = na::Vector3<f64>;
@@ -28,13 +29,13 @@ type Vec3 = na::Vector3<f64>;
 /// https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation
 ///
 ///
-#[pyclass(name = "quaternion")]
+#[pyclass(name = "quaternion", module="satkit")]
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct Quaternion {
     pub inner: Quat,
 }
 
-#[pyclass(name = "quaternion_array")]
+#[pyclass(name = "quaternion_array", module="satkit")]
 #[derive(PartialEq, Clone, Debug)]
 pub struct QuaternionVec {
     pub inner: Vec<Quat>,
@@ -206,6 +207,33 @@ impl Quaternion {
 
     fn __repr__(&self) -> PyResult<String> {
         self.__str__()
+    }
+
+    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+        match state.extract::<&PyBytes>(py) {
+            Ok(s) => {
+                if s.len().unwrap() != 32 {
+                    return Err(pyo3::exceptions::PyTypeError::new_err("Invalid serialization length"));
+                }
+                let s = s.as_bytes();
+                let w = f64::from_le_bytes(s[0..8].try_into()?);
+                let x = f64::from_le_bytes(s[8..16].try_into()?);
+                let y = f64::from_le_bytes(s[16..24].try_into()?);
+                let z = f64::from_le_bytes(s[24..32].try_into()?);
+                self.inner = Quat::from_quaternion(na::Quaternion::<f64>::new(w, x, y, z));
+                Ok(())
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
+        let mut raw = [0 as u8;32];
+        raw[0..8].clone_from_slice(f64::to_le_bytes(self.inner.w).as_slice());
+        raw[8..16].clone_from_slice(f64::to_le_bytes(self.inner.i).as_slice());
+        raw[16..24].clone_from_slice(f64::to_le_bytes(self.inner.j).as_slice());
+        raw[24..32].clone_from_slice(f64::to_le_bytes(self.inner.k).as_slice());
+        Ok(PyBytes::new_bound(py, &raw).to_object(py))
     }
 
     /// Angle of rotation in radians

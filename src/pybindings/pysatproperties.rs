@@ -4,7 +4,7 @@ use super::pyutils::kwargs_or_default;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
 
-#[pyclass(name = "satproperties_static")]
+#[pyclass(name = "satproperties_static", module="satkit")]
 #[derive(Clone, Debug)]
 pub struct PySatProperties {
     pub inner: SatPropertiesStatic,
@@ -98,6 +98,32 @@ impl PySatProperties {
     fn set_cdaoverm(&mut self, cdaoverm: f64) -> PyResult<()> {
         self.inner.cdaoverm = cdaoverm;
         Ok(())
+    }
+
+    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+        match state.extract::<&pyo3::types::PyBytes>(py) {
+            Ok(s) => {
+                if s.len().unwrap() != 16 {
+                    return Err(pyo3::exceptions::PyTypeError::new_err("Invalid serialization length"));
+                }
+                let s = s.as_bytes();
+                let craoverm = f64::from_le_bytes(s[0..8].try_into()?);
+                let cdaoverm = f64::from_le_bytes(s[8..16].try_into()?);
+                self.inner.cdaoverm = cdaoverm;
+                self.inner.craoverm = craoverm;
+                Ok(())
+            },
+            Err(e) => Err(e)
+        }
+    }
+
+    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+        let mut raw = [0 as u8; 16];
+        raw[0..8].clone_from_slice(&self.inner.craoverm.to_le_bytes());
+        raw[8..16].clone_from_slice(&self.inner.cdaoverm.to_le_bytes());
+        Ok(
+            pyo3::types::PyBytes::new_bound(py, &raw).to_object(py)
+        )
     }
 
     fn __str__(&self) -> String {

@@ -1073,6 +1073,16 @@ class kepler:
             argp (float) : Argument of perigee, radians
             nu (float) : True anomaly, radians
 
+        # Keyword Args:
+            true_anomaly (float) : True anomaly, radians
+            mean_anomaly (float) : Mean anomaly, radians
+            eccentric_anomaly (float) : Eccentric anomaly, radians
+
+        # Notes:
+            * If "nu" is provided (6th argument), it will be used as the true anomaly
+            * Anomaly may also be set via keyword arguments; if so, the there should only be
+              5 input arguments
+            
         # Returns:
             satkit.kepler: Keplerian element set object
         """
@@ -1082,6 +1092,47 @@ class kepler:
 
         Returns:
             tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: Tuple with two elements representing the position and velocity vectors
+        """
+
+    def propagate(self, dt: duration|float) -> kepler:
+        """Propagate Keplerian element set by input duration
+
+        Args:
+            dt (duration | float): Duration by which to propagate the Keplerian element set
+                                   If float, value is seconds
+
+        Returns:
+            satkit.kepler: Keplerian element set object after propagation
+        """
+
+    @property
+    def mean_motion(self) -> float:
+        """Mean motion, radians / second
+        """
+
+    @property
+    def true_anomaly(self) -> float:
+        """True anomaly, radians
+        """
+
+    @property
+    def eccentric_anomaly(self) -> float:
+        """Eccentric anomaly, radians
+        """
+
+    @property
+    def mean_anomaly(self) -> float:
+        """Mean anomaly, radians
+        """
+
+    @property
+    def mean_motion(self) -> float:
+        """Mean motion, radians / second
+        """
+
+    @property
+    def period(self) -> float:
+        """Orbital period, seconds
         """
 
     def from_pv(

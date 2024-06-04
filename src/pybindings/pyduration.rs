@@ -3,6 +3,7 @@ use crate::Duration;
 use super::pyastrotime::PyAstroTime;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use pyo3::types::PyBytes;
 
 /// Class representing durations of times, allowing for representation
 /// via common measures of duration (years, days, hours, minutes, seconds)
@@ -29,7 +30,7 @@ use pyo3::types::PyDict;
 /// >>> instant = satkit.time(2023, 3, 5)
 /// >>> plus1day = instant + duration(days=1.0)
 /// 
-#[pyclass(name = "duration")]
+#[pyclass(name = "duration", module="satkit")]
 #[derive(Clone)]
 pub struct PyDuration {
     pub inner: Duration,
@@ -242,5 +243,24 @@ impl PyDuration {
 
     fn __repr__(&self) -> String {
         self.inner.to_string()
+    }
+
+    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+        match state.extract::<&pyo3::types::PyBytes>(py) {
+            Ok(s) => {
+                if s.len().unwrap() != 8 {
+                    return Err(pyo3::exceptions::PyTypeError::new_err("Invalid serialization length"));
+                }
+                let t = f64::from_le_bytes(s.as_bytes().try_into()?);
+                self.inner = Duration::Days(t);
+                Ok(())   
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {    
+        Ok(PyBytes::new_bound(py, 
+            f64::to_le_bytes(self.inner.days()).as_slice()).to_object(py))
     }
 }

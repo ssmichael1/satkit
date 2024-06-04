@@ -87,6 +87,7 @@ Please reach out of you find errors in code or calculations, are interested in c
   api/earthgravity.md
   api/tle.md
   api/consts.md
+  api/kepler.md
   api/utils.md
   api/density.md
 

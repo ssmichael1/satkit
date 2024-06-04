@@ -12,6 +12,7 @@ mod pyitrfcoord;
 mod pyjplephem;
 mod pylpephem_moon;
 mod pylpephem_sun;
+mod pylpephem_planets;
 mod pynrlmsise;
 mod pyquaternion;
 mod pysatstate;
@@ -19,6 +20,7 @@ mod pysgp4;
 mod pysolarsystem;
 mod pytle;
 mod pykepler;
+mod pyframes;
 
 mod pypropagate;
 mod pypropsettings;
@@ -52,6 +54,7 @@ fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Solar calculations
 #[pymodule]
 fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_sun::pos_gcrf, m)?)
@@ -63,12 +66,23 @@ fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Lunar calculations
 #[pymodule]
 fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_moon::pos_gcrf, m)?)
         .unwrap();
     Ok(())
 }
+
+/// Low-precision planetary ephemerides
+#[pymodule]
+fn planets(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(pylpephem_planets::heliocentric_pos, m)?)
+        .unwrap();
+    Ok(())
+}
+
+
 
 /// Frame transform module: transform between varias coordinate frames
 #[pymodule]
@@ -116,6 +130,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDuration>()?;
     m.add_class::<pyastrotime::PyTimeScale>()?;
     m.add_class::<Quaternion>()?;
+    m.add_class::<pyframes::PyFrame>()?;
     m.add_function(wrap_pyfunction!(pysgp4::sgp4, m)?).unwrap();
 
     m.add_class::<pygravity::GravModel>()?;
@@ -143,6 +158,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pymodule!(jplephem))?;
     m.add_wrapped(wrap_pymodule!(sun))?;
     m.add_wrapped(wrap_pymodule!(moon))?;
+    m.add_wrapped(wrap_pymodule!(planets))?;
     m.add_wrapped(wrap_pymodule!(satprop))?;
 
     m.add_wrapped(wrap_pymodule!(mod_utils::utils))?;

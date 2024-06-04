@@ -1,6 +1,41 @@
 //! Keplerian orbital elements module
 //! 
 
+use thiserror::Error;
+use crate::SKResult;
+
+#[derive(Debug, Error)]
+pub enum KeplerError {
+    #[error("Eccentricity Out of Bounds {x}")]
+    EccenOutOfBound{x: f64}
+}
+
+/// Keplerian element can be defined by multiple 
+/// types of "anomalies", which describe the position
+/// of the satellite orbiting the central body within the orbital plane
+/// 
+/// These are:
+/// 
+/// * `True Anomaly` - Denoted ν, is the Periapsis-Earth-Satellite
+///    angle in the orbital plane
+///
+/// * `Mean Anomaly` - Denoted M, this does not have a great geographical
+///    representation, but is an angle that increases monotonically in time
+///    between 0 and 2π over the course of a single orbit. 
+/// 
+/// * `Eccentric Anomaly` - Denoted E, is the Periaps-C-B
+///    angle in the orbital plane, wehre "C" is the center of the orbital 
+///    ellipse, and "B" is a point on the auxilliary circle (the circle
+///    bounding the orbital ellipse) along a line from the satellite 
+///    and perpendicular to the semimajor axis.  The eccentric anomaly is
+///    a useful prerequisite to compute the mean anomaly
+/// 
+pub enum Anomaly {
+    Mean(f64),
+    True(f64),
+    Eccentric(f64)
+}
+
 // External library imports
 use nalgebra::{Vector3, UnitQuaternion};
 type Vec3 = Vector3<f64>;
@@ -14,7 +49,7 @@ type Quat = UnitQuaternion<f64>;
 /// incl: Inclination, radians
 /// RAAN: Right Ascension of the Ascending Node, radians
 /// w: Argument of Perigee, radians
-/// nu: True Anomaly, radians
+/// an: Anomaly of given type, radians
 #[derive(Debug, Clone)]
 pub struct Kepler {
     pub a: f64,
@@ -23,6 +58,49 @@ pub struct Kepler {
     pub raan: f64,
     pub w: f64,
     pub nu: f64, // True anomaly
+}
+
+// Convert mean to eccentric anomaly
+// iterative solution required
+fn mean2eccentric(m: f64, eccen: f64) -> f64
+{
+    use std::f64::consts::PI;
+    #[allow(non_snake_case)]
+    let mut E = match (m > PI) || ((m < 0.0) && (m > -PI)) {
+        true => m - eccen,
+        false => m + eccen
+    };
+    loop {
+        let de = (m - E + eccen*E.sin()) / (1.0 - eccen*E.cos());
+        E += de;
+        if de.abs() < 1.0e-6 {
+            break;
+        }
+    }
+    E
+}
+
+fn eccentric2true(ea: f64, eccen: f64) -> f64 {
+    f64::atan2(
+        ea.sin() * (1.0 - eccen.powi(2)).sqrt(),
+        ea.cos() - eccen
+    ) 
+}
+
+fn mean2true(ma: f64, eccen: f64) -> f64 {
+    eccentric2true(mean2eccentric(ma, eccen), eccen)
+}
+
+fn to_trueanomaly(an: Anomaly, eccen: f64) -> f64 {
+    match an {
+        Anomaly::True(v) => v,
+        Anomaly::Mean(ma) => {
+           mean2true(ma, eccen)      
+        }
+        Anomaly::Eccentric(ea) => {
+            eccentric2true(ea, eccen)               
+        }
+    }
 }
 
 impl Kepler {
@@ -35,21 +113,93 @@ impl Kepler {
     /// * `i` - Inclination, radians
     /// * `raan` - Right Ascension of the Ascending Node, radians
     /// * `argp` - Argument of Perigee, radians
-    /// * `nu` - True Anomaly, radians
+    /// * `anomaly` - Anomaly type representing location of satellite along the 
+    ///               orbital plane
     /// 
     /// # Returns
     /// 
     /// * `Kepler` - A new Keplerian orbital element object
-    pub fn new(a: f64, e: f64, i: f64, raan: f64, argp: f64, nu: f64) -> Kepler {
+    pub fn new(a: f64, eccen: f64, i: f64, raan: f64, argp: f64, an: Anomaly) -> Kepler {
         Kepler {
             a: a,
-            eccen: e,
+            eccen: eccen,
             incl: i,
             raan: raan,
             w: argp,
-            nu: nu,
+            nu: to_trueanomaly(an, eccen)
         }
     }
+
+    /// Return the semiparameter of the satellite orbit
+    ///
+    /// The semiparameter is also known as the semi-latus rectum
+    /// # Returns
+    /// 
+    /// * `f64` - Semiparameter, meters
+    pub fn semiparameter(&self) -> f64 {
+        self.a * (1.0 - self.eccen.powi(2))
+    }
+    
+    /// Propagate the orbit forward (or backward) in time
+    /// by givend duration
+    /// 
+    /// # Arguments
+    /// 
+    /// * `dt` - `satkit.Duration` object representing the time to propagate
+    /// 
+    /// # Returns
+    /// 
+    /// * `Kepler` - A new Keplerian orbital element object
+    pub fn propagate(&self, dt: &crate::Duration) -> Kepler {
+        let n = self.mean_motion();
+        let ma = self.mean_anomaly() + n*dt.seconds();
+        let nu = mean2true(ma, self.eccen);
+        Kepler {
+            a: self.a,
+            eccen: self.eccen,
+            incl: self.incl,
+            raan: self.raan,
+            w: self.w,
+            nu: nu
+        }
+    }
+
+    /// Return the eccentric anomaly of the satellite in radians
+    pub fn eccentric_anomaly(&self) -> f64 {
+        f64::atan2(
+            self.nu.sin()*(1.0-self.eccen.powi(2)).sqrt(),
+        1.0 + self.eccen * self.nu.cos())
+    }
+
+    /// Return the mean anomaly of the satellite in radians
+    pub fn mean_anomaly(&self) -> f64 {
+        let ea = self.eccentric_anomaly();
+        ea - self.eccen*ea.sin()
+    }
+
+    /// Return the true anomaly of the satellite in radians
+    pub fn true_anomaly(&self) -> f64 {
+        self.nu
+    }
+
+    /// Return the mean motion of the satellite in radians/second
+    /// 
+    /// # Returns
+    /// 
+    /// * `f64` - Mean motion, radians/second
+    pub fn mean_motion(&self) -> f64 {
+        (crate::consts::MU_EARTH / self.a.powi(3)).sqrt()
+    }
+
+    /// Return the period of the satellite in seconds
+    ///
+    /// # Returns
+    /// 
+    /// * `f64` - Period, seconds
+    pub fn period(&self) -> f64 {
+        2.0 * std::f64::consts::PI / self.mean_motion()
+    }
+
 
     /// Convert Cartesian coordinates to Keplerian orbital elements
     /// 
@@ -62,13 +212,16 @@ impl Kepler {
     /// 
     /// * `Kepler` - A new Keplerian orbital element object
     /// 
-    pub fn from_pv(r: Vec3, v: Vec3) -> Kepler {
+    pub fn from_pv(r: Vec3, v: Vec3) -> SKResult<Kepler> {
         let h = r.cross(&v);
         let n = Vec3::z_axis().cross(&h);
         let e = 
         ((v.norm_squared() - 
             crate::consts::MU_EARTH / r.norm()) * r - r.dot(&v) * v) / crate::consts::MU_EARTH;
         let eccen = e.norm();
+        if eccen >= 1.0 {
+            return Err(Box::new(KeplerError::EccenOutOfBound { x: eccen }));
+        }
         let xi = v.norm().powi(2) / 2.0 - crate::consts::MU_EARTH / r.norm();
         let a = -crate::consts::MU_EARTH / (2.0 * xi);
         let incl = (h.z/h.norm()).acos();
@@ -84,7 +237,7 @@ impl Kepler {
         if r.dot(&v) < 0.0 {
             nu = 2.0 * std::f64::consts::PI - nu;
         }  
-        Kepler::new(a, eccen, incl, raan, w, nu)
+        Ok(Kepler::new(a, eccen, incl, raan, w, Anomaly::True(nu)))
     }
 
     /// Convert Keplerian orbital elements to Cartesian coordinates
@@ -133,7 +286,7 @@ mod tests {
 
         let a = p / (1.0 - eccen.powi(2));
 
-        let k = Kepler::new(a, eccen, incl, raan, w, nu);
+        let k = Kepler::new(a, eccen, incl, raan, w, Anomaly::True(nu));
         let (r, v) = k.to_pv();
         // Note: values below are not incorrect in the book, but are 
         // corrected in the online errata
@@ -147,7 +300,7 @@ mod tests {
         // Vallado example 2-5
         let r = Vec3::new(6524.834, 6862.875, 6448.296)*1.0e3;
         let v = Vec3::new(4.901327, 5.533756, -1.976341)*1.0e3;
-        let k = Kepler::from_pv(r, v);
+        let k = Kepler::from_pv(r, v).unwrap();
         assert!((k.a - 36127343_f64).abs() < 1.0e3);
         assert!((k.eccen - 0.83285).abs() < 1e-3);
         assert!((k.incl - 87.87_f64.to_radians()).abs() < 1e-3);

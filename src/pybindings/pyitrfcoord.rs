@@ -53,7 +53,7 @@ use super::pyutils::*;
 ///        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
 ///       
 /// 
-#[pyclass(name = "itrfcoord")]
+#[pyclass(name = "itrfcoord", module="satkit")]
 #[derive(Clone)]
 pub struct PyITRFCoord {
     pub inner: ITRFCoord,
@@ -333,6 +333,39 @@ impl PyITRFCoord {
         PyITRFCoord {
             inner: self.inner.move_with_heading(distance, heading_rad),
         }
+    }
+    
+    fn __getnewargs_ex__(&self, py: Python) -> (Py<PyAny>, Py<PyAny>) {
+        let d = PyDict::new_bound(py).to_object(py);
+        let tp = PyTuple::new_bound(py, vec![0.0, 0.0, 0.0]).to_object(py);
+        (tp, d)
+    }
+
+    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+        match state.extract::<&pyo3::types::PyBytes>(py) {
+            Ok(s) => {
+                if s.len().unwrap() != 24 {
+                    return Err(pyo3::exceptions::PyTypeError::new_err("Invalid serialization length"));
+                }
+                let s = s.as_bytes();
+                let x = f64::from_le_bytes(s[0..8].try_into()?);
+                let y = f64::from_le_bytes(s[8..16].try_into()?);
+                let z = f64::from_le_bytes(s[16..24].try_into()?);
+                self.inner.itrf = nalgebra::Vector3::<f64>::new(x,y,z);
+                Ok(())   
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+        let mut raw = [0 as u8;24];
+        raw[0..8].clone_from_slice(f64::to_le_bytes(self.inner.itrf[0]).as_slice());
+        raw[8..16].clone_from_slice(f64::to_le_bytes(self.inner.itrf[1]).as_slice());
+        raw[16..24].clone_from_slice(f64::to_le_bytes(self.inner.itrf[2]).as_slice());        
+        Ok(
+            pyo3::types::PyBytes::new_bound(py, &raw).to_object(py)
+        )
     }
 
     /// 3-vector representing cartesian distance between this

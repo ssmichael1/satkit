@@ -113,7 +113,7 @@ class satstate:
         """
 
     @property
-    def pos(self) -> npt.ArrayLike[np.float64]:
+    def pos_gcrf(self) -> npt.ArrayLike[np.float64]:
         """state position in meters in GCRF frame
         
         Returns:
@@ -121,7 +121,7 @@ class satstate:
         """
 
     @property
-    def vel(self) -> npt.ArrayLike[np.float64]:
+    def vel_gcrf(self) -> npt.ArrayLike[np.float64]:
         """Return this state velocity in meters / second in GCRF
 
         Returns:
@@ -154,8 +154,11 @@ class satstate:
             satkit.time: Time instant of this state
         """
 
-    def propagate(self, time: satkit.time, propsettings=None) -> satstate:
+    def propagate(self, time: satkit.time|satkit.duration, propsettings=None) -> satstate:
         """Propagate this state to a new time, specified by the "time" input, updating the position, the velocity, and the covariance if set
+
+        Args:
+            time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
 
         Keyword Arguments:
             propsettings: satkit.satprop.propsettings object describing settings to use in the propagation. If omitted, default is used 

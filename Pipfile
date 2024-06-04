@@ -22,6 +22,7 @@ furo = "*"
 kaleido = "*"
 scipy = "*"
 pytest = "*"
+autoapi = "*"
 
 [dev-packages]
 
