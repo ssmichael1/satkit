@@ -1,8 +1,8 @@
-use pyo3::prelude::*;
 use crate::frames::Frame;
+use pyo3::prelude::*;
 
 #[derive(Clone, Debug)]
-#[pyclass(name="frame ")]
+#[pyclass(name = "frame", module = "satkit")]
 pub enum PyFrame {
     /// International Terrestrial Reference Frame
     ITRF,
