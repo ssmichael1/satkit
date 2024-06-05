@@ -144,13 +144,22 @@ impl PyAstroTime {
         py_args: &Bound<'_, PyTuple>,
         py_kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Self> {
-        let pyscale = match py_kwargs {
-            None => PyTimeScale::UTC,
-            Some(v) => match v.get_item("scale")? {
-                None => PyTimeScale::UTC,
-                Some(v2) => v2.extract::<PyTimeScale>()?,
-            },
-        };
+        let mut pyscale = PyTimeScale::UTC;
+        if let Some(kw) = py_kwargs {
+            if let Some(scale) = kw.get_item("scale")? {
+                pyscale = scale.extract::<PyTimeScale>()?;
+            }
+            if let Some(empty) = kw.get_item("empty")? {
+                let bempty = empty.extract::<bool>()?;
+                if bempty == true {
+                    return Ok(PyAstroTime {
+                        inner: AstroTime {
+                            mjd_tai: 0.0,
+                        }
+                    });
+                }
+            }
+        }
 
         if py_args.is_empty() {
             match AstroTime::now() {
@@ -159,7 +168,8 @@ impl PyAstroTime {
                     "Could not get current time",
                 )),
             }
-        } else if py_args.len() == 3 {
+        }
+        else if py_args.len() == 3 {
             let year = py_args.get_item(0)?.extract::<i32>()?;
             let month = py_args.get_item(1)?.extract::<u32>()?;
             let day = py_args.get_item(2)?.extract::<u32>()?;
@@ -659,10 +669,10 @@ impl PyAstroTime {
         self.__str__()
     }
 
-    fn __getnewargs_ex__(&self, py: Python) -> (Py<PyAny>, Py<PyAny>) {
-        let d = PyDict::new_bound(py).to_object(py);
-        let tp = PyTuple::new_bound(py, vec![1900, 1, 1]).to_object(py);
-        (tp, d)
+    fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
+        let d = PyDict::new_bound(py);        
+        d.set_item("empty", true).unwrap();
+        (PyTuple::empty_bound(py), d)
     }
 
     fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {

@@ -253,15 +253,15 @@ impl PySatState {
         }
     }
 
-    fn __getnewargs_ex__(&self, py: Python) -> (Py<PyAny>, Py<PyAny>) {
-        let d = PyDict::new_bound(py).to_object(py);
+    fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
+        let d = PyDict::new_bound(py);
         let tm = PyAstroTime {
             inner: AstroTime { mjd_tai: 0.0 },
         }
         .into_py(py);
         let pos = np::PyArray1::from_slice_bound(py, &[0.0, 0.0, 0.0]).to_object(py);
         let vel = np::PyArray1::from_slice_bound(py, &[0.0, 0.0, 0.0]).to_object(py);
-        (PyTuple::new_bound(py, vec![tm, pos, vel]).to_object(py), d)
+        (PyTuple::new_bound(py, vec![tm, pos, vel]), d)
     }
 
     fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {

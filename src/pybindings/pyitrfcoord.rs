@@ -334,9 +334,9 @@ impl PyITRFCoord {
         }
     }
 
-    fn __getnewargs_ex__(&self, py: Python) -> (Py<PyAny>, Py<PyAny>) {
-        let d = PyDict::new_bound(py).to_object(py);
-        let tp = PyTuple::new_bound(py, vec![0.0, 0.0, 0.0]).to_object(py);
+    fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
+        let d = PyDict::new_bound(py);
+        let tp = PyTuple::new_bound(py, vec![0.0, 0.0, 0.0]);
         (tp, d)
     }
 
