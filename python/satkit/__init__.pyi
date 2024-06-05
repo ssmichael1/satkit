@@ -31,6 +31,7 @@ __all__ = [
     "sun",
     "planets",
     "satprop",
+    "satstate",
     "density",
-    "utils"
+    "utils",
 ]

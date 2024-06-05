@@ -162,7 +162,7 @@ html_theme = "sphinx_rtd_theme"
 # NOTE: Sphinx's 'make html' builder will throw a warning about an unfound
 #       _static directory. Do not remove or comment out html_static_path
 #       since it is needed to properly generate _static in the build directory
-html_static_path = ["source/_static"]
+html_static_path = ["_static"]
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
@@ -324,5 +324,5 @@ intersphinx_mapping = {
 spelling_lang = "en_US"
 spelling_word_list_filename = "spelling_wordlist.txt"
 
-primary_domain = "python"
+# primary_domain = "python"
 highlight_language = "python"
