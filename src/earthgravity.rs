@@ -171,7 +171,9 @@ impl Gravity {
     pub fn accel(&self, pos: &Vec3, order: usize) -> Vec3 {
         // This is tedious, but using generics allows for vectors to be
         // allocated on the stack, which is faster
-        if order == 2 {
+        if order == 1 {
+            self.accel_t::<1, 5>(pos)
+        } else if order == 2 {
             self.accel_t::<2, 6>(pos)
         } else if order == 3 {
             self.accel_t::<3, 7>(pos)
@@ -255,7 +257,9 @@ impl Gravity {
     pub fn accel_and_partials(&self, pos: &Vec3, order: usize) -> (Vec3, na::Matrix3<f64>) {
         // This is tedious, but using generics allows for vectors to be
         // allocated on the stack, which is faster
-        if order == 2 {
+        if order == 1 {
+            self.accel_and_partials_t::<1, 5>(pos)
+        } else if order == 2 {
             self.accel_and_partials_t::<2, 6>(pos)
         } else if order == 3 {
             self.accel_and_partials_t::<3, 7>(pos)
