@@ -175,6 +175,28 @@ pub fn propagate(
     }
     // Propagate with state transition matrix
     else {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> { Ok(py.None()) })
+        // Create the state to propagate
+        let mut pv = na::SMatrix::<f64, 6, 7>::zeros();
+        pv.fixed_view_mut::<3, 1>(0, 0)
+            .copy_from_slice(unsafe { pos.as_slice().unwrap() });
+        pv.fixed_view_mut::<3, 1>(3, 0)
+            .copy_from_slice(unsafe { vel.as_slice().unwrap() });
+        pv.fixed_view_mut::<6, 6>(0, 1)
+            .copy_from(&na::Matrix6::<f64>::identity());
+        let res = crate::orbitprop::propagate(
+            &pv,
+            &start.inner,
+            &stoptime,
+            &propsettings,
+            satproperties,
+            output_dense,
+        )
+        .unwrap();
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            Ok(PyPropResult {
+                inner: PyPropResultType::R7(res),
+            }
+            .into_py(py))
+        })
     }
 }

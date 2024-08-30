@@ -105,13 +105,14 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
     let c = (-psat.dot(&(psun - psat)) / snorm / (psun - psat).norm()).acos();
     if a + b <= c {
         1.0
-    } else if c < b - a {
+    } else if c < (b - a) {
         0.0
     } else {
         let x = (c * c + a * a - b * b) / 2.0 / c;
         let y = (a * a - x * x).sqrt();
         let big_a = a * a * (x / a).acos() + b * b * ((c - x) / b).acos() - c * y;
-        1.0 - big_a / std::f64::consts::PI / a / a
+        let frac = 1.0 - big_a / std::f64::consts::PI / a / a;
+        frac
     }
 }
 

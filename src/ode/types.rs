@@ -53,8 +53,8 @@ pub enum ODEError {
     StepErrorToSmall,
     #[error("No Dense Output in Solution")]
     NoDenseOutputInSolution,
-    #[error("Interpolation exceeds solution bounds")]
-    InterpExceedsSolutionBounds,
+    #[error("Interpolation exceeds solution bounds: {interp} not in [{start}, {stop}]")]
+    InterpExceedsSolutionBounds { interp: f64, start: f64, stop: f64 },
     #[error("Interpolation not implemented for this integrator")]
     InterpNotImplemented,
 }

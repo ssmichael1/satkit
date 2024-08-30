@@ -330,13 +330,13 @@ impl Gravity {
         } else if order == 36 {
             self.accel_and_partials_t::<36, 40>(pos)
         } else if order == 37 {
-            self.accel_and_partials_t::<37, 15>(pos)
+            self.accel_and_partials_t::<37, 41>(pos)
         } else if order == 38 {
-            self.accel_and_partials_t::<38, 16>(pos)
+            self.accel_and_partials_t::<38, 42>(pos)
         } else if order == 39 {
-            self.accel_and_partials_t::<39, 17>(pos)
+            self.accel_and_partials_t::<39, 43>(pos)
         } else {
-            self.accel_and_partials_t::<40, 20>(pos)
+            self.accel_and_partials_t::<40, 44>(pos)
         }
     }
 
@@ -631,8 +631,8 @@ impl Gravity {
             },
             divisor_table2: {
                 let mut dt: DivisorTable = DivisorTable::zeros();
-                for m in 0..19 {
-                    for n in (m + 2)..19 {
+                for m in 0..43 {
+                    for n in (m + 2)..43 {
                         dt[(n, m)] = (n as f64 + m as f64 - 1.0) / (n - m) as f64;
                     }
                 }

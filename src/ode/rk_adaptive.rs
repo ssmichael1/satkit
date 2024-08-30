@@ -25,12 +25,21 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         if sol.dense.is_none() {
             return Err(Box::new(ODEError::NoDenseOutputInSolution));
         }
-        if sol.x < xinterp {
-            return Err(Box::new(ODEError::InterpExceedsSolutionBounds));
-        }
         let dense = sol.dense.as_ref().unwrap();
-        if sol.x < dense.x[0] {
-            return Err(Box::new(ODEError::InterpExceedsSolutionBounds));
+
+        if sol.x < xinterp {
+            return Err(Box::new(ODEError::InterpExceedsSolutionBounds {
+                interp: xinterp,
+                start: dense.x[0],
+                stop: sol.x,
+            }));
+        }
+        if xinterp < dense.x[0] {
+            return Err(Box::new(ODEError::InterpExceedsSolutionBounds {
+                interp: xinterp,
+                start: dense.x[0],
+                stop: sol.x,
+            }));
         }
 
         // We know indices are monotonically increasing, so only search from
@@ -137,11 +146,9 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         };
 
         // OK ... lets integrate!
-        let mut runloop: bool = true;
-        while runloop {
-            if (tdir > 0.0 && x + h >= xend) || (tdir < 0.0 && x + h <= xend) {
+        loop {
+            if (tdir > 0.0 && (x + h) >= xend) || (tdir < 0.0 && (x + h) <= xend) {
                 h = xend - x;
-                runloop = false;
             }
             let mut karr = Vec::new();
             karr.push(system.ydot(x, &y)?);
@@ -223,7 +230,9 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 h = h / q;
 
                 naccept += 1;
-                // If dense output, limit step size
+                if (tdir > 0.0 && x >= xend) || (tdir < 0.0 && x <= xend) {
+                    break;
+                }
             } else {
                 nreject += 1;
                 h = h / f64::min(1.0 / settings.minfac, q11 / settings.gamma);
