@@ -77,8 +77,8 @@ mod tests {
         (0..100).for_each(|idx| {
             let x = idx as f64 * PI / testcount as f64;
             let interp = RKV87::interpolate(x, &sol).unwrap();
-            assert!((interp[0] - x.cos()).abs() < 1e-10);
-            assert!((interp[1] + x.sin()).abs() < 1e-10);
+            assert!((interp[0] - x.cos()).abs() < 1e-12);
+            assert!((interp[1] + x.sin()).abs() < 1e-12);
         });
 
         Ok(())

@@ -1490,7 +1490,7 @@ class satstate:
         Args:
             time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
 
-        Keyword Arguments:
+        Keyword Args:
             propsettings: satkit.satprop.propsettings object describing settings to use in the propagation. If omitted, default is used 
 
         Returns:

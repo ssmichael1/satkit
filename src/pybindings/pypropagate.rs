@@ -77,7 +77,6 @@ use pyo3::types::{PyDict, PyString};
 ///         and possibly dense output for interpolation
 ///
 ///
-///
 #[pyfunction(signature=(pos, vel, start, **kwargs))]
 pub fn propagate(
     pos: &Bound<'_, np::PyArray1<f64>>,

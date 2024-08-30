@@ -752,10 +752,15 @@ mod tests {
             })
             .collect();
 
-        let v0 = na::vector![2.47130555e03, 2.94682777e03, -5.34171918e02, 2.13018578e-02];
+        let v0 = na::vector![
+            2.47130562e+03,
+            2.94682753e+03,
+            -5.34172176e+02,
+            2.32565692e-02
+        ];
 
         let state0 = na::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
-        let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, 2.13018578e-2);
+        let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, v0[3]);
         let settings = PropSettings::default();
 
         let res = propagate(
@@ -769,10 +774,10 @@ mod tests {
 
         // We've propagated over a day; assert that the difference in position on all three coordinate axes
         // is less than 10 meters for all 5-minute intervals
-        for iv in 0..(pgcrf.len() - 5) {
+        for iv in 0..(pgcrf.len()) {
             let interp_state = res.interp(&times[iv])?;
             for ix in 0..3 {
-                assert!((pgcrf[iv][ix] - interp_state[ix]).abs() < 10.0);
+                assert!((pgcrf[iv][ix] - interp_state[ix]).abs() < 8.0);
             }
         }
 

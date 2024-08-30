@@ -18,21 +18,33 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
     /// (first compute of next iteration is same as last compute of last iteration)
     const FSAL: bool;
 
+    /// Interpolate densely calculated solution onto
+    /// values that are evenly spaced in "x"
+    ///
     fn interpolate<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
         if sol.dense.is_none() {
             return Err(Box::new(ODEError::NoDenseOutputInSolution));
         }
-        let dense = sol.dense.as_ref().unwrap();
-        if xinterp < dense.x[0] || xinterp > sol.x {
+        if sol.x < xinterp {
             return Err(Box::new(ODEError::InterpExceedsSolutionBounds));
         }
+        let dense = sol.dense.as_ref().unwrap();
+        if sol.x < dense.x[0] {
+            return Err(Box::new(ODEError::InterpExceedsSolutionBounds));
+        }
+
+        // We know indices are monotonically increasing, so only search from
+        // last found position in the array forward
         let mut idx = match dense.x.iter().position(|x| *x >= xinterp) {
             Some(v) => v,
-            None => dense.x.len() - 1,
+            None => dense.x.len(),
         };
         if idx > 0 {
             idx -= 1;
         }
+
+        // t is fractional distance beween x at idx and idx+1
+        // and is in range [0,1]
         let t = (xinterp - dense.x[idx]) / dense.h[idx];
 
         // Compute interpolant coefficient as funciton of t
@@ -47,6 +59,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         let bi: Vec<f64> = Self::BI
             .iter()
             .map(|biarr| {
+                // Coefficients multiply increasing powers of t
                 let mut tj = 1.0;
                 biarr.iter().fold(0.0, |acc, bij| {
                     tj = tj * t;
@@ -60,14 +73,15 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         //
         // This is equation(5) of:
         // https://link.springer.com/article/10.1023/A:1021190918665
-        let yarr = dense.yprime[idx]
+        //
+        let mut y = dense.yprime[idx]
             .iter()
             .enumerate()
             .fold(dense.y[idx].clone() / dense.h[idx], |acc, (ix, k)| {
                 acc + k.clone() * bi[ix]
             });
-
-        Ok(yarr * dense.h[idx])
+        y = y * dense.h[idx];
+        Ok(y)
     }
 
     ///

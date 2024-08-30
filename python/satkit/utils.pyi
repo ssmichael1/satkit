@@ -12,7 +12,7 @@ import satkit
 def update_datafiles(**kwargs):
     """Download & store data files needed for "satkit" computations
 
-    Keyword Arguments:
+    Keyword Args:
 
       overwrite (bool):  Download and overwrite files if they already exist
       dir(string): Target directory for files.  Uses existing data directory if not specified. (see "datadir" function)

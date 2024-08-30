@@ -159,7 +159,7 @@ type Mat3 = na::Matrix3<f64>;
 /// * `pos` - Position as ITRF coordinate (satkit.itrfcoord) or numpy
 ///                3-vector representing ITRF position in meters
 ///
-/// * `order` - Order of the gravity model
+/// * `order` - Order of the gravity model, up to 40
 ///
 /// # References
 ///
@@ -199,8 +199,56 @@ impl Gravity {
             self.accel_t::<14, 18>(pos)
         } else if order == 15 {
             self.accel_t::<15, 19>(pos)
-        } else {
+        } else if order == 16 {
             self.accel_t::<16, 20>(pos)
+        } else if order == 17 {
+            self.accel_t::<17, 21>(pos)
+        } else if order == 18 {
+            self.accel_t::<18, 22>(pos)
+        } else if order == 19 {
+            self.accel_t::<19, 23>(pos)
+        } else if order == 20 {
+            self.accel_t::<20, 24>(pos)
+        } else if order == 21 {
+            self.accel_t::<21, 25>(pos)
+        } else if order == 22 {
+            self.accel_t::<22, 26>(pos)
+        } else if order == 23 {
+            self.accel_t::<23, 27>(pos)
+        } else if order == 24 {
+            self.accel_t::<24, 28>(pos)
+        } else if order == 25 {
+            self.accel_t::<25, 29>(pos)
+        } else if order == 26 {
+            self.accel_t::<26, 30>(pos)
+        } else if order == 27 {
+            self.accel_t::<27, 31>(pos)
+        } else if order == 28 {
+            self.accel_t::<28, 32>(pos)
+        } else if order == 29 {
+            self.accel_t::<29, 33>(pos)
+        } else if order == 30 {
+            self.accel_t::<30, 34>(pos)
+        } else if order == 31 {
+            self.accel_t::<31, 35>(pos)
+        } else if order == 32 {
+            self.accel_t::<32, 36>(pos)
+        } else if order == 33 {
+            self.accel_t::<33, 37>(pos)
+        } else if order == 34 {
+            self.accel_t::<34, 38>(pos)
+        } else if order == 35 {
+            self.accel_t::<35, 39>(pos)
+        } else if order == 36 {
+            self.accel_t::<36, 40>(pos)
+        } else if order == 37 {
+            self.accel_t::<37, 41>(pos)
+        } else if order == 37 {
+            self.accel_t::<38, 42>(pos)
+        } else if order == 39 {
+            self.accel_t::<39, 43>(pos)
+        } else {
+            self.accel_t::<40, 44>(pos)
         }
     }
 
@@ -235,8 +283,56 @@ impl Gravity {
             self.accel_and_partials_t::<14, 18>(pos)
         } else if order == 15 {
             self.accel_and_partials_t::<15, 19>(pos)
-        } else {
+        } else if order == 16 {
             self.accel_and_partials_t::<16, 20>(pos)
+        } else if order == 17 {
+            self.accel_and_partials_t::<17, 21>(pos)
+        } else if order == 18 {
+            self.accel_and_partials_t::<18, 22>(pos)
+        } else if order == 19 {
+            self.accel_and_partials_t::<19, 23>(pos)
+        } else if order == 20 {
+            self.accel_and_partials_t::<20, 24>(pos)
+        } else if order == 21 {
+            self.accel_and_partials_t::<21, 25>(pos)
+        } else if order == 22 {
+            self.accel_and_partials_t::<22, 26>(pos)
+        } else if order == 23 {
+            self.accel_and_partials_t::<23, 27>(pos)
+        } else if order == 24 {
+            self.accel_and_partials_t::<24, 28>(pos)
+        } else if order == 25 {
+            self.accel_and_partials_t::<25, 29>(pos)
+        } else if order == 26 {
+            self.accel_and_partials_t::<26, 30>(pos)
+        } else if order == 27 {
+            self.accel_and_partials_t::<27, 31>(pos)
+        } else if order == 28 {
+            self.accel_and_partials_t::<28, 32>(pos)
+        } else if order == 29 {
+            self.accel_and_partials_t::<29, 33>(pos)
+        } else if order == 30 {
+            self.accel_and_partials_t::<30, 34>(pos)
+        } else if order == 31 {
+            self.accel_and_partials_t::<31, 35>(pos)
+        } else if order == 32 {
+            self.accel_and_partials_t::<32, 36>(pos)
+        } else if order == 33 {
+            self.accel_and_partials_t::<33, 37>(pos)
+        } else if order == 34 {
+            self.accel_and_partials_t::<34, 38>(pos)
+        } else if order == 35 {
+            self.accel_and_partials_t::<35, 39>(pos)
+        } else if order == 36 {
+            self.accel_and_partials_t::<36, 40>(pos)
+        } else if order == 37 {
+            self.accel_and_partials_t::<37, 15>(pos)
+        } else if order == 38 {
+            self.accel_and_partials_t::<38, 16>(pos)
+        } else if order == 39 {
+            self.accel_and_partials_t::<39, 17>(pos)
+        } else {
+            self.accel_and_partials_t::<40, 20>(pos)
         }
     }
 

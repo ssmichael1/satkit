@@ -25,26 +25,20 @@ import os
 basedir = os.getenv(
     "SATKIT_TESTVEC_ROOT", default="../.." + os.path.sep + "satkit-testvecs"
 )
+fname = (
+    basedir + os.path.sep + "orbitprop" + os.path.sep
+    + "ESA0OPSFIN_20233640000_01D_05M_ORB.SP3"
+)
 
-sp3names = ['mid22630.sp3', 'mid22631.sp3', 'mid22632.sp3',
-          'mid22633.sp3', 'mid22634.sp3', 'mid22635.sp3',
-          'mid22636.sp3']
+[pitrf, timearr] = read_sp3file(fname)
+pgcrf = np.stack(
+    np.fromiter(
+        (q * p for q, p in zip(sk.frametransform.qitrf2gcrf(timearr), pitrf)),
+        list,
+    ),
+    axis=0,
+)
 
-sp3names = ['mid22630.sp3', 'mid22631.sp3', 'mid22632.sp3']
-pitrf = np.zeros((0,3), np.float64)
-timearr = np.array([])
-
-for sp3name in sp3names:
-    fname = (
-        basedir
-        + os.path.sep
-        + "orbitprop"
-        + os.path.sep
-        + sp3name
-    )
-    [pitrf1, timearray1] = read_sp3file(fname)
-    pitrf = np.append(pitrf, pitrf1, axis=0)
-    timearr = np.append(timearr, timearray1)
 
 print(pitrf.shape)
 print(timearr.shape)
@@ -62,14 +56,15 @@ vgcrf = (pgcrf[1, :] - pgcrf[0, :]) / (timearr[1] - timearr[0]).seconds()
 
 # Initial state for non-linear least squares is initial velocity
 # and susceptibility to radiation pressuer : Cr A / m
-v0 = np.array([vgcrf[0], vgcrf[1], vgcrf[2], 0.01])
-
+#v0 = np.array([vgcrf[0], vgcrf[1], vgcrf[2], 0.02])
+v0 = np.array([2.47130555e03, 2.94682777e03, -5.34171918e02, 2.13018578e-02])
 
 def minfunc(v):
     tstart = timearr[0]
     tend = timearr[-1]
     settings = sk.satprop.propsettings()
     settings.use_jplephem = False
+    settings.gravity_order = 10
     satprops = sk.satprop.satproperties_static()
     satprops.craoverm = v[3]
 
@@ -78,18 +73,25 @@ def minfunc(v):
         v[0:3],
         tstart,
         stoptime=tend,
-        dt=sk.duration.from_minutes(5),
         propsettings=settings,
-        satproperties=satprops,
+        satproperties=satprops,            
+        output_dense=True,
     )
+    pest = np.zeros((len(timearr), 3))
+    for i in range(len(timearr)):
+        pest[i, :] = res.interp(timearr[i])[0:3]
 
-    return np.sum(np.sum((res["pos"] - pgcrf) ** 2, axis=1), axis=0)
+    return np.sum(np.sum((pest - pgcrf) ** 2, axis=1), axis=0)
 
 
 # Minimize difference between true satellite state and propagated state
 # by tuning initial velocity and CrAoverM
 r = minimize(minfunc, v0, method="Nelder-Mead")
 print(r)
+
+# %%
+print(v0)
+print(r.x)
 
 # %%
 import plotly.graph_objects as go
@@ -100,11 +102,15 @@ satprops = sk.satprop.satproperties_static()
 satprops.craoverm = r.x[3]
 res = sk.satprop.propagate(
     pgcrf[0,:], r.x[0:3], timearr[0],
-    stoptime=timearr[-1], dt=sk.duration(minutes=5),
-    propsettings=settings, satproperties=satprops
+    stoptime=timearr[-1],
+    propsettings=settings, satproperties=satprops,
+    output_dense=True
 )
-perr = res['pos'] - pgcrf
+perr = np.zeros((len(timearr), 3))
+for i in range(len(timearr)):
+    perr[i,:] = res.interp(timearr[i])[0:3] - pgcrf[i,:]
 fig = go.Figure()
+
 fig.add_trace(go.Scatter(x=[t.datetime() for t in timearr], y=perr[:,0], mode='lines', name='X'))
 fig.add_trace(go.Scatter(x=[t.datetime() for t in timearr], y=perr[:,1], mode='lines', name='Y'))
 fig.add_trace(go.Scatter(x=[t.datetime() for t in timearr], y=perr[:,2], mode='lines', name='Z'))

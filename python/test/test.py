@@ -598,13 +598,19 @@ class TestHighPrecisionPropagation:
         settings = sk.satprop.propsettings()
         settings.use_jplephem = False
 
+        # Determined by orbitprop_gps_fit.py
+        fitparam = np.array(
+            [ 2.47130562e+03,  2.94682753e+03, -5.34172176e+02,  2.32565692e-02]
+        )
+
+
         # Values for craoverm and velocity come from orbitprop_gps_fit.py
         satprops = sk.satprop.satproperties_static()
-        satprops.craoverm = 2.13018578e-2
-        print(satprops)
+        satprops.craoverm = fitparam[3]
+
         res = sk.satprop.propagate(
             pgcrf[0, :],
-            np.array([2.47130555e03, 2.94682777e03, -5.34171918e02]),
+            fitparam[0:3],
             timearr[0],
             stoptime=timearr[-1],
             propsettings=settings,
@@ -613,12 +619,12 @@ class TestHighPrecisionPropagation:
         )
         print(res)
 
-        # See if propagator is accurate to < 10 meters over 1 day on
+        # See if propagator is accurate to < 8 meters over 1 day on
         # each Cartesian axis
         for iv in range(pgcrf.shape[0]-5):            
             state = res.interp(timearr[iv])
             for ix in range(0, 3):
-                assert m.fabs(state[ix] - pgcrf[iv, ix]) < 10
+                assert m.fabs(state[ix] - pgcrf[iv, ix]) < 8
 
 class TestSatState:
     def test_lvlh(self):

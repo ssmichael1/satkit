@@ -4,8 +4,8 @@ use pyo3::types::{PyDict, PyList};
 use super::pyastrotime::ToTimeVec;
 use super::pytle::PyTLE;
 use crate::sgp4 as psgp4;
-use numpy::{PyArray, PyArray1};
 use numpy::PyArrayMethods;
+use numpy::{PyArray, PyArray1};
 
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
@@ -71,8 +71,6 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
     }
 }
 
-
-
 /// """SGP-4 propagator for TLE
 ///    
 /// Note:
@@ -95,7 +93,7 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
 /// Returns:
 ///     tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: position and velocity in meters and meters/second, respectively, in the TEME frame at each of the "Ntime" input times and each of the "Ntle" tles
 ///
-/// 
+///
 /// Example:
 ///
 ///
@@ -117,13 +115,17 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
 /// >>>
 /// >>> # convert to ITRF coordinate object
 /// >>> coord = satkit.itrfcoord.from_vector(pitrf)
-/// >>> 
+/// >>>
 /// >>> # Print ITRF coordinate object location
 /// >>> print(coord)
 /// ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
 #[pyfunction]
 #[pyo3(signature=(tle, time, **kwds))]
-pub fn sgp4(tle: &Bound<'_, PyAny>, time: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyResult<PyObject> {
+pub fn sgp4(
+    tle: &Bound<'_, PyAny>,
+    time: &Bound<'_, PyAny>,
+    kwds: Option<&Bound<'_, PyDict>>,
+) -> PyResult<PyObject> {
     let mut output_err = false;
     let mut opsmode: OpsMode = OpsMode::afspc;
     let mut gravconst: GravConst = GravConst::wgs72;
@@ -161,11 +163,13 @@ pub fn sgp4(tle: &Bound<'_, PyAny>, time: &Bound<'_, PyAny>, kwds: Option<&Bound
             // hence the switch
             if output_err == false {
                 Ok((
-                    PyArray1::from_slice_bound(py, r.data.as_slice()).as_gil_ref()
+                    PyArray1::from_slice_bound(py, r.data.as_slice())
+                        .as_gil_ref()
                         .reshape(dims.clone())
                         .unwrap()
                         .to_object(py),
-                    PyArray1::from_slice_bound(py, v.data.as_slice()).as_gil_ref()
+                    PyArray1::from_slice_bound(py, v.data.as_slice())
+                        .as_gil_ref()
                         .reshape(dims)
                         .unwrap()
                         .to_object(py),
@@ -173,10 +177,12 @@ pub fn sgp4(tle: &Bound<'_, PyAny>, time: &Bound<'_, PyAny>, kwds: Option<&Bound
                     .to_object(py))
             } else {
                 Ok((
-                    PyArray1::from_slice_bound(py, r.data.as_slice()).as_gil_ref()
+                    PyArray1::from_slice_bound(py, r.data.as_slice())
+                        .as_gil_ref()
                         .reshape(dims.clone())
                         .unwrap(),
-                    PyArray1::from_slice_bound(py, v.data.as_slice()).as_gil_ref()
+                    PyArray1::from_slice_bound(py, v.data.as_slice())
+                        .as_gil_ref()
                         .reshape(dims)
                         .unwrap(),
                     PyArray::from_owned_object_array_bound(
@@ -200,9 +206,9 @@ pub fn sgp4(tle: &Bound<'_, PyAny>, time: &Bound<'_, PyAny>, kwds: Option<&Bound
 
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             let n = tles.len() * tmarray.len() * 3;
-            
+
             let parr = PyArray1::zeros_bound(py, [n], false);
-            let varr= PyArray1::zeros_bound(py, [n], false);
+            let varr = PyArray1::zeros_bound(py, [n], false);
             let ntimes = tmarray.len();
 
             // I'd prefer to create this uninitialized, which would probably be a bit faster,
