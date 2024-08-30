@@ -1,6 +1,6 @@
 [package]
 name = "satkit"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
@@ -20,7 +20,7 @@ name = "satkit"
 
 
 [dependencies]
-nalgebra = "0.33.0"
+nalgebra = { version = "0.33.0", features = ["serde-serialize"] }
 ndarray = "0.15.4"
 libc = "0.2.158"
 chrono = "0.4.19"
@@ -34,6 +34,8 @@ pyo3 = { version = "0.21", features = ["extension-module"], optional = true }
 ureq = "2.10.1"
 json = "0.12.4"
 process_path = "0.1.4"
+serde = { version = "1.0.130", features = ["derive"] }
+serde-pickle = "1.1.1"
 
 [build-dependencies]
 cc = { version = "1.1.15", features = ["parallel"] }

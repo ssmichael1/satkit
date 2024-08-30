@@ -35,7 +35,11 @@
 //!
 //! For a good description, see [here](https://www.stjarnhimlen.se/comp/time.html)
 //!
-#[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
+//!
+
+use serde::{Deserialize, Serialize};
+
+#[derive(PartialEq, PartialOrd, Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct AstroTime {
     pub(crate) mjd_tai: f64,
 }

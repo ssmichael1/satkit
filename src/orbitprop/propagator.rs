@@ -27,7 +27,9 @@ use thiserror::Error;
 
 use nalgebra as na;
 
-#[derive(Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PropagationResult<const T: usize> {
     pub time_start: AstroTime,
     pub state_start: Matrix<6, T>,

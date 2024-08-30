@@ -3,11 +3,18 @@ use pyo3::prelude::*;
 use super::pyastrotime::PyAstroTime;
 use super::pyutils::*;
 
+use pyo3::types::{PyBytes, PyDict, PyTuple};
+
 use numpy::PyArrayMethods;
 use numpy::{self as np, ToPyArray};
 
 use crate::orbitprop::PropagationResult;
+use crate::types::*;
+use crate::AstroTime;
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PyPropResultType {
     R1(PropagationResult<1>),
     R7(PropagationResult<7>),
@@ -32,6 +39,7 @@ impl PyPropStats {
 }
 
 #[pyclass(name = "propresult", module = "satkit")]
+#[derive(Debug, Clone)]
 pub struct PyPropResult {
     pub inner: PyPropResultType,
 }
@@ -68,6 +76,23 @@ fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
 
 #[pymethods]
 impl PyPropResult {
+    #[new]
+    /// This should never be called and is here only for pickle support
+    pub fn new() -> Self {
+        PyPropResult {
+            inner: PyPropResultType::R1(PropagationResult::<1> {
+                time_start: AstroTime::new(),
+                state_start: Vector::<6>::zeros(),
+                time_end: AstroTime::new(),
+                state_end: Vector::<6>::zeros(),
+                num_eval: 0,
+                accepted_steps: 0,
+                rejected_steps: 0,
+                odesol: None,
+            }),
+        }
+    }
+
     // Get start time
     #[getter]
     fn time_start(&self) -> PyAstroTime {
@@ -185,6 +210,29 @@ impl PyPropResult {
         }
     }
 
+    fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
+        let d = PyDict::new_bound(py);
+        let tp = PyTuple::empty_bound(py);
+        (tp, d)
+    }
+
+    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+        match state.extract::<&pyo3::types::PyBytes>(py) {
+            Ok(s) => {
+                self.inner =
+                    serde_pickle::from_slice(s.as_bytes(), serde_pickle::DeOptions::default())
+                        .unwrap();
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+        let p = serde_pickle::to_vec(&self.inner, serde_pickle::SerOptions::default()).unwrap();
+        Ok(PyBytes::new_bound(py, p.as_slice()).to_object(py))
+    }
+
     #[pyo3(signature=(time, output_phi=false))]
     fn interp(&self, time: PyAstroTime, output_phi: bool) -> PyResult<PyObject> {
         match &self.inner {
@@ -213,5 +261,23 @@ impl PyPropResult {
                 Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e.to_string())),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_ser() {
+        let sol = PyPropResult::new();
+        print!("sol = {:?}\n", sol);
+        let v = serde_pickle::to_vec(&sol.inner, serde_pickle::SerOptions::default()).unwrap();
+        //print!("v = {:?}", v);
+        let sol2 = PyPropResult {
+            inner: serde_pickle::from_slice(v.as_slice(), serde_pickle::DeOptions::default())
+                .unwrap(),
+        };
+        print!("sol2 = {:?}", sol2);
     }
 }

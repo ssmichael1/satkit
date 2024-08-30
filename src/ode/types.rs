@@ -3,6 +3,8 @@ use std::ops::{Add, Div, Mul, Sub};
 use std::fmt::Debug;
 use thiserror::Error;
 
+use serde::{Deserialize, Serialize};
+
 pub type ODEResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub trait ODEState:
@@ -57,7 +59,7 @@ pub enum ODEError {
     InterpNotImplemented,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DenseOutput<S>
 where
     S: ODEState,
@@ -68,7 +70,7 @@ where
     pub y: Vec<S>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ODESolution<S>
 where
     S: ODEState,

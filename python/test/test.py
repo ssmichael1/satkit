@@ -595,7 +595,7 @@ class TestHighPrecisionPropagation:
             ),
             axis=0,
         )
-        settings = sk.satprop.propsettings()
+        settings = sk.propsettings()
         settings.use_jplephem = False
 
         # Determined by orbitprop_gps_fit.py
@@ -605,10 +605,10 @@ class TestHighPrecisionPropagation:
 
 
         # Values for craoverm and velocity come from orbitprop_gps_fit.py
-        satprops = sk.satprop.satproperties_static()
+        satprops = sk.satproperties_static()
         satprops.craoverm = fitparam[3]
 
-        res = sk.satprop.propagate(
+        res = sk.propagate(
             pgcrf[0, :],
             fitparam[0:3],
             timearr[0],

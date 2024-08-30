@@ -113,16 +113,6 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[pymodule]
-fn satprop(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PyPropSettings>()?;
-    m.add_class::<pysatproperties::PySatProperties>()?;
-    m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)
-        .unwrap();
-
-    Ok(())
-}
-
-#[pymodule]
 pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAstroTime>()?;
     m.add_class::<PyDuration>()?;
@@ -153,12 +143,18 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyKepler>()?;
     m.add_class::<PySatState>()?;
 
+    m.add_class::<PyPropSettings>()?;
+    m.add_class::<pysatproperties::PySatProperties>()?;
+    m.add_class::<pypropresult::PyPropResult>()?;
+    m.add_class::<pypropresult::PyPropStats>()?;
+    m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)
+        .unwrap();
+
     m.add_wrapped(wrap_pymodule!(frametransform))?;
     m.add_wrapped(wrap_pymodule!(jplephem))?;
     m.add_wrapped(wrap_pymodule!(sun))?;
     m.add_wrapped(wrap_pymodule!(moon))?;
     m.add_wrapped(wrap_pymodule!(planets))?;
-    m.add_wrapped(wrap_pymodule!(satprop))?;
 
     m.add_wrapped(wrap_pymodule!(mod_utils::utils))?;
     m.add_wrapped(wrap_pymodule!(pydensity::density))?;

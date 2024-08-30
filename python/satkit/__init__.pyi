@@ -5,7 +5,6 @@ from . import jplephem
 from . import frametransform
 from . import moon
 from . import sun
-from . import satprop
 from . import density
 from . import utils
 from . import planets
@@ -30,8 +29,13 @@ __all__ = [
     "moon",
     "sun",
     "planets",
-    "satprop",
     "satstate",
     "density",
     "utils",
+    "propagate", 
+    "propsettings",
+    "satproperties_static",
+    "propresult", 
+    "propstats",
+    "satstate",
 ]
