@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use nalgebra as na;
 type CoeffTable = na::DMatrix<f64>;
 
-type DivisorTable = na::SMatrix<f64, 20, 20>;
+type DivisorTable = na::SMatrix<f64, 44, 44>;
 
 use once_cell::sync::OnceCell;
 
@@ -617,7 +617,7 @@ impl Gravity {
             coeffs: cs,
             divisor_table: {
                 let mut dt: DivisorTable = DivisorTable::zeros();
-                for m in 0..19 {
+                for m in 0..43 {
                     if m > 0 {
                         dt[(m, m)] = 2.0 * m as f64 - 1.0;
                     }
