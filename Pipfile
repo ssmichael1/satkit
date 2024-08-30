@@ -17,12 +17,12 @@ mypy = "*"
 commonmark = "*"
 sphinx-autoapi = "*"
 ipykernel = "*"
-satkit = "*"
 furo = "*"
 kaleido = "*"
 scipy = "*"
 pytest = "*"
 autoapi = "*"
+satkit = "*"
 
 [dev-packages]
 
