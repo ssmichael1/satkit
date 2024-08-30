@@ -63,7 +63,8 @@ Please reach out of you find errors in code or calculations, are interested in c
   frametransform
   TLE
   itrfcoord
-  satprop  
+  satprop
+  satstate
   density
 
 .. toctree::
@@ -85,6 +86,7 @@ Please reach out of you find errors in code or calculations, are interested in c
   api/jplephem.md
   api/itrfcoord.md
   api/earthgravity.md
+  api/satstate.md
   api/tle.md
   api/consts.md
   api/kepler.md

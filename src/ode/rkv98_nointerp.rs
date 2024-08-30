@@ -5,8 +5,7 @@ use super::rk_adaptive::RKAdaptive;
 // <https://www.sfu.ca/~jverner/RKV98.IIa.Robust.000000351.081209.CoeffsOnlyFLOAT6040>
 
 use super::rkv98_nointerp_table as bt;
-
-use super::types::{ODEError, ODEInterp, ODEResult, ODESolution, ODEState};
+use crate::ode::types::{ODEError, ODEResult, ODESolution, ODEState};
 
 pub struct RKV98NoInterp {}
 
@@ -35,15 +34,7 @@ impl RKAdaptive<N, 1> for RKV98NoInterp {
         berr
     };
 
-    /// Interpolate densely calculated solution onto
-    /// values that are evenly spaced in "x"
-    ///
-    fn interpolate<S: ODEState>(
-        _sol: &ODESolution<S>,
-        _xstart: f64,
-        _xend: f64,
-        _dx: f64,
-    ) -> ODEResult<ODEInterp<S>> {
+    fn interpolate<S: ODEState>(_xinterp: f64, _sol: &ODESolution<S>) -> ODEResult<S> {
         Err(Box::new(ODEError::InterpNotImplemented))
     }
 }

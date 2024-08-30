@@ -51,7 +51,7 @@ use super::{GravConst, OpsMode};
 /// Two-Line Element Set to
 /// output satellite position and velocity at given time
 /// in the "TEME" coordinate system
-/// 
+///
 /// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
 ///
 /// A detailed description is
@@ -64,7 +64,7 @@ use super::{GravConst, OpsMode};
 ///           is passed, as SGP-4 metadata is stored after each propagation
 /// * `tm` -  The time at which to compute position and velocity
 ///           Input as a slice for convenience.
-/// 
+///
 ///
 /// # Return
 ///
@@ -72,9 +72,9 @@ use super::{GravConst, OpsMode};
 /// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
 /// times in the slice) or an Err value containing
 /// a tuple with error code and error string
-/// 
+///
 /// # Note:
-/// 
+///
 /// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
 ///
 /// # Example
@@ -131,11 +131,11 @@ pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4State {
 ///           is passed, as SGP-4 metadata is stored after each propagation
 /// * `tm` -  The time at which to compute position and velocity
 ///           Input as a slice for convenience.
-/// 
+///
 /// * `gravconst` - The gravitational constant to use.
-/// 
+///
 /// * `opsmode` - The operational mode to use.
-/// 
+///
 ///
 /// # Return
 ///

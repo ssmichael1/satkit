@@ -18,115 +18,56 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
     /// (first compute of next iteration is same as last compute of last iteration)
     const FSAL: bool;
 
-    /// Interpolate densely calculated solution onto
-    /// values that are evenly spaced in "x"
-    ///
-    fn interpolate<S: ODEState>(
-        sol: &ODESolution<S>,
-        xstart: f64,
-        xend: f64,
-        dx: f64,
-    ) -> ODEResult<ODEInterp<S>> {
+    fn interpolate<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
         if sol.dense.is_none() {
             return Err(Box::new(ODEError::NoDenseOutputInSolution));
         }
-        if sol.x > xend {
-            return Err(Box::new(ODEError::InterpExceedsSolutionBounds));
-        }
         let dense = sol.dense.as_ref().unwrap();
-        if sol.x < dense.x[0] {
+        if xinterp < dense.x[0] || xinterp > sol.x {
             return Err(Box::new(ODEError::InterpExceedsSolutionBounds));
         }
-        let n = ((xend - xstart) / dx) as usize + 1;
-        let mut xarr: Vec<f64> = (0..n).map(|v| v as f64 * dx + xstart).collect();
-        if *xarr.last().unwrap() > xend {
-            xarr.pop();
-            xarr.push(xend);
+        let mut idx = match dense.x.iter().position(|x| *x >= xinterp) {
+            Some(v) => v,
+            None => dense.x.len() - 1,
+        };
+        if idx > 0 {
+            idx -= 1;
         }
+        let t = (xinterp - dense.x[idx]) / dense.h[idx];
 
-        let mut lastidx: usize = 0;
-
-        let yarr: Vec<S> = xarr
+        // Compute interpolant coefficient as funciton of t
+        // note that t is in range [0,1]
+        //
+        // This is equation (6) of
+        // https://link.springer.com/article/10.1023/A:1021190918665
+        //
+        // Note: equation (6) of paper incorrectly has sum index "j"
+        //       starting from 0.  It should start from 1.
+        //
+        let bi: Vec<f64> = Self::BI
             .iter()
-            .map(|v| {
-                // We know indices are monotonically increasing, so only search from
-                // last found position in the array forward
-                let mut idx = match dense.x[lastidx..].iter().position(|x| *x >= *v) {
-                    Some(v) => v + lastidx,
-                    None => dense.x.len(),
-                };
-                lastidx = idx;
-                if idx > 0 {
-                    idx -= 1;
-                }
-
-                // t is fractional distance beween x at idx and idx+1
-                // and is in range [0,1]
-                let t = (*v - dense.x[idx]) / dense.h[idx];
-
-                // Compute interpolant coefficient as funciton of t
-                // note that t is in range [0,1]
-                //
-                // This is equation (6) of
-                // https://link.springer.com/article/10.1023/A:1021190918665
-                //
-                // Note: equation (6) of paper incorrectly has sum index "j"
-                //       starting from 0.  It should start from 1.
-                //
-                let bi: Vec<f64> = Self::BI
-                    .iter()
-                    .map(|biarr| {
-                        // Coefficients multiply increasing powers of t
-                        let mut tj = 1.0;
-                        biarr.iter().fold(0.0, |acc, bij| {
-                            tj = tj * t;
-                            acc + bij * tj
-                        })
-                    })
-                    .collect();
-
-                //
-                // Compute interpolated value
-                //
-                // This is equation(5) of:
-                // https://link.springer.com/article/10.1023/A:1021190918665
-                //
-                let yarr = dense.yprime[idx]
-                    .iter()
-                    .enumerate()
-                    .fold(dense.y[idx].clone() / dense.h[idx], |acc, (ix, k)| {
-                        acc + k.clone() * bi[ix]
-                    });
-                yarr * dense.h[idx]
+            .map(|biarr| {
+                let mut tj = 1.0;
+                biarr.iter().fold(0.0, |acc, bij| {
+                    tj = tj * t;
+                    acc + bij * tj
+                })
             })
             .collect();
 
-        Ok(ODEInterp::<S> { x: xarr, y: yarr })
-    }
+        //
+        // Compute interpolated value
+        //
+        // This is equation(5) of:
+        // https://link.springer.com/article/10.1023/A:1021190918665
+        let yarr = dense.yprime[idx]
+            .iter()
+            .enumerate()
+            .fold(dense.y[idx].clone() / dense.h[idx], |acc, (ix, k)| {
+                acc + k.clone() * bi[ix]
+            });
 
-    /// Convenience function to perform ODE integration
-    /// and interpolate from start to finish of integration
-    /// at fixed intervals
-    fn integrate_dense<S: ODESystem>(
-        x0: f64,
-        x_end: f64,
-        dx: f64,
-        y0: &S::Output,
-        system: &mut S,
-        settings: &RKAdaptiveSettings,
-    ) -> ODEResult<(ODESolution<S::Output>, ODEInterp<S::Output>)> {
-        // Make sure dense output is enabled
-        let res = match settings.dense_output {
-            true => Self::integrate(x0, x_end, y0, system, settings)?,
-            false => {
-                let mut sc = (*settings).clone();
-                sc.dense_output = true;
-                Self::integrate(x0, x_end, y0, system, &sc)?
-            }
-        };
-        // Interpolate the result
-        let interp = Self::interpolate(&res, x0, x_end, dx)?;
-        Ok((res, interp))
+        Ok(yarr * dense.h[idx])
     }
 
     ///

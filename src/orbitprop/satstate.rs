@@ -190,10 +190,10 @@ impl SatState {
         match self.cov {
             // Simple case: do not compute state transition matrix, since covariance is not set
             StateCov::None => {
-                let res = orbitprop::propagate(&self.pv, &self.time, time, None, settings, None)?;
+                let res = orbitprop::propagate(&self.pv, &self.time, time, settings, None, false)?;
                 Ok(SatState {
                     time: time.clone(),
-                    pv: res.state[0],
+                    pv: res.state_end,
                     cov: StateCov::None,
                 })
             }
@@ -212,14 +212,14 @@ impl SatState {
                     .copy_from(&na::Matrix6::<f64>::identity());
 
                 // Propagate
-                let res = orbitprop::propagate(&state, &self.time, time, None, settings, None)?;
+                let res = orbitprop::propagate(&state, &self.time, time, settings, None, false)?;
 
                 Ok(SatState {
                     time: time.clone(),
-                    pv: res.state[0].fixed_view::<6, 1>(0, 0).into(),
+                    pv: res.state_end.fixed_view::<6, 1>(0, 0).into(),
                     cov: {
                         // Extract state transition matrix from the propagated state
-                        let phi = res.state[0].fixed_view::<6, 6>(0, 1);
+                        let phi = res.state_end.fixed_view::<6, 6>(0, 1);
                         // Evolve the covariance
                         StateCov::PVCov(phi * cov * phi.transpose())
                     },

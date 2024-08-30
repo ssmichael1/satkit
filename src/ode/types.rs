@@ -29,9 +29,6 @@ pub trait ODEState:
     // Add scalar to each element
     fn ode_scalar_add(&self, s: f64) -> Self;
 
-    // Sum of squares
-    fn ode_sumsq(&self) -> f64;
-
     // Number of elements
     fn ode_nelem(&self) -> usize;
 
@@ -52,7 +49,7 @@ pub enum ODEError {
     //StepSizeTooSmall,
     #[error("Step error not finite")]
     StepErrorToSmall,
-    #[error("Dense output not provided in solution")]
+    #[error("No Dense Output in Solution")]
     NoDenseOutputInSolution,
     #[error("Interpolation exceeds solution bounds")]
     InterpExceedsSolutionBounds,
@@ -82,13 +79,4 @@ where
     pub x: f64,
     pub y: S,
     pub dense: Option<DenseOutput<S>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ODEInterp<S>
-where
-    S: ODEState,
-{
-    pub x: Vec<f64>,
-    pub y: Vec<S>,
 }

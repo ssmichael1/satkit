@@ -19,11 +19,6 @@ impl<const R: usize, const C: usize> ODEState for nalgebra::SMatrix<f64, R, C> {
     }
 
     #[inline(always)]
-    fn ode_sumsq(&self) -> f64 {
-        self.map(|x| x * x).sum()
-    }
-
-    #[inline(always)]
     fn ode_abs(&self) -> Self {
         self.abs()
     }

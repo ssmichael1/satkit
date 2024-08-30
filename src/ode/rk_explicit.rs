@@ -1,5 +1,6 @@
 use super::types::{ODEResult, ODESystem};
 
+#[allow(unused)]
 pub trait RK<const N: usize> {
     const A: [[f64; N]; N];
     const C: [f64; N];

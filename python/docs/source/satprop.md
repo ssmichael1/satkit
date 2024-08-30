@@ -1,3 +1,4 @@
+(satprop-doc)=
 # High-Precision Orbit Propagation
 
 The ``satkit`` package includes a high-precision orbit propagator, which predicts future (and past) positions and velocities of satellites by integrating the known forces acting upon the satellite. 

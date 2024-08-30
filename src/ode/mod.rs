@@ -21,6 +21,10 @@ pub use rk_adaptive_settings::RKAdaptiveSettings;
 
 pub mod solvers {
     #[allow(unused)]
+    pub use super::rk_explicit::Midpoint;
+    #[allow(unused)]
+    pub use super::rk_explicit::RK4;
+    #[allow(unused)]
     pub use super::rkts54::RKTS54;
     #[allow(unused)]
     pub use super::rkv65::RKV65;

@@ -454,15 +454,17 @@ class time:
     
     Notes:
         * If no arguments are passed in, the created object represents the current time
-    
+        * If year is passed in, month and day must also be passed in
+        * If hour is passed in, minute and second must also be passed in
+
     Args:
-        year (int): Gregorian year (e.g., 2024) (optional)
-        month (int): Gregorian month (1 = January, 2 = February, ...) (optional)
-        day (int): Day of month, beginning with 1 (optional)
-        hour (int): Hour of day, in range [0,23] (optional), default is 0
-        min (int): Minute of hour, in range [0,59] (optional), default is 0
-        sec (float): floating point second of minute, in range [0,60) (optional), defialt is 0
-        scale (satkit.timescale): Time scale (optional), default is satkit.timescale.UTC    
+        year (int, optional): Gregorian year (e.g., 2024)
+        month (int, optional): Gregorian month (1 = January, 2 = February, ...)
+        day (int, optional): Day of month, beginning with 1
+        hour (int, optional): Hour of day, in range [0,23] (optional), default is 0
+        min (int, optional): Minute of hour, in range [0,59], default is 0
+        sec (float, optional): floating point second of minute, in range [0,60), default is 0
+        scale (satkit.timescale, optional): Time scale , default is satkit.timescale.UTC    
     
     Returns:
         satkit.time: Time object representing input date and time, or if no arguments, the current date and time
@@ -488,13 +490,13 @@ class time:
             * If no arguments are passed in, the created object represents the current time
         
         Args:
-            year (int): Gregorian year (e.g., 2024) (optional)
-            month (int): Gregorian month (1 = January, 2 = February, ...) (optional)
-            day (int): Day of month, beginning with 1 (optional)
-            hour (int): Hour of day, in range [0,23] (optional), default is 0
-            min (int): Minute of hour, in range [0,59] (optional), default is 0
-            sec (float): floating point second of minute, in range [0,60) (optional), defialt is 0
-            scale (satkit.timescale): Time scale (optional), default is satkit.timescale.UTC    
+            year (int, optional): Gregorian year (e.g., 2024)
+            month (int, optional): Gregorian month (1 = January, 2 = February, ...)
+            day (int, optional): Day of month, beginning with 1
+            hour (int, optional): Hour of day, in range [0,23] (optional), default is 0
+            min (int, optional): Minute of hour, in range [0,59], default is 0
+            sec (float, optional): floating point second of minute, in range [0,60), default is 0
+            scale (satkit.timescale, optional): Time scale , default is satkit.timescale.UTC   
         
         Returns:
             satkit.time: Time object representing input date and time, or if no arguments, the current date and time
@@ -539,6 +541,17 @@ class time:
 
         Returns:
             satkit.time: Time object representing input Julian date and time scale
+        """
+
+    @staticmethod
+    def from_unixtime(ut: float) -> time:
+        """Return a time object representing input unixtime
+        
+        Args:
+            ut (float): unixtime, UTC seconds since Jan 1, 1970 00:00:00
+
+        Returns:
+            satkit.time: Time object representing input unixtime
         """
 
     @staticmethod
@@ -1126,11 +1139,6 @@ class kepler:
         """
 
     @property
-    def mean_motion(self) -> float:
-        """Mean motion, radians / second
-        """
-
-    @property
     def period(self) -> float:
         """Orbital period, seconds
         """
@@ -1405,4 +1413,86 @@ class consts:
     @property
     def jgm3_j2() -> float:
         """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless
+        """
+class satstate:
+    """
+    A convenience class representing a satellite position and velocity, and
+    optionally 6x6 position/velocity covariance at a particular instant in time
+
+    This class can be used to propagate the position, velocity, and optional
+    covariance to different points in time.
+    """
+
+    def __init__(
+        self,
+        time: time,
+        pos: npt.ArrayLike[np.float64],
+        vel: npt.ArrayLike[np.float64],
+        cov: npt.ArrayLike[np.float64] | None = None,
+    ):
+        """Create a new satellite state
+
+        Args:
+            time (satkit.time): Time instant of this state
+            pos (npt.ArrayLike[np.float64]): Position in meters in GCRF frame
+            vel (npt.ArrayLike[np.float64]): Velocity in meters / second in GCRF frame
+            cov (npt.ArrayLike[np.float64]|None, optional): Covariance in GCRF frame. Defaults to None.  If input, should be a 6x6 numpy array
+        
+        Returns:
+            satstate: New satellite state object
+        """
+
+    @property
+    def pos_gcrf(self) -> npt.ArrayLike[np.float64]:
+        """state position in meters in GCRF frame
+        
+        Returns:
+            npt.ArrayLike[np.float64]: 3-element numpy array representing position in meters in GCRF frame
+        """
+
+    @property
+    def vel_gcrf(self) -> npt.ArrayLike[np.float64]:
+        """Return this state velocity in meters / second in GCRF
+
+        Returns:
+            npt.ArrayLike[np.float64]: 3-element numpy array representing velocity in meters / second in GCRF frame
+        """
+
+    @property
+    def qgcrf2lvlh(self) -> quaternion:
+        """ Quaternion that rotates from the GCRF to the LVLH frame for the current state
+
+        Returns:
+            satkit.quaternion: Quaternion that rotates from the GCRF to the LVLH frame for the current state
+        """
+
+
+    @property
+    def cov(self) -> npt.ArrayLike[np.float64] | None:
+        """6x6 state covariance matrix in GCRF frame
+        
+        Returns:
+            npt.ArrayLike[np.float64] | None: 6x6 numpy array representing state covariance in GCRF frame or None if not set
+        """
+
+
+    @property
+    def time(self) -> time:
+        """Return time of this satellite state
+        
+        Returns:
+            satkit.time: Time instant of this state
+        """
+
+    def propagate(self, time: time | duration, propsettings=None) -> satstate:
+        """Propagate this state to a new time, specified by the "time" input, updating the position, the velocity, and the covariance if set
+
+        Args:
+            time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
+
+        Keyword Arguments:
+            propsettings: satkit.satprop.propsettings object describing settings to use in the propagation. If omitted, default is used 
+
+        Returns:
+            satstate: New satellite state object representing the state at the new time
         """

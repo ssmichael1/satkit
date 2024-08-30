@@ -129,6 +129,23 @@ mod tests {
     type State = nalgebra::Vector2<f64>;
 
     #[test]
+    fn test_nointerp() -> ODEResult<()> {
+        let mut system = HarmonicOscillator::new(1.0);
+        let y0 = State::new(1.0, 0.0);
+
+        use std::f64::consts::PI;
+
+        let mut settings = RKAdaptiveSettings::default();
+        settings.dense_output = false;
+        settings.abserror = 1e-8;
+        settings.relerror = 1e-8;
+
+        let _res = RKTS54::integrate(0.0, 2.0 * PI, &y0, &mut system, &settings)?;
+
+        Ok(())
+    }
+
+    #[test]
     fn testit() -> ODEResult<()> {
         let mut system = HarmonicOscillator::new(1.0);
         let y0 = State::new(1.0, 0.0);
@@ -136,26 +153,20 @@ mod tests {
         use std::f64::consts::PI;
 
         let mut settings = RKAdaptiveSettings::default();
+        settings.abserror = 1e-14;
+        settings.relerror = 1e-14;
         settings.dense_output = true;
-        settings.abserror = 1e-12;
-        settings.relerror = 1e-12;
 
-        let (sol, interp) =
-            RKTS54::integrate_dense(0.0, PI, PI / 2.0 * 0.05, &y0, &mut system, &settings)?;
+        let sol = RKTS54::integrate(0.0, PI, &y0, &mut system, &settings)?;
 
-        println!("sol evals = {}", sol.nevals);
-        interp.x.iter().enumerate().for_each(|(idx, x)| {
-            // We know the exact solution for the harmonic oscillator
-            let exact = x.cos();
-            let exact_v = -x.sin();
-            // Compare with the interpolated result
-            let diff = exact - interp.y[idx][0];
-            let diff_v = exact_v - interp.y[idx][1];
-            // we set abs and rel error to 1e-12, so lets check!
-            //println!("{:+e} {:+e}", diff.abs(), diff_v.abs());
-            assert!(diff.abs() < 1e-11);
-            assert!(diff_v.abs() < 1e-11);
+        let testcount = 100;
+        (0..100).for_each(|idx| {
+            let x = idx as f64 * PI / testcount as f64;
+            let interp = RKTS54::interpolate(x, &sol).unwrap();
+            assert!((interp[0] - x.cos()).abs() < 1e-11);
+            assert!((interp[1] + x.sin()).abs() < 1e-11);
         });
+
         Ok(())
     }
 }

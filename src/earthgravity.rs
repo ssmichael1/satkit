@@ -24,10 +24,9 @@ pub enum GravityModel {
     ITUGrace16,
 }
 
-
-/// 
+///
 /// Singleton for JGM3 gravity model
-/// 
+///
 pub fn jgm3() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("JGM3.gfc").unwrap())
@@ -35,7 +34,7 @@ pub fn jgm3() -> &'static Gravity {
 
 ///
 /// Singleton for JGM2 gravity model
-/// 
+///
 pub fn jgm2() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("JGM2.gfc").unwrap())
@@ -43,7 +42,7 @@ pub fn jgm2() -> &'static Gravity {
 
 ///
 /// Singleton for EGM96 gravity model
-/// 
+///
 pub fn egm96() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("EGM96.gfc").unwrap())
@@ -51,15 +50,15 @@ pub fn egm96() -> &'static Gravity {
 
 ///
 /// Singleton for ITU GRACE16 gravity model
-/// 
+///
 pub fn itu_grace16() -> &'static Gravity {
     static INSTANCE: OnceCell<Gravity> = OnceCell::new();
     INSTANCE.get_or_init(|| Gravity::from_file("ITU_GRACE16.gfc").unwrap())
 }
 
 ///
-/// Singleton for gravity model hash
-/// 
+/// Gravity model hash
+///
 pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
     static INSTANCE: OnceCell<HashMap<GravityModel, &'static Gravity>> = OnceCell::new();
     INSTANCE.get_or_init(|| {

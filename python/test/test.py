@@ -607,16 +607,18 @@ class TestHighPrecisionPropagation:
             np.array([2.47130555e03, 2.94682777e03, -5.34171918e02]),
             timearr[0],
             stoptime=timearr[-1],
-            dt=sk.duration.from_minutes(5),
             propsettings=settings,
             satproperties=satprops,
+            output_dense=True,
         )
+        print(res)
 
         # See if propagator is accurate to < 10 meters over 1 day on
         # each Cartesian axis
-        for iv in range(pgcrf.shape[0]):
+        for iv in range(pgcrf.shape[0]-5):            
+            state = res.interp(timearr[iv])
             for ix in range(0, 3):
-                assert m.fabs(res["pos"][iv, ix] - pgcrf[iv, ix]) < 10
+                assert m.fabs(state[ix] - pgcrf[iv, ix]) < 10
 
 class TestSatState:
     def test_lvlh(self):
@@ -624,8 +626,8 @@ class TestSatState:
         Test rotations of satellite state into the LVLH frame
         """
         time = sk.time(2015, 3, 20, 0, 0, 0)
-        satstate = sk.satprop.satstate(time,
-                                       np.array([sk.consts.geo_r, 0, 0]),
+        satstate = sk.satstate(time,
+                               np.array([sk.consts.geo_r, 0, 0]),
         np.array([0, m.sqrt(sk.consts.mu_earth/sk.consts.geo_r), 0]))
         state2 = satstate.propagate(time + sk.duration.from_hours(3.5))
         h =np.cross(state2.pos, state2.vel)

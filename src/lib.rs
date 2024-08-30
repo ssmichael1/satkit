@@ -26,6 +26,7 @@
 //! * Standalone Rust library available on on <https://crates.io>
 //! * Python bindings availble on PyPi
 //!
+//!
 
 // Type definitions
 pub mod types;
@@ -45,6 +46,8 @@ pub mod frametransform;
 pub mod itrfcoord;
 /// Solar system body ephemerides, as published by the Jet Propulsion Laboratory (JPL)
 pub mod jplephem;
+/// Keplerian orbital elements
+pub mod kepler;
 /// Low-precision ephemeris for sun and moon
 pub mod lpephem;
 /// NRL-MISE00 Density model
@@ -61,8 +64,6 @@ pub mod spaceweather;
 pub mod tle;
 /// Utility functions
 pub mod utils;
-/// Keplerian orbital elements
-pub mod kepler;
 
 /// Coordinate frames
 mod frames;
@@ -76,12 +77,12 @@ mod duration;
 pub use astrotime::AstroTime;
 pub use astrotime::Scale as TimeScale;
 pub use duration::Duration;
+pub use frames::Frame;
 pub use itrfcoord::ITRFCoord;
 pub use solarsystem::SolarSystem;
 pub use tle::TLE;
 pub use utils::SKErr;
 pub use utils::SKResult;
-pub use frames::Frame;
 
 #[cfg(feature = "pybindings")]
 pub mod pybindings;

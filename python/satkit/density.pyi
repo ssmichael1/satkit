@@ -22,22 +22,16 @@ def nrlmsise(itrf: satkit.itrfcoord, time: satkit.time | None) -> typing.Tuple[f
     or for more detail:
     https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2002JA009430
     
-    Inputs: 
+    Args: 
     
-        itrf:  satkit.itrfcoord representing position at which to 
-                compute density & temperature
-                  
-        time:  Optional instant at which to compute density & temperature.
+        itrf (satkit.itrfcoord):  position at which to compute density & temperature                  
+        time (satkit.time|numpy.ndarray|list):  Optional instant(s) at which to compute density & temperature.
                "Space weather" data at this time will be used in model 
                computation.  Note: at satellite altitudes, density can
                change by > 10 X depending on solar cycle
                  
-    Outputs:
-        
-        rho:  Atmosphere mass density in kg / m^3
-        
-          T:  Atmosphere temperature in Kelvin
-    
+    Returns:
+        tuple: (rho, T) where rho is mass density in kg/m^3 and T is temperature in Kelvin
     """
     
 @typing.overload
@@ -53,22 +47,15 @@ def nrlmsise(altitude_meters: float,
     or for more detail:
     https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2002JA009430
     
-    Inputs: 
-    
-    altitude_meters:  Altitude in meters
-    
-       latitude_rad:  Latitude in radians
-       
-      longitude_rad:  Longitude in radians
+    Args:
+        altitude_meters (float):  Altitude in meters
+        latitude_rad (float, optional):  Latitude in radians. Default is 0.
+        longitude_rad (float, optional):  Longitude in radians.  Default is 0.
+        time (satkit.time|numpy.ndarray|list, optional):  Optional instant(s) at which to compute density & temperature.
+               "Space weather" data at this time will be used in model 
+               computation.  Note: at satellite altitudes, density can
+               change by > 10 X depending on solar cycle
                  
-               time:  Optional instant at which to compute density & temperature.
-                      "Space weather" data at this time will be used in model 
-                      computation.  Note: at satellite altitudes, density can
-                      change by > 10 X depending on solar cycle                 
-    Outputs:
-        
-        rho:  Atmosphere mass density in kg / m^3
-        
-          T:  Atmosphere temperature in Kelvin
-    
+    Returns:
+        tuple: (rho, T) where rho is mass density in kg/m^3 and T is temperature in Kelvin
     """

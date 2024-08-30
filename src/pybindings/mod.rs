@@ -6,21 +6,22 @@ mod pyastrotime;
 mod pyconsts;
 mod pydensity;
 mod pyduration;
+mod pyframes;
 mod pyframetransform;
 mod pygravity;
 mod pyitrfcoord;
 mod pyjplephem;
+mod pykepler;
 mod pylpephem_moon;
-mod pylpephem_sun;
 mod pylpephem_planets;
+mod pylpephem_sun;
 mod pynrlmsise;
+mod pypropresult;
 mod pyquaternion;
 mod pysatstate;
 mod pysgp4;
 mod pysolarsystem;
 mod pytle;
-mod pykepler;
-mod pyframes;
 
 mod pypropagate;
 mod pypropsettings;
@@ -82,8 +83,6 @@ fn planets(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-
-
 /// Frame transform module: transform between varias coordinate frames
 #[pymodule]
 fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -116,7 +115,6 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pymodule]
 fn satprop(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPropSettings>()?;
-    m.add_class::<PySatState>()?;
     m.add_class::<pysatproperties::PySatProperties>()?;
     m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)
         .unwrap();
@@ -153,6 +151,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyITRFCoord>()?;
 
     m.add_class::<PyKepler>()?;
+    m.add_class::<PySatState>()?;
 
     m.add_wrapped(wrap_pymodule!(frametransform))?;
     m.add_wrapped(wrap_pymodule!(jplephem))?;

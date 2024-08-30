@@ -38,134 +38,65 @@ import numpy as np
 import satkit
 import datetime
 
-class PropStats(typing.TypedDict):
-    """PropStats is a dictionary containing statistics for the propagation.
-    """
+class propstats:
+    @property
+    def num_eval() -> int:
+        """Number of function evaluations"""
+
+    @property
+    def num_accept() -> int:
+        """Number of accepted steps in adaptive RK integrator"""
+
+    @property
+    def num_reject() -> int:
+        """Number of rejected steps in adaptive RK integrator"""
+
+class propresult:
+    """Results of a satellite propagation
     
-    num_eval: int
-    """int: Number of function evaluations of the force model computed during propagation function call
+    This class lets the user access results of the satellite propagation
     """
 
-    accepted_steps: int
-    """int: Accepted steps in the adaptive Runga-Kutta solver
-    """
-    
-    rejected_steps: int
-    """int: Rejected steps in the adaptive Runga-Kutta solver
-    """
+    @property
+    def pos() -> npt.ArrayLike[float]:
+        """GCRF position of satellite, meters"""
 
-class PropResult(typing.TypedDict):
-    """
-    PropResult is a dictionary containing the results of a high-precision orbit propagation that is returned by the "propagate" function
-    """
+    @property
+    def vel() -> npt.ArrayLike[float]:
+        """GCRF velocity of satellite, meters/second"""
 
-    time: npt.ArrayLike[satkit.time]
-    """npt.ArrayLike[satkit.time]: List of satkit.time objects at which time is computed
-    """
-    
-    pos: npt.ArrayLike[np.float64]
-    """npt.ArrayLike[float]: GCRF position in meters at output times.  Output is Nx3 numpy matrix, where N is the number of times
-    """
+    @property
+    def state() -> npt.ArrayLike[float]:
+        """6-element state (pos + vel) of satellite in meters & meters/second"""
 
-    vel: npt.ArrayLike[np.float64]
-    """npt.ArrayLike[float]: GCRF velocity in meters per second at output times.  Output is Nx3 numpy matrix, where N is the number of times
-    """
+    @property
+    def time() -> satkit.time:
+        """Time at which state is valid"""
 
-    Phi: typing.NotRequired[npt.ArrayLike[np.float64]]
-    """6x6 State transition matrix corresponding to each time. Output is Nx6x6 numpy matrix, where N is the lenght of the output "time" list. Not included if output_phi kwarg is set to false (the default)
-    """
+    @property
+    def stats() -> propstats:
+        """Statistics of propagation"""
 
-    stats: PropStats
-    """
-    (PropStats): Python dictionary with statistics for the propagation. This includes:
+    @property
+    def phi() -> npt.ArrayLike[np.float64]|None:
+        """6x6 State transition matrix 
+        or None if not computed
+        """        
 
-            * num_eval: Number of function evaluations of the force model required to get solution with desired accuracy
-            * accepted_steps: Accepted steps in the adpative Runga-Kutta solver
-            * rejected_steps: Rejected steps in the adaptive Runga-Kutta solver
-    """
-
-class satstate:
-    """
-    A convenience class representing a satellite position and velocity, and
-    optionally 6x6 position/velocity covariance at a particular instant in time
-
-    This class can be used to propagate the position, velocity, and optional
-    covariance to different points in time.
-    """
-
-    def __init__(
-        self,
-        time: satkit.time,
-        pos: npt.ArrayLike[np.float64],
-        vel: npt.ArrayLike[np.float64],
-        cov: npt.ArrayLike[np.float64] | None = None,
-    ):
-        """Create a new satellite state
+    def interp(time: satkit.time, output_phi: bool=False) -> npt.ArrayLike[np.float64]|typing.Tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]:
+        """Interpolate state at given time
 
         Args:
-            time (satkit.time): Time instant of this state
-            pos (npt.ArrayLike[np.float64]): Position in meters in GCRF frame
-            vel (npt.ArrayLike[np.float64]): Velocity in meters / second in GCRF frame
-            cov (npt.ArrayLike[np.float64]|None, optional): Covariance in GCRF frame. Defaults to None.  If input, should be a 6x6 numpy array
-        
-        Returns:
-            satstate: New satellite state object
-        """
-
-    @property
-    def pos_gcrf(self) -> npt.ArrayLike[np.float64]:
-        """state position in meters in GCRF frame
-        
-        Returns:
-            npt.ArrayLike[np.float64]: 3-element numpy array representing position in meters in GCRF frame
-        """
-
-    @property
-    def vel_gcrf(self) -> npt.ArrayLike[np.float64]:
-        """Return this state velocity in meters / second in GCRF
-
-        Returns:
-            npt.ArrayLike[np.float64]: 3-element numpy array representing velocity in meters / second in GCRF frame
-        """
-
-    @property
-    def qgcrf2lvlh(self) -> satkit.quaternion:
-        """ Quaternion that rotates from the GCRF to the LVLH frame for the current state
-
-        Returns:
-            satkit.quaternion: Quaternion that rotates from the GCRF to the LVLH frame for the current state
-        """
-
-
-    @property
-    def cov(self) -> npt.ArrayLike[np.float64] | None:
-        """6x6 state covariance matrix in GCRF frame
-        
-        Returns:
-            npt.ArrayLike[np.float64] | None: 6x6 numpy array representing state covariance in GCRF frame or None if not set
-        """
-
-
-    @property
-    def time(self) -> satkit.time:
-        """Return time of this satellite state
-        
-        Returns:
-            satkit.time: Time instant of this state
-        """
-
-    def propagate(self, time: satkit.time|satkit.duration, propsettings=None) -> satstate:
-        """Propagate this state to a new time, specified by the "time" input, updating the position, the velocity, and the covariance if set
-
-        Args:
-            time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
+            time (satkit.time): Time at which to interpolate state
 
         Keyword Arguments:
-            propsettings: satkit.satprop.propsettings object describing settings to use in the propagation. If omitted, default is used 
+            output_phi (bool): Output 6x6 state transition matrix at the interpolated time
 
         Returns:
-            satstate: New satellite state object representing the state at the new time
+            6-element vector representing state at given time
+            if output_phi, also output 6x6 state transition matrix at given time
         """
+    
 
 class satproperties_static:
     """Satellite properties relevant for drag and radiation pressure
@@ -274,7 +205,7 @@ def propagate(
     vel: npt.ArrayLike[float],
     start: satkit.time,
     **kwargs,
-) -> PropResult:
+) -> propresult:
     """High-precision orbit propagator
 
     Notes:
@@ -302,21 +233,13 @@ def propagate(
         duration_secs (float): duration in seconds from "tm" for at which new position and velocity will be computed.
         duration_days (float): duration in days from "tm" at which new position and velocity will be computed.
         duration (satkit.duration): duration from "tm" at which new position & velocity will be computed.
-        dt_secs (float): Interval in seconds between "starttime" and "stoptime" at which solution will also be computed
-        dt_days (float): Interval in days between "starttime" and "stoptime" at which solution will also be computed
-        dt (satkit.duration): Interval over which new position & velocity will be computed
         output_phi (bool): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
         propsettings (propsettings): "propsettings" object with input settings for the propagation. if left out, default will be used.
-        satproperties (satproperties_static): "SatPropertiesStatic" object with drag and radiation pressure succeptibility of satellite. If left out, drag and radiation pressure are neglected
+        satproperties (satproperties_static): "SatPropertiesStatic" object with drag and radiation pressure succeptibility of satellite. 
+                                            If left out, drag and radiation pressure are neglected
+        output_dense: boolean indicting whether or not dense output should be recorded.  Default is false.  If true, this will allow for calling the "interp" function
+                      to query states at arbitrary times between the start time and the stop time
 
     Returns:
-        (PropResult): Python dictionary with the following elements:
-            * "time": list of satkit.time objects at which solution is computed
-            * "pos": GCRF position in meters at "time".  Output is a Nx3 numpy matrix, where N is the length of the output "time" list
-            * "vel": GCRF velocity in meters / second at "time".  Output is a Nx3 numpy matrix, where N is the length of the output "time" list
-            *  "Phi": 6x6 State transition matrix corresponding to each time. Output is Nx6x6 numpy matrix, where N is the lenght of the output "time" list. Not included if output_phi kwarg is set to false (the default)
-            * "stats": Python dictionary with statistics for the propagation. This includes:
-                * "num_eval": Number of function evaluations of the force model required to get solution with desired accuracy
-                * "accepted_steps": Accepted steps in the adpative Runga-Kutta solver
-                * "rejected_steps": Rejected steps in the adaptive Runga-Kutta solver
+        (propresult): Propagation result object holding state outputs, statistics, and dense output if requested
     """

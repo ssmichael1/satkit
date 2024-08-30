@@ -37,7 +37,7 @@
 //!
 #[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
 pub struct AstroTime {
-    mjd_tai: f64,
+    pub(crate) mjd_tai: f64,
 }
 
 use crate::utils::{download_if_not_exist, skerror, SKResult};
@@ -92,7 +92,7 @@ const DELTAAT_OLD: [[f64; 4]; 15] = [
 /// Time Scales
 ///
 /// # Enum Values:
-/// 
+///
 /// * `UTC` - Univeral Time Coordiante
 /// * `TT` - Terrestrial Time
 /// * `UT1` - UT1

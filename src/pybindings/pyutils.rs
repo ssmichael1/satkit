@@ -12,7 +12,7 @@ use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use crate::types::Vec3;
+use crate::types::*;
 
 pub fn kwargs_or_default<'a, T>(
     kwargs: &mut Option<&Bound<'a, PyDict>>,
@@ -37,7 +37,10 @@ where
     }
 }
 
-pub fn kwargs_or_none<'a, T>(kwargs: &mut Option<&Bound<'a, PyDict>>, name: &str) -> PyResult<Option<T>>
+pub fn kwargs_or_none<'a, T>(
+    kwargs: &mut Option<&Bound<'a, PyDict>>,
+    name: &str,
+) -> PyResult<Option<T>>
 where
     T: FromPyObject<'a>,
 {
@@ -149,7 +152,10 @@ pub fn py_func_of_time_arr<T: ToPyObject>(
 }
 
 #[inline]
-pub fn py_quat_from_time_arr(cfunc: fn(&AstroTime) -> Quat, tmarr: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+pub fn py_quat_from_time_arr(
+    cfunc: fn(&AstroTime) -> Quat,
+    tmarr: &Bound<'_, PyAny>,
+) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
         1 => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
@@ -166,6 +172,32 @@ pub fn py_quat_from_time_arr(cfunc: fn(&AstroTime) -> Quat, tmarr: &Bound<'_, Py
                 .into_py(py))
         }),
     }
+}
+
+#[inline]
+pub fn vec2py<const T: usize>(py: Python, v: &Vector<T>) -> PyObject {
+    PyArray1::from_slice_bound(py, v.as_slice()).into_py(py)
+}
+
+pub fn slice2py1d(py: Python, s: &[f64]) -> PyObject {
+    PyArray1::from_slice_bound(py, s).into_py(py)
+}
+
+pub fn slice2py2d(py: Python, s: &[f64], rows: usize, cols: usize) -> PyResult<PyObject> {
+    let arr = PyArray1::from_slice_bound(py, s);
+    match arr.reshape([rows, cols]) {
+        Ok(a) => Ok(a.into_py(py)),
+        Err(e) => Err(e),
+    }
+}
+
+#[allow(dead_code)]
+pub fn mat2py<const M: usize, const N: usize>(py: Python, m: &Matrix<M, N>) -> PyObject {
+    let p = unsafe { PyArray2::<f64>::new_bound(py, [M, N], true) };
+    unsafe {
+        std::ptr::copy_nonoverlapping(m.as_ptr(), p.as_raw_array_mut().as_mut_ptr(), M * N);
+    }
+    p.into_py(py)
 }
 
 #[inline]
@@ -189,7 +221,6 @@ where
             let mut pout = ndarray::Array2::<f64>::zeros([tm.len(), 3]);
             let mut vout = ndarray::Array2::<f64>::zeros([tm.len(), 3]);
 
-            
             for (i, tm) in tm.iter().enumerate() {
                 match cfunc(tm) {
                     Ok(r) => {

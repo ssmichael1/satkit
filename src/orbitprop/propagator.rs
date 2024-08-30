@@ -13,6 +13,7 @@ use crate::Duration;
 use crate::SolarSystem;
 use lpephem::sun::shadowfunc;
 
+use crate::types::*;
 use crate::utils::SKResult;
 
 use num_traits::identities::Zero;
@@ -27,15 +28,26 @@ use thiserror::Error;
 use nalgebra as na;
 
 #[derive(Debug)]
-pub struct PropagationResult<T> {
-    pub time: Vec<AstroTime>,
-    pub state: Vec<T>,
+pub struct PropagationResult<const T: usize> {
+    pub time_start: AstroTime,
+    pub state_start: Matrix<6, T>,
+    pub time_end: AstroTime,
+    pub state_end: Matrix<6, T>,
     pub accepted_steps: u32,
     pub rejected_steps: u32,
     pub num_eval: u32,
+    pub odesol: Option<ode::ODESolution<Matrix<6, T>>>,
+}
+
+impl<const T: usize> PropagationResult<T> {
+    pub fn interp(&self, time: &AstroTime) -> SKResult<Matrix<6, T>> {
+        interp_propresult(self, time)
+    }
 }
 
 pub type StateType<const C: usize> = na::SMatrix<f64, 6, C>;
+
+// Simple state with position & velocity
 pub type SimpleState = StateType<1>;
 
 // Covariance State in includes
@@ -45,6 +57,8 @@ pub type CovState = StateType<7>;
 pub enum PropagationError {
     #[error("Invalid number of columns: {c}")]
     InvalidStateColumns { c: usize },
+    #[error("No Dense Output in Solution")]
+    NoDenseOutputInSolution,
 }
 
 struct Propagation<'a, const C: usize> {
@@ -313,7 +327,7 @@ impl<'a, const C: usize> ode::ODESystem for Propagation<'a, C> {
 /// let stoptime = starttime + satkit::Duration::Days(0.5);
 ///
 /// // Look at the results
-/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, None, &settings, None).unwrap();
+/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None, false).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// // Expect:
@@ -353,7 +367,7 @@ impl<'a, const C: usize> ode::ODESystem for Propagation<'a, C> {
 /// let stoptime = starttime + satkit::Duration::Days(0.5);
 ///
 /// // Look at the results
-/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, None, &settings, None).unwrap();
+/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None, false).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// ```
@@ -363,10 +377,10 @@ pub fn propagate<const C: usize>(
     state: &StateType<C>,
     start: &AstroTime,
     stop: &AstroTime,
-    step_seconds: Option<f64>,
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
-) -> SKResult<PropagationResult<StateType<C>>> {
+    store_dense: bool, // Store intermediate states for later interpolation
+) -> SKResult<PropagationResult<C>> {
     // Propagation structure
     let duration_days: f64 = (*stop - *start).days().abs();
     let duration_secs: f64 = duration_days * 86400.0;
@@ -402,12 +416,10 @@ pub fn propagate<const C: usize>(
     let mut odesettings = crate::ode::RKAdaptiveSettings::default();
     odesettings.abserror = settings.abs_error;
     odesettings.relerror = settings.rel_error;
+    odesettings.dense_output = store_dense;
 
-    match step_seconds {
-        None => {
-            odesettings.dense_output = false;
-            // If no interpolation, run a different integrator with same order but skipping
-            // stages (& this computation time) that are only used for interpolation
+    match store_dense {
+        false => {
             let res = crate::ode::solvers::RKV98NoInterp::integrate(
                 0.0,
                 x_end,
@@ -415,35 +427,50 @@ pub fn propagate<const C: usize>(
                 &mut p,
                 &odesettings,
             )?;
+
             Ok(PropagationResult {
-                time: vec![stop.clone()],
-                state: vec![res.y],
+                time_start: start.clone(),
+                state_start: state.clone(),
+                time_end: stop.clone(),
+                state_end: res.y.clone(),
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
                 num_eval: res.nevals as u32,
+                odesol: Some(res),
             })
         }
-        Some(dx) => {
-            odesettings.dense_output = true;
-            let (res, interp) = crate::ode::solvers::RKV98::integrate_dense(
-                0.0,
-                x_end,
-                dx,
-                state,
-                &mut p,
-                &odesettings,
-            )?;
+        true => {
+            let res =
+                crate::ode::solvers::RKV98::integrate(0.0, x_end, state, &mut p, &odesettings)?;
             Ok(PropagationResult {
-                time: interp.x.iter().map(|x| *start + *x / 86400.0).collect(),
-                state: interp.y,
+                time_start: start.clone(),
+                state_start: state.clone(),
+                time_end: stop.clone(),
+                state_end: res.y.clone(),
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
                 num_eval: res.nevals as u32,
+                odesol: Some(res),
             })
         }
     }
+}
 
-    //Ok(res)
+pub fn interp_propresult<const C: usize>(
+    res: &PropagationResult<C>,
+    time: &AstroTime,
+) -> SKResult<StateType<C>> {
+    if let Some(sol) = &res.odesol {
+        if sol.dense.is_some() {
+            let x = (time - res.time_start).seconds();
+            let y = crate::ode::solvers::RKV98::interpolate(x, &sol)?;
+            Ok(y)
+        } else {
+            Err(Box::new(PropagationError::NoDenseOutputInSolution))
+        }
+    } else {
+        Err(Box::new(PropagationError::NoDenseOutputInSolution))
+    }
 }
 
 #[cfg(test)]
@@ -474,16 +501,46 @@ mod tests {
         settings.gravity_interp_dt_secs = 300.0;
         settings.use_jplephem = false;
 
-        let res = propagate(&state, &starttime, &stoptime, None, &settings, None)?;
-        println!("res = {:?}", res);
+        let res = propagate(&state, &starttime, &stoptime, &settings, None, false)?;
 
         // Try to propagate back to original time
-        let res2 = propagate(&res.state[0], &stoptime, &starttime, None, &settings, None)?;
+        let res2 = propagate(
+            &res.state_end,
+            &stoptime,
+            &starttime,
+            &settings,
+            None,
+            false,
+        )?;
         // See if propagating back to original time matches
         for ix in 0..6 as usize {
-            assert!((res2.state[0][ix] - state[ix]).abs() < 1.0)
+            assert!((res2.state_end[ix] - state[ix]).abs() < 1.0)
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_interp() -> SKResult<()> {
+        let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let stoptime = starttime + Duration::Days(0.5);
+
+        let mut state: SimpleState = SimpleState::zeros();
+
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        let mut settings = PropSettings::default();
+        settings.abs_error = 1.0e-9;
+        settings.rel_error = 1.0e-14;
+        settings.gravity_order = 4;
+        settings.gravity_interp_dt_secs = 300.0;
+        settings.use_jplephem = false;
+
+        let res = propagate(&state, &starttime, &stoptime, &settings, None, true)?;
+
+        let newtime = starttime + Duration::Days(0.25);
+        let _interp = res.interp(&newtime)?;
         Ok(())
     }
 
@@ -522,24 +579,24 @@ mod tests {
         let dstate = na::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
 
         // Propagate state (and state-transition matrix)
-        let res = propagate(&state, &starttime, &stoptime, None, &settings, None)?;
+        let res = propagate(&state, &starttime, &stoptime, &settings, None, false)?;
 
         // Explicitly propagate state + dstate
         let res2 = propagate(
             &(state.fixed_view::<6, 1>(0, 0) + dstate),
             &starttime,
             &stoptime,
-            None,
             &settings,
             None,
+            false,
         )?;
 
         // Difference in states from explicitly propagating with
         // "dstate" change in initial conditions
-        let dstate_prop = res2.state[0] - res.state[0].fixed_view::<6, 1>(0, 0);
+        let dstate_prop = res2.state_end - res.state_end.fixed_view::<6, 1>(0, 0);
 
         // Difference in states estimated from state transition matrix
-        let dstate_phi = res.state[0].fixed_view::<6, 6>(0, 1) * dstate;
+        let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
         for ix in 0..6 as usize {
             assert!((dstate_prop[ix] - dstate_phi[ix]).abs() / dstate_prop[ix] < 1e-3);
         }
@@ -591,9 +648,9 @@ mod tests {
             &state,
             &starttime,
             &stoptime,
-            None,
             &settings,
             Some(&satprops),
+            false,
         )?;
 
         // Explicitly propagate state + dstate
@@ -601,19 +658,16 @@ mod tests {
             &(state.fixed_view::<6, 1>(0, 0) + dstate),
             &starttime,
             &stoptime,
-            None,
             &settings,
             Some(&satprops),
+            false,
         )?;
 
         // Difference in states from explicitly propagating with
         // "dstate" change in initial conditions
-        let dstate_prop = res2.state[0] - res.state[0].fixed_view::<6, 1>(0, 0);
+        let dstate_prop = res2.state_end - res.state_end.fixed_view::<6, 1>(0, 0);
 
-        let dstate_phi = res.state[0].fixed_view::<6, 6>(0, 1) * dstate;
-
-        println!("dstate_prop = {}", dstate_prop);
-        println!("dstate_phi = {}", dstate_phi);
+        let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
 
         // Are differences within 1%?
         for ix in 0..6 as usize {
@@ -699,7 +753,7 @@ mod tests {
             .collect();
 
         let v0 = na::vector![2.47130555e03, 2.94682777e03, -5.34171918e02, 2.13018578e-02];
-        let dt = times[1] - times[0];
+
         let state0 = na::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, 2.13018578e-2);
         let settings = PropSettings::default();
@@ -708,16 +762,17 @@ mod tests {
             &state0,
             &times[0],
             &times[times.len() - 1],
-            Some(dt.seconds()),
             &settings,
             Some(&satprops),
+            true,
         )?;
 
         // We've propagated over a day; assert that the difference in position on all three coordinate axes
         // is less than 10 meters for all 5-minute intervals
-        for iv in 0..pgcrf.len() {
+        for iv in 0..(pgcrf.len() - 5) {
+            let interp_state = res.interp(&times[iv])?;
             for ix in 0..3 {
-                assert!((pgcrf[iv][ix] - res.state[iv][ix]).abs() < 10.0);
+                assert!((pgcrf[iv][ix] - interp_state[ix]).abs() < 10.0);
             }
         }
 

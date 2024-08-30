@@ -66,6 +66,7 @@ impl Duration {
         }
     }
 
+    /// String representation of duration
     pub fn to_string(&self) -> String {
         let mut secs = self.seconds();
         let mut sign = String::from("");
@@ -77,7 +78,7 @@ impl Duration {
         // e.g. if seconds = 59.999..., rather than round up and
         // display "seconds" in second field, show 0 and increment
         // minutes...
-        if secs % 60.0  > 59.9995 {
+        if secs % 60.0 > 59.9995 {
             secs = secs + 5.0e-4;
         }
 
