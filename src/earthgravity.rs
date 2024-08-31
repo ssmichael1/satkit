@@ -481,38 +481,57 @@ impl Gravity {
 
     fn compute_legendre<const NP4: usize>(&self, pos: &Vec3) -> (Legendre<NP4>, Legendre<NP4>) {
         let rsq = pos.norm_squared();
-        let xfac = pos[0] * self.radius / rsq;
-        let yfac = pos[1] * self.radius / rsq;
-        let zfac = pos[2] * self.radius / rsq;
-        let rfac = self.radius * self.radius / rsq;
+        let scale = self.radius / rsq;
+        let xfac = pos[0] * scale;
+        let yfac = pos[1] * scale;
+        let zfac = pos[2] * scale;
+        let rfac = self.radius * scale;
 
         let mut v = Legendre::<NP4>::zeros();
         let mut w = Legendre::<NP4>::zeros();
 
-        v[(0, 0)] = self.radius / rsq.sqrt();
-        w[(0, 0)] = 0.0;
+        let mut vmm1mm1 = self.radius / rsq.sqrt();
+        let mut wmm1mm1 = 0.0;
+        v[(0, 0)] = vmm1mm1;
+        w[(0, 0)] = wmm1mm1;
 
-        for m in 0..(NP4 - 1) {
-            // Along diagnoals
+        for m in 0..NP4 {
             if m > 0 {
-                v[(m, m)] = self.divisor_table[(m, m)]
-                    * (xfac * v[(m - 1, m - 1)] - yfac * w[(m - 1, m - 1)]);
-                w[(m, m)] = self.divisor_table[(m, m)]
-                    * (xfac * w[(m - 1, m - 1)] + yfac * v[(m - 1, m - 1)]);
+                let d = self.divisor_table[(m, m)];
+                v[(m, m)] = d * (xfac * vmm1mm1 - yfac * wmm1mm1);
+                w[(m, m)] = d * (xfac * wmm1mm1 + yfac * vmm1mm1);
             }
-            // Work down tree
+
+            vmm1mm1 = v[(m, m)];
+            wmm1mm1 = w[(m, m)];
+            let mut vnm2m = vmm1mm1;
+            let mut wnm2m = wmm1mm1;
+
             let n = m + 1;
-            v[(n, m)] = self.divisor_table[(n, m)] * zfac * v[(n - 1, m)];
-            w[(n, m)] = self.divisor_table[(n, m)] * zfac * w[(n - 1, m)];
+            if n >= NP4 {
+                continue;
+            }
+            let d = self.divisor_table[(n, m)] * zfac;
+            let mut vnm1m = d * vnm2m;
+            let mut wnm1m = d * wnm2m;
+            v[(n, m)] = vnm1m;
+            w[(n, m)] = wnm1m;
 
-            for n in (m + 2)..(NP4 - 1) {
-                v[(n, m)] = self.divisor_table[(n, m)] * zfac * v[(n - 1, m)]
-                    - self.divisor_table2[(n, m)] * rfac * v[(n - 2, m)];
+            for n in (m + 2)..NP4 {
+                let d = self.divisor_table[(n, m)] * zfac;
+                let d2 = self.divisor_table2[(n, m)] * rfac;
+                let vnm = d * vnm1m - d2 * vnm2m;
+                let wnm = d * wnm1m - d2 * wnm2m;
+                v[(n, m)] = vnm;
+                w[(n, m)] = wnm;
+                vnm2m = vnm1m;
+                vnm1m = vnm;
 
-                w[(n, m)] = self.divisor_table[(n, m)] * zfac * w[(n - 1, m)]
-                    - self.divisor_table2[(n, m)] * rfac * w[(n - 2, m)];
+                wnm2m = wnm1m;
+                wnm1m = wnm;
             }
         }
+
         (v, w)
     }
 
@@ -609,35 +628,28 @@ impl Gravity {
             }
         }
 
+        let mut d1 = DivisorTable::zeros();
+        let mut d2 = DivisorTable::zeros();
+        for m in 0..43 {
+            if m > 0 {
+                d1[(m, m)] = (2 * m - 1) as f64
+            }
+            let n = m + 1;
+            d1[(n, m)] = (2 * n - 1) as f64 / (n - m) as f64;
+            for n in (m + 2)..43 {
+                d1[(n, m)] = (2 * n - 1) as f64 / (n - m) as f64;
+                d2[(n, m)] = (n + m - 1) as f64 / (n - m) as f64;
+            }
+        }
+
         Ok(Gravity {
             name: String::from(name),
             gravity_constant: gravity_constant,
             radius: radius,
             max_degree: max_degree,
             coeffs: cs,
-            divisor_table: {
-                let mut dt: DivisorTable = DivisorTable::zeros();
-                for m in 0..43 {
-                    if m > 0 {
-                        dt[(m, m)] = 2.0 * m as f64 - 1.0;
-                    }
-                    let n = m + 1;
-                    dt[(n, m)] = (2.0 * n as f64 - 1.0) / (n - m) as f64;
-                    for n in (m + 2)..19 {
-                        dt[(n, m)] = (2.0 * n as f64 - 1.0) / (n - m) as f64;
-                    }
-                }
-                dt
-            },
-            divisor_table2: {
-                let mut dt: DivisorTable = DivisorTable::zeros();
-                for m in 0..43 {
-                    for n in (m + 2)..43 {
-                        dt[(n, m)] = (n as f64 + m as f64 - 1.0) / (n - m) as f64;
-                    }
-                }
-                dt
-            },
+            divisor_table: d1,
+            divisor_table2: d2,
         })
     }
 }
