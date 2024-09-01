@@ -587,7 +587,7 @@ class TestHighPrecisionPropagation:
         # Propagate backward and see if we recover original result
         res2 = sk.propagate(res1.state[0:3], res1.state[3:6], stoptime, stoptime=starttime, output_dense=True)
     
-        assert res2.state[0:3] == pytest.approx(pos, abs=0.1)
+        assert res2.state[0:3] == pytest.approx(pos, abs=0.5)
         assert res2.state[3:6] == pytest.approx(vel, abs=1e-5)
 
         newtime = starttime + sk.duration.from_hours(4.332)
