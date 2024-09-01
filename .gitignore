@@ -15,3 +15,6 @@ iframe_figures
 _build
 html
 Pipfile.lock
+
+# Ignore local virtual environments
+.venv
