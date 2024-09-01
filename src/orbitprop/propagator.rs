@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn test_interp() -> SKResult<()> {
         let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
-        let stoptime = starttime + Duration::Days(0.5);
+        let stoptime = starttime + Duration::Days(1.0);
 
         let mut state: SimpleState = SimpleState::zeros();
 
@@ -539,10 +539,23 @@ mod tests {
         settings.gravity_interp_dt_secs = 300.0;
         settings.use_jplephem = false;
 
+        // Propagate forward
         let res = propagate(&state, &starttime, &stoptime, &settings, None, true)?;
+        // propagate backward to original time
+        let res2 = propagate(&res.state_end, &stoptime, &starttime, &settings, None, true)?;
+        // Check that we recover the original state
+        for ix in 0..6 as usize {
+            assert!((state[ix] - res2.state_end[ix]).abs() < 1.0e-3);
+        }
 
-        let newtime = starttime + Duration::Days(0.25);
-        let _interp = res.interp(&newtime)?;
+        // Check interpolation forward and backward return the same result
+        let newtime = starttime + Duration::Days(0.45);
+        let interp = res.interp(&newtime)?;
+        let interp2 = res2.interp(&newtime)?;
+
+        for ix in 0..6 as usize {
+            assert!((interp[ix] - interp2[ix]).abs() < 1e-3);
+        }
         Ok(())
     }
 

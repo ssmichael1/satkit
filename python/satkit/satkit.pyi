@@ -1694,9 +1694,9 @@ def propagate(
         duration (satkit.duration): duration from "tm" at which new position & velocity will be computed.
         output_phi (bool): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
         propsettings (propsettings): "propsettings" object with input settings for the propagation. if left out, default will be used.
-        satproperties (satproperties_static): "SatPropertiesStatic" object with drag and radiation pressure succeptibility of satellite. If left out, drag and radiation pressure are neglected
-        output_dense: boolean indicting whether or not dense output should be recorded.  Default is false.  If true, this will allow for calling the "interp" function to query states at arbitrary times between the start time and the stop time
-
+        satproperties (satproperties_static): "SatPropertiesStatic" object with drag and radiation pressure succeptibility of satellite. 
+        output_dense: boolean indicting whether or not dense output should be recorded.  Default is false.  
+        
     Returns:
         (propresult): Propagation result object holding state outputs, statistics, and dense output if requested
     """
