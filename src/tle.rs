@@ -105,8 +105,9 @@ pub struct TLE {
 impl TLE {
     pub fn from_lines(lines: &Vec<String>) -> SKResult<Vec<TLE>> {
         let mut tles: Vec<TLE> = Vec::<TLE>::new();
-        let mut line0: &String = &String::new();
-        let mut line1: &String = &String::new();
+        let empty: &String = &String::new();
+        let mut line0: &String = empty;
+        let mut line1: &String = empty;
         let mut line2: &String;
 
         for line in lines {
@@ -122,6 +123,8 @@ impl TLE {
                 } else {
                     tles.push(TLE::load_3line(line0, line1, line2)?);
                 }
+                line0 = empty;
+                line1 = empty;
             } else {
                 line0 = line;
             }
