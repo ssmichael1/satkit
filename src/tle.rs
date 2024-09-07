@@ -113,19 +113,17 @@ impl TLE {
             if line.len() < 2 {
                 continue;
             }
-            if line.chars().nth(0).unwrap() == '0' {
-                line0 = line;
-            }
             if line.chars().nth(0).unwrap() == '1' {
                 line1 = line;
-            }
-            if line.chars().nth(0).unwrap() == '2' {
+            } else if line.chars().nth(0).unwrap() == '2' {
                 line2 = line;
                 if line0.is_empty() {
                     tles.push(TLE::load_2line(line1, line2)?);
                 } else {
                     tles.push(TLE::load_3line(line0, line1, line2)?);
                 }
+            } else {
+                line0 = line;
             }
         }
 
