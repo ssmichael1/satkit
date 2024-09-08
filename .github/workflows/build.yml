@@ -36,18 +36,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
-
-      # Download the data and the test vectors
-      - run: pip install requests
 
       # Try to recover satkit data from cache
       - name: Cache Satkit Data
@@ -61,7 +51,8 @@ jobs:
       # Download data if it is not in the cache
       - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'
-        run: python python/test/download_data.py ${{matrix.data_path}}
+        run: pip install requests | python python/test/download_data.py ${{matrix.data_path}}
+        
 
       # Try to recover satkit test vectors from cache
       - name: Cache Satkit Test Vectors
@@ -75,17 +66,11 @@ jobs:
       # Download test vectors if they are not in the cache
       - name: Download Satkit Test Vectors
         if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
-        run: python python/test/download_testvecs.py ${{matrix.testvec_path}}
+        run: pip install requests | python python/test/download_testvecs.py ${{matrix.testvec_path}}
 
-      # Run cargo tests
-      - name: Run Cargo Tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Build and Test
+        run: |
+          cargo build --release
+          cargo test --all-features
+          cargo doc --no-deps 
 
-      # Run cargo docs
-      - name: Build Rust Documentation
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --no-deps

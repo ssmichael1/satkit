@@ -78,6 +78,7 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
 ///     output satellite position and velocity at given time
 ///     in the "TEME" coordinate system
 ///
+/// Note:
 ///     A detailed description is at:
 ///     https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
 ///

@@ -40,14 +40,13 @@ use super::pyutils::*;
 ///     itrfcoord: New ITRF coordinate
 ///
 /// Example:
-///
-///     1. Create ITRF coord from Cartesian
-///        
+///     * Create ITRF coord from Cartesian        
 ///        >>> coord = itrfcoord([ 1523128.63570828 -4461395.28873207  4281865.94218203 ])
 ///        >>> print(coord)
 ///        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
 ///
-///     2. Create ITRF coord from Geodetic
+/// Example:
+///     * Create ITRF coord from Geodetic
 ///        >>> coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
 ///        >>> print(coord)
 ///        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
