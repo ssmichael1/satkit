@@ -105,27 +105,28 @@ pub struct TLE {
 impl TLE {
     pub fn from_lines(lines: &Vec<String>) -> SKResult<Vec<TLE>> {
         let mut tles: Vec<TLE> = Vec::<TLE>::new();
-        let mut line0: &String = &String::new();
-        let mut line1: &String = &String::new();
+        let empty: &String = &String::new();
+        let mut line0: &String = empty;
+        let mut line1: &String = empty;
         let mut line2: &String;
 
         for line in lines {
             if line.len() < 2 {
                 continue;
             }
-            if line.chars().nth(0).unwrap() == '0' {
-                line0 = line;
-            }
             if line.chars().nth(0).unwrap() == '1' {
                 line1 = line;
-            }
-            if line.chars().nth(0).unwrap() == '2' {
+            } else if line.chars().nth(0).unwrap() == '2' {
                 line2 = line;
                 if line0.is_empty() {
                     tles.push(TLE::load_2line(line1, line2)?);
                 } else {
                     tles.push(TLE::load_3line(line0, line1, line2)?);
                 }
+                line0 = empty;
+                line1 = empty;
+            } else {
+                line0 = line;
             }
         }
 
