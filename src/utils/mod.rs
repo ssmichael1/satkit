@@ -4,8 +4,9 @@ pub use skerror::SKResult;
 
 mod datadir;
 mod skerror;
+pub use datadir::data_found;
 pub use datadir::datadir;
-pub use datadir::testdirs;
+pub use datadir::set_datadir;
 
 #[cfg(test)]
 pub mod test;
@@ -28,7 +29,7 @@ pub fn githash<'a>() -> &'a str {
 
 ///
 /// Return git tag of compiled library
-/// 
+///
 pub fn gittag<'a>() -> &'a str {
     env!("GIT_TAG")
 }

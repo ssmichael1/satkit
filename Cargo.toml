@@ -1,10 +1,9 @@
 [package]
 name = "satkit"
-version = "0.3.9"
+version = "0.3.10"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
-licence = "MIT"
 license-file = "LICENSE"
 homepage = "https://github.com/ssmichael1/satkit"
 repository = "https://github.com/ssmichael1/satkit"
@@ -34,11 +33,11 @@ pyo3 = { version = "0.21", features = ["extension-module"], optional = true }
 ureq = "2.10.1"
 json = "0.12.4"
 process_path = "0.1.4"
-serde = { version = "1.0.130", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.1.1"
 
 [build-dependencies]
-cc = { version = "1.1.15", features = ["parallel"] }
+cc = { version = "1.1.18", features = ["parallel"] }
 chrono = "0.4.38"
 pyo3-build-config = { version = "0.21", optional = true }
 

@@ -14,37 +14,20 @@ use crate::orbitprop;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 
-///
 /// High-precision orbit propagator
-///
-/// Propagator uses advanced Runga-Kutta integrators and includes the following
-/// forces:
-///
-///    1) Earth gravity, with zonal gravity up to order 16 (default is 4)
-///    2) Gravitational force of moon
-///    3) Gravitational force of sun
-///    4) Solar radiation pressure (with user-specified satellite model)
-///    5) Atmospheric drag, with correction for space wither
-///       (with user-specified satellite model)
-///
 ///
 /// Propagate statellite ephemeris (position, velocity in gcrs & time) to new time
 /// and output new position and velocity
 ///
 /// Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
 ///
-/// Inputs:
+/// Args:
 ///   
 ///     pos:   3-element numpy array representing satellite GCRF position in meters
 ///     vel:   3-element numpy array representing satellite GCRF velocity in m/s
 ///      tm:   astro.time object representing instant at which satellite is at "pos" & "vel"
 ///
-/// Optional keyword arguments:
-///
-///
-/// 4 ways of setting propagation end:
-/// (one of these must be used)
-///   
+/// Keyword Args:
 ///         stoptime: astro.time object representing instant at
 ///                   which new position and velocity will be computed
 ///    duration_secs: duration in seconds from "tm" for at which new
@@ -53,10 +36,6 @@ use pyo3::types::{PyDict, PyString};
 ///                   velocity will be computed.  
 ///         duration: An astro.duration object setting duration from "tm"
 ///                   at which new position & velocity will be computed.
-///
-///  Other keywords:
-///
-///
 ///       output_phi: boolean inticating Output 6x6 state transition matrix
 ///                   between "starttime" and "stoptime"
 ///                   default is False
@@ -72,10 +51,29 @@ use pyo3::types::{PyDict, PyString};
 ///                  "starttime" and "stoptime".  Default is False
 ///           
 ///
+/// Returns:
 ///
-/// Output: Python satprop object holding resultant state, propagation statistics,
-///         and possibly dense output for interpolation
+///    satkit.propresult: object with new position and velocity, and possibly
+///                       state transition matrix between "starttime" and "stoptime",
+///                       and dense ODE solution that allow for interpolation, if requested
 ///
+/// Raises:
+///
+///   RuntimeError: If "pos" or "vel" are not 3-element numpy arrays
+///   RuntimeError: If neither "stoptime", "duration", "duration_secs", or "duration_days" are set
+///   RuntimeError: If extraneous keyword arguments are passed
+///
+/// Note:
+///
+///   Propagator uses advanced Runga-Kutta integrators and includes the following
+///   forces:
+///
+///      1) Earth gravity, with zonal gravity up to order 16 (default is 4)
+///      2) Gravitational force of moon
+///      3) Gravitational force of sun
+///      4) Solar radiation pressure (with user-specified satellite model)
+///      5) Atmospheric drag, with correction for space wither
+///         (with user-specified satellite model)
 ///
 #[pyfunction(signature=(pos, vel, start, **kwargs))]
 pub fn propagate(

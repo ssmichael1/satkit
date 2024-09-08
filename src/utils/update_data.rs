@@ -1,6 +1,5 @@
 use super::download_file_async;
 use super::download_to_string;
-use super::testdirs;
 use crate::skerror;
 use crate::utils::datadir;
 use crate::SKResult;
@@ -97,41 +96,27 @@ fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> SKRe
 }
 
 pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> SKResult<()> {
-    // Find directory where files will be downloaded
-    let mut downloaddir: Option<PathBuf> = dir.clone();
-    if downloaddir.is_none() {
-        match datadir() {
-            Ok(dd) => {
-                let md = std::fs::metadata(dd.clone())?;
-                let permissions = md.permissions();
-                if !permissions.readonly() {
-                    downloaddir = Some(dd.clone());
-                } else {
-                    return skerror!("Cannot find writable data directory");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-    if downloaddir.is_none() {
-        let d: Vec<PathBuf> = testdirs()
-            .into_iter()
-            .filter(|x| x.is_dir())
-            .filter(|x| x.metadata().unwrap().permissions().readonly() == false)
-            .collect();
-        if d.len() == 0 {
-            return skerror!("Cannot find writable data directory");
-        }
-        downloaddir = Some(d[0].clone());
+    let downloaddir = match dir {
+        Some(d) => d,
+        None => datadir()?,
+    };
+    if downloaddir.metadata()?.permissions().readonly() {
+        return skerror!(
+            r#"
+            Data directory is read-only.
+            Try setting SATKIT_DATA environment
+            variable to a writeable directory and re-starting
+            "#
+        );
     }
 
     println!(
         "Downloading data files to {}",
-        downloaddir.clone().unwrap().to_str().unwrap()
+        downloaddir.clone().to_str().unwrap()
     );
     // Download old files
     download_datadir(
-        downloaddir.clone().unwrap(),
+        downloaddir.clone(),
         String::from("https://storage.googleapis.com/astrokit-astro-data"),
         &overwrite_if_exists,
     )?;
@@ -141,7 +126,7 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> SKRe
     // Get a list of files that are updated with new data, and download them
     download_from_url_json(
         String::from("https://storage.googleapis.com/astrokit-astro-data/files_refresh.json"),
-        &downloaddir.unwrap(),
+        &downloaddir,
     )?;
     Ok(())
 }

@@ -78,8 +78,39 @@ fn datadir() -> PyResult<PyObject> {
     })
 }
 
+/// Set the data directory
+///
+/// Args:
+///    datadir (str): Path to the data directory
+///
+/// Returns:
+///   None
+///
+/// Raises:
+///  RuntimeError: If the directory does not exist
+///
+#[pyfunction]
+fn set_datadir(datadir: String) -> PyResult<()> {
+    let d = PathBuf::from(datadir);
+    match crate::utils::set_datadir(&d) {
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        Ok(_) => Ok(()),
+    }
+}
+
+/// Check if data files are found
+///
+/// Returns:
+///   bool: True if data files are found
+///        False if data files are not found
+///
+#[pyfunction]
+fn datafiles_exist() -> PyResult<bool> {
+    Ok(crate::utils::data_found())
+}
+
 /// Git hash of compiled library
-/// 
+///
 /// Returns:
 ///     str: Git hash of compiled library
 #[pyfunction]
@@ -88,7 +119,7 @@ fn githash() -> PyResult<String> {
 }
 
 /// Version of satkit
-/// 
+///
 /// Returns:
 ///    str: Version of satkit
 #[pyfunction]
@@ -96,9 +127,8 @@ fn version() -> PyResult<String> {
     Ok(String::from(crate::utils::gittag()))
 }
 
-
 /// Location of the compiled library
-/// 
+///
 /// Returns:
 ///     str: Path to the compiled library
 #[pyfunction]
@@ -111,8 +141,8 @@ fn dylib_path() -> PyResult<PyObject> {
     })
 }
 
-/// Build date of compiled 
-/// 
+/// Build date of compiled
+///
 /// Returns:
 ///     str: Build date of compiled library
 #[pyfunction]
@@ -124,6 +154,9 @@ fn build_date() -> PyResult<String> {
 #[pymodule]
 pub fn utils(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(datadir, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(set_datadir, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(datafiles_exist, m)?)
+        .unwrap();
     m.add_function(wrap_pyfunction!(dylib_path, m)?).unwrap();
     m.add_function(wrap_pyfunction!(update_datafiles, m)?)
         .unwrap();

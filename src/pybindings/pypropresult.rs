@@ -20,12 +20,21 @@ pub enum PyPropResultType {
     R7(PropagationResult<7>),
 }
 
+/// Propagation statistics
+///
+/// This class holds statistics about the result of a high-precision orbit propagation
+///
 #[pyclass(name = "propstats", module = "satkit")]
 pub struct PyPropStats {
+    /// Number of function evaluations
     #[pyo3(get)]
     num_eval: u32,
+
+    /// Number of accepted steps
     #[pyo3(get)]
     num_accept: u32,
+
+    /// Number of rejected steps
     #[pyo3(get)]
     num_reject: u32,
 }
@@ -38,6 +47,31 @@ impl PyPropStats {
     }
 }
 
+/// Propagation result
+///
+/// This class holds the result of a high-precision orbit propagation
+///
+/// The result includes the final state of the satellite, the time at which the state was computed,
+/// and statistics about the propagation
+///
+/// The result may also include a dense ODE solution that can be used for interpolation of states
+/// between the start and stop times
+///
+/// Attributes:
+///
+///    time_start: satkit.time object representing the time at which the propagation began
+///          time: satkit.time object representing the time at which the propagation ended
+///         stats: satkit.propstats object with statistics about the propagation
+///           pos: 3-element numpy array representing the final position of the satellite in GCRF meters
+///           vel: 3-element numpy array representing the final velocity of the satellite in GCRF m/s
+///         state: 6-element numpy array representing the final state of the satellite in GCRF,
+///                a concatenation of pos and vel
+///           phi: 6x6 numpy array representing the state transition matrix between
+///                the start and stop times, if requested
+///    can_interp: boolean indicating whether the result includes a dense ODE
+///                solution that can be used for interpolation
+///                of states between the start and stop times
+///
 #[pyclass(name = "propresult", module = "satkit")]
 #[derive(Debug, Clone)]
 pub struct PyPropResult {

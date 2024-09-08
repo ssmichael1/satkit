@@ -1548,7 +1548,7 @@ class propresult:
         Args:
             time (satkit.time): Time at which to interpolate state
 
-        Keyword Arguments:
+        Keyword Args:
             output_phi (bool): Output 6x6 state transition matrix at the interpolated time
 
         Returns:
@@ -1571,7 +1571,7 @@ class satproperties_static:
             cdaroverm (float): Coefficient of drag times area over mass in m^2/kg
             craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
         
-        Keyword Arguments:
+        Keyword Args:
             craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
             cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
 
@@ -1695,7 +1695,7 @@ def propagate(
         output_phi (bool): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
         propsettings (propsettings): "propsettings" object with input settings for the propagation. if left out, default will be used.
         satproperties (satproperties_static): "SatPropertiesStatic" object with drag and radiation pressure succeptibility of satellite. 
-        output_dense: boolean indicting whether or not dense output should be recorded.  Default is false.  
+        output_dense (bool): Indicate whether or not dense output should be recorded.  Default is false.  
         
     Returns:
         (propresult): Propagation result object holding state outputs, statistics, and dense output if requested
