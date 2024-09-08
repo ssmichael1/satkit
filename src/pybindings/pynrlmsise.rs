@@ -8,22 +8,17 @@ use crate::AstroTime;
 ///
 /// NRL-MSISE00 Atmospheric Model
 ///
-/// Inputs:
-///   
-///   alt_km: Altitude in kilometers
+/// Args:
+///   alt_km (float): Altitude in kilometers
 ///
-/// Optional kwargs:
+/// Keyword args:
+///       latitude_deg (float):   Latitude in degrees
+///      longitude_deg (float):   Longitude in degrees
+///                 tm (satkit.time):   The time (astrotime object)
+///   use_spaceweather (bool):   Use space weather database in calculation
 ///
-///       latitude_deg:   Latitude in degrees
-///      longitude_deg:   Longitude in degrees
-///                 tm:   The time (astrotime object)
-///   use_spaceweather:   Use space weather database in calculation
-///                       (default is true)
-///
-/// Output Tuple Elements:
-///
-///   d  : Density in kg/m^3
-///   k  : Temperature in Kelvin
+/// Returns:
+///  (float, float): Tuple of density (kg/m^3) and temperature (K)
 ///
 #[pyfunction]
 #[pyo3(signature=(alt_km, **option_kwds))]

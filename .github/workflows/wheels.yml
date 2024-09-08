@@ -36,16 +36,12 @@ jobs:
       - name: set up python
         uses: actions/setup-python@v5
 
-      - name: install requests package
-        run: pip install -U setuptools wheel requests build
+      - name: install python packages necessary for build
+        run: pip install -U setuptools wheel build
 
       - name: set up rust
         if: matrix.os != 'ubuntu'
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       # Try to recover satkit data from cache
       - name: Cache Satkit Data
@@ -59,7 +55,9 @@ jobs:
       # Download data if it is not in the cache
       - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'
-        run: python python/test/download_data.py ${{matrix.data_path}}
+        run: |
+          pip install requests
+          python python/test/download_data.py ${{matrix.data_path}}
 
       # Try to recover satkit test vectors from cache
       - name: Cache Satkit Test Vectors
@@ -73,7 +71,9 @@ jobs:
       # Download test vectors if they are not in the cache
       - name: Download Satkit Test Vectors
         if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
-        run: python python/test/download_testvecs.py ${{matrix.testvec_path}}
+        run: |
+          pip install requests
+          python python/test/download_testvecs.py ${{matrix.testvec_path}}
 
       # Details of cibuildwheel are set in pyproject.toml
       - name: Build ${{ matrix.platform || matrix.os }} wheels

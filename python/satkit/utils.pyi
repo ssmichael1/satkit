@@ -78,3 +78,10 @@ def builddate() -> str:
     Returns:
         str: Build date of this satkit library
     """
+
+def version() -> str:
+    """Return version of this satkit library as a string
+    
+    Returns:
+        str: Version of this satkit library
+    """

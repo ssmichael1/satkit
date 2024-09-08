@@ -22,31 +22,30 @@ use pyo3::types::{PyDict, PyString};
 /// Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
 ///
 /// Args:
-///   
-///     pos:   3-element numpy array representing satellite GCRF position in meters
-///     vel:   3-element numpy array representing satellite GCRF velocity in m/s
-///      tm:   astro.time object representing instant at which satellite is at "pos" & "vel"
+///     pos (numpy.ndarray): Satellite Cartesian GCRF position in meters
+///     vel (numpy.ndarray): Satellite Cartesian GCRF velocity in m/s
+///        tm (satkit.time): Instant at which satellite is at "pos" & "vel"
 ///
 /// Keyword Args:
-///         stoptime: astro.time object representing instant at
+///         stoptime (satkit.time, optional): astro.time object representing instant at
 ///                   which new position and velocity will be computed
-///    duration_secs: duration in seconds from "tm" for at which new
+///    duration_secs (float, optional): duration in seconds from "tm" for at which new
 ///                   position and velocity will be computed.  
-///    duration_days: duration in days from "tm" at which new position and
+///    duration_days (float, optional): duration in days from "tm" at which new position and
 ///                   velocity will be computed.  
-///         duration: An astro.duration object setting duration from "tm"
-///                   at which new position & velocity will be computed.
-///       output_phi: boolean inticating Output 6x6 state transition matrix
+///         duration (satkit.duration, optional): An astro.duration object setting duration
+///                   from "tm" at which new position & velocity will be computed.
+///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
 ///                   between "starttime" and "stoptime"
 ///                   default is False
-///     propsettings: "propsettings" object with input settings for
+///     propsettings (satkit.propsettings): Settings for
 ///                   the propagation. if left out, default will be used.
-///    satproperties: "SatPropertiesStatic" object with drag and
+///    satproperties (satkit.satproperties_static): object with drag and
 ///                   radiation pressure succeptibility of satellite.
 ///                   If left out, drag and radiation pressure are neglected
 ///                   Dynamic drag & radiation pressure models are not
 ///                   yet implemented
-///     output_dense: boolean indicacting output dense ODE solution that can
+///     output_dense (bool): boolean indicacting output dense ODE solution that can
 ///                   be used for interpolation of state between
 ///                  "starttime" and "stoptime".  Default is False
 ///           
@@ -63,17 +62,15 @@ use pyo3::types::{PyDict, PyString};
 ///   RuntimeError: If neither "stoptime", "duration", "duration_secs", or "duration_days" are set
 ///   RuntimeError: If extraneous keyword arguments are passed
 ///
-/// Note:
 ///
-///   Propagator uses advanced Runga-Kutta integrators and includes the following
-///   forces:
-///
-///      1) Earth gravity, with zonal gravity up to order 16 (default is 4)
-///      2) Gravitational force of moon
-///      3) Gravitational force of sun
-///      4) Solar radiation pressure (with user-specified satellite model)
-///      5) Atmospheric drag, with correction for space wither
-///         (with user-specified satellite model)
+///    Notes:
+///        * Propagator uses advanced Runga-Kutta integrators and includes the following forces:
+///            * Earth gravity with higher-order zonal terms
+///            * Sun, Moon gravity
+///            * Radiation pressure
+///            * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (can be large)
+///        * Stop time must be set by keyword argument, either explicitely or by duration
+///        * Solid Earth tides are not (yet) included in the model
 ///
 #[pyfunction(signature=(pos, vel, start, **kwargs))]
 pub fn propagate(

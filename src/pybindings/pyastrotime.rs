@@ -153,9 +153,7 @@ impl PyAstroTime {
                 let bempty = empty.extract::<bool>()?;
                 if bempty == true {
                     return Ok(PyAstroTime {
-                        inner: AstroTime {
-                            mjd_tai: 0.0,
-                        }
+                        inner: AstroTime { mjd_tai: 0.0 },
                     });
                 }
             }
@@ -168,8 +166,7 @@ impl PyAstroTime {
                     "Could not get current time",
                 )),
             }
-        }
-        else if py_args.len() == 3 {
+        } else if py_args.len() == 3 {
             let year = py_args.get_item(0)?.extract::<i32>()?;
             let month = py_args.get_item(1)?.extract::<u32>()?;
             let day = py_args.get_item(2)?.extract::<u32>()?;
@@ -238,22 +235,20 @@ impl PyAstroTime {
         }
     }
 
-    /// Return time object representing input unix time, which is UTC seconds 
+    /// Return time object representing input unix time, which is UTC seconds
     /// since Jan 1, 1970 00:00:00
-    /// 
-    /// Args: 
+    ///
+    /// Args:
     ///    unixtime (float): the unixtime
-    /// 
+    ///
     /// Returns:
-    /// 
     ///     satkit.time: Time object representing instant of input unixtime
     #[staticmethod]
     fn from_unixtime(t: f64) -> Self {
         PyAstroTime {
-            inner: AstroTime::from_unixtime(t)
+            inner: AstroTime::from_unixtime(t),
         }
     }
-
 
     /// Return time object representing input Julian date and time scale
     ///
@@ -687,7 +682,7 @@ impl PyAstroTime {
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new_bound(py);        
+        let d = PyDict::new_bound(py);
         d.set_item("empty", true).unwrap();
         (PyTuple::empty_bound(py), d)
     }
