@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use super::astrotime;
-use crate::utils::{datadir, testdirs};
+use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
 
 use crate::{skerror, SKResult};
@@ -149,23 +149,22 @@ fn eop_params_singleton() -> &'static RwLock<Vec<EOPEntry>> {
 }
 
 /// Download new Earth Orientation Parameters file, and load it.
-/// By default, tries to download into writeable directory where
-/// data files for this crate are stored: crate::datadir::get()
 pub fn update() -> SKResult<()> {
-    // Find writeabld data directory
-    let d: Vec<PathBuf> = testdirs()
-        .into_iter()
-        .filter(|x| x.is_dir())
-        .filter(|x| x.metadata().unwrap().permissions().readonly() == false)
-        .collect();
-    if d.len() == 0 {
-        return skerror!("Cannot find writable data directory");
+    // Get data directory
+    let d = datadir()?;
+    if d.metadata()?.permissions().readonly() {
+        return skerror!(
+            r#"Data directory is read-only. 
+             Try setting the environment variable SATKIT_DATA
+             to a writeable directory and re-starting or explicitly set
+             data directory"#
+        );
     }
 
     // Download most-recent EOP
     //let url = "https://datacenter.iers.org/data/9/finals2000A.all";
     let url = "http://celestrak.org/SpaceData/EOP-All.csv";
-    download_file(url, &d[0], true)?;
+    download_file(url, &d, true)?;
 
     // Re-load the params
     *eop_params_singleton().write().unwrap() = load_eop_file_csv(None).unwrap();
@@ -173,17 +172,16 @@ pub fn update() -> SKResult<()> {
     Ok(())
 }
 
-
 ///
 /// Get Earth Orientation Parameters at given Modified Julian Date (UTC)
 /// Returns None if no data is available for the given date
-/// 
+///
 /// # Arguments:
-/// 
+///
 /// * `mjd_utc` - Modified Julian Date (UTC)
-/// 
+///
 /// # Returns:
-/// 
+///
 /// * Vector [f64; 6] with following elements:
 /// * 0 : (UT1 - UTC) in seconds
 /// * 1 : X polar motion in arcsecs
@@ -191,7 +189,7 @@ pub fn update() -> SKResult<()> {
 /// * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
 /// * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
 /// * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
-/// 
+///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     let eop = eop_params_singleton().read().unwrap();
 

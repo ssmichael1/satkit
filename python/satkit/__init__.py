@@ -1,6 +1,6 @@
 from .satkit import *
 
-if utils.datadir() == None:
+if utils.datafiles_exist() == False:
     print(f"Could not find necessary data files.")
     print(f'Run "satkit.utils.update_datafiles()" to download necessary files')
     print(f"This includes JPL ephemeris, gravity, space weather, ")

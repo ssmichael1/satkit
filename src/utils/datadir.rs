@@ -1,10 +1,14 @@
 use crate::skerror;
 use crate::SKResult;
-use once_cell::sync::OnceCell;
 #[cfg(feature = "pybindings")]
 use process_path::get_dylib_path;
+use std::cell::OnceCell;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+// Pointer to the one and only data directory
+static DATADIR_SINGLETON: Mutex<OnceCell<Option<PathBuf>>> = Mutex::new(OnceCell::new());
 
 pub fn testdirs() -> Vec<PathBuf> {
     let mut testdirs: Vec<PathBuf> = Vec::new();
@@ -37,7 +41,6 @@ pub fn testdirs() -> Vec<PathBuf> {
                     .join("satkit-data"),
             );
             testdirs.push(Path::new(vstr).join(".satkit-data"));
-            testdirs.push(Path::new(vstr).to_path_buf());
         }
         Err(_e) => (),
     }
@@ -51,6 +54,21 @@ pub fn testdirs() -> Vec<PathBuf> {
     testdirs
 }
 
+/// Explicitly set data directory where data files will be stored
+/// Generally this should not be needed
+pub fn set_datadir(d: &PathBuf) -> SKResult<()> {
+    if !d.is_dir() {
+        return skerror!("Data directory does not exist");
+    }
+
+    let mut dd = DATADIR_SINGLETON.lock().unwrap();
+    dd.take();
+    match dd.set(Some(d.clone())) {
+        Ok(_) => Ok(()),
+        Err(_) => return skerror!("Could not set data directory"),
+    }
+}
+
 /// Get directory where astronomy data is stored
 ///
 /// Tries the following paths in order, and stops when the
@@ -59,7 +77,6 @@ pub fn testdirs() -> Vec<PathBuf> {
 /// *  "SATKIT_DATA" environment variable
 /// *  ${HOME}/Library/Application Support/satkit-data (on MacOS only)
 /// *  ${HOME}/.satkit-data
-/// *  ${HOME}
 /// *  /usr/share/satkit-data
 /// *  /Library/Application Support/satkit-data (on MacOS only)
 ///
@@ -68,26 +85,22 @@ pub fn testdirs() -> Vec<PathBuf> {
 ///  * SKResult<<std::path::PathBuf>> representing directory
 ///    where files are stored
 ///
+
 pub fn datadir() -> SKResult<PathBuf> {
-    static INSTANCE: OnceCell<Option<PathBuf>> = OnceCell::new();
-    let res = INSTANCE.get_or_init(|| {
+    let dd = DATADIR_SINGLETON.lock().unwrap();
+    let res = dd.get_or_init(|| {
+        let td: Vec<PathBuf> = testdirs();
+
         // Check for already-populated directory
-        for ref dir in testdirs() {
+        for ref dir in td.clone() {
             let p = PathBuf::from(&dir).join("tab5.2a.txt");
             if p.is_file() {
                 return Some(dir.to_path_buf().clone());
             }
         }
-        // Check for directory that we can create that is writable
-        for ref dir in testdirs() {
-            match std::fs::create_dir_all(dir) {
-                Ok(()) => return Some(dir.to_path_buf().clone()),
-                Err(_) => {}
-            }
-        }
 
-        // Check for writeable directory
-        for ref dir in testdirs() {
+        // Check for writeable directory that already exists
+        for ref dir in td.clone() {
             if dir.is_dir() {
                 if !dir.metadata().unwrap().permissions().readonly() {
                     return Some(dir.to_path_buf().clone());
@@ -95,11 +108,36 @@ pub fn datadir() -> SKResult<PathBuf> {
             }
         }
 
+        // Check for directory that we can create that is writable
+        for ref dir in td.clone() {
+            match std::fs::create_dir_all(dir) {
+                Ok(()) => return Some(dir.to_path_buf().clone()),
+                Err(_) => {}
+            }
+        }
+
         None
     });
+
     match res.as_ref() {
         Some(v) => Ok(v.clone()),
         None => skerror!("Could not find valid writeable data directory"),
+    }
+}
+
+/// Return true if data files exist in data directory
+pub fn data_found() -> bool {
+    match datadir() {
+        Ok(d) => {
+            let p = PathBuf::from(&d).join("tab5.2a.txt");
+            if p.is_file() {
+                true
+            } else {
+                false
+            }
+        }
+        // If can't find or create data directory, the data has not been found
+        Err(_) => false,
     }
 }
 
