@@ -66,21 +66,7 @@ jobs:
         with:
           path: ${{matrix.testvec_path}}
           enableCrossOsArchive: True
-          key: satkit-testvecs-cache
-
-      # Cache previous Cargo build data
-      - name: Cargo Cache
-        uses: actions/cache@v4
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/            
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-          
+          key: satkit-testvecs-cache        
 
       # Download test vectors if they are not in the cache
       - name: Download Satkit Test Vectors
