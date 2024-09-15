@@ -1019,15 +1019,25 @@ class kepler:
 
 
     Notes:
-        * This class is used to represent Keplerian elements and convert between Cartesian coordinates
-        * The class uses the semi-major axis (a), not the semiparameter
-        * All angle units are radians
-        * All length units are meters
-        * All velocity units are meters / second
+    * This class is used to represent Keplerian elements and convert between Cartesian coordinates
+    * The class uses the semi-major axis (a), not the semiparameter
+    * All angle units are radians
+    * All length units are meters
+    * All velocity units are meters / second
     """
 
-    def __init__(self, *args):
+    def __init__(
+        self,
+        a: float,
+        e: float,
+        i: float,
+        raan: float,
+        argp: float,
+        nu: float,
+        **kwargs,
+    ):
         """Create Keplerian element set object from input elements
+
 
         Args:
             a (float) : Semi-major axis, meters
@@ -1036,16 +1046,14 @@ class kepler:
             raan (float) : Right ascension of ascending node, radians
             argp (float) : Argument of perigee, radians
             nu (float) : True anomaly, radians
-
-        Keyword Args:
-            true_anomaly (float) : True anomaly, radians
-            mean_anomaly (float) : Mean anomaly, radians
-            eccentric_anomaly (float) : Eccentric anomaly, radians
+            true_anomaly (float, optional keyword) : True anomaly, radians
+            mean_anomaly (float, optional keyword) : Mean anomaly, radians
+            eccentric_anomaly (float, optional keyword) : Eccentric anomaly, radians
 
         Notes:
-            * If "nu" is provided (6th argument), it will be used as the true anomaly
-            * Anomaly may also be set via keyword arguments; if so, the there should only be
-              5 input arguments
+        * If "nu" is provided (6th argument), it will be used as the true anomaly
+        * Anomaly may also be set via keyword arguments; if so, the there should only be
+            5 input arguments
 
         Returns:
             satkit.kepler: Keplerian element set object
@@ -1108,13 +1116,13 @@ class itrfcoord:
     """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        * This coordinate object can be created from and also output to Geodetic coordinates (latitude, longitude, height above ellipsoid).
-        * Functions are also available to provide rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate
+
+    * This coordinate object can be created from and also output to Geodetic coordinates (latitude, longitude, height above ellipsoid).
+    * Functions are also available to provide rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate
 
     Args:
-        vec (numpy.ndarray, list, or 3-element tuple of floats, optional): ITRF Cartesian location in meters
 
-    Keyword Arguments:
+        vec (numpy.ndarray, list, or 3-element tuple of floats, optional): ITRF Cartesian location in meters
         latitude_deg (float, optional): Latitude in degrees
         longitude_deg (float, optional): Longitude in degrees
         latitude_rad (float, optional): Latitude in radians
@@ -1126,27 +1134,29 @@ class itrfcoord:
         itrfcoord: New ITRF coordinate
 
     Example:
+
         * Create ITRF coord from Cartesian
         >>> coord = itrfcoord([ 1523128.63570828 -4461395.28873207  4281865.94218203 ])
         >>> print(coord)
         ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+
         * Create ITRF coord from Geodetic
         >>> coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
         >>> print(coord)
         ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+
     """
 
     def __init__(self, *args, **kwargs):
         """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 
         Notes:
-            * This coordinate object can be created from and also output to Geodetic coordinates (latitude, longitude, height above ellipsoid).
-            * Functions are also available to provide rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate
+
+        * This coordinate object can be created from and also output to Geodetic coordinates (latitude, longitude, height above ellipsoid).
+        * Functions are also available to provide rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate
 
         Args:
-            vec (numpy.ndarray, list, or 3-element tuple of floats, optional): ITRF Cartesian location in meters
-
-        Keyword Arguments:
+            vec (numpy.ndarray|list[float]|tuple[float, float, float], optional): ITRF Cartesian location in meters
             latitude_deg (float, optional): Latitude in degrees
             longitude_deg (float, optional): Longitude in degrees
             latitude_rad (float, optional): Latitude in radians
@@ -1163,10 +1173,12 @@ class itrfcoord:
             >>> coord = itrfcoord([ 1523128.63570828 -4461395.28873207  4281865.94218203 ])
             >>> print(coord)
             ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+
             * Create ITRF coord from Geodetic
             >>> coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
             >>> print(coord)
             ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+
         """
 
     @property
@@ -1194,7 +1206,7 @@ class itrfcoord:
         """Geodetic position in radians
 
         Returns:
-            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position.  First element is latitude in radians, second is longitude in radians, and third is altitude in meters
+            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in radians, second is longitude in radians, and third is altitude in meters
         """
 
     @property
@@ -1202,7 +1214,7 @@ class itrfcoord:
         """Geodetic position in degrees
 
         Returns:
-            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position.  First element is latitude in degrees, second is longitude in degrees, and third is altitude in meters
+            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in degrees, second is longitude in degrees, and third is altitude in meters
         """
 
     @property
@@ -1230,34 +1242,30 @@ class itrfcoord:
         """
 
     def geodesic_distance(self, other: itrfcoord) -> typing.Tuple[float, float, float]:
-        """
-        Use Vincenty formula to compute geodesic distance:
+        """Use Vincenty formula to compute geodesic distance:
         https://en.wikipedia.org/wiki/Vincenty%27s_formulae
 
-        Return a tuple with:
+        Returns:
+            tuple[float, float, float]: (distance in meters, initial heading in radians, heading at destination in radians)
 
-        1: geodesic distance (shortest distance between two points)
-        between this coordinate and given coordinate, in meters
-
-        2: initial heading, in radians
-
-        3. heading at destination, in radians
         """
 
     def move_with_heading(self, distance: float, heading_rad: float) -> itrfcoord:
-        """
-        Takes two input arguments:
+        """Move a distance along the Earth surface with a given initial heading
 
-        1) distance (meters)
-        2) heading (rad)
+        Args:
+            distance (float): Distance to move in meters
+            heading_rad (float): Initial heading in radians
 
-        Return itrfcoord representing move along Earth surface by given distance
-        in direction given by heading
+        Notes:
+            Altitude is assumed to be zero
 
-        Altitude is assumed to be zero
+            Use Vincenty formula to compute position:
+            https://en.wikipedia.org/wiki/Vincenty%27s_formulae
 
-        Use Vincenty formula to compute position:
-        https://en.wikipedia.org/wiki/Vincenty%27s_formulae
+        Returns:
+            tuple[float, float, float]: (distance in meters, initial heading in radians, heading at destination in radians)
+
         """
 
 class consts:
@@ -1404,15 +1412,16 @@ class satstate:
 
         Args:
             time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
-
-        Keyword Args:
-            propsettings: satkit.propsettings object describing settings to use in the propagation. If omitted, default is used
+            propsettings (satkit.propsettings, optional): object describing settings to use in the propagation.
+                If omitted, default is used
 
         Returns:
             satstate: New satellite state object representing the state at the new time
         """
 
 class propstats:
+    """Statistics of a satellite propagation"""
+
     @property
     def num_eval() -> int:
         """Number of function evaluations"""
@@ -1429,6 +1438,11 @@ class propresult:
     """Results of a satellite propagation
 
     This class lets the user access results of the satellite propagation
+
+    Notes:
+
+    * If "output_dense" is set to True in the propagate function, the propresult object can be used to interpolate solutions at any time between the start and stop times of the propagation via the "interp" method
+
     """
 
     @property
@@ -1437,28 +1451,46 @@ class propresult:
 
     @property
     def vel() -> npt.ArrayLike[float]:
-        """GCRF velocity of satellite, meters/second"""
+        """GCRF velocity of satellite, meters/second
+
+        Returns:
+            npt.ArrayLike[float]: 3-element numpy array representing GCRF velocity of satellite in meters/second
+        """
 
     @property
     def state() -> npt.ArrayLike[float]:
-        """6-element state (pos + vel) of satellite in meters & meters/second"""
+        """6-element state (pos + vel) of satellite in meters & meters/second
+
+        Returns:
+            npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second
+        """
 
     @property
-    def time() -> satkit.time:
-        """Time at which state is valid"""
+    def time() -> time:
+        """Time at which state is valid
+
+        Returns:
+            satkit.time: Time at which state is valid
+        """
 
     @property
     def stats() -> propstats:
-        """Statistics of propagation"""
+        """Statistics of propagation
+
+        Returns:
+            propstats: Object containing statistics of propagation
+        """
 
     @property
     def phi() -> npt.ArrayLike[np.float64] | None:
-        """6x6 State transition matrix
-        or None if not computed
+        """State transition matrix
+
+        Returns:
+            npt.ArrayLike[np.float64] | None: 6x6 numpy array representing state transition matrix or None if not computed
         """
 
     def interp(
-        time: satkit.time, output_phi: bool = False
+        time: time, output_phi: bool = False
     ) -> (
         npt.ArrayLike[np.float64]
         | typing.Tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]
@@ -1467,13 +1499,11 @@ class propresult:
 
         Args:
             time (satkit.time): Time at which to interpolate state
-
-        Keyword Args:
-            output_phi (bool): Output 6x6 state transition matrix at the interpolated time
+            output_phi (bool, optional): Output 6x6 state transition matrix at the interpolated time
+                Default is False
 
         Returns:
-            6-element vector representing state at given time
-            if output_phi, also output 6x6 state transition matrix at given time
+            npt.ArrayLike[np.float64] | typing.Tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: 6-element vector representing state at given time. if output_phi, also output 6x6 state transition matrix at given time
         """
 
 class satproperties_static:
@@ -1481,22 +1511,24 @@ class satproperties_static:
 
     This class lets the satellite radiation pressure and drag
     paramters be set to static values for duration of propagation
+
+    Attributes:
+        cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
+        craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
+
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, cdaoverm: float = 0, craoverm: float = 0):
         """Create a satproperties_static object with given craoverm and cdaoverm in m^2/kg
 
         Args:
-            cdaroverm (float): Coefficient of drag times area over mass in m^2/kg
-            craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
-
-        Keyword Args:
-            craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
-            cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
+            cdaroverm (float, optional): Coefficient of drag times area over mass in m^2/kg
+            craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
 
 
         Notes:
-        The two arguments can be passed as positional arguments or as keyword arguments
+
+        * The two arguments can be passed as positional arguments or as keyword arguments
 
         Example:
 
@@ -1517,18 +1549,31 @@ class satproperties_static:
             """Coefficient of radiation pressure times area over mass.  Units are m^2/kg"""
 
 class propsettings:
-    """This class contains settings used in the high-precision orbit propgator part of the "satkit" python toolbox"""
+    """This class contains settings used in the high-precision orbit propgator part of the "satkit" python toolbox
+
+    Notes:
+
+    * Default settings:
+        * abs_error: 1e-8
+        * rel_error: 1e-8
+        * gravity_order: 4
+        * use_spaceweather: True
+        * use_jplephem: True
+
+
+    """
 
     def __init__(self):
         """Create default propsetting object
 
         Notes:
-            * Default settings:
-                * abs_error: 1e-8
-                * rel_error: 1e-8
-                * gravity_order: 4
-                * use_spaceweather: True
-                * use_jplephem: True
+
+        * Default settings:
+            * abs_error: 1e-8
+            * rel_error: 1e-8
+            * gravity_order: 4
+            * use_spaceweather: True
+            * use_jplephem: True
 
 
         Returns:
@@ -1539,22 +1584,26 @@ class propsettings:
     def abs_error() -> float:
         """Maxmum absolute value of error for any element in propagated state following ODE integration
 
-        Default: 1e-8
+        Returns:
+            float: Maximum absolute value of error for any element in propagated state following ODE integration, default is 1e-8
         """
 
     @property
     def rel_error() -> float:
         """Maximum relative error of any element in propagated state following ODE integration
 
-        Default: 1e-8
+        Returns:
+            float: Maximum relative error of any element in propagated state following ODE integration, default is 1e-8
+
         """
 
     @property
     def gravity_order() -> int:
         """Earth gravity order to use in ODE integration
 
-        Notes:
-            Default value is 4
+        Returns:
+            int: Earth gravity order to use in ODE integration, default is 4
+
         """
 
     @property
@@ -1562,10 +1611,14 @@ class propsettings:
         """Use space weather data when computing atmospheric density for drag forces
 
         Notes:
-            * Space weather data can have a large effect on the density of the atmosphere
-            * This can be important for accurate drag force calculations
-            * Space weather data is updated every 3 hours.  Most-recent data can be downloaded with ``satkit.utils.update_datafiles()``
-            * Default value is True
+
+        * Space weather data can have a large effect on the density of the atmosphere
+        * This can be important for accurate drag force calculations
+        * Space weather data is updated every 3 hours.  Most-recent data can be downloaded with ``satkit.utils.update_datafiles()``
+        * Default value is True
+
+        Returns:
+            bool: Indicate whether or not space weather data should be used when computing atmospheric density for drag forces
 
         """
 
@@ -1579,36 +1632,36 @@ def propagate(
     start: time,
     **kwargs,
 ) -> propresult:
-    """High precision orbit propagator
+    """High-precision orbit propagator
 
-    Notes:
-        * Propagates statellite ephemeris (position, velocity in gcrs & time) to new time
-        and output new position and velocity via Runge-Kutta integration.
-        * Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
-        * Propagator uses advanced Runga-Kutta integrators and includes the following forces:
-            * Earth gravity with higher-order zonal terms
-            * Sun, Moon gravity
-            * Radiation pressure
-            * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (can be large)
-        * Stop time must be set by keyword argument, either explicitely or by duration
-        * Solid Earth tides are not (yet) included in the model
-
+    Propagate orbits with high-precision force modeling via adaptive Runga-Kutta methods (default is order 9/8).
 
     Args:
         pos (npt.ArrayLike[float]): 3-element numpy array representing satellite GCRF position in meters
         vel (npt.ArrayLike[float]): 3-element numpy array representing satellite GCRF velocity in m/s
         tm (satkit.time): satkit.time object representing instant at which satellite is at "pos" & "vel"
-
-    Keyword Args:
-        stop_time (satkit.time): satkit.time object representing instant at which new position and velocity will be computed
-        duration_secs (float): duration in seconds from "tm" for at which new position and velocity will be computed.
-        duration_days (float): duration in days from "tm" at which new position and velocity will be computed.
-        duration (satkit.duration): duration from "tm" at which new position & velocity will be computed.
-        output_phi (bool): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
-        propsettings (propsettings): "propsettings" object with input settings for the propagation. if left out, default will be used.
-        satproperties (satproperties_static): "SatPropertiesStatic" object with drag and radiation pressure succeptibility of satellite.
-        output_dense (bool): Indicate whether or not dense output should be recorded.  Default is false.
+        stoptime (satkit.time, optional keyword): satkit.time object representing instant at which new position and velocity will be computed
+        duration_secs (float, optional keyword): duration in seconds from "tm" for at which new position and velocity will be computed.
+        duration_days (float, optional keyword): duration in days from "tm" at which new position and velocity will be computed.
+        duration (satkit.duration, optional keyword): duration from "tm" at which new position & velocity will be computed.
+        output_phi (bool, optional keyword): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
+        propsettings (propsettings, optional keyword): "propsettings" object with input settings for the propagation. if left out, default will be used.
+        satproperties (satproperties_static, optional keyword): "sat_properties_static" object with drag and radiation pressure succeptibility of satellite.
+        output_dense (bool, optional keyword): Indicate whether or not dense output should be recorded.  Default is false.
 
     Returns:
         (propresult): Propagation result object holding state outputs, statistics, and dense output if requested
+
+    Notes:
+
+    * Propagates statellite ephemeris (position, velocity in gcrs & time) to new time and output new position and velocity via Runge-Kutta integration.
+    * Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
+    * Propagator uses advanced Runga-Kutta integrators and includes the following forces:
+        * Earth gravity with higher-order zonal terms
+        * Sun, Moon gravity
+        * Radiation pressured
+        * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (can be large)
+    * Stop time must be set by keyword argument, either explicitely or by duration
+    * Solid Earth tides are not (yet) included in the model
+
     """
