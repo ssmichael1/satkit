@@ -16,8 +16,7 @@ use pyo3::types::{PyDict, PyString};
 
 /// High-precision orbit propagator
 ///
-/// Propagate statellite ephemeris (position, velocity in gcrs & time) to new time
-/// and output new position and velocity
+/// Propagate statellite ephemeris (position, velocity in gcrs & time) to new time via adaptive Runge-Kutta 9/8 ordinary differential equation (ODE) integration
 ///
 /// Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
 ///

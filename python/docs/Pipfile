@@ -4,6 +4,18 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+sphinx = "*"
+ipykernel = "*"
+plotly = "*"
+nbformat = "*"
+pandas = "*"
+sphinx-autoapi = "*"
+nbsphinx = "*"
+sphinx-rtd-theme = "*"
+mypy = "*"
+myst-parser = "*"
+commonmark = "*"
+pandoc = "*"
 satkit = "*"
 sphinx = "*"
 ipykernel = "*"

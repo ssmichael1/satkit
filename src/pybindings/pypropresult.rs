@@ -27,14 +27,23 @@ pub enum PyPropResultType {
 #[pyclass(name = "propstats", module = "satkit")]
 pub struct PyPropStats {
     /// Number of function evaluations
+    ///
+    /// Returns:
+    ///     int: number of derivative function evalations used in propagation
     #[pyo3(get)]
     num_eval: u32,
 
     /// Number of accepted steps
+    ///
+    /// Returns:
+    ///     int: number of accepted steps in propagation
     #[pyo3(get)]
     num_accept: u32,
 
     /// Number of rejected steps
+    ///
+    /// Returns:
+    ///    int: number of rejected steps in propagation
     #[pyo3(get)]
     num_reject: u32,
 }
