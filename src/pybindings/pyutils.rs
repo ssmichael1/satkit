@@ -3,6 +3,7 @@ use super::pyquaternion::Quaternion;
 
 use crate::astrotime::AstroTime;
 use crate::frametransform::Quat;
+use crate::types::*;
 use crate::utils::SKResult;
 use nalgebra as na;
 use numpy as np;
@@ -11,8 +12,6 @@ use numpy::PyArrayMethods;
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-
-use crate::types::*;
 
 pub fn kwargs_or_default<'a, T>(
     kwargs: &mut Option<&Bound<'a, PyDict>>,
@@ -60,7 +59,7 @@ where
 }
 
 pub fn py_vec3_of_time_arr(
-    cfunc: &dyn Fn(&AstroTime) -> Vec3,
+    cfunc: &dyn Fn(&AstroTime) -> Vector3,
     tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
@@ -134,6 +133,19 @@ pub fn py_vec3_of_time_result_arr(
             })
         }
     }
+}
+
+/// Convert python object to fixed-size matrix
+pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> PyResult<Matrix<M, N>> {
+    let mut m: Matrix<M, N> = Matrix::<M, N>::zeros();
+    if obj.is_instance_of::<np::PyArray1<f64>>() {
+        let arr = obj.extract::<np::PyReadonlyArray1<f64>>()?;
+        m.copy_from_slice(arr.as_slice()?);
+    } else if obj.is_instance_of::<np::PyArray2<f64>>() {
+        let arr = obj.extract::<np::PyReadonlyArray2<f64>>()?;
+        m.copy_from_slice(arr.as_slice()?);
+    }
+    Ok(m)
 }
 
 pub fn py_func_of_time_arr<T: ToPyObject>(
