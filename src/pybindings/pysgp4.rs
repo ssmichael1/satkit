@@ -222,6 +222,7 @@ pub fn sgp4(
             results.iter().enumerate().for_each(|(idx, (p, v, e))| {
                 unsafe {
                     let pdata: *mut f64 = parr.as_gil_ref().data();
+
                     std::ptr::copy_nonoverlapping(
                         p.as_ptr(),
                         pdata.add(idx * ntimes * 3),

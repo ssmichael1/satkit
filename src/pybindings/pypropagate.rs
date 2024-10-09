@@ -6,13 +6,15 @@ use super::pysatproperties::PySatProperties;
 use super::pyutils::*;
 
 use nalgebra as na;
-use numpy as np;
-use numpy::PyArrayMethods;
 
-use crate::orbitprop;
+use crate::orbitprop::SatProperties;
+use crate::orbitprop::SatPropertiesStatic;
+use crate::types::*;
+use crate::AstroTime;
+use crate::Duration;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString};
+use pyo3::types::{PyDict, PyString, PyTuple};
 
 /// High-precision orbit propagator
 ///
@@ -20,13 +22,19 @@ use pyo3::types::{PyDict, PyString};
 ///
 /// Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
 ///
-/// Args:
-///     pos (numpy.ndarray): Satellite Cartesian GCRF position in meters
-///     vel (numpy.ndarray): Satellite Cartesian GCRF velocity in m/s
-///        tm (satkit.time): Instant at which satellite is at "pos" & "vel"
+/// Inputs:
+///   
+///     state0:   3-element numpy array representing satellite GCRF position in meters and velocity in m/s
+///      start:   satkit.time object representing instant at which satellite is at state0
+///       stop:   satkit.time object representing time to propgate toward
 ///
-/// Keyword Args:
-///         stoptime (satkit.time, optional): astro.time object representing instant at
+/// Optional keyword arguments:
+///
+///
+/// 4 ways of setting propagation end:
+/// (one of these must be used)
+///   
+///             stop: satkit.time object representing instant at
 ///                   which new position and velocity will be computed
 ///    duration_secs (float, optional): duration in seconds from "tm" for at which new
 ///                   position and velocity will be computed.  
@@ -35,6 +43,11 @@ use pyo3::types::{PyDict, PyString};
 ///         duration (satkit.duration, optional): An astro.duration object setting duration
 ///                   from "tm" at which new position & velocity will be computed.
 ///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
+///
+///  Other keywords:
+///
+///
+///       output_phi: boolean inticating Output 6x6 state transition matrix
 ///                   between "starttime" and "stoptime"
 ///                   default is False
 ///     propsettings (satkit.propsettings): Settings for
@@ -71,89 +84,96 @@ use pyo3::types::{PyDict, PyString};
 ///        * Stop time must be set by keyword argument, either explicitely or by duration
 ///        * Solid Earth tides are not (yet) included in the model
 ///
-#[pyfunction(signature=(pos, vel, start, **kwargs))]
+#[pyfunction(signature=(*args, **kwargs))]
 pub fn propagate(
-    pos: &Bound<'_, np::PyArray1<f64>>,
-    vel: &Bound<'_, np::PyArray1<f64>>,
-    start: &PyAstroTime,
+    args: &Bound<PyTuple>,
     mut kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
-    if pos.len().unwrap() != 3 || vel.len().unwrap() != 3 {
-        return Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Position and velocity must be 1-d numpy arrays with length 3",
-        ));
-    }
     let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
-
     let propsettings = match pypropsettings {
         Some(p) => p.inner,
         None => crate::orbitprop::PropSettings::default(),
     };
 
-    let duration_secs: Option<f64> = kwargs_or_none(&mut kwargs, "duration_secs")?;
-    let pyduration: Option<PyDuration> = kwargs_or_none(&mut kwargs, "duration")?;
-    let duration_days: Option<f64> = kwargs_or_none(&mut kwargs, "duration_days")?;
-    let pystoptime: Option<PyAstroTime> = kwargs_or_none(&mut kwargs, "stoptime")?;
-    let output_phi: bool = kwargs_or_default(&mut kwargs, "output_phi", false)?;
-    let output_dense: bool = kwargs_or_default(&mut kwargs, "output_dense", false)?;
-    let pysatproperties: Option<PySatProperties> = kwargs_or_none(&mut kwargs, "satproperties")?;
+    let mut state0 = Vector6::zeros();
+    let mut starttime: AstroTime = AstroTime::new();
+    let mut stoptime: AstroTime = AstroTime::new();
+    let mut output_phi: bool = false;
+    let mut output_dense: bool = false;
+    let mut satproperties: Option<&dyn SatProperties> = None;
+    let satproperties_static: SatPropertiesStatic;
 
-    // Look for extraneous kwargs and return error
-    if kwargs.is_some() {
-        if !kwargs.unwrap().is_empty() {
-            let keystring: String =
-                kwargs
-                    .unwrap()
-                    .iter()
-                    .fold(String::from(""), |acc, (k, _v)| {
-                        let mut a2 = acc.clone();
-                        a2.push_str(k.downcast::<PyString>().unwrap().to_str().unwrap());
-                        a2.push_str(", ");
-                        a2
-                    });
+    if args.len() > 0 {
+        starttime = args.get_item(0)?.extract::<PyAstroTime>()?.inner;
+    }
+    if args.len() > 1 {
+        stoptime = args.get_item(1)?.extract::<PyAstroTime>()?.inner;
+    }
+    if args.len() > 2 {
+        state0 = py_to_smatrix(&args.get_item(2)?)?;
+    }
+
+    if let Some(kw) = kwargs {
+        if let Some(kwp) = kw.get_item("pos")? {
+            let pos = py_to_smatrix::<3, 1>(&kwp)?;
+            state0[0] = pos[0];
+            state0[1] = pos[1];
+            state0[2] = pos[2];
+            kw.del_item("pos")?;
+        }
+        if let Some(kwv) = kw.get_item("vel")? {
+            let vel = py_to_smatrix::<3, 1>(&kwv)?;
+            state0[3] = vel[0];
+            state0[4] = vel[1];
+            state0[5] = vel[2];
+            kw.del_item("vel")?;
+        }
+        if let Some(kws) = kw.get_item("start")? {
+            starttime = kws.extract::<PyAstroTime>()?.inner;
+            kw.del_item("start")?;
+        }
+        if let Some(kws) = kw.get_item("stop")? {
+            stoptime = kws.extract::<PyAstroTime>()?.inner;
+            kw.del_item("stop")?;
+        }
+        if let Some(kwd) = kw.get_item("duration")? {
+            stoptime = starttime + kwd.extract::<PyDuration>()?.inner;
+            kw.del_item("duration")?;
+        }
+        if let Some(kwd) = kw.get_item("duration_days")? {
+            stoptime = starttime + Duration::Days(kwd.extract::<f64>()?);
+            kw.del_item("duration_days")?;
+        }
+        if let Some(kwd) = kw.get_item("duration_secs")? {
+            stoptime = starttime + Duration::Seconds(kwd.extract::<f64>()?);
+            kw.del_item("duration_sec")?;
+        }
+        if let Some(kws) = kw.get_item("satproperties")? {
+            satproperties_static = kws.extract::<PySatProperties>()?.inner;
+            satproperties = Some(&satproperties_static);
+            kw.del_item("satproperties")?;
+        }
+
+        output_phi = kwargs_or_default(&mut kwargs, "output_phi", false)?;
+        output_dense = kwargs_or_default(&mut kwargs, "output_dense", false)?;
+
+        if !kw.is_empty() {
+            let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
+                let mut a2 = acc.clone();
+                a2.push_str(k.downcast::<PyString>().unwrap().to_str().unwrap());
+                a2.push_str(", ");
+                a2
+            });
             let s = format!("Invalid kwargs: {}", keystring);
             return Err(pyo3::exceptions::PyRuntimeError::new_err(s));
         }
     }
 
-    if duration_days == None && pystoptime == None && duration_secs == None && pyduration.is_none()
-    {
-        return Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Must set either duration or stop time",
-        ));
-    }
-
-    // Multiple ways of setting stop time ; this is complicated
-    let stoptime = match pystoptime {
-        Some(p) => p.inner,
-        None => {
-            start.inner
-                + match pyduration {
-                    Some(v) => v.inner.days(),
-                    None => match duration_days {
-                        Some(v) => v,
-                        None => duration_secs.unwrap() / 86400.0,
-                    },
-                }
-        }
-    };
-
-    let satproperties: Option<&dyn orbitprop::SatProperties> = match &pysatproperties {
-        None => None,
-        Some(v) => Some(&v.inner),
-    };
-
     // Simple sate propagation
     if output_phi == false {
-        // Create the state to propagate
-        let mut pv = na::SMatrix::<f64, 6, 1>::zeros();
-        pv.fixed_view_mut::<3, 1>(0, 0)
-            .copy_from_slice(unsafe { pos.as_slice().unwrap() });
-        pv.fixed_view_mut::<3, 1>(3, 0)
-            .copy_from_slice(unsafe { vel.as_slice().unwrap() });
         let res = crate::orbitprop::propagate(
-            &pv,
-            &start.inner,
+            &state0,
+            &starttime,
             &stoptime,
             &propsettings,
             satproperties,
@@ -171,15 +191,13 @@ pub fn propagate(
     else {
         // Create the state to propagate
         let mut pv = na::SMatrix::<f64, 6, 7>::zeros();
-        pv.fixed_view_mut::<3, 1>(0, 0)
-            .copy_from_slice(unsafe { pos.as_slice().unwrap() });
-        pv.fixed_view_mut::<3, 1>(3, 0)
-            .copy_from_slice(unsafe { vel.as_slice().unwrap() });
+        pv.fixed_view_mut::<6, 1>(0, 0).copy_from(&state0);
         pv.fixed_view_mut::<6, 6>(0, 1)
-            .copy_from(&na::Matrix6::<f64>::identity());
+            .copy_from(&Matrix6::identity());
+
         let res = crate::orbitprop::propagate(
             &pv,
-            &start.inner,
+            &starttime,
             &stoptime,
             &propsettings,
             satproperties,
