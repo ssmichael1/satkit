@@ -1,7 +1,7 @@
 use nalgebra as na;
 use numpy as np;
-use numpy::ToPyArray;
 use numpy::PyArrayMethods;
+use numpy::ToPyArray;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -29,13 +29,13 @@ type Vec3 = na::Vector3<f64>;
 /// https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation
 ///
 ///
-#[pyclass(name = "quaternion", module="satkit")]
+#[pyclass(name = "quaternion", module = "satkit")]
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct Quaternion {
     pub inner: Quat,
 }
 
-#[pyclass(name = "quaternion_array", module="satkit")]
+#[pyclass(name = "quaternion_array", module = "satkit")]
 #[derive(PartialEq, Clone, Debug)]
 pub struct QuaternionVec {
     pub inner: Vec<Quat>,
@@ -51,13 +51,13 @@ impl Quaternion {
     }
 
     /// Quaternion representing rotation about xhat axis by `theta-rad` degrees
-    /// 
+    ///
     /// Args:
     ///     theta_rad: Angle in radians to rotate about xhat axis
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaternion representing rotation about xhat axis
-    /// 
+    ///
     /// Notes:
     ///     This is a right-handed rotation of the vector
     ///     e.g. rotation of +xhat 90 degrees by +zhat gives +yhat
@@ -69,13 +69,13 @@ impl Quaternion {
     }
 
     /// Quaternion representing rotation about yhat axis by `theta-rad` degrees
-    /// 
+    ///
     /// Args:
     ///     theta_rad: Angle in radians to rotate about yhat axis
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaternion representing rotation about yhat axis
-    /// 
+    ///
     /// Notes:
     ///     This is a right-handed rotation of the vector
     ///     e.g. rotation of +xhat by +yhat 90 degrees gives -zhat
@@ -96,13 +96,12 @@ impl Quaternion {
         })
     }
 
-    
     /// Quaternion representing rotation about given axis by given angle in radians
     ///
     /// Args:
     ///     axis (numpy.ndarray): 3-element numpy array representing axis about which to rotate (does not need to be normalized)
     ///     angle (float): Angle in radians to rotate about axis (right-handed rotation of vector)
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaternion representing rotation about given axis by given angle
     ///     
@@ -125,7 +124,7 @@ impl Quaternion {
     /// Args:
     ///     v1 (numpy.ndarray): 3-element numpy array representing vector rotating from
     ///     v2 (numpy.ndarray): 3-element numpy array representing vector rotating to
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaternion representing rotation from v1 to v2
     #[staticmethod]
@@ -143,12 +142,11 @@ impl Quaternion {
         }
     }
 
-
     /// Return quaternion representing same rotation as input direction cosine matrix (3x3 rotation matrix)
-    /// 
+    ///
     /// Args:
     ///     dcm (numpy.ndarray): 3x3 numpy array representing rotation matrix
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaternion representing same rotation as input matrix
     #[staticmethod]
@@ -162,11 +160,13 @@ impl Quaternion {
         let dcm = unsafe { dcm.as_array() };
         let mat = na::Matrix3::from_iterator(dcm.iter().cloned());
         let rot = na::Rotation3::from_matrix(&mat.transpose());
-        Ok(Quaternion{inner: Quat::from_rotation_matrix(&rot) })
+        Ok(Quaternion {
+            inner: Quat::from_rotation_matrix(&rot),
+        })
     }
 
     /// Return rotation matrix representing identical rotation to quaternion
-    /// 
+    ///
     /// Returns:
     ///     numpy.ndarray: 3x3 numpy array representing rotation matrix
     fn to_rotation_matrix(&self) -> PyObject {
@@ -186,7 +186,7 @@ impl Quaternion {
     }
 
     ///Return rotation represented as "roll", "pitch", "yaw" euler angles in radians.
-    /// 
+    ///
     /// Returns:
     ///     (f64, f64, f64): Tuple of roll, pitch, yaw angles in radians
     fn to_euler(&self) -> (f64, f64, f64) {
@@ -213,7 +213,9 @@ impl Quaternion {
         match state.extract::<&PyBytes>(py) {
             Ok(s) => {
                 if s.len().unwrap() != 32 {
-                    return Err(pyo3::exceptions::PyTypeError::new_err("Invalid serialization length"));
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Invalid serialization length",
+                    ));
                 }
                 let s = s.as_bytes();
                 let w = f64::from_le_bytes(s[0..8].try_into()?);
@@ -222,13 +224,13 @@ impl Quaternion {
                 let z = f64::from_le_bytes(s[24..32].try_into()?);
                 self.inner = Quat::from_quaternion(na::Quaternion::<f64>::new(w, x, y, z));
                 Ok(())
-            },
+            }
             Err(e) => Err(e),
         }
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        let mut raw = [0 as u8;32];
+        let mut raw = [0 as u8; 32];
         raw[0..8].clone_from_slice(f64::to_le_bytes(self.inner.w).as_slice());
         raw[8..16].clone_from_slice(f64::to_le_bytes(self.inner.i).as_slice());
         raw[16..24].clone_from_slice(f64::to_le_bytes(self.inner.j).as_slice());
@@ -237,7 +239,7 @@ impl Quaternion {
     }
 
     /// Angle of rotation in radians
-    /// 
+    ///
     /// Returns:
     ///     float: Angle of rotation in radians
     #[getter]
@@ -246,7 +248,7 @@ impl Quaternion {
     }
 
     /// Axis of rotation
-    /// 
+    ///
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array representing axis of rotation
     #[getter]
@@ -263,7 +265,7 @@ impl Quaternion {
     }
 
     /// Quaternion representing inverse rotation
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
     #[getter]
@@ -274,7 +276,7 @@ impl Quaternion {
     }
 
     /// Quaternion representing inverse rotation
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
     #[getter]
@@ -283,14 +285,14 @@ impl Quaternion {
             inner: self.inner.conjugate(),
         })
     }
-    
+
     /// Spherical linear interpolation between self and other quaternion
     ///
     /// Args:
     ///     other (quaternion): Quaternion to perform interpolation to
     ///     frac (float): Number in range [0,1] representing fractional distance from self to other of result quaternion
     ///     epsilon (float): Value below which the sin of the angle separating both quaternion must be to return an error.  Default is 1.0e-6
-    /// 
+    ///
     /// Returns:
     ///     quaternion: Quaterion represention fracional spherical interpolation between self and other    
     #[pyo3(signature=(other, frac,  epsilon=1.0e-6))]
@@ -341,14 +343,13 @@ impl Quaternion {
                 ));
             }
 
-            let storage = unsafe {
-                na::ViewStorage::<f64, na::U3, na::U1, na::U1, na::U1>::from_raw_parts(
-                    v1d.readonly().as_array().as_ptr(),
-                    (na::U3, na::U1),
-                    (na::U1, na::U1),
-                )
-            };
-            let vout = self.inner * na::Matrix::from_data(storage);
+            let m = na::vector![
+                v1d.get_owned(0).unwrap(),
+                v1d.get_owned(1).unwrap(),
+                v1d.get_owned(2).unwrap()
+            ];
+
+            let vout = self.inner * m;
 
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 let vnd = np::PyArray1::<f64>::from_vec_bound(py, vec![vout[0], vout[1], vout[2]]);
