@@ -1,11 +1,11 @@
 # %%
-import satkit as sk
 import pytest
 import numpy as np
 import math as m
 import os
 from sp3file import read_sp3file
 from datetime import datetime, timezone
+import satkit as sk
 
 testvec_dir = os.getenv(
             "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
