@@ -14,28 +14,37 @@ use super::PyITRFCoord;
 /// Args:
 ///     coord (itrfcoord): ITRF coordinate at which to compute density & temperature
 ///     time (satkit.time): Optional time object representing instant at which to compute
-/// 
+///
 /// Returns:
 ///     tuple: (rho, T) where rho is atmosphere mass density in kg / m^3 and T is temperature in Kelvin
 #[pyfunction(name = "nrlmsise")]
 #[pyo3(signature=(*args))]
 fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
-    
-    let args = args.as_gil_ref();
+    //let args = args.as_gil_ref();
+
     if args.len() == 0 {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "Invalid number of arguments",
         ));
     }
+
     let time: Option<AstroTime> = {
-        if args[args.len() - 1].is_instance_of::<PyAstroTime>() {
-            Some(args[args.len() - 1].extract::<PyAstroTime>().unwrap().inner)
+        if args
+            .get_item(args.len() - 1)?
+            .is_instance_of::<PyAstroTime>()
+        {
+            Some(
+                args.get_item(args.len() - 1)?
+                    .extract::<PyAstroTime>()
+                    .unwrap()
+                    .inner,
+            )
         } else {
             None
         }
     };
-    if args[0].is_instance_of::<PyITRFCoord>() {
-        let itrf = args[0].extract::<PyITRFCoord>().unwrap().inner;
+    if args.get_item(0)?.is_instance_of::<PyITRFCoord>() {
+        let itrf = args.get_item(0)?.extract::<PyITRFCoord>().unwrap().inner;
         Ok(nrlmsise::nrlmsise(
             itrf.hae() / 1.0e3,
             Some(itrf.latitude_rad()),
@@ -43,18 +52,18 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
             time,
             true,
         ))
-    } else if args[0].is_instance_of::<PyFloat>() {
-        let altitude = args[0].extract::<f64>().unwrap();
+    } else if args.get_item(0)?.is_instance_of::<PyFloat>() {
+        let altitude = args.get_item(0)?.extract::<f64>().unwrap();
         let latitude: Option<f64> = {
-            if args.len() > 1 && args[1].is_instance_of::<PyFloat>() {
-                Some(args[1].extract::<f64>().unwrap())
+            if args.len() > 1 && args.get_item(1)?.is_instance_of::<PyFloat>() {
+                Some(args.get_item(1)?.extract::<f64>().unwrap())
             } else {
                 None
             }
         };
         let longitude: Option<f64> = {
-            if args.len() > 2 && args[2].is_instance_of::<PyFloat>() {
-                Some(args[2].extract::<f64>().unwrap())
+            if args.len() > 2 && args.get_item(2)?.is_instance_of::<PyFloat>() {
+                Some(args.get_item(2)?.extract::<f64>().unwrap())
             } else {
                 None
             }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "satkit"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = ["numpy>=1.0.0"]
 requires-python = ">= 3.8"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
@@ -36,13 +36,14 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 [tool.setuptools.packages]
 find = { where = ["python"] }
 
 [tool.cibuildwheel]
-build = ["cp312-*", "cp311-* cp310-* cp39-* cp38-*"]
+build = ["cp313-*", "cp312-*", "cp311-* cp310-* cp39-* cp38-*"]
 test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
 skip = ["pp*", "*_i686", "*_s390x", "*_aarch64", "*_ppc64le", "*-musllinux*"]
 

@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use pyo3::types::{PyList, PyTuple};
+use pyo3::types::{PyBytes, PyList, PyTuple};
 
 use numpy::{PyArray1, PyReadonlyArray1};
 
@@ -63,8 +63,6 @@ impl PyITRFCoord {
     #[new]
     #[pyo3(signature=(*args, **kwargs))]
     fn new(args: &Bound<'_, PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
-        let args = args.as_gil_ref();
-
         // If kwargs are set, we get input from them
         if kwargs.is_some() {
             use std::f64::consts::PI;
@@ -99,15 +97,15 @@ impl PyITRFCoord {
             })
         } else {
             if args.len() == 3 {
-                let x = args[0].extract::<f64>()?;
-                let y = args[1].extract::<f64>()?;
-                let z = args[2].extract::<f64>()?;
+                let x = args.get_item(0)?.extract::<f64>()?;
+                let y = args.get_item(1)?.extract::<f64>()?;
+                let z = args.get_item(2)?.extract::<f64>()?;
                 Ok(PyITRFCoord {
                     inner: ITRFCoord::from_slice(&[x, y, z]).unwrap(),
                 })
             } else if args.len() == 1 {
-                if args[0].is_instance_of::<PyList>() {
-                    match args[0].extract::<Vec<f64>>() {
+                if args.get_item(0)?.is_instance_of::<PyList>() {
+                    match args.get_item(0)?.extract::<Vec<f64>>() {
                         Ok(xl) => {
                             if xl.len() != 3 {
                                 return Err(pyo3::exceptions::PyTypeError::new_err(
@@ -120,8 +118,11 @@ impl PyITRFCoord {
                         }
                         Err(e) => Err(e),
                     }
-                } else if args[0].is_instance_of::<PyArray1<f64>>() {
-                    let xv = args[0].extract::<PyReadonlyArray1<f64>>().unwrap();
+                } else if args.get_item(0)?.is_instance_of::<PyArray1<f64>>() {
+                    let xv = args
+                        .get_item(0)?
+                        .extract::<PyReadonlyArray1<f64>>()
+                        .unwrap();
                     if xv.len().unwrap() != 3 {
                         return Err(pyo3::exceptions::PyTypeError::new_err(
                             "Invalid number of elements",
@@ -339,23 +340,18 @@ impl PyITRFCoord {
         (tp, d)
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&pyo3::types::PyBytes>(py) {
-            Ok(s) => {
-                if s.len().unwrap() != 24 {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "Invalid serialization length",
-                    ));
-                }
-                let s = s.as_bytes();
-                let x = f64::from_le_bytes(s[0..8].try_into()?);
-                let y = f64::from_le_bytes(s[8..16].try_into()?);
-                let z = f64::from_le_bytes(s[16..24].try_into()?);
-                self.inner.itrf = nalgebra::Vector3::<f64>::new(x, y, z);
-                Ok(())
-            }
-            Err(e) => Err(e),
+    fn __setstate__(&mut self, py: Python, s: Py<PyBytes>) -> PyResult<()> {
+        let s = s.as_bytes(py);
+        if s.len() != 24 {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid serialization length",
+            ));
         }
+        let x = f64::from_le_bytes(s[0..8].try_into()?);
+        let y = f64::from_le_bytes(s[8..16].try_into()?);
+        let z = f64::from_le_bytes(s[16..24].try_into()?);
+        self.inner.itrf = nalgebra::Vector3::<f64>::new(x, y, z);
+        Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {

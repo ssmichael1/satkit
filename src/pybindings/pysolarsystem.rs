@@ -13,7 +13,8 @@ use crate::SolarSystem as SS;
 ///   * EMB (2) is the Earth-Moon barycenter
 ///   * The sun position is relative to the solar system barycenter
 ///     (it will be close to origin)
-#[pyclass(name = "solarsystem")]
+#[derive(PartialEq, Eq)]
+#[pyclass(name = "solarsystem", eq, eq_int)]
 pub enum SolarSystem {
     Mercury = SS::Mercury as isize,
     Venus = SS::Venus as isize,

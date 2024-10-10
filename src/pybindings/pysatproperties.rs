@@ -2,9 +2,9 @@ use crate::orbitprop::SatPropertiesStatic;
 
 use super::pyutils::kwargs_or_default;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
 
-#[pyclass(name = "satproperties_static", module="satkit")]
+#[pyclass(name = "satproperties_static", module = "satkit")]
 #[derive(Clone, Debug)]
 pub struct PySatProperties {
     pub inner: SatPropertiesStatic,
@@ -26,16 +26,15 @@ impl PySatProperties {
     ///
     #[new]
     #[pyo3(signature=(*args, **kwargs))]
-    fn new(args: &Bound<'_, PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+    fn new(args: &Bound<PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut craoverm: f64 = 0.0;
         let mut cdaoverm: f64 = 0.0;
 
-        let args = args.as_gil_ref();
         if args.len() > 0 {
-            craoverm = args[0].extract::<f64>()?;
+            craoverm = args.get_item(0)?.extract::<f64>()?;
         }
         if args.len() > 1 {
-            cdaoverm = args[1].extract::<f64>()?;
+            cdaoverm = args.get_item(1)?.extract::<f64>()?;
         }
 
         if kwargs.is_some() {
@@ -63,7 +62,7 @@ impl PySatProperties {
     }
 
     /// Get the satellite's susceptibility to radiation pressure
-    /// 
+    ///
     /// Returns:
     ///     float: Cr A / m (m^2/kg)
     #[getter]
@@ -72,7 +71,7 @@ impl PySatProperties {
     }
 
     /// Get the satellite's susceptibility to drag
-    /// 
+    ///
     /// Returns:
     ///     float: Cd A / m (m^2/kg)
     #[getter]
@@ -81,7 +80,7 @@ impl PySatProperties {
     }
 
     /// Set the satellite's susceptibility to radiation pressure
-    /// 
+    ///
     /// Args:
     ///     craoverm (float): Cr A / m (m^2/kg)
     #[setter]
@@ -91,7 +90,7 @@ impl PySatProperties {
     }
 
     /// Set the satellite's susceptibility to drag
-    /// 
+    ///
     /// Args:
     ///     cdaoverm (float): Cd A / m (m^2/kg)
     #[setter]
@@ -100,30 +99,25 @@ impl PySatProperties {
         Ok(())
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&pyo3::types::PyBytes>(py) {
-            Ok(s) => {
-                if s.len().unwrap() != 16 {
-                    return Err(pyo3::exceptions::PyTypeError::new_err("Invalid serialization length"));
-                }
-                let s = s.as_bytes();
-                let craoverm = f64::from_le_bytes(s[0..8].try_into()?);
-                let cdaoverm = f64::from_le_bytes(s[8..16].try_into()?);
-                self.inner.cdaoverm = cdaoverm;
-                self.inner.craoverm = craoverm;
-                Ok(())
-            },
-            Err(e) => Err(e)
+    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
+        let state = state.as_bytes(py);
+        if state.len() != 16 {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid serialization length",
+            ));
         }
+        let craoverm = f64::from_le_bytes(state[0..8].try_into()?);
+        let cdaoverm = f64::from_le_bytes(state[8..16].try_into()?);
+        self.inner.cdaoverm = cdaoverm;
+        self.inner.craoverm = craoverm;
+        Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
         let mut raw = [0 as u8; 16];
         raw[0..8].clone_from_slice(&self.inner.craoverm.to_le_bytes());
         raw[8..16].clone_from_slice(&self.inner.cdaoverm.to_le_bytes());
-        Ok(
-            pyo3::types::PyBytes::new_bound(py, &raw).to_object(py)
-        )
+        Ok(pyo3::types::PyBytes::new_bound(py, &raw).to_object(py))
     }
 
     fn __str__(&self) -> String {
