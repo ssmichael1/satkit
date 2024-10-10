@@ -51,7 +51,9 @@ jobs:
       # Download data if it is not in the cache
       - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'
-        run: pip install requests | python python/test/download_data.py ${{matrix.data_path}}
+        run: 
+          pip3 install requests
+          python3 python/test/download_data.py ${{matrix.data_path}}
         
 
       # Try to recover satkit test vectors from cache
@@ -66,7 +68,9 @@ jobs:
       # Download test vectors if they are not in the cache
       - name: Download Satkit Test Vectors
         if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
-        run: pip install requests | python python/test/download_testvecs.py ${{matrix.testvec_path}}
+        run: 
+          pip3 install requestspython
+          python3 python/test/download_testvecs.py ${{matrix.testvec_path}}
 
       - name: Cargo Cache
         uses: actions/cache@v4
