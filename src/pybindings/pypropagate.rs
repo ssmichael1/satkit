@@ -24,9 +24,9 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 ///
 /// Inputs:
 ///   
-///     state0:   3-element numpy array representing satellite GCRF position in meters and velocity in m/s
-///      start:   satkit.time object representing instant at which satellite is at state0
-///       stop:   satkit.time object representing time to propgate toward
+///     state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
+///      start:   (satkit.time, optional): Start time of propagation, time of "state0"
+///       stop:   (satkit.time, optional): Stop time of propagation
 ///
 /// Optional keyword arguments:
 ///
