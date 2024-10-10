@@ -30,8 +30,6 @@ impl PySatState {
         vel: &Bound<'_, np::PyArray1<f64>>,
         cov: Option<&Bound<'_, np::PyArray2<f64>>>,
     ) -> PyResult<Self> {
-        let pos = pos.as_gil_ref();
-        let vel = vel.as_gil_ref();
         if pos.len() != 3 || vel.len() != 3 {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
                 "Position and velocity must be 1-d numpy arrays with length 3",
@@ -44,7 +42,7 @@ impl PySatState {
             &na::Vector3::<f64>::from_row_slice(unsafe { vel.as_slice().unwrap() }),
         );
         if cov.is_some() {
-            let cov = cov.unwrap().as_gil_ref();
+            let cov = cov.unwrap();
             let dims = cov.dims();
             if dims[0] != 6 || dims[1] != 6 {
                 return Err(pyo3::exceptions::PyRuntimeError::new_err(
@@ -69,7 +67,6 @@ impl PySatState {
         &mut self,
         sigma_pvh: &Bound<'_, np::PyArray1<f64>>,
     ) -> PyResult<()> {
-        let sigma_pvh = sigma_pvh.as_gil_ref();
         if sigma_pvh.len() != 3 {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
                 "Position uncertainty must be 1-d numpy array with length 3",
@@ -94,7 +91,6 @@ impl PySatState {
         &mut self,
         sigma_cart: &Bound<'_, np::PyArray1<f64>>,
     ) -> PyResult<()> {
-        let sigma_cart = sigma_cart.as_gil_ref();
         if sigma_cart.len() != 3 {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
                 "Position uncertainty must be 1-d numpy array with length 3",
@@ -116,7 +112,6 @@ impl PySatState {
     ///     None
     #[setter]
     fn set_cov(&mut self, cov: &Bound<'_, np::PyArray2<f64>>) -> PyResult<()> {
-        let cov = cov.as_gil_ref();
         if cov.readonly().shape()[0] != 6 || cov.readonly().shape()[1] != 6 {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
                 "Covariance must be 6x6 numpy array",

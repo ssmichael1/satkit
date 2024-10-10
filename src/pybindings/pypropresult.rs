@@ -259,16 +259,11 @@ impl PyPropResult {
         (tp, d)
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&pyo3::types::PyBytes>(py) {
-            Ok(s) => {
-                self.inner =
-                    serde_pickle::from_slice(s.as_bytes(), serde_pickle::DeOptions::default())
-                        .unwrap();
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
+    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
+        let s = state.as_bytes(py);
+
+        self.inner = serde_pickle::from_slice(s, serde_pickle::DeOptions::default()).unwrap();
+        Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {

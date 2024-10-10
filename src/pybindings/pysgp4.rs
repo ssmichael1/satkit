@@ -4,13 +4,13 @@ use pyo3::types::{PyDict, PyList};
 use super::pyastrotime::ToTimeVec;
 use super::pytle::PyTLE;
 use crate::sgp4 as psgp4;
+use numpy::PyArray1;
 use numpy::PyArrayMethods;
-use numpy::{PyArray, PyArray1};
 
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
-#[pyclass(name = "sgp4_error")]
-#[derive(Clone, Copy)]
+#[pyclass(name = "sgp4_error", eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PySGP4Error {
     success = psgp4::SGP4Error::SGP4Success as isize,
     eccen = psgp4::SGP4Error::SGP4ErrorEccen as isize,
@@ -22,8 +22,8 @@ pub enum PySGP4Error {
 }
 
 #[allow(non_camel_case_types)]
-#[pyclass(name = "sgp4_gravconst")]
-#[derive(Clone)]
+#[pyclass(name = "sgp4_gravconst", eq, eq_int)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum GravConst {
     wgs72 = psgp4::GravConst::WGS72 as isize,
     wgs72old = psgp4::GravConst::WGS72OLD as isize,
@@ -41,8 +41,8 @@ impl From<GravConst> for psgp4::GravConst {
 }
 
 #[allow(non_camel_case_types)]
-#[pyclass(name = "sgp4_opsmode")]
-#[derive(Clone)]
+#[pyclass(name = "sgp4_opsmode", eq, eq_int)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum OpsMode {
     afspc = psgp4::OpsMode::AFSPC as isize,
     improved = psgp4::OpsMode::IMPROVED as isize,
@@ -165,34 +165,19 @@ pub fn sgp4(
             if output_err == false {
                 Ok((
                     PyArray1::from_slice_bound(py, r.data.as_slice())
-                        .as_gil_ref()
-                        .reshape(dims.clone())
-                        .unwrap()
+                        .reshape(dims.clone())?
                         .to_object(py),
                     PyArray1::from_slice_bound(py, v.data.as_slice())
-                        .as_gil_ref()
-                        .reshape(dims)
-                        .unwrap()
+                        .reshape(dims)?
                         .to_object(py),
                 )
                     .to_object(py))
             } else {
+                let eint: Vec<i32> = e.into_iter().map(|x| x as i32).collect();
                 Ok((
-                    PyArray1::from_slice_bound(py, r.data.as_slice())
-                        .as_gil_ref()
-                        .reshape(dims.clone())
-                        .unwrap(),
-                    PyArray1::from_slice_bound(py, v.data.as_slice())
-                        .as_gil_ref()
-                        .reshape(dims)
-                        .unwrap(),
-                    PyArray::from_owned_object_array_bound(
-                        py,
-                        ndarray::Array::from_iter(e.iter().map(|x| {
-                            let y: PySGP4Error = x.clone().into();
-                            y.into_py(py)
-                        })),
-                    ),
+                    PyArray1::from_slice_bound(py, r.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice_bound(py, v.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice_bound(py, eint.as_slice()),
                 )
                     .to_object(py))
             }
@@ -214,32 +199,33 @@ pub fn sgp4(
 
             // I'd prefer to create this uninitialized, which would probably be a bit faster,
             // but I can't figure out how...
+            /*
             let mut earr = ndarray::Array::from_elem(
                 (tles.len(), tmarray.len()),
                 PySGP4Error::success.into_py(py),
             );
-
+            */
+            let mut eint = Vec::new();
+            eint.resize(ntimes * tle.len()?, 0);
             results.iter().enumerate().for_each(|(idx, (p, v, e))| {
                 unsafe {
-                    let pdata: *mut f64 = parr.as_gil_ref().data();
+                    let pdata: *mut f64 = parr.data();
 
                     std::ptr::copy_nonoverlapping(
                         p.as_ptr(),
                         pdata.add(idx * ntimes * 3),
                         ntimes * 3,
                     );
-                    let vdata: *mut f64 = varr.as_gil_ref().data();
+                    let vdata: *mut f64 = varr.data();
                     std::ptr::copy_nonoverlapping(
                         v.as_ptr(),
                         vdata.add(idx * ntimes * 3),
                         ntimes * 3,
                     );
+                    eint[idx] = e[idx].clone() as i32;
                 }
-                let e1 = ndarray::Array1::from_iter(e.iter().map(|x| {
-                    let y: PySGP4Error = x.clone().into();
-                    y.into_py(py)
-                }));
-                earr.slice_mut(ndarray::s![idx, ..]).assign(&e1);
+
+                //earr.slice_mut(ndarray::s![idx, ..]).assign(&e1);
             });
 
             // Set dimensions of output to remove singleton dimensions
@@ -250,6 +236,7 @@ pub fn sgp4(
                 (false, false) => vec![3],
             };
             // Dims for error output
+
             let edims = match (tles.len() > 1, ntimes > 1) {
                 (true, true) => vec![tles.len(), ntimes],
                 (true, false) => vec![tles.len()],
@@ -257,7 +244,7 @@ pub fn sgp4(
                 (false, false) => vec![1],
             };
 
-            if !output_err {
+            if output_err == false {
                 Ok((
                     parr.reshape(dims.clone()).unwrap(),
                     varr.reshape(dims).unwrap(),
@@ -267,10 +254,7 @@ pub fn sgp4(
                 Ok((
                     parr.reshape(dims.clone()).unwrap(),
                     varr.reshape(dims).unwrap(),
-                    PyArray::from_owned_object_array_bound(py, earr)
-                        .as_gil_ref()
-                        .reshape(edims)
-                        .unwrap(),
+                    PyArray1::from_slice_bound(py, eint.as_slice()).reshape(edims)?,
                 )
                     .to_object(py))
             }

@@ -104,13 +104,13 @@ pub fn propagate(
     let satproperties_static: SatPropertiesStatic;
 
     if args.len() > 0 {
-        starttime = args.get_item(0)?.extract::<PyAstroTime>()?.inner;
+        state0 = py_to_smatrix(&args.get_item(0)?)?;
     }
     if args.len() > 1 {
-        stoptime = args.get_item(1)?.extract::<PyAstroTime>()?.inner;
+        starttime = args.get_item(1)?.extract::<PyAstroTime>()?.inner;
     }
     if args.len() > 2 {
-        state0 = py_to_smatrix(&args.get_item(2)?)?;
+        stoptime = args.get_item(2)?.extract::<PyAstroTime>()?.inner;
     }
 
     if let Some(kw) = kwargs {

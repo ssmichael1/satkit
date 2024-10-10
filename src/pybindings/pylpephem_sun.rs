@@ -53,13 +53,13 @@ pub fn pos_mod(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///
 /// Returns:
 ///     (satkit.time, satkit.time): tuple of sunrise and sunset times
-#[pyfunction]
+#[pyfunction(signature=(time, coord, sigma=None))]
 pub fn rise_set(
-    tm: &PyAstroTime,
+    time: &PyAstroTime,
     coord: &PyITRFCoord,
     sigma: Option<f64>,
 ) -> PyResult<(PyObject, PyObject)> {
-    match sun::riseset(&tm.inner, &coord.inner, sigma) {
+    match sun::riseset(&time.inner, &coord.inner, sigma) {
         Ok((rise, set)) => pyo3::Python::with_gil(|py| Ok((rise.into_py(py), set.into_py(py)))),
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
     }

@@ -1,11 +1,11 @@
 # %%
-import satkit as sk
 import pytest
 import numpy as np
 import math as m
 import os
 from sp3file import read_sp3file
 from datetime import datetime, timezone
+import satkit as sk
 
 testvec_dir = os.getenv(
             "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
@@ -583,9 +583,9 @@ class TestHighPrecisionPropagation:
         stoptime = starttime + sk.duration.from_days(1.0)
         
         # Propagate forward
-        res1 = sk.propagate(pos, vel, starttime, stoptime=stoptime, output_dense=True)
+        res1 = sk.propagate(np.concatenate((pos, vel)), starttime, stop=stoptime, output_dense=True)
         # Propagate backward and see if we recover original result
-        res2 = sk.propagate(res1.state[0:3], res1.state[3:6], stoptime, stoptime=starttime, output_dense=True)
+        res2 = sk.propagate(res1.state, stoptime, stop=starttime, output_dense=True)
     
         assert res2.state[0:3] == pytest.approx(pos, abs=0.5)
         assert res2.state[3:6] == pytest.approx(vel, abs=1e-5)
@@ -630,15 +630,13 @@ class TestHighPrecisionPropagation:
         satprops.craoverm = fitparam[3]
 
         res = sk.propagate(
-            pgcrf[0, :],
-            fitparam[0:3],
+            np.concatenate((pgcrf[0, :],fitparam[0:3])),
             timearr[0],
-            stoptime=timearr[-1],
+            stop=timearr[-1],
             propsettings=settings,
             satproperties=satprops,
             output_dense=True,
         )
-        print(res)
 
         # See if propagator is accurate to < 8 meters over 1 day on
         # each Cartesian axis

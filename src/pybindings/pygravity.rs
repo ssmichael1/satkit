@@ -17,8 +17,8 @@ use pyo3::types::PyDict;
 /// http://icgem.gfz-potsdam.de/tom_longtime
 ///
 #[allow(non_camel_case_types)]
-#[pyclass(name = "gravmodel")]
-#[derive(Clone)]
+#[pyclass(name = "gravmodel", eq, eq_int)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum GravModel {
     jgm3 = GravityModel::JGM3 as isize,
     jgm2 = GravityModel::JGM2 as isize,
@@ -49,19 +49,19 @@ impl IntoPy<PyObject> for &GravityModel {
     }
 }
 
-/// Acceleration vector due to Earth gravity 
-/// 
-/// 
+/// Acceleration vector due to Earth gravity
+///
+///
 /// Args:
 ///     pos (numpy.ndarray|satkit.itrfcoord): position at which to compute acceleration.  itrfcoord or 3-element numpy array with Cartesian ITRF position in meters
-/// 
+///
 /// Returns:
 ///     numpy.ndarray: 3-element numpy array representing acceleration due to Earth gravity at input position.  Units are m/s^2
-/// 
+///
 /// Keyword Args:
 ///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.jgm3
 ///     order (int): order of gravity model to use.  Default is 6, maximum is 16
-/// 
+///
 /// Notes:
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 #[pyfunction]
@@ -110,24 +110,27 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyRe
 }
 
 /// Acceleration vector due to Earth gravity and partials with respect to position
-/// 
-/// 
+///
+///
 /// Args:
 ///     pos (numpy.ndarray|satkit.itrfcoord): position at which to compute acceleration.  itrfcoord or 3-element numpy array with Cartesian ITRF position in meters
-/// 
+///
 /// Returns:
 ///     (numpy.ndarray, numpy.ndarray): tuple of 3-element numpy array representing acceleration due to Earth gravity at input position and 3x3 numpy array of partials of acceleration with respect to position.  Units are m/s^2 for gravity and m/s^2/m for partials
-/// 
+///
 /// Keyword Args:
 ///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.jgm3
 ///     order (int): order of gravity model to use.  Default is 6, maximum is 16
-/// 
+///
 /// Notes:
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
-/// 
+///
 #[pyfunction]
 #[pyo3(signature=(pos, **kwds))]
-pub fn gravity_and_partials(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyResult<(PyObject, PyObject)> {
+pub fn gravity_and_partials(
+    pos: &Bound<'_, PyAny>,
+    kwds: Option<&Bound<'_, PyDict>>,
+) -> PyResult<(PyObject, PyObject)> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
     if kwds.is_some() {
