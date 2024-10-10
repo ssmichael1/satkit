@@ -24,9 +24,10 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 ///
 /// Inputs:
 ///   
-///     state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
-///      start:   (satkit.time, optional): Start time of propagation, time of "state0"
-///       stop:   (satkit.time, optional): Stop time of propagation
+///      start (satkit.time, optional): Start time of propagation, time of "state0"
+///       stop (satkit.time, optional): Stop time of propagation
+///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
+///
 ///
 /// Optional keyword arguments:
 ///
@@ -34,20 +35,19 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 /// 4 ways of setting propagation end:
 /// (one of these must be used)
 ///   
-///             stop: satkit.time object representing instant at
-///                   which new position and velocity will be computed
-///    duration_secs (float, optional): duration in seconds from "tm" for at which new
+///             stop: (satkit.time, optional): instant at which new position and
+///                   velocity will be computed
+///    duration_secs: (float, optional): duration in seconds from "tm" for at which new
 ///                   position and velocity will be computed.  
-///    duration_days (float, optional): duration in days from "tm" at which new position and
+///    duration_days: (float, optional): duration in days from "tm" at which new position and
 ///                   velocity will be computed.  
-///         duration (satkit.duration, optional): An astro.duration object setting duration
+///         duration: (satkit.duration, optional): An astro.duration object setting duration
 ///                   from "tm" at which new position & velocity will be computed.
-///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
 ///
 ///  Other keywords:
 ///
 ///
-///       output_phi: boolean inticating Output 6x6 state transition matrix
+///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
 ///                   between "starttime" and "stoptime"
 ///                   default is False
 ///     propsettings (satkit.propsettings): Settings for

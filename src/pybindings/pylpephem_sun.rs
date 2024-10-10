@@ -7,19 +7,18 @@ use pyo3::prelude::*;
 /// Sun position in the Geocentric Celestial Reference Frame (GCRF)
 ///
 /// Notes:
-//     * Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated from MOD to GCRF via Equations 3-88 and 3-89 in Vallado.  
+//     * Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated from MOD to GCRF via Equations 3-88 and 3-89 in Vallado.
 ///    * Valid with accuracy of .01 degrees from 1950 to 2050
-/// 
+///
 /// Args:
-///     time (AstroTime, numpy array, or list): time[s] at which to compute position
-/// 
+///     time (satkit.time, numpy array, or list): time[s] at which to compute position
+///
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in GCRF frame at input time[s]
 #[pyfunction]
 pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
     pyutils::py_vec3_of_time_arr(&sun::pos_gcrf, time)
 }
-
 
 /// Sun position in the Mean-of-Date Frame
 ///
@@ -28,7 +27,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///    * Valid with accuracy of .01 degrees from 1950 to 2050
 /// Args:
 ///     time (AstroTime, numpy array, or list): time[s] at which to compute position
-/// 
+///
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s]
 #[pyfunction]
@@ -46,12 +45,12 @@ pub fn pos_mod(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///         * "Civil Twilight": 96 deg
 ///         * "Nautical Twilight": 102 deg
 ///         * "Astronomical Twilight": 108 deg
-/// 
+///
 /// Args:
 ///     time (satkit.time): time at which to compute sunrise and sunset
 ///     coord (satkit.ITRFCoord): location at which to compute sunrise and sunset
 ///     sigma (float, optional): angle in degrees between noon and rise/set.  Default is 90.0+50.0/60.0 (Standard)
-/// 
+///
 /// Returns:
 ///     (satkit.time, satkit.time): tuple of sunrise and sunset times
 #[pyfunction]
