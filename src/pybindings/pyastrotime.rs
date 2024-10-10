@@ -28,8 +28,8 @@ use numpy as np;
 /// * GPS = Global Positioning System Time (epoch = 1/6/1980 00:00:00)
 /// * TDB = Barycentric Dynamical Time
 ///
-#[derive(Clone)]
-#[pyclass(name = "timescale", module = "satkit")]
+#[derive(Clone, PartialEq, Eq)]
+#[pyclass(name = "timescale", module = "satkit", eq, eq_int)]
 pub enum PyTimeScale {
     /// Invalid time scale
     Invalid = Scale::INVALID as isize,
@@ -741,18 +741,19 @@ impl ToTimeVec for &Bound<'_, PyAny> {
             let tm: PyAstroTime = self.extract().unwrap();
             Ok(vec![tm.inner.clone()])
         } else if self.is_instance_of::<PyDateTime>() {
-            let dt: &PyDateTime = self.extract().unwrap();
-            Ok(vec![datetime2astrotime(dt).unwrap()])
+            let dt: Py<PyDateTime> = self.extract().unwrap();
+            pyo3::Python::with_gil(|py| Ok(vec![datetime2astrotime(dt.bind(py)).unwrap()]))
         }
         // List case
         else if self.is_instance_of::<pyo3::types::PyList>() {
             match self.extract::<Vec<PyAstroTime>>() {
                 Ok(v) => Ok(v.iter().map(|x| x.inner).collect::<Vec<_>>()),
-                Err(_e) => match self.extract::<Vec<&PyDateTime>>() {
-                    Ok(v) => Ok(v
-                        .iter()
-                        .map(|x| datetime2astrotime(*x).unwrap())
-                        .collect::<Vec<_>>()),
+                Err(_e) => match self.extract::<Vec<Py<PyDateTime>>>() {
+                    Ok(v) => pyo3::Python::with_gil(|py| {
+                        Ok(v.iter()
+                            .map(|x| datetime2astrotime(x.bind(py)).unwrap())
+                            .collect::<Vec<_>>())
+                    }),
                     Err(e) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
                         "Not a list of satkit.time or datetime.datetime: {e}"
                     ))),
@@ -770,8 +771,11 @@ impl ToTimeVec for &Bound<'_, PyAny> {
                         .map(|p| -> Result<AstroTime, _> {
                             match p.extract::<PyAstroTime>(py) {
                                 Ok(v2) => Ok(v2.inner),
-                                Err(_) => match p.bind(py).extract::<&PyDateTime>(py) {
-                                    Ok(v3) => Ok(datetime2astrotime(v3).unwrap()),
+                                Err(_) => match p.extract::<Py<PyDateTime>>(py) {
+                                    Ok(v3) => 
+                                    pyo3::Python::with_gil(|py| {
+                                        Ok(datetime2astrotime(v3.bind(py)).unwrap())
+                                    }),
                                     Err(_) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
                                         "Input numpy array must contain satkit.time elements or datetime.datetime elements"
                                     ))),

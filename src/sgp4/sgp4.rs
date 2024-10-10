@@ -38,6 +38,20 @@ impl From<i32> for SGP4Error {
     }
 }
 
+impl From<SGP4Error> for i32 {
+    fn from(val: SGP4Error) -> i32 {
+        match val {
+            SGP4Error::SGP4ErrorEccen => 1,
+            SGP4Error::SGP4ErrorMeanMotion => 2,
+            SGP4Error::SGP4ErrorOrbitDecay => 6,
+            SGP4Error::SGP4ErrorPerturbEccen => 3,
+            SGP4Error::SGP4ErrorSemiLatusRectum => 4,
+            SGP4Error::SGP4ErrorUnused => -1,
+            SGP4Error::SGP4Success => 0,
+        }
+    }
+}
+
 type StateArr = OMatrix<f64, Const<3>, Dyn>;
 pub type SGP4State = (StateArr, StateArr, Vec<SGP4Error>);
 pub type SGP4Result = Result<SGP4State, (SGP4Error, usize)>;

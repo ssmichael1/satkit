@@ -1,8 +1,8 @@
 use crate::frames::Frame;
 use pyo3::prelude::*;
 
-#[derive(Clone, Debug)]
-#[pyclass(name = "frame", module = "satkit")]
+#[derive(PartialEq)]
+#[pyclass(name = "frame", module = "satkit", eq, eq_int)]
 pub enum PyFrame {
     /// International Terrestrial Reference Frame
     ITRF,

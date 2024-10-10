@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::types::{PyBytes, PyList, PyTuple};
