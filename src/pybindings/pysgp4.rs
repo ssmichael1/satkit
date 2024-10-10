@@ -165,12 +165,10 @@ pub fn sgp4(
             if output_err == false {
                 Ok((
                     PyArray1::from_slice_bound(py, r.data.as_slice())
-                        .as_gil_ref()
                         .reshape(dims.clone())
                         .unwrap()
                         .to_object(py),
                     PyArray1::from_slice_bound(py, v.data.as_slice())
-                        .as_gil_ref()
                         .reshape(dims)
                         .unwrap()
                         .to_object(py),
@@ -179,11 +177,9 @@ pub fn sgp4(
             } else {
                 Ok((
                     PyArray1::from_slice_bound(py, r.data.as_slice())
-                        .as_gil_ref()
                         .reshape(dims.clone())
                         .unwrap(),
                     PyArray1::from_slice_bound(py, v.data.as_slice())
-                        .as_gil_ref()
                         .reshape(dims)
                         .unwrap(),
                     PyArray::from_owned_object_array_bound(

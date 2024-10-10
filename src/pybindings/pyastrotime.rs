@@ -687,20 +687,16 @@ impl PyAstroTime {
         (PyTuple::empty_bound(py), d)
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&pyo3::types::PyBytes>(py) {
-            Ok(s) => {
-                if s.len().unwrap() != 8 {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "Invalid serialization length",
-                    ));
-                }
-                let t = f64::from_le_bytes(s.as_bytes().try_into()?);
-                self.inner = AstroTime::from_mjd(t, astrotime::Scale::TAI);
-                Ok(())
-            }
-            Err(e) => Err(e),
+    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
+        let s = state.as_bytes(py);
+        if s.len() != 8 {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid serialization length",
+            ));
         }
+        let t = f64::from_le_bytes(s.try_into()?);
+        self.inner = AstroTime::from_mjd(t, astrotime::Scale::TAI);
+        Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
@@ -725,7 +721,7 @@ impl<'b> From<&'b PyAstroTime> for &'b astrotime::AstroTime {
     }
 }
 
-fn datetime2astrotime(tm: &PyDateTime) -> PyResult<AstroTime> {
+fn datetime2astrotime(tm: &Bound<PyDateTime>) -> PyResult<AstroTime> {
     let ts: f64 = tm
         .call_method("timestamp", (), None)
         .unwrap()
@@ -774,7 +770,7 @@ impl ToTimeVec for &Bound<'_, PyAny> {
                         .map(|p| -> Result<AstroTime, _> {
                             match p.extract::<PyAstroTime>(py) {
                                 Ok(v2) => Ok(v2.inner),
-                                Err(_) => match p.extract::<&PyDateTime>(py) {
+                                Err(_) => match p.bind(py).extract::<&PyDateTime>(py) {
                                     Ok(v3) => Ok(datetime2astrotime(v3).unwrap()),
                                     Err(_) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
                                         "Input numpy array must contain satkit.time elements or datetime.datetime elements"

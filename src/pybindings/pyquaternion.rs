@@ -151,13 +151,12 @@ impl Quaternion {
     ///     quaternion: Quaternion representing same rotation as input matrix
     #[staticmethod]
     fn from_rotation_matrix(dcm: np::PyReadonlyArray2<f64>) -> PyResult<Self> {
-        let dcm = dcm.as_gil_ref();
         if dcm.dims() != [3, 3] {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "Invalid DCM. Must be 3x3",
             ));
         }
-        let dcm = unsafe { dcm.as_array() };
+        let dcm = dcm.as_array();
         let mat = na::Matrix3::from_iterator(dcm.iter().cloned());
         let rot = na::Rotation3::from_matrix(&mat.transpose());
         Ok(Quaternion {
@@ -209,24 +208,19 @@ impl Quaternion {
         self.__str__()
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&PyBytes>(py) {
-            Ok(s) => {
-                if s.len().unwrap() != 32 {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "Invalid serialization length",
-                    ));
-                }
-                let s = s.as_bytes();
-                let w = f64::from_le_bytes(s[0..8].try_into()?);
-                let x = f64::from_le_bytes(s[8..16].try_into()?);
-                let y = f64::from_le_bytes(s[16..24].try_into()?);
-                let z = f64::from_le_bytes(s[24..32].try_into()?);
-                self.inner = Quat::from_quaternion(na::Quaternion::<f64>::new(w, x, y, z));
-                Ok(())
-            }
-            Err(e) => Err(e),
+    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
+        let state = state.as_bytes(py);
+        if state.len() != 32 {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid serialization length",
+            ));
         }
+        let w = f64::from_le_bytes(state[0..8].try_into()?);
+        let x = f64::from_le_bytes(state[8..16].try_into()?);
+        let y = f64::from_le_bytes(state[16..24].try_into()?);
+        let z = f64::from_le_bytes(state[24..32].try_into()?);
+        self.inner = Quat::from_quaternion(na::Quaternion::<f64>::new(w, x, y, z));
+        Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
@@ -337,7 +331,7 @@ impl Quaternion {
                 Ok(res.into_py(py))
             })
         } else if let Ok(v1d) = other.downcast::<np::PyArray1<f64>>() {
-            if v1d.as_gil_ref().len() != 3 {
+            if v1d.len()? != 3 {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "Invalid rhs.  1D array must be of length 3",
                 ));
