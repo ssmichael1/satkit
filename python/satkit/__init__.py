@@ -1,6 +1,6 @@
 from .satkit import *
 
-__version__ = utils.version()[1:]
+from ._version import *
 
 if utils.datafiles_exist() == False:
     print(f"Could not find necessary data files.")
