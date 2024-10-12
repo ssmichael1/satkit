@@ -7,6 +7,7 @@
 
 type Vector<const T: usize> = nalgebra::SVector<f64, T>;
 type Matrix<const M: usize, const N: usize> = nalgebra::SMatrix<f64, M, N>;
+use crate::utils::{skerror, SKResult};
 
 pub struct UKF<const N: usize> {
     pub alpha: f64,
@@ -32,7 +33,7 @@ impl<const N: usize> UKF<N> {
     fn weight_c(alpha: f64, beta: f64, kappa: f64) -> Vec<f64> {
         let mut weight_c = Vec::<f64>::with_capacity(2 * N + 1);
         let den: f64 = alpha.powi(2) as f64 * (N as f64 + kappa);
-        weight_c.push(2.0 - alpha.powi(2) as f64 + beta - N as f64 / den + alpha.powi(2) as f64);
+        weight_c.push(2.0 - alpha.powi(2) as f64 + beta - N as f64 / den);
         for _i in 1..2 * N + 1 {
             weight_c.push(1.0 / (2.0 * den));
         }
@@ -65,15 +66,21 @@ impl<const N: usize> UKF<N> {
         }
     }
 
+    //https://www.mathworks.com/help/control/ug/extended-and-unscented-kalman-filter-algorithms-for-online-state-estimation.html
     pub fn update<const M: usize>(
         &mut self,
         y: &Vector<M>,
         y_cov: &Matrix<M, M>,
-        f: fn(Vector<N>) -> Vector<M>,
-    ) {
+        f: impl Fn(Vector<N>) -> Vector<M>,
+    ) -> SKResult<()> {
         let c = self.alpha.powi(2) as f64 * (N as f64 + self.kappa);
 
-        let cp = c.sqrt() * self.p.cholesky().unwrap().l();
+        let cp = c.sqrt()
+            * match self.p.cholesky() {
+                Some(p) => p.l(),
+                None => return skerror!("cannot take cholesky decomposition"),
+            };
+
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
         // Create prior weights
@@ -117,6 +124,7 @@ impl<const N: usize> UKF<N> {
         let kalman_gain = p_xy * p_yy.try_inverse().unwrap();
         self.x = self.x + kalman_gain * (y - yhat);
         self.p = self.p - kalman_gain * p_yy * kalman_gain.transpose();
+        Ok(())
     }
 
     /// Predict step
@@ -124,7 +132,11 @@ impl<const N: usize> UKF<N> {
     pub fn predict(&mut self, f: fn(Vector<N>) -> Vector<N>) {
         let c = self.alpha.powi(2) as f64 * (N as f64 + self.kappa);
 
-        let cp = c.sqrt() * self.p.cholesky().unwrap().l();
+        let cp = c.sqrt()
+            * match self.p.cholesky() {
+                Some(p) => p.l(),
+                None => panic!("cannot take cholesky decomposition"),
+            };
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
         // Create prior weights
@@ -157,5 +169,41 @@ impl<const N: usize> UKF<N> {
             .fold(Matrix::<N, N>::zeros(), |acc, (i, x)| {
                 acc + self.weight_c[i] * (x - self.x) * (x - self.x).transpose()
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rand_distr::{Distribution, Normal};
+
+    #[test]
+    fn test_ukf() {
+        let mut ukf = UKF::<2>::new_default();
+
+        let normal = Normal::new(0.0, 1.0).unwrap();
+
+        let ytruth = Vector::<2>::new(3.0, 4.0);
+        let y_cov = Matrix::<2, 2>::new(1.0, 0.0, 0.0, 1.0);
+        let v = normal.sample(&mut rand::thread_rng());
+        let w = normal.sample(&mut rand::thread_rng());
+        let ysample = ytruth + Vector::<2>::new(v, w);
+        let offset = Vector::<2>::new(5.0, 8.0);
+        let observe = |x: Vector<2>| x + offset;
+
+        // Process noise
+        let q = Matrix::<2, 2>::new(1.0e-12, 0.0, 0.0, 1.0e-12);
+        ukf.x = ysample;
+        ukf.p = y_cov;
+        for _ix in 0..500 {
+            let v = normal.sample(&mut rand::thread_rng());
+            let w = normal.sample(&mut rand::thread_rng());
+            let ysample = observe(ytruth + Vector::<2>::new(v, w));
+            ukf.update(&ysample, &y_cov, observe).unwrap();
+            ukf.p = ukf.p + q;
+            println!("x = {:?}", ukf.x);
+            println!("cov = {} {}", ukf.p[(0, 0)].sqrt(), ukf.p[(1, 1)].sqrt());
+        }
     }
 }

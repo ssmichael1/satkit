@@ -37,13 +37,14 @@ serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.1.1"
 
 [build-dependencies]
-cc = { version = "1.1.18", features = ["parallel"] }
+cc = { version = "1.1.29", features = ["parallel"] }
 chrono = "0.4.38"
 pyo3-build-config = { version = "0.22.3", optional = true }
 
 [dev-dependencies]
 rand = "0.8.5"
 approx = "0.5.1"
+rand_distr = "0.4.3"
 
 [features]
 pybindings = ["pyo3", "numpy", "pyo3-build-config"]
