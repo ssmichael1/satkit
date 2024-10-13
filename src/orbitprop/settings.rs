@@ -1,5 +1,9 @@
 //! Orbit Propagation Settings
 
+use crate::orbitprop::Precomputed;
+use crate::utils::SKResult;
+use crate::AstroTime;
+
 /// Propagation settings
 ///
 /// These include
@@ -18,6 +22,7 @@ pub struct PropSettings {
     pub rel_error: f64,
     pub use_spaceweather: bool,
     pub enable_interp: bool,
+    pub precomputed: Option<Precomputed>,
 }
 
 impl PropSettings {
@@ -28,7 +33,13 @@ impl PropSettings {
             rel_error: 1e-8,
             use_spaceweather: true,
             enable_interp: true,
+            precomputed: None,
         }
+    }
+
+    pub fn precompute_terms(&mut self, start: &AstroTime, stop: &AstroTime) -> SKResult<()> {
+        self.precomputed = Some(Precomputed::new(start, stop)?);
+        Ok(())
     }
 
     pub fn to_string(&self) -> String {
@@ -38,12 +49,17 @@ impl PropSettings {
             Max Abs Error: {:e},
             Max Rel Error: {:e},
             Space Weather: {},
-            Interpolation: {}"#,
+            Interpolation: {}
+            {}"#,
             self.gravity_order,
             self.abs_error,
             self.rel_error,
             self.use_spaceweather,
-            self.enable_interp
+            self.enable_interp,
+            match &self.precomputed {
+                Some(p) => format!("Precomputed: {} to {}", p.start, p.stop),
+                None => "No Precomputed".to_string(),
+            }
         )
     }
 }

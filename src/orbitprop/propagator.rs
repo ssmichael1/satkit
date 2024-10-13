@@ -205,9 +205,25 @@ pub fn propagate<const C: usize>(
     odesettings.relerror = settings.rel_error;
     odesettings.dense_output = settings.enable_interp;
 
-    let interp = match stop > start {
-        true => Precomputed::new(start, stop)?,
-        false => Precomputed::new(stop, start)?,
+    // Get or create data for interpolation
+    let interp: &Precomputed = {
+        if let Some(sinterp) = &settings.precomputed {
+            if stop > start {
+                if (*start >= sinterp.start) && (*stop <= sinterp.stop) {
+                    sinterp
+                } else {
+                    &Precomputed::new(start, stop)?
+                }
+            } else {
+                if (*stop >= sinterp.start) && (*start <= sinterp.stop) {
+                    sinterp
+                } else {
+                    &Precomputed::new(start, stop)?
+                }
+            }
+        } else {
+            &Precomputed::new(start, stop)?
+        }
     };
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
@@ -449,13 +465,11 @@ mod tests {
         settings.abs_error = 1.0e-12;
         settings.rel_error = 1.0e-14;
         settings.gravity_order = 4;
+        settings.precompute_terms(&starttime, &stoptime)?;
 
         let res1 = propagate(&state, &starttime, &stoptime, &settings, None)?;
-        println!("state = {:?}", res1.state_end);
         // Try to propagate back to original time
         let res2 = propagate(&res1.state_end, &stoptime, &starttime, &settings, None)?;
-        println!("state2 = {:?}", res2.state_end);
-        println!("state0 = {:?}", state);
         // See if propagating back to original time matches
         for ix in 0..6 as usize {
             assert!((res2.state_end[ix] - state[ix]).abs() < 1.0)
@@ -476,7 +490,7 @@ mod tests {
 
         let mut settings = PropSettings::default();
         settings.abs_error = 1.0e-9;
-        settings.rel_error = 1.0e-14;
+        settings.rel_error = 1.0e-12;
         settings.gravity_order = 4;
 
         // Propagate forward
@@ -492,7 +506,6 @@ mod tests {
         let newtime = starttime + Duration::Days(0.45);
         let interp = res.interp(&newtime)?;
         let interp2 = res2.interp(&newtime)?;
-
         for ix in 0..6 as usize {
             assert!((interp[ix] - interp2[ix]).abs() < 1e-3);
         }

@@ -8,6 +8,7 @@ use crate::SolarSystem;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
 
+#[derive(Debug, Clone)]
 pub struct Precomputed {
     pub start: AstroTime,
     pub stop: AstroTime,
@@ -19,23 +20,21 @@ impl Precomputed {
     pub fn new(start: &AstroTime, stop: &AstroTime) -> SKResult<Precomputed> {
         let step: f64 = 60.0;
 
+        let (pstart, pstop) = match stop > start {
+            true => (start, stop),
+            false => (stop, start),
+        };
+
         Ok(Precomputed {
-            start: start.clone(),
-            stop: stop.clone(),
-            step: {
-                match stop > start {
-                    true => step.abs(),
-                    false => -1.0 * step.abs(),
-                }
-            },
+            start: pstart.clone(),
+            stop: pstop.clone(),
+            step: step,
             data: {
-                let nsteps: usize =
-                    2 + ((stop - start).seconds().abs() / step.abs()).ceil() as usize;
-                println!("nsteps: {}", nsteps);
+                let nsteps: usize = 2 + ((pstop - pstart).seconds() / step.abs()).ceil() as usize;
                 let mut data = Vec::new();
                 data.reserve(nsteps);
                 for idx in 0..nsteps {
-                    let t = *start + Duration::Seconds((idx as f64) * step);
+                    let t = *pstart + Duration::Seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
                     let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
                     let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
@@ -47,14 +46,8 @@ impl Precomputed {
     }
 
     pub fn interp(&self, t: &AstroTime) -> SKResult<InterpType> {
-        if self.step > 0.0 {
-            if *t < self.start || *t > self.stop {
-                return Err("Precomputed::interp: time is outside of precomputed range".into());
-            }
-        } else {
-            if *t > self.start || *t < self.stop {
-                return Err("Precomputed::interp: time is outside of precomputed range".into());
-            }
+        if *t < self.start || *t > self.stop {
+            return Err("Precomputed::interp: time is outside of precomputed range".into());
         }
 
         let idx = (t - self.start).seconds() / self.step;

@@ -326,15 +326,6 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 nreject += 1;
                 h = h / f64::min(1.0 / settings.minfac, q11 / settings.gamma);
             }
-            /*
-            h = h * f64::min(
-                settings.maxfac,
-                f64::max(
-                    settings.minfac,
-                    0.9 * (1.0 / enorm).powf(1.0 / (Self::ORDER + 3) as f64),
-                ),
-            );
-            */
         }
 
         Ok(ODESolution {

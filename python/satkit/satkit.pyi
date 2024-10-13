@@ -1559,7 +1559,7 @@ class propsettings:
         * gravity_order: 4
         * use_spaceweather: True
         * use_jplephem: True
-
+        * enable_interp: False
 
     """
 
@@ -1625,6 +1625,16 @@ class propsettings:
     @property
     def enable_interp() -> bool:
         """Store intermediate data that allows for fast high-precision interpolation of state between start and stop times"""
+
+    def precompute_terms(self, start: time, stop: time, step: duration):
+        """Precompute terms for fast interpolation of state between start and stop times
+
+        Args:
+            start (satkit.time): Start time of propagation
+            stop (satkit.time): Stop time of propagation
+            step (satkit.duration, optional): Step size for interpolation.  Default = 60 seconds
+
+        """
 
 def propagate(
     pos: npt.ArrayLike[float],
