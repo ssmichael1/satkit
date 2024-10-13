@@ -24,9 +24,9 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 ///
 /// Inputs:
 ///   
+///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
 ///      start (satkit.time, optional): Start time of propagation, time of "state0"
 ///       stop (satkit.time, optional): Stop time of propagation
-///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
 ///
 ///
 /// Optional keyword arguments:

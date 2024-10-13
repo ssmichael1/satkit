@@ -581,11 +581,14 @@ class TestHighPrecisionPropagation:
         pos = np.array([sk.consts.geo_r, 0, 0])
         vel = np.array([0, m.sqrt(sk.consts.mu_earth/sk.consts.geo_r), 0])
         stoptime = starttime + sk.duration.from_days(1.0)
-        
+
+        settings = sk.propsettings()
+        settings.precompute_terms(starttime, stoptime)
+
         # Propagate forward
-        res1 = sk.propagate(np.concatenate((pos, vel)), starttime, stop=stoptime, output_dense=True)
+        res1 = sk.propagate(np.concatenate((pos, vel)), starttime, stop=stoptime, propsettings=settings)
         # Propagate backward and see if we recover original result
-        res2 = sk.propagate(res1.state, stoptime, stop=starttime, output_dense=True)
+        res2 = sk.propagate(res1.state, stoptime, stop=starttime, propsettings=settings)
     
         assert res2.state[0:3] == pytest.approx(pos, abs=0.5)
         assert res2.state[3:6] == pytest.approx(vel, abs=1e-5)
@@ -617,7 +620,6 @@ class TestHighPrecisionPropagation:
             axis=0,
         )
         settings = sk.propsettings()
-        settings.use_jplephem = False
 
         # Determined by orbitprop_gps_fit.py
         fitparam = np.array(
@@ -635,7 +637,6 @@ class TestHighPrecisionPropagation:
             stop=timearr[-1],
             propsettings=settings,
             satproperties=satprops,
-            output_dense=True,
         )
 
         # See if propagator is accurate to < 8 meters over 1 day on

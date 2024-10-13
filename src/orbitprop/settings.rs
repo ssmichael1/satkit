@@ -13,7 +13,8 @@ use crate::AstroTime;
 /// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
 /// * `rel_error` - the maximum relative error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
 /// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
-/// * `use_jplephem` -  Use very high precision JPL ephemerides when computing force of sun & moon.  Default is true
+/// * `enable_interp` - Do we enable interpolation of the state between start and stop times.  Default is true
+///                     slight comptuation savings if set to false
 ///
 #[derive(Debug, Clone)]
 pub struct PropSettings {
