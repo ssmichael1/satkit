@@ -35,7 +35,6 @@ impl RKAdaptive<17, 7> for RKV87 {
 #[cfg(test)]
 mod tests {
     use super::super::types::*;
-    use super::super::HarmonicOscillator;
     use super::super::RKAdaptive;
     use super::super::RKAdaptiveSettings;
     use super::RKV87;
@@ -44,7 +43,6 @@ mod tests {
 
     #[test]
     fn test_nointerp() -> ODEResult<()> {
-        let mut system = HarmonicOscillator::new(1.0);
         let y0 = State::new(1.0, 0.0);
 
         use std::f64::consts::PI;
@@ -54,14 +52,19 @@ mod tests {
         settings.abserror = 1e-8;
         settings.relerror = 1e-8;
 
-        let _res = RKV87::integrate(0.0, 2.0 * PI, &y0, &mut system, &settings)?;
+        let _res = RKV87::integrate(
+            0.0,
+            2.0 * PI,
+            &y0,
+            |_t, y| Ok([y[1], -y[0]].into()),
+            &settings,
+        )?;
 
         Ok(())
     }
 
     #[test]
     fn testit() -> ODEResult<()> {
-        let mut system = HarmonicOscillator::new(1.0);
         let y0 = State::new(1.0, 0.0);
 
         use std::f64::consts::PI;
@@ -71,7 +74,7 @@ mod tests {
         settings.relerror = 1e-14;
         settings.dense_output = true;
 
-        let sol = RKV87::integrate(0.0, PI, &y0, &mut system, &settings)?;
+        let sol = RKV87::integrate(0.0, PI, &y0, |_t, y| Ok([y[1], -y[0]].into()), &settings)?;
 
         let testcount = 100;
         (0..100).for_each(|idx| {

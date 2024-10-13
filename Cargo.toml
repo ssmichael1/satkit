@@ -28,8 +28,8 @@ num-traits = "0.2"
 thiserror = "1.0.63"
 simba = "0.9"
 once_cell = "1.6.0"
-numpy = { git = "https://github.com/PyO3/rust-numpy.git", rev = "505a79", optional = true }
-pyo3 = { version = "0.22.3", features = ["extension-module"], optional = true }
+numpy = { version = "0.22", optional = true }
+pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
 ureq = "2.10.1"
 json = "0.12.4"
 process_path = "0.1.4"
@@ -37,9 +37,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.1.1"
 
 [build-dependencies]
-cc = { version = "1.1.29", features = ["parallel"] }
+cc = { version = "1.1", features = ["parallel"] }
 chrono = "0.4.38"
-pyo3-build-config = { version = "0.22.3", optional = true }
+pyo3-build-config = { version = "0.22.4", optional = true }
 
 [dev-dependencies]
 rand = "0.8.5"

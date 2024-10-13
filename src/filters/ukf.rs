@@ -202,8 +202,6 @@ mod tests {
             let ysample = observe(ytruth + Vector::<2>::new(v, w));
             ukf.update(&ysample, &y_cov, observe).unwrap();
             ukf.p = ukf.p + q;
-            println!("x = {:?}", ukf.x);
-            println!("cov = {} {}", ukf.p[(0, 0)].sqrt(), ukf.p[(1, 1)].sqrt());
         }
     }
 }

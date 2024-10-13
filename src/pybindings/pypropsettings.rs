@@ -51,17 +51,6 @@ impl PyPropSettings {
     }
 
     #[getter]
-    fn get_use_jplephem(&self) -> bool {
-        self.inner.use_jplephem
-    }
-
-    #[setter(use_jplephem)]
-    fn set_use_jplephem(&mut self, val: bool) -> PyResult<()> {
-        self.inner.use_jplephem = val;
-        Ok(())
-    }
-
-    #[getter]
     fn get_use_spaceweather(&self) -> bool {
         self.inner.use_spaceweather
     }
