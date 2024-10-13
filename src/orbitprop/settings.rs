@@ -17,6 +17,7 @@ pub struct PropSettings {
     pub abs_error: f64,
     pub rel_error: f64,
     pub use_spaceweather: bool,
+    pub enable_interp: bool,
 }
 
 impl PropSettings {
@@ -26,6 +27,7 @@ impl PropSettings {
             abs_error: 1e-8,
             rel_error: 1e-8,
             use_spaceweather: true,
+            enable_interp: true,
         }
     }
 
@@ -35,8 +37,13 @@ impl PropSettings {
             Gravity Order: {},
             Max Abs Error: {:e},
             Max Rel Error: {:e},
-            Space Weather: {}"#,
-            self.gravity_order, self.abs_error, self.rel_error, self.use_spaceweather,
+            Space Weather: {},
+            Interpolation: {}"#,
+            self.gravity_order,
+            self.abs_error,
+            self.rel_error,
+            self.use_spaceweather,
+            self.enable_interp
         )
     }
 }

@@ -1573,7 +1573,7 @@ class propsettings:
             * rel_error: 1e-8
             * gravity_order: 4
             * use_spaceweather: True
-            * use_jplephem: True
+            * enable_interp: False
 
 
         Returns:
@@ -1623,8 +1623,8 @@ class propsettings:
         """
 
     @property
-    def use_jplephem() -> bool:
-        """Use high-precision but computationally expensive JPL ephemerides for sun and mun when computing their gravitational force"""
+    def enable_interp() -> bool:
+        """Store intermediate data that allows for fast high-precision interpolation of state between start and stop times"""
 
 def propagate(
     pos: npt.ArrayLike[float],
@@ -1647,7 +1647,6 @@ def propagate(
         output_phi (bool, optional keyword): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
         propsettings (propsettings, optional keyword): "propsettings" object with input settings for the propagation. if left out, default will be used.
         satproperties (satproperties_static, optional keyword): "sat_properties_static" object with drag and radiation pressure succeptibility of satellite.
-        output_dense (bool, optional keyword): Indicate whether or not dense output should be recorded.  Default is false.
 
     Returns:
         (propresult): Propagation result object holding state outputs, statistics, and dense output if requested

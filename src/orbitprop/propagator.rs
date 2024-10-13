@@ -196,7 +196,6 @@ pub fn propagate<const C: usize>(
     stop: &AstroTime,
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
-    store_dense: bool, // Store intermediate states for later interpolation
 ) -> SKResult<PropagationResult<C>> {
     // Duration to end of integration, in seconds
     let x_end: f64 = (*stop - *start).seconds();
@@ -204,7 +203,7 @@ pub fn propagate<const C: usize>(
     let mut odesettings = crate::ode::RKAdaptiveSettings::default();
     odesettings.abserror = settings.abs_error;
     odesettings.relerror = settings.rel_error;
-    odesettings.dense_output = store_dense;
+    odesettings.dense_output = settings.enable_interp;
 
     let interp = match stop > start {
         true => Precomputed::new(start, stop)?,
@@ -371,7 +370,7 @@ pub fn propagate<const C: usize>(
         }
     };
 
-    match store_dense {
+    match settings.enable_interp {
         false => {
             let res = crate::ode::solvers::RKV98NoInterp::integrate(
                 0.0,
@@ -451,17 +450,10 @@ mod tests {
         settings.rel_error = 1.0e-14;
         settings.gravity_order = 4;
 
-        let res1 = propagate(&state, &starttime, &stoptime, &settings, None, false)?;
+        let res1 = propagate(&state, &starttime, &stoptime, &settings, None)?;
         println!("state = {:?}", res1.state_end);
         // Try to propagate back to original time
-        let res2 = propagate(
-            &res1.state_end,
-            &stoptime,
-            &starttime,
-            &settings,
-            None,
-            false,
-        )?;
+        let res2 = propagate(&res1.state_end, &stoptime, &starttime, &settings, None)?;
         println!("state2 = {:?}", res2.state_end);
         println!("state0 = {:?}", state);
         // See if propagating back to original time matches
@@ -488,9 +480,9 @@ mod tests {
         settings.gravity_order = 4;
 
         // Propagate forward
-        let res = propagate(&state, &starttime, &stoptime, &settings, None, true)?;
+        let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
         // propagate backward to original time
-        let res2 = propagate(&res.state_end, &stoptime, &starttime, &settings, None, true)?;
+        let res2 = propagate(&res.state_end, &stoptime, &starttime, &settings, None)?;
         // Check that we recover the original state
         for ix in 0..6 as usize {
             assert!((state[ix] - res2.state_end[ix]).abs() < 1.0e-3);
@@ -540,7 +532,7 @@ mod tests {
         let dstate = na::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
 
         // Propagate state (and state-transition matrix)
-        let res = propagate(&state, &starttime, &stoptime, &settings, None, false)?;
+        let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
 
         // Explicitly propagate state + dstate
         let res2 = propagate(
@@ -549,7 +541,6 @@ mod tests {
             &stoptime,
             &settings,
             None,
-            false,
         )?;
 
         // Difference in states from explicitly propagating with
@@ -603,14 +594,7 @@ mod tests {
 
         // Propagate state (and state-transition matrix)
 
-        let res = propagate(
-            &state,
-            &starttime,
-            &stoptime,
-            &settings,
-            Some(&satprops),
-            false,
-        )?;
+        let res = propagate(&state, &starttime, &stoptime, &settings, Some(&satprops))?;
 
         // Explicitly propagate state + dstate
         let res2 = propagate(
@@ -619,7 +603,6 @@ mod tests {
             &stoptime,
             &settings,
             Some(&satprops),
-            false,
         )?;
 
         // Difference in states from explicitly propagating with
@@ -720,7 +703,8 @@ mod tests {
 
         let state0 = na::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, v0[3]);
-        let settings = PropSettings::default();
+        let mut settings = PropSettings::default();
+        settings.enable_interp = true;
 
         let res = propagate(
             &state0,
@@ -728,7 +712,6 @@ mod tests {
             &times[times.len() - 1],
             &settings,
             Some(&satprops),
-            true,
         )?;
 
         // We've propagated over a day; assert that the difference in position on all three coordinate axes

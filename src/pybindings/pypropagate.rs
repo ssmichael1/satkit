@@ -99,7 +99,6 @@ pub fn propagate(
     let mut starttime: AstroTime = AstroTime::new();
     let mut stoptime: AstroTime = AstroTime::new();
     let mut output_phi: bool = false;
-    let mut output_dense: bool = false;
     let mut satproperties: Option<&dyn SatProperties> = None;
     let satproperties_static: SatPropertiesStatic;
 
@@ -155,7 +154,6 @@ pub fn propagate(
         }
 
         output_phi = kwargs_or_default(&mut kwargs, "output_phi", false)?;
-        output_dense = kwargs_or_default(&mut kwargs, "output_dense", false)?;
 
         if !kw.is_empty() {
             let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
@@ -177,7 +175,6 @@ pub fn propagate(
             &stoptime,
             &propsettings,
             satproperties,
-            output_dense,
         )
         .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
@@ -195,15 +192,9 @@ pub fn propagate(
         pv.fixed_view_mut::<6, 6>(0, 1)
             .copy_from(&Matrix6::identity());
 
-        let res = crate::orbitprop::propagate(
-            &pv,
-            &starttime,
-            &stoptime,
-            &propsettings,
-            satproperties,
-            output_dense,
-        )
-        .unwrap();
+        let res =
+            crate::orbitprop::propagate(&pv, &starttime, &stoptime, &propsettings, satproperties)
+                .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             Ok(PyPropResult {
                 inner: PyPropResultType::R7(res),

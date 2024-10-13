@@ -51,6 +51,17 @@ impl PyPropSettings {
     }
 
     #[getter]
+    fn get_enable_interp(&self) -> bool {
+        self.inner.enable_interp
+    }
+
+    #[setter(enable_interp)]
+    fn set_enable_interp(&mut self, val: bool) -> PyResult<()> {
+        self.inner.enable_interp = val;
+        Ok(())
+    }
+
+    #[getter]
     fn get_use_spaceweather(&self) -> bool {
         self.inner.use_spaceweather
     }
