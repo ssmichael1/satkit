@@ -135,8 +135,6 @@ pub enum PropagationError {
 /// settings.abs_error = 1.0e-9;
 /// settings.rel_error = 1.0e-14;
 /// settings.gravity_order = 4;
-/// settings.gravity_interp_dt_secs = 300.0;
-/// settings.use_jplephem = false;
 ///
 /// // Pick an arbitrary start time
 /// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
@@ -144,7 +142,7 @@ pub enum PropagationError {
 /// let stoptime = starttime + satkit::Duration::Days(0.5);
 ///
 /// // Look at the results
-/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None, false).unwrap();
+/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// // Expect:
@@ -175,8 +173,6 @@ pub enum PropagationError {
 /// settings.abs_error = 1.0e-9;
 /// settings.rel_error = 1.0e-14;
 /// settings.gravity_order = 4;
-/// settings.gravity_interp_dt_secs = 300.0;
-/// settings.use_jplephem = false;
 ///
 /// // Pick an arbitrary start time
 /// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
@@ -184,7 +180,7 @@ pub enum PropagationError {
 /// let stoptime = starttime + satkit::Duration::Days(0.5);
 ///
 /// // Look at the results
-/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None, false).unwrap();
+/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// ```
