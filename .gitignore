@@ -16,6 +16,7 @@ _build
 html
 Pipfile.lock
 
+# Ignore automatically-created version file
 _version.py
 
 # Ignore local virtual environments
