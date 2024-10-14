@@ -131,6 +131,9 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 /// that the sunrise and sunset times are computed for 2020-08-20 in Boston.
 ///
 ///
+/// Will return an error if the sun does not rise or set on the given date
+/// at given location (e.g., Alaska in summer)
+///
 /// # Input Arguments
 ///
 /// * `time`  - Date at which to compute sunrise & sunset
@@ -212,7 +215,6 @@ pub fn riseset(
         }
         Ok(ret / 360.0)
     };
-    //let jd0h = (time.to_jd(TimeScale::UTC) * 2.0).round() / 2.0;
 
     Ok((
         AstroTime::from_jd(
