@@ -170,18 +170,22 @@ pub fn riseset(
         (100.4606184 + 36000.77005361 * t + 0.00038793 * t * t - 2.6E-8 * t * t * t) % 360.0
     };
 
-    let jd0h = (time.to_jd(TimeScale::UTC) * 2.0).round() / 2.0;
-    let criseset = |jdoffset: f64, lhafunc: fn(f64) -> f64| -> SKResult<AstroTime> {
-        let jd = time.to_jd(TimeScale::UTC) + jdoffset - longitude / 360.0;
+    let jd0h: f64 = time.to_jd(TimeScale::UTC).floor() + 0.5;
+    let jdsunrise = jd0h + 0.25 - longitude / 360.0;
+    let jdsunset = jd0h + 0.75 - longitude / 360.0;
+
+    let criseset = |jd: f64, lhafunc: fn(f64) -> f64| -> SKResult<f64> {
         let t = (jd - 2451545.0) / 36525.0;
 
         let lambda_sun = 280.4606184 + 36000.77005361 * t;
         let msun = 357.5291092 + 35999.05034 * t;
         let lambda_ecliptic =
             lambda_sun + 1.914666471 * sind(msun) + 0.019994643 * sind(2.0 * msun);
+        // Longitude in ecliptl
         let epsilon = 23.439291 - 0.0130042 * t;
 
         let tanalpha_sun = cosd(epsilon) * tand(lambda_ecliptic);
+
         let sindelta_sun = sind(epsilon) * sind(lambda_ecliptic);
         let deltasun = f64::asin(sindelta_sun) * RAD2DEG;
         let alpha_sun = f64::atan(tanalpha_sun) * RAD2DEG;
@@ -202,17 +206,54 @@ pub fn riseset(
         if ret < 0.0 {
             ret += 360.0;
         }
-        Ok(AstroTime::from_jd(
-            ret / 360.0 + jd0h - longitude / 360.0,
-            TimeScale::UTC,
-        ))
+        Ok(ret / 360.0)
     };
-    Ok((criseset(0.25, |x| 360.0 - x)?, criseset(0.75, |x| x)?))
+    //let jd0h = (time.to_jd(TimeScale::UTC) * 2.0).round() / 2.0;
+
+    Ok((
+        AstroTime::from_jd(
+            jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.75,
+            TimeScale::UTC,
+        ),
+        AstroTime::from_jd(jdsunset + criseset(jdsunset, |x| x)? - 0.25, TimeScale::UTC),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn testit2() {
+        let coord = ITRFCoord::from_geodetic_deg(42.4154, -71.1565, 0.0);
+        let time = &AstroTime::from_date(2024, 10, 14);
+        let longitude: f64 = coord.longitude_deg();
+        let jd0h: f64 = time.to_jd(TimeScale::UTC).floor() + 0.5 - longitude / 360.0;
+        let jdsunrise = jd0h + 0.25;
+        let jdsunset = jd0h + 0.75;
+        let [a, b] = [jdsunrise, jdsunset].map(|v| {
+            DateTime::from_timestamp(
+                AstroTime::from_jd(v, TimeScale::UTC).to_unixtime() as i64,
+                0,
+            )
+            .unwrap()
+            .with_timezone(&Local)
+        });
+        println!("a = {a}");
+        println!("b = {b}");
+
+        let (a, b) = riseset(time, &coord, None).unwrap();
+        println!("a = {a}");
+        println!("b = {b}");
+        let [a, b] = [a, b].map(|v| {
+            DateTime::from_timestamp(v.to_unixtime() as i64, 0)
+                .unwrap()
+                .with_timezone(&Local)
+        });
+        let (rise, set) = if a.hour() < b.hour() { (a, b) } else { (b, a) };
+        println!("rise = {rise}");
+        println!("set = {set}");
+    }
 
     #[test]
     fn sunpos_mod() {
@@ -274,5 +315,42 @@ mod tests {
         let tm2 = AstroTime::from_date(2020, 6, 20);
         let r = riseset(&tm2, &itrf2, None);
         assert!(r.is_err());
+    }
+
+    use crate::{lpephem::sun::riseset, AstroTime, ITRFCoord};
+    use chrono::{DateTime, Datelike, Local, Timelike};
+    /// Get the rise and set times from the satkit library,
+    /// converted to chrono time units
+    fn get_riseset(time: DateTime<Local>) -> (DateTime<Local>, DateTime<Local>) {
+        // Washington, DC, approximately
+        let coord = ITRFCoord::from_geodetic_deg(39.0, -77.0, 10.0);
+
+        // The docstring for riseset says "time is at location, and should have hours, minutes, and seconds set to zero"
+        // which... is a little confusing, since there's a "unix time" constructor,
+        // but whatever.
+        // The rise/set tables are nonsensical if I provide fractional days (Unix timestamps),
+        // shifting over the course of a day.
+        let time = &AstroTime::from_date(time.year(), time.month(), time.day());
+
+        let (a, b) = riseset(time, &coord, None).unwrap();
+        let [a, b] = [a, b].map(|v| {
+            DateTime::from_timestamp(v.to_unixtime() as i64, 0)
+                .unwrap()
+                .with_timezone(&Local)
+        });
+        let (rise, set) = if a.hour() < b.hour() { (a, b) } else { (b, a) };
+        (rise, set)
+    }
+
+    #[test]
+    fn testit() {
+        let mut now = Local::now();
+        let end = now + chrono::Duration::days(72);
+
+        while now < end {
+            let (rise, set) = get_riseset(now);
+            println!("{rise} // {set}");
+            now += chrono::Duration::days(1);
+        }
     }
 }
