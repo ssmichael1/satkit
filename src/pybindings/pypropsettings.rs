@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 
 use crate::orbitprop::PropSettings;
+use crate::pybindings::PyAstroTime;
 
 #[pyclass(name = "propsettings")]
 #[derive(Clone, Debug)]
@@ -51,13 +52,13 @@ impl PyPropSettings {
     }
 
     #[getter]
-    fn get_use_jplephem(&self) -> bool {
-        self.inner.use_jplephem
+    fn get_enable_interp(&self) -> bool {
+        self.inner.enable_interp
     }
 
-    #[setter(use_jplephem)]
-    fn set_use_jplephem(&mut self, val: bool) -> PyResult<()> {
-        self.inner.use_jplephem = val;
+    #[setter(enable_interp)]
+    fn set_enable_interp(&mut self, val: bool) -> PyResult<()> {
+        self.inner.enable_interp = val;
         Ok(())
     }
 
@@ -74,6 +75,13 @@ impl PyPropSettings {
 
     fn __str__(&self) -> String {
         format!("{}", self.inner.to_string())
+    }
+
+    fn precompute_terms(&mut self, start: &PyAstroTime, stop: &PyAstroTime) -> PyResult<()> {
+        match self.inner.precompute_terms(&start.inner, &stop.inner) {
+            Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+            Ok(_) => Ok(()),
+        }
     }
 }
 

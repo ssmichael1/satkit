@@ -190,7 +190,7 @@ impl SatState {
         match self.cov {
             // Simple case: do not compute state transition matrix, since covariance is not set
             StateCov::None => {
-                let res = orbitprop::propagate(&self.pv, &self.time, time, settings, None, false)?;
+                let res = orbitprop::propagate(&self.pv, &self.time, time, settings, None)?;
                 Ok(SatState {
                     time: time.clone(),
                     pv: res.state_end,
@@ -212,7 +212,7 @@ impl SatState {
                     .copy_from(&na::Matrix6::<f64>::identity());
 
                 // Propagate
-                let res = orbitprop::propagate(&state, &self.time, time, settings, None, false)?;
+                let res = orbitprop::propagate(&state, &self.time, time, settings, None)?;
 
                 Ok(SatState {
                     time: time.clone(),

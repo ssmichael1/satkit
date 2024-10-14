@@ -14,6 +14,8 @@ import typing
 import numpy.typing as npt
 import numpy as np
 
+from .satkit import time, quaternion
+
 import datetime
 
 def gmst(

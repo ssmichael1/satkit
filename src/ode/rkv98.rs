@@ -37,43 +37,47 @@ impl RKAdaptive<N, NI> for RKV98 {
 #[cfg(test)]
 mod tests {
     use super::super::types::*;
-    use super::super::HarmonicOscillator;
     use super::super::RKAdaptive;
     use super::super::RKAdaptiveSettings;
     use super::RKV98;
+    use crate::types::*;
+    use std::f64::consts::PI;
 
-    type State = nalgebra::Vector2<f64>;
+    type State = Vector<2>;
     #[test]
     fn test_nointerp() -> ODEResult<()> {
-        let mut system = HarmonicOscillator::new(1.0);
         let y0 = State::new(1.0, 0.0);
-
-        use std::f64::consts::PI;
 
         let mut settings = RKAdaptiveSettings::default();
         settings.dense_output = false;
         settings.abserror = 1e-8;
         settings.relerror = 1e-8;
 
-        let _res = RKV98::integrate(0.0, 2.0 * PI, &y0, &mut system, &settings)?;
-
+        let _res = RKV98::integrate(
+            0.0,
+            2.0 * PI,
+            &y0,
+            |_t, y| Ok([y[1], -y[0]].into()),
+            &settings,
+        );
         Ok(())
     }
 
     #[test]
     fn testit() -> ODEResult<()> {
-        let mut system = HarmonicOscillator::new(1.0);
-        let y0 = State::new(1.0, 0.0);
-
-        use std::f64::consts::PI;
-
+        let y0 = Vector::<2>::new(1.0, 0.0);
         let mut settings = RKAdaptiveSettings::default();
         settings.abserror = 1e-14;
         settings.relerror = 1e-14;
         settings.dense_output = true;
 
-        let sol = RKV98::integrate(0.0, PI, &y0, &mut system, &settings)?;
-
+        let sol = RKV98::integrate(
+            0.0,
+            PI,
+            &y0,
+            |_t, &y| Ok(Vector::<2>::new(y[1], -y[0])),
+            &settings,
+        )?;
         let testcount = 100;
         (0..100).for_each(|idx| {
             let x = idx as f64 * PI / testcount as f64;

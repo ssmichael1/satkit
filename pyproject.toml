@@ -1,15 +1,15 @@
 [build-system]
-requires = ["setuptools", "setuptools-rust"]
+requires = ["setuptools", "setuptools-rust", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "satkit"
-version = "0.3.13"
 dependencies = ["numpy>=1.0.0"]
 requires-python = ">= 3.8"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
+dynamic = ["version"]
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
     "satellite",
@@ -105,3 +105,6 @@ target = "satkit/satkit"
 path = "Cargo.toml"
 binding = "PyO3"
 py-limited-api = "auto"
+
+[tool.setuptools_scm]
+version_file = "python/satkit/_version.py"

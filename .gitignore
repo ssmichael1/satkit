@@ -16,5 +16,8 @@ _build
 html
 Pipfile.lock
 
+_version.py
+
 # Ignore local virtual environments
 .venv
+

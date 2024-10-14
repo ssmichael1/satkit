@@ -72,7 +72,7 @@ def githash() -> str:
         str: Git hash of this satkit build
     """
 
-def builddate() -> str:
+def build_date() -> str:
     """Return build date of this satkit library as a string
     
     Returns:

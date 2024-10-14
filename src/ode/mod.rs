@@ -35,8 +35,3 @@ pub mod solvers {
 }
 
 pub use types::*;
-
-#[cfg(test)]
-mod harmonic_oscillator;
-#[cfg(test)]
-use harmonic_oscillator::HarmonicOscillator;
