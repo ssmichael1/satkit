@@ -122,9 +122,17 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 /// Sunrise and sunset times on the day given by input time
 /// and at the given location.  
 ///
-/// Time is at location, and should have hours, minutes, and seconds
-/// set to zero
+/// Since sunrise and sunset are local, the input time will have its
+/// local hour angle subtracted off to compute the sunrise and sunset
+/// at the date of the input time locally
 ///
+/// For example, the time 2020-08-20 00:00:00.000Z is actually a date of
+/// 2020-08-19 in local time of Boston, Ma.  The time will be shifted such
+/// that the sunrise and sunset times are computed for 2020-08-20 in Boston.
+///
+///
+/// Will return an error if the sun does not rise or set on the given date
+/// at given location (e.g., Alaska in summer)
 ///
 /// # Input Arguments
 ///
@@ -162,7 +170,6 @@ pub fn riseset(
 
     let sind: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).sin();
     let cosd: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).cos();
-    let tand: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).tan();
     const RAD2DEG: f64 = 180.0 / PI;
 
     // Zero-hour GMST, equation 3-45 in Vallado
@@ -170,21 +177,25 @@ pub fn riseset(
         (100.4606184 + 36000.77005361 * t + 0.00038793 * t * t - 2.6E-8 * t * t * t) % 360.0
     };
 
-    let jd0h = (time.to_jd(TimeScale::UTC) * 2.0).round() / 2.0;
-    let criseset = |jdoffset: f64, lhafunc: fn(f64) -> f64| -> SKResult<AstroTime> {
-        let jd = time.to_jd(TimeScale::UTC) + jdoffset - longitude / 360.0;
+    let jd0h: f64 = (time.to_jd(TimeScale::UTC) - longitude / 360.0).floor() + 0.5;
+    let jdsunrise = jd0h + 0.25 - longitude / 360.0;
+    let jdsunset = jd0h + 0.75 - longitude / 360.0;
+
+    let criseset = |jd: f64, lhafunc: fn(f64) -> f64| -> SKResult<f64> {
         let t = (jd - 2451545.0) / 36525.0;
 
         let lambda_sun = 280.4606184 + 36000.77005361 * t;
         let msun = 357.5291092 + 35999.05034 * t;
         let lambda_ecliptic =
             lambda_sun + 1.914666471 * sind(msun) + 0.019994643 * sind(2.0 * msun);
+        // Longitude in ecliptl
         let epsilon = 23.439291 - 0.0130042 * t;
 
-        let tanalpha_sun = cosd(epsilon) * tand(lambda_ecliptic);
         let sindelta_sun = sind(epsilon) * sind(lambda_ecliptic);
         let deltasun = f64::asin(sindelta_sun) * RAD2DEG;
-        let alpha_sun = f64::atan(tanalpha_sun) * RAD2DEG;
+        //let alpha_sun = f64::atan(tanalpha_sun) * RAD2DEG;
+        let alpha_sun =
+            f64::atan2(cosd(epsilon) * sind(lambda_ecliptic), cosd(lambda_ecliptic)) * RAD2DEG;
 
         let coslha =
             (cosd(sigma) - sind(deltasun) * sind(latitude)) / (cosd(deltasun) * cosd(latitude));
@@ -202,12 +213,16 @@ pub fn riseset(
         if ret < 0.0 {
             ret += 360.0;
         }
-        Ok(AstroTime::from_jd(
-            ret / 360.0 + jd0h - longitude / 360.0,
-            TimeScale::UTC,
-        ))
+        Ok(ret / 360.0)
     };
-    Ok((criseset(0.25, |x| 360.0 - x)?, criseset(0.75, |x| x)?))
+
+    Ok((
+        AstroTime::from_jd(
+            jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.25,
+            TimeScale::UTC,
+        ),
+        AstroTime::from_jd(jdsunset + criseset(jdsunset, |x| x)? - 0.75, TimeScale::UTC),
+    ))
 }
 
 #[cfg(test)]
@@ -274,5 +289,21 @@ mod tests {
         let tm2 = AstroTime::from_date(2020, 6, 20);
         let r = riseset(&tm2, &itrf2, None);
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn test_webexample() {
+        let coord = ITRFCoord::from_geodetic_deg(42.4154, -71.1565, 0.0);
+        let time = &AstroTime::from_date(2024, 10, 14);
+
+        let (rise, set) = riseset(time, &coord, None).unwrap();
+
+        // Check against web example
+        // https://www.timeanddate.com/sun/@4929180
+        let rise_web = AstroTime::from_datetime(2024, 10, 14, 10, 57, 0.0);
+        let set_web = AstroTime::from_datetime(2024, 10, 14, 22, 4, 0.0);
+
+        assert!((rise - rise_web).seconds().abs() < 60.0);
+        assert!((set - set_web).seconds().abs() < 60.0);
     }
 }
