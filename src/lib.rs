@@ -65,6 +65,9 @@ pub mod tle;
 /// Utility functions
 pub mod utils;
 
+// Filters
+pub mod filters;
+
 /// Coordinate frames
 mod frames;
 

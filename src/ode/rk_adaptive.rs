@@ -185,24 +185,21 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         Ok(y)
     }
 
-    ///
-    /// Runga-Kutta integration
-    /// with Proportional-Integral controller
-    fn integrate<S: ODESystem>(
-        xstart: f64,
-        xend: f64,
-        y0: &S::Output,
-        system: &mut S,
+    fn integrate<S: ODEState>(
+        start: f64,
+        stop: f64,
+        y0: &S,
+        ydot: impl Fn(f64, &S) -> ODEResult<S>,
         settings: &RKAdaptiveSettings,
-    ) -> ODEResult<ODESolution<S::Output>> {
+    ) -> ODEResult<ODESolution<S>> {
         let mut nevals: usize = 0;
         let mut naccept: usize = 0;
         let mut nreject: usize = 0;
-        let mut x = xstart.clone();
+        let mut x = start.clone();
         let mut y = y0.clone();
 
         let mut qold: f64 = 1.0e-4;
-        let tdir = match xend > xstart {
+        let tdir = match stop > start {
             true => 1.0,
             false => -1.0,
         };
@@ -213,11 +210,11 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             let sci = (y0.ode_abs() * settings.relerror).ode_scalar_add(settings.abserror);
 
             let d0 = y0.ode_elem_div(&sci).ode_norm();
-            let ydot0 = system.ydot(xstart.clone(), &y0)?;
+            let ydot0 = ydot(start.clone(), &y0)?;
             let d1 = ydot0.ode_elem_div(&sci).ode_norm();
             let h0 = 0.01 * d0 / d1 * tdir;
             let y1 = y0.clone() + ydot0.clone() * h0;
-            let ydot1 = system.ydot(xstart + h0, &y1)?;
+            let ydot1 = ydot(start + h0, &y1)?;
             let d2 = (ydot1 - ydot0).ode_elem_div(&sci).ode_norm() / h0;
             let dmax = f64::max(d1, d2);
             let h1: f64 = match dmax < 1e-15 {
@@ -227,7 +224,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             nevals += 2;
             f64::min(100.0 * h0.abs(), h1.abs()) * tdir
         };
-        let mut accepted_steps: Option<DenseOutput<S::Output>> = match settings.dense_output {
+        let mut accepted_steps: Option<DenseOutput<S>> = match settings.dense_output {
             false => None,
             true => Some(DenseOutput {
                 x: Vec::new(),
@@ -239,15 +236,15 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
         // OK ... lets integrate!
         loop {
-            if (tdir > 0.0 && (x + h) >= xend) || (tdir < 0.0 && (x + h) <= xend) {
-                h = xend - x;
+            if (tdir > 0.0 && (x + h) >= stop) || (tdir < 0.0 && (x + h) <= stop) {
+                h = stop - x;
             }
-            let mut karr = Vec::new();
-            karr.push(system.ydot(x, &y)?);
+            let mut karr = Vec::with_capacity(N);
+            karr.push(ydot(x, &y)?);
 
             // Create the "k"s
             for k in 1..N {
-                karr.push(system.ydot(
+                karr.push(ydot(
                     x + h * Self::C[k],
                     &(karr.iter().enumerate().fold(y.clone(), |acc, (idx, ki)| {
                         acc + ki.clone() * Self::A[k][idx] * h
@@ -268,7 +265,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             let yerr = karr
                 .iter()
                 .enumerate()
-                .fold(S::Output::ode_zero(), |acc, (idx, k)| {
+                .fold(S::ode_zero(), |acc, (idx, k)| {
                     if Self::BERR[idx].abs() > 1.0e-9 {
                         acc + k.clone() * Self::BERR[idx]
                     } else {
@@ -322,22 +319,13 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 h = h / q;
 
                 naccept += 1;
-                if (tdir > 0.0 && x >= xend) || (tdir < 0.0 && x <= xend) {
+                if (tdir > 0.0 && x >= stop) || (tdir < 0.0 && x <= stop) {
                     break;
                 }
             } else {
                 nreject += 1;
                 h = h / f64::min(1.0 / settings.minfac, q11 / settings.gamma);
             }
-            /*
-            h = h * f64::min(
-                settings.maxfac,
-                f64::max(
-                    settings.minfac,
-                    0.9 * (1.0 / enorm).powf(1.0 / (Self::ORDER + 3) as f64),
-                ),
-            );
-            */
         }
 
         Ok(ODESolution {

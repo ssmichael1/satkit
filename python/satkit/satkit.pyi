@@ -1559,7 +1559,10 @@ class propsettings:
         * gravity_order: 4
         * use_spaceweather: True
         * use_jplephem: True
+        * enable_interp: True
 
+    * enable_interp enables high-preciion interpolation of state between start and stop times via the returned function,
+      it is enabled by default.  There is a small increase in computational efficiency if set to false
 
     """
 
@@ -1573,7 +1576,7 @@ class propsettings:
             * rel_error: 1e-8
             * gravity_order: 4
             * use_spaceweather: True
-            * use_jplephem: True
+            * enable_interp: True
 
 
         Returns:
@@ -1623,13 +1626,25 @@ class propsettings:
         """
 
     @property
-    def use_jplephem() -> bool:
-        """Use high-precision but computationally expensive JPL ephemerides for sun and mun when computing their gravitational force"""
+    def enable_interp() -> bool:
+        """Store intermediate data that allows for fast high-precision interpolation of state between start and stop times
+           If not needed, there is a small computational advantage if set to False
+        """
+
+    def precompute_terms(self, start: time, stop: time, step: duration):
+        """Precompute terms for fast interpolation of state between start and stop times
+
+        Args:
+            start (satkit.time): Start time of propagation
+            stop (satkit.time): Stop time of propagation
+            step (satkit.duration, optional): Step size for interpolation.  Default = 60 seconds
+
+        """
 
 def propagate(
-    pos: npt.ArrayLike[float],
-    vel: npt.ArrayLike[float],
+    state: npt.ArrayLike[float],
     start: time,
+    stop: time,
     **kwargs,
 ) -> propresult:
     """High-precision orbit propagator
@@ -1637,17 +1652,15 @@ def propagate(
     Propagate orbits with high-precision force modeling via adaptive Runga-Kutta methods (default is order 9/8).
 
     Args:
-        pos (npt.ArrayLike[float]): 3-element numpy array representing satellite GCRF position in meters
-        vel (npt.ArrayLike[float]): 3-element numpy array representing satellite GCRF velocity in m/s
-        tm (satkit.time): satkit.time object representing instant at which satellite is at "pos" & "vel"
-        stoptime (satkit.time, optional keyword): satkit.time object representing instant at which new position and velocity will be computed
-        duration_secs (float, optional keyword): duration in seconds from "tm" for at which new position and velocity will be computed.
-        duration_days (float, optional keyword): duration in days from "tm" at which new position and velocity will be computed.
-        duration (satkit.duration, optional keyword): duration from "tm" at which new position & velocity will be computed.
+        state (npt.ArrayLike[float], optional): 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second
+        start (satkit.time, optional): satkit.time object representing instant at which satellite is at "pos" & "vel"
+        stop (satkit.time, optional keyword): satkit.time object representing instant at which new position and velocity will be computed
+        duration (satkit.duration, optional keyword): duration from "start" at which new position & velocity will be computed.
+        duration_secs (float, optional keyword): duration in seconds from "start" for at which new position and velocity will be computed.
+        duration_days (float, optional keyword): duration in days from "start" at which new position and velocity will be computed.
         output_phi (bool, optional keyword): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
         propsettings (propsettings, optional keyword): "propsettings" object with input settings for the propagation. if left out, default will be used.
         satproperties (satproperties_static, optional keyword): "sat_properties_static" object with drag and radiation pressure succeptibility of satellite.
-        output_dense (bool, optional keyword): Indicate whether or not dense output should be recorded.  Default is false.
 
     Returns:
         (propresult): Propagation result object holding state outputs, statistics, and dense output if requested

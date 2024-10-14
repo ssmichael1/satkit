@@ -42,7 +42,6 @@ impl RKAdaptive<N, 1> for RKV98NoInterp {
 #[cfg(test)]
 mod tests {
     use super::super::types::*;
-    use super::super::HarmonicOscillator;
     use super::super::RKAdaptive;
     use super::super::RKAdaptiveSettings;
     use super::RKV98NoInterp;
@@ -51,7 +50,6 @@ mod tests {
 
     #[test]
     fn testit() -> ODEResult<()> {
-        let mut system = HarmonicOscillator::new(1.0);
         let y0 = State::new(1.0, 0.0);
 
         use std::f64::consts::PI;
@@ -61,10 +59,20 @@ mod tests {
         settings.abserror = 1e-12;
         settings.relerror = 1e-12;
 
-        let res = RKV98NoInterp::integrate(0.0, 2.0 * PI, &y0, &mut system, &settings)?;
-        println!("res = {:?}", res);
-        let res2 = RKV98NoInterp::integrate(0.0, -2.0 * PI, &y0, &mut system, &settings)?;
-        println!("res2 = {:?}", res2);
+        let res = RKV98NoInterp::integrate(
+            0.0,
+            2.0 * PI,
+            &y0,
+            |_t, y| Ok([y[1], -y[0]].into()),
+            &settings,
+        )?;
+        let _res2 = RKV98NoInterp::integrate(
+            0.0,
+            -2.0 * PI,
+            &y0,
+            |_t, y| Ok([y[1], -y[0]].into()),
+            &settings,
+        )?;
 
         assert!((res.y[0] - 1.0).abs() < 1.0e-11);
         assert!(res.y[1].abs() < 1.0e-11);

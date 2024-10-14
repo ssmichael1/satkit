@@ -22,6 +22,7 @@ mod pysatstate;
 mod pysgp4;
 mod pysolarsystem;
 mod pytle;
+//mod pyukf;
 
 mod pypropagate;
 mod pypropsettings;
