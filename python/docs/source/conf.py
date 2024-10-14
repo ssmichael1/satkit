@@ -12,6 +12,7 @@
 import os
 import shutil
 import sys
+import pathlib
 
 sys.path.insert(0, "python/satkit")
 sys.path.insert(0, "../satkit")
@@ -70,7 +71,10 @@ github_project_url = "https://github.com/ssmichael1/satkit"
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
-_version_py = os.path.join("../../satkit/_version.py")
+
+cwd = pathlib.Path(__file__).parent.resolve()
+
+_version_py = os.path.join(cwd, "/../../satkit/_version.py")
 version_ns = {}
 exec(
     compile(open(_version_py).read(), _version_py, "exec"), version_ns
