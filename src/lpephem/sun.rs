@@ -227,8 +227,6 @@ pub fn riseset(
 mod tests {
     use super::*;
 
-    use chrono::{DateTime, Datelike, Local, Timelike};
-
     #[test]
     fn sunpos_mod() {
         // Example 5-1 in Vallado
