@@ -1120,6 +1120,7 @@ class itrfcoord:
     * This coordinate object can be created from and also output to Geodetic coordinates (latitude, longitude, height above ellipsoid).
     * Functions are also available to provide rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate
 
+
     Args:
 
         vec (numpy.ndarray, list, or 3-element tuple of floats, optional): ITRF Cartesian location in meters
@@ -1178,6 +1179,7 @@ class itrfcoord:
             >>> coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
             >>> print(coord)
             ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+
 
         """
 
@@ -1628,7 +1630,7 @@ class propsettings:
     @property
     def enable_interp() -> bool:
         """Store intermediate data that allows for fast high-precision interpolation of state between start and stop times
-           If not needed, there is a small computational advantage if set to False
+        If not needed, there is a small computational advantage if set to False
         """
 
     def precompute_terms(self, start: time, stop: time, step: duration):
