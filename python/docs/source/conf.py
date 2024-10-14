@@ -74,7 +74,7 @@ github_project_url = "https://github.com/ssmichael1/satkit"
 
 cwd = pathlib.Path(__file__).parent.resolve()
 
-_version_py = os.path.join(cwd, "/../../satkit/_version.py")
+_version_py = os.path.join(cwd, "../../satkit/_version.py")
 version_ns = {}
 exec(
     compile(open(_version_py).read(), _version_py, "exec"), version_ns
