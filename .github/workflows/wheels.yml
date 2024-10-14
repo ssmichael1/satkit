@@ -36,9 +36,6 @@ jobs:
       - name: set up python
         uses: actions/setup-python@v5
 
-      - name: install python packages necessary for build
-        run: python -m pip install -U setuptools wheel build
-
       - name: set up rust
         if: matrix.os != 'ubuntu'
         uses: dtolnay/rust-toolchain@stable
@@ -56,6 +53,8 @@ jobs:
       - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install requests
           python python/test/download_data.py ${{matrix.data_path}}
 
@@ -72,6 +71,8 @@ jobs:
       - name: Download Satkit Test Vectors
         if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install requests
           python python/test/download_testvecs.py ${{matrix.testvec_path}}
 
@@ -85,7 +86,12 @@ jobs:
 
       - name: Create sdist
         if: matrix.os == 'ubuntu'
-        run: python -m build --sdist . -o wheelhouse
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install build
+          python -m build --sdist . -o wheelhouse
+          
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
