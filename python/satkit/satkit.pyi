@@ -149,28 +149,28 @@ def sgp4(
         in the TEME frame at each of the "Ntime" input times and each of the "Ntle" tles
 
     Example:
-    >>> lines = [
-    >>>        "0 INTELSAT 902",
-    >>>     "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
-    >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
-    >>> ]
-    >>>
-    >>> tle = satkit.TLE.single_from_lines(lines)
-    >>>
-    >>> # Compute TEME position & velocity at epoch
-    >>> pteme, vteme = satkit.sgp4(tle, tle.epoch)
-    >>>
-    >>> # Rotate to ITRF frame
-    >>> q = satkit.frametransform.qteme2itrf(tm)
-    >>> pitrf = q * pteme
-    >>> vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
-    >>>
-    >>> # convert to ITRF coordinate object
-    >>> coord = satkit.itrfcoord.from_vector(pitrf)
-    >>>
-    >>> # Print ITRF coordinate object location
-    >>> print(coord)
-    ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
+        >>> lines = [
+        >>>        "0 INTELSAT 902",
+        >>>     "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
+        >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
+        >>> ]
+        >>>
+        >>> tle = satkit.TLE.single_from_lines(lines)
+        >>>
+        >>> # Compute TEME position & velocity at epoch
+        >>> pteme, vteme = satkit.sgp4(tle, tle.epoch)
+        >>>
+        >>> # Rotate to ITRF frame
+        >>> q = satkit.frametransform.qteme2itrf(tm)
+        >>> pitrf = q * pteme
+        >>> vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
+        >>>
+        >>> # convert to ITRF coordinate object
+        >>> coord = satkit.itrfcoord.from_vector(pitrf)
+        >>>
+        >>> # Print ITRF coordinate object location
+        >>> print(coord)
+        ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
     """
 
 class sgp4_gravconst:
