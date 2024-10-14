@@ -135,6 +135,21 @@ pub fn py_vec3_of_time_result_arr(
     }
 }
 
+#[allow(dead_code)]
+pub fn smatrix_to_py<const M: usize, const N: usize>(m: &Matrix<M, N>) -> PyResult<PyObject> {
+    if N == 1 {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            Ok(PyArray1::from_slice_bound(py, m.as_slice()).into_py(py))
+        })
+    } else {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            Ok(PyArray1::from_slice_bound(py, m.as_slice())
+                .reshape([M, N])?
+                .into_py(py))
+        })
+    }
+}
+
 /// Convert python object to fixed-size matrix
 pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> PyResult<Matrix<M, N>> {
     let mut m: Matrix<M, N> = Matrix::<M, N>::zeros();

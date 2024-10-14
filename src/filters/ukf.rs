@@ -129,7 +129,7 @@ impl<const N: usize> UKF<N> {
 
     /// Predict step
     /// Note: add your own process noise after this function is called
-    pub fn predict(&mut self, f: fn(Vector<N>) -> Vector<N>) {
+    pub fn predict(&mut self, f: impl Fn(Vector<N>) -> Vector<N>) {
         let c = self.alpha.powi(2) as f64 * (N as f64 + self.kappa);
 
         let cp = c.sqrt()
