@@ -122,8 +122,13 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 /// Sunrise and sunset times on the day given by input time
 /// and at the given location.  
 ///
-/// Time is at location, and should have hours, minutes, and seconds
-/// set to zero
+/// Since sunrise and sunset are local, the input time will have its
+/// local hour angle subtracted off to compute the sunrise and sunset
+/// at the date of the input time locally
+///
+/// For example, the time 2020-08-20 00:00:00.000Z is actually a date of
+/// 2020-08-19 in local time of Boston, Ma.  The time will be shifted such
+/// that the sunrise and sunset times are computed for 2020-08-20 in Boston.
 ///
 ///
 /// # Input Arguments
@@ -162,7 +167,6 @@ pub fn riseset(
 
     let sind: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).sin();
     let cosd: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).cos();
-    let tand: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).tan();
     const RAD2DEG: f64 = 180.0 / PI;
 
     // Zero-hour GMST, equation 3-45 in Vallado
@@ -170,7 +174,7 @@ pub fn riseset(
         (100.4606184 + 36000.77005361 * t + 0.00038793 * t * t - 2.6E-8 * t * t * t) % 360.0
     };
 
-    let jd0h: f64 = time.to_jd(TimeScale::UTC).floor() + 0.5;
+    let jd0h: f64 = (time.to_jd(TimeScale::UTC) - longitude / 360.0).floor() + 0.5;
     let jdsunrise = jd0h + 0.25 - longitude / 360.0;
     let jdsunset = jd0h + 0.75 - longitude / 360.0;
 
@@ -184,11 +188,11 @@ pub fn riseset(
         // Longitude in ecliptl
         let epsilon = 23.439291 - 0.0130042 * t;
 
-        let tanalpha_sun = cosd(epsilon) * tand(lambda_ecliptic);
-
         let sindelta_sun = sind(epsilon) * sind(lambda_ecliptic);
         let deltasun = f64::asin(sindelta_sun) * RAD2DEG;
-        let alpha_sun = f64::atan(tanalpha_sun) * RAD2DEG;
+        //let alpha_sun = f64::atan(tanalpha_sun) * RAD2DEG;
+        let alpha_sun =
+            f64::atan2(cosd(epsilon) * sind(lambda_ecliptic), cosd(lambda_ecliptic)) * RAD2DEG;
 
         let coslha =
             (cosd(sigma) - sind(deltasun) * sind(latitude)) / (cosd(deltasun) * cosd(latitude));
@@ -212,10 +216,10 @@ pub fn riseset(
 
     Ok((
         AstroTime::from_jd(
-            jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.75,
+            jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.25,
             TimeScale::UTC,
         ),
-        AstroTime::from_jd(jdsunset + criseset(jdsunset, |x| x)? - 0.25, TimeScale::UTC),
+        AstroTime::from_jd(jdsunset + criseset(jdsunset, |x| x)? - 0.75, TimeScale::UTC),
     ))
 }
 
@@ -250,9 +254,9 @@ mod tests {
                 .unwrap()
                 .with_timezone(&Local)
         });
-        let (rise, set) = if a.hour() < b.hour() { (a, b) } else { (b, a) };
-        println!("rise = {rise}");
-        println!("set = {set}");
+        //let (rise, set) = if a.hour() < b.hour() { (a, b) } else { (b, a) };
+        println!("rise = {a}");
+        println!("set = {b}");
     }
 
     #[test]
@@ -315,42 +319,5 @@ mod tests {
         let tm2 = AstroTime::from_date(2020, 6, 20);
         let r = riseset(&tm2, &itrf2, None);
         assert!(r.is_err());
-    }
-
-    use crate::{lpephem::sun::riseset, AstroTime, ITRFCoord};
-    use chrono::{DateTime, Datelike, Local, Timelike};
-    /// Get the rise and set times from the satkit library,
-    /// converted to chrono time units
-    fn get_riseset(time: DateTime<Local>) -> (DateTime<Local>, DateTime<Local>) {
-        // Washington, DC, approximately
-        let coord = ITRFCoord::from_geodetic_deg(39.0, -77.0, 10.0);
-
-        // The docstring for riseset says "time is at location, and should have hours, minutes, and seconds set to zero"
-        // which... is a little confusing, since there's a "unix time" constructor,
-        // but whatever.
-        // The rise/set tables are nonsensical if I provide fractional days (Unix timestamps),
-        // shifting over the course of a day.
-        let time = &AstroTime::from_date(time.year(), time.month(), time.day());
-
-        let (a, b) = riseset(time, &coord, None).unwrap();
-        let [a, b] = [a, b].map(|v| {
-            DateTime::from_timestamp(v.to_unixtime() as i64, 0)
-                .unwrap()
-                .with_timezone(&Local)
-        });
-        let (rise, set) = if a.hour() < b.hour() { (a, b) } else { (b, a) };
-        (rise, set)
-    }
-
-    #[test]
-    fn testit() {
-        let mut now = Local::now();
-        let end = now + chrono::Duration::days(72);
-
-        while now < end {
-            let (rise, set) = get_riseset(now);
-            println!("{rise} // {set}");
-            now += chrono::Duration::days(1);
-        }
     }
 }
