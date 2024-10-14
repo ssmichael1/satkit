@@ -227,37 +227,7 @@ pub fn riseset(
 mod tests {
     use super::*;
 
-    #[test]
-    fn testit2() {
-        let coord = ITRFCoord::from_geodetic_deg(42.4154, -71.1565, 0.0);
-        let time = &AstroTime::from_date(2024, 10, 14);
-        let longitude: f64 = coord.longitude_deg();
-        let jd0h: f64 = time.to_jd(TimeScale::UTC).floor() + 0.5 - longitude / 360.0;
-        let jdsunrise = jd0h + 0.25;
-        let jdsunset = jd0h + 0.75;
-        let [a, b] = [jdsunrise, jdsunset].map(|v| {
-            DateTime::from_timestamp(
-                AstroTime::from_jd(v, TimeScale::UTC).to_unixtime() as i64,
-                0,
-            )
-            .unwrap()
-            .with_timezone(&Local)
-        });
-        println!("a = {a}");
-        println!("b = {b}");
-
-        let (a, b) = riseset(time, &coord, None).unwrap();
-        println!("a = {a}");
-        println!("b = {b}");
-        let [a, b] = [a, b].map(|v| {
-            DateTime::from_timestamp(v.to_unixtime() as i64, 0)
-                .unwrap()
-                .with_timezone(&Local)
-        });
-        //let (rise, set) = if a.hour() < b.hour() { (a, b) } else { (b, a) };
-        println!("rise = {a}");
-        println!("set = {b}");
-    }
+    use chrono::{DateTime, Datelike, Local, Timelike};
 
     #[test]
     fn sunpos_mod() {
@@ -319,5 +289,21 @@ mod tests {
         let tm2 = AstroTime::from_date(2020, 6, 20);
         let r = riseset(&tm2, &itrf2, None);
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn test_webexample() {
+        let coord = ITRFCoord::from_geodetic_deg(42.4154, -71.1565, 0.0);
+        let time = &AstroTime::from_date(2024, 10, 14);
+
+        let (rise, set) = riseset(time, &coord, None).unwrap();
+
+        // Check against web example
+        // https://www.timeanddate.com/sun/@4929180
+        let rise_web = AstroTime::from_datetime(2024, 10, 14, 10, 57, 0.0);
+        let set_web = AstroTime::from_datetime(2024, 10, 14, 22, 4, 0.0);
+
+        assert!((rise - rise_web).seconds().abs() < 60.0);
+        assert!((set - set_web).seconds().abs() < 60.0);
     }
 }
