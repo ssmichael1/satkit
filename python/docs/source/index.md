@@ -74,8 +74,9 @@ Please reach out of you find errors in code or calculations, are interested in c
   examples/Satellite Ground Contacts.ipynb
   examples/Two-Line Element Set.ipynb
   examples/Eclipse.ipynb
-  examples/Sunrise Sunset.ipynb
   examples/Plots.ipynb
+  examples/sunrise_sunset.ipynb
+  examples/riseset.ipynb
 
 .. toctree::
   :caption: API Reference
