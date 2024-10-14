@@ -35,7 +35,10 @@ jobs:
 
       - name: set up python
         uses: actions/setup-python@v5
-        
+
+      - name: install python packages necessary for build
+        run: python -m pip install -U setuptools wheel build
+
       - name: set up rust
         if: matrix.os != 'ubuntu'
         uses: dtolnay/rust-toolchain@stable
