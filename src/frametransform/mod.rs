@@ -148,6 +148,28 @@ pub fn qteme2itrf(tm: &AstroTime) -> Quat {
 }
 
 ///
+/// Rotation from True Equator Mean Equinox (TEME) frame
+/// to Geocentric Celestial Reference Frame (GCRF)
+///
+/// # Arguments
+///
+/// * `tm` - Time at which to compute rotation
+///
+/// # Returns
+///
+/// * Quaternion representing rotation from TEME to GCRF
+///
+/// # Notes
+///
+/// * The TEME frame is the default frame output by the
+/// SGP4 propagator
+/// * An approximate rotation, accurate to within 1 arcsec
+///
+pub fn qteme2gcrf(tm: &AstroTime) -> Quat {
+    qitrf2gcrf_approx(tm) * qteme2itrf(tm)
+}
+
+///
 /// Rotate from Mean Equinix of Date (MOD) coordinate frame
 /// to Geocentric Celestrial Reference Frame
 ///

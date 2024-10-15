@@ -19,7 +19,12 @@ from .satkit import time, quaternion
 import datetime
 
 def gmst(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> float | npt.ArrayLike[np.float]:
     """Greenwich Mean Sidereal Time
 
@@ -35,21 +40,30 @@ def gmst(
         float | npt.ArrayLike[np.float]: Greenwich Mean Sideral Time, radians, at intput time(s)
     """
 
-
 def gast(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> float | npt.ArrayLike[np.float]:
-    """ Greenwich Apparent Sideral Time
+    """Greenwich Apparent Sideral Time
 
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
 
     Returns:
-        float | npt.ArrayLike[np.float]: Greenwich apparant sidereal time, radians, at input time(s)    
+        float | npt.ArrayLike[np.float]: Greenwich apparant sidereal time, radians, at input time(s)
     """
 
 def earth_rotation_angle(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> float | npt.ArrayLike[np.float]:
     """Earth Rotation Angle
 
@@ -68,10 +82,15 @@ def earth_rotation_angle(
     """
 
 def qitrf2tirs(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> quaternion | npt.ArrayLike[quaternion]:
     """Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
-    
+
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
 
@@ -79,9 +98,32 @@ def qitrf2tirs(
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to TIRS at input time(s)
     """
 
-def qcirs2gcrf(tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
-    ) -> quaternion | npt.ArrayLike[quaternion]:
-    """ Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
+def qteme2gcrf(
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
+) -> quaternion | npt.ArrayLike[quaternion]:
+    """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
+
+    Args:
+        tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
+
+    Returns:
+        quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from TEME to GCRF at input time(s)
+    """
+
+def qcirs2gcrf(
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
+) -> quaternion | npt.ArrayLike[quaternion]:
+    """Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
 
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -90,21 +132,30 @@ def qcirs2gcrf(tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLik
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from CIRS to GCRF at input time(s)
     """
 
-
 def qtirs2cirs(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> quaternion | npt.ArrayLike[quaternion]:
     """Rotation from Terrestrial Intermediate Reference System (TIRS) to the Celestial Intermediate Reference System (CIRS)
 
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
-    
+
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from TIRS to CIRS at input time(s)
     """
 
 def qgcrf2itrf_approx(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> quaternion | npt.ArrayLike[quaternion]:
     """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -113,20 +164,24 @@ def qgcrf2itrf_approx(
 
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
-        
+
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from GCRF to ITRF at input time(s)
     """
 
-
 def qitrf2gcrf_approx(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> quaternion | npt.ArrayLike[quaternion]:
     """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
-    Notes: 
+    Notes:
         * Accurate to approx. 1 arcsec
-    
+
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
 
@@ -134,9 +189,13 @@ def qitrf2gcrf_approx(
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to GCRF at input time(s)
     """
 
-
 def qgcrf2itrf(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> quaternion | npt.ArrayLike[quaternion]:
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -154,7 +213,12 @@ def qgcrf2itrf(
     """
 
 def qitrf2gcrf(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> quaternion | npt.ArrayLike[quaternion]:
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
@@ -163,18 +227,22 @@ def qitrf2gcrf(
         * See IERS Technical Note 36, Chapter 5
         * Does not include solid tides, ocean tides
         * Very computationally expensive
-    
+
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to GCRF at input time(s)
     """
 
-
 def qteme2itrf(
-    tm: time | npt.ArrayLike[time] | datetime.datetime | npt.ArrayLike[datetime.datetime],
+    tm: (
+        time
+        | npt.ArrayLike[time]
+        | datetime.datetime
+        | npt.ArrayLike[datetime.datetime]
+    ),
 ) -> quaternion | npt.ArrayLike[quaternion]:
-    """ Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
+    """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
         * This is equation 3-90 in Vallado
@@ -186,7 +254,6 @@ def qteme2itrf(
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from TEME to ITRF at input time(s)
     """
-
 
 def earth_orientation_params(time: time) -> tuple[float, float, float, float] | None:
     """Get Earth Orientation Parameters at given instant
@@ -202,5 +269,5 @@ def earth_orientation_params(time: time) -> tuple[float, float, float, float] | 
             3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
             4 : dX wrt IAU-2000A nutation, milli-arcsecs
             5 : dY wrt IAU-2000A nutation, milli-arcsecs
-            
+
     """
