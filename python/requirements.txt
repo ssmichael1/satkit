@@ -98,7 +98,7 @@ rfc3339-validator==0.1.4
 rfc3986-validator==0.1.1
 rpds-py==0.20.0
 rsa==4.9
-satkit==0.3.14
+satkit==0.4.0
 Send2Trash==1.8.3
 setuptools==75.2.0
 six==1.16.0
