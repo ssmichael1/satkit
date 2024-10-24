@@ -16,6 +16,7 @@ sphinx-rtd-theme = "*"
 plotly = "*"
 jupyter = "*"
 pandas = "*"
+pytest = "*"
 
 [dev-packages]
 
