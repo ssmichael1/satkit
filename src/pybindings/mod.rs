@@ -108,6 +108,8 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::qcirs2gcrf, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::qteme2gcrf, m)?)
+        .unwrap();
     m.add_function(wrap_pyfunction!(pyft::pyeop, m)?).unwrap();
 
     Ok(())

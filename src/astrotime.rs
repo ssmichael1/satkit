@@ -141,11 +141,11 @@ fn deltaat_new() -> &'static Vec<[u64; 2]> {
 
         let mut leapvec = Vec::<[u64; 2]>::new();
         for line in io::BufReader::new(file).lines() {
-            match &line {
-                Ok(s) => match &s {
-                    v if v.chars().next().unwrap() == '#' => (),
+            if let Ok(s) = &line {
+                match &s {
+                    v if v.starts_with('#') => (),
                     v => {
-                        let split = v.trim().split_whitespace().collect::<Vec<&str>>();
+                        let split = v.split_whitespace().collect::<Vec<&str>>();
                         if split.len() >= 2 {
                             let a: u64 = split[0].parse().unwrap_or(0);
                             let b: u64 = split[1].parse().unwrap_or(0);
@@ -154,8 +154,7 @@ fn deltaat_new() -> &'static Vec<[u64; 2]> {
                             }
                         }
                     }
-                },
-                Err(_) => (),
+                }
             }
         }
         leapvec.reverse();
@@ -165,7 +164,19 @@ fn deltaat_new() -> &'static Vec<[u64; 2]> {
 
 impl std::fmt::Display for AstroTime {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        let (mut year, mut mon, mut day, mut hour, mut min, mut sec) = self.to_datetime();
+
+        // Prevent edge case where seconds is displayed as 60
+        if sec > 59.999 {
+            let t = *self + 5e-4 / 86400.0;
+            (year, mon, day, hour, min, sec) = t.to_datetime();
+        }
+
+        write!(
+            f,
+            "{}-{:02}-{:02} {:02}:{:02}:{:06.3}Z",
+            year, mon, day, hour, min, sec
+        )
     }
 }
 
@@ -249,14 +260,14 @@ impl std::ops::Sub<&AstroTime> for AstroTime {
 impl std::ops::Add<&Vec<Duration>> for AstroTime {
     type Output = Vec<Self>;
     fn add(self, other: &Vec<Duration>) -> Self::Output {
-        other.into_iter().map(|x| self + x.days()).collect()
+        other.iter().map(|x| self + x.days()).collect()
     }
 }
 
 impl std::ops::Add<&Vec<f64>> for AstroTime {
     type Output = Vec<Self>;
     fn add(self, other: &Vec<f64>) -> Self::Output {
-        other.into_iter().map(|x| self + *x).collect()
+        other.iter().map(|x| self + *x).collect()
     }
 }
 
@@ -278,7 +289,7 @@ impl std::convert::From<&chrono::NaiveDateTime> for AstroTime {
 
 impl std::convert::From<AstroTime> for chrono::NaiveDateTime {
     fn from(s: AstroTime) -> chrono::NaiveDateTime {
-        let secs: i64 = s.to_unixtime() as i64;
+        let secs: i64 = s.as_unixtime() as i64;
         let nsecs: u32 = (((s.to_mjd(Scale::UTC) * 86400.0) % 1.0) * 1.0e9) as u32;
         chrono::DateTime::from_timestamp(secs, nsecs)
             .unwrap()
@@ -294,6 +305,12 @@ impl TryFrom<std::time::SystemTime> for AstroTime {
             Ok(v) => Ok(AstroTime::from_unixtime(v.as_secs() as f64)),
             Err(_) => Err("Invalid system time"),
         }
+    }
+}
+
+impl Default for AstroTime {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -315,21 +332,6 @@ impl AstroTime {
         AstroTime::from_mjd(t / 86400.0 + UTC1970, Scale::UTC)
     }
 
-    pub fn to_string(&self) -> String {
-        let (mut year, mut mon, mut day, mut hour, mut min, mut sec) = self.to_datetime();
-
-        // Prevent edge case where seconds is displayed as 60
-        if sec > 59.999 {
-            let t = self.clone() + 5e-4 / 86400.0;
-            (year, mon, day, hour, min, sec) = t.to_datetime();
-        }
-
-        format!(
-            "{}-{:02}-{:02} {:02}:{:02}:{:06.3}Z",
-            year, mon, day, hour, min, sec
-        )
-    }
-
     /// Construt new AstroTime object, representing
     /// current date and time
     pub fn now() -> SKResult<AstroTime> {
@@ -344,7 +346,7 @@ impl AstroTime {
     }
 
     /// Convert to unixtime (seconds since midnight Jan 1 1970, UTC)
-    pub fn to_unixtime(&self) -> f64 {
+    pub fn as_unixtime(&self) -> f64 {
         (self.to_mjd(Scale::UTC) - UTC1970) * 86400.0
     }
 
@@ -361,7 +363,7 @@ impl AstroTime {
     ///
     pub fn add_utc_days(&self, days: f64) -> AstroTime {
         let mut utc = self.to_mjd(Scale::UTC);
-        utc = utc + days;
+        utc += days;
         AstroTime::from_mjd(utc, Scale::UTC)
     }
 
@@ -381,9 +383,7 @@ impl AstroTime {
     /// * AstroTime object
     pub fn from_mjd(val: f64, scale: Scale) -> AstroTime {
         match scale {
-            Scale::TAI => AstroTime {
-                mjd_tai: val.clone(),
-            },
+            Scale::TAI => AstroTime { mjd_tai: val },
             Scale::UTC => AstroTime {
                 mjd_tai: val + mjd_utc2tai_seconds(val) / 86400.0,
             },
@@ -465,7 +465,7 @@ impl AstroTime {
         let fracofday: f64 = mjd_utc - mjd_utc.floor();
         let mut sec: f64 = fracofday * 86400.0;
         let hour: u32 = std::cmp::min((sec / 3600.0).floor() as u32, 23);
-        let min: u32 = std::cmp::min((sec as u32 - hour * 3600) / 60 as u32, 59);
+        let min: u32 = std::cmp::min((sec as u32 - hour * 3600) / 60_u32, 59);
         sec = sec - hour as f64 * 3600.0 - min as f64 * 60.0;
 
         (year, month, day, hour, min, sec)
@@ -539,7 +539,7 @@ impl AstroTime {
         scale: Scale,
     ) -> AstroTime {
         let mut mjd: f64 = date2mjd_utc(year, month, day) as f64;
-        mjd = mjd + (((min + (hour * 60)) * 60) as f64 + sec) / 86400.0;
+        mjd += (((min + (hour * 60)) * 60) as f64 + sec) / 86400.0;
         AstroTime::from_mjd(mjd, scale)
     }
 
@@ -549,10 +549,10 @@ impl AstroTime {
     /// midnight on Nov 17, 1858.  The MJD can be computed by
     /// subtracting 2400000.5 from the Julian day
     ///
-    pub fn to_mjd(&self, ref scale: Scale) -> f64 {
+    pub fn to_mjd(&self, scale: Scale) -> f64 {
         match scale {
-            &Scale::TAI => self.mjd_tai,
-            &Scale::GPS => {
+            Scale::TAI => self.mjd_tai,
+            Scale::GPS => {
                 // GPS tracks TAI - 19 seconds
                 // after Jan 1 1980, & prior is
                 // undefined, but we'll just set it to UTC
@@ -562,8 +562,8 @@ impl AstroTime {
                     self.mjd_tai + mjd_tai2utc_seconds(self.mjd_tai) / 86400.0
                 }
             }
-            &Scale::TT => self.mjd_tai + 32.184 / 86400.0,
-            &Scale::UT1 => {
+            Scale::TT => self.mjd_tai + 32.184 / 86400.0,
+            Scale::UT1 => {
                 // First convert to UTC
                 let utc: f64 = self.mjd_tai + mjd_tai2utc_seconds(self.mjd_tai) / 86400.0;
 
@@ -573,9 +573,9 @@ impl AstroTime {
                 utc + eop::eop_from_mjd_utc(utc).unwrap()[0] / 86400.0
             }
 
-            &Scale::UTC => self.mjd_tai + mjd_tai2utc_seconds(self.mjd_tai) / 86400.0,
-            &Scale::INVALID => -1.0,
-            &Scale::TDB => {
+            Scale::UTC => self.mjd_tai + mjd_tai2utc_seconds(self.mjd_tai) / 86400.0,
+            Scale::INVALID => -1.0,
+            Scale::TDB => {
                 let tt: f64 = self.mjd_tai + 32.184 / 86400.0;
                 let ttc: f64 = (tt - (2451545.0 - 2400000.4)) / 36525.0;
                 tt + 0.001657 / 86400.0 * (PI / 180.0 * (628.3076 * ttc + 6.2401)).sin()
@@ -671,14 +671,14 @@ fn date2mjd_utc(year: i32, month: u32, day: u32) -> i32 {
     const C: i32 = -38;
 
     let h: i32 = month as i32 - M;
-    let g: i32 = year as i32 + Y - (N - h) / N;
+    let g: i32 = year + Y - (N - h) / N;
     let f: i32 = (h - 1 + N) % N;
     let e: i32 = (P * g + Q) / R + (day as i32) - 1 - J;
 
     let mut jdn: i32 = e + (S * f + T) / U;
     jdn = jdn - (3 * ((g + A) / 100)) / 4 - C;
 
-    (jdn - 2400001) as i32
+    jdn - 2400001
 }
 
 #[cfg(test)]

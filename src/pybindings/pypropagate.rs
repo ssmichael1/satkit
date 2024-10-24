@@ -168,7 +168,7 @@ pub fn propagate(
     }
 
     // Simple sate propagation
-    if output_phi == false {
+    if !output_phi {
         let res = crate::orbitprop::propagate(
             &state0,
             &starttime,
@@ -179,7 +179,7 @@ pub fn propagate(
         .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             Ok(PyPropResult {
-                inner: PyPropResultType::R1(res),
+                inner: PyPropResultType::R1(Box::new(res)),
             }
             .into_py(py))
         })
@@ -197,7 +197,7 @@ pub fn propagate(
                 .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             Ok(PyPropResult {
-                inner: PyPropResultType::R7(res),
+                inner: PyPropResultType::R7(Box::new(res)),
             }
             .into_py(py))
         })

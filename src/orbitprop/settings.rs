@@ -26,8 +26,8 @@ pub struct PropSettings {
     pub precomputed: Option<Precomputed>,
 }
 
-impl PropSettings {
-    pub fn default() -> PropSettings {
+impl Default for PropSettings {
+    fn default() -> PropSettings {
         PropSettings {
             gravity_order: 4,
             abs_error: 1e-8,
@@ -37,14 +37,19 @@ impl PropSettings {
             precomputed: None,
         }
     }
+}
 
+impl PropSettings {
     pub fn precompute_terms(&mut self, start: &AstroTime, stop: &AstroTime) -> SKResult<()> {
         self.precomputed = Some(Precomputed::new(start, stop)?);
         Ok(())
     }
+}
 
-    pub fn to_string(&self) -> String {
-        format!(
+impl std::fmt::Display for PropSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
             r#"Orbit Propagation Settings
             Gravity Order: {},
             Max Abs Error: {:e},
@@ -62,12 +67,6 @@ impl PropSettings {
                 None => "No Precomputed".to_string(),
             }
         )
-    }
-}
-
-impl std::fmt::Display for PropSettings {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
     }
 }
 

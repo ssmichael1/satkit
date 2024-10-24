@@ -111,8 +111,8 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
         let x = (c * c + a * a - b * b) / 2.0 / c;
         let y = (a * a - x * x).sqrt();
         let big_a = a * a * (x / a).acos() + b * b * ((c - x) / b).acos() - c * y;
-        let frac = 1.0 - big_a / std::f64::consts::PI / a / a;
-        frac
+        
+        1.0 - big_a / std::f64::consts::PI / a / a
     }
 }
 
@@ -238,7 +238,7 @@ mod tests {
 
         let pos = pos_mod(&t);
         // Below value is from Vallado example
-        let ref_pos = vec![146186212.0E3, 28788976.0E3, 12481064.0E3];
+        let ref_pos = [146186212.0E3, 28788976.0E3, 12481064.0E3];
         for idx in 0..3 {
             let err = f64::abs(pos[idx] / ref_pos[idx] - 1.0);
             assert!(err < 1.0e-6);
@@ -254,7 +254,7 @@ mod tests {
 
         let pos = pos_gcrf(&t);
         // Below value is from Vallado example
-        let ref_pos = vec![146259922.0E3, 28585947.0E3, 12397430.0E3];
+        let ref_pos = [146259922.0E3, 28585947.0E3, 12397430.0E3];
         for idx in 0..3 {
             let err = f64::abs(pos[idx] / ref_pos[idx] - 1.0);
             // Less exact here because we are comparing to JPL ephemeris.

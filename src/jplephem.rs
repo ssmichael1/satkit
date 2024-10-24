@@ -115,8 +115,8 @@ impl JPLEphem {
     /// # Return
     ///
     /// * Object holding all of the JPL ephemerides in memory that can be
-    /// queried to find solar system body position in heliocentric or
-    /// geocentric coordinate system as function of time
+    ///   queried to find solar system body position in heliocentric or
+    ///   geocentric coordinate system as function of time
     ///
     /// # Example
     ///
@@ -158,7 +158,7 @@ impl JPLEphem {
 
         // Read in bytes
         let raw = std::fs::read(path)?;
-        let title: &str = &std::str::from_utf8(&raw[0..84])?;
+        let title: &str = std::str::from_utf8(&raw[0..84])?;
 
         // Get version
         let de_version: i32 = title[26..29].parse()?;
@@ -174,10 +174,11 @@ impl JPLEphem {
         let ipt: [[usize; 3]; 15] = {
             let mut ipt: [[usize; 3]; 15] = [[0, 0, 0]; 15];
             let mut idx = 2696;
+            #[allow(clippy::needless_range_loop)]
             for ix in 0..15 {
                 for iy in 0..3 {
                     ipt[ix][iy] = u32::from_le_bytes(raw[idx..(idx + 4)].try_into()?) as usize;
-                    idx = idx + 4;
+                    idx += 4;
                 }
             }
 
@@ -190,7 +191,7 @@ impl JPLEphem {
                     let idx = ((n_con - 400) * 6) as usize;
                     ipt[13][0] = u32::from_le_bytes(raw[idx..(idx + 4)].try_into()?) as usize;
                 } else {
-                    ipt[13][0] = 1 as usize;
+                    ipt[13][0] = 1_usize;
                 }
             }
 
@@ -198,11 +199,11 @@ impl JPLEphem {
             if ipt[13][0] != (ipt[12][0] + ipt[12][1] * ipt[12][2] * 3)
                 || ipt[14][0] != (ipt[13][0] + ipt[13][1] * ipt[13][2] * 3)
             {
-                for ix in 13..15 {
-                    for iy in 0..3 {
-                        ipt[ix][iy] = 0;
-                    }
-                }
+                ipt.iter_mut().skip(13).for_each(|x| {
+                    x[0] = 0;
+                    x[1] = 0;
+                    x[2] = 0;
+                });
             }
             ipt
         };
@@ -210,20 +211,21 @@ impl JPLEphem {
         // Kernel size
         let kernel_size: usize = {
             let mut ks: usize = 4;
-            for ix in 0..15 {
-                ks = ks + 2 * ipt[ix][1] * ipt[ix][2] * dimension(ix)
-            }
+            ipt.iter().enumerate().for_each(|(ix, _)| {
+                ks += 2 * ipt[ix][1] * ipt[ix][2] * dimension(ix);
+            });
+
             ks
         };
 
         Ok(JPLEphem {
             _de_version: de_version,
-            jd_start: jd_start,
-            jd_stop: jd_stop,
-            jd_step: jd_step,
+            jd_start,
+            jd_stop,
+            jd_step,
             _au: au,
-            emrat: emrat,
-            ipt: ipt,
+            emrat,
+            ipt,
             consts: {
                 let mut hm = HashMap::new();
 
@@ -258,8 +260,8 @@ impl JPLEphem {
 
                 unsafe {
                     std::ptr::copy_nonoverlapping(
-                        raw.as_ptr().offset((record_size * 2) as isize) as *const f64,
-                        v.as_mut_ptr() as *mut f64,
+                        raw.as_ptr().add(record_size * 2) as *const f64,
+                        v.as_mut_ptr(),
                         ncoeff * nrecords,
                     );
                 }
@@ -454,7 +456,7 @@ impl JPLEphem {
     ///
     fn geocentric_pos(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
         if body == SolarSystem::Moon {
-            return self.barycentric_pos(body, tm);
+            self.barycentric_pos(body, tm)
         } else {
             let emb: Vec3 = self.barycentric_pos(SolarSystem::EMB, tm)?;
             let moon: Vec3 = self.barycentric_pos(SolarSystem::Moon, tm)?;
@@ -484,7 +486,7 @@ impl JPLEphem {
     ///
     fn geocentric_state(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<(Vec3, Vec3)> {
         if body == SolarSystem::Moon {
-            return self.barycentric_state(body, tm);
+            self.barycentric_state(body, tm)
         } else {
             let emb: (Vec3, Vec3) = self.barycentric_state(SolarSystem::EMB, tm)?;
             let moon: (Vec3, Vec3) = self.barycentric_state(SolarSystem::Moon, tm)?;
@@ -675,7 +677,7 @@ mod tests {
                         .geocentric_state(SolarSystem::Moon, &tm)
                         .unwrap();
                     // Scale Earth velocity
-                    tvel = tvel - mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
+                    tvel -= mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
                 }
                 if src == 3 {
                     spos = Vec3::zeros();
@@ -685,7 +687,7 @@ mod tests {
                         .geocentric_state(SolarSystem::Moon, &tm)
                         .unwrap();
                     //Scale Earth velocity
-                    svel = svel - mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
+                    svel -= mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
                 }
                 if src == 10 {
                     // Compute moon velocity in barycentric frame (not relative to Earth)

@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PyPropResultType {
-    R1(PropagationResult<1>),
-    R7(PropagationResult<7>),
+    R1(Box<PropagationResult<1>>),
+    R7(Box<PropagationResult<7>>),
 }
 
 /// Propagation statistics
@@ -88,7 +88,7 @@ pub struct PyPropResult {
 }
 
 fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
-    let mut s = format!("Propagation Results\n");
+    let mut s = "Propagation Results\n".to_string();
     s.push_str(format!("  Time: {}\n", r.time_end).as_str());
     s.push_str(
         format!(
@@ -121,9 +121,10 @@ fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
 impl PyPropResult {
     #[new]
     /// This should never be called and is here only for pickle support
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         PyPropResult {
-            inner: PyPropResultType::R1(PropagationResult::<1> {
+            inner: PyPropResultType::R1(Box::new(PropagationResult::<1> {
                 time_start: AstroTime::new(),
                 state_start: Vector::<6>::zeros(),
                 time_end: AstroTime::new(),
@@ -132,7 +133,7 @@ impl PyPropResult {
                 accepted_steps: 0,
                 rejected_steps: 0,
                 odesol: None,
-            }),
+            })),
         }
     }
 
@@ -282,7 +283,7 @@ impl PyPropResult {
             },
             PyPropResultType::R7(r) => match r.interp(&time.inner) {
                 Ok(res) => {
-                    if output_phi == false {
+                    if !output_phi {
                         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                             Ok(slice2py1d(py, &res.as_slice()[0..6]))
                         })
@@ -309,13 +310,13 @@ mod test {
     #[test]
     fn test_ser() {
         let sol = PyPropResult::new();
-        print!("sol = {:?}\n", sol);
+        println!("sol = {:?}", sol);
         let v = serde_pickle::to_vec(&sol.inner, serde_pickle::SerOptions::default()).unwrap();
         //print!("v = {:?}", v);
         let sol2 = PyPropResult {
             inner: serde_pickle::from_slice(v.as_slice(), serde_pickle::DeOptions::default())
                 .unwrap(),
         };
-        print!("sol2 = {:?}", sol2);
+        println!("sol2 = {:?}", sol2);
     }
 }

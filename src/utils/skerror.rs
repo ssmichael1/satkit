@@ -31,7 +31,7 @@ impl std::error::Error for SKErr {
 #[macro_export]
 macro_rules! skerror {
     ($($args:tt),*) => {{
-        Err(crate::utils::SKErr::new(format!($($args),*).as_str()).into())
+        Err($crate::utils::SKErr::new(format!($($args),*).as_str()).into())
     }};
 }
 

@@ -21,7 +21,7 @@ use nalgebra as na;
 /// # Notes
 ///
 /// * Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
-/// and 1275 km in range
+///   and 1275 km in range
 ///
 pub fn pos_gcrf(time: &AstroTime) -> na::Vector3<f64> {
     // Julian centuries since Jan 1, 2000 12pm
@@ -83,7 +83,7 @@ mod tests {
         let pos = pos_gcrf(&t);
 
         // Below value is from Vallado example
-        let ref_pos = vec![-134240.626E3, -311571.590E3, -126693.785E3];
+        let ref_pos = [-134240.626E3, -311571.590E3, -126693.785E3];
         for idx in 0..3 {
             let err = f64::abs(pos[idx] / ref_pos[idx] - 1.0);
             assert!(err < 1.0e-6);

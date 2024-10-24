@@ -29,25 +29,19 @@ pub struct SatPropertiesStatic {
 
 impl SatPropertiesStatic {
     pub fn new(cdaoverm: f64, craoverm: f64) -> SatPropertiesStatic {
-        SatPropertiesStatic {
-            cdaoverm: cdaoverm,
-            craoverm: craoverm,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        format!(
-            r#"Static Sat Properties:
-              Cd A / M : {} m^2/kg
-              Cr A / M : {} m^2/kg"#,
-            self.cdaoverm, self.craoverm,
-        )
+        SatPropertiesStatic { cdaoverm, craoverm }
     }
 }
 
 impl std::fmt::Display for SatPropertiesStatic {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(
+            f,
+            r#"Static Sat Properties:
+              Cd A / M : {} m^2/kg
+              Cr A / M : {} m^2/kg"#,
+            self.cdaoverm, self.craoverm,
+        )
     }
 }
 

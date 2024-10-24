@@ -5,20 +5,27 @@ use pyo3::prelude::*;
 #[pyclass(name = "frame", module = "satkit", eq, eq_int)]
 pub enum PyFrame {
     /// International Terrestrial Reference Frame
+    #[allow(clippy::upper_case_acronyms)]
     ITRF,
     /// Terrestrial Intermediate Reference System
+    #[allow(clippy::upper_case_acronyms)]
     TIRS,
     /// Celestial Intermediate Reference System
+    #[allow(clippy::upper_case_acronyms)]
     CIRS,
     /// Geocentric Celestial Reference Frame
+    #[allow(clippy::upper_case_acronyms)]
     GCRF,
     /// True Equator Mean Equinox
+    #[allow(clippy::upper_case_acronyms)]
     TEME,
     /// Earth Mean Equator 2000
     EME2000,
     /// International Celestial Reference Frame
+    #[allow(clippy::upper_case_acronyms)]
     ICRF,
     /// Local Vertical Local Horizontal
+    #[allow(clippy::upper_case_acronyms)]
     LVLH,
 }
 

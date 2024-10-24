@@ -118,13 +118,10 @@ pub fn nrlmsise(
         sec_of_day = dhour as f64 * 3600.0 + dmin as f64 * 60.0 + dsec;
 
         if use_spaceweather {
-            match spaceweather::get(time - 1.0) {
-                Ok(r) => {
-                    f107a = r.f10p7_adj_c81;
-                    f107 = r.f10p7_adj;
-                    ap = r.ap_avg as f64;
-                }
-                Err(_) => (),
+            if let Ok(r) = spaceweather::get(time - 1.0) {
+                f107a = r.f10p7_adj_c81;
+                f107 = r.f10p7_adj;
+                ap = r.ap_avg as f64;
             }
         }
     }
@@ -137,9 +134,9 @@ pub fn nrlmsise(
         g_lat: lat,
         g_lon: lon,
         lst: sec_of_day / 3600.0 + lon / 15.0,
-        f107a: f107a,
-        f107: f107,
-        ap: ap,
+        f107a,
+        f107,
+        ap,
         ap_a: std::ptr::null(),
     };
 

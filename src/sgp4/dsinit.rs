@@ -81,6 +81,7 @@ use std::f64::consts::PI;
 *    vallado, crawford, hujsak, kelso  2006
 ----------------------------------------------------------------------------*/
 
+#[allow(clippy::too_many_arguments)]
 pub fn dsinit(
     // sgp4fix just send in xke as a constant and eliminate getgravconst call
     // gravconsttype whichconst,
@@ -206,7 +207,7 @@ pub fn dsinit(
     const ROOT22: f64 = 1.7891679e-6;
     const ROOT44: f64 = 7.3636953e-9;
     const ROOT54: f64 = 2.1765803e-9;
-    const RPTIM: f64 = 4.37526908801129966e-3; // this equates to 7.29211514668855e-5 rad/sec
+    const RPTIM: f64 = 4.375_269_088_011_3e-3; // this equates to 7.29211514668855e-5 rad/sec
     const ROOT32: f64 = 3.7393792e-7;
     const ROOT52: f64 = 1.1428639e-7;
     const X2O3: f64 = 2.0 / 3.0;
@@ -237,7 +238,7 @@ pub fn dsinit(
         shs = 0.0;
     }
     if sinim != 0.0 {
-        shs = shs / sinim;
+        shs /= sinim;
     }
     let sgs = sghs - cosim * shs;
 
@@ -254,18 +255,18 @@ pub fn dsinit(
     *domdt = sgs + sghl;
     *dnodt = shs;
     if sinim != 0.0 {
-        *domdt = *domdt - cosim / sinim * shll;
-        *dnodt = *dnodt + shll / sinim;
+        *domdt -= cosim / sinim * shll;
+        *dnodt += shll / sinim;
     }
 
     /* ----------- calculate deep space resonance effects -------- */
     *dndt = 0.0;
     let theta = (gsto + tc * RPTIM) % TWOPI;
-    *em = *em + *dedt * t;
-    *inclm = *inclm + *didt * t;
-    *argpm = *argpm + *domdt * t;
-    *nodem = *nodem + *dnodt * t;
-    *mm = *mm + *dmdt * t;
+    *em += *dedt * t;
+    *inclm += *didt * t;
+    *argpm += *domdt * t;
+    *nodem += *dnodt * t;
+    *mm += *dmdt * t;
     //   sgp4fix for negative inclinations
     //   the following if statement should be commented out
     //if (inclm < 0.0)
@@ -344,15 +345,15 @@ pub fn dsinit(
             let mut temp = temp1 * ROOT22;
             *d2201 = temp * f220 * g201;
             *d2211 = temp * f221 * g211;
-            temp1 = temp1 * aonv;
+            temp1 *= aonv;
             temp = temp1 * ROOT32;
             *d3210 = temp * f321 * g310;
             *d3222 = temp * f322 * g322;
-            temp1 = temp1 * aonv;
+            temp1 *= aonv;
             temp = 2.0 * temp1 * ROOT44;
             *d4410 = temp * f441 * g410;
             *d4422 = temp * f442 * g422;
-            temp1 = temp1 * aonv;
+            temp1 *= aonv;
             temp = temp1 * ROOT52;
             *d5220 = temp * f522 * g520;
             *d5232 = temp * f523 * g532;

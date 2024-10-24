@@ -67,15 +67,15 @@ pub fn py_vec3_of_time_arr(
         1 => {
             let v: Vec3 = cfunc(&tm[0]);
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Ok(np::PyArray1::from_slice_bound(py, &v.as_slice()).to_object(py))
+                Ok(np::PyArray1::from_slice_bound(py, v.as_slice()).to_object(py))
             })
         }
         _ => {
             let n = tm.len();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 let out = np::PyArray2::<f64>::zeros_bound(py, (n, 3), false);
-                for idx in 0..n {
-                    let v: Vec3 = cfunc(&tm[idx]);
+                for (idx, time) in tm.iter().enumerate() {
+                    let v: Vec3 = cfunc(time);
                     // I cannot figure out how to do this with a "safe" function,
                     // but... careful checking of dimensions above so this should
                     // never fail
@@ -102,7 +102,7 @@ pub fn py_vec3_of_time_result_arr(
     match tm.len() {
         1 => match cfunc(&tm[0]) {
             Ok(v) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Ok(np::PyArray1::from_slice_bound(py, &v.as_slice()).to_object(py))
+                Ok(np::PyArray1::from_slice_bound(py, v.as_slice()).to_object(py))
             }),
             Err(_) => Err(pyo3::exceptions::PyTypeError::new_err("Invalid time")),
         },
@@ -110,8 +110,8 @@ pub fn py_vec3_of_time_result_arr(
             let n = tm.len();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 let out = np::PyArray2::<f64>::zeros_bound(py, (n, 3), false);
-                for idx in 0..n {
-                    match cfunc(&tm[idx]) {
+                for (idx, time) in tm.iter().enumerate() {
+                    match cfunc(time) {
                         Ok(v) => {
                             // I cannot figure out how to do this with a "safe" function,
                             // but... careful checking of dimensions above so this should
@@ -172,7 +172,7 @@ pub fn py_func_of_time_arr<T: ToPyObject>(
     match tm.len() {
         1 => pyo3::Python::with_gil(|py| -> PyResult<PyObject> { Ok(cfunc(&tm[0]).to_object(py)) }),
         _ => {
-            let tvec: Vec<T> = tm.iter().map(|x| cfunc(&x)).collect();
+            let tvec: Vec<T> = tm.iter().map(cfunc).collect();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> { Ok(tvec.to_object(py)) })
         }
     }
@@ -194,7 +194,7 @@ pub fn py_quat_from_time_arr(
         _ => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             Ok(tm
                 .iter()
-                .map(|x| -> Quaternion { Quaternion { inner: cfunc(&x) } })
+                .map(|x| -> Quaternion { Quaternion { inner: cfunc(x) } })
                 .collect::<Vec<Quaternion>>()
                 .into_py(py))
         }),

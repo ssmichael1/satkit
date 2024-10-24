@@ -95,52 +95,50 @@ impl PyITRFCoord {
                     altitude,
                 ),
             })
-        } else {
-            if args.len() == 3 {
-                let x = args.get_item(0)?.extract::<f64>()?;
-                let y = args.get_item(1)?.extract::<f64>()?;
-                let z = args.get_item(2)?.extract::<f64>()?;
-                Ok(PyITRFCoord {
-                    inner: ITRFCoord::from_slice(&[x, y, z]).unwrap(),
-                })
-            } else if args.len() == 1 {
-                if args.get_item(0)?.is_instance_of::<PyList>() {
-                    match args.get_item(0)?.extract::<Vec<f64>>() {
-                        Ok(xl) => {
-                            if xl.len() != 3 {
-                                return Err(pyo3::exceptions::PyTypeError::new_err(
-                                    "Invalid number of elements",
-                                ));
-                            }
-                            Ok(PyITRFCoord {
-                                inner: ITRFCoord::from_slice(&xl).unwrap(),
-                            })
+        } else if args.len() == 3 {
+            let x = args.get_item(0)?.extract::<f64>()?;
+            let y = args.get_item(1)?.extract::<f64>()?;
+            let z = args.get_item(2)?.extract::<f64>()?;
+            Ok(PyITRFCoord {
+                inner: ITRFCoord::from_slice(&[x, y, z]).unwrap(),
+            })
+        } else if args.len() == 1 {
+            if args.get_item(0)?.is_instance_of::<PyList>() {
+                match args.get_item(0)?.extract::<Vec<f64>>() {
+                    Ok(xl) => {
+                        if xl.len() != 3 {
+                            return Err(pyo3::exceptions::PyTypeError::new_err(
+                                "Invalid number of elements",
+                            ));
                         }
-                        Err(e) => Err(e),
+                        Ok(PyITRFCoord {
+                            inner: ITRFCoord::from_slice(&xl).unwrap(),
+                        })
                     }
-                } else if args.get_item(0)?.is_instance_of::<PyArray1<f64>>() {
-                    let xv = args
-                        .get_item(0)?
-                        .extract::<PyReadonlyArray1<f64>>()
-                        .unwrap();
-                    if xv.len().unwrap() != 3 {
-                        return Err(pyo3::exceptions::PyTypeError::new_err(
-                            "Invalid number of elements",
-                        ));
-                    }
-                    Ok(PyITRFCoord {
-                        inner: ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap(),
-                    })
-                } else {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                "First input must be float, 3-element list of floats, or 3-element numpy array of float"
-            ));
+                    Err(e) => Err(e),
                 }
+            } else if args.get_item(0)?.is_instance_of::<PyArray1<f64>>() {
+                let xv = args
+                    .get_item(0)?
+                    .extract::<PyReadonlyArray1<f64>>()
+                    .unwrap();
+                if xv.len().unwrap() != 3 {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Invalid number of elements",
+                    ));
+                }
+                Ok(PyITRFCoord {
+                    inner: ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap(),
+                })
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                 "First input must be float, 3-element list of floats, or 3-element numpy array of float"
             ));
             }
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "First input must be float, 3-element list of floats, or 3-element numpy array of float"
+            ));
         }
     }
 
@@ -355,7 +353,7 @@ impl PyITRFCoord {
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        let mut raw = [0 as u8; 24];
+        let mut raw = [0; 24];
         raw[0..8].clone_from_slice(f64::to_le_bytes(self.inner.itrf[0]).as_slice());
         raw[8..16].clone_from_slice(f64::to_le_bytes(self.inner.itrf[1]).as_slice());
         raw[16..24].clone_from_slice(f64::to_le_bytes(self.inner.itrf[2]).as_slice());
@@ -380,7 +378,7 @@ impl IntoPy<PyObject> for ITRFCoord {
 }
 
 impl<'b> From<&'b PyITRFCoord> for &'b ITRFCoord {
-    fn from<'a>(s: &'a PyITRFCoord) -> &'a ITRFCoord {
+    fn from(s: &PyITRFCoord) -> &ITRFCoord {
         &s.inner
     }
 }

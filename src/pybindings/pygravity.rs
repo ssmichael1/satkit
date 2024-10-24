@@ -69,21 +69,18 @@ impl IntoPy<PyObject> for &GravityModel {
 pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyResult<PyObject> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
-    if kwds.is_some() {
-        let kw = kwds.unwrap();
-        match kw.get_item("model").unwrap() {
-            Some(v) => model = v.extract::<GravModel>()?,
-            None => {}
+    if let Some(kw) = kwds {
+        if let Some(v) = kw.get_item("model")? {
+            model = v.extract::<GravModel>()?;
         }
-        match kw.get_item("order").unwrap() {
-            Some(v) => order = v.extract::<usize>()?,
-            None => {}
+        if let Some(v) = kw.get_item("order")? {
+            order = v.extract::<usize>()?;
         }
     }
 
     if pos.is_instance_of::<PyITRFCoord>() {
         let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
-        let itrf: ITRFCoord = pyitrf.inner.into();
+        let itrf: ITRFCoord = pyitrf.inner;
         let v = accel(&itrf.itrf, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             let vpy = np::PyArray1::<f64>::from_slice_bound(py, v.as_slice());
@@ -133,21 +130,18 @@ pub fn gravity_and_partials(
 ) -> PyResult<(PyObject, PyObject)> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
-    if kwds.is_some() {
-        let kw = kwds.unwrap();
-        match kw.get_item("model").unwrap() {
-            Some(v) => model = v.extract::<GravModel>()?,
-            None => {}
+    if let Some(kw) = kwds {
+        if let Some(v) = kw.get_item("model")? {
+            model = v.extract::<GravModel>()?;
         }
-        match kw.get_item("order").unwrap() {
-            Some(v) => order = v.extract::<usize>()?,
-            None => {}
+        if let Some(v) = kw.get_item("order")? {
+            order = v.extract::<usize>()?;
         }
     }
 
     if pos.is_instance_of::<PyITRFCoord>() {
         let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
-        let itrf: ITRFCoord = pyitrf.inner.into();
+        let itrf: ITRFCoord = pyitrf.inner;
         let (g, p) = accel_and_partials(&itrf.itrf, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
             let gpy = np::PyArray1::<f64>::from_slice_bound(py, g.as_slice());

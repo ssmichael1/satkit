@@ -193,7 +193,7 @@ pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4State {
 ///
 /// ```
 ///
-pub fn sgp4_full<'a>(
+pub fn sgp4_full(
     tle: &mut TLE,
     tm: &[AstroTime],
     gravconst: GravConst,
@@ -216,7 +216,7 @@ pub fn sgp4_full<'a>(
         match sgp4init(
             gravconst,
             opsmode,
-            &"satno",
+            "satno",
             jdsatepoch - 2433281.5,
             bstar,
             ndot,
@@ -240,18 +240,17 @@ pub fn sgp4_full<'a>(
         }
     }
 
-    let mut s = tle.satrec.as_mut().unwrap();
+    let s = tle.satrec.as_mut().unwrap();
 
     let n = tm.len();
     let mut rarr = StateArr::zeros(n);
     let mut varr = StateArr::zeros(n);
-    let mut earr = Vec::<SGP4Error>::new();
-    earr.reserve(n);
+    let mut earr = Vec::<SGP4Error>::with_capacity(n);
 
     for (pos, thetime) in tm.iter().enumerate() {
         let tsince = (*thetime - tle.epoch).days() * 1440.0;
 
-        match sgp4_lowlevel(&mut s, tsince) {
+        match sgp4_lowlevel(s, tsince) {
             Ok((r, v)) => {
                 rarr.index_mut((.., pos)).copy_from_slice(&r);
                 varr.index_mut((.., pos)).copy_from_slice(&v);
@@ -277,8 +276,7 @@ mod tests {
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
         let line0: &str = "0 INTELSAT 902";
 
-        let mut tle =
-            TLE::load_3line(&line0.to_string(), &line1.to_string(), &line2.to_string()).unwrap();
+        let mut tle = TLE::load_3line(line0, line1, line2).unwrap();
         let tm = tle.epoch;
 
         let (_pos, _vel, err) = sgp4(&mut tle, &[tm]);
@@ -322,12 +320,8 @@ mod tests {
 
                 let testvec: Vec<f64> = line
                     .unwrap()
-                    .trim()
                     .split_whitespace()
-                    .map(|x| match x.parse() {
-                        Ok(v) => v,
-                        Err(_) => -1.0,
-                    })
+                    .map(|x| x.parse().unwrap_or(-1.0))
                     .collect();
                 if testvec.len() < 7 {
                     continue;

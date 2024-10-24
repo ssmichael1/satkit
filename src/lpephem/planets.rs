@@ -399,7 +399,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &AstroTime) -> SKResult<Vec3> {
         }
     };
     // Get m into range [-180, 180]
-    m = m % 360.0;
+    m %= 360.0;
     if m > 180.0 {
         m -= 360.0;
     }

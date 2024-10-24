@@ -101,7 +101,7 @@ fn gstime_sgp4(jdut1: f64) -> f64 {
 *    hoots, schumacher and glover 2004
 *    vallado, crawford, hujsak, kelso  2006
 ----------------------------------------------------------------------------*/
-
+#[allow(clippy::too_many_arguments)]
 pub fn initl(
     // sgp4fix satn not needed. include in satrec in case needed later
     // int satn,
@@ -132,12 +132,8 @@ pub fn initl(
 ) {
     /* --------------------- local variables ------------------------ */
     //double ak, d1, del, adel, po, x2o3;
-    let ak: f64;
-    let d1: f64;
+
     let mut del: f64;
-    let adel: f64;
-    let po: f64;
-    let x2o3: f64;
 
     /*
     // sgp4fix use old way of finding gst
@@ -157,7 +153,7 @@ pub fn initl(
     // sgp4fix identify constants and allow alternate values
     // only xke and j2 are used here so pass them in directly
     // getgravconst( whichconst, tumin, mu, radiusearthkm, xke, j2, j3, j4, j3oj2 );
-    x2o3 = 2.0 / 3.0;
+    let x2o3: f64 = 2.0 / 3.0;
 
     /* ------------- calculate auxillary epoch quantities ---------- */
     *eccsq = ecco * ecco;
@@ -167,16 +163,16 @@ pub fn initl(
     *cosio2 = *cosio * *cosio;
 
     /* ------------------ un-kozai the mean motion ----------------- */
-    ak = f64::powf(xke / no_kozai, x2o3);
-    d1 = 0.75 * j2 * (3.0 * *cosio2 - 1.0) / (*rteosq * *omeosq);
+    let ak: f64 = f64::powf(xke / no_kozai, x2o3);
+    let d1: f64 = 0.75 * j2 * (3.0 * *cosio2 - 1.0) / (*rteosq * *omeosq);
     del = d1 / (ak * ak);
-    adel = ak * (1.0 - del * del - del * (1.0 / 3.0 + 134.0 * del * del / 81.0));
+    let adel: f64 = ak * (1.0 - del * del - del * (1.0 / 3.0 + 134.0 * del * del / 81.0));
     del = d1 / (adel * adel);
     *no_unkozai = no_kozai / (1.0 + del);
 
     *ao = f64::powf(xke / *no_unkozai, x2o3);
     *sinio = f64::sin(inclo);
-    po = *ao * *omeosq;
+    let po: f64 = *ao * *omeosq;
     *con42 = 1.0 - 5.0 * *cosio2;
     *con41 = -*con42 - *cosio2 - *cosio2;
     *ainv = 1.0 / *ao;

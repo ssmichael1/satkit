@@ -40,7 +40,7 @@ impl IERSTable {
                         tnum = tline[4..5].parse()?;
                         let s: Vec<&str> = tline.split_whitespace().collect();
                         let tsize: usize = s[s.len() - 1].parse().unwrap_or(0);
-                        if tnum < 0 || tnum > 5 || tsize == 0 {
+                        if !(0..=5).contains(&tnum) || tsize == 0 {
                             return utils::skerror!(
                                 "Error parsing file {}, invalid table definition line",
                                 fname
@@ -62,11 +62,10 @@ impl IERSTable {
                             &na::SMatrix::<f64, 1, 17>::from_iterator(
                                 tline
                                     .split_whitespace()
-                                    .into_iter()
                                     .map(|x| x.parse().unwrap()),
                             ),
                         );
-                        rowcnt = rowcnt + 1;
+                        rowcnt += 1;
                     }
                 }
                 Err(_) => continue,
@@ -85,7 +84,7 @@ impl IERSTable {
 
             let mut tmult: f64 = 1.0;
             for _ in 0..i {
-                tmult = tmult * t_tt;
+                tmult *= t_tt;
             }
 
             for j in 0..self.data[i].nrows() {

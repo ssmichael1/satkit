@@ -183,7 +183,7 @@ impl ITRFCoord {
     /// 
     /// 
     pub fn from_vector(v: &na::Vector3<f64>) -> ITRFCoord {
-        ITRFCoord { itrf: v.clone() }
+        ITRFCoord { itrf: *v }
     }
 
     /// Returns an ITRF Coordinate given Cartesian ITRF coordinates represented as a slice

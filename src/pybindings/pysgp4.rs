@@ -132,17 +132,14 @@ pub fn sgp4(
     let mut gravconst: GravConst = GravConst::wgs72;
     if kwds.is_some() {
         let kw = kwds.unwrap();
-        match kw.get_item("errflag").unwrap() {
-            Some(v) => output_err = v.extract::<bool>()?,
-            None => {}
+        if let Some(v) = kw.get_item("errflag")? {
+            output_err = v.extract::<bool>()?;
         }
-        match kw.get_item("opsmode").unwrap() {
-            Some(v) => opsmode = v.extract::<OpsMode>()?,
-            None => {}
+        if let Some(v) = kw.get_item("opsmode")? {
+            opsmode = v.extract::<OpsMode>()?;
         }
-        match kw.get_item("gravconst").unwrap() {
-            Some(v) => gravconst = v.extract::<GravConst>()?,
-            None => {}
+        if let Some(v) = kw.get_item("gravconst")? {
+            gravconst = v.extract::<GravConst>()?;
         }
     }
     if tle.is_instance_of::<PyTLE>() {
@@ -162,7 +159,7 @@ pub fn sgp4(
             // Note: this is a little confusing: ndarray uses
             // row major, nalgebra and numpy use column major,
             // hence the switch
-            if output_err == false {
+            if !output_err {
                 Ok((
                     PyArray1::from_slice_bound(py, r.data.as_slice())
                         .reshape(dims.clone())?
@@ -205,8 +202,7 @@ pub fn sgp4(
                 PySGP4Error::success.into_py(py),
             );
             */
-            let mut eint = Vec::new();
-            eint.resize(ntimes * tle.len()?, 0);
+            let mut eint = vec![0; ntimes * tle.len()?];
             results.iter().enumerate().for_each(|(idx, (p, v, e))| {
                 unsafe {
                     let pdata: *mut f64 = parr.data();
@@ -244,7 +240,7 @@ pub fn sgp4(
                 (false, false) => vec![1],
             };
 
-            if output_err == false {
+            if !output_err {
                 Ok((
                     parr.reshape(dims.clone()).unwrap(),
                     varr.reshape(dims).unwrap(),

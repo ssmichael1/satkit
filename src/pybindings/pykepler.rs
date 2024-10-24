@@ -202,7 +202,7 @@ impl PyKepler {
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
-        let mut state = [0 as u8; 48];
+        let mut state = [0; 48];
         state[0..8].clone_from_slice(&self.inner.a.to_le_bytes());
         state[8..16].clone_from_slice(&self.inner.eccen.to_le_bytes());
         state[16..24].clone_from_slice(&self.inner.incl.to_le_bytes());

@@ -91,82 +91,82 @@ use super::satrec::SatRec;
 use std::f64::consts::PI;
 
 pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64; 3]), i32> {
-    let am: f64;
-    let axnl: f64;
-    let aynl: f64;
-    let betal: f64;
-    let cosim: f64;
-    let cnod: f64;
-    let cos2u: f64;
+    
+    
+    
+    
+    
+    
+    
     let mut coseo1: f64 = 0.0;
-    let cosi: f64;
+    
     let mut cosip: f64;
     let cosisq: f64;
-    let cossu: f64;
-    let cosu: f64;
+    
+    
     let delm: f64;
     let delomg: f64;
     let mut em: f64;
-    let _emsq: f64;
-    let ecose: f64;
-    let el2: f64;
+    
+    
+    
     let mut eo1: f64;
     let mut ep: f64;
-    let esine: f64;
+    
     let mut argpm: f64;
     let mut argpp: f64;
-    let argpdf: f64;
-    let pl: f64;
-    let mrt: f64;
-    let mvt: f64;
-    let rdotl: f64;
-    let rl: f64;
-    let rvdot: f64;
-    let rvdotl: f64;
-    let sinim: f64;
-    let sin2u: f64;
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     let mut sineo1: f64 = 0.0;
-    let sini: f64;
+    
     let mut sinip: f64;
-    let sinsu: f64;
-    let sinu: f64;
-    let snod: f64;
+    
+    
+    
     let mut su: f64;
-    let t2: f64;
+    
     let t3: f64;
     let t4: f64;
     let mut tem5: f64;
     let mut temp: f64;
-    let temp1: f64;
-    let temp2: f64;
+    
+    
     let mut tempa: f64;
     let mut tempe: f64;
     let mut templ: f64;
-    let u: f64;
-    let ux: f64;
-    let uy: f64;
-    let uz: f64;
-    let vx: f64;
-    let vy: f64;
-    let vz: f64;
+    
+    
+    
+    
+    
+    
+    
     let mut inclm: f64;
     let mut mm: f64;
     let mut nm: f64;
     let mut nodem: f64;
-    let xinc: f64;
+    
     let mut xincp: f64;
-    let xl: f64;
+    
     let mut xlm: f64;
     let mut mp: f64;
-    let xmdf: f64;
-    let xmx: f64;
-    let xmy: f64;
-    let nodedf: f64;
-    let xnode: f64;
+    
+    
+    
+    
+    
     let mut nodep: f64;
     let tc: f64;
     let mut dndt: f64 = 0.0;
-    let vkmpersec: f64;
+    
     let delmtemp: f64;
 
     let mut ktr: i32;
@@ -196,19 +196,19 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
     const X2O3: f64 = 2.0 / 3.0;
     // sgp4fix identify constants and allow alternate values
     // getgravconst( whichconst, tumin, mu, radiusearthkm, xke, j2, j3, j4, j3oj2 );
-    vkmpersec = satrec.radiusearthkm * satrec.xke / 60.0;
+    let vkmpersec: f64 = satrec.radiusearthkm * satrec.xke / 60.0;
 
     /* --------------------- clear sgp4 error flag ----------------- */
     satrec.t = tsince;
     satrec.error = 0;
 
     /* ------- update for secular gravity and atmospheric drag ----- */
-    xmdf = satrec.mo + satrec.mdot * satrec.t;
-    argpdf = satrec.argpo + satrec.argpdot * satrec.t;
-    nodedf = satrec.nodeo + satrec.nodedot * satrec.t;
+    let xmdf: f64 = satrec.mo + satrec.mdot * satrec.t;
+    let argpdf: f64 = satrec.argpo + satrec.argpdot * satrec.t;
+    let nodedf: f64 = satrec.nodeo + satrec.nodedot * satrec.t;
     argpm = argpdf;
     mm = xmdf;
-    t2 = satrec.t * satrec.t;
+    let t2: f64 = satrec.t * satrec.t;
     nodem = nodedf + satrec.nodecf * t2;
     tempa = 1.0 - satrec.cc1 * satrec.t;
     tempe = satrec.bstar * satrec.cc4 * satrec.t;
@@ -225,7 +225,7 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
         t3 = t2 * satrec.t;
         t4 = t3 * satrec.t;
         tempa = tempa - satrec.d2 * t2 - satrec.d3 * t3 - satrec.d4 * t4;
-        tempe = tempe + satrec.bstar * satrec.cc5 * (f64::sin(mm) - satrec.sinmao);
+        tempe += satrec.bstar * satrec.cc5 * (f64::sin(mm) - satrec.sinmao);
         templ = templ + satrec.t3cof * t3 + t4 * (satrec.t4cof + satrec.t * satrec.t5cof);
     }
 
@@ -279,32 +279,32 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
         //         printf("# error nm %f\n", nm);
         satrec.error = 2;
         // sgp4fix add return
-        return Err(satrec.error as i32);
+        return Err(satrec.error);
     }
-    am = f64::powf(satrec.xke / nm, X2O3) * tempa * tempa;
+    let am: f64 = f64::powf(satrec.xke / nm, X2O3) * tempa * tempa;
     nm = satrec.xke / f64::powf(am, 1.5);
-    em = em - tempe;
+    em -= tempe;
 
     // fix tolerance for error recognition
     // sgp4fix am is fixed from the previous nm check
-    if (em >= 1.0) || (em < -0.001) {
+    if !(-0.001..1.0).contains(&em) {
         //         printf("# error em %f\n", em);
         satrec.error = 1;
         // sgp4fix to return if there is an error in eccentricity
-        return Err(satrec.error as i32);
+        return Err(satrec.error);
     }
     // sgp4fix fix tolerance to avoid a divide by zero
     if em < 1.0e-6 {
         em = 1.0e-6;
     }
-    mm = mm + satrec.no_unkozai * templ;
+    mm += satrec.no_unkozai * templ;
     xlm = mm + argpm + nodem;
-    _emsq = em * em;
+    let _emsq: f64 = em * em;
     //temp = 1.0 - emsq;
 
-    nodem = nodem % TWOPI; //fmod(nodem, twopi);
-    argpm = argpm % TWOPI; //fmod(argpm, twopi);
-    xlm = xlm % TWOPI; //fmod(xlm, twopi);
+    nodem %= TWOPI; //fmod(nodem, twopi);
+    argpm %= TWOPI; //fmod(argpm, twopi);
+    xlm %= TWOPI; //fmod(xlm, twopi);
     mm = (xlm - argpm - nodem) % TWOPI;
 
     // sgp4fix recover singly averaged mean elements
@@ -317,8 +317,8 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
     satrec.nm = nm;
 
     /* ----------------- compute extra mean quantities ------------- */
-    sinim = f64::sin(inclm);
-    cosim = f64::cos(inclm);
+    let sinim: f64 = f64::sin(inclm);
+    let cosim: f64 = f64::cos(inclm);
 
     /* -------------------- add lunar-solar periodics -------------- */
     ep = em;
@@ -373,14 +373,14 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
         );
         if xincp < 0.0 {
             xincp = -xincp;
-            nodep = nodep + PI;
-            argpp = argpp - PI;
+            nodep += PI;
+            argpp -= PI;
         }
-        if (ep < 0.0) || (ep > 1.0) {
+        if !(0.0..=1.0).contains(&ep) {
             //            printf("# error ep %f\n", ep);
             satrec.error = 3;
             // sgp4fix add return
-            return Err(satrec.error as i32);
+            return Err(satrec.error);
         }
     } // if method = d
 
@@ -396,13 +396,13 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
             satrec.xlcof = -0.25 * satrec.j3oj2 * sinip * (3.0 + 5.0 * cosip) / TEMP4;
         }
     }
-    axnl = ep * f64::cos(argpp);
+    let axnl: f64 = ep * f64::cos(argpp);
     temp = 1.0 / (am * (1.0 - ep * ep));
-    aynl = ep * f64::sin(argpp) + temp * satrec.aycof;
-    xl = mp + argpp + nodep + temp * satrec.xlcof * axnl;
+    let aynl: f64 = ep * f64::sin(argpp) + temp * satrec.aycof;
+    let xl: f64 = mp + argpp + nodep + temp * satrec.xlcof * axnl;
 
     /* --------------------- solve kepler's equation --------------- */
-    u = (xl - nodep) % TWOPI;
+    let u: f64 = (xl - nodep) % TWOPI;
     eo1 = u;
     tem5 = 9999.9;
     ktr = 1;
@@ -421,36 +421,36 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
             }
             //tem5 = tem5 > 0.0 ? 0.95 : -0.95;
         }
-        eo1 = eo1 + tem5;
-        ktr = ktr + 1;
+        eo1 += tem5;
+        ktr += 1;
     }
 
     /* ------------- short period preliminary quantities ----------- */
-    ecose = axnl * coseo1 + aynl * sineo1;
-    esine = axnl * sineo1 - aynl * coseo1;
-    el2 = axnl * axnl + aynl * aynl;
-    pl = am * (1.0 - el2);
+    let ecose: f64 = axnl * coseo1 + aynl * sineo1;
+    let esine: f64 = axnl * sineo1 - aynl * coseo1;
+    let el2: f64 = axnl * axnl + aynl * aynl;
+    let pl: f64 = am * (1.0 - el2);
 
     if pl < 0.0 {
         //         printf("# error pl %f\n", pl);
         satrec.error = 4;
         // sgp4fix add return
-        return Err(satrec.error as i32);
+        return Err(satrec.error);
     }
 
-    rl = am * (1.0 - ecose);
-    rdotl = f64::sqrt(am) * esine / rl;
-    rvdotl = f64::sqrt(pl) / rl;
-    betal = f64::sqrt(1.0 - el2);
+    let rl: f64 = am * (1.0 - ecose);
+    let rdotl: f64 = f64::sqrt(am) * esine / rl;
+    let rvdotl: f64 = f64::sqrt(pl) / rl;
+    let betal: f64 = f64::sqrt(1.0 - el2);
     temp = esine / (1.0 + betal);
-    sinu = am / rl * (sineo1 - aynl - axnl * temp);
-    cosu = am / rl * (coseo1 - axnl + aynl * temp);
+    let sinu: f64 = am / rl * (sineo1 - aynl - axnl * temp);
+    let cosu: f64 = am / rl * (coseo1 - axnl + aynl * temp);
     su = f64::atan2(sinu, cosu);
-    sin2u = (cosu + cosu) * sinu;
-    cos2u = 1.0 - 2.0 * sinu * sinu;
+    let sin2u: f64 = (cosu + cosu) * sinu;
+    let cos2u: f64 = 1.0 - 2.0 * sinu * sinu;
     temp = 1.0 / pl;
-    temp1 = 0.5 * satrec.j2 * temp;
-    temp2 = temp1 * temp;
+    let temp1: f64 = 0.5 * satrec.j2 * temp;
+    let temp2: f64 = temp1 * temp;
 
     /* -------------- update for short period periodics ------------ */
     if satrec.method == 'd' {
@@ -459,34 +459,34 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
         satrec.x1mth2 = 1.0 - cosisq;
         satrec.x7thm1 = 7.0 * cosisq - 1.0;
     }
-    mrt = rl * (1.0 - 1.5 * temp2 * betal * satrec.con41) + 0.5 * temp1 * satrec.x1mth2 * cos2u;
-    su = su - 0.25 * temp2 * satrec.x7thm1 * sin2u;
-    xnode = nodep + 1.5 * temp2 * cosip * sin2u;
-    xinc = xincp + 1.5 * temp2 * cosip * sinip * cos2u;
-    mvt = rdotl - nm * temp1 * satrec.x1mth2 * sin2u / satrec.xke;
-    rvdot = rvdotl + nm * temp1 * (satrec.x1mth2 * cos2u + 1.5 * satrec.con41) / satrec.xke;
+    let mrt: f64 = rl * (1.0 - 1.5 * temp2 * betal * satrec.con41) + 0.5 * temp1 * satrec.x1mth2 * cos2u;
+    su -= 0.25 * temp2 * satrec.x7thm1 * sin2u;
+    let xnode: f64 = nodep + 1.5 * temp2 * cosip * sin2u;
+    let xinc: f64 = xincp + 1.5 * temp2 * cosip * sinip * cos2u;
+    let mvt: f64 = rdotl - nm * temp1 * satrec.x1mth2 * sin2u / satrec.xke;
+    let rvdot: f64 = rvdotl + nm * temp1 * (satrec.x1mth2 * cos2u + 1.5 * satrec.con41) / satrec.xke;
 
     /* --------------------- orientation vectors ------------------- */
-    sinsu = f64::sin(su);
-    cossu = f64::cos(su);
-    snod = f64::sin(xnode);
-    cnod = f64::cos(xnode);
-    sini = f64::sin(xinc);
-    cosi = f64::cos(xinc);
-    xmx = -snod * cosi;
-    xmy = cnod * cosi;
-    ux = xmx * sinsu + cnod * cossu;
-    uy = xmy * sinsu + snod * cossu;
-    uz = sini * sinsu;
-    vx = xmx * cossu - cnod * sinsu;
-    vy = xmy * cossu - snod * sinsu;
-    vz = sini * cossu;
+    let sinsu: f64 = f64::sin(su);
+    let cossu: f64 = f64::cos(su);
+    let snod: f64 = f64::sin(xnode);
+    let cnod: f64 = f64::cos(xnode);
+    let sini: f64 = f64::sin(xinc);
+    let cosi: f64 = f64::cos(xinc);
+    let xmx: f64 = -snod * cosi;
+    let xmy: f64 = cnod * cosi;
+    let ux: f64 = xmx * sinsu + cnod * cossu;
+    let uy: f64 = xmy * sinsu + snod * cossu;
+    let uz: f64 = sini * sinsu;
+    let vx: f64 = xmx * cossu - cnod * sinsu;
+    let vy: f64 = xmy * cossu - snod * sinsu;
+    let vz: f64 = sini * cossu;
 
     // sgp4fix for decaying satellites
     if mrt < 1.0 {
         //         printf("# decay condition %11.6f \n",mrt);
         satrec.error = 6;
-        return Err(satrec.error as i32);
+        return Err(satrec.error);
     }
 
     /* --------- position and velocity (in km and km/sec) ---------- */
@@ -497,7 +497,7 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
     //v[1] = (mvt * uy + rvdot * vy) * vkmpersec;
     //v[2] = (mvt * uz + rvdot * vz) * vkmpersec;
 
-    return Ok((
+    Ok((
         [
             (mrt * ux) * satrec.radiusearthkm,
             (mrt * uy) * satrec.radiusearthkm,
@@ -508,7 +508,7 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
             (mvt * uy + rvdot * vy) * vkmpersec,
             (mvt * uz + rvdot * vz) * vkmpersec,
         ],
-    ));
+    ))
 
     //#include "debug7.cpp"
 } // sgp4

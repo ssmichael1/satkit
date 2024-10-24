@@ -11,7 +11,7 @@ import satkit
 
 @typing.overload
 def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
-     """
+    """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
     Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated
@@ -31,11 +31,11 @@ def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
     From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
 
     """
-    
+
 @typing.overload
 def pos_gcrf(
-    time: npt.ArrayLike[satkit.time]|list[satkit.time]
-             ) -> npt.ArrayLike[np.float64]:
+    time: npt.ArrayLike[satkit.time] | list[satkit.time],
+) -> npt.ArrayLike[np.float64]:
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
@@ -55,10 +55,10 @@ def pos_gcrf(
 
     From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
     """
-    
+
 @typing.overload
 def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
-     """
+    """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
     Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated
@@ -78,8 +78,7 @@ def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
     From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
 
     """
-    
-    
+
 @typing.overload
 def pos_mod(time: satkit.time) -> npt.ArrayLike[np.float64]:
     """
@@ -87,12 +86,12 @@ def pos_mod(time: satkit.time) -> npt.ArrayLike[np.float64]:
 
     Algorithm 29 from Vallado for sun in Mean of Date (MOD)
 
-    Input:
+    Args:
 
-    time:  satkit.time object representing time
-            aatwhich to compute position
+        time:  satkit.time object representing time
+                aatwhich to compute position
 
-    Output:
+    Returns:
 
     3-element numpy array representing sun position in MOD frame
     at given time.  Units are meters
@@ -100,42 +99,45 @@ def pos_mod(time: satkit.time) -> npt.ArrayLike[np.float64]:
     From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
 
     """
+
 @typing.overload
 def pos_mod(
-    time: npt.ArrayLike[satkit.time]|list[satkit.time]
-             ) -> npt.ArrayLike[np.float64]:
+    time: npt.ArrayLike[satkit.time] | list[satkit.time],
+) -> npt.ArrayLike[np.float64]:
     """
     Sun position in the Mean-of-Date Frame
 
     Algorithm 29 from Vallado for sun in Mean of Date (MOD)
 
-    Input:
+    Args:
 
-    time:  list or numpy arra of satkit.time objects,
-           representing times at which to compute positions
+        time (time|npt.ArrayLike[time]):  list or numpy arra of satkit.time objects,
+             representing times at which to compute positions
 
-    Output:
+    Returns:
 
-    Nx3 numpy array representing sun position in MOD frame
-    at given times.  Units are meters
+        (npt.ArrayLike[float]): Nx3 numpy array representing sun position in MOD frame
+        at given times.  Units are meters
 
-    From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+
+    Notes:
+
+        From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
     """
-    
-def rise_set(time: satkit.time,
-             coord: satkit.itrfcoord,
-             sigma: float = 90.0 + 50.0/60.0
-             ) -> typing.Tuple[satkit.time, satkit.time]:
+
+def rise_set(
+    time: satkit.time, coord: satkit.itrfcoord, sigma: float = 90.0 + 50.0 / 60.0
+) -> typing.Tuple[satkit.time, satkit.time]:
     """
     Sunrise and sunset times on the day given by input time
-    and at the given location.  
+    and at the given location.
 
     Time is a "date" at location, and should have hours, minutes, and seconds
     set to zero
 
     Vallado Algorithm 30
 
-    Inputs:
+    Args:
 
         Time:   satkit.time representing date for which to compute
                 sunrise & sunset
@@ -152,8 +154,8 @@ def rise_set(time: satkit.time,
 
                 If not passed in, "Standard" is used (90.0 + 50.0/60.0)
 
-    Returns Tuple:
+    Returns:
 
-    (sunrise: satkit.time, sunset: satkit.time)
+        (sunrise: satkit.time, sunset: satkit.time)
 
     """

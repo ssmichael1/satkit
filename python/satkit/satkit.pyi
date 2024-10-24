@@ -522,7 +522,7 @@ class time:
             satkit.time: Time object representing input modified Julian date and time scale
         """
 
-    def to_date(self) -> typing.Tuple[int, int, int]:
+    def as_date(self) -> typing.Tuple[int, int, int]:
         """Return tuple representing as UTC Gegorian date of the time object.
 
         Returns:
@@ -563,7 +563,7 @@ class time:
             2023-03-05 11:03:45.453Z
         """
 
-    def to_gregorian(
+    def as_gregorian(
         self, scale=timescale.UTC
     ) -> typing.Tuple[int, int, int, int, int, float]:
         """Return tuple representing as UTC Gegorian date and time of the time object.
@@ -608,7 +608,7 @@ class time:
             2023-06-03 02:19:34
         """
 
-    def to_mjd(self, scale: timescale = timescale.UTC) -> float:
+    def as_mjd(self, scale: timescale = timescale.UTC) -> float:
         """
         Represent time instance as a Modified Julian Date
         with the provided time scale
@@ -616,7 +616,7 @@ class time:
         If no time scale is provided, default is satkit.timescale.UTC
         """
 
-    def to_jd(self, scale: timescale = timescale.UTC) -> float:
+    def as_jd(self, scale: timescale = timescale.UTC) -> float:
         """
         Represent time instance as Julian Date with
         the provided time scale
@@ -624,7 +624,7 @@ class time:
         If no time scale is provided, default is satkit.timescale.UTC
         """
 
-    def to_unixtime(self) -> float:
+    def as_unixtime(self) -> float:
         """
         Represent time as unixtime
 
@@ -926,14 +926,14 @@ class quaternion:
             satkit.quaternion: Quaternion that rotates from v1 to v2
         """
 
-    def to_rotation_matrix(self) -> npt.ArrayLike[np.float64]:
+    def as_rotation_matrix(self) -> npt.ArrayLike[np.float64]:
         """Return 3x3 rotation matrix representing equivalent rotation
 
         Returns:
             npt.ArrayLike[np.float64]: 3x3 rotation matrix representing equivalent rotation
         """
 
-    def to_euler(self) -> typing.Tuple[float, float, float]:
+    def as_euler(self) -> typing.Tuple[float, float, float]:
         """Return equivalent rotation angle represented as rotation angles: ("roll", "pitch", "yaw") in radians:
 
         Returns:
