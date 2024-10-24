@@ -65,6 +65,7 @@
 *    hoots, schumacher and glover 2004
 *    vallado, crawford, hujsak, kelso  2006
 ----------------------------------------------------------------------------*/
+#[allow(clippy::too_many_arguments)]
 pub fn dscom(
     epoch: f64,
     ep: f64,
@@ -187,10 +188,9 @@ pub fn dscom(
     let mut a8: f64;
     let mut a9: f64;
     let mut a10: f64;
-    let betasq: f64;
+
     let mut cc: f64;
-    let ctem: f64;
-    let stem: f64;
+
     let mut x1: f64;
     let mut x2: f64;
     let mut x3: f64;
@@ -199,22 +199,20 @@ pub fn dscom(
     let mut x6: f64;
     let mut x7: f64;
     let mut x8: f64;
-    let xnodce: f64;
-    let xnoi: f64;
+
     let mut zcosg: f64;
-    let zcosgl: f64;
+
     let mut zcosh: f64;
-    let zcoshl: f64;
+
     let mut zcosi: f64;
-    let zcosil: f64;
+
     let mut zsing: f64;
-    let zsingl: f64;
+
     let mut zsinh: f64;
-    let zsinhl: f64;
+
     let mut zsini: f64;
-    let zsinil: f64;
+
     let mut zx: f64;
-    let zy: f64;
 
     *nm = np;
     *em = ep;
@@ -225,7 +223,7 @@ pub fn dscom(
     *sinim = f64::sin(inclp);
     *cosim = f64::cos(inclp);
     *emsq = *em * *em;
-    betasq = 1.0 - *emsq;
+    let betasq: f64 = 1.0 - *emsq;
     *rtemsq = f64::sqrt(betasq);
 
     /* ----------------- initialize lunar solar terms --------------- */
@@ -235,20 +233,20 @@ pub fn dscom(
     *pgho = 0.0;
     *pho = 0.0;
     *day = epoch + 18261.5 + tc / 1440.0;
-    xnodce = (4.5236020 - 9.2422029e-4 * *day) % TWOPI;
-    stem = f64::sin(xnodce);
-    ctem = f64::cos(xnodce);
-    zcosil = 0.91375164 - 0.03568096 * ctem;
-    zsinil = f64::sqrt(1.0 - zcosil * zcosil);
-    zsinhl = 0.089683511 * stem / zsinil;
-    zcoshl = f64::sqrt(1.0 - zsinhl * zsinhl);
+    let xnodce: f64 = (4.5236020 - 9.2422029e-4 * *day) % TWOPI;
+    let stem: f64 = f64::sin(xnodce);
+    let ctem: f64 = f64::cos(xnodce);
+    let zcosil: f64 = 0.91375164 - 0.03568096 * ctem;
+    let zsinil: f64 = f64::sqrt(1.0 - zcosil * zcosil);
+    let zsinhl: f64 = 0.089683511 * stem / zsinil;
+    let zcoshl: f64 = f64::sqrt(1.0 - zsinhl * zsinhl);
     *gam = 5.8351514 + 0.0019443680 * *day;
     zx = 0.39785416 * stem / zsinil;
-    zy = zcoshl * ctem + 0.91744867 * zsinhl * stem;
+    let zy: f64 = zcoshl * ctem + 0.91744867 * zsinhl * stem;
     zx = f64::atan2(zx, zy);
     zx = *gam + zx - xnodce;
-    zcosgl = f64::cos(zx);
-    zsingl = f64::sin(zx);
+    let zcosgl: f64 = f64::cos(zx);
+    let zsingl: f64 = f64::sin(zx);
 
     /* ------------------------- do solar terms --------------------- */
     zcosg = ZCOSGS;
@@ -258,7 +256,7 @@ pub fn dscom(
     zcosh = *cnodm;
     zsinh = *snodm;
     cc = C1SS;
-    xnoi = 1.0 / *nm;
+    let xnoi: f64 = 1.0 / *nm;
 
     //for (lsflg = 1; lsflg <= 2; lsflg++)
     for lsflg in 1..3 {

@@ -86,7 +86,7 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
                 c != "I" && c != "P"
             } =>
             {
-                ()
+                
             }
             v => {
                 // Pull from "Bulliten A"
@@ -125,16 +125,10 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
                     },
                     lod: lod_str.trim().parse().unwrap_or(0.0),
                     dX: {
-                        match dx_str.trim().parse() {
-                            Ok(v) => v,
-                            Err(_) => 0.0,
-                        }
+                        dx_str.trim().parse().unwrap_or(0.0)
                     },
                     dY: {
-                        match dy_str.trim().parse() {
-                            Ok(v) => v,
-                            Err(_) => 0.0,
-                        }
+                        dy_str.trim().parse().unwrap_or(0.0)
                     },
                 })
             }
@@ -145,7 +139,7 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
 
 fn eop_params_singleton() -> &'static RwLock<Vec<EOPEntry>> {
     static INSTANCE: OnceCell<RwLock<Vec<EOPEntry>>> = OnceCell::new();
-    INSTANCE.get_or_init(|| RwLock::new(load_eop_file_csv(None).unwrap_or(Vec::<EOPEntry>::new())))
+    INSTANCE.get_or_init(|| RwLock::new(load_eop_file_csv(None).unwrap_or_default()))
 }
 
 /// Download new Earth Orientation Parameters file, and load it.
@@ -197,7 +191,7 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     match idx {
         None => None,
         Some(v) => {
-            if v == 0 as usize {
+            if v == 0_usize {
                 return None;
             }
             // Linear interpolation
@@ -247,9 +241,8 @@ mod tests {
     /// Check that data is loaded
     #[test]
     fn loaded() {
-        assert_eq!(
-            eop_params_singleton().read().unwrap()[0].mjd_utc >= 0.0,
-            true
+        assert!(
+            eop_params_singleton().read().unwrap()[0].mjd_utc >= 0.0
         );
     }
 

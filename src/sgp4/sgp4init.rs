@@ -90,7 +90,7 @@ use std::f64::consts::PI;
 *    hoots, schumacher and glover 2004
 *    vallado, crawford, hujsak, kelso  2006
 ----------------------------------------------------------------------------*/
-
+#[allow(clippy::too_many_arguments)]
 pub fn sgp4init(
     gravconst: GravConst,
     opsmode: OpsMode,
@@ -194,12 +194,9 @@ pub fn sgp4init(
     let mut z31: f64 = 0.0;
     let mut z32: f64 = 0.0;
     let mut z33: f64 = 0.0;
-    let qzms2t: f64;
-    let ss: f64;
-    let x2o3: f64;
 
     let delmotemp: f64;
-    let qzms2ttemp: f64;
+
     let qzms24temp: f64;
 
     /*
@@ -277,11 +274,11 @@ pub fn sgp4init(
     /* ------------------------ earth constants ----------------------- */
     // sgp4fix identify constants and allow alternate values no longer needed
     // getgravconst( whichconst, tumin, mu, radiusearthkm, xke, j2, j3, j4, j3oj2 );
-    ss = 78.0 / satrec.radiusearthkm + 1.0;
+    let ss: f64 = 78.0 / satrec.radiusearthkm + 1.0;
     // sgp4fix use multiply for speed instead of pow
-    qzms2ttemp = (120.0 - 78.0) / satrec.radiusearthkm;
-    qzms2t = qzms2ttemp * qzms2ttemp * qzms2ttemp * qzms2ttemp;
-    x2o3 = 2.0 / 3.0;
+    let qzms2ttemp: f64 = (120.0 - 78.0) / satrec.radiusearthkm;
+    let qzms2t: f64 = qzms2ttemp * qzms2ttemp * qzms2ttemp * qzms2ttemp;
+    let x2o3: f64 = 2.0 / 3.0;
 
     satrec.init = 'y';
     satrec.t = 0.0;

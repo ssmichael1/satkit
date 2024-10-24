@@ -34,16 +34,22 @@ pub enum PyTimeScale {
     /// Invalid time scale
     Invalid = Scale::INVALID as isize,
     /// Universal Time Coordinate
+    #[allow(clippy::upper_case_acronyms)]
     UTC = Scale::UTC as isize,
     /// Terrestrial Time
+    #[allow(clippy::upper_case_acronyms)]
     TT = Scale::TT as isize,
     /// UT1
+    #[allow(clippy::upper_case_acronyms)]
     UT1 = Scale::UT1 as isize,
     /// International Atomic Time
+    #[allow(clippy::upper_case_acronyms)]
     TAI = Scale::TAI as isize,
     /// Global Positioning System (GPS) Time
+    #[allow(clippy::upper_case_acronyms)]
     GPS = Scale::GPS as isize,
     /// Barycentric Dynamical Time
+    #[allow(clippy::upper_case_acronyms)]
     TDB = Scale::TDB as isize,
 }
 
@@ -151,7 +157,7 @@ impl PyAstroTime {
             }
             if let Some(empty) = kw.get_item("empty")? {
                 let bempty = empty.extract::<bool>()?;
-                if bempty == true {
+                if bempty {
                     return Ok(PyAstroTime {
                         inner: AstroTime { mjd_tai: 0.0 },
                     });
@@ -269,7 +275,7 @@ impl PyAstroTime {
     ///
     /// Returns:
     ///    (int, int, int): Tuple with 3 elements representing Gregorian year, month, and day
-    fn to_date(&self) -> (u32, u32, u32) {
+    fn as_date(&self) -> (u32, u32, u32) {
         self.inner.to_date()
     }
 
@@ -278,7 +284,7 @@ impl PyAstroTime {
     /// Returns:
     ///     (int, int, int, int, int, float): Tuple with 6 elements representing Gregorian year, month, day, hour, minute, and second
     ///
-    fn to_gregorian(&self) -> (u32, u32, u32, u32, u32, f64) {
+    fn as_gregorian(&self) -> (u32, u32, u32, u32, u32, f64) {
         self.inner.to_datetime()
     }
 
@@ -350,7 +356,7 @@ impl PyAstroTime {
     #[pyo3(signature = (utc=true))]
     fn datetime(&self, utc: bool) -> PyResult<PyObject> {
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            let timestamp: f64 = self.to_unixtime();
+            let timestamp: f64 = self.as_unixtime();
             let tz = match utc {
                 false => None,
                 true => Some(timezone_utc_bound(py)),
@@ -367,7 +373,7 @@ impl PyAstroTime {
     /// Returns:
     ///     float: Modified Julian Date
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
-    fn to_mjd(&self, scale: &PyTimeScale) -> f64 {
+    fn as_mjd(&self, scale: &PyTimeScale) -> f64 {
         self.inner.to_mjd(scale.into())
     }
 
@@ -379,7 +385,7 @@ impl PyAstroTime {
     /// Returns:
     ///     float: Julian Date
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
-    fn to_jd(&self, scale: &PyTimeScale) -> f64 {
+    fn as_jd(&self, scale: &PyTimeScale) -> f64 {
         self.inner.to_jd(scale.into())
     }
 
@@ -387,8 +393,8 @@ impl PyAstroTime {
     ///
     /// Returns:
     ///     float: Unix time (seconds since 1970-01-01 00:00:00 UTC)
-    fn to_unixtime(&self) -> f64 {
-        self.inner.to_unixtime()
+    fn as_unixtime(&self) -> f64 {
+        self.inner.as_unixtime()
     }
 
     /// Add to satkit time a duration or list or numpy array of durations
@@ -406,7 +412,6 @@ impl PyAstroTime {
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 let objarr = parr
                     .as_array()
-                    .into_iter()
                     .map(|x| {
                         let obj = PyAstroTime {
                             inner: self.inner + *x,
@@ -423,15 +428,13 @@ impl PyAstroTime {
             if let Ok(v) = other.extract::<Vec<f64>>() {
                 pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                     let objarr = v
-                        .into_iter()
+                        .iter()
                         .map(|x| {
                             let pyobj = PyAstroTime {
-                                inner: self.inner + x,
+                                inner: self.inner + *x,
                             };
                             pyobj.into_py(py)
-                        })
-                        .into_iter();
-
+                        });
                     let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
                 })
@@ -444,8 +447,7 @@ impl PyAstroTime {
                                 inner: self.inner + x.inner,
                             };
                             pyobj.into_py(py)
-                        })
-                        .into_iter();
+                        });
 
                     let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
@@ -501,9 +503,7 @@ impl PyAstroTime {
                             inner: self.inner - *x,
                         };
                         obj.into_py(py)
-                    })
-                    .into_iter();
-                let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
+                    });                let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                 Ok(parr.into_py(py))
             })
         }
@@ -518,9 +518,7 @@ impl PyAstroTime {
                                 inner: self.inner - x,
                             };
                             pyobj.into_py(py)
-                        })
-                        .into_iter();
-
+                        });
                     let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
                 })
@@ -533,9 +531,7 @@ impl PyAstroTime {
                                 inner: self.inner - x.inner,
                             };
                             pyobj.into_py(py)
-                        })
-                        .into_iter();
-
+                        });
                     let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
                     Ok(parr.into_py(py))
                 })
@@ -716,7 +712,7 @@ impl IntoPy<PyObject> for astrotime::AstroTime {
 }
 
 impl<'b> From<&'b PyAstroTime> for &'b astrotime::AstroTime {
-    fn from<'a>(s: &'a PyAstroTime) -> &'a astrotime::AstroTime {
+    fn from(s: &PyAstroTime) -> &astrotime::AstroTime {
         &s.inner
     }
 }
@@ -739,7 +735,7 @@ impl ToTimeVec for &Bound<'_, PyAny> {
         // "Scalar" time input case
         if self.is_instance_of::<PyAstroTime>() {
             let tm: PyAstroTime = self.extract().unwrap();
-            Ok(vec![tm.inner.clone()])
+            Ok(vec![tm.inner])
         } else if self.is_instance_of::<PyDateTime>() {
             let dt: Py<PyDateTime> = self.extract().unwrap();
             pyo3::Python::with_gil(|py| Ok(vec![datetime2astrotime(dt.bind(py)).unwrap()]))
@@ -776,19 +772,20 @@ impl ToTimeVec for &Bound<'_, PyAny> {
                                     pyo3::Python::with_gil(|py| {
                                         Ok(datetime2astrotime(v3.bind(py)).unwrap())
                                     }),
-                                    Err(_) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
-                                        "Input numpy array must contain satkit.time elements or datetime.datetime elements"
-                                    ))),
+                                    Err(_) => Err(pyo3::exceptions::PyTypeError::new_err(
+                                        "Input numpy array must contain satkit.time elements or datetime.datetime elements".to_string()
+                                    )),
                             }
                         }
                         })
                         .collect();
-                    if !tmarray.is_ok() {
+              
+                    if let Ok(tm) = tmarray {
+                        Ok(tm)
+                    } else {
                         Err(pyo3::exceptions::PyRuntimeError::new_err(
                             "Invalid satkit.time input",
                         ))
-                    } else {
-                        Ok(tmarray.unwrap())
                     }
                 }),
 

@@ -114,13 +114,13 @@ impl PySatProperties {
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
-        let mut raw = [0 as u8; 16];
+        let mut raw = [0; 16];
         raw[0..8].clone_from_slice(&self.inner.craoverm.to_le_bytes());
         raw[8..16].clone_from_slice(&self.inner.cdaoverm.to_le_bytes());
         Ok(pyo3::types::PyBytes::new_bound(py, &raw).to_object(py))
     }
 
     fn __str__(&self) -> String {
-        format!("{}", self.inner.to_string())
+        self.inner.to_string()
     }
 }

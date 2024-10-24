@@ -1,4 +1,4 @@
-
+use crate::skerror;
 
 #[derive(Clone, Debug)]
 pub enum Frame {
@@ -35,8 +35,10 @@ impl std::fmt::Display for Frame {
     }
 }
 
-impl Frame {
-    pub fn from_str(s: &str) -> Result<Self, &'static str> {
+impl std::str::FromStr for Frame {
+    type Err = crate::SKErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "ITRF" => Ok(Frame::ITRF),
             "TIRS" => Ok(Frame::TIRS),
@@ -46,7 +48,7 @@ impl Frame {
             "EME2000" => Ok(Frame::EME2000),
             "ICRF" => Ok(Frame::ICRF),
             "LVLH" => Ok(Frame::LVLH),
-            _ => Err("Invalid frame"),
+            _ => skerror!("Invalid Frame"),
         }
     }
 }

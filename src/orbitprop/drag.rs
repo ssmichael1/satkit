@@ -40,9 +40,9 @@ pub fn drag_force(
     // to get velocity relative to wind in gcrf frame
     // This is a little confusing, but if you think about it long enough
     // it will make sense
-    let vrel = vel_gcrf - OMEGA_EARTH.cross(&pos_gcrf);
-    let drag_accel_gcrf = -0.5 * cd_a_over_m * density * vrel * vrel.norm();
-    drag_accel_gcrf
+    let vrel = vel_gcrf - OMEGA_EARTH.cross(pos_gcrf);
+    
+    -0.5 * cd_a_over_m * density * vrel * vrel.norm()
 }
 
 // Partials are used for computing state transition matrix
@@ -65,11 +65,9 @@ fn compute_rho_drhodr(
     let qned2itrf = itrf.q_ned2itrf();
 
     // Offset in the NED frame
-    let offset_vecs = vec![
-        na::vector![dx, 0.0, 0.0],
+    let offset_vecs = [na::vector![dx, 0.0, 0.0],
         na::vector![0.0, dx, 0.0],
-        na::vector![0.0, 0.0, dx],
-    ];
+        na::vector![0.0, 0.0, dx]];
     let (density0, _temperature) = crate::nrlmsise::nrlmsise(
         itrf.hae() / 1.0e3,
         Some(itrf.latitude_rad()),
@@ -115,14 +113,14 @@ pub fn drag_and_partials(
     cd_a_over_m: f64,
     use_spaceweather: bool,
 ) -> (na::Vector3<f64>, na::Matrix3<f64>, na::Matrix3<f64>) {
-    let (density, drhodr) = compute_rho_drhodr(&pos_gcrf, &qgcrf2itrf, &time, use_spaceweather);
+    let (density, drhodr) = compute_rho_drhodr(pos_gcrf, qgcrf2itrf, time, use_spaceweather);
 
     // The "wind" moves along with the rotation earth, so we subtract off the
     // rotation Earth part in while still staying in the gcrf frame
     // to get velocity relative to wind in gcrf frame
     // This is a little confusing, but if you think about it long enough
     // it will make sense
-    let vrel = vel_gcrf - OMEGA_EARTH.cross(&pos_gcrf);
+    let vrel = vel_gcrf - OMEGA_EARTH.cross(pos_gcrf);
 
     let drag_accel_gcrf = -0.5 * cd_a_over_m * density * vrel * vrel.norm();
 

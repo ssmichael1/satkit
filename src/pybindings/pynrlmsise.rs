@@ -29,21 +29,18 @@ pub fn nrlmsise00(alt_km: f64, option_kwds: Option<&Bound<'_, PyDict>>) -> PyRes
     let mut use_spaceweather: bool = true;
     if option_kwds.is_some() {
         let kwds = option_kwds.unwrap();
-        match kwds.get_item("latitude_deg")? {
-            Some(v) => lat = Some(v.extract::<f64>()?),
-            None => (),
+
+        if let Some(kw) = kwds.get_item("latitude_deg")? {
+            lat = Some(kw.extract::<f64>()?);
         }
-        match kwds.get_item("longitude_deg")? {
-            Some(v) => lon = Some(v.extract::<f64>()?),
-            None => (),
+        if let Some(v) = kwds.get_item("longitude_deg")? {
+            lon = Some(v.extract::<f64>()?);
         }
-        match kwds.get_item("time")? {
-            Some(v) => tm = Some(v.extract::<PyAstroTime>()?.inner),
-            None => (),
+        if let Some(v) = kwds.get_item("time")? {
+            tm = Some(v.extract::<PyAstroTime>()?.inner);
         }
-        match kwds.get_item("use_spaceweather")? {
-            Some(v) => use_spaceweather = v.extract::<bool>()?,
-            None => (),
+        if let Some(v) = kwds.get_item("use_spaceweather")? {
+            use_spaceweather = v.extract::<bool>()?;
         }
     }
 

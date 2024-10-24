@@ -14,24 +14,20 @@ pub fn testdirs() -> Vec<PathBuf> {
     let mut testdirs: Vec<PathBuf> = Vec::new();
 
     // Look for paths in environment variable
-    match std::env::var(&"SATKIT_DATA") {
-        Ok(val) => testdirs.push(Path::new(&val).to_path_buf()),
-        Err(_) => (),
+    if let Ok(val) = std::env::var("SATKIT_DATA") {
+        testdirs.push(Path::new(&val).to_path_buf())
     }
 
     // Look for paths in current library directory
     #[cfg(feature = "pybindings")]
-    match get_dylib_path() {
-        Some(v) => {
-            testdirs.push(Path::new(&v).parent().unwrap().join("satkit-data"));
-        }
-        None => (),
+    if let Some(v) = get_dylib_path() {
+        testdirs.push(Path::new(&v).parent().unwrap().join("satkit-data"));
     }
 
     // Look for paths under home directory
-    match std::env::var(&"HOME") {
+    match std::env::var("HOME") {
         Ok(val) => {
-            let vstr = &String::from(val);
+            let vstr = &val;
 
             #[cfg(target_os = "macos")]
             testdirs.push(
@@ -56,16 +52,16 @@ pub fn testdirs() -> Vec<PathBuf> {
 
 /// Explicitly set data directory where data files will be stored
 /// Generally this should not be needed
-pub fn set_datadir(d: &PathBuf) -> SKResult<()> {
+pub fn set_datadir(d: &Path) -> SKResult<()> {
     if !d.is_dir() {
         return skerror!("Data directory does not exist");
     }
 
     let mut dd = DATADIR_SINGLETON.lock().unwrap();
     dd.take();
-    match dd.set(Some(d.clone())) {
+    match dd.set(Some(d.to_path_buf().clone())) {
         Ok(_) => Ok(()),
-        Err(_) => return skerror!("Could not set data directory"),
+        Err(_) => skerror!("Could not set data directory"),
     }
 }
 
@@ -101,18 +97,15 @@ pub fn datadir() -> SKResult<PathBuf> {
 
         // Check for writeable directory that already exists
         for ref dir in td.clone() {
-            if dir.is_dir() {
-                if !dir.metadata().unwrap().permissions().readonly() {
-                    return Some(dir.to_path_buf().clone());
-                }
+            if dir.is_dir() && !dir.metadata().unwrap().permissions().readonly() {
+                return Some(dir.to_path_buf().clone());
             }
         }
 
         // Check for directory that we can create that is writable
         for ref dir in td.clone() {
-            match std::fs::create_dir_all(dir) {
-                Ok(()) => return Some(dir.to_path_buf().clone()),
-                Err(_) => {}
+            if let Ok(()) = std::fs::create_dir_all(dir) {
+                return Some(dir.to_path_buf().clone());
             }
         }
 
@@ -130,11 +123,7 @@ pub fn data_found() -> bool {
     match datadir() {
         Ok(d) => {
             let p = PathBuf::from(&d).join("tab5.2a.txt");
-            if p.is_file() {
-                true
-            } else {
-                false
-            }
+            p.is_file()
         }
         // If can't find or create data directory, the data has not been found
         Err(_) => false,
@@ -149,6 +138,6 @@ mod tests {
         use crate::utils::datadir;
         let d = datadir::datadir();
         println!("d = {:?}", d.as_ref().unwrap());
-        assert_eq!(d.is_err(), false);
+        assert!(d.is_ok());
     }
 }

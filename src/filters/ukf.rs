@@ -22,7 +22,7 @@ pub struct UKF<const N: usize> {
 impl<const N: usize> UKF<N> {
     fn weight_m(alpha: f64, kappa: f64) -> Vec<f64> {
         let mut weight_m = Vec::<f64>::with_capacity(2 * N + 1);
-        let den: f64 = alpha.powi(2) as f64 * (N as f64 + kappa);
+        let den = alpha.powi(2) * (N as f64 + kappa);
         weight_m.push(1.0 - N as f64 / den);
         for _i in 1..2 * N + 1 {
             weight_m.push(1.0 / (2.0 * den));
@@ -32,8 +32,8 @@ impl<const N: usize> UKF<N> {
 
     fn weight_c(alpha: f64, beta: f64, kappa: f64) -> Vec<f64> {
         let mut weight_c = Vec::<f64>::with_capacity(2 * N + 1);
-        let den: f64 = alpha.powi(2) as f64 * (N as f64 + kappa);
-        weight_c.push(2.0 - alpha.powi(2) as f64 + beta - N as f64 / den);
+        let den: f64 = alpha.powi(2) * (N as f64 + kappa);
+        weight_c.push(2.0 - alpha.powi(2) + beta - N as f64 / den);
         for _i in 1..2 * N + 1 {
             weight_c.push(1.0 / (2.0 * den));
         }
@@ -73,7 +73,7 @@ impl<const N: usize> UKF<N> {
         y_cov: &Matrix<M, M>,
         f: impl Fn(Vector<N>) -> Vector<M>,
     ) -> SKResult<()> {
-        let c = self.alpha.powi(2) as f64 * (N as f64 + self.kappa);
+        let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
         let cp = c.sqrt()
             * match self.p.cholesky() {
@@ -84,19 +84,20 @@ impl<const N: usize> UKF<N> {
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
         // Create prior weights
-        x_sigma_points.push(self.x.clone());
+        x_sigma_points.push(self.x);
         for i in 0..N {
-            x_sigma_points.push(self.x.clone() + cp.column(i));
+            x_sigma_points.push(self.x + cp.column(i));
         }
         for i in 0..N {
-            x_sigma_points.push(self.x.clone() - cp.column(i));
+            x_sigma_points.push(self.x - cp.column(i));
         }
 
-        // Compute predicted measurements
-        let mut yhat_i = Vec::<Vector<M>>::with_capacity(2 * N + 1);
-        for i in 0..2 * N + 1 {
-            yhat_i.push(f(x_sigma_points[i]));
-        }
+        // Compute predict with sigma values
+        let yhat_i = x_sigma_points
+            .iter()
+            .map(|x| f(*x))
+            .collect::<Vec<Vector<M>>>();
+
         let yhat = yhat_i
             .iter()
             .enumerate()
@@ -105,12 +106,9 @@ impl<const N: usize> UKF<N> {
             });
 
         // Compute predicted covariance
-        let p_yy = yhat_i
-            .iter()
-            .enumerate()
-            .fold(y_cov.clone(), |acc, (i, y)| {
-                acc + self.weight_c[i] * (y - yhat) * (y - yhat).transpose()
-            });
+        let p_yy = yhat_i.iter().enumerate().fold(*y_cov, |acc, (i, y)| {
+            acc + self.weight_c[i] * (y - yhat) * (y - yhat).transpose()
+        });
 
         // Compute cross covariance
         let p_xy = x_sigma_points
@@ -122,15 +120,15 @@ impl<const N: usize> UKF<N> {
             });
 
         let kalman_gain = p_xy * p_yy.try_inverse().unwrap();
-        self.x = self.x + kalman_gain * (y - yhat);
-        self.p = self.p - kalman_gain * p_yy * kalman_gain.transpose();
+        self.x += kalman_gain * (y - yhat);
+        self.p -= kalman_gain * p_yy * kalman_gain.transpose();
         Ok(())
     }
 
     /// Predict step
     /// Note: add your own process noise after this function is called
     pub fn predict(&mut self, f: impl Fn(Vector<N>) -> Vector<N>) {
-        let c = self.alpha.powi(2) as f64 * (N as f64 + self.kappa);
+        let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
         let cp = c.sqrt()
             * match self.p.cholesky() {
@@ -140,19 +138,19 @@ impl<const N: usize> UKF<N> {
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
         // Create prior weights
-        x_sigma_points.push(self.x.clone());
+        x_sigma_points.push(self.x);
         for i in 0..N {
-            x_sigma_points.push(self.x.clone() + cp.column(i));
+            x_sigma_points.push(self.x + cp.column(i));
         }
         for i in 0..N {
-            x_sigma_points.push(self.x.clone() - cp.column(i));
+            x_sigma_points.push(self.x - cp.column(i));
         }
 
         // Compute predict with sigma values
-        let mut x_post = Vec::<Vector<N>>::with_capacity(2 * N + 1);
-        for i in 0..2 * N + 1 {
-            x_post.push(f(x_sigma_points[i]));
-        }
+        let x_post = x_sigma_points
+            .iter()
+            .map(|x| f(*x))
+            .collect::<Vec<Vector<N>>>();
 
         // Update state
         self.x = x_post
@@ -201,7 +199,7 @@ mod tests {
             let w = normal.sample(&mut rand::thread_rng());
             let ysample = observe(ytruth + Vector::<2>::new(v, w));
             ukf.update(&ysample, &y_cov, observe).unwrap();
-            ukf.p = ukf.p + q;
+            ukf.p += q;
         }
     }
 }

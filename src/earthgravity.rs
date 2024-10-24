@@ -245,7 +245,7 @@ impl Gravity {
             self.accel_t::<36, 40>(pos)
         } else if order == 37 {
             self.accel_t::<37, 41>(pos)
-        } else if order == 37 {
+        } else if order == 38 {
             self.accel_t::<38, 42>(pos)
         } else if order == 39 {
             self.accel_t::<39, 43>(pos)
@@ -352,8 +352,8 @@ impl Gravity {
 
     fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vec3) -> Vec3 {
         let (v, w) = self.compute_legendre::<NP4>(pos);
-        let accel = self.accel_from_legendre_t::<N, NP4>(&v, &w);
-        accel
+
+        self.accel_from_legendre_t::<N, NP4>(&v, &w)
     }
 
     // Equations 7.65 to 7.69 in Montenbruck & Gill
@@ -563,7 +563,7 @@ impl Gravity {
 
         // Read header lines
         for line in &lines {
-            header_cnt = header_cnt + 1;
+            header_cnt += 1;
 
             let s: Vec<&str> = line.split_whitespace().collect();
             if s.len() < 2 {
@@ -613,17 +613,17 @@ impl Gravity {
             for m in 0..(n + 1) {
                 let mut scale: f64 = 1.0;
                 for k in (n - m + 1)..(n + m + 1) {
-                    scale = scale * k as f64;
+                    scale *= k as f64;
                 }
-                scale = scale / (2.0 * n as f64 + 1.0);
+                scale /= 2.0 * n as f64 + 1.0;
                 if m > 0 {
-                    scale = scale / 2.0;
+                    scale /= 2.0;
                 }
                 scale = 1.0 / f64::sqrt(scale);
-                cs[(n, m)] = cs[(n, m)] * scale;
+                cs[(n, m)] *= scale;
 
                 if m > 0 {
-                    cs[(m - 1, n)] = cs[(m - 1, n)] * scale;
+                    cs[(m - 1, n)] *= scale;
                 }
             }
         }
@@ -643,10 +643,10 @@ impl Gravity {
         }
 
         Ok(Gravity {
-            name: String::from(name),
-            gravity_constant: gravity_constant,
-            radius: radius,
-            max_degree: max_degree,
+            name,
+            gravity_constant,
+            radius,
+            max_degree,
             coeffs: cs,
             divisor_table: d1,
             divisor_table2: d2,

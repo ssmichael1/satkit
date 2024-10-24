@@ -134,6 +134,12 @@ pub struct SatRec {
     pub nm: f64,
 }
 
+impl Default for SatRec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SatRec {
     pub fn new() -> SatRec {
         SatRec {
