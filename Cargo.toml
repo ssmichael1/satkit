@@ -19,25 +19,25 @@ name = "satkit"
 
 
 [dependencies]
-nalgebra = { version = "0.33.0", features = ["serde-serialize"] }
+nalgebra = { version = "0.33.1", features = ["serde-serialize"] }
 ndarray = "0.16.1"
-libc = "0.2.158"
+libc = "0.2.161"
 chrono = "0.4.19"
 cty = "0.2.2"
 num-traits = "0.2"
-thiserror = "1.0.63"
+thiserror = "1.0.65"
 simba = "0.9"
 once_cell = "1.6.0"
 numpy = { version = "0.22", optional = true }
-pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.22.5", features = ["extension-module"], optional = true }
 ureq = "2.10.1"
 json = "0.12.4"
 process_path = "0.1.4"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.213", features = ["derive"] }
 serde-pickle = "1.1.1"
 
 [build-dependencies]
-cc = { version = "1.1", features = ["parallel"] }
+cc = { version = "1.1.31", features = ["parallel"] }
 chrono = "0.4.38"
 pyo3-build-config = { version = "0.22.4", optional = true }
 
