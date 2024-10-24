@@ -1,0 +1,23 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+sphinx = "*"
+numpy = "*"
+myst = "*"
+satkit = "*"
+sphinx-autoapi = "*"
+ipython = "*"
+nbsphinx = "*"
+myst-parser = "*"
+sphinx-rtd-theme = "*"
+plotly = "*"
+jupyter = "*"
+pandas = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.13"
