@@ -82,7 +82,7 @@ mod tests {
     }
     impl HarmonicOscillator {
         fn new(k: f64) -> HarmonicOscillator {
-            HarmonicOscillator { k: k }
+            HarmonicOscillator { k }
         }
     }
 

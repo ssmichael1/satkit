@@ -29,6 +29,7 @@
 --------------------------------------------------------------------------- */
 use super::GravConst;
 
+#[allow(clippy::too_many_arguments)]
 pub fn getgravconst(
     whichconst: GravConst,
     tumin: &mut f64,

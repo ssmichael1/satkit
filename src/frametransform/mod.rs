@@ -55,7 +55,7 @@ pub fn gmst(tm: &AstroTime) -> f64 {
         + tut1 * ((876600.0 * 3600.0 + 8640184.812866) + tut1 * (0.093104 + tut1 * -6.2e-6));
 
     gmst = (gmst % 86400.0) / 240.0 * PI / 180.0;
-    return gmst;
+    gmst
 }
 
 /// Equation of Equinoxes
@@ -140,7 +140,7 @@ pub fn qitrf2tirs(tm: &AstroTime) -> Quat {
 /// # Notes
 ///
 /// * The TEME frame is the default frame output by the
-/// SGP4 propagator
+///   SGP4 propagator
 /// * This is Equation 3-90 in Vallado
 ///
 pub fn qteme2itrf(tm: &AstroTime) -> Quat {
@@ -162,7 +162,7 @@ pub fn qteme2itrf(tm: &AstroTime) -> Quat {
 /// # Notes
 ///
 /// * The TEME frame is the default frame output by the
-/// SGP4 propagator
+///   SGP4 propagator
 /// * An approximate rotation, accurate to within 1 arcsec
 ///
 pub fn qteme2gcrf(tm: &AstroTime) -> Quat {
@@ -199,9 +199,7 @@ pub fn qmod2gcrf(tm: &AstroTime) -> Quat {
         * (2004.191903
             + tt * (-0.42949342 + tt * (-0.04182264 + tt * (-0.000007089 + tt * -0.0000001274))));
 
-    return qrot_zcoord(zeta * ASEC2RAD)
-        * qrot_ycoord(-theta * ASEC2RAD)
-        * qrot_zcoord(z * ASEC2RAD);
+    qrot_zcoord(zeta * ASEC2RAD) * qrot_ycoord(-theta * ASEC2RAD) * qrot_zcoord(z * ASEC2RAD)
 }
 
 ///
@@ -223,10 +221,10 @@ pub fn qmod2gcrf(tm: &AstroTime) -> Quat {
 /// * Accurate to approx. 1 arcsec
 ///
 /// * This uses an approximation of the IAU-76/FK5 Reduction
-/// See Vallado section 3.7.3
+///   See Vallado section 3.7.3
 ///
 /// * For a reference, see "Eplanatory Supplement to the
-/// Astronomical Almanac", 2013, Ch. 6
+///   Astronomical Almanac", 2013, Ch. 6
 ///
 pub fn qgcrf2itrf_approx(tm: &AstroTime) -> Quat {
     // Neglecting polar motion
@@ -254,10 +252,10 @@ pub fn qgcrf2itrf_approx(tm: &AstroTime) -> Quat {
 /// * Accurate to approx. 1 arcsec
 ///
 /// * This uses an approximation of the IAU-76/FK5 Reduction
-/// See Vallado section 3.7.3
+///   See Vallado section 3.7.3
 ///
 /// * For a reference, see "Eplanatory Supplement to the
-/// Astronomical Almanac", 2013, Ch. 6
+///   Astronomical Almanac", 2013, Ch. 6
 pub fn qitrf2gcrf_approx(tm: &AstroTime) -> Quat {
     qgcrf2itrf_approx(tm).conjugate()
 }
@@ -310,11 +308,11 @@ pub fn qtod2mod_approx(tm: &AstroTime) -> Quat {
 /// # Notes:
 ///
 ///  * Uses the full IAU2006 reduction, see
-/// [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf)
-/// Equation 5.1
+///    [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf)
+///    Equation 5.1
 ///
 ///  * This is **very** computationally expensive; for most
-/// applications, the approximate rotation will work just fine
+///    applications, the approximate rotation will work just fine
 ///
 /// * This computatation **does not** include impact of the
 ///       Earth solid tides, but it does include polar motion,
@@ -357,11 +355,11 @@ pub fn qitrf2gcrf(tm: &AstroTime) -> Quat {
 /// # Notes:
 ///
 ///  * Uses the full IAU2006 reduction, see
-/// [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf?__blob=publicationFile&v=1)
-/// Equation 5.1
+///    [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf?__blob=publicationFile&v=1)
+///    Equation 5.1
 ///
 ///  * **Note** This is **very** computationally expensive; for most
-/// applications, the approximate rotation will work just fine
+///    applications, the approximate rotation will work just fine
 ///
 pub fn qgcrf2itrf(tm: &AstroTime) -> Quat {
     qitrf2gcrf(tm).conjugate()
@@ -430,11 +428,11 @@ mod tests {
         // Slight differences below are due to example using approximate
         // value for dut1 and polar wander, hence the larger than
         // expected errors (though still within ~ 1e-6)
-        let ptirs = qitrf2tirs(&tm) * pitrf;
+        let ptirs = qitrf2tirs(tm) * pitrf;
         assert!((ptirs[0] + 1033.4750312).abs() < 1.0e-4);
         assert!((ptirs[1] - 7901.3055856).abs() < 1.0e-4);
         assert!((ptirs[2] - 6380.3445327).abs() < 1.0e-4);
-        let era = earth_rotation_angle(&tm);
+        let era = earth_rotation_angle(tm);
         assert!((era * 180.0 / PI - 312.7552829).abs() < 1.0e-5);
         let pcirs = qrot_zcoord(-era) * ptirs;
         println!("pcirs = {:?}", pcirs);

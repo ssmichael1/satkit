@@ -210,12 +210,10 @@ pub fn propagate<const C: usize>(
                 } else {
                     &Precomputed::new(start, stop)?
                 }
+            } else if (*stop >= sinterp.start) && (*start <= sinterp.stop) {
+                sinterp
             } else {
-                if (*stop >= sinterp.start) && (*start <= sinterp.stop) {
-                    sinterp
-                } else {
-                    &Precomputed::new(start, stop)?
-                }
+                &Precomputed::new(start, stop)?
             }
         } else {
             &Precomputed::new(start, stop)?
@@ -224,7 +222,7 @@ pub fn propagate<const C: usize>(
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
         // The time variable in the ODE is in seconds
-        let time: AstroTime = start.clone() + Duration::Seconds(x);
+        let time: AstroTime = *start + Duration::Seconds(x);
 
         // get GCRS position & velocity;
         let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
@@ -393,10 +391,10 @@ pub fn propagate<const C: usize>(
             )?;
 
             Ok(PropagationResult {
-                time_start: start.clone(),
-                state_start: state.clone(),
-                time_end: stop.clone(),
-                state_end: res.y.clone(),
+                time_start: *start,
+                state_start: *state,
+                time_end: *stop,
+                state_end: res.y,
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
                 num_eval: res.nevals as u32,
@@ -406,10 +404,10 @@ pub fn propagate<const C: usize>(
         true => {
             let res = crate::ode::solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)?;
             Ok(PropagationResult {
-                time_start: start.clone(),
-                state_start: state.clone(),
-                time_end: stop.clone(),
-                state_end: res.y.clone(),
+                time_start: *start,
+                state_start: *state,
+                time_end: *stop,
+                state_end: res.y,
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
                 num_eval: res.nevals as u32,
@@ -426,7 +424,7 @@ pub fn interp_propresult<const C: usize>(
     if let Some(sol) = &res.odesol {
         if sol.dense.is_some() {
             let x = (time - res.time_start).seconds();
-            let y = crate::ode::solvers::RKV98::interpolate(x, &sol)?;
+            let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)
         } else {
             Err(Box::new(PropagationError::NoDenseOutputInSolution))
@@ -457,17 +455,19 @@ mod tests {
         state[0] = consts::GEO_R;
         state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
 
-        let mut settings = PropSettings::default();
-        settings.abs_error = 1.0e-12;
-        settings.rel_error = 1.0e-14;
-        settings.gravity_order = 4;
+        let mut settings = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_order: 4,
+            ..Default::default()
+        };
         settings.precompute_terms(&starttime, &stoptime)?;
 
         let res1 = propagate(&state, &starttime, &stoptime, &settings, None)?;
         // Try to propagate back to original time
         let res2 = propagate(&res1.state_end, &stoptime, &starttime, &settings, None)?;
         // See if propagating back to original time matches
-        for ix in 0..6 as usize {
+        for ix in 0..6_usize {
             assert!((res2.state_end[ix] - state[ix]).abs() < 1.0)
         }
 
@@ -484,17 +484,19 @@ mod tests {
         state[0] = consts::GEO_R;
         state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
 
-        let mut settings = PropSettings::default();
-        settings.abs_error = 1.0e-9;
-        settings.rel_error = 1.0e-12;
-        settings.gravity_order = 4;
+        let settings = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_order: 4,
+            ..Default::default()
+        };
 
         // Propagate forward
         let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
         // propagate backward to original time
         let res2 = propagate(&res.state_end, &stoptime, &starttime, &settings, None)?;
         // Check that we recover the original state
-        for ix in 0..6 as usize {
+        for ix in 0..6_usize {
             assert!((state[ix] - res2.state_end[ix]).abs() < 1.0e-3);
         }
 
@@ -502,7 +504,7 @@ mod tests {
         let newtime = starttime + Duration::Days(0.45);
         let interp = res.interp(&newtime)?;
         let interp2 = res2.interp(&newtime)?;
-        for ix in 0..6 as usize {
+        for ix in 0..6_usize {
             assert!((interp[ix] - interp2[ix]).abs() < 1e-3);
         }
         Ok(())
@@ -532,10 +534,12 @@ mod tests {
             .fixed_view_mut::<6, 6>(0, 1)
             .copy_from(&na::Matrix6::<f64>::identity());
 
-        let mut settings = PropSettings::default();
-        settings.abs_error = 1.0e-9;
-        settings.rel_error = 1.0e-14;
-        settings.gravity_order = 4;
+        let settings = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_order: 4,
+            ..Default::default()
+        };
 
         // Made-up small variations in the state
         let dstate = na::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
@@ -558,7 +562,7 @@ mod tests {
 
         // Difference in states estimated from state transition matrix
         let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
-        for ix in 0..6 as usize {
+        for ix in 0..6_usize {
             assert!((dstate_prop[ix] - dstate_phi[ix]).abs() / dstate_prop[ix] < 1e-3);
         }
 
@@ -591,10 +595,12 @@ mod tests {
             .fixed_view_mut::<6, 6>(0, 1)
             .copy_from(&na::Matrix6::<f64>::identity());
 
-        let mut settings = PropSettings::default();
-        settings.abs_error = 1.0e-8;
-        settings.rel_error = 1.0e-8;
-        settings.gravity_order = 4;
+        let settings = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_order: 4,
+            ..Default::default()
+        };
 
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(2.0 * 0.3 * 0.1 / 5.0, 0.0);
 
@@ -621,7 +627,7 @@ mod tests {
         let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
 
         // Are differences within 1%?
-        for ix in 0..6 as usize {
+        for ix in 0..6_usize {
             assert!((dstate_prop[ix] - dstate_phi[ix]).abs() / dstate_prop[ix] < 0.1);
         }
 
@@ -649,9 +655,7 @@ mod tests {
 
         let times: Vec<crate::AstroTime> = match io::BufReader::new(file)
             .lines()
-            .filter(|x: &Result<String, io::Error>| {
-                x.as_ref().unwrap().chars().nth(0).unwrap() == '*'
-            })
+            .filter(|x: &Result<String, io::Error>| x.as_ref().unwrap().starts_with('*'))
             .map(|rline| -> SKResult<crate::AstroTime> {
                 let line = rline.unwrap();
                 let lvals: Vec<&str> = line.split_whitespace().collect();
@@ -712,8 +716,11 @@ mod tests {
 
         let state0 = na::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, v0[3]);
-        let mut settings = PropSettings::default();
-        settings.enable_interp = true;
+
+        let settings = PropSettings {
+            enable_interp: true,
+            ..Default::default()
+        };
 
         let res = propagate(
             &state0,

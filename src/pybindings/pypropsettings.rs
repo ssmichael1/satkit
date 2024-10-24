@@ -74,7 +74,7 @@ impl PyPropSettings {
     }
 
     fn __str__(&self) -> String {
-        format!("{}", self.inner.to_string())
+        self.inner.to_string()
     }
 
     fn precompute_terms(&mut self, start: &PyAstroTime, stop: &PyAstroTime) -> PyResult<()> {

@@ -148,7 +148,7 @@ impl TLE {
             mean_motion_dot: 0.0,
             mean_motion_dot_dot: 0.0,
             bstar: 0.0,
-            ephem_type: 'U' as u8,
+            ephem_type: b'U',
             element_num: 0,
             inclination: 0.0,
             raan: 0.0,
@@ -250,7 +250,7 @@ impl TLE {
                 Ok(y) => y,
                 Err(_) => return Err("Could not parse year".to_string()),
             };
-            s = s - 100;
+            s -= 100;
             s
         };
         if year > 57 {
@@ -278,16 +278,10 @@ impl TLE {
             },
             intl_desig: { line1[9..16].trim().to_string() },
             desig_year: {
-                match line1[9..11].trim().parse() {
-                    Ok(l) => l,
-                    Err(_) => 70,
-                }
+                line1[9..11].trim().parse().unwrap_or(70)
             },
             desig_launch: {
-                match line1[11..14].trim().parse() {
-                    Ok(l) => l,
-                    Err(_) => 0,
-                }
+                line1[11..14].trim().parse().unwrap_or_default()
             },
             desig_piece: {
                 match line1[14..18].trim().parse() {
@@ -295,7 +289,7 @@ impl TLE {
                     Err(_) => return Err("Could not parse desig_piece".to_string()),
                 }
             },
-            epoch: epoch,
+            epoch,
             mean_motion_dot: {
                 let mut mstr: String = "0".to_owned();
                 mstr.push_str(&line1[34..43]);
@@ -304,43 +298,40 @@ impl TLE {
                     Err(_) => return Err("Could not parse mean motion dot".to_string()),
                 };
                 if line1.chars().nth(33).unwrap() == '-' {
-                    m = -1.0 * m;
+                    m *= -1.0;
                 }
                 m
             },
             mean_motion_dot_dot: {
                 let mut mstr: String = "0.".to_owned();
                 mstr.push_str(&line1[45..50]);
-                mstr.push_str("E");
+                mstr.push('E');
                 mstr.push_str(&line1[50..53]);
                 let mut m: f64 = match mstr.trim().parse() {
                     Ok(y) => y,
                     Err(_) => return Err("Could not parse mean motion dot dot".to_string()),
                 };
                 if line1.chars().nth(44).unwrap() == '-' {
-                    m = -1.0 * m;
+                    m *= -1.0;
                 }
                 m
             },
             bstar: {
                 let mut mstr: String = "0.".to_owned();
                 mstr.push_str(&line1[54..59]);
-                mstr.push_str("E");
+                mstr.push('E');
                 mstr.push_str(&line1[59..62]);
                 let mut m: f64 = match mstr.trim().parse() {
                     Ok(y) => y,
                     Err(_) => return Err("Could not parse bstar (drag)".to_string()),
                 };
                 if line1.chars().nth(53).unwrap() == '-' {
-                    m = -1.0 * m;
+                    m *= -1.0;
                 }
                 m
             },
             ephem_type: {
-                match line1[62..63].trim().parse() {
-                    Ok(y) => y,
-                    Err(_) => 0,
-                }
+                line1[62..63].trim().parse().unwrap_or_default()
             },
             element_num: {
                 match line1[64..68].trim().parse() {
@@ -451,14 +442,14 @@ mod tests {
         let line2: &str =
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
         let line0: &str = "0 INTELSAT 902";
-        match TLE::load_3line(&line0.to_string(), &line1.to_string(), &line2.to_string()) {
+        match TLE::load_3line(line0, line1, line2) {
             Ok(_t) => {}
 
             Err(s) => {
                 panic!("load_3line: Err = \"{}\"", s);
             }
         }
-        match TLE::load_2line(&line1.to_string(), &line2.to_string()) {
+        match TLE::load_2line(line1, line2) {
             Ok(_t) => {}
             Err(s) => {
                 panic!("load_2line: Err = \"{}\"", s);

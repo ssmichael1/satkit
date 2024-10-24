@@ -155,7 +155,7 @@ impl PySatState {
             match self.inner.cov {
                 StateCov::None => PyNone::get_bound(py).to_object(py),
                 StateCov::PVCov(cov) => {
-                    let dims = vec![6 as usize, 6 as usize];
+                    let dims = vec![6, 6];
                     np::PyArray1::from_slice_bound(py, cov.as_slice())
                         .reshape(dims)
                         .unwrap()
@@ -243,7 +243,7 @@ impl PySatState {
             Ok(s) => Ok(PySatState { inner: s }),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Error propagating state: {}",
-                e.to_string()
+                e
             ))),
         }
     }
@@ -311,6 +311,6 @@ impl PySatState {
     }
 
     fn __str__(&self) -> String {
-        format!("{}", self.inner.to_string())
+        self.inner.to_string()
     }
 }

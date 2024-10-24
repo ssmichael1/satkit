@@ -66,6 +66,7 @@ use super::OpsMode;
 *    vallado, crawford, hujsak, kelso  2006
 ----------------------------------------------------------------------------*/
 
+#[allow(clippy::too_many_arguments)]
 pub fn dpper(
     e3: f64,
     ee2: f64,
@@ -132,19 +133,11 @@ pub fn dpper(
     let mut ph: f64;
     let mut pinc: f64;
     let mut pl: f64;
-    let sel: f64;
-    let ses: f64;
-    let sghl: f64;
-    let sghs: f64;
-    let shll: f64;
-    let shs: f64;
-    let sil: f64;
+
     let sinip: f64;
     let sinop: f64;
     let mut sinzf: f64;
-    let sis: f64;
-    let sll: f64;
-    let sls: f64;
+
     let mut xls: f64;
     let xnoh: f64;
     let mut zf: f64;
@@ -166,11 +159,11 @@ pub fn dpper(
     sinzf = f64::sin(zf);
     f2 = 0.5 * sinzf * sinzf - 0.25;
     f3 = -0.5 * sinzf * f64::cos(zf);
-    ses = se2 * f2 + se3 * f3;
-    sis = si2 * f2 + si3 * f3;
-    sls = sl2 * f2 + sl3 * f3 + sl4 * sinzf;
-    sghs = sgh2 * f2 + sgh3 * f3 + sgh4 * sinzf;
-    shs = sh2 * f2 + sh3 * f3;
+    let ses: f64 = se2 * f2 + se3 * f3;
+    let sis: f64 = si2 * f2 + si3 * f3;
+    let sls: f64 = sl2 * f2 + sl3 * f3 + sl4 * sinzf;
+    let sghs: f64 = sgh2 * f2 + sgh3 * f3 + sgh4 * sinzf;
+    let shs: f64 = sh2 * f2 + sh3 * f3;
     zm = zmol + ZNL * t;
     if init == 'y' {
         zm = zmol;
@@ -179,11 +172,11 @@ pub fn dpper(
     sinzf = f64::sin(zf);
     f2 = 0.5 * sinzf * sinzf - 0.25;
     f3 = -0.5 * sinzf * f64::cos(zf);
-    sel = ee2 * f2 + e3 * f3;
-    sil = xi2 * f2 + xi3 * f3;
-    sll = xl2 * f2 + xl3 * f3 + xl4 * sinzf;
-    sghl = xgh2 * f2 + xgh3 * f3 + xgh4 * sinzf;
-    shll = xh2 * f2 + xh3 * f3;
+    let sel: f64 = ee2 * f2 + e3 * f3;
+    let sil: f64 = xi2 * f2 + xi3 * f3;
+    let sll: f64 = xl2 * f2 + xl3 * f3 + xl4 * sinzf;
+    let sghl: f64 = xgh2 * f2 + xgh3 * f3 + xgh4 * sinzf;
+    let shll: f64 = xh2 * f2 + xh3 * f3;
     pe = ses + sel;
     pinc = sis + sil;
     pl = sls + sll;
@@ -191,13 +184,13 @@ pub fn dpper(
     ph = shs + shll;
 
     if init == 'n' {
-        pe = pe - peo;
-        pinc = pinc - pinco;
-        pl = pl - plo;
-        pgh = pgh - pgho;
-        ph = ph - pho;
-        *inclp = *inclp + pinc;
-        *ep = *ep + pe;
+        pe -= peo;
+        pinc -= pinco;
+        pl -= plo;
+        pgh -= pgho;
+        ph -= pho;
+        *inclp += pinc;
+        *ep += pe;
         sinip = f64::sin(*inclp);
         cosip = f64::cos(*inclp);
 
@@ -211,11 +204,11 @@ pub fn dpper(
         //  if (inclo >= 0.2)
         //  use next line for gsfc version and perturbed inclination
         if *inclp >= 0.2 {
-            ph = ph / sinip;
-            pgh = pgh - cosip * ph;
-            *argpp = *argpp + pgh;
-            *nodep = *nodep + ph;
-            *mp = *mp + pl;
+            ph /= sinip;
+            pgh -= cosip * ph;
+            *argpp += pgh;
+            *nodep += ph;
+            *mp += pl;
         } else {
             /* ---- apply periodics with lyddane modification ---- */
             sinop = f64::sin(*nodep);
@@ -224,32 +217,32 @@ pub fn dpper(
             betdp = sinip * cosop;
             dalf = ph * cosop + pinc * cosip * sinop;
             dbet = -ph * sinop + pinc * cosip * cosop;
-            alfdp = alfdp + dalf;
-            betdp = betdp + dbet;
-            *nodep = *nodep % TWOPI;
+            alfdp += dalf;
+            betdp += dbet;
+            *nodep %= TWOPI;
             //  sgp4fix for afspc written intrinsic functions
             // nodep used without a trigonometric function ahead
             if *nodep < 0.0 && opsmode == OpsMode::AFSPC {
-                *nodep = *nodep + TWOPI;
+                *nodep += TWOPI;
             }
             xls = *mp + *argpp + cosip * *nodep;
             dls = pl + pgh - pinc * *nodep * sinip;
-            xls = xls + dls;
+            xls += dls;
             xnoh = *nodep;
             *nodep = f64::atan2(alfdp, betdp);
             //  sgp4fix for afspc written intrinsic functions
             // nodep used without a trigonometric function ahead
             if (*nodep < 0.0) && (opsmode == OpsMode::AFSPC) {
-                *nodep = *nodep + TWOPI;
+                *nodep += TWOPI;
             }
             if f64::abs(xnoh - *nodep) > PI {
                 if *nodep < xnoh {
-                    *nodep = *nodep + TWOPI;
+                    *nodep += TWOPI;
                 } else {
-                    *nodep = *nodep - TWOPI;
+                    *nodep -= TWOPI;
                 }
             }
-            *mp = *mp + pl;
+            *mp += pl;
             *argpp = xls - *mp - cosip * *nodep;
         }
     } // if init == 'n'

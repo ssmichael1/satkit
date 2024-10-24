@@ -26,13 +26,12 @@ impl Precomputed {
         };
 
         Ok(Precomputed {
-            start: pstart.clone(),
-            stop: pstop.clone(),
-            step: step,
+            start: *pstart,
+            stop: *pstop,
+            step,
             data: {
                 let nsteps: usize = 2 + ((pstop - pstart).seconds() / step.abs()).ceil() as usize;
-                let mut data = Vec::new();
-                data.reserve(nsteps);
+                let mut data = Vec::with_capacity(nsteps);
                 for idx in 0..nsteps {
                     let t = *pstart + Duration::Seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);

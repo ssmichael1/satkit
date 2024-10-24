@@ -26,11 +26,10 @@ impl PyTLE {
     ///           only 1 are passed in
     #[staticmethod]
     fn from_file(filename: String) -> PyResult<PyObject> {
-        let file = File::open(&std::path::PathBuf::from(filename))?;
+        let file = File::open(std::path::PathBuf::from(filename))?;
 
         let lines: Vec<String> = io::BufReader::new(file)
             .lines()
-            .into_iter()
             .map(|v| -> String { v.unwrap() })
             .collect();
 
@@ -66,7 +65,7 @@ impl PyTLE {
                 }
             }),
             Err(e) => {
-                let serr = format!("Error loading TLEs: {}", e.to_string());
+                let serr = format!("Error loading TLEs: {}", e);
                 Err(pyo3::exceptions::PyImportError::new_err(serr))
             }
         }
@@ -166,21 +165,21 @@ impl PyTLE {
         let namelen = self.inner.name.len() as u16;
         raw[cnt..cnt + 2].clone_from_slice(&namelen.to_le_bytes());
         cnt += 2;
-        raw[cnt..cnt + self.inner.name.len()].clone_from_slice(&self.inner.name.as_bytes());
+        raw[cnt..cnt + self.inner.name.len()].clone_from_slice(self.inner.name.as_bytes());
         cnt += self.inner.name.len();
 
         let intl_len = self.inner.intl_desig.len() as u16;
         raw[cnt..cnt + 2].clone_from_slice(&intl_len.to_le_bytes());
         cnt += 2;
         raw[cnt..cnt + self.inner.intl_desig.len()]
-            .clone_from_slice(&self.inner.intl_desig.as_bytes());
+            .clone_from_slice(self.inner.intl_desig.as_bytes());
         cnt += self.inner.intl_desig.len();
 
         let piece_len = self.inner.desig_piece.len() as u16;
         raw[cnt..cnt + 2].clone_from_slice(&piece_len.to_le_bytes());
         cnt += 2;
         raw[cnt..cnt + self.inner.desig_piece.len()]
-            .clone_from_slice(&self.inner.desig_piece.as_bytes());
+            .clone_from_slice(self.inner.desig_piece.as_bytes());
 
         Ok(pyo3::types::PyBytes::new_bound(py, &raw).to_object(py))
     }
@@ -236,7 +235,7 @@ impl IntoPy<PyObject> for TLE {
 }
 
 impl<'b> From<&'b mut PyTLE> for &'b mut TLE {
-    fn from<'a>(s: &'a mut PyTLE) -> &'a mut TLE {
+    fn from(s: &mut PyTLE) -> &mut TLE {
         &mut s.inner
     }
 }

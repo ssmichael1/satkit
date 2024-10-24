@@ -27,9 +27,9 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         // These could probably be combined into a single function, but...
         // keeping forward and backward separate makes it simpler in my mind
         if sol.x > dense.x[0] {
-            return Self::interpolate_forward(xinterp, sol);
+            Self::interpolate_forward(xinterp, sol)
         } else {
-            return Self::interpolate_backward(xinterp, sol);
+            Self::interpolate_backward(xinterp, sol)
         }
     }
 
@@ -64,9 +64,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             Some(v) => v,
             None => dense.x.len(),
         };
-        if idx > 0 {
-            idx -= 1;
-        }
+        idx = idx.saturating_sub(1);
 
         // t is fractional distance beween x at idx and idx+1
         // and is in range [0,1]
@@ -87,7 +85,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 // Coefficients multiply increasing powers of t
                 let mut tj = 1.0;
                 biarr.iter().fold(0.0, |acc, bij| {
-                    tj = tj * t;
+                    tj *= t;
                     acc + bij * tj
                 })
             })
@@ -140,9 +138,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             Some(v) => v,
             None => dense.x.len(),
         };
-        if idx > 0 {
-            idx -= 1;
-        }
+        idx = idx.saturating_sub(1);
 
         // t is fractional distance beween x at idx and idx+1
         // and is in range [0,1]
@@ -163,7 +159,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 // Coefficients multiply increasing powers of t
                 let mut tj = 1.0;
                 biarr.iter().fold(0.0, |acc, bij| {
-                    tj = tj * t;
+                    tj *= t;
                     acc + bij * tj
                 })
             })
@@ -195,7 +191,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         let mut nevals: usize = 0;
         let mut naccept: usize = 0;
         let mut nreject: usize = 0;
-        let mut x = start.clone();
+        let mut x = start;
         let mut y = y0.clone();
 
         let mut qold: f64 = 1.0e-4;
@@ -210,7 +206,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             let sci = (y0.ode_abs() * settings.relerror).ode_scalar_add(settings.abserror);
 
             let d0 = y0.ode_elem_div(&sci).ode_norm();
-            let ydot0 = ydot(start.clone(), &y0)?;
+            let ydot0 = ydot(start, y0)?;
             let d1 = ydot0.ode_elem_div(&sci).ode_norm();
             let h0 = 0.01 * d0 / d1 * tdir;
             let y1 = y0.clone() + ydot0.clone() * h0;
@@ -218,7 +214,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             let d2 = (ydot1 - ydot0).ode_elem_div(&sci).ode_norm() / h0;
             let dmax = f64::max(d1, d2);
             let h1: f64 = match dmax < 1e-15 {
-                false => (10.0 as f64).powf(-(2.0 + dmax.log10()) / (Self::ORDER as f64)),
+                false => 10.0_f64.powf(-(2.0 + dmax.log10()) / (Self::ORDER as f64)),
                 true => f64::max(1e-6, h0.abs() * 1e-3),
             };
             nevals += 2;
@@ -301,22 +297,19 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
             if (enorm < 1.0) || (h.abs() <= settings.dtmin) {
                 // If dense output requested, record dense output
-                match settings.dense_output {
-                    true => {
-                        let astep = accepted_steps.as_mut().unwrap();
-                        astep.x.push(x);
-                        astep.h.push(h);
-                        astep.yprime.push(karr);
-                        astep.y.push(y.clone());
-                    }
-                    false => {}
+                if settings.dense_output {
+                    let astep = accepted_steps.as_mut().unwrap();
+                    astep.x.push(x);
+                    astep.h.push(h);
+                    astep.yprime.push(karr);
+                    astep.y.push(y.clone());
                 }
 
                 // Adjust step size
                 qold = f64::max(enorm, 1.0e-4);
                 x += h;
                 y = ynp1;
-                h = h / q;
+                h /= q;
 
                 naccept += 1;
                 if (tdir > 0.0 && x >= stop) || (tdir < 0.0 && x <= stop) {
@@ -324,16 +317,16 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 }
             } else {
                 nreject += 1;
-                h = h / f64::min(1.0 / settings.minfac, q11 / settings.gamma);
+                h /= f64::min(1.0 / settings.minfac, q11 / settings.gamma);
             }
         }
 
         Ok(ODESolution {
-            nevals: nevals,
-            naccept: naccept,
-            nreject: nreject,
-            x: x,
-            y: y,
+            nevals,
+            naccept,
+            nreject,
+            x,
+            y,
             dense: accepted_steps,
         })
     }

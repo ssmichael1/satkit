@@ -8,6 +8,7 @@ use crate::SKResult;
 type PVCovType = na::SMatrix<f64, 6, 6>;
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum StateCov {
     None,
     PVCov(PVCovType),
@@ -40,7 +41,7 @@ pub struct SatState {
 impl SatState {
     pub fn from_pv(time: &AstroTime, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> SatState {
         SatState {
-            time: time.clone(),
+            time: *time,
             pv: na::vector![pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]],
             cov: StateCov::None,
         }
@@ -192,7 +193,7 @@ impl SatState {
             StateCov::None => {
                 let res = orbitprop::propagate(&self.pv, &self.time, time, settings, None)?;
                 Ok(SatState {
-                    time: time.clone(),
+                    time: *time,
                     pv: res.state_end,
                     cov: StateCov::None,
                 })
@@ -215,7 +216,7 @@ impl SatState {
                 let res = orbitprop::propagate(&state, &self.time, time, settings, None)?;
 
                 Ok(SatState {
-                    time: time.clone(),
+                    time: *time,
                     pv: res.state_end.fixed_view::<6, 1>(0, 0).into(),
                     cov: {
                         // Extract state transition matrix from the propagated state
@@ -227,8 +228,10 @@ impl SatState {
             }
         }
     }
+}
 
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for SatState {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut s1 = format!(
             r#"Satellite State
                        Time: {}
@@ -237,7 +240,7 @@ impl SatState {
             self.time, self.pv[0], self.pv[1], self.pv[2], self.pv[3], self.pv[4], self.pv[5],
         );
         match self.cov {
-            StateCov::None => s1,
+            StateCov::None => {}
             StateCov::PVCov(cov) => {
                 s1.push_str(
                     format!(
@@ -246,15 +249,9 @@ impl SatState {
                     )
                     .as_str(),
                 );
-                s1
             }
         }
-    }
-}
-
-impl std::fmt::Display for SatState {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", s1)
     }
 }
 

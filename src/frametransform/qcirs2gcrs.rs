@@ -131,9 +131,6 @@ pub fn qcirs2gcrs_dxdy(tm: &AstroTime, dxdy: Option<(f64, f64)>) -> Quat {
 /// * Also see [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf)
 ///    
 pub fn qcirs2gcrs(tm: &AstroTime) -> Quat {
-    let dxdy: Option<(f64, f64)> = match crate::earth_orientation_params::get(&tm) {
-        None => None,
-        Some(v) => Some((v[4], v[5])),
-    };
+    let dxdy: Option<(f64, f64)> = crate::earth_orientation_params::get(tm).map(|v| (v[4], v[5]));
     qcirs2gcrs_dxdy(tm, dxdy)
 }

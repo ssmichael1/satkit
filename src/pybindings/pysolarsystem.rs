@@ -18,6 +18,7 @@ use crate::SolarSystem as SS;
 pub enum SolarSystem {
     Mercury = SS::Mercury as isize,
     Venus = SS::Venus as isize,
+    #[allow(clippy::upper_case_acronyms)]
     EMB = SS::EMB as isize,
     Mars = SS::Mars as isize,
     Jupiter = SS::Jupiter as isize,
@@ -32,17 +33,17 @@ pub enum SolarSystem {
 impl From<&SolarSystem> for SS {
     fn from(s: &SolarSystem) -> SS {
         match s {
-            &SolarSystem::Mercury => SS::Mercury,
-            &SolarSystem::Venus => SS::Venus,
-            &SolarSystem::EMB => SS::EMB,
-            &SolarSystem::Mars => SS::Mars,
-            &SolarSystem::Jupiter => SS::Jupiter,
-            &SolarSystem::Saturn => SS::Saturn,
-            &SolarSystem::Uranus => SS::Uranus,
-            &SolarSystem::Neptune => SS::Neptune,
-            &SolarSystem::Pluto => SS::Pluto,
-            &SolarSystem::Moon => SS::Moon,
-            &SolarSystem::Sun => SS::Sun,
+            SolarSystem::Mercury => SS::Mercury,
+            SolarSystem::Venus => SS::Venus,
+            SolarSystem::EMB => SS::EMB,
+            SolarSystem::Mars => SS::Mars,
+            SolarSystem::Jupiter => SS::Jupiter,
+            SolarSystem::Saturn => SS::Saturn,
+            SolarSystem::Uranus => SS::Uranus,
+            SolarSystem::Neptune => SS::Neptune,
+            SolarSystem::Pluto => SS::Pluto,
+            SolarSystem::Moon => SS::Moon,
+            SolarSystem::Sun => SS::Sun,
         }
     }
 }

@@ -72,6 +72,7 @@ use std::f64::consts::PI;
 *    hoots, schumacher and glover 2004
 *    vallado, crawford, hujsak, kelso  2006
 a	----------------------------------------------------------------------------*/
+#[allow(clippy::too_many_arguments)]
 pub fn dspace(
     irez: i32,
     d2201: f64,
@@ -117,7 +118,7 @@ pub fn dspace(
 
     let delt: f64;
     let mut ft: f64;
-    let theta: f64;
+
     let mut x2li: f64;
     let mut x2omi: f64;
     let xl: f64;
@@ -140,20 +141,20 @@ pub fn dspace(
     const G44: f64 = 1.8014998;
     const G52: f64 = 1.0508330;
     const G54: f64 = 4.4108898;
-    const RPTIM: f64 = 4.37526908801129966e-3; // this equates to 7.29211514668855e-5 rad/sec
+    const RPTIM: f64 = 4.375_269_088_011_3e-3; // this equates to 7.29211514668855e-5 rad/sec
     const STEPP: f64 = 720.0;
     const STEPN: f64 = -720.0;
     const STEP2: f64 = 259200.0;
 
     /* ----------- calculate deep space resonance effects ----------- */
     *dndt = 0.0;
-    theta = (gsto + tc * RPTIM) % TWOPI;
-    *em = *em + dedt * t;
+    let theta: f64 = (gsto + tc * RPTIM) % TWOPI;
+    *em += dedt * t;
 
-    *inclm = *inclm + didt * t;
-    *argpm = *argpm + domdt * t;
-    *nodem = *nodem + dnodt * t;
-    *mm = *mm + dmdt * t;
+    *inclm += didt * t;
+    *argpm += domdt * t;
+    *nodem += dnodt * t;
+    *mm += dmdt * t;
 
     //   sgp4fix for negative inclinations
     //   the following if statement should be commented out
@@ -199,7 +200,7 @@ pub fn dspace(
                 xnddt = del1 * f64::cos(*xli - FASX2)
                     + 2.0 * del2 * f64::cos(2.0 * (*xli - FASX4))
                     + 3.0 * del3 * f64::cos(3.0 * (*xli - FASX6));
-                xnddt = xnddt * xldot;
+                xnddt *= xldot;
             } else {
                 /* --------- near - half-day resonance terms -------- */
                 xomi = argpo + argpdot * *atime;
@@ -227,7 +228,7 @@ pub fn dspace(
                             + d4422 * f64::cos(x2li - G44)
                             + d5421 * f64::cos(xomi + x2li - G54)
                             + d5433 * f64::cos(-xomi + x2li - G54));
-                xnddt = xnddt * xldot;
+                xnddt *= xldot;
             }
 
             /* ----------------------- integrator ------------------- */
@@ -245,7 +246,7 @@ pub fn dspace(
             if iretn == 381 {
                 *xli = *xli + xldot * delt + xndt * STEP2;
                 *xni = *xni + xndt * delt + xnddt * STEP2;
-                *atime = *atime + delt;
+                *atime += delt;
             }
         } // while iretn = 381
 

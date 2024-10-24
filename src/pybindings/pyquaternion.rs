@@ -168,7 +168,7 @@ impl Quaternion {
     ///
     /// Returns:
     ///     numpy.ndarray: 3x3 numpy array representing rotation matrix
-    fn to_rotation_matrix(&self) -> PyObject {
+    fn as_rotation_matrix(&self) -> PyObject {
         let rot = self.inner.to_rotation_matrix();
 
         pyo3::Python::with_gil(|py| -> PyObject {
@@ -188,7 +188,7 @@ impl Quaternion {
     ///
     /// Returns:
     ///     (f64, f64, f64): Tuple of roll, pitch, yaw angles in radians
-    fn to_euler(&self) -> (f64, f64, f64) {
+    fn as_euler(&self) -> (f64, f64, f64) {
         self.inner.euler_angles()
     }
 
@@ -224,7 +224,7 @@ impl Quaternion {
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        let mut raw = [0 as u8; 32];
+        let mut raw = [0; 32];
         raw[0..8].clone_from_slice(f64::to_le_bytes(self.inner.w).as_slice());
         raw[8..16].clone_from_slice(f64::to_le_bytes(self.inner.i).as_slice());
         raw[16..24].clone_from_slice(f64::to_le_bytes(self.inner.j).as_slice());
@@ -308,10 +308,10 @@ impl Quaternion {
         if other.is_instance_of::<Quaternion>() {
             let q: PyRef<Quaternion> = other.extract()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                return Ok(Quaternion {
+                Ok(Quaternion {
                     inner: self.inner * q.inner,
                 }
-                .into_py(py));
+                .into_py(py))
             })
         }
         // This incorrectly matches for all PyArray types

@@ -121,10 +121,10 @@ impl Kepler {
     /// * `Kepler` - A new Keplerian orbital element object
     pub fn new(a: f64, eccen: f64, i: f64, raan: f64, argp: f64, an: Anomaly) -> Kepler {
         Kepler {
-            a: a,
-            eccen: eccen,
+            a,
+            eccen,
             incl: i,
-            raan: raan,
+            raan,
             w: argp,
             nu: to_trueanomaly(an, eccen)
         }
@@ -160,7 +160,7 @@ impl Kepler {
             incl: self.incl,
             raan: self.raan,
             w: self.w,
-            nu: nu
+            nu
         }
     }
 

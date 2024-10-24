@@ -7,7 +7,7 @@ use json::JsonValue;
 use std::path::PathBuf;
 use std::thread::JoinHandle;
 
-fn download_from_url_json(json_url: String, basedir: &std::path::PathBuf) -> SKResult<()> {
+fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> SKResult<()> {
     let json_base: JsonValue = json::parse(download_to_string(json_url.as_str())?.as_str())?;
     let vresult: Vec<std::thread::JoinHandle<SKResult<bool>>> = json_base
         .members()
@@ -43,12 +43,9 @@ fn download_from_json(
                 download_from_json(entry.1, pbnew.clone(), newurl, overwrite, thandles)?;
                 Ok(())
             })
-            .filter(|res| match res {
-                Ok(_) => false,
-                Err(_) => true,
-            })
+            .filter(|res| res.is_err())
             .collect();
-        if r1.len() > 0 {
+        if !r1.is_empty() {
             return skerror!("Could not parse entries");
         }
     } else if v.is_array() {
@@ -58,18 +55,15 @@ fn download_from_json(
                 download_from_json(val, basedir.clone(), baseurl.clone(), overwrite, thandles)?;
                 Ok(())
             })
-            .filter(|res| match res {
-                Ok(_) => false,
-                Err(_) => true,
-            })
+            .filter(|res| res.is_err())
             .collect();
-        if r2.len() > 0 {
+        if !r2.is_empty() {
             return skerror!("could not parse array entries");
         }
     } else if v.is_string() {
         let mut newurl = baseurl.clone();
         newurl.push_str(format!("/{}", v).as_str());
-        thandles.push(download_file_async(newurl, &basedir, overwrite.clone()));
+        thandles.push(download_file_async(newurl, &basedir, *overwrite));
     } else {
         return skerror!("invalid json for downloading files??!!");
     }

@@ -161,19 +161,17 @@ pub fn get(tm: AstroTime) -> SKResult<SpaceWeatherRecord> {
 
     // First, try simple indexing
     let idx = (tm - sw[0].date).days().floor() as usize;
-    if idx < sw.len() {
-        if (tm - sw[idx].date).days().abs() < 1.0 {
-            return Ok(sw[idx].clone());
-        }
+    if idx < sw.len() && (tm - sw[idx].date).days().abs() < 1.0 {
+        return Ok(sw[idx].clone());
     }
 
     // More-complex lookup (is it in the future?)
     // Increase efficiency by looking backward
     let rec = sw.iter().rev().find(|x| x.date <= tm);
-    if rec.is_none() {
-        skerror!("Invalid date")
+    if let Some(r) = rec {
+        Ok(r.clone())
     } else {
-        Ok(rec.unwrap().clone())
+        skerror!("Invalid date")
     }
 }
 

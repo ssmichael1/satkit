@@ -3,12 +3,11 @@ use std::path::PathBuf;
 
 pub fn get_project_root() -> std::io::Result<PathBuf> {
     let path = std::env::current_dir()?;
-    let mut path_ancestors = path.as_path().ancestors();
+    let path_ancestors = path.as_path().ancestors();
 
-    while let Some(p) = path_ancestors.next() {
+    for p in path_ancestors {
         let has_cargo = std::fs::read_dir(p)?
-            .into_iter()
-            .any(|p| p.unwrap().file_name() == std::ffi::OsString::from("Cargo.lock"));
+            .any(|p| p.unwrap().file_name() == *"Cargo.lock");
         if has_cargo {
             return Ok(PathBuf::from(p));
         }
@@ -20,11 +19,8 @@ pub fn get_project_root() -> std::io::Result<PathBuf> {
 }
 
 pub fn get_testvec_dir() -> std::io::Result<PathBuf> {
-    match std::env::var(&"SATKIT_TESTVEC_ROOT") {
-        Ok(val) => {
-            return Ok(Path::new(&val).to_path_buf());
-        }
-        Err(_) => (),
+    if let Ok(val) = std::env::var("SATKIT_TESTVEC_ROOT") {
+        return Ok(Path::new(&val).to_path_buf());
     }
     let root = get_project_root()?;
     Ok(root.join("satkit-testvecs"))
