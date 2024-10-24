@@ -55,7 +55,7 @@ class TestTime:
         Test MJD conversion
         """
         t = sk.time(2021, 1, 1, 0, 0, 0)
-        mjd = t.to_mjd(sk.timescale.UTC)
+        mjd = t.as_mjd(sk.timescale.UTC)
         assert mjd == pytest.approx(59215.0)
 
     def test_jd(self):
@@ -63,7 +63,7 @@ class TestTime:
         Test JD conversion
         """
         t = sk.time(2021, 1, 1, 0, 0, 0)
-        jd = t.to_jd(sk.timescale.UTC)
+        jd = t.as_jd(sk.timescale.UTC)
         assert jd == pytest.approx(2459215.5)
 
     def test_duration(self):
@@ -113,7 +113,7 @@ class TestTime:
         Test conversion to Gregorian calendar
         """
         t = sk.time(2021, 1, 1, 0, 0, 0)
-        (year, mon, day, hour, minute, sec) = t.to_gregorian()
+        (year, mon, day, hour, minute, sec) = t.as_gregorian()
         assert year == 2021
         assert mon == 1
         assert day == 1
@@ -322,9 +322,9 @@ class TestFrameTransform:
         assert dut1 == pytest.approx(-0.4399619, rel=1e-3)
         assert xp == pytest.approx(-0.140857, rel=1e-3)
         assert yp == pytest.approx(0.333309, rel=1e-3)
-        jd_tt = tm.to_jd(sk.timescale.TT)
+        jd_tt = tm.as_jd(sk.timescale.TT)
         assert jd_tt == pytest.approx(2453101.828154745)
-        t_tt = (tm.to_jd(sk.timescale.TT) - 2451545.0) / 36525.0
+        t_tt = (tm.as_jd(sk.timescale.TT) - 2451545.0) / 36525.0
 
         assert t_tt == pytest.approx(0.0426236319, rel=1e-8)
         # Check transform to terrestial intermediate frame
@@ -362,7 +362,7 @@ class TestFrameTransform:
         tm = sk.time(1992, 8, 20, 12, 14, 0)
 
         # Spooof UTC as UT1 value (as is done in example from Vallado)
-        tdiff = tm.to_mjd(sk.timescale.UT1) - tm.to_mjd(sk.timescale.UTC)
+        tdiff = tm.as_mjd(sk.timescale.UT1) - tm.as_mjd(sk.timescale.UTC)
         tm = tm - sk.duration.from_days(tdiff)
         gmst = sk.frametransform.gmst(tm)
         truth = -207.4212121875 * m.pi / 180
@@ -403,7 +403,7 @@ class TestMoon:
         # Vallado approximates UTC as TBD, so we will
         # make the same approximation
         # for the purposes of this test case
-        t1 = sk.time.from_mjd(t0.to_mjd(sk.timescale.UTC), sk.timescale.TDB)
+        t1 = sk.time.from_mjd(t0.as_mjd(sk.timescale.UTC), sk.timescale.TDB)
         p = sk.moon.pos_gcrf(t1)
         ref_pos = np.array([-134240.626e3, -311571.590e3, -126693.785e3])
         assert p == pytest.approx(ref_pos)
@@ -418,7 +418,7 @@ class TestSun:
         # Vallado approximates UTC as TBD, so we will
         # make the same approximation
         # for the purposes of this test case
-        t1 = sk.time.from_mjd(t0.to_mjd(sk.timescale.UTC), sk.timescale.TDB)
+        t1 = sk.time.from_mjd(t0.as_mjd(sk.timescale.UTC), sk.timescale.TDB)
         p = sk.sun.pos_gcrf(t1)
         pref = np.array([146259922.0e3, 28585947.0e3, 12397430.0e3])
         assert p == pytest.approx(pref, 5e-4)
@@ -430,14 +430,14 @@ class TestSun:
         coord = sk.itrfcoord(latitude_deg=40.0, longitude_deg=0.0)
         tm = sk.time(1996, 3, 23, 0, 0, 0)
         sunrise, sunset = sk.sun.rise_set(tm, coord)
-        (year, mon, day, hour, minute, sec) = sunrise.to_gregorian()
+        (year, mon, day, hour, minute, sec) = sunrise.as_gregorian()
         assert year == 1996
         assert mon == 3
         assert day == 23
         assert hour == 5
         assert minute == 58
         assert sec == pytest.approx(21.97, 1e-3)
-        (year, mon, day, hour, minute, sec) = sunset.to_gregorian()
+        (year, mon, day, hour, minute, sec) = sunset.as_gregorian()
         assert year == 1996
         assert mon == 3
         assert day == 23
@@ -480,13 +480,13 @@ class TestQuaternion:
         # Test rotations of 90 degrees with right-hande rule of 3 coordinate axes
         assert sk.quaternion.rotz(
             m.pi / 2
-        ).to_rotation_matrix() @ xhat == pytest.approx(yhat, 1.0e-10)
+        ).as_rotation_matrix() @ xhat == pytest.approx(yhat, 1.0e-10)
         assert sk.quaternion.rotx(
             m.pi / 2
-        ).to_rotation_matrix() @ yhat == pytest.approx(zhat, 1.0e-10)
+        ).as_rotation_matrix() @ yhat == pytest.approx(zhat, 1.0e-10)
         assert sk.quaternion.roty(
             m.pi / 2
-        ).to_rotation_matrix() @ zhat == pytest.approx(xhat, 1.0e-10)
+        ).as_rotation_matrix() @ zhat == pytest.approx(xhat, 1.0e-10)
 
     def test_dcm2quaternion(self):
         """
@@ -496,7 +496,7 @@ class TestQuaternion:
         yhat = np.array([0.0, 1.0, 0.0])
         zhat = np.array([0.0, 0.0, 1.0])
 
-        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).to_rotation_matrix())
+        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).as_rotation_matrix())
         assert q * xhat == pytest.approx(yhat, 1.0e-10)
 
 
@@ -507,8 +507,8 @@ class TestQuaternion:
         xhat = np.array([1.0, 0.0, 0.0])
         yhat = np.array([0.0, 1.0, 0.0])
         zhat = np.array([0.0, 0.0, 1.0])
-        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).to_rotation_matrix())
-        dcm = q.to_rotation_matrix()
+        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).as_rotation_matrix())
+        dcm = q.as_rotation_matrix()
         assert dcm @ xhat == pytest.approx(yhat, 1.0e-10)
 
     def test_quaternion2euler(self):
@@ -516,19 +516,19 @@ class TestQuaternion:
         Test conversion of quaternion to Euler angles
         """
         q = sk.quaternion.rotz(m.pi/3)
-        euler = q.to_euler()
+        euler = q.as_euler()
         assert euler[0] == pytest.approx(0.0)
         assert euler[1] == pytest.approx(0.0)
         assert euler[2] == pytest.approx(m.pi/3)
 
         q = sk.quaternion.rotx(m.pi/3)
-        euler = q.to_euler()
+        euler = q.as_euler()
         assert euler[0] == pytest.approx(m.pi/3)
         assert euler[1] == pytest.approx(0.0)
         assert euler[2] == pytest.approx(0.0)
 
         q = sk.quaternion.roty(m.pi/3)
-        euler = q.to_euler()
+        euler = q.as_euler()
         assert euler[0] == pytest.approx(0.0)
         assert euler[1] == pytest.approx(m.pi/3)
         assert euler[2] == pytest.approx(0.0)
