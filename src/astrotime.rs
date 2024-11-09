@@ -44,19 +44,15 @@ pub struct AstroTime {
     pub(crate) mjd_tai: f64,
 }
 
-use crate::utils::{download_if_not_exist, skerror, SKResult};
+use crate::utils::{skerror, SKResult};
 use crate::Duration;
 
 use super::earth_orientation_params as eop;
-use super::utils::datadir;
 
 extern crate chrono;
 
 use std::f64::consts::PI;
 
-use std::fs::File;
-use std::io::{self, BufRead};
-use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const UTC1970: f64 = 40587.;
@@ -70,8 +66,6 @@ pub const JD2MJD: f64 = -2400000.5;
 
 /// Conversion from Modified Julian Date to Julian Date
 pub const MJD2JD: f64 = 2400000.5;
-
-use once_cell::sync::OnceCell;
 
 /*
 const DELTAAT_OLD: [[f64; 4]; 15] = [
@@ -123,44 +117,37 @@ pub enum Scale {
     TDB = 6,
 }
 
-fn deltaat_new() -> &'static Vec<[u64; 2]> {
-    static INSTANCE: OnceCell<Vec<[u64; 2]>> = OnceCell::new();
-    INSTANCE.get_or_init(|| {
-        let path = datadir()
-            .unwrap_or(PathBuf::from("."))
-            .join("leap-seconds.list");
-        match download_if_not_exist(&path, None) {
-            Ok(()) => {}
-            Err(e) => panic!("Could not download {} : {}", path.display(), e),
-        }
-
-        let file = match File::open(&path) {
-            Err(why) => panic!("Couldn't open {}: {}", path.display(), why),
-            Ok(file) => file,
-        };
-
-        let mut leapvec = Vec::<[u64; 2]>::new();
-        for line in io::BufReader::new(file).lines() {
-            if let Ok(s) = &line {
-                match &s {
-                    v if v.starts_with('#') => (),
-                    v => {
-                        let split = v.split_whitespace().collect::<Vec<&str>>();
-                        if split.len() >= 2 {
-                            let a: u64 = split[0].parse().unwrap_or(0);
-                            let b: u64 = split[1].parse().unwrap_or(0);
-                            if a != 0 && b != 0 {
-                                leapvec.push([a, b]);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        leapvec.reverse();
-        leapvec
-    })
-}
+// Delta AT values (leap seconds)
+const DELTAAT: [[u64; 2]; 28] = [
+    [3692217600, 37],
+    [3644697600, 36],
+    [3550089600, 35],
+    [3439756800, 34],
+    [3345062400, 33],
+    [3124137600, 32],
+    [3076704000, 31],
+    [3029443200, 30],
+    [2982009600, 29],
+    [2950473600, 28],
+    [2918937600, 27],
+    [2871676800, 26],
+    [2840140800, 25],
+    [2776982400, 24],
+    [2698012800, 23],
+    [2634854400, 22],
+    [2603318400, 21],
+    [2571782400, 20],
+    [2524521600, 19],
+    [2492985600, 18],
+    [2461449600, 17],
+    [2429913600, 16],
+    [2398291200, 15],
+    [2366755200, 14],
+    [2335219200, 13],
+    [2303683200, 12],
+    [2287785600, 11],
+    [2272060800, 10],
+];
 
 impl std::fmt::Display for AstroTime {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -600,13 +587,146 @@ impl AstroTime {
     pub fn from_jd(jd: f64, scale: Scale) -> AstroTime {
         AstroTime::from_mjd(jd + JD2MJD, scale)
     }
+
+    /// Convert from string with given format
+    /// using strftime format
+    ///
+    /// # Notes:
+    /// * For format, see: <https://docs.rs/chrono/latest/chrono/format/strftime/index.html>
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - string to format
+    /// * `format` - strftime format string
+    ///
+    /// # Returns
+    /// * Result with AstroTime object
+    ///
+    pub fn strftime(s: &str, format: &str) -> SKResult<AstroTime> {
+        let dt = chrono::NaiveDateTime::parse_from_str(s, format);
+        match dt {
+            Ok(v) => Ok(AstroTime::from(&v)),
+            Err(e) => skerror!("Cannot parse datetime: {}", e),
+        }
+    }
+
+    /// Create time from string with format guessed
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - string to format
+    ///
+    /// # Returns
+    ///
+    /// * Result with AstroTime object
+    ///
+    /// # Exceptions
+    ///
+    /// * If string cannot be parsed
+    ///
+    pub fn from_string(s: &str) -> SKResult<AstroTime> {
+        // Attempt to guess format
+        let formats = [
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S%.f",
+            "%Y-%m-%d %H:%M:%S%.fZ",
+            "%Y-%m-%d %H:%M:%S%.f %Z",
+            "%Y-%m-%d %H:%M:%S %Z",
+            "%Y-%m-%d %H:%M:%S%.f %z",
+            "%Y-%m-%d %H:%M:%S %z",
+            "%Y-%m-%d %H:%M:%S%.f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+            "%Y-%j",
+            "%Y-%j %H:%M:%S",
+            "%Y-%j %H:%M:%S%.f",
+            "%Y-%j %H:%M:%S%.fZ",
+            "%Y-%j %H:%M:%S %Z",
+            "%Y-%j %H:%M:%S %z",
+            "%Y-%j %H:%M:%S%.f %z",
+            "%Y-%j %H:%M:%S%.f",
+            "%Y-%j %H:%M:%S",
+            "%Y-%j %H:%M",
+            "%Y-%j",
+            "%Y-%m-%d %H:%M:%S%.f %Z",
+            "%Y-%m-%d %H:%M:%S %Z",
+            "%Y-%m-%d %H:%M:%S%.f %z",
+            "%Y-%m-%d %H:%M:%S %z",
+            "%Y-%m-%d %H:%M:%S%.f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+            "%Y-%j",
+            "%Y-%j %H:%M:%S",
+            "%Y-%j %H:%M:%S%.f",
+            "%Y-%j %H:%M:%S%.fZ",
+            "%Y-%j %H:%M:%S %Z",
+            "%Y-%j %H:%M:%S %z",
+            "%Y-%j %H:%M:%S%.f %z",
+            "%Y-%j %H:%M:%S%.f",
+            "%Y-%j %H:%M:%S",
+            "%Y-%j %H:%M",
+            "%Y-%j",
+            "%Y-%m-%d %H:%M:%S%.f %Z",
+            "%Y-%m-%d %H:%M:%S %Z",
+            "%Y-%m-%d %H:%M:%S%.f %z",
+            "%Y/%m/%d %H:%M:%S %z",
+            "%Y/%m/%d %H:%M:%S%.f %z",
+            "%Y/%m/%d %H:%M:%S %Z",
+            "%Y/%m/%d %H:%M:%S%.f %Z",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y/%m/%d %H:%M:%S%.f",
+            "%Y/%m/%d %H:%M",
+            "%Y/%m/%d",
+            "%Y/%j",
+            "%Y/%j %H:%M:%S",
+            "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y %H:%M:%S%.f",
+            "%m/%d/%Y %H:%M:%S %Z",
+            "%m/%d/%Y %H:%M:%S%.f %Z",
+            "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y %H:%M:%S%.f",
+            "%m/%d/%Y %H:%M",
+        ];
+
+        for f in formats.iter() {
+            let dt = chrono::NaiveDateTime::parse_from_str(s, f);
+            if let Ok(dt) = dt {
+                return Ok(AstroTime::from(&dt));
+            }
+        }
+        skerror!("Cannot parse datetime")
+    }
+
+    /// Convert from string with RFC3339 format (overlaps with ISO8601)
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - string to format
+    ///
+    /// # Returns
+    ///
+    /// * Result with AstroTime object
+    ///
+    /// # Exceptions
+    ///
+    /// * If string cannot be parsed
+    ///
+    pub fn from_rfc3339(s: &str) -> SKResult<AstroTime> {
+        let dt = chrono::DateTime::parse_from_rfc3339(s);
+        match dt {
+            Ok(v) => Ok(AstroTime::from(&v.naive_utc())),
+            Err(e) => skerror!("Cannot parse datetime: {}", e),
+        }
+    }
 }
 
 /// (TAI - UTC) in seconds for an UTC input modified Julian date
 fn mjd_utc2tai_seconds(mjd_utc: f64) -> f64 {
     if mjd_utc > UTC1972 {
         let utc1900: u64 = (mjd_utc as u64 - 15020) * 86400;
-        let val = deltaat_new().iter().find(|&&x| x[0] < utc1900);
+        let val = DELTAAT.iter().find(|&&x| x[0] < utc1900);
         val.unwrap_or(&[0, 0])[1] as f64
     } else {
         0.0
@@ -616,7 +736,7 @@ fn mjd_utc2tai_seconds(mjd_utc: f64) -> f64 {
 fn mjd_tai2utc_seconds(mjd_tai: f64) -> f64 {
     if mjd_tai > TAI1972 {
         let tai1900: u64 = (mjd_tai as u64 - 15020) * 86400;
-        let val = deltaat_new().iter().find(|&&x| (x[0] + x[1]) < tai1900);
+        let val = DELTAAT.iter().find(|&&x| (x[0] + x[1]) < tai1900);
         -(val.unwrap_or(&[0, 0])[1] as f64)
     } else {
         0.0
@@ -686,12 +806,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn datadir() {
-        println!("deltaat = {:?}", deltaat_new()[1]);
-        assert_eq!(1, 1);
-    }
-
-    #[test]
     fn date2mjd_test() {
         // Truth is pulled from leap-seconds file
         // for these examples
@@ -723,6 +837,18 @@ mod tests {
     #[test]
     fn testdatetime() {
         let tm: AstroTime = AstroTime::from_datetime(2021, 3, 4, 12, 45, 33.0);
+        let (year, mon, day, hour, min, sec) = tm.to_datetime();
+        assert_eq!(year, 2021);
+        assert_eq!(mon, 3);
+        assert_eq!(day, 4);
+        assert_eq!(hour, 12);
+        assert_eq!(min, 45);
+        assert!(((sec - 33.0) / 33.0).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn test_rfctime() {
+        let tm = AstroTime::from_rfc3339("2021-03-04T12:45:33Z").unwrap();
         let (year, mon, day, hour, min, sec) = tm.to_datetime();
         assert_eq!(year, 2021);
         assert_eq!(mon, 3);

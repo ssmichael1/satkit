@@ -36,6 +36,36 @@ A description of the above time systems is at:
 
 ## Examples
 
+### Object creation
+
+```python
+import satkit as sk
+import datetime
+
+# Test time creation functions
+
+# Create from a string, attempting multiple formats
+# (format below is iso8601)
+t = sk.time('2020-03-01T18:20:30Z')
+print(t)
+# prints 2020-03-01T18:20:30Z
+# Same thing, trying a different format (satkit tries to guess)
+t = sk.time('2024/3/1 18:20:30')
+print(t)
+# prints 2024-03-01T18:20:30Z
+
+# Create from a datetime object
+dt = datetime.datetime(2020, 3, 1, 18, 20, 30, tzinfo=datetime.timezone.utc)
+t = sk.time.from_datetime(dt)
+print(t)
+# prints 2020-03-01T18:20:30Z
+
+# Create from a rfc3339 string (ISO 8601)
+t = sk.time.from_rfctime('2020-03-01T18:20:30Z')
+print(t)
+# prints 2020-03-01T18:20:30Z
+```
+
 ### Epochs
 
 ```python
@@ -70,15 +100,15 @@ print(duration)
 instant = sk.time(2024, 4, 9, 12, 0, 0, scale=sk.timescale.UTC)
 
 # Convert to Julian date (default epoch is UTC)
-jd = instant.to_jd()
+jd = instant.as_jd()
 print(jd)
 
 # Convert to a modified julian date (default epoch is UTC)
-mjd = instant.to_mjd()
+mjd = instant.as_mjd()
 print(mjd)
 
 # Convert to a modified Julian date with Terrestrial Time as the epoch
-mjd_tt = instant.to_mjd(sk.timescale.TT)
+mjd_tt = instant.as_mjd(sk.timescale.TT)
 print(mjd_tt)
 # This will print:
 # 2460410.0

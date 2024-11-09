@@ -65,6 +65,8 @@ fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         .unwrap();
     m.add_function(wrap_pyfunction!(pylpephem_sun::rise_set, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pylpephem_sun::shadowfunc, m)?)
+        .unwrap();
     Ok(())
 }
 

@@ -22,7 +22,7 @@ import satkit as sk
 
 # The two-line element set
 # Lets pick a random StarLink satellite
-# The lines below were downloaded from https://www.celetrack.org
+# The lines below were downloaded from https://www.celestrack.org
 tle_lines = [
     '0 STARLINK-30477',
     '1 57912U 23146X   24099.49439401  .00006757  00000+0  51475-3 0  9997',
