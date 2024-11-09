@@ -50,11 +50,19 @@ jobs:
           key: satkit-data-cache
 
       # Download data if it is not in the cache
-      - name: Download Satkit Data
-        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+      - name: Download Satkit Data Windows
+        if: steps.cache-satkit-data.outputs.cache-hit != 'true' && matrix.os == 'windows'
         run: |
           python -m venv .venv
           source .venv/bin/activate
+          python -m pip install requests
+          python python/test/download_data.py ${{matrix.data_path}}
+
+      - name: Download Satkit Data MacOS & Linux
+        if: steps.cache-satkit-data.outputs.cache-hit != 'true' && matrix.os != 'windows'
+        run: |
+          python -m venv .venv
+          .venv\Scripts\activate
           python -m pip install requests
           python python/test/download_data.py ${{matrix.data_path}}
 
@@ -68,8 +76,16 @@ jobs:
           key: satkit-testvecs-cache        
 
       # Download test vectors if they are not in the cache
-      - name: Download Satkit Test Vectors
-        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
+      - name: Download Satkit Test Vectors Windows
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true' && matrix.os == 'windows'
+        run: |
+          python -m venv .venv
+          .venv\Scripts\activate
+          python -m pip install requests
+          python python/test/download_testvecs.py ${{matrix.testvec_path}}
+
+      - name: Download Satkit Test Vectors MacOS & Linux
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true' && matrix.os != 'windows'
         run: |
           python -m venv .venv
           source .venv/bin/activate
