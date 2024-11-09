@@ -139,6 +139,7 @@ impl PyAstroTime {
     ///     min (int, optional): Minute of hour, in range [0,59] (optional), default is 0
     ///     sec (float, optional): floating point second of minute, in range [0,60) (optional), defialt is 0
     ///     scale (satkit.timescale, optional): Time scale (optional), default is satkit.timescale.UTC    
+    ///     format (str, optional): If this is only argument, attempt to parse time from string
     ///
     /// Note: If no arguments are passed in, the created object represents the current time
     ///
@@ -163,7 +164,7 @@ impl PyAstroTime {
                     });
                 }
             }
-        }
+        }        
 
         if py_args.is_empty() {
             match AstroTime::now() {
@@ -189,10 +190,96 @@ impl PyAstroTime {
                 true => py_args.get_item(6)?.extract::<PyTimeScale>()?,
             };
             Self::from_gregorian(year, month, day, hour, min, sec, pyscale)
-        } else {
+        } else if py_args.len() == 1 {
+            let item = py_args.get_item(0)?;
+            let s = item.extract::<&str>()?;
+            
+            // Input is a string, first try rfc3339 format
+            match Self::from_rfctime(s) {
+                Ok(v) => return Ok(v),
+                Err(_) => {
+                    // Now try multiple formats
+                    return Self::from_string(s);
+                }
+            }            
+        }
+        else {
             Err(pyo3::exceptions::PyTypeError::new_err(
                 "Must pass in year, month, day or year, month, day, hour, min, sec",
             ))
+        }
+    }
+
+
+    /// Create satkit.time object from string
+    /// 
+    /// Args:
+    ///    s (str): String representing time
+    /// 
+    /// Returns:
+    ///   satkit.time: Time object representing input time
+    /// 
+    /// Raises:
+    ///   ValueError: If input string cannot be parsed
+    /// 
+    #[staticmethod]
+    fn from_string(s: &str) -> PyResult<Self> {
+        match AstroTime::from_string(s) {
+            Ok(v) => Ok(PyAstroTime { inner: v }),
+            Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
+                "Could not parse time string",
+            )),
+        }
+    }   
+
+    /// Create satkit.time object from string with given format
+    /// 
+    /// Args:
+    ///   s (str): String representing time
+    ///  fmt (str): Format string
+    /// 
+    /// Returns:
+    ///  satkit.time: Time object representing input time
+    /// 
+    /// Raises:
+    ///  ValueError: If input string cannot be parsed
+    /// 
+    /// Notes:
+    ///    See: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+    ///    for format string options
+    #[staticmethod]
+    fn strftime(s: &str, fmt: &str) -> PyResult<Self> {
+        match AstroTime::strftime(s, fmt) {
+            Ok(v) => Ok(PyAstroTime { inner: v }),
+            Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
+                "Could not parse time string",
+            )),
+        }
+    }
+
+    /// Create satkit.time object from RFC3339 string
+    /// 
+    /// Notes:
+    ///   RFC3339 is a standard for representing time in a string format
+    ///   See: https://tools.ietf.org/html/rfc3339
+    ///   This overlaps with ISO 8601
+    /// 
+    /// Args:
+    ///   s (str): String representing time
+    /// 
+    /// Returns:
+    ///   satkit.time: Time object representing input time
+    /// 
+    /// Raises:
+    ///   ValueError: If input string cannot be parsed
+    /// 
+    #[staticmethod]
+    fn from_rfctime(s: &str) -> PyResult<Self> {
+        match AstroTime::from_rfc3339(s) {
+            Ok(v) => Ok(PyAstroTime { inner: v }),
+            Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
+                "Could not parse time string",
+            )),
         }
     }
 

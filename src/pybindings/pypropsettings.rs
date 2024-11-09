@@ -3,6 +3,8 @@ use pyo3::prelude::*;
 use crate::orbitprop::PropSettings;
 use crate::pybindings::PyAstroTime;
 
+use pyo3::types::{PyDict, PyString};
+
 #[pyclass(name = "propsettings")]
 #[derive(Clone, Debug)]
 pub struct PyPropSettings {
@@ -12,10 +14,43 @@ pub struct PyPropSettings {
 #[pymethods]
 impl PyPropSettings {
     #[new]
-    fn py_new() -> PyResult<Self> {
-        Ok(PyPropSettings {
-            inner: PropSettings::default(),
-        })
+    #[pyo3(signature=(**kwargs))]
+    fn py_new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let mut ps = PropSettings::default();
+        if let Some(kw) = kwargs {
+            if let Some(abserr) = kw.get_item("abs_error")? {
+                ps.abs_error = abserr.extract::<f64>()?;
+                kw.del_item("abs_error")?;
+            }
+            if let Some(relerr) = kw.get_item("rel_error")? {
+                ps.rel_error = relerr.extract::<f64>()?;
+                kw.del_item("rel_error")?;
+            }
+            if let Some(gravorder) = kw.get_item("gravity_order")? {
+                ps.gravity_order = gravorder.extract::<u16>()?;
+                kw.del_item("gravity_order")?;
+            }
+            if let Some(interp) = kw.get_item("enable_iterp")? {
+                ps.enable_interp = interp.extract::<bool>()?;
+                kw.del_item("enable_interp")?;
+            }
+            if let Some(sw) = kw.get_item("use_spaceweather")? {
+                ps.use_spaceweather = sw.extract::<bool>()?;
+                kw.del_item("use_spaceweather")?;
+            }
+            if !kw.is_empty() {
+                let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
+                    let mut a2 = acc.clone();
+                    a2.push_str(k.downcast::<PyString>().unwrap().to_str().unwrap());
+                    a2.push_str(", ");
+                    a2
+                });
+                let s = format!("Invalid kwargs: {}", keystring);
+                return Err(pyo3::exceptions::PyRuntimeError::new_err(s));
+            }
+        }
+
+        Ok(PyPropSettings { inner: ps })
     }
 
     #[getter]

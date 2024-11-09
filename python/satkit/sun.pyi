@@ -159,3 +159,19 @@ def rise_set(
         (sunrise: satkit.time, sunset: satkit.time)
 
     """
+
+def shadowfunc(sunpos: npt.ArrayLike[float], satpos: npt.ArrayLike[float]) -> float:
+    """
+    Is satellite in Earth shadow given sun position
+    
+    Args:
+        sunpos: geocentric Sun position, meters
+        satpos: geocentric satellite position, meters, 
+
+    Notes:
+    * See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
+
+    Returns:
+        (float) : number in range [0,1] indication no sun or full sun (no occlusion) hitting satellite
+    
+    """

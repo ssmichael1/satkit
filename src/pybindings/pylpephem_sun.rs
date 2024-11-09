@@ -64,3 +64,10 @@ pub fn rise_set(
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
     }
 }
+
+#[pyfunction(signature=(sunpos, satpos))]
+pub fn shadowfunc(sunpos: Bound<'_, PyAny>, satpos: Bound<'_, PyAny>) -> PyResult<f64> {
+    let satpos = pyutils::py_to_smatrix::<3, 1>(&satpos)?;
+    let sunpos = pyutils::py_to_smatrix::<3, 1>(&sunpos)?;
+    Ok(sun::shadowfunc(&sunpos, &satpos))
+}

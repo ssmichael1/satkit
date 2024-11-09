@@ -3,3 +3,6 @@ recursive-include src *.rs python extern
 include LICENSE
 include README.md
 include pyproject.toml
+prune __pycache__
+prune docs
+prune test

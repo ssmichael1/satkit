@@ -159,6 +159,17 @@ impl PyPropResult {
         }
     }
 
+    /// Get the stop time
+    #[getter]
+    fn time_end(&self) -> PyAstroTime {
+        PyAstroTime {
+            inner: match &self.inner {
+                PyPropResultType::R1(r) => r.time_end,
+                PyPropResultType::R7(r) => r.time_end,
+            },
+        }
+    }
+
     #[getter]
     fn stats(&self) -> PyPropStats {
         match &self.inner {
@@ -213,6 +224,34 @@ impl PyPropResult {
                     .to_pyarray_bound(py)
                     .to_object(py),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
+                    .to_pyarray_bound(py)
+                    .to_object(py),
+            }
+        })
+    }
+
+    #[getter]
+    fn state_end(&self) -> PyObject {
+        pyo3::Python::with_gil(|py| -> PyObject {
+            match &self.inner {
+                PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
+                    .to_pyarray_bound(py)
+                    .to_object(py),
+                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
+                    .to_pyarray_bound(py)
+                    .to_object(py),
+            }
+        })
+    }
+
+    #[getter]
+    fn state_start(&self) -> PyObject {
+        pyo3::Python::with_gil(|py| -> PyObject {
+            match &self.inner {
+                PyPropResultType::R1(r) => np::ndarray::arr1(r.state_start.as_slice())
+                    .to_pyarray_bound(py)
+                    .to_object(py),
+                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_start.as_slice()[0..6])
                     .to_pyarray_bound(py)
                     .to_object(py),
             }

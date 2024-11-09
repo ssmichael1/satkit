@@ -39,8 +39,11 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 
-[tool.setuptools.packages]
-find = { where = ["python"] }
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["satkit*"]
+exclude = ["test*", "docs*", "examples*"]
 
 [tool.cibuildwheel]
 build = ["cp313-*", "cp312-*", "cp311-* cp310-* cp39-* cp38-*"]

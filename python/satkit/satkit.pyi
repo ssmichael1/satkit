@@ -421,12 +421,12 @@ class time:
         min (int, optional): Minute of hour, in range [0,59], default is 0
         sec (float, optional): floating point second of minute, in range [0,60), default is 0
         scale (satkit.timescale, optional): Time scale , default is satkit.timescale.UTC
-
+        str (str, optional): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
     Returns:
         satkit.time: Time object representing input date and time, or if no arguments, the current date and time
 
     Example:
-        >>> print(satkit.time(2023, 3, 5, 11, 3,45.453))
+        >>> print(satkit.time(2023, 3, 5, 11, 3, 45.453))
         2023-03-05 11:03:45.453Z
 
         >>> print(satkit.time(2023, 3, 5))
@@ -453,6 +453,7 @@ class time:
             min (int, optional): Minute of hour, in range [0,59], default is 0
             sec (float, optional): floating point second of minute, in range [0,60), default is 0
             scale (satkit.timescale, optional): Time scale , default is satkit.timescale.UTC
+            str (str, optional): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
 
         Returns:
             satkit.time: Time object representing input date and time, or if no arguments, the current date and time
@@ -472,6 +473,56 @@ class time:
 
         Returns:
             satkit.time: Time object representing the current time
+        """
+
+    @staticmethod
+    def from_string(str: str) -> time:
+        """Create a "time" object from input string
+
+        Args:
+            str (str): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
+
+        Returns:
+            satkit.time: Time object representing input string
+
+        Example:
+            >>> print(satkit.time.from_string("2023-03-05 11:03:45.453Z"))
+            2023-03-05 11:03:45.453Z
+        """
+
+    @staticmethod
+    def from_rfctime(rfc: str) -> time:
+        """Create a "time" object from input RFC 3339 string
+
+        Args:
+            rfc (str): RFC 3339 string representation of time
+
+        Returns:
+            satkit.time: Time object representing input RFC 3339 string
+
+        Example:
+            >>> print(satkit.time.from_rfctime("2023-03-05T11:03:45.453Z"))
+            2023-03-05 11:03:45.453Z
+        """
+
+    @staticmethod
+    def strftime(str: str, format: str) -> time:
+        """Create a "time" object from input string
+
+        Args:
+            str (str): string representation of time
+            format (str): format of the string
+
+        Notes:
+        * The format string is the same as the "strftime" function in rust chrono crate
+            See: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+
+        Returns:
+            satkit.time: Time object representing input string
+
+        Example:
+            >>> print(satkit.time.strftime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
+            2023-03-05 11:03:45.453Z
         """
 
     @staticmethod
@@ -1443,29 +1494,52 @@ class propresult:
 
     Notes:
 
-    * If "output_dense" is set to True in the propagate function, the propresult object can be used to interpolate solutions at any time between the start and stop times of the propagation via the "interp" method
+    * If "enable_interp" is set to True in the propagation settings, the propresult object can be used to interpolate solutions at any time between the start and stop times of the propagation via the "interp" method
 
     """
 
     @property
     def pos() -> npt.ArrayLike[float]:
-        """GCRF position of satellite, meters"""
+        """GCRF position of satellite, meters
+        
+        Returns:
+            npt.ArrayLike[float]: 3-element numpy array representing GCRF position (meters) at end of propagation
+        
+        """
 
     @property
     def vel() -> npt.ArrayLike[float]:
         """GCRF velocity of satellite, meters/second
 
         Returns:
-            npt.ArrayLike[float]: 3-element numpy array representing GCRF velocity of satellite in meters/second
+            npt.ArrayLike[float]: 3-element numpy array representing GCRF velocity in meters/second at end of propagation
         """
 
     @property
     def state() -> npt.ArrayLike[float]:
-        """6-element state (pos + vel) of satellite in meters & meters/second
+        """6-element end state (pos + vel) of satellite in meters & meters/second
 
         Returns:
             npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second
         """
+
+    @property
+    def state_end() -> npt.ArrayLike[float]:
+        """6-element state (pos + vel) of satellite in meters & meters/second at end of propagation
+
+        Notes:
+        * This is the same as the "state" property 
+
+        Returns:
+            npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second
+        """
+
+    @property
+    def state_start() -> npt.ArrayLike[float]:
+        """6-element state (pos + vel) of satellite in meters & meters/second at start of propagation
+        Returns:
+            npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second at start of propagation
+        """  
 
     @property
     def time() -> time:
@@ -1474,6 +1548,26 @@ class propresult:
         Returns:
             satkit.time: Time at which state is valid
         """
+
+    @property
+    def time_end() -> time:
+        """Time at which state is valid
+
+        Notes:
+        * This is identical to "time" property
+
+        Returns:
+            satkit.time: Time at which state is valid
+        """
+
+    @property
+    def time_start() -> time:
+        """Time at which state_start is valid
+
+
+        Returns:
+            satkit.time: Time at which state_start is valid
+        """        
 
     @property
     def stats() -> propstats:
@@ -1568,17 +1662,16 @@ class propsettings:
 
     """
 
-    def __init__(self):
-        """Create default propsetting object
+    def __init__(**kwargs):
+        """Create propagation settings object used to configure high-precision orbit propagator
 
-        Notes:
-
-        * Default settings:
-            * abs_error: 1e-8
-            * rel_error: 1e-8
-            * gravity_order: 4
-            * use_spaceweather: True
-            * enable_interp: True
+        Args:
+            abs_error (float, optional keyword): Maximum absolute value of error for any element in propagated state following ODE integration. Default is 1e-8
+            rel_error (float, optional keyword): Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
+            gravity_order (int, optional keyword): Earth gravity order to use in ODE integration. Default is 4
+            use_spaceweather (bool, optional keyword): Use space weather data when computing atmospheric density for drag forces. Default is True
+            use_jplephem (bool, optional keyword): Use JPL ephemeris for solar system bodies. Default is True
+            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between start and stop times. Default is True        
 
 
         Returns:
@@ -1636,6 +1729,8 @@ class propsettings:
     def precompute_terms(self, start: time, stop: time, step: duration):
         """Precompute terms for fast interpolation of state between start and stop times
 
+        This can be used, for example, to compute sun and moon positions only once if propagating many satellites over the same time period
+
         Args:
             start (satkit.time): Start time of propagation
             stop (satkit.time): Stop time of propagation
@@ -1675,7 +1770,7 @@ def propagate(
         * Earth gravity with higher-order zonal terms
         * Sun, Moon gravity
         * Radiation pressured
-        * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (can be large)
+        * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (which can be large)
     * Stop time must be set by keyword argument, either explicitely or by duration
     * Solid Earth tides are not (yet) included in the model
 
