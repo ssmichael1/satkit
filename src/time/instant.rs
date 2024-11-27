@@ -305,6 +305,23 @@ impl Instant {
         self.as_mjd_with_scale(scale) + 2400000.5
     }
 
+    /// Add given floating-point number of days to AstroTime instance,
+    /// and return new instance representing new time.
+    ///
+    /// Days are defined in this case to have exactly 86400.0 seconds
+    /// In other words, this will ignore leap seconds and the integer
+    /// part of the floating point will increment the number of days and
+    /// the decimal part will increment the fractions of a day.
+    ///
+    /// So, for example, adding 1.0 to a day with a leap second will
+    /// increment by a full day
+    ///
+    pub fn add_utc_days(&self, days: f64) -> Instant {
+        let mut utc = self.as_mjd_with_scale(TimeScale::UTC);
+        utc += days;
+        Instant::from_mjd_with_scale(utc, TimeScale::UTC)
+    }
+
     /// As Modified Julian Date with given time scale
     /// Days since 1858-11-17 00:00:00 UTC
     ///

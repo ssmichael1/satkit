@@ -99,7 +99,7 @@ pub fn gast(tm: &Instant) -> f64 {
 ///
 ///
 pub fn earth_rotation_angle(tm: &Instant) -> f64 {
-    let t = tm.as_mjd_with_scale(TimeScale::UT1);
+    let t = tm.as_jd_with_scale(TimeScale::UT1);
     let f = t % 1.0;
     2.0 * PI * ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0)) % 1.0)
 }
@@ -437,12 +437,10 @@ mod tests {
         let era = earth_rotation_angle(tm);
         assert!((era * 180.0 / PI - 312.7552829).abs() < 1.0e-5);
         let pcirs = qrot_zcoord(-era) * ptirs;
-        println!("pcirs = {:?}", pcirs);
         assert!((pcirs[0] - 5100.0184047).abs() < 1e-3);
         assert!((pcirs[1] - 6122.7863648).abs() < 1e-3);
         assert!((pcirs[2] - 6380.3446237).abs() < 1e-3);
         let pgcrf = qcirs2gcrs_dxdy(tm, None) * pcirs;
-        println!("pgcrf = {:?}", pgcrf);
         assert!((pgcrf[0] - 5102.508959).abs() < 1e-3);
         assert!((pgcrf[1] - 6123.011403).abs() < 1e-3);
         assert!((pgcrf[2] - 6378.136925).abs() < 1e-3);
