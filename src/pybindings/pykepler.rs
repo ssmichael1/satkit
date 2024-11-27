@@ -140,7 +140,7 @@ impl PyKepler {
     fn propagate(k: &PyKepler, dt: &Bound<'_, PyAny>) -> PyResult<PyKepler> {
         if dt.is_instance_of::<pyo3::types::PyFloat>() {
             let dt = dt.extract::<f64>()?;
-            let dt = crate::Duration::Seconds(dt);
+            let dt = crate::Duration::from_seconds(dt);
             Ok(PyKepler {
                 inner: k.inner.propagate(&dt),
             })

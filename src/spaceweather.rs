@@ -3,8 +3,8 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use crate::astrotime::AstroTime;
 use crate::utils::{datadir, download_file, download_if_not_exist, skerror, SKResult};
+use crate::Instant;
 
 use std::sync::RwLock;
 
@@ -13,7 +13,7 @@ use once_cell::sync::OnceCell;
 #[derive(Debug, Clone)]
 pub struct SpaceWeatherRecord {
     /// Date of record
-    pub date: AstroTime,
+    pub date: Instant,
     /// Bartels Solar Radiation Number.  
     /// A sequence of 27-day intervals counted continuously from 1832 February 8
     pub bsrn: i32,
@@ -64,14 +64,14 @@ impl PartialOrd for SpaceWeatherRecord {
     }
 }
 
-impl PartialEq<AstroTime> for SpaceWeatherRecord {
-    fn eq(&self, other: &AstroTime) -> bool {
+impl PartialEq<Instant> for SpaceWeatherRecord {
+    fn eq(&self, other: &Instant) -> bool {
         self.date == *other
     }
 }
 
-impl PartialOrd<AstroTime> for SpaceWeatherRecord {
-    fn partial_cmp(&self, other: &AstroTime) -> Option<Ordering> {
+impl PartialOrd<Instant> for SpaceWeatherRecord {
+    fn partial_cmp(&self, other: &Instant) -> Option<Ordering> {
         self.date.partial_cmp(other)
     }
 }
@@ -101,7 +101,7 @@ fn load_space_weather_csv() -> SKResult<Vec<SpaceWeatherRecord>> {
                 None => return skerror!("invalid day in file"),
             };
             Ok(SpaceWeatherRecord {
-                date: (AstroTime::from_date(year as i32, mon, day)),
+                date: (Instant::from_date(year as i32, mon as i32, day as i32)),
                 bsrn: lvals[1].parse().unwrap_or(-1),
                 nd: lvals[2].parse().unwrap_or(-1),
                 kp: {
@@ -155,13 +155,13 @@ fn space_weather_singleton() -> &'static RwLock<SKResult<Vec<SpaceWeatherRecord>
 /// # Notes:
 ///
 /// * Space weather is updated daily in a file: sw19571001.txt
-pub fn get(tm: AstroTime) -> SKResult<SpaceWeatherRecord> {
+pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
     let sw_lock = space_weather_singleton().read().unwrap();
     let sw = sw_lock.as_ref().unwrap();
 
     // First, try simple indexing
-    let idx = (tm - sw[0].date).days().floor() as usize;
-    if idx < sw.len() && (tm - sw[idx].date).days().abs() < 1.0 {
+    let idx = (tm - sw[0].date).as_days().floor() as usize;
+    if idx < sw.len() && (tm - sw[idx].date).as_days().abs() < 1.0 {
         return Ok(sw[idx].clone());
     }
 
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_load() {
-        let tm: AstroTime = AstroTime::from_datetime(2023, 11, 14, 0, 0, 0.0);
+        let tm: Instant = Instant::from_datetime(2023, 11, 14, 0, 0, 0.0);
         let r = get(tm);
         println!("r = {:?}", r);
         println!("rdate = {}", r.unwrap().date);

@@ -103,7 +103,7 @@ impl PyTLE {
 
     /// Epoch time of TLE
     #[getter]
-    fn get_epoch(&self) -> PyResult<crate::astrotime::AstroTime> {
+    fn get_epoch(&self) -> PyResult<crate::Instant> {
         Ok(self.inner.epoch)
     }
 
@@ -157,7 +157,13 @@ impl PyTLE {
         raw[60..68].clone_from_slice(&self.inner.arg_of_perigee.to_le_bytes());
         raw[68..76].clone_from_slice(&self.inner.mean_anomaly.to_le_bytes());
         raw[76..84].clone_from_slice(&self.inner.mean_motion.to_le_bytes());
-        raw[84..92].clone_from_slice(&self.inner.epoch.to_mjd(crate::TimeScale::TAI).to_le_bytes());
+        raw[84..92].clone_from_slice(
+            &self
+                .inner
+                .epoch
+                .as_mjd_with_scale(crate::TimeScale::TAI)
+                .to_le_bytes(),
+        );
         raw[92..96].clone_from_slice(&self.inner.rev_num.to_le_bytes());
 
         let mut cnt = 96;
@@ -199,7 +205,7 @@ impl PyTLE {
         self.inner.arg_of_perigee = f64::from_le_bytes(raw[60..68].try_into().unwrap());
         self.inner.mean_anomaly = f64::from_le_bytes(raw[68..76].try_into().unwrap());
         self.inner.mean_motion = f64::from_le_bytes(raw[76..84].try_into().unwrap());
-        self.inner.epoch = crate::AstroTime::from_mjd(
+        self.inner.epoch = crate::Instant::from_mjd_with_scale(
             f64::from_le_bytes(raw[84..92].try_into().unwrap()),
             crate::TimeScale::TAI,
         );

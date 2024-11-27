@@ -3,7 +3,7 @@ use pyo3::types::{PyFloat, PyTuple};
 use pyo3::wrap_pyfunction;
 
 use crate::nrlmsise;
-use crate::AstroTime;
+use crate::Instant;
 
 use super::PyAstroTime;
 use super::PyITRFCoord;
@@ -28,7 +28,7 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
         ));
     }
 
-    let time: Option<AstroTime> = {
+    let time: Option<Instant> = {
         if args
             .get_item(args.len() - 1)?
             .is_instance_of::<PyAstroTime>()

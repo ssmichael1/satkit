@@ -1,7 +1,7 @@
 use nalgebra as na;
 
 use crate::nrlmsise::nrlmsise;
-use crate::AstroTime;
+use crate::Instant;
 use crate::ITRFCoord;
 
 const OMEGA_EARTH: na::Vector3<f64> = na::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
@@ -22,7 +22,7 @@ pub fn drag_force(
     pos_gcrf: &na::Vector3<f64>,
     pos_itrf: &na::Vector3<f64>,
     vel_gcrf: &na::Vector3<f64>,
-    time: &crate::AstroTime,
+    time: &crate::Instant,
     cd_a_over_m: f64,
     use_spaceweather: bool,
 ) -> na::Vector3<f64> {
@@ -55,7 +55,7 @@ pub fn drag_force(
 fn compute_rho_drhodr(
     pgcrf: &na::Vector3<f64>,
     qgcrf2itrf: &crate::frametransform::Quat,
-    time: &AstroTime,
+    time: &Instant,
     use_spaceweather: bool,
 ) -> (f64, na::Vector3<f64>) {
     let dx = 100.0;
@@ -109,7 +109,7 @@ pub fn drag_and_partials(
     pos_gcrf: &na::Vector3<f64>,
     qgcrf2itrf: &na::UnitQuaternion<f64>,
     vel_gcrf: &na::Vector3<f64>,
-    time: &crate::AstroTime,
+    time: &crate::Instant,
     cd_a_over_m: f64,
     use_spaceweather: bool,
 ) -> (na::Vector3<f64>, na::Matrix3<f64>, na::Matrix3<f64>) {

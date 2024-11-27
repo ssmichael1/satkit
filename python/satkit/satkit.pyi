@@ -585,7 +585,7 @@ class time:
         """
 
     @staticmethod
-    def from_gregorian(
+    def from_datetime(
         self,
         year: int,
         month: int,
@@ -610,7 +610,7 @@ class time:
             satkit.time: Time object representing input UTC Gregorian time
 
         Example:
-            >>> print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
+            >>> print(satkit.time.from_datetime(2023, 3, 5, 11, 3,45.453))
             2023-03-05 11:03:45.453Z
         """
 

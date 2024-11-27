@@ -3,7 +3,7 @@ use pyo3::types::PyDict;
 
 use super::PyAstroTime;
 use crate::nrlmsise;
-use crate::AstroTime;
+use crate::Instant;
 
 ///
 /// NRL-MSISE00 Atmospheric Model
@@ -25,7 +25,7 @@ use crate::AstroTime;
 pub fn nrlmsise00(alt_km: f64, option_kwds: Option<&Bound<'_, PyDict>>) -> PyResult<(f64, f64)> {
     let mut lat: Option<f64> = None;
     let mut lon: Option<f64> = None;
-    let mut tm: Option<AstroTime> = None;
+    let mut tm: Option<Instant> = None;
     let mut use_spaceweather: bool = true;
     if option_kwds.is_some() {
         let kwds = option_kwds.unwrap();

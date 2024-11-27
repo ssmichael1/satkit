@@ -1,4 +1,4 @@
-use crate::AstroTime;
+use crate::Instant;
 
 /// Enum representing durations of times, allowing for representation
 /// via common measures of duration (years, days, hours, minutes, seconds)
@@ -67,18 +67,18 @@ impl Duration {
     }
 }
 
-impl std::ops::Add<AstroTime> for Duration {
-    type Output = AstroTime;
+impl std::ops::Add<Instant> for Duration {
+    type Output = Instant;
     #[inline]
-    fn add(self, other: AstroTime) -> AstroTime {
+    fn add(self, other: Instant) -> Instant {
         other + self.days()
     }
 }
 
-impl std::ops::Add<&AstroTime> for Duration {
-    type Output = AstroTime;
+impl std::ops::Add<&Instant> for Duration {
+    type Output = Instant;
     #[inline]
-    fn add(self, other: &AstroTime) -> AstroTime {
+    fn add(self, other: &Instant) -> Instant {
         *other + self.days()
     }
 }

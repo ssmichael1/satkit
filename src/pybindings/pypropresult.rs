@@ -10,7 +10,7 @@ use numpy::{self as np, ToPyArray};
 
 use crate::orbitprop::PropagationResult;
 use crate::types::*;
-use crate::AstroTime;
+use crate::Instant;
 
 use serde::{Deserialize, Serialize};
 
@@ -125,9 +125,9 @@ impl PyPropResult {
     pub fn new() -> Self {
         PyPropResult {
             inner: PyPropResultType::R1(Box::new(PropagationResult::<1> {
-                time_start: AstroTime::new(),
+                time_start: Instant::INVALID,
                 state_start: Vector::<6>::zeros(),
-                time_end: AstroTime::new(),
+                time_end: Instant::INVALID,
                 state_end: Vector::<6>::zeros(),
                 num_eval: 0,
                 accepted_steps: 0,

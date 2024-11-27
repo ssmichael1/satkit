@@ -1,0 +1,85 @@
+use super::Duration;
+use super::Instant;
+
+#[test]
+fn test_j2000() {
+    let g = Instant::J2000.as_datetime();
+    assert!(g.0 == 2000);
+    assert!(g.1 == 1);
+    assert!(g.2 == 1);
+    assert!(g.3 == 12);
+    assert!(g.4 == 0);
+    // J2000 is TT time, which is 32.184 seconds
+    assert!((g.5 - 32.184).abs() < 1.0e-7);
+}
+
+#[test]
+fn test_leapsecond() {
+    let mut t = Instant::new(1483228836000000);
+    let g = t.as_datetime();
+    assert!(g.0 == 2016);
+    assert!(g.1 == 12);
+    assert!(g.2 == 31);
+    assert!(g.3 == 23);
+    assert!(g.4 == 59);
+    assert!(g.5 == 60.0);
+
+    t -= Duration::from_seconds(1.0);
+    let g = t.as_datetime();
+    assert!(g.0 == 2016);
+    assert!(g.1 == 12);
+    assert!(g.2 == 31);
+    assert!(g.3 == 23);
+    assert!(g.4 == 59);
+    assert!(g.5 == 59.0);
+
+    t += Duration::from_seconds(2.0);
+    let g = t.as_datetime();
+    assert!(g.0 == 2017);
+    assert!(g.1 == 1);
+    assert!(g.2 == 1);
+    assert!(g.3 == 0);
+    assert!(g.4 == 0);
+    assert!(g.5 == 0.0);
+}
+
+#[test]
+fn test_ops() {
+    let t1 = Instant::from_datetime(2024, 11, 13, 8, 0, 3.0);
+    let t2 = Instant::from_datetime(2024, 11, 13, 8, 0, 4.0);
+    let dt = t2 - t1;
+    assert!(dt.as_microseconds() == 1_000_000);
+    let t2 = Instant::from_datetime(2024, 11, 13, 8, 0, 2.0);
+    let dt = t2 - t1;
+    assert!(dt.as_microseconds() == -1_000_000);
+    let t2 = Instant::from_datetime(2024, 11, 13, 8, 1, 3.0);
+    let dt = t2 - t1;
+    assert!(dt.as_microseconds() == 60_000_000);
+
+    let t3 = t2 + Duration::from_days(1.0);
+    let g = t3.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 11);
+    assert!(g.2 == 14);
+    assert!(g.3 == 8);
+    assert!(g.4 == 1);
+    assert!(g.5 == 3.0);
+}
+
+#[test]
+fn test_gps() {
+    let g = Instant::GPS_EPOCH.as_datetime();
+    assert!(g.0 == 1980);
+    assert!(g.1 == 1);
+    assert!(g.2 == 6);
+    assert!(g.3 == 0);
+    assert!(g.4 == 0);
+    assert!(g.5 == 0.0);
+}
+
+#[test]
+fn test_jd() {
+    let time = Instant::from_datetime(2024, 11, 24, 12, 0, 0.0);
+    assert!(time.as_jd() == 2_460_639.0);
+    assert!(time.as_mjd() == 60_638.5);
+}

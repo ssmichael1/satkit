@@ -37,10 +37,8 @@
 //!
 //!
 
-use serde::{Deserialize, Serialize};
-
 #[derive(PartialEq, PartialOrd, Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct AstroTime {
+pub struct Instant {
     pub(crate) mjd_tai: f64,
 }
 
@@ -149,14 +147,14 @@ const DELTAAT: [[u64; 2]; 28] = [
     [2272060800, 10],
 ];
 
-impl std::fmt::Display for AstroTime {
+impl std::fmt::Display for Instant {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let (mut year, mut mon, mut day, mut hour, mut min, mut sec) = self.to_datetime();
+        let (mut year, mut mon, mut day, mut hour, mut min, mut sec) = self.as_datetime();
 
         // Prevent edge case where seconds is displayed as 60
         if sec > 59.999 {
             let t = *self + 5e-4 / 86400.0;
-            (year, mon, day, hour, min, sec) = t.to_datetime();
+            (year, mon, day, hour, min, sec) = t.as_datetime();
         }
 
         write!(
@@ -167,15 +165,15 @@ impl std::fmt::Display for AstroTime {
     }
 }
 
-impl std::ops::Add<f64> for AstroTime {
+impl std::ops::Add<f64> for Instant {
     type Output = Self;
     #[inline]
     fn add(self, other: f64) -> Self::Output {
-        AstroTime::from_mjd(self.mjd_tai + other, Scale::TAI)
+        Instant::from_mjd(self.mjd_tai + other, Scale::TAI)
     }
 }
 
-impl std::ops::Add<Duration> for AstroTime {
+impl std::ops::Add<Duration> for Instant {
     type Output = Self;
     #[inline]
     fn add(self, other: Duration) -> Self::Output {
@@ -185,7 +183,7 @@ impl std::ops::Add<Duration> for AstroTime {
     }
 }
 
-impl std::ops::Sub<Duration> for AstroTime {
+impl std::ops::Sub<Duration> for Instant {
     type Output = Self;
     #[inline]
     fn sub(self, other: Duration) -> Self::Output {
@@ -198,7 +196,7 @@ impl std::ops::Sub<Duration> for AstroTime {
 /// Take the difference between two AstroTime time instances
 /// returning the floating-point number of days between
 /// the instances.
-impl std::ops::Sub<f64> for AstroTime {
+impl std::ops::Sub<f64> for Instant {
     type Output = Self;
     fn sub(self, other: f64) -> Self::Output {
         Self {
@@ -207,106 +205,106 @@ impl std::ops::Sub<f64> for AstroTime {
     }
 }
 
-impl std::ops::Sub<f64> for &AstroTime {
-    type Output = AstroTime;
+impl std::ops::Sub<f64> for &Instant {
+    type Output = Instant;
     fn sub(self, other: f64) -> Self::Output {
-        AstroTime {
+        Instant {
             mjd_tai: self.mjd_tai - other,
         }
     }
 }
 
-impl std::ops::Sub<AstroTime> for &AstroTime {
+impl std::ops::Sub<Instant> for &Instant {
     type Output = Duration;
-    fn sub(self, other: AstroTime) -> Duration {
+    fn sub(self, other: Instant) -> Duration {
         Duration::Days(self.mjd_tai - other.mjd_tai)
     }
 }
 
-impl std::ops::Sub<&AstroTime> for &AstroTime {
+impl std::ops::Sub<&Instant> for &Instant {
     type Output = Duration;
-    fn sub(self, other: &AstroTime) -> Duration {
+    fn sub(self, other: &Instant) -> Duration {
         Duration::Days(self.mjd_tai - other.mjd_tai)
     }
 }
 
-impl std::ops::Sub<AstroTime> for AstroTime {
+impl std::ops::Sub<Instant> for Instant {
     type Output = Duration;
-    fn sub(self, other: AstroTime) -> Duration {
+    fn sub(self, other: Instant) -> Duration {
         Duration::Days(self.mjd_tai - other.mjd_tai)
     }
 }
 
-impl std::ops::Sub<&AstroTime> for AstroTime {
+impl std::ops::Sub<&Instant> for Instant {
     type Output = Duration;
-    fn sub(self, other: &AstroTime) -> Duration {
+    fn sub(self, other: &Instant) -> Duration {
         Duration::Days(self.mjd_tai - other.mjd_tai)
     }
 }
 
-impl std::ops::Add<&Vec<Duration>> for AstroTime {
+impl std::ops::Add<&Vec<Duration>> for Instant {
     type Output = Vec<Self>;
     fn add(self, other: &Vec<Duration>) -> Self::Output {
         other.iter().map(|x| self + x.days()).collect()
     }
 }
 
-impl std::ops::Add<&Vec<f64>> for AstroTime {
+impl std::ops::Add<&Vec<f64>> for Instant {
     type Output = Vec<Self>;
     fn add(self, other: &Vec<f64>) -> Self::Output {
         other.iter().map(|x| self + *x).collect()
     }
 }
 
-impl<T: chrono::TimeZone> std::convert::From<chrono::DateTime<T>> for AstroTime {
+impl<T: chrono::TimeZone> std::convert::From<chrono::DateTime<T>> for Instant {
     fn from(c: chrono::DateTime<T>) -> Self {
-        let mut t = AstroTime::from_unixtime(c.timestamp() as f64);
+        let mut t = Instant::from_unixtime(c.timestamp() as f64);
         t = t + c.timestamp_subsec_micros() as f64 / 86400.0e6;
         t
     }
 }
 
-impl std::convert::From<&chrono::NaiveDateTime> for AstroTime {
+impl std::convert::From<&chrono::NaiveDateTime> for Instant {
     fn from(c: &chrono::NaiveDateTime) -> Self {
-        let mut t = AstroTime::from_unixtime(c.and_utc().timestamp() as f64);
+        let mut t = Instant::from_unixtime(c.and_utc().timestamp() as f64);
         t = t + c.and_utc().timestamp_subsec_micros() as f64 / 86400.0e6;
         t
     }
 }
 
-impl std::convert::From<AstroTime> for chrono::NaiveDateTime {
-    fn from(s: AstroTime) -> chrono::NaiveDateTime {
+impl std::convert::From<Instant> for chrono::NaiveDateTime {
+    fn from(s: Instant) -> chrono::NaiveDateTime {
         let secs: i64 = s.as_unixtime() as i64;
-        let nsecs: u32 = (((s.to_mjd(Scale::UTC) * 86400.0) % 1.0) * 1.0e9) as u32;
+        let nsecs: u32 = (((s.as_mjd_with_scale(TimeScale::UTC) * 86400.0) % 1.0) * 1.0e9) as u32;
         chrono::DateTime::from_timestamp(secs, nsecs)
             .unwrap()
             .naive_utc()
     }
 }
 
-impl TryFrom<std::time::SystemTime> for AstroTime {
+impl TryFrom<std::time::SystemTime> for Instant {
     type Error = &'static str;
     fn try_from(st: std::time::SystemTime) -> Result<Self, Self::Error> {
         let val = st.duration_since(std::time::SystemTime::UNIX_EPOCH);
         match val {
-            Ok(v) => Ok(AstroTime::from_unixtime(v.as_secs() as f64)),
+            Ok(v) => Ok(Instant::from_unixtime(v.as_secs() as f64)),
             Err(_) => Err("Invalid system time"),
         }
     }
 }
 
-impl Default for AstroTime {
+impl Default for Instant {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AstroTime {
+impl Instant {
     #[inline]
     /// Construct new astrotime object,
     /// representing time at TAI epoch of modified Julian date
-    pub fn new() -> AstroTime {
-        AstroTime { mjd_tai: JD2MJD }
+    pub fn new() -> Instant {
+        Instant { mjd_tai: JD2MJD }
     }
 
     /// Construct new AstroTime object, representing given unixtime
@@ -315,16 +313,16 @@ impl AstroTime {
     /// # Arguments:
     ///
     /// * `t` - The unixtime (seconds since midnight, Jan 1, 1970, UTC)
-    pub fn from_unixtime(t: f64) -> AstroTime {
-        AstroTime::from_mjd(t / 86400.0 + UTC1970, Scale::UTC)
+    pub fn from_unixtime(t: f64) -> Instant {
+        Instant::from_mjd(t / 86400.0 + UTC1970, Scale::UTC)
     }
 
     /// Construt new AstroTime object, representing
     /// current date and time
-    pub fn now() -> SKResult<AstroTime> {
+    pub fn now() -> SKResult<Instant> {
         let now = SystemTime::now();
         match now.duration_since(UNIX_EPOCH) {
-            Ok(v) => Ok(AstroTime::from_mjd(
+            Ok(v) => Ok(Instant::from_mjd(
                 v.as_millis() as f64 / 86400000.0 + UTC1970,
                 Scale::UTC,
             )),
@@ -334,7 +332,7 @@ impl AstroTime {
 
     /// Convert to unixtime (seconds since midnight Jan 1 1970, UTC)
     pub fn as_unixtime(&self) -> f64 {
-        (self.to_mjd(Scale::UTC) - UTC1970) * 86400.0
+        (self.as_mjd_with_scale(TimeScale::UTC) - UTC1970) * 86400.0
     }
 
     /// Add given floating-point number of days to AstroTime instance,
@@ -348,10 +346,10 @@ impl AstroTime {
     /// So, for example, adding 1.0 to a day with a leap second will
     /// increment by a full day
     ///
-    pub fn add_utc_days(&self, days: f64) -> AstroTime {
-        let mut utc = self.to_mjd(Scale::UTC);
+    pub fn add_utc_days(&self, days: f64) -> Instant {
+        let mut utc = self.as_mjd_with_scale(TimeScale::UTC);
         utc += days;
-        AstroTime::from_mjd(utc, Scale::UTC)
+        Instant::from_mjd(utc, Scale::UTC)
     }
 
     /// Construct new AstroTime object representing time at
@@ -368,16 +366,16 @@ impl AstroTime {
     /// # Returns
     ///
     /// * AstroTime object
-    pub fn from_mjd(val: f64, scale: Scale) -> AstroTime {
+    pub fn from_mjd(val: f64, scale: Scale) -> Instant {
         match scale {
-            Scale::TAI => AstroTime { mjd_tai: val },
-            Scale::UTC => AstroTime {
+            Scale::TAI => Instant { mjd_tai: val },
+            Scale::UTC => Instant {
                 mjd_tai: val + mjd_utc2tai_seconds(val) / 86400.0,
             },
-            Scale::TT => AstroTime {
+            Scale::TT => Instant {
                 mjd_tai: val - 32.184 / 86400.0,
             },
-            Scale::GPS => AstroTime {
+            Scale::GPS => Instant {
                 mjd_tai: {
                     if val >= UTCGPS0 - f64::EPSILON {
                         val + 19.0 / 86400.0
@@ -386,7 +384,7 @@ impl AstroTime {
                     }
                 },
             },
-            Scale::TDB => AstroTime {
+            Scale::TDB => Instant {
                 mjd_tai: {
                     let ttc: f64 = (val - (2451545.0 - 2400000.4)) / 36525.0;
                     val - 0.01657 / 86400.0 * (PI / 180.0 * (628.3076 * ttc + 6.2401)).sin()
@@ -395,11 +393,11 @@ impl AstroTime {
             },
             Scale::UT1 => {
                 let utc: f64 = val - eop::eop_from_mjd_utc(val).unwrap()[0] / 86400.0;
-                AstroTime {
+                Instant {
                     mjd_tai: utc + mjd_utc2tai_seconds(val) / 86400.0,
                 }
             }
-            Scale::INVALID => AstroTime { mjd_tai: JD2MJD },
+            Scale::INVALID => Instant { mjd_tai: JD2MJD },
         }
     }
 
@@ -414,8 +412,8 @@ impl AstroTime {
     /// # Returns
     ///
     /// * AstroTime Object
-    pub fn from_date(year: i32, month: u32, day: u32) -> AstroTime {
-        AstroTime::from_mjd(date2mjd_utc(year, month, day) as f64, Scale::UTC)
+    pub fn from_date(year: i32, month: u32, day: u32) -> Instant {
+        Instant::from_mjd(date2mjd_utc(year, month, day) as f64, Scale::UTC)
     }
 
     /// Convert AstroTime to UTC Gregorian date
@@ -427,7 +425,7 @@ impl AstroTime {
     ///   * month - the month, 1 based (1=January, 2=February, ...)
     ///   * day - Day of month, starting from 1
     pub fn to_date(&self) -> (u32, u32, u32) {
-        mjd_utc2date(self.to_mjd(Scale::UTC))
+        mjd_utc2date(self.as_mjd_with_scale(TimeScale::UTC))
     }
 
     /// Convert AstroTime to Gregorian date and timewith given scale
@@ -446,8 +444,8 @@ impl AstroTime {
     ///   * `min` - Minute of hour, in range \[0,59\]
     ///   * `sec` - Second of minute, including fractions for subsecond, in range \[0,1)
     ///
-    pub fn to_datetime_with_scale(&self, scale: Scale) -> (u32, u32, u32, u32, u32, f64) {
-        let mjd_utc = self.to_mjd(scale);
+    pub fn as_datetime_with_scale(&self, scale: Scale) -> (u32, u32, u32, u32, u32, f64) {
+        let mjd_utc = self.as_mjd_with_scale(TimeScale);
         let (year, month, day) = mjd_utc2date(mjd_utc);
         let fracofday: f64 = mjd_utc - mjd_utc.floor();
         let mut sec: f64 = fracofday * 86400.0;
@@ -471,8 +469,8 @@ impl AstroTime {
     ///   * `sec` - Second of minute, including fractions for subsecond, in range \[0,1)
     ///
     #[inline]
-    pub fn to_datetime(&self) -> (u32, u32, u32, u32, u32, f64) {
-        self.to_datetime_with_scale(Scale::UTC)
+    pub fn as_datetime(&self) -> (u32, u32, u32, u32, u32, f64) {
+        self.as_datetime_with_scale(Scale::UTC)
     }
 
     /// Convert UTC Gregorian date and time to AstroTime
@@ -497,8 +495,8 @@ impl AstroTime {
         hour: u32,
         min: u32,
         sec: f64,
-    ) -> AstroTime {
-        AstroTime::from_datetime_with_scale(year, month, day, hour, min, sec, Scale::UTC)
+    ) -> Instant {
+        Instant::from_datetime_with_scale(year, month, day, hour, min, sec, Scale::UTC)
     }
 
     /// Convert UTC Gregorian date and time to AstroTime
@@ -524,10 +522,10 @@ impl AstroTime {
         min: u32,
         sec: f64,
         scale: Scale,
-    ) -> AstroTime {
+    ) -> Instant {
         let mut mjd: f64 = date2mjd_utc(year, month, day) as f64;
         mjd += (((min + (hour * 60)) * 60) as f64 + sec) / 86400.0;
-        AstroTime::from_mjd(mjd, scale)
+        Instant::from_mjd(mjd, scale)
     }
 
     /// Convert to modified Julian day (MJD), with given scale
@@ -576,7 +574,7 @@ impl AstroTime {
     ///
     /// Jan 1 2000, 12pm is defined as Julian day 2451545.0
     pub fn to_jd(&self, scale: Scale) -> f64 {
-        self.to_mjd(scale) + MJD2JD
+        self.as_mjd_with_scale(TimeScale) + MJD2JD
     }
 
     /// Convert from Julian day, with given scale
@@ -584,8 +582,8 @@ impl AstroTime {
     /// since given epoch
     ///
     /// Jan 1 2000, 12pm is defined as Julian day 2451545.0
-    pub fn from_jd(jd: f64, scale: Scale) -> AstroTime {
-        AstroTime::from_mjd(jd + JD2MJD, scale)
+    pub fn from_jd(jd: f64, scale: Scale) -> Instant {
+        Instant::from_mjd(jd + JD2MJD, scale)
     }
 
     /// Convert from string with given format
@@ -602,10 +600,10 @@ impl AstroTime {
     /// # Returns
     /// * Result with AstroTime object
     ///
-    pub fn strftime(s: &str, format: &str) -> SKResult<AstroTime> {
+    pub fn strftime(s: &str, format: &str) -> SKResult<Instant> {
         let dt = chrono::NaiveDateTime::parse_from_str(s, format);
         match dt {
-            Ok(v) => Ok(AstroTime::from(&v)),
+            Ok(v) => Ok(Instant::from(&v)),
             Err(e) => skerror!("Cannot parse datetime: {}", e),
         }
     }
@@ -624,7 +622,7 @@ impl AstroTime {
     ///
     /// * If string cannot be parsed
     ///
-    pub fn from_string(s: &str) -> SKResult<AstroTime> {
+    pub fn from_string(s: &str) -> SKResult<Instant> {
         // Attempt to guess format
         let formats = [
             "%Y-%m-%d %H:%M:%S",
@@ -693,7 +691,7 @@ impl AstroTime {
         for f in formats.iter() {
             let dt = chrono::NaiveDateTime::parse_from_str(s, f);
             if let Ok(dt) = dt {
-                return Ok(AstroTime::from(&dt));
+                return Ok(Instant::from(&dt));
             }
         }
         skerror!("Cannot parse datetime")
@@ -713,10 +711,10 @@ impl AstroTime {
     ///
     /// * If string cannot be parsed
     ///
-    pub fn from_rfc3339(s: &str) -> SKResult<AstroTime> {
+    pub fn from_rfc3339(s: &str) -> SKResult<Instant> {
         let dt = chrono::DateTime::parse_from_rfc3339(s);
         match dt {
-            Ok(v) => Ok(AstroTime::from(&v.naive_utc())),
+            Ok(v) => Ok(Instant::from(&v.naive_utc())),
             Err(e) => skerror!("Cannot parse datetime: {}", e),
         }
     }
@@ -821,8 +819,8 @@ mod tests {
         //let dt = Utc.ymd(2014, 7, 8).and_hms(9, 10, 11); // `2014-07-08T09:10:11Z`
         let dt = Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap();
 
-        let ts = AstroTime::from(dt);
-        let (year, mon, day, hour, min, sec) = ts.to_datetime();
+        let ts = Instant::from(dt);
+        let (year, mon, day, hour, min, sec) = ts.as_datetime();
         assert_eq!(year, 2014);
         assert_eq!(mon, 7);
         assert_eq!(day, 8);
@@ -836,8 +834,8 @@ mod tests {
 
     #[test]
     fn testdatetime() {
-        let tm: AstroTime = AstroTime::from_datetime(2021, 3, 4, 12, 45, 33.0);
-        let (year, mon, day, hour, min, sec) = tm.to_datetime();
+        let tm: Instant = Instant::from_datetime(2021, 3, 4, 12, 45, 33.0);
+        let (year, mon, day, hour, min, sec) = tm.as_datetime();
         assert_eq!(year, 2021);
         assert_eq!(mon, 3);
         assert_eq!(day, 4);
@@ -848,8 +846,8 @@ mod tests {
 
     #[test]
     fn test_rfctime() {
-        let tm = AstroTime::from_rfc3339("2021-03-04T12:45:33Z").unwrap();
-        let (year, mon, day, hour, min, sec) = tm.to_datetime();
+        let tm = Instant::from_rfc3339("2021-03-04T12:45:33Z").unwrap();
+        let (year, mon, day, hour, min, sec) = tm.as_datetime();
         assert_eq!(year, 2021);
         assert_eq!(mon, 3);
         assert_eq!(day, 4);
@@ -860,8 +858,8 @@ mod tests {
 
     #[test]
     fn sub_test() {
-        let tm1 = AstroTime::from_datetime(2024, 2, 3, 22, 0, 0.0);
-        let tm2 = AstroTime::from_datetime(2024, 2, 3, 11, 0, 0.0);
+        let tm1 = Instant::from_datetime(2024, 2, 3, 22, 0, 0.0);
+        let tm2 = Instant::from_datetime(2024, 2, 3, 11, 0, 0.0);
         let diff = tm1 - tm2;
         println!("diff = {}", diff);
         let diff2 = tm2 - tm1;
@@ -871,10 +869,10 @@ mod tests {
 
     #[test]
     fn add_test() {
-        let tm = AstroTime::from_datetime(2021, 3, 4, 11, 20, 41.0);
+        let tm = Instant::from_datetime(2021, 3, 4, 11, 20, 41.0);
         let delta: f64 = 0.5;
         let tm2 = tm + delta;
-        let (year, mon, day, hour, min, sec) = tm2.to_datetime();
+        let (year, mon, day, hour, min, sec) = tm2.as_datetime();
         assert_eq!(year, 2021);
         assert_eq!(mon, 3);
         assert_eq!(day, 4);
@@ -888,7 +886,7 @@ mod tests {
 
     #[test]
     fn test_vec() {
-        let tm = AstroTime::from_datetime(2004, 4, 6, 7, 51, 28.386009);
+        let tm = Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009);
         let v: &Vec<f64> = &vec![0.0, 1.0, 2.0, 3.0];
         println!("time vec = {:?}", tm + v);
     }
@@ -896,15 +894,17 @@ mod tests {
     #[test]
     fn test_deltaat() {
         // Pulled from Vallado example 3-14
-        let tm = &AstroTime::from_datetime(2004, 4, 6, 7, 51, 28.386009);
+        let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009);
         println!("tm = {}", tm);
-        let dut1 = (tm.to_mjd(Scale::UT1) - tm.to_mjd(Scale::UTC)) * 86400.0;
+        let dut1 =
+            (tm.as_mjd_with_scale(TimeScale::UT1) - tm.as_mjd_with_scale(TimeScale::UTC)) * 86400.0;
         println!("dut1 = {} sec", dut1);
-        let delta_at = (tm.to_mjd(Scale::TAI) - tm.to_mjd(Scale::UTC)) * 86400.0;
+        let delta_at =
+            (tm.as_mjd_with_scale(TimeScale::TAI) - tm.as_mjd_with_scale(TimeScale::UTC)) * 86400.0;
         println!("delta_at = {} sec", delta_at);
         println!(
             "delta at 2 = {}",
-            mjd_utc2tai_seconds(tm.to_mjd(Scale::UTC))
+            mjd_utc2tai_seconds(tm.as_mjd_with_scale(TimeScale::UTC))
         );
     }
 

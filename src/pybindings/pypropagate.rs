@@ -10,8 +10,8 @@ use nalgebra as na;
 use crate::orbitprop::SatProperties;
 use crate::orbitprop::SatPropertiesStatic;
 use crate::types::*;
-use crate::AstroTime;
 use crate::Duration;
+use crate::Instant;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
@@ -96,8 +96,8 @@ pub fn propagate(
     };
 
     let mut state0 = Vector6::zeros();
-    let mut starttime: AstroTime = AstroTime::new();
-    let mut stoptime: AstroTime = AstroTime::new();
+    let mut starttime: Instant = Instant::INVALID;
+    let mut stoptime: Instant = Instant::INVALID;
     let mut output_phi: bool = false;
     let mut satproperties: Option<&dyn SatProperties> = None;
     let satproperties_static: SatPropertiesStatic;
@@ -140,11 +140,11 @@ pub fn propagate(
             kw.del_item("duration")?;
         }
         if let Some(kwd) = kw.get_item("duration_days")? {
-            stoptime = starttime + Duration::Days(kwd.extract::<f64>()?);
+            stoptime = starttime + Duration::from_days(kwd.extract::<f64>()?);
             kw.del_item("duration_days")?;
         }
         if let Some(kwd) = kw.get_item("duration_secs")? {
-            stoptime = starttime + Duration::Seconds(kwd.extract::<f64>()?);
+            stoptime = starttime + Duration::from_seconds(kwd.extract::<f64>()?);
             kw.del_item("duration_sec")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {

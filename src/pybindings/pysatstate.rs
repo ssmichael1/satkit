@@ -12,7 +12,7 @@ use pyo3::types::{PyDict, PyNone, PyTuple};
 
 use crate::orbitprop::{PropSettings, SatState, StateCov};
 use crate::pybindings::PyDuration;
-use crate::AstroTime;
+use crate::Instant;
 
 #[pyclass(name = "satstate", module = "satkit")]
 #[derive(Clone, Debug)]
@@ -215,7 +215,7 @@ impl PySatState {
         timedur: &Bound<'_, PyAny>,
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Self> {
-        let time: AstroTime = {
+        let time: Instant = {
             if timedur.is_instance_of::<PyAstroTime>() {
                 timedur.extract::<PyAstroTime>()?.inner
             } else if timedur.is_instance_of::<PyDuration>() {
@@ -251,7 +251,7 @@ impl PySatState {
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
         let d = PyDict::new_bound(py);
         let tm = PyAstroTime {
-            inner: AstroTime { mjd_tai: 0.0 },
+            inner: Instant::INVALID,
         }
         .into_py(py);
         let pos = np::PyArray1::from_slice_bound(py, &[0.0, 0.0, 0.0]).to_object(py);
@@ -266,7 +266,7 @@ impl PySatState {
                 "State must be at least 56 bytes",
             ));
         }
-        let time = AstroTime::from_mjd(
+        let time = Instant::from_mjd_with_scale(
             f64::from_le_bytes(state[0..8].try_into().unwrap()),
             crate::TimeScale::TAI,
         );
@@ -292,7 +292,13 @@ impl PySatState {
                 StateCov::PVCov(_) => 36,
             };
         let mut buffer: Vec<u8> = vec![0; len];
-        buffer[0..8].clone_from_slice(&self.inner.time.to_mjd(crate::TimeScale::TAI).to_le_bytes());
+        buffer[0..8].clone_from_slice(
+            &self
+                .inner
+                .time
+                .as_mjd_with_scale(crate::TimeScale::TAI)
+                .to_le_bytes(),
+        );
         unsafe {
             buffer[8..56].clone_from_slice(std::slice::from_raw_parts(
                 self.inner.pv.as_ptr() as *const u8,

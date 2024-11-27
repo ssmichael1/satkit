@@ -1,6 +1,6 @@
-use super::astrotime::AstroTime;
 use crate::sgp4::SatRec;
 use crate::utils::SKResult;
+use crate::Instant;
 
 ///
 /// Stucture representing a Two-Line Element Set (TLE), a satellite
@@ -73,7 +73,7 @@ pub struct TLE {
     /// Piece of launch
     pub desig_piece: String,
     /// TLE epoch
-    pub epoch: AstroTime,
+    pub epoch: Instant,
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
     pub mean_motion_dot: f64,
     /// One sixth of 2nd derivative of mean motion wrt tim, in revs/day^3
@@ -144,7 +144,7 @@ impl TLE {
             desig_year: 0,
             desig_launch: 0,
             desig_piece: "A".to_string(),
-            epoch: AstroTime::new(),
+            epoch: Instant::J2000,
             mean_motion_dot: 0.0,
             mean_motion_dot_dot: 0.0,
             bstar: 0.0,
@@ -266,7 +266,8 @@ impl TLE {
         // Note: day_of_year starts from 1, not zero,
         // also, go from Jan 2 to avoid leap-second
         // issues, hence the "-2" at end
-        let epoch = AstroTime::from_date(year as i32, 1, 2).add_utc_days(day_of_year - 2.0);
+        //let epoch = Instant::from_date(year as i32, 1, 2).add_utc_days(day_of_year - 2.0);
+        let epoch = Instant::from_date(year as i32, 1, 2) - crate::Duration::from_days(2.0);
 
         Ok(TLE {
             name: "none".to_string(),
@@ -277,12 +278,8 @@ impl TLE {
                 }
             },
             intl_desig: { line1[9..16].trim().to_string() },
-            desig_year: {
-                line1[9..11].trim().parse().unwrap_or(70)
-            },
-            desig_launch: {
-                line1[11..14].trim().parse().unwrap_or_default()
-            },
+            desig_year: { line1[9..11].trim().parse().unwrap_or(70) },
+            desig_launch: { line1[11..14].trim().parse().unwrap_or_default() },
             desig_piece: {
                 match line1[14..18].trim().parse() {
                     Ok(l) => l,
@@ -330,9 +327,7 @@ impl TLE {
                 }
                 m
             },
-            ephem_type: {
-                line1[62..63].trim().parse().unwrap_or_default()
-            },
+            ephem_type: { line1[62..63].trim().parse().unwrap_or_default() },
             element_num: {
                 match line1[64..68].trim().parse() {
                     Ok(y) => y,

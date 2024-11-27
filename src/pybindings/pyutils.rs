@@ -1,10 +1,10 @@
 use super::pyastrotime::ToTimeVec;
 use super::pyquaternion::Quaternion;
 
-use crate::astrotime::AstroTime;
 use crate::frametransform::Quat;
 use crate::types::*;
 use crate::utils::SKResult;
+use crate::Instant;
 use nalgebra as na;
 use numpy as np;
 use numpy::ndarray;
@@ -59,7 +59,7 @@ where
 }
 
 pub fn py_vec3_of_time_arr(
-    cfunc: &dyn Fn(&AstroTime) -> Vector3,
+    cfunc: &dyn Fn(&Instant) -> Vector3,
     tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
@@ -94,7 +94,7 @@ pub fn py_vec3_of_time_arr(
 }
 
 pub fn py_vec3_of_time_result_arr(
-    cfunc: &dyn Fn(&AstroTime) -> SKResult<Vec3>,
+    cfunc: &dyn Fn(&Instant) -> SKResult<Vec3>,
     tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
@@ -164,7 +164,7 @@ pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> PyRe
 }
 
 pub fn py_func_of_time_arr<T: ToPyObject>(
-    cfunc: fn(&AstroTime) -> T,
+    cfunc: fn(&Instant) -> T,
     tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
@@ -180,7 +180,7 @@ pub fn py_func_of_time_arr<T: ToPyObject>(
 
 #[inline]
 pub fn py_quat_from_time_arr(
-    cfunc: fn(&AstroTime) -> Quat,
+    cfunc: fn(&Instant) -> Quat,
     tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
@@ -230,7 +230,7 @@ pub fn mat2py<const M: usize, const N: usize>(py: Python, m: &Matrix<M, N>) -> P
 #[inline]
 pub fn tuple_func_of_time_arr<F>(cfunc: F, tmarr: &Bound<'_, PyAny>) -> PyResult<PyObject>
 where
-    F: Fn(&AstroTime) -> SKResult<(na::Vector3<f64>, na::Vector3<f64>)>,
+    F: Fn(&Instant) -> SKResult<(na::Vector3<f64>, na::Vector3<f64>)>,
 {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
