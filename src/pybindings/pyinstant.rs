@@ -301,7 +301,7 @@ impl PyInstant {
     }
 
     /// Return time object representing input unix time, which is UTC seconds
-    /// since Jan 1, 1970 00:00:00
+    /// since Jan 1, 1970 00:00:00 (not counting leap seconds)
     ///
     /// Args:
     ///    unixtime (float): the unixtime
@@ -319,7 +319,7 @@ impl PyInstant {
     ///
     /// Args:
     ///    jd (float): The Julian Date
-    ///   scale (satkit.timescale): The time scale
+    ///   scale (satkit.timescale, optional): The time scale. Default is satkit.timescale.UTC
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of julian date with given scale

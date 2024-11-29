@@ -506,7 +506,7 @@ class time:
         """
 
     @staticmethod
-    def strftime(str: str, format: str) -> time:
+    def strptime(str: str, format: str) -> time:
         """Create a "time" object from input string
 
         Args:
@@ -556,6 +556,7 @@ class time:
 
         Args:
             ut (float): unixtime, UTC seconds since Jan 1, 1970 00:00:00
+                        (leap seconds are not included)
 
         Returns:
             satkit.time: Time object representing input unixtime
@@ -630,6 +631,33 @@ class time:
         """
 
     @staticmethod
+    def from_gregorian(
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        min: int,
+        sec: float,
+    ) -> time:
+        """Create time object from 6 input arguments representing UTC Gregorian time.
+
+        Args:
+            year (int): Gregorian year
+            month (int): Gregorian month (1 = January, 2 = February, ...)
+            day (int): Day of month, beginning with 1
+            hour (int): Hour of day, in range [0,23]
+            min (int): Minute of hour, in range [0,59]
+            sec (float): floating point second of minute, in range [0,60)
+
+        Returns:
+            satkit.time: Time object representing input UTC Gregorian time
+
+        Example:
+            >>> print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
+            2023-03-05 11:03:45.453Z
+        """
+
+    @staticmethod
     def from_datetime(dt: datetime.datetime) -> time:
         """Convert input "datetime.datetime" object to an "satkit.time" object representing the same instant in time
 
@@ -679,7 +707,7 @@ class time:
         """
         Represent time as unixtime
 
-        (seconds since Jan 1, 1970 UTC)
+        (seconds since Jan 1, 1970 UTC, excluding leap seconds)
 
         Includes fractional comopnent of seconds
         """
@@ -1501,10 +1529,10 @@ class propresult:
     @property
     def pos() -> npt.ArrayLike[float]:
         """GCRF position of satellite, meters
-        
+
         Returns:
             npt.ArrayLike[float]: 3-element numpy array representing GCRF position (meters) at end of propagation
-        
+
         """
 
     @property
@@ -1528,7 +1556,7 @@ class propresult:
         """6-element state (pos + vel) of satellite in meters & meters/second at end of propagation
 
         Notes:
-        * This is the same as the "state" property 
+        * This is the same as the "state" property
 
         Returns:
             npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second
@@ -1539,7 +1567,7 @@ class propresult:
         """6-element state (pos + vel) of satellite in meters & meters/second at start of propagation
         Returns:
             npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second at start of propagation
-        """  
+        """
 
     @property
     def time() -> time:
@@ -1567,7 +1595,7 @@ class propresult:
 
         Returns:
             satkit.time: Time at which state_start is valid
-        """        
+        """
 
     @property
     def stats() -> propstats:
@@ -1671,7 +1699,7 @@ class propsettings:
             gravity_order (int, optional keyword): Earth gravity order to use in ODE integration. Default is 4
             use_spaceweather (bool, optional keyword): Use space weather data when computing atmospheric density for drag forces. Default is True
             use_jplephem (bool, optional keyword): Use JPL ephemeris for solar system bodies. Default is True
-            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between start and stop times. Default is True        
+            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between start and stop times. Default is True
 
 
         Returns:
