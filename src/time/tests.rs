@@ -15,8 +15,20 @@ fn test_j2000() {
 
 #[test]
 fn test_fromstring() {
-    let time = Instant::from_string("January 4 2024");
-    
+    let time = Instant::from_string("March 4 2024").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 3);
+    assert!(g.2 == 4);
+
+    let time = Instant::from_string("2024-01-04 13:14:12.123000").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 1);
+    assert!(g.2 == 4);
+    assert!(g.3 == 13);
+    assert!(g.4 == 14);
+    assert!((g.5 - 12.123).abs() < 1.0e-7);
 }
 
 #[test]

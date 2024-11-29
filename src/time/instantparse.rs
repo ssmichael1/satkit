@@ -26,74 +26,222 @@ const MONTH_ABBRS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+#[derive(PartialEq, Debug)]
+enum ParseVal {
+    Str(String),
+    Num(i32),
+}
+
 impl Instant {
+    /// Parse a string into an Instant object
+    ///
+    /// Attempts to guess the string format.
+    /// Use sparingly and with caution.  This is
+    /// probably not what you want.
+    ///
+    /// Args:
+    ///   s (str): The string to parse
+    ///
+    /// Returns:
+    ///  Instant: The instant object
+    ///
+    /// Raises:
+    /// SKError: If the string cannot be parsed
     pub fn from_string(s: &str) -> SKResult<Instant> {
         let mut chars = s.chars().peekable();
         let mut year = -1;
         let mut month = -1;
         let mut day = -1;
-        let mut hour = 0;
-        let mut minute = 0;
-        let mut second = 0;
-        let mut microsecond = 0;
-        let mut numlist = Vec::<i32>::new();
-        let mut wordlist = Vec::<String>::new();
+        let mut hour = -1;
+        let mut minute = -1;
+        let mut second = -1;
+        let mut microsecond = -1;
+
+        let mut thelist = Vec::<ParseVal>::new();
         // Find numbers in the string
 
         while let Some(c) = chars.peek() {
             if c.is_ascii_digit() {
-                numlist.push(
+                thelist.push(ParseVal::Num(
                     chars
                         .take_while_ref(|c| c.is_ascii_digit())
                         .collect::<String>()
                         .parse()?,
-                );
+                ));
             } else if c.is_alphabetic() {
-                wordlist.push(
+                thelist.push(ParseVal::Str(
                     chars
                         .take_while_ref(|c| c.is_alphabetic())
                         .collect::<String>(),
-                );
+                ));
             } else {
                 chars.next();
             }
+        } // end of while
+
+        let mut to_remove = Vec::new();
+        thelist.iter().enumerate().for_each(|(idx, x)| match x {
+            ParseVal::Num(_) => {}
+            ParseVal::Str(s) => {
+                if month == -1 {
+                    month = match MONTH_NAMES.iter().position(|&m| m == *s) {
+                        Some(m) => {
+                            println!("match month name: {}", m);
+                            if idx < thelist.len() - 1 {
+                                if let ParseVal::Num(n) = thelist[idx + 1] {
+                                    println!("day = {}", n);
+                                    day = n;
+                                    to_remove.push(idx + 1);
+                                }
+                            }
+                            to_remove.push(idx);
+                            m as i32 + 1
+                        }
+                        None => month,
+                    };
+                }
+                if month == -1 {
+                    month = match MONTH_ABBRS.iter().position(|&m| m == *s) {
+                        Some(m) => {
+                            if idx < thelist.len() - 1 {
+                                if let ParseVal::Num(n) = thelist[idx + 1] {
+                                    day = n;
+                                    to_remove.push(idx + 1);
+                                }
+                            }
+                            to_remove.push(idx);
+                            m as i32 + 1
+                        }
+                        None => month,
+                    };
+                }
+            }
+        }); // look for month names
+
+        for &idx in to_remove.iter() {
+            thelist.remove(idx);
         }
 
-        // Find the month if a string
-        for (idx, &month_name) in MONTH_NAMES.iter().enumerate() {
-            if wordlist.contains(&month_name.to_string()) {
-                month = idx as i32 + 1;
-                wordlist.retain(|x| x != month_name);
-                break;
-            }
-        }
-        if month > 0 {
-            // Look for abbreviated month names
-            for (idx, &month_abbr) in MONTH_ABBRS.iter().enumerate() {
-                if wordlist.contains(&month_abbr.to_string()) {
-                    if month > 0 {
-                        return skerror!("Ambiguous month name");
-                    }
-                    month = idx as i32 + 1;
-                    wordlist.retain(|x| x != month_abbr);
-                    break;
+        // Look for ??:??:?? for time
+        if let Some(p) = thelist
+            .iter()
+            .position(|x| *x == ParseVal::Str(String::from(":")))
+        {
+            if (p > 0)
+                && (p < thelist.len() - 4)
+                && (thelist[p + 2] == ParseVal::Str(String::from(":")))
+            {
+                if let ParseVal::Num(h) = thelist[p - 1] {
+                    hour = h;
+                }
+                if let ParseVal::Num(m) = thelist[p + 1] {
+                    minute = m;
+                }
+                if let ParseVal::Num(s) = thelist[p + 3] {
+                    second = s;
+                }
+                if let ParseVal::Num(m) = thelist[p + 5] {
+                    microsecond = m;
                 }
             }
         }
 
-        // Find the year
-        for idx in 0..numlist.len() {
-            if numlist[idx] > 1900 {
-                year = numlist[idx];
-                numlist.remove(idx);
-                break;
+        // Look for ??/??/???? for date
+        if let Some(p) = thelist
+            .iter()
+            .position(|x| *x == ParseVal::Str(String::from("/")))
+        {
+            if (p > 0)
+                && (p < thelist.len() - 4)
+                && (thelist[p + 2] == ParseVal::Str(String::from("/")))
+            {
+                if let ParseVal::Num(m) = thelist[p - 1] {
+                    if m > 1900 {
+                        year = m;
+                    } else {
+                        month = m;
+                    }
+                }
+                if let ParseVal::Num(d) = thelist[p + 1] {
+                    day = d;
+                }
+                if let ParseVal::Num(y) = thelist[p + 3] {
+                    if year >= 0 {
+                        month = y;
+                    } else {
+                        year = y;
+                    }
+                }
             }
         }
 
-        println!("numlist: {:?}", numlist);
-        println!("wordlist: {:?}", wordlist);
+        // Look for ??-??-???? for date
+        if let Some(p) = thelist
+            .iter()
+            .position(|x| *x == ParseVal::Str(String::from("-")))
+        {
+            if (p > 0)
+                && (p < thelist.len() - 4)
+                && (thelist[p + 2] == ParseVal::Str(String::from("-")))
+            {
+                if let ParseVal::Num(m) = thelist[p - 1] {
+                    if m > 1900 {
+                        year = m;
+                    } else {
+                        month = m;
+                    }
+                }
+                if let ParseVal::Num(d) = thelist[p + 1] {
+                    day = d;
+                }
+                if let ParseVal::Num(y) = thelist[p + 3] {
+                    if year >= 0 {
+                        month = y;
+                    } else {
+                        year = y;
+                    }
+                }
+            }
+        }
 
-        Ok(Instant::J2000)
+        thelist.iter().for_each(|x| match x {
+            ParseVal::Num(x) => {
+                if year == -1 {
+                    year = *x;
+                } else if month == -1 {
+                    month = *x;
+                } else if day == -1 {
+                    day = *x;
+                } else if hour == -1 {
+                    hour = *x;
+                } else if minute == -1 {
+                    minute = *x;
+                } else if second == -1 {
+                    second = *x;
+                } else if microsecond == -1 {
+                    microsecond = *x;
+                }
+            }
+            ParseVal::Str(_) => {}
+        });
+
+        if year == -1 || month == -1 || day == -1 {
+            return skerror!("Invalid date string");
+        }
+        if hour == -1 || minute == -1 || second < 0 {
+            hour = 0;
+            minute = 0;
+            second = 0;
+            microsecond = 0;
+        }
+        Ok(Instant::from_datetime(
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second as f64 + microsecond as f64 / 1_000_000.0,
+        ))
     }
 
     pub fn strptime(s: &str, format: &str) -> SKResult<Instant> {
