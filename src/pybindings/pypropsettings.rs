@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 use crate::orbitprop::PropSettings;
-use crate::pybindings::PyAstroTime;
+use crate::pybindings::PyInstant;
 
 use pyo3::types::{PyDict, PyString};
 
@@ -112,7 +112,7 @@ impl PyPropSettings {
         self.inner.to_string()
     }
 
-    fn precompute_terms(&mut self, start: &PyAstroTime, stop: &PyAstroTime) -> PyResult<()> {
+    fn precompute_terms(&mut self, start: &PyInstant, stop: &PyInstant) -> PyResult<()> {
         match self.inner.precompute_terms(&start.inner, &stop.inner) {
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
             Ok(_) => Ok(()),

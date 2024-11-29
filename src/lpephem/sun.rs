@@ -152,7 +152,7 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 ///
 /// # Returns
 ///
-/// * SKResult<(sunrise: AstroTime, sunset: AstroTime)>
+/// * SKResult<(sunrise: Instant, sunset: Instant)>
 ///
 /// # References
 ///

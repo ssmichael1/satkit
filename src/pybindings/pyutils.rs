@@ -1,4 +1,4 @@
-use super::pyastrotime::ToTimeVec;
+use super::pyinstant::ToTimeVec;
 use super::pyquaternion::Quaternion;
 
 use crate::frametransform::Quat;

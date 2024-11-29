@@ -1,4 +1,4 @@
-use super::pyastrotime::PyAstroTime;
+use super::pyinstant::PyInstant;
 use super::pyitrfcoord::PyITRFCoord;
 use super::pyutils;
 use crate::lpephem::sun;
@@ -26,7 +26,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///    * Algorithm 29 from Vallado for sun in Mean of Date (MOD)
 ///    * Valid with accuracy of .01 degrees from 1950 to 2050
 /// Args:
-///     time (AstroTime, numpy array, or list): time[s] at which to compute position
+///     time (Instant, numpy array, or list): time[s] at which to compute position
 ///
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s]
@@ -55,7 +55,7 @@ pub fn pos_mod(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///     (satkit.time, satkit.time): tuple of sunrise and sunset times
 #[pyfunction(signature=(time, coord, sigma=None))]
 pub fn rise_set(
-    time: &PyAstroTime,
+    time: &PyInstant,
     coord: &PyITRFCoord,
     sigma: Option<f64>,
 ) -> PyResult<(PyObject, PyObject)> {

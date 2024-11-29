@@ -83,7 +83,7 @@ const LEAP_SECOND_TABLE: [(i64, i64); 28] = [
 
 /// Return the number of leap "micro" seconds at "raw" time,
 /// which is microseconds since unixtime epoch
-fn microleapseconds(raw: i64) -> i64 {
+pub(crate) fn microleapseconds(raw: i64) -> i64 {
     for (t, ls) in LEAP_SECOND_TABLE.iter() {
         if raw > *t {
             return *ls;
@@ -104,7 +104,7 @@ impl Instant {
     /// # Example
     ///
     /// ```
-    /// use satctrl::Instant;
+    /// use satkit::Instant;
     /// let now = Instant::new(1234567890);
     /// ```
     pub fn new(raw: i64) -> Self {
@@ -176,7 +176,7 @@ impl Instant {
         raw: 315964819000000,
     };
 
-    pub const INVALID: Self = Instant { raw: std::i64::MIN };
+    pub const INVALID: Self = Instant { raw: i64::MIN };
 
     /// Modified Julian day epoch is
     /// 1858-11-17 00:00:00 UTC
@@ -305,7 +305,7 @@ impl Instant {
         self.as_mjd_with_scale(scale) + 2400000.5
     }
 
-    /// Add given floating-point number of days to AstroTime instance,
+    /// Add given floating-point number of days to Instant instance,
     /// and return new instance representing new time.
     ///
     /// Days are defined in this case to have exactly 86400.0 seconds
@@ -380,17 +380,17 @@ impl Instant {
         let mut second =
             (utc_usec_of_day - (hour * 3_600_000_000) - (minute * 60_000_000)) as f64 * 1.0e-6;
 
-        // Rare case where we are in a leap-second
+        // Rare case where we are in the middle of a leap-second
         for (t, _) in LEAP_SECOND_TABLE.iter() {
             if self.raw >= *t && self.raw - *t < 1_000_000 {
                 hour = 23;
                 minute = 59;
                 if second == 0.0 {
                     second = 60.0;
+                    jdadd -= 1;
                 } else {
                     second += 1.0;
                 }
-                jdadd -= 1;
             }
         }
 

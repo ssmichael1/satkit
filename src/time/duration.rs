@@ -3,6 +3,7 @@
 /// an `Instant` object.
 ///
 /// Duration is represented natively in microseconds.
+#[derive(Clone, Copy)]
 pub struct Duration {
     pub(crate) usec: i64,
 }
@@ -29,6 +30,19 @@ impl Duration {
     pub fn from_seconds(seconds: f64) -> Self {
         Self {
             usec: (seconds * 1_000_000.0) as i64,
+        }
+    }
+
+    /// Create a new duration object from minutes
+    ///
+    /// # Arguments
+    /// * `minutes` - The duration in minutes
+    ///
+    /// # Returns
+    /// A new `Duration` object representing the time interval in minutes
+    pub fn from_minutes(minutes: f64) -> Self {
+        Self {
+            usec: (minutes * 60_000_000.0) as i64,
         }
     }
 
@@ -96,6 +110,22 @@ impl Duration {
     /// The duration in seconds
     pub fn as_seconds(&self) -> f64 {
         self.usec as f64 / 1_000_000.0
+    }
+
+    /// Represent duration as hours
+    ///
+    /// # Returns
+    /// The duration in hours
+    pub fn as_hours(&self) -> f64 {
+        self.usec as f64 / 3_600_000_000.0
+    }
+
+    /// Represent duration as minutes
+    ///
+    /// # Returns
+    /// The duration in minutes
+    pub fn as_minutes(&self) -> f64 {
+        self.usec as f64 / 60_000_000.0
     }
 
     /// Represent duration as microseconds

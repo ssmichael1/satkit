@@ -136,16 +136,16 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
 /// // Propagate to 1/2 day ahead
-/// let stoptime = starttime + satkit::Duration::Days(0.5);
+/// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
 /// // Look at the results
 /// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// // Expect:
-/// // res = PropagationResult { time: [AstroTime { mjd_tai: 57101.50040509259 }],
+/// // res = PropagationResult { time: [Instant { mjd_tai: 57101.50040509259 }],
 /// //                           state: [[[-42153870.84175911, -379423.6616440884, -26.239180898423687,
 /// //                                     27.66411233952899, -3075.146656613106, 0.0020580348953689828]]],
 /// //                           accepted_steps: 45, rejected_steps: 0, num_eval: 722
@@ -174,9 +174,9 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
 /// // Propagate to 1/2 day ahead
-/// let stoptime = starttime + satkit::Duration::Days(0.5);
+/// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
 /// // Look at the results
 /// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();

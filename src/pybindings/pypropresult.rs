@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use super::pyastrotime::PyAstroTime;
+use super::pyinstant::PyInstant;
 use super::pyutils::*;
 
 use pyo3::types::{PyBytes, PyDict, PyTuple};
@@ -139,8 +139,8 @@ impl PyPropResult {
 
     // Get start time
     #[getter]
-    fn time_start(&self) -> PyAstroTime {
-        PyAstroTime {
+    fn time_start(&self) -> PyInstant {
+        PyInstant {
             inner: match &self.inner {
                 PyPropResultType::R1(r) => r.time_start,
                 PyPropResultType::R7(r) => r.time_start,
@@ -150,8 +150,8 @@ impl PyPropResult {
 
     /// Get the stop time
     #[getter]
-    fn time(&self) -> PyAstroTime {
-        PyAstroTime {
+    fn time(&self) -> PyInstant {
+        PyInstant {
             inner: match &self.inner {
                 PyPropResultType::R1(r) => r.time_end,
                 PyPropResultType::R7(r) => r.time_end,
@@ -161,8 +161,8 @@ impl PyPropResult {
 
     /// Get the stop time
     #[getter]
-    fn time_end(&self) -> PyAstroTime {
-        PyAstroTime {
+    fn time_end(&self) -> PyInstant {
+        PyInstant {
             inner: match &self.inner {
                 PyPropResultType::R1(r) => r.time_end,
                 PyPropResultType::R7(r) => r.time_end,
@@ -312,7 +312,7 @@ impl PyPropResult {
     }
 
     #[pyo3(signature=(time, output_phi=false))]
-    fn interp(&self, time: PyAstroTime, output_phi: bool) -> PyResult<PyObject> {
+    fn interp(&self, time: PyInstant, output_phi: bool) -> PyResult<PyObject> {
         match &self.inner {
             PyPropResultType::R1(r) => match r.interp(&time.inner) {
                 Ok(res) => {

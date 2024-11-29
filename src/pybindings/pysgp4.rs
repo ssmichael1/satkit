@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-use super::pyastrotime::ToTimeVec;
+use super::pyinstant::ToTimeVec;
 use super::pytle::PyTLE;
 use crate::sgp4 as psgp4;
 use numpy::PyArray1;

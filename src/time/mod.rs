@@ -1,6 +1,7 @@
 mod duration;
 mod instant;
 mod instant_ops;
+mod instantparse;
 mod timescale;
 
 pub use duration::Duration;

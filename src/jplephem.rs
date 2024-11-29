@@ -124,10 +124,10 @@ impl JPLEphem {
     ///
     /// use satkit::jplephem;
     /// use satkit::SolarSystem;
-    /// use satkit::AstroTime;
+    /// use satkit::Instant;
     ///
     /// // Construct time: March 1 2021 12:00pm UTC
-    /// let t = AstroTime::from_datetime(2021, 3, 1, 12, 0, 0.0);
+    /// let t = Instant::from_datetime(2021, 3, 1, 12, 0, 0.0);
     ///
     /// // Find geocentric moon position at this time in the GCRF frame
     /// let p = jplephem::geocentric_pos(SolarSystem::Moon, &t).unwrap();
@@ -610,11 +610,11 @@ mod tests {
 
     #[test]
     fn load_test() {
-        //let tm = &AstroTime::from_date(2010, 3, 1);
+        //let tm = &Instant::from_date(2010, 3, 1);
         let jpl = jplephem_singleton().as_ref().unwrap();
 
         let tm = Instant::from_jd_with_scale(2451545.0, TimeScale::TT);
-        //let tm = &AstroTime::from_jd(2451545.0, Scale::UTC);
+        //let tm = &Instant::from_jd(2451545.0, Scale::UTC);
         let (_, _): (Vec3, Vec3) = jpl.geocentric_state(SolarSystem::Moon, &tm).unwrap();
         println!("au = {:.20}", jpl._au);
     }

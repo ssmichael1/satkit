@@ -5,8 +5,8 @@ use pyo3::wrap_pyfunction;
 use crate::nrlmsise;
 use crate::Instant;
 
-use super::PyAstroTime;
 use super::PyITRFCoord;
+use super::PyInstant;
 
 ///
 /// NRL MSISE-00 Density Model
@@ -29,13 +29,10 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
     }
 
     let time: Option<Instant> = {
-        if args
-            .get_item(args.len() - 1)?
-            .is_instance_of::<PyAstroTime>()
-        {
+        if args.get_item(args.len() - 1)?.is_instance_of::<PyInstant>() {
             Some(
                 args.get_item(args.len() - 1)?
-                    .extract::<PyAstroTime>()
+                    .extract::<PyInstant>()
                     .unwrap()
                     .inner,
             )

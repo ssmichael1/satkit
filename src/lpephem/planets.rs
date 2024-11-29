@@ -58,9 +58,9 @@ type Quat = na::UnitQuaternion<f64>;
 /// ```
 /// use satkit::lpephem::heliocentric_pos;
 /// use satkit::SolarSystem;
-/// use satkit::AstroTime;
+/// use satkit::Instant;
 ///
-/// let time = AstroTime::from_date(2000, 1, 1);
+/// let time = Instant::from_date(2000, 1, 1);
 /// let pos = heliocentric_pos(SolarSystem::Mars, &time).unwrap();
 /// println!("Position of Mars: {}", pos);
 /// ```
@@ -483,7 +483,7 @@ mod test {
         ];
 
         for planet in planets {
-            //let time = AstroTime::from_date(2000, 1, 1);
+            //let time = Instant::from_date(2000, 1, 1);
             let time = Instant::from_datetime(2010, 1, 1, 12, 0, 0.0);
             let psun = jplephem::barycentric_pos(SolarSystem::Sun, &time).unwrap();
             let p2 = jplephem::barycentric_pos(planet, &time).unwrap() - psun;

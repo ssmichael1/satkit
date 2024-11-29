@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use super::PyAstroTime;
+use super::PyInstant;
 use crate::nrlmsise;
 use crate::Instant;
 
@@ -14,7 +14,7 @@ use crate::Instant;
 /// Keyword args:
 ///       latitude_deg (float):   Latitude in degrees
 ///      longitude_deg (float):   Longitude in degrees
-///                 tm (satkit.time):   The time (astrotime object)
+///                 tm (satkit.time):   The time (Instant object)
 ///   use_spaceweather (bool):   Use space weather database in calculation
 ///
 /// Returns:
@@ -37,7 +37,7 @@ pub fn nrlmsise00(alt_km: f64, option_kwds: Option<&Bound<'_, PyDict>>) -> PyRes
             lon = Some(v.extract::<f64>()?);
         }
         if let Some(v) = kwds.get_item("time")? {
-            tm = Some(v.extract::<PyAstroTime>()?.inner);
+            tm = Some(v.extract::<PyInstant>()?.inner);
         }
         if let Some(v) = kwds.get_item("use_spaceweather")? {
             use_spaceweather = v.extract::<bool>()?;

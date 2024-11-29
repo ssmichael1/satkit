@@ -1,6 +1,6 @@
 use crate::Duration;
 
-use super::pyastrotime::PyAstroTime;
+use super::pyinstant::PyInstant;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDict;
@@ -86,10 +86,10 @@ impl PyDuration {
         }
 
         Ok(PyDuration {
-            inner: Duration::Seconds(seconds)
-                + Duration::Days(days)
-                + Duration::Minutes(minutes)
-                + Duration::Hours(hours),
+            inner: Duration::from_seconds(seconds)
+                + Duration::from_days(days)
+                + Duration::from_minutes(minutes)
+                + Duration::from_hours(hours),
         })
     }
 
@@ -103,7 +103,7 @@ impl PyDuration {
     #[staticmethod]
     fn from_days(d: f64) -> PyDuration {
         PyDuration {
-            inner: Duration::Days(d),
+            inner: Duration::from_days(d),
         }
     }
 
@@ -117,7 +117,7 @@ impl PyDuration {
     #[staticmethod]
     fn from_seconds(d: f64) -> PyDuration {
         PyDuration {
-            inner: Duration::Seconds(d),
+            inner: Duration::from_seconds(d),
         }
     }
 
@@ -131,7 +131,7 @@ impl PyDuration {
     #[staticmethod]
     fn from_minutes(d: f64) -> PyDuration {
         PyDuration {
-            inner: Duration::Minutes(d),
+            inner: Duration::from_minutes(d),
         }
     }
 
@@ -145,7 +145,7 @@ impl PyDuration {
     #[staticmethod]
     fn from_hours(d: f64) -> PyDuration {
         PyDuration {
-            inner: Duration::Hours(d),
+            inner: Duration::from_hours(d),
         }
     }
 
@@ -161,15 +161,15 @@ impl PyDuration {
             let dur = other.extract::<PyDuration>()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 Ok(PyDuration {
-                    inner: self.inner.clone() + dur.inner.clone(),
+                    inner: self.inner + dur.inner,
                 }
                 .into_py(py))
             })
-        } else if other.is_instance_of::<PyAstroTime>() {
-            let tm = other.extract::<PyAstroTime>()?;
+        } else if other.is_instance_of::<PyInstant>() {
+            let tm = other.extract::<PyInstant>()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Ok(PyAstroTime {
-                    inner: tm.inner + self.inner.clone(),
+                Ok(PyInstant {
+                    inner: tm.inner + self.inner,
                 }
                 .into_py(py))
             })
@@ -189,7 +189,7 @@ impl PyDuration {
     ///     duration: New duration object representing the difference
     fn __sub__(&self, other: &PyDuration) -> PyDuration {
         PyDuration {
-            inner: self.inner.clone() - other.inner.clone(),
+            inner: self.inner - other.inner,
         }
     }
 
@@ -202,7 +202,7 @@ impl PyDuration {
     ///     duration: New duration object representing the scaled duration
     fn __mul__(&self, other: f64) -> PyDuration {
         PyDuration {
-            inner: Duration::Seconds(self.inner.seconds() * other),
+            inner: Duration::from_seconds(self.inner.as_seconds() * other),
         }
     }
 
@@ -211,7 +211,7 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in days
     fn days(&self) -> f64 {
-        self.inner.days()
+        self.inner.as_days()
     }
 
     /// Duration in units of seconds
@@ -219,7 +219,7 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in seconds
     fn seconds(&self) -> f64 {
-        self.inner.seconds()
+        self.inner.as_seconds()
     }
 
     /// Duration in units of minutes
@@ -227,7 +227,7 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in minutes
     fn minutes(&self) -> f64 {
-        self.inner.minutes()
+        self.inner.as_minutes()
     }
 
     /// Duration in units of hours
@@ -235,7 +235,7 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in hours
     fn hours(&self) -> f64 {
-        self.inner.hours()
+        self.inner.as_hours()
     }
 
     fn __str__(&self) -> String {
@@ -253,12 +253,12 @@ impl PyDuration {
                 "Invalid serialization length",
             ));
         }
-        let t = f64::from_le_bytes(s.try_into()?);
-        self.inner = Duration::Days(t);
+        let t = i64::from_le_bytes(s.try_into()?);
+        self.inner = Duration { usec: t };
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
-        Ok(PyBytes::new_bound(py, f64::to_le_bytes(self.inner.days()).as_slice()).to_object(py))
+        Ok(PyBytes::new_bound(py, i64::to_le_bytes(self.inner.usec).as_slice()).to_object(py))
     }
 }

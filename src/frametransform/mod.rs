@@ -43,7 +43,7 @@ pub(crate) fn qrot_zcoord(theta: f64) -> Quat {
 ///
 /// # Arguments
 ///
-/// * `tm` - AstroTime object representing input time
+/// * `tm` - Instant object representing input time
 ///
 /// # Returns
 ///
@@ -401,7 +401,7 @@ mod tests {
         let mut tm = Instant::from_datetime(1992, 8, 20, 12, 14, 0.0);
         // Spoof this as UT1 value
         let tdiff = tm.as_mjd_with_scale(TimeScale::UT1) - tm.as_mjd_with_scale(TimeScale::UTC);
-        tm = tm - Duration::from_days(tdiff);
+        tm -= Duration::from_days(tdiff);
         // Convert to UT1
         let gmval = gmst(&tm) * 180.0 / PI;
         let truth = -207.4212121875;

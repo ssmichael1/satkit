@@ -32,7 +32,7 @@
 pub mod types;
 
 /// Time and time bases (UTC, TAI, GPS, TT, etc...)
-// pub mod astrotime;
+// pub mod Instant;
 /// Universal constants
 pub mod consts;
 /// Earth orientation parameters (polar motion, delta-UT1, lenth of day)

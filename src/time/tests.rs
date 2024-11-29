@@ -14,7 +14,14 @@ fn test_j2000() {
 }
 
 #[test]
+fn test_fromstring() {
+    let time = Instant::from_string("January 4 2024");
+    
+}
+
+#[test]
 fn test_leapsecond() {
+    // Beginning of leap second
     let mut t = Instant::new(1483228836000000);
     let g = t.as_datetime();
     assert!(g.0 == 2016);
@@ -24,6 +31,17 @@ fn test_leapsecond() {
     assert!(g.4 == 59);
     assert!(g.5 == 60.0);
 
+    // Middle of a leap second
+    let t2 = t + Duration::from_microseconds(100);
+    let g = t2.as_datetime();
+    assert!(g.0 == 2016);
+    assert!(g.1 == 12);
+    assert!(g.2 == 31);
+    assert!(g.3 == 23);
+    assert!(g.4 == 59);
+    assert!((g.5 - 60.0001).abs() < 1.0e-7);
+
+    // Just prior to leap second
     t -= Duration::from_seconds(1.0);
     let g = t.as_datetime();
     assert!(g.0 == 2016);
@@ -33,6 +51,7 @@ fn test_leapsecond() {
     assert!(g.4 == 59);
     assert!(g.5 == 59.0);
 
+    // Just after leap second
     t += Duration::from_seconds(2.0);
     let g = t.as_datetime();
     assert!(g.0 == 2017);
@@ -82,4 +101,26 @@ fn test_jd() {
     let time = Instant::from_datetime(2024, 11, 24, 12, 0, 0.0);
     assert!(time.as_jd() == 2_460_639.0);
     assert!(time.as_mjd() == 60_638.5);
+}
+
+#[test]
+fn test_strptime() {
+    let time = Instant::strptime("2024-11-24T12:03:45.123456", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 11);
+    assert!(g.2 == 24);
+    assert!(g.3 == 12);
+    assert!(g.4 == 3);
+    assert!(g.5 == 45.123456);
+    let time =
+        Instant::strptime("February 13 2024 12:03:45.123456", "%B %d %Y %H:%M:%S.%f").unwrap();
+
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 2);
+    assert!(g.2 == 13);
+    assert!(g.3 == 12);
+    assert!(g.4 == 3);
+    assert!(g.5 == 45.123456);
 }

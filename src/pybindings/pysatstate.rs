@@ -1,4 +1,4 @@
-use super::pyastrotime::PyAstroTime;
+use super::pyinstant::PyInstant;
 use super::pypropsettings::PyPropSettings;
 use super::pyquaternion::Quaternion;
 
@@ -25,7 +25,7 @@ impl PySatState {
     #[new]
     #[pyo3(signature=(time, pos, vel, cov=None))]
     fn py_new(
-        time: &PyAstroTime,
+        time: &PyInstant,
         pos: &Bound<'_, np::PyArray1<f64>>,
         vel: &Bound<'_, np::PyArray1<f64>>,
         cov: Option<&Bound<'_, np::PyArray2<f64>>>,
@@ -123,8 +123,8 @@ impl PySatState {
     }
 
     #[getter]
-    fn get_time(&self) -> PyAstroTime {
-        PyAstroTime {
+    fn get_time(&self) -> PyInstant {
+        PyInstant {
             inner: self.inner.time,
         }
     }
@@ -216,8 +216,8 @@ impl PySatState {
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Self> {
         let time: Instant = {
-            if timedur.is_instance_of::<PyAstroTime>() {
-                timedur.extract::<PyAstroTime>()?.inner
+            if timedur.is_instance_of::<PyInstant>() {
+                timedur.extract::<PyInstant>()?.inner
             } else if timedur.is_instance_of::<PyDuration>() {
                 let dur = timedur.extract::<PyDuration>()?;
                 self.inner.time + dur.inner
@@ -250,7 +250,7 @@ impl PySatState {
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
         let d = PyDict::new_bound(py);
-        let tm = PyAstroTime {
+        let tm = PyInstant {
             inner: Instant::INVALID,
         }
         .into_py(py);

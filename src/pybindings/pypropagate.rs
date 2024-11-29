@@ -1,5 +1,5 @@
-use super::pyastrotime::PyAstroTime;
 use super::pyduration::PyDuration;
+use super::pyinstant::PyInstant;
 use super::pypropresult::{PyPropResult, PyPropResultType};
 use super::pypropsettings::PyPropSettings;
 use super::pysatproperties::PySatProperties;
@@ -106,10 +106,10 @@ pub fn propagate(
         state0 = py_to_smatrix(&args.get_item(0)?)?;
     }
     if args.len() > 1 {
-        starttime = args.get_item(1)?.extract::<PyAstroTime>()?.inner;
+        starttime = args.get_item(1)?.extract::<PyInstant>()?.inner;
     }
     if args.len() > 2 {
-        stoptime = args.get_item(2)?.extract::<PyAstroTime>()?.inner;
+        stoptime = args.get_item(2)?.extract::<PyInstant>()?.inner;
     }
 
     if let Some(kw) = kwargs {
@@ -128,11 +128,11 @@ pub fn propagate(
             kw.del_item("vel")?;
         }
         if let Some(kws) = kw.get_item("start")? {
-            starttime = kws.extract::<PyAstroTime>()?.inner;
+            starttime = kws.extract::<PyInstant>()?.inner;
             kw.del_item("start")?;
         }
         if let Some(kws) = kw.get_item("stop")? {
-            stoptime = kws.extract::<PyAstroTime>()?.inner;
+            stoptime = kws.extract::<PyInstant>()?.inner;
             kw.del_item("stop")?;
         }
         if let Some(kwd) = kw.get_item("duration")? {
