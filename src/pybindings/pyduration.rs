@@ -69,6 +69,7 @@ impl PyDuration {
         let mut seconds = 0.0;
         let mut minutes = 0.0;
         let mut hours = 0.0;
+        let mut microseconds: i64 = 0;
 
         if let Some(kwargs) = kwargs {
             if let Some(d) = kwargs.get_item("days")? {
@@ -83,13 +84,17 @@ impl PyDuration {
             if let Some(h) = kwargs.get_item("hours")? {
                 hours = h.extract::<f64>()?;
             }
+            if let Some(m) = kwargs.get_item("microseconds")? {
+                microseconds = m.extract::<i64>()?;
+            }
         }
 
         Ok(PyDuration {
             inner: Duration::from_seconds(seconds)
                 + Duration::from_days(days)
                 + Duration::from_minutes(minutes)
-                + Duration::from_hours(hours),
+                + Duration::from_hours(hours)
+                + Duration::from_microseconds(microseconds),
         })
     }
 

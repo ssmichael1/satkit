@@ -32,6 +32,29 @@ fn test_fromstring() {
 }
 
 #[test]
+fn test_unixtime() {
+    let time = Instant::from_unixtime(1732939013.0);
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 11);
+    assert!(g.2 == 30);
+    assert!(g.3 == 3);
+    assert!(g.4 == 56);
+    assert!(g.5 == 53.0);
+
+    let time = Instant::from_datetime(2016, 12, 31, 23, 59, 40.0);
+    assert!(time.as_unixtime() == 1483228780.0);
+
+    let g = time.as_datetime();
+    assert!(g.0 == 2016);
+    assert!(g.1 == 12);
+    assert!(g.2 == 31);
+    assert!(g.3 == 23);
+    assert!(g.4 == 59);
+    assert!(g.5 == 40.0);
+}
+
+#[test]
 fn test_leapsecond() {
     // Beginning of leap second
     let mut t = Instant::new(1483228836000000);

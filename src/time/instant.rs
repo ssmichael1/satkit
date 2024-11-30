@@ -83,7 +83,7 @@ const LEAP_SECOND_TABLE: [(i64, i64); 28] = [
 
 /// Return the number of leap "micro" seconds at "raw" time,
 /// which is microseconds since unixtime epoch
-pub(crate) fn microleapseconds(raw: i64) -> i64 {
+fn microleapseconds(raw: i64) -> i64 {
     for (t, ls) in LEAP_SECOND_TABLE.iter() {
         if raw > *t {
             return *ls;
@@ -120,7 +120,7 @@ impl Instant {
     /// # Returns
     /// A new Instant object
     ///
-    pub fn from_gps_week_and_sow(week: i32, sow: f64) -> Self {
+    pub fn from_gps_week_and_second(week: i32, sow: f64) -> Self {
         let week = week as i64;
         let raw = week * 14_515_200_000_000 + (sow * 1.0e6) as i64 + Instant::GPS_EPOCH.raw;
         Self { raw }
@@ -183,6 +183,15 @@ impl Instant {
     pub const MJD_EPOCH: Self = Instant {
         raw: -3506716800000000,
     };
+
+    /// Return the day of the week
+    /// 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    ///
+    /// See: https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week
+    pub fn day_of_week(&self) -> super::Weekday {
+        let jd = self.as_jd();
+        super::Weekday::from(((jd + 1.5) % 7.0).floor() as i32)
+    }
 
     /// As Modified Julian Date (UTC)
     /// Days since 1858-11-17 00:00:00 UTC

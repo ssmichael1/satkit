@@ -5,7 +5,7 @@ use pyo3::types::PyDateTime;
 use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
 
-use crate::{Instant, TimeScale};
+use crate::{Instant, TimeScale, Weekday};
 
 use super::pyduration::PyDuration;
 
@@ -51,6 +51,62 @@ pub enum PyTimeScale {
     /// Barycentric Dynamical Time
     #[allow(clippy::upper_case_acronyms)]
     TDB = TimeScale::TDB as isize,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+#[pyclass(name = "weekday", module = "satkit", eq, eq_int)]
+pub enum PyWeekday
+{
+    Sunday = 0,
+    Monday = 1,
+    Tuesday = 2,
+    Wednesday = 3,
+    Thursday = 4,
+    Friday = 5,
+    Saturday = 6,
+}
+
+impl From<&PyWeekday> for Weekday {
+    fn from(w: &PyWeekday) -> Weekday {
+        match w {
+            PyWeekday::Sunday => Weekday::Sunday,
+            PyWeekday::Monday => Weekday::Monday,
+            PyWeekday::Tuesday => Weekday::Tuesday,
+            PyWeekday::Wednesday => Weekday::Wednesday,
+            PyWeekday::Thursday => Weekday::Thursday,
+            PyWeekday::Friday => Weekday::Friday,
+            PyWeekday::Saturday => Weekday::Saturday,
+        }
+    }
+}   
+
+impl From<Weekday> for PyWeekday {
+    fn from(w: Weekday) -> PyWeekday {
+        match w {
+            Weekday::Sunday => PyWeekday::Sunday,
+            Weekday::Monday => PyWeekday::Monday,
+            Weekday::Tuesday => PyWeekday::Tuesday,
+            Weekday::Wednesday => PyWeekday::Wednesday,
+            Weekday::Thursday => PyWeekday::Thursday,
+            Weekday::Friday => PyWeekday::Friday,
+            Weekday::Saturday => PyWeekday::Saturday,
+        }
+    }
+}
+
+impl IntoPy<PyObject> for Weekday {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        let wd: PyWeekday = match self {
+            Weekday::Sunday => PyWeekday::Sunday,
+            Weekday::Monday => PyWeekday::Monday,
+            Weekday::Tuesday => PyWeekday::Tuesday,
+            Weekday::Wednesday => PyWeekday::Wednesday,
+            Weekday::Thursday => PyWeekday::Thursday,
+            Weekday::Friday => PyWeekday::Friday,
+            Weekday::Saturday => PyWeekday::Saturday,
+        };
+        wd.into_py(py)
+    }
 }
 
 impl From<&PyTimeScale> for TimeScale {
@@ -448,11 +504,23 @@ impl PyInstant {
     }
 
     /// Convert to Unix time (seconds since 1970-01-01 00:00:00 UTC)
+    /// Excludes leap seconds
     ///
     /// Returns:
     ///     float: Unix time (seconds since 1970-01-01 00:00:00 UTC)
     fn as_unixtime(&self) -> f64 {
         self.inner.as_unixtime()
+    }
+
+    #[staticmethod]
+    fn from_gps_week_and_second(week: i32, seconds: f64) -> Self {
+        PyInstant {
+            inner: Instant::from_gps_week_and_second(week, seconds),
+        }
+    }
+    
+    fn weekday(&self) -> PyWeekday {
+       PyWeekday::from(self.inner.day_of_week())
     }
 
     /// Add to satkit time a duration or list or numpy array of durations

@@ -352,6 +352,49 @@ class sgp4error:
     def orbit_decay() -> int:
         """Orbit decayed"""
 
+class weekday:
+    """
+
+    Represent the day of the week
+
+    Values:
+    * `Sunday`
+    * `Monday`
+    * `Tuesday`
+    * `Wednesday`
+    * `Thursday`
+    * `Friday`
+    * `Saturday`
+    """
+
+    @property
+    def Sunday() -> int:
+        """Sunday"""
+
+    @property
+    def Monday() -> int:
+        """Monday"""
+
+    @property
+    def Tuesday() -> int:
+        """Tuesday"""
+
+    @property
+    def Wednesday() -> int:
+        """Wednesday"""
+
+    @property
+    def Thursday() -> int:
+        """Thursday"""
+
+    @property
+    def Friday() -> int:
+        """Friday"""
+
+    @property
+    def Saturday() -> int:
+        """Saturday"""
+
 class timescale:
     """
     Specify time scale used to represent or convert between the "satkit.time"
@@ -561,6 +604,27 @@ class time:
         Returns:
             satkit.time: Time object representing input unixtime
         """
+
+    @staticmethod
+    def from_gps_week_and_second(week: int, sec: float) -> time:
+        """Return a time object representing input GPS week and second
+
+        Args:
+            week (int): GPS week number
+            sec (float): GPS seconds of week
+            scale (timescale, optional): Time scale.  Default is satkit.timescale.GPS
+
+        Returns:
+            satkit.time: Time object representing input GPS week and second
+        """
+
+        def weekday(self) -> weekday:
+            """
+            Return the day of the week
+
+            Returns:
+                satkit.weekday: Day of the week
+            """
 
     @staticmethod
     def from_mjd(mjd: float, scale: timescale = timescale.UTC) -> time:

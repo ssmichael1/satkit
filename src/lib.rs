@@ -81,7 +81,7 @@ mod time;
 pub use frames::Frame;
 pub use itrfcoord::ITRFCoord;
 pub use solarsystem::SolarSystem;
-pub use time::{Duration, Instant, TimeScale};
+pub use time::{Duration, Instant, TimeScale, Weekday};
 pub use tle::TLE;
 pub use utils::SKErr;
 pub use utils::SKResult;
