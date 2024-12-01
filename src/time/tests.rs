@@ -139,6 +139,37 @@ fn test_jd() {
 }
 
 #[test]
+fn test_rfc3339() {
+    let time = Instant::from_rfc3339("2024-11-24T12:03:45.123456Z").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 11);
+    assert!(g.2 == 24);
+    assert!(g.3 == 12);
+    assert!(g.4 == 3);
+    assert!(g.5 == 45.123456);
+
+    let time = Instant::from_rfc3339("2024-11-24T12:03:45Z").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 11);
+    assert!(g.2 == 24);
+    assert!(g.3 == 12);
+    assert!(g.4 == 3);
+    assert!(g.5 == 45.0);
+
+    // Test with milliseconds
+    let time = Instant::from_rfc3339("2024-11-24T12:03:45.123Z").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 11);
+    assert!(g.2 == 24);
+    assert!(g.3 == 12);
+    assert!(g.4 == 3);
+    assert!(g.5 == 45.123);
+}
+
+#[test]
 fn test_strptime() {
     let time = Instant::strptime("2024-11-24T12:03:45.123456", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
     let g = time.as_datetime();
@@ -148,6 +179,17 @@ fn test_strptime() {
     assert!(g.3 == 12);
     assert!(g.4 == 3);
     assert!(g.5 == 45.123456);
+
+    // Test with milliseconds
+    let time = Instant::strptime("2024-11-24T12:03:45.123", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2024);
+    assert!(g.1 == 11);
+    assert!(g.2 == 24);
+    assert!(g.3 == 12);
+    assert!(g.4 == 3);
+    assert!(g.5 == 45.123);
+
     let time =
         Instant::strptime("February 13 2024 12:03:45.123456", "%B %d %Y %H:%M:%S.%f").unwrap();
 

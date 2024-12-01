@@ -60,22 +60,36 @@ impl Instant {
         let mut thelist = Vec::<ParseVal>::new();
         // Find numbers in the string
 
+        let mut isperiod: bool = false;
         while let Some(c) = chars.peek() {
             if c.is_ascii_digit() {
-                thelist.push(ParseVal::Num(
-                    chars
-                        .take_while_ref(|c| c.is_ascii_digit())
-                        .collect::<String>()
-                        .parse()?,
-                ));
+                let cstr = chars
+                    .take_while_ref(|c| c.is_ascii_digit())
+                    .collect::<String>();
+                // If following a period, allow for trailing zeros up to 6 digits
+                let val = match isperiod {
+                    true => match cstr.len() {
+                        1 => cstr.parse::<i32>()? * 100_000,
+                        2 => cstr.parse::<i32>()? * 10_000,
+                        3 => cstr.parse::<i32>()? * 1_000,
+                        4 => cstr.parse::<i32>()? * 100,
+                        5 => cstr.parse::<i32>()? * 10,
+                        6 => cstr.parse::<i32>()?,
+                        _ => {
+                            return skerror!("Invalid microsecond value");
+                        }
+                    },
+                    false => cstr.parse::<i32>()?,
+                };
+                thelist.push(ParseVal::Num(val));
             } else if c.is_alphabetic() {
                 thelist.push(ParseVal::Str(
                     chars
                         .take_while_ref(|c| c.is_alphabetic())
                         .collect::<String>(),
                 ));
-            } else {
-                chars.next();
+            } else if let Some(c) = chars.next() {
+                isperiod = c == '.';
             }
         } // end of while
 
@@ -147,6 +161,7 @@ impl Instant {
         }
 
         // Look for ??/??/???? for date
+        let mut to_remove = Vec::new();
         if let Some(p) = thelist
             .iter()
             .position(|x| *x == ParseVal::Str(String::from("/")))
@@ -155,26 +170,33 @@ impl Instant {
                 && (p < thelist.len() - 4)
                 && (thelist[p + 2] == ParseVal::Str(String::from("/")))
             {
-                if let ParseVal::Num(m) = thelist[p - 1] {
-                    if m > 1900 {
-                        year = m;
-                    } else {
-                        month = m;
-                    }
-                }
-                if let ParseVal::Num(d) = thelist[p + 1] {
-                    day = d;
-                }
                 if let ParseVal::Num(y) = thelist[p + 3] {
                     if year >= 0 {
                         month = y;
                     } else {
                         year = y;
                     }
+                    to_remove.push(p + 3);
+                }
+                if let ParseVal::Num(d) = thelist[p + 1] {
+                    day = d;
+                    to_remove.push(p + 1);
+                }
+                if let ParseVal::Num(m) = thelist[p - 1] {
+                    if m > 1900 {
+                        year = m;
+                    } else {
+                        month = m;
+                    }
+                    to_remove.push(p - 1);
                 }
             }
         }
+        to_remove.iter().for_each(|&idx| {
+            thelist.remove(idx);
+        });
 
+        let mut to_remove = Vec::new();
         // Look for ??-??-???? for date
         if let Some(p) = thelist
             .iter()
@@ -184,26 +206,35 @@ impl Instant {
                 && (p < thelist.len() - 4)
                 && (thelist[p + 2] == ParseVal::Str(String::from("-")))
             {
-                if let ParseVal::Num(m) = thelist[p - 1] {
-                    if m > 1900 {
-                        year = m;
-                    } else {
-                        month = m;
-                    }
-                }
-                if let ParseVal::Num(d) = thelist[p + 1] {
-                    day = d;
-                }
                 if let ParseVal::Num(y) = thelist[p + 3] {
                     if year >= 0 {
                         month = y;
                     } else {
                         year = y;
                     }
+                    to_remove.push(p + 3);
+                }
+
+                if let ParseVal::Num(d) = thelist[p + 1] {
+                    day = d;
+                    to_remove.push(p + 1);
+                }
+                if let ParseVal::Num(m) = thelist[p - 1] {
+                    if m > 1900 {
+                        year = m;
+                    } else {
+                        month = m;
+                    }
+                    to_remove.push(p - 1);
                 }
             }
         }
+        to_remove.iter().for_each(|&idx| {
+            thelist.remove(idx);
+        });
 
+        // Go throuth remaining members of list trying to
+        // fill out remaining empty fields
         thelist.iter().for_each(|x| match x {
             ParseVal::Num(x) => {
                 if year == -1 {
@@ -244,9 +275,33 @@ impl Instant {
         ))
     }
 
+    /// Parse a string into an Instant object
+    ///
+    /// Notes:
+    /// * The format string is a subset of the Python datetime module
+    ///
+    /// Args:
+    ///  s (str): The string to parse
+    /// format (str): The format string
+    ///
+    /// Format Codes:
+    /// * %Y - Year with century as a decimal number
+    /// * %m - Month as a zero-padded decimal number [01, 12]
+    /// * %B - Full month name (January, February, etc.)
+    /// * %b - Abbreviated month name (Jan, Feb, etc.)
+    /// * %d - Day of the month as a zero-padded decimal number [01, 31]
+    /// * %H - Hour (24-hour clock) as a zero-padded decimal number
+    /// * %M - Minute as a zero-padded decimal number
+    /// * %S - Second as a zero-padded decimal number
+    /// * %f - Microsecond as a decimal number, allowing for trailing zeros
+    /// * %z - UTC offset in the form +HHMM or -HHMM or 'Z' for UTC
+    ///
+    /// Returns:
+    /// Instant: The instant object
+    ///
     pub fn strptime(s: &str, format: &str) -> SKResult<Instant> {
         let mut chars = format.chars();
-        let mut s_chars = s.chars();
+        let mut s_chars = s.chars().peekable();
         let mut year = 0;
         let mut month: i32 = 0;
         let mut day = 0;
@@ -254,6 +309,7 @@ impl Instant {
         let mut minute = 0;
         let mut second = 0;
         let mut microsecond = 0;
+        let mut offset = 0;
 
         while let Some(c) = chars.next() {
             match c {
@@ -287,10 +343,46 @@ impl Instant {
                     Some('M') => minute = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('S') => second = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('f') => {
-                        microsecond = s_chars
+                        let smicro = s_chars
                             .take_while_ref(|c| c.is_ascii_digit())
-                            .collect::<String>()
-                            .parse()?
+                            .collect::<String>();
+                        // This is a little strange ... formating convention allows
+                        // for trailing zeros to be omitted.  So we need to determine
+                        // the number of digits and multiply by the appropriate factor
+                        microsecond = match smicro.len() {
+                            1 => smicro.parse::<i32>()? * 100_000,
+                            2 => smicro.parse::<i32>()? * 10_000,
+                            3 => smicro.parse::<i32>()? * 1_000,
+                            4 => smicro.parse::<i32>()? * 100,
+                            5 => smicro.parse::<i32>()? * 10,
+                            6 => smicro.parse::<i32>()?,
+                            _ => {
+                                return skerror!("Invalid microsecond value");
+                            }
+                        }
+                    }
+                    Some('z') => {
+                        let z = s_chars.by_ref().take(1).collect::<String>();
+                        if z == "Z" {
+                            // UTC
+                        } else {
+                            let sign = if z == "-" { -1 } else { 1 };
+                            let h = s_chars
+                                .by_ref()
+                                .take(2)
+                                .collect::<String>()
+                                .parse::<i32>()?;
+                            // take the colon if it is there (it appears to be optional)
+                            if s_chars.peek() == Some(&':') {
+                                s_chars.next();
+                            }
+                            let m = s_chars
+                                .by_ref()
+                                .take(2)
+                                .collect::<String>()
+                                .parse::<i32>()?;
+                            offset = sign * (h * 60 + m);
+                        }
                     }
                     Some(t) => {
                         return skerror!("Invalid format string: {}", t);
@@ -308,14 +400,18 @@ impl Instant {
             }
         }
 
-        Ok(Instant::from_datetime(
+        let mut instant = Instant::from_datetime(
             year,
             month,
             day,
             hour,
             minute,
             second as f64 + microsecond as f64 / 1_000_000.0,
-        ))
+        );
+        if offset != 0 {
+            instant += crate::Duration::from_minutes(offset as f64);
+        }
+        Ok(instant)
     }
 
     /// Parse a string in RFC3339 format
@@ -323,22 +419,78 @@ impl Instant {
     /// Args:
     ///    rfc3339 (str): The string in RFC3339 format
     ///
+    /// Notes:
+    /// * Only allows a subset of the RFC3339 format: "YYYY-MM-DDTHH:MM:SS.sssZ"
+    ///
     /// Returns:
     ///   Instant: The instant object
     pub fn from_rfc3339(rfc3339: &str) -> crate::SKResult<Self> {
-        if rfc3339.len() < 20 {
-            return skerror!("Invalid RFC3339 string");
+        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%fZ") {
+            return Ok(result);
         }
-        Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S%.fZ")
+        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%f") {
+            return Ok(result);
+        }
+        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S") {
+            return Ok(result);
+        }
+        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:SZ") {
+            return Ok(result);
+        }
+        skerror!("Invalid RFC3339 format")
     }
 
+    /// Format the Instant object as a string in RFC3339 format
+    ///
+    /// Returns:
+    /// str: The formatted string in RFC3339 format: "YYYY-MM-DDTHH:MM:SS.sssZ"
+    ///
+    /// Notes:
+    /// * This is the same as ISO8601 format
+    pub fn as_rfc3339(&self) -> String {
+        self.strftime("%Y-%m-%dT%H:%M:%S.%fZ").unwrap()
+    }
+
+    /// Format the Instant object as a string in ISO8601 format
+    ///
+    /// Returns:
+    /// str: The formatted string in ISO8601 format: "YYYY-MM-DDTHH:MM:SS.sssZ"
+    ///
+    /// Notes:
+    /// * This is the same as RFC3339 format
+    pub fn as_iso8601(&self) -> String {
+        self.strftime("%Y-%m-%dT%H:%M:%S.%fZ").unwrap()
+    }
+
+    /// Format the Instant object as a string
+    ///
+    /// Notes:
+    /// * The format string is a subset of the Python datetime module
+    ///
+    /// Args:
+    ///  format (str): The format string
+    ///
+    /// Format Codes:
+    /// * %Y - Year with century as a decimal number
+    /// * %m - Month as a zero-padded decimal number [01, 12]
+    /// * %B - Full month name (January, February, etc.)
+    /// * %b - Abbreviated month name (Jan, Feb, etc.)
+    /// * %d - Day of the month as a zero-padded decimal number [01, 31]
+    /// * %H - Hour (24-hour clock) as a zero-padded decimal number
+    /// * %M - Minute as a zero-padded decimal number
+    /// * %S - Second as a zero-padded decimal number
+    /// * %f - Microsecond as a decimal number
+    ///
+    /// Returns:
+    /// str: The formatted string
+    ///
     pub fn strftime(&self, format: &str) -> SKResult<String> {
         let mut result = String::new();
         let mut chars = format.chars();
 
         let (year, month, day, hour, minute, fsecond) = self.as_datetime();
         let second = fsecond as i32;
-        let nanosecond = (fsecond.fract() * 1_000_000_000.0) as u32;
+        let microsecond = (fsecond.fract() * 1_000_000.0).round() as u32;
 
         while let Some(c) = chars.next() {
             if c == '%' {
@@ -362,7 +514,7 @@ impl Instant {
                         result.push_str(&format!("{:02}", second));
                     }
                     Some('f') => {
-                        result.push_str(&format!("{:09}", nanosecond));
+                        result.push_str(&format!("{:06}", microsecond));
                     }
                     Some(_) => {
                         return skerror!("Invalid format string");

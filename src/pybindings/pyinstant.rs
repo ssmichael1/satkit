@@ -307,13 +307,37 @@ impl PyInstant {
     ///   ValueError: If input string cannot be parsed
     /// 
     #[staticmethod]
-    fn from_rfctime(s: &str) -> PyResult<Self> {
+    fn from_rfc3339(s: &str) -> PyResult<Self> {
         match Instant::from_rfc3339(s) {
             Ok(v) => Ok(PyInstant { inner: v }),
             Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
                 "Could not parse time string",
             )),
         }
+    }
+
+    /// Convert satkit.time object to RFC3339 string
+    /// 
+    /// Returns:
+    /// str: String representing time in RFC3339 format : "YYYY-MM-DDTHH:MM:SS.sssZ"
+    /// 
+    /// Notes:
+    ///  RFC3339 is a standard for representing time in a string format
+    ///  Return string also matches ISO8601
+    fn as_rfc3339(&self) -> String {
+        self.inner.as_rfc3339()
+    }
+
+    /// Convert satkit.time object to ISO8601 string
+    /// 
+    /// Returns:
+    /// str: String representing time in ISO8601 format : "YYYY-MM-DDTHH:MM:SS.sssZ"
+    /// 
+    /// Notes:
+    /// ISO8601 is a standard for representing time in a string format
+    /// Return string also matches RFC3339
+    fn as_iso8601(&self) -> String {
+        self.inner.as_iso8601()
     }
 
     /// Return current time

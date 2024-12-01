@@ -520,10 +520,15 @@ class time:
 
     @staticmethod
     def from_string(str: str) -> time:
-        """Create a "time" object from input string
+        """
+        Create a "time" object from input string
 
         Args:
-            str (str): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
+            str (str): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try
+            to intelligently parse, but no guarantees
+
+        Note:
+            * This is probably not what you want.  Use with caution.
 
         Returns:
             satkit.time: Time object representing input string
@@ -534,11 +539,15 @@ class time:
         """
 
     @staticmethod
-    def from_rfctime(rfc: str) -> time:
+    def from_rfc3339(rfc: str) -> time:
         """Create a "time" object from input RFC 3339 string
 
         Args:
             rfc (str): RFC 3339 string representation of time
+
+        Notes:
+            * RFC 3339 is a subset of ISO 8601
+            * Only allows a subset of the format: "YYYY-MM-DDTHH:MM:SS.sssZ" or "YYYY-MM-DDTHH:MM:SS.ssssssZ"
 
         Returns:
             satkit.time: Time object representing input RFC 3339 string
@@ -550,21 +559,33 @@ class time:
 
     @staticmethod
     def strptime(str: str, format: str) -> time:
-        """Create a "time" object from input string
+        """
+        Create a "time" object from input string with given formatting
 
         Args:
             str (str): string representation of time
             format (str): format of the string
 
         Notes:
-        * The format string is the same as the "strftime" function in rust chrono crate
-            See: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+        * The format string is a subset of the strptime format string in the Python "datetime" module
+
+        Format Codes:
+        * %Y - year
+        * %m - month with leading zeros (01-12)
+        * %d - day of month with leading zeros (01-31)
+        * %H - hour with leading zeros (00-23)
+        * %M - minute with leading zeros (00-59)
+        * %S - second with leading zeros (00-59)
+        * %f - microsecond, allowing for trailing zeros
+        * %b - abbreviated month name (Jan, Feb, ...)
+        * %B - full month name (January, February, ...)
 
         Returns:
             satkit.time: Time object representing input string
 
         Example:
-            >>> print(satkit.time.strftime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
+            # Note the microsecond %f actually is represented as milliseconds in the input string
+            >>> print(satkit.time.strptime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
             2023-03-05 11:03:45.453Z
         """
 
@@ -774,6 +795,22 @@ class time:
         (seconds since Jan 1, 1970 UTC, excluding leap seconds)
 
         Includes fractional comopnent of seconds
+        """
+
+    def as_iso8601(self) -> str:
+        """
+        Represent time as ISO 8601 string
+
+        Returns:
+            str: ISO 8601 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
+        """
+
+    def as_rfc3339(self) -> str:
+        """
+        Represent time as RFC 3339 string
+
+        Returns:
+            str: RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
         """
 
     def __add__(

@@ -122,6 +122,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyInstant>()?;
     m.add_class::<PyDuration>()?;
     m.add_class::<pyinstant::PyTimeScale>()?;
+    m.add_class::<pyinstant::PyWeekday>()?;
     m.add_class::<Quaternion>()?;
     m.add_class::<pyframes::PyFrame>()?;
     m.add_function(wrap_pyfunction!(pysgp4::sgp4, m)?).unwrap();
