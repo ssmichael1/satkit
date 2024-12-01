@@ -277,15 +277,57 @@ impl PyInstant {
     /// Raises:
     ///  ValueError: If input string cannot be parsed
     /// 
-    /// Notes:
-    ///    See: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-    ///    for format string options
+    /// Format Codes:
+    /// %Y: Year with century as a decimal number
+    /// %m: Month as a zero-padded decimal number
+    /// %d: Day of the month as a zero-padded decimal number
+    /// %H: Hour (24-hour clock) as a zero-padded decimal number
+    /// %M: Minute as a zero-padded decimal number
+    /// %S: Second as a zero-padded decimal number
+    /// %f: Microsecond as a decimal number, with possible trailing zeros (1 to 6 digits)
+    /// %z: UTC offset in the form +HHMM or -HHMM
+    /// %b: Month as locale’s abbreviated name
+    /// %B: Month as locale’s full name
     #[staticmethod]
     fn strptime(s: &str, fmt: &str) -> PyResult<Self> {
         match Instant::strptime(fmt, s) {
             Ok(v) => Ok(PyInstant { inner: v }),
             Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
                 "Could not parse time string",
+            )),
+        }
+    }
+
+    /// Format time object as string
+    /// 
+    /// Args:
+    ///  fmt (str): Format string
+    /// 
+    /// Returns:
+    /// str: String representing time in given format
+    /// 
+    /// Raises:
+    /// ValueError: If input string cannot be formatted
+    /// 
+    /// Format Codes:
+    /// %Y: Year with century as a decimal number
+    /// %m: Month as a zero-padded decimal number
+    /// %d: Day of the month as a zero-padded decimal number
+    /// %H: Hour (24-hour clock) as a zero-padded decimal number
+    /// %M: Minute as a zero-padded decimal number
+    /// %S: Second as a zero-padded decimal number
+    /// %f: Microsecond as a decimal number, with possible trailing zeros (1 to 6 digits)
+    /// %z: UTC offset in the form +HHMM or -HHMM
+    /// %A: Weekday as locale’s full name
+    /// %b: Month as locale’s abbreviated name
+    /// %B: Month as locale’s full name
+    /// %w: Weekday as a decimal number, where 0 is Sunday and 6 is Saturday
+    /// 
+    fn strftime(&self, fmt: &str) -> PyResult<String> {
+        match self.inner.strftime(fmt) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
+                "Could not format time string",
             )),
         }
     }

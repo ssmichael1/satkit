@@ -813,6 +813,34 @@ class time:
             str: RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
         """
 
+    def strftime(self, format: str) -> str:
+        """
+        Represent time as string with given format
+
+        Args:
+            format (str): format of the string
+
+        Format Codes:
+        * %Y - year
+        * %m - month with leading zeros (01-12)
+        * %d - day of month with leading zeros (01-31)
+        * %H - hour with leading zeros (00-23)
+        * %M - minute with leading zeros (00-59)
+        * %S - second with leading zeros (00-59)
+        * %f - microsecond, allowing for trailing zeros
+        * %b - abbreviated month name (Jan, Feb, ...)
+        * %B - full month name (January, February, ...)
+        * %A - full weekday name (Sunday, Monday, ...)
+        * %w - weekday as a decimal number (0=Sunday, 1=Monday, ...)
+
+        Returns:
+            str: string representation of time
+
+        Example:
+            >>> print(satkit.time(2023, 6, 3, 6, 19, 34).strptime("%Y-%m-%d %H:%M:%S"))
+            2023-06-03 06:19:34
+        """
+
     def __add__(
         self,
         other: (

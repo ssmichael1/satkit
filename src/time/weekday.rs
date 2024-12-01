@@ -24,6 +24,20 @@ impl From<i32> for Weekday {
     }
 }
 
+impl From<Weekday> for i32 {
+    fn from(value: Weekday) -> i32 {
+        match value {
+            Weekday::Sunday => 0,
+            Weekday::Monday => 1,
+            Weekday::Tuesday => 2,
+            Weekday::Wednesday => 3,
+            Weekday::Thursday => 4,
+            Weekday::Friday => 5,
+            Weekday::Saturday => 6,
+        }
+    }
+}
+
 impl std::fmt::Display for Weekday {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(

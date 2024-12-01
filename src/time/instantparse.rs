@@ -480,6 +480,8 @@ impl Instant {
     /// * %M - Minute as a zero-padded decimal number
     /// * %S - Second as a zero-padded decimal number
     /// * %f - Microsecond as a decimal number
+    /// * %A - Full weekday name (Sunday, Monday, etc.)
+    /// * %w - Weekday as a decimal number [0(Sunday), 6(Saturday)]
     ///
     /// Returns:
     /// str: The formatted string
@@ -515,6 +517,20 @@ impl Instant {
                     }
                     Some('f') => {
                         result.push_str(&format!("{:06}", microsecond));
+                    }
+                    Some('B') => {
+                        result.push_str(MONTH_NAMES[(month - 1) as usize]);
+                    }
+                    Some('b') => {
+                        result.push_str(MONTH_ABBRS[(month - 1) as usize]);
+                    }
+                    Some('A') => {
+                        let weekday = self.day_of_week();
+                        result.push_str(&weekday.to_string());
+                    }
+                    Some('w') => {
+                        let weekday = self.day_of_week();
+                        result.push_str(&format!("{:02}", weekday as i32));
                     }
                     Some(_) => {
                         return skerror!("Invalid format string");
