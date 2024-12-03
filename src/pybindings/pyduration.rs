@@ -36,6 +36,19 @@ pub struct PyDuration {
     pub inner: Duration,
 }
 
+impl<'py> IntoPyObject<'py> for crate::Duration {
+    type Target = PyBytes; // the Python type
+    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Ok(PyBytes::new(
+            py,
+            i64::to_le_bytes(self.as_microseconds()).as_slice(),
+        ))
+    }
+}
+
 #[pymethods]
 impl PyDuration {
     /// Create a new Duration object.

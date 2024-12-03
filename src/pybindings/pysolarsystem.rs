@@ -47,22 +47,3 @@ impl From<&SolarSystem> for SS {
         }
     }
 }
-
-impl IntoPy<PyObject> for SS {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let ss: SolarSystem = match self {
-            SS::Mercury => SolarSystem::Mercury,
-            SS::Venus => SolarSystem::Venus,
-            SS::EMB => SolarSystem::EMB,
-            SS::Mars => SolarSystem::Mars,
-            SS::Jupiter => SolarSystem::Jupiter,
-            SS::Saturn => SolarSystem::Saturn,
-            SS::Uranus => SolarSystem::Uranus,
-            SS::Neptune => SolarSystem::Neptune,
-            SS::Pluto => SolarSystem::Pluto,
-            SS::Moon => SolarSystem::Moon,
-            SS::Sun => SolarSystem::Sun,
-        };
-        ss.into_py(py)
-    }
-}

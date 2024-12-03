@@ -136,7 +136,7 @@ fn dylib_path() -> PyResult<PyObject> {
     pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
         match process_path::get_dylib_path() {
             Some(v) => Ok(v.to_str().unwrap().to_object(py)),
-            None => Ok(pyo3::types::PyNone::get_bound(py).into_py(py)),
+            None => Ok(pyo3::types::PyNone::get(py).into_py(py)),
         }
     })
 }

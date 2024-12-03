@@ -1,9 +1,10 @@
 use pyo3::prelude::*;
-use pyo3::types::timezone_utc_bound;
+use pyo3::types::timezone_utc;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDateTime;
 use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
+use pyo3::IntoPyObjectExt;
 
 use crate::{Instant, TimeScale, Weekday};
 
@@ -93,10 +94,13 @@ impl From<Weekday> for PyWeekday {
         }
     }
 }
+impl<'py> IntoPyObject<'py> for crate::Weekday {
+    type Target = PyAny; // the Python type
+    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = std::convert::Infallible;
 
-impl IntoPy<PyObject> for Weekday {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let wd: PyWeekday = match self {
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Ok(match self {
             Weekday::Sunday => PyWeekday::Sunday,
             Weekday::Monday => PyWeekday::Monday,
             Weekday::Tuesday => PyWeekday::Tuesday,
@@ -104,10 +108,13 @@ impl IntoPy<PyObject> for Weekday {
             Weekday::Thursday => PyWeekday::Thursday,
             Weekday::Friday => PyWeekday::Friday,
             Weekday::Saturday => PyWeekday::Saturday,
-        };
-        wd.into_py(py)
+        }.into_bound_py_any(py).unwrap())
+        
     }
 }
+
+
+
 
 impl From<&PyTimeScale> for TimeScale {
     fn from(s: &PyTimeScale) -> TimeScale {
@@ -137,20 +144,6 @@ impl From<PyTimeScale> for TimeScale {
     }
 }
 
-impl IntoPy<PyObject> for TimeScale {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let ts: PyTimeScale = match self {
-            TimeScale::Invalid => PyTimeScale::Invalid,
-            TimeScale::UTC => PyTimeScale::UTC,
-            TimeScale::TT => PyTimeScale::TT,
-            TimeScale::UT1 => PyTimeScale::UT1,
-            TimeScale::TAI => PyTimeScale::TAI,
-            TimeScale::GPS => PyTimeScale::GPS,
-            TimeScale::TDB => PyTimeScale::TDB,
-        };
-        ts.into_py(py)
-    }
-}
 
 /// Representation of an instant in time
 ///
@@ -176,6 +169,19 @@ impl IntoPy<PyObject> for TimeScale {
 #[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyInstant {
     pub inner: Instant,
+}
+
+impl<'py> IntoPyObject<'py> for crate::Instant {
+    type Target = PyBytes; // the Python type
+    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Ok(PyBytes::new(
+            py,
+            i64::to_le_bytes(self.raw).as_slice(),
+        ))
+    }
 }
 
 #[pymethods]
@@ -539,9 +545,9 @@ impl PyInstant {
             let timestamp: f64 = self.as_unixtime();
             let tz = match utc {
                 false => None,
-                true => Some(timezone_utc_bound(py)),
+                true => Some(timezone_utc(py)),
             };
-            Ok(PyDateTime::from_timestamp_bound(py, timestamp, tz.as_ref())?.into_py(py))
+            Ok(PyDateTime::from_timestamp(py, timestamp, tz.as_ref())?.into())
         })
     }
 
@@ -605,13 +611,12 @@ impl PyInstant {
                 let objarr = parr
                     .as_array()
                     .map(|x| {
-                        let obj = PyInstant {
+                        PyInstant {
                             inner: self.inner + crate::Duration::from_days(*x),
-                        };
-                        obj.into_py(py)
+                        }.into_py(py)
                     })
                     .into_iter();
-                let parr = np::PyArray1::<PyObject>::from_iter_bound(py, objarr);
+                let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
                 Ok(parr.into_py(py))
             })
         }
@@ -653,7 +658,6 @@ impl PyInstant {
         // Constant number
         else if other.is_instance_of::<pyo3::types::PyFloat>()
             || other.is_instance_of::<pyo3::types::PyInt>()
-            || other.is_instance_of::<pyo3::types::PyLong>()
         {
             let dt: f64 = other.extract::<f64>().unwrap();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
@@ -690,7 +694,7 @@ impl PyInstant {
                 let objarr = parr
                     .as_array()
                     .into_iter()
-                    .map(|x| {
+                    .map(|x| -> PyObject {
                         let obj = PyInstant {
                             inner: self.inner - crate::Duration::from_days(*x),
                         };
@@ -870,9 +874,9 @@ impl PyInstant {
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new_bound(py);
+        let d = PyDict::new(py);
         d.set_item("empty", true).unwrap();
-        (PyTuple::empty_bound(py), d)
+        (PyTuple::empty(py), d)
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
@@ -888,20 +892,10 @@ impl PyInstant {
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
-        Ok(PyBytes::new_bound(
-            py,
-            &i64::to_le_bytes(self.inner.raw)
-        )
-        .to_object(py))
+        Ok(PyBytes::new(py, &i64::to_le_bytes(self.inner.raw)).into())
     }
 }
 
-impl IntoPy<PyObject> for Instant {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let ts: PyInstant = PyInstant { inner: self };
-        ts.into_py(py)
-    }
-}
 
 impl<'b> From<&'b PyInstant> for &'b Instant {
     fn from(s: &PyInstant) -> &Instant {
