@@ -22,12 +22,12 @@ impl Precomputed {
 
         let (pstart, pstop) = match stop > start {
             true => (
-                start - Duration::from_seconds(1.0),
-                stop + Duration::from_seconds(1.0),
+                start - Duration::from_seconds(120.0),
+                stop + Duration::from_seconds(120.0),
             ),
             false => (
-                stop - Duration::from_seconds(1.0),
-                start + Duration::from_seconds(1.0),
+                stop - Duration::from_seconds(120.0),
+                start + Duration::from_seconds(120.0),
             ),
         };
 
@@ -53,7 +53,11 @@ impl Precomputed {
 
     pub fn interp(&self, t: &Instant) -> SKResult<InterpType> {
         if *t < self.start || *t > self.stop {
-            return Err("Precomputed::interp: time is outside of precomputed range".into());
+            return Err(format!(
+                "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
+                *t, self.start, self.stop
+            )
+            .into());
         }
 
         let idx = (t - self.start).as_seconds() / self.step;
