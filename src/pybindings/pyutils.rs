@@ -9,6 +9,7 @@ use nalgebra as na;
 use numpy as np;
 use numpy::ndarray;
 use numpy::PyArrayMethods;
+use numpy::PyUntypedArrayMethods;
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -155,10 +156,26 @@ pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> PyRe
     let mut m: Matrix<M, N> = Matrix::<M, N>::zeros();
     if obj.is_instance_of::<np::PyArray1<f64>>() {
         let arr = obj.extract::<np::PyReadonlyArray1<f64>>()?;
-        m.copy_from_slice(arr.as_slice()?);
+        if arr.is_contiguous() {
+            m.copy_from_slice(arr.as_slice()?);
+        } else {
+            let arr = arr.as_array();
+            for row in 0..M {
+                m[row] = arr[row];
+            }
+        }
     } else if obj.is_instance_of::<np::PyArray2<f64>>() {
         let arr = obj.extract::<np::PyReadonlyArray2<f64>>()?;
-        m.copy_from_slice(arr.as_slice()?);
+        if arr.is_contiguous() {
+            m.copy_from_slice(arr.as_slice()?);
+        } else {
+            let arr = arr.as_array();
+            for row in 0..M {
+                for col in 0..N {
+                    m[(row, col)] = arr[(row, col)];
+                }
+            }
+        }
     }
     Ok(m)
 }
