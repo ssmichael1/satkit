@@ -290,7 +290,7 @@ impl PyInstant {
     /// %B: Month as locale’s full name
     #[staticmethod]
     fn strptime(s: &str, fmt: &str) -> PyResult<Self> {
-        match Instant::strptime(fmt, s) {
+        match Instant::strptime(s, fmt) {
             Ok(v) => Ok(PyInstant { inner: v }),
             Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
                 "Could not parse time string",

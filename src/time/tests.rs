@@ -200,4 +200,13 @@ fn test_strptime() {
     assert!(g.3 == 12);
     assert!(g.4 == 3);
     assert!(g.5 == 45.123456);
+
+    let time = Instant::strptime("09-Jun-2023 22:27:19", "%d-%b-%Y %H:%M:%S").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2023);
+    assert!(g.1 == 6);
+    assert!(g.2 == 9);
+    assert!(g.3 == 22);
+    assert!(g.4 == 27);
+    assert!(g.5 == 19.0);
 }
