@@ -445,6 +445,28 @@ mod tests {
     use std::io::{self, BufRead};
 
     #[test]
+    fn test_short_propagate() -> SKResult<()> {
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let stoptime = starttime + Duration::from_seconds(0.1);
+
+        let mut state: SimpleState = SimpleState::zeros();
+
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        let settings = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_order: 4,
+            ..Default::default()
+        };
+
+        let _res1 = propagate(&state, &starttime, &stoptime, &settings, None)?;
+
+        Ok(())
+    }
+
+    #[test]
     fn test_propagate() -> SKResult<()> {
         let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
         let stoptime = starttime + Duration::from_days(0.25);

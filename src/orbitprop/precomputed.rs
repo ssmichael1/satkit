@@ -21,20 +21,26 @@ impl Precomputed {
         let step: f64 = 60.0;
 
         let (pstart, pstop) = match stop > start {
-            true => (start, stop),
-            false => (stop, start),
+            true => (
+                start - Duration::from_seconds(1.0),
+                stop + Duration::from_seconds(1.0),
+            ),
+            false => (
+                stop - Duration::from_seconds(1.0),
+                start + Duration::from_seconds(1.0),
+            ),
         };
 
         Ok(Precomputed {
-            start: *pstart,
-            stop: *pstop,
+            start: pstart,
+            stop: pstop,
             step,
             data: {
                 let nsteps: usize =
                     2 + ((pstop - pstart).as_seconds() / step.abs()).ceil() as usize;
                 let mut data = Vec::with_capacity(nsteps);
                 for idx in 0..nsteps {
-                    let t = *pstart + Duration::from_seconds((idx as f64) * step);
+                    let t = pstart + Duration::from_seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
                     let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
                     let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
