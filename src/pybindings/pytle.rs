@@ -103,8 +103,8 @@ impl PyTLE {
 
     /// Epoch time of TLE
     #[getter]
-    fn get_epoch(&self) -> PyResult<crate::Instant> {
-        Ok(self.inner.epoch)
+    fn get_epoch(&self, py: Python) -> PyResult<PyObject> {
+        Ok(self.inner.epoch.into_py(py))
     }
 
     /// argument of perigee, degrees
