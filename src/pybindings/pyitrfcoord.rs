@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::types::{PyBytes, PyList, PyTuple};
+use pyo3::IntoPyObjectExt;
 
 use numpy::{PyArray1, PyReadonlyArray1};
 
@@ -54,9 +55,7 @@ use super::pyutils::*;
 ///
 #[pyclass(name = "itrfcoord", module = "satkit")]
 #[derive(Clone)]
-pub struct PyITRFCoord {
-    pub inner: ITRFCoord,
-}
+pub struct PyITRFCoord(pub ITRFCoord);
 
 #[pymethods]
 impl PyITRFCoord {
@@ -88,20 +87,16 @@ impl PyITRFCoord {
                     "Must set latitude, longitude",
                 ));
             }
-            Ok(PyITRFCoord {
-                inner: ITRFCoord::from_geodetic_deg(
-                    latitude_deg.unwrap(),
-                    longitude_deg.unwrap(),
-                    altitude,
-                ),
-            })
+            Ok(PyITRFCoord(ITRFCoord::from_geodetic_deg(
+                latitude_deg.unwrap(),
+                longitude_deg.unwrap(),
+                altitude,
+            )))
         } else if args.len() == 3 {
             let x = args.get_item(0)?.extract::<f64>()?;
             let y = args.get_item(1)?.extract::<f64>()?;
             let z = args.get_item(2)?.extract::<f64>()?;
-            Ok(PyITRFCoord {
-                inner: ITRFCoord::from_slice(&[x, y, z]).unwrap(),
-            })
+            Ok(PyITRFCoord(ITRFCoord::from_slice(&[x, y, z]).unwrap()))
         } else if args.len() == 1 {
             if args.get_item(0)?.is_instance_of::<PyList>() {
                 match args.get_item(0)?.extract::<Vec<f64>>() {
@@ -111,9 +106,7 @@ impl PyITRFCoord {
                                 "Invalid number of elements",
                             ));
                         }
-                        Ok(PyITRFCoord {
-                            inner: ITRFCoord::from_slice(&xl).unwrap(),
-                        })
+                        Ok(PyITRFCoord(ITRFCoord::from_slice(&xl).unwrap()))
                     }
                     Err(e) => Err(e),
                 }
@@ -127,9 +120,9 @@ impl PyITRFCoord {
                         "Invalid number of elements",
                     ));
                 }
-                Ok(PyITRFCoord {
-                    inner: ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap(),
-                })
+                Ok(PyITRFCoord(
+                    ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap(),
+                ))
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                 "First input must be float, 3-element list of floats, or 3-element numpy array of float"
@@ -148,7 +141,7 @@ impl PyITRFCoord {
     /// Returns:
     ///     float: Latitude in degrees
     fn get_latitude_deg(&self) -> f64 {
-        self.inner.latitude_deg()
+        self.0.latitude_deg()
     }
 
     /// Longitude in degrees
@@ -157,7 +150,7 @@ impl PyITRFCoord {
     ///     float: Longitude in degrees
     #[getter]
     fn get_longitude_deg(&self) -> f64 {
-        self.inner.longitude_deg()
+        self.0.longitude_deg()
     }
 
     /// Latitude in radians
@@ -166,7 +159,7 @@ impl PyITRFCoord {
     ///     float: Latitude in radians
     #[getter]
     fn get_latitude_rad(&self) -> f64 {
-        self.inner.latitude_rad()
+        self.0.latitude_rad()
     }
 
     /// Longitude in radians
@@ -175,7 +168,7 @@ impl PyITRFCoord {
     ///     float: Longitude in radians
     #[getter]
     fn get_longitude_rad(&self) -> f64 {
-        self.inner.longitude_rad()
+        self.0.longitude_rad()
     }
 
     /// Height above ellipsoid in meters
@@ -184,13 +177,13 @@ impl PyITRFCoord {
     ///     float: Height above ellipsoid in meters
     #[getter]
     fn get_height(&self) -> f64 {
-        self.inner.hae()
+        self.0.hae()
     }
 
     /// Height above ellipsoid, meters
     #[getter]
     fn get_altitude(&self) -> f64 {
-        self.inner.hae()
+        self.0.hae()
     }
 
     /// Return Tuple with latitude in rad, longitude in rad, height above ellipsoid in meters
@@ -199,7 +192,7 @@ impl PyITRFCoord {
     ///     tuple: (latitude_rad, longitude_rad, height)
     #[getter]
     fn get_geodetic_rad(&self) -> (f64, f64, f64) {
-        self.inner.to_geodetic_rad()
+        self.0.to_geodetic_rad()
     }
 
     /// Return tuple with latitude in deg, longitude in deg, height above ellipsoid in meters
@@ -208,7 +201,7 @@ impl PyITRFCoord {
     ///     tuple: (latitude_deg, longitude_deg, height)
     #[getter]
     fn get_geodetic_deg(&self) -> (f64, f64, f64) {
-        self.inner.to_geodetic_deg()
+        self.0.to_geodetic_deg()
     }
 
     /// Return vector representing ITRF Cartesian coordinate in meters
@@ -218,12 +211,14 @@ impl PyITRFCoord {
     #[getter]
     fn get_vector(&self) -> PyObject {
         pyo3::Python::with_gil(|py| -> PyObject {
-            numpy::PyArray::from_slice_bound(py, self.inner.itrf.data.as_slice()).to_object(py)
+            numpy::PyArray::from_slice(py, self.0.itrf.data.as_slice())
+                .into_py_any(py)
+                .unwrap()
         })
     }
 
     fn __str__(&self) -> String {
-        let (lat, lon, hae) = self.inner.to_geodetic_deg();
+        let (lat, lon, hae) = self.0.to_geodetic_deg();
         format!(
             "ITRFCoord(lat: {:8.4} deg, lon: {:8.4} deg, hae: {:5.2} km)",
             lat,
@@ -243,9 +238,7 @@ impl PyITRFCoord {
     ///     satkit.quaternion: Quaternion representing rotation from NED to ITRF
     #[getter]
     fn get_qned2itrf(&self) -> Quaternion {
-        Quaternion {
-            inner: self.inner.q_ned2itrf(),
-        }
+        self.0.q_ned2itrf().into()
     }
 
     /// Quaternion representing rotation from East-North-Up (ENU) coordinate frame to International Terrestrial Reference Frame
@@ -255,9 +248,7 @@ impl PyITRFCoord {
     ///     satkit.quaternion: Quaternion representing rotation from ENU to ITRF
     #[getter]
     fn get_qenu2itrf(&self) -> Quaternion {
-        Quaternion {
-            inner: self.inner.q_enu2itrf(),
-        }
+        self.0.q_enu2itrf().into()
     }
 
     /// Return East-North-Up location of input coordinate relative to self
@@ -268,9 +259,11 @@ impl PyITRFCoord {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of other relative to self
     fn to_enu(&self, other: &Self) -> PyObject {
-        let v: Vec3 = self.inner.q_enu2itrf().conjugate() * (self.inner.itrf - other.inner.itrf);
+        let v: Vec3 = self.0.q_enu2itrf().conjugate() * (self.0.itrf - other.0.itrf);
         pyo3::Python::with_gil(|py| -> PyObject {
-            numpy::PyArray::from_slice_bound(py, v.data.as_slice()).to_object(py)
+            numpy::PyArray::from_slice(py, v.data.as_slice())
+                .into_py_any(py)
+                .unwrap()
         })
     }
 
@@ -282,9 +275,11 @@ impl PyITRFCoord {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing NED location in meters of other relative to self
     fn to_ned(&self, other: &Self) -> PyObject {
-        let v: Vec3 = self.inner.q_ned2itrf().conjugate() * (self.inner.itrf - other.inner.itrf);
+        let v: Vec3 = self.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
         pyo3::Python::with_gil(|py| -> PyObject {
-            numpy::PyArray::from_slice_bound(py, v.data.as_slice()).to_object(py)
+            numpy::PyArray::from_slice(py, v.data.as_slice())
+                .into_py_any(py)
+                .unwrap()
         })
     }
 
@@ -310,7 +305,7 @@ impl PyITRFCoord {
     ///  3. heading at destination, in radians
     ///
     fn geodesic_distance(&self, other: &Self) -> (f64, f64, f64) {
-        self.inner.geodesic_distance(&other.inner)
+        self.0.geodesic_distance(&other.0)
     }
 
     /// Move this coordinate along a given heading by a given distance
@@ -327,14 +322,12 @@ impl PyITRFCoord {
     /// Returns:
     ///     itrfcoord: New ITRF coordinate after moving
     fn move_with_heading(&self, distance: f64, heading_rad: f64) -> PyITRFCoord {
-        PyITRFCoord {
-            inner: self.inner.move_with_heading(distance, heading_rad),
-        }
+        PyITRFCoord(self.0.move_with_heading(distance, heading_rad))
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new_bound(py);
-        let tp = PyTuple::new_bound(py, vec![0.0, 0.0, 0.0]);
+        let d = PyDict::new(py);
+        let tp = PyTuple::new(py, vec![0.0, 0.0, 0.0]).unwrap();
         (tp, d)
     }
 
@@ -348,37 +341,25 @@ impl PyITRFCoord {
         let x = f64::from_le_bytes(s[0..8].try_into()?);
         let y = f64::from_le_bytes(s[8..16].try_into()?);
         let z = f64::from_le_bytes(s[16..24].try_into()?);
-        self.inner.itrf = nalgebra::Vector3::<f64>::new(x, y, z);
+        self.0.itrf = nalgebra::Vector3::<f64>::new(x, y, z);
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
         let mut raw = [0; 24];
-        raw[0..8].clone_from_slice(f64::to_le_bytes(self.inner.itrf[0]).as_slice());
-        raw[8..16].clone_from_slice(f64::to_le_bytes(self.inner.itrf[1]).as_slice());
-        raw[16..24].clone_from_slice(f64::to_le_bytes(self.inner.itrf[2]).as_slice());
-        Ok(pyo3::types::PyBytes::new_bound(py, &raw).to_object(py))
+        raw[0..8].clone_from_slice(f64::to_le_bytes(self.0.itrf[0]).as_slice());
+        raw[8..16].clone_from_slice(f64::to_le_bytes(self.0.itrf[1]).as_slice());
+        raw[16..24].clone_from_slice(f64::to_le_bytes(self.0.itrf[2]).as_slice());
+        pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }
 
     /// 3-vector representing cartesian distance between this
     /// and other point, in meters
     fn __sub__(&self, other: &PyITRFCoord) -> PyObject {
-        let vout = self.inner - other.inner;
+        let vout = self.0 - other.0;
         pyo3::Python::with_gil(|py| -> PyObject {
-            let vnd = PyArray1::<f64>::from_vec_bound(py, vec![vout[0], vout[1], vout[2]]);
-            vnd.into_py(py)
+            let vnd = PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]]);
+            vnd.into_py_any(py).unwrap()
         })
-    }
-}
-
-impl IntoPy<PyObject> for ITRFCoord {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        PyITRFCoord { inner: self }.into_py(py)
-    }
-}
-
-impl<'b> From<&'b PyITRFCoord> for &'b ITRFCoord {
-    fn from(s: &PyITRFCoord) -> &ITRFCoord {
-        &s.inner
     }
 }

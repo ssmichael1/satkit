@@ -3,6 +3,7 @@ use super::pyitrfcoord::PyITRFCoord;
 use super::pyutils;
 use crate::lpephem::sun;
 use pyo3::prelude::*;
+use pyo3::IntoPyObjectExt;
 
 /// Sun position in the Geocentric Celestial Reference Frame (GCRF)
 ///
@@ -59,8 +60,10 @@ pub fn rise_set(
     coord: &PyITRFCoord,
     sigma: Option<f64>,
 ) -> PyResult<(PyObject, PyObject)> {
-    match sun::riseset(&time.inner, &coord.inner, sigma) {
-        Ok((rise, set)) => pyo3::Python::with_gil(|py| Ok((rise.into_py(py), set.into_py(py)))),
+    match sun::riseset(&time.0, &coord.0, sigma) {
+        Ok((rise, set)) => {
+            pyo3::Python::with_gil(|py| Ok((rise.into_py_any(py)?, set.into_py_any(py)?)))
+        }
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
     }
 }

@@ -4,6 +4,7 @@ use super::pyinstant::PyInstant;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDict;
+use pyo3::IntoPyObjectExt;
 
 /// Class representing durations of times, allowing for representation
 /// via common measures of duration (years, days, hours, minutes, seconds)
@@ -32,22 +33,7 @@ use pyo3::types::PyDict;
 ///
 #[pyclass(name = "duration", module = "satkit")]
 #[derive(Clone)]
-pub struct PyDuration {
-    pub inner: Duration,
-}
-
-impl<'py> IntoPyObject<'py> for crate::Duration {
-    type Target = PyBytes; // the Python type
-    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
-    type Error = std::convert::Infallible;
-
-    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        Ok(PyBytes::new(
-            py,
-            i64::to_le_bytes(self.as_microseconds()).as_slice(),
-        ))
-    }
-}
+pub struct PyDuration(pub Duration);
 
 #[pymethods]
 impl PyDuration {
@@ -102,13 +88,13 @@ impl PyDuration {
             }
         }
 
-        Ok(PyDuration {
-            inner: Duration::from_seconds(seconds)
+        Ok(PyDuration(
+            Duration::from_seconds(seconds)
                 + Duration::from_days(days)
                 + Duration::from_minutes(minutes)
                 + Duration::from_hours(hours)
                 + Duration::from_microseconds(microseconds),
-        })
+        ))
     }
 
     /// Create new duration object from the number of days
@@ -120,9 +106,7 @@ impl PyDuration {
     ///     duration: New duration object
     #[staticmethod]
     fn from_days(d: f64) -> PyDuration {
-        PyDuration {
-            inner: Duration::from_days(d),
-        }
+        PyDuration(Duration::from_days(d))
     }
 
     /// Create new duration object from the number of seconds
@@ -134,9 +118,7 @@ impl PyDuration {
     ///     duration: New duration object
     #[staticmethod]
     fn from_seconds(d: f64) -> PyDuration {
-        PyDuration {
-            inner: Duration::from_seconds(d),
-        }
+        PyDuration(Duration::from_seconds(d))
     }
 
     /// Create new duration object from the number of minutes
@@ -148,9 +130,7 @@ impl PyDuration {
     ///     duration: New duration object
     #[staticmethod]
     fn from_minutes(d: f64) -> PyDuration {
-        PyDuration {
-            inner: Duration::from_minutes(d),
-        }
+        PyDuration(Duration::from_minutes(d))
     }
 
     /// Create new duration object from number of hours
@@ -162,9 +142,7 @@ impl PyDuration {
     ///     duration: New duration object
     #[staticmethod]
     fn from_hours(d: f64) -> PyDuration {
-        PyDuration {
-            inner: Duration::from_hours(d),
-        }
+        PyDuration(Duration::from_hours(d))
     }
 
     /// Add durations or add duration to satkit.time
@@ -178,18 +156,12 @@ impl PyDuration {
         if other.is_instance_of::<PyDuration>() {
             let dur = other.extract::<PyDuration>()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Ok(PyDuration {
-                    inner: self.inner + dur.inner,
-                }
-                .into_py(py))
+                PyDuration(self.0 + dur.0).into_py_any(py)
             })
         } else if other.is_instance_of::<PyInstant>() {
             let tm = other.extract::<PyInstant>()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Ok(PyInstant {
-                    inner: tm.inner + self.inner,
-                }
-                .into_py(py))
+                PyInstant(tm.0 + self.0).into_py_any(py)
             })
         } else {
             Err(pyo3::exceptions::PyTypeError::new_err(
@@ -206,9 +178,7 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object representing the difference
     fn __sub__(&self, other: &PyDuration) -> PyDuration {
-        PyDuration {
-            inner: self.inner - other.inner,
-        }
+        PyDuration(self.0 - other.0)
     }
 
     /// Multiply duration by a scalar (scale duration)
@@ -219,9 +189,7 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object representing the scaled duration
     fn __mul__(&self, other: f64) -> PyDuration {
-        PyDuration {
-            inner: Duration::from_seconds(self.inner.as_seconds() * other),
-        }
+        PyDuration(Duration::from_seconds(self.0.as_seconds() * other))
     }
 
     /// Duration in units of days, where 1 day = 86,400 seconds
@@ -229,7 +197,7 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in days
     fn days(&self) -> f64 {
-        self.inner.as_days()
+        self.0.as_days()
     }
 
     /// Duration in units of seconds
@@ -237,7 +205,7 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in seconds
     fn seconds(&self) -> f64 {
-        self.inner.as_seconds()
+        self.0.as_seconds()
     }
 
     /// Duration in units of minutes
@@ -245,7 +213,7 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in minutes
     fn minutes(&self) -> f64 {
-        self.inner.as_minutes()
+        self.0.as_minutes()
     }
 
     /// Duration in units of hours
@@ -253,15 +221,15 @@ impl PyDuration {
     /// Returns:
     ///     float: Duration in hours
     fn hours(&self) -> f64 {
-        self.inner.as_hours()
+        self.0.as_hours()
     }
 
     fn __str__(&self) -> String {
-        self.inner.to_string()
+        self.0.to_string()
     }
 
     fn __repr__(&self) -> String {
-        self.inner.to_string()
+        self.0.to_string()
     }
 
     fn __setstate__(&mut self, py: Python, s: Py<PyBytes>) -> PyResult<()> {
@@ -272,11 +240,11 @@ impl PyDuration {
             ));
         }
         let t = i64::from_le_bytes(s.try_into()?);
-        self.inner = Duration { usec: t };
+        self.0 = Duration { usec: t };
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
-        Ok(PyBytes::new_bound(py, i64::to_le_bytes(self.inner.usec).as_slice()).to_object(py))
+        PyBytes::new(py, i64::to_le_bytes(self.0.usec).as_slice()).into_py_any(py)
     }
 }

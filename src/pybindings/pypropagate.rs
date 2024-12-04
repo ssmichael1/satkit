@@ -4,6 +4,7 @@ use super::pypropresult::{PyPropResult, PyPropResultType};
 use super::pypropsettings::PyPropSettings;
 use super::pysatproperties::PySatProperties;
 use super::pyutils::*;
+use pyo3::IntoPyObjectExt;
 
 use nalgebra as na;
 
@@ -106,10 +107,10 @@ pub fn propagate(
         state0 = py_to_smatrix(&args.get_item(0)?)?;
     }
     if args.len() > 1 {
-        starttime = args.get_item(1)?.extract::<PyInstant>()?.inner;
+        starttime = args.get_item(1)?.extract::<PyInstant>()?.0;
     }
     if args.len() > 2 {
-        stoptime = args.get_item(2)?.extract::<PyInstant>()?.inner;
+        stoptime = args.get_item(2)?.extract::<PyInstant>()?.0;
     }
 
     if let Some(kw) = kwargs {
@@ -128,15 +129,15 @@ pub fn propagate(
             kw.del_item("vel")?;
         }
         if let Some(kws) = kw.get_item("start")? {
-            starttime = kws.extract::<PyInstant>()?.inner;
+            starttime = kws.extract::<PyInstant>()?.0;
             kw.del_item("start")?;
         }
         if let Some(kws) = kw.get_item("stop")? {
-            stoptime = kws.extract::<PyInstant>()?.inner;
+            stoptime = kws.extract::<PyInstant>()?.0;
             kw.del_item("stop")?;
         }
         if let Some(kwd) = kw.get_item("duration")? {
-            stoptime = starttime + kwd.extract::<PyDuration>()?.inner;
+            stoptime = starttime + kwd.extract::<PyDuration>()?.0;
             kw.del_item("duration")?;
         }
         if let Some(kwd) = kw.get_item("duration_days")? {
@@ -148,7 +149,7 @@ pub fn propagate(
             kw.del_item("duration_sec")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {
-            satproperties_static = kws.extract::<PySatProperties>()?.inner;
+            satproperties_static = kws.extract::<PySatProperties>()?.0;
             satproperties = Some(&satproperties_static);
             kw.del_item("satproperties")?;
         }
@@ -178,10 +179,7 @@ pub fn propagate(
         )
         .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            Ok(PyPropResult {
-                inner: PyPropResultType::R1(Box::new(res)),
-            }
-            .into_py(py))
+            PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)
         })
     }
     // Propagate with state transition matrix
@@ -196,10 +194,7 @@ pub fn propagate(
             crate::orbitprop::propagate(&pv, &starttime, &stoptime, &propsettings, satproperties)
                 .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            Ok(PyPropResult {
-                inner: PyPropResultType::R7(Box::new(res)),
-            }
-            .into_py(py))
+            PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)
         })
     }
 }

@@ -3,12 +3,11 @@ use crate::orbitprop::SatPropertiesStatic;
 use super::pyutils::kwargs_or_default;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
+use pyo3::IntoPyObjectExt;
 
 #[pyclass(name = "satproperties_static", module = "satkit")]
 #[derive(Clone, Debug)]
-pub struct PySatProperties {
-    pub inner: SatPropertiesStatic,
-}
+pub struct PySatProperties(pub SatPropertiesStatic);
 
 #[pymethods]
 impl PySatProperties {
@@ -56,9 +55,9 @@ impl PySatProperties {
             }
         }
 
-        Ok(PySatProperties {
-            inner: SatPropertiesStatic::new(cdaoverm, craoverm),
-        })
+        Ok(PySatProperties(SatPropertiesStatic::new(
+            cdaoverm, craoverm,
+        )))
     }
 
     /// Get the satellite's susceptibility to radiation pressure
@@ -67,7 +66,7 @@ impl PySatProperties {
     ///     float: Cr A / m (m^2/kg)
     #[getter]
     fn get_craoverm(&self) -> f64 {
-        self.inner.craoverm
+        self.0.craoverm
     }
 
     /// Get the satellite's susceptibility to drag
@@ -76,7 +75,7 @@ impl PySatProperties {
     ///     float: Cd A / m (m^2/kg)
     #[getter]
     fn get_cdaoverm(&self) -> f64 {
-        self.inner.cdaoverm
+        self.0.cdaoverm
     }
 
     /// Set the satellite's susceptibility to radiation pressure
@@ -85,7 +84,7 @@ impl PySatProperties {
     ///     craoverm (float): Cr A / m (m^2/kg)
     #[setter]
     fn set_craoverm(&mut self, craoverm: f64) -> PyResult<()> {
-        self.inner.craoverm = craoverm;
+        self.0.craoverm = craoverm;
         Ok(())
     }
 
@@ -95,7 +94,7 @@ impl PySatProperties {
     ///     cdaoverm (float): Cd A / m (m^2/kg)
     #[setter]
     fn set_cdaoverm(&mut self, cdaoverm: f64) -> PyResult<()> {
-        self.inner.cdaoverm = cdaoverm;
+        self.0.cdaoverm = cdaoverm;
         Ok(())
     }
 
@@ -108,19 +107,19 @@ impl PySatProperties {
         }
         let craoverm = f64::from_le_bytes(state[0..8].try_into()?);
         let cdaoverm = f64::from_le_bytes(state[8..16].try_into()?);
-        self.inner.cdaoverm = cdaoverm;
-        self.inner.craoverm = craoverm;
+        self.0.cdaoverm = cdaoverm;
+        self.0.craoverm = craoverm;
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
         let mut raw = [0; 16];
-        raw[0..8].clone_from_slice(&self.inner.craoverm.to_le_bytes());
-        raw[8..16].clone_from_slice(&self.inner.cdaoverm.to_le_bytes());
-        Ok(pyo3::types::PyBytes::new_bound(py, &raw).to_object(py))
+        raw[0..8].clone_from_slice(&self.0.craoverm.to_le_bytes());
+        raw[8..16].clone_from_slice(&self.0.cdaoverm.to_le_bytes());
+        pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }
 
     fn __str__(&self) -> String {
-        self.inner.to_string()
+        self.0.to_string()
     }
 }

@@ -209,5 +209,5 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///     * 5 : dY wrt IAU-2000A nutation, milli-arcsecs
 #[pyfunction(name = "earth_orientation_params")]
 pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
-    crate::earth_orientation_params::get(&time.inner).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
+    crate::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
 }

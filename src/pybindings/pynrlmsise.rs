@@ -37,7 +37,7 @@ pub fn nrlmsise00(alt_km: f64, option_kwds: Option<&Bound<'_, PyDict>>) -> PyRes
             lon = Some(v.extract::<f64>()?);
         }
         if let Some(v) = kwds.get_item("time")? {
-            tm = Some(v.extract::<PyInstant>()?.inner);
+            tm = Some(v.extract::<PyInstant>()?.0);
         }
         if let Some(v) = kwds.get_item("use_spaceweather")? {
             use_spaceweather = v.extract::<bool>()?;

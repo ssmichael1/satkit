@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
+use pyo3::IntoPyObjectExt;
 
 use nalgebra::Vector3;
 type Vec3 = Vector3<f64>;
@@ -116,13 +117,13 @@ impl PyKepler {
 
     /// Convert Keplerian elements to Cartesian
     /// position (meters) and velocity (meters/second)
-    fn to_pv(&self) -> (PyObject, PyObject) {
+    fn to_pv(&self) -> PyResult<(PyObject, PyObject)> {
         let (r, v) = self.inner.to_pv();
-        pyo3::Python::with_gil(|py| -> (PyObject, PyObject) {
-            (
-                numpy::PyArray::from_slice_bound(py, r.as_slice()).to_object(py),
-                numpy::PyArray::from_slice_bound(py, v.as_slice()).to_object(py),
-            )
+        pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
+            Ok((
+                numpy::PyArray::from_slice(py, r.as_slice()).into_py_any(py)?,
+                numpy::PyArray::from_slice(py, v.as_slice()).into_py_any(py)?,
+            ))
         })
     }
 
@@ -147,7 +148,7 @@ impl PyKepler {
         } else {
             let dt: PyDuration = dt.extract()?;
             Ok(PyKepler {
-                inner: k.inner.propagate(&dt.inner),
+                inner: k.inner.propagate(&dt.0),
             })
         }
     }
@@ -209,7 +210,7 @@ impl PyKepler {
         state[24..32].clone_from_slice(&self.inner.raan.to_le_bytes());
         state[32..40].clone_from_slice(&self.inner.w.to_le_bytes());
         state[40..48].clone_from_slice(&self.inner.nu.to_le_bytes());
-        Ok(PyBytes::new_bound(py, &state).to_object(py))
+        PyBytes::new(py, &state).into_py_any(py)
     }
 
     fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
@@ -224,8 +225,8 @@ impl PyKepler {
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new_bound(py);
-        let tp = PyTuple::new_bound(py, vec![6378137.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        let d = PyDict::new(py);
+        let tp = PyTuple::new(py, vec![6378137.0, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap();
         (tp, d)
     }
 }

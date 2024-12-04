@@ -113,7 +113,7 @@ impl PyPropSettings {
     }
 
     fn precompute_terms(&mut self, start: &PyInstant, stop: &PyInstant) -> PyResult<()> {
-        match self.inner.precompute_terms(&start.inner, &stop.inner) {
+        match self.inner.precompute_terms(&start.0, &stop.0) {
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
             Ok(_) => Ok(()),
         }
