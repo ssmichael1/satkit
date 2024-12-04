@@ -92,7 +92,7 @@ pub fn propagate(
 ) -> PyResult<Py<PyAny>> {
     let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
     let propsettings = match pypropsettings {
-        Some(p) => p.inner,
+        Some(p) => p.0,
         None => crate::orbitprop::PropSettings::default(),
     };
 

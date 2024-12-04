@@ -17,9 +17,7 @@ use crate::Instant;
 
 #[pyclass(name = "satstate", module = "satkit")]
 #[derive(Clone, Debug)]
-pub struct PySatState {
-    inner: SatState,
-}
+pub struct PySatState(SatState);
 
 #[pymethods]
 impl PySatState {
@@ -54,7 +52,7 @@ impl PySatState {
             state.set_cov(StateCov::PVCov(nacov));
         }
 
-        Ok(PySatState { inner: state })
+        Ok(PySatState(state))
     }
 
     /// Set position uncertainty (1-sigma, meters) in the lvlh (local-vertical, local-horizontal) frame
@@ -76,7 +74,7 @@ impl PySatState {
         let na_sigma_pvh =
             na::Vector3::<f64>::from_row_slice(unsafe { sigma_pvh.as_slice().unwrap() });
 
-        self.inner.set_lvlh_pos_uncertainty(&na_sigma_pvh);
+        self.0.set_lvlh_pos_uncertainty(&na_sigma_pvh);
         Ok(())
     }
 
@@ -100,7 +98,7 @@ impl PySatState {
         let na_sigma_cart =
             na::Vector3::<f64>::from_row_slice(unsafe { sigma_cart.as_slice().unwrap() });
 
-        self.inner.set_gcrf_pos_uncertainty(&na_sigma_cart);
+        self.0.set_gcrf_pos_uncertainty(&na_sigma_cart);
         Ok(())
     }
 
@@ -119,19 +117,19 @@ impl PySatState {
             ));
         }
         let na_cov = na::Matrix6::from_row_slice(unsafe { cov.as_slice().unwrap() });
-        self.inner.cov = StateCov::PVCov(na_cov);
+        self.0.cov = StateCov::PVCov(na_cov);
         Ok(())
     }
 
     #[getter]
     fn get_time(&self) -> PyInstant {
-        PyInstant(self.inner.time)
+        PyInstant(self.0.time)
     }
 
     #[getter]
     fn get_pos_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.inner.pv.fixed_view::<3, 1>(0, 0).as_slice())
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
         })
@@ -140,7 +138,7 @@ impl PySatState {
     #[getter]
     fn get_vel_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.inner.pv.fixed_view::<3, 1>(3, 0).as_slice())
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
         })
@@ -153,7 +151,7 @@ impl PySatState {
     #[getter]
     fn get_cov(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            match self.inner.cov {
+            match self.0.cov {
                 StateCov::None => PyNone::get(py).into_py_any(py).unwrap(),
                 StateCov::PVCov(cov) => {
                     let dims = vec![6, 6];
@@ -179,7 +177,7 @@ impl PySatState {
     ///     satkit.quaternion: quaternion to go from gcrf to lvlh frame
     #[getter]
     fn get_qgcrf2lvlh(&self) -> Quaternion {
-        self.inner.qgcrf2lvlh().into()
+        self.0.qgcrf2lvlh().into()
     }
 
     /// Return position (meters) in GCRF frame
@@ -189,7 +187,7 @@ impl PySatState {
     #[getter]
     fn get_pos(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.inner.pv.fixed_view::<3, 1>(0, 0).as_slice())
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
         })
@@ -197,7 +195,7 @@ impl PySatState {
     #[getter]
     fn get_vel(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.inner.pv.fixed_view::<3, 1>(3, 0).as_slice())
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
         })
@@ -222,7 +220,7 @@ impl PySatState {
                 timedur.extract::<PyInstant>()?.0
             } else if timedur.is_instance_of::<PyDuration>() {
                 let dur = timedur.extract::<PyDuration>()?;
-                self.inner.time + dur.0
+                self.0.time + dur.0
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "timedur must be satkit.time or satkit.duration",
@@ -235,14 +233,14 @@ impl PySatState {
                 let kw = kwargs.unwrap();
                 match kw.get_item("propsettings")? {
                     None => None,
-                    Some(v) => Some(v.extract::<PyPropSettings>()?.inner),
+                    Some(v) => Some(v.extract::<PyPropSettings>()?.0),
                 }
             }
             false => None,
         };
 
-        match self.inner.propagate(&time, propsettings.as_ref()) {
-            Ok(s) => Ok(PySatState { inner: s }),
+        match self.0.propagate(&time, propsettings.as_ref()) {
+            Ok(s) => Ok(PySatState(s)),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Error propagating state: {}",
                 e
@@ -278,38 +276,38 @@ impl PySatState {
         let pv = na::Vector6::<f64>::from_row_slice(unsafe {
             std::slice::from_raw_parts(state[8..56].as_ptr() as *const f64, 6)
         });
-        self.inner.time = time;
-        self.inner.pv = pv;
+        self.0.time = time;
+        self.0.pv = pv;
         if state.len() >= 92 {
             let cov = na::Matrix6::<f64>::from_row_slice(unsafe {
                 std::slice::from_raw_parts(state[56..].as_ptr() as *const f64, 36)
             });
-            self.inner.cov = StateCov::PVCov(cov);
+            self.0.cov = StateCov::PVCov(cov);
         }
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
         let len: usize = 56
-            + match self.inner.cov {
+            + match self.0.cov {
                 StateCov::None => 0,
                 StateCov::PVCov(_) => 36,
             };
         let mut buffer: Vec<u8> = vec![0; len];
         buffer[0..8].clone_from_slice(
             &self
-                .inner
+                .0
                 .time
                 .as_mjd_with_scale(crate::TimeScale::TAI)
                 .to_le_bytes(),
         );
         unsafe {
             buffer[8..56].clone_from_slice(std::slice::from_raw_parts(
-                self.inner.pv.as_ptr() as *const u8,
+                self.0.pv.as_ptr() as *const u8,
                 48,
             ));
         }
-        if let StateCov::PVCov(cov) = self.inner.cov {
+        if let StateCov::PVCov(cov) = self.0.cov {
             unsafe {
                 buffer[56..].clone_from_slice(std::slice::from_raw_parts(
                     cov.as_ptr() as *const u8,
@@ -321,6 +319,6 @@ impl PySatState {
     }
 
     fn __str__(&self) -> String {
-        self.inner.to_string()
+        self.0.to_string()
     }
 }
