@@ -239,6 +239,10 @@ mod tests {
     /// Check value against manual value from file
     #[test]
     fn checkval() {
+        let tm = crate::Instant::from_rfc3339("2006-04-16T17:52:50.805408Z").unwrap();
+        let v: Option<[f64; 6]> = eop_from_mjd_utc(tm.as_mjd());
+        assert!(v.is_some());
+
         let v = eop_from_mjd_utc(59464.00).unwrap();
         const TRUTH: [f64; 4] = [-0.1145667, 0.241155, 0.317274, -0.0002255];
         for it in v.iter().zip(TRUTH.iter()) {
