@@ -3,7 +3,11 @@ name: Wheel
 on:
   push:
     tags:
+      # Build and publish wheels on tags like "v1.2.3"
       - v*
+    branches:
+      # Allow testing of building wheels without publish on branches prefixed with "wheel"
+      - wheel*
 
 jobs:
   build_python:
@@ -21,13 +25,15 @@ jobs:
             platform: linux
             testvec_path: satkit-testvecs
             data_path: astro-data
+            activatestr: source .venv/bin/activate
           - os: windows
-            ls: dir
             testvec_path: satkit-testvecs
             data_path: astro-data
+            activatestr: .venv\Scripts\activate
           - os: macos
             testvec_path: satkit-testvecs
             data_path: astro-data
+            activatestr: source .venv/bin/activate
 
     runs-on: ${{ format('{0}-latest', matrix.os) }}
     steps:
@@ -50,21 +56,14 @@ jobs:
           key: satkit-data-cache
 
       # Download data if it is not in the cache
-      - name: Download Satkit Data Windows
-        if: steps.cache-satkit-data.outputs.cache-hit != 'true' && matrix.os == 'windows'
+      - name: Download Satkit Data 
+        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
         run: |
           python -m venv .venv
-          source .venv/bin/activate
+          ${{matrix.activatestr}}
           python -m pip install requests
           python python/test/download_data.py ${{matrix.data_path}}
 
-      - name: Download Satkit Data MacOS & Linux
-        if: steps.cache-satkit-data.outputs.cache-hit != 'true' && matrix.os != 'windows'
-        run: |
-          python -m venv .venv
-          .venv\Scripts\activate
-          python -m pip install requests
-          python python/test/download_data.py ${{matrix.data_path}}
 
       # Try to recover satkit test vectors from cache
       - name: Cache Satkit Test Vectors
@@ -76,21 +75,14 @@ jobs:
           key: satkit-testvecs-cache        
 
       # Download test vectors if they are not in the cache
-      - name: Download Satkit Test Vectors Windows
-        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true' && matrix.os == 'windows'
+      - name: Download Satkit Test Vectors 
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true' 
         run: |
           python -m venv .venv
-          .venv\Scripts\activate
+          ${{matrix.activatestr}}
           python -m pip install requests
           python python/test/download_testvecs.py ${{matrix.testvec_path}}
 
-      - name: Download Satkit Test Vectors MacOS & Linux
-        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true' && matrix.os != 'windows'
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install requests
-          python python/test/download_testvecs.py ${{matrix.testvec_path}}
 
       # Details of cibuildwheel are set in pyproject.toml
       - name: Build ${{ matrix.platform || matrix.os }} wheels
@@ -119,6 +111,8 @@ jobs:
     needs: build_python
     runs-on: ubuntu-latest
     environment: PyPiPublish
+    # Only run on tags
+    if: startsWith(github.ref, 'refs/tags/v')
 
     permissions:
       id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
