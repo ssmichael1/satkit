@@ -1,7 +1,8 @@
 use cty;
 
 use crate::spaceweather;
-use crate::AstroTime;
+use crate::Duration;
+use crate::Instant;
 
 /// Array containing the following magnetic values:
 ///   0 : daily AP
@@ -98,7 +99,7 @@ pub fn nrlmsise(
     alt_km: f64,
     lat_option: Option<f64>,
     lon_option: Option<f64>,
-    time_option: Option<AstroTime>,
+    time_option: Option<Instant>,
     use_spaceweather: bool,
 ) -> (f64, f64) {
     let lat: f64 = lat_option.unwrap_or(0.0);
@@ -112,13 +113,13 @@ pub fn nrlmsise(
 
     if time_option.is_some() {
         let time = time_option.unwrap();
-        let (year, _mon, _day, dhour, dmin, dsec) = time.to_datetime();
-        let fday: f64 = (time - AstroTime::from_date(year as i32, 1, 1)).days() + 1.0;
+        let (year, _mon, _day, dhour, dmin, dsec) = time.as_datetime();
+        let fday: f64 = (time - Instant::from_date(year, 1, 1)).as_days() + 1.0;
         day_of_year = fday.floor() as i32;
         sec_of_day = dhour as f64 * 3600.0 + dmin as f64 * 60.0 + dsec;
 
         if use_spaceweather {
-            if let Ok(r) = spaceweather::get(time - 1.0) {
+            if let Ok(r) = spaceweather::get(time - Duration::from_days(1.0)) {
                 f107a = r.f10p7_adj_c81;
                 f107 = r.f10p7_adj;
                 ap = r.ap_avg as f64;
@@ -174,7 +175,8 @@ mod tests {
 
     #[test]
     fn test_nrlmsise() {
-        let tm: AstroTime = AstroTime::from_date(2010, 1, 1) + 171.0 + 29000.0 / 86400.0;
+        let tm: Instant =
+            Instant::from_date(2010, 1, 1) + Duration::from_days(171.0 + 29000.0 / 86400.0);
         let (_density, _temperature) = nrlmsise(400.0, Some(60.0), Some(-70.0), Some(tm), true);
     }
 }

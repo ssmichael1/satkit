@@ -3,7 +3,6 @@ use std::io::{self, BufRead};
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-use super::astrotime;
 use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
 
@@ -84,10 +83,7 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
             v if {
                 let c: String = v.chars().skip(16).take(1).collect();
                 c != "I" && c != "P"
-            } =>
-            {
-                
-            }
+            } => {}
             v => {
                 // Pull from "Bulliten A"
                 let mjd_str: String = v.chars().skip(7).take(8).collect();
@@ -124,12 +120,8 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
                         }
                     },
                     lod: lod_str.trim().parse().unwrap_or(0.0),
-                    dX: {
-                        dx_str.trim().parse().unwrap_or(0.0)
-                    },
-                    dY: {
-                        dy_str.trim().parse().unwrap_or(0.0)
-                    },
+                    dX: { dx_str.trim().parse().unwrap_or(0.0) },
+                    dY: { dy_str.trim().parse().unwrap_or(0.0) },
                 })
             }
         }
@@ -229,8 +221,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 ///   * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
 ///
 #[inline]
-pub fn get(tm: &astrotime::AstroTime) -> Option<[f64; 6]> {
-    eop_from_mjd_utc(tm.to_mjd(astrotime::Scale::UTC))
+pub fn get(tm: &crate::Instant) -> Option<[f64; 6]> {
+    eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC))
 }
 
 #[cfg(test)]
@@ -241,9 +233,7 @@ mod tests {
     /// Check that data is loaded
     #[test]
     fn loaded() {
-        assert!(
-            eop_params_singleton().read().unwrap()[0].mjd_utc >= 0.0
-        );
+        assert!(eop_params_singleton().read().unwrap()[0].mjd_utc >= 0.0);
     }
 
     /// Check value against manual value from file

@@ -1,17 +1,18 @@
-use super::pyastrotime::PyAstroTime;
 use super::pyduration::PyDuration;
+use super::pyinstant::PyInstant;
 use super::pypropresult::{PyPropResult, PyPropResultType};
 use super::pypropsettings::PyPropSettings;
 use super::pysatproperties::PySatProperties;
 use super::pyutils::*;
+use pyo3::IntoPyObjectExt;
 
 use nalgebra as na;
 
 use crate::orbitprop::SatProperties;
 use crate::orbitprop::SatPropertiesStatic;
 use crate::types::*;
-use crate::AstroTime;
 use crate::Duration;
+use crate::Instant;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
@@ -91,13 +92,13 @@ pub fn propagate(
 ) -> PyResult<Py<PyAny>> {
     let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
     let propsettings = match pypropsettings {
-        Some(p) => p.inner,
+        Some(p) => p.0,
         None => crate::orbitprop::PropSettings::default(),
     };
 
     let mut state0 = Vector6::zeros();
-    let mut starttime: AstroTime = AstroTime::new();
-    let mut stoptime: AstroTime = AstroTime::new();
+    let mut starttime: Instant = Instant::INVALID;
+    let mut stoptime: Instant = Instant::INVALID;
     let mut output_phi: bool = false;
     let mut satproperties: Option<&dyn SatProperties> = None;
     let satproperties_static: SatPropertiesStatic;
@@ -106,10 +107,10 @@ pub fn propagate(
         state0 = py_to_smatrix(&args.get_item(0)?)?;
     }
     if args.len() > 1 {
-        starttime = args.get_item(1)?.extract::<PyAstroTime>()?.inner;
+        starttime = args.get_item(1)?.extract::<PyInstant>()?.0;
     }
     if args.len() > 2 {
-        stoptime = args.get_item(2)?.extract::<PyAstroTime>()?.inner;
+        stoptime = args.get_item(2)?.extract::<PyInstant>()?.0;
     }
 
     if let Some(kw) = kwargs {
@@ -128,27 +129,27 @@ pub fn propagate(
             kw.del_item("vel")?;
         }
         if let Some(kws) = kw.get_item("start")? {
-            starttime = kws.extract::<PyAstroTime>()?.inner;
+            starttime = kws.extract::<PyInstant>()?.0;
             kw.del_item("start")?;
         }
         if let Some(kws) = kw.get_item("stop")? {
-            stoptime = kws.extract::<PyAstroTime>()?.inner;
+            stoptime = kws.extract::<PyInstant>()?.0;
             kw.del_item("stop")?;
         }
         if let Some(kwd) = kw.get_item("duration")? {
-            stoptime = starttime + kwd.extract::<PyDuration>()?.inner;
+            stoptime = starttime + kwd.extract::<PyDuration>()?.0;
             kw.del_item("duration")?;
         }
         if let Some(kwd) = kw.get_item("duration_days")? {
-            stoptime = starttime + Duration::Days(kwd.extract::<f64>()?);
+            stoptime = starttime + Duration::from_days(kwd.extract::<f64>()?);
             kw.del_item("duration_days")?;
         }
         if let Some(kwd) = kw.get_item("duration_secs")? {
-            stoptime = starttime + Duration::Seconds(kwd.extract::<f64>()?);
+            stoptime = starttime + Duration::from_seconds(kwd.extract::<f64>()?);
             kw.del_item("duration_sec")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {
-            satproperties_static = kws.extract::<PySatProperties>()?.inner;
+            satproperties_static = kws.extract::<PySatProperties>()?.0;
             satproperties = Some(&satproperties_static);
             kw.del_item("satproperties")?;
         }
@@ -178,10 +179,7 @@ pub fn propagate(
         )
         .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            Ok(PyPropResult {
-                inner: PyPropResultType::R1(Box::new(res)),
-            }
-            .into_py(py))
+            PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)
         })
     }
     // Propagate with state transition matrix
@@ -196,10 +194,7 @@ pub fn propagate(
             crate::orbitprop::propagate(&pv, &starttime, &stoptime, &propsettings, satproperties)
                 .unwrap();
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            Ok(PyPropResult {
-                inner: PyPropResultType::R7(Box::new(res)),
-            }
-            .into_py(py))
+            PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)
         })
     }
 }

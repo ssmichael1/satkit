@@ -32,7 +32,7 @@ use crate::utils::{datadir, download_if_not_exist};
 
 use once_cell::sync::OnceCell;
 
-use super::astrotime::{AstroTime, Scale};
+use crate::{Instant, TimeScale};
 
 impl TryFrom<i32> for SolarSystem {
     type Error = ();
@@ -124,10 +124,10 @@ impl JPLEphem {
     ///
     /// use satkit::jplephem;
     /// use satkit::SolarSystem;
-    /// use satkit::AstroTime;
+    /// use satkit::Instant;
     ///
     /// // Construct time: March 1 2021 12:00pm UTC
-    /// let t = AstroTime::from_datetime(2021, 3, 1, 12, 0, 0.0);
+    /// let t = Instant::from_datetime(2021, 3, 1, 12, 0, 0.0);
     ///
     /// // Find geocentric moon position at this time in the GCRF frame
     /// let p = jplephem::geocentric_pos(SolarSystem::Moon, &t).unwrap();
@@ -275,10 +275,10 @@ impl JPLEphem {
     fn body_pos_optimized<const N: usize>(
         &self,
         body: SolarSystem,
-        tm: &AstroTime,
+        tm: &Instant,
     ) -> SKResult<Vec3> {
         // Terrestrial time
-        let tt = tm.to_jd(Scale::TT);
+        let tt = tm.as_jd_with_scale(TimeScale::TT);
         if (self.jd_start > tt) || (self.jd_stop < tt) {
             return Err(Box::new(InvalidTime));
         }
@@ -338,7 +338,7 @@ impl JPLEphem {
     ///  * EMB (2) is the Earth-Moon barycenter
     ///  * The sun position is relative to the solar system barycenter
     ///    (it will be close to origin)
-    fn barycentric_pos(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
+    fn barycentric_pos(&self, body: SolarSystem, tm: &Instant) -> SKResult<Vec3> {
         match self.ipt[body as usize][1] {
             6 => self.body_pos_optimized::<6>(body, tm),
             7 => self.body_pos_optimized::<7>(body, tm),
@@ -372,7 +372,7 @@ impl JPLEphem {
     ///  * EMB (2) is the Earth-Moon barycenter
     ///  * The sun position is relative to the solar system barycenter
     ///    (it will be close to origin)
-    fn barycentric_state(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<(Vec3, Vec3)> {
+    fn barycentric_state(&self, body: SolarSystem, tm: &Instant) -> SKResult<(Vec3, Vec3)> {
         match self.ipt[body as usize][1] {
             6 => self.body_state_optimized::<6>(body, tm),
             7 => self.body_state_optimized::<7>(body, tm),
@@ -389,10 +389,10 @@ impl JPLEphem {
     fn body_state_optimized<const N: usize>(
         &self,
         body: SolarSystem,
-        tm: &AstroTime,
+        tm: &Instant,
     ) -> SKResult<(Vec3, Vec3)> {
         // Terrestrial time
-        let tt = tm.to_jd(Scale::TT);
+        let tt = tm.as_jd_with_scale(TimeScale::TT);
         if (self.jd_start > tt) || (self.jd_stop < tt) {
             return Err(Box::new(InvalidTime));
         }
@@ -454,7 +454,7 @@ impl JPLEphem {
     ///
     ///    3-vector of cartesian Geocentric position in meters
     ///
-    fn geocentric_pos(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
+    fn geocentric_pos(&self, body: SolarSystem, tm: &Instant) -> SKResult<Vec3> {
         if body == SolarSystem::Moon {
             self.barycentric_pos(body, tm)
         } else {
@@ -484,7 +484,7 @@ impl JPLEphem {
     ///     * 3-vector of cartesian Geocentric velocity in meters / second
     ///       Note: velocity is relative to Earth
     ///
-    fn geocentric_state(&self, body: SolarSystem, tm: &AstroTime) -> SKResult<(Vec3, Vec3)> {
+    fn geocentric_state(&self, body: SolarSystem, tm: &Instant) -> SKResult<(Vec3, Vec3)> {
         if body == SolarSystem::Moon {
             self.barycentric_state(body, tm)
         } else {
@@ -526,7 +526,7 @@ pub fn consts(s: &String) -> Option<&f64> {
 ///  * EMB (2) is the Earth-Moon barycenter
 ///  * The sun position is relative to the solar system barycenter
 ///    (it will be close to origin)
-pub fn barycentric_pos(body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
+pub fn barycentric_pos(body: SolarSystem, tm: &Instant) -> SKResult<Vec3> {
     jplephem_singleton()
         .as_ref()
         .unwrap()
@@ -548,7 +548,7 @@ pub fn barycentric_pos(body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
 ///     * 3-vector of cartesian Geocentric velocity in meters / second
 ///       Note: velocity is relative to Earth
 ///
-pub fn geocentric_state(body: SolarSystem, tm: &AstroTime) -> SKResult<(Vec3, Vec3)> {
+pub fn geocentric_state(body: SolarSystem, tm: &Instant) -> SKResult<(Vec3, Vec3)> {
     jplephem_singleton()
         .as_ref()
         .unwrap()
@@ -567,7 +567,7 @@ pub fn geocentric_state(body: SolarSystem, tm: &AstroTime) -> SKResult<(Vec3, Ve
 ///
 ///    3-vector of cartesian Geocentric position in meters
 ///
-pub fn geocentric_pos(body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
+pub fn geocentric_pos(body: SolarSystem, tm: &Instant) -> SKResult<Vec3> {
     jplephem_singleton()
         .as_ref()
         .unwrap()
@@ -595,7 +595,7 @@ pub fn geocentric_pos(body: SolarSystem, tm: &AstroTime) -> SKResult<Vec3> {
 ///  * EMB (2) is the Earth-Moon barycenter
 ///  * The sun position is relative to the solar system barycenter
 ///    (it will be close to origin)
-pub fn barycentric_state(body: SolarSystem, tm: &AstroTime) -> SKResult<(Vec3, Vec3)> {
+pub fn barycentric_state(body: SolarSystem, tm: &Instant) -> SKResult<(Vec3, Vec3)> {
     jplephem_singleton()
         .as_ref()
         .unwrap()
@@ -610,11 +610,11 @@ mod tests {
 
     #[test]
     fn load_test() {
-        //let tm = &AstroTime::from_date(2010, 3, 1);
+        //let tm = &Instant::from_date(2010, 3, 1);
         let jpl = jplephem_singleton().as_ref().unwrap();
 
-        let tm = AstroTime::from_jd(2451545.0, Scale::TT);
-        //let tm = &AstroTime::from_jd(2451545.0, Scale::UTC);
+        let tm = Instant::from_jd_with_scale(2451545.0, TimeScale::TT);
+        //let tm = &Instant::from_jd(2451545.0, Scale::UTC);
         let (_, _): (Vec3, Vec3) = jpl.geocentric_state(SolarSystem::Moon, &tm).unwrap();
         println!("au = {:.20}", jpl._au);
     }
@@ -658,7 +658,7 @@ mod tests {
             let src: i32 = s[4].parse().unwrap();
             let coord: usize = s[5].parse().unwrap();
             let truth: f64 = s[6].parse().unwrap();
-            let tm = AstroTime::from_jd(jd, Scale::TT);
+            let tm = Instant::from_jd_with_scale(jd, TimeScale::TT);
             if tar <= 10 && src <= 10 && coord <= 6 {
                 let (mut tpos, mut tvel) = jpl
                     .geocentric_state(SolarSystem::try_from(tar - 1).unwrap(), &tm)

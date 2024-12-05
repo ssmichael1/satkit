@@ -9,6 +9,7 @@ use numpy as np;
 use numpy::PyArrayMethods;
 
 use pyo3::types::PyDict;
+use pyo3::IntoPyObjectExt;
 
 ///
 /// Gravity model enumeration
@@ -34,18 +35,6 @@ impl From<GravModel> for GravityModel {
             GravModel::egm96 => GravityModel::EGM96,
             GravModel::itugrace16 => GravityModel::ITUGrace16,
         }
-    }
-}
-
-impl IntoPy<PyObject> for &GravityModel {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let g: GravModel = match self {
-            GravityModel::JGM3 => GravModel::jgm3,
-            GravityModel::JGM2 => GravModel::jgm2,
-            GravityModel::EGM96 => GravModel::egm96,
-            GravityModel::ITUGrace16 => GravModel::itugrace16,
-        };
-        g.into_py(py)
     }
 }
 
@@ -80,11 +69,11 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyRe
 
     if pos.is_instance_of::<PyITRFCoord>() {
         let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
-        let itrf: ITRFCoord = pyitrf.inner;
+        let itrf: ITRFCoord = pyitrf.0;
         let v = accel(&itrf.itrf, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            let vpy = np::PyArray1::<f64>::from_slice_bound(py, v.as_slice());
-            Ok(vpy.into_py(py))
+            let vpy = np::PyArray1::<f64>::from_slice(py, v.as_slice());
+            vpy.into_py_any(py)
         })
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
         let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
@@ -96,8 +85,8 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyRe
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let a = accel(&v, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            let vpy = np::PyArray1::<f64>::from_slice_bound(py, a.as_slice());
-            Ok(vpy.into_py(py))
+            let vpy = np::PyArray1::<f64>::from_slice(py, a.as_slice());
+            vpy.into_py_any(py)
         })
     } else {
         Err(pyo3::exceptions::PyTypeError::new_err(
@@ -141,15 +130,15 @@ pub fn gravity_and_partials(
 
     if pos.is_instance_of::<PyITRFCoord>() {
         let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
-        let itrf: ITRFCoord = pyitrf.inner;
+        let itrf: ITRFCoord = pyitrf.0;
         let (g, p) = accel_and_partials(&itrf.itrf, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
-            let gpy = np::PyArray1::<f64>::from_slice_bound(py, g.as_slice());
-            let ppy = unsafe { np::PyArray2::<f64>::new_bound(py, [3, 3], false) };
+            let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
+            let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {
                 std::ptr::copy_nonoverlapping(p.as_ptr(), ppy.as_raw_array_mut().as_mut_ptr(), 9);
             }
-            Ok((gpy.into_py(py), ppy.into_py(py)))
+            Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
         })
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
         let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
@@ -161,12 +150,12 @@ pub fn gravity_and_partials(
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let (g, p) = accel_and_partials(&v, order, model.into());
         pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
-            let gpy = np::PyArray1::<f64>::from_slice_bound(py, g.as_slice());
-            let ppy = unsafe { np::PyArray2::<f64>::new_bound(py, [3, 3], false) };
+            let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
+            let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {
                 std::ptr::copy_nonoverlapping(p.as_ptr(), ppy.as_raw_array_mut().as_mut_ptr(), 9);
             }
-            Ok((gpy.into_py(py), ppy.into_py(py)))
+            Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
         })
     } else {
         Err(pyo3::exceptions::PyTypeError::new_err(

@@ -1,7 +1,7 @@
 mod ierstable;
 mod qcirs2gcrs;
 
-use super::astrotime::{AstroTime, Scale};
+use crate::{Instant, TimeScale};
 use std::f64::consts::PI;
 
 use nalgebra as na;
@@ -43,14 +43,14 @@ pub(crate) fn qrot_zcoord(theta: f64) -> Quat {
 ///
 /// # Arguments
 ///
-/// * `tm` - AstroTime object representing input time
+/// * `tm` - Instant object representing input time
 ///
 /// # Returns
 ///
 /// * `gmst` - in radians
 ///
-pub fn gmst(tm: &AstroTime) -> f64 {
-    let tut1: f64 = (tm.to_mjd(Scale::UT1) - 51544.5) / 36525.0;
+pub fn gmst(tm: &Instant) -> f64 {
+    let tut1: f64 = (tm.as_mjd_with_scale(TimeScale::UT1) - 51544.5) / 36525.0;
     let mut gmst: f64 = 67310.54841
         + tut1 * ((876600.0 * 3600.0 + 8640184.812866) + tut1 * (0.093104 + tut1 * -6.2e-6));
 
@@ -60,8 +60,8 @@ pub fn gmst(tm: &AstroTime) -> f64 {
 
 /// Equation of Equinoxes
 /// Equation of the equinoxes
-pub fn eqeq(tm: &AstroTime) -> f64 {
-    let d: f64 = tm.to_mjd(Scale::TT) - 51544.5;
+pub fn eqeq(tm: &Instant) -> f64 {
+    let d: f64 = tm.as_mjd_with_scale(TimeScale::TT) - 51544.5;
     let omega = PI / 180.0 * (125.04 - 0.052954 * d);
     let l = (280.47 + 0.98565 * d) * PI / 180.0;
     let epsilon = (23.4393 - 0.0000004 * d) * PI / 180.0;
@@ -70,7 +70,7 @@ pub fn eqeq(tm: &AstroTime) -> f64 {
 }
 
 /// Greenwich Apparent Sidereal Time
-pub fn gast(tm: &AstroTime) -> f64 {
+pub fn gast(tm: &Instant) -> f64 {
     gmst(tm) + eqeq(tm)
 }
 
@@ -98,8 +98,8 @@ pub fn gast(tm: &AstroTime) -> f64 {
 /// * ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t − 2451545.0))
 ///
 ///
-pub fn earth_rotation_angle(tm: &AstroTime) -> f64 {
-    let t = tm.to_jd(Scale::UT1);
+pub fn earth_rotation_angle(tm: &Instant) -> f64 {
+    let t = tm.as_jd_with_scale(TimeScale::UT1);
     let f = t % 1.0;
     2.0 * PI * ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0)) % 1.0)
 }
@@ -115,12 +115,12 @@ pub fn earth_rotation_angle(tm: &AstroTime) -> f64 {
 ///
 ///  * Quaternion representing rotation from ITRF to TIRS
 ///
-pub fn qitrf2tirs(tm: &AstroTime) -> Quat {
+pub fn qitrf2tirs(tm: &Instant) -> Quat {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
     let eop = earth_orientation_params::get(tm).unwrap();
     let xp = eop[1] * ASEC2RAD;
     let yp = eop[2] * ASEC2RAD;
-    let t_tt = (tm.to_mjd(Scale::TT) - 51544.5) / 36525.0;
+    let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
     let sp = -47.0e-6 * ASEC2RAD * t_tt;
     qrot_zcoord(-sp) * qrot_ycoord(xp) * qrot_xcoord(yp)
 }
@@ -143,7 +143,7 @@ pub fn qitrf2tirs(tm: &AstroTime) -> Quat {
 ///   SGP4 propagator
 /// * This is Equation 3-90 in Vallado
 ///
-pub fn qteme2itrf(tm: &AstroTime) -> Quat {
+pub fn qteme2itrf(tm: &Instant) -> Quat {
     qitrf2tirs(tm).conjugate() * qrot_zcoord(gmst(tm))
 }
 
@@ -165,7 +165,7 @@ pub fn qteme2itrf(tm: &AstroTime) -> Quat {
 ///   SGP4 propagator
 /// * An approximate rotation, accurate to within 1 arcsec
 ///
-pub fn qteme2gcrf(tm: &AstroTime) -> Quat {
+pub fn qteme2gcrf(tm: &Instant) -> Quat {
     qitrf2gcrf_approx(tm) * qteme2itrf(tm)
 }
 
@@ -185,9 +185,9 @@ pub fn qteme2gcrf(tm: &AstroTime) -> Quat {
 ///
 /// * Equations 3-88 and 3-89 in Vallado
 ///
-pub fn qmod2gcrf(tm: &AstroTime) -> Quat {
+pub fn qmod2gcrf(tm: &Instant) -> Quat {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
-    let tt = (tm.to_mjd(Scale::TT) - 51544.5) / 36525.0;
+    let tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
 
     let zeta = 2.650545
         + tt * (2306.083227
@@ -226,7 +226,7 @@ pub fn qmod2gcrf(tm: &AstroTime) -> Quat {
 /// * For a reference, see "Eplanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
 ///
-pub fn qgcrf2itrf_approx(tm: &AstroTime) -> Quat {
+pub fn qgcrf2itrf_approx(tm: &Instant) -> Quat {
     // Neglecting polar motion
     let qitrf2tod_approx: Quat = qrot_zcoord(-gast(tm));
 
@@ -256,7 +256,7 @@ pub fn qgcrf2itrf_approx(tm: &AstroTime) -> Quat {
 ///
 /// * For a reference, see "Eplanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
-pub fn qitrf2gcrf_approx(tm: &AstroTime) -> Quat {
+pub fn qitrf2gcrf_approx(tm: &Instant) -> Quat {
     qgcrf2itrf_approx(tm).conjugate()
 }
 
@@ -266,8 +266,8 @@ pub fn qitrf2gcrf_approx(tm: &AstroTime) -> Quat {
 ///
 /// See Vallado section 3.7.3
 ///
-pub fn qtod2mod_approx(tm: &AstroTime) -> Quat {
-    let d = tm.to_mjd(Scale::TT) - 51544.5;
+pub fn qtod2mod_approx(tm: &Instant) -> Quat {
+    let d = tm.as_mjd_with_scale(TimeScale::TT) - 51544.5;
     let t = d / 36525.0;
 
     const DEG2RAD: f64 = PI / 180.0;
@@ -318,7 +318,7 @@ pub fn qtod2mod_approx(tm: &AstroTime) -> Quat {
 ///       Earth solid tides, but it does include polar motion,
 ///       precession, and nutation
 ///
-pub fn qitrf2gcrf(tm: &AstroTime) -> Quat {
+pub fn qitrf2gcrf(tm: &Instant) -> Quat {
     // w is rotation from international terrestrial reference frame
     // to terrestrial intermediate reference frame
     let eop = earth_orientation_params::get(tm).unwrap();
@@ -329,7 +329,7 @@ pub fn qitrf2gcrf(tm: &AstroTime) -> Quat {
         const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
         let xp = eop[1] * ASEC2RAD;
         let yp = eop[2] * ASEC2RAD;
-        let t_tt = (tm.to_mjd(Scale::TT) - 51544.5) / 36525.0;
+        let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
         let sp = -47.0e-6 * ASEC2RAD * t_tt;
         qrot_zcoord(-sp) * qrot_ycoord(xp) * qrot_xcoord(yp)
     };
@@ -361,7 +361,7 @@ pub fn qitrf2gcrf(tm: &AstroTime) -> Quat {
 ///  * **Note** This is **very** computationally expensive; for most
 ///    applications, the approximate rotation will work just fine
 ///
-pub fn qgcrf2itrf(tm: &AstroTime) -> Quat {
+pub fn qgcrf2itrf(tm: &Instant) -> Quat {
     qitrf2gcrf(tm).conjugate()
 }
 
@@ -385,23 +385,23 @@ pub fn qgcrf2itrf(tm: &AstroTime) -> Quat {
 /// Equation 5.5
 ///
 #[inline]
-pub fn qtirs2cirs(tm: &AstroTime) -> Quat {
+pub fn qtirs2cirs(tm: &Instant) -> Quat {
     qrot_zcoord(-earth_rotation_angle(tm))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::astrotime::{AstroTime, Scale};
+    use crate::{Duration, Instant, TimeScale};
     type Vec3 = na::Vector3<f64>;
 
     #[test]
     fn test_gmst() {
         // Vallado example 3-5
-        let mut tm = AstroTime::from_datetime(1992, 8, 20, 12, 14, 0.0);
+        let mut tm = Instant::from_datetime(1992, 8, 20, 12, 14, 0.0);
         // Spoof this as UT1 value
-        let tdiff = tm.to_mjd(Scale::UT1) - tm.to_mjd(Scale::UTC);
-        tm = tm - tdiff;
+        let tdiff = tm.as_mjd_with_scale(TimeScale::UT1) - tm.as_mjd_with_scale(TimeScale::UTC);
+        tm -= Duration::from_days(tdiff);
         // Convert to UT1
         let gmval = gmst(&tm) * 180.0 / PI;
         let truth = -207.4212121875;
@@ -413,16 +413,18 @@ mod tests {
         // Example 3-14 from Vallado
         // With verification fo intermediate calculations
         // Input time
-        let tm = &AstroTime::from_datetime(2004, 4, 6, 7, 51, 28.386009);
+        let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009);
         // Input terrestrial location
         let pitrf = Vec3::new(-1033.4793830, 7901.2952754, 6380.3565958);
-        let t_tt = (tm.to_jd(Scale::TT) - 2451545.0) / 36525.0;
+        let t_tt = (tm.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;
         assert!((t_tt - 0.0426236319).abs() < 1.0e-8);
 
-        let dut1 = (tm.to_mjd(Scale::UT1) - tm.to_mjd(Scale::UTC)) * 86400.0;
+        let dut1 =
+            (tm.as_mjd_with_scale(TimeScale::UT1) - tm.as_mjd_with_scale(TimeScale::UTC)) * 86400.0;
         // We linearly interpolate dut1, so this won't match exactly
         assert!((dut1 + 0.4399619).abs() < 0.01);
-        let delta_at = (tm.to_mjd(Scale::TAI) - tm.to_mjd(Scale::UTC)) * 86400.0;
+        let delta_at =
+            (tm.as_mjd_with_scale(TimeScale::TAI) - tm.as_mjd_with_scale(TimeScale::UTC)) * 86400.0;
         assert!((delta_at - 32.0).abs() < 1.0e-7);
 
         // Slight differences below are due to example using approximate
@@ -435,12 +437,10 @@ mod tests {
         let era = earth_rotation_angle(tm);
         assert!((era * 180.0 / PI - 312.7552829).abs() < 1.0e-5);
         let pcirs = qrot_zcoord(-era) * ptirs;
-        println!("pcirs = {:?}", pcirs);
         assert!((pcirs[0] - 5100.0184047).abs() < 1e-3);
         assert!((pcirs[1] - 6122.7863648).abs() < 1e-3);
         assert!((pcirs[2] - 6380.3446237).abs() < 1e-3);
         let pgcrf = qcirs2gcrs_dxdy(tm, None) * pcirs;
-        println!("pgcrf = {:?}", pgcrf);
         assert!((pgcrf[0] - 5102.508959).abs() < 1e-3);
         assert!((pgcrf[1] - 6123.011403).abs() < 1e-3);
         assert!((pgcrf[2] - 6378.136925).abs() < 1e-3);

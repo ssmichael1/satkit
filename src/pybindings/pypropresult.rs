@@ -1,16 +1,17 @@
 use pyo3::prelude::*;
 
-use super::pyastrotime::PyAstroTime;
+use super::pyinstant::PyInstant;
 use super::pyutils::*;
 
 use pyo3::types::{PyBytes, PyDict, PyTuple};
+use pyo3::IntoPyObjectExt;
 
 use numpy::PyArrayMethods;
 use numpy::{self as np, ToPyArray};
 
 use crate::orbitprop::PropagationResult;
 use crate::types::*;
-use crate::AstroTime;
+use crate::Instant;
 
 use serde::{Deserialize, Serialize};
 
@@ -83,9 +84,7 @@ impl PyPropStats {
 ///
 #[pyclass(name = "propresult", module = "satkit")]
 #[derive(Debug, Clone)]
-pub struct PyPropResult {
-    pub inner: PyPropResultType,
-}
+pub struct PyPropResult(pub PyPropResultType);
 
 fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
     let mut s = "Propagation Results\n".to_string();
@@ -123,56 +122,48 @@ impl PyPropResult {
     /// This should never be called and is here only for pickle support
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        PyPropResult {
-            inner: PyPropResultType::R1(Box::new(PropagationResult::<1> {
-                time_start: AstroTime::new(),
-                state_start: Vector::<6>::zeros(),
-                time_end: AstroTime::new(),
-                state_end: Vector::<6>::zeros(),
-                num_eval: 0,
-                accepted_steps: 0,
-                rejected_steps: 0,
-                odesol: None,
-            })),
-        }
+        PyPropResult(PyPropResultType::R1(Box::new(PropagationResult::<1> {
+            time_start: Instant::INVALID,
+            state_start: Vector::<6>::zeros(),
+            time_end: Instant::INVALID,
+            state_end: Vector::<6>::zeros(),
+            num_eval: 0,
+            accepted_steps: 0,
+            rejected_steps: 0,
+            odesol: None,
+        })))
     }
 
     // Get start time
     #[getter]
-    fn time_start(&self) -> PyAstroTime {
-        PyAstroTime {
-            inner: match &self.inner {
-                PyPropResultType::R1(r) => r.time_start,
-                PyPropResultType::R7(r) => r.time_start,
-            },
-        }
+    fn time_start(&self) -> PyInstant {
+        PyInstant(match &self.0 {
+            PyPropResultType::R1(r) => r.time_start,
+            PyPropResultType::R7(r) => r.time_start,
+        })
     }
 
     /// Get the stop time
     #[getter]
-    fn time(&self) -> PyAstroTime {
-        PyAstroTime {
-            inner: match &self.inner {
-                PyPropResultType::R1(r) => r.time_end,
-                PyPropResultType::R7(r) => r.time_end,
-            },
-        }
+    fn time(&self) -> PyInstant {
+        PyInstant(match &self.0 {
+            PyPropResultType::R1(r) => r.time_end,
+            PyPropResultType::R7(r) => r.time_end,
+        })
     }
 
     /// Get the stop time
     #[getter]
-    fn time_end(&self) -> PyAstroTime {
-        PyAstroTime {
-            inner: match &self.inner {
-                PyPropResultType::R1(r) => r.time_end,
-                PyPropResultType::R7(r) => r.time_end,
-            },
-        }
+    fn time_end(&self) -> PyInstant {
+        PyInstant(match &self.0 {
+            PyPropResultType::R1(r) => r.time_end,
+            PyPropResultType::R7(r) => r.time_end,
+        })
     }
 
     #[getter]
     fn stats(&self) -> PyPropStats {
-        match &self.inner {
+        match &self.0 {
             PyPropResultType::R1(r) => PyPropStats {
                 num_eval: r.num_eval,
                 num_accept: r.accepted_steps,
@@ -189,13 +180,15 @@ impl PyPropResult {
     #[getter]
     fn pos(&self) -> PyObject {
         pyo3::Python::with_gil(|py| -> PyObject {
-            match &self.inner {
+            match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..3])
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..3])
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
             }
         })
     }
@@ -203,14 +196,16 @@ impl PyPropResult {
     #[getter]
     fn vel(&self) -> PyObject {
         pyo3::Python::with_gil(|py| -> PyObject {
-            match &self.inner {
+            match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[3..6])
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
                 PyPropResultType::R7(r) => {
                     np::ndarray::arr1(&r.state_end.column(0).as_slice()[3..6])
-                        .to_pyarray_bound(py)
-                        .to_object(py)
+                        .to_pyarray(py)
+                        .into_py_any(py)
+                        .unwrap()
                 }
             }
         })
@@ -219,13 +214,15 @@ impl PyPropResult {
     #[getter]
     fn state(&self) -> PyObject {
         pyo3::Python::with_gil(|py| -> PyObject {
-            match &self.inner {
+            match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
             }
         })
     }
@@ -233,13 +230,15 @@ impl PyPropResult {
     #[getter]
     fn state_end(&self) -> PyObject {
         pyo3::Python::with_gil(|py| -> PyObject {
-            match &self.inner {
+            match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
             }
         })
     }
@@ -247,24 +246,26 @@ impl PyPropResult {
     #[getter]
     fn state_start(&self) -> PyObject {
         pyo3::Python::with_gil(|py| -> PyObject {
-            match &self.inner {
+            match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_start.as_slice())
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_start.as_slice()[0..6])
-                    .to_pyarray_bound(py)
-                    .to_object(py),
+                    .to_pyarray(py)
+                    .into_py_any(py)
+                    .unwrap(),
             }
         })
     }
 
     #[getter]
-    fn phi(&self) -> PyObject {
-        pyo3::Python::with_gil(|py| -> PyObject {
-            match &self.inner {
-                PyPropResultType::R1(_r) => py.None(),
+    fn phi(&self) -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            match &self.0 {
+                PyPropResultType::R1(_r) => Ok(py.None()),
                 PyPropResultType::R7(r) => {
-                    let phi = unsafe { np::PyArray2::<f64>::new_bound(py, [6, 6], false) };
+                    let phi = unsafe { np::PyArray2::<f64>::new(py, [6, 6], false) };
                     unsafe {
                         std::ptr::copy_nonoverlapping(
                             r.state_end.as_ptr().offset(6),
@@ -272,14 +273,14 @@ impl PyPropResult {
                             36,
                         );
                     }
-                    phi.to_object(py)
+                    phi.into_py_any(py)
                 }
             }
         })
     }
 
     fn __str__(&self) -> String {
-        match &self.inner {
+        match &self.0 {
             PyPropResultType::R1(r) => to_string::<1>(r),
             PyPropResultType::R7(r) => to_string::<7>(r),
         }
@@ -287,40 +288,40 @@ impl PyPropResult {
 
     #[getter]
     fn can_interp(&self) -> bool {
-        match &self.inner {
+        match &self.0 {
             PyPropResultType::R1(r) => r.odesol.is_some(),
             PyPropResultType::R7(r) => r.odesol.is_some(),
         }
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new_bound(py);
-        let tp = PyTuple::empty_bound(py);
+        let d = PyDict::new(py);
+        let tp = PyTuple::empty(py);
         (tp, d)
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
         let s = state.as_bytes(py);
 
-        self.inner = serde_pickle::from_slice(s, serde_pickle::DeOptions::default()).unwrap();
+        self.0 = serde_pickle::from_slice(s, serde_pickle::DeOptions::default()).unwrap();
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
-        let p = serde_pickle::to_vec(&self.inner, serde_pickle::SerOptions::default()).unwrap();
-        Ok(PyBytes::new_bound(py, p.as_slice()).to_object(py))
+        let p = serde_pickle::to_vec(&self.0, serde_pickle::SerOptions::default()).unwrap();
+        PyBytes::new(py, p.as_slice()).into_py_any(py)
     }
 
     #[pyo3(signature=(time, output_phi=false))]
-    fn interp(&self, time: PyAstroTime, output_phi: bool) -> PyResult<PyObject> {
-        match &self.inner {
-            PyPropResultType::R1(r) => match r.interp(&time.inner) {
+    fn interp(&self, time: PyInstant, output_phi: bool) -> PyResult<PyObject> {
+        match &self.0 {
+            PyPropResultType::R1(r) => match r.interp(&time.0) {
                 Ok(res) => {
                     pyo3::Python::with_gil(|py| -> PyResult<PyObject> { Ok(vec2py(py, &res)) })
                 }
                 Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e.to_string())),
             },
-            PyPropResultType::R7(r) => match r.interp(&time.inner) {
+            PyPropResultType::R7(r) => match r.interp(&time.0) {
                 Ok(res) => {
                     if !output_phi {
                         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
@@ -328,11 +329,11 @@ impl PyPropResult {
                         })
                     } else {
                         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                            Ok((
+                            (
                                 slice2py1d(py, &res.as_slice()[0..6]),
                                 slice2py2d(py, &res.as_slice()[6..42], 6, 6)?,
                             )
-                                .to_object(py))
+                                .into_py_any(py)
                         })
                     }
                 }
@@ -350,12 +351,11 @@ mod test {
     fn test_ser() {
         let sol = PyPropResult::new();
         println!("sol = {:?}", sol);
-        let v = serde_pickle::to_vec(&sol.inner, serde_pickle::SerOptions::default()).unwrap();
+        let v = serde_pickle::to_vec(&sol.0, serde_pickle::SerOptions::default()).unwrap();
         //print!("v = {:?}", v);
-        let sol2 = PyPropResult {
-            inner: serde_pickle::from_slice(v.as_slice(), serde_pickle::DeOptions::default())
-                .unwrap(),
-        };
+        let sol2 = PyPropResult(
+            serde_pickle::from_slice(v.as_slice(), serde_pickle::DeOptions::default()).unwrap(),
+        );
         println!("sol2 = {:?}", sol2);
     }
 }

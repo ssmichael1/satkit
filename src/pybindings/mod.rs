@@ -2,13 +2,13 @@ use pyo3::prelude::*;
 use pyo3::{wrap_pyfunction, wrap_pymodule};
 
 mod mod_utils;
-mod pyastrotime;
 mod pyconsts;
 mod pydensity;
 mod pyduration;
 mod pyframes;
 mod pyframetransform;
 mod pygravity;
+mod pyinstant;
 mod pyitrfcoord;
 mod pyjplephem;
 mod pykepler;
@@ -30,9 +30,9 @@ mod pysatproperties;
 
 mod pyutils;
 
-use pyastrotime::PyAstroTime;
 use pyduration::PyDuration;
 use pyframetransform as pyft;
+use pyinstant::PyInstant;
 use pyitrfcoord::PyITRFCoord;
 use pykepler::PyKepler;
 use pyquaternion::Quaternion;
@@ -119,9 +119,10 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[pymodule]
 pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PyAstroTime>()?;
+    m.add_class::<PyInstant>()?;
     m.add_class::<PyDuration>()?;
-    m.add_class::<pyastrotime::PyTimeScale>()?;
+    m.add_class::<pyinstant::PyTimeScale>()?;
+    m.add_class::<pyinstant::PyWeekday>()?;
     m.add_class::<Quaternion>()?;
     m.add_class::<pyframes::PyFrame>()?;
     m.add_function(wrap_pyfunction!(pysgp4::sgp4, m)?).unwrap();

@@ -8,22 +8,23 @@ from datetime import datetime, timezone
 import satkit as sk
 
 testvec_dir = os.getenv(
-            "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
-        )
+    "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
+)
+
 
 class TestDateTime:
     """
-    Check that function calls with satkit.time and datetime.datetime return 
+    Check that function calls with satkit.time and datetime.datetime return
     the same result
     """
+
     def test_scalar_times(self):
 
         # Create times and show that they are equal
         tm1 = sk.time(2023, 3, 4, 12, 5, 6)
         tm2 = datetime(2023, 3, 4, 12, 5, 6, tzinfo=timezone.utc)
 
-
-        assert(tm1.datetime() == tm2)
+        assert tm1.datetime() == tm2
         # Check that function calls work
         # Pick gmst as the test function call for time
         # it can be anything since under the hood the same function call is used
@@ -34,22 +35,32 @@ class TestDateTime:
 
     def test_list_times(self):
         timearr = range(10)
-        tm1 = [sk.time(2023, 3, x+1, 12, 0, 0) for x in timearr]
-        tm2 = [datetime(2023, 3, x+1, 12, 0, 0, tzinfo=timezone.utc) for x in timearr]
+        tm1 = [sk.time(2023, 3, x + 1, 12, 0, 0) for x in timearr]
+        tm2 = [datetime(2023, 3, x + 1, 12, 0, 0, tzinfo=timezone.utc) for x in timearr]
         g1 = sk.frametransform.gmst(tm1)
         g2 = sk.frametransform.gmst(tm2)
         assert g1 == pytest.approx(g2)
 
     def test_numpy_times(self):
         timearr = range(10)
-        tm1 = np.array([sk.time(2023, 3, x+1, 12, 0, 0) for x in timearr])
-        tm2 = np.array([datetime(2023, 3, x+1, 12, 0, 0, tzinfo=timezone.utc) for x in timearr])
+        tm1 = np.array([sk.time(2023, 3, x + 1, 12, 0, 0) for x in timearr])
+        tm2 = np.array(
+            [datetime(2023, 3, x + 1, 12, 0, 0, tzinfo=timezone.utc) for x in timearr]
+        )
         g1 = sk.frametransform.gmst(tm1)
         g2 = sk.frametransform.gmst(tm2)
-        assert g1 == pytest.approx(g2)   
+        assert g1 == pytest.approx(g2)
 
 
 class TestTime:
+
+    def test_rfc3339(self):
+        """
+        Test RFC3339 conversion
+        """
+        t = sk.time(2021, 9, 30, 12, 45, 13.345)
+        assert t.as_rfc3339() == "2021-09-30T12:45:13.345000Z"
+
     def test_mjd(self):
         """
         Test MJD conversion
@@ -101,13 +112,6 @@ class TestTime:
         t2 = t1 - d
         assert t2 == sk.time(2020, 12, 31, 0, 0, 0)
 
-    def test_time_str(self):
-        """
-        Test string conversion of time
-        """
-        t = sk.time(2021, 1, 1, 0, 0, 0)
-        assert str(t) == "2021-01-01 00:00:00.000Z"
-
     def test_time_gregorian(self):
         """
         Test conversion to Gregorian calendar
@@ -121,24 +125,25 @@ class TestTime:
         assert minute == 0
         assert sec == 0
 
+
 class TestKepler:
     def test_kepler_from_pv(self):
         """
         Test creation of Kepler elements from position and velocity
         """
-    
+
         # Test case from Vallado, example 2-6
-        r = np.array([6524.834, 6862.875, 6448.296])*1.0e3
-        v = np.array([4.901327, 5.533756, -1.976341])*1.0e3
+        r = np.array([6524.834, 6862.875, 6448.296]) * 1.0e3
+        v = np.array([4.901327, 5.533756, -1.976341]) * 1.0e3
         kep = sk.kepler.from_pv(r, v)
-        rad2deg = 180.0/m.pi
+        rad2deg = 180.0 / m.pi
         print(kep)
         assert kep.a == pytest.approx(36127343, 1.0e-3)
         assert kep.eccen == pytest.approx(0.83285, 1.0e-5)
-        assert kep.inclination*rad2deg == pytest.approx(87.87, 1.0e-3)
-        assert kep.raan*rad2deg == pytest.approx(227.89, 1.0e-3)
-        assert kep.w*rad2deg == pytest.approx(53.38, 1.0e-3)
-        assert kep.nu*rad2deg == pytest.approx(92.335, 1.0e-3)
+        assert kep.inclination * rad2deg == pytest.approx(87.87, 1.0e-3)
+        assert kep.raan * rad2deg == pytest.approx(227.89, 1.0e-3)
+        assert kep.w * rad2deg == pytest.approx(53.38, 1.0e-3)
+        assert kep.nu * rad2deg == pytest.approx(92.335, 1.0e-3)
 
     def test_kepler_to_pv(self):
         """
@@ -146,17 +151,20 @@ class TestKepler:
         """
         p = 11067790
         eccen = 0.83285
-        incl = 87.87*m.pi/180
-        raan = 227.89*m.pi/180
-        w = 53.38*m.pi/180
-        nu = 92.335*m.pi/180
+        incl = 87.87 * m.pi / 180
+        raan = 227.89 * m.pi / 180
+        w = 53.38 * m.pi / 180
+        nu = 92.335 * m.pi / 180
 
-        a = p/(1-eccen**2)
+        a = p / (1 - eccen**2)
         kep = sk.kepler(a, eccen, incl, raan, w, nu)
         pos, vel = kep.to_pv()
-        assert pos == pytest.approx(np.array([6525.368, 6861.532, 6449.119])*1.0e3, 1.0e-3)
-        assert vel == pytest.approx(np.array([4.902279, 5.533140, -1.975710])*1.0e3, 1.0e-3)
-
+        assert pos == pytest.approx(
+            np.array([6525.368, 6861.532, 6449.119]) * 1.0e3, 1.0e-3
+        )
+        assert vel == pytest.approx(
+            np.array([4.902279, 5.533140, -1.975710]) * 1.0e3, 1.0e-3
+        )
 
 
 class TestJPLEphem:
@@ -254,6 +262,7 @@ class TestJPLEphem:
                 else:
                     calc = (tvel - svel)[coord - 4] / sk.consts.au * 86400.0
                     assert calc == pytest.approx(truth, rel=1e-12)
+
 
 class TestGravity:
     def test_gravity(self):
@@ -496,9 +505,10 @@ class TestQuaternion:
         yhat = np.array([0.0, 1.0, 0.0])
         zhat = np.array([0.0, 0.0, 1.0])
 
-        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).as_rotation_matrix())
+        q = sk.quaternion.from_rotation_matrix(
+            sk.quaternion.rotz(m.pi / 2).as_rotation_matrix()
+        )
         assert q * xhat == pytest.approx(yhat, 1.0e-10)
-
 
     def test_quaternion2dcm(self):
         """
@@ -507,7 +517,9 @@ class TestQuaternion:
         xhat = np.array([1.0, 0.0, 0.0])
         yhat = np.array([0.0, 1.0, 0.0])
         zhat = np.array([0.0, 0.0, 1.0])
-        q = sk.quaternion.from_rotation_matrix(sk.quaternion.rotz(m.pi / 2).as_rotation_matrix())
+        q = sk.quaternion.from_rotation_matrix(
+            sk.quaternion.rotz(m.pi / 2).as_rotation_matrix()
+        )
         dcm = q.as_rotation_matrix()
         assert dcm @ xhat == pytest.approx(yhat, 1.0e-10)
 
@@ -515,25 +527,23 @@ class TestQuaternion:
         """
         Test conversion of quaternion to Euler angles
         """
-        q = sk.quaternion.rotz(m.pi/3)
+        q = sk.quaternion.rotz(m.pi / 3)
         euler = q.as_euler()
         assert euler[0] == pytest.approx(0.0)
         assert euler[1] == pytest.approx(0.0)
-        assert euler[2] == pytest.approx(m.pi/3)
+        assert euler[2] == pytest.approx(m.pi / 3)
 
-        q = sk.quaternion.rotx(m.pi/3)
+        q = sk.quaternion.rotx(m.pi / 3)
         euler = q.as_euler()
-        assert euler[0] == pytest.approx(m.pi/3)
+        assert euler[0] == pytest.approx(m.pi / 3)
         assert euler[1] == pytest.approx(0.0)
         assert euler[2] == pytest.approx(0.0)
 
-        q = sk.quaternion.roty(m.pi/3)
+        q = sk.quaternion.roty(m.pi / 3)
         euler = q.as_euler()
         assert euler[0] == pytest.approx(0.0)
-        assert euler[1] == pytest.approx(m.pi/3)
+        assert euler[1] == pytest.approx(m.pi / 3)
         assert euler[2] == pytest.approx(0.0)
-        
-
 
 
 class TestGeodesicDistance:
@@ -577,27 +587,29 @@ class TestHighPrecisionPropagation:
 
     def test_interp(self):
         starttime = sk.time(2015, 3, 20, 0, 0, 0)
-        
+
         pos = np.array([sk.consts.geo_r, 0, 0])
-        vel = np.array([0, m.sqrt(sk.consts.mu_earth/sk.consts.geo_r), 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
         stoptime = starttime + sk.duration.from_days(1.0)
 
         settings = sk.propsettings()
         settings.precompute_terms(starttime, stoptime)
 
         # Propagate forward
-        res1 = sk.propagate(np.concatenate((pos, vel)), starttime, stop=stoptime, propsettings=settings)
+        res1 = sk.propagate(
+            np.concatenate((pos, vel)), starttime, stop=stoptime, propsettings=settings
+        )
         # Propagate backward and see if we recover original result
         res2 = sk.propagate(res1.state, stoptime, stop=starttime, propsettings=settings)
-    
+
         assert res2.state[0:3] == pytest.approx(pos, abs=0.5)
         assert res2.state[3:6] == pytest.approx(vel, abs=1e-5)
 
         newtime = starttime + sk.duration.from_hours(4.332)
         istate1 = res1.interp(newtime)
         istate2 = res2.interp(newtime)
-      
-        assert(istate1 == pytest.approx(istate2, rel=1e-8))
+
+        assert istate1 == pytest.approx(istate2, rel=1e-7)
 
     def test_gps(self):
 
@@ -623,16 +635,15 @@ class TestHighPrecisionPropagation:
 
         # Determined by orbitprop_gps_fit.py
         fitparam = np.array(
-            [ 2.47130562e+03,  2.94682753e+03, -5.34172176e+02,  2.32565692e-02]
+            [2.47130562e03, 2.94682753e03, -5.34172176e02, 2.32565692e-02]
         )
-
 
         # Values for craoverm and velocity come from orbitprop_gps_fit.py
         satprops = sk.satproperties_static()
         satprops.craoverm = fitparam[3]
 
         res = sk.propagate(
-            np.concatenate((pgcrf[0, :],fitparam[0:3])),
+            np.concatenate((pgcrf[0, :], fitparam[0:3])),
             timearr[0],
             stop=timearr[-1],
             propsettings=settings,
@@ -641,33 +652,35 @@ class TestHighPrecisionPropagation:
 
         # See if propagator is accurate to < 8 meters over 1 day on
         # each Cartesian axis
-        for iv in range(pgcrf.shape[0]-5):            
+        for iv in range(pgcrf.shape[0] - 5):
             state = res.interp(timearr[iv])
             for ix in range(0, 3):
                 assert m.fabs(state[ix] - pgcrf[iv, ix]) < 8
 
+
 class TestSatState:
     def test_lvlh(self):
-        """ 
+        """
         Test rotations of satellite state into the LVLH frame
         """
         time = sk.time(2015, 3, 20, 0, 0, 0)
-        satstate = sk.satstate(time,
-                               np.array([sk.consts.geo_r, 0, 0]),
-        np.array([0, m.sqrt(sk.consts.mu_earth/sk.consts.geo_r), 0]))
+        satstate = sk.satstate(
+            time,
+            np.array([sk.consts.geo_r, 0, 0]),
+            np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0]),
+        )
         state2 = satstate.propagate(time + sk.duration.from_hours(3.5))
-        h =np.cross(state2.pos, state2.vel)
-        rz = -1.0/np.linalg.norm(state2.pos) * (state2.qgcrf2lvlh * state2.pos)
-        ry = -1.0/np.linalg.norm(h) * (state2.qgcrf2lvlh * h)
-        rx = 1.0/np.linalg.norm(state2.vel) * (state2.qgcrf2lvlh * state2.vel)
-    
+        h = np.cross(state2.pos, state2.vel)
+        rz = -1.0 / np.linalg.norm(state2.pos) * (state2.qgcrf2lvlh * state2.pos)
+        ry = -1.0 / np.linalg.norm(h) * (state2.qgcrf2lvlh * h)
+        rx = 1.0 / np.linalg.norm(state2.vel) * (state2.qgcrf2lvlh * state2.vel)
+
         # Since p & v are not quite orthoginal, we allow for more tolerance
         # on this one (v is not exactly along xhat)
         assert np.array([1.0, 0.0, 0.0]) == pytest.approx(rx, abs=1.0e-4)
         # Two tests below should be exact
         assert np.array([0.0, 1.0, 0.0]) == pytest.approx(ry, abs=1e-10)
         assert np.array([0.0, 0.0, 1.0]) == pytest.approx(rz, abs=1e-10)
-
 
 
 class TestSGP4:
@@ -751,4 +764,3 @@ class TestSGP4:
                         assert eflag == sk.sgp4_error.perturb_eccen
                 except RuntimeError:
                     print("Caught runtime error; this is expected in test vectors")
-

@@ -1,5 +1,5 @@
 use super::pyutils::*;
-use super::PyAstroTime;
+use super::PyInstant;
 use crate::frametransform as ft;
 use pyo3::prelude::*;
 
@@ -208,6 +208,6 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///     * 4 : dX wrt IAU-2000A nutation, milli-arcsecs
 ///     * 5 : dY wrt IAU-2000A nutation, milli-arcsecs
 #[pyfunction(name = "earth_orientation_params")]
-pub fn pyeop(time: &PyAstroTime) -> Option<(f64, f64, f64, f64, f64, f64)> {
-    crate::earth_orientation_params::get(&time.inner).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
+pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
+    crate::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
 }

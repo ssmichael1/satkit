@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::wrap_pyfunction;
+use pyo3::IntoPyObjectExt;
 
 use std::path::PathBuf;
 
@@ -72,8 +73,8 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
 fn datadir() -> PyResult<PyObject> {
     pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
         match crate::utils::datadir() {
-            Ok(v) => Ok(v.to_str().unwrap().to_object(py)),
-            Err(_) => Ok(pyo3::types::PyNone::get_bound(py).into_py(py)),
+            Ok(v) => v.to_str().unwrap().into_py_any(py),
+            Err(_) => pyo3::types::PyNone::get(py).into_py_any(py),
         }
     })
 }
@@ -135,8 +136,8 @@ fn version() -> PyResult<String> {
 fn dylib_path() -> PyResult<PyObject> {
     pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
         match process_path::get_dylib_path() {
-            Some(v) => Ok(v.to_str().unwrap().to_object(py)),
-            None => Ok(pyo3::types::PyNone::get_bound(py).into_py(py)),
+            Some(v) => v.to_str().unwrap().into_py_any(py),
+            None => pyo3::types::PyNone::get(py).into_py_any(py),
         }
     })
 }
