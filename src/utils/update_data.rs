@@ -89,6 +89,25 @@ fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> SKRe
     Ok(())
 }
 
+///
+/// Download and update any necessary data files for "satkit" calculations
+///
+/// # Arguments
+/// dir: The directory to download to, optional.  If not provided, the default data directory is used.
+/// overwrite_if_exists: If true, overwrite any existing files.  If false, skip files that already exist.
+///
+/// # Returns
+/// SKResult<()>
+///
+/// # Notes
+///
+/// This function downloads the data files necessary for "satkit" calculations.  These files include
+/// data necessary for calculating the JPL ephemerides, inertial-to-Earth-fixed rotations, high-order
+/// gravity field coefficients, and other data necessary for satellite calculations.
+///
+/// The data files also include space weather and Earth orientation parameters.  These files are always
+/// downloaded, as they are updated at least daily.
+///
 pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> SKResult<()> {
     let downloaddir = match dir {
         Some(d) => d,
