@@ -26,7 +26,25 @@
 //! * Standalone Rust library available on on <https://crates.io>
 //! * Python bindings availble on PyPi
 //!
+//! # Getting started
 //!
+//! The library relies on the use of several external data sources for many of the calculations.  These include:
+//!
+//! * <a href="https://ssd.jpl.nasa.gov/ephem.html">JPL Planetary Ephemerides</a>
+//! * <a href="http://icgem.gfz-potsdam.de/calculation">Earth Gravity Models</a>
+//! * <a href="https://celestrak.org/SpaceData/">Space Weather Data and Earth orientation parameters</a>
+//! * <a href="https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn36.html">Coefficients for Earth-fixed to Inertial coordinate transforms</a>
+//!
+//! These data sources must be downloaded and placed in a directory that is accessible to the library.
+//! The library provides a utility function to download these files from the internet.
+//!
+//! # Example
+//! ```no_run
+//! // Print the directoyr where data will be stored
+//! println!("Data directory: {:?}", satkit::utils::datadir());
+//! // Update the data files (download those that are missing; refresh those that are out of date)
+//! satkit::utils::update_datafiles(None, false);
+//! ```
 
 // Type definitions
 pub mod types;
