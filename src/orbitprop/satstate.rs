@@ -2,7 +2,7 @@ use nalgebra as na;
 
 use crate::orbitprop;
 use crate::orbitprop::PropSettings;
-use crate::AstroTime;
+use crate::Instant;
 use crate::SKResult;
 
 type PVCovType = na::SMatrix<f64, 6, 6>;
@@ -33,13 +33,13 @@ pub enum StateCov {
 ///
 #[derive(Clone, Debug)]
 pub struct SatState {
-    pub time: AstroTime,
+    pub time: Instant,
     pub pv: na::Vector6<f64>,
     pub cov: StateCov,
 }
 
 impl SatState {
-    pub fn from_pv(time: &AstroTime, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> SatState {
+    pub fn from_pv(time: &Instant, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> SatState {
         SatState {
             time: *time,
             pv: na::vector![pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]],
@@ -183,7 +183,7 @@ impl SatState {
     ///
     pub fn propagate(
         &self,
-        time: &AstroTime,
+        time: &Instant,
         option_settings: Option<&PropSettings>,
     ) -> SKResult<SatState> {
         let default = orbitprop::PropSettings::default();
@@ -264,12 +264,13 @@ mod test {
     #[test]
     fn test_qgcrf2lvlh() -> SKResult<()> {
         let satstate = SatState::from_pv(
-            &AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0),
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
 
-        let state2 = satstate.propagate(&(satstate.time + crate::Duration::Hours(3.56)), None)?;
+        let state2 =
+            satstate.propagate(&(satstate.time + crate::Duration::from_hours(3.56)), None)?;
 
         let rz = -1.0 / state2.pos_gcrf().norm() * (state2.qgcrf2lvlh() * state2.pos_gcrf());
         let h = state2.pos_gcrf().cross(&state2.vel_gcrf());
@@ -286,14 +287,15 @@ mod test {
     #[test]
     fn test_satstate() -> SKResult<()> {
         let mut satstate = SatState::from_pv(
-            &AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0),
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
         satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
         satstate.set_lvlh_vel_uncertainty(&na::vector![0.01, 0.02, 0.03]);
 
-        let state2 = satstate.propagate(&(satstate.time + 0.5), None)?;
+        let state2 =
+            satstate.propagate(&(satstate.time + crate::Duration::from_days(0.5)), None)?;
 
         // Propagate back to original time
         let state0 = state2.propagate(&satstate.time, None)?;
@@ -317,13 +319,14 @@ mod test {
     #[test]
     fn test_satcov() -> SKResult<()> {
         let mut satstate = SatState::from_pv(
-            &AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0),
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
         satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
 
-        let _state2 = satstate.propagate(&(satstate.time + 1.0), None)?;
+        let _state2 =
+            satstate.propagate(&(satstate.time + crate::Duration::from_days(1.0)), None)?;
 
         Ok(())
     }

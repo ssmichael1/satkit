@@ -1,8 +1,8 @@
 use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
-use crate::astrotime::{AstroTime, Scale};
 use crate::tle::TLE;
+use crate::{Instant, TimeScale};
 use nalgebra::{Const, Dyn, OMatrix};
 
 use thiserror::Error;
@@ -125,7 +125,7 @@ use super::{GravConst, OpsMode};
 /// ```
 ///
 #[inline]
-pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4State {
+pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
     sgp4_full(tle, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
@@ -195,7 +195,7 @@ pub fn sgp4(tle: &mut TLE, tm: &[AstroTime]) -> SGP4State {
 ///
 pub fn sgp4_full(
     tle: &mut TLE,
-    tm: &[AstroTime],
+    tm: &[Instant],
     gravconst: GravConst,
     opsmode: OpsMode,
 ) -> SGP4State {
@@ -211,7 +211,7 @@ pub fn sgp4_full(
         let argpo = tle.arg_of_perigee * PI / 180.0;
         let mo = tle.mean_anomaly * PI / 180.0;
         let ecco = tle.eccen;
-        let jdsatepoch = tle.epoch.to_jd(Scale::UTC);
+        let jdsatepoch = tle.epoch.as_jd_with_scale(TimeScale::UTC);
 
         match sgp4init(
             gravconst,
@@ -248,7 +248,7 @@ pub fn sgp4_full(
     let mut earr = Vec::<SGP4Error>::with_capacity(n);
 
     for (pos, thetime) in tm.iter().enumerate() {
-        let tsince = (*thetime - tle.epoch).days() * 1440.0;
+        let tsince = (*thetime - tle.epoch).as_days() * 1440.0;
 
         match sgp4_lowlevel(s, tsince) {
             Ok((r, v)) => {
@@ -329,7 +329,7 @@ mod tests {
                 if testvec[0] < 0.0 {
                     continue;
                 }
-                let tm = tle.epoch + testvec[0] / 86400.0;
+                let tm = tle.epoch + crate::Duration::from_seconds(testvec[0]);
 
                 // Test vectors assume WGS72 gravity model and AFSPC ops mode
                 let (pos, vel, err) = sgp4_full(&mut tle, &[tm], GravConst::WGS72, OpsMode::AFSPC);

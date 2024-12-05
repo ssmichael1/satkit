@@ -1,7 +1,8 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use pyo3::IntoPyObjectExt;
 
-use super::pyastrotime::ToTimeVec;
+use super::pyinstant::ToTimeVec;
 use super::pytle::PyTLE;
 use crate::sgp4 as psgp4;
 use numpy::PyArray1;
@@ -145,7 +146,7 @@ pub fn sgp4(
     if tle.is_instance_of::<PyTLE>() {
         let mut stle: PyRefMut<PyTLE> = tle.extract()?;
         let (r, v, e) = psgp4::sgp4_full(
-            &mut stle.inner,
+            &mut stle.0,
             time.to_time_vec()?.as_slice(),
             gravconst.into(),
             opsmode.into(),
@@ -160,23 +161,23 @@ pub fn sgp4(
             // row major, nalgebra and numpy use column major,
             // hence the switch
             if !output_err {
-                Ok((
-                    PyArray1::from_slice_bound(py, r.data.as_slice())
+                (
+                    PyArray1::from_slice(py, r.data.as_slice())
                         .reshape(dims.clone())?
-                        .to_object(py),
-                    PyArray1::from_slice_bound(py, v.data.as_slice())
+                        .into_py_any(py)?,
+                    PyArray1::from_slice(py, v.data.as_slice())
                         .reshape(dims)?
-                        .to_object(py),
+                        .into_py_any(py)?,
                 )
-                    .to_object(py))
+                    .into_py_any(py)
             } else {
                 let eint: Vec<i32> = e.into_iter().map(|x| x as i32).collect();
-                Ok((
-                    PyArray1::from_slice_bound(py, r.data.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice_bound(py, v.data.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice_bound(py, eint.as_slice()),
+                (
+                    PyArray1::from_slice(py, r.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, v.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, eint.as_slice()),
                 )
-                    .to_object(py))
+                    .into_py_any(py)
             }
         })
     } else if tle.is_instance_of::<PyList>() {
@@ -184,14 +185,14 @@ pub fn sgp4(
         let tmarray = time.to_time_vec()?;
         let results: Vec<psgp4::SGP4State> = tles
             .iter_mut()
-            .map(|tle| psgp4::sgp4(&mut tle.inner, tmarray.as_slice()))
+            .map(|tle| psgp4::sgp4(&mut tle.0, tmarray.as_slice()))
             .collect();
 
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             let n = tles.len() * tmarray.len() * 3;
 
-            let parr = PyArray1::zeros_bound(py, [n], false);
-            let varr = PyArray1::zeros_bound(py, [n], false);
+            let parr = PyArray1::zeros(py, [n], false);
+            let varr = PyArray1::zeros(py, [n], false);
             let ntimes = tmarray.len();
 
             // I'd prefer to create this uninitialized, which would probably be a bit faster,
@@ -241,18 +242,18 @@ pub fn sgp4(
             };
 
             if !output_err {
-                Ok((
+                (
                     parr.reshape(dims.clone()).unwrap(),
                     varr.reshape(dims).unwrap(),
                 )
-                    .to_object(py))
+                    .into_py_any(py)
             } else {
-                Ok((
+                (
                     parr.reshape(dims.clone()).unwrap(),
                     varr.reshape(dims).unwrap(),
-                    PyArray1::from_slice_bound(py, eint.as_slice()).reshape(edims)?,
+                    PyArray1::from_slice(py, eint.as_slice()).reshape(edims)?,
                 )
-                    .to_object(py))
+                    .into_py_any(py)
             }
         })
     } else {

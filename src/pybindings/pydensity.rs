@@ -3,10 +3,10 @@ use pyo3::types::{PyFloat, PyTuple};
 use pyo3::wrap_pyfunction;
 
 use crate::nrlmsise;
-use crate::AstroTime;
+use crate::Instant;
 
-use super::PyAstroTime;
 use super::PyITRFCoord;
+use super::PyInstant;
 
 ///
 /// NRL MSISE-00 Density Model
@@ -28,23 +28,20 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
         ));
     }
 
-    let time: Option<AstroTime> = {
-        if args
-            .get_item(args.len() - 1)?
-            .is_instance_of::<PyAstroTime>()
-        {
+    let time: Option<Instant> = {
+        if args.get_item(args.len() - 1)?.is_instance_of::<PyInstant>() {
             Some(
                 args.get_item(args.len() - 1)?
-                    .extract::<PyAstroTime>()
+                    .extract::<PyInstant>()
                     .unwrap()
-                    .inner,
+                    .0,
             )
         } else {
             None
         }
     };
     if args.get_item(0)?.is_instance_of::<PyITRFCoord>() {
-        let itrf = args.get_item(0)?.extract::<PyITRFCoord>().unwrap().inner;
+        let itrf = args.get_item(0)?.extract::<PyITRFCoord>().unwrap().0;
         Ok(nrlmsise::nrlmsise(
             itrf.hae() / 1.0e3,
             Some(itrf.latitude_rad()),

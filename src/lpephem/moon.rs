@@ -1,5 +1,5 @@
 use crate::consts;
-use crate::AstroTime;
+use crate::Instant;
 use crate::TimeScale;
 
 use nalgebra as na;
@@ -23,10 +23,10 @@ use nalgebra as na;
 /// * Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
 ///   and 1275 km in range
 ///
-pub fn pos_gcrf(time: &AstroTime) -> na::Vector3<f64> {
+pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
     // Julian centuries since Jan 1, 2000 12pm
 
-    let t: f64 = (time.to_jd(TimeScale::TDB) - 2451545.0) / 36525.0;
+    let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
 
     #[allow(non_upper_case_globals)]
     const deg2rad: f64 = std::f64::consts::PI / 180.;
@@ -76,9 +76,9 @@ mod tests {
     #[test]
     fn moonpos() {
         //! This is Vallado example 5-3
-        let t0 = AstroTime::from_date(1994, 4, 28);
+        let t0 = Instant::from_date(1994, 4, 28);
         // Approximate this UTC as TDB to match example...
-        let t = AstroTime::from_mjd(t0.to_mjd(TimeScale::UTC), TimeScale::TDB);
+        let t = Instant::from_mjd_with_scale(t0.as_mjd_with_scale(TimeScale::UTC), TimeScale::TDB);
 
         let pos = pos_gcrf(&t);
 

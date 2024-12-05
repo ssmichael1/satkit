@@ -352,6 +352,49 @@ class sgp4error:
     def orbit_decay() -> int:
         """Orbit decayed"""
 
+class weekday:
+    """
+
+    Represent the day of the week
+
+    Values:
+    * `Sunday`
+    * `Monday`
+    * `Tuesday`
+    * `Wednesday`
+    * `Thursday`
+    * `Friday`
+    * `Saturday`
+    """
+
+    @property
+    def Sunday() -> int:
+        """Sunday"""
+
+    @property
+    def Monday() -> int:
+        """Monday"""
+
+    @property
+    def Tuesday() -> int:
+        """Tuesday"""
+
+    @property
+    def Wednesday() -> int:
+        """Wednesday"""
+
+    @property
+    def Thursday() -> int:
+        """Thursday"""
+
+    @property
+    def Friday() -> int:
+        """Friday"""
+
+    @property
+    def Saturday() -> int:
+        """Saturday"""
+
 class timescale:
     """
     Specify time scale used to represent or convert between the "satkit.time"
@@ -477,10 +520,15 @@ class time:
 
     @staticmethod
     def from_string(str: str) -> time:
-        """Create a "time" object from input string
+        """
+        Create a "time" object from input string
 
         Args:
-            str (str): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
+            str (str): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try
+            to intelligently parse, but no guarantees
+
+        Note:
+            * This is probably not what you want.  Use with caution.
 
         Returns:
             satkit.time: Time object representing input string
@@ -491,11 +539,15 @@ class time:
         """
 
     @staticmethod
-    def from_rfctime(rfc: str) -> time:
+    def from_rfc3339(rfc: str) -> time:
         """Create a "time" object from input RFC 3339 string
 
         Args:
             rfc (str): RFC 3339 string representation of time
+
+        Notes:
+            * RFC 3339 is a subset of ISO 8601
+            * Only allows a subset of the format: "YYYY-MM-DDTHH:MM:SS.sssZ" or "YYYY-MM-DDTHH:MM:SS.ssssssZ"
 
         Returns:
             satkit.time: Time object representing input RFC 3339 string
@@ -506,22 +558,34 @@ class time:
         """
 
     @staticmethod
-    def strftime(str: str, format: str) -> time:
-        """Create a "time" object from input string
+    def strptime(str: str, format: str) -> time:
+        """
+        Create a "time" object from input string with given formatting
 
         Args:
             str (str): string representation of time
             format (str): format of the string
 
         Notes:
-        * The format string is the same as the "strftime" function in rust chrono crate
-            See: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+        * The format string is a subset of the strptime format string in the Python "datetime" module
+
+        Format Codes:
+        * %Y - year
+        * %m - month with leading zeros (01-12)
+        * %d - day of month with leading zeros (01-31)
+        * %H - hour with leading zeros (00-23)
+        * %M - minute with leading zeros (00-59)
+        * %S - second with leading zeros (00-59)
+        * %f - microsecond, allowing for trailing zeros
+        * %b - abbreviated month name (Jan, Feb, ...)
+        * %B - full month name (January, February, ...)
 
         Returns:
             satkit.time: Time object representing input string
 
         Example:
-            >>> print(satkit.time.strftime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
+            # Note the microsecond %f actually is represented as milliseconds in the input string
+            >>> print(satkit.time.strptime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
             2023-03-05 11:03:45.453Z
         """
 
@@ -556,10 +620,32 @@ class time:
 
         Args:
             ut (float): unixtime, UTC seconds since Jan 1, 1970 00:00:00
+                        (leap seconds are not included)
 
         Returns:
             satkit.time: Time object representing input unixtime
         """
+
+    @staticmethod
+    def from_gps_week_and_second(week: int, sec: float) -> time:
+        """Return a time object representing input GPS week and second
+
+        Args:
+            week (int): GPS week number
+            sec (float): GPS seconds of week
+            scale (timescale, optional): Time scale.  Default is satkit.timescale.GPS
+
+        Returns:
+            satkit.time: Time object representing input GPS week and second
+        """
+
+        def weekday(self) -> weekday:
+            """
+            Return the day of the week
+
+            Returns:
+                satkit.weekday: Day of the week
+            """
 
     @staticmethod
     def from_mjd(mjd: float, scale: timescale = timescale.UTC) -> time:
@@ -585,7 +671,7 @@ class time:
         """
 
     @staticmethod
-    def from_gregorian(
+    def from_datetime(
         self,
         year: int,
         month: int,
@@ -610,7 +696,7 @@ class time:
             satkit.time: Time object representing input UTC Gregorian time
 
         Example:
-            >>> print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
+            >>> print(satkit.time.from_datetime(2023, 3, 5, 11, 3,45.453))
             2023-03-05 11:03:45.453Z
         """
 
@@ -627,6 +713,33 @@ class time:
 
         Month is in range [1,12]
         Day is in range [1,31]
+        """
+
+    @staticmethod
+    def from_gregorian(
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        min: int,
+        sec: float,
+    ) -> time:
+        """Create time object from 6 input arguments representing UTC Gregorian time.
+
+        Args:
+            year (int): Gregorian year
+            month (int): Gregorian month (1 = January, 2 = February, ...)
+            day (int): Day of month, beginning with 1
+            hour (int): Hour of day, in range [0,23]
+            min (int): Minute of hour, in range [0,59]
+            sec (float): floating point second of minute, in range [0,60)
+
+        Returns:
+            satkit.time: Time object representing input UTC Gregorian time
+
+        Example:
+            >>> print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
+            2023-03-05 11:03:45.453Z
         """
 
     @staticmethod
@@ -679,9 +792,53 @@ class time:
         """
         Represent time as unixtime
 
-        (seconds since Jan 1, 1970 UTC)
+        (seconds since Jan 1, 1970 UTC, excluding leap seconds)
 
         Includes fractional comopnent of seconds
+        """
+
+    def as_iso8601(self) -> str:
+        """
+        Represent time as ISO 8601 string
+
+        Returns:
+            str: ISO 8601 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
+        """
+
+    def as_rfc3339(self) -> str:
+        """
+        Represent time as RFC 3339 string
+
+        Returns:
+            str: RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
+        """
+
+    def strftime(self, format: str) -> str:
+        """
+        Represent time as string with given format
+
+        Args:
+            format (str): format of the string
+
+        Format Codes:
+        * %Y - year
+        * %m - month with leading zeros (01-12)
+        * %d - day of month with leading zeros (01-31)
+        * %H - hour with leading zeros (00-23)
+        * %M - minute with leading zeros (00-59)
+        * %S - second with leading zeros (00-59)
+        * %f - microsecond, allowing for trailing zeros
+        * %b - abbreviated month name (Jan, Feb, ...)
+        * %B - full month name (January, February, ...)
+        * %A - full weekday name (Sunday, Monday, ...)
+        * %w - weekday as a decimal number (0=Sunday, 1=Monday, ...)
+
+        Returns:
+            str: string representation of time
+
+        Example:
+            >>> print(satkit.time(2023, 6, 3, 6, 19, 34).strptime("%Y-%m-%d %H:%M:%S"))
+            2023-06-03 06:19:34
         """
 
     def __add__(
@@ -1501,10 +1658,10 @@ class propresult:
     @property
     def pos() -> npt.ArrayLike[float]:
         """GCRF position of satellite, meters
-        
+
         Returns:
             npt.ArrayLike[float]: 3-element numpy array representing GCRF position (meters) at end of propagation
-        
+
         """
 
     @property
@@ -1528,7 +1685,7 @@ class propresult:
         """6-element state (pos + vel) of satellite in meters & meters/second at end of propagation
 
         Notes:
-        * This is the same as the "state" property 
+        * This is the same as the "state" property
 
         Returns:
             npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second
@@ -1539,7 +1696,7 @@ class propresult:
         """6-element state (pos + vel) of satellite in meters & meters/second at start of propagation
         Returns:
             npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second at start of propagation
-        """  
+        """
 
     @property
     def time() -> time:
@@ -1567,7 +1724,7 @@ class propresult:
 
         Returns:
             satkit.time: Time at which state_start is valid
-        """        
+        """
 
     @property
     def stats() -> propstats:
@@ -1671,7 +1828,7 @@ class propsettings:
             gravity_order (int, optional keyword): Earth gravity order to use in ODE integration. Default is 4
             use_spaceweather (bool, optional keyword): Use space weather data when computing atmospheric density for drag forces. Default is True
             use_jplephem (bool, optional keyword): Use JPL ephemeris for solar system bodies. Default is True
-            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between start and stop times. Default is True        
+            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between start and stop times. Default is True
 
 
         Returns:

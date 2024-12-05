@@ -33,7 +33,7 @@
 //! | Neptune  | 400         | 15           | 4000       |
 //!
 
-use crate::AstroTime;
+use crate::Instant;
 use crate::SKResult;
 use crate::SolarSystem;
 use crate::TimeScale;
@@ -58,21 +58,21 @@ type Quat = na::UnitQuaternion<f64>;
 /// ```
 /// use satkit::lpephem::heliocentric_pos;
 /// use satkit::SolarSystem;
-/// use satkit::AstroTime;
+/// use satkit::Instant;
 ///
-/// let time = AstroTime::from_date(2000, 1, 1);
+/// let time = Instant::from_date(2000, 1, 1);
 /// let pos = heliocentric_pos(SolarSystem::Mars, &time).unwrap();
 /// println!("Position of Mars: {}", pos);
 /// ```
 ///
-pub fn heliocentric_pos(body: SolarSystem, time: &AstroTime) -> SKResult<Vec3> {
+pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
     // Keplerian elements are provided seaparately and more accurately
     // for times in range of years 1800AD to 2050AD
-    let tm0: AstroTime = AstroTime::from_date(-3000, 1, 1);
-    let tm1: AstroTime = AstroTime::from_date(3000, 1, 1);
-    let tmp0: AstroTime = AstroTime::from_date(1800, 1, 1);
-    let tmp1: AstroTime = AstroTime::from_date(2050, 12, 31);
-    let jcen = (time.to_jd(TimeScale::TT) - 2451545.0) / 36525.0;
+    let tm0: Instant = Instant::from_date(-3000, 1, 1);
+    let tm1: Instant = Instant::from_date(3000, 1, 1);
+    let tmp0: Instant = Instant::from_date(1800, 1, 1);
+    let tmp1: Instant = Instant::from_date(2050, 12, 31);
+    let jcen = (time.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;
 
     #[allow(non_snake_case)]
     let (a, eccen, incl, l, wbar, Omega, terms) = {
@@ -483,8 +483,8 @@ mod test {
         ];
 
         for planet in planets {
-            //let time = AstroTime::from_date(2000, 1, 1);
-            let time = AstroTime::from_datetime(2010, 1, 1, 12, 0, 0.0);
+            //let time = Instant::from_date(2000, 1, 1);
+            let time = Instant::from_datetime(2010, 1, 1, 12, 0, 0.0);
             let psun = jplephem::barycentric_pos(SolarSystem::Sun, &time).unwrap();
             let p2 = jplephem::barycentric_pos(planet, &time).unwrap() - psun;
             let p1 = heliocentric_pos(planet, &time).unwrap();

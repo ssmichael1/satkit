@@ -2,38 +2,45 @@ use crate::frametransform::qgcrf2itrf_approx;
 use crate::jplephem;
 use crate::types::*;
 use crate::utils::SKResult;
-use crate::AstroTime;
 use crate::Duration;
+use crate::Instant;
 use crate::SolarSystem;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
 
 #[derive(Debug, Clone)]
 pub struct Precomputed {
-    pub start: AstroTime,
-    pub stop: AstroTime,
+    pub start: Instant,
+    pub stop: Instant,
     pub step: f64,
     data: Vec<InterpType>,
 }
 
 impl Precomputed {
-    pub fn new(start: &AstroTime, stop: &AstroTime) -> SKResult<Precomputed> {
+    pub fn new(start: &Instant, stop: &Instant) -> SKResult<Precomputed> {
         let step: f64 = 60.0;
 
         let (pstart, pstop) = match stop > start {
-            true => (start, stop),
-            false => (stop, start),
+            true => (
+                start - Duration::from_seconds(120.0),
+                stop + Duration::from_seconds(120.0),
+            ),
+            false => (
+                stop - Duration::from_seconds(120.0),
+                start + Duration::from_seconds(120.0),
+            ),
         };
 
         Ok(Precomputed {
-            start: *pstart,
-            stop: *pstop,
+            start: pstart,
+            stop: pstop,
             step,
             data: {
-                let nsteps: usize = 2 + ((pstop - pstart).seconds() / step.abs()).ceil() as usize;
+                let nsteps: usize =
+                    2 + ((pstop - pstart).as_seconds() / step.abs()).ceil() as usize;
                 let mut data = Vec::with_capacity(nsteps);
                 for idx in 0..nsteps {
-                    let t = *pstart + Duration::Seconds((idx as f64) * step);
+                    let t = pstart + Duration::from_seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
                     let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
                     let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
@@ -44,12 +51,16 @@ impl Precomputed {
         })
     }
 
-    pub fn interp(&self, t: &AstroTime) -> SKResult<InterpType> {
+    pub fn interp(&self, t: &Instant) -> SKResult<InterpType> {
         if *t < self.start || *t > self.stop {
-            return Err("Precomputed::interp: time is outside of precomputed range".into());
+            return Err(format!(
+                "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
+                *t, self.start, self.stop
+            )
+            .into());
         }
 
-        let idx = (t - self.start).seconds() / self.step;
+        let idx = (t - self.start).as_seconds() / self.step;
         let delta = idx - idx.floor();
         let idx = idx.floor() as usize;
 

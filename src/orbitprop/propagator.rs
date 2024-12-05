@@ -2,14 +2,13 @@ use super::drag::{drag_and_partials, drag_force};
 use super::point_gravity::{point_gravity, point_gravity_and_partials};
 use super::settings::PropSettings;
 
-use crate::astrotime::AstroTime;
 use crate::earthgravity;
 use crate::lpephem;
 use crate::ode;
 use crate::ode::ODEResult;
 use crate::ode::RKAdaptive;
 use crate::orbitprop::Precomputed;
-use crate::Duration;
+use crate::{Duration, Instant};
 use lpephem::sun::shadowfunc;
 
 use crate::types::*;
@@ -28,9 +27,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PropagationResult<const T: usize> {
-    pub time_start: AstroTime,
+    pub time_start: Instant,
     pub state_start: Matrix<6, T>,
-    pub time_end: AstroTime,
+    pub time_end: Instant,
     pub state_end: Matrix<6, T>,
     pub accepted_steps: u32,
     pub rejected_steps: u32,
@@ -39,7 +38,7 @@ pub struct PropagationResult<const T: usize> {
 }
 
 impl<const T: usize> PropagationResult<T> {
-    pub fn interp(&self, time: &AstroTime) -> SKResult<Matrix<6, T>> {
+    pub fn interp(&self, time: &Instant) -> SKResult<Matrix<6, T>> {
         interp_propresult(self, time)
     }
 }
@@ -137,16 +136,16 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
 /// // Propagate to 1/2 day ahead
-/// let stoptime = starttime + satkit::Duration::Days(0.5);
+/// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
 /// // Look at the results
 /// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// // Expect:
-/// // res = PropagationResult { time: [AstroTime { mjd_tai: 57101.50040509259 }],
+/// // res = PropagationResult { time: [Instant { mjd_tai: 57101.50040509259 }],
 /// //                           state: [[[-42153870.84175911, -379423.6616440884, -26.239180898423687,
 /// //                                     27.66411233952899, -3075.146656613106, 0.0020580348953689828]]],
 /// //                           accepted_steps: 45, rejected_steps: 0, num_eval: 722
@@ -175,9 +174,9 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
 /// // Propagate to 1/2 day ahead
-/// let stoptime = starttime + satkit::Duration::Days(0.5);
+/// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
 /// // Look at the results
 /// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();
@@ -188,13 +187,13 @@ pub enum PropagationError {
 ///
 pub fn propagate<const C: usize>(
     state: &StateType<C>,
-    start: &AstroTime,
-    stop: &AstroTime,
+    start: &Instant,
+    stop: &Instant,
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
 ) -> SKResult<PropagationResult<C>> {
     // Duration to end of integration, in seconds
-    let x_end: f64 = (*stop - *start).seconds();
+    let x_end: f64 = (*stop - *start).as_seconds();
 
     let mut odesettings = crate::ode::RKAdaptiveSettings::default();
     odesettings.abserror = settings.abs_error;
@@ -222,7 +221,7 @@ pub fn propagate<const C: usize>(
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
         // The time variable in the ODE is in seconds
-        let time: AstroTime = *start + Duration::Seconds(x);
+        let time: Instant = *start + Duration::from_seconds(x);
 
         // get GCRS position & velocity;
         let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
@@ -419,11 +418,11 @@ pub fn propagate<const C: usize>(
 
 pub fn interp_propresult<const C: usize>(
     res: &PropagationResult<C>,
-    time: &AstroTime,
+    time: &Instant,
 ) -> SKResult<StateType<C>> {
     if let Some(sol) = &res.odesol {
         if sol.dense.is_some() {
-            let x = (time - res.time_start).seconds();
+            let x = (time - res.time_start).as_seconds();
             let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)
         } else {
@@ -446,9 +445,31 @@ mod tests {
     use std::io::{self, BufRead};
 
     #[test]
+    fn test_short_propagate() -> SKResult<()> {
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let stoptime = starttime + Duration::from_seconds(0.1);
+
+        let mut state: SimpleState = SimpleState::zeros();
+
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        let settings = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_order: 4,
+            ..Default::default()
+        };
+
+        let _res1 = propagate(&state, &starttime, &stoptime, &settings, None)?;
+
+        Ok(())
+    }
+
+    #[test]
     fn test_propagate() -> SKResult<()> {
-        let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
-        let stoptime = starttime + Duration::Days(0.25);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let stoptime = starttime + Duration::from_days(0.25);
 
         let mut state: SimpleState = SimpleState::zeros();
 
@@ -476,8 +497,8 @@ mod tests {
 
     #[test]
     fn test_interp() -> SKResult<()> {
-        let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
-        let stoptime = starttime + Duration::Days(1.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let stoptime = starttime + Duration::from_days(1.0);
 
         let mut state: SimpleState = SimpleState::zeros();
 
@@ -501,7 +522,7 @@ mod tests {
         }
 
         // Check interpolation forward and backward return the same result
-        let newtime = starttime + Duration::Days(0.45);
+        let newtime = starttime + Duration::from_days(0.45);
         let interp = res.interp(&newtime)?;
         let interp2 = res2.interp(&newtime)?;
         for ix in 0..6_usize {
@@ -520,8 +541,8 @@ mod tests {
         // Note also: drag partials are very small relative to other terms,
         // making it difficult to confirm that calculations are correct.
 
-        let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
-        let stoptime = starttime + 0.5;
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let stoptime = starttime + Duration::from_days(0.5);
 
         let mut state: CovState = CovState::zeros();
 
@@ -580,8 +601,8 @@ mod tests {
         // set a fininte cdaoverm value so that there is drag
         // and we can check drag partials
 
-        let starttime = AstroTime::from_datetime(2015, 3, 20, 0, 0, 0.0);
-        let stoptime = starttime + crate::Duration::Days(0.2);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let stoptime = starttime + crate::Duration::from_days(0.2);
 
         let mut state: CovState = CovState::zeros();
 
@@ -653,19 +674,19 @@ mod tests {
         }
         let file: File = File::open(testvecfile.clone())?;
 
-        let times: Vec<crate::AstroTime> = match io::BufReader::new(file)
+        let times: Vec<crate::Instant> = match io::BufReader::new(file)
             .lines()
             .filter(|x: &Result<String, io::Error>| x.as_ref().unwrap().starts_with('*'))
-            .map(|rline| -> SKResult<crate::AstroTime> {
+            .map(|rline| -> SKResult<crate::Instant> {
                 let line = rline.unwrap();
                 let lvals: Vec<&str> = line.split_whitespace().collect();
                 let year: i32 = lvals[1].parse()?;
-                let mon: u32 = lvals[2].parse()?;
-                let day: u32 = lvals[3].parse()?;
-                let hour: u32 = lvals[4].parse()?;
-                let min: u32 = lvals[5].parse()?;
+                let mon: i32 = lvals[2].parse()?;
+                let day: i32 = lvals[3].parse()?;
+                let hour: i32 = lvals[4].parse()?;
+                let min: i32 = lvals[5].parse()?;
                 let sec: f64 = lvals[6].parse()?;
-                Ok(AstroTime::from_datetime(year, mon, day, hour, min, sec))
+                Ok(Instant::from_datetime(year, mon, day, hour, min, sec))
             })
             .collect()
         {

@@ -1,6 +1,6 @@
 use crate::consts;
-use crate::AstroTime;
 use crate::ITRFCoord;
+use crate::Instant;
 use crate::TimeScale;
 
 use crate::utils::{skerror, SKResult};
@@ -27,7 +27,7 @@ type Vec3 = na::Vector3<f64>;
 ///   from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
 ///
 #[inline]
-pub fn pos_gcrf(time: &AstroTime) -> na::Vector3<f64> {
+pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
     crate::frametransform::qmod2gcrf(time) * pos_mod(time)
 }
 
@@ -48,8 +48,8 @@ pub fn pos_gcrf(time: &AstroTime) -> na::Vector3<f64> {
 /// * Algorithm 29 from Vallado for sun in Mean of Date (MOD)
 /// * Valid with accuracy of .01 degrees from 1950 to 2050
 ///
-pub fn pos_mod(time: &AstroTime) -> na::Vector3<f64> {
-    let t: f64 = (time.to_jd(TimeScale::TDB) - 2451545.0) / 36525.0;
+pub fn pos_mod(time: &Instant) -> na::Vector3<f64> {
+    let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
     #[allow(non_upper_case_globals)]
     const deg2rad: f64 = std::f64::consts::PI / 180.;
 
@@ -111,7 +111,7 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
         let x = (c * c + a * a - b * b) / 2.0 / c;
         let y = (a * a - x * x).sqrt();
         let big_a = a * a * (x / a).acos() + b * b * ((c - x) / b).acos() - c * y;
-        
+
         1.0 - big_a / std::f64::consts::PI / a / a
     }
 }
@@ -152,17 +152,17 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 ///
 /// # Returns
 ///
-/// * SKResult<(sunrise: AstroTime, sunset: AstroTime)>
+/// * SKResult<(sunrise: Instant, sunset: Instant)>
 ///
 /// # References
 ///
 /// * Vallado Algorithm 30
 ///
 pub fn riseset(
-    time: &AstroTime,
+    time: &Instant,
     coord: &ITRFCoord,
     osigma: Option<f64>,
-) -> SKResult<(AstroTime, AstroTime)> {
+) -> SKResult<(Instant, Instant)> {
     use std::f64::consts::PI;
     let sigma = osigma.unwrap_or(90.0 + 50.0 / 60.0);
     let latitude: f64 = coord.latitude_deg();
@@ -177,7 +177,7 @@ pub fn riseset(
         (100.4606184 + 36000.77005361 * t + 0.00038793 * t * t - 2.6E-8 * t * t * t) % 360.0
     };
 
-    let jd0h: f64 = (time.to_jd(TimeScale::UTC) - longitude / 360.0).floor() + 0.5;
+    let jd0h: f64 = (time.as_jd_with_scale(TimeScale::UTC) - longitude / 360.0).floor() + 0.5;
     let jdsunrise = jd0h + 0.25 - longitude / 360.0;
     let jdsunset = jd0h + 0.75 - longitude / 360.0;
 
@@ -217,11 +217,8 @@ pub fn riseset(
     };
 
     Ok((
-        AstroTime::from_jd(
-            jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.25,
-            TimeScale::UTC,
-        ),
-        AstroTime::from_jd(jdsunset + criseset(jdsunset, |x| x)? - 0.75, TimeScale::UTC),
+        Instant::from_jd(jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.25),
+        Instant::from_jd(jdsunset + criseset(jdsunset, |x| x)? - 0.75),
     ))
 }
 
@@ -232,9 +229,9 @@ mod tests {
     #[test]
     fn sunpos_mod() {
         // Example 5-1 in Vallado
-        let t0: AstroTime = AstroTime::from_date(2006, 4, 2);
+        let t0: Instant = Instant::from_date(2006, 4, 2);
         // Approximate this UTC as TDB to match example...
-        let t = AstroTime::from_mjd(t0.to_mjd(TimeScale::UTC), TimeScale::TDB);
+        let t = Instant::from_mjd_with_scale(t0.as_mjd_with_scale(TimeScale::UTC), TimeScale::TDB);
 
         let pos = pos_mod(&t);
         // Below value is from Vallado example
@@ -248,9 +245,9 @@ mod tests {
     #[test]
     fn sunpos_gcrf() {
         // Example 5-1 in Vallado
-        let t0: AstroTime = AstroTime::from_date(2006, 4, 2);
+        let t0: Instant = Instant::from_date(2006, 4, 2);
         // Approximate this UTC as TDB to match example...
-        let t = AstroTime::from_mjd(t0.to_mjd(TimeScale::UTC), TimeScale::TDB);
+        let t = Instant::from_mjd_with_scale(t0.as_mjd(), TimeScale::TDB);
 
         let pos = pos_gcrf(&t);
         // Below value is from Vallado example
@@ -267,16 +264,16 @@ mod tests {
     fn sunriseset() {
         // Example 5-2 from Vallado
         let itrf = ITRFCoord::from_geodetic_deg(40.0, 0.0, 0.0);
-        let tm = AstroTime::from_datetime(1996, 3, 23, 0, 0, 0.0);
+        let tm = Instant::from_datetime(1996, 3, 23, 0, 0, 0.0);
         let (sunrise, sunset) = riseset(&tm, &itrf, None).unwrap();
-        let (ryear, rmon, rday, rhour, rmin, rsec) = sunrise.to_datetime();
+        let (ryear, rmon, rday, rhour, rmin, rsec) = sunrise.as_datetime();
         assert!(ryear == 1996);
         assert!(rmon == 3);
         assert!(rday == 23);
         assert!(rhour == 5);
         assert!(rmin == 58);
         assert!((rsec / 21.97 - 1.0).abs() < 1.0e-3);
-        let (syear, smon, sday, shour, smin, ssec) = sunset.to_datetime();
+        let (syear, smon, sday, shour, smin, ssec) = sunset.as_datetime();
         assert!(syear == 1996);
         assert!(smon == 3);
         assert!(sday == 23);
@@ -286,7 +283,7 @@ mod tests {
 
         // Check for error returned on 24-hour sunlight condition
         let itrf2 = ITRFCoord::from_geodetic_deg(85.0, 30.0, 0.0);
-        let tm2 = AstroTime::from_date(2020, 6, 20);
+        let tm2 = Instant::from_date(2020, 6, 20);
         let r = riseset(&tm2, &itrf2, None);
         assert!(r.is_err());
     }
@@ -294,16 +291,16 @@ mod tests {
     #[test]
     fn test_webexample() {
         let coord = ITRFCoord::from_geodetic_deg(42.4154, -71.1565, 0.0);
-        let time = &AstroTime::from_date(2024, 10, 14);
+        let time = &Instant::from_date(2024, 10, 14);
 
         let (rise, set) = riseset(time, &coord, None).unwrap();
 
         // Check against web example
         // https://www.timeanddate.com/sun/@4929180
-        let rise_web = AstroTime::from_datetime(2024, 10, 14, 10, 57, 0.0);
-        let set_web = AstroTime::from_datetime(2024, 10, 14, 22, 4, 0.0);
+        let rise_web = Instant::from_datetime(2024, 10, 14, 10, 57, 0.0);
+        let set_web = Instant::from_datetime(2024, 10, 14, 22, 4, 0.0);
 
-        assert!((rise - rise_web).seconds().abs() < 60.0);
-        assert!((set - set_web).seconds().abs() < 60.0);
+        assert!((rise - rise_web).as_seconds().abs() < 60.0);
+        assert!((set - set_web).as_seconds().abs() < 60.0);
     }
 }

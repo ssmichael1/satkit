@@ -1,4 +1,4 @@
-use super::pyastrotime::PyAstroTime;
+use super::pyinstant::PyInstant;
 use super::pypropsettings::PyPropSettings;
 use super::pyquaternion::Quaternion;
 
@@ -9,23 +9,22 @@ use numpy::PyUntypedArrayMethods;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyNone, PyTuple};
+use pyo3::IntoPyObjectExt;
 
 use crate::orbitprop::{PropSettings, SatState, StateCov};
 use crate::pybindings::PyDuration;
-use crate::AstroTime;
+use crate::Instant;
 
 #[pyclass(name = "satstate", module = "satkit")]
 #[derive(Clone, Debug)]
-pub struct PySatState {
-    inner: SatState,
-}
+pub struct PySatState(SatState);
 
 #[pymethods]
 impl PySatState {
     #[new]
     #[pyo3(signature=(time, pos, vel, cov=None))]
     fn py_new(
-        time: &PyAstroTime,
+        time: &PyInstant,
         pos: &Bound<'_, np::PyArray1<f64>>,
         vel: &Bound<'_, np::PyArray1<f64>>,
         cov: Option<&Bound<'_, np::PyArray2<f64>>>,
@@ -37,7 +36,7 @@ impl PySatState {
         }
 
         let mut state = SatState::from_pv(
-            &time.inner,
+            &time.0,
             &na::Vector3::<f64>::from_row_slice(unsafe { pos.as_slice().unwrap() }),
             &na::Vector3::<f64>::from_row_slice(unsafe { vel.as_slice().unwrap() }),
         );
@@ -53,7 +52,7 @@ impl PySatState {
             state.set_cov(StateCov::PVCov(nacov));
         }
 
-        Ok(PySatState { inner: state })
+        Ok(PySatState(state))
     }
 
     /// Set position uncertainty (1-sigma, meters) in the lvlh (local-vertical, local-horizontal) frame
@@ -75,7 +74,7 @@ impl PySatState {
         let na_sigma_pvh =
             na::Vector3::<f64>::from_row_slice(unsafe { sigma_pvh.as_slice().unwrap() });
 
-        self.inner.set_lvlh_pos_uncertainty(&na_sigma_pvh);
+        self.0.set_lvlh_pos_uncertainty(&na_sigma_pvh);
         Ok(())
     }
 
@@ -99,7 +98,7 @@ impl PySatState {
         let na_sigma_cart =
             na::Vector3::<f64>::from_row_slice(unsafe { sigma_cart.as_slice().unwrap() });
 
-        self.inner.set_gcrf_pos_uncertainty(&na_sigma_cart);
+        self.0.set_gcrf_pos_uncertainty(&na_sigma_cart);
         Ok(())
     }
 
@@ -118,30 +117,30 @@ impl PySatState {
             ));
         }
         let na_cov = na::Matrix6::from_row_slice(unsafe { cov.as_slice().unwrap() });
-        self.inner.cov = StateCov::PVCov(na_cov);
+        self.0.cov = StateCov::PVCov(na_cov);
         Ok(())
     }
 
     #[getter]
-    fn get_time(&self) -> PyAstroTime {
-        PyAstroTime {
-            inner: self.inner.time,
-        }
+    fn get_time(&self) -> PyInstant {
+        PyInstant(self.0.time)
     }
 
     #[getter]
     fn get_pos_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice_bound(py, self.inner.pv.fixed_view::<3, 1>(0, 0).as_slice())
-                .to_object(py)
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
+                .into_py_any(py)
+                .unwrap()
         })
     }
 
     #[getter]
     fn get_vel_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice_bound(py, self.inner.pv.fixed_view::<3, 1>(3, 0).as_slice())
-                .to_object(py)
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
+                .into_py_any(py)
+                .unwrap()
         })
     }
 
@@ -152,14 +151,15 @@ impl PySatState {
     #[getter]
     fn get_cov(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            match self.inner.cov {
-                StateCov::None => PyNone::get_bound(py).to_object(py),
+            match self.0.cov {
+                StateCov::None => PyNone::get(py).into_py_any(py).unwrap(),
                 StateCov::PVCov(cov) => {
                     let dims = vec![6, 6];
-                    np::PyArray1::from_slice_bound(py, cov.as_slice())
+                    np::PyArray1::from_slice(py, cov.as_slice())
                         .reshape(dims)
                         .unwrap()
-                        .to_object(py)
+                        .into_py_any(py)
+                        .unwrap()
                 }
             }
         })
@@ -177,9 +177,7 @@ impl PySatState {
     ///     satkit.quaternion: quaternion to go from gcrf to lvlh frame
     #[getter]
     fn get_qgcrf2lvlh(&self) -> Quaternion {
-        Quaternion {
-            inner: self.inner.qgcrf2lvlh(),
-        }
+        self.0.qgcrf2lvlh().into()
     }
 
     /// Return position (meters) in GCRF frame
@@ -189,15 +187,17 @@ impl PySatState {
     #[getter]
     fn get_pos(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice_bound(py, self.inner.pv.fixed_view::<3, 1>(0, 0).as_slice())
-                .to_object(py)
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
+                .into_py_any(py)
+                .unwrap()
         })
     }
     #[getter]
     fn get_vel(&self) -> Py<PyAny> {
         pyo3::Python::with_gil(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice_bound(py, self.inner.pv.fixed_view::<3, 1>(3, 0).as_slice())
-                .to_object(py)
+            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
+                .into_py_any(py)
+                .unwrap()
         })
     }
 
@@ -215,12 +215,12 @@ impl PySatState {
         timedur: &Bound<'_, PyAny>,
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Self> {
-        let time: AstroTime = {
-            if timedur.is_instance_of::<PyAstroTime>() {
-                timedur.extract::<PyAstroTime>()?.inner
+        let time: Instant = {
+            if timedur.is_instance_of::<PyInstant>() {
+                timedur.extract::<PyInstant>()?.0
             } else if timedur.is_instance_of::<PyDuration>() {
                 let dur = timedur.extract::<PyDuration>()?;
-                self.inner.time + dur.inner
+                self.0.time + dur.0
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "timedur must be satkit.time or satkit.duration",
@@ -233,14 +233,14 @@ impl PySatState {
                 let kw = kwargs.unwrap();
                 match kw.get_item("propsettings")? {
                     None => None,
-                    Some(v) => Some(v.extract::<PyPropSettings>()?.inner),
+                    Some(v) => Some(v.extract::<PyPropSettings>()?.0),
                 }
             }
             false => None,
         };
 
-        match self.inner.propagate(&time, propsettings.as_ref()) {
-            Ok(s) => Ok(PySatState { inner: s }),
+        match self.0.propagate(&time, propsettings.as_ref()) {
+            Ok(s) => Ok(PySatState(s)),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Error propagating state: {}",
                 e
@@ -249,14 +249,16 @@ impl PySatState {
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new_bound(py);
-        let tm = PyAstroTime {
-            inner: AstroTime { mjd_tai: 0.0 },
-        }
-        .into_py(py);
-        let pos = np::PyArray1::from_slice_bound(py, &[0.0, 0.0, 0.0]).to_object(py);
-        let vel = np::PyArray1::from_slice_bound(py, &[0.0, 0.0, 0.0]).to_object(py);
-        (PyTuple::new_bound(py, vec![tm, pos, vel]), d)
+        let d = PyDict::new(py);
+        let tm = PyInstant(Instant::INVALID).into_py_any(py).unwrap();
+
+        let pos = np::PyArray1::from_slice(py, &[0.0, 0.0, 0.0])
+            .into_py_any(py)
+            .unwrap();
+        let vel = np::PyArray1::from_slice(py, &[0.0, 0.0, 0.0])
+            .into_py_any(py)
+            .unwrap();
+        (PyTuple::new(py, vec![tm, pos, vel]).unwrap(), d)
     }
 
     fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
@@ -266,7 +268,7 @@ impl PySatState {
                 "State must be at least 56 bytes",
             ));
         }
-        let time = AstroTime::from_mjd(
+        let time = Instant::from_mjd_with_scale(
             f64::from_le_bytes(state[0..8].try_into().unwrap()),
             crate::TimeScale::TAI,
         );
@@ -274,32 +276,38 @@ impl PySatState {
         let pv = na::Vector6::<f64>::from_row_slice(unsafe {
             std::slice::from_raw_parts(state[8..56].as_ptr() as *const f64, 6)
         });
-        self.inner.time = time;
-        self.inner.pv = pv;
+        self.0.time = time;
+        self.0.pv = pv;
         if state.len() >= 92 {
             let cov = na::Matrix6::<f64>::from_row_slice(unsafe {
                 std::slice::from_raw_parts(state[56..].as_ptr() as *const f64, 36)
             });
-            self.inner.cov = StateCov::PVCov(cov);
+            self.0.cov = StateCov::PVCov(cov);
         }
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
         let len: usize = 56
-            + match self.inner.cov {
+            + match self.0.cov {
                 StateCov::None => 0,
                 StateCov::PVCov(_) => 36,
             };
         let mut buffer: Vec<u8> = vec![0; len];
-        buffer[0..8].clone_from_slice(&self.inner.time.to_mjd(crate::TimeScale::TAI).to_le_bytes());
+        buffer[0..8].clone_from_slice(
+            &self
+                .0
+                .time
+                .as_mjd_with_scale(crate::TimeScale::TAI)
+                .to_le_bytes(),
+        );
         unsafe {
             buffer[8..56].clone_from_slice(std::slice::from_raw_parts(
-                self.inner.pv.as_ptr() as *const u8,
+                self.0.pv.as_ptr() as *const u8,
                 48,
             ));
         }
-        if let StateCov::PVCov(cov) = self.inner.cov {
+        if let StateCov::PVCov(cov) = self.0.cov {
             unsafe {
                 buffer[56..].clone_from_slice(std::slice::from_raw_parts(
                     cov.as_ptr() as *const u8,
@@ -307,10 +315,10 @@ impl PySatState {
                 ));
             }
         }
-        Ok(pyo3::types::PyBytes::new_bound(py, &buffer).to_object(py))
+        pyo3::types::PyBytes::new(py, &buffer).into_py_any(py)
     }
 
     fn __str__(&self) -> String {
-        self.inner.to_string()
+        self.0.to_string()
     }
 }
