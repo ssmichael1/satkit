@@ -230,6 +230,7 @@ impl Instant {
     ///
     /// # Arguments
     /// * `jd` - Julian Date
+    /// * `scale` - The time scale to use
     ///
     /// # Returns
     /// A new Instant object representing the given JD at given time scale
@@ -325,6 +326,12 @@ impl Instant {
     /// So, for example, adding 1.0 to a day with a leap second will
     /// increment by a full day
     ///
+    /// # Arguments
+    /// * `days` - The number of days to add
+    ///
+    /// # Returns
+    /// A new Instant object representing the new time
+    ///
     pub fn add_utc_days(&self, days: f64) -> Instant {
         let mut utc = self.as_mjd_with_scale(TimeScale::UTC);
         utc += days;
@@ -375,6 +382,8 @@ impl Instant {
     }
 
     /// Return the Gregorian date and time
+    ///
+    /// # Returns
     /// (year, month, day, hour, minute, second), UTC
     pub fn as_datetime(&self) -> (i32, i32, i32, i32, i32, f64) {
         // Fractional part of UTC day, accounting for leapseconds and TT - TAI

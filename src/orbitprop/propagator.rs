@@ -115,8 +115,7 @@ pub enum PropagationError {
 ///  * `satprops` - Properties of the satellite, such as ballistic coefficient & susceptibility to
 ///     radiation pressure
 ///
-/// # Output:
-///
+/// # Returns
 /// * `PropagationResult` object with details of the propagation compute, the final state, and intermediate states if step size
 ///    is set
 ///
