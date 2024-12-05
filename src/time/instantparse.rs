@@ -39,13 +39,13 @@ impl Instant {
     /// Use sparingly and with caution.  This is
     /// probably not what you want.
     ///
-    /// Args:
+    /// # Arguments:
     ///   s (str): The string to parse
     ///
-    /// Returns:
+    /// # Returns:
     ///  Instant: The instant object
     ///
-    /// Raises:
+    /// # Raises:
     /// SKError: If the string cannot be parsed
     pub fn from_string(s: &str) -> SKResult<Instant> {
         let mut chars = s.chars().peekable();
@@ -277,14 +277,14 @@ impl Instant {
 
     /// Parse a string into an Instant object
     ///
-    /// Notes:
+    /// # Notes:
     /// * The format string is a subset of the Python datetime module
     ///
-    /// Args:
-    ///  s (str): The string to parse
-    /// format (str): The format string
+    /// # Arguments:
+    /// * s (str): The string to parse
+    /// * format (str): The format string
     ///
-    /// Format Codes:
+    /// # Format Codes:
     /// * %Y - Year with century as a decimal number
     /// * %m - Month as a zero-padded decimal number [01, 12]
     /// * %B - Full month name (January, February, etc.)
@@ -296,7 +296,7 @@ impl Instant {
     /// * %f - Microsecond as a decimal number, allowing for trailing zeros
     /// * %z - UTC offset in the form +HHMM or -HHMM or 'Z' for UTC
     ///
-    /// Returns:
+    /// # Returns:
     /// Instant: The instant object
     ///
     pub fn strptime(s: &str, format: &str) -> SKResult<Instant> {
@@ -416,13 +416,13 @@ impl Instant {
 
     /// Parse a string in RFC3339 format
     ///
-    /// Args:
+    /// # Arguments:
     ///    rfc3339 (str): The string in RFC3339 format
     ///
-    /// Notes:
+    /// # Notes:
     /// * Only allows a subset of the RFC3339 format: "YYYY-MM-DDTHH:MM:SS.sssZ"
     ///
-    /// Returns:
+    /// # Returns:
     ///   Instant: The instant object
     pub fn from_rfc3339(rfc3339: &str) -> crate::SKResult<Self> {
         if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%fZ") {
@@ -442,10 +442,10 @@ impl Instant {
 
     /// Format the Instant object as a string in RFC3339 format
     ///
-    /// Returns:
+    /// # Returns:
     /// str: The formatted string in RFC3339 format: "YYYY-MM-DDTHH:MM:SS.sssZ"
     ///
-    /// Notes:
+    /// # Notes:
     /// * This is the same as ISO8601 format
     pub fn as_rfc3339(&self) -> String {
         self.strftime("%Y-%m-%dT%H:%M:%S.%fZ").unwrap()
@@ -453,10 +453,10 @@ impl Instant {
 
     /// Format the Instant object as a string in ISO8601 format
     ///
-    /// Returns:
+    /// # Returns:
     /// str: The formatted string in ISO8601 format: "YYYY-MM-DDTHH:MM:SS.sssZ"
     ///
-    /// Notes:
+    /// # Notes:
     /// * This is the same as RFC3339 format
     pub fn as_iso8601(&self) -> String {
         self.strftime("%Y-%m-%dT%H:%M:%S.%fZ").unwrap()
@@ -464,13 +464,13 @@ impl Instant {
 
     /// Format the Instant object as a string
     ///
-    /// Notes:
+    /// # Notes:
     /// * The format string is a subset of the Python datetime module
     ///
-    /// Args:
+    /// # Arguments:
     ///  format (str): The format string
     ///
-    /// Format Codes:
+    /// # Format Codes:
     /// * %Y - Year with century as a decimal number
     /// * %m - Month as a zero-padded decimal number [01, 12]
     /// * %B - Full month name (January, February, etc.)
@@ -483,7 +483,7 @@ impl Instant {
     /// * %A - Full weekday name (Sunday, Monday, etc.)
     /// * %w - Weekday as a decimal number [0(Sunday), 6(Saturday)]
     ///
-    /// Returns:
+    /// # Returns:
     /// str: The formatted string
     ///
     pub fn strftime(&self, format: &str) -> SKResult<String> {

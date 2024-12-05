@@ -1,3 +1,4 @@
+/// Day of week
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Weekday {
     Sunday = 0,
