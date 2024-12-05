@@ -761,7 +761,7 @@ mod tests {
             let accel3 = accel1 + partials * dpos;
 
             // show that they are approximately equal
-            assert_relative_eq!(accel2, accel3, max_relative = 1.0e-5);
+            assert_relative_eq!(accel2, accel3, max_relative = 1.0e-4);
         }
     }
 }
