@@ -38,11 +38,17 @@
 //! These data sources must be downloaded and placed in a directory that is accessible to the library.
 //! The library provides a utility function to download these files from the internet.
 //!
-//! # Example
+//! The data files need only be downloaded once.  However, the space weather data file (necessary for density calculations that impact satellite drag)
+//! and the Earth Orientation Parameters (necessary for accurate inertial-to-earth frame transformations) are updated daily and should be
+//! refreshed as necessary.
+//!
+//! ## Downloading the data files
 //! ```no_run
 //! // Print the directoyr where data will be stored
 //! println!("Data directory: {:?}", satkit::utils::datadir());
 //! // Update the data files (download those that are missing; refresh those that are out of date)
+//! // This will always download the most-recent space weather data and Earth Orientation Parameters
+//! // Other data files will be skipped if they are already present
 //! satkit::utils::update_datafiles(None, false);
 //! ```
 
