@@ -1,4 +1,3 @@
-pub(crate) use skerror::skerror;
 pub use skerror::SKErr;
 pub use skerror::SKResult;
 
@@ -7,6 +6,7 @@ mod skerror;
 pub use datadir::data_found;
 pub use datadir::datadir;
 pub use datadir::set_datadir;
+pub(crate) use skerror::skerror;
 
 #[cfg(test)]
 pub mod test;

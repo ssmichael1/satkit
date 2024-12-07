@@ -51,18 +51,15 @@ impl IERSTable {
                         continue;
                     } else if tnum >= 0 {
                         if table.data[tnum as usize].ncols() < 17 {
-                            return Err(utils::SKErr::new(
-                                format!("Error parsing file {}, table not initialized", fname)
-                                    .as_str(),
-                            )
-                            .into());
+                            return crate::skerror!(
+                                "Error parsing file {}, table not initialized",
+                                fname
+                            );
                         }
                         table.data[tnum as usize].set_row(
                             rowcnt,
                             &na::SMatrix::<f64, 1, 17>::from_iterator(
-                                tline
-                                    .split_whitespace()
-                                    .map(|x| x.parse().unwrap()),
+                                tline.split_whitespace().map(|x| x.parse().unwrap()),
                             ),
                         );
                         rowcnt += 1;

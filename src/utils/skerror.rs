@@ -1,38 +1,63 @@
-use std::error::Error;
-use std::fmt;
+use thiserror::Error;
 
-pub type SKResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
-
-#[derive(Debug)]
-pub struct SKErr {
-    details: String,
+#[derive(Error, Debug)]
+pub enum SKErr {
+    #[error("Error: {0}")]
+    Error(String),
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Format error: {0}")]
+    FormatError(#[from] std::fmt::Error),
+    #[error("Invalid Instant: {0}")]
+    InvalidInstant(crate::Instant),
+    #[error("Time Error: {0}")]
+    TimeError(#[from] crate::time::InstantError),
+    #[error("Kepler Error: {0}")]
+    KeplerError(#[from] crate::kepler::KeplerError),
+    #[error("Propagation Error: {0}")]
+    PropagationError(#[from] crate::orbitprop::PropagationError),
+    #[error("Parse Int Error: {0}")]
+    ParseIntError(#[from] std::num::ParseIntError),
+    #[error("Parse Float Error: {0}")]
+    ParseFloatError(#[from] std::num::ParseFloatError),
+    #[error("ODE Error: {0}")]
+    ODEError(#[from] crate::ode::ODEError),
+    #[error("UTF-8 Error: {0}")]
+    Utf8Error(#[from] std::str::Utf8Error),
+    #[error("From UTF-8 Error: {0}")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
+    #[error("Array From Slice error: {0}")]
+    ArrayError(#[from] std::array::TryFromSliceError),
+    #[error("ureq error: {0}")]
+    UreqError(#[from] ureq::Error),
+    #[error("JSON Error: {0}")]
+    JsonError(#[from] json::Error),
 }
 
-impl SKErr {
-    pub fn new(msg: &str) -> SKErr {
-        SKErr {
-            details: msg.to_string(),
-        }
+pub type SKResult<T> = Result<T, SKErr>;
+
+impl<T> From<crate::time::InstantError> for SKResult<T> {
+    fn from(e: crate::time::InstantError) -> Self {
+        Err(SKErr::TimeError(e))
     }
 }
 
-impl fmt::Display for SKErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SKErr: {}", self.details)
+impl<T> From<crate::ode::ODEError> for SKResult<T> {
+    fn from(e: crate::ode::ODEError) -> Self {
+        Err(SKErr::ODEError(e))
     }
 }
 
-impl std::error::Error for SKErr {
-    fn description(&self) -> &str {
-        &self.details
+impl<T> From<SKErr> for SKResult<T> {
+    fn from(e: SKErr) -> Self {
+        Err(e)
     }
 }
 
-#[macro_export]
 macro_rules! skerror {
-    ($($args:tt),*) => {{
-        Err($crate::utils::SKErr::new(format!($($args),*).as_str()).into())
-    }};
+    ($($arg:tt)*) => {
+        Err(crate::SKErr::Error(format!($($arg)*)))
+    };
 }
 
 pub(crate) use skerror;

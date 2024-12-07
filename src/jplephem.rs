@@ -255,7 +255,7 @@ impl JPLEphem {
                 let mut v: DMatrix<f64> = DMatrix::repeat(ncoeff, nrecords, 0.0);
 
                 if raw.len() < record_size * 2 + ncoeff * nrecords * 8 {
-                    return Err(Box::new(InvalidSize));
+                    return crate::skerror!("Invalid record size for cheby data");
                 }
 
                 unsafe {
@@ -280,7 +280,7 @@ impl JPLEphem {
         // Terrestrial time
         let tt = tm.as_jd_with_scale(TimeScale::TT);
         if (self.jd_start > tt) || (self.jd_stop < tt) {
-            return Err(Box::new(InvalidTime));
+            return crate::skerror!("Invalid julian date: {}", tt);
         }
 
         // Get record index
@@ -380,7 +380,7 @@ impl JPLEphem {
             12 => self.body_state_optimized::<12>(body, tm),
             13 => self.body_state_optimized::<13>(body, tm),
             14 => self.body_state_optimized::<14>(body, tm),
-            _ => panic!("Invalid body"),
+            _ => crate::skerror!("Invalid body"),
         }
     }
 
@@ -392,7 +392,7 @@ impl JPLEphem {
         // Terrestrial time
         let tt = tm.as_jd_with_scale(TimeScale::TT);
         if (self.jd_start > tt) || (self.jd_stop < tt) {
-            return Err(Box::new(InvalidTime));
+            return crate::skerror!("Invalid Julian date: {}", tt);
         }
 
         // Get record index

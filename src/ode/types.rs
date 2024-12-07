@@ -5,7 +5,27 @@ use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
 
-pub type ODEResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+#[derive(Debug, Error)]
+pub enum ODEError {
+    #[error("Step error not finite")]
+    StepErrorToSmall,
+    #[error("No Dense Output in Solution")]
+    NoDenseOutputInSolution,
+    #[error("Interpolation exceeds solution bounds: {interp} not in [{start}, {stop}]")]
+    InterpExceedsSolutionBounds { interp: f64, start: f64, stop: f64 },
+    #[error("Interpolation not implemented for this integrator")]
+    InterpNotImplemented,
+    #[error("Y dot Function Error: {0}")]
+    YDotError(String),
+}
+
+pub type ODEResult<T> = Result<T, ODEError>;
+
+impl<T> From<ODEError> for ODEResult<T> {
+    fn from(e: ODEError) -> Self {
+        Err(e)
+    }
+}
 
 pub trait ODEState:
     Add<Output = Self>
@@ -41,22 +61,6 @@ pub trait ODEState:
 pub trait ODESystem {
     type Output: ODEState;
     fn ydot(&mut self, x: f64, y: &Self::Output) -> ODEResult<Self::Output>;
-}
-
-#[derive(Debug, Error)]
-pub enum ODEError {
-    //#[error("Stopped at x = {x}.  Reached maximum of {steps} steps.")]
-    //MaxStepsReached { x: f64, steps: usize },
-    //#[error("Step Size is Too Small")]
-    //StepSizeTooSmall,
-    #[error("Step error not finite")]
-    StepErrorToSmall,
-    #[error("No Dense Output in Solution")]
-    NoDenseOutputInSolution,
-    #[error("Interpolation exceeds solution bounds: {interp} not in [{start}, {stop}]")]
-    InterpExceedsSolutionBounds { interp: f64, start: f64, stop: f64 },
-    #[error("Interpolation not implemented for this integrator")]
-    InterpNotImplemented,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

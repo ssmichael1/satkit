@@ -20,7 +20,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
     fn interpolate<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
         if sol.dense.is_none() {
-            return Err(Box::new(ODEError::NoDenseOutputInSolution));
+            return ODEError::NoDenseOutputInSolution.into();
         }
         let dense = sol.dense.as_ref().unwrap();
 
@@ -38,24 +38,26 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
     /// for forward direction
     fn interpolate_forward<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
         if sol.dense.is_none() {
-            return Err(Box::new(ODEError::NoDenseOutputInSolution));
+            return ODEError::NoDenseOutputInSolution.into();
         }
         let dense = sol.dense.as_ref().unwrap();
 
         // Check if interpolation point is within bounds
         if sol.x < xinterp {
-            return Err(Box::new(ODEError::InterpExceedsSolutionBounds {
+            return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
                 start: dense.x[0],
                 stop: sol.x,
-            }));
+            }
+            .into();
         }
         if xinterp < dense.x[0] {
-            return Err(Box::new(ODEError::InterpExceedsSolutionBounds {
+            return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
                 start: dense.x[0],
                 stop: sol.x,
-            }));
+            }
+            .into();
         }
 
         // We know indices are monotonically increasing, so only search from
@@ -112,24 +114,26 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
     /// for backward direction
     fn interpolate_backward<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
         if sol.dense.is_none() {
-            return Err(Box::new(ODEError::NoDenseOutputInSolution));
+            return ODEError::NoDenseOutputInSolution.into();
         }
         let dense = sol.dense.as_ref().unwrap();
 
         // Check if interpolation point is within bounds
         if sol.x > xinterp {
-            return Err(Box::new(ODEError::InterpExceedsSolutionBounds {
+            return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
                 start: dense.x[0],
                 stop: sol.x,
-            }));
+            }
+            .into();
         }
         if xinterp > dense.x[0] {
-            return Err(Box::new(ODEError::InterpExceedsSolutionBounds {
+            return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
                 start: dense.x[0],
                 stop: sol.x,
-            }));
+            }
+            .into();
         }
 
         // We know indices are monotonically increasing, so only search from
@@ -280,7 +284,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             nevals += N;
 
             if !enorm.is_finite() {
-                return Err(Box::new(ODEError::StepErrorToSmall));
+                return ODEError::StepErrorToSmall.into();
             }
 
             // Run proportional-integral controller on error

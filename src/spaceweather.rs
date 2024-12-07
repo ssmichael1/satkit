@@ -1,3 +1,4 @@
+use crate::SKErr;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -171,7 +172,7 @@ pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
     if let Some(r) = rec {
         Ok(r.clone())
     } else {
-        skerror!("Invalid date")
+        SKErr::InvalidInstant(tm).into()
     }
 }
 

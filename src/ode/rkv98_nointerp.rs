@@ -35,7 +35,7 @@ impl RKAdaptive<N, 1> for RKV98NoInterp {
     };
 
     fn interpolate<S: ODEState>(_xinterp: f64, _sol: &ODESolution<S>) -> ODEResult<S> {
-        Err(Box::new(ODEError::InterpNotImplemented))
+        ODEError::InterpNotImplemented.into()
     }
 }
 

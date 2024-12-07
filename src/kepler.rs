@@ -6,8 +6,14 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum KeplerError {
-    #[error("Eccentricity Out of Bounds {x}")]
-    EccenOutOfBound { x: f64 },
+    #[error("Eccentricity Out of Bounds {0}")]
+    EccenOutOfBound(f64),
+}
+
+impl<T> From<KeplerError> for crate::SKResult<T> {
+    fn from(e: KeplerError) -> Self {
+        Err(crate::SKErr::KeplerError(e))
+    }
 }
 
 /// Keplerian element can be defined by multiple
@@ -211,7 +217,7 @@ impl Kepler {
             / crate::consts::MU_EARTH;
         let eccen = e.norm();
         if eccen >= 1.0 {
-            return Err(Box::new(KeplerError::EccenOutOfBound { x: eccen }));
+            return KeplerError::EccenOutOfBound(eccen).into();
         }
         let xi = v.norm().powi(2) / 2.0 - crate::consts::MU_EARTH / r.norm();
         let a = -crate::consts::MU_EARTH / (2.0 * xi);

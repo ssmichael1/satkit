@@ -1,6 +1,7 @@
 pub mod rk_adaptive;
 pub mod rk_adaptive_settings;
 pub mod rk_explicit;
+mod types;
 //mod rkf45;
 mod rkts54;
 mod rkv65;
@@ -11,7 +12,6 @@ mod rkv98;
 mod rkv98_nointerp;
 mod rkv98_nointerp_table;
 mod rkv98_table;
-pub mod types;
 
 // NAlgebera bindings for ODE state
 mod nalgebra;
