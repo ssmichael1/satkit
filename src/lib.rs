@@ -57,6 +57,7 @@ pub mod types;
 
 /// Time and time bases (UTC, TAI, GPS, TT, etc...)
 // pub mod Instant;
+
 /// Universal constants
 pub mod consts;
 /// Earth orientation parameters (polar motion, delta-UT1, lenth of day)
@@ -100,16 +101,16 @@ mod ode;
 
 // Time and duration
 mod time;
+pub use time::{Duration, Instant, TimeScale, Weekday};
 
 // Objects available at crate level
 pub use frames::Frame;
 pub use itrfcoord::ITRFCoord;
 pub use solarsystem::SolarSystem;
-pub use time::{Duration, Instant, TimeScale, Weekday};
 pub use tle::TLE;
-pub(crate) use utils::skerror;
-pub use utils::SKErr;
-pub use utils::SKResult;
+pub(crate) use types::skerror;
+pub use types::SKErr;
+pub use types::SKResult;
 
 #[cfg(feature = "pybindings")]
 pub mod pybindings;

@@ -2,9 +2,9 @@ use crate::frametransform::qgcrf2itrf_approx;
 use crate::jplephem;
 use crate::skerror;
 use crate::types::{Quaternion, Vector3};
-use crate::utils::SKResult;
 use crate::Duration;
 use crate::Instant;
+use crate::SKResult;
 use crate::SolarSystem;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
@@ -59,8 +59,7 @@ impl Precomputed {
                 *t,
                 self.start,
                 self.stop
-            )
-            .into();
+            );
         }
 
         let idx = (t - self.start).as_seconds() / self.step;

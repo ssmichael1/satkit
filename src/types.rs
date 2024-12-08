@@ -1,3 +1,20 @@
+use thiserror::Error;
+pub type SKResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+#[derive(Debug, Error)]
+pub enum SKErr {
+    #[error("SatKIt Error: {0}")]
+    Error(String),
+}
+
+macro_rules! skerror {
+    ($($arg:tt)*) => {
+        Err(Box::new(crate::SKErr::Error(format!($($arg)*))))
+    };
+}
+
+pub(crate) use skerror;
+
 pub type Vec3 = nalgebra::Vector3<f64>;
 pub type Quaternion = nalgebra::UnitQuaternion<f64>;
 pub type Vector<const T: usize> = nalgebra::SVector<f64, T>;

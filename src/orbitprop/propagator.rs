@@ -13,7 +13,7 @@ use crate::{Duration, Instant};
 use lpephem::sun::shadowfunc;
 
 use crate::types::*;
-use crate::utils::SKResult;
+use crate::SKResult;
 
 use num_traits::identities::Zero;
 
@@ -58,11 +58,13 @@ pub enum PropagationError {
     InvalidStateColumns { c: usize },
     #[error("No Dense Output in Solution")]
     NoDenseOutputInSolution,
+    #[error("ODE Error: {0}")]
+    ODEError(ode::ODEError),
 }
 
 impl<T> From<PropagationError> for SKResult<T> {
     fn from(e: PropagationError) -> Self {
-        Err(crate::SKErr::PropagationError(e))
+        Err(e.into())
     }
 }
 
@@ -398,7 +400,7 @@ pub fn propagate<const C: usize>(
                 &odesettings,
             ) {
                 Ok(res) => res,
-                Err(e) => return e.into(),
+                Err(e) => return PropagationError::ODEError(e).into(),
             };
 
             Ok(PropagationResult {

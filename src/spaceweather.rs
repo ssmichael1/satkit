@@ -1,11 +1,11 @@
-use crate::SKErr;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use crate::utils::{datadir, download_file, download_if_not_exist, skerror, SKResult};
+use crate::utils::{datadir, download_file, download_if_not_exist};
 use crate::Instant;
+use crate::{skerror, SKResult};
 
 use std::sync::RwLock;
 
@@ -85,7 +85,7 @@ fn load_space_weather_csv() -> SKResult<Vec<SpaceWeatherRecord>> {
     io::BufReader::new(file)
         .lines()
         .skip(1)
-        .map(|rline| {
+        .map(|rline| -> SKResult<SpaceWeatherRecord> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
 
@@ -172,7 +172,7 @@ pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
     if let Some(r) = rec {
         Ok(r.clone())
     } else {
-        SKErr::InvalidInstant(tm).into()
+        skerror!("Invalid instant: {}", tm)
     }
 }
 

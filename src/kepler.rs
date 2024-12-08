@@ -12,7 +12,7 @@ pub enum KeplerError {
 
 impl<T> From<KeplerError> for crate::SKResult<T> {
     fn from(e: KeplerError) -> Self {
-        Err(crate::SKErr::KeplerError(e))
+        Err(e.into())
     }
 }
 

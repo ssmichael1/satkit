@@ -35,7 +35,7 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
     io::BufReader::new(file)
         .lines()
         .skip(1)
-        .map(|rline| {
+        .map(|rline| -> SKResult<EOPEntry> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
             if lvals.len() < 12 {

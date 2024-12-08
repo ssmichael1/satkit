@@ -1,8 +1,8 @@
 //! Orbit Propagation Settings
 
 use crate::orbitprop::Precomputed;
-use crate::utils::SKResult;
 use crate::Instant;
+use crate::SKResult;
 
 /// Propagation settings
 ///

@@ -1,7 +1,7 @@
 use crate::sgp4::SatRec;
 use crate::skerror;
-use crate::utils::SKResult;
 use crate::Instant;
+use crate::SKResult;
 
 ///
 /// Stucture representing a Two-Line Element Set (TLE), a satellite

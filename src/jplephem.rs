@@ -27,8 +27,8 @@ use nalgebra as na;
 pub type Vec3 = na::Vector3<f64>;
 pub type Quat = na::UnitQuaternion<f64>;
 
-use crate::utils::SKResult;
 use crate::utils::{datadir, download_if_not_exist};
+use crate::SKResult;
 
 use once_cell::sync::OnceCell;
 
@@ -51,24 +51,6 @@ impl TryFrom<i32> for SolarSystem {
             x if x == SolarSystem::Sun as i32 => Ok(SolarSystem::Sun),
             _ => Err(()),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct InvalidSize;
-impl std::error::Error for InvalidSize {}
-impl std::fmt::Display for InvalidSize {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Invalid file size")
-    }
-}
-
-#[derive(Debug, Clone)]
-struct InvalidTime;
-impl std::error::Error for InvalidTime {}
-impl std::fmt::Display for InvalidTime {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Invalid Time for Body Query")
     }
 }
 

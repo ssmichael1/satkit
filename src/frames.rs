@@ -36,7 +36,7 @@ impl std::fmt::Display for Frame {
 }
 
 impl std::str::FromStr for Frame {
-    type Err = crate::SKErr;
+    type Err = Box<dyn std::error::Error + Send + Sync>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {

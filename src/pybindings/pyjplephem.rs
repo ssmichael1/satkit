@@ -4,8 +4,8 @@ use super::pysolarsystem;
 use super::pyutils::*;
 use crate::jplephem;
 use crate::solarsystem::SolarSystem;
-use crate::utils::SKResult;
 use crate::Instant;
+use crate::SKResult;
 use nalgebra as na;
 
 /// Return the position and velocity of the given body in Geocentric coordinate system (GCRF)

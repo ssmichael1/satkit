@@ -3,8 +3,8 @@ use super::pyquaternion::Quaternion;
 
 use crate::frametransform::Quat;
 use crate::types::*;
-use crate::utils::SKResult;
 use crate::Instant;
+use crate::SKResult;
 use nalgebra as na;
 use numpy as np;
 use numpy::ndarray;

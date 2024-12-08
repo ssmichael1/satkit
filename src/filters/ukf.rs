@@ -7,7 +7,7 @@
 
 type Vector<const T: usize> = nalgebra::SVector<f64, T>;
 type Matrix<const M: usize, const N: usize> = nalgebra::SMatrix<f64, M, N>;
-use crate::utils::{skerror, SKResult};
+use crate::{skerror, SKResult};
 
 pub struct UKF<const N: usize> {
     pub alpha: f64,

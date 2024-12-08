@@ -1,4 +1,5 @@
-use crate::utils::{self, download_if_not_exist, SKResult};
+use crate::utils::{self, download_if_not_exist};
+use crate::SKResult;
 use nalgebra as na;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
@@ -41,7 +42,7 @@ impl IERSTable {
                         let s: Vec<&str> = tline.split_whitespace().collect();
                         let tsize: usize = s[s.len() - 1].parse().unwrap_or(0);
                         if !(0..=5).contains(&tnum) || tsize == 0 {
-                            return utils::skerror!(
+                            return crate::skerror!(
                                 "Error parsing file {}, invalid table definition line",
                                 fname
                             );
