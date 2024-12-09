@@ -10,7 +10,7 @@
 //! The nomenclature is confusing
 //!
 
-use super::rk_adaptive::RKAdaptive;
+use super::RKAdaptive;
 
 const A32: f64 = 0.335_480_655_492_357;
 const A42: f64 = -6.359448489975075;

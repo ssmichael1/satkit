@@ -65,6 +65,13 @@ pub trait ODESystem {
     fn ydot(&mut self, x: f64, y: &Self::Output) -> ODEResult<Self::Output>;
 }
 
+/// Dense output for ODE integrators
+///
+/// This is a struct that contains the dense output of an ODE integrator
+/// if dense output is enabled
+///
+/// It can be used for interpolation of state values between
+/// the steps of the integrator
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DenseOutput<S>
 where
@@ -76,15 +83,28 @@ where
     pub y: Vec<S>,
 }
 
+/// Solution of an ODE
+/// Contains the final state, final x value, and dense output if enabled
+/// Also contains statistics on the number of steps taken
+/// and the number of function evaluations
+///
+/// Serde is implemented for this struct
+/// so that it is simple to incorporate into python bindings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ODESolution<S>
 where
     S: ODEState,
 {
+    /// Total number of derivative function evaluations
     pub nevals: usize,
+    /// Number of accepted steps
     pub naccept: usize,
+    /// Number of rejected steps
     pub nreject: usize,
+    /// The final x value
     pub x: f64,
+    /// The final y (state) value
     pub y: S,
+    /// The dense output, if enabled
     pub dense: Option<DenseOutput<S>>,
 }

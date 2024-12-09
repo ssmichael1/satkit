@@ -1,17 +1,16 @@
-use super::rk_adaptive::RKAdaptive;
+use super::RKAdaptive;
 
 // File below is auto-generated via python script that parses
 // data available on web at:
 // <https://www.sfu.ca/~jverner/RKV98.IIa.Robust.000000351.081209.CoeffsOnlyFLOAT6040>
 
-use super::rkv98_nointerp_table as bt;
-use crate::ode::types::{ODEError, ODEResult, ODESolution, ODEState};
+use super::rkv98_table as bt;
+const N: usize = 21;
+const NI: usize = 8;
 
-pub struct RKV98NoInterp {}
+pub struct RKV98 {}
 
-const N: usize = 16;
-
-impl RKAdaptive<N, 1> for RKV98NoInterp {
+impl RKAdaptive<N, NI> for RKV98 {
     const ORDER: usize = 9;
 
     const FSAL: bool = false;
@@ -22,7 +21,7 @@ impl RKAdaptive<N, 1> for RKV98NoInterp {
 
     const A: [[f64; N]; N] = bt::A;
 
-    const BI: [[f64; 1]; N] = bt::BI;
+    const BI: [[f64; 8]; N] = bt::BI;
 
     const BERR: [f64; N] = {
         let mut berr = [0.0; N];
@@ -33,8 +32,4 @@ impl RKAdaptive<N, 1> for RKV98NoInterp {
         }
         berr
     };
-
-    fn interpolate<S: ODEState>(_xinterp: f64, _sol: &ODESolution<S>) -> ODEResult<S> {
-        ODEError::InterpNotImplemented.into()
-    }
 }

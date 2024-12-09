@@ -1,4 +1,4 @@
-use super::rk_adaptive::RKAdaptive;
+use super::RKAdaptive;
 
 // File below is auto-generated via python script that parses
 // data available on web at:
