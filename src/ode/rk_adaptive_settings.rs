@@ -9,8 +9,8 @@ pub struct RKAdaptiveSettings {
     pub dense_output: bool,
 }
 
-impl RKAdaptiveSettings {
-    pub fn default() -> RKAdaptiveSettings {
+impl Default for RKAdaptiveSettings {
+    fn default() -> RKAdaptiveSettings {
         RKAdaptiveSettings {
             abserror: 1.0e-8,
             relerror: 1.0e-8,

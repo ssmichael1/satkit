@@ -203,10 +203,12 @@ pub fn propagate<const C: usize>(
     // Duration to end of integration, in seconds
     let x_end: f64 = (*stop - *start).as_seconds();
 
-    let mut odesettings = crate::ode::RKAdaptiveSettings::default();
-    odesettings.abserror = settings.abs_error;
-    odesettings.relerror = settings.rel_error;
-    odesettings.dense_output = settings.enable_interp;
+    let odesettings = crate::ode::RKAdaptiveSettings {
+        abserror: settings.abs_error,
+        relerror: settings.rel_error,
+        dense_output: settings.enable_interp,
+        ..Default::default()
+    };
 
     // Get or create data for interpolation
     let interp: &Precomputed = {

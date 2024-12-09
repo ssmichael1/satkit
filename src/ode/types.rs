@@ -19,6 +19,7 @@ pub enum ODEError {
     YDotError(String),
 }
 
+/// Ouptut of ODE integrator
 pub type ODEResult<T> = Result<T, ODEError>;
 
 impl<T> From<ODEError> for ODEResult<T> {
@@ -27,6 +28,7 @@ impl<T> From<ODEError> for ODEResult<T> {
     }
 }
 
+/// "States" of ordeinary differential equations
 pub trait ODEState:
     Add<Output = Self>
     + Sub<Output = Self>

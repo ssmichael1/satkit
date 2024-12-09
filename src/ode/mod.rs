@@ -35,3 +35,6 @@ pub mod solvers {
 }
 
 pub use types::*;
+
+#[cfg(test)]
+mod ode_tests;
