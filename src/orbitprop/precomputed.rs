@@ -23,12 +23,12 @@ impl Precomputed {
 
         let (pstart, pstop) = match stop > start {
             true => (
-                start - Duration::from_seconds(120.0),
-                stop + Duration::from_seconds(120.0),
+                start - Duration::from_seconds(240.0),
+                stop + Duration::from_seconds(240.0),
             ),
             false => (
-                stop - Duration::from_seconds(120.0),
-                start + Duration::from_seconds(120.0),
+                stop - Duration::from_seconds(240.0),
+                start + Duration::from_seconds(240.0),
             ),
         };
 
