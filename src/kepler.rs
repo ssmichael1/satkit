@@ -166,7 +166,7 @@ impl Kepler {
     pub fn eccentric_anomaly(&self) -> f64 {
         f64::atan2(
             self.nu.sin() * (1.0 - self.eccen.powi(2)).sqrt(),
-            1.0 + self.eccen * self.nu.cos(),
+            self.eccen + self.nu.cos(),
         )
     }
 

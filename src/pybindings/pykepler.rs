@@ -39,7 +39,7 @@ use super::pyutils::kwargs_or_none;
 ///
 #[pyclass(name = "kepler", module = "satkit")]
 #[derive(Clone)]
-pub struct PyKepler(Kepler);
+pub struct PyKepler(pub Kepler);
 
 #[pymethods]
 impl PyKepler {
@@ -131,15 +131,14 @@ impl PyKepler {
         Ok(PyKepler(Kepler::from_pv(r, v).unwrap()))
     }
 
-    #[staticmethod]
-    fn propagate(k: &PyKepler, dt: &Bound<'_, PyAny>) -> PyResult<PyKepler> {
+    fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<PyKepler> {
         if dt.is_instance_of::<pyo3::types::PyFloat>() {
             let dt = dt.extract::<f64>()?;
             let dt = crate::Duration::from_seconds(dt);
-            Ok(PyKepler(k.0.propagate(&dt)))
+            Ok(PyKepler(self.0.propagate(&dt)))
         } else {
             let dt: PyDuration = dt.extract()?;
-            Ok(PyKepler(k.0.propagate(&dt.0)))
+            Ok(PyKepler(self.0.propagate(&dt.0)))
         }
     }
 
