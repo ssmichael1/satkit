@@ -150,33 +150,33 @@ pub fn dpper(
     const ZEL: f64 = 0.05490;
 
     /* --------------- calculate time varying periodics ----------- */
-    zm = zmos + ZNS * t;
+    zm = ZNS.mul_add(t, zmos);
     // be sure that the initial call has time set to zero
     if init == 'y' {
         zm = zmos;
     }
-    zf = zm + 2.0 * ZES * f64::sin(zm);
+    zf = (2.0 * ZES).mul_add(f64::sin(zm), zm);
     sinzf = f64::sin(zf);
-    f2 = 0.5 * sinzf * sinzf - 0.25;
+    f2 = (0.5 * sinzf).mul_add(sinzf, -0.25);
     f3 = -0.5 * sinzf * f64::cos(zf);
-    let ses: f64 = se2 * f2 + se3 * f3;
-    let sis: f64 = si2 * f2 + si3 * f3;
-    let sls: f64 = sl2 * f2 + sl3 * f3 + sl4 * sinzf;
-    let sghs: f64 = sgh2 * f2 + sgh3 * f3 + sgh4 * sinzf;
-    let shs: f64 = sh2 * f2 + sh3 * f3;
-    zm = zmol + ZNL * t;
+    let ses: f64 = se2.mul_add(f2, se3 * f3);
+    let sis: f64 = si2.mul_add(f2, si3 * f3);
+    let sls: f64 = sl4.mul_add(sinzf, sl2.mul_add(f2, sl3 * f3));
+    let sghs: f64 = sgh4.mul_add(sinzf, sgh2.mul_add(f2, sgh3 * f3));
+    let shs: f64 = sh2.mul_add(f2, sh3 * f3);
+    zm = ZNL.mul_add(t, zmol);
     if init == 'y' {
         zm = zmol;
     }
-    zf = zm + 2.0 * ZEL * f64::sin(zm);
+    zf = (2.0 * ZEL).mul_add(f64::sin(zm), zm);
     sinzf = f64::sin(zf);
-    f2 = 0.5 * sinzf * sinzf - 0.25;
+    f2 = (0.5 * sinzf).mul_add(sinzf, -0.25);
     f3 = -0.5 * sinzf * f64::cos(zf);
-    let sel: f64 = ee2 * f2 + e3 * f3;
-    let sil: f64 = xi2 * f2 + xi3 * f3;
-    let sll: f64 = xl2 * f2 + xl3 * f3 + xl4 * sinzf;
-    let sghl: f64 = xgh2 * f2 + xgh3 * f3 + xgh4 * sinzf;
-    let shll: f64 = xh2 * f2 + xh3 * f3;
+    let sel: f64 = ee2.mul_add(f2, e3 * f3);
+    let sil: f64 = xi2.mul_add(f2, xi3 * f3);
+    let sll: f64 = xl4.mul_add(sinzf, xl2.mul_add(f2, xl3 * f3));
+    let sghl: f64 = xgh4.mul_add(sinzf, xgh2.mul_add(f2, xgh3 * f3));
+    let shll: f64 = xh2.mul_add(f2, xh3 * f3);
     pe = ses + sel;
     pinc = sis + sil;
     pl = sls + sll;
@@ -215,8 +215,8 @@ pub fn dpper(
             cosop = f64::cos(*nodep);
             alfdp = sinip * sinop;
             betdp = sinip * cosop;
-            dalf = ph * cosop + pinc * cosip * sinop;
-            dbet = -ph * sinop + pinc * cosip * cosop;
+            dalf = ph.mul_add(cosop, pinc * cosip * sinop);
+            dbet = (-ph).mul_add(sinop, pinc * cosip * cosop);
             alfdp += dalf;
             betdp += dbet;
             *nodep %= TWOPI;
@@ -225,8 +225,8 @@ pub fn dpper(
             if *nodep < 0.0 && opsmode == OpsMode::AFSPC {
                 *nodep += TWOPI;
             }
-            xls = *mp + *argpp + cosip * *nodep;
-            dls = pl + pgh - pinc * *nodep * sinip;
+            xls = cosip.mul_add(*nodep, *mp + *argpp);
+            dls = (pinc * *nodep).mul_add(-sinip, pl + pgh);
             xls += dls;
             xnoh = *nodep;
             *nodep = f64::atan2(alfdp, betdp);
@@ -243,7 +243,7 @@ pub fn dpper(
                 }
             }
             *mp += pl;
-            *argpp = xls - *mp - cosip * *nodep;
+            *argpp = cosip.mul_add(-(*nodep), xls - *mp);
         }
     } // if init == 'n'
 

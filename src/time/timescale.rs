@@ -10,7 +10,7 @@
 /// * `TDB` - Barycentric Dynamical Time
 /// * `Invalid` - Invalid
 ///    
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum TimeScale {
     /// Invalid
@@ -32,13 +32,13 @@ pub enum TimeScale {
 impl From<i32> for TimeScale {
     fn from(value: i32) -> Self {
         match value {
-            1 => TimeScale::UTC,
-            2 => TimeScale::TT,
-            3 => TimeScale::UT1,
-            4 => TimeScale::TAI,
-            5 => TimeScale::GPS,
-            6 => TimeScale::TDB,
-            _ => TimeScale::Invalid,
+            1 => Self::UTC,
+            2 => Self::TT,
+            3 => Self::UT1,
+            4 => Self::TAI,
+            5 => Self::GPS,
+            6 => Self::TDB,
+            _ => Self::Invalid,
         }
     }
 }
@@ -49,13 +49,13 @@ impl std::fmt::Display for TimeScale {
             f,
             "{}",
             match self {
-                TimeScale::UTC => "Coordinate Univeral Time",
-                TimeScale::TT => "Terrestrial Time",
-                TimeScale::UT1 => "Universal Time 1",
-                TimeScale::TAI => "International Atomic Time",
-                TimeScale::GPS => "Global Positioning System",
-                TimeScale::TDB => "Barycentric Dynamical Time",
-                TimeScale::Invalid => "Invalid",
+                Self::UTC => "Coordinate Univeral Time",
+                Self::TT => "Terrestrial Time",
+                Self::UT1 => "Universal Time 1",
+                Self::TAI => "International Atomic Time",
+                Self::GPS => "Global Positioning System",
+                Self::TDB => "Barycentric Dynamical Time",
+                Self::Invalid => "Invalid",
             }
         )
     }

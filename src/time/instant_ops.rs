@@ -91,20 +91,20 @@ impl std::ops::Sub<Instant> for &Instant {
     }
 }
 
-impl std::ops::Sub<Instant> for Instant {
+impl std::ops::Sub<Self> for Instant {
     type Output = Duration;
 
-    fn sub(self, other: Instant) -> Duration {
+    fn sub(self, other: Self) -> Duration {
         Duration {
             usec: self.raw - other.raw,
         }
     }
 }
 
-impl std::ops::Sub<&Instant> for Instant {
+impl std::ops::Sub<&Self> for Instant {
     type Output = Duration;
 
-    fn sub(self, other: &Instant) -> Duration {
+    fn sub(self, other: &Self) -> Duration {
         Duration {
             usec: self.raw - other.raw,
         }
@@ -176,7 +176,7 @@ impl std::cmp::PartialEq for Instant {
 }
 
 /// Add two durations together
-impl std::ops::Add<Duration> for Duration {
+impl std::ops::Add<Self> for Duration {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -186,25 +186,25 @@ impl std::ops::Add<Duration> for Duration {
     }
 }
 
-impl std::ops::AddAssign<Duration> for Duration {
+impl std::ops::AddAssign<Self> for Duration {
     fn add_assign(&mut self, other: Self) {
         self.usec += other.usec;
     }
 }
 
-impl std::ops::AddAssign<&Duration> for Duration {
+impl std::ops::AddAssign<&Self> for Duration {
     fn add_assign(&mut self, other: &Self) {
         self.usec += other.usec;
     }
 }
 
-impl std::ops::SubAssign<Duration> for Duration {
+impl std::ops::SubAssign<Self> for Duration {
     fn sub_assign(&mut self, other: Self) {
         self.usec -= other.usec;
     }
 }
 
-impl std::ops::SubAssign<&Duration> for Duration {
+impl std::ops::SubAssign<&Self> for Duration {
     fn sub_assign(&mut self, other: &Self) {
         self.usec -= other.usec;
     }
@@ -223,7 +223,7 @@ impl std::cmp::PartialOrd for Duration {
 }
 
 /// Subtract two durations
-impl std::ops::Sub<Duration> for Duration {
+impl std::ops::Sub<Self> for Duration {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {

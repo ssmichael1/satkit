@@ -233,16 +233,16 @@ pub fn dscom(
     *pgho = 0.0;
     *pho = 0.0;
     *day = epoch + 18261.5 + tc / 1440.0;
-    let xnodce: f64 = (4.5236020 - 9.2422029e-4 * *day) % TWOPI;
+    let xnodce: f64 = 9.2422029e-4f64.mul_add(-(*day), 4.5236020) % TWOPI;
     let stem: f64 = f64::sin(xnodce);
     let ctem: f64 = f64::cos(xnodce);
-    let zcosil: f64 = 0.91375164 - 0.03568096 * ctem;
-    let zsinil: f64 = f64::sqrt(1.0 - zcosil * zcosil);
+    let zcosil: f64 = 0.03568096f64.mul_add(-ctem, 0.91375164);
+    let zsinil: f64 = f64::sqrt(zcosil.mul_add(-zcosil, 1.0));
     let zsinhl: f64 = 0.089683511 * stem / zsinil;
-    let zcoshl: f64 = f64::sqrt(1.0 - zsinhl * zsinhl);
-    *gam = 5.8351514 + 0.0019443680 * *day;
+    let zcoshl: f64 = f64::sqrt(zsinhl.mul_add(-zsinhl, 1.0));
+    *gam = 0.0019443680f64.mul_add(*day, 5.8351514);
     zx = 0.39785416 * stem / zsinil;
-    let zy: f64 = zcoshl * ctem + 0.91744867 * zsinhl * stem;
+    let zy: f64 = zcoshl.mul_add(ctem, 0.91744867 * zsinhl * stem);
     zx = f64::atan2(zx, zy);
     zx = *gam + zx - xnodce;
     let zcosgl: f64 = f64::cos(zx);
@@ -260,50 +260,48 @@ pub fn dscom(
 
     //for (lsflg = 1; lsflg <= 2; lsflg++)
     for lsflg in 1..3 {
-        a1 = zcosg * zcosh + zsing * zcosi * zsinh;
-        a3 = -zsing * zcosh + zcosg * zcosi * zsinh;
-        a7 = -zcosg * zsinh + zsing * zcosi * zcosh;
+        a1 = zcosg.mul_add(zcosh, zsing * zcosi * zsinh);
+        a3 = (-zsing).mul_add(zcosh, zcosg * zcosi * zsinh);
+        a7 = (-zcosg).mul_add(zsinh, zsing * zcosi * zcosh);
         a8 = zsing * zsini;
-        a9 = zsing * zsinh + zcosg * zcosi * zcosh;
+        a9 = zsing.mul_add(zsinh, zcosg * zcosi * zcosh);
         a10 = zcosg * zsini;
-        a2 = *cosim * a7 + *sinim * a8;
-        a4 = *cosim * a9 + *sinim * a10;
-        a5 = -*sinim * a7 + *cosim * a8;
-        a6 = -*sinim * a9 + *cosim * a10;
+        a2 = (*cosim).mul_add(a7, *sinim * a8);
+        a4 = (*cosim).mul_add(a9, *sinim * a10);
+        a5 = (-*sinim).mul_add(a7, *cosim * a8);
+        a6 = (-*sinim).mul_add(a9, *cosim * a10);
 
-        x1 = a1 * *cosomm + a2 * *sinomm;
-        x2 = a3 * *cosomm + a4 * *sinomm;
-        x3 = -a1 * *sinomm + a2 * *cosomm;
-        x4 = -a3 * *sinomm + a4 * *cosomm;
+        x1 = a1.mul_add(*cosomm, a2 * *sinomm);
+        x2 = a3.mul_add(*cosomm, a4 * *sinomm);
+        x3 = (-a1).mul_add(*sinomm, a2 * *cosomm);
+        x4 = (-a3).mul_add(*sinomm, a4 * *cosomm);
         x5 = a5 * *sinomm;
         x6 = a6 * *sinomm;
         x7 = a5 * *cosomm;
         x8 = a6 * *cosomm;
 
-        *z31 = 12.0 * x1 * x1 - 3.0 * x3 * x3;
-        *z32 = 24.0 * x1 * x2 - 6.0 * x3 * x4;
-        *z33 = 12.0 * x2 * x2 - 3.0 * x4 * x4;
-        *z1 = 3.0 * (a1 * a1 + a2 * a2) + *z31 * *emsq;
-        *z2 = 6.0 * (a1 * a3 + a2 * a4) + *z32 * *emsq;
-        *z3 = 3.0 * (a3 * a3 + a4 * a4) + *z33 * *emsq;
-        *z11 = -6.0 * a1 * a5 + *emsq * (-24.0 * x1 * x7 - 6.0 * x3 * x5);
-        *z12 = -6.0 * (a1 * a6 + a3 * a5)
-            + *emsq * (-24.0 * (x2 * x7 + x1 * x8) - 6.0 * (x3 * x6 + x4 * x5));
-        *z13 = -6.0 * a3 * a6 + *emsq * (-24.0 * x2 * x8 - 6.0 * x4 * x6);
-        *z21 = 6.0 * a2 * a5 + *emsq * (24.0 * x1 * x5 - 6.0 * x3 * x7);
-        *z22 = 6.0 * (a4 * a5 + a2 * a6)
-            + *emsq * (24.0 * (x2 * x5 + x1 * x6) - 6.0 * (x4 * x7 + x3 * x8));
-        *z23 = 6.0 * a4 * a6 + *emsq * (24.0 * x2 * x6 - 6.0 * x4 * x8);
-        *z1 = *z1 + *z1 + betasq * *z31;
-        *z2 = *z2 + *z2 + betasq * *z32;
-        *z3 = *z3 + *z3 + betasq * *z33;
+        *z31 = (12.0 * x1).mul_add(x1, -(3.0 * x3 * x3));
+        *z32 = (24.0 * x1).mul_add(x2, -(6.0 * x3 * x4));
+        *z33 = (12.0 * x2).mul_add(x2, -(3.0 * x4 * x4));
+        *z1 = 3.0f64.mul_add(a1.mul_add(a1, a2 * a2), *z31 * *emsq);
+        *z2 = 6.0f64.mul_add(a1.mul_add(a3, a2 * a4), *z32 * *emsq);
+        *z3 = 3.0f64.mul_add(a3.mul_add(a3, a4 * a4), *z33 * *emsq);
+        *z11 = (-6.0 * a1).mul_add(a5, *emsq * (-24.0 * x1).mul_add(x7, -(6.0 * x3 * x5)));
+        *z12 = (-6.0f64).mul_add(a1.mul_add(a6, a3 * a5), *emsq * (-24.0f64).mul_add(x2.mul_add(x7, x1 * x8), -(6.0 * x3.mul_add(x6, x4 * x5))));
+        *z13 = (-6.0 * a3).mul_add(a6, *emsq * (-24.0 * x2).mul_add(x8, -(6.0 * x4 * x6)));
+        *z21 = (6.0 * a2).mul_add(a5, *emsq * (24.0 * x1).mul_add(x5, -(6.0 * x3 * x7)));
+        *z22 = 6.0f64.mul_add(a4.mul_add(a5, a2 * a6), *emsq * 24.0f64.mul_add(x2.mul_add(x5, x1 * x6), -(6.0 * x4.mul_add(x7, x3 * x8))));
+        *z23 = (6.0 * a4).mul_add(a6, *emsq * (24.0 * x2).mul_add(x6, -(6.0 * x4 * x8)));
+        *z1 = betasq.mul_add(*z31, *z1 + *z1);
+        *z2 = betasq.mul_add(*z32, *z2 + *z2);
+        *z3 = betasq.mul_add(*z33, *z3 + *z3);
         *s3 = cc * xnoi;
         *s2 = -0.5 * *s3 / *rtemsq;
         *s4 = *s3 * *rtemsq;
         *s1 = -15.0 * *em * *s4;
-        *s5 = x1 * x3 + x2 * x4;
-        *s6 = x2 * x3 + x1 * x4;
-        *s7 = x2 * x4 - x1 * x3;
+        *s5 = x1.mul_add(x3, x2 * x4);
+        *s6 = x2.mul_add(x3, x1 * x4);
+        *s7 = x2.mul_add(x4, -(x1 * x3));
 
         /* ----------------------- do lunar terms ------------------- */
         if lsflg == 1 {
@@ -330,14 +328,14 @@ pub fn dscom(
             zsing = zsingl;
             zcosi = zcosil;
             zsini = zsinil;
-            zcosh = zcoshl * *cnodm + zsinhl * *snodm;
-            zsinh = *snodm * zcoshl - *cnodm * zsinhl;
+            zcosh = zcoshl.mul_add(*cnodm, zsinhl * *snodm);
+            zsinh = (*snodm).mul_add(zcoshl, -(*cnodm * zsinhl));
             cc = C1L;
         }
     }
 
-    *zmol = (4.7199672 + 0.22997150 * *day - *gam) % TWOPI;
-    *zmos = (6.2565837 + 0.017201977 * *day) % TWOPI;
+    *zmol = (0.22997150f64.mul_add(*day, 4.7199672) - *gam) % TWOPI;
+    *zmos = 0.017201977f64.mul_add(*day, 6.2565837) % TWOPI;
 
     /* ------------------------ do solar terms ---------------------- */
     *se2 = 2.0 * *ss1 * *ss6;
@@ -346,7 +344,7 @@ pub fn dscom(
     *si3 = 2.0 * *ss2 * (*sz13 - *sz11);
     *sl2 = -2.0 * *ss3 * *sz2;
     *sl3 = -2.0 * *ss3 * (*sz3 - *sz1);
-    *sl4 = -2.0 * *ss3 * (-21.0 - 9.0 * *emsq) * ZES;
+    *sl4 = -2.0 * *ss3 * 9.0f64.mul_add(-(*emsq), -21.0) * ZES;
     *sgh2 = 2.0 * *ss4 * *sz32;
     *sgh3 = 2.0 * *ss4 * (*sz33 - *sz31);
     *sgh4 = -18.0 * *ss4 * ZES;
@@ -360,7 +358,7 @@ pub fn dscom(
     *xi3 = 2.0 * *s2 * (*z13 - *z11);
     *xl2 = -2.0 * *s3 * *z2;
     *xl3 = -2.0 * *s3 * (*z3 - *z1);
-    *xl4 = -2.0 * *s3 * (-21.0 - 9.0 * *emsq) * ZEL;
+    *xl4 = -2.0 * *s3 * 9.0f64.mul_add(-(*emsq), -21.0) * ZEL;
     *xgh2 = 2.0 * *s4 * *z32;
     *xgh3 = 2.0 * *s4 * (*z33 - *z31);
     *xgh4 = -18.0 * *s4 * ZEL;

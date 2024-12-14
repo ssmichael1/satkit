@@ -215,12 +215,12 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
             };
             // Julian century
             (
-                a[0] + jcen * adot[0],
-                a[1] + jcen * adot[1],
-                a[2] + jcen * adot[2],
-                a[3] + jcen * adot[3],
-                a[4] + jcen * adot[4],
-                a[5] + jcen * adot[5],
+                jcen.mul_add(adot[0], a[0]),
+                jcen.mul_add(adot[1], a[1]),
+                jcen.mul_add(adot[2], a[2]),
+                jcen.mul_add(adot[3], a[3]),
+                jcen.mul_add(adot[4], a[4]),
+                jcen.mul_add(adot[5], a[5]),
                 None,
             )
         } else if time > &tm0 && time < &tm1 {
@@ -366,12 +366,12 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                 _ => None,
             };
             (
-                a[0] + jcen * adot[0],
-                a[1] + jcen * adot[1],
-                a[2] + jcen * adot[2],
-                a[3] + jcen * adot[3],
-                a[4] + jcen * adot[4],
-                a[5] + jcen * adot[5],
+                jcen.mul_add(adot[0], a[0]),
+                jcen.mul_add(adot[1], a[1]),
+                jcen.mul_add(adot[2], a[2]),
+                jcen.mul_add(adot[3], a[3]),
+                jcen.mul_add(adot[4], a[4]),
+                jcen.mul_add(adot[5], a[5]),
                 error_terms,
             )
         } else {
@@ -393,8 +393,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
     let mut m = match terms {
         None => l - wbar,
         Some([b, c, s, f]) => {
-            l - wbar
-                + b * jcen * jcen
+            (b * jcen).mul_add(jcen, l - wbar)
                 + (c * (f * jcen).cos()).to_degrees()
                 + (s * (f * jcen).sin()).to_degrees()
         }
@@ -411,10 +410,10 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
     let mrad = m.to_radians();
 
     // Get the eccentric anomaly
-    let mut enrad = mrad + eccen * mrad.sin();
+    let mut enrad = eccen.mul_add(mrad.sin(), mrad);
     loop {
-        let deltamrad = mrad - (enrad - eccen * enrad.sin());
-        let deltaerad = deltamrad / (1.0 - eccen * enrad.cos());
+        let deltamrad = mrad - eccen.mul_add(-enrad.sin(), enrad);
+        let deltaerad = deltamrad / eccen.mul_add(-enrad.cos(), 1.0);
         enrad += deltaerad;
         if (deltaerad / enrad).abs() < 1.0e-8 {
             break;
@@ -422,7 +421,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
     }
     // Get heliocentric coordinates in orbital plane
     let xprime = a * (enrad.cos() - eccen);
-    let yprime = a * (1.0 - eccen * eccen).sqrt() * enrad.sin();
+    let yprime = a * eccen.mul_add(-eccen, 1.0).sqrt() * enrad.sin();
     let rprime = Vec3::new(xprime, yprime, 0.0);
     let recl = Quat::from_axis_angle(&Vec3::z_axis(), Omega.to_radians())
         * Quat::from_axis_angle(&Vec3::x_axis(), incl.to_radians())
@@ -431,10 +430,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
 
     // Rotate to the equatorial plane
     // Obliquity at J2000
-    let obliquity = (23.439279 - 0.0130102 * jcen - 5.086e-8 * jcen * jcen
-        + 5.565e-7 * jcen.powi(3)
-        + 1.6e-10 * jcen.powi(4)
-        + 1.21e-11 * jcen.powi(5))
+    let obliquity = 1.21e-11f64.mul_add(jcen.powi(5), 1.6e-10f64.mul_add(jcen.powi(4), 5.565e-7f64.mul_add(jcen.powi(3), (5.086e-8 * jcen).mul_add(-jcen, 0.0130102f64.mul_add(-jcen, 23.439279)))))
     .to_radians();
 
     Ok(Quat::from_axis_angle(&Vec3::x_axis(), obliquity) * recl * crate::consts::AU)
@@ -445,7 +441,7 @@ mod test {
     use super::*;
     use crate::jplephem;
 
-    fn errors_precise(planet: &SolarSystem) -> (usize, usize, usize) {
+    const fn errors_precise(planet: &SolarSystem) -> (usize, usize, usize) {
         match planet {
             SolarSystem::Mercury => (15, 1, 1),
             SolarSystem::Venus => (20, 1, 4),

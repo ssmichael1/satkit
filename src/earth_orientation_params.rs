@@ -212,12 +212,12 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
             let v1: &EOPEntry = &eop[v];
             let v0: &EOPEntry = &eop[v - 1];
             Some([
-                g0 * v0.dut1 + g1 * v1.dut1,
-                g0 * v0.xp + g1 * v1.xp,
-                g0 * v0.yp + g1 * v1.yp,
-                g0 * v0.lod + g1 * v1.lod,
-                g0 * v0.dX + g1 * v1.dX,
-                g0 * v0.dY + g1 * v1.dY,
+                g0.mul_add(v0.dut1, g1 * v1.dut1),
+                g0.mul_add(v0.xp, g1 * v1.xp),
+                g0.mul_add(v0.yp, g1 * v1.yp),
+                g0.mul_add(v0.lod, g1 * v1.lod),
+                g0.mul_add(v0.dX, g1 * v1.dX),
+                g0.mul_add(v0.dY, g1 * v1.dY),
             ])
         }
     }
