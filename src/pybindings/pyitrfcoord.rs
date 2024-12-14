@@ -64,23 +64,14 @@ impl PyITRFCoord {
     fn new(args: &Bound<'_, PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         // If kwargs are set, we get input from them
         if kwargs.is_some() {
-            use std::f64::consts::PI;
-
             let mut latitude_deg: Option<f64> = kwargs_or_none(&mut kwargs, "latitude_deg")?;
-            latitude_deg = match kwargs_or_none::<f64>(&mut kwargs, "latitude_rad")? {
-                None => latitude_deg,
-                Some(v) => Some(v * 180.0 / PI),
-            };
+            latitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "latitude_rad")?)
+                .map_or(latitude_deg, |v| Some(v.to_degrees()));
             let mut longitude_deg: Option<f64> = kwargs_or_none(&mut kwargs, "longitude_deg")?;
-            longitude_deg = match kwargs_or_none::<f64>(&mut kwargs, "longitude_rad")? {
-                None => longitude_deg,
-                Some(v) => Some(v * 180.0 / PI),
-            };
+            longitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "longitude_rad")?)
+                .map_or(longitude_deg, |v| Some(v.to_degrees()));
             let mut altitude: f64 = kwargs_or_default(&mut kwargs, "altitude", 0.0)?;
-            altitude = match kwargs_or_none(&mut kwargs, "height")? {
-                None => altitude,
-                Some(v) => v,
-            };
+            altitude = (kwargs_or_none(&mut kwargs, "height")?).map_or(altitude, |v| v);
 
             if latitude_deg.is_none() || longitude_deg.is_none() {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
@@ -120,9 +111,7 @@ impl PyITRFCoord {
                         "Invalid number of elements",
                     ));
                 }
-                Ok(Self(
-                    ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap(),
-                ))
+                Ok(Self(ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap()))
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                 "First input must be float, 3-element list of floats, or 3-element numpy array of float"

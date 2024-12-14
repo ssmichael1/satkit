@@ -287,7 +287,7 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn can_interp(&self) -> bool {
+    const fn can_interp(&self) -> bool {
         match &self.0 {
             PyPropResultType::R1(r) => r.odesol.is_some(),
             PyPropResultType::R7(r) => r.odesol.is_some(),

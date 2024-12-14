@@ -152,10 +152,11 @@ pub fn sgp4(
             opsmode.into(),
         );
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            let mut dims = vec![r.len()];
-            if r.nrows() > 1 && r.ncols() > 1 {
-                dims = vec![r.ncols(), r.nrows()];
-            }
+            let dims = if r.nrows() > 1 && r.ncols() > 1 {
+                vec![r.ncols(), r.nrows()]
+            } else {
+                vec![r.len()]
+            };
 
             // Note: this is a little confusing: ndarray uses
             // row major, nalgebra and numpy use column major,

@@ -23,10 +23,14 @@ struct EOPEntry {
 }
 
 fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
-    let path: PathBuf = match filename {
-        Some(pb) => pb,
-        None => datadir().unwrap_or(PathBuf::from(".")).join("EOP-All.csv"),
-    };
+    let path: PathBuf = filename.map_or_else(
+        || {
+            datadir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("EOP-All.csv")
+        },
+        |pb| pb,
+    );
     // Download EOP data from celetrak.org
     download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
 
@@ -56,12 +60,14 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
 
 #[allow(dead_code)]
 fn load_eop_file_legacy(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
-    let path: PathBuf = match filename {
-        Some(pb) => pb,
-        None => datadir()
-            .unwrap_or(PathBuf::from("."))
-            .join("finals2000A.all"),
-    };
+    let path: PathBuf = filename.map_or_else(
+        || {
+            datadir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("finals2000A.all")
+        },
+        |pb| pb,
+    );
 
     if !path.is_file() {
         return skerror!(
