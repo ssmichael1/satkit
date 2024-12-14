@@ -164,10 +164,6 @@ pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
         return Ok(sw[idx].clone());
     }
 
-    // More-complex lookup (is it in the future?)
-    // Increase efficiency by looking backward
-    let rec = sw.iter().rev().find(|x| x.date <= tm);
-
     sw.iter()
         .rev()
         .find(|x| x.date <= tm)
