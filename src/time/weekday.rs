@@ -8,19 +8,20 @@ pub enum Weekday {
     Thursday = 4,
     Friday = 5,
     Saturday = 6,
+    Invalid = 7,
 }
 
 impl From<i32> for Weekday {
     fn from(value: i32) -> Self {
         match value {
-            0 => Weekday::Sunday,
-            1 => Weekday::Monday,
-            2 => Weekday::Tuesday,
-            3 => Weekday::Wednesday,
-            4 => Weekday::Thursday,
-            5 => Weekday::Friday,
-            6 => Weekday::Saturday,
-            _ => panic!("Invalid weekday value: {}", value),
+            0 => Self::Sunday,
+            1 => Self::Monday,
+            2 => Self::Tuesday,
+            3 => Self::Wednesday,
+            4 => Self::Thursday,
+            5 => Self::Friday,
+            6 => Self::Saturday,
+            _ => Self::Invalid,
         }
     }
 }
@@ -35,6 +36,7 @@ impl From<Weekday> for i32 {
             Weekday::Thursday => 4,
             Weekday::Friday => 5,
             Weekday::Saturday => 6,
+            Weekday::Invalid => -1,
         }
     }
 }
@@ -45,13 +47,14 @@ impl std::fmt::Display for Weekday {
             f,
             "{}",
             match self {
-                Weekday::Sunday => "Sunday",
-                Weekday::Monday => "Monday",
-                Weekday::Tuesday => "Tuesday",
-                Weekday::Wednesday => "Wednesday",
-                Weekday::Thursday => "Thursday",
-                Weekday::Friday => "Friday",
-                Weekday::Saturday => "Saturday",
+                Self::Sunday => "Sunday",
+                Self::Monday => "Monday",
+                Self::Tuesday => "Tuesday",
+                Self::Wednesday => "Wednesday",
+                Self::Thursday => "Thursday",
+                Self::Friday => "Friday",
+                Self::Saturday => "Saturday",
+                Self::Invalid => "Invalid",
             }
         )
     }

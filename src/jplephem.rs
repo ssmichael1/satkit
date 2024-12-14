@@ -32,6 +32,7 @@ use crate::SKResult;
 
 use once_cell::sync::OnceCell;
 
+use crate::skerror;
 use crate::{Instant, TimeScale};
 
 impl TryFrom<i32> for SolarSystem {
@@ -64,11 +65,13 @@ impl TryFrom<i32> for SolarSystem {
 /// of time
 #[derive(Debug)]
 struct JPLEphem {
+    /// Version of ephemeris code
     _de_version: i32,
     /// Julian date of start of ephemerides database
     jd_start: f64,
     /// Julian date of end of ephemerides database
     jd_stop: f64,
+    /// Step size in Julian date
     jd_step: f64,
     /// Length of 1 astronomical unit, km
     _au: f64,
@@ -330,7 +333,7 @@ impl JPLEphem {
             12 => self.body_pos_optimized::<12>(body, tm),
             13 => self.body_pos_optimized::<13>(body, tm),
             14 => self.body_pos_optimized::<14>(body, tm),
-            _ => panic!("Invalid body"),
+            _ => skerror!("Invalid body"),
         }
     }
     /// Return the position & velocity the given body in the barycentric coordinate system
@@ -602,7 +605,7 @@ mod tests {
             .join("testpo.440");
 
         if !testvecfile.is_file() {
-            panic!(
+            println!(
                 "Required JPL ephemeris test vectors file: \"{}\" does not exist
                 clone test vectors repo at 
                 https://github.com/StevenSamirMichael/satkit-testvecs.git 
@@ -610,6 +613,7 @@ mod tests {
                 to point to directory",
                 testvecfile.to_string_lossy()
             );
+            return;
         }
 
         let file = std::fs::File::open(testvecfile).unwrap();

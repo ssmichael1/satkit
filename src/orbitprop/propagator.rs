@@ -679,7 +679,7 @@ mod tests {
             .join("ESA0OPSFIN_20233640000_01D_05M_ORB.SP3");
 
         if !testvecfile.is_file() {
-            panic!(
+            return skerror!(
                 "Required GPS SP3 File: \"{}\" does not exist
                 clone test vectors repo at
                 https://github.com/StevenSamirMichael/satkit-testvecs.git

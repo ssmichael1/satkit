@@ -434,9 +434,10 @@ impl std::fmt::Display for TLE {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{skerror, SKResult};
 
     #[test]
-    fn testload() {
+    fn testload() -> SKResult<()> {
         let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
         let line2: &str =
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
@@ -445,14 +446,15 @@ mod tests {
             Ok(_t) => {}
 
             Err(s) => {
-                panic!("load_3line: Err = \"{}\"", s);
+                return skerror!("load_3line: Err = \"{}\"", s);
             }
         }
         match TLE::load_2line(line1, line2) {
             Ok(_t) => {}
             Err(s) => {
-                panic!("load_2line: Err = \"{}\"", s);
+                return skerror!("load_2line: Err = \"{}\"", s);
             }
         }
+        Ok(())
     }
 }

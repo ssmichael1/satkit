@@ -1,9 +1,10 @@
 use thiserror::Error;
+pub type SKError = Box<dyn std::error::Error + Send + Sync>;
 pub type SKResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Debug, Error)]
 pub enum SKErr {
-    #[error("SatKIt Error: {0}")]
+    #[error("SatKit Error: {0}")]
     Error(String),
 }
 

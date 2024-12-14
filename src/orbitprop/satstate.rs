@@ -305,11 +305,11 @@ mod test {
         assert_abs_diff_eq!(satstate.vel_gcrf(), state0.vel_gcrf(), epsilon = 0.001);
         let cov1 = match satstate.cov() {
             StateCov::PVCov(v) => v,
-            StateCov::None => panic!("cov is not none"),
+            StateCov::None => return crate::skerror!("cov is not none"),
         };
         let cov2 = match state0.cov() {
             StateCov::PVCov(v) => v,
-            StateCov::None => panic!("cov is not none"),
+            StateCov::None => return crate::skerror!("cov is not none"),
         };
         assert_abs_diff_eq!(cov1, cov2, epsilon = 0.001);
 

@@ -24,18 +24,16 @@ pub fn kwargs_or_default<'a, T>(
 where
     T: FromPyObject<'a>,
 {
-    match kwargs.is_some() {
-        true => {
-            let kw = kwargs.unwrap();
-            match kw.get_item(name)? {
-                None => Ok(default),
-                Some(v) => {
-                    kw.del_item(name)?;
-                    Ok(v.extract::<T>()?)
-                }
+    if let Some(kw) = kwargs {
+        match kw.get_item(name)? {
+            None => Ok(default),
+            Some(v) => {
+                kw.del_item(name)?;
+                Ok(v.extract::<T>()?)
             }
         }
-        false => Ok(default),
+    } else {
+        Ok(default)
     }
 }
 
@@ -46,18 +44,16 @@ pub fn kwargs_or_none<'a, T>(
 where
     T: FromPyObject<'a>,
 {
-    match kwargs.is_some() {
-        true => {
-            let kw = kwargs.unwrap();
-            match kw.get_item(name)? {
-                None => Ok(None),
-                Some(v) => {
-                    kw.del_item(name)?;
-                    Ok(Some(v.extract::<T>()?))
-                }
+    if let Some(kw) = kwargs {
+        match kw.get_item(name)? {
+            None => Ok(None),
+            Some(v) => {
+                kw.del_item(name)?;
+                Ok(Some(v.extract::<T>()?))
             }
         }
-        false => Ok(None),
+    } else {
+        Ok(None)
     }
 }
 
@@ -217,14 +213,12 @@ pub fn py_quat_from_time_arr(
 }
 
 #[inline]
-pub fn vec2py<const T: usize>(py: Python, v: &Vector<T>) -> PyObject {
-    PyArray1::from_slice(py, v.as_slice())
-        .into_py_any(py)
-        .unwrap()
+pub fn vec2py<const T: usize>(py: Python, v: &Vector<T>) -> PyResult<PyObject> {
+    PyArray1::from_slice(py, v.as_slice()).into_py_any(py)
 }
 
-pub fn slice2py1d(py: Python, s: &[f64]) -> PyObject {
-    PyArray1::from_slice(py, s).into_py_any(py).unwrap()
+pub fn slice2py1d(py: Python, s: &[f64]) -> PyResult<PyObject> {
+    PyArray1::from_slice(py, s).into_py_any(py)
 }
 
 pub fn slice2py2d(py: Python, s: &[f64], rows: usize, cols: usize) -> PyResult<PyObject> {

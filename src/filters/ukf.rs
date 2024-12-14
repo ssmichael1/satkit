@@ -5,10 +5,18 @@
 ///
 //
 
+/// Generic float vector type of fixed size
 type Vector<const T: usize> = nalgebra::SVector<f64, T>;
-type Matrix<const M: usize, const N: usize> = nalgebra::SMatrix<f64, M, N>;
-use crate::{skerror, SKResult};
 
+/// Generic float matrix type of fixed size
+type Matrix<const M: usize, const N: usize> = nalgebra::SMatrix<f64, M, N>;
+use crate::SKResult;
+
+/// Unscented Kalman Filter
+///
+/// See: https://www.mathworks.com/help/control/ug/extended-and-unscented-kalman-filter-algorithms-for-online-state-estimation.html
+/// for a good explanation of the UKF algorithm
+///
 pub struct UKF<const N: usize> {
     pub alpha: f64,
     pub beta: f64,
@@ -33,7 +41,7 @@ impl<const N: usize> UKF<N> {
     fn weight_c(alpha: f64, beta: f64, kappa: f64) -> Vec<f64> {
         let mut weight_c = Vec::<f64>::with_capacity(2 * N + 1);
         let den: f64 = alpha.powi(2) * (N as f64 + kappa);
-        weight_c.push(2.0 - alpha.powi(2) + beta - N as f64 / den);
+        weight_c.push(2.0 + beta - alpha.powi(2).mul_add(1.0, N as f64 / den));
         for _i in 1..2 * N + 1 {
             weight_c.push(1.0 / (2.0 * den));
         }
@@ -71,15 +79,20 @@ impl<const N: usize> UKF<N> {
         &mut self,
         y: &Vector<M>,
         y_cov: &Matrix<M, M>,
-        f: impl Fn(Vector<N>) -> Vector<M>,
+        f: impl Fn(Vector<N>) -> SKResult<Vector<M>>,
     ) -> SKResult<()> {
         let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
         let cp = c.sqrt()
-            * match self.p.cholesky() {
-                Some(p) => p.l(),
-                None => return skerror!("cannot take cholesky decomposition"),
-            };
+            * self
+                .p
+                .cholesky()
+                .ok_or_else(|| {
+                    Box::new(crate::SKErr::Error(
+                        "Cannot take cholesky decomposition".to_string(),
+                    ))
+                })?
+                .l();
 
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
@@ -96,7 +109,7 @@ impl<const N: usize> UKF<N> {
         let yhat_i = x_sigma_points
             .iter()
             .map(|x| f(*x))
-            .collect::<Vec<Vector<M>>>();
+            .collect::<SKResult<Vec<Vector<M>>>>()?;
 
         let yhat = yhat_i
             .iter()
@@ -127,14 +140,20 @@ impl<const N: usize> UKF<N> {
 
     /// Predict step
     /// Note: add your own process noise after this function is called
-    pub fn predict(&mut self, f: impl Fn(Vector<N>) -> Vector<N>) {
+    pub fn predict(&mut self, f: impl Fn(Vector<N>) -> SKResult<Vector<N>>) -> SKResult<()> {
         let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
         let cp = c.sqrt()
-            * match self.p.cholesky() {
-                Some(p) => p.l(),
-                None => panic!("cannot take cholesky decomposition"),
-            };
+            * self
+                .p
+                .cholesky()
+                .ok_or_else(|| {
+                    Box::new(crate::SKErr::Error(
+                        "Cannot take cholesky decomposition".to_string(),
+                    ))
+                })?
+                .l();
+
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
         // Create prior weights
@@ -150,7 +169,7 @@ impl<const N: usize> UKF<N> {
         let x_post = x_sigma_points
             .iter()
             .map(|x| f(*x))
-            .collect::<Vec<Vector<N>>>();
+            .collect::<SKResult<Vec<Vector<N>>>>()?;
 
         // Update state
         self.x = x_post
@@ -167,6 +186,8 @@ impl<const N: usize> UKF<N> {
             .fold(Matrix::<N, N>::zeros(), |acc, (i, x)| {
                 acc + self.weight_c[i] * (x - self.x) * (x - self.x).transpose()
             });
+
+        Ok(())
     }
 }
 
@@ -188,7 +209,7 @@ mod tests {
         let w = normal.sample(&mut rand::thread_rng());
         let ysample = ytruth + Vector::<2>::new(v, w);
         let offset = Vector::<2>::new(5.0, 8.0);
-        let observe = |x: Vector<2>| x + offset;
+        let observe = |x: Vector<2>| Ok(x + offset);
 
         // Process noise
         let q = Matrix::<2, 2>::new(1.0e-12, 0.0, 0.0, 1.0e-12);
@@ -197,7 +218,7 @@ mod tests {
         for _ix in 0..500 {
             let v = normal.sample(&mut rand::thread_rng());
             let w = normal.sample(&mut rand::thread_rng());
-            let ysample = observe(ytruth + Vector::<2>::new(v, w));
+            let ysample = observe(ytruth + Vector::<2>::new(v, w)).unwrap();
             ukf.update(&ysample, &y_cov, observe).unwrap();
             ukf.p += q;
         }

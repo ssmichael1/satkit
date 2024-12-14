@@ -105,13 +105,14 @@ mod tests {
     use super::IERSTable;
 
     #[test]
-    fn load_table() {
+    fn load_table() -> crate::SKResult<()> {
         let t = IERSTable::from_file("tab5.2a.txt");
         if t.is_err() {
-            panic!("Could not load IERS table");
+            return crate::skerror!("Could not load IERS table");
         }
         if t.unwrap().data[0].ncols() < 17 {
-            panic!("Error loading table");
+            return crate::skerror!("Error loading table");
         }
+        Ok(())
     }
 }

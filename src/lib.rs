@@ -52,11 +52,11 @@
 //! satkit::utils::update_datafiles(None, false);
 //! ```
 
+//#![warn(clippy::all, clippy::nursery, clippy::cargo)]
+#![warn(clippy::panic)]
+
 // Type definitions
 pub mod types;
-
-/// Time and time bases (UTC, TAI, GPS, TT, etc...)
-// pub mod Instant;
 
 /// Universal constants
 pub mod consts;
@@ -111,6 +111,5 @@ pub use tle::TLE;
 pub(crate) use types::skerror;
 pub use types::SKErr;
 pub use types::SKResult;
-
 #[cfg(feature = "pybindings")]
 pub mod pybindings;
