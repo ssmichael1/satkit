@@ -55,7 +55,7 @@ impl PySatProperties {
             }
         }
 
-        Ok(PySatProperties(SatPropertiesStatic::new(
+        Ok(Self(SatPropertiesStatic::new(
             cdaoverm, craoverm,
         )))
     }

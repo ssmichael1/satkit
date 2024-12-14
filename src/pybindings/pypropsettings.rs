@@ -48,7 +48,7 @@ impl PyPropSettings {
             }
         }
 
-        Ok(PyPropSettings(ps))
+        Ok(Self(ps))
     }
 
     #[getter]
@@ -119,13 +119,13 @@ impl PyPropSettings {
 }
 
 impl From<&PyPropSettings> for PropSettings {
-    fn from(item: &PyPropSettings) -> PropSettings {
+    fn from(item: &PyPropSettings) -> Self {
         item.0.clone()
     }
 }
 
 impl From<&PropSettings> for PyPropSettings {
-    fn from(item: &PropSettings) -> PyPropSettings {
-        PyPropSettings(item.clone())
+    fn from(item: &PropSettings) -> Self {
+        Self(item.clone())
     }
 }

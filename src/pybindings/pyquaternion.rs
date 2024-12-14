@@ -40,7 +40,7 @@ pub struct QuaternionVec(Vec<Quat>);
 
 impl From<Quat> for Quaternion {
     fn from(q: Quat) -> Self {
-        Quaternion(q)
+        Self(q)
     }
 }
 
@@ -254,7 +254,7 @@ impl Quaternion {
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
     #[getter]
-    fn conj(&self) -> PyResult<Quaternion> {
+    fn conj(&self) -> PyResult<Self> {
         Ok(self.0.conjugate().into())
     }
 
@@ -263,7 +263,7 @@ impl Quaternion {
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
     #[getter]
-    fn conjugate(&self) -> PyResult<Quaternion> {
+    fn conjugate(&self) -> PyResult<Self> {
         Ok(self.0.conjugate().into())
     }
 
@@ -277,7 +277,7 @@ impl Quaternion {
     /// Returns:
     ///     quaternion: Quaterion represention fracional spherical interpolation between self and other    
     #[pyo3(signature=(other, frac,  epsilon=1.0e-6))]
-    fn slerp(&self, other: &Quaternion, frac: f64, epsilon: f64) -> PyResult<Quaternion> {
+    fn slerp(&self, other: &Self, frac: f64, epsilon: f64) -> PyResult<Self> {
         match self.0.try_slerp(&other.0, frac, epsilon) {
             Some(v) => Ok(v.into()),
             None => Err(pyo3::exceptions::PyRuntimeError::new_err(
@@ -288,10 +288,10 @@ impl Quaternion {
 
     fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         // Multiply quaternion by quaternion
-        if other.is_instance_of::<Quaternion>() {
-            let q: PyRef<Quaternion> = other.extract()?;
+        if other.is_instance_of::<Self>() {
+            let q: PyRef<Self> = other.extract()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Quaternion(self.0 * q.0).into_py_any(py)
+                Self(self.0 * q.0).into_py_any(py)
             })
         }
         // This incorrectly matches for all PyArray types

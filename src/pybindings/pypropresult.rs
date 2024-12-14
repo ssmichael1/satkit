@@ -122,7 +122,7 @@ impl PyPropResult {
     /// This should never be called and is here only for pickle support
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        PyPropResult(PyPropResultType::R1(Box::new(PropagationResult::<1> {
+        Self(PyPropResultType::R1(Box::new(PropagationResult::<1> {
             time_start: Instant::INVALID,
             state_start: Vector::<6>::zeros(),
             time_end: Instant::INVALID,

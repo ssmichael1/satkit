@@ -42,12 +42,12 @@ impl PyTLE {
             .map(|v| -> String { v.unwrap() })
             .collect();
 
-        PyTLE::from_lines(lines)
+        Self::from_lines(lines)
     }
 
     #[new]
-    fn new() -> PyTLE {
-        PyTLE(TLE::new())
+    fn new() -> Self {
+        Self(TLE::new())
     }
 
     /// Return a list of TLES loaded from input list of lines

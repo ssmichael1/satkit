@@ -70,31 +70,31 @@ pub enum PyWeekday
 }
 
 impl From<&PyWeekday> for Weekday {
-    fn from(w: &PyWeekday) -> Weekday {
+    fn from(w: &PyWeekday) -> Self {
         match w {
-            PyWeekday::Sunday => Weekday::Sunday,
-            PyWeekday::Monday => Weekday::Monday,
-            PyWeekday::Tuesday => Weekday::Tuesday,
-            PyWeekday::Wednesday => Weekday::Wednesday,
-            PyWeekday::Thursday => Weekday::Thursday,
-            PyWeekday::Friday => Weekday::Friday,
-            PyWeekday::Saturday => Weekday::Saturday,
-            PyWeekday::Invalid => Weekday::Invalid,
+            PyWeekday::Sunday => Self::Sunday,
+            PyWeekday::Monday => Self::Monday,
+            PyWeekday::Tuesday => Self::Tuesday,
+            PyWeekday::Wednesday => Self::Wednesday,
+            PyWeekday::Thursday => Self::Thursday,
+            PyWeekday::Friday => Self::Friday,
+            PyWeekday::Saturday => Self::Saturday,
+            PyWeekday::Invalid => Self::Invalid,
         }
     }
 }   
 
 impl From<Weekday> for PyWeekday {
-    fn from(w: Weekday) -> PyWeekday {
+    fn from(w: Weekday) -> Self {
         match w {
-            Weekday::Sunday => PyWeekday::Sunday,
-            Weekday::Monday => PyWeekday::Monday,
-            Weekday::Tuesday => PyWeekday::Tuesday,
-            Weekday::Wednesday => PyWeekday::Wednesday,
-            Weekday::Thursday => PyWeekday::Thursday,
-            Weekday::Friday => PyWeekday::Friday,
-            Weekday::Saturday => PyWeekday::Saturday,
-            Weekday::Invalid => PyWeekday::Invalid,
+            Weekday::Sunday => Self::Sunday,
+            Weekday::Monday => Self::Monday,
+            Weekday::Tuesday => Self::Tuesday,
+            Weekday::Wednesday => Self::Wednesday,
+            Weekday::Thursday => Self::Thursday,
+            Weekday::Friday => Self::Friday,
+            Weekday::Saturday => Self::Saturday,
+            Weekday::Invalid => Self::Invalid,
         }
     }
 }
@@ -122,29 +122,29 @@ impl<'py> IntoPyObject<'py> for crate::Weekday {
 
 
 impl From<&PyTimeScale> for TimeScale {
-    fn from(s: &PyTimeScale) -> TimeScale {
+    fn from(s: &PyTimeScale) -> Self {
         match s {
-            PyTimeScale::Invalid => TimeScale::Invalid,
-            PyTimeScale::UTC => TimeScale::UTC,
-            PyTimeScale::TT => TimeScale::TT,
-            PyTimeScale::UT1 => TimeScale::UT1,
-            PyTimeScale::TAI => TimeScale::TAI,
-            PyTimeScale::GPS => TimeScale::GPS,
-            PyTimeScale::TDB => TimeScale::TDB,
+            PyTimeScale::Invalid => Self::Invalid,
+            PyTimeScale::UTC => Self::UTC,
+            PyTimeScale::TT => Self::TT,
+            PyTimeScale::UT1 => Self::UT1,
+            PyTimeScale::TAI => Self::TAI,
+            PyTimeScale::GPS => Self::GPS,
+            PyTimeScale::TDB => Self::TDB,
         }
     }
 }
 
 impl From<PyTimeScale> for TimeScale {
-    fn from(s: PyTimeScale) -> TimeScale {
+    fn from(s: PyTimeScale) -> Self {
         match s {
-            PyTimeScale::Invalid => TimeScale::Invalid,
-            PyTimeScale::UTC => TimeScale::UTC,
-            PyTimeScale::TT => TimeScale::TT,
-            PyTimeScale::UT1 => TimeScale::UT1,
-            PyTimeScale::TAI => TimeScale::TAI,
-            PyTimeScale::GPS => TimeScale::GPS,
-            PyTimeScale::TDB => TimeScale::TDB,
+            PyTimeScale::Invalid => Self::Invalid,
+            PyTimeScale::UTC => Self::UTC,
+            PyTimeScale::TT => Self::TT,
+            PyTimeScale::UT1 => Self::UT1,
+            PyTimeScale::TAI => Self::TAI,
+            PyTimeScale::GPS => Self::GPS,
+            PyTimeScale::TDB => Self::TDB,
         }
     }
 }
@@ -216,7 +216,7 @@ impl PyInstant {
                 
 
         if py_args.is_empty() {
-            Ok(PyInstant(Instant::now()))       
+            Ok(Self(Instant::now()))       
         } else if py_args.len() == 3 {
             let year = py_args.get_item(0)?.extract::<i32>()?;
             let month = py_args.get_item(1)?.extract::<i32>()?;
@@ -230,14 +230,14 @@ impl PyInstant {
             let min = py_args.get_item(4)?.extract::<i32>()?;
             let sec = py_args.get_item(5)?.extract::<f64>()?;
          
-            Ok(PyInstant(Instant::from_datetime(year, month, day, hour, min, sec)))
+            Ok(Self(Instant::from_datetime(year, month, day, hour, min, sec)))
         } else if py_args.len() == 1 {
             let item = py_args.get_item(0)?;
             let s = item.extract::<&str>()?;
             
             // Input is a string, first try rfc3339 format
             match Instant::from_rfc3339(s) {
-                Ok(v) => return Ok(PyInstant(v)),
+                Ok(v) => return Ok(Self(v)),
                 Err(_) => {
                     // Now try multiple formats
                     return Self::from_string(s);
@@ -266,7 +266,7 @@ impl PyInstant {
     #[staticmethod]
     fn from_string(s: &str) -> PyResult<Self> {
         match Instant::from_string(s) {
-            Ok(v) => Ok(PyInstant(v)),
+            Ok(v) => Ok(Self(v)),
             Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
                 "Could not parse time string",
             )),
@@ -299,7 +299,7 @@ impl PyInstant {
     #[staticmethod]
     fn strptime(s: &str, fmt: &str) -> PyResult<Self> {
         match Instant::strptime(s, fmt) {
-            Ok(v) => Ok(PyInstant(v)),
+            Ok(v) => Ok(Self(v)),
             Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
                 "Could not parse time string",
             )),
@@ -359,7 +359,7 @@ impl PyInstant {
     #[staticmethod]
     fn from_rfc3339(s: &str) -> PyResult<Self> {
         match Instant::from_rfc3339(s) {
-            Ok(v) => Ok(PyInstant(v)),
+            Ok(v) => Ok(Self(v)),
             Err(_) => Err(pyo3::exceptions::PyValueError::new_err(
                 "Could not parse time string",
             )),
@@ -396,7 +396,7 @@ impl PyInstant {
     ///     satkit.time: Time object representing current time
     #[staticmethod]
     fn now() -> PyResult<Self> {
-        Ok(PyInstant(Instant::now()))
+        Ok(Self(Instant::now()))
     }
 
     /// Return time object representing input date
@@ -410,7 +410,7 @@ impl PyInstant {
     ///     satkit.time: Time object representing instant of input date
     #[staticmethod]
     fn from_date(year: i32, month: i32, day: i32) -> PyResult<Self> {
-        Ok(PyInstant(Instant::from_date(year, month, day)))        
+        Ok(Self(Instant::from_date(year, month, day)))        
     }
 
     /// Return time object representing input modified Julian date and time scale
@@ -449,7 +449,7 @@ impl PyInstant {
     ///     satkit.time: Time object representing instant of julian date with given scale
     #[staticmethod]
     fn from_jd(jd: f64, scale: &PyTimeScale) -> Self {
-        PyInstant(Instant::from_jd_with_scale(jd, scale.into()))        
+        Self(Instant::from_jd_with_scale(jd, scale.into()))        
     }
 
     /// Convert time object to UTC Gegorian date
@@ -493,7 +493,7 @@ impl PyInstant {
         min: i32,
         sec: f64,
     ) -> PyResult<Self> {
-        Ok(PyInstant(Instant::from_datetime(
+        Ok(Self(Instant::from_datetime(
                 year,
                 month,
                 day,
@@ -519,7 +519,7 @@ impl PyInstant {
             .unwrap()
             .extract::<f64>()
             .unwrap();
-        Ok(PyInstant(Instant::from_unixtime(ts)))        
+        Ok(Self(Instant::from_unixtime(ts)))        
     }
 
     /// Convert to Python datetime object
@@ -577,7 +577,7 @@ impl PyInstant {
 
     #[staticmethod]
     fn from_gps_week_and_second(week: i32, seconds: f64) -> Self {
-        PyInstant(Instant::from_gps_week_and_second(week, seconds))
+        Self(Instant::from_gps_week_and_second(week, seconds))
 
     }
     
@@ -601,7 +601,7 @@ impl PyInstant {
                 let objarr = parr
                     .as_array()
                     .map(|x| {
-                        PyInstant(self.0 + crate::Duration::from_days(*x)).into_py_any(py).unwrap()                    
+                        Self(self.0 + crate::Duration::from_days(*x)).into_py_any(py).unwrap()                    
                     })
                     .into_iter();
                 let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
@@ -615,7 +615,7 @@ impl PyInstant {
                     let objarr = v
                         .iter()
                         .map(|x| {
-                            let pyobj = PyInstant(self.0 + crate::Duration::from_days(*x));                            
+                            let pyobj = Self(self.0 + crate::Duration::from_days(*x));                            
                             pyobj.into_py_any(py).unwrap()
                         });
                     let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
@@ -626,7 +626,7 @@ impl PyInstant {
                     let objarr = v
                         .into_iter()
                         .map(|x| {
-                            let pyobj = PyInstant(self.0 + x.0);                            
+                            let pyobj = Self(self.0 + x.0);                            
                             pyobj.into_py_any(py).unwrap()
                         });
 
@@ -644,11 +644,11 @@ impl PyInstant {
             || other.is_instance_of::<pyo3::types::PyInt>()
         {
             let dt: f64 = other.extract::<f64>().unwrap();
-            PyInstant(self.0 + crate::Duration::from_days(dt)).into_py_any(other.py())                
+            Self(self.0 + crate::Duration::from_days(dt)).into_py_any(other.py())                
         
         } else if other.is_instance_of::<PyDuration>() {
             let dur: PyDuration = other.extract::<PyDuration>().unwrap();
-            PyInstant(self.0 + dur.0).into_py_any(other.py())       
+            Self(self.0 + dur.0).into_py_any(other.py())       
         } else {
             Err(pyo3::exceptions::PyTypeError::new_err(
                 "Invalid type for rhs",
@@ -671,7 +671,7 @@ impl PyInstant {
                 .as_array()
                 .into_iter()
                 .map(|x| -> PyObject {
-                    let obj = PyInstant(self.0 - crate::Duration::from_days(*x));
+                    let obj = Self(self.0 - crate::Duration::from_days(*x));
                     obj.into_py_any(other.py()).unwrap()                                                
                 });               
                 let parr = np::PyArray1::<PyObject>::from_iter(other.py(), objarr);
@@ -683,7 +683,7 @@ impl PyInstant {
                 let objarr = v
                     .into_iter()
                     .map(|x| {
-                        let pyobj = PyInstant(self.0 - crate::Duration::from_days(x));                         
+                        let pyobj = Self(self.0 - crate::Duration::from_days(x));                         
                         pyobj.into_py_any(other.py()).unwrap()
                     });
                 let parr = np::PyArray1::<PyObject>::from_iter(other.py(), objarr);
@@ -692,7 +692,7 @@ impl PyInstant {
                 let objarr = v
                     .into_iter()
                     .map(|x| {
-                        let pyobj = PyInstant(self.0 - x.0);                    
+                        let pyobj = Self(self.0 - x.0);                    
                         pyobj.into_py_any(other.py()).unwrap()
                     });
                     
@@ -711,13 +711,13 @@ impl PyInstant {
         {
             let dt: f64 = other.extract::<f64>().unwrap();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                PyInstant(self.0 - crate::Duration::from_days(dt)).into_py_any(py)                            
+                Self(self.0 - crate::Duration::from_days(dt)).into_py_any(py)                            
             })
         } else if other.is_instance_of::<PyDuration>() {
             let dur: PyDuration = other.extract::<PyDuration>().unwrap();
-            PyInstant(self.0 - dur.0).into_py_any(other.py())            
-        } else if other.is_instance_of::<PyInstant>() {
-            let tm2 = other.extract::<PyInstant>().unwrap();
+            Self(self.0 - dur.0).into_py_any(other.py())            
+        } else if other.is_instance_of::<Self>() {
+            let tm2 = other.extract::<Self>().unwrap();
             PyDuration(self.0 - tm2.0).into_py_any(other.py())
         } else {
             Err(pyo3::exceptions::PyTypeError::new_err(
@@ -734,8 +734,8 @@ impl PyInstant {
     /// Returns:
     ///     bool: True if equal, False otherwise
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<PyInstant>() {
-            let tm2 = other.extract::<PyInstant>().unwrap();
+        if other.is_instance_of::<Self>() {
+            let tm2 = other.extract::<Self>().unwrap();
             Ok(self.0 == tm2.0)
         } else {
             Ok(false)
@@ -750,8 +750,8 @@ impl PyInstant {
     /// Returns:
     ///     bool: True if less than, False otherwise
     fn __lt__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<PyInstant>() {
-            let tm2 = other.extract::<PyInstant>().unwrap();
+        if other.is_instance_of::<Self>() {
+            let tm2 = other.extract::<Self>().unwrap();
             Ok(self.0 < tm2.0)
         } else {
             Ok(false)
@@ -766,8 +766,8 @@ impl PyInstant {
     /// Returns:
     ///     bool: True if less than or equal, False otherwise
     fn __le__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<PyInstant>() {
-            let tm2 = other.extract::<PyInstant>().unwrap();
+        if other.is_instance_of::<Self>() {
+            let tm2 = other.extract::<Self>().unwrap();
             Ok(self.0 <= tm2.0)
         } else {
             Ok(false)
@@ -782,8 +782,8 @@ impl PyInstant {
     /// Returns:
     ///     bool: True if greater than, False otherwise
     fn __gt__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<PyInstant>() {
-            let tm2 = other.extract::<PyInstant>().unwrap();
+        if other.is_instance_of::<Self>() {
+            let tm2 = other.extract::<Self>().unwrap();
             Ok(self.0 > tm2.0)
         } else {
             Ok(false)
@@ -798,8 +798,8 @@ impl PyInstant {
     /// Returns:
     ///     
     fn __ge__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<PyInstant>() {
-            let tm2 = other.extract::<PyInstant>().unwrap();
+        if other.is_instance_of::<Self>() {
+            let tm2 = other.extract::<Self>().unwrap();
             Ok(self.0 >= tm2.0)
         } else {
             Ok(false)
@@ -819,8 +819,8 @@ impl PyInstant {
     ///
     /// A UTC days is defined as being exactly 86400 seconds long.  This
     /// avoids the ambiguity of adding a "day" to a time that has a leap second
-    fn add_utc_days(&self, days: f64) -> PyInstant {
-        PyInstant(self.0.add_utc_days(days))        
+    fn add_utc_days(&self, days: f64) -> Self {
+        Self(self.0.add_utc_days(days))        
     }
 
     fn __str__(&self) -> PyResult<String> {

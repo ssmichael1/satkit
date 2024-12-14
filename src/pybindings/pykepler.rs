@@ -69,7 +69,7 @@ impl PyKepler {
                 ))
             }
         };
-        Ok(PyKepler(Kepler::new(a, e, i, raan, w, an)))
+        Ok(Self(Kepler::new(a, e, i, raan, w, an)))
     }
 
     #[getter]
@@ -126,19 +126,19 @@ impl PyKepler {
         let r = py_to_smatrix(r)?;
         let v = py_to_smatrix(v)?;
         match Kepler::from_pv(r, v) {
-            Ok(k) => Ok(PyKepler(k)),
+            Ok(k) => Ok(Self(k)),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
         }
     }
 
-    fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<PyKepler> {
+    fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<Self> {
         if dt.is_instance_of::<pyo3::types::PyFloat>() {
             let dt = dt.extract::<f64>()?;
             let dt = crate::Duration::from_seconds(dt);
-            Ok(PyKepler(self.0.propagate(&dt)))
+            Ok(Self(self.0.propagate(&dt)))
         } else {
             let dt: PyDuration = dt.extract()?;
-            Ok(PyKepler(self.0.propagate(&dt.0)))
+            Ok(Self(self.0.propagate(&dt.0)))
         }
     }
 
