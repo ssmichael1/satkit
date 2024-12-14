@@ -7,6 +7,7 @@ use json::JsonValue;
 use std::path::PathBuf;
 use std::thread::JoinHandle;
 
+/// Download a list of files from a JSON file
 fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> SKResult<()> {
     let json_base: JsonValue = json::parse(download_to_string(json_url.as_str())?.as_str())?;
     let vresult: Vec<std::thread::JoinHandle<SKResult<bool>>> = json_base
@@ -23,6 +24,7 @@ fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> SKResu
     Ok(())
 }
 
+/// Download a list of files from a JSON file
 fn download_from_json(
     v: &JsonValue,
     basedir: std::path::PathBuf,
@@ -143,22 +145,3 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> SKRe
     )?;
     Ok(())
 }
-
-/*
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    #[test]
-    fn update_data() {
-        match update_datafiles(None, false) {
-            Ok(()) => (),
-            Err(e) => {
-                println!("Error: {}", e.to_string());
-                assert!(1 == 0);
-            }
-        }
-    }
-}
-*/

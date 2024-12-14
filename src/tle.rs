@@ -1,6 +1,7 @@
 use crate::sgp4::SatRec;
-use crate::utils::SKResult;
+use crate::skerror;
 use crate::Instant;
+use crate::SKResult;
 
 ///
 /// Stucture representing a Two-Line Element Set (TLE), a satellite
@@ -195,7 +196,7 @@ impl TLE {
     ///
     /// ```
     ///
-    pub fn load_3line(line0: &str, line1: &str, line2: &str) -> Result<TLE, String> {
+    pub fn load_3line(line0: &str, line1: &str, line2: &str) -> SKResult<TLE> {
         match TLE::load_2line(line1, line2) {
             Ok(mut tle) => {
                 tle.name = {
@@ -242,13 +243,13 @@ impl TLE {
     ///
     /// ```
     ///
-    pub fn load_2line(line1: &str, line2: &str) -> Result<TLE, String> {
+    pub fn load_2line(line1: &str, line2: &str) -> SKResult<TLE> {
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
             mstr.push_str(&line1[18..20]);
             let mut s: u32 = match mstr.parse() {
                 Ok(y) => y,
-                Err(_) => return Err("Could not parse year".to_string()),
+                Err(_) => return crate::skerror!("Could not parse year"),
             };
             s -= 100;
             s
@@ -260,7 +261,7 @@ impl TLE {
         }
         let day_of_year: f64 = match line1[20..32].parse() {
             Ok(y) => y,
-            Err(_) => return Err("Could not parse day of year".to_string()),
+            Err(_) => return crate::skerror!("Could not parse day of year"),
         };
 
         // Note: day_of_year starts from 1, not zero,
@@ -273,7 +274,7 @@ impl TLE {
             sat_num: {
                 match line1[2..7].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse sat number".to_string()),
+                    Err(e) => return skerror!("Could not parse sat number: {}", e.to_string()),
                 }
             },
             intl_desig: { line1[9..16].trim().to_string() },
@@ -282,7 +283,7 @@ impl TLE {
             desig_piece: {
                 match line1[14..18].trim().parse() {
                     Ok(l) => l,
-                    Err(_) => return Err("Could not parse desig_piece".to_string()),
+                    Err(e) => return skerror!("Could not parse desig_piece: {}", e.to_string()),
                 }
             },
             epoch,
@@ -291,7 +292,9 @@ impl TLE {
                 mstr.push_str(&line1[34..43]);
                 let mut m: f64 = match mstr.parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse mean motion dot".to_string()),
+                    Err(e) => {
+                        return skerror!("Could not parse mean motion dot: {}", e.to_string())
+                    }
                 };
                 if line1.chars().nth(33).unwrap() == '-' {
                     m *= -1.0;
@@ -305,7 +308,9 @@ impl TLE {
                 mstr.push_str(&line1[50..53]);
                 let mut m: f64 = match mstr.trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse mean motion dot dot".to_string()),
+                    Err(e) => {
+                        return skerror!("Could not parse mean motion dot dot: {}", e.to_string())
+                    }
                 };
                 if line1.chars().nth(44).unwrap() == '-' {
                     m *= -1.0;
@@ -319,7 +324,7 @@ impl TLE {
                 mstr.push_str(&line1[59..62]);
                 let mut m: f64 = match mstr.trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse bstar (drag)".to_string()),
+                    Err(e) => return skerror!("Could not parse bstar (drag): {}", e.to_string()),
                 };
                 if line1.chars().nth(53).unwrap() == '-' {
                     m *= -1.0;
@@ -330,19 +335,19 @@ impl TLE {
             element_num: {
                 match line1[64..68].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse element number".to_string()),
+                    Err(e) => return skerror!("Could not parse element number: {}", e.to_string()),
                 }
             },
             inclination: {
                 match line2[8..16].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse inclination".to_string()),
+                    Err(e) => return skerror!("Could not parse inclination: {}", e.to_string()),
                 }
             },
             raan: {
                 match line2[17..25].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse raan".to_string()),
+                    Err(e) => return skerror!("Could not parse raan: {}", e.to_string()),
                 }
             },
             eccen: {
@@ -350,31 +355,31 @@ impl TLE {
                 mstr.push_str(&line2[26..33]);
                 match mstr.trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse eccen".to_string()),
+                    Err(e) => return skerror!("Could not parse eccen: {}", e.to_string()),
                 }
             },
             arg_of_perigee: {
                 match line2[34..42].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse arg of perigee".to_string()),
+                    Err(e) => return skerror!("Could not parse arg of perigee: {}", e.to_string()),
                 }
             },
             mean_anomaly: {
                 match line2[42..51].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse mean anomaly".to_string()),
+                    Err(e) => return skerror!("Could not parse mean anomaly: {}", e.to_string()),
                 }
             },
             mean_motion: {
                 match line2[52..63].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse mean motion".to_string()),
+                    Err(e) => return skerror!("Could not parse mean motion: {}", e.to_string()),
                 }
             },
             rev_num: {
                 match line2[63..68].trim().parse() {
                     Ok(y) => y,
-                    Err(_) => return Err("Could not parse rev num".to_string()),
+                    Err(e) => return skerror!("Could not parse rev num: {}", e.to_string()),
                 }
             },
             satrec: None,
@@ -429,9 +434,10 @@ impl std::fmt::Display for TLE {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{skerror, SKResult};
 
     #[test]
-    fn testload() {
+    fn testload() -> SKResult<()> {
         let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
         let line2: &str =
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
@@ -440,14 +446,15 @@ mod tests {
             Ok(_t) => {}
 
             Err(s) => {
-                panic!("load_3line: Err = \"{}\"", s);
+                return skerror!("load_3line: Err = \"{}\"", s);
             }
         }
         match TLE::load_2line(line1, line2) {
             Ok(_t) => {}
             Err(s) => {
-                panic!("load_2line: Err = \"{}\"", s);
+                return skerror!("load_2line: Err = \"{}\"", s);
             }
         }
+        Ok(())
     }
 }

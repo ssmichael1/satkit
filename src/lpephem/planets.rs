@@ -33,6 +33,7 @@
 //! | Neptune  | 400         | 15           | 4000       |
 //!
 
+use crate::skerror;
 use crate::Instant;
 use crate::SKResult;
 use crate::SolarSystem;
@@ -142,7 +143,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     44.96476227,
                     131.78422574,
                 ],
-                _ => return Err("Invalid Body".into()),
+                _ => return skerror!("Invalid Body"),
             };
 
             let adot: [f64; 6] = match body {
@@ -210,7 +211,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     -0.32241464,
                     -0.00508664,
                 ],
-                _ => return Err("Invalid Body".into()),
+                _ => return skerror!("Invalid Body"),
             };
             // Julian century
             (
@@ -288,7 +289,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     44.96476227,
                     131.78422574,
                 ],
-                _ => return Err("Invalid Body".into()),
+                _ => return skerror!("Invalid Body"),
             };
             let adot: [f64; 6] = match body {
                 SolarSystem::Mercury => [
@@ -355,7 +356,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     0.01009938,
                     -0.00606302,
                 ],
-                _ => return Err("Invalid Body".into()),
+                _ => return skerror!("Invalid Body"),
             };
             let error_terms: Option<[f64; 4]> = match body {
                 SolarSystem::Jupiter => Some([-0.00012452, 0.06064060, -0.35635438, 38.35125000]),
@@ -374,7 +375,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                 error_terms,
             )
         } else {
-            return Err("Time out of range".into());
+            return skerror!("Time out of range");
         }
     };
 

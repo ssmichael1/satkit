@@ -1,4 +1,5 @@
-use crate::utils::{self, download_if_not_exist, SKResult};
+use crate::utils::{self, download_if_not_exist};
+use crate::SKResult;
 use nalgebra as na;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
@@ -41,7 +42,7 @@ impl IERSTable {
                         let s: Vec<&str> = tline.split_whitespace().collect();
                         let tsize: usize = s[s.len() - 1].parse().unwrap_or(0);
                         if !(0..=5).contains(&tnum) || tsize == 0 {
-                            return utils::skerror!(
+                            return crate::skerror!(
                                 "Error parsing file {}, invalid table definition line",
                                 fname
                             );
@@ -51,18 +52,15 @@ impl IERSTable {
                         continue;
                     } else if tnum >= 0 {
                         if table.data[tnum as usize].ncols() < 17 {
-                            return Err(utils::SKErr::new(
-                                format!("Error parsing file {}, table not initialized", fname)
-                                    .as_str(),
-                            )
-                            .into());
+                            return crate::skerror!(
+                                "Error parsing file {}, table not initialized",
+                                fname
+                            );
                         }
                         table.data[tnum as usize].set_row(
                             rowcnt,
                             &na::SMatrix::<f64, 1, 17>::from_iterator(
-                                tline
-                                    .split_whitespace()
-                                    .map(|x| x.parse().unwrap()),
+                                tline.split_whitespace().map(|x| x.parse().unwrap()),
                             ),
                         );
                         rowcnt += 1;
@@ -107,13 +105,14 @@ mod tests {
     use super::IERSTable;
 
     #[test]
-    fn load_table() {
+    fn load_table() -> crate::SKResult<()> {
         let t = IERSTable::from_file("tab5.2a.txt");
         if t.is_err() {
-            panic!("Could not load IERS table");
+            return crate::skerror!("Could not load IERS table");
         }
         if t.unwrap().data[0].ncols() < 17 {
-            panic!("Error loading table");
+            return crate::skerror!("Error loading table");
         }
+        Ok(())
     }
 }

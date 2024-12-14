@@ -1,7 +1,7 @@
-use super::rk_adaptive::RKAdaptive;
+use super::RKAdaptive;
 
 pub struct RKF45 {}
-impl RKAdaptive<6> for RKF45 {
+impl RKAdaptive<6, 1> for RKF45 {
     const A: [[f64; 6]; 6] = [
         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         [0.25, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -31,6 +31,16 @@ impl RKAdaptive<6> for RKF45 {
             0.0,
         ],
     ];
+
+    const BI: [[f64; 1]; 6] = [
+        [16.0 / 135.0],
+        [0.0],
+        [6656.0 / 12825.0],
+        [28561.0 / 56430.0],
+        [-9.0 / 50.0],
+        [2.0 / 55.0],
+    ];
+
     const B: [f64; 6] = [
         16.0 / 135.0,
         0.0,
@@ -63,44 +73,4 @@ impl RKAdaptive<6> for RKF45 {
     const ORDER: usize = 4;
 
     const FSAL: bool = false;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::types::*;
-    use super::super::RKAdaptiveSettings;
-    use super::*;
-    type State = nalgebra::Vector2<f64>;
-
-    struct HarmonicOscillator {
-        k: f64,
-    }
-    impl HarmonicOscillator {
-        fn new(k: f64) -> HarmonicOscillator {
-            HarmonicOscillator { k: k }
-        }
-    }
-
-    impl ODESystem for HarmonicOscillator {
-        type Output = nalgebra::Vector2<f64>;
-        fn ydot(&mut self, _x: f64, y: &nalgebra::Vector2<f64>) -> ODEResult<Self::Output> {
-            Ok(State::new(y[1], -self.k * y[0]))
-        }
-    }
-
-    #[test]
-    fn testit() {
-        let mut system = HarmonicOscillator::new(1.0);
-        let y0 = State::new(1.0, 0.0);
-
-        use std::f64::consts::PI;
-
-        let mut settings = RKAdaptiveSettings::default();
-        settings.dense_output = false;
-
-        // integrating this harmonic oscillator between 0 and 2PI should return to the
-        // original state
-        let res = RKF45::integrate(0.0, PI / 2.0, &y0, &mut system, &settings);
-        println!("res = {:?}", res);
-    }
 }

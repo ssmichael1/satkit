@@ -3,7 +3,7 @@ use crate::ITRFCoord;
 use crate::Instant;
 use crate::TimeScale;
 
-use crate::utils::{skerror, SKResult};
+use crate::{skerror, SKResult};
 
 use nalgebra as na;
 

@@ -35,7 +35,7 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
     io::BufReader::new(file)
         .lines()
         .skip(1)
-        .map(|rline| {
+        .map(|rline| -> SKResult<EOPEntry> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
             if lvals.len() < 12 {
@@ -55,7 +55,7 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
 }
 
 #[allow(dead_code)]
-fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
+fn load_eop_file_legacy(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
     let path: PathBuf = match filename {
         Some(pb) => pb,
         None => datadir()
@@ -64,14 +64,14 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
     };
 
     if !path.is_file() {
-        panic!(
+        return skerror!(
             "Cannot open earth orientation parameters file: {}",
             path.to_str().unwrap()
         );
     }
 
     let file = match File::open(&path) {
-        Err(why) => panic!("Couldn't open {}: {}", path.display(), why),
+        Err(why) => return skerror!("Couldn't open {}: {}", path.display(), why),
         Ok(file) => file,
     };
 
@@ -98,25 +98,45 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
                     mjd_utc: {
                         match mjd_str.trim().parse() {
                             Ok(v) => v,
-                            Err(_) => panic!("Could not extract mjd from file"),
+                            Err(e) => {
+                                return skerror!(
+                                    "Could not extract mjd from file: {}",
+                                    e.to_string()
+                                )
+                            }
                         }
                     },
                     xp: {
                         match xp_str.trim().parse() {
                             Ok(v) => v,
-                            Err(_) => panic!("Could not extract x polar motion from file"),
+                            Err(e) => {
+                                return skerror!(
+                                    "Could not extract x polar motion from file: {}",
+                                    e.to_string()
+                                )
+                            }
                         }
                     },
                     yp: {
                         match yp_str.trim().parse() {
                             Ok(v) => v,
-                            Err(_) => panic!("Could not extract y polar motion from file"),
+                            Err(e) => {
+                                return skerror!(
+                                    "Could not extract y polar motion from file: {}",
+                                    e.to_string()
+                                )
+                            }
                         }
                     },
                     dut1: {
                         match dut1_str.trim().parse() {
                             Ok(v) => v,
-                            Err(_) => panic!("Could not extract dut1 from file"),
+                            Err(e) => {
+                                return skerror!(
+                                    "Could not extract dut1 from file: {}",
+                                    e.to_string()
+                                )
+                            }
                         }
                     },
                     lod: lod_str.trim().parse().unwrap_or(0.0),
@@ -126,7 +146,7 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Vec<EOPEntry> {
             }
         }
     }
-    eopvec
+    Ok(eopvec)
 }
 
 fn eop_params_singleton() -> &'static RwLock<Vec<EOPEntry>> {
