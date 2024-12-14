@@ -8,6 +8,12 @@ use serde::{Deserialize, Serialize};
 /// The Instant struct provides methods for converting to and from Unix time, GPS time,
 /// Julian Date, Modified Julian Date, and Gregorian calendar date.
 ///
+/// Why do we need another structure that handles time?
+///
+/// This structure is necessary as it is time scale aware, i.e. it can
+/// handle different time scales such as UTC, TAI, TT, UT1, GPS, etc.
+/// This is necessary for high-precision coordinate transforms and orbit propagation.
+///
 #[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct Instant {
     /// The number of microseconds since
