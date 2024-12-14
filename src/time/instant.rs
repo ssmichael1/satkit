@@ -285,10 +285,10 @@ impl Instant {
             TimeScale::Invalid => Self::INVALID,
             TimeScale::TDB => {
                 let ttc: f64 = (mjd - (2451545.0 - 2400000.4)) / 36525.0;
-                let mjd = mjd
-                    - 0.01657 / 86400.0
-                        * (std::f64::consts::PI / 180.0 * (628.3076 * ttc + 6.2401)).sin()
-                    - 32.184 / 86400.0;
+                let mjd = (0.01657f64 / 86400.0f64).mul_add(
+                    -(std::f64::consts::PI / 180.0 * 628.3076f64.mul_add(ttc, 6.2401)).sin(),
+                    mjd,
+                ) - 32.184 / 86400.0;
                 Self::from_mjd_with_scale(mjd, TimeScale::TAI)
             }
         }
