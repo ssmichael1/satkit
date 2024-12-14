@@ -373,7 +373,7 @@ impl Instant {
             }
             TimeScale::TDB => {
                 let tt: f64 = self.as_mjd_with_scale(TimeScale::TT);
-                let ttc: f64 = (tt - (2451545.0 - 2400000.4)) / 36525.0;
+                let ttc: f64 = (tt - (2451545.0f64 - 2400000.4f64)) / 36525.0;
                 tt + 0.001657 / 86400.0
                     * (std::f64::consts::PI / 180.0 * (628.3076 * ttc + 6.2401)).sin()
             }
