@@ -135,7 +135,7 @@ impl JPLEphem {
         }
 
         // Open the file
-        let path = datadir().unwrap_or(PathBuf::from(".")).join(fname);
+        let path = datadir().unwrap_or_else(|_| PathBuf::from(".")).join(fname);
         if !path.is_file() {
             println!("Downloading JPL Ephemeris file.  File size is approx. 100MB");
         }
@@ -220,11 +220,11 @@ impl JPLEphem {
                     let eidx: usize = sidx + 8;
                     let val: f64 = f64::from_le_bytes(raw[sidx..eidx].try_into()?);
 
-                    let mut stridx: usize = (84 * 3 + ix * 6) as usize;
-                    // different loc if constants >= 400
-                    if ix >= 400 {
-                        stridx = (84 * 3 + 400 * 6 + 5 * 8 + 41 * 4 + ix * 6) as usize;
-                    }
+                    let stridx: usize = if ix >= 400 {
+                        (84 * 3 + 400 * 6 + 5 * 8 + 41 * 4 + ix * 6) as usize
+                    } else {
+                        (84 * 3 + ix * 6) as usize
+                    };
                     let s = String::from_utf8(raw[stridx..(stridx + 6)].to_vec())?;
 
                     hm.insert(String::from(s.trim()), val);

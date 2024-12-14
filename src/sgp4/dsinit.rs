@@ -292,31 +292,82 @@ pub fn dsinit(
 
             if *em <= 0.65 {
                 g211 = 16.2900f64.mul_add(emsq, 13.2470f64.mul_add(-(*em), 3.616));
-                g310 = 156.5910f64.mul_add(eoc, 228.4190f64.mul_add(-emsq, 117.3900f64.mul_add(*em, -19.302)));
-                g322 = 146.5816f64.mul_add(eoc, 214.6334f64.mul_add(-emsq, 109.7927f64.mul_add(*em, -18.9068)));
-                g410 = 313.9530f64.mul_add(eoc, 471.0940f64.mul_add(-emsq, 242.6940f64.mul_add(*em, -41.122)));
-                g422 = 1083.4350f64.mul_add(eoc, 1629.014f64.mul_add(-emsq, 841.8800f64.mul_add(*em, -146.407)));
-                g520 = 3708.2760f64.mul_add(eoc, 5740.032f64.mul_add(-emsq, 3017.977f64.mul_add(*em, -532.114)));
+                g310 = 156.5910f64.mul_add(
+                    eoc,
+                    228.4190f64.mul_add(-emsq, 117.3900f64.mul_add(*em, -19.302)),
+                );
+                g322 = 146.5816f64.mul_add(
+                    eoc,
+                    214.6334f64.mul_add(-emsq, 109.7927f64.mul_add(*em, -18.9068)),
+                );
+                g410 = 313.9530f64.mul_add(
+                    eoc,
+                    471.0940f64.mul_add(-emsq, 242.6940f64.mul_add(*em, -41.122)),
+                );
+                g422 = 1083.4350f64.mul_add(
+                    eoc,
+                    1629.014f64.mul_add(-emsq, 841.8800f64.mul_add(*em, -146.407)),
+                );
+                g520 = 3708.2760f64.mul_add(
+                    eoc,
+                    5740.032f64.mul_add(-emsq, 3017.977f64.mul_add(*em, -532.114)),
+                );
             } else {
-                g211 = 266.724f64.mul_add(eoc, 508.738f64.mul_add(-emsq, 331.819f64.mul_add(*em, -72.099)));
-                g310 = 1246.113f64.mul_add(eoc, 2415.925f64.mul_add(-emsq, 1582.851f64.mul_add(*em, -346.844)));
-                g322 = 1215.972f64.mul_add(eoc, 2366.899f64.mul_add(-emsq, 1554.908f64.mul_add(*em, -342.585)));
-                g410 = 3651.957f64.mul_add(eoc, 7193.992f64.mul_add(-emsq, 4758.686f64.mul_add(*em, -1052.797)));
-                g422 = 12422.520f64.mul_add(eoc, 24462.770f64.mul_add(-emsq, 16178.110f64.mul_add(*em, -3581.690)));
+                g211 = 266.724f64.mul_add(
+                    eoc,
+                    508.738f64.mul_add(-emsq, 331.819f64.mul_add(*em, -72.099)),
+                );
+                g310 = 1246.113f64.mul_add(
+                    eoc,
+                    2415.925f64.mul_add(-emsq, 1582.851f64.mul_add(*em, -346.844)),
+                );
+                g322 = 1215.972f64.mul_add(
+                    eoc,
+                    2366.899f64.mul_add(-emsq, 1554.908f64.mul_add(*em, -342.585)),
+                );
+                g410 = 3651.957f64.mul_add(
+                    eoc,
+                    7193.992f64.mul_add(-emsq, 4758.686f64.mul_add(*em, -1052.797)),
+                );
+                g422 = 12422.520f64.mul_add(
+                    eoc,
+                    24462.770f64.mul_add(-emsq, 16178.110f64.mul_add(*em, -3581.690)),
+                );
                 if *em > 0.715 {
-                    g520 = 31324.56f64.mul_add(eoc, 54087.36f64.mul_add(-emsq, 29936.92f64.mul_add(*em, -5149.66)));
+                    g520 = 31324.56f64.mul_add(
+                        eoc,
+                        54087.36f64.mul_add(-emsq, 29936.92f64.mul_add(*em, -5149.66)),
+                    );
                 } else {
                     g520 = 3763.64f64.mul_add(emsq, 4664.75f64.mul_add(-(*em), 1464.74));
                 }
             }
             if *em < 0.7 {
-                g533 = 5542.21f64.mul_add(eoc, 9064.7700f64.mul_add(-emsq, 4988.6100f64.mul_add(*em, -919.22770)));
-                g521 = 5337.524f64.mul_add(eoc, 8491.4146f64.mul_add(-emsq, 4568.6173f64.mul_add(*em, -822.71072)));
-                g532 = 5341.4f64.mul_add(eoc, 8624.7700f64.mul_add(-emsq, 4690.2500f64.mul_add(*em, -853.66600)));
+                g533 = 5542.21f64.mul_add(
+                    eoc,
+                    9064.7700f64.mul_add(-emsq, 4988.6100f64.mul_add(*em, -919.22770)),
+                );
+                g521 = 5337.524f64.mul_add(
+                    eoc,
+                    8491.4146f64.mul_add(-emsq, 4568.6173f64.mul_add(*em, -822.71072)),
+                );
+                g532 = 5341.4f64.mul_add(
+                    eoc,
+                    8624.7700f64.mul_add(-emsq, 4690.2500f64.mul_add(*em, -853.66600)),
+                );
             } else {
-                g533 = 109377.94f64.mul_add(eoc, 229838.20f64.mul_add(-emsq, 161616.52f64.mul_add(*em, -37995.780)));
-                g521 = 146349.42f64.mul_add(eoc, 309468.16f64.mul_add(-emsq, 218913.95f64.mul_add(*em, -51752.104)));
-                g532 = 115605.82f64.mul_add(eoc, 242699.48f64.mul_add(-emsq, 170470.89f64.mul_add(*em, -40023.880)));
+                g533 = 109377.94f64.mul_add(
+                    eoc,
+                    229838.20f64.mul_add(-emsq, 161616.52f64.mul_add(*em, -37995.780)),
+                );
+                g521 = 146349.42f64.mul_add(
+                    eoc,
+                    309468.16f64.mul_add(-emsq, 218913.95f64.mul_add(*em, -51752.104)),
+                );
+                g532 = 115605.82f64.mul_add(
+                    eoc,
+                    242699.48f64.mul_add(-emsq, 170470.89f64.mul_add(*em, -40023.880)),
+                );
             }
 
             let sini2 = sinim * sinim;
@@ -328,15 +379,27 @@ pub fn dsinit(
             f442 = 39.3750 * sini2 * sini2;
             f522 = 9.84375
                 * sinim
-                * sini2.mul_add(5.0f64.mul_add(-cosisq, 2.0f64.mul_add(-cosim, 1.0)), 0.33333333 * 6.0f64.mul_add(cosisq, 4.0f64.mul_add(cosim, -2.0)));
+                * sini2.mul_add(
+                    5.0f64.mul_add(-cosisq, 2.0f64.mul_add(-cosim, 1.0)),
+                    0.33333333 * 6.0f64.mul_add(cosisq, 4.0f64.mul_add(cosim, -2.0)),
+                );
             f523 = sinim
-                * (4.92187512 * sini2).mul_add(10.0f64.mul_add(cosisq, 4.0f64.mul_add(-cosim, -2.0)), 6.56250012 * 3.0f64.mul_add(-cosisq, 2.0f64.mul_add(cosim, 1.0)));
+                * (4.92187512 * sini2).mul_add(
+                    10.0f64.mul_add(cosisq, 4.0f64.mul_add(-cosim, -2.0)),
+                    6.56250012 * 3.0f64.mul_add(-cosisq, 2.0f64.mul_add(cosim, 1.0)),
+                );
             f542 = 29.53125
                 * sinim
-                * cosisq.mul_add(10.0f64.mul_add(cosisq, 8.0f64.mul_add(cosim, -12.0)), 8.0f64.mul_add(-cosim, 2.0));
+                * cosisq.mul_add(
+                    10.0f64.mul_add(cosisq, 8.0f64.mul_add(cosim, -12.0)),
+                    8.0f64.mul_add(-cosim, 2.0),
+                );
             f543 = 29.53125
                 * sinim
-                * cosisq.mul_add(10.0f64.mul_add(-cosisq, 8.0f64.mul_add(cosim, 12.0)), 8.0f64.mul_add(-cosim, -2.0));
+                * cosisq.mul_add(
+                    10.0f64.mul_add(-cosisq, 8.0f64.mul_add(cosim, 12.0)),
+                    8.0f64.mul_add(-cosim, -2.0),
+                );
             let xno2 = *nm * *nm;
             let ainv2 = aonv * aonv;
             let mut temp1 = 3.0 * xno2 * ainv2;
@@ -370,7 +433,8 @@ pub fn dsinit(
             g310 = 2.0f64.mul_add(emsq, 1.0);
             g300 = emsq.mul_add(6.60937f64.mul_add(emsq, -6.0), 1.0);
             f220 = 0.75 * (1.0 + cosim) * (1.0 + cosim);
-            f311 = (0.9375 * sinim * sinim).mul_add(3.0f64.mul_add(cosim, 1.0), -(0.75 * (1.0 + cosim)));
+            f311 = (0.9375 * sinim * sinim)
+                .mul_add(3.0f64.mul_add(cosim, 1.0), -(0.75 * (1.0 + cosim)));
             f330 = 1.0 + cosim;
             f330 = 1.875 * f330 * f330 * f330;
             *del1 = 3.0 * *nm * *nm * aonv * aonv;

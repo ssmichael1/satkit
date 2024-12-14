@@ -202,8 +202,7 @@ pub fn dspace(
                 xomi = argpdot.mul_add(*atime, argpo);
                 x2omi = xomi + xomi;
                 x2li = *xli + *xli;
-                xndt = d5421.mul_add(f64::sin(xomi + x2li - G54), d5232.mul_add(f64::sin(-xomi + *xli - G52), d5220.mul_add(f64::sin(xomi + *xli - G52), d4422.mul_add(f64::sin(x2li - G44), d4410.mul_add(f64::sin(x2omi + x2li - G44), d3222.mul_add(f64::sin(-xomi + *xli - G32), d3210.mul_add(f64::sin(xomi + *xli - G32), d2201.mul_add(f64::sin(x2omi + *xli - G22), d2211 * f64::sin(*xli - G22)))))))))
-                    + d5433 * f64::sin(-xomi + x2li - G54);
+                xndt = d5433.mul_add(f64::sin(-xomi + x2li - G54), d5421.mul_add(f64::sin(xomi + x2li - G54), d5232.mul_add(f64::sin(-xomi + *xli - G52), d5220.mul_add(f64::sin(xomi + *xli - G52), d4422.mul_add(f64::sin(x2li - G44), d4410.mul_add(f64::sin(x2omi + x2li - G44), d3222.mul_add(f64::sin(-xomi + *xli - G32), d3210.mul_add(f64::sin(xomi + *xli - G32), d2201.mul_add(f64::sin(x2omi + *xli - G22), d2211 * f64::sin(*xli - G22))))))))));
                 xldot = *xni + xfact;
                 xnddt = 2.0f64.mul_add(d5433.mul_add(f64::cos(-xomi + x2li - G54), d5421.mul_add(f64::cos(xomi + x2li - G54), d4410.mul_add(f64::cos(x2omi + x2li - G44), d4422 * f64::cos(x2li - G44)))), d5232.mul_add(f64::cos(-xomi + *xli - G52), d5220.mul_add(f64::cos(xomi + *xli - G52), d3222.mul_add(f64::cos(-xomi + *xli - G32), d3210.mul_add(f64::cos(xomi + *xli - G32), d2201.mul_add(f64::cos(x2omi + *xli - G22), d2211 * f64::cos(*xli - G22)))))));
                 xnddt *= xldot;

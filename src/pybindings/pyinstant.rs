@@ -171,7 +171,7 @@ impl From<PyTimeScale> for TimeScale {
 /// Returns:
 ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
 #[pyclass(name = "time", module = "satkit")]
-#[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyInstant(pub Instant);
 
 
@@ -423,7 +423,7 @@ impl PyInstant {
     ///     satkit.time: Time object representing instant of modified julian date with given scale    
     #[staticmethod]    
     fn from_mjd(mjd: f64, scale: &PyTimeScale) -> Self {
-        PyInstant(Instant::from_mjd_with_scale(mjd, scale.into()))
+        Self(Instant::from_mjd_with_scale(mjd, scale.into()))
     }
 
     /// Return time object representing input unix time, which is UTC seconds
@@ -436,7 +436,7 @@ impl PyInstant {
     ///     satkit.time: Time object representing instant of input unixtime
     #[staticmethod]
     fn from_unixtime(t: f64) -> Self {
-        PyInstant(Instant::from_unixtime(t))
+        Self(Instant::from_unixtime(t))
     }
 
     /// Return time object representing input Julian date and time scale
