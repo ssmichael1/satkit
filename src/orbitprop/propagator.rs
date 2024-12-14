@@ -5,6 +5,7 @@ use super::settings::PropSettings;
 use crate::earthgravity;
 use crate::lpephem;
 use crate::ode;
+use crate::ode::ODEError;
 use crate::ode::ODEResult;
 use crate::ode::RKAdaptive;
 use crate::orbitprop::Precomputed;
@@ -12,7 +13,7 @@ use crate::{Duration, Instant};
 use lpephem::sun::shadowfunc;
 
 use crate::types::*;
-use crate::utils::SKResult;
+use crate::SKResult;
 
 use num_traits::identities::Zero;
 
@@ -57,6 +58,14 @@ pub enum PropagationError {
     InvalidStateColumns { c: usize },
     #[error("No Dense Output in Solution")]
     NoDenseOutputInSolution,
+    #[error("ODE Error: {0}")]
+    ODEError(ode::ODEError),
+}
+
+impl<T> From<PropagationError> for SKResult<T> {
+    fn from(e: PropagationError) -> Self {
+        Err(e.into())
+    }
 }
 
 //
@@ -194,10 +203,12 @@ pub fn propagate<const C: usize>(
     // Duration to end of integration, in seconds
     let x_end: f64 = (*stop - *start).as_seconds();
 
-    let mut odesettings = crate::ode::RKAdaptiveSettings::default();
-    odesettings.abserror = settings.abs_error;
-    odesettings.relerror = settings.rel_error;
-    odesettings.dense_output = settings.enable_interp;
+    let odesettings = crate::ode::RKAdaptiveSettings {
+        abserror: settings.abs_error,
+        relerror: settings.rel_error,
+        dense_output: settings.enable_interp,
+        ..Default::default()
+    };
 
     // Get or create data for interpolation
     let interp: &Precomputed = {
@@ -227,7 +238,10 @@ pub fn propagate<const C: usize>(
         let vel_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(3, 0).into();
 
         // Get interpolated values
-        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time)?;
+        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = match interp.interp(&time) {
+            Ok(v) => v,
+            Err(e) => return Err(ODEError::YDotError(e.to_string())),
+        };
         let qitrf2gcrf = qgcrf2itrf.conjugate();
 
         // Position in ITRF coordinates
@@ -374,19 +388,22 @@ pub fn propagate<const C: usize>(
             dy.fixed_view_mut::<6, 6>(0, 1).copy_from(&dphi);
             Ok(dy)
         } else {
-            Err(Box::new(PropagationError::InvalidStateColumns { c: C }))
+            ODEError::YDotError(PropagationError::InvalidStateColumns { c: C }.to_string()).into()
         }
     };
 
     match settings.enable_interp {
         false => {
-            let res = crate::ode::solvers::RKV98NoInterp::integrate(
+            let res = match crate::ode::solvers::RKV98NoInterp::integrate(
                 0.0,
                 x_end,
                 state,
                 ydot,
                 &odesettings,
-            )?;
+            ) {
+                Ok(res) => res,
+                Err(e) => return PropagationError::ODEError(e).into(),
+            };
 
             Ok(PropagationResult {
                 time_start: *start,
@@ -425,10 +442,10 @@ pub fn interp_propresult<const C: usize>(
             let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)
         } else {
-            Err(Box::new(PropagationError::NoDenseOutputInSolution))
+            PropagationError::NoDenseOutputInSolution.into()
         }
     } else {
-        Err(Box::new(PropagationError::NoDenseOutputInSolution))
+        PropagationError::NoDenseOutputInSolution.into()
     }
 }
 
@@ -662,7 +679,7 @@ mod tests {
             .join("ESA0OPSFIN_20233640000_01D_05M_ORB.SP3");
 
         if !testvecfile.is_file() {
-            panic!(
+            return skerror!(
                 "Required GPS SP3 File: \"{}\" does not exist
                 clone test vectors repo at
                 https://github.com/StevenSamirMichael/satkit-testvecs.git

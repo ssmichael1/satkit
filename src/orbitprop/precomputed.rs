@@ -1,9 +1,10 @@
 use crate::frametransform::qgcrf2itrf_approx;
 use crate::jplephem;
-use crate::types::*;
-use crate::utils::SKResult;
+use crate::skerror;
+use crate::types::{Quaternion, Vector3};
 use crate::Duration;
 use crate::Instant;
+use crate::SKResult;
 use crate::SolarSystem;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
@@ -22,12 +23,12 @@ impl Precomputed {
 
         let (pstart, pstop) = match stop > start {
             true => (
-                start - Duration::from_seconds(120.0),
-                stop + Duration::from_seconds(120.0),
+                start - Duration::from_seconds(240.0),
+                stop + Duration::from_seconds(240.0),
             ),
             false => (
-                stop - Duration::from_seconds(120.0),
-                start + Duration::from_seconds(120.0),
+                stop - Duration::from_seconds(240.0),
+                start + Duration::from_seconds(240.0),
             ),
         };
 
@@ -53,11 +54,12 @@ impl Precomputed {
 
     pub fn interp(&self, t: &Instant) -> SKResult<InterpType> {
         if *t < self.start || *t > self.stop {
-            return Err(format!(
+            return skerror!(
                 "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
-                *t, self.start, self.stop
-            )
-            .into());
+                *t,
+                self.start,
+                self.stop
+            );
         }
 
         let idx = (t - self.start).as_seconds() / self.step;

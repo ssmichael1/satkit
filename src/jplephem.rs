@@ -27,11 +27,12 @@ use nalgebra as na;
 pub type Vec3 = na::Vector3<f64>;
 pub type Quat = na::UnitQuaternion<f64>;
 
-use crate::utils::SKResult;
 use crate::utils::{datadir, download_if_not_exist};
+use crate::SKResult;
 
 use once_cell::sync::OnceCell;
 
+use crate::skerror;
 use crate::{Instant, TimeScale};
 
 impl TryFrom<i32> for SolarSystem {
@@ -54,24 +55,6 @@ impl TryFrom<i32> for SolarSystem {
     }
 }
 
-#[derive(Debug, Clone)]
-struct InvalidSize;
-impl std::error::Error for InvalidSize {}
-impl std::fmt::Display for InvalidSize {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Invalid file size")
-    }
-}
-
-#[derive(Debug, Clone)]
-struct InvalidTime;
-impl std::error::Error for InvalidTime {}
-impl std::fmt::Display for InvalidTime {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Invalid Time for Body Query")
-    }
-}
-
 /// JPL Ephemeris Structure
 ///
 /// included ephemerides and solar system constants loaded from the
@@ -82,11 +65,13 @@ impl std::fmt::Display for InvalidTime {
 /// of time
 #[derive(Debug)]
 struct JPLEphem {
+    /// Version of ephemeris code
     _de_version: i32,
     /// Julian date of start of ephemerides database
     jd_start: f64,
     /// Julian date of end of ephemerides database
     jd_stop: f64,
+    /// Step size in Julian date
     jd_step: f64,
     /// Length of 1 astronomical unit, km
     _au: f64,
@@ -255,7 +240,7 @@ impl JPLEphem {
                 let mut v: DMatrix<f64> = DMatrix::repeat(ncoeff, nrecords, 0.0);
 
                 if raw.len() < record_size * 2 + ncoeff * nrecords * 8 {
-                    return Err(Box::new(InvalidSize));
+                    return crate::skerror!("Invalid record size for cheby data");
                 }
 
                 unsafe {
@@ -280,7 +265,7 @@ impl JPLEphem {
         // Terrestrial time
         let tt = tm.as_jd_with_scale(TimeScale::TT);
         if (self.jd_start > tt) || (self.jd_stop < tt) {
-            return Err(Box::new(InvalidTime));
+            return crate::skerror!("Invalid julian date: {}", tt);
         }
 
         // Get record index
@@ -348,7 +333,7 @@ impl JPLEphem {
             12 => self.body_pos_optimized::<12>(body, tm),
             13 => self.body_pos_optimized::<13>(body, tm),
             14 => self.body_pos_optimized::<14>(body, tm),
-            _ => panic!("Invalid body"),
+            _ => skerror!("Invalid body"),
         }
     }
     /// Return the position & velocity the given body in the barycentric coordinate system
@@ -380,7 +365,7 @@ impl JPLEphem {
             12 => self.body_state_optimized::<12>(body, tm),
             13 => self.body_state_optimized::<13>(body, tm),
             14 => self.body_state_optimized::<14>(body, tm),
-            _ => panic!("Invalid body"),
+            _ => crate::skerror!("Invalid body"),
         }
     }
 
@@ -392,7 +377,7 @@ impl JPLEphem {
         // Terrestrial time
         let tt = tm.as_jd_with_scale(TimeScale::TT);
         if (self.jd_start > tt) || (self.jd_stop < tt) {
-            return Err(Box::new(InvalidTime));
+            return crate::skerror!("Invalid Julian date: {}", tt);
         }
 
         // Get record index
@@ -620,7 +605,7 @@ mod tests {
             .join("testpo.440");
 
         if !testvecfile.is_file() {
-            panic!(
+            println!(
                 "Required JPL ephemeris test vectors file: \"{}\" does not exist
                 clone test vectors repo at 
                 https://github.com/StevenSamirMichael/satkit-testvecs.git 
@@ -628,6 +613,7 @@ mod tests {
                 to point to directory",
                 testvecfile.to_string_lossy()
             );
+            return;
         }
 
         let file = std::fs::File::open(testvecfile).unwrap();

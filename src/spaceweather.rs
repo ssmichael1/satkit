@@ -3,8 +3,9 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use crate::utils::{datadir, download_file, download_if_not_exist, skerror, SKResult};
+use crate::utils::{datadir, download_file, download_if_not_exist};
 use crate::Instant;
+use crate::{skerror, SKResult};
 
 use std::sync::RwLock;
 
@@ -39,17 +40,13 @@ pub struct SpaceWeatherRecord {
 }
 
 fn str2num<T: core::str::FromStr>(s: &str, sidx: usize, eidx: usize) -> Option<T> {
-    match s
-        .chars()
+    s.chars()
         .skip(sidx)
         .take(eidx - sidx)
         .collect::<String>()
         .trim()
         .parse()
-    {
-        Ok(v) => Some(v),
-        Err(_) => None,
-    }
+        .ok()
 }
 
 impl PartialEq for SpaceWeatherRecord {
@@ -77,14 +74,16 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
 }
 
 fn load_space_weather_csv() -> SKResult<Vec<SpaceWeatherRecord>> {
-    let path = datadir().unwrap_or(PathBuf::from(".")).join("SW-All.csv");
+    let path = datadir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("SW-All.csv");
     download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
 
     let file = File::open(&path)?;
     io::BufReader::new(file)
         .lines()
         .skip(1)
-        .map(|rline| {
+        .map(|rline| -> SKResult<SpaceWeatherRecord> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
 
@@ -171,7 +170,7 @@ pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
     if let Some(r) = rec {
         Ok(r.clone())
     } else {
-        skerror!("Invalid date")
+        skerror!("Invalid instant: {}", tm)
     }
 }
 

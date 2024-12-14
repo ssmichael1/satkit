@@ -167,39 +167,39 @@ impl ITRFCoord {
 
     ///
     /// Returns an ITRF Coordinate given Cartesian ITRF coordinates
-    /// 
+    ///
     /// # Arguments:
-    /// 
+    ///
     /// * `v` - `nalgebra::Vector3<f64>` representing ITRF coordinates in meters
-    /// 
+    ///
     /// # Examples:
-    /// 
+    ///
     /// ```
     /// // Create coord for ~ Boston, MA
     /// use satkit::itrfcoord::ITRFCoord;
     /// use nalgebra as na;
     /// let itrf = ITRFCoord::from_vector(&na::Vector3::new(1522386.15660978, -4459627.78585002,  4284030.6890791));
     /// ```
-    /// 
-    /// 
+    ///
+    ///
     pub fn from_vector(v: &na::Vector3<f64>) -> ITRFCoord {
         ITRFCoord { itrf: *v }
     }
 
     /// Returns an ITRF Coordinate given Cartesian ITRF coordinates represented as a slice
-    /// 
+    ///
     /// # Arguments:
-    /// 
+    ///
     /// * `v` - Slice representing ITRF coordinates in meters
-    /// 
+    ///
     /// # Examples:
-    /// 
+    ///
     /// ```
     /// // Create coord for ~ Boston, MA
     /// use satkit::itrfcoord::ITRFCoord;
     /// let itrf = ITRFCoord::from_slice(&[1522386.15660978, -4459627.78585002,  4284030.6890791]);
     /// ```
-    /// 
+    ///
     pub fn from_slice(v: &[f64]) -> SKResult<ITRFCoord> {
         if v.len() != 3 {
             return skerror!("Input slice must have 3 elements");
@@ -347,14 +347,14 @@ impl ITRFCoord {
     ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
     ///
     /// # Arguments:
-    /// 
+    ///
     /// * `distance_m` - Distance in meters to travel along surface of Earth
     /// * `heading_rad` - Initial heading, in radians
-    /// 
+    ///
     /// # Returns:
-    /// 
+    ///
     /// * ITRFCoord representing final position
-    /// 
+    ///
     pub fn move_with_heading(&self, distance_m: f64, heading_rad: f64) -> ITRFCoord {
         let phi1 = self.latitude_rad();
         #[allow(non_upper_case_globals)]
@@ -433,7 +433,7 @@ impl ITRFCoord {
     //  * Vincenty's formula inverse
     ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
     ///   See: <https://geodesyapps.ga.gov.au/vincenty-inverse>
-    /// 
+    ///
     pub fn geodesic_distance(&self, other: &ITRFCoord) -> (f64, f64, f64) {
         #[allow(non_upper_case_globals)]
         const a: f64 = WGS84_A;
@@ -652,5 +652,4 @@ mod tests {
         let itrf2 = itrf1 + itrf1.q_ned2itrf() * na::vector![0.0, 0.0, 10000.0];
         println!("height diff = {}", itrf2.hae() - itrf1.hae());
     }
-
 }

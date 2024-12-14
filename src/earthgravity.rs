@@ -1,4 +1,5 @@
-use crate::utils::{datadir, download_if_not_exist, skerror, SKResult};
+use crate::utils::{datadir, download_if_not_exist};
+use crate::{skerror, SKResult};
 use std::collections::HashMap;
 use std::io::{self, BufRead};
 use std::path::PathBuf;

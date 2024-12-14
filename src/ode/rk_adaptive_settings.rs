@@ -1,16 +1,25 @@
 #[derive(Clone, Debug)]
+
+/// Settings for adaptive Runge-Kutta methods.
 pub struct RKAdaptiveSettings {
+    /// Absolute error tolerance
     pub abserror: f64,
+    /// Relative error tolerance
     pub relerror: f64,
+    /// Minimum factor for step size
     pub minfac: f64,
+    /// Maximum factor for step size
     pub maxfac: f64,
+    /// Safety factor
     pub gamma: f64,
+    /// Minimum step size
     pub dtmin: f64,
+    /// Enable dense output (more storage, but allows interpolation)
     pub dense_output: bool,
 }
 
-impl RKAdaptiveSettings {
-    pub fn default() -> RKAdaptiveSettings {
+impl Default for RKAdaptiveSettings {
+    fn default() -> RKAdaptiveSettings {
         RKAdaptiveSettings {
             abserror: 1.0e-8,
             relerror: 1.0e-8,

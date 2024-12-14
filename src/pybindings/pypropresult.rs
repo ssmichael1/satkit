@@ -316,21 +316,19 @@ impl PyPropResult {
     fn interp(&self, time: PyInstant, output_phi: bool) -> PyResult<PyObject> {
         match &self.0 {
             PyPropResultType::R1(r) => match r.interp(&time.0) {
-                Ok(res) => {
-                    pyo3::Python::with_gil(|py| -> PyResult<PyObject> { Ok(vec2py(py, &res)) })
-                }
+                Ok(res) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> { vec2py(py, &res) }),
                 Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e.to_string())),
             },
             PyPropResultType::R7(r) => match r.interp(&time.0) {
                 Ok(res) => {
                     if !output_phi {
                         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                            Ok(slice2py1d(py, &res.as_slice()[0..6]))
+                            slice2py1d(py, &res.as_slice()[0..6])
                         })
                     } else {
                         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                             (
-                                slice2py1d(py, &res.as_slice()[0..6]),
+                                slice2py1d(py, &res.as_slice()[0..6])?,
                                 slice2py2d(py, &res.as_slice()[6..42], 6, 6)?,
                             )
                                 .into_py_any(py)

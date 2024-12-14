@@ -1,17 +1,14 @@
-use numpy as np;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
 use pyo3::IntoPyObjectExt;
 
-use nalgebra::Vector3;
-type Vec3 = Vector3<f64>;
-
 use crate::kepler::{Anomaly, Kepler};
 
 use super::pyduration::PyDuration;
 use super::pyutils::kwargs_or_none;
+use super::pyutils::py_to_smatrix;
 
 ///
 /// Representation of Keplerian orbital elements
@@ -39,7 +36,7 @@ use super::pyutils::kwargs_or_none;
 ///
 #[pyclass(name = "kepler", module = "satkit")]
 #[derive(Clone)]
-pub struct PyKepler(Kepler);
+pub struct PyKepler(pub Kepler);
 
 #[pymethods]
 impl PyKepler {
@@ -125,21 +122,23 @@ impl PyKepler {
 
     /// Convert Cartesian elements to kepler
     #[staticmethod]
-    fn from_pv(r: np::PyReadonlyArray1<f64>, v: np::PyReadonlyArray1<f64>) -> PyResult<Self> {
-        let r = Vec3::from_row_slice(r.as_slice().unwrap());
-        let v = Vec3::from_row_slice(v.as_slice().unwrap());
-        Ok(PyKepler(Kepler::from_pv(r, v).unwrap()))
+    fn from_pv(r: &Bound<PyAny>, v: &Bound<PyAny>) -> PyResult<Self> {
+        let r = py_to_smatrix(r)?;
+        let v = py_to_smatrix(v)?;
+        match Kepler::from_pv(r, v) {
+            Ok(k) => Ok(PyKepler(k)),
+            Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        }
     }
 
-    #[staticmethod]
-    fn propagate(k: &PyKepler, dt: &Bound<'_, PyAny>) -> PyResult<PyKepler> {
+    fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<PyKepler> {
         if dt.is_instance_of::<pyo3::types::PyFloat>() {
             let dt = dt.extract::<f64>()?;
             let dt = crate::Duration::from_seconds(dt);
-            Ok(PyKepler(k.0.propagate(&dt)))
+            Ok(PyKepler(self.0.propagate(&dt)))
         } else {
             let dt: PyDuration = dt.extract()?;
-            Ok(PyKepler(k.0.propagate(&dt.0)))
+            Ok(PyKepler(self.0.propagate(&dt.0)))
         }
     }
 

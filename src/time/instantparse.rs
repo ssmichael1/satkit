@@ -2,11 +2,11 @@
 //! Interaction of Instant class with strings
 //!
 
-use crate::skerror;
 use crate::Instant;
-use crate::SKResult;
+use crate::{time::InstantError, SKResult};
 use itertools::Itertools;
 
+/// Full month names
 const MONTH_NAMES: [&str; 12] = [
     "January",
     "February",
@@ -22,6 +22,7 @@ const MONTH_NAMES: [&str; 12] = [
     "December",
 ];
 
+/// Abbreviated month names
 const MONTH_ABBRS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
@@ -46,7 +47,7 @@ impl Instant {
     ///  Instant: The instant object
     ///
     /// # Raises:
-    /// SKError: If the string cannot be parsed
+    /// SCErr: If the string cannot be parsed
     pub fn from_string(s: &str) -> SKResult<Instant> {
         let mut chars = s.chars().peekable();
         let mut year = -1;
@@ -76,7 +77,7 @@ impl Instant {
                         5 => cstr.parse::<i32>()? * 10,
                         6 => cstr.parse::<i32>()?,
                         _ => {
-                            return skerror!("Invalid microsecond value");
+                            return InstantError::InvalidMicrosecond(cstr.parse::<i32>()?).into();
                         }
                     },
                     false => cstr.parse::<i32>()?,
@@ -257,7 +258,7 @@ impl Instant {
         });
 
         if year == -1 || month == -1 || day == -1 {
-            return skerror!("Invalid date string");
+            return InstantError::InvalidString(s.to_string()).into();
         }
         if hour == -1 || minute == -1 || second < 0 {
             hour = 0;
@@ -323,7 +324,7 @@ impl Instant {
                         month = match MONTH_NAMES.iter().position(|&m| m == month_name) {
                             Some(m) => m as i32 + 1,
                             None => {
-                                return skerror!("Invalid month name");
+                                return InstantError::InvalidMonth(month).into();
                             }
                         };
                     }
@@ -334,7 +335,7 @@ impl Instant {
                         month = match MONTH_ABBRS.iter().position(|&m| m == month_abbr) {
                             Some(m) => m as i32 + 1,
                             None => {
-                                return skerror!("Invalid month abbreviation");
+                                return InstantError::InvalidString(month_abbr).into();
                             }
                         }
                     }
@@ -357,7 +358,8 @@ impl Instant {
                             5 => smicro.parse::<i32>()? * 10,
                             6 => smicro.parse::<i32>()?,
                             _ => {
-                                return skerror!("Invalid microsecond value");
+                                return InstantError::InvalidMicrosecond(smicro.parse::<i32>()?)
+                                    .into()
                             }
                         }
                     }
@@ -385,16 +387,17 @@ impl Instant {
                         }
                     }
                     Some(t) => {
-                        return skerror!("Invalid format string: {}", t);
+                        return InstantError::InvalidFormat(t).into();
                     }
                     None => {
-                        return skerror!("Expected a special character");
+                        return InstantError::InvalidFormat('%').into();
                     }
                 },
                 _ => {
                     let n = s_chars.next().unwrap();
                     if c != n {
-                        return skerror!("Invalid format match: \"{}\" \"{}\"", c, n);
+                        return InstantError::InvalidString(format!("{} doesn't match {}", c, n))
+                            .into();
                     }
                 }
             }
@@ -424,20 +427,20 @@ impl Instant {
     ///
     /// # Returns:
     ///   Instant: The instant object
-    pub fn from_rfc3339(rfc3339: &str) -> crate::SKResult<Self> {
-        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%fZ") {
-            return Ok(result);
+    pub fn from_rfc3339(rfc3339: &str) -> SKResult<Self> {
+        if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%fZ") {
+            return Ok(r);
         }
-        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%f") {
-            return Ok(result);
+        if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%f") {
+            return Ok(r);
         }
-        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S") {
-            return Ok(result);
+        if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S") {
+            return Ok(r);
         }
-        if let Ok(result) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:SZ") {
-            return Ok(result);
+        if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:SZ") {
+            return Ok(r);
         }
-        skerror!("Invalid RFC3339 format")
+        InstantError::InvalidString(rfc3339.to_string()).into()
     }
 
     /// Format the Instant object as a string in RFC3339 format
@@ -532,11 +535,14 @@ impl Instant {
                         let weekday = self.day_of_week();
                         result.push_str(&format!("{:02}", weekday as i32));
                     }
-                    Some(_) => {
-                        return skerror!("Invalid format string");
+                    Some(c) => {
+                        return InstantError::InvalidFormat(c).into();
                     }
                     None => {
-                        return skerror!("Expected a special character");
+                        return InstantError::InvalidString(
+                            "Expected a format character".to_string(),
+                        )
+                        .into();
                     }
                 }
             } else {

@@ -54,6 +54,7 @@ pub enum PyTimeScale {
     TDB = TimeScale::TDB as isize,
 }
 
+
 #[derive(Clone, PartialEq, Eq)]
 #[pyclass(name = "weekday", module = "satkit", eq, eq_int)]
 pub enum PyWeekday
@@ -65,6 +66,7 @@ pub enum PyWeekday
     Thursday = 4,
     Friday = 5,
     Saturday = 6,
+    Invalid = -1,
 }
 
 impl From<&PyWeekday> for Weekday {
@@ -77,6 +79,7 @@ impl From<&PyWeekday> for Weekday {
             PyWeekday::Thursday => Weekday::Thursday,
             PyWeekday::Friday => Weekday::Friday,
             PyWeekday::Saturday => Weekday::Saturday,
+            PyWeekday::Invalid => Weekday::Invalid,
         }
     }
 }   
@@ -91,6 +94,7 @@ impl From<Weekday> for PyWeekday {
             Weekday::Thursday => PyWeekday::Thursday,
             Weekday::Friday => PyWeekday::Friday,
             Weekday::Saturday => PyWeekday::Saturday,
+            Weekday::Invalid => PyWeekday::Invalid,
         }
     }
 }
@@ -101,13 +105,14 @@ impl<'py> IntoPyObject<'py> for crate::Weekday {
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         Ok(match self {
-            Weekday::Sunday => PyWeekday::Sunday,
-            Weekday::Monday => PyWeekday::Monday,
-            Weekday::Tuesday => PyWeekday::Tuesday,
-            Weekday::Wednesday => PyWeekday::Wednesday,
-            Weekday::Thursday => PyWeekday::Thursday,
-            Weekday::Friday => PyWeekday::Friday,
-            Weekday::Saturday => PyWeekday::Saturday,
+            Self::Sunday => PyWeekday::Sunday,
+            Self::Monday => PyWeekday::Monday,
+            Self::Tuesday => PyWeekday::Tuesday,
+            Self::Wednesday => PyWeekday::Wednesday,
+            Self::Thursday => PyWeekday::Thursday,
+            Self::Friday => PyWeekday::Friday,
+            Self::Saturday => PyWeekday::Saturday,
+            Self::Invalid => PyWeekday::Invalid,
         }.into_bound_py_any(py).unwrap())
         
     }
