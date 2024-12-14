@@ -28,8 +28,8 @@ pub struct SatPropertiesStatic {
 }
 
 impl SatPropertiesStatic {
-    pub fn new(cdaoverm: f64, craoverm: f64) -> SatPropertiesStatic {
-        SatPropertiesStatic { cdaoverm, craoverm }
+    pub const fn new(cdaoverm: f64, craoverm: f64) -> Self {
+        Self { cdaoverm, craoverm }
     }
 }
 

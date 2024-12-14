@@ -13,7 +13,7 @@ pub trait RK<const N: usize> {
         // Create the "k"s
         for k in 1..N {
             karr.push(system.ydot(
-                x0 + h * Self::C[k],
+                h.mul_add(Self::C[k], x0),
                 &(karr.iter().enumerate().fold(y0.clone(), |acc, (idx, ki)| {
                     acc + ki.clone() * Self::A[k][idx] * h
                 })),
@@ -37,7 +37,8 @@ pub trait RK<const N: usize> {
         let mut x: f64 = x0;
         let mut v = Vec::new();
         let mut y = y0.clone();
-        while x < xend {
+        let steps = ((xend - x0) / dx).ceil() as usize;
+        for _ in 0..steps {
             let ynew = Self::step(x, &y, dx, system)?;
             v.push(ynew.clone());
             x += dx;
@@ -81,8 +82,8 @@ mod tests {
         k: f64,
     }
     impl HarmonicOscillator {
-        fn new(k: f64) -> HarmonicOscillator {
-            HarmonicOscillator { k }
+        const fn new(k: f64) -> Self {
+            Self { k }
         }
     }
 

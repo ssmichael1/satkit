@@ -62,10 +62,11 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
         // We know indices are monotonically increasing, so only search from
         // last found position in the array forward
-        let mut idx = match dense.x.iter().position(|x| *x >= xinterp) {
-            Some(v) => v,
-            None => dense.x.len(),
-        };
+        let mut idx = dense
+            .x
+            .iter()
+            .position(|x| *x >= xinterp)
+            .map_or(dense.x.len(), |v| v);
         idx = idx.saturating_sub(1);
 
         // t is fractional distance beween x at idx and idx+1
@@ -138,10 +139,11 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
         // We know indices are monotonically increasing, so only search from
         // last found position in the array forward
-        let mut idx = match dense.x.iter().position(|x| *x <= xinterp) {
-            Some(v) => v,
-            None => dense.x.len(),
-        };
+        let mut idx = dense
+            .x
+            .iter()
+            .position(|x| *x <= xinterp)
+            .map_or(dense.x.len(), |v| v);
         idx = idx.saturating_sub(1);
 
         // t is fractional distance beween x at idx and idx+1
@@ -245,7 +247,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             // Create the "k"s
             for k in 1..N {
                 karr.push(ydot(
-                    x + h * Self::C[k],
+                    h.mul_add(Self::C[k], x),
                     &(karr.iter().enumerate().fold(y.clone(), |acc, (idx, ki)| {
                         acc + ki.clone() * Self::A[k][idx] * h
                     })),

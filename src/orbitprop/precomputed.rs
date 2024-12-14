@@ -18,7 +18,7 @@ pub struct Precomputed {
 }
 
 impl Precomputed {
-    pub fn new(start: &Instant, stop: &Instant) -> SKResult<Precomputed> {
+    pub fn new(start: &Instant, stop: &Instant) -> SKResult<Self> {
         let step: f64 = 60.0;
 
         let (pstart, pstop) = match stop > start {
@@ -32,7 +32,7 @@ impl Precomputed {
             ),
         };
 
-        Ok(Precomputed {
+        Ok(Self {
             start: pstart,
             stop: pstop,
             step,

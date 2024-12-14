@@ -39,8 +39,8 @@ pub struct SatState {
 }
 
 impl SatState {
-    pub fn from_pv(time: &Instant, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> SatState {
-        SatState {
+    pub fn from_pv(time: &Instant, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> Self {
+        Self {
             time: *time,
             pv: na::vector![pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]],
             cov: StateCov::None,
@@ -185,14 +185,14 @@ impl SatState {
         &self,
         time: &Instant,
         option_settings: Option<&PropSettings>,
-    ) -> SKResult<SatState> {
+    ) -> SKResult<Self> {
         let default = orbitprop::PropSettings::default();
         let settings = option_settings.unwrap_or(&default);
         match self.cov {
             // Simple case: do not compute state transition matrix, since covariance is not set
             StateCov::None => {
                 let res = orbitprop::propagate(&self.pv, &self.time, time, settings, None)?;
-                Ok(SatState {
+                Ok(Self {
                     time: *time,
                     pv: res.state_end,
                     cov: StateCov::None,
@@ -215,7 +215,7 @@ impl SatState {
                 // Propagate
                 let res = orbitprop::propagate(&state, &self.time, time, settings, None)?;
 
-                Ok(SatState {
+                Ok(Self {
                     time: *time,
                     pv: res.state_end.fixed_view::<6, 1>(0, 0).into(),
                     cov: {
