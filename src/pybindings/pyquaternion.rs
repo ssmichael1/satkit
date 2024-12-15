@@ -40,7 +40,7 @@ pub struct QuaternionVec(Vec<Quat>);
 
 impl From<Quat> for Quaternion {
     fn from(q: Quat) -> Self {
-        Quaternion(q)
+        Self(q)
     }
 }
 
@@ -104,12 +104,14 @@ impl Quaternion {
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> PyResult<Self> {
         let v = Vec3::from_row_slice(axis.as_slice()?);
         let u = na::UnitVector3::try_new(v, 1.0e-9);
-        match u {
-            Some(ax) => Ok(Quat::from_axis_angle(&ax, angle).into()),
-            None => Err(pyo3::exceptions::PyArithmeticError::new_err(
-                "Axis norm is 0",
-            )),
-        }
+        u.map_or_else(
+            || {
+                Err(pyo3::exceptions::PyArithmeticError::new_err(
+                    "Axis norm is 0",
+                ))
+            },
+            |ax| Ok(Quat::from_axis_angle(&ax, angle).into()),
+        )
     }
 
     /// Quaternion representing rotation from V1 to V2
@@ -127,12 +129,14 @@ impl Quaternion {
     ) -> PyResult<Self> {
         let v1 = Vec3::from_row_slice(v1.as_slice()?);
         let v2 = Vec3::from_row_slice(v2.as_slice()?);
-        match Quat::rotation_between(&v1, &v2) {
-            Some(q) => Ok(q.into()),
-            None => Err(pyo3::exceptions::PyArithmeticError::new_err(
-                "Norms are 0 or vectors are 180° apart",
-            )),
-        }
+        Quat::rotation_between(&v1, &v2).map_or_else(
+            || {
+                Err(pyo3::exceptions::PyArithmeticError::new_err(
+                    "Norms are 0 or vectors are 180° apart",
+                ))
+            },
+            |q| Ok(q.into()),
+        )
     }
 
     /// Return quaternion representing same rotation as input direction cosine matrix (3x3 rotation matrix)
@@ -184,10 +188,10 @@ impl Quaternion {
     }
 
     fn __str__(&self) -> PyResult<String> {
-        let ax: na::Unit<Vec3> = match self.0.axis() {
-            Some(v) => v,
-            None => na::Unit::new_normalize(Vec3::new(1.0, 0.0, 0.0)),
-        };
+        let ax: na::Unit<Vec3> = self
+            .0
+            .axis()
+            .map_or_else(|| na::Unit::new_normalize(Vec3::new(1.0, 0.0, 0.0)), |v| v);
         let angle = self.0.angle();
         Ok(format!(
             "Quaternion(Axis = [{:6.4}, {:6.4}, {:6.4}], Angle = {:6.4} rad)",
@@ -238,10 +242,7 @@ impl Quaternion {
     ///     numpy.ndarray: 3-element numpy array representing axis of rotation
     #[getter]
     fn axis(&self) -> PyResult<PyObject> {
-        let a = match self.0.axis() {
-            Some(ax) => ax,
-            None => Vec3::x_axis(),
-        };
+        let a = self.0.axis().map_or_else(Vec3::x_axis, |ax| ax);
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             numpy::ndarray::arr1(a.as_slice())
                 .to_pyarray(py)
@@ -254,7 +255,7 @@ impl Quaternion {
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
     #[getter]
-    fn conj(&self) -> PyResult<Quaternion> {
+    fn conj(&self) -> PyResult<Self> {
         Ok(self.0.conjugate().into())
     }
 
@@ -263,7 +264,7 @@ impl Quaternion {
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
     #[getter]
-    fn conjugate(&self) -> PyResult<Quaternion> {
+    fn conjugate(&self) -> PyResult<Self> {
         Ok(self.0.conjugate().into())
     }
 
@@ -277,21 +278,23 @@ impl Quaternion {
     /// Returns:
     ///     quaternion: Quaterion represention fracional spherical interpolation between self and other    
     #[pyo3(signature=(other, frac,  epsilon=1.0e-6))]
-    fn slerp(&self, other: &Quaternion, frac: f64, epsilon: f64) -> PyResult<Quaternion> {
-        match self.0.try_slerp(&other.0, frac, epsilon) {
-            Some(v) => Ok(v.into()),
-            None => Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Quaternions cannot be 180 deg apart",
-            )),
-        }
+    fn slerp(&self, other: &Self, frac: f64, epsilon: f64) -> PyResult<Self> {
+        self.0.try_slerp(&other.0, frac, epsilon).map_or_else(
+            || {
+                Err(pyo3::exceptions::PyRuntimeError::new_err(
+                    "Quaternions cannot be 180 deg apart",
+                ))
+            },
+            |v| Ok(v.into()),
+        )
     }
 
     fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         // Multiply quaternion by quaternion
-        if other.is_instance_of::<Quaternion>() {
-            let q: PyRef<Quaternion> = other.extract()?;
+        if other.is_instance_of::<Self>() {
+            let q: PyRef<Self> = other.extract()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                Quaternion(self.0 * q.0).into_py_any(py)
+                Self(self.0 * q.0).into_py_any(py)
             })
         }
         // This incorrectly matches for all PyArray types

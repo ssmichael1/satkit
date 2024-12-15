@@ -32,11 +32,11 @@ pub enum GravConst {
 }
 
 impl From<GravConst> for psgp4::GravConst {
-    fn from(f: GravConst) -> psgp4::GravConst {
+    fn from(f: GravConst) -> Self {
         match f {
-            GravConst::wgs72 => psgp4::GravConst::WGS72,
-            GravConst::wgs72old => psgp4::GravConst::WGS72OLD,
-            GravConst::wgs84 => psgp4::GravConst::WGS84,
+            GravConst::wgs72 => Self::WGS72,
+            GravConst::wgs72old => Self::WGS72OLD,
+            GravConst::wgs84 => Self::WGS84,
         }
     }
 }
@@ -50,24 +50,24 @@ pub enum OpsMode {
 }
 
 impl From<OpsMode> for psgp4::OpsMode {
-    fn from(f: OpsMode) -> psgp4::OpsMode {
+    fn from(f: OpsMode) -> Self {
         match f {
-            OpsMode::afspc => psgp4::OpsMode::AFSPC,
-            OpsMode::improved => psgp4::OpsMode::IMPROVED,
+            OpsMode::afspc => Self::AFSPC,
+            OpsMode::improved => Self::IMPROVED,
         }
     }
 }
 
 impl From<psgp4::SGP4Error> for PySGP4Error {
-    fn from(f: psgp4::SGP4Error) -> PySGP4Error {
+    fn from(f: psgp4::SGP4Error) -> Self {
         match f {
-            psgp4::SGP4Error::SGP4Success => PySGP4Error::success,
-            psgp4::SGP4Error::SGP4ErrorEccen => PySGP4Error::eccen,
-            psgp4::SGP4Error::SGP4ErrorMeanMotion => PySGP4Error::mean_motion,
-            psgp4::SGP4Error::SGP4ErrorPerturbEccen => PySGP4Error::perturb_eccen,
-            psgp4::SGP4Error::SGP4ErrorSemiLatusRectum => PySGP4Error::semi_latus_rectum,
-            psgp4::SGP4Error::SGP4ErrorUnused => PySGP4Error::unused,
-            psgp4::SGP4Error::SGP4ErrorOrbitDecay => PySGP4Error::orbit_decay,
+            psgp4::SGP4Error::SGP4Success => Self::success,
+            psgp4::SGP4Error::SGP4ErrorEccen => Self::eccen,
+            psgp4::SGP4Error::SGP4ErrorMeanMotion => Self::mean_motion,
+            psgp4::SGP4Error::SGP4ErrorPerturbEccen => Self::perturb_eccen,
+            psgp4::SGP4Error::SGP4ErrorSemiLatusRectum => Self::semi_latus_rectum,
+            psgp4::SGP4Error::SGP4ErrorUnused => Self::unused,
+            psgp4::SGP4Error::SGP4ErrorOrbitDecay => Self::orbit_decay,
         }
     }
 }
@@ -152,10 +152,11 @@ pub fn sgp4(
             opsmode.into(),
         );
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            let mut dims = vec![r.len()];
-            if r.nrows() > 1 && r.ncols() > 1 {
-                dims = vec![r.ncols(), r.nrows()];
-            }
+            let dims = if r.nrows() > 1 && r.ncols() > 1 {
+                vec![r.ncols(), r.nrows()]
+            } else {
+                vec![r.len()]
+            };
 
             // Note: this is a little confusing: ndarray uses
             // row major, nalgebra and numpy use column major,

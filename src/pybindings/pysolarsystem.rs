@@ -31,19 +31,19 @@ pub enum SolarSystem {
 }
 
 impl From<&SolarSystem> for SS {
-    fn from(s: &SolarSystem) -> SS {
+    fn from(s: &SolarSystem) -> Self {
         match s {
-            SolarSystem::Mercury => SS::Mercury,
-            SolarSystem::Venus => SS::Venus,
-            SolarSystem::EMB => SS::EMB,
-            SolarSystem::Mars => SS::Mars,
-            SolarSystem::Jupiter => SS::Jupiter,
-            SolarSystem::Saturn => SS::Saturn,
-            SolarSystem::Uranus => SS::Uranus,
-            SolarSystem::Neptune => SS::Neptune,
-            SolarSystem::Pluto => SS::Pluto,
-            SolarSystem::Moon => SS::Moon,
-            SolarSystem::Sun => SS::Sun,
+            SolarSystem::Mercury => Self::Mercury,
+            SolarSystem::Venus => Self::Venus,
+            SolarSystem::EMB => Self::EMB,
+            SolarSystem::Mars => Self::Mars,
+            SolarSystem::Jupiter => Self::Jupiter,
+            SolarSystem::Saturn => Self::Saturn,
+            SolarSystem::Uranus => Self::Uranus,
+            SolarSystem::Neptune => Self::Neptune,
+            SolarSystem::Pluto => Self::Pluto,
+            SolarSystem::Moon => Self::Moon,
+            SolarSystem::Sun => Self::Sun,
         }
     }
 }

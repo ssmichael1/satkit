@@ -148,7 +148,7 @@ pub fn dspace(
 
     /* ----------- calculate deep space resonance effects ----------- */
     *dndt = 0.0;
-    let theta: f64 = (gsto + tc * RPTIM) % TWOPI;
+    let theta: f64 = tc.mul_add(RPTIM, gsto) % TWOPI;
     *em += dedt * t;
 
     *inclm += didt * t;
@@ -193,41 +193,18 @@ pub fn dspace(
             /* ------------------- dot terms calculated ------------- */
             /* ----------- near - synchronous resonance terms ------- */
             if irez != 2 {
-                xndt = del1 * f64::sin(*xli - FASX2)
-                    + del2 * f64::sin(2.0 * (*xli - FASX4))
-                    + del3 * f64::sin(3.0 * (*xli - FASX6));
+                xndt = del3.mul_add(f64::sin(3.0 * (*xli - FASX6)), del1.mul_add(f64::sin(*xli - FASX2), del2 * f64::sin(2.0 * (*xli - FASX4))));
                 xldot = *xni + xfact;
-                xnddt = del1 * f64::cos(*xli - FASX2)
-                    + 2.0 * del2 * f64::cos(2.0 * (*xli - FASX4))
-                    + 3.0 * del3 * f64::cos(3.0 * (*xli - FASX6));
+                xnddt = (3.0 * del3).mul_add(f64::cos(3.0 * (*xli - FASX6)), del1.mul_add(f64::cos(*xli - FASX2), 2.0 * del2 * f64::cos(2.0 * (*xli - FASX4))));
                 xnddt *= xldot;
             } else {
                 /* --------- near - half-day resonance terms -------- */
-                xomi = argpo + argpdot * *atime;
+                xomi = argpdot.mul_add(*atime, argpo);
                 x2omi = xomi + xomi;
                 x2li = *xli + *xli;
-                xndt = d2201 * f64::sin(x2omi + *xli - G22)
-                    + d2211 * f64::sin(*xli - G22)
-                    + d3210 * f64::sin(xomi + *xli - G32)
-                    + d3222 * f64::sin(-xomi + *xli - G32)
-                    + d4410 * f64::sin(x2omi + x2li - G44)
-                    + d4422 * f64::sin(x2li - G44)
-                    + d5220 * f64::sin(xomi + *xli - G52)
-                    + d5232 * f64::sin(-xomi + *xli - G52)
-                    + d5421 * f64::sin(xomi + x2li - G54)
-                    + d5433 * f64::sin(-xomi + x2li - G54);
+                xndt = d5433.mul_add(f64::sin(-xomi + x2li - G54), d5421.mul_add(f64::sin(xomi + x2li - G54), d5232.mul_add(f64::sin(-xomi + *xli - G52), d5220.mul_add(f64::sin(xomi + *xli - G52), d4422.mul_add(f64::sin(x2li - G44), d4410.mul_add(f64::sin(x2omi + x2li - G44), d3222.mul_add(f64::sin(-xomi + *xli - G32), d3210.mul_add(f64::sin(xomi + *xli - G32), d2201.mul_add(f64::sin(x2omi + *xli - G22), d2211 * f64::sin(*xli - G22))))))))));
                 xldot = *xni + xfact;
-                xnddt = d2201 * f64::cos(x2omi + *xli - G22)
-                    + d2211 * f64::cos(*xli - G22)
-                    + d3210 * f64::cos(xomi + *xli - G32)
-                    + d3222 * f64::cos(-xomi + *xli - G32)
-                    + d5220 * f64::cos(xomi + *xli - G52)
-                    + d5232 * f64::cos(-xomi + *xli - G52)
-                    + 2.0
-                        * (d4410 * f64::cos(x2omi + x2li - G44)
-                            + d4422 * f64::cos(x2li - G44)
-                            + d5421 * f64::cos(xomi + x2li - G54)
-                            + d5433 * f64::cos(-xomi + x2li - G54));
+                xnddt = 2.0f64.mul_add(d5433.mul_add(f64::cos(-xomi + x2li - G54), d5421.mul_add(f64::cos(xomi + x2li - G54), d4410.mul_add(f64::cos(x2omi + x2li - G44), d4422 * f64::cos(x2li - G44)))), d5232.mul_add(f64::cos(-xomi + *xli - G52), d5220.mul_add(f64::cos(xomi + *xli - G52), d3222.mul_add(f64::cos(-xomi + *xli - G32), d3210.mul_add(f64::cos(xomi + *xli - G32), d2201.mul_add(f64::cos(x2omi + *xli - G22), d2211 * f64::cos(*xli - G22)))))));
                 xnddt *= xldot;
             }
 
@@ -244,16 +221,16 @@ pub fn dspace(
             }
 
             if iretn == 381 {
-                *xli = *xli + xldot * delt + xndt * STEP2;
-                *xni = *xni + xndt * delt + xnddt * STEP2;
+                *xli = xndt.mul_add(STEP2, xldot.mul_add(delt, *xli));
+                *xni = xnddt.mul_add(STEP2, xndt.mul_add(delt, *xni));
                 *atime += delt;
             }
         } // while iretn = 381
 
-        *nm = *xni + xndt * ft + xnddt * ft * ft * 0.5;
-        xl = *xli + xldot * ft + xndt * ft * ft * 0.5;
+        *nm = (xnddt * ft * ft).mul_add(0.5, xndt.mul_add(ft, *xni));
+        xl = (xndt * ft * ft).mul_add(0.5, xldot.mul_add(ft, *xli));
         if irez != 1 {
-            *mm = xl - 2.0 * *nodem + 2.0 * theta;
+            *mm = 2.0f64.mul_add(theta, 2.0f64.mul_add(-(*nodem), xl));
             *dndt = *nm - no;
         } else {
             *mm = xl - *nodem - *argpm + theta;

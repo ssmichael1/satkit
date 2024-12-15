@@ -18,20 +18,20 @@ pub use download::download_to_string;
 ///
 /// Return git hash of compiled library
 ///
-pub fn githash<'a>() -> &'a str {
+pub const fn githash<'a>() -> &'a str {
     env!("GIT_HASH")
 }
 
 ///
 /// Return git tag of compiled library
 ///
-pub fn gittag<'a>() -> &'a str {
+pub const fn gittag<'a>() -> &'a str {
     env!("GIT_TAG")
 }
 
 ///
 /// Return libary compile date
 ///
-pub fn build_date<'a>() -> &'a str {
+pub const fn build_date<'a>() -> &'a str {
     env!("BUILD_DATE")
 }

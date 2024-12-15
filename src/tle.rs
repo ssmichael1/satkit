@@ -104,8 +104,8 @@ pub struct TLE {
 }
 
 impl TLE {
-    pub fn from_lines(lines: &Vec<String>) -> SKResult<Vec<TLE>> {
-        let mut tles: Vec<TLE> = Vec::<TLE>::new();
+    pub fn from_lines(lines: &Vec<String>) -> SKResult<Vec<Self>> {
+        let mut tles: Vec<Self> = Vec::<Self>::new();
         let empty: &String = &String::new();
         let mut line0: &String = empty;
         let mut line1: &String = empty;
@@ -120,9 +120,9 @@ impl TLE {
             } else if line.chars().nth(0).unwrap() == '2' {
                 line2 = line;
                 if line0.is_empty() {
-                    tles.push(TLE::load_2line(line1, line2)?);
+                    tles.push(Self::load_2line(line1, line2)?);
                 } else {
-                    tles.push(TLE::load_3line(line0, line1, line2)?);
+                    tles.push(Self::load_3line(line0, line1, line2)?);
                 }
                 line0 = empty;
                 line1 = empty;
@@ -137,8 +137,8 @@ impl TLE {
     ///
     /// Return a default empty TLE.  Note that values are invalid.
     ///
-    pub fn new() -> TLE {
-        TLE {
+    pub fn new() -> Self {
+        Self {
             name: "none".to_string(),
             intl_desig: "".to_string(),
             sat_num: 0,
@@ -196,8 +196,8 @@ impl TLE {
     ///
     /// ```
     ///
-    pub fn load_3line(line0: &str, line1: &str, line2: &str) -> SKResult<TLE> {
-        match TLE::load_2line(line1, line2) {
+    pub fn load_3line(line0: &str, line1: &str, line2: &str) -> SKResult<Self> {
+        match Self::load_2line(line1, line2) {
             Ok(mut tle) => {
                 tle.name = {
                     if line0.len() > 2 && line0.chars().nth(0).unwrap() == '0' {
@@ -243,7 +243,7 @@ impl TLE {
     ///
     /// ```
     ///
-    pub fn load_2line(line1: &str, line2: &str) -> SKResult<TLE> {
+    pub fn load_2line(line1: &str, line2: &str) -> SKResult<Self> {
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
             mstr.push_str(&line1[18..20]);
@@ -269,7 +269,7 @@ impl TLE {
         // issues, hence the "-2" at end
         let epoch = Instant::from_date(year as i32, 1, 2).add_utc_days(day_of_year - 2.0);
 
-        Ok(TLE {
+        Ok(Self {
             name: "none".to_string(),
             sat_num: {
                 match line1[2..7].trim().parse() {
@@ -422,6 +422,12 @@ impl TLE {
             self.mean_motion,
             self.rev_num,
         )
+    }
+}
+
+impl Default for TLE {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

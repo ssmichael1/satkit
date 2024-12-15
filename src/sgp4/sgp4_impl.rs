@@ -7,7 +7,7 @@ use nalgebra::{Const, Dyn, OMatrix};
 
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, PartialEq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum SGP4Error {
     #[error("Success")]
     SGP4Success = 0,
@@ -25,21 +25,21 @@ pub enum SGP4Error {
     SGP4ErrorOrbitDecay = 6,
 }
 impl From<i32> for SGP4Error {
-    fn from(val: i32) -> SGP4Error {
+    fn from(val: i32) -> Self {
         match val {
-            0 => SGP4Error::SGP4Success,
-            1 => SGP4Error::SGP4ErrorEccen,
-            2 => SGP4Error::SGP4ErrorMeanMotion,
-            3 => SGP4Error::SGP4ErrorPerturbEccen,
-            4 => SGP4Error::SGP4ErrorSemiLatusRectum,
-            6 => SGP4Error::SGP4ErrorOrbitDecay,
-            _ => SGP4Error::SGP4ErrorUnused,
+            0 => Self::SGP4Success,
+            1 => Self::SGP4ErrorEccen,
+            2 => Self::SGP4ErrorMeanMotion,
+            3 => Self::SGP4ErrorPerturbEccen,
+            4 => Self::SGP4ErrorSemiLatusRectum,
+            6 => Self::SGP4ErrorOrbitDecay,
+            _ => Self::SGP4ErrorUnused,
         }
     }
 }
 
 impl From<SGP4Error> for i32 {
-    fn from(val: SGP4Error) -> i32 {
+    fn from(val: SGP4Error) -> Self {
         match val {
             SGP4Error::SGP4ErrorEccen => 1,
             SGP4Error::SGP4ErrorMeanMotion => 2,
@@ -206,10 +206,10 @@ pub fn sgp4_full(
         let bstar = tle.bstar;
         let ndot = tle.mean_motion_dot / (1440.0 * 1440.0 / TWOPI);
         let nddot = tle.mean_motion_dot_dot / (1440.0 * 1440.0 * 1440.0 / TWOPI);
-        let inclo = tle.inclination * PI / 180.0;
-        let nodeo = tle.raan * PI / 180.0;
-        let argpo = tle.arg_of_perigee * PI / 180.0;
-        let mo = tle.mean_anomaly * PI / 180.0;
+        let inclo = tle.inclination.to_radians();
+        let nodeo = tle.raan.to_radians();
+        let argpo = tle.arg_of_perigee.to_radians();
+        let mo = tle.mean_anomaly.to_radians();
         let ecco = tle.eccen;
         let jdsatepoch = tle.epoch.as_jd_with_scale(TimeScale::UTC);
 
@@ -346,8 +346,8 @@ mod tests {
                     if testvec[idx + 4].abs() < 1.0e-6 {
                         maxvelerr = 1.0e-2;
                     }
-                    let poserr = ((pos[idx] * 1.0e-3 - testvec[idx + 1]) / testvec[idx + 1]).abs();
-                    let velerr = ((vel[idx] * 1.0e-3 - testvec[idx + 4]) / testvec[idx + 4]).abs();
+                    let poserr = (pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
+                    let velerr = (vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
                     assert!(poserr < maxposerr);
                     assert!(velerr < maxvelerr);
                 }

@@ -1,6 +1,6 @@
 /// Unscented Kalman Filter
 ///
-/// Uses nalgebra
+/// Uses nalgebra for state and covariance matrices
 ///
 ///
 //
@@ -28,6 +28,7 @@ pub struct UKF<const N: usize> {
 }
 
 impl<const N: usize> UKF<N> {
+    /// Weights for the state estimate
     fn weight_m(alpha: f64, kappa: f64) -> Vec<f64> {
         let mut weight_m = Vec::<f64>::with_capacity(2 * N + 1);
         let den = alpha.powi(2) * (N as f64 + kappa);
@@ -38,6 +39,7 @@ impl<const N: usize> UKF<N> {
         weight_m
     }
 
+    /// Weights for the covariance
     fn weight_c(alpha: f64, beta: f64, kappa: f64) -> Vec<f64> {
         let mut weight_c = Vec::<f64>::with_capacity(2 * N + 1);
         let den: f64 = alpha.powi(2) * (N as f64 + kappa);
@@ -74,7 +76,20 @@ impl<const N: usize> UKF<N> {
         }
     }
 
-    //https://www.mathworks.com/help/control/ug/extended-and-unscented-kalman-filter-algorithms-for-online-state-estimation.html
+    /// <https://www.mathworks.com/help/control/ug/extended-and-unscented-kalman-filter-algorithms-for-online-state-estimation.html>
+    /// Update state and covariance with new observation
+    ///
+    /// # Arguments
+    /// * `y` - Observation vector
+    /// * `y_cov` - Covariance of observation
+    /// * `f` - Function to compute the observation from the state
+    ///
+    /// # Returns
+    /// * `SKResult<()>` - Result of the update
+    ///
+    /// # Notes:
+    /// * This will update the state estimate and the covariance matrix
+    ///
     pub fn update<const M: usize>(
         &mut self,
         y: &Vector<M>,
@@ -132,14 +147,30 @@ impl<const N: usize> UKF<N> {
                 acc + self.weight_c[i] * (x - self.x) * (y - yhat).transpose()
             });
 
-        let kalman_gain = p_xy * p_yy.try_inverse().unwrap();
+        let kalman_gain = p_xy
+            * p_yy.try_inverse().ok_or_else(|| {
+                Box::new(crate::SKErr::Error(
+                    "Cannot take inverse of predicted covariance; it is singular".to_string(),
+                ))
+            })?;
         self.x += kalman_gain * (y - yhat);
         self.p -= kalman_gain * p_yy * kalman_gain.transpose();
         Ok(())
     }
 
     /// Predict step
-    /// Note: add your own process noise after this function is called
+    ///
+    /// # Arguments
+    /// * `f` - Function to compute the next state from the current state
+    ///
+    /// # Returns
+    /// * Empty Ok value or an error
+    ///
+    /// # Notes
+    /// * This will update the state estimate and the covariance matrix
+    /// * This function does not add process noise to the state estimate,
+    ///   you should add process noise after this function is called
+    ///
     pub fn predict(&mut self, f: impl Fn(Vector<N>) -> SKResult<Vector<N>>) -> SKResult<()> {
         let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 

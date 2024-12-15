@@ -48,7 +48,7 @@ impl Instant {
     ///
     /// # Raises:
     /// SCErr: If the string cannot be parsed
-    pub fn from_string(s: &str) -> SKResult<Instant> {
+    pub fn from_string(s: &str) -> SKResult<Self> {
         let mut chars = s.chars().peekable();
         let mut year = -1;
         let mut month = -1;
@@ -266,7 +266,7 @@ impl Instant {
             second = 0;
             microsecond = 0;
         }
-        Ok(Instant::from_datetime(
+        Ok(Self::from_datetime(
             year,
             month,
             day,
@@ -300,7 +300,7 @@ impl Instant {
     /// # Returns:
     /// Instant: The instant object
     ///
-    pub fn strptime(s: &str, format: &str) -> SKResult<Instant> {
+    pub fn strptime(s: &str, format: &str) -> SKResult<Self> {
         let mut chars = format.chars();
         let mut s_chars = s.chars().peekable();
         let mut year = 0;
@@ -394,7 +394,7 @@ impl Instant {
                     }
                 },
                 _ => {
-                    let n = s_chars.next().unwrap();
+                    let n = s_chars.next().unwrap_or('_');
                     if c != n {
                         return InstantError::InvalidString(format!("{} doesn't match {}", c, n))
                             .into();
@@ -403,7 +403,7 @@ impl Instant {
             }
         }
 
-        let mut instant = Instant::from_datetime(
+        let mut instant = Self::from_datetime(
             year,
             month,
             day,

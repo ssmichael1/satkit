@@ -1,7 +1,7 @@
 use super::types::{ODEResult, ODESystem};
 
 #[allow(unused)]
-pub trait RK<const N: usize> {
+pub trait RKExplicit<const N: usize> {
     const A: [[f64; N]; N];
     const C: [f64; N];
     const B: [f64; N];
@@ -13,7 +13,7 @@ pub trait RK<const N: usize> {
         // Create the "k"s
         for k in 1..N {
             karr.push(system.ydot(
-                x0 + h * Self::C[k],
+                h.mul_add(Self::C[k], x0),
                 &(karr.iter().enumerate().fold(y0.clone(), |acc, (idx, ki)| {
                     acc + ki.clone() * Self::A[k][idx] * h
                 })),
@@ -37,7 +37,8 @@ pub trait RK<const N: usize> {
         let mut x: f64 = x0;
         let mut v = Vec::new();
         let mut y = y0.clone();
-        while x < xend {
+        let steps = ((xend - x0) / dx).ceil() as usize;
+        for _ in 0..steps {
             let ynew = Self::step(x, &y, dx, system)?;
             v.push(ynew.clone());
             x += dx;
@@ -53,7 +54,7 @@ pub trait RK<const N: usize> {
 pub struct RK4 {}
 ///
 /// Buchter tableau for RK4
-impl RK<4> for RK4 {
+impl RKExplicit<4> for RK4 {
     const A: [[f64; 4]; 4] = [
         [0.0, 0.0, 0.0, 0.0],
         [0.5, 0.0, 0.0, 0.0],
@@ -65,7 +66,7 @@ impl RK<4> for RK4 {
 }
 
 pub struct Midpoint {}
-impl RK<2> for Midpoint {
+impl RKExplicit<2> for Midpoint {
     const A: [[f64; 2]; 2] = [[0.0, 0.0], [0.5, 0.0]];
     const B: [f64; 2] = [0.0, 1.0];
     const C: [f64; 2] = [0.0, 0.5];
@@ -81,8 +82,8 @@ mod tests {
         k: f64,
     }
     impl HarmonicOscillator {
-        fn new(k: f64) -> HarmonicOscillator {
-            HarmonicOscillator { k }
+        const fn new(k: f64) -> Self {
+            Self { k }
         }
     }
 

@@ -8,6 +8,12 @@ use serde::{Deserialize, Serialize};
 /// The Instant struct provides methods for converting to and from Unix time, GPS time,
 /// Julian Date, Modified Julian Date, and Gregorian calendar date.
 ///
+/// Why do we need another structure that handles time?
+///
+/// This structure is necessary as it is time scale aware, i.e. it can
+/// handle different time scales such as UTC, TAI, TT, UT1, GPS, etc.
+/// This is necessary for high-precision coordinate transforms and orbit propagation.
+///
 #[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct Instant {
     /// The number of microseconds since
@@ -107,7 +113,7 @@ impl Instant {
     /// use satkit::Instant;
     /// let now = Instant::new(1234567890);
     /// ```
-    pub fn new(raw: i64) -> Self {
+    pub const fn new(raw: i64) -> Self {
         Self { raw }
     }
 
@@ -122,7 +128,7 @@ impl Instant {
     ///
     pub fn from_gps_week_and_second(week: i32, sow: f64) -> Self {
         let week = week as i64;
-        let raw = week * 14_515_200_000_000 + (sow * 1.0e6) as i64 + Instant::GPS_EPOCH.raw;
+        let raw = week * 14_515_200_000_000 + (sow * 1.0e6) as i64 + Self::GPS_EPOCH.raw;
         Self { raw }
     }
 
@@ -138,7 +144,7 @@ impl Instant {
     /// Unixtime is the number of non-leap seconds since Jan 1 1970 00:00:00 UTC
     /// (Leap seconds are ignored!!)
     pub fn from_unixtime(unixtime: f64) -> Self {
-        let mut raw = (unixtime * 1.0e6) as i64 + Instant::UNIX_EPOCH.raw;
+        let mut raw = (unixtime * 1.0e6) as i64 + Self::UNIX_EPOCH.raw;
 
         // Add leapseconds since unixtime ignores them
         let ls = microleapseconds(raw);
@@ -159,28 +165,28 @@ impl Instant {
     /// 1970-01-01 00:00:00 UTC.
     pub fn as_unixtime(&self) -> f64 {
         // Subtract leap seconds since unixtime ignores them
-        (self.raw - Instant::UNIX_EPOCH.raw - microleapseconds(self.raw)) as f64 * 1.0e-6
+        (self.raw - Self::UNIX_EPOCH.raw - microleapseconds(self.raw)) as f64 * 1.0e-6
     }
 
     /// J2000 epoch is 2000-01-01 12:00:00 TT
     /// TT (Terristrial Time) is 32.184 seconds ahead of TAI
-    pub const J2000: Self = Instant {
+    pub const J2000: Self = Self {
         raw: 946728064184000,
     };
 
     /// Unix epoch is 1970-01-01 00:00:00 UTC
-    pub const UNIX_EPOCH: Self = Instant { raw: 0 };
+    pub const UNIX_EPOCH: Self = Self { raw: 0 };
 
     /// GPS epoch is 1980-01-06 00:00:00 UTC
-    pub const GPS_EPOCH: Self = Instant {
+    pub const GPS_EPOCH: Self = Self {
         raw: 315964819000000,
     };
 
-    pub const INVALID: Self = Instant { raw: i64::MIN };
+    pub const INVALID: Self = Self { raw: i64::MIN };
 
     /// Modified Julian day epoch is
     /// 1858-11-17 00:00:00 UTC
-    pub const MJD_EPOCH: Self = Instant {
+    pub const MJD_EPOCH: Self = Self {
         raw: -3506716800000000,
     };
 
@@ -250,7 +256,7 @@ impl Instant {
     pub fn from_mjd_with_scale(mjd: f64, scale: TimeScale) -> Self {
         match scale {
             TimeScale::UTC => {
-                let raw = (mjd * 86_400_000_000.0) as i64 + Instant::MJD_EPOCH.raw;
+                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
                 let ls = microleapseconds(raw);
                 let raw = raw + ls;
                 // Make sure adding the leapseconds didn't cross another
@@ -259,11 +265,11 @@ impl Instant {
                 Self { raw }
             }
             TimeScale::TAI => {
-                let raw = (mjd * 86_400_000_000.0) as i64 + Instant::MJD_EPOCH.raw;
+                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
                 Self { raw }
             }
             TimeScale::TT => {
-                let raw = (mjd * 86_400_000_000.0) as i64 + Instant::MJD_EPOCH.raw - 32_184_000;
+                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw - 32_184_000;
                 Self { raw }
             }
             TimeScale::UT1 => {
@@ -271,24 +277,24 @@ impl Instant {
                 let eop =
                     crate::earth_orientation_params::eop_from_mjd_utc(mjd).unwrap_or([0.0; 6]);
                 let dut1 = eop[0] as f64;
-                Instant::from_mjd_with_scale(mjd - dut1 / 86_400.0, TimeScale::UTC)
+                Self::from_mjd_with_scale(mjd - dut1 / 86_400.0, TimeScale::UTC)
             }
             TimeScale::GPS => {
                 if mjd >= 44244.0 {
-                    let raw = (mjd * 86_400_000_000.0) as i64 + Instant::GPS_EPOCH.raw + 19_000_000;
+                    let raw = (mjd * 86_400_000_000.0) as i64 + Self::GPS_EPOCH.raw + 19_000_000;
                     Self { raw }
                 } else {
-                    let raw = (mjd * 86_400_000_000.0) as i64 + Instant::MJD_EPOCH.raw;
+                    let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
                     Self { raw }
                 }
             }
             TimeScale::Invalid => Self::INVALID,
             TimeScale::TDB => {
                 let ttc: f64 = (mjd - (2451545.0 - 2400000.4)) / 36525.0;
-                let mjd = mjd
-                    - 0.01657 / 86400.0
-                        * (std::f64::consts::PI / 180.0 * (628.3076 * ttc + 6.2401)).sin()
-                    - 32.184 / 86400.0;
+                let mjd = (0.01657f64 / 86400.0f64).mul_add(
+                    -(std::f64::consts::PI / 180.0 * 628.3076f64.mul_add(ttc, 6.2401)).sin(),
+                    mjd,
+                ) - 32.184 / 86400.0;
                 Self::from_mjd_with_scale(mjd, TimeScale::TAI)
             }
         }
@@ -332,10 +338,10 @@ impl Instant {
     /// # Returns
     /// A new Instant object representing the new time
     ///
-    pub fn add_utc_days(&self, days: f64) -> Instant {
+    pub fn add_utc_days(&self, days: f64) -> Self {
         let mut utc = self.as_mjd_with_scale(TimeScale::UTC);
         utc += days;
-        Instant::from_mjd_with_scale(utc, TimeScale::UTC)
+        Self::from_mjd_with_scale(utc, TimeScale::UTC)
     }
 
     /// As Modified Julian Date with given time scale
@@ -350,11 +356,11 @@ impl Instant {
     pub fn as_mjd_with_scale(&self, scale: TimeScale) -> f64 {
         match scale {
             TimeScale::UTC => {
-                (self.raw - Instant::MJD_EPOCH.raw - microleapseconds(self.raw)) as f64
+                (self.raw - Self::MJD_EPOCH.raw - microleapseconds(self.raw)) as f64
                     / 86_400_000_000.0
             }
             TimeScale::TT => {
-                (self.raw - Instant::MJD_EPOCH.raw + 32_184_000) as f64 / 86_400_000_000.0
+                (self.raw - Self::MJD_EPOCH.raw + 32_184_000) as f64 / 86_400_000_000.0
             }
             TimeScale::UT1 => {
                 let mjd_utc = self.as_mjd();
@@ -363,19 +369,21 @@ impl Instant {
                 let dut1 = eop[0] as f64;
                 mjd_utc + dut1 / 86_400.0
             }
-            TimeScale::TAI => (self.raw - Instant::MJD_EPOCH.raw) as f64 / 86_400_000_000.0,
+            TimeScale::TAI => (self.raw - Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0,
             TimeScale::GPS => {
-                if self > &Instant::GPS_EPOCH {
-                    (self.raw - Instant::GPS_EPOCH.raw - 19_000_000) as f64 / 86_400_000_000.0
+                if self > &Self::GPS_EPOCH {
+                    (self.raw - Self::GPS_EPOCH.raw - 19_000_000) as f64 / 86_400_000_000.0
                 } else {
-                    (self.raw - Instant::MJD_EPOCH.raw) as f64 / 86_400_000_000.0
+                    (self.raw - Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0
                 }
             }
             TimeScale::TDB => {
                 let tt: f64 = self.as_mjd_with_scale(TimeScale::TT);
-                let ttc: f64 = (tt - (2451545.0 - 2400000.4)) / 36525.0;
-                tt + 0.001657 / 86400.0
-                    * (std::f64::consts::PI / 180.0 * (628.3076 * ttc + 6.2401)).sin()
+                let ttc: f64 = (tt - (2451545.0f64 - 2400000.4f64)) / 36525.0;
+                (0.001657f64 / 86400.0f64).mul_add(
+                    (std::f64::consts::PI / 180.0 * 628.3076f64.mul_add(ttc, 6.2401)).sin(),
+                    tt,
+                )
             }
             TimeScale::Invalid => 0.0,
         }
@@ -485,7 +493,7 @@ impl Instant {
             + (hour as i64 * 3_600_000_000)
             + (minute as i64 * 60_000_000)
             + (second * 1_000_000.0) as i64
-            + Instant::MJD_EPOCH.raw;
+            + Self::MJD_EPOCH.raw;
         // Account for additional leap seconds if needed
         let ls = microleapseconds(raw);
         raw += ls;

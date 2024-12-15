@@ -35,9 +35,7 @@ const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 
 fn gstime_sgp4(jdut1: f64) -> f64 {
     let tut1 = (jdut1 - 2451545.0) / 36525.0;
-    let mut temp = -6.2e-6 * tut1 * tut1 * tut1
-        + 0.093104 * tut1 * tut1
-        + (876600.0 * 3600.0 + 8640184.812866) * tut1
+    let mut temp = 876600.0f64.mul_add(3600.0, 8640184.812866).mul_add(tut1, (-6.2e-6 * tut1 * tut1).mul_add(tut1, 0.093104 * tut1 * tut1))
         + 67310.54841; // sec
     temp = (temp * DEG2RAD / 240.0) % TWOPI; //360/86400 = 1/240, to deg, to rad
 
@@ -164,16 +162,16 @@ pub fn initl(
 
     /* ------------------ un-kozai the mean motion ----------------- */
     let ak: f64 = f64::powf(xke / no_kozai, x2o3);
-    let d1: f64 = 0.75 * j2 * (3.0 * *cosio2 - 1.0) / (*rteosq * *omeosq);
+    let d1: f64 = 0.75 * j2 * 3.0f64.mul_add(*cosio2, -1.0) / (*rteosq * *omeosq);
     del = d1 / (ak * ak);
-    let adel: f64 = ak * (1.0 - del * del - del * (1.0 / 3.0 + 134.0 * del * del / 81.0));
+    let adel: f64 = ak * del.mul_add(-(1.0 / 3.0 + 134.0 * del * del / 81.0), del.mul_add(-del, 1.0));
     del = d1 / (adel * adel);
     *no_unkozai = no_kozai / (1.0 + del);
 
     *ao = f64::powf(xke / *no_unkozai, x2o3);
     *sinio = f64::sin(inclo);
     let po: f64 = *ao * *omeosq;
-    *con42 = 1.0 - 5.0 * *cosio2;
+    *con42 = 5.0f64.mul_add(-(*cosio2), 1.0);
     *con41 = -*con42 - *cosio2 - *cosio2;
     *ainv = 1.0 / *ao;
     *posq = po * po;

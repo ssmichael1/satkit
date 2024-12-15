@@ -54,22 +54,22 @@ pub fn pos_mod(time: &Instant) -> na::Vector3<f64> {
     const deg2rad: f64 = std::f64::consts::PI / 180.;
 
     // Mean longitude
-    let lambda: f64 = 280.46 + 36000.77 * t;
+    let lambda: f64 = 36000.77f64.mul_add(t, 280.46);
 
     // mean anomaly
     #[allow(non_snake_case)]
-    let M: f64 = deg2rad * (357.5277233 + 35999.05034 * t);
+    let M: f64 = deg2rad * 35999.05034f64.mul_add(t, 357.5277233);
 
     // obliquity
-    let epsilon: f64 = deg2rad * (23.439291 - 0.0130042 * t);
+    let epsilon: f64 = deg2rad * 0.0130042f64.mul_add(-t, 23.439291);
 
     // Ecliptic
     let lambda_ecliptic: f64 =
-        deg2rad * (lambda + 1.914666471 * f64::sin(M) + 0.019994643 * f64::sin(2.0 * M));
+        deg2rad * 0.019994643f64.mul_add(f64::sin(2.0 * M), 1.914666471f64.mul_add(f64::sin(M), lambda));
 
     // Magnitude of sun vector
     let r: f64 =
-        consts::AU * (1.000140612 - 0.016708617 * f64::cos(M) - 0.000139589 * f64::cos(2. * M));
+        consts::AU * 0.000139589f64.mul_add(-f64::cos(2. * M), 0.016708617f64.mul_add(-f64::cos(M), 1.000140612));
 
     na::Vector3::<f64>::new(
         r * f64::cos(lambda_ecliptic),
@@ -108,9 +108,9 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
     } else if c < (b - a) {
         0.0
     } else {
-        let x = (c * c + a * a - b * b) / 2.0 / c;
-        let y = (a * a - x * x).sqrt();
-        let big_a = a * a * (x / a).acos() + b * b * ((c - x) / b).acos() - c * y;
+        let x = b.mul_add(-b, c.mul_add(c, a * a)) / 2.0 / c;
+        let y = a.mul_add(a, -(x * x)).sqrt();
+        let big_a = c.mul_add(-y, (a * a).mul_add((x / a).acos(), b * b * ((c - x) / b).acos()));
 
         1.0 - big_a / std::f64::consts::PI / a / a
     }
@@ -168,13 +168,13 @@ pub fn riseset(
     let latitude: f64 = coord.latitude_deg();
     let longitude: f64 = coord.longitude_deg();
 
-    let sind: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).sin();
-    let cosd: fn(f64) -> f64 = |x: f64| (x * PI / 180.0).cos();
+    let sind: fn(f64) -> f64 = |x: f64| x.to_radians().sin();
+    let cosd: fn(f64) -> f64 = |x: f64| x.to_radians().cos();
     const RAD2DEG: f64 = 180.0 / PI;
 
     // Zero-hour GMST, equation 3-45 in Vallado
     let gmst0h = |t: f64| -> f64 {
-        (100.4606184 + 36000.77005361 * t + 0.00038793 * t * t - 2.6E-8 * t * t * t) % 360.0
+        (2.6E-8 * t * t).mul_add(-t, (0.00038793 * t).mul_add(t, 36000.77005361f64.mul_add(t, 100.4606184))) % 360.0
     };
 
     let jd0h: f64 = (time.as_jd_with_scale(TimeScale::UTC) - longitude / 360.0).floor() + 0.5;
@@ -184,12 +184,12 @@ pub fn riseset(
     let criseset = |jd: f64, lhafunc: fn(f64) -> f64| -> SKResult<f64> {
         let t = (jd - 2451545.0) / 36525.0;
 
-        let lambda_sun = 280.4606184 + 36000.77005361 * t;
-        let msun = 357.5291092 + 35999.05034 * t;
+        let lambda_sun = 36000.77005361f64.mul_add(t, 280.4606184);
+        let msun = 35999.05034f64.mul_add(t, 357.5291092);
         let lambda_ecliptic =
-            lambda_sun + 1.914666471 * sind(msun) + 0.019994643 * sind(2.0 * msun);
+            0.019994643f64.mul_add(sind(2.0 * msun), 1.914666471f64.mul_add(sind(msun), lambda_sun));
         // Longitude in ecliptl
-        let epsilon = 23.439291 - 0.0130042 * t;
+        let epsilon = 0.0130042f64.mul_add(-t, 23.439291);
 
         let sindelta_sun = sind(epsilon) * sind(lambda_ecliptic);
         let deltasun = f64::asin(sindelta_sun) * RAD2DEG;
@@ -198,7 +198,7 @@ pub fn riseset(
             f64::atan2(cosd(epsilon) * sind(lambda_ecliptic), cosd(lambda_ecliptic)) * RAD2DEG;
 
         let coslha =
-            (cosd(sigma) - sind(deltasun) * sind(latitude)) / (cosd(deltasun) * cosd(latitude));
+            sind(deltasun).mul_add(-sind(latitude), cosd(sigma)) / (cosd(deltasun) * cosd(latitude));
         if coslha.abs() > 1.0 {
             return skerror!(
                 "Invalid position.  Sun doesn't rise/set on this day at \

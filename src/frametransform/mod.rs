@@ -51,10 +51,15 @@ pub(crate) fn qrot_zcoord(theta: f64) -> Quat {
 ///
 pub fn gmst(tm: &Instant) -> f64 {
     let tut1: f64 = (tm.as_mjd_with_scale(TimeScale::UT1) - 51544.5) / 36525.0;
-    let mut gmst: f64 = 67310.54841
-        + tut1 * ((876600.0 * 3600.0 + 8640184.812866) + tut1 * (0.093104 + tut1 * -6.2e-6));
+    let mut gmst: f64 = tut1.mul_add(
+        tut1.mul_add(
+            tut1.mul_add(-6.2e-6, 0.093104),
+            876600.0f64.mul_add(3600.0, 8640184.812866),
+        ),
+        67310.54841,
+    );
 
-    gmst = (gmst % 86400.0) / 240.0 * PI / 180.0;
+    gmst = ((gmst % 86400.0) / 240.0).to_radians();
     gmst
 }
 
@@ -62,10 +67,11 @@ pub fn gmst(tm: &Instant) -> f64 {
 /// Equation of the equinoxes
 pub fn eqeq(tm: &Instant) -> f64 {
     let d: f64 = tm.as_mjd_with_scale(TimeScale::TT) - 51544.5;
-    let omega = PI / 180.0 * (125.04 - 0.052954 * d);
-    let l = (280.47 + 0.98565 * d) * PI / 180.0;
-    let epsilon = (23.4393 - 0.0000004 * d) * PI / 180.0;
-    let d_psi = (-0.000319 * f64::sin(omega) - 0.000024 * f64::sin(2.0 * l)) * 15.0 * PI / 180.0;
+    let omega = PI / 180.0 * 0.052954f64.mul_add(-d, 125.04);
+    let l = 0.98565f64.mul_add(d, 280.47).to_radians();
+    let epsilon = 0.0000004f64.mul_add(-d, 23.4393).to_radians();
+    let d_psi = ((-0.000319f64).mul_add(f64::sin(omega), -(0.000024 * f64::sin(2.0 * l))) * 15.0)
+        .to_radians();
     d_psi * f64::cos(epsilon)
 }
 
@@ -101,7 +107,7 @@ pub fn gast(tm: &Instant) -> f64 {
 pub fn earth_rotation_angle(tm: &Instant) -> f64 {
     let t = tm.as_jd_with_scale(TimeScale::UT1);
     let f = t % 1.0;
-    2.0 * PI * ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0)) % 1.0)
+    2.0 * PI * (0.00273781191135448f64.mul_add(t - 2451545.0, 0.7790572732640 + f) % 1.0)
 }
 
 ///
@@ -189,16 +195,34 @@ pub fn qmod2gcrf(tm: &Instant) -> Quat {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
     let tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
 
-    let zeta = 2.650545
-        + tt * (2306.083227
-            + tt * (0.2988499 + tt * (0.01801828 + tt * (-0.000005971 + tt * -0.0000003173))));
-    let z = -2.650545
-        + tt * (2306.077181
-            + tt * (1.0927348 + tt * (0.01826837 + tt * (-0.000028596 + tt * -0.0000002904))));
+    let zeta = tt.mul_add(
+        tt.mul_add(
+            tt.mul_add(
+                tt.mul_add(tt.mul_add(-0.0000003173, -0.000005971), 0.01801828),
+                0.2988499,
+            ),
+            2306.083227,
+        ),
+        2.650545,
+    );
+    let z = tt.mul_add(
+        tt.mul_add(
+            tt.mul_add(
+                tt.mul_add(tt.mul_add(-0.0000002904, -0.000028596), 0.01826837),
+                1.0927348,
+            ),
+            2306.077181,
+        ),
+        -2.650545,
+    );
     let theta = tt
-        * (2004.191903
-            + tt * (-0.42949342 + tt * (-0.04182264 + tt * (-0.000007089 + tt * -0.0000001274))));
-
+        * tt.mul_add(
+            tt.mul_add(
+                tt.mul_add(tt.mul_add(-0.0000001274, -0.000007089), -0.04182264),
+                -0.42949342,
+            ),
+            2004.191903,
+        );
     qrot_zcoord(zeta * ASEC2RAD) * qrot_ycoord(-theta * ASEC2RAD) * qrot_zcoord(z * ASEC2RAD)
 }
 
@@ -275,17 +299,29 @@ pub fn qtod2mod_approx(tm: &Instant) -> Quat {
     // Compute nutation rotation (accurate to ~ 1 arcsec)
     // This is where the approximation comes in
     let delta_psi = DEG2RAD
-        * (-0.0048 * f64::sin((125.0 - 0.05295 * d) * DEG2RAD)
-            - 0.0004 * f64::sin((200.9 + 1.97129 * d) * DEG2RAD));
+        * (-0.0048f64).mul_add(
+            f64::sin(0.05295f64.mul_add(-d, 125.0) * DEG2RAD),
+            -(0.0004 * f64::sin(1.97129f64.mul_add(d, 200.9) * DEG2RAD)),
+        );
     let delta_epsilon = DEG2RAD
-        * (0.0026 * f64::cos((125.0 - 0.05295 * d) * DEG2RAD)
-            + 0.0002 * f64::cos((200.9 + 1.97129 * d) * DEG2RAD));
+        * 0.0026f64.mul_add(
+            f64::cos(0.05295f64.mul_add(-d, 125.0) * DEG2RAD),
+            0.0002 * f64::cos(1.97129f64.mul_add(d, 200.9) * DEG2RAD),
+        );
     let epsilon_a = DEG2RAD
-        * ((23.0 + 26.0 / 60.0 + 21.406 / 3600.0)
-            + t * (-46.836769 / 3600.0
-                + t * (-0.0001831 / 3600.0
-                    + t * (0.00200340 / 3600.0
-                        + t * (-5.76e-7 / 3600.0 + t * -4.34E-8 / 3600.0)))));
+        * t.mul_add(
+            t.mul_add(
+                t.mul_add(
+                    t.mul_add(
+                        -5.76e-7 / 3600.0 + t * -4.34E-8 / 3600.0,
+                        0.00200340 / 3600.0,
+                    ),
+                    -0.0001831 / 3600.0,
+                ),
+                -46.836769 / 3600.0,
+            ),
+            23.0 + 26.0 / 60.0 + 21.406 / 3600.0,
+        );
     let epsilon = epsilon_a + delta_epsilon;
     qrot_xcoord(-epsilon_a) * qrot_zcoord(delta_psi) * qrot_xcoord(epsilon)
 }
@@ -403,7 +439,7 @@ mod tests {
         let tdiff = tm.as_mjd_with_scale(TimeScale::UT1) - tm.as_mjd_with_scale(TimeScale::UTC);
         tm -= Duration::from_days(tdiff);
         // Convert to UT1
-        let gmval = gmst(&tm) * 180.0 / PI;
+        let gmval = gmst(&tm).to_degrees();
         let truth = -207.4212121875;
         assert!(((gmval - truth) / truth).abs() < 1.0e-6)
     }
@@ -435,7 +471,7 @@ mod tests {
         assert!((ptirs[1] - 7901.3055856).abs() < 1.0e-4);
         assert!((ptirs[2] - 6380.3445327).abs() < 1.0e-4);
         let era = earth_rotation_angle(tm);
-        assert!((era * 180.0 / PI - 312.7552829).abs() < 1.0e-5);
+        assert!((era.to_degrees() - 312.7552829).abs() < 1.0e-5);
         let pcirs = qrot_zcoord(-era) * ptirs;
         assert!((pcirs[0] - 5100.0184047).abs() < 1e-3);
         assert!((pcirs[1] - 6122.7863648).abs() < 1e-3);

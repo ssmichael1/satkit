@@ -164,14 +164,11 @@ pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
         return Ok(sw[idx].clone());
     }
 
-    // More-complex lookup (is it in the future?)
-    // Increase efficiency by looking backward
-    let rec = sw.iter().rev().find(|x| x.date <= tm);
-    if let Some(r) = rec {
-        Ok(r.clone())
-    } else {
-        skerror!("Invalid instant: {}", tm)
-    }
+    sw.iter()
+        .rev()
+        .find(|x| x.date <= tm)
+        .cloned()
+        .ok_or_else(|| Box::new(crate::SKErr::Error(format!("Invalid instant: {}", tm))).into())
 }
 
 /// Download new Space Weather file, and load it.

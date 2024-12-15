@@ -1,7 +1,7 @@
 use crate::frames::Frame;
 use pyo3::prelude::*;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 #[pyclass(name = "frame", module = "satkit", eq, eq_int)]
 pub enum PyFrame {
     /// International Terrestrial Reference Frame
@@ -32,14 +32,14 @@ pub enum PyFrame {
 impl From<Frame> for PyFrame {
     fn from(frame: Frame) -> Self {
         match frame {
-            Frame::ITRF => PyFrame::ITRF,
-            Frame::TIRS => PyFrame::TIRS,
-            Frame::CIRS => PyFrame::CIRS,
-            Frame::GCRF => PyFrame::GCRF,
-            Frame::TEME => PyFrame::TEME,
-            Frame::EME2000 => PyFrame::EME2000,
-            Frame::ICRF => PyFrame::ICRF,
-            Frame::LVLH => PyFrame::LVLH,
+            Frame::ITRF => Self::ITRF,
+            Frame::TIRS => Self::TIRS,
+            Frame::CIRS => Self::CIRS,
+            Frame::GCRF => Self::GCRF,
+            Frame::TEME => Self::TEME,
+            Frame::EME2000 => Self::EME2000,
+            Frame::ICRF => Self::ICRF,
+            Frame::LVLH => Self::LVLH,
         }
     }
 }
@@ -47,14 +47,14 @@ impl From<Frame> for PyFrame {
 impl From<PyFrame> for Frame {
     fn from(frame: PyFrame) -> Self {
         match frame {
-            PyFrame::ITRF => Frame::ITRF,
-            PyFrame::TIRS => Frame::TIRS,
-            PyFrame::CIRS => Frame::CIRS,
-            PyFrame::GCRF => Frame::GCRF,
-            PyFrame::TEME => Frame::TEME,
-            PyFrame::EME2000 => Frame::EME2000,
-            PyFrame::ICRF => Frame::ICRF,
-            PyFrame::LVLH => Frame::LVLH,
+            PyFrame::ITRF => Self::ITRF,
+            PyFrame::TIRS => Self::TIRS,
+            PyFrame::CIRS => Self::CIRS,
+            PyFrame::GCRF => Self::GCRF,
+            PyFrame::TEME => Self::TEME,
+            PyFrame::EME2000 => Self::EME2000,
+            PyFrame::ICRF => Self::ICRF,
+            PyFrame::LVLH => Self::LVLH,
         }
     }
 }

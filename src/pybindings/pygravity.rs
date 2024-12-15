@@ -28,12 +28,12 @@ pub enum GravModel {
 }
 
 impl From<GravModel> for GravityModel {
-    fn from(g: GravModel) -> GravityModel {
+    fn from(g: GravModel) -> Self {
         match g {
-            GravModel::jgm3 => GravityModel::JGM3,
-            GravModel::jgm2 => GravityModel::JGM2,
-            GravModel::egm96 => GravityModel::EGM96,
-            GravModel::itugrace16 => GravityModel::ITUGrace16,
+            GravModel::jgm3 => Self::JGM3,
+            GravModel::jgm2 => Self::JGM2,
+            GravModel::egm96 => Self::EGM96,
+            GravModel::itugrace16 => Self::ITUGrace16,
         }
     }
 }

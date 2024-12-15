@@ -116,7 +116,7 @@ pub fn nrlmsise(
         let (year, _mon, _day, dhour, dmin, dsec) = time.as_datetime();
         let fday: f64 = (time - Instant::from_date(year, 1, 1)).as_days() + 1.0;
         day_of_year = fday.floor() as i32;
-        sec_of_day = dhour as f64 * 3600.0 + dmin as f64 * 60.0 + dsec;
+        sec_of_day = (dhour as f64).mul_add(3600.0, dmin as f64 * 60.0) + dsec;
 
         if use_spaceweather {
             if let Ok(r) = spaceweather::get(time - Duration::from_days(1.0)) {

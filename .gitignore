@@ -23,3 +23,6 @@ _version.py
 .venv
 
 .pytest_cache
+
+wheelhouse
+wheel

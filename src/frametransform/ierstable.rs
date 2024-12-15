@@ -10,8 +10,8 @@ pub struct IERSTable {
 }
 
 impl IERSTable {
-    pub fn from_file(fname: &str) -> SKResult<IERSTable> {
-        let mut table = IERSTable {
+    pub fn from_file(fname: &str) -> SKResult<Self> {
+        let mut table = Self {
             data: [
                 na::DMatrix::<f64>::zeros(0, 0),
                 na::DMatrix::<f64>::zeros(0, 0),
@@ -22,7 +22,9 @@ impl IERSTable {
             ],
         };
 
-        let path = utils::datadir().unwrap_or(PathBuf::from(".")).join(fname);
+        let path = utils::datadir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(fname);
         download_if_not_exist(&path, None)?;
 
         let mut tnum: i32 = -1;
@@ -93,7 +95,7 @@ impl IERSTable {
                 }
                 let sval = f64::sin(argval);
                 let cval = f64::cos(argval);
-                retval += tmult * (self.data[i][(j, 1)] * sval + self.data[i][(j, 2)] * cval);
+                retval += tmult * self.data[i][(j, 1)].mul_add(sval, self.data[i][(j, 2)] * cval);
             }
         }
         retval

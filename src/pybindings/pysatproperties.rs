@@ -45,7 +45,7 @@ impl PySatProperties {
                         .unwrap()
                         .iter()
                         .fold(String::from(""), |acc, (k, _v)| {
-                            let mut a2 = acc.clone();
+                            let mut a2 = acc;
                             a2.push_str(k.downcast::<PyString>().unwrap().to_str().unwrap());
                             a2.push_str(", ");
                             a2
@@ -55,9 +55,7 @@ impl PySatProperties {
             }
         }
 
-        Ok(PySatProperties(SatPropertiesStatic::new(
-            cdaoverm, craoverm,
-        )))
+        Ok(Self(SatPropertiesStatic::new(cdaoverm, craoverm)))
     }
 
     /// Get the satellite's susceptibility to radiation pressure
@@ -65,7 +63,7 @@ impl PySatProperties {
     /// Returns:
     ///     float: Cr A / m (m^2/kg)
     #[getter]
-    fn get_craoverm(&self) -> f64 {
+    const fn get_craoverm(&self) -> f64 {
         self.0.craoverm
     }
 
@@ -74,7 +72,7 @@ impl PySatProperties {
     /// Returns:
     ///     float: Cd A / m (m^2/kg)
     #[getter]
-    fn get_cdaoverm(&self) -> f64 {
+    const fn get_cdaoverm(&self) -> f64 {
         self.0.cdaoverm
     }
 

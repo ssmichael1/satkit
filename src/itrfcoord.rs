@@ -1,6 +1,4 @@
 use std::f64::consts::PI;
-const DEG2RAD: f64 = PI / 180.;
-const RAD2DEG: f64 = 180. / PI;
 
 use crate::consts::WGS84_A;
 use crate::consts::WGS84_F;
@@ -87,9 +85,9 @@ impl std::ops::Sub<Vec3> for ITRFCoord {
     }
 }
 
-impl std::ops::Sub<ITRFCoord> for ITRFCoord {
+impl std::ops::Sub<Self> for ITRFCoord {
     type Output = Vec3;
-    fn sub(self, other: ITRFCoord) -> Vec3 {
+    fn sub(self, other: Self) -> Vec3 {
         self.itrf - other.itrf
     }
 }
@@ -108,16 +106,16 @@ impl std::ops::Sub<&ITRFCoord> for &ITRFCoord {
     }
 }
 
-impl std::ops::Sub<&ITRFCoord> for ITRFCoord {
+impl std::ops::Sub<&Self> for ITRFCoord {
     type Output = Vec3;
-    fn sub(self, other: &ITRFCoord) -> Vec3 {
+    fn sub(self, other: &Self) -> Vec3 {
         self.itrf - other.itrf
     }
 }
 
 impl std::convert::From<[f64; 3]> for ITRFCoord {
     fn from(v: [f64; 3]) -> Self {
-        ITRFCoord {
+        Self {
             itrf: Vec3::from(v),
         }
     }
@@ -126,7 +124,7 @@ impl std::convert::From<[f64; 3]> for ITRFCoord {
 impl std::convert::From<&[f64]> for ITRFCoord {
     fn from(v: &[f64]) -> Self {
         assert!(v.len() == 3);
-        ITRFCoord {
+        Self {
             itrf: Vec3::from_row_slice(v),
         }
     }
@@ -134,7 +132,7 @@ impl std::convert::From<&[f64]> for ITRFCoord {
 
 impl std::convert::From<Vec3> for ITRFCoord {
     fn from(v: Vec3) -> Self {
-        ITRFCoord { itrf: v }
+        Self { itrf: v }
     }
 }
 
@@ -161,8 +159,8 @@ impl ITRFCoord {
     /// let itrf = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 150.0);
     /// ```
     ///
-    pub fn from_geodetic_deg(lat: f64, lon: f64, hae: f64) -> ITRFCoord {
-        ITRFCoord::from_geodetic_rad(lat * DEG2RAD, lon * DEG2RAD, hae)
+    pub fn from_geodetic_deg(lat: f64, lon: f64, hae: f64) -> Self {
+        Self::from_geodetic_rad(lat.to_radians(), lon.to_radians(), hae)
     }
 
     ///
@@ -182,8 +180,8 @@ impl ITRFCoord {
     /// ```
     ///
     ///
-    pub fn from_vector(v: &na::Vector3<f64>) -> ITRFCoord {
-        ITRFCoord { itrf: *v }
+    pub const fn from_vector(v: &na::Vector3<f64>) -> Self {
+        Self { itrf: *v }
     }
 
     /// Returns an ITRF Coordinate given Cartesian ITRF coordinates represented as a slice
@@ -200,11 +198,11 @@ impl ITRFCoord {
     /// let itrf = ITRFCoord::from_slice(&[1522386.15660978, -4459627.78585002,  4284030.6890791]);
     /// ```
     ///
-    pub fn from_slice(v: &[f64]) -> SKResult<ITRFCoord> {
+    pub fn from_slice(v: &[f64]) -> SKResult<Self> {
         if v.len() != 3 {
             return skerror!("Input slice must have 3 elements");
         }
-        Ok(ITRFCoord {
+        Ok(Self {
             itrf: Vec3::from_row_slice(v),
         })
     }
@@ -227,21 +225,21 @@ impl ITRFCoord {
     /// let itrf = ITRFCoord::from_geodetic_rad(42.466*DEG2RAD, -71.1516*DEG2RAD, 150.0);
     /// ```
     ///
-    pub fn from_geodetic_rad(lat: f64, lon: f64, hae: f64) -> ITRFCoord {
+    pub fn from_geodetic_rad(lat: f64, lon: f64, hae: f64) -> Self {
         let sinp: f64 = lat.sin();
         let cosp: f64 = lat.cos();
         let sinl: f64 = lon.sin();
         let cosl: f64 = lon.cos();
 
-        let f2 = (1.0 - WGS84_F).powf(2.0);
-        let c = 1.0 / (cosp * cosp + f2 * sinp * sinp).sqrt();
+        let f2 = (1.0 - WGS84_F).powi(2);
+        let c = 1.0 / cosp.mul_add(cosp, f2 * sinp * sinp).sqrt();
         let s = f2 * c;
 
-        ITRFCoord {
+        Self {
             itrf: Vec3::from([
-                (WGS84_A * c + hae) * cosp * cosl,
-                (WGS84_A * c + hae) * cosp * sinl,
-                (WGS84_A * s + hae) * sinp,
+                WGS84_A.mul_add(c, hae) * cosp * cosl,
+                WGS84_A.mul_add(c, hae) * cosp * sinl,
+                WGS84_A.mul_add(s, hae) * sinp,
             ]),
         }
     }
@@ -259,13 +257,13 @@ impl ITRFCoord {
         const E2: f64 = 1.0 - (1.0 - WGS84_F) * (1.0 - WGS84_F);
         const EP2: f64 = E2 / (1.0 - E2);
 
-        let rho = (self.itrf[0] * self.itrf[0] + self.itrf[1] * self.itrf[1]).sqrt();
+        let rho = self.itrf[0].hypot(self.itrf[1]);
         let mut beta: f64 = f64::atan2(self.itrf[2], (1.0 - WGS84_F) * rho);
         let mut sinbeta: f64 = beta.sin();
         let mut cosbeta: f64 = beta.cos();
         let mut phi: f64 = f64::atan2(
-            self.itrf[2] + B * EP2 * sinbeta.powf(3.0),
-            rho - WGS84_A * E2 * cosbeta.powf(3.0),
+            (B * EP2).mul_add(sinbeta.powi(3), self.itrf[2]),
+            (WGS84_A * E2).mul_add(-cosbeta.powi(3), rho),
         );
         let mut betanew: f64 = f64::atan2((1.0 - WGS84_F) * phi.sin(), phi.cos());
         for _x in 0..5 {
@@ -273,16 +271,16 @@ impl ITRFCoord {
             sinbeta = beta.sin();
             cosbeta = beta.cos();
             phi = f64::atan2(
-                self.itrf[2] + B * EP2 * sinbeta.powf(3.0),
-                rho - WGS84_A * E2 * cosbeta.powf(3.0),
+                (B * EP2).mul_add(sinbeta.powi(3), self.itrf[2]),
+                (WGS84_A * E2).mul_add(-cosbeta.powi(3), rho),
             );
             betanew = f64::atan2((1.0 - WGS84_F) * phi.sin(), phi.cos());
         }
         let lat: f64 = phi;
         let lon: f64 = f64::atan2(self.itrf[1], self.itrf[0]);
         let sinphi: f64 = phi.sin();
-        let n: f64 = WGS84_A / (1.0 - E2 * sinphi * sinphi).sqrt();
-        let h = rho * phi.cos() + (self.itrf[2] + E2 * n * sinphi) * sinphi - n;
+        let n: f64 = WGS84_A / (E2 * sinphi).mul_add(-sinphi, 1.0).sqrt();
+        let h = rho.mul_add(phi.cos(), (E2 * n).mul_add(sinphi, self.itrf[2]) * sinphi) - n;
         (lat, lon, h)
     }
 
@@ -296,7 +294,7 @@ impl ITRFCoord {
     ///
     pub fn to_geodetic_deg(&self) -> (f64, f64, f64) {
         let (lat_rad, lon_rad, hae) = self.to_geodetic_rad();
-        (lat_rad * RAD2DEG, lon_rad * RAD2DEG, hae)
+        (lat_rad.to_degrees(), lon_rad.to_degrees(), hae)
     }
 
     /// Return geodetic longitude in radians, [-π, π]
@@ -309,7 +307,7 @@ impl ITRFCoord {
     /// Return geodetic longitude in degrees, [-180, 180]
     #[inline]
     pub fn longitude_deg(&self) -> f64 {
-        self.longitude_rad() * RAD2DEG
+        self.longitude_rad().to_degrees()
     }
 
     /// return geodetic latitude in radians, [-π/2, π/2]
@@ -329,7 +327,7 @@ impl ITRFCoord {
     /// Return geodetic latitude in degrees, [-180, 180]
     #[inline]
     pub fn latitude_deg(&self) -> f64 {
-        self.latitude_rad() * RAD2DEG
+        self.latitude_rad().to_degrees()
     }
 
     /// Compute location when moving a given Distance at a given heading along the Earth's surface
@@ -355,7 +353,7 @@ impl ITRFCoord {
     ///
     /// * ITRFCoord representing final position
     ///
-    pub fn move_with_heading(&self, distance_m: f64, heading_rad: f64) -> ITRFCoord {
+    pub fn move_with_heading(&self, distance_m: f64, heading_rad: f64) -> Self {
         let phi1 = self.latitude_rad();
         #[allow(non_upper_case_globals)]
         const a: f64 = WGS84_A;
@@ -365,50 +363,58 @@ impl ITRFCoord {
         let u1 = ((1.0 - WGS84_F) * phi1.tan()).atan();
         let sigma1 = f64::atan2(u1.tan(), heading_rad.cos());
         let sinalpha = u1.cos() * heading_rad.sin();
-        let usq = (1.0 - sinalpha.powf(2.0)) * ((a / b).powf(2.0) - 1.0);
-        let big_a = 1.0 + usq / 16384.0 * (4096.0 + usq * (-768.0 + usq * (320.0 - 175.0 * usq)));
-        let big_b = usq / 1024.0 * (256.0 + usq * (-128.0 + usq * (74.0 - 47.0 * usq)));
+        let usq = sinalpha.mul_add(-sinalpha, 1.0) * (a / b).mul_add(a / b, -1.0);
+        let big_a = (usq / 16384.0).mul_add(
+            usq.mul_add(usq.mul_add(175.0f64.mul_add(-usq, 320.0), -768.0), 4096.0),
+            1.0,
+        );
+        let big_b =
+            usq / 1024.0 * usq.mul_add(usq.mul_add(47.0f64.mul_add(-usq, 74.0), -128.0), 256.0);
         let mut sigma = distance_m / b / big_a;
         let mut costwosigmam = 0.0;
         for _ in 0..5 {
-            costwosigmam = (2.0 * sigma1 + sigma).cos();
+            costwosigmam = 2.0f64.mul_add(sigma1, sigma).cos();
             let dsigma = big_b
                 * sigma.sin()
-                * (costwosigmam
-                    + 0.25
-                        * big_b
-                        * (sigma.cos() * (-1.0 + 2.0 * costwosigmam.powf(2.0))
-                            - big_b / 6.0
-                                * costwosigmam
-                                * (-3.0 + 4.0 * sigma.sin().powf(2.0))
-                                * (-3.0 + 4.0 * costwosigmam.powf(2.0))));
+                * (0.25 * big_b).mul_add(
+                    sigma.cos().mul_add(
+                        2.0f64.mul_add(costwosigmam.powi(2), -1.0),
+                        -(big_b / 6.0
+                            * costwosigmam
+                            * 4.0f64.mul_add(sigma.sin().powi(2), -3.0)
+                            * 4.0f64.mul_add(costwosigmam.powi(2), -3.0)),
+                    ),
+                    costwosigmam,
+                );
             sigma = distance_m / b / big_a + dsigma;
         }
         let phi2 = f64::atan2(
-            u1.sin() * sigma.cos() + u1.cos() * sigma.sin() * heading_rad.cos(),
+            u1.sin()
+                .mul_add(sigma.cos(), u1.cos() * sigma.sin() * heading_rad.cos()),
             (1.0 - WGS84_F)
-                * (sinalpha.powf(2.0)
-                    + (u1.sin() * sigma.sin() - u1.cos() * sigma.cos() * heading_rad.cos())
-                        .powf(2.0))
-                .sqrt(),
+                * sinalpha.hypot(
+                    u1.sin()
+                        .mul_add(sigma.sin(), -(u1.cos() * sigma.cos() * heading_rad.cos())),
+                ),
         );
         let lam = f64::atan2(
             sigma.sin() * heading_rad.sin(),
-            u1.cos() * sigma.cos() - u1.sin() * sigma.sin() * heading_rad.cos(),
+            u1.cos()
+                .mul_add(sigma.cos(), -(u1.sin() * sigma.sin() * heading_rad.cos())),
         );
-        let cossqalpha = 1.0 - sinalpha.powf(2.0);
-        let big_c = WGS84_F / 16.0 * cossqalpha * (4.0 + WGS84_F * (4.0 - 3.0 * cossqalpha));
-        let delta_lon = lam
-            - (1.0 - big_c)
-                * WGS84_F
-                * sinalpha
-                * (sigma
-                    + big_c
-                        * sigma.sin()
-                        * (costwosigmam
-                            + big_c * sigma.cos() * (-1.0 + 2.0 * costwosigmam.powf(2.0))));
+        let cossqalpha = sinalpha.mul_add(-sinalpha, 1.0);
+        let big_c =
+            WGS84_F / 16.0 * cossqalpha * WGS84_F.mul_add(3.0f64.mul_add(-cossqalpha, 4.0), 4.0);
+        let delta_lon = ((1.0 - big_c) * WGS84_F * sinalpha).mul_add(
+            -(big_c * sigma.sin()).mul_add(
+                (big_c * sigma.cos())
+                    .mul_add(2.0f64.mul_add(costwosigmam.powi(2), -1.0), costwosigmam),
+                sigma,
+            ),
+            lam,
+        );
         let lambda2 = delta_lon + self.longitude_rad();
-        ITRFCoord::from_geodetic_rad(phi2, lambda2, 0.0)
+        Self::from_geodetic_rad(phi2, lambda2, 0.0)
     }
 
     /// Geodesic distance between two coordinates
@@ -434,7 +440,7 @@ impl ITRFCoord {
     ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
     ///   See: <https://geodesyapps.ga.gov.au/vincenty-inverse>
     ///
-    pub fn geodesic_distance(&self, other: &ITRFCoord) -> (f64, f64, f64) {
+    pub fn geodesic_distance(&self, other: &Self) -> (f64, f64, f64) {
         #[allow(non_upper_case_globals)]
         const a: f64 = WGS84_A;
         #[allow(non_upper_case_globals)]
@@ -456,44 +462,55 @@ impl ITRFCoord {
         let mut cos2sm = 0.0;
         let mut sigma = 0.0;
         for _ in 0..5 {
-            sinsigma = ((u2.cos() * lam.sin()).powf(2.0)
-                + (u1.cos() * u2.sin() - u1.sin() * u2.cos() * lam.cos()).powf(2.0))
-            .sqrt();
-            cossigma = u1.sin() * u2.sin() + u1.cos() * u2.cos() * lam.cos();
+            sinsigma = (u2.cos() * lam.sin()).hypot(
+                u1.cos()
+                    .mul_add(u2.sin(), -(u1.sin() * u2.cos() * lam.cos())),
+            );
+            cossigma = u1.sin().mul_add(u2.sin(), u1.cos() * u2.cos() * lam.cos());
             sigma = f64::atan2(sinsigma, cossigma);
             let sinalpha = (u1.cos() * u2.cos() * lam.sin()) / sigma.sin();
-            cossqalpha = 1.0 - sinalpha.powf(2.0);
+            cossqalpha = sinalpha.mul_add(-sinalpha, 1.0);
             cos2sm = sigma.cos() - (2.0 * u1.sin() * u2.sin()) / cossqalpha;
-            let c = WGS84_F / 16.0 * cossqalpha * (4.0 + WGS84_F * (4.0 - 3.0 * cossqalpha));
-            lam = londiff
-                + (1.0 - c)
-                    * WGS84_F
-                    * sinalpha
-                    * (sigma
-                        + c * sinsigma * (cos2sm + c * cossigma * (-1.0 + 2.0 * cos2sm.powf(2.0))));
+            let c = WGS84_F / 16.0
+                * cossqalpha
+                * WGS84_F.mul_add(3.0f64.mul_add(-cossqalpha, 4.0), 4.0);
+            lam = ((1.0 - c) * WGS84_F * sinalpha).mul_add(
+                (c * sinsigma).mul_add(
+                    (c * cossigma).mul_add(2.0f64.mul_add(cos2sm.powi(2), -1.0), cos2sm),
+                    sigma,
+                ),
+                londiff,
+            );
         }
 
-        let usq = cossqalpha * ((a / b).powf(2.0) - 1.0);
-        let biga = 1.0 + usq / 16384.0 * (4096.0 + usq * (-768.0 + usq * (320.0 - 175.0 * usq)));
-        let bigb = usq / 1024.0 * (256.0 + usq * (-128.0 + usq * (74.0 - 47.0 * usq)));
+        let usq = cossqalpha * (a / b).mul_add(a / b, -1.0);
+        let biga = (usq / 16384.0).mul_add(
+            usq.mul_add(usq.mul_add(175.0f64.mul_add(-usq, 320.0), -768.0), 4096.0),
+            1.0,
+        );
+        let bigb =
+            usq / 1024.0 * usq.mul_add(usq.mul_add(47.0f64.mul_add(-usq, 74.0), -128.0), 256.0);
         let dsigma = bigb
             * sinsigma
-            * (cos2sm
-                + 0.25
-                    * bigb
-                    * (cossigma * (-1.0 + 2.0 * cos2sm.powf(2.0))
-                        - bigb / 6.0
-                            * cos2sm
-                            * (-3.0 + 4.0 * sinsigma.powf(2.0))
-                            * (-3.0 + 4.0 * cos2sm.powf(2.0))));
+            * (0.25 * bigb).mul_add(
+                cossigma.mul_add(
+                    2.0f64.mul_add(cos2sm.powi(2), -1.0),
+                    -(bigb / 6.0
+                        * cos2sm
+                        * 4.0f64.mul_add(sinsigma.powi(2), -3.0)
+                        * 4.0f64.mul_add(cos2sm.powi(2), -3.0)),
+                ),
+                cos2sm,
+            );
         let s = b * biga * (sigma - dsigma);
         let alpha1 = f64::atan2(
             u2.cos() * lam.sin(),
-            u1.cos() * u2.sin() - u1.sin() * u2.cos() * lam.cos(),
+            u1.cos()
+                .mul_add(u2.sin(), -(u1.sin() * u2.cos() * lam.cos())),
         );
         let alpha2 = f64::atan2(
             u1.cos() * lam.sin(),
-            -u1.sin() * u2.cos() + u1.cos() * u2.sin() * lam.cos(),
+            (-u1.sin()).mul_add(u2.cos(), u1.cos() * u2.sin() * lam.cos()),
         );
         (s, alpha1, alpha2)
     }
@@ -533,7 +550,7 @@ impl ITRFCoord {
     /// // Should return [0.0, 0.0, 100.0]
     /// ```
     ///
-    pub fn to_ned(&self, ref_coord: &ITRFCoord) -> Vec3 {
+    pub fn to_ned(&self, ref_coord: &Self) -> Vec3 {
         self.q_ned2itrf().conjugate() * (self.itrf - ref_coord.itrf)
     }
 
@@ -571,7 +588,7 @@ impl ITRFCoord {
     /// // Should return [0.0, 0.0, -100.0]
     /// ```
     ///
-    pub fn to_enu(&self, other: &ITRFCoord) -> Vec3 {
+    pub fn to_enu(&self, other: &Self) -> Vec3 {
         self.q_enu2itrf().conjugate() * (self.itrf - other.itrf)
     }
 }
@@ -593,8 +610,12 @@ mod tests {
         // Forward azimuth = 293.466588 deg
         // Reverse azimuth = 106.780805 deg
         assert_relative_eq!(dist, 1928536.609, max_relative = 1.0e-8);
-        assert_relative_eq!(h0 + 2.0 * PI, 293.466588 * DEG2RAD, max_relative = 1.0e-6);
-        assert_relative_eq!(h1 + PI, 106.780805 * DEG2RAD, max_relative = 1.0e-6);
+        assert_relative_eq!(
+            2.0f64.mul_add(PI, h0),
+            293.466588f64.to_radians(),
+            max_relative = 1.0e-6
+        );
+        assert_relative_eq!(h1 + PI, 106.780805f64.to_radians(), max_relative = 1.0e-6);
 
         // Moving from Mumbai at the given distance and heading should get us to Dubai
         let testpoint = mumbai.move_with_heading(dist, h0);

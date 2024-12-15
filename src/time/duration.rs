@@ -16,7 +16,7 @@ impl Duration {
     ///
     /// # Returns
     /// A new `Duration` object
-    pub fn new(usec: i64) -> Self {
+    pub const fn new(usec: i64) -> Self {
         Self { usec }
     }
 
@@ -53,7 +53,7 @@ impl Duration {
     ///
     /// # Returns
     /// A new `Duration` object representing the time interval in microseconds
-    pub fn from_microseconds(usec: i64) -> Self {
+    pub const fn from_microseconds(usec: i64) -> Self {
         Self { usec }
     }
 
@@ -132,7 +132,7 @@ impl Duration {
     ///
     /// # Returns
     /// The duration in microseconds
-    pub fn as_microseconds(&self) -> i64 {
+    pub const fn as_microseconds(&self) -> i64 {
         self.usec
     }
 }
