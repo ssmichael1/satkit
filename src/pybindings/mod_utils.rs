@@ -135,10 +135,10 @@ fn version() -> PyResult<String> {
 #[pyfunction]
 fn dylib_path() -> PyResult<PyObject> {
     pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-        match process_path::get_dylib_path() {
-            Some(v) => v.to_str().unwrap().into_py_any(py),
-            None => pyo3::types::PyNone::get(py).into_py_any(py),
-        }
+        process_path::get_dylib_path().map_or_else(
+            || pyo3::types::PyNone::get(py).into_py_any(py),
+            |v| v.to_str().unwrap().into_py_any(py),
+        )
     })
 }
 

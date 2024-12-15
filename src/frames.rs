@@ -23,14 +23,14 @@ pub enum Frame {
 impl std::fmt::Display for Frame {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Frame::ITRF => write!(f, "ITRF"),
-            Frame::TIRS => write!(f, "TIRS"),
-            Frame::CIRS => write!(f, "CIRS"),
-            Frame::GCRF => write!(f, "GCRF"),
-            Frame::TEME => write!(f, "TEME"),
-            Frame::EME2000 => write!(f, "EME2000"),
-            Frame::ICRF => write!(f, "ICRF"),
-            Frame::LVLH => write!(f, "LVLH"),
+            Self::ITRF => write!(f, "ITRF"),
+            Self::TIRS => write!(f, "TIRS"),
+            Self::CIRS => write!(f, "CIRS"),
+            Self::GCRF => write!(f, "GCRF"),
+            Self::TEME => write!(f, "TEME"),
+            Self::EME2000 => write!(f, "EME2000"),
+            Self::ICRF => write!(f, "ICRF"),
+            Self::LVLH => write!(f, "LVLH"),
         }
     }
 }
@@ -40,14 +40,14 @@ impl std::str::FromStr for Frame {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "ITRF" => Ok(Frame::ITRF),
-            "TIRS" => Ok(Frame::TIRS),
-            "CIRS" => Ok(Frame::CIRS),
-            "GCRF" => Ok(Frame::GCRF),
-            "TEME" => Ok(Frame::TEME),
-            "EME2000" => Ok(Frame::EME2000),
-            "ICRF" => Ok(Frame::ICRF),
-            "LVLH" => Ok(Frame::LVLH),
+            "ITRF" => Ok(Self::ITRF),
+            "TIRS" => Ok(Self::TIRS),
+            "CIRS" => Ok(Self::CIRS),
+            "GCRF" => Ok(Self::GCRF),
+            "TEME" => Ok(Self::TEME),
+            "EME2000" => Ok(Self::EME2000),
+            "ICRF" => Ok(Self::ICRF),
+            "LVLH" => Ok(Self::LVLH),
             _ => skerror!("Invalid Frame"),
         }
     }

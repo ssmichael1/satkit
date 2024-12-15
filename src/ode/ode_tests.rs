@@ -60,7 +60,7 @@ where
     let res = F::integrate(0.0, PI, &y0, ydot, &settings).unwrap();
 
     let testcount = 100;
-    (0..100).for_each(|idx| {
+    (0..testcount).for_each(|idx| {
         let x = idx as f64 * PI / testcount as f64;
         let interp = F::interpolate(x, &res).unwrap();
         assert!((interp[0] - x.cos()).abs() < 1e-10);

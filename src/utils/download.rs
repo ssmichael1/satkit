@@ -47,7 +47,7 @@ pub fn download_file_async(
     overwrite_if_exists: bool,
 ) -> std::thread::JoinHandle<SKResult<bool>> {
     let dclone = downloaddir.to_path_buf();
-    let urlclone = url.clone();
+    let urlclone = url;
     let overwriteclone = overwrite_if_exists;
     std::thread::spawn(move || download_file(urlclone.as_str(), &dclone, overwriteclone))
 }

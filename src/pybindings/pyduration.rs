@@ -88,7 +88,7 @@ impl PyDuration {
             }
         }
 
-        Ok(PyDuration(
+        Ok(Self(
             Duration::from_seconds(seconds)
                 + Duration::from_days(days)
                 + Duration::from_minutes(minutes)
@@ -105,8 +105,8 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_days(d: f64) -> PyDuration {
-        PyDuration(Duration::from_days(d))
+    fn from_days(d: f64) -> Self {
+        Self(Duration::from_days(d))
     }
 
     /// Create new duration object from the number of seconds
@@ -117,8 +117,8 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_seconds(d: f64) -> PyDuration {
-        PyDuration(Duration::from_seconds(d))
+    fn from_seconds(d: f64) -> Self {
+        Self(Duration::from_seconds(d))
     }
 
     /// Create new duration object from the number of minutes
@@ -129,8 +129,8 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_minutes(d: f64) -> PyDuration {
-        PyDuration(Duration::from_minutes(d))
+    fn from_minutes(d: f64) -> Self {
+        Self(Duration::from_minutes(d))
     }
 
     /// Create new duration object from number of hours
@@ -141,8 +141,8 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_hours(d: f64) -> PyDuration {
-        PyDuration(Duration::from_hours(d))
+    fn from_hours(d: f64) -> Self {
+        Self(Duration::from_hours(d))
     }
 
     /// Add durations or add duration to satkit.time
@@ -153,10 +153,10 @@ impl PyDuration {
     /// Returns:
     ///     duration|satkit.time: New duration or time object
     fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
-        if other.is_instance_of::<PyDuration>() {
-            let dur = other.extract::<PyDuration>()?;
+        if other.is_instance_of::<Self>() {
+            let dur = other.extract::<Self>()?;
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                PyDuration(self.0 + dur.0).into_py_any(py)
+                Self(self.0 + dur.0).into_py_any(py)
             })
         } else if other.is_instance_of::<PyInstant>() {
             let tm = other.extract::<PyInstant>()?;
@@ -177,8 +177,8 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration: New duration object representing the difference
-    fn __sub__(&self, other: &PyDuration) -> PyDuration {
-        PyDuration(self.0 - other.0)
+    fn __sub__(&self, other: &Self) -> Self {
+        Self(self.0 - other.0)
     }
 
     /// Multiply duration by a scalar (scale duration)
@@ -188,8 +188,8 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration: New duration object representing the scaled duration
-    fn __mul__(&self, other: f64) -> PyDuration {
-        PyDuration(Duration::from_seconds(self.0.as_seconds() * other))
+    fn __mul__(&self, other: f64) -> Self {
+        Self(Duration::from_seconds(self.0.as_seconds() * other))
     }
 
     /// Duration in units of days, where 1 day = 86,400 seconds

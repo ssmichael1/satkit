@@ -42,7 +42,7 @@ fn download_from_json(
                 }
                 let mut newurl = baseurl.clone();
                 newurl.push_str(format!("/{}", entry.0).as_str());
-                download_from_json(entry.1, pbnew.clone(), newurl, overwrite, thandles)?;
+                download_from_json(entry.1, pbnew, newurl, overwrite, thandles)?;
                 Ok(())
             })
             .filter(|res| res.is_err())
@@ -63,7 +63,7 @@ fn download_from_json(
             return skerror!("could not parse array entries");
         }
     } else if v.is_string() {
-        let mut newurl = baseurl.clone();
+        let mut newurl = baseurl;
         newurl.push_str(format!("/{}", v).as_str());
         thandles.push(download_file_async(newurl, &basedir, *overwrite));
     } else {
@@ -127,7 +127,7 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> SKRe
 
     println!(
         "Downloading data files to {}",
-        downloaddir.clone().to_str().unwrap()
+        downloaddir.to_str().unwrap()
     );
     // Download old files
     download_datadir(

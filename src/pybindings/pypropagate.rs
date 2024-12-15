@@ -89,7 +89,7 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 pub fn propagate(
     args: &Bound<PyTuple>,
     mut kwargs: Option<&Bound<'_, PyDict>>,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<PyObject> {
     let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
     let propsettings = match pypropsettings {
         Some(p) => p.0,
@@ -157,12 +157,12 @@ pub fn propagate(
         output_phi = kwargs_or_default(&mut kwargs, "output_phi", false)?;
 
         if !kw.is_empty() {
-            let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
-                let mut a2 = acc.clone();
-                a2.push_str(k.downcast::<PyString>().unwrap().to_str().unwrap());
+            let keystring: String = kw.iter().try_fold(String::from(""), |acc, (k, _v)| {
+                let mut a2 = acc;
+                a2.push_str(k.downcast::<PyString>()?.to_str()?);
                 a2.push_str(", ");
-                a2
-            });
+                Ok::<_, PyErr>(a2)
+            })?;
             let s = format!("Invalid kwargs: {}", keystring);
             return Err(pyo3::exceptions::PyRuntimeError::new_err(s));
         }
@@ -170,14 +170,16 @@ pub fn propagate(
 
     // Simple sate propagation
     if !output_phi {
-        let res = crate::orbitprop::propagate(
+        let res = match crate::orbitprop::propagate(
             &state0,
             &starttime,
             &stoptime,
             &propsettings,
             satproperties,
-        )
-        .unwrap();
+        ) {
+            Ok(r) => r,
+            Err(e) => return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        };
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)
         })
@@ -190,9 +192,16 @@ pub fn propagate(
         pv.fixed_view_mut::<6, 6>(0, 1)
             .copy_from(&Matrix6::identity());
 
-        let res =
-            crate::orbitprop::propagate(&pv, &starttime, &stoptime, &propsettings, satproperties)
-                .unwrap();
+        let res = match crate::orbitprop::propagate(
+            &pv,
+            &starttime,
+            &stoptime,
+            &propsettings,
+            satproperties,
+        ) {
+            Ok(r) => r,
+            Err(e) => return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        };
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)
         })

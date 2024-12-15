@@ -141,8 +141,8 @@ impl Default for SatRec {
 }
 
 impl SatRec {
-    pub fn new() -> SatRec {
-        SatRec {
+    pub const fn new() -> Self {
+        Self {
             epochyr: 0,
             epochtynumrev: 0,
             error: 0,

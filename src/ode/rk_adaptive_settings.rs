@@ -19,8 +19,8 @@ pub struct RKAdaptiveSettings {
 }
 
 impl Default for RKAdaptiveSettings {
-    fn default() -> RKAdaptiveSettings {
-        RKAdaptiveSettings {
+    fn default() -> Self {
+        Self {
             abserror: 1.0e-8,
             relerror: 1.0e-8,
             minfac: 0.2,

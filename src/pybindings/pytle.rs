@@ -42,12 +42,12 @@ impl PyTLE {
             .map(|v| -> String { v.unwrap() })
             .collect();
 
-        PyTLE::from_lines(lines)
+        Self::from_lines(lines)
     }
 
     #[new]
-    fn new() -> PyTLE {
-        PyTLE(TLE::new())
+    fn new() -> Self {
+        Self(TLE::new())
     }
 
     /// Return a list of TLES loaded from input list of lines
@@ -82,31 +82,31 @@ impl PyTLE {
 
     /// Satellite NORAD Catalog Number
     #[getter]
-    fn get_satnum(&self) -> PyResult<i32> {
+    const fn get_satnum(&self) -> PyResult<i32> {
         Ok(self.0.sat_num)
     }
 
     /// Orbit eccentricity
     #[getter]
-    fn get_eccen(&self) -> PyResult<f64> {
+    const fn get_eccen(&self) -> PyResult<f64> {
         Ok(self.0.eccen)
     }
 
     /// Mean anomaly in degrees
     #[getter]
-    fn get_mean_anomaly(&self) -> PyResult<f64> {
+    const fn get_mean_anomaly(&self) -> PyResult<f64> {
         Ok(self.0.mean_anomaly)
     }
 
     /// Mean motion in revs / day
     #[getter]
-    fn get_mean_motion(&self) -> PyResult<f64> {
+    const fn get_mean_motion(&self) -> PyResult<f64> {
         Ok(self.0.mean_motion)
     }
 
     /// inclination in degrees
     #[getter]
-    fn get_inclination(&self) -> PyResult<f64> {
+    const fn get_inclination(&self) -> PyResult<f64> {
         Ok(self.0.inclination)
     }
 
@@ -118,19 +118,19 @@ impl PyTLE {
 
     /// argument of perigee, degrees
     #[getter]
-    fn get_arg_of_perigee(&self) -> PyResult<f64> {
+    const fn get_arg_of_perigee(&self) -> PyResult<f64> {
         Ok(self.0.arg_of_perigee)
     }
 
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
     #[getter]
-    fn get_mean_motion_dot(&self) -> PyResult<f64> {
+    const fn get_mean_motion_dot(&self) -> PyResult<f64> {
         Ok(self.0.mean_motion_dot)
     }
 
     /// One sixth of 2nd derivative of mean motion wrt time, in revs/day^3
     #[getter]
-    fn get_mean_motion_dot_dot(&self) -> PyResult<f64> {
+    const fn get_mean_motion_dot_dot(&self) -> PyResult<f64> {
         Ok(self.0.mean_motion_dot_dot)
     }
 
@@ -140,7 +140,7 @@ impl PyTLE {
     }
 
     // Drag
-    fn bstar(&self) -> PyResult<f64> {
+    const fn bstar(&self) -> PyResult<f64> {
         Ok(self.0.bstar)
     }
 

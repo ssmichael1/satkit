@@ -27,8 +27,8 @@ pub struct PropSettings {
 }
 
 impl Default for PropSettings {
-    fn default() -> PropSettings {
-        PropSettings {
+    fn default() -> Self {
+        Self {
             gravity_order: 4,
             abs_error: 1e-8,
             rel_error: 1e-8,
@@ -62,10 +62,10 @@ impl std::fmt::Display for PropSettings {
             self.rel_error,
             self.use_spaceweather,
             self.enable_interp,
-            match &self.precomputed {
-                Some(p) => format!("Precomputed: {} to {}", p.start, p.stop),
-                None => "No Precomputed".to_string(),
-            }
+            self.precomputed.as_ref().map_or_else(
+                || "No Precomputed".to_string(),
+                |p| format!("Precomputed: {} to {}", p.start, p.stop)
+            )
         )
     }
 }

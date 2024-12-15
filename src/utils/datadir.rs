@@ -59,7 +59,7 @@ pub fn set_datadir(d: &Path) -> SKResult<()> {
 
     let mut dd = DATADIR_SINGLETON.lock().unwrap();
     dd.take();
-    match dd.set(Some(d.to_path_buf().clone())) {
+    match dd.set(Some(d.to_path_buf())) {
         Ok(_) => Ok(()),
         Err(_) => skerror!("Could not set data directory"),
     }
@@ -91,21 +91,21 @@ pub fn datadir() -> SKResult<PathBuf> {
         for ref dir in td.clone() {
             let p = PathBuf::from(&dir).join("tab5.2a.txt");
             if p.is_file() {
-                return Some(dir.to_path_buf().clone());
+                return Some(dir.to_path_buf());
             }
         }
 
         // Check for writeable directory that already exists
         for ref dir in td.clone() {
             if dir.is_dir() && !dir.metadata().unwrap().permissions().readonly() {
-                return Some(dir.to_path_buf().clone());
+                return Some(dir.to_path_buf());
             }
         }
 
         // Check for directory that we can create that is writable
-        for ref dir in td.clone() {
-            if let Ok(()) = std::fs::create_dir_all(dir) {
-                return Some(dir.to_path_buf().clone());
+        for ref dir in td {
+            if matches!(std::fs::create_dir_all(dir), Ok(())) {
+                return Some(dir.to_path_buf());
             }
         }
 

@@ -32,28 +32,16 @@ pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
     const deg2rad: f64 = std::f64::consts::PI / 180.;
 
     let lambda_ecliptic: f64 = deg2rad
-        * (218.32 + 481267.8813 * t + 6.29 * f64::sin(deg2rad * (134.9 + 477198.85 * t))
-            - 1.27 * f64::sin(deg2rad * (259.2 - 413335.38 * t))
-            + 0.66 * f64::sin(deg2rad * (235.7 + 890534.23 * t))
-            + 0.21 * f64::sin(deg2rad * (269.9 + 954397.70 * t))
-            - 0.19 * f64::sin(deg2rad * (357.5 + 35999.05 * t))
-            - 0.11 * f64::sin(deg2rad * (186.6 + 966404.05 * t)));
+        * 0.11f64.mul_add(-f64::sin(deg2rad * 966404.05f64.mul_add(t, 186.6)), 0.19f64.mul_add(-f64::sin(deg2rad * 35999.05f64.mul_add(t, 357.5)), 0.21f64.mul_add(f64::sin(deg2rad * 954397.70f64.mul_add(t, 269.9)), 0.66f64.mul_add(f64::sin(deg2rad * 890534.23f64.mul_add(t, 235.7)), 1.27f64.mul_add(-f64::sin(deg2rad * 413335.38f64.mul_add(-t, 259.2)), 6.29f64.mul_add(f64::sin(deg2rad * 477198.85f64.mul_add(t, 134.9)), 481267.8813f64.mul_add(t, 218.32)))))));
 
     let phi_ecliptic: f64 = deg2rad
-        * (5.13 * f64::sin(deg2rad * (93.3 + 483202.03 * t))
-            + 0.28 * f64::sin(deg2rad * (228.2 + 960400.87 * t))
-            - 0.28 * f64::sin(deg2rad * (318.3 + 6003.18 * t))
-            - 0.17 * f64::sin(deg2rad * (217.6 - 407332.20 * t)));
+        * 0.17f64.mul_add(-f64::sin(deg2rad * 407332.20f64.mul_add(-t, 217.6)), 0.28f64.mul_add(-f64::sin(deg2rad * 6003.18f64.mul_add(t, 318.3)), 5.13f64.mul_add(f64::sin(deg2rad * 483202.03f64.mul_add(t, 93.3)), 0.28 * f64::sin(deg2rad * 960400.87f64.mul_add(t, 228.2)))));
 
     let hparallax: f64 = deg2rad
-        * (0.9508
-            + 0.0518 * f64::cos(deg2rad * (134.9 + 477198.85 * t))
-            + 0.0095 * f64::cos(deg2rad * (259.2 - 413335.38 * t))
-            + 0.0078 * f64::cos(deg2rad * (235.7 + 890534.23 * t))
-            + 0.0028 * f64::cos(deg2rad * (269.9 + 954397.70 * t)));
+        * 0.0028f64.mul_add(f64::cos(deg2rad * 954397.70f64.mul_add(t, 269.9)), 0.0078f64.mul_add(f64::cos(deg2rad * 890534.23f64.mul_add(t, 235.7)), 0.0095f64.mul_add(f64::cos(deg2rad * 413335.38f64.mul_add(-t, 259.2)), 0.0518f64.mul_add(f64::cos(deg2rad * 477198.85f64.mul_add(t, 134.9)), 0.9508))));
 
     let epsilon: f64 =
-        deg2rad * (23.439291 - 0.0130042 * t - 1.64e-7 * t * t + 5.04E-7 * t * t * t);
+        deg2rad * (5.04E-7 * t * t).mul_add(t, (1.64e-7 * t).mul_add(-t, 0.0130042f64.mul_add(-t, 23.439291)));
 
     // Convert values above from degrees to radians
     // for remainder of computations
@@ -62,10 +50,8 @@ pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
 
     rmag * na::Vector3::<f64>::new(
         f64::cos(phi_ecliptic) * f64::cos(lambda_ecliptic),
-        f64::cos(epsilon) * f64::cos(phi_ecliptic) * f64::sin(lambda_ecliptic)
-            - f64::sin(epsilon) * f64::sin(phi_ecliptic),
-        f64::sin(epsilon) * f64::cos(phi_ecliptic) * f64::sin(lambda_ecliptic)
-            + f64::cos(epsilon) * f64::sin(phi_ecliptic),
+        (f64::cos(epsilon) * f64::cos(phi_ecliptic)).mul_add(f64::sin(lambda_ecliptic), -(f64::sin(epsilon) * f64::sin(phi_ecliptic))),
+        (f64::sin(epsilon) * f64::cos(phi_ecliptic)).mul_add(f64::sin(lambda_ecliptic), f64::cos(epsilon) * f64::sin(phi_ecliptic)),
     )
 }
 

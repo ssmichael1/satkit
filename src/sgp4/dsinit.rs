@@ -230,7 +230,7 @@ pub fn dsinit(
     /* ------------------------ do solar terms ------------------- */
     let ses = ss1 * ZNS * ss5;
     let sis = ss2 * ZNS * (sz11 + sz13);
-    let sls = -ZNS * ss3 * (sz1 + sz3 - 14.0 - 6.0 * emsq);
+    let sls = -ZNS * ss3 * 6.0f64.mul_add(-emsq, sz1 + sz3 - 14.0);
     let sghs = ss4 * ZNS * (sz31 + sz33 - 6.0);
     let mut shs = -ZNS * ss2 * (sz21 + sz23);
     // sgp4fix for 180 deg incl
@@ -240,12 +240,12 @@ pub fn dsinit(
     if sinim != 0.0 {
         shs /= sinim;
     }
-    let sgs = sghs - cosim * shs;
+    let sgs = cosim.mul_add(-shs, sghs);
 
     /* ------------------------- do lunar terms ------------------ */
-    *dedt = ses + s1 * ZNL * s5;
-    *didt = sis + s2 * ZNL * (z11 + z13);
-    *dmdt = sls - ZNL * s3 * (z1 + z3 - 14.0 - 6.0 * emsq);
+    *dedt = (s1 * ZNL).mul_add(s5, ses);
+    *didt = (s2 * ZNL).mul_add(z11 + z13, sis);
+    *dmdt = (ZNL * s3).mul_add(-6.0f64.mul_add(-emsq, z1 + z3 - 14.0), sls);
     let sghl = s4 * ZNL * (z31 + z33 - 6.0);
     let mut shll = -ZNL * s2 * (z21 + z23);
     // sgp4fix for 180 deg incl
@@ -261,7 +261,7 @@ pub fn dsinit(
 
     /* ----------- calculate deep space resonance effects -------- */
     *dndt = 0.0;
-    let theta = (gsto + tc * RPTIM) % TWOPI;
+    let theta = tc.mul_add(RPTIM, gsto) % TWOPI;
     *em += *dedt * t;
     *inclm += *didt * t;
     *argpm += *domdt * t;
@@ -288,57 +288,118 @@ pub fn dsinit(
             emsqo = emsq;
             emsq = eccsq;
             let eoc = *em * emsq;
-            g201 = -0.306 - (*em - 0.64) * 0.440;
+            g201 = (*em - 0.64).mul_add(-0.440, -0.306);
 
             if *em <= 0.65 {
-                g211 = 3.616 - 13.2470 * *em + 16.2900 * emsq;
-                g310 = -19.302 + 117.3900 * *em - 228.4190 * emsq + 156.5910 * eoc;
-                g322 = -18.9068 + 109.7927 * *em - 214.6334 * emsq + 146.5816 * eoc;
-                g410 = -41.122 + 242.6940 * *em - 471.0940 * emsq + 313.9530 * eoc;
-                g422 = -146.407 + 841.8800 * *em - 1629.014 * emsq + 1083.4350 * eoc;
-                g520 = -532.114 + 3017.977 * *em - 5740.032 * emsq + 3708.2760 * eoc;
+                g211 = 16.2900f64.mul_add(emsq, 13.2470f64.mul_add(-(*em), 3.616));
+                g310 = 156.5910f64.mul_add(
+                    eoc,
+                    228.4190f64.mul_add(-emsq, 117.3900f64.mul_add(*em, -19.302)),
+                );
+                g322 = 146.5816f64.mul_add(
+                    eoc,
+                    214.6334f64.mul_add(-emsq, 109.7927f64.mul_add(*em, -18.9068)),
+                );
+                g410 = 313.9530f64.mul_add(
+                    eoc,
+                    471.0940f64.mul_add(-emsq, 242.6940f64.mul_add(*em, -41.122)),
+                );
+                g422 = 1083.4350f64.mul_add(
+                    eoc,
+                    1629.014f64.mul_add(-emsq, 841.8800f64.mul_add(*em, -146.407)),
+                );
+                g520 = 3708.2760f64.mul_add(
+                    eoc,
+                    5740.032f64.mul_add(-emsq, 3017.977f64.mul_add(*em, -532.114)),
+                );
             } else {
-                g211 = -72.099 + 331.819 * *em - 508.738 * emsq + 266.724 * eoc;
-                g310 = -346.844 + 1582.851 * *em - 2415.925 * emsq + 1246.113 * eoc;
-                g322 = -342.585 + 1554.908 * *em - 2366.899 * emsq + 1215.972 * eoc;
-                g410 = -1052.797 + 4758.686 * *em - 7193.992 * emsq + 3651.957 * eoc;
-                g422 = -3581.690 + 16178.110 * *em - 24462.770 * emsq + 12422.520 * eoc;
+                g211 = 266.724f64.mul_add(
+                    eoc,
+                    508.738f64.mul_add(-emsq, 331.819f64.mul_add(*em, -72.099)),
+                );
+                g310 = 1246.113f64.mul_add(
+                    eoc,
+                    2415.925f64.mul_add(-emsq, 1582.851f64.mul_add(*em, -346.844)),
+                );
+                g322 = 1215.972f64.mul_add(
+                    eoc,
+                    2366.899f64.mul_add(-emsq, 1554.908f64.mul_add(*em, -342.585)),
+                );
+                g410 = 3651.957f64.mul_add(
+                    eoc,
+                    7193.992f64.mul_add(-emsq, 4758.686f64.mul_add(*em, -1052.797)),
+                );
+                g422 = 12422.520f64.mul_add(
+                    eoc,
+                    24462.770f64.mul_add(-emsq, 16178.110f64.mul_add(*em, -3581.690)),
+                );
                 if *em > 0.715 {
-                    g520 = -5149.66 + 29936.92 * *em - 54087.36 * emsq + 31324.56 * eoc;
+                    g520 = 31324.56f64.mul_add(
+                        eoc,
+                        54087.36f64.mul_add(-emsq, 29936.92f64.mul_add(*em, -5149.66)),
+                    );
                 } else {
-                    g520 = 1464.74 - 4664.75 * *em + 3763.64 * emsq;
+                    g520 = 3763.64f64.mul_add(emsq, 4664.75f64.mul_add(-(*em), 1464.74));
                 }
             }
             if *em < 0.7 {
-                g533 = -919.22770 + 4988.6100 * *em - 9064.7700 * emsq + 5542.21 * eoc;
-                g521 = -822.71072 + 4568.6173 * *em - 8491.4146 * emsq + 5337.524 * eoc;
-                g532 = -853.66600 + 4690.2500 * *em - 8624.7700 * emsq + 5341.4 * eoc;
+                g533 = 5542.21f64.mul_add(
+                    eoc,
+                    9064.7700f64.mul_add(-emsq, 4988.6100f64.mul_add(*em, -919.22770)),
+                );
+                g521 = 5337.524f64.mul_add(
+                    eoc,
+                    8491.4146f64.mul_add(-emsq, 4568.6173f64.mul_add(*em, -822.71072)),
+                );
+                g532 = 5341.4f64.mul_add(
+                    eoc,
+                    8624.7700f64.mul_add(-emsq, 4690.2500f64.mul_add(*em, -853.66600)),
+                );
             } else {
-                g533 = -37995.780 + 161616.52 * *em - 229838.20 * emsq + 109377.94 * eoc;
-                g521 = -51752.104 + 218913.95 * *em - 309468.16 * emsq + 146349.42 * eoc;
-                g532 = -40023.880 + 170470.89 * *em - 242699.48 * emsq + 115605.82 * eoc;
+                g533 = 109377.94f64.mul_add(
+                    eoc,
+                    229838.20f64.mul_add(-emsq, 161616.52f64.mul_add(*em, -37995.780)),
+                );
+                g521 = 146349.42f64.mul_add(
+                    eoc,
+                    309468.16f64.mul_add(-emsq, 218913.95f64.mul_add(*em, -51752.104)),
+                );
+                g532 = 115605.82f64.mul_add(
+                    eoc,
+                    242699.48f64.mul_add(-emsq, 170470.89f64.mul_add(*em, -40023.880)),
+                );
             }
 
             let sini2 = sinim * sinim;
-            f220 = 0.75 * (1.0 + 2.0 * cosim + cosisq);
+            f220 = 0.75 * (2.0f64.mul_add(cosim, 1.0) + cosisq);
             f221 = 1.5 * sini2;
-            f321 = 1.875 * sinim * (1.0 - 2.0 * cosim - 3.0 * cosisq);
-            f322 = -1.875 * sinim * (1.0 + 2.0 * cosim - 3.0 * cosisq);
+            f321 = 1.875 * sinim * 3.0f64.mul_add(-cosisq, 2.0f64.mul_add(-cosim, 1.0));
+            f322 = -1.875 * sinim * 3.0f64.mul_add(-cosisq, 2.0f64.mul_add(cosim, 1.0));
             f441 = 35.0 * sini2 * f220;
             f442 = 39.3750 * sini2 * sini2;
             f522 = 9.84375
                 * sinim
-                * (sini2 * (1.0 - 2.0 * cosim - 5.0 * cosisq)
-                    + 0.33333333 * (-2.0 + 4.0 * cosim + 6.0 * cosisq));
+                * sini2.mul_add(
+                    5.0f64.mul_add(-cosisq, 2.0f64.mul_add(-cosim, 1.0)),
+                    0.33333333 * 6.0f64.mul_add(cosisq, 4.0f64.mul_add(cosim, -2.0)),
+                );
             f523 = sinim
-                * (4.92187512 * sini2 * (-2.0 - 4.0 * cosim + 10.0 * cosisq)
-                    + 6.56250012 * (1.0 + 2.0 * cosim - 3.0 * cosisq));
+                * (4.92187512 * sini2).mul_add(
+                    10.0f64.mul_add(cosisq, 4.0f64.mul_add(-cosim, -2.0)),
+                    6.56250012 * 3.0f64.mul_add(-cosisq, 2.0f64.mul_add(cosim, 1.0)),
+                );
             f542 = 29.53125
                 * sinim
-                * (2.0 - 8.0 * cosim + cosisq * (-12.0 + 8.0 * cosim + 10.0 * cosisq));
+                * cosisq.mul_add(
+                    10.0f64.mul_add(cosisq, 8.0f64.mul_add(cosim, -12.0)),
+                    8.0f64.mul_add(-cosim, 2.0),
+                );
             f543 = 29.53125
                 * sinim
-                * (-2.0 - 8.0 * cosim + cosisq * (12.0 + 8.0 * cosim - 10.0 * cosisq));
+                * cosisq.mul_add(
+                    10.0f64.mul_add(-cosisq, 8.0f64.mul_add(cosim, 12.0)),
+                    8.0f64.mul_add(-cosim, -2.0),
+                );
             let xno2 = *nm * *nm;
             let ainv2 = aonv * aonv;
             let mut temp1 = 3.0 * xno2 * ainv2;
@@ -361,18 +422,19 @@ pub fn dsinit(
             *d5421 = temp * f542 * g521;
             *d5433 = temp * f543 * g533;
             *xlamo = (mo + nodeo + nodeo - theta - theta) % TWOPI;
-            *xfact = mdot + *dmdt + 2.0 * (nodedot + *dnodt - RPTIM) - no;
+            *xfact = 2.0f64.mul_add(nodedot + *dnodt - RPTIM, mdot + *dmdt) - no;
             *em = emo;
             emsq = emsqo;
         }
 
         /* ---------------- synchronous resonance terms -------------- */
         if *irez == 1 {
-            g200 = 1.0 + emsq * (-2.5 + 0.8125 * emsq);
-            g310 = 1.0 + 2.0 * emsq;
-            g300 = 1.0 + emsq * (-6.0 + 6.60937 * emsq);
+            g200 = emsq.mul_add(0.8125f64.mul_add(emsq, -2.5), 1.0);
+            g310 = 2.0f64.mul_add(emsq, 1.0);
+            g300 = emsq.mul_add(6.60937f64.mul_add(emsq, -6.0), 1.0);
             f220 = 0.75 * (1.0 + cosim) * (1.0 + cosim);
-            f311 = 0.9375 * sinim * sinim * (1.0 + 3.0 * cosim) - 0.75 * (1.0 + cosim);
+            f311 = (0.9375 * sinim * sinim)
+                .mul_add(3.0f64.mul_add(cosim, 1.0), -(0.75 * (1.0 + cosim)));
             f330 = 1.0 + cosim;
             f330 = 1.875 * f330 * f330 * f330;
             *del1 = 3.0 * *nm * *nm * aonv * aonv;

@@ -52,8 +52,7 @@
 //! satkit::utils::update_datafiles(None, false);
 //! ```
 
-//#![warn(clippy::all, clippy::nursery, clippy::cargo)]
-#![warn(clippy::panic)]
+#![warn(clippy::all, clippy::use_self, clippy::cargo)]
 
 // Type definitions
 pub mod types;

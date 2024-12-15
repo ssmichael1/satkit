@@ -39,17 +39,17 @@ impl TryFrom<i32> for SolarSystem {
     type Error = ();
     fn try_from(v: i32) -> Result<Self, Self::Error> {
         match v {
-            x if x == SolarSystem::Mercury as i32 => Ok(SolarSystem::Mercury),
-            x if x == SolarSystem::Venus as i32 => Ok(SolarSystem::Venus),
-            x if x == SolarSystem::EMB as i32 => Ok(SolarSystem::EMB),
-            x if x == SolarSystem::Mars as i32 => Ok(SolarSystem::Mars),
-            x if x == SolarSystem::Jupiter as i32 => Ok(SolarSystem::Jupiter),
-            x if x == SolarSystem::Saturn as i32 => Ok(SolarSystem::Saturn),
-            x if x == SolarSystem::Uranus as i32 => Ok(SolarSystem::Uranus),
-            x if x == SolarSystem::Neptune as i32 => Ok(SolarSystem::Neptune),
-            x if x == SolarSystem::Pluto as i32 => Ok(SolarSystem::Pluto),
-            x if x == SolarSystem::Moon as i32 => Ok(SolarSystem::Moon),
-            x if x == SolarSystem::Sun as i32 => Ok(SolarSystem::Sun),
+            x if x == Self::Mercury as i32 => Ok(Self::Mercury),
+            x if x == Self::Venus as i32 => Ok(Self::Venus),
+            x if x == Self::EMB as i32 => Ok(Self::EMB),
+            x if x == Self::Mars as i32 => Ok(Self::Mars),
+            x if x == Self::Jupiter as i32 => Ok(Self::Jupiter),
+            x if x == Self::Saturn as i32 => Ok(Self::Saturn),
+            x if x == Self::Uranus as i32 => Ok(Self::Uranus),
+            x if x == Self::Neptune as i32 => Ok(Self::Neptune),
+            x if x == Self::Pluto as i32 => Ok(Self::Pluto),
+            x if x == Self::Moon as i32 => Ok(Self::Moon),
+            x if x == Self::Sun as i32 => Ok(Self::Sun),
             _ => Err(()),
         }
     }
@@ -119,12 +119,12 @@ impl JPLEphem {
     /// println!("p = {}", p);
     /// ```
     ///
-    fn from_file(fname: &str) -> SKResult<JPLEphem> {
+    fn from_file(fname: &str) -> SKResult<Self> {
         use std::collections::HashMap;
         use std::path::PathBuf;
 
         // Dimensions of ephemeris for given index
-        fn dimension(idx: usize) -> usize {
+        const fn dimension(idx: usize) -> usize {
             if idx == 11 {
                 2
             } else if idx == 14 {
@@ -135,7 +135,7 @@ impl JPLEphem {
         }
 
         // Open the file
-        let path = datadir().unwrap_or(PathBuf::from(".")).join(fname);
+        let path = datadir().unwrap_or_else(|_| PathBuf::from(".")).join(fname);
         if !path.is_file() {
             println!("Downloading JPL Ephemeris file.  File size is approx. 100MB");
         }
@@ -203,7 +203,7 @@ impl JPLEphem {
             ks
         };
 
-        Ok(JPLEphem {
+        Ok(Self {
             _de_version: de_version,
             jd_start,
             jd_stop,
@@ -220,11 +220,11 @@ impl JPLEphem {
                     let eidx: usize = sidx + 8;
                     let val: f64 = f64::from_le_bytes(raw[sidx..eidx].try_into()?);
 
-                    let mut stridx: usize = (84 * 3 + ix * 6) as usize;
-                    // different loc if constants >= 400
-                    if ix >= 400 {
-                        stridx = (84 * 3 + 400 * 6 + 5 * 8 + 41 * 4 + ix * 6) as usize;
-                    }
+                    let stridx: usize = if ix >= 400 {
+                        (84 * 3 + 400 * 6 + 5 * 8 + 41 * 4 + ix * 6) as usize
+                    } else {
+                        (84 * 3 + ix * 6) as usize
+                    };
                     let s = String::from_utf8(raw[stridx..(stridx + 6)].to_vec())?;
 
                     hm.insert(String::from(s.trim()), val);
@@ -282,7 +282,7 @@ impl JPLEphem {
         let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
         let sub_int_num: usize = t_int_2.floor() as usize;
         // Scale from -1 to 1
-        let t_seg = 2.0 * (t_int_2 - sub_int_num as f64) - 1.0;
+        let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
 
         let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
 
@@ -290,7 +290,7 @@ impl JPLEphem {
         t[0] = 1.0;
         t[1] = t_seg;
         for j in 2..ncoeff {
-            t[j] = 2.0 * t_seg * t[j - 1] - t[j - 2];
+            t[j] = (2.0 * t_seg).mul_add(t[j - 1], -t[j - 2]);
         }
 
         let mut pos: Vec3 = Vec3::zeros();
@@ -394,7 +394,7 @@ impl JPLEphem {
         let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
         let sub_int_num: usize = t_int_2.floor() as usize;
         // Scale from -1 to 1
-        let t_seg = 2.0 * (t_int_2 - sub_int_num as f64) - 1.0;
+        let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
 
         let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
 
@@ -405,8 +405,8 @@ impl JPLEphem {
         v[0] = 0.0;
         v[1] = 1.0;
         for j in 2..ncoeff {
-            t[j] = 2.0 * t_seg * t[j - 1] - t[j - 2];
-            v[j] = 2.0 * t_seg * v[j - 1] - v[j - 2] + 2.0 * t[j - 1];
+            t[j] = (2.0 * t_seg).mul_add(t[j - 1], -t[j - 2]);
+            v[j] = 2.0f64.mul_add(t[j - 1], (2.0 * t_seg).mul_add(v[j - 1], -v[j - 2]));
         }
 
         let mut pos: Vec3 = Vec3::zeros();

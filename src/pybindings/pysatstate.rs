@@ -52,7 +52,7 @@ impl PySatState {
             state.set_cov(StateCov::PVCov(nacov));
         }
 
-        Ok(PySatState(state))
+        Ok(Self(state))
     }
 
     /// Set position uncertainty (1-sigma, meters) in the lvlh (local-vertical, local-horizontal) frame
@@ -240,7 +240,7 @@ impl PySatState {
         };
 
         match self.0.propagate(&time, propsettings.as_ref()) {
-            Ok(s) => Ok(PySatState(s)),
+            Ok(s) => Ok(Self(s)),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Error propagating state: {}",
                 e

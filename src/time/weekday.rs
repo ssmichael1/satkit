@@ -27,7 +27,7 @@ impl From<i32> for Weekday {
 }
 
 impl From<Weekday> for i32 {
-    fn from(value: Weekday) -> i32 {
+    fn from(value: Weekday) -> Self {
         match value {
             Weekday::Sunday => 0,
             Weekday::Monday => 1,

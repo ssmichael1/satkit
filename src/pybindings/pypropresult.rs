@@ -122,7 +122,7 @@ impl PyPropResult {
     /// This should never be called and is here only for pickle support
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        PyPropResult(PyPropResultType::R1(Box::new(PropagationResult::<1> {
+        Self(PyPropResultType::R1(Box::new(PropagationResult::<1> {
             time_start: Instant::INVALID,
             state_start: Vector::<6>::zeros(),
             time_end: Instant::INVALID,
@@ -178,83 +178,73 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn pos(&self) -> PyObject {
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn pos(&self) -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..3])
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..3])
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
             }
         })
     }
 
     #[getter]
-    fn vel(&self) -> PyObject {
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn vel(&self) -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[3..6])
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
                 PyPropResultType::R7(r) => {
                     np::ndarray::arr1(&r.state_end.column(0).as_slice()[3..6])
                         .to_pyarray(py)
                         .into_py_any(py)
-                        .unwrap()
                 }
             }
         })
     }
 
     #[getter]
-    fn state(&self) -> PyObject {
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn state(&self) -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
             }
         })
     }
 
     #[getter]
-    fn state_end(&self) -> PyObject {
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn state_end(&self) -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
             }
         })
     }
 
     #[getter]
-    fn state_start(&self) -> PyObject {
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn state_start(&self) -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_start.as_slice())
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
                 PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_start.as_slice()[0..6])
                     .to_pyarray(py)
-                    .into_py_any(py)
-                    .unwrap(),
+                    .into_py_any(py),
             }
         })
     }
@@ -287,7 +277,7 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn can_interp(&self) -> bool {
+    const fn can_interp(&self) -> bool {
         match &self.0 {
             PyPropResultType::R1(r) => r.odesol.is_some(),
             PyPropResultType::R7(r) => r.odesol.is_some(),

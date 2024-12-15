@@ -376,7 +376,7 @@ impl Gravity {
             let fnp1 = (n + 1) as f64;
             let fnp21 = ((n + 2) * (n + 1)) as f64;
             let vnp2m = v[(np2, 0)];
-            daxdx += 0.5 * cnm * (v[(np2, 2)] - fnp21 * vnp2m);
+            daxdx += 0.5 * cnm * fnp21.mul_add(-vnp2m, v[(np2, 2)]);
             daxdy += 0.5 * cnm * w[(np2, 2)];
             daxdz += fnp1 * cnm * v[(np2, 1)];
             daydz += fnp1 * cnm * w[(np2, 1)];
@@ -405,31 +405,24 @@ impl Gravity {
 
                 if m == 1 {
                     daxdx += 0.25
-                        * (cnm * vnp2mp2 + snm * wnp2mp2
-                            - fnmmp21 * (3.0 * cnm * vnp2m + snm * wnp2m));
+                        * fnmmp21.mul_add(-(3.0 * cnm).mul_add(vnp2m, snm * wnp2m), cnm.mul_add(vnp2mp2, snm * wnp2mp2));
                     daxdy += 0.25
-                        * (cnm * wnp2mp2 - snm * vnp2mp2 - fnmmp21 * (cnm * wnp2m + snm * vnp2m));
+                        * fnmmp21.mul_add(-cnm.mul_add(wnp2m, snm * vnp2m), cnm.mul_add(wnp2mp2, -(snm * vnp2mp2)));
                 } else {
                     let mm2 = m - 2;
                     let fnmmp41 = (fnmmp1 + 3.0) * fnmmp31;
                     let vnp2mm2 = v[(np2, mm2)];
                     let wnp2mm2 = w[(np2, mm2)];
                     daxdx += 0.25
-                        * (cnm * vnp2mp2 + snm * wnp2mp2
-                            - 2.0 * fnmmp21 * (cnm * vnp2m + snm * wnp2m)
-                            + fnmmp41 * (cnm * vnp2mm2 + snm * wnp2mm2));
+                        * fnmmp41.mul_add(cnm.mul_add(vnp2mm2, snm * wnp2mm2), (2.0 * fnmmp21).mul_add(-cnm.mul_add(vnp2m, snm * wnp2m), cnm.mul_add(vnp2mp2, snm * wnp2mp2)));
                     daxdy += 0.25
-                        * (cnm * wnp2mp2
-                            - snm * vnp2mp2
-                            - fnmmp41 * (cnm * wnp2mm2 - snm * vnp2mm2));
+                        * fnmmp41.mul_add(-cnm.mul_add(wnp2mm2, -(snm * vnp2mm2)), cnm.mul_add(wnp2mp2, -(snm * vnp2mp2)));
                 }
                 daxdz += 0.5
-                    * (fnmmp1 * (cnm * vnp2mp1 + snm * wnp2mp1)
-                        - fnmmp31 * (cnm * vnp2mm1 + snm * wnp2mm1));
+                    * fnmmp1.mul_add(cnm.mul_add(vnp2mp1, snm * wnp2mp1), -(fnmmp31 * cnm.mul_add(vnp2mm1, snm * wnp2mm1)));
                 daydz += 0.5
-                    * (fnmmp1 * (cnm * wnp2mp1 - snm * vnp2mp1)
-                        + fnmmp31 * (cnm * wnp2mm1 - snm * vnp2mm1));
-                dazdz += fnmmp21 * (cnm * vnp2m + snm * wnp2m);
+                    * fnmmp1.mul_add(cnm.mul_add(wnp2mp1, -(snm * vnp2mp1)), fnmmp31 * cnm.mul_add(wnp2mm1, -(snm * vnp2mm1)));
+                dazdz += fnmmp21 * cnm.mul_add(vnp2m, snm * wnp2m);
             }
         }
 
@@ -438,7 +431,7 @@ impl Gravity {
         na::Matrix3::<f64>::new(
             daxdx, daxdy, daxdz, daxdy, daydy, daydz, daxdz, daydz, dazdz,
         ) * self.gravity_constant
-            / self.radius.powf(3.0)
+            / self.radius.powi(3)
     }
 
     /// See Equation 3.33 in Montenbruck & Gill
@@ -461,19 +454,12 @@ impl Gravity {
                     accel[1] -= cnm * w[(n + 1, 1)];
                 } else {
                     accel[0] += 0.5
-                        * ((-cnm * v[(n + 1, m + 1)] - snm * w[(n + 1, m + 1)])
-                            + (n - m + 2) as f64
-                                * (n - m + 1) as f64
-                                * (cnm * v[(n + 1, m - 1)] + snm * w[(n + 1, m - 1)]));
+                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(cnm.mul_add(v[(n + 1, m - 1)], snm * w[(n + 1, m - 1)]), (-cnm).mul_add(v[(n + 1, m + 1)], -(snm * w[(n + 1, m + 1)])));
 
                     accel[1] += 0.5
-                        * (-cnm * w[(n + 1, m + 1)]
-                            + snm * v[(n + 1, m + 1)]
-                            + (n - m + 2) as f64
-                                * (n - m + 1) as f64
-                                * (-1.0 * cnm * w[(n + 1, m - 1)] + snm * v[(n + 1, m - 1)]));
+                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add((-1.0 * cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]), (-cnm).mul_add(w[(n + 1, m + 1)], snm * v[(n + 1, m + 1)]));
                 }
-                accel[2] += (n - m + 1) as f64 * (-1.0 * cnm * v[(n + 1, m)] - snm * w[(n + 1, m)]);
+                accel[2] += (n - m + 1) as f64 * (-1.0 * cnm).mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
             }
         }
 
@@ -499,8 +485,8 @@ impl Gravity {
         for m in 0..NP4 {
             if m > 0 {
                 let d = self.divisor_table[(m, m)];
-                v[(m, m)] = d * (xfac * vmm1mm1 - yfac * wmm1mm1);
-                w[(m, m)] = d * (xfac * wmm1mm1 + yfac * vmm1mm1);
+                v[(m, m)] = d * xfac.mul_add(vmm1mm1, -(yfac * wmm1mm1));
+                w[(m, m)] = d * xfac.mul_add(wmm1mm1, yfac * vmm1mm1);
             }
 
             vmm1mm1 = v[(m, m)];
@@ -521,8 +507,8 @@ impl Gravity {
             for n in (m + 2)..NP4 {
                 let d = self.divisor_table[(n, m)] * zfac;
                 let d2 = self.divisor_table2[(n, m)] * rfac;
-                let vnm = d * vnm1m - d2 * vnm2m;
-                let wnm = d * wnm1m - d2 * wnm2m;
+                let vnm = d.mul_add(vnm1m, -(d2 * vnm2m));
+                let wnm = d.mul_add(wnm1m, -(d2 * wnm2m));
                 v[(n, m)] = vnm;
                 w[(n, m)] = wnm;
                 vnm2m = vnm1m;
@@ -539,7 +525,7 @@ impl Gravity {
     /// Load Gravity model coefficients from file
     /// Files are at:
     /// <http://icgem.gfz-potsdam.de/tom_longtime>
-    pub fn from_file(filename: &str) -> SKResult<Gravity> {
+    pub fn from_file(filename: &str) -> SKResult<Self> {
         let path = datadir().unwrap_or(PathBuf::from(".")).join(filename);
         download_if_not_exist(&path, None)?;
 
@@ -616,7 +602,7 @@ impl Gravity {
                 for k in (n - m + 1)..(n + m + 1) {
                     scale *= k as f64;
                 }
-                scale /= 2.0 * n as f64 + 1.0;
+                scale /= 2.0f64.mul_add(n as f64, 1.0);
                 if m > 0 {
                     scale /= 2.0;
                 }
@@ -643,7 +629,7 @@ impl Gravity {
             }
         }
 
-        Ok(Gravity {
+        Ok(Self {
             name,
             gravity_constant,
             radius,
@@ -664,7 +650,7 @@ mod tests {
     use crate::itrfcoord::ITRFCoord;
     use crate::types::Vec3;
     use approx::assert_relative_eq;
-    use std::f64::consts::PI;
+    
 
     #[test]
     fn test_gravity2() {
@@ -714,8 +700,8 @@ mod tests {
         let g_enu: Vec3 = coord.q_enu2itrf().conjugate() * gravity;
 
         // Compute East/West and North/South deflections, in arcsec
-        let ew_deflection: f64 = -f64::atan2(g_enu[0], -g_enu[2]) * 180.0 / PI * 3600.0;
-        let ns_deflection: f64 = -f64::atan2(g_enu[1], -g_enu[2]) * 180.0 / PI * 3600.0;
+        let ew_deflection: f64 = (-f64::atan2(g_enu[0], -g_enu[2])).to_degrees() * 3600.0;
+        let ns_deflection: f64 = (-f64::atan2(g_enu[1], -g_enu[2])).to_degrees() * 3600.0;
 
         // Compare with reference values
         assert_relative_eq!(
@@ -738,8 +724,8 @@ mod tests {
         for _idx in 0..100 {
             // Generate a random coordinate
             let latitude = random::<f64>() * 360.0;
-            let longitude = random::<f64>() * 180.0 - 90.0;
-            let altitude = random::<f64>() * 100.0 + 500.0;
+            let longitude = random::<f64>().mul_add(180.0, -90.0);
+            let altitude = random::<f64>().mul_add(100.0, 500.0);
             let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
 
             // generate a random shift

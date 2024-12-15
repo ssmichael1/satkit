@@ -76,7 +76,7 @@ fn mean2eccentric(m: f64, eccen: f64) -> f64 {
         false => m + eccen,
     };
     loop {
-        let de = (m - E + eccen * E.sin()) / (1.0 - eccen * E.cos());
+        let de = eccen.mul_add(E.sin(), m - E) / eccen.mul_add(-E.cos(), 1.0);
         E += de;
         if de.abs() < 1.0e-6 {
             break;
@@ -86,7 +86,7 @@ fn mean2eccentric(m: f64, eccen: f64) -> f64 {
 }
 
 fn eccentric2true(ea: f64, eccen: f64) -> f64 {
-    f64::atan2(ea.sin() * (1.0 - eccen.powi(2)).sqrt(), ea.cos() - eccen)
+    f64::atan2(ea.sin() * eccen.mul_add(-eccen, 1.0).sqrt(), ea.cos() - eccen)
 }
 
 fn mean2true(ma: f64, eccen: f64) -> f64 {
@@ -117,8 +117,8 @@ impl Kepler {
     /// # Returns
     ///
     /// * `Kepler` - A new Keplerian orbital element object
-    pub fn new(a: f64, eccen: f64, i: f64, raan: f64, argp: f64, an: Anomaly) -> Kepler {
-        Kepler {
+    pub fn new(a: f64, eccen: f64, i: f64, raan: f64, argp: f64, an: Anomaly) -> Self {
+        Self {
             a,
             eccen,
             incl: i,
@@ -135,7 +135,7 @@ impl Kepler {
     ///
     /// * `f64` - Semiparameter, meters
     pub fn semiparameter(&self) -> f64 {
-        self.a * (1.0 - self.eccen.powi(2))
+        self.a * self.eccen.mul_add(-self.eccen, 1.0)
     }
 
     /// Propagate the orbit forward (or backward) in time
@@ -148,11 +148,11 @@ impl Kepler {
     /// # Returns
     ///
     /// * `Kepler` - A new Keplerian orbital element object
-    pub fn propagate(&self, dt: &crate::Duration) -> Kepler {
+    pub fn propagate(&self, dt: &crate::Duration) -> Self {
         let n = self.mean_motion();
-        let ma = self.mean_anomaly() + n * dt.as_seconds();
+        let ma = n.mul_add(dt.as_seconds(), self.mean_anomaly());
         let nu = mean2true(ma, self.eccen);
-        Kepler {
+        Self {
             a: self.a,
             eccen: self.eccen,
             incl: self.incl,
@@ -165,7 +165,7 @@ impl Kepler {
     /// Return the eccentric anomaly of the satellite in radians
     pub fn eccentric_anomaly(&self) -> f64 {
         f64::atan2(
-            self.nu.sin() * (1.0 - self.eccen.powi(2)).sqrt(),
+            self.nu.sin() * self.eccen.mul_add(-self.eccen, 1.0).sqrt(),
             self.eccen + self.nu.cos(),
         )
     }
@@ -173,11 +173,11 @@ impl Kepler {
     /// Return the mean anomaly of the satellite in radians
     pub fn mean_anomaly(&self) -> f64 {
         let ea = self.eccentric_anomaly();
-        ea - self.eccen * ea.sin()
+        self.eccen.mul_add(-ea.sin(), ea)
     }
 
     /// Return the true anomaly of the satellite in radians
-    pub fn true_anomaly(&self) -> f64 {
+    pub const fn true_anomaly(&self) -> f64 {
         self.nu
     }
 
@@ -210,7 +210,7 @@ impl Kepler {
     ///
     /// * `Kepler` - A new Keplerian orbital element object
     ///
-    pub fn from_pv(r: Vec3, v: Vec3) -> SKResult<Kepler> {
+    pub fn from_pv(r: Vec3, v: Vec3) -> SKResult<Self> {
         let h = r.cross(&v);
         let n = Vec3::z_axis().cross(&h);
         let e = ((v.norm_squared() - crate::consts::MU_EARTH / r.norm()) * r - r.dot(&v) * v)
@@ -224,17 +224,17 @@ impl Kepler {
         let incl = (h.z / h.norm()).acos();
         let mut raan = (n.x / n.norm()).acos();
         if n.y < 0.0 {
-            raan = 2.0 * std::f64::consts::PI - raan;
+            raan = 2.0f64.mul_add(std::f64::consts::PI, -raan);
         }
         let mut w = (n.dot(&e) / n.norm() / e.norm()).acos();
         if e.z < 0.0 {
-            w = 2.0 * std::f64::consts::PI - w;
+            w = 2.0f64.mul_add(std::f64::consts::PI, -w);
         }
         let mut nu = (r.dot(&e) / r.norm() / e.norm()).acos();
         if r.dot(&v) < 0.0 {
-            nu = 2.0 * std::f64::consts::PI - nu;
+            nu = 2.0f64.mul_add(std::f64::consts::PI, -nu);
         }
-        Ok(Kepler::new(a, eccen, incl, raan, w, Anomaly::True(nu)))
+        Ok(Self::new(a, eccen, incl, raan, w, Anomaly::True(nu)))
     }
 
     /// Convert Keplerian orbital elements to Cartesian coordinates
@@ -244,8 +244,8 @@ impl Kepler {
     /// * `(Vec3, Vec3)` - Position and velocity vectors, meters and meters/second
     ///
     pub fn to_pv(&self) -> (Vec3, Vec3) {
-        let p = self.a * (1.0 - self.eccen.powi(2));
-        let r = p / (1.0 + self.eccen * self.nu.cos());
+        let p = self.a * self.eccen.mul_add(-self.eccen, 1.0);
+        let r = p / self.eccen.mul_add(self.nu.cos(), 1.0);
         let r_pqw = Vec3::new(r * self.nu.cos(), r * self.nu.sin(), 0.0);
         let v_pqw = Vec3::new(-self.nu.sin(), self.eccen + self.nu.cos(), 0.0)
             * (crate::consts::MU_EARTH / p).sqrt();
@@ -285,7 +285,7 @@ mod tests {
         let w = 53.38_f64.to_radians();
         let nu = 92.335_f64.to_radians();
 
-        let a = p / (1.0 - eccen.powi(2));
+        let a = p / eccen.mul_add(-eccen, 1.0);
 
         let k = Kepler::new(a, eccen, incl, raan, w, Anomaly::True(nu));
         let (r, v) = k.to_pv();

@@ -99,12 +99,14 @@ pub fn py_vec3_of_time_result_arr(
     let tm = tmarr.to_time_vec()?;
 
     match tm.len() {
-        1 => match cfunc(&tm[0]) {
-            Ok(v) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)
-            }),
-            Err(_) => Err(pyo3::exceptions::PyTypeError::new_err("Invalid time")),
-        },
+        1 => cfunc(&tm[0]).map_or_else(
+            |_| Err(pyo3::exceptions::PyTypeError::new_err("Invalid time")),
+            |v| {
+                pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                    np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)
+                })
+            },
+        ),
         _ => {
             let n = tm.len();
             pyo3::Python::with_gil(|py| -> PyResult<PyObject> {

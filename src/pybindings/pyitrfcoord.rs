@@ -64,30 +64,21 @@ impl PyITRFCoord {
     fn new(args: &Bound<'_, PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         // If kwargs are set, we get input from them
         if kwargs.is_some() {
-            use std::f64::consts::PI;
-
             let mut latitude_deg: Option<f64> = kwargs_or_none(&mut kwargs, "latitude_deg")?;
-            latitude_deg = match kwargs_or_none::<f64>(&mut kwargs, "latitude_rad")? {
-                None => latitude_deg,
-                Some(v) => Some(v * 180.0 / PI),
-            };
+            latitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "latitude_rad")?)
+                .map_or(latitude_deg, |v| Some(v.to_degrees()));
             let mut longitude_deg: Option<f64> = kwargs_or_none(&mut kwargs, "longitude_deg")?;
-            longitude_deg = match kwargs_or_none::<f64>(&mut kwargs, "longitude_rad")? {
-                None => longitude_deg,
-                Some(v) => Some(v * 180.0 / PI),
-            };
+            longitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "longitude_rad")?)
+                .map_or(longitude_deg, |v| Some(v.to_degrees()));
             let mut altitude: f64 = kwargs_or_default(&mut kwargs, "altitude", 0.0)?;
-            altitude = match kwargs_or_none(&mut kwargs, "height")? {
-                None => altitude,
-                Some(v) => v,
-            };
+            altitude = (kwargs_or_none(&mut kwargs, "height")?).map_or(altitude, |v| v);
 
             if latitude_deg.is_none() || longitude_deg.is_none() {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "Must set latitude, longitude",
                 ));
             }
-            Ok(PyITRFCoord(ITRFCoord::from_geodetic_deg(
+            Ok(Self(ITRFCoord::from_geodetic_deg(
                 latitude_deg.unwrap(),
                 longitude_deg.unwrap(),
                 altitude,
@@ -96,7 +87,7 @@ impl PyITRFCoord {
             let x = args.get_item(0)?.extract::<f64>()?;
             let y = args.get_item(1)?.extract::<f64>()?;
             let z = args.get_item(2)?.extract::<f64>()?;
-            Ok(PyITRFCoord(ITRFCoord::from_slice(&[x, y, z]).unwrap()))
+            Ok(Self(ITRFCoord::from_slice(&[x, y, z]).unwrap()))
         } else if args.len() == 1 {
             if args.get_item(0)?.is_instance_of::<PyList>() {
                 match args.get_item(0)?.extract::<Vec<f64>>() {
@@ -106,7 +97,7 @@ impl PyITRFCoord {
                                 "Invalid number of elements",
                             ));
                         }
-                        Ok(PyITRFCoord(ITRFCoord::from_slice(&xl).unwrap()))
+                        Ok(Self(ITRFCoord::from_slice(&xl).unwrap()))
                     }
                     Err(e) => Err(e),
                 }
@@ -120,9 +111,7 @@ impl PyITRFCoord {
                         "Invalid number of elements",
                     ));
                 }
-                Ok(PyITRFCoord(
-                    ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap(),
-                ))
+                Ok(Self(ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap()))
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                 "First input must be float, 3-element list of floats, or 3-element numpy array of float"
@@ -321,8 +310,8 @@ impl PyITRFCoord {
     ///
     /// Returns:
     ///     itrfcoord: New ITRF coordinate after moving
-    fn move_with_heading(&self, distance: f64, heading_rad: f64) -> PyITRFCoord {
-        PyITRFCoord(self.0.move_with_heading(distance, heading_rad))
+    fn move_with_heading(&self, distance: f64, heading_rad: f64) -> Self {
+        Self(self.0.move_with_heading(distance, heading_rad))
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
@@ -355,7 +344,7 @@ impl PyITRFCoord {
 
     /// 3-vector representing cartesian distance between this
     /// and other point, in meters
-    fn __sub__(&self, other: &PyITRFCoord) -> PyObject {
+    fn __sub__(&self, other: &Self) -> PyObject {
         let vout = self.0 - other.0;
         pyo3::Python::with_gil(|py| -> PyObject {
             let vnd = PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]]);

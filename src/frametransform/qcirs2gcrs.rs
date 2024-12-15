@@ -37,68 +37,104 @@ pub fn qcirs2gcrs_dxdy(tm: &Instant, dxdy: Option<(f64, f64)>) -> Quat {
 
     // Mean anomaly of the Moon
     delaunay[0] = ASEC2RAD
-        * (3600.0 * 134.96340251
-            + t_tt * (1717915923.2178 + t_tt * (31.8792 + t_tt * (0.051635 + t_tt * -0.00024470))));
+        * 3600.0f64.mul_add(
+            134.96340251,
+            t_tt * t_tt.mul_add(
+                t_tt.mul_add(t_tt.mul_add(-0.00024470, 0.051635), 31.8792),
+                1717915923.2178,
+            ),
+        );
 
     // Mean anomaly of the sun
     delaunay[1] = ASEC2RAD
-        * (3600.0 * 357.52910918
-            + t_tt * (129596581.0481 + t_tt * (-0.5532 + t_tt * (0.000136 + t_tt * -0.00001149))));
+        * 3600.0f64.mul_add(
+            357.52910918,
+            t_tt * t_tt.mul_add(
+                t_tt.mul_add(t_tt.mul_add(-0.00001149, 0.000136), -0.5532),
+                129596581.0481,
+            ),
+        );
 
     // F = L-Omega
     delaunay[2] = ASEC2RAD
-        * (3600.0 * 93.27209062
-            + t_tt
-                * (1739527262.8478 + t_tt * (-12.7512 + t_tt * (-0.001037 + t_tt * 0.00000417))));
+        * 3600.0f64.mul_add(
+            93.27209062,
+            t_tt * t_tt.mul_add(
+                t_tt.mul_add(t_tt.mul_add(0.00000417, -0.001037), -12.7512),
+                1739527262.8478,
+            ),
+        );
 
     // D = Mean elongation of the Moon from the Sun
     delaunay[3] = ASEC2RAD
-        * (3600.0 * 297.85019547
-            + t_tt
-                * (1602961601.2090 + t_tt * (-6.37006 + t_tt * (0.006593 + t_tt * -0.00003169))));
+        * 3600.0f64.mul_add(
+            297.85019547,
+            t_tt * t_tt.mul_add(
+                t_tt.mul_add(t_tt.mul_add(-0.00003169, 0.006593), -6.37006),
+                1602961601.2090,
+            ),
+        );
 
     // Omega = mean longitude of ascending node of the Moon
     delaunay[4] = ASEC2RAD
-        * (3600.0 * 125.04455501
-            + t_tt * (-6962890.5431 + t_tt * (7.4722 + t_tt * (0.007702 + t_tt * -0.00005939))));
+        * 3600.0f64.mul_add(
+            125.04455501,
+            t_tt * t_tt.mul_add(
+                t_tt.mul_add(t_tt.mul_add(-0.00005939, 0.007702), 7.4722),
+                -6962890.5431,
+            ),
+        );
 
     // Planetary nutation
     // Equations 5.44 in IERS technical note 36
-    delaunay[5] = 4.402608842 + 2608.7903141574 * t_tt;
-    delaunay[6] = 3.176146697 + 1021.3285546211 * t_tt;
-    delaunay[7] = 1.753470314 + 628.3075849991 * t_tt;
-    delaunay[8] = 6.203480913 + 334.0612426700 * t_tt;
-    delaunay[9] = 0.599546497 + 52.9690962641 * t_tt;
-    delaunay[10] = 0.874016757 + 21.3299104960 * t_tt;
-    delaunay[11] = 5.481293872 + 7.4781598567 * t_tt;
-    delaunay[12] = 5.311886287 + 3.8133035638 * t_tt;
-    delaunay[13] = t_tt * (0.02438175 + t_tt * 0.00000538691);
+    delaunay[5] = 2608.7903141574f64.mul_add(t_tt, 4.402608842);
+    delaunay[6] = 1021.3285546211f64.mul_add(t_tt, 3.176146697);
+    delaunay[7] = 628.3075849991f64.mul_add(t_tt, 1.753470314);
+    delaunay[8] = 334.0612426700f64.mul_add(t_tt, 6.203480913);
+    delaunay[9] = 52.9690962641f64.mul_add(t_tt, 0.599546497);
+    delaunay[10] = 21.3299104960f64.mul_add(t_tt, 0.874016757);
+    delaunay[11] = 7.4781598567f64.mul_add(t_tt, 5.481293872);
+    delaunay[12] = 3.8133035638f64.mul_add(t_tt, 5.311886287);
+    delaunay[13] = t_tt * t_tt.mul_add(0.00000538691, 0.02438175);
 
     // Polynomial part of X & Y, values in arcseconds
     // Equations 5.16 in IERS technical note 36
-    let x0 = -0.016617
-        + t_tt
-            * (2004.191898
-                + t_tt
-                    * (-0.4297829
-                        + t_tt * (-0.19861834 + t_tt * (0.000007578 + t_tt * 0.0000059285))));
-    let y0 = -0.006951
-        + t_tt
-            * (-0.025896
-                + t_tt
-                    * (-22.4072747
-                        + t_tt * (0.00190059 + t_tt * (0.001112526 + t_tt * 0.0000001358))));
+    let x0 = t_tt.mul_add(
+        t_tt.mul_add(
+            t_tt.mul_add(
+                t_tt.mul_add(t_tt.mul_add(0.0000059285, 0.000007578), -0.19861834),
+                -0.4297829,
+            ),
+            2004.191898,
+        ),
+        -0.016617,
+    );
+    let y0 = t_tt.mul_add(
+        t_tt.mul_add(
+            t_tt.mul_add(
+                t_tt.mul_add(t_tt.mul_add(0.0000001358, 0.001112526), 0.00190059),
+                -22.4072747,
+            ),
+            -0.025896,
+        ),
+        -0.006951,
+    );
 
     // Polynomial part of CIO locator s, values in microarcseconds
     // Described in table 5.2d of IERS technical note 36
-    let s0 = 94.0
-        + t_tt * (3808.65 + t_tt * (-122.68 + t_tt * (-72574.11 + t_tt * (27.98 + t_tt * 15.62))));
+    let s0 = t_tt.mul_add(
+        t_tt.mul_add(
+            t_tt.mul_add(t_tt.mul_add(t_tt.mul_add(15.62, 27.98), -72574.11), -122.68),
+            3808.65,
+        ),
+        94.0,
+    );
 
     let xsums = table5a_singleton().compute(t_tt, &delaunay);
     let ysums = table5b_singleton().compute(t_tt, &delaunay);
     let ssums = table5d_singleton().compute(t_tt, &delaunay);
-    let mut x = (x0 + xsums * 1.0e-6) * ASEC2RAD;
-    let mut y = (y0 + ysums * 1.0e-6) * ASEC2RAD;
+    let mut x = xsums.mul_add(1.0e-6, x0) * ASEC2RAD;
+    let mut y = ysums.mul_add(1.0e-6, y0) * ASEC2RAD;
     // If dX and dY are passed in, they are in milli-arcsecs
     if dxdy.is_some() {
         let (dx, dy) = dxdy.unwrap();
@@ -106,13 +142,13 @@ pub fn qcirs2gcrs_dxdy(tm: &Instant, dxdy: Option<(f64, f64)>) -> Quat {
         y += dy * 1e-3 * ASEC2RAD;
     }
 
-    let s = (s0 + ssums) * 1.0e-6 * ASEC2RAD - x * y / 2.0;
+    let s = ((s0 + ssums) * 1.0e-6).mul_add(ASEC2RAD, -(x * y / 2.0));
 
     // Compute expression for the celestial motion of the
     // celestial intermediate pole (CIP)
     // Equations 5.6 & 5.7 of IERS technical note 36
     let e = f64::atan2(y, x);
-    let d = f64::asin(f64::sqrt(x * x + y * y));
+    let d = f64::asin(f64::sqrt(x.mul_add(x, y * y)));
     qrot_zcoord(-e) * qrot_ycoord(-d) * qrot_zcoord(e + s)
 }
 
