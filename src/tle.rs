@@ -425,6 +425,12 @@ impl TLE {
     }
 }
 
+impl Default for TLE {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl std::fmt::Display for TLE {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.to_pretty_string())

@@ -211,13 +211,13 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             // Adapted from OrdinaryDiffEq.jl
             let sci = (y0.ode_abs() * settings.relerror).ode_scalar_add(settings.abserror);
 
-            let d0 = y0.ode_elem_div(&sci).ode_norm();
+            let d0 = y0.ode_elem_div(&sci).ode_scaled_norm();
             let ydot0 = ydot(start, y0)?;
-            let d1 = ydot0.ode_elem_div(&sci).ode_norm();
+            let d1 = ydot0.ode_elem_div(&sci).ode_scaled_norm();
             let h0 = 0.01 * d0 / d1 * tdir;
             let y1 = y0.clone() + ydot0.clone() * h0;
             let ydot1 = ydot(start + h0, &y1)?;
-            let d2 = (ydot1 - ydot0).ode_elem_div(&sci).ode_norm() / h0;
+            let d2 = (ydot1 - ydot0).ode_elem_div(&sci).ode_scaled_norm() / h0;
             let dmax = f64::max(d1, d2);
             let h1: f64 = match dmax < 1e-15 {
                 false => 10.0_f64.powf(-(2.0 + dmax.log10()) / (Self::ORDER as f64)),
@@ -281,7 +281,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 let mut ymax = y.ode_abs().ode_elem_max(&ynp1.ode_abs()) * settings.relerror;
                 ymax = ymax.ode_scalar_add(settings.abserror);
                 let ydiv = yerr.ode_elem_div(&ymax);
-                ydiv.ode_norm()
+                ydiv.ode_scaled_norm()
             };
             nevals += N;
 
@@ -290,6 +290,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             }
 
             // Run proportional-integral controller on error
+            // references Julia's OrdinaryDiffEq.jl
             let beta1 = 7.0 / (5.0 * Self::ORDER as f64);
             let beta2 = 2.0 / (5.0 * Self::ORDER as f64);
             let q11 = enorm.powf(beta1);

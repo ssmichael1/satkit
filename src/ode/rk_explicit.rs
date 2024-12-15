@@ -1,7 +1,7 @@
 use super::types::{ODEResult, ODESystem};
 
 #[allow(unused)]
-pub trait RK<const N: usize> {
+pub trait RKExplicit<const N: usize> {
     const A: [[f64; N]; N];
     const C: [f64; N];
     const B: [f64; N];
@@ -54,7 +54,7 @@ pub trait RK<const N: usize> {
 pub struct RK4 {}
 ///
 /// Buchter tableau for RK4
-impl RK<4> for RK4 {
+impl RKExplicit<4> for RK4 {
     const A: [[f64; 4]; 4] = [
         [0.0, 0.0, 0.0, 0.0],
         [0.5, 0.0, 0.0, 0.0],
@@ -66,7 +66,7 @@ impl RK<4> for RK4 {
 }
 
 pub struct Midpoint {}
-impl RK<2> for Midpoint {
+impl RKExplicit<2> for Midpoint {
     const A: [[f64; 2]; 2] = [[0.0, 0.0], [0.5, 0.0]];
     const B: [f64; 2] = [0.0, 1.0];
     const C: [f64; 2] = [0.0, 0.5];

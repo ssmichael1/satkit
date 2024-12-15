@@ -394,7 +394,7 @@ impl Instant {
                     }
                 },
                 _ => {
-                    let n = s_chars.next().unwrap();
+                    let n = s_chars.next().unwrap_or('_');
                     if c != n {
                         return InstantError::InvalidString(format!("{} doesn't match {}", c, n))
                             .into();

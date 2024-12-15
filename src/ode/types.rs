@@ -44,8 +44,8 @@ pub trait ODEState:
     // Element-wise maximum of self with other
     fn ode_elem_max(&self, other: &Self) -> Self;
 
-    // Euclideian norm
-    fn ode_norm(&self) -> f64;
+    // Euclidian norm scaled by inverse square root of number of elements
+    fn ode_scaled_norm(&self) -> f64;
 
     // Element-wise absolute value
     fn ode_abs(&self) -> Self;

@@ -33,6 +33,15 @@ impl SatPropertiesStatic {
     }
 }
 
+impl Default for SatPropertiesStatic {
+    fn default() -> Self {
+        Self {
+            cdaoverm: 0.0,
+            craoverm: 0.0,
+        }
+    }
+}
+
 impl std::fmt::Display for SatPropertiesStatic {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
