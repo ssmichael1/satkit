@@ -1,3 +1,4 @@
+use pyo3::conversion::FromPyObjectBound;
 use pyo3::prelude::*;
 use pyo3::types::timezone_utc;
 use pyo3::types::PyBytes;
@@ -176,6 +177,13 @@ impl<'py> IntoPyObject<'py> for crate::Instant {
 
     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         Ok(PyInstant(self).into_bound_py_any(py).unwrap())
+    }
+}
+
+impl<'py> FromPyObject<'py> for Instant {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let obj = PyInstant::extract_bound(ob)?;
+        Ok(obj.0)
     }
 }
 
