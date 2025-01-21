@@ -3,6 +3,9 @@ use crate::skerror;
 use crate::Instant;
 use crate::SKResult;
 
+// 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
+const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+
 ///
 /// Stucture representing a Two-Line Element Set (TLE), a satellite
 /// ephemeris format from the 1970s that is still somehow in use
@@ -311,7 +314,7 @@ impl TLE {
         Ok(Self {
             name: "none".to_string(),
             sat_num: {
-                match line1[2..7].trim().parse() {
+                match Self::alpha5_to_int(&line1[2..7]) {
                     Ok(y) => y,
                     Err(e) => return skerror!("Could not parse sat number: {}", e.to_string()),
                 }
@@ -425,6 +428,94 @@ impl TLE {
         })
     }
 
+    /// Convert an alpha5 formated Satellite Catalog Number, also known as NORAD ID, to a plain
+    /// numerical ID.
+    ///
+    /// 5 digit NORAD IDs are getting exhausted while many formats, like TLE, rely on them being
+    /// limited to 5 characters. Thus the introduction of the alpha 5 format.
+    ///
+    /// Up to number 99999 plain numerical id and alpha5 are identicial. Starting with 100000 the
+    /// alpha5 string uses a character instead of the first digit to handle satellite numbers
+    /// in the 100000 to 339999 range.
+    /// 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
+    ///
+    /// # Arguments:
+    ///  * `alpha5` - a reference to a str representing an alpha5 encoded satellite number.
+    ///
+    /// # Returns:
+    ///  * An i32 of the plain numerical satellite number or string indicating error condition
+    ///
+    /// # Example
+    /// ```
+    /// use satkit::TLE;
+    ///
+    /// let sat_num = TLE::alpha5_to_int("S9994");
+    /// // sat_num has the value 269994
+    /// ```
+    pub fn alpha5_to_int(alpha5: &str) -> SKResult<i32> {
+        match alpha5.chars().nth(0) {
+            // Alpha char is only possible at the first position, so if the first char is a
+            // digit or a whitespace the standard `.parse()` can be used.
+            Some(c) if c.is_ascii_digit() || c.is_whitespace() => match alpha5.trim().parse() {
+                Ok(i) => Ok(i),
+                Err(e) => skerror!("Invalid sat num: {}", e.to_string()),
+            },
+            Some(c) if c.is_alphabetic() => {
+                match ALPHA5_MATCHING
+                    .chars()
+                    .position(|m| m == c.to_ascii_uppercase())
+                {
+                    Some(p) => match alpha5[1..].parse::<i32>() {
+                        Ok(i) => Ok((p as i32 + 10) * 10000 + i),
+                        Err(e) => skerror!("Invalid sat num: {}", e.to_string()),
+                    },
+                    None => skerror!("Invalid first digit in sat num: {}", c),
+                }
+            }
+            Some(c) => skerror!("Invalid first digit in sat num: {}", c),
+            None => skerror!("Parse error"),
+        }
+    }
+
+    /// Convert a numerical Satellite Catalog Number, also known as NORAD ID, to an alpha5 String.
+    ///
+    /// 5 digit NORAD IDs are getting exhausted while many formats, like TLE, rely on them being
+    /// limited to 5 characters. Thus the introduction of the alpha 5 format.
+    ///
+    /// Up to number 99999 plain numerical id and alpha5 are identicial. Starting with 100000 the
+    /// alpha5 string uses a character instead of the first digit to handle satellite numbers
+    /// in the 100000 to 339999 range.
+    /// 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
+    ///
+    /// # Arguments:
+    ///  * `sat_num` - An i32 of a plain numerical satellite number
+    ///
+    /// # Returns:
+    ///   * A String representing an alpha5 encoded satellite number or string indicating error
+    ///     condition
+    ///
+    /// # Example
+    /// ```
+    /// use satkit::TLE;
+    ///
+    /// let alpha5_sat_num = TLE::int_to_alpha5(269994);
+    /// // alpha5_sat_num has the String value "S9994"
+    /// ```
+    pub fn int_to_alpha5(sat_num: i32) -> SKResult<String> {
+        match sat_num {
+            i @ 0..=99999 => Ok(format!("{:0>5}", i)),
+            i @ 100000..=339999 => {
+                let c = ALPHA5_MATCHING
+                    .chars()
+                    .nth(i as usize / 10000 - 10)
+                    .unwrap();
+                Ok(format!("{c}{:0>4}", i % 10000))
+            }
+            _i @ 340000.. => skerror!("Sat num >= 340000 cannot be represented in alpha5 format"),
+            _ => skerror!("Invalid sat num value"),
+        }
+    }
+
     /// Return a string representation of the TLE
     /// in a human-readable format
     ///
@@ -461,7 +552,7 @@ impl TLE {
                             Rev #: {}
         "#,
             self.name,
-            self.sat_num,
+            Self::int_to_alpha5(self.sat_num).unwrap(),
             match self.desig_year > 50 {
                 true => self.desig_year + 1900,
                 false => self.desig_year + 2000,
@@ -543,6 +634,12 @@ mod tests {
             "2 07530 101.9893 320.0351 0012269 147.9195 274.9996 12.53682684288423".to_string(),
             "1 52743U 22057M   23037.04954473  .00011781  00000-0  61944-3 0  9993".to_string(),
             "2 52743  97.5265 153.6940 0008594  82.9904  31.3082 15.15793680 38769".to_string(),
+            "0 ISS (ZARYA)".to_string(),
+            "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992".to_string(),
+            "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(),
+            "0 ISS (ZARYA)".to_string(),
+            "1 Z9999U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992".to_string(),
+            "2 Z9999  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(),
         ];
 
         let tles = match TLE::from_lines(&lines) {
@@ -552,7 +649,7 @@ mod tests {
             }
         };
 
-        if tles.len() != 7 {
+        if tles.len() != 9 {
             return skerror!("load_lines: Err = \"Incorrect number of elements parsed\"");
         }
 
@@ -617,6 +714,63 @@ mod tests {
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[6].name
             );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_alpha5_to_int() -> SKResult<()> {
+        // 0-padded less-than-5-digits
+        match TLE::alpha5_to_int("00091") {
+            Ok(91) => {}
+            Ok(i) => return skerror!("Error parsing '00091' as 91: got {}", i),
+            Err(e) => return skerror!("Error parsing '00091' as 91: {}", e),
+        }
+
+        // Non-0-padded less-than-5-digits
+        match TLE::alpha5_to_int("  982") {
+            Ok(982) => {}
+            Ok(i) => return skerror!("Error parsing '  982' as 982: got {}", i),
+            Err(e) => return skerror!("Error parsing '  982' as 982: {}", e),
+        }
+
+        // Numerical 5 digit
+        match TLE::alpha5_to_int("99993") {
+            Ok(99993) => {}
+            Ok(i) => return skerror!("Error parsing '99993' as 99993: got {}", i),
+            Err(e) => return skerror!("Error parsing '99993' as 99993: {}", e),
+        }
+
+        // Alpha5
+        match TLE::alpha5_to_int("S9994") {
+            Ok(269994) => {}
+            Ok(i) => return skerror!("Error parsing 'S9994' as 269994: got {}", i),
+            Err(e) => return skerror!("Error parsing 'S9994' as 269994: {}", e),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_int_to_alpha5() -> SKResult<()> {
+        match TLE::int_to_alpha5(91) {
+            Ok(ref s) if s == "00091" => {}
+            Ok(ref s) => return skerror!("Error converting 91 to '00091': got {}", s),
+            Err(e) => return skerror!("Error converting 91 to '00091': {}", e),
+        }
+
+        match TLE::int_to_alpha5(99993) {
+            Ok(ref s) if s == "99993" => {}
+            Ok(ref s) => return skerror!("Error converting 99993 to '99993': got {}", s),
+            Err(e) => return skerror!("Error converting 99993 to '99993': {}", e),
+        }
+
+        // Alpha5
+        match TLE::int_to_alpha5(269994) {
+            Ok(ref s) if s == "S9994" => {}
+            Ok(ref s) => return skerror!("Error converting 269994 to 'S9994': got {}", s),
+            Err(e) => return skerror!("Error converting 269994 to 'S9994': {}", e),
         }
 
         Ok(())
