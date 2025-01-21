@@ -104,6 +104,39 @@ pub struct TLE {
 }
 
 impl TLE {
+    /// Load a vector of strings representing Two-Line Element Set (TLE) lines into a vector of
+    /// TLE structures.
+    /// This function will call [`Self::load_2line`] respectively [`Self::load_3line`] as required
+    /// for each TLE entry it encounters in the input lines.
+    ///
+    /// Those TLEs can then be used to compute satellite position and
+    /// velocity as a function of time.
+    ///
+    /// For details, see [here](https://en.wikipedia.org/wiki/Two-line_element_set)
+    ///
+    /// # Arguments:
+    ///   * `lines` - a reference to a [`Vec`] of [`String`] representing TLE lines
+    ///
+    /// # Returns:
+    ///  * A [`Vec`] of [`TLE`] objects or string indicating error condition
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use satkit::TLE;
+    ///
+    /// let lines = vec![
+    ///     "2 PATHFINDER".to_string(),
+    ///     "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995".to_string(),
+    ///     "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085".to_string(),
+    ///     "0 SHINSEI (MS-F2)".to_string(),
+    ///     "1  5485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992".to_string(),
+    ///     "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065".to_string(),
+    /// ];
+    ///
+    /// let tles = TLE::from_lines(&lines).unwrap();
+    ///
+    /// ```
     pub fn from_lines(lines: &Vec<String>) -> SKResult<Vec<Self>> {
         let mut tles: Vec<Self> = Vec::<Self>::new();
         let empty: &String = &String::new();
