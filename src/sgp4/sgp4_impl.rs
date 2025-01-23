@@ -304,8 +304,18 @@ mod tests {
             Ok(file) => file,
         };
         let buf = std::io::BufReader::new(f);
-        let lines: Vec<String> = buf.lines().map(|l| l.unwrap()).collect();
+        // Vallado test vectors include some extra information at the end of the line
+        // So truncate all lines to 69 characters
+        let lines: Vec<String> = buf
+            .lines()
+            .map(|l| {
+                let line = l.unwrap();
+                line.chars().take(69).collect()
+            })
+            .collect();
+
         let tles = TLE::from_lines(&lines).unwrap();
+        
         assert!(tles.len() > 5);
 
         for mut tle in tles {
@@ -346,8 +356,10 @@ mod tests {
                     if testvec[idx + 4].abs() < 1.0e-6 {
                         maxvelerr = 1.0e-2;
                     }
-                    let poserr = (pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
-                    let velerr = (vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
+                    let poserr =
+                        (pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
+                    let velerr =
+                        (vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
                     assert!(poserr < maxposerr);
                     assert!(velerr < maxvelerr);
                 }
