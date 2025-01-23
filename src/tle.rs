@@ -104,6 +104,39 @@ pub struct TLE {
 }
 
 impl TLE {
+    /// Load a vector of strings representing Two-Line Element Set (TLE) lines into a vector of
+    /// TLE structures.
+    /// This function will call [`Self::load_2line`] respectively [`Self::load_3line`] as required
+    /// for each TLE entry it encounters in the input lines.
+    ///
+    /// Those TLEs can then be used to compute satellite position and
+    /// velocity as a function of time.
+    ///
+    /// For details, see [here](https://en.wikipedia.org/wiki/Two-line_element_set)
+    ///
+    /// # Arguments:
+    ///   * `lines` - a reference to a [`Vec`] of [`String`] representing TLE lines
+    ///
+    /// # Returns:
+    ///  * A [`Vec`] of [`TLE`] objects or string indicating error condition
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use satkit::TLE;
+    ///
+    /// let lines = vec![
+    ///     "2 PATHFINDER".to_string(),
+    ///     "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995".to_string(),
+    ///     "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085".to_string(),
+    ///     "0 SHINSEI (MS-F2)".to_string(),
+    ///     "1  5485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992".to_string(),
+    ///     "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065".to_string(),
+    /// ];
+    ///
+    /// let tles = TLE::from_lines(&lines).unwrap();
+    ///
+    /// ```
     pub fn from_lines(lines: &Vec<String>) -> SKResult<Vec<Self>> {
         let mut tles: Vec<Self> = Vec::<Self>::new();
         let empty: &String = &String::new();
@@ -115,9 +148,15 @@ impl TLE {
             if line.len() < 2 {
                 continue;
             }
-            if line.chars().nth(0).unwrap() == '1' {
+            if line.chars().nth(0).unwrap() == '1'
+                && line.chars().nth(1).unwrap() == ' '
+                && line.len() == 69
+            {
                 line1 = line;
-            } else if line.chars().nth(0).unwrap() == '2' {
+            } else if line.chars().nth(0).unwrap() == '2'
+                && line.chars().nth(1).unwrap() == ' '
+                && line.len() == 69
+            {
                 line2 = line;
                 if line0.is_empty() {
                     tles.push(Self::load_2line(line1, line2)?);
@@ -461,6 +500,108 @@ mod tests {
                 return skerror!("load_2line: Err = \"{}\"", s);
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_lines() -> SKResult<()> {
+        let lines = vec![
+            "2023-193D".to_string(),
+            "1 58556U 23193D   25003.79555039  .00279397  31144-4  86159-3 0  9996".to_string(),
+            "2 58556  97.2472  26.1173 0004235 271.4738  88.6051 15.91743157 60937".to_string(),
+            "0 CPOD FLT2 (TYVAK-0033)".to_string(),
+            "1 52780U 22057BB  23036.86744141  .00018086  00000-0  87869-3 0  9991".to_string(),
+            "2 52780  97.5313 154.3283 0011660  53.1934 307.0368 15.18441019 16465".to_string(),
+            "1998-067WV".to_string(),
+            "1 60955U 98067WV  24295.33823779  .06453473  12009-4  26290-2 0  9998".to_string(),
+            "2 60955  51.6166  43.0490 0010894 336.3668  23.6849 16.22453324  8315".to_string(),
+            "2 PATHFINDER".to_string(),
+            "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995".to_string(),
+            "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085".to_string(),
+            "0 SHINSEI (MS-F2)".to_string(),
+            "1  5485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992".to_string(),
+            "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065".to_string(),
+            "OSCAR 7 (AO-7)".to_string(),
+            "1 07530U 74089B   24323.87818483 -.00000039  00000+0  47934-4 0  9997".to_string(),
+            "2 07530 101.9893 320.0351 0012269 147.9195 274.9996 12.53682684288423".to_string(),
+            "1 52743U 22057M   23037.04954473  .00011781  00000-0  61944-3 0  9993".to_string(),
+            "2 52743  97.5265 153.6940 0008594  82.9904  31.3082 15.15793680 38769".to_string(),
+        ];
+
+        let tles = match TLE::from_lines(&lines) {
+            Ok(t) => t,
+            Err(s) => {
+                return skerror!("load_lines: Err = \"{}\"", s);
+            }
+        };
+
+        if tles.len() != 7 {
+            return skerror!("load_lines: Err = \"Incorrect number of elements parsed\"");
+        }
+
+        if tles[0].name != "2023-193D" {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat name {}\"",
+                tles[0].name
+            );
+        }
+
+        if tles[1].name != "CPOD FLT2 (TYVAK-0033)" {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat name {}\"",
+                tles[1].name
+            );
+        }
+
+        if tles[2].name != "1998-067WV" {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat name {}\"",
+                tles[2].name
+            );
+        }
+
+        if tles[3].name != "2 PATHFINDER" {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat name {}\"",
+                tles[3].name
+            );
+        }
+
+        if tles[4].name != "SHINSEI (MS-F2)" {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat name {}\"",
+                tles[4].name
+            );
+        }
+
+        if tles[4].sat_num != 5485 {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat num {}\"",
+                tles[4].sat_num
+            );
+        }
+
+        if tles[5].name != "OSCAR 7 (AO-7)" {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat name {}\"",
+                tles[5].name
+            );
+        }
+
+        if tles[5].sat_num != 7530 {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat num {}\"",
+                tles[5].sat_num
+            );
+        }
+
+        if tles[6].name != "none" {
+            return skerror!(
+                "load_lines: Err = \"Error parsing sat name {}\"",
+                tles[6].name
+            );
+        }
+
         Ok(())
     }
 }
