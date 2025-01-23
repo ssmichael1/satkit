@@ -14,7 +14,7 @@ use crate::SKResult;
 
 /// Unscented Kalman Filter
 ///
-/// See: https://www.mathworks.com/help/control/ug/extended-and-unscented-kalman-filter-algorithms-for-online-state-estimation.html
+/// See: <https://www.mathworks.com/help/control/ug/extended-and-unscented-kalman-filter-algorithms-for-online-state-estimation.html>
 /// for a good explanation of the UKF algorithm
 ///
 pub struct UKF<const N: usize> {

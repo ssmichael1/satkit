@@ -23,7 +23,7 @@ pub struct Instant {
 
 /// For conversian between Julian day and
 /// Gregorian calendar date
-/// See: https://en.wikipedia.org/wiki/Julian_day
+/// See: <https://en.wikipedia.org/wiki/Julian_day>
 /// or Expl. Suppl. Astron. Almanac, P. 619
 mod gregorian_coefficients {
     #[allow(non_upper_case_globals)]
@@ -193,7 +193,7 @@ impl Instant {
     /// Return the day of the week
     /// 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     ///
-    /// See: https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week
+    /// See: <https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week>
     pub fn day_of_week(&self) -> super::Weekday {
         let jd = self.as_jd();
         super::Weekday::from(((jd + 1.5) % 7.0).floor() as i32)

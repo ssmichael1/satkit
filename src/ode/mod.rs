@@ -6,7 +6,7 @@
 //! Solvers are adapted from Julia's DifferentialEquations.jl package.
 //!
 //! Solvers use coefficients from Jim Verner's website:
-//! <https://www.sfu.ca/~jverner/
+//! <https://www.sfu.ca/~jverner/>
 //! which is awesome
 //!
 //! For certain solvers, interpolation between the starting and ending
