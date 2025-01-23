@@ -291,9 +291,11 @@ mod tests {
         if !testdir.is_dir() {
             return skerror!(
                 "Required SGP4 test vectors directory: \"{}\" does not exist
-                    clone test vectors repo at 
-                    https://github.com/StevenSamirMichael/satkit-testvecs.git 
-                    from root of repo or set \"SATKIT_TESTVEC_ROOT\" 
+                    clone test vectors from:
+                    <https://storage.googleapis.com/satkit-testvecs/>
+                    using python script in satkit repo:
+                    python/test/download-testvecs.py
+                    and set \"SATKIT_TESTVEC_ROOT\" 
                     to point to directory",
                 testdir.to_string_lossy()
             );
@@ -315,7 +317,7 @@ mod tests {
             .collect();
 
         let tles = TLE::from_lines(&lines).unwrap();
-        
+
         assert!(tles.len() > 5);
 
         for mut tle in tles {
