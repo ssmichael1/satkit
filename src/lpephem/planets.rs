@@ -19,6 +19,7 @@
 //! | Saturn   | 600         | 25           | 1500       |
 //! | Uranus   | 50          | 2            | 1000       |
 //! | Neptune  | 10          | 1            | 200        |
+//! | Pluto    | 5           | 2            | 300        |
 //!
 //! From 3000 BC to 3000 AD:
 //! |  Planet  | RA (arcsec) | Dec (arcsec) | Range (Mm) |
@@ -31,6 +32,7 @@
 //! | Saturn   | 1000        | 100          | 4000       |
 //! | Uranus   | 2000        | 30           | 8000       |
 //! | Neptune  | 400         | 15           | 4000       |
+//! | Pluto    | 400         | 100          | 2500       |
 //!
 
 use crate::skerror;
@@ -67,7 +69,7 @@ type Quat = na::UnitQuaternion<f64>;
 /// ```
 ///
 pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
-    // Keplerian elements are provided seaparately and more accurately
+    // Keplerian elements are provided separately and more accurately
     // for times in range of years 1800AD to 2050AD
     let tm0: Instant = Instant::from_date(-3000, 1, 1);
     let tm1: Instant = Instant::from_date(3000, 1, 1);
@@ -143,6 +145,14 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     44.96476227,
                     131.78422574,
                 ],
+                SolarSystem::Pluto => [
+                    39.48211675,
+                    0.2488273,
+                    17.14001206,
+                    238.92903833,
+                    224.06891629,
+                    110.30393684,
+                ],
                 _ => return skerror!("Invalid Body"),
             };
 
@@ -211,6 +221,14 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     -0.32241464,
                     -0.00508664,
                 ],
+                SolarSystem::Pluto => [
+		    -0.00031596,
+		    0.00005170,
+		    0.00004818,
+		    145.20780515,
+		    -0.04062942,
+		    -0.01183482,
+		],
                 _ => return skerror!("Invalid Body"),
             };
             // Julian century
@@ -289,6 +307,14 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     44.96476227,
                     131.78422574,
                 ],
+                SolarSystem::Pluto => [
+		    39.48686035,
+		    0.24885238,
+		    17.1410426,
+		    238.96535011,
+		    224.09702598,
+		    110.30167986,
+                ],
                 _ => return skerror!("Invalid Body"),
             };
             let adot: [f64; 6] = match body {
@@ -356,6 +382,14 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     0.01009938,
                     -0.00606302,
                 ],
+                SolarSystem::Pluto => [
+		    0.00449751,
+		    0.00006016,
+		    0.00000501,
+		    145.18042903,
+		    -0.00968827,
+		    -0.00809981,
+                ],
                 _ => return skerror!("Invalid Body"),
             };
             let error_terms: Option<[f64; 4]> = match body {
@@ -363,6 +397,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                 SolarSystem::Saturn => Some([0.00025899, -0.13434469, 0.87320147, 38.35125000]),
                 SolarSystem::Uranus => Some([0.00058331, -0.97731848, 0.17689245, 7.67025000]),
                 SolarSystem::Neptune => Some([-0.00041348, 0.68346318, -0.10162547, 7.67025000]),
+                SolarSystem::Pluto => Some([-0.01262784, 0.0, 0.0, 0.0]),
                 _ => None,
             };
             (
@@ -451,6 +486,7 @@ mod test {
             SolarSystem::Saturn => (600, 25, 1500),
             SolarSystem::Uranus => (50, 2, 1000),
             SolarSystem::Neptune => (10, 1, 200),
+            SolarSystem::Pluto => (5, 2, 300),
             _ => (0, 0, 0),
         }
     }
@@ -467,6 +503,7 @@ mod test {
         // Saturn	600	25	1500	1000	100	4000
         // Uranus	50	2	1000	2000	30	8000
         // Neptune	10	1	200	400	15	4000
+        // Pluto	5	2	300	400	100	2500
 
         let planets = [
             SolarSystem::Mercury,
@@ -477,6 +514,7 @@ mod test {
             SolarSystem::Saturn,
             SolarSystem::Uranus,
             SolarSystem::Neptune,
+            SolarSystem::Pluto,
         ];
 
         for planet in planets {
