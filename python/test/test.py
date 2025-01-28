@@ -730,7 +730,6 @@ class TestSGP4:
         lines = [l.strip() for l in lines]
         lines = [l[0:69] for l in lines]
 
-        print(lines)
         tles = sk.TLE.from_lines(lines)
         for tle in tles:
             fname = f"{basedir}{os.path.sep}{tle.satnum:05}.e"
