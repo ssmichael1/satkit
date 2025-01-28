@@ -9,6 +9,13 @@ pub struct IERSTable {
     data: [na::DMatrix<f64>; 6],
 }
 
+/// IERS Table
+///
+/// This struct is used to store the IERS tables used in the IERS 2010 conventions.
+/// See the IERS Conventions 2010 document for more information.
+///
+/// Should not be used directly, but through the `FrameTransform` struct.
+///
 impl IERSTable {
     pub fn from_file(fname: &str) -> SKResult<Self> {
         let mut table = Self {

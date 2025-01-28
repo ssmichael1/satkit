@@ -8,6 +8,7 @@ pub enum SKErr {
     Error(String),
 }
 
+/// Macro for creating a new SKErr::Error
 macro_rules! skerror {
     ($($arg:tt)*) => {
         Err(Box::new(crate::SKErr::Error(format!($($arg)*))))
