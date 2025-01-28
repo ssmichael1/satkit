@@ -1,6 +1,6 @@
 [package]
 name = "satkit"
-version = "0.5.4"
+version = "0.5.5"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
@@ -21,21 +21,21 @@ name = "satkit"
 [dependencies]
 nalgebra = { version = "0.33.2", features = ["serde-serialize"] }
 ndarray = "0.16.1"
-libc = "0.2.168"
+libc = "0.2.169"
 chrono = "0.4.39"
 cty = "0.2.2"
 num-traits = "0.2.19"
-thiserror = "2.0.7"
+thiserror = "2.0.11"
 simba = "0.9"
 once_cell = "1.20.2"
 numpy = { version = "0.23.0", optional = true }
-pyo3 = { version = "0.23.2", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.23.4", features = ["extension-module"], optional = true }
 ureq = "2.12.1"
 json = "0.12.4"
 process_path = "0.1.4"
 serde = { version = "1.0.216", features = ["derive"] }
 serde-pickle = "1.2.0"
-itertools = "0.13.0"
+itertools = "0.14.0"
 
 [build-dependencies]
 cc = { version = "1.2.4", features = ["parallel"] }
@@ -43,9 +43,9 @@ chrono = "0.4.38"
 pyo3-build-config = { version = "0.23.3", optional = true }
 
 [dev-dependencies]
-rand = "0.8.5"
+rand = "0.9.0"
 approx = "0.5.1"
-rand_distr = "0.4.3"
+rand_distr = "0.5.0"
 
 [features]
 pybindings = ["pyo3", "numpy", "pyo3-build-config"]

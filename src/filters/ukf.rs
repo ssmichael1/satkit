@@ -236,8 +236,8 @@ mod tests {
 
         let ytruth = Vector::<2>::new(3.0, 4.0);
         let y_cov = Matrix::<2, 2>::new(1.0, 0.0, 0.0, 1.0);
-        let v = normal.sample(&mut rand::thread_rng());
-        let w = normal.sample(&mut rand::thread_rng());
+        let v = normal.sample(&mut rand::rng());
+        let w = normal.sample(&mut rand::rng());
         let ysample = ytruth + Vector::<2>::new(v, w);
         let offset = Vector::<2>::new(5.0, 8.0);
         let observe = |x: Vector<2>| Ok(x + offset);
@@ -247,8 +247,8 @@ mod tests {
         ukf.x = ysample;
         ukf.p = y_cov;
         for _ix in 0..500 {
-            let v = normal.sample(&mut rand::thread_rng());
-            let w = normal.sample(&mut rand::thread_rng());
+            let v = normal.sample(&mut rand::rng());
+            let w = normal.sample(&mut rand::rng());
             let ysample = observe(ytruth + Vector::<2>::new(v, w)).unwrap();
             ukf.update(&ysample, &y_cov, observe).unwrap();
             ukf.p += q;

@@ -425,6 +425,23 @@ impl TLE {
         })
     }
 
+    /// Return a string representation of the TLE
+    /// in a human-readable format
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use satkit::TLE;
+    /// let line0: &str = "0 INTELSAT 902";
+    /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
+    /// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981";
+    /// let tle = TLE::load_3line(&line0.to_string(),
+    ///    &line1.to_string(),
+    ///   &line2.to_string()
+    /// ).unwrap();
+    /// println!("{}", tle.to_pretty_string());
+    /// ```
+    ///
     pub fn to_pretty_string(&self) -> String {
         format!(
             r#"

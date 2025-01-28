@@ -2,7 +2,8 @@
 //! Low-precision planetary ephemerides
 //!
 //! See: <https://ssd.jpl.nasa.gov/planets/approx_pos.html>
-//!
+//! which references original paper at:
+//! <https://www.researchgate.net/publication/232203657_Orbital_Ephemerides_of_the_Sun_Moon_and_Planets>
 //!
 //! Approximate uncertainties for the given date ranges are reported below
 //! as stated in the JPL website.
@@ -222,13 +223,13 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     -0.00508664,
                 ],
                 SolarSystem::Pluto => [
-		    -0.00031596,
-		    0.00005170,
-		    0.00004818,
-		    145.20780515,
-		    -0.04062942,
-		    -0.01183482,
-		],
+                    -0.00031596,
+                    0.00005170,
+                    0.00004818,
+                    145.20780515,
+                    -0.04062942,
+                    -0.01183482,
+                ],
                 _ => return skerror!("Invalid Body"),
             };
             // Julian century
@@ -252,39 +253,39 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     48.33961819,
                 ],
                 SolarSystem::Venus => [
-                    0.72332982,
-                    0.00677192,
+                    0.72332102,
+                    0.00676399,
                     3.39777545,
                     181.97970850,
                     131.76755713,
                     76.67261496,
                 ],
                 SolarSystem::EMB => [
-                    1.000001018,
-                    0.01670863,
-                    -0.00004180,
-                    100.46457166,
-                    102.93768193,
-                    0.0,
+                    1.00000018,
+                    0.01673163,
+                    -0.00054346,
+                    100.46691572,
+                    102.93005885,
+                    -5.11260389,
                 ],
                 SolarSystem::Mars => [
-                    1.52367934,
-                    0.09340065,
+                    1.52371243,
+                    0.09336511,
                     1.85181869,
                     -4.56813164,
                     -23.91744784,
                     49.71320984,
                 ],
                 SolarSystem::Jupiter => [
-                    5.202603191,
-                    0.048464512,
-                    1.298470324,
+                    5.20248019,
+                    0.04853590,
+                    1.29861416,
                     34.33479152,
                     14.27495244,
                     100.29282654,
                 ],
                 SolarSystem::Saturn => [
-                    9.554909596,
+                    9.54149883,
                     0.05550825,
                     2.49424102,
                     50.07571329,
@@ -292,28 +293,28 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     113.63998702,
                 ],
                 SolarSystem::Uranus => [
-                    19.218446062,
-                    0.04629590,
-                    0.77237271,
+                    19.18797948,
+                    0.04685740,
+                    0.77298127,
                     314.20276625,
                     172.43404441,
                     73.96250215,
                 ],
                 SolarSystem::Neptune => [
-                    30.110386869,
-                    0.00898809,
-                    1.77004347,
-                    -55.12002969,
-                    44.96476227,
-                    131.78422574,
+                    30.06952752,
+                    0.00895439,
+                    1.77005520,
+                    304.22289287,
+                    46.68158724,
+                    131.78635853,
                 ],
                 SolarSystem::Pluto => [
-		    39.48686035,
-		    0.24885238,
-		    17.1410426,
-		    238.96535011,
-		    224.09702598,
-		    110.30167986,
+                    39.48686035,
+                    0.24885238,
+                    17.1410426,
+                    238.96535011,
+                    224.09702598,
+                    110.30167986,
                 ],
                 _ => return skerror!("Invalid Body"),
             };
@@ -331,11 +332,11 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     -0.00005107,
                     0.00043494,
                     58517.81560260,
-                    0.00682069,
-                    -0.23431738,
+                    0.05679648,
+                    -0.27274174,
                 ],
                 SolarSystem::EMB => [
-                    -0.0000003,
+                    -0.00000003,
                     -0.00003661,
                     -0.01337178,
                     35999.37306329,
@@ -383,12 +384,12 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     -0.00606302,
                 ],
                 SolarSystem::Pluto => [
-		    0.00449751,
-		    0.00006016,
-		    0.00000501,
-		    145.18042903,
-		    -0.00968827,
-		    -0.00809981,
+                    0.00449751,
+                    0.00006016,
+                    0.00000501,
+                    145.18042903,
+                    -0.00968827,
+                    -0.00809981,
                 ],
                 _ => return skerror!("Invalid Body"),
             };
@@ -397,7 +398,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                 SolarSystem::Saturn => Some([0.00025899, -0.13434469, 0.87320147, 38.35125000]),
                 SolarSystem::Uranus => Some([0.00058331, -0.97731848, 0.17689245, 7.67025000]),
                 SolarSystem::Neptune => Some([-0.00041348, 0.68346318, -0.10162547, 7.67025000]),
-                SolarSystem::Pluto => Some([-0.01262784, 0.0, 0.0, 0.0]),
+                SolarSystem::Pluto => Some([-0.01262724, 0.0, 0.0, 0.0]),
                 _ => None,
             };
             (
@@ -465,8 +466,18 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
 
     // Rotate to the equatorial plane
     // Obliquity at J2000
-    let obliquity = 1.21e-11f64.mul_add(jcen.powi(5), 1.6e-10f64.mul_add(jcen.powi(4), 5.565e-7f64.mul_add(jcen.powi(3), (5.086e-8 * jcen).mul_add(-jcen, 0.0130102f64.mul_add(-jcen, 23.439279)))))
-    .to_radians();
+    let obliquity = 1.21e-11f64
+        .mul_add(
+            jcen.powi(5),
+            1.6e-10f64.mul_add(
+                jcen.powi(4),
+                5.565e-7f64.mul_add(
+                    jcen.powi(3),
+                    (5.086e-8 * jcen).mul_add(-jcen, 0.0130102f64.mul_add(-jcen, 23.439279)),
+                ),
+            ),
+        )
+        .to_radians();
 
     Ok(Quat::from_axis_angle(&Vec3::x_axis(), obliquity) * recl * crate::consts::AU)
 }
