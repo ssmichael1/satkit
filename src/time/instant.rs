@@ -504,6 +504,18 @@ impl Instant {
         Self { raw }
     }
 
+    /// Current time
+    ///
+    /// # Returns
+    /// The current time as an Instant object
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use satkit::Instant;
+    /// let now = Instant::now();
+    /// ```
+    ///
     pub fn now() -> Self {
         let now = std::time::SystemTime::now();
         let since_epoch = now.duration_since(std::time::UNIX_EPOCH).unwrap();
