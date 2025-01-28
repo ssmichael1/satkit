@@ -137,7 +137,7 @@ impl TLE {
     /// let tles = TLE::from_lines(&lines).unwrap();
     ///
     /// ```
-    pub fn from_lines(lines: &Vec<String>) -> SKResult<Vec<Self>> {
+    pub fn from_lines(lines: &[String]) -> SKResult<Vec<Self>> {
         let mut tles: Vec<Self> = Vec::<Self>::new();
         let empty: &String = &String::new();
         let mut line0: &String = empty;
