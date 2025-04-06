@@ -17,6 +17,8 @@ use crate::Instant;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
 
+use anyhow::{bail, Result};
+
 /// High-precision orbit propagator
 ///
 /// Propagate statellite ephemeris (position, velocity in gcrs & time) to new time via adaptive Runge-Kutta 9/8 ordinary differential equation (ODE) integration
@@ -89,7 +91,7 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 pub fn propagate(
     args: &Bound<PyTuple>,
     mut kwargs: Option<&Bound<'_, PyDict>>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
     let propsettings = match pypropsettings {
         Some(p) => p.0,
@@ -163,25 +165,21 @@ pub fn propagate(
                 a2.push_str(", ");
                 Ok::<_, PyErr>(a2)
             })?;
-            let s = format!("Invalid kwargs: {}", keystring);
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(s));
+            bail!("Extraneous keyword arguments: {}", keystring);
         }
     }
 
     // Simple sate propagation
     if !output_phi {
-        let res = match crate::orbitprop::propagate(
+        let res = crate::orbitprop::propagate(
             &state0,
             &starttime,
             &stoptime,
             &propsettings,
             satproperties,
-        ) {
-            Ok(r) => r,
-            Err(e) => return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
-        };
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)
+        )?;
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+            Ok(PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)?)
         })
     }
     // Propagate with state transition matrix
@@ -192,18 +190,10 @@ pub fn propagate(
         pv.fixed_view_mut::<6, 6>(0, 1)
             .copy_from(&Matrix6::identity());
 
-        let res = match crate::orbitprop::propagate(
-            &pv,
-            &starttime,
-            &stoptime,
-            &propsettings,
-            satproperties,
-        ) {
-            Ok(r) => r,
-            Err(e) => return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
-        };
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)
+        let res =
+            crate::orbitprop::propagate(&pv, &starttime, &stoptime, &propsettings, satproperties)?;
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+            Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
         })
     }
 }
