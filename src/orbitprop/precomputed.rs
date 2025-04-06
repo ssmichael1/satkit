@@ -1,6 +1,5 @@
 use crate::frametransform::qgcrf2itrf_approx;
 use crate::jplephem;
-use crate::skerror;
 use crate::types::{Quaternion, Vector3};
 use crate::Duration;
 use crate::Instant;
@@ -54,7 +53,7 @@ impl Precomputed {
 
     pub fn interp(&self, t: &Instant) -> SKResult<InterpType> {
         if *t < self.start || *t > self.stop {
-            return skerror!(
+            anyhow::bail!(
                 "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
                 *t,
                 self.start,

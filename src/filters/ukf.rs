@@ -10,7 +10,7 @@ type Vector<const T: usize> = nalgebra::SVector<f64, T>;
 
 /// Generic float matrix type of fixed size
 type Matrix<const M: usize, const N: usize> = nalgebra::SMatrix<f64, M, N>;
-use crate::SKResult;
+use anyhow::{anyhow, Result};
 
 /// Unscented Kalman Filter
 ///
@@ -85,7 +85,7 @@ impl<const N: usize> UKF<N> {
     /// * `f` - Function to compute the observation from the state
     ///
     /// # Returns
-    /// * `SKResult<()>` - Result of the update
+    /// * `Result<()>` - Result of the update
     ///
     /// # Notes:
     /// * This will update the state estimate and the covariance matrix
@@ -94,19 +94,15 @@ impl<const N: usize> UKF<N> {
         &mut self,
         y: &Vector<M>,
         y_cov: &Matrix<M, M>,
-        f: impl Fn(Vector<N>) -> SKResult<Vector<M>>,
-    ) -> SKResult<()> {
+        f: impl Fn(Vector<N>) -> Result<Vector<M>>,
+    ) -> Result<()> {
         let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
         let cp = c.sqrt()
             * self
                 .p
                 .cholesky()
-                .ok_or_else(|| {
-                    Box::new(crate::SKErr::Error(
-                        "Cannot take cholesky decomposition".to_string(),
-                    ))
-                })?
+                .ok_or_else(|| anyhow!("Cannot take Cholesky decomposition"))?
                 .l();
 
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
@@ -124,7 +120,7 @@ impl<const N: usize> UKF<N> {
         let yhat_i = x_sigma_points
             .iter()
             .map(|x| f(*x))
-            .collect::<SKResult<Vec<Vector<M>>>>()?;
+            .collect::<Result<Vec<Vector<M>>>>()?;
 
         let yhat = yhat_i
             .iter()
@@ -148,11 +144,9 @@ impl<const N: usize> UKF<N> {
             });
 
         let kalman_gain = p_xy
-            * p_yy.try_inverse().ok_or_else(|| {
-                Box::new(crate::SKErr::Error(
-                    "Cannot take inverse of predicted covariance; it is singular".to_string(),
-                ))
-            })?;
+            * p_yy
+                .try_inverse()
+                .ok_or_else(|| anyhow!("Cannot take inverse of kalman gain; it is singular"))?;
         self.x += kalman_gain * (y - yhat);
         self.p -= kalman_gain * p_yy * kalman_gain.transpose();
         Ok(())
@@ -171,18 +165,14 @@ impl<const N: usize> UKF<N> {
     /// * This function does not add process noise to the state estimate,
     ///   you should add process noise after this function is called
     ///
-    pub fn predict(&mut self, f: impl Fn(Vector<N>) -> SKResult<Vector<N>>) -> SKResult<()> {
+    pub fn predict(&mut self, f: impl Fn(Vector<N>) -> Result<Vector<N>>) -> Result<()> {
         let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
         let cp = c.sqrt()
             * self
                 .p
                 .cholesky()
-                .ok_or_else(|| {
-                    Box::new(crate::SKErr::Error(
-                        "Cannot take cholesky decomposition".to_string(),
-                    ))
-                })?
+                .ok_or_else(|| anyhow!("Cannot take cholesky decomposition in predict step"))?
                 .l();
 
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
@@ -200,7 +190,7 @@ impl<const N: usize> UKF<N> {
         let x_post = x_sigma_points
             .iter()
             .map(|x| f(*x))
-            .collect::<SKResult<Vec<Vector<N>>>>()?;
+            .collect::<Result<Vec<Vector<N>>>>()?;
 
         // Update state
         self.x = x_post

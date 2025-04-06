@@ -1,18 +1,18 @@
 use super::download_file_async;
 use super::download_to_string;
-use crate::skerror;
 use crate::utils::datadir;
-use crate::SKResult;
 use json::JsonValue;
 use std::path::PathBuf;
 use std::thread::JoinHandle;
 
+use anyhow::{bail, Result};
+
 /// Download a list of files from a JSON file
-fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> SKResult<()> {
+fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> Result<()> {
     let json_base: JsonValue = json::parse(download_to_string(json_url.as_str())?.as_str())?;
-    let vresult: Vec<std::thread::JoinHandle<SKResult<bool>>> = json_base
+    let vresult: Vec<std::thread::JoinHandle<Result<bool>>> = json_base
         .members()
-        .map(|url| -> JoinHandle<SKResult<bool>> {
+        .map(|url| -> JoinHandle<Result<bool>> {
             download_file_async(url.to_string(), basedir, true)
         })
         .collect();
@@ -30,12 +30,12 @@ fn download_from_json(
     basedir: std::path::PathBuf,
     baseurl: String,
     overwrite: &bool,
-    thandles: &mut Vec<JoinHandle<SKResult<bool>>>,
-) -> SKResult<()> {
+    thandles: &mut Vec<JoinHandle<Result<bool>>>,
+) -> Result<()> {
     if v.is_object() {
-        let r1: Vec<SKResult<()>> = v
+        let r1: Vec<Result<()>> = v
             .entries()
-            .map(|entry: (&str, &JsonValue)| -> SKResult<()> {
+            .map(|entry: (&str, &JsonValue)| -> Result<()> {
                 let pbnew = basedir.join(entry.0);
                 if !pbnew.is_dir() {
                     std::fs::create_dir_all(pbnew.clone())?;
@@ -48,32 +48,32 @@ fn download_from_json(
             .filter(|res| res.is_err())
             .collect();
         if !r1.is_empty() {
-            return skerror!("Could not parse entries");
+            bail!("Could not parse entries");
         }
     } else if v.is_array() {
-        let r2: Vec<SKResult<()>> = v
+        let r2: Vec<Result<()>> = v
             .members()
-            .map(|val| -> SKResult<()> {
+            .map(|val| -> Result<()> {
                 download_from_json(val, basedir.clone(), baseurl.clone(), overwrite, thandles)?;
                 Ok(())
             })
             .filter(|res| res.is_err())
             .collect();
         if !r2.is_empty() {
-            return skerror!("could not parse array entries");
+            bail!("could not parse array entries");
         }
     } else if v.is_string() {
         let mut newurl = baseurl;
         newurl.push_str(format!("/{}", v).as_str());
         thandles.push(download_file_async(newurl, &basedir, *overwrite));
     } else {
-        return skerror!("invalid json for downloading files??!!");
+        bail!("invalid json for downloading files??!!");
     }
 
     Ok(())
 }
 
-fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> SKResult<()> {
+fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> Result<()> {
     if !basedir.is_dir() {
         std::fs::create_dir_all(basedir.clone())?;
     }
@@ -82,7 +82,7 @@ fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> SKRe
     fileurl.push_str("/files.json");
 
     let json_base: JsonValue = json::parse(download_to_string(fileurl.as_str())?.as_str())?;
-    let mut thandles: Vec<JoinHandle<SKResult<bool>>> = Vec::new();
+    let mut thandles: Vec<JoinHandle<Result<bool>>> = Vec::new();
     download_from_json(&json_base, basedir, baseurl, overwrite, &mut thandles)?;
     // Wait for all the threads to funish
     for jh in thandles {
@@ -99,7 +99,7 @@ fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> SKRe
 /// overwrite_if_exists: If true, overwrite any existing files.  If false, skip files that already exist.
 ///
 /// # Returns
-/// SKResult<()>
+/// Result<()>
 ///
 /// # Notes
 ///
@@ -110,13 +110,13 @@ fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> SKRe
 /// The data files also include space weather and Earth orientation parameters.  These files are always
 /// downloaded, as they are updated at least daily.
 ///
-pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> SKResult<()> {
+pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Result<()> {
     let downloaddir = match dir {
         Some(d) => d,
         None => datadir()?,
     };
     if downloaddir.metadata()?.permissions().readonly() {
-        return skerror!(
+        bail!(
             r#"
             Data directory is read-only.
             Try setting SATKIT_DATA environment

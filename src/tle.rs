@@ -1,7 +1,7 @@
 use crate::sgp4::SatRec;
-use crate::skerror;
 use crate::Instant;
-use crate::SKResult;
+
+use anyhow::{bail, Context, Result};
 
 // 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
 const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -140,7 +140,7 @@ impl TLE {
     /// let tles = TLE::from_lines(&lines).unwrap();
     ///
     /// ```
-    pub fn from_lines(lines: &[String]) -> SKResult<Vec<Self>> {
+    pub fn from_lines(lines: &[String]) -> Result<Vec<Self>> {
         let mut tles: Vec<Self> = Vec::<Self>::new();
         let empty: &String = &String::new();
         let mut line0: &String = empty;
@@ -238,7 +238,7 @@ impl TLE {
     ///
     /// ```
     ///
-    pub fn load_3line(line0: &str, line1: &str, line2: &str) -> SKResult<Self> {
+    pub fn load_3line(line0: &str, line1: &str, line2: &str) -> Result<Self> {
         match Self::load_2line(line1, line2) {
             Ok(mut tle) => {
                 tle.name = {
@@ -285,14 +285,11 @@ impl TLE {
     ///
     /// ```
     ///
-    pub fn load_2line(line1: &str, line2: &str) -> SKResult<Self> {
+    pub fn load_2line(line1: &str, line2: &str) -> Result<Self> {
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
             mstr.push_str(&line1[18..20]);
-            let mut s: u32 = match mstr.parse() {
-                Ok(y) => y,
-                Err(_) => return crate::skerror!("Could not parse year"),
-            };
+            let mut s = mstr.parse().context("Could not parse year")?;
             s -= 100;
             s
         };
@@ -301,10 +298,9 @@ impl TLE {
         } else {
             year += 2000;
         }
-        let day_of_year: f64 = match line1[20..32].parse() {
-            Ok(y) => y,
-            Err(_) => return crate::skerror!("Could not parse day of year"),
-        };
+        let day_of_year: f64 = line1[20..32]
+            .parse()
+            .context("Could not parse day of year")?;
 
         // Note: day_of_year starts from 1, not zero,
         // also, go from Jan 2 to avoid leap-second
@@ -313,31 +309,22 @@ impl TLE {
 
         Ok(Self {
             name: "none".to_string(),
-            sat_num: {
-                match Self::alpha5_to_int(&line1[2..7]) {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse sat number: {}", e.to_string()),
-                }
-            },
+            sat_num: Self::alpha5_to_int(&line1[2..7])
+                .context("Could not parse satellite number")?,
+
             intl_desig: { line1[9..16].trim().to_string() },
             desig_year: { line1[9..11].trim().parse().unwrap_or(70) },
             desig_launch: { line1[11..14].trim().parse().unwrap_or_default() },
-            desig_piece: {
-                match line1[14..18].trim().parse() {
-                    Ok(l) => l,
-                    Err(e) => return skerror!("Could not parse desig_piece: {}", e.to_string()),
-                }
-            },
+            desig_piece: line1[14..18]
+                .trim()
+                .parse()
+                .context("Could not parse desig_piece")?,
+
             epoch,
             mean_motion_dot: {
                 let mut mstr: String = "0".to_owned();
                 mstr.push_str(&line1[34..43]);
-                let mut m: f64 = match mstr.parse() {
-                    Ok(y) => y,
-                    Err(e) => {
-                        return skerror!("Could not parse mean motion dot: {}", e.to_string())
-                    }
-                };
+                let mut m = mstr.parse().context("Could not parse mean motion dot")?;
                 if line1.chars().nth(33).unwrap() == '-' {
                     m *= -1.0;
                 }
@@ -348,12 +335,10 @@ impl TLE {
                 mstr.push_str(&line1[45..50]);
                 mstr.push('E');
                 mstr.push_str(&line1[50..53]);
-                let mut m: f64 = match mstr.trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => {
-                        return skerror!("Could not parse mean motion dot dot: {}", e.to_string())
-                    }
-                };
+                let mut m = mstr
+                    .trim()
+                    .parse()
+                    .context("Coudl not parse mean motion dot dot")?;
                 if line1.chars().nth(44).unwrap() == '-' {
                     m *= -1.0;
                 }
@@ -364,66 +349,57 @@ impl TLE {
                 mstr.push_str(&line1[54..59]);
                 mstr.push('E');
                 mstr.push_str(&line1[59..62]);
-                let mut m: f64 = match mstr.trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse bstar (drag): {}", e.to_string()),
-                };
+                let mut m = mstr
+                    .trim()
+                    .parse()
+                    .context("Could not parse bstar (drag)")?;
                 if line1.chars().nth(53).unwrap() == '-' {
                     m *= -1.0;
                 }
                 m
             },
             ephem_type: { line1[62..63].trim().parse().unwrap_or_default() },
-            element_num: {
-                match line1[64..68].trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse element number: {}", e.to_string()),
-                }
-            },
-            inclination: {
-                match line2[8..16].trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse inclination: {}", e.to_string()),
-                }
-            },
-            raan: {
-                match line2[17..25].trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse raan: {}", e.to_string()),
-                }
-            },
+            element_num: line1[64..68]
+                .trim()
+                .parse()
+                .context("Could not parse element number")?,
+
+            inclination: line2[8..16]
+                .trim()
+                .parse()
+                .context("Could not parse inclination")?,
+
+            raan: line2[17..25]
+                .trim()
+                .parse()
+                .context("Could not parse raan")?,
+
             eccen: {
                 let mut mstr: String = "0.".to_owned();
                 mstr.push_str(&line2[26..33]);
-                match mstr.trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse eccen: {}", e.to_string()),
-                }
+                mstr.trim()
+                    .parse()
+                    .context("Could not parse eccentricity")?
             },
-            arg_of_perigee: {
-                match line2[34..42].trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse arg of perigee: {}", e.to_string()),
-                }
-            },
-            mean_anomaly: {
-                match line2[42..51].trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse mean anomaly: {}", e.to_string()),
-                }
-            },
-            mean_motion: {
-                match line2[52..63].trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse mean motion: {}", e.to_string()),
-                }
-            },
-            rev_num: {
-                match line2[63..68].trim().parse() {
-                    Ok(y) => y,
-                    Err(e) => return skerror!("Could not parse rev num: {}", e.to_string()),
-                }
-            },
+            arg_of_perigee: line2[34..42]
+                .trim()
+                .parse()
+                .context("Could not parse arg of perigee")?,
+
+            mean_anomaly: line2[42..51]
+                .trim()
+                .parse()
+                .context("Could not parse mean anomaly")?,
+
+            mean_motion: line2[52..63]
+                .trim()
+                .parse()
+                .context("Could not parse mean motion")?,
+
+            rev_num: line2[63..68]
+                .trim()
+                .parse()
+                .context("Could not parse rev num")?,
             satrec: None,
         })
     }
@@ -452,13 +428,13 @@ impl TLE {
     /// let sat_num = TLE::alpha5_to_int("S9994");
     /// // sat_num has the value 269994
     /// ```
-    pub fn alpha5_to_int(alpha5: &str) -> SKResult<i32> {
+    pub fn alpha5_to_int(alpha5: &str) -> Result<i32> {
         match alpha5.chars().nth(0) {
             // Alpha char is only possible at the first position, so if the first char is a
             // digit or a whitespace the standard `.parse()` can be used.
             Some(c) if c.is_ascii_digit() || c.is_whitespace() => match alpha5.trim().parse() {
                 Ok(i) => Ok(i),
-                Err(e) => skerror!("Invalid sat num: {}", e.to_string()),
+                Err(e) => bail!("Invalid sat num: {}", e.to_string()),
             },
             Some(c) if c.is_alphabetic() => {
                 match ALPHA5_MATCHING
@@ -467,13 +443,13 @@ impl TLE {
                 {
                     Some(p) => match alpha5[1..].parse::<i32>() {
                         Ok(i) => Ok((p as i32 + 10) * 10000 + i),
-                        Err(e) => skerror!("Invalid sat num: {}", e.to_string()),
+                        Err(e) => bail!("Invalid sat num: {}", e.to_string()),
                     },
-                    None => skerror!("Invalid first digit in sat num: {}", c),
+                    None => bail!("Invalid first digit in sat num: {}", c),
                 }
             }
-            Some(c) => skerror!("Invalid first digit in sat num: {}", c),
-            None => skerror!("Parse error"),
+            Some(c) => bail!("Invalid first digit in sat num: {}", c),
+            None => bail!("Parse error"),
         }
     }
 
@@ -501,7 +477,7 @@ impl TLE {
     /// let alpha5_sat_num = TLE::int_to_alpha5(269994);
     /// // alpha5_sat_num has the String value "S9994"
     /// ```
-    pub fn int_to_alpha5(sat_num: i32) -> SKResult<String> {
+    pub fn int_to_alpha5(sat_num: i32) -> Result<String> {
         match sat_num {
             i @ 0..=99999 => Ok(format!("{:0>5}", i)),
             i @ 100000..=339999 => {
@@ -511,8 +487,8 @@ impl TLE {
                     .unwrap();
                 Ok(format!("{c}{:0>4}", i % 10000))
             }
-            _i @ 340000.. => skerror!("Sat num >= 340000 cannot be represented in alpha5 format"),
-            _ => skerror!("Invalid sat num value"),
+            _i @ 340000.. => bail!("Sat num >= 340000 cannot be represented in alpha5 format"),
+            _ => bail!("Invalid sat num value"),
         }
     }
 
@@ -587,10 +563,9 @@ impl std::fmt::Display for TLE {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{skerror, SKResult};
 
     #[test]
-    fn testload() -> SKResult<()> {
+    fn testload() -> Result<()> {
         let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
         let line2: &str =
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
@@ -599,20 +574,20 @@ mod tests {
             Ok(_t) => {}
 
             Err(s) => {
-                return skerror!("load_3line: Err = \"{}\"", s);
+                bail!("load_3line: Err = \"{}\"", s);
             }
         }
         match TLE::load_2line(line1, line2) {
             Ok(_t) => {}
             Err(s) => {
-                return skerror!("load_2line: Err = \"{}\"", s);
+                bail!("load_2line: Err = \"{}\"", s);
             }
         }
         Ok(())
     }
 
     #[test]
-    fn test_from_lines() -> SKResult<()> {
+    fn test_from_lines() -> Result<()> {
         let lines = vec![
             "2023-193D".to_string(),
             "1 58556U 23193D   25003.79555039  .00279397  31144-4  86159-3 0  9996".to_string(),
@@ -645,72 +620,72 @@ mod tests {
         let tles = match TLE::from_lines(&lines) {
             Ok(t) => t,
             Err(s) => {
-                return skerror!("load_lines: Err = \"{}\"", s);
+                bail!("load_lines: Err = \"{}\"", s);
             }
         };
 
         if tles.len() != 9 {
-            return skerror!("load_lines: Err = \"Incorrect number of elements parsed\"");
+            bail!("load_lines: Err = \"Incorrect number of elements parsed\"");
         }
 
         if tles[0].name != "2023-193D" {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[0].name
             );
         }
 
         if tles[1].name != "CPOD FLT2 (TYVAK-0033)" {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[1].name
             );
         }
 
         if tles[2].name != "1998-067WV" {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[2].name
             );
         }
 
         if tles[3].name != "2 PATHFINDER" {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[3].name
             );
         }
 
         if tles[4].name != "SHINSEI (MS-F2)" {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[4].name
             );
         }
 
         if tles[4].sat_num != 5485 {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat num {}\"",
                 tles[4].sat_num
             );
         }
 
         if tles[5].name != "OSCAR 7 (AO-7)" {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[5].name
             );
         }
 
         if tles[5].sat_num != 7530 {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat num {}\"",
                 tles[5].sat_num
             );
         }
 
         if tles[6].name != "none" {
-            return skerror!(
+            bail!(
                 "load_lines: Err = \"Error parsing sat name {}\"",
                 tles[6].name
             );
@@ -720,57 +695,57 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha5_to_int() -> SKResult<()> {
+    fn test_alpha5_to_int() -> Result<()> {
         // 0-padded less-than-5-digits
         match TLE::alpha5_to_int("00091") {
             Ok(91) => {}
-            Ok(i) => return skerror!("Error parsing '00091' as 91: got {}", i),
-            Err(e) => return skerror!("Error parsing '00091' as 91: {}", e),
+            Ok(i) => bail!("Error parsing '00091' as 91: got {}", i),
+            Err(e) => bail!("Error parsing '00091' as 91: {}", e),
         }
 
         // Non-0-padded less-than-5-digits
         match TLE::alpha5_to_int("  982") {
             Ok(982) => {}
-            Ok(i) => return skerror!("Error parsing '  982' as 982: got {}", i),
-            Err(e) => return skerror!("Error parsing '  982' as 982: {}", e),
+            Ok(i) => bail!("Error parsing '  982' as 982: got {}", i),
+            Err(e) => bail!("Error parsing '  982' as 982: {}", e),
         }
 
         // Numerical 5 digit
         match TLE::alpha5_to_int("99993") {
             Ok(99993) => {}
-            Ok(i) => return skerror!("Error parsing '99993' as 99993: got {}", i),
-            Err(e) => return skerror!("Error parsing '99993' as 99993: {}", e),
+            Ok(i) => bail!("Error parsing '99993' as 99993: got {}", i),
+            Err(e) => bail!("Error parsing '99993' as 99993: {}", e),
         }
 
         // Alpha5
         match TLE::alpha5_to_int("S9994") {
             Ok(269994) => {}
-            Ok(i) => return skerror!("Error parsing 'S9994' as 269994: got {}", i),
-            Err(e) => return skerror!("Error parsing 'S9994' as 269994: {}", e),
+            Ok(i) => bail!("Error parsing 'S9994' as 269994: got {}", i),
+            Err(e) => bail!("Error parsing 'S9994' as 269994: {}", e),
         }
 
         Ok(())
     }
 
     #[test]
-    fn test_int_to_alpha5() -> SKResult<()> {
+    fn test_int_to_alpha5() -> Result<()> {
         match TLE::int_to_alpha5(91) {
             Ok(ref s) if s == "00091" => {}
-            Ok(ref s) => return skerror!("Error converting 91 to '00091': got {}", s),
-            Err(e) => return skerror!("Error converting 91 to '00091': {}", e),
+            Ok(ref s) => bail!("Error converting 91 to '00091': got {}", s),
+            Err(e) => bail!("Error converting 91 to '00091': {}", e),
         }
 
         match TLE::int_to_alpha5(99993) {
             Ok(ref s) if s == "99993" => {}
-            Ok(ref s) => return skerror!("Error converting 99993 to '99993': got {}", s),
-            Err(e) => return skerror!("Error converting 99993 to '99993': {}", e),
+            Ok(ref s) => bail!("Error converting 99993 to '99993': got {}", s),
+            Err(e) => bail!("Error converting 99993 to '99993': {}", e),
         }
 
         // Alpha5
         match TLE::int_to_alpha5(269994) {
             Ok(ref s) if s == "S9994" => {}
-            Ok(ref s) => return skerror!("Error converting 269994 to 'S9994': got {}", s),
-            Err(e) => return skerror!("Error converting 269994 to 'S9994': {}", e),
+            Ok(ref s) => bail!("Error converting 269994 to 'S9994': got {}", s),
+            Err(e) => bail!("Error converting 269994 to 'S9994': {}", e),
         }
 
         Ok(())

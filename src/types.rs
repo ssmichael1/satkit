@@ -1,21 +1,4 @@
-use thiserror::Error;
-pub type SKError = Box<dyn std::error::Error + Send + Sync>;
-pub type SKResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-
-#[derive(Debug, Error)]
-pub enum SKErr {
-    #[error("SatKit Error: {0}")]
-    Error(String),
-}
-
-/// Macro for creating a new SKErr::Error
-macro_rules! skerror {
-    ($($arg:tt)*) => {
-        Err(Box::new(crate::SKErr::Error(format!($($arg)*))))
-    };
-}
-
-pub(crate) use skerror;
+pub type SKResult<T> = anyhow::Result<T>;
 
 pub type Vec3 = nalgebra::Vector3<f64>;
 pub type Quaternion = nalgebra::UnitQuaternion<f64>;

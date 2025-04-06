@@ -36,11 +36,11 @@
 //! | Pluto    | 400         | 100          | 2500       |
 //!
 
-use crate::skerror;
 use crate::Instant;
-use crate::SKResult;
 use crate::SolarSystem;
 use crate::TimeScale;
+
+use anyhow::{bail, Result};
 
 use nalgebra as na;
 type Vec3 = na::Vector3<f64>;
@@ -69,7 +69,7 @@ type Quat = na::UnitQuaternion<f64>;
 /// println!("Position of Mars: {}", pos);
 /// ```
 ///
-pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
+pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vec3> {
     // Keplerian elements are provided separately and more accurately
     // for times in range of years 1800AD to 2050AD
     let tm0: Instant = Instant::from_date(-3000, 1, 1);
@@ -154,7 +154,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     224.06891629,
                     110.30393684,
                 ],
-                _ => return skerror!("Invalid Body"),
+                _ => bail!("Invalid Body"),
             };
 
             let adot: [f64; 6] = match body {
@@ -230,7 +230,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     -0.04062942,
                     -0.01183482,
                 ],
-                _ => return skerror!("Invalid Body"),
+                _ => bail!("Invalid Body"),
             };
             // Julian century
             (
@@ -316,7 +316,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     224.09702598,
                     110.30167986,
                 ],
-                _ => return skerror!("Invalid Body"),
+                _ => bail!("Invalid Body"),
             };
             let adot: [f64; 6] = match body {
                 SolarSystem::Mercury => [
@@ -391,7 +391,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                     -0.00968827,
                     -0.00809981,
                 ],
-                _ => return skerror!("Invalid Body"),
+                _ => bail!("Invalid Body"),
             };
             let error_terms: Option<[f64; 4]> = match body {
                 SolarSystem::Jupiter => Some([-0.00012452, 0.06064060, -0.35635438, 38.35125000]),
@@ -411,7 +411,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> SKResult<Vec3> {
                 error_terms,
             )
         } else {
-            return skerror!("Time out of range");
+            bail!("Time out of range");
         }
     };
 

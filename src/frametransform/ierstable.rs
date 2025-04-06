@@ -1,5 +1,7 @@
 use crate::utils::{self, download_if_not_exist};
-use crate::SKResult;
+
+use anyhow::Result;
+
 use nalgebra as na;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
@@ -17,7 +19,7 @@ pub struct IERSTable {
 /// Should not be used directly, but through the `FrameTransform` struct.
 ///
 impl IERSTable {
-    pub fn from_file(fname: &str) -> SKResult<Self> {
+    pub fn from_file(fname: &str) -> Result<Self> {
         let mut table = Self {
             data: [
                 na::DMatrix::<f64>::zeros(0, 0),
@@ -51,7 +53,7 @@ impl IERSTable {
                         let s: Vec<&str> = tline.split_whitespace().collect();
                         let tsize: usize = s[s.len() - 1].parse().unwrap_or(0);
                         if !(0..=5).contains(&tnum) || tsize == 0 {
-                            return crate::skerror!(
+                            anyhow::bail!(
                                 "Error parsing file {}, invalid table definition line",
                                 fname
                             );
@@ -61,10 +63,7 @@ impl IERSTable {
                         continue;
                     } else if tnum >= 0 {
                         if table.data[tnum as usize].ncols() < 17 {
-                            return crate::skerror!(
-                                "Error parsing file {}, table not initialized",
-                                fname
-                            );
+                            anyhow::bail!("Error parsing file {}, table not initialized", fname);
                         }
                         table.data[tnum as usize].set_row(
                             rowcnt,
@@ -112,15 +111,16 @@ impl IERSTable {
 #[cfg(test)]
 mod tests {
     use super::IERSTable;
+    use anyhow::Result;
 
     #[test]
-    fn load_table() -> crate::SKResult<()> {
+    fn load_table() -> Result<()> {
         let t = IERSTable::from_file("tab5.2a.txt");
         if t.is_err() {
-            return crate::skerror!("Could not load IERS table");
+            anyhow::bail!("Could not load IERS table");
         }
         if t.unwrap().data[0].ncols() < 17 {
-            return crate::skerror!("Error loading table");
+            anyhow::bail!("Error loading table");
         }
         Ok(())
     }

@@ -5,7 +5,6 @@ use crate::consts::WGS84_F;
 
 use nalgebra as na;
 
-use crate::skerror;
 use crate::types::Quaternion as Quat;
 use crate::types::Vec3;
 use crate::SKResult;
@@ -200,7 +199,7 @@ impl ITRFCoord {
     ///
     pub fn from_slice(v: &[f64]) -> SKResult<Self> {
         if v.len() != 3 {
-            return skerror!("Input slice must have 3 elements");
+            anyhow::bail!("Input slice must have 3 elements");
         }
         Ok(Self {
             itrf: Vec3::from_row_slice(v),

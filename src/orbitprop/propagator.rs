@@ -13,7 +13,6 @@ use crate::{Duration, Instant};
 use lpephem::sun::shadowfunc;
 
 use crate::types::*;
-use crate::SKResult;
 
 use num_traits::identities::Zero;
 
@@ -679,7 +678,7 @@ mod tests {
             .join("ESA0OPSFIN_20233640000_01D_05M_ORB.SP3");
 
         if !testvecfile.is_file() {
-            return skerror!(
+            anyhow::bail!(
                 "Required GPS SP3 File: \"{}\" does not exist
                 clone test vectors from:
                 <https://storage.googleapis.com/satkit-testvecs/>

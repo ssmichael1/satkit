@@ -265,10 +265,10 @@ pub fn sgp4_full(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::skerror;
     use crate::tle::TLE;
     use crate::utils::test;
     use crate::SKResult;
+    use anyhow::bail;
     use std::io::BufRead;
 
     #[test]
@@ -289,7 +289,7 @@ mod tests {
     fn vallado_testvecs() -> SKResult<()> {
         let testdir = test::get_testvec_dir().unwrap().join("sgp4");
         if !testdir.is_dir() {
-            return skerror!(
+            bail!(
                 "Required SGP4 test vectors directory: \"{}\" does not exist
                     clone test vectors from:
                     <https://storage.googleapis.com/satkit-testvecs/>
@@ -302,7 +302,7 @@ mod tests {
         }
         let tlefile = testdir.join("SGP4-VER.TLE");
         let f = match std::fs::File::open(&tlefile) {
-            Err(why) => return skerror!("Could not open {}: {}", tlefile.display(), why),
+            Err(why) => bail!("Could not open {}: {}", tlefile.display(), why),
             Ok(file) => file,
         };
         let buf = std::io::BufReader::new(f);
@@ -325,7 +325,7 @@ mod tests {
 
             let fh = testdir.join(fname);
             let ftle = match std::fs::File::open(&fh) {
-                Err(why) => return skerror!("Could not open {}: {}", fh.display(), why),
+                Err(why) => bail!("Could not open {}: {}", fh.display(), why),
                 Ok(file) => file,
             };
             for line in std::io::BufReader::new(ftle).lines() {
