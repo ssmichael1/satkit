@@ -11,6 +11,8 @@ use numpy::PyArrayMethods;
 use pyo3::types::PyDict;
 use pyo3::IntoPyObjectExt;
 
+use anyhow::{bail, Result};
+
 ///
 /// Gravity model enumeration
 ///
@@ -55,7 +57,7 @@ impl From<GravModel> for GravityModel {
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 #[pyfunction]
 #[pyo3(signature=(pos, **kwds))]
-pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyResult<PyObject> {
+pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<PyObject> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
     if let Some(kw) = kwds {
@@ -71,27 +73,23 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyRe
         let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
         let itrf: ITRFCoord = pyitrf.0;
         let v = accel(&itrf.itrf, order, model.into());
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
             let vpy = np::PyArray1::<f64>::from_slice(py, v.as_slice());
-            vpy.into_py_any(py)
+            Ok(vpy.into_py_any(py)?)
         })
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
         let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
         if vpy.len().unwrap() != 3 {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "input must have 3 elements",
-            ));
+            bail!("Input must have 3 elements");
         }
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let a = accel(&v, order, model.into());
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
             let vpy = np::PyArray1::<f64>::from_slice(py, a.as_slice());
-            vpy.into_py_any(py)
+            Ok(vpy.into_py_any(py)?)
         })
     } else {
-        Err(pyo3::exceptions::PyTypeError::new_err(
-            "Input must be 3-element numpy or itrfcoord",
-        ))
+        bail!("Input must be 3-element numpy or itrfcoord");
     }
 }
 
@@ -116,7 +114,7 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> PyRe
 pub fn gravity_and_partials(
     pos: &Bound<'_, PyAny>,
     kwds: Option<&Bound<'_, PyDict>>,
-) -> PyResult<(PyObject, PyObject)> {
+) -> Result<(PyObject, PyObject)> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
     if let Some(kw) = kwds {
@@ -132,7 +130,7 @@ pub fn gravity_and_partials(
         let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
         let itrf: ITRFCoord = pyitrf.0;
         let (g, p) = accel_and_partials(&itrf.itrf, order, model.into());
-        pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
+        pyo3::Python::with_gil(|py| -> Result<(PyObject, PyObject)> {
             let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
             let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {
@@ -143,13 +141,11 @@ pub fn gravity_and_partials(
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
         let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
         if vpy.len().unwrap() != 3 {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "input must have 3 elements",
-            ));
+            bail!("Input must have 3 elements");
         }
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let (g, p) = accel_and_partials(&v, order, model.into());
-        pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
+        pyo3::Python::with_gil(|py| -> Result<(PyObject, PyObject)> {
             let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
             let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {
@@ -158,8 +154,6 @@ pub fn gravity_and_partials(
             Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
         })
     } else {
-        Err(pyo3::exceptions::PyTypeError::new_err(
-            "Input must be 3-element numpy or itrfcoord",
-        ))
+        bail!("Input must be 3-element numpy or itrfcoord");
     }
 }

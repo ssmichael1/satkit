@@ -5,6 +5,8 @@ use crate::lpephem::sun;
 use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 
+use anyhow::Result;
+
 /// Sun position in the Geocentric Celestial Reference Frame (GCRF)
 ///
 /// Notes:
@@ -17,7 +19,7 @@ use pyo3::IntoPyObjectExt;
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in GCRF frame at input time[s]
 #[pyfunction]
-pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<PyObject> {
     pyutils::py_vec3_of_time_arr(&sun::pos_gcrf, time)
 }
 
@@ -32,7 +34,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s]
 #[pyfunction]
-pub fn pos_mod(time: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+pub fn pos_mod(time: &Bound<'_, PyAny>) -> Result<PyObject> {
     pyutils::py_vec3_of_time_arr(&sun::pos_mod, time)
 }
 

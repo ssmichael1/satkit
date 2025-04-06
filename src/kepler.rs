@@ -1,7 +1,7 @@
 //! Keplerian orbital elements module
 //!
 
-use crate::SKResult;
+use anyhow::Result;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -10,7 +10,7 @@ pub enum KeplerError {
     EccenOutOfBound(f64),
 }
 
-impl<T> From<KeplerError> for crate::SKResult<T> {
+impl<T> From<KeplerError> for Result<T> {
     fn from(e: KeplerError) -> Self {
         Err(e.into())
     }
@@ -86,7 +86,10 @@ fn mean2eccentric(m: f64, eccen: f64) -> f64 {
 }
 
 fn eccentric2true(ea: f64, eccen: f64) -> f64 {
-    f64::atan2(ea.sin() * eccen.mul_add(-eccen, 1.0).sqrt(), ea.cos() - eccen)
+    f64::atan2(
+        ea.sin() * eccen.mul_add(-eccen, 1.0).sqrt(),
+        ea.cos() - eccen,
+    )
 }
 
 fn mean2true(ma: f64, eccen: f64) -> f64 {
@@ -210,7 +213,7 @@ impl Kepler {
     ///
     /// * `Kepler` - A new Keplerian orbital element object
     ///
-    pub fn from_pv(r: Vec3, v: Vec3) -> SKResult<Self> {
+    pub fn from_pv(r: Vec3, v: Vec3) -> Result<Self> {
         let h = r.cross(&v);
         let n = Vec3::z_axis().cross(&h);
         let e = ((v.norm_squared() - crate::consts::MU_EARTH / r.norm()) * r - r.dot(&v) * v)

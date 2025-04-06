@@ -5,8 +5,9 @@ use super::pyutils::*;
 use crate::jplephem;
 use crate::solarsystem::SolarSystem;
 use crate::Instant;
-use crate::SKResult;
 use nalgebra as na;
+
+use anyhow::Result;
 
 /// Return the position and velocity of the given body in Geocentric coordinate system (GCRF)
 ///
@@ -22,7 +23,7 @@ pub fn geocentric_state(
     tm: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let rbody: SolarSystem = body.into();
-    let f = |tm: &Instant| -> SKResult<(na::Vector3<f64>, na::Vector3<f64>)> {
+    let f = |tm: &Instant| -> Result<(na::Vector3<f64>, na::Vector3<f64>)> {
         jplephem::geocentric_state(rbody, tm)
     };
     tuple_func_of_time_arr(f, tm)
@@ -51,7 +52,7 @@ pub fn barycentric_state(
     tm: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let rbody: SolarSystem = body.into();
-    let f = |tm: &Instant| -> SKResult<(na::Vector3<f64>, na::Vector3<f64>)> {
+    let f = |tm: &Instant| -> Result<(na::Vector3<f64>, na::Vector3<f64>)> {
         jplephem::barycentric_state(rbody, tm)
     };
     tuple_func_of_time_arr(f, tm)
@@ -69,9 +70,9 @@ pub fn barycentric_state(
 pub fn geocentric_pos(
     body: &pysolarsystem::SolarSystem,
     tm: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let rbody: SolarSystem = body.into();
-    let f = |tm: &Instant| -> SKResult<na::Vector3<f64>> { jplephem::geocentric_pos(rbody, tm) };
+    let f = |tm: &Instant| -> Result<na::Vector3<f64>> { jplephem::geocentric_pos(rbody, tm) };
     py_vec3_of_time_result_arr(&f, tm)
 }
 
@@ -94,8 +95,8 @@ pub fn geocentric_pos(
 pub fn barycentric_pos(
     body: &pysolarsystem::SolarSystem,
     tm: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let rbody: SolarSystem = body.into();
-    let f = |tm: &Instant| -> SKResult<na::Vector3<f64>> { jplephem::barycentric_pos(rbody, tm) };
+    let f = |tm: &Instant| -> Result<na::Vector3<f64>> { jplephem::barycentric_pos(rbody, tm) };
     py_vec3_of_time_result_arr(&f, tm)
 }

@@ -3,7 +3,8 @@ use nalgebra as na;
 use crate::orbitprop;
 use crate::orbitprop::PropSettings;
 use crate::Instant;
-use crate::SKResult;
+
+use anyhow::Result;
 
 type PVCovType = na::SMatrix<f64, 6, 6>;
 
@@ -185,7 +186,7 @@ impl SatState {
         &self,
         time: &Instant,
         option_settings: Option<&PropSettings>,
-    ) -> SKResult<Self> {
+    ) -> Result<Self> {
         let default = orbitprop::PropSettings::default();
         let settings = option_settings.unwrap_or(&default);
         match self.cov {
@@ -262,7 +263,7 @@ mod test {
     use approx::{assert_abs_diff_eq, assert_relative_eq};
 
     #[test]
-    fn test_qgcrf2lvlh() -> SKResult<()> {
+    fn test_qgcrf2lvlh() -> Result<()> {
         let satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],
@@ -285,7 +286,7 @@ mod test {
     }
 
     #[test]
-    fn test_satstate() -> SKResult<()> {
+    fn test_satstate() -> Result<()> {
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],
@@ -305,11 +306,11 @@ mod test {
         assert_abs_diff_eq!(satstate.vel_gcrf(), state0.vel_gcrf(), epsilon = 0.001);
         let cov1 = match satstate.cov() {
             StateCov::PVCov(v) => v,
-            StateCov::None => return crate::skerror!("cov is not none"),
+            StateCov::None => anyhow::bail!("cov is not none"),
         };
         let cov2 = match state0.cov() {
             StateCov::PVCov(v) => v,
-            StateCov::None => return crate::skerror!("cov is not none"),
+            StateCov::None => anyhow::bail!("cov is not none"),
         };
         assert_abs_diff_eq!(cov1, cov2, epsilon = 0.001);
 
@@ -317,7 +318,7 @@ mod test {
     }
 
     #[test]
-    fn test_satcov() -> SKResult<()> {
+    fn test_satcov() -> Result<()> {
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
             &na::vector![consts::GEO_R, 0.0, 0.0],

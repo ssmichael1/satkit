@@ -6,7 +6,7 @@ use std::sync::RwLock;
 use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
 
-use crate::{skerror, SKResult};
+use anyhow::{bail, Context, Result};
 
 use once_cell::sync::OnceCell;
 
@@ -22,7 +22,7 @@ struct EOPEntry {
     dY: f64,
 }
 
-fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
+fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
     let path: PathBuf = filename.map_or_else(
         || {
             datadir()
@@ -39,11 +39,11 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
     io::BufReader::new(file)
         .lines()
         .skip(1)
-        .map(|rline| -> SKResult<EOPEntry> {
+        .map(|rline| -> Result<EOPEntry> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
             if lvals.len() < 12 {
-                return skerror!("Invalid entry in EOP file");
+                bail!("Invalid entry in EOP file");
             }
             Ok(EOPEntry {
                 mjd_utc: lvals[1].parse()?,
@@ -59,7 +59,7 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
 }
 
 #[allow(dead_code)]
-fn load_eop_file_legacy(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
+fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
     let path: PathBuf = filename.map_or_else(
         || {
             datadir()
@@ -70,14 +70,14 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
     );
 
     if !path.is_file() {
-        return skerror!(
+        bail!(
             "Cannot open earth orientation parameters file: {}",
             path.to_str().unwrap()
         );
     }
 
     let file = match File::open(&path) {
-        Err(why) => return skerror!("Couldn't open {}: {}", path.display(), why),
+        Err(why) => bail!("Couldn't open {}: {}", path.display(), why),
         Ok(file) => file,
     };
 
@@ -101,53 +101,25 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> SKResult<Vec<EOPEntry>> {
                 let dy_str: String = v.chars().skip(116).take(9).collect();
 
                 eopvec.push(EOPEntry {
-                    mjd_utc: {
-                        match mjd_str.trim().parse() {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return skerror!(
-                                    "Could not extract mjd from file: {}",
-                                    e.to_string()
-                                )
-                            }
-                        }
-                    },
-                    xp: {
-                        match xp_str.trim().parse() {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return skerror!(
-                                    "Could not extract x polar motion from file: {}",
-                                    e.to_string()
-                                )
-                            }
-                        }
-                    },
-                    yp: {
-                        match yp_str.trim().parse() {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return skerror!(
-                                    "Could not extract y polar motion from file: {}",
-                                    e.to_string()
-                                )
-                            }
-                        }
-                    },
-                    dut1: {
-                        match dut1_str.trim().parse() {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return skerror!(
-                                    "Could not extract dut1 from file: {}",
-                                    e.to_string()
-                                )
-                            }
-                        }
-                    },
+                    mjd_utc: mjd_str
+                        .trim()
+                        .parse()
+                        .context("Could not extract MJD from file")?,
+                    xp: xp_str
+                        .trim()
+                        .parse()
+                        .context("Could not extract X polar motion from file")?,
+                    yp: yp_str
+                        .trim()
+                        .parse()
+                        .context("Could not extract Y polar motion from file")?,
+                    dut1: dut1_str
+                        .trim()
+                        .parse()
+                        .context("Could not extract delta UT1 from file")?,
                     lod: lod_str.trim().parse().unwrap_or(0.0),
-                    dX: { dx_str.trim().parse().unwrap_or(0.0) },
-                    dY: { dy_str.trim().parse().unwrap_or(0.0) },
+                    dX: dx_str.trim().parse().unwrap_or(0.0),
+                    dY: dy_str.trim().parse().unwrap_or(0.0),
                 })
             }
         }
@@ -161,11 +133,11 @@ fn eop_params_singleton() -> &'static RwLock<Vec<EOPEntry>> {
 }
 
 /// Download new Earth Orientation Parameters file, and load it.
-pub fn update() -> SKResult<()> {
+pub fn update() -> Result<()> {
     // Get data directory
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
-        return skerror!(
+        bail!(
             r#"Data directory is read-only. 
              Try setting the environment variable SATKIT_DATA
              to a writeable directory and re-starting or explicitly set

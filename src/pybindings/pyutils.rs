@@ -4,7 +4,6 @@ use super::pyquaternion::Quaternion;
 use crate::frametransform::Quat;
 use crate::types::*;
 use crate::Instant;
-use crate::SKResult;
 use nalgebra as na;
 use numpy as np;
 use numpy::ndarray;
@@ -15,6 +14,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::IntoPyObject;
 use pyo3::IntoPyObjectExt;
+
+use anyhow::{bail, Result};
 
 pub fn kwargs_or_default<'a, T>(
     kwargs: &mut Option<&Bound<'a, PyDict>>,
@@ -60,18 +61,18 @@ where
 pub fn py_vec3_of_time_arr(
     cfunc: &dyn Fn(&Instant) -> Vector3,
     tmarr: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
         1 => {
             let v: Vec3 = cfunc(&tm[0]);
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)
+            pyo3::Python::with_gil(|py| -> Result<PyObject> {
+                Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?)
             })
         }
         _ => {
             let n = tm.len();
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            pyo3::Python::with_gil(|py| -> Result<PyObject> {
                 let out = np::PyArray2::<f64>::zeros(py, (n, 3), false);
                 for (idx, time) in tm.iter().enumerate() {
                     let v: Vec3 = cfunc(time);
@@ -86,30 +87,28 @@ pub fn py_vec3_of_time_arr(
                         );
                     }
                 }
-                out.into_py_any(py)
+                Ok(out.into_py_any(py)?)
             })
         }
     }
 }
 
 pub fn py_vec3_of_time_result_arr(
-    cfunc: &dyn Fn(&Instant) -> SKResult<Vec3>,
+    cfunc: &dyn Fn(&Instant) -> Result<Vec3>,
     tmarr: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let tm = tmarr.to_time_vec()?;
 
     match tm.len() {
-        1 => cfunc(&tm[0]).map_or_else(
-            |_| Err(pyo3::exceptions::PyTypeError::new_err("Invalid time")),
-            |v| {
-                pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-                    np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)
-                })
-            },
-        ),
+        1 => match cfunc(&tm[0]) {
+            Ok(v) => pyo3::Python::with_gil(|py| {
+                Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?)
+            }),
+            Err(_) => bail!("Invalid time"),
+        },
         _ => {
             let n = tm.len();
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            pyo3::Python::with_gil(|py| -> Result<PyObject> {
                 let out = np::PyArray2::<f64>::zeros(py, (n, 3), false);
                 for (idx, time) in tm.iter().enumerate() {
                     match cfunc(time) {
@@ -126,27 +125,27 @@ pub fn py_vec3_of_time_result_arr(
                             }
                         }
                         Err(_) => {
-                            return Err(pyo3::exceptions::PyTypeError::new_err("Invalid time"));
+                            bail!("Invalid time");
                         }
                     }
                 }
-                out.into_py_any(py)
+                Ok(out.into_py_any(py)?)
             })
         }
     }
 }
 
 #[allow(dead_code)]
-pub fn smatrix_to_py<const M: usize, const N: usize>(m: &Matrix<M, N>) -> PyResult<PyObject> {
+pub fn smatrix_to_py<const M: usize, const N: usize>(m: &Matrix<M, N>) -> Result<PyObject> {
     if N == 1 {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            PyArray1::from_slice(py, m.as_slice()).into_py_any(py)
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+            Ok(PyArray1::from_slice(py, m.as_slice()).into_py_any(py)?)
         })
     } else {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            PyArray1::from_slice(py, m.as_slice())
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+            Ok(PyArray1::from_slice(py, m.as_slice())
                 .reshape([M, N])?
-                .into_py_any(py)
+                .into_py_any(py)?)
         })
     }
 }
@@ -243,7 +242,7 @@ pub fn mat2py<const M: usize, const N: usize>(py: Python, m: &Matrix<M, N>) -> P
 #[inline]
 pub fn tuple_func_of_time_arr<F>(cfunc: F, tmarr: &Bound<'_, PyAny>) -> PyResult<PyObject>
 where
-    F: Fn(&Instant) -> SKResult<(na::Vector3<f64>, na::Vector3<f64>)>,
+    F: Fn(&Instant) -> Result<(na::Vector3<f64>, na::Vector3<f64>)>,
 {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {

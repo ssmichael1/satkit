@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use crate::utils::{datadir, download_file, download_if_not_exist};
 use crate::Instant;
-use crate::{skerror, SKResult};
+use anyhow::{bail, Context, Result};
 
 use std::sync::RwLock;
 
@@ -39,14 +39,14 @@ pub struct SpaceWeatherRecord {
     pub f10p7_adj_l81: f64,
 }
 
-fn str2num<T: core::str::FromStr>(s: &str, sidx: usize, eidx: usize) -> Option<T> {
+fn str2num<T: core::str::FromStr>(s: &str, sidx: usize, eidx: usize) -> Result<T> {
     s.chars()
         .skip(sidx)
         .take(eidx - sidx)
         .collect::<String>()
         .trim()
         .parse()
-        .ok()
+        .map_err(|_| anyhow::anyhow!("Invalid number in file"))
 }
 
 impl PartialEq for SpaceWeatherRecord {
@@ -73,7 +73,7 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
     }
 }
 
-fn load_space_weather_csv() -> SKResult<Vec<SpaceWeatherRecord>> {
+fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
     let path = datadir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("SW-All.csv");
@@ -83,22 +83,14 @@ fn load_space_weather_csv() -> SKResult<Vec<SpaceWeatherRecord>> {
     io::BufReader::new(file)
         .lines()
         .skip(1)
-        .map(|rline| -> SKResult<SpaceWeatherRecord> {
+        .map(|rline| -> Result<SpaceWeatherRecord> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
 
-            let year: u32 = match str2num(lvals[0], 0, 4) {
-                Some(v) => v,
-                None => return skerror!("invalid year in file"),
-            };
-            let mon: u32 = match str2num(lvals[0], 5, 7) {
-                Some(v) => v,
-                None => return skerror!("Invalid month in file"),
-            };
-            let day: u32 = match str2num(lvals[0], 8, 10) {
-                Some(v) => v,
-                None => return skerror!("invalid day in file"),
-            };
+            let year: u32 = str2num(lvals[0], 0, 4).context("Cannot read year")?;
+            let mon: u32 = str2num(lvals[0], 5, 7).context("Cannot read month")?;
+            let day: u32 = str2num(lvals[0], 8, 10).context("Cannot ready day of month")?;
+
             Ok(SpaceWeatherRecord {
                 date: (Instant::from_date(year as i32, mon as i32, day as i32)),
                 bsrn: lvals[1].parse().unwrap_or(-1),
@@ -133,8 +125,8 @@ fn load_space_weather_csv() -> SKResult<Vec<SpaceWeatherRecord>> {
         .collect()
 }
 
-fn space_weather_singleton() -> &'static RwLock<SKResult<Vec<SpaceWeatherRecord>>> {
-    static INSTANCE: OnceCell<RwLock<SKResult<Vec<SpaceWeatherRecord>>>> = OnceCell::new();
+fn space_weather_singleton() -> &'static RwLock<Result<Vec<SpaceWeatherRecord>>> {
+    static INSTANCE: OnceCell<RwLock<Result<Vec<SpaceWeatherRecord>>>> = OnceCell::new();
     INSTANCE.get_or_init(|| RwLock::new(load_space_weather_csv()))
 }
 
@@ -154,7 +146,7 @@ fn space_weather_singleton() -> &'static RwLock<SKResult<Vec<SpaceWeatherRecord>
 /// # Notes:
 ///
 /// * Space weather is updated daily in a file: sw19571001.txt
-pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
+pub fn get(tm: Instant) -> Result<SpaceWeatherRecord> {
     let sw_lock = space_weather_singleton().read().unwrap();
     let sw = sw_lock.as_ref().unwrap();
 
@@ -168,15 +160,15 @@ pub fn get(tm: Instant) -> SKResult<SpaceWeatherRecord> {
         .rev()
         .find(|x| x.date <= tm)
         .cloned()
-        .ok_or_else(|| Box::new(crate::SKErr::Error(format!("Invalid instant: {}", tm))).into())
+        .ok_or_else(|| anyhow::anyhow!("No space weather record found for date"))
 }
 
 /// Download new Space Weather file, and load it.
-pub fn update() -> SKResult<()> {
+pub fn update() -> Result<()> {
     // Get data directory
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
-        return skerror!(
+        bail!(
             r#"Data directory is read-only. 
              Try setting the environment variable SATKIT_DATA
              to a writeable directory and re-starting or explicitly set

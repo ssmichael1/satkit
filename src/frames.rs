@@ -1,4 +1,4 @@
-use crate::skerror;
+use anyhow::bail;
 
 #[derive(Clone, Debug)]
 pub enum Frame {
@@ -36,7 +36,7 @@ impl std::fmt::Display for Frame {
 }
 
 impl std::str::FromStr for Frame {
-    type Err = Box<dyn std::error::Error + Send + Sync>;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -48,7 +48,7 @@ impl std::str::FromStr for Frame {
             "EME2000" => Ok(Self::EME2000),
             "ICRF" => Ok(Self::ICRF),
             "LVLH" => Ok(Self::LVLH),
-            _ => skerror!("Invalid Frame"),
+            _ => bail!("Invalid Frame"),
         }
     }
 }
