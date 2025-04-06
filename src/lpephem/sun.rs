@@ -3,8 +3,7 @@ use crate::ITRFCoord;
 use crate::Instant;
 use crate::TimeScale;
 
-use crate::{skerror, SKResult};
-
+use anyhow::Result;
 use nalgebra as na;
 
 type Vec3 = na::Vector3<f64>;
@@ -64,12 +63,18 @@ pub fn pos_mod(time: &Instant) -> na::Vector3<f64> {
     let epsilon: f64 = deg2rad * 0.0130042f64.mul_add(-t, 23.439291);
 
     // Ecliptic
-    let lambda_ecliptic: f64 =
-        deg2rad * 0.019994643f64.mul_add(f64::sin(2.0 * M), 1.914666471f64.mul_add(f64::sin(M), lambda));
+    let lambda_ecliptic: f64 = deg2rad
+        * 0.019994643f64.mul_add(
+            f64::sin(2.0 * M),
+            1.914666471f64.mul_add(f64::sin(M), lambda),
+        );
 
     // Magnitude of sun vector
-    let r: f64 =
-        consts::AU * 0.000139589f64.mul_add(-f64::cos(2. * M), 0.016708617f64.mul_add(-f64::cos(M), 1.000140612));
+    let r: f64 = consts::AU
+        * 0.000139589f64.mul_add(
+            -f64::cos(2. * M),
+            0.016708617f64.mul_add(-f64::cos(M), 1.000140612),
+        );
 
     na::Vector3::<f64>::new(
         r * f64::cos(lambda_ecliptic),
@@ -110,7 +115,10 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
     } else {
         let x = b.mul_add(-b, c.mul_add(c, a * a)) / 2.0 / c;
         let y = a.mul_add(a, -(x * x)).sqrt();
-        let big_a = c.mul_add(-y, (a * a).mul_add((x / a).acos(), b * b * ((c - x) / b).acos()));
+        let big_a = c.mul_add(
+            -y,
+            (a * a).mul_add((x / a).acos(), b * b * ((c - x) / b).acos()),
+        );
 
         1.0 - big_a / std::f64::consts::PI / a / a
     }
@@ -152,7 +160,7 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 ///
 /// # Returns
 ///
-/// * SKResult<(sunrise: Instant, sunset: Instant)>
+/// * Result<(sunrise: Instant, sunset: Instant)>
 ///
 /// # References
 ///
@@ -162,7 +170,7 @@ pub fn riseset(
     time: &Instant,
     coord: &ITRFCoord,
     osigma: Option<f64>,
-) -> SKResult<(Instant, Instant)> {
+) -> Result<(Instant, Instant)> {
     use std::f64::consts::PI;
     let sigma = osigma.unwrap_or(90.0 + 50.0 / 60.0);
     let latitude: f64 = coord.latitude_deg();
@@ -174,20 +182,25 @@ pub fn riseset(
 
     // Zero-hour GMST, equation 3-45 in Vallado
     let gmst0h = |t: f64| -> f64 {
-        (2.6E-8 * t * t).mul_add(-t, (0.00038793 * t).mul_add(t, 36000.77005361f64.mul_add(t, 100.4606184))) % 360.0
+        (2.6E-8 * t * t).mul_add(
+            -t,
+            (0.00038793 * t).mul_add(t, 36000.77005361f64.mul_add(t, 100.4606184)),
+        ) % 360.0
     };
 
     let jd0h: f64 = (time.as_jd_with_scale(TimeScale::UTC) - longitude / 360.0).floor() + 0.5;
     let jdsunrise = jd0h + 0.25 - longitude / 360.0;
     let jdsunset = jd0h + 0.75 - longitude / 360.0;
 
-    let criseset = |jd: f64, lhafunc: fn(f64) -> f64| -> SKResult<f64> {
+    let criseset = |jd: f64, lhafunc: fn(f64) -> f64| -> Result<f64> {
         let t = (jd - 2451545.0) / 36525.0;
 
         let lambda_sun = 36000.77005361f64.mul_add(t, 280.4606184);
         let msun = 35999.05034f64.mul_add(t, 357.5291092);
-        let lambda_ecliptic =
-            0.019994643f64.mul_add(sind(2.0 * msun), 1.914666471f64.mul_add(sind(msun), lambda_sun));
+        let lambda_ecliptic = 0.019994643f64.mul_add(
+            sind(2.0 * msun),
+            1.914666471f64.mul_add(sind(msun), lambda_sun),
+        );
         // Longitude in ecliptl
         let epsilon = 0.0130042f64.mul_add(-t, 23.439291);
 
@@ -197,10 +210,10 @@ pub fn riseset(
         let alpha_sun =
             f64::atan2(cosd(epsilon) * sind(lambda_ecliptic), cosd(lambda_ecliptic)) * RAD2DEG;
 
-        let coslha =
-            sind(deltasun).mul_add(-sind(latitude), cosd(sigma)) / (cosd(deltasun) * cosd(latitude));
+        let coslha = sind(deltasun).mul_add(-sind(latitude), cosd(sigma))
+            / (cosd(deltasun) * cosd(latitude));
         if coslha.abs() > 1.0 {
-            return skerror!(
+            anyhow::bail!(
                 "Invalid position.  Sun doesn't rise/set on this day at \
                  this location (e.g., Alaska in summer)"
             );

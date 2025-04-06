@@ -8,6 +8,8 @@ use crate::sgp4 as psgp4;
 use numpy::PyArray1;
 use numpy::PyArrayMethods;
 
+use anyhow::{bail, Result};
+
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
 #[pyclass(name = "sgp4_error", eq, eq_int)]
@@ -127,7 +129,7 @@ pub fn sgp4(
     tle: &Bound<'_, PyAny>,
     time: &Bound<'_, PyAny>,
     kwds: Option<&Bound<'_, PyDict>>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let mut output_err = false;
     let mut opsmode: OpsMode = OpsMode::afspc;
     let mut gravconst: GravConst = GravConst::wgs72;
@@ -151,7 +153,7 @@ pub fn sgp4(
             gravconst.into(),
             opsmode.into(),
         );
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
             let dims = if r.nrows() > 1 && r.ncols() > 1 {
                 vec![r.ncols(), r.nrows()]
             } else {
@@ -162,7 +164,7 @@ pub fn sgp4(
             // row major, nalgebra and numpy use column major,
             // hence the switch
             if !output_err {
-                (
+                Ok((
                     PyArray1::from_slice(py, r.data.as_slice())
                         .reshape(dims.clone())?
                         .into_py_any(py)?,
@@ -170,15 +172,15 @@ pub fn sgp4(
                         .reshape(dims)?
                         .into_py_any(py)?,
                 )
-                    .into_py_any(py)
+                    .into_py_any(py)?)
             } else {
                 let eint: Vec<i32> = e.into_iter().map(|x| x as i32).collect();
-                (
+                Ok((
                     PyArray1::from_slice(py, r.data.as_slice()).reshape(dims.clone())?,
                     PyArray1::from_slice(py, v.data.as_slice()).reshape(dims.clone())?,
                     PyArray1::from_slice(py, eint.as_slice()),
                 )
-                    .into_py_any(py)
+                    .into_py_any(py)?)
             }
         })
     } else if tle.is_instance_of::<PyList>() {
@@ -189,7 +191,7 @@ pub fn sgp4(
             .map(|tle| psgp4::sgp4(&mut tle.0, tmarray.as_slice()))
             .collect();
 
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+        pyo3::Python::with_gil(|py| -> Result<PyObject> {
             let n = tles.len() * tmarray.len() * 3;
 
             let parr = PyArray1::zeros(py, [n], false);
@@ -243,23 +245,21 @@ pub fn sgp4(
             };
 
             if !output_err {
-                (
+                Ok((
                     parr.reshape(dims.clone()).unwrap(),
                     varr.reshape(dims).unwrap(),
                 )
-                    .into_py_any(py)
+                    .into_py_any(py)?)
             } else {
-                (
+                Ok((
                     parr.reshape(dims.clone()).unwrap(),
                     varr.reshape(dims).unwrap(),
                     PyArray1::from_slice(py, eint.as_slice()).reshape(edims)?,
                 )
-                    .into_py_any(py)
+                    .into_py_any(py)?)
             }
         })
     } else {
-        Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Invalid input type for argument 1",
-        ))
+        bail!("Invalid input type for argument 1");
     }
 }

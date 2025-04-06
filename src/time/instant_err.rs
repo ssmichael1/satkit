@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum InstantError {
+    #[error("Invalid Month String: {0}")]
+    InvalidMonthString(String),
     #[error("Invalid Month: {0}")]
     InvalidMonth(i32),
     #[error("Invalid Day: {0}")]
@@ -20,10 +22,4 @@ pub enum InstantError {
     InvalidFormat(char),
     #[error("Missing Format Character")]
     MissingFormat,
-}
-
-impl<T> From<InstantError> for crate::SKResult<T> {
-    fn from(e: InstantError) -> Self {
-        Err(e.into())
-    }
 }

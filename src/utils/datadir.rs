@@ -1,11 +1,11 @@
-use crate::skerror;
-use crate::SKResult;
 #[cfg(feature = "pybindings")]
 use process_path::get_dylib_path;
 use std::cell::OnceCell;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
+
+use anyhow::{bail, Result};
 
 // Pointer to the one and only data directory
 static DATADIR_SINGLETON: Mutex<OnceCell<Option<PathBuf>>> = Mutex::new(OnceCell::new());
@@ -52,16 +52,16 @@ pub fn testdirs() -> Vec<PathBuf> {
 
 /// Explicitly set data directory where data files will be stored
 /// Generally this should not be needed
-pub fn set_datadir(d: &Path) -> SKResult<()> {
+pub fn set_datadir(d: &Path) -> Result<()> {
     if !d.is_dir() {
-        return skerror!("Data directory does not exist");
+        bail!("Data directory does not exist");
     }
 
     let mut dd = DATADIR_SINGLETON.lock().unwrap();
     dd.take();
     match dd.set(Some(d.to_path_buf())) {
         Ok(_) => Ok(()),
-        Err(_) => skerror!("Could not set data directory"),
+        Err(_) => bail!("Could not set data directory"),
     }
 }
 
@@ -78,11 +78,11 @@ pub fn set_datadir(d: &Path) -> SKResult<()> {
 ///
 /// Returns:
 ///
-///  * SKResult<<std::path::PathBuf>> representing directory
+///  * anyhow::Result<<std::path::PathBuf>> representing directory
 ///    where files are stored
 ///
 
-pub fn datadir() -> SKResult<PathBuf> {
+pub fn datadir() -> Result<PathBuf> {
     let dd = DATADIR_SINGLETON.lock().unwrap();
     let res = dd.get_or_init(|| {
         let td: Vec<PathBuf> = testdirs();
@@ -114,7 +114,7 @@ pub fn datadir() -> SKResult<PathBuf> {
 
     match res.as_ref() {
         Some(v) => Ok(v.clone()),
-        None => skerror!("Could not find valid writeable data directory"),
+        None => bail!("Could not find valid writeable data directory"),
     }
 }
 

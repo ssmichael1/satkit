@@ -1,5 +1,5 @@
 use crate::utils::{datadir, download_if_not_exist};
-use crate::{skerror, SKResult};
+use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
@@ -405,23 +405,44 @@ impl Gravity {
 
                 if m == 1 {
                     daxdx += 0.25
-                        * fnmmp21.mul_add(-(3.0 * cnm).mul_add(vnp2m, snm * wnp2m), cnm.mul_add(vnp2mp2, snm * wnp2mp2));
+                        * fnmmp21.mul_add(
+                            -(3.0 * cnm).mul_add(vnp2m, snm * wnp2m),
+                            cnm.mul_add(vnp2mp2, snm * wnp2mp2),
+                        );
                     daxdy += 0.25
-                        * fnmmp21.mul_add(-cnm.mul_add(wnp2m, snm * vnp2m), cnm.mul_add(wnp2mp2, -(snm * vnp2mp2)));
+                        * fnmmp21.mul_add(
+                            -cnm.mul_add(wnp2m, snm * vnp2m),
+                            cnm.mul_add(wnp2mp2, -(snm * vnp2mp2)),
+                        );
                 } else {
                     let mm2 = m - 2;
                     let fnmmp41 = (fnmmp1 + 3.0) * fnmmp31;
                     let vnp2mm2 = v[(np2, mm2)];
                     let wnp2mm2 = w[(np2, mm2)];
                     daxdx += 0.25
-                        * fnmmp41.mul_add(cnm.mul_add(vnp2mm2, snm * wnp2mm2), (2.0 * fnmmp21).mul_add(-cnm.mul_add(vnp2m, snm * wnp2m), cnm.mul_add(vnp2mp2, snm * wnp2mp2)));
+                        * fnmmp41.mul_add(
+                            cnm.mul_add(vnp2mm2, snm * wnp2mm2),
+                            (2.0 * fnmmp21).mul_add(
+                                -cnm.mul_add(vnp2m, snm * wnp2m),
+                                cnm.mul_add(vnp2mp2, snm * wnp2mp2),
+                            ),
+                        );
                     daxdy += 0.25
-                        * fnmmp41.mul_add(-cnm.mul_add(wnp2mm2, -(snm * vnp2mm2)), cnm.mul_add(wnp2mp2, -(snm * vnp2mp2)));
+                        * fnmmp41.mul_add(
+                            -cnm.mul_add(wnp2mm2, -(snm * vnp2mm2)),
+                            cnm.mul_add(wnp2mp2, -(snm * vnp2mp2)),
+                        );
                 }
                 daxdz += 0.5
-                    * fnmmp1.mul_add(cnm.mul_add(vnp2mp1, snm * wnp2mp1), -(fnmmp31 * cnm.mul_add(vnp2mm1, snm * wnp2mm1)));
+                    * fnmmp1.mul_add(
+                        cnm.mul_add(vnp2mp1, snm * wnp2mp1),
+                        -(fnmmp31 * cnm.mul_add(vnp2mm1, snm * wnp2mm1)),
+                    );
                 daydz += 0.5
-                    * fnmmp1.mul_add(cnm.mul_add(wnp2mp1, -(snm * vnp2mp1)), fnmmp31 * cnm.mul_add(wnp2mm1, -(snm * vnp2mm1)));
+                    * fnmmp1.mul_add(
+                        cnm.mul_add(wnp2mp1, -(snm * vnp2mp1)),
+                        fnmmp31 * cnm.mul_add(wnp2mm1, -(snm * vnp2mm1)),
+                    );
                 dazdz += fnmmp21 * cnm.mul_add(vnp2m, snm * wnp2m);
             }
         }
@@ -454,12 +475,19 @@ impl Gravity {
                     accel[1] -= cnm * w[(n + 1, 1)];
                 } else {
                     accel[0] += 0.5
-                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(cnm.mul_add(v[(n + 1, m - 1)], snm * w[(n + 1, m - 1)]), (-cnm).mul_add(v[(n + 1, m + 1)], -(snm * w[(n + 1, m + 1)])));
+                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(
+                            cnm.mul_add(v[(n + 1, m - 1)], snm * w[(n + 1, m - 1)]),
+                            (-cnm).mul_add(v[(n + 1, m + 1)], -(snm * w[(n + 1, m + 1)])),
+                        );
 
                     accel[1] += 0.5
-                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add((-1.0 * cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]), (-cnm).mul_add(w[(n + 1, m + 1)], snm * v[(n + 1, m + 1)]));
+                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(
+                            (-1.0 * cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]),
+                            (-cnm).mul_add(w[(n + 1, m + 1)], snm * v[(n + 1, m + 1)]),
+                        );
                 }
-                accel[2] += (n - m + 1) as f64 * (-1.0 * cnm).mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
+                accel[2] += (n - m + 1) as f64
+                    * (-1.0 * cnm).mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
             }
         }
 
@@ -525,7 +553,7 @@ impl Gravity {
     /// Load Gravity model coefficients from file
     /// Files are at:
     /// <http://icgem.gfz-potsdam.de/tom_longtime>
-    pub fn from_file(filename: &str) -> SKResult<Self> {
+    pub fn from_file(filename: &str) -> Result<Self> {
         let path = datadir().unwrap_or(PathBuf::from(".")).join(filename);
         download_if_not_exist(&path, None)?;
 
@@ -535,7 +563,7 @@ impl Gravity {
         }
         */
 
-        let file = std::fs::File::open(&path)?;
+        let file = std::fs::File::open(&path).context("Failed to open gravity model file")?;
 
         let mut name = String::new();
         let mut gravity_constant: f64 = 0.0;
@@ -573,7 +601,7 @@ impl Gravity {
             }
         }
         if max_degree == 0 {
-            return skerror!("Invalid file; did not find max degree");
+            bail!("Invalid file; did not find max degree");
         }
 
         // Create matrix with lookup values
@@ -582,7 +610,7 @@ impl Gravity {
         for line in &lines[header_cnt..] {
             let s: Vec<&str> = line.split_whitespace().collect();
             if s.len() < 3 {
-                return skerror!("Invalid line: {}", line);
+                bail!("Invalid line: {}", line);
             }
 
             let n: usize = s[1].parse()?;
@@ -650,7 +678,6 @@ mod tests {
     use crate::itrfcoord::ITRFCoord;
     use crate::types::Vec3;
     use approx::assert_relative_eq;
-    
 
     #[test]
     fn test_gravity2() {
