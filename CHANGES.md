@@ -8,3 +8,8 @@
 
 ### Two-Line Element Sets
 - Fix issue where two-line element sets confuse satellite name for a line number if satellite name starts with a "1" or a "2"
+
+## 0.5.6 - 2025-04-6
+
+## Anyhow
+- Use "anyhow" crate for error handling, both in core code and in python bindings (it is very nice!)
