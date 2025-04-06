@@ -1,5 +1,3 @@
-pub type SKResult<T> = anyhow::Result<T>;
-
 pub type Vec3 = nalgebra::Vector3<f64>;
 pub type Quaternion = nalgebra::UnitQuaternion<f64>;
 pub type Vector<const T: usize> = nalgebra::SVector<f64, T>;

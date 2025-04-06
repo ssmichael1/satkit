@@ -4,7 +4,6 @@ use super::pyquaternion::Quaternion;
 use crate::frametransform::Quat;
 use crate::types::*;
 use crate::Instant;
-use crate::SKResult;
 use nalgebra as na;
 use numpy as np;
 use numpy::ndarray;
@@ -15,6 +14,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::IntoPyObject;
 use pyo3::IntoPyObjectExt;
+
+use anyhow::Result;
 
 pub fn kwargs_or_default<'a, T>(
     kwargs: &mut Option<&Bound<'a, PyDict>>,
@@ -93,7 +94,7 @@ pub fn py_vec3_of_time_arr(
 }
 
 pub fn py_vec3_of_time_result_arr(
-    cfunc: &dyn Fn(&Instant) -> SKResult<Vec3>,
+    cfunc: &dyn Fn(&Instant) -> Result<Vec3>,
     tmarr: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let tm = tmarr.to_time_vec()?;
@@ -243,7 +244,7 @@ pub fn mat2py<const M: usize, const N: usize>(py: Python, m: &Matrix<M, N>) -> P
 #[inline]
 pub fn tuple_func_of_time_arr<F>(cfunc: F, tmarr: &Bound<'_, PyAny>) -> PyResult<PyObject>
 where
-    F: Fn(&Instant) -> SKResult<(na::Vector3<f64>, na::Vector3<f64>)>,
+    F: Fn(&Instant) -> Result<(na::Vector3<f64>, na::Vector3<f64>)>,
 {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {

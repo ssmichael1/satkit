@@ -29,7 +29,10 @@ thiserror = "2.0"
 simba = "0.9"
 once_cell = "1.21"
 numpy = { version = "0.24", optional = true }
-pyo3 = { version = "0.24", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.24", features = [
+    "extension-module",
+    "anyhow",
+], optional = true }
 ureq = "3"
 json = "0.12.4"
 process_path = "0.1.4"

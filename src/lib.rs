@@ -107,6 +107,5 @@ pub use frames::Frame;
 pub use itrfcoord::ITRFCoord;
 pub use solarsystem::SolarSystem;
 pub use tle::TLE;
-pub use types::SKResult;
 #[cfg(feature = "pybindings")]
 pub mod pybindings;

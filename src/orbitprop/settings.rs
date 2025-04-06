@@ -2,7 +2,8 @@
 
 use crate::orbitprop::Precomputed;
 use crate::Instant;
-use crate::SKResult;
+
+use anyhow::Result;
 
 /// Propagation settings
 ///
@@ -40,7 +41,7 @@ impl Default for PropSettings {
 }
 
 impl PropSettings {
-    pub fn precompute_terms(&mut self, start: &Instant, stop: &Instant) -> SKResult<()> {
+    pub fn precompute_terms(&mut self, start: &Instant, stop: &Instant) -> Result<()> {
         self.precomputed = Some(Precomputed::new(start, stop)?);
         Ok(())
     }

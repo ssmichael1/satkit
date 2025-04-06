@@ -7,7 +7,8 @@ use nalgebra as na;
 
 use crate::types::Quaternion as Quat;
 use crate::types::Vec3;
-use crate::SKResult;
+
+use anyhow::Result;
 
 ///
 /// Representation of a coordinate in the
@@ -197,7 +198,7 @@ impl ITRFCoord {
     /// let itrf = ITRFCoord::from_slice(&[1522386.15660978, -4459627.78585002,  4284030.6890791]);
     /// ```
     ///
-    pub fn from_slice(v: &[f64]) -> SKResult<Self> {
+    pub fn from_slice(v: &[f64]) -> Result<Self> {
         if v.len() != 3 {
             anyhow::bail!("Input slice must have 3 elements");
         }

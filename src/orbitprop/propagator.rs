@@ -12,12 +12,13 @@ use crate::orbitprop::Precomputed;
 use crate::{Duration, Instant};
 use lpephem::sun::shadowfunc;
 
-use crate::types::*;
+use anyhow::{Context, Result};
 
-use num_traits::identities::Zero;
+use crate::types::*;
 
 use crate::consts;
 use crate::orbitprop::SatProperties;
+use num_traits::identities::Zero;
 
 use thiserror::Error;
 
@@ -38,7 +39,7 @@ pub struct PropagationResult<const T: usize> {
 }
 
 impl<const T: usize> PropagationResult<T> {
-    pub fn interp(&self, time: &Instant) -> SKResult<Matrix<6, T>> {
+    pub fn interp(&self, time: &Instant) -> Result<Matrix<6, T>> {
         interp_propresult(self, time)
     }
 }
@@ -59,12 +60,6 @@ pub enum PropagationError {
     NoDenseOutputInSolution,
     #[error("ODE Error: {0}")]
     ODEError(ode::ODEError),
-}
-
-impl<T> From<PropagationError> for SKResult<T> {
-    fn from(e: PropagationError) -> Self {
-        Err(e.into())
-    }
 }
 
 //
@@ -198,7 +193,7 @@ pub fn propagate<const C: usize>(
     stop: &Instant,
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
-) -> SKResult<PropagationResult<C>> {
+) -> Result<PropagationResult<C>> {
     // Duration to end of integration, in seconds
     let x_end: f64 = (*stop - *start).as_seconds();
 
@@ -216,15 +211,18 @@ pub fn propagate<const C: usize>(
                 if (*start >= sinterp.start) && (*stop <= sinterp.stop) {
                     sinterp
                 } else {
-                    &Precomputed::new(start, stop)?
+                    &Precomputed::new(start, stop)
+                        .context("Cannot compute precomputed interpolation data for propagation")?
                 }
             } else if (*stop >= sinterp.start) && (*start <= sinterp.stop) {
                 sinterp
             } else {
-                &Precomputed::new(start, stop)?
+                &Precomputed::new(start, stop)
+                    .context("Cannot compute precomputed interpolation data for propagation")?
             }
         } else {
-            &Precomputed::new(start, stop)?
+            &Precomputed::new(start, stop)
+                .context("Cannot compute precomputed interpolation dat for propagation")?
         }
     };
 
@@ -401,7 +399,7 @@ pub fn propagate<const C: usize>(
                 &odesettings,
             ) {
                 Ok(res) => res,
-                Err(e) => return PropagationError::ODEError(e).into(),
+                Err(e) => return Err(PropagationError::ODEError(e).into()),
             };
 
             Ok(PropagationResult {
@@ -434,17 +432,17 @@ pub fn propagate<const C: usize>(
 pub fn interp_propresult<const C: usize>(
     res: &PropagationResult<C>,
     time: &Instant,
-) -> SKResult<StateType<C>> {
+) -> Result<StateType<C>> {
     if let Some(sol) = &res.odesol {
         if sol.dense.is_some() {
             let x = (time - res.time_start).as_seconds();
             let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)
         } else {
-            PropagationError::NoDenseOutputInSolution.into()
+            Err(PropagationError::NoDenseOutputInSolution.into())
         }
     } else {
-        PropagationError::NoDenseOutputInSolution.into()
+        Err(PropagationError::NoDenseOutputInSolution.into())
     }
 }
 
@@ -460,7 +458,7 @@ mod tests {
     use std::io::{self, BufRead};
 
     #[test]
-    fn test_short_propagate() -> SKResult<()> {
+    fn test_short_propagate() -> Result<()> {
         let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
         let stoptime = starttime + Duration::from_seconds(0.1);
 
@@ -482,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn test_propagate() -> SKResult<()> {
+    fn test_propagate() -> Result<()> {
         let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
         let stoptime = starttime + Duration::from_days(0.25);
 
@@ -511,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn test_interp() -> SKResult<()> {
+    fn test_interp() -> Result<()> {
         let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
         let stoptime = starttime + Duration::from_days(1.0);
 
@@ -547,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn test_state_transition() -> SKResult<()> {
+    fn test_state_transition() -> Result<()> {
         // Check the state transition matrix:
         // Explicitly propagate two slightly different states,
         // separated by "dstate",
@@ -606,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn test_state_transition_drag() -> SKResult<()> {
+    fn test_state_transition_drag() -> Result<()> {
         // Check the state transition matrix:
         // Explicitly propagate two slightly different states,
         // separated by "dstate",
@@ -671,7 +669,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gps() -> SKResult<()> {
+    fn test_gps() -> Result<()> {
         let testvecfile = crate::utils::test::get_testvec_dir()
             .unwrap()
             .join("orbitprop")
@@ -692,7 +690,7 @@ mod tests {
         let times: Vec<crate::Instant> = match io::BufReader::new(file)
             .lines()
             .filter(|x: &Result<String, io::Error>| x.as_ref().unwrap().starts_with('*'))
-            .map(|rline| -> SKResult<crate::Instant> {
+            .map(|rline| -> Result<crate::Instant> {
                 let line = rline.unwrap();
                 let lvals: Vec<&str> = line.split_whitespace().collect();
                 let year: i32 = lvals[1].parse()?;
@@ -719,7 +717,7 @@ mod tests {
                 let rline = &x.as_ref().unwrap()[0..4];
                 rline == satstr
             })
-            .map(|rline| -> SKResult<na::Vector3<f64>> {
+            .map(|rline| -> Result<na::Vector3<f64>> {
                 let line = rline.unwrap();
                 let lvals: Vec<&str> = line.split_whitespace().collect();
                 let px: f64 = lvals[1].parse()?;

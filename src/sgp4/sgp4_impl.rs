@@ -267,8 +267,7 @@ mod tests {
     use super::*;
     use crate::tle::TLE;
     use crate::utils::test;
-    use crate::SKResult;
-    use anyhow::bail;
+    use anyhow::{bail, Result};
     use std::io::BufRead;
 
     #[test]
@@ -286,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn vallado_testvecs() -> SKResult<()> {
+    fn vallado_testvecs() -> Result<()> {
         let testdir = test::get_testvec_dir().unwrap().join("sgp4");
         if !testdir.is_dir() {
             bail!(

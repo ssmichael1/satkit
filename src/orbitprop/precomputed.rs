@@ -3,11 +3,11 @@ use crate::jplephem;
 use crate::types::{Quaternion, Vector3};
 use crate::Duration;
 use crate::Instant;
-use crate::SKResult;
 use crate::SolarSystem;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
 
+use anyhow::Result;
 #[derive(Debug, Clone)]
 pub struct Precomputed {
     pub start: Instant,
@@ -17,7 +17,7 @@ pub struct Precomputed {
 }
 
 impl Precomputed {
-    pub fn new(start: &Instant, stop: &Instant) -> SKResult<Self> {
+    pub fn new(start: &Instant, stop: &Instant) -> Result<Self> {
         let step: f64 = 60.0;
 
         let (pstart, pstop) = match stop > start {
@@ -51,7 +51,7 @@ impl Precomputed {
         })
     }
 
-    pub fn interp(&self, t: &Instant) -> SKResult<InterpType> {
+    pub fn interp(&self, t: &Instant) -> Result<InterpType> {
         if *t < self.start || *t > self.stop {
             anyhow::bail!(
                 "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
