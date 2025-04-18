@@ -687,7 +687,7 @@ mod tests {
         }
         let file: File = File::open(testvecfile.clone())?;
 
-        let times: Vec<crate::Instant> = match io::BufReader::new(file)
+        let times: Vec<crate::Instant> = io::BufReader::new(file)
             .lines()
             .filter(|x: &Result<String, io::Error>| x.as_ref().unwrap().starts_with('*'))
             .map(|rline| -> Result<crate::Instant> {
@@ -701,17 +701,13 @@ mod tests {
                 let sec: f64 = lvals[6].parse()?;
                 Ok(Instant::from_datetime(year, mon, day, hour, min, sec))
             })
-            .collect()
-        {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+            .collect::<Result<Vec<crate::Instant>>>()?;
 
         let file: File = File::open(testvecfile)?;
 
         let satnum: usize = 20;
         let satstr = format!("PG{}", satnum);
-        let pitrf: Vec<na::Vector3<f64>> = match io::BufReader::new(file)
+        let pitrf: Vec<na::Vector3<f64>> = io::BufReader::new(file)
             .lines()
             .filter(|x| {
                 let rline = &x.as_ref().unwrap()[0..4];
@@ -725,11 +721,7 @@ mod tests {
                 let pz: f64 = lvals[3].parse()?;
                 Ok(na::vector![px, py, pz] * 1.0e3)
             })
-            .collect()
-        {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+            .collect::<Result<Vec<na::Vector3<f64>>>>()?;
 
         assert!(times.len() == pitrf.len());
         let pgcrf: Vec<na::Vector3<f64>> = pitrf

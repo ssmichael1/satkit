@@ -85,7 +85,6 @@ impl PySatState {
     ///
     /// Returns:
     ///     None
-
     fn set_gcrf_pos_uncertainty(
         &mut self,
         sigma_cart: &Bound<'_, np::PyArray1<f64>>,
