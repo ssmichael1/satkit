@@ -11,7 +11,7 @@ on:
 
 jobs:
   build_python:
-    name: build python bindings on ${{ matrix.platform || matrix.os }}
+    name: build python bindings on ${{ matrix.os }}
 
     strategy:
       fail-fast: false
