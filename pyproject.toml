@@ -48,7 +48,7 @@ exclude = ["test*", "docs*", "examples*"]
 [tool.cibuildwheel]
 build = ["cp313-*", "cp312-*", "cp311-* cp310-* cp39-* cp38-*"]
 test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
-skip = ["pp*", "*_i686", "*_s390x", "*_aarch64", "*_ppc64le", "*-musllinux*"]
+skip = ["pp*", "*_i686", "*_s390x", "*_ppc64le", "*-musllinux*"]
 
 
 [tool.cibuildwheel.macos]
@@ -69,8 +69,8 @@ test-command = [
 
 
 [tool.cibuildwheel.linux]
+archs = ["native"]
 environment = { PATH = "$PATH:$HOME/.cargo/bin" }
-archs = ["x86_64"]
 before-build = [
     "pip install -U setuptools-rust",
     "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y",
@@ -82,6 +82,7 @@ test-command = [
 ]
 
 [tool.cibuildwheel.windows]
+archs = ["AMD64"]
 environment = { PATH = '$UserProfile\.cargo\bin;$PATH' }
 before-build = [
     "pip install -U setuptools-rust",
@@ -90,7 +91,6 @@ before-build = [
     "rustup override set stable-x86_64-pc-windows-msvc",
     "rustup show",
 ]
-archs = ["AMD64"]
 test-requires = "pytest"
 before-test = [
     "set SATKIT_DATA={package}\\astro-data",
