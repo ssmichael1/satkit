@@ -11,5 +11,10 @@
 
 ## 0.5.6 - 2025-04-6
 
-## Anyhow
+### Anyhow
 - Use "anyhow" crate for error handling, both in core code and in python bindings (it is very nice!)
+
+## 0.5.7 - 2025-04-25
+
+## Linux ARM
+- Include Python binaries for Linux 64-bit ARM
