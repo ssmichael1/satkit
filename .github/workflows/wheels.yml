@@ -41,7 +41,7 @@ jobs:
             data_path: astro-data
             activatestr: source .venv/bin/activate
 
-    runs-on: matrix.os
+    runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v4
 
