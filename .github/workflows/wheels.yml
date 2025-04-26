@@ -17,33 +17,39 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos
-          - ubuntu
-          - windows
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+          - ubuntu-24.04-arm
         include:
-          - os: ubuntu
+          - os: ubuntu-latest
             platform: linux
             testvec_path: satkit-testvecs
             data_path: astro-data
             activatestr: source .venv/bin/activate
-          - os: windows
+          - os: ubuntu-24.04-arm
+            platform: linux
+            testvec_path: satkit-testvecs
+            data_path: astro-data
+            activatestr: source .venv/bin/activate          
+          - os: windows-latest
             testvec_path: satkit-testvecs
             data_path: astro-data
             activatestr: .venv\Scripts\activate
-          - os: macos
+          - os: macos-latest
             testvec_path: satkit-testvecs
             data_path: astro-data
             activatestr: source .venv/bin/activate
 
-    runs-on: ${{ format('{0}-latest', matrix.os) }}
+    runs-on: matrix.os
     steps:
       - uses: actions/checkout@v4
 
       - name: set up python
         uses: actions/setup-python@v5
 
-      - name: set up rust
-        if: matrix.os != 'ubuntu'
+      - name: set up rust on non-linux systems
+        if: matrix.platform != 'linux'
         uses: dtolnay/rust-toolchain@stable
 
       # Try to recover satkit data from cache
@@ -93,7 +99,7 @@ jobs:
           config-file: "{package}/pyproject.toml"
 
       - name: Create sdist
-        if: matrix.os == 'ubuntu'
+        if: matrix.os == 'ubuntu-latest'
         run: |
           python -m venv .venv
           source .venv/bin/activate
