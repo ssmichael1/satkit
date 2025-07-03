@@ -1,6 +1,8 @@
+use anyhow::Context;
 use nalgebra as na;
 use numpy as np;
 use numpy::PyArrayMethods;
+use numpy::PyUntypedArrayMethods;
 use numpy::ToPyArray;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -127,16 +129,31 @@ impl Quaternion {
         v1: np::PyReadonlyArray1<f64>,
         v2: np::PyReadonlyArray1<f64>,
     ) -> PyResult<Self> {
-        let v1 = Vec3::from_row_slice(v1.as_slice()?);
-        let v2 = Vec3::from_row_slice(v2.as_slice()?);
-        Quat::rotation_between(&v1, &v2).map_or_else(
-            || {
-                Err(pyo3::exceptions::PyArithmeticError::new_err(
-                    "Norms are 0 or vectors are 180° apart",
-                ))
-            },
-            |q| Ok(q.into()),
-        )
+        if v1.len() != 3 || v2.len() != 3 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Invalid input. Must be 3-element vectors",
+            ));
+        }
+        let v1 = match v1.is_contiguous() {
+            true => Vec3::from_row_slice(v1.as_slice().context("Cannot convert v1 to 3D vector")?),
+            false => Vec3::from_row_slice(&[
+                *v1.get(0).unwrap(),
+                *v1.get(1).unwrap(),
+                *v1.get(2).unwrap(),
+            ]),
+        };
+        let v2 = match v2.is_contiguous() {
+            true => Vec3::from_row_slice(v2.as_slice().context("Cannot convert vd2 to 3D vector")?),
+            false => Vec3::from_row_slice(&[
+                *v2.get(0).unwrap(),
+                *v2.get(1).unwrap(),
+                *v2.get(2).unwrap(),
+            ]),
+        };
+        let q =
+            Quat::rotation_between(&v1, &v2).context("Norms are 0 or vectors are 180° apart")?;
+
+        Ok(q.into())
     }
 
     /// Return quaternion representing same rotation as input direction cosine matrix (3x3 rotation matrix)
@@ -314,7 +331,7 @@ impl Quaternion {
                 res.into_py_any(py)
             })
         } else if let Ok(v1d) = other.downcast::<np::PyArray1<f64>>() {
-            if v1d.len()? != 3 {
+            if v1d.len() != 3 {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "Invalid rhs.  1D array must be of length 3",
                 ));
