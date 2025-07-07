@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::timezone_utc;
+use pyo3::types::PyTzInfo;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDateTime;
 use pyo3::types::PyDict;
@@ -534,9 +534,10 @@ impl PyInstant {
             let timestamp: f64 = self.as_unixtime();
             let tz = match utc {
                 false => None,
-                true => Some(timezone_utc(py)),
+                true => Some(PyTzInfo::utc(py)),
             };
-            Ok(PyDateTime::from_timestamp(py, timestamp, tz.as_ref())?.into())
+            let tz = tz.as_ref().map(|r| r.as_ref().unwrap());
+            Ok(PyDateTime::from_timestamp(py, timestamp, tz.map(|v| &**v))?.into())
         })
     }
 

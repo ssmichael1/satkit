@@ -166,8 +166,6 @@ type Mat3 = na::Matrix3<f64>;
 ///
 /// See Equation 3.33 of Montenbruck & Gill (referenced above) for
 /// calculation details.
-///
-
 impl Gravity {
     pub fn accel(&self, pos: &Vec3, order: usize) -> Vec3 {
         // This is tedious, but using generics allows for vectors to be
@@ -670,7 +668,6 @@ impl Gravity {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
 

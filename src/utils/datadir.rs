@@ -80,8 +80,6 @@ pub fn set_datadir(d: &Path) -> Result<()> {
 ///
 ///  * anyhow::Result<<std::path::PathBuf>> representing directory
 ///    where files are stored
-///
-
 pub fn datadir() -> Result<PathBuf> {
     let dd = DATADIR_SINGLETON.lock().unwrap();
     let res = dd.get_or_init(|| {
