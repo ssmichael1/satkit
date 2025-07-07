@@ -222,7 +222,14 @@ pub fn sgp4(
                         vdata.add(idx * ntimes * 3),
                         ntimes * 3,
                     );
-                    eint[idx] = e[idx].clone() as i32;
+                    if output_err {
+                        let evals = e.iter().map(|x| x.clone() as i32).collect::<Vec<i32>>();
+                        std::ptr::copy_nonoverlapping(
+                            evals.as_ptr(),
+                            eint.as_mut_ptr().add(idx * ntimes),
+                            ntimes,
+                        )
+                    }
                 }
 
                 //earr.slice_mut(ndarray::s![idx, ..]).assign(&e1);
