@@ -16,5 +16,14 @@
 
 ## 0.5.7 - 2025-04-25
 
-## Linux ARM
+### Linux ARM
 - Include Python binaries for Linux 64-bit ARM
+
+## 0.5.8 - 2025-07-07
+
+### Python fixes
+- Fix issue with quaternion rotation on multiple vectors failing if memory is non-contiguous
+- Fix indexing error with SGP4 when propagating with multiple TLEs
+
+
+
