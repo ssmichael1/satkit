@@ -1,9 +1,7 @@
-/// Unscented Kalman Filter
-///
-/// Uses nalgebra for state and covariance matrices
-///
-///
-//
+//! Unscented Kalman Filter
+//!
+//! Uses nalgebra for state and covariance matrices
+
 
 /// Generic float vector type of fixed size
 type Vector<const T: usize> = nalgebra::SVector<f64, T>;

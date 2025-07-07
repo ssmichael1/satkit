@@ -25,5 +25,7 @@
 - Fix issue with quaternion rotation on multiple vectors failing if memory is non-contiguous
 - Fix indexing error with SGP4 when propagating with multiple TLEs
 
+### Clippy Warnings
+- minor code changes to remove rust clippy warnings
 
 
