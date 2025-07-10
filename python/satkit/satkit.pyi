@@ -177,26 +177,26 @@ class sgp4_gravconst:
     """Gravity constant to use for SGP4 propagation"""
 
     @property
-    def wgs72() -> int:
+    def wgs72(self) -> int:
         """WGS-72"""
 
     @property
-    def wgs72old() -> int:
+    def wgs72old(self) -> int:
         """WGS-72 Old"""
 
     @property
-    def wgs84() -> int:
+    def wgs84(self) -> int:
         """WGS-84"""
 
 class sgp4_opsmode:
     """Ops Mode for SGP4 Propagation"""
 
     @property
-    def afspc() -> int:
+    def afspc(self) -> int:
         """afspc (Air Force Space Command), the default"""
 
     @property
-    def improved() -> int:
+    def improved(self) -> int:
         """Improved"""
 
 class gravmodel:
@@ -278,47 +278,47 @@ class solarsystem:
     """Solar system bodies for which high-precision ephemeris can be computed"""
 
     @property
-    def Mercury() -> int:
+    def Mercury(self) -> int:
         """Mercury"""
 
     @property
-    def Venus() -> int:
+    def Venus(self) -> int:
         """Venus"""
 
     @property
-    def EMB() -> int:
+    def EMB(self) -> int:
         """Earth-Moon Barycenter"""
 
     @property
-    def Mars() -> int:
+    def Mars(self) -> int:
         """Mars"""
 
-    @property
-    def Jupiter() -> int:
+    @property 
+    def Jupiter(self) -> int:
         """Jupter"""
 
     @property
-    def Saturn() -> int:
+    def Saturn(self) -> int:
         """Saturn"""
 
     @property
-    def Uranus() -> int:
+    def Uranus(self) -> int:
         """Uranus"""
 
     @property
-    def Neptune() -> int:
+    def Neptune(self) -> int:
         """Neptune"""
 
     @property
-    def Pluto() -> int:
+    def Pluto(self) -> int:
         """Pluto"""
 
     @property
-    def Moon() -> int:
+    def Moon(self) -> int:
         """Moon"""
 
     @property
-    def Sun() -> int:
+    def Sun(self) -> int:
         """Sun"""
 
 class sgp4error:
@@ -419,28 +419,32 @@ class timescale:
     """
 
     @property
-    def Invalid() -> int:
+    def Invalid(self) -> int:
         """Invalid time scale"""
 
     @property
-    def UTC() -> int:
+    def UTC(self) -> int:
         """Universal Time Coordinate"""
 
-    def TT() -> int:
+    @property
+    def TT(self) -> int:
         """Terrestrial Time"""
 
-    def UT1() -> int:
+    @property
+    def UT1(self) -> int:
         """UT1"""
 
-    def TAI() -> int:
+    @property
+    def TAI(self) -> int:
         """International Atomic Time
         (nice because it is monotonically increasing)
         """
 
-    def GPS() -> int:
+    @property
+    def GPS(self) -> int:
         """Global Positioning System (GPS) time"""
 
-    def TDB() -> int:
+    def TDB(self) -> int:
         """Barycentric Dynamical Time"""
 
 class time:
@@ -603,7 +607,7 @@ class time:
         """
 
     @staticmethod
-    def from_jd(jd: float, scale: timescale = timescale.UTC) -> time:
+    def from_jd(jd: float, scale: timescale = 1) -> time:
         """Return a time object representing input Julian date and time scale
 
         Args:
@@ -648,7 +652,7 @@ class time:
             """
 
     @staticmethod
-    def from_mjd(mjd: float, scale: timescale = timescale.UTC) -> time:
+    def from_mjd(mjd: float, scale: timescale = 1) -> time:
         """Return a time object representing input modified Julian date and time scale
 
         Args:
@@ -772,7 +776,7 @@ class time:
             2023-06-03 02:19:34
         """
 
-    def as_mjd(self, scale: timescale = timescale.UTC) -> float:
+    def as_mjd(self, scale: timescale = 1) -> float:
         """
         Represent time instance as a Modified Julian Date
         with the provided time scale
@@ -780,7 +784,7 @@ class time:
         If no time scale is provided, default is satkit.timescale.UTC
         """
 
-    def as_jd(self, scale: timescale = timescale.UTC) -> float:
+    def as_jd(self, scale: timescale = 1) -> float:
         """
         Represent time instance as Julian Date with
         the provided time scale
@@ -841,51 +845,96 @@ class time:
             2023-06-03 06:19:34
         """
 
-    def __add__(
-        self,
-        other: (
-            duration
-            | npt.ArrayLike[float]
-            | float
-            | list[float]
-            | npt.ArrayLike[duration]
-        ),
-    ) -> time | npt.ArrayLike[time]:
+    @typing.overload
+    def __add__(self, other: duration) -> time:
         """
-        Return an satkit.time object or nunpy array of satkit.time objects
-        representing the input "added to" the current object
-
-        Notes:
-        * Possible inputs and corresponding outputs:
-            *  `float` - return satkit.time object incremented by input number of days
-            * `satkit.duration` - return satkit.time object incremented by duration
-            * `list[float]`  - return numpy array of satkit.time objects, representing
-            an element-wise addition of days to the "self"
-            * `list[duration]` -  reuturn numpy array of satkit.time objects, with each
-            object representing an element-wise addition of "duration" to the "self"
-            * `numpy.array(float)` - return numpy array of satkit.time objects, with each
-            object representing an element-wise addition of days to the "self"
-        """
-
-    def __sub__(
-        self,
-        other: (
-            duration
-            | time
-            | npt.ArrayLoke[float]
-            | npt.ArrayLike[duration]
-            | list[float]
-        ),
-    ) -> time | duration | npt.ArrayLike[time]:
-        """Return an satkit.time object or numpy array of satkit.time objects
-        representing the input "subtracted from" the current object
-
+        Return a time object representing the input duration added to the current time
+        
         Args:
-            other (duration | time | npt.ArrayLike[float] | npt.ArrayLike[duration] | list[float]): duration(s) or time(s) to subtract from the current time
+            other (duration): duration to add to the current time
 
         Returns:
-            time | duration | npt.ArrayLike[time]: If "other" is a duration, output is a time representing the input duration subtracted from the current time.  If "other" is a time, output is a duration representing the difference between the two times.  If "other" is a list of floats, output is a numpy array of satkit.time objects, with each object representing an element-wise subtraction of days from the "self"
+            satkit.time: Time object representing the input duration added to the current time
+
         """
+
+    @typing.overload
+    def __add__(self, other: float) -> time:
+        """
+        Return a time object representing the input number of days added to the current time
+        
+        Args:
+            other (float): number of days to add to the current time
+
+        Returns:
+            satkit.time: Time object representing the input number of days added to the current time
+
+        """
+
+    @typing.overload
+    def __add__(self, other: npt.ArrayLike[duration]) -> npt.ArrayLike[time]:
+        """
+        Return a numpy array of time objects, with each object representing an element-wise addition of duration to the "self" time object
+
+        Args:
+            other (npt.ArrayLike[duration]): array-like structure containing durations to add to the current time
+
+        Returns:
+            npt.ArrayLike[time]: Array of time objects representing the element-wise addition of durations to the current time
+
+        """
+    
+    @typing.overload
+    def __sub__(self, other: duration) -> time:
+        """        
+        Return a time object representing the input duration subtracted from the current time
+        
+        Args:
+            other (duration): duration to subtract from the current time
+
+        Returns:
+            satkit.time: Time object representing the input duration subtracted from the current time
+        
+        """
+
+    @typing.overload
+    def __sub__(self, other: time) -> duration:
+        """
+        Return a duration object representing the difference between the two times
+
+        Args:
+            other (time): time to subtract from the current time
+
+        Returns:
+            satkit.duration: Duration object representing the difference between the two times
+
+        """
+
+    @typing.overload
+    def __sub__(self, other: float) -> time:
+        """
+        Return a time object representing the input number of days subtracted from the current time
+        
+        Args:
+            other (float): number of days to subtract from the current time
+
+        Returns:
+            satkit.time: Time object representing the input number of days subtracted from the current time
+
+        """
+
+    @typing.overload
+    def __sub__(self, other: npt.ArrayLike[float]) -> npt.ArrayLike[time]:
+        """
+        Return a numpy array of time objects, with each object representing an element-wise subtraction of days from the "self" time object
+
+        Args:
+            other (npt.ArrayLike[float]): array-like structure containing days to subtract from the current time
+
+        Returns:
+            npt.ArrayLike[time]: Array of time objects representing the element-wise subtraction of days from the current time
+
+        """ 
 
 class duration:
     """
@@ -936,23 +985,47 @@ class duration:
             satkit.duration: Duration object representing input number of hours
         """
 
-    def __add__(self, other: duration | time) -> duration | time:
-        """Add a duration to either another duration or a time
+    @typing.overload
+    def __add__(self, other: duration) -> duration:
+        """Add a duration to another duration
 
         Args:
-            other (duration | time): duration or time to add to the current duration
+            other (duration): duration to add to the current duration
 
         Returns:
-            duration | time: If "other" is a duration, output is a duration representing
-            the sum, or concatenation, of both durations.  If "other" is a time, output is a
-            time representing the input time plus the duration if "other" is a duration,
-            output is a duration representing the sum, or concatenation, of both durations
-
+            duration: Duration object representing the sum, or concatenation, of both durations
 
         Example:
             >>> print(duration.from_hours(1) + duration.from_minutes(1))
             Duration: 1 hours, 1 minutes, 0.000 seconds
+        """
 
+    @typing.overload
+    def __add__(self, other: float) -> duration:
+        """Add a number of days to the current duration
+
+        Args:
+            other (float): number of days to add to the current duration
+
+        Returns:
+            duration: Duration object representing the input number of days added to the current duration
+
+        Example:
+            >>> print(duration.from_days(1) + 2.5)
+            Duration: 3 days, 0 hours, 0 minutes, 0.000 seconds
+        """
+
+    @typing.overload
+    def __add__(self, other: time) -> time:
+        """Add a duration to a time
+
+        Args:
+            other (time): time to add the current duration to
+
+        Returns:
+            time: Time object representing the input time plus the duration
+
+        Example:
             >>> print(duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
             2023-06-04 13:30:00.000Z
         """
