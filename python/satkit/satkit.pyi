@@ -11,7 +11,7 @@ import numpy as np
 import datetime
 
 from collections.abc import Callable
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Sequence, TypeVar
 
 R = TypeVar("R")
 
@@ -63,7 +63,7 @@ class TLE:
         """
 
     @staticmethod
-    def from_lines(lines: list[str]) -> list[TLE] | TLE:
+    def from_lines(lines: list[str]) -> Sequence[TLE]:
         """Return a list of TLES loaded from input list of lines
 
             If the file contains lines only represent a single TLE, the TLE will
@@ -890,6 +890,18 @@ class time:
         """
 
     @typing.overload
+    def __add__(self, other: list[duration]) -> npt.NDArray[Any]:
+        """
+        Return a numpy array of time objects, with each object representing an element-wise addition of days to the "self" time object
+
+        Args:
+            other (list[duration]): array-like structure containing days to add to the current time
+
+        Returns:
+            npt.ArrayLike[time]: Array of time objects representing the element-wise addition of days to the current time
+        """
+
+    @typing.overload
     def __add__(self, other: npt.NDArray[Any]) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise addition of duration to the "self" time object
@@ -954,10 +966,56 @@ class time:
 
         """
 
+    @typing.overload
+    def __sub__(self, other: list[duration]) -> npt.NDArray[Any]:
+        """
+        Return a numpy array of time objects, with each object representing an element-wise subtraction of duration from the "self" time object
+
+        Args:
+            other (list[duration]): array-like structure containing durations to subtract from the current time
+
+        Returns:
+            npt.ArrayLike[time]: Array of time objects representing the element-wise subtraction of durations from the current time
+        """
+
+    @typing.overload
+    def __sub__(self, other: list[time]) -> npt.NDArray[Any]:
+        """
+        Return a numpy array of duration objects, with each object representing an element-wise subtraction of time from the "self" time object
+
+        Args:
+            other (list[time]): array-like structure containing times to subtract from the current time
+
+        Returns:
+            npt.ArrayLike[duration]: Array of duration objects representing the element-wise subtraction of times from the current time
+        """
+
 class duration:
     """
-    Representation of a time duration
+    Representation of a duration, or interval of time
     """
+
+    def __init__(self, **kwargs):
+        """Create a duration object representing input time duration
+
+        Args:
+            days (float, optional): Number of days, default is 0
+            hours (float, optional): Number of hours, default is 0
+            minutes (float, optional): Number of minutes, default is 0
+            seconds (float, optional): Number of seconds, default is 0.0
+            microseconds(float, optional): Number of microseconds, default is 0.0
+
+        Notes:
+            * If no arguments are passed in, the created object represents a duration of 0 seconds
+
+        Returns:
+            satkit.duration: Duration object representing input time duration
+
+        Example:
+            >>> print(satkit.duration(days=1, hours=2, minutes=3, seconds=4.5))
+            Duration: 1 days, 2 hours, 3 minutes, 4.500 seconds
+
+        """
 
     @staticmethod
     def from_days(d: float) -> duration:
