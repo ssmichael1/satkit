@@ -1139,6 +1139,7 @@ class duration:
             Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
         """
 
+    @property
     def days(self) -> float:
         """Floating point number of days represented by duration
 
@@ -1148,6 +1149,7 @@ class duration:
         A day is defined as 86,400 seconds
         """
 
+    @property
     def hours(self) -> float:
         """Floating point number of hours represented by duration
 
@@ -1155,6 +1157,7 @@ class duration:
             float: Floating point number of hours represented by duration
         """
 
+    @property
     def minutes(self) -> float:
         """Floating point number of minutes represented by duration
 
@@ -1162,6 +1165,7 @@ class duration:
             float: Floating point number of minutes represented by duration
         """
 
+    @property
     def seconds(self) -> float:
         """Floating point number of seconds represented by duration
 
