@@ -151,7 +151,11 @@ impl std::fmt::Display for Duration {
             if self.usec > 60_000_000 {
                 write!(f, "{} minutes ", self.usec / 60_000_000)?;
             }
-            write!(f, "{:.6} seconds", self.usec as f64 / 1_000_000.0)?;
+            write!(
+                f,
+                "{:.6} seconds",
+                (self.usec % 60_000_000) as f64 / 1_000_000.0
+            )?;
         }
         Ok(())
     }

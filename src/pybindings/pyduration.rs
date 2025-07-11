@@ -196,6 +196,7 @@ impl PyDuration {
     ///
     /// Returns:
     ///     float: Duration in days
+    #[getter]
     fn days(&self) -> f64 {
         self.0.as_days()
     }
@@ -204,6 +205,7 @@ impl PyDuration {
     ///
     /// Returns:
     ///     float: Duration in seconds
+    #[getter]
     fn seconds(&self) -> f64 {
         self.0.as_seconds()
     }
@@ -212,6 +214,7 @@ impl PyDuration {
     ///
     /// Returns:
     ///     float: Duration in minutes
+    #[getter]
     fn minutes(&self) -> f64 {
         self.0.as_minutes()
     }
@@ -220,6 +223,7 @@ impl PyDuration {
     ///
     /// Returns:
     ///     float: Duration in hours
+    #[getter]
     fn hours(&self) -> f64 {
         self.0.as_hours()
     }

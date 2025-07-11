@@ -36,8 +36,8 @@ def update_datafiles(**kwargs):
     """
 
 def datadir() -> str:
-    """ Return directory currently used to hold necessary data files for the directory
-  
+    """Return directory currently used to hold necessary data files for the directory
+
 
     Data directory is 1st of following directories search that contains
     the data files listed in "update_datafiles"
@@ -45,11 +45,11 @@ def datadir() -> str:
     * MacOS:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
         2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is location of compiled python satkit library
-        3. ``$HOME/LIBRARY/Application\ Support/satkit-data``
+        3. ``$HOME/LIBRARY/Application Support/satkit-data``
         4. ``$HOME/.astro-data``
         5. ``$HOME``
         6. ``/usr/share/astro-data``
-        7. ``/Library/Application\ Support/astro-data``
+        7. ``/Library/Application Support/astro-data``
 
     * Linux:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
@@ -67,21 +67,21 @@ def datadir() -> str:
 
 def githash() -> str:
     """Return git hash of this satkit build
-    
+
     Returns:
         str: Git hash of this satkit build
     """
 
 def build_date() -> str:
     """Return build date of this satkit library as a string
-    
+
     Returns:
         str: Build date of this satkit library
     """
 
 def version() -> str:
     """Return version of this satkit library as a string
-    
+
     Returns:
         str: Version of this satkit library
     """
