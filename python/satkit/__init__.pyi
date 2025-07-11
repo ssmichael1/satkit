@@ -7,6 +7,7 @@ from . import sun
 from . import density
 from . import utils
 from . import planets
+from ._version import __version__
 
 __all__ = [
     "time",
@@ -37,4 +38,5 @@ __all__ = [
     "propresult",
     "propstats",
     "satstate",
+    "__version__",
 ]

@@ -139,7 +139,10 @@ def sgp4(
     tle: TLE | list[TLE],
     tm: time | list[time] | npt.ArrayLike,
     **kwargs,
-) -> tuple[npt.ArrayLike, npt.ArrayLike]:
+) -> (
+    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+    | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], list[sgp4error]]
+):
     """SGP-4 propagator for TLE
 
     Note:
@@ -158,11 +161,15 @@ def sgp4(
         gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
         opsmode (satkit.sgp4_opsmode): opsmode.afspc (Air Force Space Command) or opsmode.improved.  Default is opsmode.afspc
         errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
+                        (this is likely rarely needed, but can be useful for debugging)
 
     Returns:
         tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: position and velocity
         in meters and meters/second, respectively,
         in the TEME frame at each of the "Ntime" input times and each of the "Ntle" tles
+
+        Additional return value if errflag is True:
+        list[sgp4error]: list of errors for each TLE and time output, if errflag is True
 
     Example:
         >>> lines = [
