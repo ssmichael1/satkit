@@ -139,10 +139,7 @@ def sgp4(
     tle: TLE | list[TLE],
     tm: time | list[time] | npt.ArrayLike,
     **kwargs,
-) -> (
-    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
-    | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], list[sgp4error]]
-):
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """SGP-4 propagator for TLE
 
     Note:
@@ -162,6 +159,7 @@ def sgp4(
         opsmode (satkit.sgp4_opsmode): opsmode.afspc (Air Force Space Command) or opsmode.improved.  Default is opsmode.afspc
         errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
                         (this is likely rarely needed, but can be useful for debugging)
+                        (this may also flag a typing error ... I can't figure out how to get rid of it)
 
     Returns:
         tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: position and velocity
@@ -278,7 +276,7 @@ def gravity(
 
 def gravity_and_partials(
     pos: itrfcoord | npt.NDArray[np.float64], **kwargs
-) -> typing.Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Gravity and partial derivatives of gravity with respect to Cartesian coordinates
 
     Args:
@@ -687,7 +685,7 @@ class time:
             satkit.time: Time object representing input modified Julian date and time scale
         """
 
-    def as_date(self) -> typing.Tuple[int, int, int]:
+    def as_date(self) -> tuple[int, int, int]:
         """Return tuple representing as UTC Gegorian date of the time object.
 
         Returns:
@@ -730,7 +728,7 @@ class time:
 
     def as_gregorian(
         self, scale=timescale.UTC
-    ) -> typing.Tuple[int, int, int, int, int, float]:
+    ) -> tuple[int, int, int, int, int, float]:
         """Return tuple representing as UTC Gegorian date and time of the time object.
 
         Args:
@@ -1297,7 +1295,7 @@ class quaternion:
             npt.ArrayLike[np.float64]: 3x3 rotation matrix representing equivalent rotation
         """
 
-    def as_euler(self) -> typing.Tuple[float, float, float]:
+    def as_euler(self) -> tuple[float, float, float]:
         """Return equivalent rotation angle represented as rotation angles: ("roll", "pitch", "yaw") in radians:
 
         Returns:
@@ -1425,7 +1423,7 @@ class kepler:
 
     def to_pv(
         self,
-    ) -> typing.Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """Convert Keplerian element set to position and velocity vectors
 
         Returns:
@@ -1567,7 +1565,7 @@ class itrfcoord:
         """Altitude above ellipsoid, in meters"""
 
     @property
-    def geodetic_rad(self) -> typing.Tuple[float, float, float]:
+    def geodetic_rad(self) -> tuple[float, float, float]:
         """Geodetic position in radians
 
         Returns:
@@ -1575,7 +1573,7 @@ class itrfcoord:
         """
 
     @property
-    def geodetic_deg(self) -> typing.Tuple[float, float, float]:
+    def geodetic_deg(self) -> tuple[float, float, float]:
         """Geodetic position in degrees
 
         Returns:
@@ -1606,7 +1604,7 @@ class itrfcoord:
             satkit.quaternion: Quaternion representiong rotation from East-North-Up (ENU) to ITRF at this location
         """
 
-    def geodesic_distance(self, other: itrfcoord) -> typing.Tuple[float, float, float]:
+    def geodesic_distance(self, other: itrfcoord) -> tuple[float, float, float]:
         """Use Vincenty formula to compute geodesic distance:
         https://en.wikipedia.org/wiki/Vincenty%27s_formulae
 
@@ -1901,7 +1899,7 @@ class propresult:
         self, time: time, output_phi: bool = False
     ) -> (
         npt.NDArray[np.float64]
-        | typing.Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+        | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
     ):
         """Interpolate state at given time
 
@@ -1911,7 +1909,7 @@ class propresult:
                 Default is False
 
         Returns:
-            npt.ArrayLike[np.float64] | typing.Tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: 6-element vector representing state at given time. if output_phi, also output 6x6 state transition matrix at given time
+            npt.ArrayLike[np.float64] | tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: 6-element vector representing state at given time. if output_phi, also output 6x6 state transition matrix at given time
         """
 
 class satproperties_static:
