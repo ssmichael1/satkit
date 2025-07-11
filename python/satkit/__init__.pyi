@@ -1,6 +1,5 @@
 from .satkit import *
 
-
 from . import jplephem
 from . import frametransform
 from . import moon
@@ -17,7 +16,7 @@ __all__ = [
     "sgp4",
     "gravmodel",
     "gravity",
-    "nrlmsise00",
+    "density",
     "solarsystem",
     "TLE",
     "itrfcoord",
@@ -32,10 +31,10 @@ __all__ = [
     "satstate",
     "density",
     "utils",
-    "propagate", 
+    "propagate",
     "propsettings",
     "satproperties_static",
-    "propresult", 
+    "propresult",
     "propstats",
     "satstate",
 ]

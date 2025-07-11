@@ -11,7 +11,7 @@ import numpy as np
 import datetime
 
 from collections.abc import Callable
-from typing import Any, Generic, Sequence, TypeVar
+from typing import Any, Generic, TypeVar
 
 R = TypeVar("R")
 
@@ -63,7 +63,7 @@ class TLE:
         """
 
     @staticmethod
-    def from_lines(lines: list[str]) -> Sequence[TLE]:
+    def from_lines(lines: list[str]) -> list[TLE] | TLE:
         """Return a list of TLES loaded from input list of lines
 
             If the file contains lines only represent a single TLE, the TLE will
@@ -192,16 +192,16 @@ def sgp4(
 class sgp4_gravconst:
     """Gravity constant to use for SGP4 propagation"""
 
-    @property
-    def wgs72(self) -> int:
+    @static_property
+    def wgs72(self) -> sgp4_gravconst:
         """WGS-72"""
 
-    @property
-    def wgs72old(self) -> int:
+    @static_property
+    def wgs72old(self) -> sgp4_gravconst:
         """WGS-72 Old"""
 
-    @property
-    def wgs84(self) -> int:
+    @static_property
+    def wgs84(self) -> sgp4_gravconst:
         """WGS-84"""
 
 class sgp4_opsmode:
@@ -294,78 +294,78 @@ class solarsystem:
     """Solar system bodies for which high-precision ephemeris can be computed"""
 
     @static_property
-    def Mercury(self) -> int:
+    def Mercury(self) -> solarsystem:
         """Mercury"""
 
     @static_property
-    def Venus(self) -> int:
+    def Venus(self) -> solarsystem:
         """Venus"""
 
     @static_property
-    def EMB(self) -> int:
+    def EMB(self) -> solarsystem:
         """Earth-Moon Barycenter"""
 
     @static_property
-    def Mars(self) -> int:
+    def Mars(self) -> solarsystem:
         """Mars"""
 
     @static_property
-    def Jupiter(self) -> int:
-        """Jupter"""
+    def Jupiter(self) -> solarsystem:
+        """Jupiter"""
 
     @static_property
-    def Saturn(self) -> int:
+    def Saturn(self) -> solarsystem:
         """Saturn"""
 
-    @property
-    def Uranus(self) -> int:
+    @static_property
+    def Uranus(self) -> solarsystem:
         """Uranus"""
 
-    @property
-    def Neptune(self) -> int:
+    @static_property
+    def Neptune(self) -> solarsystem:
         """Neptune"""
 
-    @property
-    def Pluto(self) -> int:
+    @static_property
+    def Pluto(self) -> solarsystem:
         """Pluto"""
 
-    @property
-    def Moon(self) -> int:
+    @static_property
+    def Moon(self) -> solarsystem:
         """Moon"""
 
-    @property
-    def Sun(self) -> int:
+    @static_property
+    def Sun(self) -> solarsystem:
         """Sun"""
 
 class sgp4error:
     """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""
 
     @static_property
-    def success(self) -> int:
+    def success(self) -> sgp4error:
         """Success"""
 
     @static_property
-    def eccen(self) -> int:
+    def eccen(self) -> sgp4error:
         """Eccentricity < 0 or > 1"""
 
     @static_property
-    def mean_motion(self) -> int:
+    def mean_motion(self) -> sgp4error:
         """Mean motion (revs / day) < 0"""
 
     @static_property
-    def perturb_eccen(self) -> int:
+    def perturb_eccen(self) -> sgp4error:
         """Perturbed eccentricity < 0 or > 1"""
 
     @static_property
-    def semi_latus_rectum(self) -> int:
+    def semi_latus_rectum(self) -> sgp4error:
         """Semi-Latus Rectum < 0"""
 
     @static_property
-    def unused(self) -> int:
+    def unused(self) -> sgp4error:
         """Unused, but in base code, so keeping for completeness"""
 
     @static_property
-    def orbit_decay(self) -> int:
+    def orbit_decay(self) -> sgp4error:
         """Orbit decayed"""
 
 class weekday:
@@ -384,31 +384,31 @@ class weekday:
     """
 
     @static_property
-    def Sunday(self) -> int:
+    def Sunday(self) -> weekday:
         """Sunday"""
 
     @static_property
-    def Monday(self) -> int:
+    def Monday(self) -> weekday:
         """Monday"""
 
     @static_property
-    def Tuesday(self) -> int:
+    def Tuesday(self) -> weekday:
         """Tuesday"""
 
     @static_property
-    def Wednesday(self) -> int:
+    def Wednesday(self) -> weekday:
         """Wednesday"""
 
     @static_property
-    def Thursday(self) -> int:
+    def Thursday(self) -> weekday:
         """Thursday"""
 
     @static_property
-    def Friday(self) -> int:
+    def Friday(self) -> weekday:
         """Friday"""
 
     @static_property
-    def Saturday(self) -> int:
+    def Saturday(self) -> weekday:
         """Saturday"""
 
 class timescale:
