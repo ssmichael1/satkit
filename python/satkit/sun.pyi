@@ -56,28 +56,6 @@ def pos_gcrf(
     From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
     """
 
-@typing.overload
-def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
-    """
-    Sun position in the Geocentric Celestial Reference Frame (GCRF)
-
-    Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated
-    from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
-
-    Input:
-
-    time:  satkit.time object representing time
-            at which to compute position
-
-    Output:
-
-    3-element numpy array representing sun position in GCRF frame
-    at given time[s].  Units are meters
-
-
-    From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
-
-    """
 
 @typing.overload
 def pos_mod(time: satkit.time) -> npt.NDArray[np.float64]:

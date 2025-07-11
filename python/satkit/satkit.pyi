@@ -906,6 +906,51 @@ class time:
             npt.ArrayLike[time]: Array of time objects representing the element-wise addition of days to the current time
         """
 
+
+    def __le__(self, other: time) -> bool:
+        """
+        Compare two time objects for less than or equal to
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is less than or equal to "other" time, False otherwise
+        """
+
+    def __lt__(self, other: time) -> bool:
+        """
+        Compare two time objects for less than
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is less than "other" time, False otherwise
+        """
+
+    def __ge__(self, other: time) -> bool:
+        """
+        Compare two time objects for greater than or equal to
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is greater than or equal to "other" time, False otherwise
+        """
+
+    def __gt__(self, other: time) -> bool:
+        """
+        Compare two time objects for greater than
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is greater than "other" time, False otherwise
+        """
+
     @typing.overload
     def __add__(self, other: npt.NDArray[Any]) -> npt.NDArray[Any]:
         """
