@@ -82,8 +82,8 @@ class TestTime:
         Test duration conversion
         """
         d = sk.duration.from_seconds(86400)
-        assert d.seconds() == 86400
-        assert d.days() == 1.0
+        assert d.seconds == 86400
+        assert d.days == 1.0
 
     def test_time_diff(self):
         """
@@ -92,7 +92,7 @@ class TestTime:
         t1 = sk.time(2021, 1, 1, 0, 0, 0)
         t2 = sk.time(2021, 1, 2, 0, 0, 0)
         d = t2 - t1
-        assert d.days() == 1.0
+        assert d.days == 1.0
 
     def test_time_add(self):
         """
@@ -182,7 +182,7 @@ class TestJPLEphem:
             lines = fd.readlines()
 
         # Function to convert integer index to solar system body
-        def int_to_ss(ix: int):
+        def int_to_ss(ix: int) -> sk.solarsystem:
             if ix == 0:
                 return sk.solarsystem.Mercury
             elif ix == 1:
@@ -205,6 +205,8 @@ class TestJPLEphem:
                 return sk.solarsystem.Moon
             elif ix == 10:
                 return sk.solarsystem.Sun
+            else:
+                raise ValueError(f"Unknown solar system body index: {ix}")
 
         # Go through the test vectors
         # each test vecxtor is a line in the file

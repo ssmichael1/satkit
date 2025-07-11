@@ -11,7 +11,7 @@ import numpy as np
 import datetime
 
 from collections.abc import Callable
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, Optional
 
 R = TypeVar("R")
 
@@ -167,7 +167,7 @@ def sgp4(
         in the TEME frame at each of the "Ntime" input times and each of the "Ntle" tles
 
         Additional return value if errflag is True:
-        list[sgp4error]: list of errors for each TLE and time output, if errflag is True
+        list[sgp4_error]: list of errors for each TLE and time output, if errflag is True
 
     Example:
         >>> lines = [
@@ -342,35 +342,35 @@ class solarsystem:
     def Sun(self) -> solarsystem:
         """Sun"""
 
-class sgp4error:
+class sgp4_error:
     """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""
 
     @static_property
-    def success(self) -> sgp4error:
+    def success(self) -> sgp4_error:
         """Success"""
 
     @static_property
-    def eccen(self) -> sgp4error:
+    def eccen(self) -> sgp4_error:
         """Eccentricity < 0 or > 1"""
 
     @static_property
-    def mean_motion(self) -> sgp4error:
+    def mean_motion(self) -> sgp4_error:
         """Mean motion (revs / day) < 0"""
 
     @static_property
-    def perturb_eccen(self) -> sgp4error:
+    def perturb_eccen(self) -> sgp4_error:
         """Perturbed eccentricity < 0 or > 1"""
 
     @static_property
-    def semi_latus_rectum(self) -> sgp4error:
+    def semi_latus_rectum(self) -> sgp4_error:
         """Semi-Latus Rectum < 0"""
 
     @static_property
-    def unused(self) -> sgp4error:
+    def unused(self) -> sgp4_error:
         """Unused, but in base code, so keeping for completeness"""
 
     @static_property
-    def orbit_decay(self) -> sgp4error:
+    def orbit_decay(self) -> sgp4_error:
         """Orbit decayed"""
 
 class weekday:
@@ -1321,6 +1321,7 @@ class quaternion:
             npt.ArrayLike[np.float64]: 3-element array representing the axis of rotation as a unit vector
         """
 
+    @property
     def conj(self) -> quaternion:
         """Return conjugate or inverse of the rotation
 
@@ -1328,6 +1329,7 @@ class quaternion:
             satkit.quaternion: Conjugate or inverse of the rotation
         """
 
+    @property
     def conjugate(self) -> quaternion:
         """Return conjugate or inverse of the rotation
 
@@ -1464,6 +1466,30 @@ class kepler:
     @property
     def period(self) -> float:
         """Orbital period, seconds"""
+
+    @property
+    def a(self) -> float:
+        """Semi-major axis, meters"""
+
+    @property
+    def eccen(tricity) -> float:
+        """Eccentricity, unitless"""
+
+    @property
+    def inclination(self) -> float:
+        """Inclination, radians"""
+
+    @property
+    def raan(self) -> float:
+        """Right ascension of ascending node, radians"""
+
+    @property
+    def nu(self) -> float:
+        """True anomaly, radians"""
+
+    @property
+    def w(self) -> float:
+        """Argument of perigee, radians"""
 
     @staticmethod
     def from_pv(pos: npt.NDArray[np.float64], vel: npt.NDArray[np.float64]) -> kepler:
@@ -1608,6 +1634,16 @@ class itrfcoord:
             satkit.quaternion: Quaternion representiong rotation from East-North-Up (ENU) to ITRF at this location
         """
 
+    def __sub__(self, other: itrfcoord) -> npt.NDArray[np.float64]:
+        """Subtract another ITRF coordinate from this one
+
+        Args:
+            other (itrfcoord): Other ITRF coordinate to subtract
+
+        Returns:
+            npt.NDArray[np.float64]: 3-element numpy array representing the difference in meters between the two ITRF coordinates
+        """
+
     def geodesic_distance(self, other: itrfcoord) -> tuple[float, float, float]:
         """Use Vincenty formula to compute geodesic distance:
         https://en.wikipedia.org/wiki/Vincenty%27s_formulae
@@ -1735,7 +1771,7 @@ class satstate:
         """
 
     @property
-    def pos_gcrf(self) -> npt.NDArray[np.float64]:
+    def pos(self) -> npt.NDArray[np.float64]:
         """state position in meters in GCRF frame
 
         Returns:
@@ -1743,7 +1779,7 @@ class satstate:
         """
 
     @property
-    def vel_gcrf(self) -> npt.NDArray[np.float64]:
+    def vel(self) -> npt.NDArray[np.float64]:
         """Return this state velocity in meters / second in GCRF
 
         Returns:
@@ -2040,7 +2076,9 @@ class propsettings:
         If not needed, there is a small computational advantage if set to False
         """
 
-    def precompute_terms(self, start: time, stop: time, step: duration):
+    def precompute_terms(
+        self, start: time, stop: time, step: Optional[duration] = None
+    ):
         """Precompute terms for fast interpolation of state between start and stop times
 
         This can be used, for example, to compute sun and moon positions only once if propagating many satellites over the same time period
