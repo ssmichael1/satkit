@@ -10,7 +10,7 @@ import numpy as np
 import satkit
 
 @typing.overload
-def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
+def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
@@ -34,8 +34,8 @@ def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
 
 @typing.overload
 def pos_gcrf(
-    time: npt.ArrayLike[satkit.time] | list[satkit.time],
-) -> npt.ArrayLike[np.float64]:
+    time: npt.ArrayLike | list[satkit.time],
+) -> npt.NDArray[np.float64]:
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
@@ -57,7 +57,7 @@ def pos_gcrf(
     """
 
 @typing.overload
-def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
+def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
@@ -80,7 +80,7 @@ def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
     """
 
 @typing.overload
-def pos_mod(time: satkit.time) -> npt.ArrayLike[np.float64]:
+def pos_mod(time: satkit.time) -> npt.NDArray[np.float64]:
     """
     Sun position in the Mean-of-Date Frame
 
@@ -102,8 +102,8 @@ def pos_mod(time: satkit.time) -> npt.ArrayLike[np.float64]:
 
 @typing.overload
 def pos_mod(
-    time: npt.ArrayLike[satkit.time] | list[satkit.time],
-) -> npt.ArrayLike[np.float64]:
+    time: npt.ArrayLike | list[satkit.time],
+) -> npt.NDArray[np.float64]:
     """
     Sun position in the Mean-of-Date Frame
 
@@ -160,18 +160,20 @@ def rise_set(
 
     """
 
-def shadowfunc(sunpos: npt.ArrayLike[float], satpos: npt.ArrayLike[float]) -> float:
+def shadowfunc(
+    sunpos: npt.NDArray[np.float64], satpos: npt.NDArray[np.float64]
+) -> float:
     """
     Is satellite in Earth shadow given sun position
-    
+
     Args:
         sunpos: geocentric Sun position, meters
-        satpos: geocentric satellite position, meters, 
+        satpos: geocentric satellite position, meters,
 
     Notes:
     * See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
 
     Returns:
         (float) : number in range [0,1] indication no sun or full sun (no occlusion) hitting satellite
-    
+
     """

@@ -29,3 +29,11 @@
 - minor code changes to remove rust clippy warnings
 
 
+## 0.5.9 - 2025-07-10
+
+### Python typing fixes
+- Python typing fixes, too many to enumerate
+
+### Python duration casting
+- Python binding duration casting (e.g., seconds, minutes, hours, days) are now properties, not function calls, e.g. d.seconds instead of d.seconds()
+

@@ -10,7 +10,7 @@ import numpy as np
 import satkit
 
 @typing.overload
-def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
+def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
     """
     Approximate Moon position in the GCRF Frame
 
@@ -18,7 +18,7 @@ def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
 
     Input:
 
-    time:  satkit.time object, 
+    time:  satkit.time object,
     Output:
 
     3-element numpy array representing moon position in GCRF frame
@@ -27,11 +27,11 @@ def pos_gcrf(time: satkit.time) -> npt.ArrayLike[np.float64]:
     Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
     and 1275 km in range
     """
-    
+
 @typing.overload
 def pos_gcrf(
-    time: npt.ArrayLike[satkit.time]|list[satkit.time]
-             ) -> npt.ArrayLike[np.float64]:
+    time: npt.ArrayLike | list[satkit.time],
+) -> npt.NDArray[np.float64]:
     """
     Approximate Moon position in the GCRF Frame
 
