@@ -1,9 +1,9 @@
 use pyo3::prelude::*;
-use pyo3::types::PyTzInfo;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDateTime;
 use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
+use pyo3::types::PyTzInfo;
 use pyo3::IntoPyObjectExt;
 
 use crate::{Instant, TimeScale, Weekday};
@@ -729,84 +729,30 @@ impl PyInstant {
         }
     }
 
-    /// Check for equality
-    ///
-    /// Args:
-    ///     other (satkit.time): Time object to compare
-    ///
-    /// Returns:
-    ///     bool: True if equal, False otherwise
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<Self>() {
-            let tm2 = other.extract::<Self>().unwrap();
-            Ok(self.0 == tm2.0)
-        } else {
-            Ok(false)
-        }
+    // Comparison operators are below
+
+    fn __le__(&self, other: &Self) -> bool {
+        self.0 <= other.0
     }
 
-    /// Less than comparison
-    ///
-    /// Args:
-    ///     other (satkit.time): Time object to compare
-    ///
-    /// Returns:
-    ///     bool: True if less than, False otherwise
-    fn __lt__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<Self>() {
-            let tm2 = other.extract::<Self>().unwrap();
-            Ok(self.0 < tm2.0)
-        } else {
-            Ok(false)
-        }
+    fn __ge__(&self, other: &Self) -> bool {
+        self.0 >= other.0
     }
 
-    /// Less than or equal comparison
-    ///
-    /// Args:
-    ///     other (satkit.time): Time object to compare
-    ///
-    /// Returns:
-    ///     bool: True if less than or equal, False otherwise
-    fn __le__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<Self>() {
-            let tm2 = other.extract::<Self>().unwrap();
-            Ok(self.0 <= tm2.0)
-        } else {
-            Ok(false)
-        }
+    fn __lt__(&self, other: &Self) -> bool {
+        self.0 < other.0
     }
 
-    /// Greater than comparison
-    ///
-    /// Args:
-    ///     other (satkit.time): Time object to compare
-    ///
-    /// Returns:
-    ///     bool: True if greater than, False otherwise
-    fn __gt__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<Self>() {
-            let tm2 = other.extract::<Self>().unwrap();
-            Ok(self.0 > tm2.0)
-        } else {
-            Ok(false)
-        }
+    fn __gt__(&self, other: &Self) -> bool {
+        self.0 > other.0
     }
 
-    /// Greater than or equal comparison
-    ///
-    /// Args:
-    ///     other (satkit.time): Time object to compare
-    ///
-    /// Returns:
-    ///     
-    fn __ge__(&self, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if other.is_instance_of::<Self>() {
-            let tm2 = other.extract::<Self>().unwrap();
-            Ok(self.0 >= tm2.0)
-        } else {
-            Ok(false)
-        }
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.0 != other.0
     }
 
     ///
