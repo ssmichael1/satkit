@@ -37,3 +37,8 @@
 ### Python duration casting
 - Python binding duration casting (e.g., seconds, minutes, hours, days) are now properties, not function calls, e.g. d.seconds instead of d.seconds()
 
+
+## 0.6.1 - 2025-07-12
+
+### Python comparison operators
+- Add complete set of comparison operators for python bindings of time and duration
