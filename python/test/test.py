@@ -81,9 +81,33 @@ class TestTime:
         """
         Test duration conversion
         """
-        d = sk.duration.from_seconds(86400)
-        assert d.seconds == 86400
-        assert d.days == 1.0
+        d1 = sk.duration.from_seconds(86400)
+        assert d1.seconds == 86400
+        assert d1.days == 1.0
+
+        d2 = sk.duration.from_days(1)
+        assert d1 == d2
+        assert d1 >= d2
+        assert d1 <= d2
+        assert d1 + d1 > d2
+        assert d1 - d1 == sk.duration.from_seconds(0)
+        assert d1 - sk.duration.from_seconds(43200) == sk.duration.from_seconds(43200)
+        assert d2 < d1 + d1
+        assert d1 != d2 + d1
+        assert d1 < d1 + d2
+        assert d1 + d2 > d1
+
+    def test_comparison_operators(self):
+
+        t1 = sk.time(2021, 1, 1, 0, 0, 0)
+        t2 = sk.time(2021, 1, 1, 0, 0, 0)
+        d = sk.duration.from_days(1)
+        assert t1 == t2
+        assert t1 + d > t2
+        assert t1 - d < t2
+        assert t1 >= t2
+        assert t1 <= t2
+        assert t1 != sk.time(2020, 12, 31, 0, 0, 0)
 
     def test_time_diff(self):
         """
@@ -628,11 +652,11 @@ class TestHighPrecisionPropagation:
         [pitrf, timearr] = read_sp3file(fname)
         pgcrf = np.stack(
             np.fromiter(
-                (q * p for q, p in zip(sk.frametransform.qitrf2gcrf(timearr), pitrf)),
+                (q * p for q, p in zip(sk.frametransform.qitrf2gcrf(timearr), pitrf)),  # type: ignore
                 list,
-            ),
+            ),  # type: ignore
             axis=0,
-        )
+        )  # type: ignore
         settings = sk.propsettings()
 
         # Determined by orbitprop_gps_fit.py
@@ -642,7 +666,7 @@ class TestHighPrecisionPropagation:
 
         # Values for craoverm and velocity come from orbitprop_gps_fit.py
         satprops = sk.satproperties_static()
-        satprops.craoverm = fitparam[3]
+        satprops.craoverm = fitparam[3]  # type: ignore
 
         res = sk.propagate(
             np.concatenate((pgcrf[0, :], fitparam[0:3])),
@@ -674,7 +698,7 @@ class TestSatState:
         state2 = satstate.propagate(time + sk.duration.from_hours(3.5))
         h = np.cross(state2.pos, state2.vel)
         rz = -1.0 / np.linalg.norm(state2.pos) * (state2.qgcrf2lvlh * state2.pos)
-        ry = -1.0 / np.linalg.norm(h) * (state2.qgcrf2lvlh * h)
+        ry = -1.0 / np.linalg.norm(h) * (state2.qgcrf2lvlh * h)  # type: ignore
         rx = 1.0 / np.linalg.norm(state2.vel) * (state2.qgcrf2lvlh * state2.vel)
 
         # Since p & v are not quite orthoginal, we allow for more tolerance
@@ -711,7 +735,7 @@ class TestSGP4:
             sk.time(2024, 1, 15) + sk.duration.from_seconds(x * 10) for x in range(100)
         ]
         [p, v] = sk.sgp4(tles, tm)
-        [p2, v2] = sk.sgp4(tles[2], tm)
+        [p2, v2] = sk.sgp4(tles[2], tm)  # type: ignore
         # Verify that propagating multiple TLEs matches propagation of a single TLE
         assert p2 == pytest.approx(np.squeeze(p[2, :, :]))
         assert v2 == pytest.approx(np.squeeze(v[2, :, :]))
@@ -733,7 +757,7 @@ class TestSGP4:
         lines = [l[0:69] for l in lines]
 
         tles = sk.TLE.from_lines(lines)
-        for tle in tles:
+        for tle in tles:  # type: ignore
             fname = f"{basedir}{os.path.sep}{tle.satnum:05}.e"
             with open(fname, "r") as fh:
                 testvecs = fh.readlines()
@@ -749,7 +773,7 @@ class TestSGP4:
                     continue
                 time = tle.epoch + sk.duration.from_seconds(vals[0])
                 try:
-                    [p, v, eflag] = sk.sgp4(
+                    [p, v, eflag] = sk.sgp4(  # type: ignore
                         tle,
                         time,
                         opsmode=sk.sgp4_opsmode.afspc,

@@ -192,6 +192,31 @@ impl PyDuration {
         Self(Duration::from_seconds(self.0.as_seconds() * other))
     }
 
+    // Comparison methods for duration objects
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.0 != other.0
+    }
+
+    fn __lt__(&self, other: &Self) -> bool {
+        self.0 < other.0
+    }
+
+    fn __le__(&self, other: &Self) -> bool {
+        self.0 <= other.0
+    }
+
+    fn __gt__(&self, other: &Self) -> bool {
+        self.0 > other.0
+    }
+
+    fn __ge__(&self, other: &Self) -> bool {
+        self.0 >= other.0
+    }
+
     /// Duration in units of days, where 1 day = 86,400 seconds
     ///
     /// Returns:

@@ -906,6 +906,72 @@ class time:
             npt.ArrayLike[time]: Array of time objects representing the element-wise addition of days to the current time
         """
 
+    def __le__(self, other: time) -> bool:
+        """
+        Compare two time objects for less than or equal to
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is less than or equal to "other" time, False otherwise
+        """
+
+    def __lt__(self, other: time) -> bool:
+        """
+        Compare two time objects for less than
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is less than "other" time, False otherwise
+        """
+
+    def __ge__(self, other: time) -> bool:
+        """
+        Compare two time objects for greater than or equal to
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is greater than or equal to "other" time, False otherwise
+        """
+
+    def __gt__(self, other: time) -> bool:
+        """
+        Compare two time objects for greater than
+
+        Args:
+            other (time): time object to compare with
+
+        Returns:
+            bool: True if "self" time is greater than "other" time, False otherwise
+        """
+
+    def __eq__(self, value: object) -> bool:
+        """
+        Compare two time objects for equality
+
+        Args:
+            value (object): object to compare with
+
+        Returns:
+            bool: True if "self" time is equal to "value", False otherwise
+        """
+
+    def __ne__(self, value: object) -> bool:
+        """
+        Compare two time objects for inequality
+
+        Args:
+            value (object): object to compare with
+
+        Returns:
+            bool: True if "self" time is not equal to "value", False otherwise
+        """
+
     @typing.overload
     def __add__(self, other: npt.NDArray[Any]) -> npt.NDArray[Any]:
         """
@@ -1137,6 +1203,84 @@ class duration:
         Example:
             >>> print(duration.from_days(1) * 2.5)
             Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
+        """
+
+    def __gt__(self, other: duration) -> bool:
+        """Compare two durations for greater than
+
+        Args:
+            other (duration): duration to compare with
+        Returns:
+            bool: True if "self" duration is greater than "other" duration, False otherwise
+
+        Example:
+            >>> print(duration.from_hours(1) > duration.from_minutes(30))
+            True
+        """
+
+    def __lt__(self, other: duration) -> bool:
+        """Compare two durations for less than
+
+        Args:
+            other (duration): duration to compare with
+        Returns:
+            bool: True if "self" duration is less than "other" duration, False otherwise
+
+        Example:
+            >>> print(duration.from_hours(1) < duration.from_minutes(30))
+            False
+        """
+
+    def __ge__(self, other: duration) -> bool:
+        """Compare two durations for greater than or equal to
+
+        Args:
+            other (duration): duration to compare with
+        Returns:
+            bool: True if "self" duration is greater than or equal to "other" duration, False otherwise
+
+        Example:
+            >>> print(duration.from_hours(1) >= duration.from_minutes(30))
+            True
+        """
+
+    def __le__(self, other: duration) -> bool:
+        """Compare two durations for less than or equal to
+
+        Args:
+            other (duration): duration to compare with
+        Returns:
+            bool: True if "self" duration is less than or equal to "other" duration, False otherwise
+
+        Example:
+            >>> print(duration.from_hours(1) <= duration.from_minutes(30))
+            False
+        """
+
+    def __eq__(self, other: duration) -> bool:
+        """Compare two durations for equality
+
+        Args:
+            other (duration): duration to compare with
+        Returns:
+            bool: True if "self" duration is equal to "other" duration, False otherwise
+
+        Example:
+            >>> print(duration.from_hours(1) == duration.from_minutes(60))
+            True
+        """
+
+    def __ne__(self, other: duration) -> bool:
+        """Compare two durations for inequality
+
+        Args:
+            other (duration): duration to compare with
+        Returns:
+            bool: True if "self" duration is not equal to "other" duration, False otherwise
+
+        Example:
+            >>> print(duration.from_hours(1) != duration.from_minutes(30))
+            True
         """
 
     @property
