@@ -42,3 +42,8 @@
 
 ### Python comparison operators
 - Add complete set of comparison operators for python bindings of time and duration
+
+## 0.6.2 - 2025-07014
+
+### Jupyter notebook example fixes
+- Fix jupyter notbook examples to work with time and duration casting as properties
