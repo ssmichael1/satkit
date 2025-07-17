@@ -22,7 +22,9 @@ This file is updated at [celestrack.org](https://www.celestrak.org) every 3 hour
 
 ## Acquiring the data files
 
-The data files are downloaded on-demand if they are needed but do not exist.  The data files can be manually downloaded with the following command:
+The data files are included with the ``satkit-data`` package, a dependency of ``satkit``
+
+The data files can also be manually downloaded with the following command:
 
 ```python
 satkit.utils.update_datafiles()
@@ -39,6 +41,8 @@ satkit.utils.datadir()
 ```
 
 The ``satkit`` package will search for the data files in the following locations, in order, stopping when the files are found:
+
+* ``data`` subdirectory of the ``satkit-data`` package, if installed (which it should be, as it is a prerequisite)
 
 * Directory pointed to by the ``SATKIT_DATA`` environment variable
 
