@@ -43,7 +43,13 @@
 ### Python comparison operators
 - Add complete set of comparison operators for python bindings of time and duration
 
-## 0.6.2 - 2025-07014
+## 0.6.2 - 2025-07-14
 
 ### Jupyter notebook example fixes
 - Fix jupyter notbook examples to work with time and duration casting as properties
+
+
+## 0.7.0 - 2025-07-17
+
+### satkit-data package for python bindings
+- For python bindings, necessary data files are now included in a separate package, ``satkit-data``, which is a dependency of ``satkit``

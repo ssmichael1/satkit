@@ -15,6 +15,10 @@ pub use download::download_file_async;
 pub use download::download_if_not_exist;
 pub use download::download_to_string;
 
+#[cfg(feature = "pybindings")]
+mod pypackage;
+
+
 ///
 /// Return git hash of compiled library
 ///
