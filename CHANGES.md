@@ -56,6 +56,8 @@
 
 
 ## 0.7.1 - 2025-07-22
+## 0.7.2 - 2025-07-22
 
 ## Quaternion python bindings
  - Add ability to create quaternion from (w,x,y,z) values in python bindings
+ - Did not merge correctly, so upped version twice.
