@@ -5,7 +5,7 @@ use numpy::PyArrayMethods;
 use numpy::PyUntypedArrayMethods;
 use numpy::ToPyArray;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyTuple, PyBytes};
 use pyo3::IntoPyObjectExt;
 
 type Quat = na::UnitQuaternion<f64>;
@@ -49,8 +49,25 @@ impl From<Quat> for Quaternion {
 #[pymethods]
 impl Quaternion {
     #[new]
-    fn py_new() -> PyResult<Self> {
-        Ok(Quat::from_axis_angle(&Vec3::x_axis(), 0.0).into())
+    #[pyo3(signature=(*args))]
+    fn py_new(args: &Bound<'_, PyTuple>) -> PyResult<Self> {
+        if args.len() == 0 {
+            Ok(Quat::identity().into())
+        }
+        else if args.len() == 4 {
+            let w = args.get_item(0)?.extract::<f64>()?;
+            let x = args.get_item(1)?.extract::<f64>()?;
+            let y = args.get_item(2)?.extract::<f64>()?;
+            let z = args.get_item(3)?.extract::<f64>()?;
+            // Create a nalgebra quaternion from 4 input scalars
+            let quat = na::Quaternion::<f64>::new(w, x, y, z);
+            Ok(Quat::from_quaternion(quat).into())
+        }
+        else {
+            Err(pyo3::exceptions::PyValueError::new_err(
+                "Invalid input. Must be 4-element vector",
+            ))
+        }
     }
 
     /// Quaternion representing rotation about xhat axis by `theta-rad` degrees

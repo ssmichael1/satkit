@@ -1339,10 +1339,16 @@ class quaternion:
     """
 
     def __init__(self):
-        """Return unit quaternion (no rotation)
+        """Return quaternion with input (w,x,y,z) values
+
+        Optional Args:
+            w (float): Scalar component of the quaternion
+            x (float): X component of the quaternion
+            y (float): Y component of the quaternion
+            z (float): Z component of the quaternion
 
         Returns:
-            satkit.quaternion: Quaternion representing no rotation
+            satkit.quaternion: Quaternion representing input values, or if not provided, the identity quaternion
         """
 
     @staticmethod
