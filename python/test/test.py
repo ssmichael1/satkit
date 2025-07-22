@@ -549,6 +549,21 @@ class TestQuaternion:
         dcm = q.as_rotation_matrix()
         assert dcm @ xhat == pytest.approx(yhat, 1.0e-10)
 
+    def test_construction(self):
+        """
+        Test construction of quaternions from scalars
+        """
+        s = 1 / m.sqrt(2.0)
+        q = sk.quaternion(s, s, 0, 0)
+        assert(q.axis == pytest.approx(np.array([1.0, 0.0, 0.0]), 1.0e-10))
+        assert(q.angle == pytest.approx(m.pi / 2, 1.0e-10))
+        q = sk.quaternion(s, 0, s, 0)
+        assert(q.axis == pytest.approx(np.array([0.0, 1.0, 0.0]), 1.0e-10))
+        assert(q.angle == pytest.approx(m.pi / 2, 1.0e-10))
+        q = sk.quaternion(s, 0, 0, s)
+        assert(q.axis == pytest.approx(np.array([0.0, 0.0, 1.0]), 1.0e-10))
+        assert(q.angle == pytest.approx(m.pi / 2, 1.0e-10))
+
     def test_quaternion2euler(self):
         """
         Test conversion of quaternion to Euler angles
