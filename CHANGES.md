@@ -53,3 +53,9 @@
 
 ### satkit-data package for python bindings
 - For python bindings, necessary data files are now included in a separate package, ``satkit-data``, which is a dependency of ``satkit``
+
+
+## 0.7.1 - 2025-07-22
+
+## Quaternion python bindings
+ - Add ability to create quaternion from (w,x,y,z) values in python bindings
