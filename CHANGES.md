@@ -58,6 +58,11 @@
 ## 0.7.1 - 2025-07-22
 ## 0.7.2 - 2025-07-22
 
-## Quaternion python bindings
+### Quaternion python bindings
  - Add ability to create quaternion from (w,x,y,z) values in python bindings
  - Did not merge correctly, so upped version twice.
+
+## 0.7.3 - 2025-07-30
+
+### Python data file warning to stderr
+ - Print warning to stderr in python bindings if importing with missing datafiles
