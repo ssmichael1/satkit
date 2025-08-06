@@ -289,13 +289,11 @@ mod tests {
         let testdir = test::get_testvec_dir().unwrap().join("sgp4");
         if !testdir.is_dir() {
             bail!(
-                "Required SGP4 test vectors directory: \"{}\" does not exist
-                    clone test vectors from:
+                "Required SGP4 test vectors directory: \"{}\" does not exist.
+                    Clone test vectors from:
                     <https://storage.googleapis.com/satkit-testvecs/>
-                    using python script in satkit repo:
-                    python/test/download-testvecs.py
-                    and set \"SATKIT_TESTVEC_ROOT\" 
-                    to point to directory",
+                    or using python script in satkit repo: `python/test/download_testvecs.py`
+                    or set \"SATKIT_TESTVEC_ROOT\" to point to directory",
                 testdir.to_string_lossy()
             );
         }
