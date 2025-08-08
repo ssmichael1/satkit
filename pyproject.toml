@@ -9,7 +9,8 @@ requires-python = ">= 3.8"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
-dynamic = ["version"]
+version = "0.7.4"
+dynamic = []
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
     "satellite",

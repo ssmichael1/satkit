@@ -121,9 +121,18 @@ pub fn earth_rotation_angle(tm: &Instant) -> f64 {
 ///
 ///  * Quaternion representing rotation from ITRF to TIRS
 ///
+/// # Notes:
+///
+/// This function requires use of the Earth orentation parameters
+/// (EOP) to compute the rotation. If the EOP are not outside of the
+/// valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
+/// they will be set to zero, and a warning will be printed to stderr.
+///
 pub fn qitrf2tirs(tm: &Instant) -> Quat {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
-    let eop = earth_orientation_params::get(tm).unwrap();
+    // Get earth oreintation parameters or set them all to zero if not available
+    // (function will print warning to stderr if not available)
+    let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
     let xp = eop[1] * ASEC2RAD;
     let yp = eop[2] * ASEC2RAD;
     let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
@@ -354,10 +363,15 @@ pub fn qtod2mod_approx(tm: &Instant) -> Quat {
 ///       Earth solid tides, but it does include polar motion,
 ///       precession, and nutation
 ///
+/// * This function requires use of the Earth orientation parameters
+///       (EOP) to compute the rotation. If the EOP are not outside of the
+///       valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
+///       they will be set to zero, and a warning will be printed to stderr.
+///
 pub fn qitrf2gcrf(tm: &Instant) -> Quat {
     // w is rotation from international terrestrial reference frame
     // to terrestrial intermediate reference frame
-    let eop = earth_orientation_params::get(tm).unwrap();
+    let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
 
     // Compute this here instead of using function above, so that
     // we only have to get earth orientation parameters once
