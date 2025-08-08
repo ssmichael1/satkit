@@ -413,4 +413,18 @@ def earth_orientation_params(
             4 : dX wrt IAU-2000A nutation, milli-arcsecs
             5 : dY wrt IAU-2000A nutation, milli-arcsecs
 
+    Notes:
+        * Returns None if the time is outside the range of available Earth Orientation Parameters (EOP)
+        * EOP are only available from 1962 to current, and predict to current + ~ 4 months
+        * If EOP are not available, all values will be set to zero, and a warning will be printed to stderr
+        * See: https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html
+
+    """
+
+def disable_eop_time_warning() -> None:
+    """Disable the warning printed to stderr when Earth Orientation Parameters (EOP) are not available for a given time.
+
+    Notes:
+        * This function is used to disable the warning printed when EOP are not available for a given time.
+        * If not disabled, warning will be shown only once per library load,
     """

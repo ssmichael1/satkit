@@ -207,7 +207,28 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> PyResult<PyObject> {
 ///     * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
 ///     * 4 : dX wrt IAU-2000A nutation, milli-arcsecs
 ///     * 5 : dY wrt IAU-2000A nutation, milli-arcsecs
+///
+///     Or None if the time is outside the range of available Earth Orientation Parameters (EOP)
+///    (EOP are only available from 1962 to current, and predict to current + ~ 4 months)
+///
 #[pyfunction(name = "earth_orientation_params")]
 pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
     crate::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
+}
+
+///
+/// Disable warning about out-of-range Earth Orientation Parameters (EOP)
+///
+/// Warning is shown only once, but to prevent it from being shown,
+/// run this function.
+///
+/// # Example
+/// ```python
+/// import satkit
+/// satkit.frametransform.disable_eop_warning()
+/// ```
+///
+#[pyfunction(name = "disable_eop_time_warning")]
+pub fn disable_eop_time_warning() {
+    crate::earth_orientation_params::disable_eop_time_warning();
 }
