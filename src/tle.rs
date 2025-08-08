@@ -239,6 +239,14 @@ impl TLE {
     /// ```
     ///
     pub fn load_3line(line0: &str, line1: &str, line2: &str) -> Result<Self> {
+        if line1.len() < 69 || line2.len() < 69 {
+            bail!(
+                "Invalid TLE line lengths: line1 = {}, line2 = {}",
+                line1.len(),
+                line2.len()
+            );
+        }
+
         match Self::load_2line(line1, line2) {
             Ok(mut tle) => {
                 tle.name = {
@@ -286,6 +294,19 @@ impl TLE {
     /// ```
     ///
     pub fn load_2line(line1: &str, line2: &str) -> Result<Self> {
+        if line1.len() < 69 {
+            bail!(
+                "Line 1 too short: expected 69 characters, got {}",
+                line1.len()
+            );
+        }
+        if line2.len() < 69 {
+            bail!(
+                "Line 2 too short: expected 69 characters, got {}",
+                line2.len()
+            );
+        }
+
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
             mstr.push_str(&line1[18..20]);
@@ -691,6 +712,56 @@ mod tests {
             );
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_invalid_from_lines() -> Result<()> {
+        let res = TLE::from_lines(&[
+            "0 INVALID TLE".to_string(),
+            "1 12345U 67890A 12345.67890123  .00000123  00000-0  12345-6 0  9992".to_string(),
+            "2 12345  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(),
+        ]);
+        assert!(res.is_err(), "Expected error due to short lines, got OK");
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("Invalid TLE line lengths"),
+            "Expected error about invalid line lengths."
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_invalid_tle2() -> Result<()> {
+        let res = TLE::load_2line(
+            "1 12345U 67890A 12345.67890123  .00000123  00000-0  12345-6 0 9992",
+            "2 12345 51.6403 106.8969 0007877   6.1421 113.2479",
+        );
+        assert!(res.is_err(), "Expected error due to short line2, got OK");
+        assert!(
+            res.unwrap_err().to_string().contains("too short"),
+            "Expected error about line being too short."
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_invalid_tle3() -> Result<()> {
+        let res = TLE::load_3line(
+            "0 INVALID TLE",
+            "1 12345U 67890A 12345.67890123  .00000123  00000-0  12345-6 0 9992",
+            "2 12345 51.6403 106.8969 0007877   6.1421 113.2479",
+        );
+        assert!(res.is_err(), "Expected error due to short line2, got OK");
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("Invalid TLE line lengths"),
+            "Expected error about invalid line lengths."
+        );
         Ok(())
     }
 
