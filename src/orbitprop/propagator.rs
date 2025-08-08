@@ -677,10 +677,10 @@ mod tests {
 
         if !testvecfile.is_file() {
             anyhow::bail!(
-                "Required GPS SP3 File: \"{}\" does not exist
-                clone test vectors from:
+                "Required GPS SP3 File: \"{}\" does not exist.
+                Clone test vectors from:
                 <https://storage.googleapis.com/satkit-testvecs/>
-                using python script in satkit repo: `python/test/download-testvecs.py`
+                or using python script in satkit repo: `python/test/download_testvecs.py`
                 or set \"SATKIT_TESTVEC_ROOT\" to point to directory",
                 testvecfile.to_string_lossy()
             );

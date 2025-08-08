@@ -1,15 +1,15 @@
 # %%
 """
-This function reads an SP3 file containing precise GPS locaions in the ITRF frame
+This function reads an SP3 file containing precise GPS locations in the ITRF frame.
 
 It then minimizes RMS difference between the precise locations and locations predicted
-by high-precision propagator by tuning the initial velocity and the 
-radiation pressure parameter Cr A /M
+by high-precision propagator by tuning the initial velocity and the
+radiation pressure parameter `Cr A / M`.
 
 This can then be used to check accuracy of the high-precision propagator in the 
-python tests
+python tests.
 
-Currently we can get it accurate to < 10 meters over full day of propagation
+Currently, we can get it accurate to < 10 meters over full day of propagation.
 
 """
 

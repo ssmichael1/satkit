@@ -3,8 +3,6 @@ Download SatKit test vectors
 to a local directory
 """
 
-import json
-import os
 from pathlib import Path
 import requests
 from download_from_json import download_from_json
