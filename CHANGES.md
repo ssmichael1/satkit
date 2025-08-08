@@ -66,3 +66,21 @@
 
 ### Python data file warning to stderr
  - Print warning to stderr in python bindings if importing with missing datafiles
+
+## Python 0.7.4 Rust 0.7.4
+
+### Separate Rust and python versions
+ - Rust and python versions will now evolve independently
+
+### Fix EOP-induced crashes in frame transform
+ - Earth orientation parameters query returns None for invalid dates, which caused frame transform functions that rely on it to panic.  Instead, print warning to stderr in query when out of bounds, and for frame transforms set all values to zero when out of bounds.  Also add function to disable the warning from being shown even once
+
+### Add workflow_dispatch trigger to GitHub Actions
+ - Suggestion & contribution by "DeflateAwning"
+
+### Docs cleanup and fix path for download of python scripts
+ - Contribution by "DeflateAwning"
+
+### No panic if TLE lines are too short
+ - Return error rather than panic if not enough characters in TLE
+ - Contribution by "DeflateAwning"

@@ -1,3 +1,21 @@
+//! Earth Orientation Parameters (EOP) module
+//!
+//! This module provides access to Earth Orientation Parameters (EOP) data,
+//! which are essential for accurate satellite orbit predictions and transformations
+//! between different reference frames.
+//!
+//! It includes functionality to load EOP data from a CSV file, retrieve EOP parameters for a given Modified Julian Date (MJD),
+//! and update the EOP data by downloading the latest file from a specified URL.
+//!
+//! The EOP data includes parameters such as polar motion, UT1-UTC, and length of day (LOD),
+//! which are crucial for precise calculations in satellite tracking and navigation.
+//!
+//! This module also provides a way to disable warnings about out-of-range EOP data,
+//! allowing users to suppress these warnings if they are aware of the limitations of the data.
+//!
+//! See: https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html for details on EOP data
+//!
+
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
@@ -127,6 +145,28 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
     Ok(eopvec)
 }
 
+/// Singleton to track if warning has been shown
+fn warning_shown() -> &'static RwLock<bool> {
+    static INSTANCE: OnceCell<RwLock<bool>> = OnceCell::new();
+    INSTANCE.get_or_init(|| RwLock::new(false))
+}
+
+///
+/// Disable warning about out-of-range EOP data.
+///
+/// Warning is shown only once, but to prevent it from begin shown,
+/// run this function.
+///
+/// # Example
+///
+/// ```rust
+/// satkit::earth_orientation_params::disable_eop_time_warning();
+/// ```
+///
+pub fn disable_eop_time_warning() {
+    *warning_shown().write().unwrap() = true;
+}
+
 fn eop_params_singleton() -> &'static RwLock<Vec<EOPEntry>> {
     static INSTANCE: OnceCell<RwLock<Vec<EOPEntry>>> = OnceCell::new();
     INSTANCE.get_or_init(|| RwLock::new(load_eop_file_csv(None).unwrap_or_default()))
@@ -166,22 +206,91 @@ pub fn update() -> Result<()> {
 ///
 /// # Returns:
 ///
-/// * Vector [f64; 6] with following elements:
-/// * 0 : (UT1 - UTC) in seconds
-/// * 1 : X polar motion in arcsecs
-/// * 2 : Y polar motion in arcsecs
-/// * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
-/// * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
-/// * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
+/// * If time is valid within file, Vector [f64; 6] with following elements:
+///     * 0 : (UT1 - UTC) in seconds
+///     * 1 : X polar motion in arcsecs
+///     * 2 : Y polar motion in arcsecs
+///     * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
+///     * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
+///     * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
+///
+/// * If time is outside range of file, returns None and print warning to stderr
+///   (but only once per library load)
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     let eop = eop_params_singleton().read().unwrap();
 
     let idx = eop.iter().position(|x| x.mjd_utc > mjd_utc);
     match idx {
-        None => None,
+        None => {
+            let mut shown = warning_shown().write().unwrap();
+            if !*shown {
+                // Warning for python:
+                #[cfg(feature = "pybindings")]
+                eprintln!(
+                    r"
+                    Warning: EOP data not available for MJD UTC = {} (too late).
+                    Run `satkit.frametransform.update()` to download
+                    the most recent data.  Valid times are 1962 to present,
+                    and predicts go to ~ 4 months into the future
+
+                    This warning will only be shown once for each library load.
+
+                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`                                                        
+                    ",
+                    mjd_utc
+                );
+
+                #[cfg(not(feature = "pybindings"))]
+                eprintln!(
+                "
+                    Warning: EOP data not available for MJD UTC = {} (too late).
+                    Run `satkit.frametransform.update()` to download
+                    the most recent data.  Valid times are 1962 to present,
+                    and predicts go to ~ 4 months into the future
+
+                    This warning will only be shown once for each library load.
+
+                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`                                                        
+                    ",
+                    mjd_utc
+                );
+
+                *shown = true;
+            }
+            None
+        }
         Some(v) => {
             if v == 0_usize {
+                let mut shown = warning_shown().write().unwrap();
+                if !*shown {
+                    // Warning for python:
+                    #[cfg(feature = "pybindings")]
+                    eprintln!(
+                        r"
+                    Warning: EOP data not available for MJD UTC = {} (too early).
+                   
+                    This warning will only be shown once for each library load.
+
+                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`                                                        
+                    ",
+                        mjd_utc
+                    );
+
+                    #[cfg(not(feature = "pybindings"))]
+                    eprintln!(
+                "
+                    Warning: EOP data not available for MJD UTC = {} (too early).          
+
+                    This warning will only be shown once for each library load.
+
+                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`                                                        
+                    ",
+                    mjd_utc
+                );
+
+                    *shown = true;
+                }
                 return None;
             }
             // Linear interpolation
@@ -218,6 +327,14 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 ///   * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
 ///   * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
 ///
+///
+/// # Example:
+///
+/// ```rust
+/// let tm = satkit::Instant::from_rfc3339("2006-04-16T17:52:50.805408Z").unwrap();
+/// let eop = satkit::earth_orientation_params::get(&tm);
+/// ```
+///
 #[inline]
 pub fn get(tm: &crate::Instant) -> Option<[f64; 6]> {
     eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC))
@@ -232,6 +349,16 @@ mod tests {
     #[test]
     fn loaded() {
         assert!(eop_params_singleton().read().unwrap()[0].mjd_utc >= 0.0);
+    }
+
+    #[test]
+    fn test_time_bound() {
+        let tm = crate::Instant::from_rfc3339("2056-04-16T17:52:50.805408Z").unwrap();
+        let eop = eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC));
+        assert!(eop.is_none());
+        let tm = crate::Instant::from_rfc3339("1950-04-16T17:52:50.805408Z").unwrap();
+        let eop = eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC));
+        assert!(eop.is_none());
     }
 
     /// Check value against manual value from file
