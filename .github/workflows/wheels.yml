@@ -8,6 +8,7 @@ on:
     branches:
       # Allow testing of building wheels without publish on branches prefixed with "wheel"
       - wheel*
+  workflow_dispatch:
 
 jobs:
   build_python:
