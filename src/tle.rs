@@ -790,14 +790,27 @@ impl TLE {
         Ok(String::from_iter(line2))
     }
 
-    /// Return the TLE as a 2-element vector of strings, one for each line.
+    /// Return the TLE as a vector of strings, one for each line.
+    ///
+    /// # Arguments
+    ///
+    /// * `include_title_line` - Whether to include the title line in the output                       
     ///
     /// # Returns
     ///
-    /// A vector of strings, one for each of the 2 lines of the TLE.
+    /// A vector of strings, one for each of the 2 lines of the TLE, or 3 lines
+    /// if `include_title_line` is true (1st line is title)
     ///
-    pub fn as_lines(&self) -> Result<Vec<String>> {
-        Ok(vec![self.line1()?, self.line2()?])
+    pub fn as_lines(&self, include_title_line: bool) -> Result<Vec<String>> {
+        if !include_title_line {
+            Ok(vec![self.line1()?, self.line2()?])
+        } else {
+            Ok(vec![
+                format!("0 {}", self.name),
+                self.line1()?,
+                self.line2()?,
+            ])
+        }
     }
 }
 

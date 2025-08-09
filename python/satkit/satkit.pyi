@@ -121,9 +121,16 @@ class TLE:
     def line2(self) -> str:
         """Line2 of the TLE"""
 
-    @property
-    def lines(self) -> list[str]:
-        """lines of the TLE"""
+    def lines(self, include_title_line: bool = False) -> list[str]:
+        """
+        Lines of the TLE
+
+        Args:
+            include_title_line (bool): Whether to include the title line in the output. default is False
+
+        Returns:
+            list[str]: A vector of strings, one for each line of the TLE, or 3 lines if `include_title_line` is true (1st line is title)
+        """
 
     @property
     def mean_motion_dot_dot(self) -> float:

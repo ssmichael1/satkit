@@ -149,9 +149,9 @@ impl PyTLE {
         })
     }
 
-    #[getter]
-    fn lines(&self) -> PyResult<Vec<String>> {
-        self.0.as_lines().map_err(|e| {
+    #[pyo3(signature=(include_title_line=false))]
+    fn lines(&self, include_title_line: bool) -> PyResult<Vec<String>> {
+        self.0.as_lines(include_title_line).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("Error getting lines: {}", e))
         })
     }
