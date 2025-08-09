@@ -35,7 +35,7 @@ const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 ///
 /// let lines = vec!["0 INTELSAT 902",
 ///     "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
-///     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."];
+///     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981"];
 ///
 /// let mut tle = TLE::load_3line(lines[0], lines[1], lines[2]).unwrap();
 /// let tm = Instant::from_datetime(2006, 5, 1, 11, 0, 0.0);
@@ -230,7 +230,7 @@ impl TLE {
     /// use satkit::TLE;
     /// let line0: &str = "0 INTELSAT 902";
     /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
-    /// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
+    /// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981";
     /// let tle = TLE::load_3line(&line0.to_string(),
     ///     &line1.to_string(),
     ///     &line2.to_string()
@@ -285,7 +285,7 @@ impl TLE {
     ///
     /// use satkit::TLE;
     /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
-    /// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
+    /// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981";
     /// let tle = TLE::load_2line(
     ///     &line1.to_string(),
     ///     &line2.to_string()
@@ -695,11 +695,7 @@ impl TLE {
     ///
     /// # Returns
     ///
-    /// A string representation of the second line of the TLE.
-    ///
-    /// # Returns
-    ///
-    /// A string representation of the second line of the TLE.
+    /// A string representation of the second line of the TLE.    
     ///
     pub fn line2(&self) -> Result<String> {
         let mut line2 = [' '; 69];
@@ -794,12 +790,32 @@ impl TLE {
     ///
     /// # Arguments
     ///
-    /// * `include_title_line` - Whether to include the title line in the output                       
+    /// * `include_title_line` - Whether to include the title line in the output
+    ///    if true, output will be 3 lines instead of 2                       
     ///
     /// # Returns
     ///
     /// A vector of strings, one for each of the 2 lines of the TLE, or 3 lines
     /// if `include_title_line` is true (1st line is title)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let lines = vec!["0 INTELSAT 902",
+    /// "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
+    /// "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981 "];
+    /// let mut tle = satkit::TLE::load_3line(&lines[0], &lines[1], &lines[2]).unwrap();
+    /// // Change the inclination for fun
+    /// tle.inclination = 45.0;
+    /// // This reconstructs the lines from the object, now with the new inclination
+    /// print!("TLE Lines:\n{:?}", tle.as_lines(true).unwrap());
+    /// // Output
+    /// //
+    /// // TLE Lines:
+    /// // ["0 INTELSAT 902",
+    /// //. "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
+    /// //  "2 26900  45.0000 266.5378 0003319  86.1794 182.2590  1.00273847 16989"]    
+    /// ```
     ///
     pub fn as_lines(&self, include_title_line: bool) -> Result<Vec<String>> {
         if !include_title_line {
@@ -833,8 +849,7 @@ mod tests {
     #[test]
     fn testload() -> Result<()> {
         let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
-        let line2: &str =
-            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
+        let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981";
         let line0: &str = "0 INTELSAT 902";
         match TLE::load_3line(line0, line1, line2) {
             Ok(_t) => {}
@@ -853,26 +868,26 @@ mod tests {
     }
 
     #[test]
-    fn testexport() -> Result<()> {
+    fn test_export() -> Result<()> {
         let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
         let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981";
         let line0: &str = "0 INTELSAT 902";
-        let tle = TLE::load_3line(line0, line1, line2).context("Could not load TLE from lines")?;
+        let mut tle =
+            TLE::load_3line(line0, line1, line2).context("Could not load TLE from lines")?;
         let line1_new = tle.line1().context("Could not get line 1 from TLE")?;
         assert!(line1_new == line1);
-        println!("line1 old = {}", line1);
-        println!("line1 new = {}", line1_new);
 
         let line2_new = tle.line2().context("Could not get line 2 from TLE")?;
         assert!(line2_new == line2);
-        println!("line2 old = {}", line2);
-        println!("line2 new = {}", line2_new);
+
+        tle.inclination = 45.0;
+        print!("TLE Lines:\n{:?}", tle.as_lines(true).unwrap());
 
         Ok(())
     }
 
     #[test]
-    fn testexport2() -> Result<()> {
+    fn test_export2() -> Result<()> {
         let lines = vec![
             "2023-193D".to_string(),
             "1 58556U 23193D   25003.79555039  .00279397  31144-4  86159-3 0  9996".to_string(),
