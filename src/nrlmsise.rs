@@ -1,8 +1,8 @@
 use cty;
 
+use crate::spaceweather;
 use crate::Duration;
 use crate::Instant;
-use crate::spaceweather;
 
 /// Array containing the following magnetic values:
 ///   0 : daily AP
@@ -111,8 +111,7 @@ pub fn nrlmsise(
     let mut f107: f64 = 150.0;
     let mut ap: f64 = 4.0;
 
-    if time_option.is_some() {
-        let time = time_option.unwrap();
+    if let Some(time) = time_option {
         let (year, _mon, _day, dhour, dmin, dsec) = time.as_datetime();
         let fday: f64 = (time - Instant::from_date(year, 1, 1)).as_days() + 1.0;
         day_of_year = fday.floor() as i32;

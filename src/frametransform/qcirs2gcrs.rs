@@ -136,8 +136,7 @@ pub fn qcirs2gcrs_dxdy(tm: &Instant, dxdy: Option<(f64, f64)>) -> Quat {
     let mut x = xsums.mul_add(1.0e-6, x0) * ASEC2RAD;
     let mut y = ysums.mul_add(1.0e-6, y0) * ASEC2RAD;
     // If dX and dY are passed in, they are in milli-arcsecs
-    if dxdy.is_some() {
-        let (dx, dy) = dxdy.unwrap();
+    if let Some((dx, dy)) = dxdy {
         x += dx * 1e-3 * ASEC2RAD;
         y += dy * 1e-3 * ASEC2RAD;
     }

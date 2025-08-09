@@ -133,8 +133,7 @@ pub fn sgp4(
     let mut output_err = false;
     let mut opsmode: OpsMode = OpsMode::afspc;
     let mut gravconst: GravConst = GravConst::wgs72;
-    if kwds.is_some() {
-        let kw = kwds.unwrap();
+    if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("errflag")? {
             output_err = v.extract::<bool>()?;
         }

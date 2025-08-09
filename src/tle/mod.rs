@@ -793,7 +793,7 @@ impl TLE {
     /// # Arguments
     ///
     /// * `include_title_line` - Whether to include the title line in the output
-    ///    if true, output will be 3 lines instead of 2                       
+    ///   if true, output will be 3 lines instead of 2                       
     ///
     /// # Returns
     ///

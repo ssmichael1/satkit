@@ -73,7 +73,7 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
             true,
         ))
     } else {
-        return Err(pyo3::exceptions::PyTypeError::new_err("Invalid arguments"));
+        Err(pyo3::exceptions::PyTypeError::new_err("Invalid arguments"))
     }
 }
 

@@ -27,9 +27,7 @@ pub fn nrlmsise00(alt_km: f64, option_kwds: Option<&Bound<'_, PyDict>>) -> PyRes
     let mut lon: Option<f64> = None;
     let mut tm: Option<Instant> = None;
     let mut use_spaceweather: bool = true;
-    if option_kwds.is_some() {
-        let kwds = option_kwds.unwrap();
-
+    if let Some(kwds) = option_kwds {
         if let Some(kw) = kwds.get_item("latitude_deg")? {
             lat = Some(kw.extract::<f64>()?);
         }

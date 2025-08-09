@@ -23,18 +23,18 @@ impl<T> From<KeplerError> for Result<T> {
 /// These are:
 ///
 /// * `True Anomaly` - Denoted ν, is the Periapsis-Earth-Satellite
-///    angle in the orbital plane
+///   angle in the orbital plane
 ///
 /// * `Mean Anomaly` - Denoted M, this does not have a great geographical
-///    representation, but is an angle that increases monotonically in time
-///    between 0 and 2π over the course of a single orbit.
+///   representation, but is an angle that increases monotonically in time
+///   between 0 and 2π over the course of a single orbit.
 ///
 /// * `Eccentric Anomaly` - Denoted E, is the Periaps-C-B
-///    angle in the orbital plane, wehre "C" is the center of the orbital
-///    ellipse, and "B" is a point on the auxilliary circle (the circle
-///    bounding the orbital ellipse) along a line from the satellite
-///    and perpendicular to the semimajor axis.  The eccentric anomaly is
-///    a useful prerequisite to compute the mean anomaly
+///   angle in the orbital plane, wehre "C" is the center of the orbital
+///   ellipse, and "B" is a point on the auxilliary circle (the circle
+///   bounding the orbital ellipse) along a line from the satellite
+///   and perpendicular to the semimajor axis.  The eccentric anomaly is
+///   a useful prerequisite to compute the mean anomaly
 ///
 pub enum Anomaly {
     Mean(f64),
@@ -115,7 +115,7 @@ impl Kepler {
     /// * `raan` - Right Ascension of the Ascending Node, radians
     /// * `argp` - Argument of Perigee, radians
     /// * `anomaly` - Anomaly type representing location of satellite along the
-    ///               orbital plane
+    ///   orbital plane
     ///
     /// # Returns
     ///
@@ -225,15 +225,25 @@ impl Kepler {
         let xi = v.norm().powi(2) / 2.0 - crate::consts::MU_EARTH / r.norm();
         let a = -crate::consts::MU_EARTH / (2.0 * xi);
         let incl = (h.z / h.norm()).acos();
-        let mut raan = (n.x / n.norm()).acos();
+
+        let mut raan = match n.norm() < 1e-10 {
+            true => 0.0,
+            false => (n.x / n.norm()).acos(),
+        };
         if n.y < 0.0 {
             raan = 2.0f64.mul_add(std::f64::consts::PI, -raan);
         }
-        let mut w = (n.dot(&e) / n.norm() / e.norm()).acos();
+        let mut w = match e.norm() < 1e-10 {
+            true => 0.0,
+            false => (n.dot(&e) / n.norm() / e.norm()).acos(),
+        };
         if e.z < 0.0 {
             w = 2.0f64.mul_add(std::f64::consts::PI, -w);
         }
-        let mut nu = (r.dot(&e) / r.norm() / e.norm()).acos();
+        let mut nu = match e.norm() < 1e-10 {
+            true => 0.0,
+            false => (r.dot(&e) / r.norm() / e.norm()).acos(),
+        };
         if r.dot(&v) < 0.0 {
             nu = 2.0f64.mul_add(std::f64::consts::PI, -nu);
         }

@@ -89,5 +89,15 @@
   ### Export TLE object as lines
   - Generatetwo 69-character lines of element set from TLE object
 
+  ### TLE fitting
+  - Generate a TLE that matches arrray of states from high-precision propagation
+    (Minimizes position difference by tuning TLE terms via Levenberg-Marquardt non-linear minimization)
+
   ### Comparison operators for Instant and Duration
   - Implement Ord (previously only PartialOrd was implemented)
+
+  ### Kepler elements
+  - Eliminate possibility of "nan"" kepler elements in degenerate cases
+
+  ### Clippy Warnings
+  - Remove warnings by fixing documentation indentation and a few other small syntax updates

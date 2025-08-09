@@ -40,8 +40,7 @@ impl PySatState {
             &na::Vector3::<f64>::from_row_slice(unsafe { pos.as_slice().unwrap() }),
             &na::Vector3::<f64>::from_row_slice(unsafe { vel.as_slice().unwrap() }),
         );
-        if cov.is_some() {
-            let cov = cov.unwrap();
+        if let Some(cov) = cov {
             let dims = cov.dims();
             if dims[0] != 6 || dims[1] != 6 {
                 return Err(pyo3::exceptions::PyRuntimeError::new_err(
