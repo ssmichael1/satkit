@@ -40,6 +40,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.2.0"
 itertools = "0.14.0"
 anyhow = "1"
+rmpfit = "0.3.0"
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }

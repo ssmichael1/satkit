@@ -4,6 +4,15 @@ use crate::Instant;
 use anyhow::{bail, Context, Result};
 use nalgebra as na;
 
+use rmpfit::{MPFitter, MPResult};
+
+struct Problem {
+    states: Vec<[f64; 6]>,
+    times: Vec<Instant>,
+    epoch: Instant,
+    tle: TLE,
+}
+
 impl TLE {
     pub fn fit_from_states(
         states: &Vec<[f64; 6]>,
@@ -64,6 +73,6 @@ impl TLE {
         tle.mean_anomaly = kepler.mean_anomaly().to_degrees();
 
         // Implement fitting logic here
-        Ok(Self::new())
+        Ok(tle)
     }
 }

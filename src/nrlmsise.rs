@@ -1,8 +1,8 @@
 use cty;
 
-use crate::spaceweather;
 use crate::Duration;
 use crate::Instant;
+use crate::spaceweather;
 
 /// Array containing the following magnetic values:
 ///   0 : daily AP
@@ -70,7 +70,7 @@ struct nrlmsise_output {
     t: [cty::c_double; 2],
 }
 
-extern "C" {
+unsafe extern "C" {
     fn gtd7d(input: *mut nrlmsise_input, flags: *mut nrlmsise_flags, output: *mut nrlmsise_output);
 
     // Version below does not include atomic oxygen
