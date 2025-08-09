@@ -480,12 +480,12 @@ impl Gravity {
 
                     accel[1] += 0.5
                         * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(
-                            -cnm.mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]),
+                            (-cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]),
                             (-cnm).mul_add(w[(n + 1, m + 1)], snm * v[(n + 1, m + 1)]),
                         );
                 }
                 accel[2] +=
-                    (n - m + 1) as f64 * -cnm.mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
+                    (n - m + 1) as f64 * (-cnm).mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
             }
         }
 
