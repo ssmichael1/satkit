@@ -134,6 +134,28 @@ impl PyTLE {
         Ok(self.0.mean_motion_dot_dot)
     }
 
+    #[getter]
+    fn line1(&self) -> PyResult<String> {
+        self.0.line1().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Error getting line1: {}", e))
+        })
+    }
+
+    /// Return the second line of the TLE
+    #[getter]
+    fn line2(&self) -> PyResult<String> {
+        self.0.line2().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Error getting line2: {}", e))
+        })
+    }
+
+    #[getter]
+    fn lines(&self) -> PyResult<Vec<String>> {
+        self.0.as_lines().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Error getting lines: {}", e))
+        })
+    }
+
     /// Name of satellite
     fn name(&self) -> PyResult<String> {
         Ok(self.0.name.clone())

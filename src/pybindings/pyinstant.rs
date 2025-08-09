@@ -553,6 +553,12 @@ impl PyInstant {
         self.0.as_mjd_with_scale(scale.into())
     }
 
+    /// Day of Year
+    /// Returns the day of the year (1-366) for the given instant.
+    fn day_of_year(&self) -> i32 {
+        self.0.day_of_year()
+    }
+
     /// Convert to Julian date
     ///
     /// Args:

@@ -567,6 +567,238 @@ impl TLE {
             self.rev_num,
         )
     }
+
+    fn weird_notation(f: f64) -> String {
+        // Weird notation for mean motion dot dot and bstar
+        let mut line = [' '; 8];
+        if f < 0.0 {
+            line[0] = '-';
+        }
+        let fabs = f.abs();
+        if fabs < 1e-10 {
+            return String::from(" 00000-0");
+        }
+        let mut eval: i32 = 0;
+        let mut fint: f64 = fabs;
+        while fint < 0.1 {
+            fint *= 10.0;
+            eval -= 1;
+        }
+        line[1..].copy_from_slice(
+            &format!("{:0<5}-{}", (fint * 1e5).round() as u32, eval.abs())
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+
+        String::from_iter(line)
+    }
+
+    /// Return the first line of the TLE as a string.
+    ///
+    /// # Returns
+    ///
+    /// A string representation of the first line of the TLE.
+    ///
+    pub fn line1(&self) -> Result<String> {
+        let mut line1 = [' '; 69];
+        line1[0] = '1';
+        let satnum =
+            Self::int_to_alpha5(self.sat_num).context("Could not convert sat_num to alpha5")?;
+        let satnum_chars: Vec<char> = satnum.chars().collect();
+        if satnum_chars.len() != 5 {
+            bail!("sat_num must be 5 characters long, got: {}", satnum);
+        }
+        line1[2..7].copy_from_slice(&satnum_chars);
+        line1[7] = 'U';
+
+        line1[9..11].copy_from_slice(
+            &format!("{:0>2}", self.desig_year.abs() % 100)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+        line1[11..14].copy_from_slice(
+            &format!("{:0>3}", self.desig_launch.abs() % 1000)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+        // get the first 3 characters of desig_piece as a string
+        let desig_piece_chars = self.desig_piece.chars().take(3).collect::<String>();
+        line1[14..17].copy_from_slice(
+            &format!("{:<3}", desig_piece_chars)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+
+        let (year, _, _, _, _, _) = self.epoch.as_datetime();
+        line1[18..20].copy_from_slice(
+            &format!("{:0>2}", year.abs() % 100)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+
+        let day_of_year = self.epoch.day_of_year();
+        let fraction_of_day = self.epoch.as_mjd() % 1.0;
+
+        line1[20..32].copy_from_slice(
+            &format!(
+                "{:0>3}.{:0>8}",
+                day_of_year,
+                (fraction_of_day.fract() * 1e8).round() as u32
+            )
+            .chars()
+            .collect::<Vec<char>>(),
+        );
+        line1[33] = if self.mean_motion_dot < 0.0 { '-' } else { ' ' };
+        line1[34..43].copy_from_slice(
+            &format!("{:0>9.8}", self.mean_motion_dot.abs())
+                .chars()
+                .collect::<Vec<char>>()[1..],
+        );
+        line1[44..52].copy_from_slice(
+            &Self::weird_notation(self.mean_motion_dot_dot)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+
+        line1[53..61].copy_from_slice(
+            &Self::weird_notation(self.bstar)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+
+        line1[62] = '0';
+        line1[64..68].copy_from_slice(
+            &format!("{:>4}", self.element_num.abs() % 10000)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+
+        line1[68] = char::from_digit(Self::tle_checksum(&line1[0..68]) as u32, 10).unwrap_or('0');
+
+        Ok(String::from_iter(line1))
+    }
+
+    fn tle_checksum(line: &[char]) -> u8 {
+        // https://en.wikipedia.org/wiki/Two-line_element_set
+        let sum: u32 = line
+            .iter()
+            .map(|c| match c {
+                '0'..='9' => c.to_digit(10).unwrap(),
+                '-' => 1,
+                _ => 0,
+            })
+            .sum();
+        (sum % 10) as u8
+    }
+
+    /// Return the second line of the TLE as a string.
+    ///
+    /// # Returns
+    ///
+    /// A string representation of the second line of the TLE.
+    ///
+    /// # Returns
+    ///
+    /// A string representation of the second line of the TLE.
+    ///
+    pub fn line2(&self) -> Result<String> {
+        let mut line2 = [' '; 69];
+
+        line2[0] = '2';
+        let satnum =
+            Self::int_to_alpha5(self.sat_num).context("Could not convert sat_num to alpha5")?;
+        let satnum_chars: Vec<char> = satnum.chars().collect();
+        if satnum_chars.len() != 5 {
+            bail!("sat_num must be 5 characters long, got: {}", satnum);
+        }
+        line2[2..7].copy_from_slice(&satnum_chars);
+
+        line2[8..16].copy_from_slice(
+            &format!(
+                "{:>3}.{:0>4}",
+                self.inclination.abs() as u32,
+                (self.inclination.abs().fract() * 1e4).round() as u32
+            )
+            .chars()
+            .collect::<Vec<char>>(),
+        );
+
+        let mut raan = self.raan % 360.0;
+        if raan < 0.0 {
+            raan += 360.0;
+        }
+        line2[17..25].copy_from_slice(
+            &format!(
+                "{:>3}.{:0>4}",
+                raan as u32,
+                (raan.fract() * 1e4).round() as u32
+            )
+            .chars()
+            .collect::<Vec<char>>(),
+        );
+
+        line2[26..33].copy_from_slice(
+            &format!("{:0<9}", self.eccen.abs().fract())
+                .chars()
+                .collect::<Vec<char>>()[2..],
+        );
+        let mut aap = self.arg_of_perigee % 360.0;
+        if aap < 0.0 {
+            aap += 360.0;
+        }
+        line2[34..42].copy_from_slice(
+            &format!(
+                "{:>3}.{:0>4}",
+                aap as u32,
+                (aap.fract() * 1e4).round() as u32
+            )
+            .chars()
+            .collect::<Vec<char>>(),
+        );
+
+        let mut mean_anomaly = self.mean_anomaly % 360.0;
+        if mean_anomaly < 0.0 {
+            mean_anomaly += 360.0;
+        }
+        line2[43..51].copy_from_slice(
+            &format!(
+                "{:>3}.{:0>4}",
+                mean_anomaly as u32,
+                (mean_anomaly.fract() * 1e4).round() as u32
+            )
+            .chars()
+            .collect::<Vec<char>>(),
+        );
+
+        line2[52..63].copy_from_slice(
+            &format!(
+                "{:>2}.{:0>8}",
+                self.mean_motion.abs() as u32,
+                (self.mean_motion.abs().fract() * 1e8).round() as u32
+            )
+            .chars()
+            .collect::<Vec<char>>(),
+        );
+
+        line2[63..68].copy_from_slice(
+            &format!("{:>5}", self.rev_num.abs() % 100000)
+                .chars()
+                .collect::<Vec<char>>(),
+        );
+        line2[68] = char::from_digit(Self::tle_checksum(&line2[0..68]) as u32, 10).unwrap_or('0');
+
+        Ok(String::from_iter(line2))
+    }
+
+    /// Return the TLE as a 2-element vector of strings, one for each line.
+    ///
+    /// # Returns
+    ///
+    /// A vector of strings, one for each of the 2 lines of the TLE.
+    ///
+    pub fn as_lines(&self) -> Result<Vec<String>> {
+        Ok(vec![self.line1()?])
+    }
 }
 
 impl Default for TLE {
@@ -604,6 +836,82 @@ mod tests {
                 bail!("load_2line: Err = \"{}\"", s);
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn testexport() -> Result<()> {
+        let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
+        let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981";
+        let line0: &str = "0 INTELSAT 902";
+        let tle = TLE::load_3line(line0, line1, line2).context("Could not load TLE from lines")?;
+        let line1_new = tle.line1().context("Could not get line 1 from TLE")?;
+        assert!(line1_new == line1);
+        println!("line1 old = {}", line1);
+        println!("line1 new = {}", line1_new);
+
+        let line2_new = tle.line2().context("Could not get line 2 from TLE")?;
+        assert!(line2_new == line2);
+        println!("line2 old = {}", line2);
+        println!("line2 new = {}", line2_new);
+
+        Ok(())
+    }
+
+    #[test]
+    fn testexport2() -> Result<()> {
+        let lines = vec![
+            "2023-193D".to_string(),
+            "1 58556U 23193D   25003.79555039  .00279397  31144-4  86159-3 0  9996".to_string(),
+            "2 58556  97.2472  26.1173 0004235 271.4738  88.6051 15.91743157 60937".to_string(),
+            "0 CPOD FLT2 (TYVAK-0033)".to_string(),
+            "1 52780U 22057BB  23036.86744141  .00018086  00000-0  87869-3 0  9991".to_string(),
+            "2 52780  97.5313 154.3283 0011660  53.1934 307.0368 15.18441019 16465".to_string(),
+            "1998-067WV".to_string(),
+            "1 60955U 98067WV  24295.33823779  .06453473  12009-4  26290-2 0  9998".to_string(),
+            "2 60955  51.6166  43.0490 0010894 336.3668  23.6849 16.22453324  8315".to_string(),
+            "2 PATHFINDER".to_string(),
+            "1 45727U 20037E   24323.73967089  .00003818  00000-0  31595-3 0  9996".to_string(),
+            "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085".to_string(),
+            "0 SHINSEI (MS-F2)".to_string(),
+            "1 05485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992".to_string(),
+            "2 05485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065".to_string(),
+            "OSCAR 7 (AO-7)".to_string(),
+            "1 07530U 74089B   24323.87818483 -.00000039  00000-0  47934-4 0  9998".to_string(),
+            "2 07530 101.9893 320.0351 0012269 147.9195 274.9996 12.53682684288423".to_string(),
+            "1 52743U 22057M   23037.04954473  .00011781  00000-0  61944-3 0  9993".to_string(),
+            "2 52743  97.5265 153.6940 0008594  82.9904  31.3082 15.15793680 38769".to_string(),
+            "0 ISS (ZARYA)".to_string(),
+            "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9990".to_string(),
+            "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487613".to_string(),
+            "0 ISS (ZARYA)".to_string(),
+            "1 Z9999U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992".to_string(),
+            "2 Z9999  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(),
+        ];
+
+        let tles = match TLE::from_lines(&lines) {
+            Ok(t) => t,
+            Err(s) => {
+                bail!("load_lines: Err = \"{}\"", s);
+            }
+        };
+        assert!(tles[0].line1().unwrap() == lines[1]);
+        assert!(tles[0].line2().unwrap() == lines[2]);
+        assert!(tles[1].line1().unwrap() == lines[4]);
+        assert!(tles[1].line2().unwrap() == lines[5]);
+        assert!(tles[2].line1().unwrap() == lines[7]);
+        assert!(tles[2].line2().unwrap() == lines[8]);
+        assert!(tles[3].line1().unwrap() == lines[10]);
+        assert!(tles[3].line2().unwrap() == lines[11]);
+        assert!(tles[4].line1().unwrap() == lines[13]);
+        assert!(tles[4].line2().unwrap() == lines[14]);
+        assert!(tles[5].line1().unwrap() == lines[16]);
+        assert!(tles[5].line2().unwrap() == lines[17]);
+        assert!(tles[6].line1().unwrap() == lines[18]);
+        assert!(tles[6].line2().unwrap() == lines[19]);
+        assert!(tles[7].line1().unwrap() == lines[21]);
+        assert!(tles[7].line2().unwrap() == lines[22]);
+
         Ok(())
     }
 

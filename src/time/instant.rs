@@ -199,6 +199,37 @@ impl Instant {
         super::Weekday::from(((jd + 1.5) % 7.0).floor() as i32)
     }
 
+    /// Returns the day of the year
+    /// 1 = January 1st, 365 = December 31st
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use satkit::Instant;
+    /// let test = Instant::from_datetime(2025, 8, 8, 12, 0, 0.0);
+    /// assert_eq!(test.day_of_year(), 220);
+    /// ```
+    ///
+    pub fn day_of_year(&self) -> i32 {
+        let (year, month, day, _, _, _) = self.as_datetime();
+        let mut doy = day;
+        for m in 1..month {
+            doy += match m {
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                4 | 6 | 9 | 11 => 30,
+                2 => {
+                    if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+                        29
+                    } else {
+                        28
+                    }
+                }
+                _ => unreachable!(),
+            };
+        }
+        doy
+    }
+
     /// As Modified Julian Date (UTC)
     /// Days since 1858-11-17 00:00:00 UTC
     /// where each day is 86,400 seconds
@@ -389,10 +420,19 @@ impl Instant {
         }
     }
 
-    /// Return the Gregorian date and time
+    /// Return the Gregorian date and time as tuple
     ///
     /// # Returns
     /// (year, month, day, hour, minute, second), UTC
+    ///
+    /// # Notes:
+    ///
+    /// * Month is 1-indexed (January is 1, December is 12)
+    /// * Day is 1-indexed (1st is 1, 31st is 31)
+    /// * Hour is 0-indexed (0 is midnight, 23 is 11 PM)
+    /// * Minute is 0-indexed (0 is the top of the hour, 59 is the last minute)
+    /// * Second is 0-indexed (0 is the top of the minute, 59 is the last second)
+    ///
     pub fn as_datetime(&self) -> (i32, i32, i32, i32, i32, f64) {
         // Fractional part of UTC day, accounting for leapseconds and TT - TAI
         let utc_usec_of_day = (self.raw - microleapseconds(self.raw)) % 86_400_000_000;

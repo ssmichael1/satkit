@@ -114,6 +114,18 @@ class TLE:
         """
 
     @property
+    def line1(self) -> str:
+        """Line1 of the TLE"""
+
+    @property
+    def line2(self) -> str:
+        """Line2 of the TLE"""
+
+    @property
+    def lines(self) -> list[str]:
+        """lines of the TLE"""
+
+    @property
     def mean_motion_dot_dot(self) -> float:
         """1/6 of 2nd derivative of mean motion, in revs/day^3
 
@@ -665,13 +677,18 @@ class time:
             satkit.time: Time object representing input GPS week and second
         """
 
-        def weekday(self) -> weekday:
-            """
-            Return the day of the week
+    def weekday(self) -> weekday:
+        """
+        Return the day of the week
 
-            Returns:
-                satkit.weekday: Day of the week
-            """
+        Returns:
+            satkit.weekday: Day of the week
+        """
+
+    def day_of_yeare(self) -> int:
+        """
+        Return the day of the year (1-366) for the given instant.
+        """
 
     @staticmethod
     def from_mjd(mjd: float, scale: timescale = timescale.UTC) -> time:
