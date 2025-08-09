@@ -797,7 +797,7 @@ impl TLE {
     /// A vector of strings, one for each of the 2 lines of the TLE.
     ///
     pub fn as_lines(&self) -> Result<Vec<String>> {
-        Ok(vec![self.line1()?])
+        Ok(vec![self.line1()?, self.line2()?])
     }
 }
 
