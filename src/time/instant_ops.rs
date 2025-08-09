@@ -218,9 +218,17 @@ impl std::cmp::PartialEq for Duration {
 
 impl std::cmp::PartialOrd for Duration {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.usec.partial_cmp(&other.usec)
+        Some(self.cmp(other))
     }
 }
+
+impl std::cmp::Ord for Duration {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.usec.cmp(&other.usec)
+    }
+}
+
+impl std::cmp::Eq for Duration {}
 
 /// Subtract two durations
 impl std::ops::Sub<Self> for Duration {
@@ -237,6 +245,12 @@ impl std::cmp::Eq for Instant {}
 
 impl std::cmp::PartialOrd for Instant {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.raw.partial_cmp(&other.raw)
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for Instant {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.raw.cmp(&other.raw)
     }
 }

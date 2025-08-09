@@ -84,3 +84,10 @@
 ### No panic if TLE lines are too short
  - Return error rather than panic if not enough characters in TLE
  - Contribution by "DeflateAwning"
+
+## Python 0.7.5 Rust 0.7.5
+  ### Export TLE object as lines
+  - Generatetwo 69-character lines of element set from TLE object
+
+  ### Comparison operators for Instant and Duration
+  - Implement Ord (previously only PartialOrd was implemented)

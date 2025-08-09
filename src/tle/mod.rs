@@ -1,6 +1,8 @@
 use crate::sgp4::SatRec;
 use crate::Instant;
 
+mod fitting;
+
 use anyhow::{bail, Context, Result};
 
 // 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
