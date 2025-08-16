@@ -474,6 +474,16 @@ impl PyInstant {
         self.0.as_datetime()
     }
 
+    /// Return the 1-based Gregorian day of the year (1 = January 1, 365 = December 31)
+    /// Leap-year aware
+    ///
+    /// Returns:
+    ///     int : The 1-based day of the year
+    ///
+    fn day_of_year(&self) -> u32 {
+        self.0.day_of_year()
+    }
+
     /// Create satkit.time representing input UTC Gegorian date and time
     ///
     /// Args:

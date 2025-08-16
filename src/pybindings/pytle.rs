@@ -150,12 +150,15 @@ impl PyTLE {
         self.0.to_pretty_string()
     }
 
-    /// Output as lines
+    /// Output as 2 canonical TLE Lines
     fn to_2line(&self) -> Result<[String; 2]> {
         self.0.to_2line()
     }
 
-    
+    // Output as 2 canonical TLE lines preceded by a name line (3-line element set)
+    fn to_3line(&self) -> Result<[String; 3]> {
+        self.0.to_3line()
+    }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
         let nbytes: usize =

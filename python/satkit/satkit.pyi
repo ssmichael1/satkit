@@ -135,6 +135,22 @@ class TLE:
         1 / Earth radius
         """
 
+    def to_2line(self) -> list[str]:
+        """
+        Output as 2 canonical TLE Lines
+
+        Returns:
+            list[str]: 2 canonical TLE Lines
+        """
+
+    def to_3line(self) -> list[str]:
+        """
+        Output as 2 canonical TLE lines preceded by a name line (3-line element set)
+
+        Returns:
+            list[str]: 3-line element set, name line then 2 canonical TLE lines
+        """
+
 def sgp4(
     tle: TLE | list[TLE],
     tm: time | list[time] | npt.ArrayLike,
@@ -173,7 +189,7 @@ def sgp4(
         >>> lines = [
         >>>        "0 INTELSAT 902",
         >>>     "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
-        >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
+        >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981"
         >>> ]
         >>>
         >>> tle = satkit.TLE.single_from_lines(lines)
@@ -665,13 +681,21 @@ class time:
             satkit.time: Time object representing input GPS week and second
         """
 
-        def weekday(self) -> weekday:
-            """
-            Return the day of the week
+    def weekday(self) -> weekday:
+        """
+        Return the day of the week
 
-            Returns:
-                satkit.weekday: Day of the week
-            """
+        Returns:
+            satkit.weekday: Day of the week
+        """
+
+    def day_of_year(self) -> int:
+        """
+        Return the 1-based Gregorian day of the year (1 = January 1, 365 = December 31)
+
+        Returns:
+            int: The 1-based day of the year
+        """
 
     @staticmethod
     def from_mjd(mjd: float, scale: timescale = timescale.UTC) -> time:
@@ -1338,7 +1362,7 @@ class quaternion:
         * Under the hood, this is using the "UnitQuaternion" object in the rust "nalgebra" crate.
     """
 
-    def __init__(self):
+    def __init__(self, w: float = 1.0, x: float = 0.0, y: float = 0.0, z: float = 0.0):
         """Return quaternion with input (w,x,y,z) values
 
         Optional Args:
