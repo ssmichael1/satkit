@@ -456,6 +456,41 @@ impl Instant {
         Self::from_datetime(year, month, day, 0, 0, 0.0)
     }
 
+    /// Return the day of the year (1-based, Gregorian); leap-year aware.
+    ///
+    /// # Returns
+    /// The day of the year (1-based, Gregorian); leap-year aware.
+    ///
+    /// # Notes:
+    ///
+    /// * Gregorian Jan 1 = 1
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Examples checked against google query
+    ///
+    /// let thedate = satkit::Instant::from_date(2023, 1, 1);
+    /// assert_eq!(thedate.day_of_year(), 1);
+    ///
+    /// let thedate = satkit::Instant::from_date(2025, 8, 16);
+    /// assert_eq!(thedate.day_of_year(), 228);
+    /// ```
+    pub fn day_of_year(&self) -> u32 {
+        const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        let (y, m, d, _, _, _) = self.as_datetime();
+        let leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
+        let mut doy = d;
+        for mm in 1..m {
+            doy += if mm == 2 && leap {
+                29i32
+            } else {
+                MDAYS[(mm - 1) as usize] as i32
+            };
+        }
+        doy as u32
+    }
+
     /// Construct an instant from a given Gregorian UTC date and time
     ///
     /// # Arguments

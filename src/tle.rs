@@ -498,13 +498,16 @@ impl TLE {
 
     /// Compute (two-digit year, fractional day-of-year) from epoch.
     fn epoch_to_tle_ydoy(&self) -> Result<(u8, f64)> {
-        let (y, m, d, h, min, s) = self.epoch.as_datetime();
+        let (y, _, _, _, _, _) = self.epoch.as_datetime();
 
         // Day-of-year
-        let doy_int = tle_formatter::day_of_year(y, m, d);
-        let frac = (h as f64 * 3600.0 + min as f64 * 60.0 + s) / 86400.0;
-        let doy = (doy_int as f64) + frac;
+        let doy_int = self.epoch.day_of_year();
 
+        // Fraction of day
+        // Note: this works with days that have leap seconds
+        // (in which second of day is normalized to 86401 instead of 86400)
+        let frac = self.epoch.as_mjd() % 1.0;
+        let doy = (doy_int as f64) + frac;
         let yy = (y % 100) as u8;
         Ok((yy, doy))
     }
@@ -729,21 +732,6 @@ mod tle_formatter {
             };
         }
         (sum % 10) as u8
-    }
-
-    /// Convert Y-M-D to day-of-year (1-based, Gregorian); leap-year aware.
-    pub fn day_of_year(y: i32, m: i32, d: i32) -> u32 {
-        const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-        let leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
-        let mut doy = d;
-        for mm in 1..m {
-            doy += if mm == 2 && leap {
-                29i32
-            } else {
-                MDAYS[(mm - 1) as usize] as i32
-            };
-        }
-        doy as u32
     }
 }
 

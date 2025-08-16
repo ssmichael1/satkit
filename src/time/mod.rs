@@ -12,5 +12,6 @@ pub use instant_err::InstantError;
 pub use timescale::TimeScale;
 pub use weekday::Weekday;
 
+/// Put all tests in a separate module
 #[cfg(test)]
 mod tests;
