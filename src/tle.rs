@@ -426,6 +426,27 @@ impl TLE {
     }
 
     /// Format this TLE back into the two canonical 69-char lines.
+    ///
+    /// # Returns:
+    ///
+    /// * `lines` - Result with OK value containing 2-element array of two strings representing the TLE lines
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// let lines = [
+    ///     "ISS (ZARYA)".to_string(),
+    ///     "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9990".to_string(),
+    ///     "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487613".to_string(),
+    /// ];
+    /// // Construct the TLE from the lines
+    /// let tle = satkit::TLE::from_lines(&lines).unwrap()[0].clone();
+    ///
+    /// // Show that we can re-create the same lines
+    /// assert_eq!(tle.to_2line().unwrap()[0], lines[1]);
+    /// assert_eq!(tle.to_2line().unwrap()[1], lines[2]);    
+    /// ```
+    ///
     pub fn to_2line(&self) -> Result<[String; 2]> {
         // Epoch as (YY, DOY.fraction)
         let (yy, doy) = self.epoch_to_tle_ydoy()?;
@@ -491,6 +512,31 @@ impl TLE {
     }
 
     /// Convenience: include "line 0" (name) above the two TLE lines.
+    ///
+    /// Format this TLE back into name line plus two canonical 69-char lines.
+    ///
+    /// # Returns:
+    ///
+    /// * `lines` - Result with OK value containing 3-element array of name line as string and
+    ///   two strings representing the TLE lines
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// let lines = [
+    ///     "ISS (ZARYA)".to_string(),
+    ///     "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9990".to_string(),
+    ///     "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487613".to_string(),
+    /// ];
+    /// // Construct the TLE from the lines
+    /// let tle = satkit::TLE::from_lines(&lines).unwrap()[0].clone();
+    ///
+    /// // Show that we can re-create the same lines
+    /// assert_eq!(tle.to_3line().unwrap()[0], lines[0]);
+    /// assert_eq!(tle.to_3line().unwrap()[1], lines[1]);
+    /// assert_eq!(tle.to_3line().unwrap()[2], lines[2]);    
+    /// ```
+    //////
     pub fn to_3line(&self) -> Result<[String; 3]> {
         let [l1, l2] = self.to_2line()?;
         Ok([self.name.clone(), l1, l2])
