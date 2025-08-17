@@ -40,7 +40,7 @@ pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
 /// # Returns
 ///
 /// * Vector representing sun position in MOD frame
-///    at given time.  Units are meters
+///   at given time.  Units are meters
 ///
 /// # Notes:
 ///
@@ -147,10 +147,10 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 /// * `time`  - Date at which to compute sunrise & sunset
 ///
 /// * `coord` - ITRFCoord representing location for which to compute
-///             sunrise & sunset
+///   sunrise & sunset
 ///
 /// * `sigma` - Angle in degrees between noon & rise/set
-///    Common Values:
+///   Common Values:
 ///    * "Standard": 90 deg, 50 arcmin (90.0+50.0/60.0)
 ///    * "Civil Twilight": 96 deg
 ///    * "Nautical Twilight": 102 deg

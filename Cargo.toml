@@ -19,7 +19,7 @@ name = "satkit"
 
 
 [dependencies]
-nalgebra = { version = "0.33.2", features = ["serde-serialize"] }
+nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
 ndarray = "0.16.1"
 libc = "0.2"
 chrono = "0.4"
@@ -40,6 +40,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.2.0"
 itertools = "0.14.0"
 anyhow = "1"
+webpki-roots = "1.0.2"
+
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }

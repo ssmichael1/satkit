@@ -360,13 +360,13 @@ pub fn qtod2mod_approx(tm: &Instant) -> Quat {
 ///    applications, the approximate rotation will work just fine
 ///
 /// * This computatation **does not** include impact of the
-///       Earth solid tides, but it does include polar motion,
-///       precession, and nutation
+///   Earth solid tides, but it does include polar motion,
+///   precession, and nutation
 ///
 /// * This function requires use of the Earth orientation parameters
-///       (EOP) to compute the rotation. If the EOP are not outside of the
-///       valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
-///       they will be set to zero, and a warning will be printed to stderr.
+///   (EOP) to compute the rotation. If the EOP are not outside of the
+///   valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
+///   they will be set to zero, and a warning will be printed to stderr.
 ///
 pub fn qitrf2gcrf(tm: &Instant) -> Quat {
     // w is rotation from international terrestrial reference frame

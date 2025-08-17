@@ -14,11 +14,13 @@
 //! * Keplerian orbit propagation
 //! * JPL planetary ephemerides
 //! * High-order gravity models
-//! * High-precision, high-speed numerical satellite orbit propagation with high-order (9/8) efficient Runga-Kutta solvers, ability to solve for state transition matrix for covariance propagation, and inclusion following forces:
+//! * High-precision, high-speed numerical satellite orbit propagation with high-order (9/8)
+//!   efficient Runga-Kutta solvers, ability to solve for state transition matrix for covariance propagation,
+//!   and inclusion following forces:
 //!   * High-order Earth gravity with multiple models
 //!   * Solar gravity
 //!   * Lunar gravity
-//!   * Dra, with NRL MISE-00 density model and inclusion of space weather data
+//!   * Drag, with NRL MISE-00 density model and inclusion of space weather data
 //!   * Radiation pressure
 //!
 //! # Language Bindings

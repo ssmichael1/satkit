@@ -113,14 +113,14 @@ impl PyITRFCoord {
                 }
                 Ok(Self(ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap()))
             } else {
-                return Err(pyo3::exceptions::PyTypeError::new_err(
+                Err(pyo3::exceptions::PyTypeError::new_err(
                 "First input must be float, 3-element list of floats, or 3-element numpy array of float"
-            ));
+            ))
             }
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
+            Err(pyo3::exceptions::PyTypeError::new_err(
                 "First input must be float, 3-element list of floats, or 3-element numpy array of float"
-            ));
+            ))
         }
     }
 

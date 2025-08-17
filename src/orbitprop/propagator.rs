@@ -104,23 +104,23 @@ pub enum PropagationError {
 ///
 /// * `state` - The satellite state, represented as:
 ///    * `SimpleState` - a 6x1 matrix where the 1st three elements represent GCRF position in meters,
-///       and the 2nd three elements represent GCRF velocity in meters / second
+///      nd the 2nd three elements represent GCRF velocity in meters / second
 ///    * `CovState` - a 6x7 matrix where the first column is the same as SimpleState above, and columns
-///       2-7 represent the 6x6 state transition matrix, dS/dS0
-///       The state transition matrix should be initialized to identity when running
-///       The output of the state transition matrix can be used to compute the evolution of the
-///       state covariance  (see Montenbruck and Gill for details)
+///      2-7 represent the 6x6 state transition matrix, dS/dS0
+///      The state transition matrix should be initialized to identity when running
+///      The output of the state transition matrix can be used to compute the evolution of the
+///      state covariance  (see Montenbruck and Gill for details)
 ///  * `start` - The time at the initial state
 ///  * `stop` - The time at which to propagate for computing new states
 ///  * `step_seconds` - An optional value representing intervals between `start` and `stop` at which
-///     the new state will be computed
+///    the new state will be computed
 ///  * `settings` - Settings for the Runga-Kutta propagator
 ///  * `satprops` - Properties of the satellite, such as ballistic coefficient & susceptibility to
-///     radiation pressure
+///    radiation pressure
 ///
 /// # Returns
 /// * `PropagationResult` object with details of the propagation compute, the final state, and intermediate states if step size
-///    is set
+///   is set
 ///
 /// # Example:
 ///
@@ -700,8 +700,8 @@ mod tests {
                 let min: i32 = lvals[5].parse()?;
                 let sec: f64 = lvals[6].parse()?;
                 Ok(Instant::from_datetime(year, mon, day, hour, min, sec))
-            }).collect::<Result<Vec<crate::Instant>, _>>()?;
-        
+            })
+            .collect::<Result<Vec<crate::Instant>, _>>()?;
 
         let file: File = File::open(testvecfile)?;
 

@@ -235,10 +235,10 @@ impl PyInstant {
 
             // Input is a string, first try rfc3339 format
             match Instant::from_rfc3339(s) {
-                Ok(v) => return Ok(Self(v)),
+                Ok(v) => Ok(Self(v)),
                 Err(_) => {
                     // Now try multiple formats
-                    return Self::from_string(s);
+                    Self::from_string(s)
                 }
             }
         } else {

@@ -755,7 +755,7 @@ mod tle_formatter {
         // TLE stores a single-digit exponent with sign: "±d"
         // e = e10 (we already accounted for mant being *1e5)
         let e = e10 + 1;
-        let mant_s = format!("{:0>5}", mant.max(0) as i64);
+        let mant_s = format!("{:0>5}", { mant.max(0) });
 
         // Clamp to displayable range [-9, 9]; real TLEs fit this for these fields
         let e_clamped = e.clamp(-9, 9);

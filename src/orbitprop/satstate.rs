@@ -61,8 +61,8 @@ impl SatState {
     /// # Arguments
     ///
     /// * `cov` -  Covariance matrix.  6x6 or larger if including terms like drag.
-    ///            Upper-left 6x6 is covariance for position & velocity, in units of
-    ///            meters and meters / second
+    ///   Upper-left 6x6 is covariance for position & velocity, in units of
+    ///   meters and meters / second
     ///
     pub fn set_cov(&mut self, cov: StateCov) {
         self.cov = cov;
