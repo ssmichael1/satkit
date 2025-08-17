@@ -40,7 +40,7 @@ pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
 /// # Returns
 ///
 /// * Vector representing sun position in MOD frame
-///    at given time.  Units are meters
+///   at given time.  Units are meters
 ///
 /// # Notes:
 ///
@@ -147,10 +147,10 @@ pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
 /// * `time`  - Date at which to compute sunrise & sunset
 ///
 /// * `coord` - ITRFCoord representing location for which to compute
-///             sunrise & sunset
+///   sunrise & sunset
 ///
 /// * `sigma` - Angle in degrees between noon & rise/set
-///    Common Values:
+///   Common Values:
 ///    * "Standard": 90 deg, 50 arcmin (90.0+50.0/60.0)
 ///    * "Civil Twilight": 96 deg
 ///    * "Nautical Twilight": 102 deg
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn sunpos_mod() {
         // Example 5-1 in Vallado
-        let t0: Instant = Instant::from_date(2006, 4, 2);
+        let t0: Instant = Instant::from_date(2006, 4, 2).unwrap();
         // Approximate this UTC as TDB to match example...
         let t = Instant::from_mjd_with_scale(t0.as_mjd_with_scale(TimeScale::UTC), TimeScale::TDB);
 
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn sunpos_gcrf() {
         // Example 5-1 in Vallado
-        let t0: Instant = Instant::from_date(2006, 4, 2);
+        let t0: Instant = Instant::from_date(2006, 4, 2).unwrap();
         // Approximate this UTC as TDB to match example...
         let t = Instant::from_mjd_with_scale(t0.as_mjd(), TimeScale::TDB);
 
@@ -277,7 +277,7 @@ mod tests {
     fn sunriseset() {
         // Example 5-2 from Vallado
         let itrf = ITRFCoord::from_geodetic_deg(40.0, 0.0, 0.0);
-        let tm = Instant::from_datetime(1996, 3, 23, 0, 0, 0.0);
+        let tm = Instant::from_datetime(1996, 3, 23, 0, 0, 0.0).unwrap();
         let (sunrise, sunset) = riseset(&tm, &itrf, None).unwrap();
         let (ryear, rmon, rday, rhour, rmin, rsec) = sunrise.as_datetime();
         assert!(ryear == 1996);
@@ -296,7 +296,7 @@ mod tests {
 
         // Check for error returned on 24-hour sunlight condition
         let itrf2 = ITRFCoord::from_geodetic_deg(85.0, 30.0, 0.0);
-        let tm2 = Instant::from_date(2020, 6, 20);
+        let tm2 = Instant::from_date(2020, 6, 20).unwrap();
         let r = riseset(&tm2, &itrf2, None);
         assert!(r.is_err());
     }
@@ -304,14 +304,14 @@ mod tests {
     #[test]
     fn test_webexample() {
         let coord = ITRFCoord::from_geodetic_deg(42.4154, -71.1565, 0.0);
-        let time = &Instant::from_date(2024, 10, 14);
+        let time = &Instant::from_date(2024, 10, 14).unwrap();
 
         let (rise, set) = riseset(time, &coord, None).unwrap();
 
         // Check against web example
         // https://www.timeanddate.com/sun/@4929180
-        let rise_web = Instant::from_datetime(2024, 10, 14, 10, 57, 0.0);
-        let set_web = Instant::from_datetime(2024, 10, 14, 22, 4, 0.0);
+        let rise_web = Instant::from_datetime(2024, 10, 14, 10, 57, 0.0).unwrap();
+        let set_web = Instant::from_datetime(2024, 10, 14, 22, 4, 0.0).unwrap();
 
         assert!((rise - rise_web).as_seconds().abs() < 60.0);
         assert!((set - set_web).as_seconds().abs() < 60.0);

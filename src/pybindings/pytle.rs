@@ -36,7 +36,7 @@ impl PyTLE {
     /// * `tle` - a list of TLE objects or a single TLE if lines for
     ///           only 1 are passed in
     #[staticmethod]
-    fn from_file(filename: String) -> PyResult<PyObject> {
+    fn from_file(filename: String) -> Result<PyObject> {
         let file = File::open(std::path::PathBuf::from(filename))?;
 
         let lines: Vec<String> = io::BufReader::new(file)
@@ -66,50 +66,47 @@ impl PyTLE {
     /// * `tle` - a list of TLE objects or a single TLE if lines for
     ///           only 1 are passed in
     #[staticmethod]
-    fn from_lines(lines: Vec<String>) -> PyResult<PyObject> {
-        match TLE::from_lines(&lines) {
-            Ok(v) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn from_lines(lines: Vec<String>) -> Result<PyObject> {
+        TLE::from_lines(&lines).and_then(|v| {
+            pyo3::Python::with_gil(|py| {
                 if v.len() > 1 {
                     v.into_py_any(py)
                 } else {
                     v[0].clone().into_py_any(py)
                 }
-            }),
-            Err(e) => {
-                let serr = format!("Error loading TLEs: {}", e);
-                Err(pyo3::exceptions::PyImportError::new_err(serr))
-            }
-        }
+            })
+            .map_err(|e| e.into())
+        })
     }
 
     /// Satellite NORAD Catalog Number
     #[getter]
-    const fn get_satnum(&self) -> PyResult<i32> {
-        Ok(self.0.sat_num)
+    const fn get_satnum(&self) -> i32 {
+        self.0.sat_num
     }
 
     /// Orbit eccentricity
     #[getter]
-    const fn get_eccen(&self) -> PyResult<f64> {
-        Ok(self.0.eccen)
+    const fn get_eccen(&self) -> f64 {
+        self.0.eccen
     }
 
     /// Mean anomaly in degrees
     #[getter]
-    const fn get_mean_anomaly(&self) -> PyResult<f64> {
-        Ok(self.0.mean_anomaly)
+    const fn get_mean_anomaly(&self) -> f64 {
+        self.0.mean_anomaly
     }
 
     /// Mean motion in revs / day
     #[getter]
-    const fn get_mean_motion(&self) -> PyResult<f64> {
-        Ok(self.0.mean_motion)
+    const fn get_mean_motion(&self) -> f64 {
+        self.0.mean_motion
     }
 
     /// inclination in degrees
     #[getter]
-    const fn get_inclination(&self) -> PyResult<f64> {
-        Ok(self.0.inclination)
+    const fn get_inclination(&self) -> f64 {
+        self.0.inclination
     }
 
     /// Epoch time of TLE
@@ -120,30 +117,30 @@ impl PyTLE {
 
     /// argument of perigee, degrees
     #[getter]
-    const fn get_arg_of_perigee(&self) -> PyResult<f64> {
-        Ok(self.0.arg_of_perigee)
+    const fn get_arg_of_perigee(&self) -> f64 {
+        self.0.arg_of_perigee
     }
 
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
     #[getter]
-    const fn get_mean_motion_dot(&self) -> PyResult<f64> {
-        Ok(self.0.mean_motion_dot)
+    const fn get_mean_motion_dot(&self) -> f64 {
+        self.0.mean_motion_dot
     }
 
     /// One sixth of 2nd derivative of mean motion wrt time, in revs/day^3
     #[getter]
-    const fn get_mean_motion_dot_dot(&self) -> PyResult<f64> {
-        Ok(self.0.mean_motion_dot_dot)
+    const fn get_mean_motion_dot_dot(&self) -> f64 {
+        self.0.mean_motion_dot_dot
     }
 
     /// Name of satellite
-    fn name(&self) -> PyResult<String> {
-        Ok(self.0.name.clone())
+    fn name(&self) -> String {
+        self.0.name.clone()
     }
 
     // Drag
-    const fn bstar(&self) -> PyResult<f64> {
-        Ok(self.0.bstar)
+    const fn bstar(&self) -> f64 {
+        self.0.bstar
     }
 
     fn __str__(&self) -> String {

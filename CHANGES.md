@@ -84,3 +84,19 @@
 ### No panic if TLE lines are too short
  - Return error rather than panic if not enough characters in TLE
  - Contribution by "DeflateAwning"
+
+
+## Python 0.8.0.  Rust 0.8.0 (not yet released)
+  
+### TLE export to lines
+  - functions for generating 69-character TLE lines from a TLE object
+
+### Python use of "anyhow::Result"
+  - Use "anyhow::Result" where appropriate in python bindings, as it is used in main code branch and compatible with pyo3
+
+### Code Cleanup
+  - Remove "clippy" warnings, mainly in comment indentation and a few inefficient code idioms
+
+### Error Checking on from_datetime
+  - Bounds checking on month, day, hour, minute, second
+

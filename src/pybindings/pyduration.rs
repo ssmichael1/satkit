@@ -6,6 +6,8 @@ use pyo3::types::PyBytes;
 use pyo3::types::PyDict;
 use pyo3::IntoPyObjectExt;
 
+use anyhow::{bail, Result};
+
 /// Class representing durations of times, allowing for representation
 /// via common measures of duration (years, days, hours, minutes, seconds)
 ///
@@ -63,7 +65,7 @@ impl PyDuration {
     ///
     #[new]
     #[pyo3(signature=(**kwargs))]
-    fn py_new(kwargs: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+    fn py_new(kwargs: Option<Bound<'_, PyDict>>) -> Result<Self> {
         let mut days = 0.0;
         let mut seconds = 0.0;
         let mut minutes = 0.0;
@@ -152,21 +154,19 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration|satkit.time: New duration or time object
-    fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn __add__(&self, other: &Bound<'_, PyAny>) -> Result<PyObject> {
         if other.is_instance_of::<Self>() {
             let dur = other.extract::<Self>()?;
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 Self(self.0 + dur.0).into_py_any(py)
-            })
+            })?)
         } else if other.is_instance_of::<PyInstant>() {
             let tm = other.extract::<PyInstant>()?;
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
                 PyInstant(tm.0 + self.0).into_py_any(py)
-            })
+            })?)
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid right-hand side",
-            ))
+            bail!("Invalid right-hand side")
         }
     }
 
@@ -261,12 +261,10 @@ impl PyDuration {
         self.0.to_string()
     }
 
-    fn __setstate__(&mut self, py: Python, s: Py<PyBytes>) -> PyResult<()> {
+    fn __setstate__(&mut self, py: Python, s: Py<PyBytes>) -> Result<()> {
         let s = s.as_bytes(py);
         if s.len() != 8 {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid serialization length",
-            ));
+            bail!("Invalid serialization length");
         }
         let t = i64::from_le_bytes(s.try_into()?);
         self.0 = Duration { usec: t };

@@ -23,18 +23,18 @@ impl<T> From<KeplerError> for Result<T> {
 /// These are:
 ///
 /// * `True Anomaly` - Denoted ν, is the Periapsis-Earth-Satellite
-///    angle in the orbital plane
+///   angle in the orbital plane
 ///
 /// * `Mean Anomaly` - Denoted M, this does not have a great geographical
-///    representation, but is an angle that increases monotonically in time
-///    between 0 and 2π over the course of a single orbit.
+///   representation, but is an angle that increases monotonically in time
+///   between 0 and 2π over the course of a single orbit.
 ///
 /// * `Eccentric Anomaly` - Denoted E, is the Periaps-C-B
-///    angle in the orbital plane, wehre "C" is the center of the orbital
-///    ellipse, and "B" is a point on the auxilliary circle (the circle
-///    bounding the orbital ellipse) along a line from the satellite
-///    and perpendicular to the semimajor axis.  The eccentric anomaly is
-///    a useful prerequisite to compute the mean anomaly
+///   angle in the orbital plane, wehre "C" is the center of the orbital
+///   ellipse, and "B" is a point on the auxilliary circle (the circle
+///   bounding the orbital ellipse) along a line from the satellite
+///   and perpendicular to the semimajor axis.  The eccentric anomaly is
+///   a useful prerequisite to compute the mean anomaly
 ///
 pub enum Anomaly {
     Mean(f64),
@@ -115,7 +115,7 @@ impl Kepler {
     /// * `raan` - Right Ascension of the Ascending Node, radians
     /// * `argp` - Argument of Perigee, radians
     /// * `anomaly` - Anomaly type representing location of satellite along the
-    ///               orbital plane
+    ///   orbital plane
     ///
     /// # Returns
     ///

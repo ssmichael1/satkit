@@ -38,7 +38,7 @@ const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 ///     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."];
 ///
 /// let mut tle = TLE::load_3line(lines[0], lines[1], lines[2]).unwrap();
-/// let tm = Instant::from_datetime(2006, 5, 1, 11, 0, 0.0);
+/// let tm = Instant::from_datetime(2006, 5, 1, 11, 0, 0.0).unwrap();
 ///
 /// // Use SGP4 to get position,
 /// let (pTEME, vTEME, errs) = sgp4(&mut tle, &[tm]);
@@ -326,7 +326,9 @@ impl TLE {
         // Note: day_of_year starts from 1, not zero,
         // also, go from Jan 2 to avoid leap-second
         // issues, hence the "-2" at end
-        let epoch = Instant::from_date(year as i32, 1, 2).add_utc_days(day_of_year - 2.0);
+        let epoch = Instant::from_date(year as i32, 1, 2)
+            .context("Invalid year, month, or day")?
+            .add_utc_days(day_of_year - 2.0);
 
         Ok(Self {
             name: "none".to_string(),
@@ -755,7 +757,7 @@ mod tle_formatter {
         // TLE stores a single-digit exponent with sign: "±d"
         // e = e10 (we already accounted for mant being *1e5)
         let e = e10 + 1;
-        let mant_s = format!("{:0>5}", mant.max(0) as i64);
+        let mant_s = format!("{:0>5}", mant.max(0));
 
         // Clamp to displayable range [-9, 9]; real TLEs fit this for these fields
         let e_clamped = e.clamp(-9, 9);

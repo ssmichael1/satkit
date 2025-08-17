@@ -16,6 +16,8 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
     /// First Same as Last
     /// (first compute of next iteration is same as last compute of last iteration)
+    /// (I haven't implemented this yet...)
+    #[allow(dead_code)]
     const FSAL: bool;
 
     fn interpolate<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {

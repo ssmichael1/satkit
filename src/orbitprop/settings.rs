@@ -15,7 +15,7 @@ use anyhow::Result;
 /// * `rel_error` - the maximum relative error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
 /// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
 /// * `enable_interp` - Do we enable interpolation of the state between start and stop times.  Default is true
-///                     slight comptuation savings if set to false
+///   slight computation savings if set to false
 ///
 #[derive(Debug, Clone)]
 pub struct PropSettings {

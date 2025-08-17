@@ -92,7 +92,7 @@ fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
             let day: u32 = str2num(lvals[0], 8, 10).context("Cannot ready day of month")?;
 
             Ok(SpaceWeatherRecord {
-                date: (Instant::from_date(year as i32, mon as i32, day as i32)),
+                date: (Instant::from_date(year as i32, mon as i32, day as i32)?),
                 bsrn: lvals[1].parse().unwrap_or(-1),
                 nd: lvals[2].parse().unwrap_or(-1),
                 kp: {
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_load() {
-        let tm: Instant = Instant::from_datetime(2023, 11, 14, 0, 0, 0.0);
+        let tm: Instant = Instant::from_datetime(2023, 11, 14, 0, 0, 0.0).unwrap();
         let r = get(tm);
         println!("r = {:?}", r);
         println!("rdate = {}", r.unwrap().date);

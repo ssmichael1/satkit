@@ -14,11 +14,13 @@
 //! * Keplerian orbit propagation
 //! * JPL planetary ephemerides
 //! * High-order gravity models
-//! * High-precision, high-speed numerical satellite orbit propagation with high-order (9/8) efficient Runga-Kutta solvers, ability to solve for state transition matrix for covariance propagation, and inclusion following forces:
+//! * High-precision, high-speed numerical satellite orbit propagation with high-order (9/8)
+//!   efficient Runga-Kutta solvers, ability to solve for state transition matrix for covariance propagation,
+//!   and inclusion following forces:
 //!   * High-order Earth gravity with multiple models
 //!   * Solar gravity
 //!   * Lunar gravity
-//!   * Dra, with NRL MISE-00 density model and inclusion of space weather data
+//!   * Drag, with NRL MISE-00 density model and inclusion of space weather data
 //!   * Radiation pressure
 //!
 //! # Language Bindings
@@ -44,7 +46,7 @@
 //!
 //! ## Downloading the data files
 //! ```no_run
-//! // Print the directoyr where data will be stored
+//! // Print the directory where data will be stored
 //! println!("Data directory: {:?}", satkit::utils::datadir());
 //! // Update the data files (download those that are missing; refresh those that are out of date)
 //! // This will always download the most-recent space weather data and Earth Orientation Parameters
@@ -53,7 +55,6 @@
 //! ```
 
 #![warn(clippy::all, clippy::use_self, clippy::cargo)]
-
 // Type definitions
 pub mod types;
 

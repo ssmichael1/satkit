@@ -49,7 +49,7 @@ Also includes python bindings for *all* functions via via [pyo3](https://pyo3.rs
   - High-order Earth gravity with multiple models
   - Solar gravity
   - Lunar gravity
-  - Drag (NRL MISE-00 density model)
+  - Drag: NRL MISE-00 density model
   - Radiation pressure
 
 ## ODE Solvers
