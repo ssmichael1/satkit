@@ -149,6 +149,28 @@ class TestTime:
         assert minute == 0
         assert sec == 0
 
+    def test_day_of_year(self):
+        t = sk.time(2021, 1, 1)
+        assert t.day_of_year() == 1
+
+        t = sk.time(2021, 12, 31)
+        assert t.day_of_year() == 365
+
+        t = sk.time(2020, 12, 31)
+        assert t.day_of_year() == 366
+
+        t = sk.time(2100, 12, 31)
+        assert t.day_of_year() == 365
+
+        t = sk.time(2400, 12, 31)
+        assert t.day_of_year() == 366
+
+        t = sk.time(2024, 2, 29)
+        assert t.day_of_year() == 60
+
+        t = sk.time(2025, 8, 16)
+        assert t.day_of_year() == 228
+
 
 class TestKepler:
     def test_kepler_from_pv(self):
@@ -555,14 +577,14 @@ class TestQuaternion:
         """
         s = 1 / m.sqrt(2.0)
         q = sk.quaternion(s, s, 0, 0)
-        assert(q.axis == pytest.approx(np.array([1.0, 0.0, 0.0]), 1.0e-10))
-        assert(q.angle == pytest.approx(m.pi / 2, 1.0e-10))
+        assert q.axis == pytest.approx(np.array([1.0, 0.0, 0.0]), 1.0e-10)
+        assert q.angle == pytest.approx(m.pi / 2, 1.0e-10)
         q = sk.quaternion(s, 0, s, 0)
-        assert(q.axis == pytest.approx(np.array([0.0, 1.0, 0.0]), 1.0e-10))
-        assert(q.angle == pytest.approx(m.pi / 2, 1.0e-10))
+        assert q.axis == pytest.approx(np.array([0.0, 1.0, 0.0]), 1.0e-10)
+        assert q.angle == pytest.approx(m.pi / 2, 1.0e-10)
         q = sk.quaternion(s, 0, 0, s)
-        assert(q.axis == pytest.approx(np.array([0.0, 0.0, 1.0]), 1.0e-10))
-        assert(q.angle == pytest.approx(m.pi / 2, 1.0e-10))
+        assert q.axis == pytest.approx(np.array([0.0, 0.0, 1.0]), 1.0e-10)
+        assert q.angle == pytest.approx(m.pi / 2, 1.0e-10)
 
     def test_quaternion2euler(self):
         """
@@ -754,6 +776,27 @@ class TestSGP4:
         # Verify that propagating multiple TLEs matches propagation of a single TLE
         assert p2 == pytest.approx(np.squeeze(p[2, :, :]))
         assert v2 == pytest.approx(np.squeeze(v[2, :, :]))
+
+    def test_to_lines(self):
+        """
+        Test converting TLE to lines
+        """
+
+        lines = [
+            "STARLINK-3118",
+            "1 49140U 21082L   24030.39663557  .00000076  00000-0  14180-4 0  9995",
+            "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
+        ]
+        tle = sk.TLE.from_lines(lines)
+
+        if isinstance(tle, list):
+            tle = tle[0]
+
+        lines2 = tle.to_2line()
+        assert lines[1:] == lines2
+
+        lines2 = tle.to_3line()
+        assert lines == lines2
 
     def test_sgp4_vallado(self):
         """

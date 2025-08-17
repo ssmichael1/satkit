@@ -425,6 +425,139 @@ impl TLE {
         })
     }
 
+    /// Format this TLE back into the two canonical 69-char lines.
+    ///
+    /// # Returns:
+    ///
+    /// * `lines` - Result with OK value containing 2-element array of two strings representing the TLE lines
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// let lines = [
+    ///     "ISS (ZARYA)".to_string(),
+    ///     "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9990".to_string(),
+    ///     "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487613".to_string(),
+    /// ];
+    /// // Construct the TLE from the lines
+    /// let tle = satkit::TLE::from_lines(&lines).unwrap()[0].clone();
+    ///
+    /// // Show that we can re-create the same lines
+    /// assert_eq!(tle.to_2line().unwrap()[0], lines[1]);
+    /// assert_eq!(tle.to_2line().unwrap()[1], lines[2]);    
+    /// ```
+    ///
+    pub fn to_2line(&self) -> Result<[String; 2]> {
+        // Epoch as (YY, DOY.fraction)
+        let (yy, doy) = self.epoch_to_tle_ydoy()?;
+
+        // Satellite number in alpha5
+        let sat_alpha5 = Self::int_to_alpha5(self.sat_num)?;
+
+        // Format ndot/2, nddot/6, bstar with correct implied fields
+        let (ndot_sign, ndot_body) = tle_formatter::format_ndot(self.mean_motion_dot);
+        let (nddot_sign, nddot_mant, nddot_exp2) =
+            tle_formatter::format_implied(self.mean_motion_dot_dot);
+        let (bstar_sign, bstar_mant, bstar_exp2) = tle_formatter::format_implied(self.bstar);
+
+        // Ephemeris type as a single digit '0'..'9'
+        let et = if (0..=9).contains(&self.ephem_type) {
+            char::from(b'0' + self.ephem_type)
+        } else {
+            '0'
+        };
+
+        // ------- Build Line 1 -------
+        let sat5 = format!("{:<5}", sat_alpha5); // cols 3-7
+
+        // International designator triplet.
+        // Last 2 digits of launch year, 3-digit launch number within year, 3-character piece identifier.
+        // Never decoded, so no need to re-encode.
+        let desig = format!("{:<8}", self.intl_desig); // cols 10-17
+
+        let epoch = format!("{:0>2}{:012.8}", yy, doy); // cols 19-32
+        let ndot = format!("{}{}", ndot_sign, ndot_body); // cols 34-43 (10 chars total)
+        let nddot = format!("{}{}{}", nddot_sign, nddot_mant, nddot_exp2); // cols 45-52 (8 chars)
+        let bstar = format!("{}{}{}", bstar_sign, bstar_mant, bstar_exp2); // cols 54-61 (8 chars)
+        let elem_no = format!("{:>4}", self.element_num.max(0)); // cols 65-68
+
+        let mut l1 = format!("1 {sat5}U {desig} {epoch} {ndot} {nddot} {bstar} {et} {elem_no}");
+
+        let cksum1 = tle_formatter::tle_checksum(&l1);
+        l1.push(char::from(b'0' + cksum1));
+
+        // ------- Build Line 2 -------
+        let incl = format!("{:8.4}", self.inclination);
+        let raan = format!("{:8.4}", self.raan);
+        let ecc7 = format!("{:0>7}", (self.eccen.abs() * 1.0e7 + 0.5).floor() as u64);
+        let argp = format!("{:8.4}", self.arg_of_perigee);
+        let mean_anom = format!("{:8.4}", self.mean_anomaly);
+        let n = format!("{:11.8}", self.mean_motion);
+        let rev = format!("{:>5}", self.rev_num.max(0));
+
+        let mut l2 = format!("2 {sat_alpha5:<5} {incl} {raan} {ecc7} {argp} {mean_anom} {n}{rev}");
+
+        // Ensure 68 chars before checksum (line-2 is stable with these widths)
+        if l2.len() != 68 {
+            if l2.len() < 68 {
+                l2.push_str(&" ".repeat(68 - l2.len()));
+            } else {
+                l2.truncate(68);
+            }
+        }
+        let cksum2 = tle_formatter::tle_checksum(&l2);
+        l2.push(char::from(b'0' + cksum2));
+
+        Ok([l1, l2])
+    }
+
+    /// Convenience: include "line 0" (name) above the two TLE lines.
+    ///
+    /// Format this TLE back into name line plus two canonical 69-char lines.
+    ///
+    /// # Returns:
+    ///
+    /// * `lines` - Result with OK value containing 3-element array of name line as string and
+    ///   two strings representing the TLE lines
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// let lines = [
+    ///     "ISS (ZARYA)".to_string(),
+    ///     "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9990".to_string(),
+    ///     "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487613".to_string(),
+    /// ];
+    /// // Construct the TLE from the lines
+    /// let tle = satkit::TLE::from_lines(&lines).unwrap()[0].clone();
+    ///
+    /// // Show that we can re-create the same lines
+    /// assert_eq!(tle.to_3line().unwrap()[0], lines[0]);
+    /// assert_eq!(tle.to_3line().unwrap()[1], lines[1]);
+    /// assert_eq!(tle.to_3line().unwrap()[2], lines[2]);    
+    /// ```
+    //////
+    pub fn to_3line(&self) -> Result<[String; 3]> {
+        let [l1, l2] = self.to_2line()?;
+        Ok([self.name.clone(), l1, l2])
+    }
+
+    /// Compute (two-digit year, fractional day-of-year) from epoch.
+    fn epoch_to_tle_ydoy(&self) -> Result<(u8, f64)> {
+        let (y, _, _, _, _, _) = self.epoch.as_datetime();
+
+        // Day-of-year
+        let doy_int = self.epoch.day_of_year();
+
+        // Fraction of day
+        // Note: this works with days that have leap seconds
+        // (in which second of day is normalized to 86401 instead of 86400)
+        let frac = self.epoch.as_mjd() % 1.0;
+        let doy = (doy_int as f64) + frac;
+        let yy = (y % 100) as u8;
+        Ok((yy, doy))
+    }
+
     /// Convert an alpha5 formated Satellite Catalog Number, also known as NORAD ID, to a plain
     /// numerical ID.
     ///
@@ -581,6 +714,73 @@ impl std::fmt::Display for TLE {
     }
 }
 
+mod tle_formatter {
+
+    /// Format ndot/2 as sign + ".dddddddd" (10 cols split as [sign][9-body])
+    pub fn format_ndot(v: f64) -> (char, String) {
+        let sign = if v < 0.0 { '-' } else { ' ' };
+        let mut body = format!("{:.8}", v.abs());
+        if let Some(stripped) = body.strip_prefix('0') {
+            body = stripped.to_string(); // turn "0.xxxxxxxx" into ".xxxxxxxx"
+        }
+        // ensure width 9 (".dddddddd")
+        if body.len() < 9 {
+            body = format!("{:>9}", body);
+        } else if body.len() > 9 {
+            body.truncate(9);
+        }
+        (sign, body)
+    }
+
+    /// Format value for implied-exponent fields (nddot/6 and bstar).
+    /// Returns (sign, mantissa[5], exp[2 with sign]) per TLE ("MMMMM±E", where E is 0..9).
+    pub fn format_implied(v: f64) -> (char, String, String) {
+        if v == 0.0 {
+            // Exact zero as " 00000-0"
+            return (' ', "00000".to_string(), "-0".to_string());
+        }
+        let sign = if v < 0.0 { '-' } else { ' ' };
+        let x = v.abs();
+
+        // Represent v ≈ mant * 10^(e - 5) with mant in [0, 99999]
+        let mut e10 = x.log10().floor() as i32; // base-10 exponent
+        let mut mant = (x / 10f64.powi(e10) * 1.0e4).round() as i64;
+
+        // Normalize if rounding pushed mant to 100000
+        if mant == 100_000 {
+            mant = 10_000;
+            e10 += 1;
+        }
+
+        // TLE stores a single-digit exponent with sign: "±d"
+        // e = e10 (we already accounted for mant being *1e5)
+        let e = e10 + 1;
+        let mant_s = format!("{:0>5}", mant.max(0) as i64);
+
+        // Clamp to displayable range [-9, 9]; real TLEs fit this for these fields
+        let e_clamped = e.clamp(-9, 9);
+        let exp_s = format!("{:+}", e_clamped);
+
+        (sign, mant_s, exp_s)
+    }
+
+    /// Compute the TLE checksum (mod 10) over the first 68 characters.
+    pub fn tle_checksum(s: &str) -> u8 {
+        let mut sum: u32 = 0;
+        for (i, c) in s.chars().enumerate() {
+            if i >= 68 {
+                break;
+            }
+            sum += match c {
+                '0'..='9' => c as u32 - '0' as u32,
+                '-' => 1,
+                _ => 0,
+            };
+        }
+        (sum % 10) as u8
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -632,10 +832,10 @@ mod tests {
             "2 52743  97.5265 153.6940 0008594  82.9904  31.3082 15.15793680 38769".to_string(),
             "0 ISS (ZARYA)".to_string(),
             "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992".to_string(),
-            "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(),
+            "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(), // Note: Invalid checksum.
             "0 ISS (ZARYA)".to_string(),
             "1 Z9999U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992".to_string(),
-            "2 Z9999  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(),
+            "2 Z9999  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(), // Note: Invalid checksum.
         ];
 
         let tles = match TLE::from_lines(&lines) {
@@ -817,6 +1017,118 @@ mod tests {
             Ok(ref s) if s == "S9994" => {}
             Ok(ref s) => bail!("Error converting 269994 to 'S9994': got {}", s),
             Err(e) => bail!("Error converting 269994 to 'S9994': {}", e),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_3line_encoding() -> Result<()> {
+        let line0 = "ISS (ZARYA)";
+        let line1 = "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927";
+        let line2 = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537";
+
+        let orig = TLE::load_3line(line0, line1, line2)?;
+
+        // Format back to text
+        let [l0, l1, l2] = orig.to_3line()?;
+
+        // Check that it matches.
+        assert_eq!(l1, line1, "Line 1 must match original");
+        assert_eq!(l2, line2, "Line 2 must match original");
+        assert_eq!(l0, line0, "Line 0 (name) must be preserved");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_2line_encoding() -> Result<()> {
+        let line1 = "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927";
+        let line2 = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537";
+
+        let orig = TLE::load_2line(line1, line2)?;
+
+        // Format back to text
+        let [l1, l2] = orig.to_2line()?;
+
+        // Check that it matches.
+        assert_eq!(l1, line1, "Line 1 must match original");
+        assert_eq!(l2, line2, "Line 2 must match original");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_2line_encoding_many_times() -> Result<()> {
+        let tle_examples = vec![
+            [
+                // "2023-193D"
+                "1 58556U 23193D   25003.79555039  .00279397  31144-4  86159-3 0  9996".to_string(),
+                "2 58556  97.2472  26.1173 0004235 271.4738  88.6051 15.91743157 60937".to_string(),
+            ],
+            [
+                // "0 CPOD FLT2 (TYVAK-0033)"
+                "1 52780U 22057BB  23036.86744141  .00018086  00000-0  87869-3 0  9991".to_string(),
+                "2 52780  97.5313 154.3283 0011660  53.1934 307.0368 15.18441019 16465".to_string(),
+            ],
+            [
+                // "1998-067WV"
+                "1 60955U 98067WV  24295.33823779  .06453473  12009-4  26290-2 0  9998".to_string(),
+                "2 60955  51.6166  43.0490 0010894 336.3668  23.6849 16.22453324  8315".to_string(),
+            ],
+            [
+                // "2 PATHFINDER"
+                "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995".to_string(),
+                "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085".to_string(),
+            ],
+            // [
+            //     // "0 SHINSEI (MS-F2)". Exclude because it does not use a 5-digit NORAD ID, and thus the encoding isn't as expected.
+            //     "1  5485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992".to_string(),
+            //     "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065".to_string(),
+            // ],
+            [
+                // "OSCAR 7 (AO-7)"
+                "1 07530U 74089B   24323.87818483 -.00000039  00000+0  47934-4 0  9997".to_string(),
+                "2 07530 101.9893 320.0351 0012269 147.9195 274.9996 12.53682684288423".to_string(),
+            ],
+            [
+                "1 52743U 22057M   23037.04954473  .00011781  00000-0  61944-3 0  9993".to_string(),
+                "2 52743  97.5265 153.6940 0008594  82.9904  31.3082 15.15793680 38769".to_string(),
+            ],
+            [
+                // "0 ISS (ZARYA)"
+                "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992".to_string(),
+                "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487613".to_string(),
+            ],
+            [
+                // "0 ISS (ZARYA)"
+                "1 Z9999U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992".to_string(),
+                "2 Z9999  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487611".to_string(),
+            ],
+        ];
+
+        for tle in tle_examples {
+            let tle_loaded = TLE::load_2line(&tle[0], &tle[1])?;
+            let [l1, l2] = tle_loaded.to_2line()?;
+
+            // Check that it matches.
+            // Allow ignoring the sign of the exponent on zero.
+            if tle[0].contains(" 00000+0 ") {
+                let mut expected: String = tle[0].replace(" 00000+0 ", " 00000-0 ");
+
+                // Increment the checksum digit at the end of the line.
+                if let Some(last_char) = expected.chars().last() {
+                    if let Some(digit) = last_char.to_digit(10) {
+                        let new_digit = (digit + 1) % 10; // wrap around if needed
+                        expected.pop(); // remove last char
+                        expected.push(char::from_digit(new_digit, 10).unwrap());
+                    }
+                }
+
+                assert_eq!(l1, expected, "Line 1 must match original");
+            } else {
+                assert_eq!(l2, tle[1], "Line 2 must match original");
+            }
         }
 
         Ok(())

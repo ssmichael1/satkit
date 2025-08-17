@@ -98,6 +98,35 @@ fn test_leapsecond() {
 }
 
 #[test]
+fn test_day_of_year() {
+    // Following examples from google
+    let thedate = Instant::from_date(2025, 8, 16);
+    assert_eq!(thedate.day_of_year(), 228);
+
+    let thedate = Instant::from_date(2024, 2, 29);
+    assert_eq!(thedate.day_of_year(), 60);
+
+    let thedate = Instant::from_date(2023, 1, 1);
+    assert_eq!(thedate.day_of_year(), 1);
+
+    // Include a time component
+    let thetime = Instant::from_datetime(2024, 12, 31, 23, 59, 59.999999);
+    assert_eq!(thetime.day_of_year(), 366);
+
+    // Leap year test
+    let thedate = Instant::from_date(2024, 12, 31);
+    assert_eq!(thedate.day_of_year(), 366);
+
+    // Check year modulo 100, but not 400 (Not a leap year!)
+    let thedate = Instant::from_date(2100, 12, 31);
+    assert_eq!(thedate.day_of_year(), 365);
+
+    // Check year modulo 400 (Leap year!)
+    let thedate = Instant::from_date(2400, 12, 31);
+    assert_eq!(thedate.day_of_year(), 366);
+}
+
+#[test]
 fn test_ops() {
     let t1 = Instant::from_datetime(2024, 11, 13, 8, 0, 3.0);
     let t2 = Instant::from_datetime(2024, 11, 13, 8, 0, 4.0);
