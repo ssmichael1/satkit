@@ -199,6 +199,29 @@ fn test_rfc3339() {
 }
 
 #[test]
+fn test_bounds() {
+    let tm = Instant::from_date(2024, 13, 4);
+    assert!(tm.is_err());
+
+    let tm = Instant::from_date(2024, 2, 29);
+    assert!(tm.is_ok());
+
+    let tm = Instant::from_date(2024, 2, 30);
+    assert!(tm.is_err());
+
+    let tm = Instant::from_datetime(2024, 2, 29, 23, 59, 59.999999);
+    assert!(tm.is_ok());
+
+    // Should be error ... not in leap second
+    let tm = Instant::from_datetime(2024, 2, 29, 23, 59, 60.5);
+    assert!(tm.is_err());
+
+    // Should be OK ... within a leap second
+    let tm = Instant::from_datetime(2008, 12, 31, 23, 59, 60.5);
+    assert!(tm.is_ok());
+}
+
+#[test]
 fn test_strptime() {
     let time = Instant::strptime("2024-11-24T12:03:45.123456", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
     let g = time.as_datetime();

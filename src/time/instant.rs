@@ -507,6 +507,7 @@ impl Instant {
     ///
     /// # Returns
     /// A new Instant object representing the given date and time, or error if invalid
+    /// or error if the month, day, hour, minute, or second are out of bounds
     pub fn from_datetime(
         year: i32,
         month: i32,
@@ -515,6 +516,8 @@ impl Instant {
         minute: i32,
         second: f64,
     ) -> Result<Self> {
+        let mut check_leapsecond: bool = false;
+
         // Bounds checking on input
         if !(1..=12).contains(&month) {
             bail!("Invalid month: {}", month);
@@ -537,8 +540,14 @@ impl Instant {
         if !(0..=59).contains(&minute) {
             bail!("Invalid minute: {}", minute);
         }
-        if !(0.0..=60.0).contains(&second) {
-            bail!("Invalid second: {}", second);
+        if !(0.0..60.0).contains(&second) {
+            // Check for rare case of leap second
+            if (60.0..61.0).contains(&second) {
+                // Are we in a leap second?
+                check_leapsecond = true;
+            } else {
+                bail!("Invalid second: {}", second);
+            }
         }
 
         use gregorian_coefficients as gc;
@@ -565,6 +574,26 @@ impl Instant {
         // Make sure adding the leapseconds didn't cross another
         // leapsecond boundary
         raw = raw + microleapseconds(raw) - ls;
+
+        // Very rare -- check if second is in range [60, 61).  If so, make sure
+        // this is in the middle of a leap second
+        // I can't believe I'm even doing this...
+        if check_leapsecond {
+            let mut valid_leap_second = false;
+            // Check if raw is within a leap second
+            for (t, _) in LEAP_SECOND_TABLE.iter() {
+                // The table holds the first of the "second" that happens twice, so
+                // we are in leap second if raw is between [t + 1_000_000, t + 2_000_000)
+                if raw >= *t + 1_000_000 && raw < *t + 2_000_000 {
+                    // We are in a leap second
+                    valid_leap_second = true;
+                    break;
+                }
+            }
+            if !valid_leap_second {
+                bail!("Invalid second");
+            }
+        }
 
         Ok(Self { raw })
     }
