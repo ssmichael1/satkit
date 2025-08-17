@@ -308,7 +308,7 @@ impl Quaternion {
     fn slerp(&self, other: &Self, frac: f64, epsilon: f64) -> Result<Self> {
         self.0.try_slerp(&other.0, frac, epsilon).map_or_else(
             || {
-                bail!("Quaternions cannot be 180 deg apart");
+                bail!("Quaternions cannot be 180 deg apart")
             },
             |v| Ok(v.into()),
         )
