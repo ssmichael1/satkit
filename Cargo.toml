@@ -33,7 +33,7 @@ pyo3 = { version = "0.25.1", features = [
     "extension-module",
     "anyhow",
 ], optional = true }
-ureq = "3"
+ureq = "3.1.0"
 json = "0.12.4"
 process_path = "0.1.4"
 serde = { version = "1.0", features = ["derive"] }
@@ -49,9 +49,9 @@ chrono = "0.4.38"
 pyo3-build-config = { version = "0.25.1", optional = true }
 
 [dev-dependencies]
-rand = "0.9"
+rand = "0.9.2"
 approx = "0.5"
-rand_distr = "0.5"
+rand_distr = "0.5.1"
 
 [features]
 pybindings = ["pyo3", "numpy", "pyo3-build-config"]
