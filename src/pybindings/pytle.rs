@@ -5,6 +5,8 @@ use crate::tle::TLE;
 use std::fs::File;
 use std::io::{self, BufRead};
 
+use anyhow::Result;
+
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
 
@@ -146,6 +148,16 @@ impl PyTLE {
 
     fn __str__(&self) -> String {
         self.0.to_pretty_string()
+    }
+
+    /// Output as 2 canonical TLE Lines
+    fn to_2line(&self) -> Result<[String; 2]> {
+        self.0.to_2line()
+    }
+
+    // Output as 2 canonical TLE lines preceded by a name line (3-line element set)
+    fn to_3line(&self) -> Result<[String; 3]> {
+        self.0.to_3line()
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
