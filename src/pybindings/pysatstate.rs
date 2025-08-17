@@ -15,6 +15,8 @@ use crate::orbitprop::{PropSettings, SatState, StateCov};
 use crate::pybindings::PyDuration;
 use crate::Instant;
 
+use anyhow::{bail, Result};
+
 #[pyclass(name = "satstate", module = "satkit")]
 #[derive(Clone, Debug)]
 pub struct PySatState(SatState);
@@ -28,11 +30,9 @@ impl PySatState {
         pos: &Bound<'_, np::PyArray1<f64>>,
         vel: &Bound<'_, np::PyArray1<f64>>,
         cov: Option<&Bound<'_, np::PyArray2<f64>>>,
-    ) -> PyResult<Self> {
+    ) -> Result<Self> {
         if pos.len() != 3 || vel.len() != 3 {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Position and velocity must be 1-d numpy arrays with length 3",
-            ));
+            bail!("Position and velocity must be 1-d numpy arrays with length 3");
         }
 
         let mut state = SatState::from_pv(
@@ -43,9 +43,7 @@ impl PySatState {
         if let Some(cov) = cov {
             let dims = cov.dims();
             if dims[0] != 6 || dims[1] != 6 {
-                return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                    "Covariance must be 6x6 matrix",
-                ));
+                bail!("Covariance must be 6x6 numpy array");
             }
             let nacov = na::Matrix6::<f64>::from_row_slice(unsafe { cov.as_slice().unwrap() });
             state.set_cov(StateCov::PVCov(nacov));
@@ -87,11 +85,9 @@ impl PySatState {
     fn set_gcrf_pos_uncertainty(
         &mut self,
         sigma_cart: &Bound<'_, np::PyArray1<f64>>,
-    ) -> PyResult<()> {
+    ) -> Result<()> {
         if sigma_cart.len() != 3 {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Position uncertainty must be 1-d numpy array with length 3",
-            ));
+            bail!("Position uncertainty must be 1-d numpy array with length 3");
         }
         let na_sigma_cart =
             na::Vector3::<f64>::from_row_slice(unsafe { sigma_cart.as_slice().unwrap() });
@@ -212,7 +208,7 @@ impl PySatState {
         &self,
         timedur: &Bound<'_, PyAny>,
         kwargs: Option<&Bound<'_, PyDict>>,
-    ) -> PyResult<Self> {
+    ) -> Result<Self> {
         let time: Instant = {
             if timedur.is_instance_of::<PyInstant>() {
                 timedur.extract::<PyInstant>()?.0
@@ -220,9 +216,7 @@ impl PySatState {
                 let dur = timedur.extract::<PyDuration>()?;
                 self.0.time + dur.0
             } else {
-                return Err(pyo3::exceptions::PyTypeError::new_err(
-                    "timedur must be satkit.time or satkit.duration",
-                ));
+                bail!("1st argument must be satkit.time or satkit.duration");
             }
         };
 
@@ -237,13 +231,7 @@ impl PySatState {
             false => None,
         };
 
-        match self.0.propagate(&time, propsettings.as_ref()) {
-            Ok(s) => Ok(Self(s)),
-            Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
-                "Error propagating state: {}",
-                e
-            ))),
-        }
+        self.0.propagate(&time, propsettings.as_ref()).map(Self)
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {

@@ -138,7 +138,7 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
 /// // Propagate to 1/2 day ahead
 /// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
@@ -176,7 +176,7 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
 /// // Propagate to 1/2 day ahead
 /// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_short_propagate() -> Result<()> {
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_seconds(0.1);
 
         let mut state: SimpleState = SimpleState::zeros();
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn test_propagate() -> Result<()> {
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_days(0.25);
 
         let mut state: SimpleState = SimpleState::zeros();
@@ -510,7 +510,7 @@ mod tests {
 
     #[test]
     fn test_interp() -> Result<()> {
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_days(1.0);
 
         let mut state: SimpleState = SimpleState::zeros();
@@ -554,7 +554,7 @@ mod tests {
         // Note also: drag partials are very small relative to other terms,
         // making it difficult to confirm that calculations are correct.
 
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_days(0.5);
 
         let mut state: CovState = CovState::zeros();
@@ -614,7 +614,7 @@ mod tests {
         // set a fininte cdaoverm value so that there is drag
         // and we can check drag partials
 
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + crate::Duration::from_days(0.2);
 
         let mut state: CovState = CovState::zeros();
@@ -699,7 +699,7 @@ mod tests {
                 let hour: i32 = lvals[4].parse()?;
                 let min: i32 = lvals[5].parse()?;
                 let sec: f64 = lvals[6].parse()?;
-                Ok(Instant::from_datetime(year, mon, day, hour, min, sec))
+                Instant::from_datetime(year, mon, day, hour, min, sec)
             })
             .collect::<Result<Vec<crate::Instant>, _>>()?;
 

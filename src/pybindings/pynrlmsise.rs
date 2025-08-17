@@ -22,7 +22,10 @@ use crate::Instant;
 ///
 #[pyfunction]
 #[pyo3(signature=(alt_km, **option_kwds))]
-pub fn nrlmsise00(alt_km: f64, option_kwds: Option<&Bound<'_, PyDict>>) -> PyResult<(f64, f64)> {
+pub fn nrlmsise00(
+    alt_km: f64,
+    option_kwds: Option<&Bound<'_, PyDict>>,
+) -> anyhow::Result<(f64, f64)> {
     let mut lat: Option<f64> = None;
     let mut lon: Option<f64> = None;
     let mut tm: Option<Instant> = None;

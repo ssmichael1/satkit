@@ -448,7 +448,7 @@ mod tests {
     #[test]
     fn test_gmst() {
         // Vallado example 3-5
-        let mut tm = Instant::from_datetime(1992, 8, 20, 12, 14, 0.0);
+        let mut tm = Instant::from_datetime(1992, 8, 20, 12, 14, 0.0).unwrap();
         // Spoof this as UT1 value
         let tdiff = tm.as_mjd_with_scale(TimeScale::UT1) - tm.as_mjd_with_scale(TimeScale::UTC);
         tm -= Duration::from_days(tdiff);
@@ -463,7 +463,7 @@ mod tests {
         // Example 3-14 from Vallado
         // With verification fo intermediate calculations
         // Input time
-        let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009);
+        let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
         // Input terrestrial location
         let pitrf = Vec3::new(-1033.4793830, 7901.2952754, 6380.3565958);
         let t_tt = (tm.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;

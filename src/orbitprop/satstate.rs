@@ -265,7 +265,7 @@ mod test {
     #[test]
     fn test_qgcrf2lvlh() -> Result<()> {
         let satstate = SatState::from_pv(
-            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
@@ -288,7 +288,7 @@ mod test {
     #[test]
     fn test_satstate() -> Result<()> {
         let mut satstate = SatState::from_pv(
-            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
@@ -320,7 +320,7 @@ mod test {
     #[test]
     fn test_satcov() -> Result<()> {
         let mut satstate = SatState::from_pv(
-            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0),
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
             &na::vector![consts::GEO_R, 0.0, 0.0],
             &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
