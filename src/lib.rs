@@ -46,7 +46,7 @@
 //!
 //! ## Downloading the data files
 //! ```no_run
-//! // Print the directoyr where data will be stored
+//! // Print the directory where data will be stored
 //! println!("Data directory: {:?}", satkit::utils::datadir());
 //! // Update the data files (download those that are missing; refresh those that are out of date)
 //! // This will always download the most-recent space weather data and Earth Orientation Parameters
@@ -55,7 +55,7 @@
 //! ```
 
 #![warn(clippy::all, clippy::use_self, clippy::cargo)]
-
+#![allow(clippy::multiple_crate_versions)]
 // Type definitions
 pub mod types;
 
