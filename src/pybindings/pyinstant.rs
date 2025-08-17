@@ -10,6 +10,8 @@ use crate::{Instant, TimeScale, Weekday};
 
 use super::pyduration::PyDuration;
 
+use anyhow::{bail, Result};
+
 use numpy as np;
 
 /// Specify time scale used to represent or convert between the "satkit.time"
@@ -210,7 +212,7 @@ impl PyInstant {
     ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
     #[new]
     #[pyo3(signature=(*py_args))]
-    fn py_new(py_args: &Bound<'_, PyTuple>) -> PyResult<Self> {
+    fn py_new(py_args: &Bound<'_, PyTuple>) -> Result<Self> {
         if py_args.is_empty() {
             Ok(Self(Instant::now()))
         } else if py_args.len() == 3 {
@@ -228,23 +230,21 @@ impl PyInstant {
 
             Ok(Self(Instant::from_datetime(
                 year, month, day, hour, min, sec,
-            )))
+            )?))
         } else if py_args.len() == 1 {
             let item = py_args.get_item(0)?;
             let s = item.extract::<&str>()?;
 
             // Input is a string, first try rfc3339 format
             match Instant::from_rfc3339(s) {
-                Ok(v) => return Ok(Self(v)),
+                Ok(v) => Ok(Self(v)),
                 Err(_) => {
                     // Now try multiple formats
-                    return Self::from_string(s);
+                    Self::from_string(s)
                 }
             }
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err(
-                "Must pass in year, month, day or year, month, day, hour, min, sec",
-            ))
+            bail!("Must pass in year, month, day or year, month, day, hour, min, sec");
         }
     }
 
@@ -260,15 +260,8 @@ impl PyInstant {
     ///   ValueError: If input string cannot be parsed
     ///
     #[staticmethod]
-    fn from_string(s: &str) -> PyResult<Self> {
-        Instant::from_string(s).map_or_else(
-            |_| {
-                Err(pyo3::exceptions::PyValueError::new_err(
-                    "Could not parse time string",
-                ))
-            },
-            |v| Ok(Self(v)),
-        )
+    fn from_string(s: &str) -> Result<Self> {
+        Instant::from_string(s).map(Self)
     }
 
     /// Create satkit.time object from string with given format
@@ -295,15 +288,8 @@ impl PyInstant {
     /// %b: Month as locale’s abbreviated name
     /// %B: Month as locale’s full name
     #[staticmethod]
-    fn strptime(s: &str, fmt: &str) -> PyResult<Self> {
-        Instant::strptime(s, fmt).map_or_else(
-            |_| {
-                Err(pyo3::exceptions::PyValueError::new_err(
-                    "Could not parse time string",
-                ))
-            },
-            |v| Ok(Self(v)),
-        )
+    fn strptime(s: &str, fmt: &str) -> Result<Self> {
+        Instant::strptime(s, fmt).map(Self)
     }
 
     /// Format time object as string
@@ -331,15 +317,10 @@ impl PyInstant {
     /// %B: Month as locale’s full name
     /// %w: Weekday as a decimal number, where 0 is Sunday and 6 is Saturday
     ///
-    fn strftime(&self, fmt: &str) -> PyResult<String> {
-        self.0.strftime(fmt).map_or_else(
-            |_| {
-                Err(pyo3::exceptions::PyValueError::new_err(
-                    "Could not format time string",
-                ))
-            },
-            Ok,
-        )
+    fn strftime(&self, fmt: &str) -> Result<String> {
+        self.0
+            .strftime(fmt)
+            .map_err(|e| anyhow::anyhow!("Could not format time string: {}", e))
     }
 
     /// Create satkit.time object from RFC3339 string
@@ -399,8 +380,8 @@ impl PyInstant {
     /// Returns:
     ///     satkit.time: Time object representing current time
     #[staticmethod]
-    fn now() -> PyResult<Self> {
-        Ok(Self(Instant::now()))
+    fn now() -> Self {
+        Self(Instant::now())
     }
 
     /// Return time object representing input date
@@ -413,8 +394,8 @@ impl PyInstant {
     /// Returns:
     ///     satkit.time: Time object representing instant of input date
     #[staticmethod]
-    fn from_date(year: i32, month: i32, day: i32) -> PyResult<Self> {
-        Ok(Self(Instant::from_date(year, month, day)))
+    fn from_date(year: i32, month: i32, day: i32) -> Result<Self> {
+        Ok(Self(Instant::from_date(year, month, day)?))
     }
 
     /// Return time object representing input modified Julian date and time scale
@@ -506,10 +487,8 @@ impl PyInstant {
         hour: i32,
         min: i32,
         sec: f64,
-    ) -> PyResult<Self> {
-        Ok(Self(Instant::from_datetime(
-            year, month, day, hour, min, sec,
-        )))
+    ) -> Result<Self> {
+        Instant::from_datetime(year, month, day, hour, min, sec).map(Self)
     }
 
     /// Convert from Python datetime object

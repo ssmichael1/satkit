@@ -64,7 +64,7 @@ type Quat = na::UnitQuaternion<f64>;
 /// use satkit::SolarSystem;
 /// use satkit::Instant;
 ///
-/// let time = Instant::from_date(2000, 1, 1);
+/// let time = Instant::from_date(2000, 1, 1).unwrap();
 /// let pos = heliocentric_pos(SolarSystem::Mars, &time).unwrap();
 /// println!("Position of Mars: {}", pos);
 /// ```
@@ -72,10 +72,10 @@ type Quat = na::UnitQuaternion<f64>;
 pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vec3> {
     // Keplerian elements are provided separately and more accurately
     // for times in range of years 1800AD to 2050AD
-    let tm0: Instant = Instant::from_date(-3000, 1, 1);
-    let tm1: Instant = Instant::from_date(3000, 1, 1);
-    let tmp0: Instant = Instant::from_date(1800, 1, 1);
-    let tmp1: Instant = Instant::from_date(2050, 12, 31);
+    let tm0: Instant = Instant::from_date(-3000, 1, 1)?;
+    let tm1: Instant = Instant::from_date(3000, 1, 1)?;
+    let tmp0: Instant = Instant::from_date(1800, 1, 1)?;
+    let tmp1: Instant = Instant::from_date(2050, 12, 31)?;
     let jcen = (time.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;
 
     #[allow(non_snake_case)]
@@ -530,7 +530,7 @@ mod test {
 
         for planet in planets {
             //let time = Instant::from_date(2000, 1, 1);
-            let time = Instant::from_datetime(2010, 1, 1, 12, 0, 0.0);
+            let time = Instant::from_datetime(2010, 1, 1, 12, 0, 0.0).unwrap();
             let psun = jplephem::barycentric_pos(SolarSystem::Sun, &time).unwrap();
             let p2 = jplephem::barycentric_pos(planet, &time).unwrap() - psun;
             let p1 = heliocentric_pos(planet, &time).unwrap();

@@ -112,7 +112,7 @@ impl JPLEphem {
     /// use satkit::Instant;
     ///
     /// // Construct time: March 1 2021 12:00pm UTC
-    /// let t = Instant::from_datetime(2021, 3, 1, 12, 0, 0.0);
+    /// let t = Instant::from_datetime(2021, 3, 1, 12, 0, 0.0).unwrap();
     ///
     /// // Find geocentric moon position at this time in the GCRF frame
     /// let p = jplephem::geocentric_pos(SolarSystem::Moon, &t).unwrap();

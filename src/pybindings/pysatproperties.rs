@@ -5,6 +5,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
 use pyo3::IntoPyObjectExt;
 
+use anyhow::{bail, Result};
+
 #[pyclass(name = "satproperties_static", module = "satkit")]
 #[derive(Clone, Debug)]
 pub struct PySatProperties(pub SatPropertiesStatic);
@@ -25,7 +27,7 @@ impl PySatProperties {
     ///
     #[new]
     #[pyo3(signature=(*args, **kwargs))]
-    fn new(args: &Bound<PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+    fn new(args: &Bound<PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> Result<Self> {
         let mut craoverm: f64 = 0.0;
         let mut cdaoverm: f64 = 0.0;
 
@@ -50,8 +52,7 @@ impl PySatProperties {
                             a2.push_str(", ");
                             a2
                         });
-                let s = format!("Invalid keyword args: {}", keystring);
-                return Err(pyo3::exceptions::PyRuntimeError::new_err(s));
+                bail!("Invalid keyword args: {}", keystring);
             }
         }
 
@@ -81,9 +82,8 @@ impl PySatProperties {
     /// Args:
     ///     craoverm (float): Cr A / m (m^2/kg)
     #[setter]
-    fn set_craoverm(&mut self, craoverm: f64) -> PyResult<()> {
+    fn set_craoverm(&mut self, craoverm: f64) {
         self.0.craoverm = craoverm;
-        Ok(())
     }
 
     /// Set the satellite's susceptibility to drag
@@ -91,17 +91,14 @@ impl PySatProperties {
     /// Args:
     ///     cdaoverm (float): Cd A / m (m^2/kg)
     #[setter]
-    fn set_cdaoverm(&mut self, cdaoverm: f64) -> PyResult<()> {
+    fn set_cdaoverm(&mut self, cdaoverm: f64) {
         self.0.cdaoverm = cdaoverm;
-        Ok(())
     }
 
-    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
+    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {
         let state = state.as_bytes(py);
         if state.len() != 16 {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid serialization length",
-            ));
+            bail!("Invalid serialization length");
         }
         let craoverm = f64::from_le_bytes(state[0..8].try_into()?);
         let cdaoverm = f64::from_le_bytes(state[8..16].try_into()?);

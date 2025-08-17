@@ -5,6 +5,8 @@ use pyo3::IntoPyObjectExt;
 
 use std::path::PathBuf;
 
+use anyhow::Result;
+
 ///
 /// Download data files needed for computation
 ///
@@ -32,7 +34,7 @@ use std::path::PathBuf;
 ///
 #[pyfunction]
 #[pyo3(signature=(**kwds))]
-fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
+fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
     let overwrite_files = match kwds {
         None => false,
         Some(u) => match u.get_item("overwrite")? {
@@ -48,10 +50,7 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
         },
     };
 
-    match crate::utils::update_datafiles(datadir, overwrite_files) {
-        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
-        Ok(_) => Ok(()),
-    }
+    crate::utils::update_datafiles(datadir, overwrite_files)
 }
 
 /// Get directory where astronomy data is stored
@@ -91,12 +90,9 @@ fn datadir() -> PyResult<PyObject> {
 ///  RuntimeError: If the directory does not exist
 ///
 #[pyfunction]
-fn set_datadir(datadir: String) -> PyResult<()> {
+fn set_datadir(datadir: String) -> Result<()> {
     let d = PathBuf::from(datadir);
-    match crate::utils::set_datadir(&d) {
-        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
-        Ok(_) => Ok(()),
-    }
+    crate::utils::set_datadir(&d)
 }
 
 /// Check if data files are found
@@ -106,8 +102,8 @@ fn set_datadir(datadir: String) -> PyResult<()> {
 ///        False if data files are not found
 ///
 #[pyfunction]
-fn datafiles_exist() -> PyResult<bool> {
-    Ok(crate::utils::data_found())
+fn datafiles_exist() -> bool {
+    crate::utils::data_found()
 }
 
 /// Git hash of compiled library
@@ -115,8 +111,8 @@ fn datafiles_exist() -> PyResult<bool> {
 /// Returns:
 ///     str: Git hash of compiled library
 #[pyfunction]
-fn githash() -> PyResult<String> {
-    Ok(String::from(crate::utils::githash()))
+fn githash() -> String {
+    String::from(crate::utils::githash())
 }
 
 /// Version of satkit
@@ -124,8 +120,8 @@ fn githash() -> PyResult<String> {
 /// Returns:
 ///    str: Version of satkit
 #[pyfunction]
-fn version() -> PyResult<String> {
-    Ok(String::from(crate::utils::gittag()))
+fn version() -> String {
+    String::from(crate::utils::gittag())
 }
 
 /// Location of the compiled library
@@ -133,13 +129,10 @@ fn version() -> PyResult<String> {
 /// Returns:
 ///     str: Path to the compiled library
 #[pyfunction]
-fn dylib_path() -> PyResult<PyObject> {
-    pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-        process_path::get_dylib_path().map_or_else(
-            || pyo3::types::PyNone::get(py).into_py_any(py),
-            |v| v.to_str().unwrap().into_py_any(py),
-        )
-    })
+fn dylib_path() -> Result<String> {
+    process_path::get_dylib_path()
+        .and_then(|v| v.to_str().map(|s| s.to_string()))
+        .ok_or_else(|| anyhow::anyhow!("Failed to get dylib path"))
 }
 
 /// Build date of compiled

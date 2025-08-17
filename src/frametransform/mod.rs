@@ -360,13 +360,13 @@ pub fn qtod2mod_approx(tm: &Instant) -> Quat {
 ///    applications, the approximate rotation will work just fine
 ///
 /// * This computatation **does not** include impact of the
-///       Earth solid tides, but it does include polar motion,
-///       precession, and nutation
+///   Earth solid tides, but it does include polar motion,
+///   precession, and nutation
 ///
 /// * This function requires use of the Earth orientation parameters
-///       (EOP) to compute the rotation. If the EOP are not outside of the
-///       valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
-///       they will be set to zero, and a warning will be printed to stderr.
+///   (EOP) to compute the rotation. If the EOP are not outside of the
+///   valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
+///   they will be set to zero, and a warning will be printed to stderr.
 ///
 pub fn qitrf2gcrf(tm: &Instant) -> Quat {
     // w is rotation from international terrestrial reference frame
@@ -448,7 +448,7 @@ mod tests {
     #[test]
     fn test_gmst() {
         // Vallado example 3-5
-        let mut tm = Instant::from_datetime(1992, 8, 20, 12, 14, 0.0);
+        let mut tm = Instant::from_datetime(1992, 8, 20, 12, 14, 0.0).unwrap();
         // Spoof this as UT1 value
         let tdiff = tm.as_mjd_with_scale(TimeScale::UT1) - tm.as_mjd_with_scale(TimeScale::UTC);
         tm -= Duration::from_days(tdiff);
@@ -463,7 +463,7 @@ mod tests {
         // Example 3-14 from Vallado
         // With verification fo intermediate calculations
         // Input time
-        let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009);
+        let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
         // Input terrestrial location
         let pitrf = Vec3::new(-1033.4793830, 7901.2952754, 6380.3565958);
         let t_tt = (tm.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;

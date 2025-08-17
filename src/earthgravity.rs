@@ -82,7 +82,7 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 /// * `pos` - nalgebra 3-vector representing ITRF position in meters
 ///
 /// * `order` - The order of the gravity model to use.
-///             Maximum is 16
+///   Maximum is 16
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
@@ -111,7 +111,7 @@ pub fn accel(pos_itrf: &Vec3, order: usize, model: GravityModel) -> Vec3 {
 /// * `pos` - nalgebra 3-vector representing ITRF position in meters
 ///
 /// * `order` - The order of the gravity model to use.
-///               Maximum is 16
+///   Maximum is 16
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
@@ -158,7 +158,7 @@ type Mat3 = na::Matrix3<f64>;
 /// # Inputs Arguments
 ///
 /// * `pos` - Position as ITRF coordinate (satkit.itrfcoord) or numpy
-///                3-vector representing ITRF position in meters
+///   3-vector representing ITRF position in meters
 ///
 /// * `order` - Order of the gravity model, up to 40
 ///
@@ -480,12 +480,12 @@ impl Gravity {
 
                     accel[1] += 0.5
                         * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(
-                            (-1.0 * cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]),
+                            (-cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]),
                             (-cnm).mul_add(w[(n + 1, m + 1)], snm * v[(n + 1, m + 1)]),
                         );
                 }
-                accel[2] += (n - m + 1) as f64
-                    * (-1.0 * cnm).mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
+                accel[2] +=
+                    (n - m + 1) as f64 * (-cnm).mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
             }
         }
 

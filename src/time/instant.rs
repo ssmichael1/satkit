@@ -1,6 +1,11 @@
 use super::TimeScale;
 use serde::{Deserialize, Serialize};
 
+use anyhow::{bail, Result};
+
+// Days in the month, neglecting leap years
+const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
 /// A module for handling time and date conversions.  Time is stored natively as
 /// the number of microseconds since the Unix epoch (1970-01-01 00:00:00 UTC)
 /// with leap seconds accounted for.
@@ -452,7 +457,7 @@ impl Instant {
     ///
     /// # Returns
     /// A new Instant object representing the given date
-    pub fn from_date(year: i32, month: i32, day: i32) -> Self {
+    pub fn from_date(year: i32, month: i32, day: i32) -> Result<Self> {
         Self::from_datetime(year, month, day, 0, 0, 0.0)
     }
 
@@ -470,14 +475,13 @@ impl Instant {
     /// ```rust
     /// // Examples checked against google query
     ///
-    /// let thedate = satkit::Instant::from_date(2023, 1, 1);
+    /// let thedate = satkit::Instant::from_date(2023, 1, 1).unwrap();
     /// assert_eq!(thedate.day_of_year(), 1);
     ///
-    /// let thedate = satkit::Instant::from_date(2025, 8, 16);
+    /// let thedate = satkit::Instant::from_date(2025, 8, 16).unwrap();
     /// assert_eq!(thedate.day_of_year(), 228);
     /// ```
     pub fn day_of_year(&self) -> u32 {
-        const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
         let (y, m, d, _, _, _) = self.as_datetime();
         let leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
         let mut doy = d;
@@ -502,7 +506,8 @@ impl Instant {
     /// * `second` - The second
     ///
     /// # Returns
-    /// A new Instant object representing the given date and time
+    /// A new Instant object representing the given date and time, or error if invalid
+    /// or error if the month, day, hour, minute, or second are out of bounds
     pub fn from_datetime(
         year: i32,
         month: i32,
@@ -510,7 +515,41 @@ impl Instant {
         hour: i32,
         minute: i32,
         second: f64,
-    ) -> Self {
+    ) -> Result<Self> {
+        let mut check_leapsecond: bool = false;
+
+        // Bounds checking on input
+        if !(1..=12).contains(&month) {
+            bail!("Invalid month: {}", month);
+        }
+        let max_day = if month == 2 {
+            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+                29
+            } else {
+                28
+            }
+        } else {
+            MDAYS[(month - 1) as usize]
+        };
+        if day < 1 || day > max_day as i32 {
+            bail!("Invalid day: {}", day);
+        }
+        if !(0..=23).contains(&hour) {
+            bail!("Invalid hour: {}", hour);
+        }
+        if !(0..=59).contains(&minute) {
+            bail!("Invalid minute: {}", minute);
+        }
+        if !(0.0..60.0).contains(&second) {
+            // Check for rare case of leap second
+            if (60.0..61.0).contains(&second) {
+                // Are we in a leap second?
+                check_leapsecond = true;
+            } else {
+                bail!("Invalid second: {}", second);
+            }
+        }
+
         use gregorian_coefficients as gc;
         let h = month as i64 - gc::m;
         let g = year as i64 + gc::y - (gc::n - h) / gc::n;
@@ -536,7 +575,27 @@ impl Instant {
         // leapsecond boundary
         raw = raw + microleapseconds(raw) - ls;
 
-        Self { raw }
+        // Very rare -- check if second is in range [60, 61).  If so, make sure
+        // this is in the middle of a leap second
+        // I can't believe I'm even doing this...
+        if check_leapsecond {
+            let mut valid_leap_second = false;
+            // Check if raw is within a leap second
+            for (t, _) in LEAP_SECOND_TABLE.iter() {
+                // The table holds the first of the "second" that happens twice, so
+                // we are in leap second if raw is between [t + 1_000_000, t + 2_000_000)
+                if raw >= *t + 1_000_000 && raw < *t + 2_000_000 {
+                    // We are in a leap second
+                    valid_leap_second = true;
+                    break;
+                }
+            }
+            if !valid_leap_second {
+                bail!("Invalid second");
+            }
+        }
+
+        Ok(Self { raw })
     }
 
     /// Current time

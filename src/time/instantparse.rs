@@ -270,14 +270,14 @@ impl Instant {
             second = 0;
             microsecond = 0;
         }
-        Ok(Self::from_datetime(
+        Self::from_datetime(
             year,
             month,
             day,
             hour,
             minute,
             second as f64 + microsecond as f64 / 1_000_000.0,
-        ))
+        )
     }
 
     /// Parse a string into an Instant object
@@ -417,7 +417,7 @@ impl Instant {
             hour,
             minute,
             second as f64 + microsecond as f64 / 1_000_000.0,
-        );
+        )?;
         if offset != 0 {
             instant += crate::Duration::from_minutes(offset as f64);
         }

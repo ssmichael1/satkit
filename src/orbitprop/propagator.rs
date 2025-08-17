@@ -104,23 +104,23 @@ pub enum PropagationError {
 ///
 /// * `state` - The satellite state, represented as:
 ///    * `SimpleState` - a 6x1 matrix where the 1st three elements represent GCRF position in meters,
-///       and the 2nd three elements represent GCRF velocity in meters / second
+///      and the 2nd three elements represent GCRF velocity in meters / second
 ///    * `CovState` - a 6x7 matrix where the first column is the same as SimpleState above, and columns
-///       2-7 represent the 6x6 state transition matrix, dS/dS0
-///       The state transition matrix should be initialized to identity when running
-///       The output of the state transition matrix can be used to compute the evolution of the
-///       state covariance  (see Montenbruck and Gill for details)
+///      2-7 represent the 6x6 state transition matrix, dS/dS0
+///      The state transition matrix should be initialized to identity when running
+///      The output of the state transition matrix can be used to compute the evolution of the
+///      state covariance  (see Montenbruck and Gill for details)
 ///  * `start` - The time at the initial state
 ///  * `stop` - The time at which to propagate for computing new states
 ///  * `step_seconds` - An optional value representing intervals between `start` and `stop` at which
-///     the new state will be computed
+///    the new state will be computed
 ///  * `settings` - Settings for the Runga-Kutta propagator
 ///  * `satprops` - Properties of the satellite, such as ballistic coefficient & susceptibility to
-///     radiation pressure
+///    radiation pressure
 ///
 /// # Returns
 /// * `PropagationResult` object with details of the propagation compute, the final state, and intermediate states if step size
-///    is set
+///   is set
 ///
 /// # Example:
 ///
@@ -138,7 +138,7 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
 /// // Propagate to 1/2 day ahead
 /// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
@@ -176,7 +176,7 @@ pub enum PropagationError {
 /// settings.gravity_order = 4;
 ///
 /// // Pick an arbitrary start time
-/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
 /// // Propagate to 1/2 day ahead
 /// let stoptime = starttime + satkit::Duration::from_days(0.5);
 ///
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_short_propagate() -> Result<()> {
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_seconds(0.1);
 
         let mut state: SimpleState = SimpleState::zeros();
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn test_propagate() -> Result<()> {
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_days(0.25);
 
         let mut state: SimpleState = SimpleState::zeros();
@@ -510,7 +510,7 @@ mod tests {
 
     #[test]
     fn test_interp() -> Result<()> {
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_days(1.0);
 
         let mut state: SimpleState = SimpleState::zeros();
@@ -554,7 +554,7 @@ mod tests {
         // Note also: drag partials are very small relative to other terms,
         // making it difficult to confirm that calculations are correct.
 
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + Duration::from_days(0.5);
 
         let mut state: CovState = CovState::zeros();
@@ -614,7 +614,7 @@ mod tests {
         // set a fininte cdaoverm value so that there is drag
         // and we can check drag partials
 
-        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0);
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
         let stoptime = starttime + crate::Duration::from_days(0.2);
 
         let mut state: CovState = CovState::zeros();
@@ -699,9 +699,9 @@ mod tests {
                 let hour: i32 = lvals[4].parse()?;
                 let min: i32 = lvals[5].parse()?;
                 let sec: f64 = lvals[6].parse()?;
-                Ok(Instant::from_datetime(year, mon, day, hour, min, sec))
-            }).collect::<Result<Vec<crate::Instant>, _>>()?;
-        
+                Instant::from_datetime(year, mon, day, hour, min, sec)
+            })
+            .collect::<Result<Vec<crate::Instant>, _>>()?;
 
         let file: File = File::open(testvecfile)?;
 

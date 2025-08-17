@@ -151,7 +151,7 @@ pub fn smatrix_to_py<const M: usize, const N: usize>(m: &Matrix<M, N>) -> Result
 }
 
 /// Convert python object to fixed-size matrix
-pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> PyResult<Matrix<M, N>> {
+pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> Result<Matrix<M, N>> {
     let mut m: Matrix<M, N> = Matrix::<M, N>::zeros();
     if obj.is_instance_of::<np::PyArray1<f64>>() {
         let arr = obj.extract::<np::PyReadonlyArray1<f64>>()?;
@@ -182,14 +182,14 @@ pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> PyRe
 pub fn py_func_of_time_arr<'a, T: IntoPyObject<'a>>(
     cfunc: fn(&Instant) -> T,
     tmarr: &Bound<'a, PyAny>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let tm = tmarr.to_time_vec()?;
 
     match tm.len() {
-        1 => cfunc(&tm[0]).into_py_any(tmarr.py()),
+        1 => Ok(cfunc(&tm[0]).into_py_any(tmarr.py())?),
         _ => {
             let tvec: Vec<T> = tm.iter().map(cfunc).collect();
-            tvec.into_py_any(tmarr.py())
+            Ok(tvec.into_py_any(tmarr.py())?)
         }
     }
 }
@@ -198,18 +198,18 @@ pub fn py_func_of_time_arr<'a, T: IntoPyObject<'a>>(
 pub fn py_quat_from_time_arr(
     cfunc: fn(&Instant) -> Quat,
     tmarr: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> Result<PyObject> {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
-        1 => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+        1 => Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             Quaternion(cfunc(&tm[0])).into_py_any(py)
-        }),
-        _ => pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+        })?),
+        _ => Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             tm.iter()
                 .map(|x| Quaternion(cfunc(x)))
                 .collect::<Vec<Quaternion>>()
                 .into_py_any(py)
-        }),
+        })?),
     }
 }
 

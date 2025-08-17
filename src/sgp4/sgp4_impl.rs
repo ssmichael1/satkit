@@ -75,9 +75,9 @@ use super::{GravConst, OpsMode};
 /// # Arguments
 ///
 /// * `tle` - The TLE on which top operate.  Note that a mutable reference
-///           is passed, as SGP-4 metadata is stored after each propagation
+///   is passed, as SGP-4 metadata is stored after each propagation
 /// * `tm` -  The time at which to compute position and velocity
-///           Input as a slice for convenience.
+///   Input as a slice for convenience.
 ///
 ///
 /// # Return
@@ -142,9 +142,9 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 /// # Arguments
 ///
 /// * `tle` - The TLE on which top operate.  Note that a mutable reference
-///           is passed, as SGP-4 metadata is stored after each propagation
+///   is passed, as SGP-4 metadata is stored after each propagation
 /// * `tm` -  The time at which to compute position and velocity
-///           Input as a slice for convenience.
+///   Input as a slice for convenience.
 ///
 /// * `gravconst` - The gravitational constant to use.
 ///
