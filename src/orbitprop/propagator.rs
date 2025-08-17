@@ -104,7 +104,7 @@ pub enum PropagationError {
 ///
 /// * `state` - The satellite state, represented as:
 ///    * `SimpleState` - a 6x1 matrix where the 1st three elements represent GCRF position in meters,
-///      nd the 2nd three elements represent GCRF velocity in meters / second
+///      and the 2nd three elements represent GCRF velocity in meters / second
 ///    * `CovState` - a 6x7 matrix where the first column is the same as SimpleState above, and columns
 ///      2-7 represent the 6x6 state transition matrix, dS/dS0
 ///      The state transition matrix should be initialized to identity when running
