@@ -2,10 +2,61 @@ use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 
 use crate::tle::TLE;
-use std::fs::File;
-use std::io::{self, BufRead};
 
-use anyhow::Result;
+use crate::pybindings::pyinstant::ToTimeVec;
+use anyhow::{bail, Result};
+
+use std::fs::File;
+use std::io;
+use std::io::BufRead;
+
+use rmpfit::MPSuccess;
+
+#[derive(PartialEq, Eq)]
+#[pyclass(name = "mpsuccess", eq, eq_int)]
+pub enum PyMPSuccess {
+    NotDone = MPSuccess::NotDone as isize,
+    Chi = MPSuccess::Chi as isize,
+    Par = MPSuccess::Par as isize,
+    Both = MPSuccess::Both as isize,
+    Dir = MPSuccess::Dir as isize,
+    MaxIter = MPSuccess::MaxIter as isize,
+    Ftol = MPSuccess::Ftol as isize,
+    Xtol = MPSuccess::Xtol as isize,
+    Gtol = MPSuccess::Gtol as isize,
+}
+
+impl From<MPSuccess> for PyMPSuccess {
+    fn from(success: MPSuccess) -> Self {
+        match success {
+            MPSuccess::NotDone => Self::NotDone,
+            MPSuccess::Chi => Self::Chi,
+            MPSuccess::Par => Self::Par,
+            MPSuccess::Both => Self::Both,
+            MPSuccess::Dir => Self::Dir,
+            MPSuccess::MaxIter => Self::MaxIter,
+            MPSuccess::Ftol => Self::Ftol,
+            MPSuccess::Xtol => Self::Xtol,
+            MPSuccess::Gtol => Self::Gtol,
+        }
+    }
+}
+
+impl PyMPSuccess {
+    fn __str__(&self) -> &str {
+        match self {
+            Self::NotDone => "Not Finished Iterations",
+            Self::Chi => "Convergence in chi-square Value",
+            Self::Par => "Convergence in parameter value",
+            Self::Both => "Convergence in both chi-square and parameter",
+            Self::Dir => "Convergence in orthogonality",
+            Self::MaxIter => "Maximum number of iterations reached",
+            Self::Ftol => "ftol is too small; no further improvement",
+            Self::Xtol => "xtol is too small; no further improvement",
+            Self::Gtol => "gtol is too small; no further improvement",
+        }
+    }
+}
 
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
@@ -155,6 +206,42 @@ impl PyTLE {
     // Output as 2 canonical TLE lines preceded by a name line (3-line element set)
     fn to_3line(&self) -> Result<[String; 3]> {
         self.0.to_3line()
+    }
+
+    // Fit a TLE from GCRF states and times
+    #[staticmethod]
+    fn fit_from_states(
+        states: Vec<[f64; 6]>,
+        times: &Bound<'_, PyAny>,
+        epoch: &Bound<'_, PyAny>,
+    ) -> Result<(Self, Py<PyAny>)> {
+        let times = times.to_time_vec()?;
+        let epoch = epoch.to_time_vec()?;
+        if epoch.len() != 1 {
+            bail!("epoch must be a single time value");
+        }
+        let (tle, status) = TLE::fit_from_states(&states, &times, epoch[0])?;
+
+        Ok((
+            Self(tle),
+            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                let dict = pyo3::types::PyDict::new(py);
+                dict.set_item("success", PyMPSuccess::from(status.success))?;
+                dict.set_item("best_norm", status.best_norm)?;
+                dict.set_item("orig_norm", status.orig_norm)?;
+                dict.set_item("n_iter", status.n_iter)?;
+                dict.set_item("n_fev", status.n_fev)?;
+                dict.set_item("n_par", status.n_par)?;
+                dict.set_item("n_free", status.n_free)?;
+                dict.set_item("n_pegged", status.n_pegged)?;
+                dict.set_item("n_func", status.n_func)?;
+                dict.set_item("resid", status.resid)?;
+                dict.set_item("xerror", status.xerror)?;
+                dict.set_item("covar", status.covar)?;
+
+                Ok(dict.into())
+            })?,
+        ))
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {

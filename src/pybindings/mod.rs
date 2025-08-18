@@ -145,6 +145,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pyconsts::Consts>()?;
     m.add_class::<SolarSystem>()?;
     m.add_class::<pytle::PyTLE>()?;
+    m.add_class::<pytle::PyMPSuccess>()?;
 
     m.add_class::<PyITRFCoord>()?;
 

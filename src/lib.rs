@@ -55,6 +55,7 @@
 //! ```
 
 #![warn(clippy::all, clippy::use_self, clippy::cargo)]
+#![allow(clippy::multiple_crate_versions)]
 // Type definitions
 pub mod types;
 

@@ -746,6 +746,29 @@ class TestSatState:
         assert np.array([0.0, 0.0, 1.0]) == pytest.approx(rz, abs=1e-10)
 
 
+class TestTLEFitting:
+    def test_tle_fit(self):
+        """
+        Test fitting of TLE From high-precision states
+        """
+        altitude = 400e3
+        r0 = sk.consts.earth_radius + altitude
+        v0 = m.sqrt(sk.consts.mu_earth / r0)
+        inc = 97 * m.pi / 180
+        state0 = np.array([r0, 0, 0, 0, v0 * m.cos(inc), v0 * m.sin(inc)])
+
+        sp = sk.satproperties_static(cdaoverm=2.0 * 10 / 3500)
+        tm = sk.time(2016, 5, 16, 12, 0, 0)
+        res = sk.propagate(
+            state0, tm, stop=tm + sk.duration.from_days(1), satproperties=sp
+        )
+        time_arr = [tm + sk.duration(seconds=x * 10) for x in range(8640)]
+        state_arr = [res.interp(t) for t in time_arr]
+        epoch = time_arr[0]
+
+        _tle, _result = sk.TLE.fit_from_states(state_arr, time_arr, epoch)  # type: ignore
+
+
 class TestSGP4:
     def test_sgp4_multiple(self):
         """

@@ -130,6 +130,12 @@ fn test_day_of_year() {
 fn test_ops() {
     let t1 = Instant::from_datetime(2024, 11, 13, 8, 0, 3.0).unwrap();
     let t2 = Instant::from_datetime(2024, 11, 13, 8, 0, 4.0).unwrap();
+
+    assert!(t1 == t1);
+    assert!(t1 != t2);
+    assert!(t1 < t2);
+    assert!(t2 > t1);
+
     let dt = t2 - t1;
     assert!(dt.as_microseconds() == 1_000_000);
     let t2 = Instant::from_datetime(2024, 11, 13, 8, 0, 2.0).unwrap();
@@ -147,6 +153,15 @@ fn test_ops() {
     assert!(g.3 == 8);
     assert!(g.4 == 1);
     assert!(g.5 == 3.0);
+
+    let d1 = Duration::from_seconds(4.0);
+    let d2 = Duration::from_seconds(5.0);
+    assert!(d1 < d2);
+    assert!(d2 > d1);
+    assert!(d1 <= d2);
+    assert!(d2 >= d1);
+    assert!(d1 == d1);
+    assert!(d1 != d2);
 }
 
 #[test]
