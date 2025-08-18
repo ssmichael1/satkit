@@ -12,6 +12,13 @@ use std::io::BufRead;
 
 use rmpfit::MPSuccess;
 
+/// 
+/// MPFit success codes
+/// returned when generating a TLE by fitting it 
+/// to satellite state vectors
+/// 
+/// see: <https://docs.rs/rmpfit/latest/rmpfit/> for details
+/// 
 #[derive(PartialEq, Eq)]
 #[pyclass(name = "mpsuccess", eq, eq_int)]
 pub enum PyMPSuccess {
