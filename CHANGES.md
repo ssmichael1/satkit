@@ -100,3 +100,5 @@
 ### Error Checking on from_datetime
   - Bounds checking on month, day, hour, minute, second
 
+### TLE Fitting
+  - Add functionality to generate TLE from high-precision state vectors
