@@ -2,13 +2,13 @@ use rmpfit::MPSuccess;
 
 use pyo3::prelude::*;
 
-/// 
+///
 /// MPFit success codes
-/// returned when generating a TLE by fitting it 
+/// returned when generating a TLE by fitting it
 /// to satellite state vectors
-/// 
+///
 /// see: <https://docs.rs/rmpfit/latest/rmpfit/> for details
-/// 
+///
 #[derive(PartialEq, Eq)]
 #[pyclass(name = "mpsuccess", eq, eq_int)]
 pub enum PyMPSuccess {
@@ -39,6 +39,8 @@ impl From<MPSuccess> for PyMPSuccess {
     }
 }
 
+#[pymethods]
+impl PyMPSuccess {
     pub fn __str__(&self) -> &str {
         match self {
             Self::NotDone => "Not Finished Iterations",

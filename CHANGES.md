@@ -86,7 +86,7 @@
  - Contribution by "DeflateAwning"
 
 
-## Python 0.8.0.  Rust 0.8.0 (not yet released)
+## Python 0.8.0.  Rust 0.8.0
   
 ### TLE export to lines
   - functions for generating 69-character TLE lines from a TLE object
@@ -102,3 +102,6 @@
 
 ### TLE Fitting
   - Add functionality to generate TLE from high-precision state vectors
+
+### Day of Year
+  - Add functionality to compute 1-based day of year in "Instant" structure
