@@ -28,8 +28,6 @@ classifiers = [
     #   5 - Production/Stable
     "Development Status :: 4 - Beta",
 
-    "License :: OSI Approved :: MIT License",
-
     # Specify the Python versions you support here.
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
