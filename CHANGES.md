@@ -105,3 +105,8 @@
 
 ### Day of Year
   - Add functionality to compute 1-based day of year in "Instant" structure
+
+## Python 0.8.1
+
+### Fix _version.py
+  - export "version" and "_version"
