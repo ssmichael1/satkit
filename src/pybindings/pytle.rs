@@ -2,14 +2,22 @@ use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 
 use crate::tle::TLE;
-use std::fs::File;
-use std::io::{self, BufRead};
 
-use anyhow::Result;
+use crate::pybindings::pyinstant::ToTimeVec;
+use anyhow::{bail, Result};
+
+// Import PyMPSuccess from its module (adjust the path if needed)
+use crate::pybindings::pympsuccess::PyMPSuccess;
+
+use std::fs::File;
+use std::io;
+use std::io::BufRead;
+
+
+
 
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
-
 impl<'py> IntoPyObject<'py> for TLE {
     type Target = PyAny; // the Python type
     type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
@@ -155,6 +163,42 @@ impl PyTLE {
     // Output as 2 canonical TLE lines preceded by a name line (3-line element set)
     fn to_3line(&self) -> Result<[String; 3]> {
         self.0.to_3line()
+    }
+
+    // Fit a TLE from GCRF states and times
+    #[staticmethod]
+    fn fit_from_states(
+        states: Vec<[f64; 6]>,
+        times: &Bound<'_, PyAny>,
+        epoch: &Bound<'_, PyAny>,
+    ) -> Result<(Self, Py<PyAny>)> {
+        let times = times.to_time_vec()?;
+        let epoch = epoch.to_time_vec()?;
+        if epoch.len() != 1 {
+            bail!("epoch must be a single time value");
+        }
+        let (tle, status) = TLE::fit_from_states(&states, &times, epoch[0])?;
+
+        Ok((
+            Self(tle),
+            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                let dict = pyo3::types::PyDict::new(py);
+                dict.set_item("success", PyMPSuccess::from(status.success))?;
+                dict.set_item("best_norm", status.best_norm)?;
+                dict.set_item("orig_norm", status.orig_norm)?;
+                dict.set_item("n_iter", status.n_iter)?;
+                dict.set_item("n_fev", status.n_fev)?;
+                dict.set_item("n_par", status.n_par)?;
+                dict.set_item("n_free", status.n_free)?;
+                dict.set_item("n_pegged", status.n_pegged)?;
+                dict.set_item("n_func", status.n_func)?;
+                dict.set_item("resid", status.resid)?;
+                dict.set_item("xerror", status.xerror)?;
+                dict.set_item("covar", status.covar)?;
+
+                Ok(dict.into())
+            })?,
+        ))
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
