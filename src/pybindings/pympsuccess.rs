@@ -39,8 +39,7 @@ impl From<MPSuccess> for PyMPSuccess {
     }
 }
 
-impl PyMPSuccess {
-    fn __str__(&self) -> &str {
+    pub fn __str__(&self) -> &str {
         match self {
             Self::NotDone => "Not Finished Iterations",
             Self::Chi => "Convergence in chi-square Value",
