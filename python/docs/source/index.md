@@ -77,7 +77,7 @@ Please reach out of you find errors in code or calculations, are interested in c
   examples/Plots.ipynb
   examples/sunrise_sunset.ipynb
   examples/riseset.ipynb
-  exmamples/TLE Fitting.ipynb
+  examples/TLE Fitting.ipynb
 
 .. toctree::
   :caption: API Reference
