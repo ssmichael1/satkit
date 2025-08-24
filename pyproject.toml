@@ -10,7 +10,7 @@ authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
 version = "0.8.0"
-dynamic = []
+license = "MIT"
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
     "satellite",
@@ -28,7 +28,7 @@ classifiers = [
     #   5 - Production/Stable
     "Development Status :: 4 - Beta",
 
-    "License :: MIT",
+    "License :: OSI Approved :: MIT License",
 
     # Specify the Python versions you support here.
     "Programming Language :: Python :: 3.8",
