@@ -175,6 +175,20 @@ impl std::cmp::PartialEq for Instant {
     }
 }
 
+impl std::cmp::PartialOrd for Instant {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Eq for Instant {}
+
+impl std::cmp::Ord for Instant {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.raw.cmp(&other.raw)
+    }
+}
+
 /// Add two durations together
 impl std::ops::Add<Self> for Duration {
     type Output = Self;
@@ -218,7 +232,15 @@ impl std::cmp::PartialEq for Duration {
 
 impl std::cmp::PartialOrd for Duration {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.usec.partial_cmp(&other.usec)
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Eq for Duration {}
+
+impl std::cmp::Ord for Duration {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.usec.cmp(&other.usec)
     }
 }
 
@@ -230,13 +252,5 @@ impl std::ops::Sub<Self> for Duration {
         Self {
             usec: self.usec - other.usec,
         }
-    }
-}
-
-impl std::cmp::Eq for Instant {}
-
-impl std::cmp::PartialOrd for Instant {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.raw.partial_cmp(&other.raw)
     }
 }

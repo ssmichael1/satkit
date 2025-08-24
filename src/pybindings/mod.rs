@@ -22,11 +22,13 @@ mod pysatstate;
 mod pysgp4;
 mod pysolarsystem;
 mod pytle;
+mod pympsuccess;
 //mod pyukf;
 
 mod pypropagate;
 mod pypropsettings;
 mod pysatproperties;
+
 
 mod pyutils;
 
@@ -40,6 +42,8 @@ use pysolarsystem::SolarSystem;
 
 use pypropsettings::PyPropSettings;
 use pysatstate::PySatState;
+
+
 
 /// JPL Ephemeris Sub-Module
 #[pymodule]
@@ -145,6 +149,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pyconsts::Consts>()?;
     m.add_class::<SolarSystem>()?;
     m.add_class::<pytle::PyTLE>()?;
+    m.add_class::<pympsuccess::PyMPSuccess>()?;
 
     m.add_class::<PyITRFCoord>()?;
 

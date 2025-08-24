@@ -1,6 +1,9 @@
 use crate::sgp4::SatRec;
 use crate::Instant;
 
+// TLE fitting from state vectors
+mod fitting;
+
 use anyhow::{bail, Context, Result};
 
 // 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
@@ -314,11 +317,11 @@ impl TLE {
             s -= 100;
             s
         };
-        if year > 57 {
-            year += 1900;
-        } else {
-            year += 2000;
-        }
+        // See: https://celestrak.org/columns/v04n03/
+        // Years >= 1957 = 1900s
+        // Years < 1957 = 2000s
+        let century = if year >= 57 { 1900 } else { 2000 };
+        year += century;
         let day_of_year: f64 = line1[20..32]
             .parse()
             .context("Could not parse day of year")?;
@@ -556,8 +559,12 @@ impl TLE {
         // (in which second of day is normalized to 86401 instead of 86400)
         let frac = self.epoch.as_mjd() % 1.0;
         let doy = (doy_int as f64) + frac;
-        let yy = (y % 100) as u8;
-        Ok((yy, doy))
+        // Years >= 1957 = 1900s
+        // Years < 1957 = 2000s
+        // See: https://celestrak.org/columns/v04n03/
+        let century = if y >= 1957 { 1900 } else { 2000 };
+        let year = ((y - century) % 100) as u8;
+        Ok((year, doy))
     }
 
     /// Convert an alpha5 formated Satellite Catalog Number, also known as NORAD ID, to a plain
