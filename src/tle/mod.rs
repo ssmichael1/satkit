@@ -549,21 +549,25 @@ impl TLE {
 
     /// Compute (two-digit year, fractional day-of-year) from epoch.
     fn epoch_to_tle_ydoy(&self) -> Result<(u8, f64)> {
-        let (y, _, _, _, _, _) = self.epoch.as_datetime();
+        let (year, _, _, _, _, _) = self.epoch.as_datetime();
 
-        // Day-of-year
+        if (year < 1957) || (year > 2056) {
+            bail!("Year out of range for TLE: {}", year);
+        }
+
+        // Day-of-year.
         let doy_int = self.epoch.day_of_year();
 
-        // Fraction of day
-        // Note: this works with days that have leap seconds
-        // (in which second of day is normalized to 86401 instead of 86400)
+        // Fraction of day.
+        // Note: This works with days that have leap seconds
+        // (in which second of day is normalized to 86401 instead of 86400).
         let frac = self.epoch.as_mjd() % 1.0;
         let doy = (doy_int as f64) + frac;
         // Years >= 1957 = 1900s
         // Years < 1957 = 2000s
         // See: https://celestrak.org/columns/v04n03/
-        let century = if y >= 1957 { 1900 } else { 2000 };
-        let year = ((y - century) % 100) as u8;
+        let century = if year >= 1957 { 1900 } else { 2000 };
+        let year = ((year - century) % 100) as u8;
         Ok((year, doy))
     }
 
@@ -1139,6 +1143,39 @@ mod tests {
                 assert_eq!(l2, tle[1], "Line 2 must match original");
             }
         }
+
+        Ok(())
+    }
+
+
+    #[test]
+    fn test_2line_encoding_with_invalid_past_date() -> Result<()> {
+        let line1 = "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927";
+        let line2 = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537";
+
+        let mut tle = TLE::load_2line(line1, line2)?;
+        tle.epoch = Instant::from_date(1952, 06, 13)?;
+
+        let result = tle.to_2line();
+
+        // Check that it errors.
+        assert!(result.is_err(), "Expected error due to epoch before 1957, got {:?}", result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_2line_encoding_with_invalid_future_date() -> Result<()> {
+        let line1 = "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927";
+        let line2 = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537";
+
+        let mut tle = TLE::load_2line(line1, line2)?;
+        tle.epoch = Instant::from_date(2057, 06, 13)?;
+
+        let result = tle.to_2line();
+
+        // Check that it errors.
+        assert!(result.is_err(), "Expected error due to epoch after 2056, got {:?}", result);
 
         Ok(())
     }
