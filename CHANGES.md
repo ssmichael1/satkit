@@ -110,3 +110,8 @@
 
 ### Fix _version.py
   - export "version" and "_version"
+
+## Python 0.8.2
+
+### Allow TLE setting of parameters
+  - Allow setting of TLE parameters in python bindings
