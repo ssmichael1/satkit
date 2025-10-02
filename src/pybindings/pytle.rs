@@ -93,10 +93,20 @@ impl PyTLE {
         self.0.sat_num
     }
 
+    #[setter]
+    fn set_satnum(&mut self, value: i32) {
+        self.0.sat_num = value;
+    }
+
     /// Orbit eccentricity
     #[getter]
     const fn get_eccen(&self) -> f64 {
         self.0.eccen
+    }
+
+    #[setter]
+    fn set_eccen(&mut self, value: f64) {
+        self.0.eccen = value;
     }
 
     /// Mean anomaly in degrees
@@ -104,11 +114,19 @@ impl PyTLE {
     const fn get_mean_anomaly(&self) -> f64 {
         self.0.mean_anomaly
     }
+    #[setter]
+    fn set_mean_anomaly(&mut self, value: f64) {
+        self.0.mean_anomaly = value;
+    }
 
     /// Mean motion in revs / day
     #[getter]
     const fn get_mean_motion(&self) -> f64 {
         self.0.mean_motion
+    }
+    #[setter]
+    fn set_mean_motion(&mut self, value: f64) {
+        self.0.mean_motion = value;
     }
 
     /// inclination in degrees
@@ -116,17 +134,34 @@ impl PyTLE {
     const fn get_inclination(&self) -> f64 {
         self.0.inclination
     }
+    #[setter]
+    fn set_inclination(&mut self, value: f64) {
+        self.0.inclination = value;
+    }
 
     /// Epoch time of TLE
     #[getter]
     fn get_epoch(&self, py: Python) -> PyResult<PyObject> {
         self.0.epoch.into_py_any(py)
     }
+    #[setter]
+    fn set_epoch(&mut self, value: &Bound<'_, PyAny>) -> Result<()> {
+        let epoch = value.to_time_vec()?;
+        if epoch.is_empty() {
+            bail!("epoch must be a single time value");
+        }
+        self.0.epoch = epoch[0];
+        Ok(())
+    }
 
     /// argument of perigee, degrees
     #[getter]
     const fn get_arg_of_perigee(&self) -> f64 {
         self.0.arg_of_perigee
+    }
+    #[setter]
+    fn set_arg_of_perigee(&mut self, value: f64) {
+        self.0.arg_of_perigee = value;
     }
 
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
@@ -140,15 +175,31 @@ impl PyTLE {
     const fn get_mean_motion_dot_dot(&self) -> f64 {
         self.0.mean_motion_dot_dot
     }
+    #[setter]
+    fn set_mean_motion_dot_dot(&mut self, value: f64) {
+        self.0.mean_motion_dot_dot = value;
+    }
+
 
     /// Name of satellite
+    #[getter]
     fn name(&self) -> String {
         self.0.name.clone()
     }
+    #[setter]
+    fn set_name(&mut self, value: String) {
+        self.0.name = value;
+    }
+
 
     // Drag
+    #[getter]
     const fn bstar(&self) -> f64 {
         self.0.bstar
+    }
+    #[setter]
+    fn set_bstar(&mut self, value: f64) {
+        self.0.bstar = value;
     }
 
     fn __str__(&self) -> String {
