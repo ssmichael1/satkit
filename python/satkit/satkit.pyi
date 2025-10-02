@@ -81,29 +81,51 @@ class TLE:
     def satnum(self) -> int:
         """Satellite number, or equivalently the NORAD ID"""
 
+    def set_satnum(self, value: int) -> None:
+        """Set the satellite number (NORAD ID)"""
+        
+
     @property
     def eccen(self) -> float:
         """Satellite eccentricity, in range [0,1]"""
+
+    def set_eccentricity(self, value: float) -> None:
+        """Set the satellite eccentricity"""
 
     @property
     def mean_anomaly(self) -> float:
         """Mean anomaly in degrees"""
 
+    def set_mean_anomaly(self, value: float) -> None:
+        """Set the satellite mean anomaly"""
+
     @property
     def mean_motion(self) -> float:
         """Mean motion in revs / day"""
+
+    def set_mean_motion(self, value: float) -> None:
+        """Set the satellite mean motion"""
 
     @property
     def inclination(self) -> float:
         """Inclination, in degrees"""
 
+    def set_inclination(self, value: float) -> None:
+        """Set the satellite inclination, degrees"""
+
     @property
     def epoch(self) -> time:
         """TLE epoch"""
 
+    def set_epoch(self, value: time) -> None:
+        """Set the TLE epoch"""        
+
     @property
     def arg_of_perigee(self) -> time:
         """Argument of Perigee, in degrees"""
+
+    def set_arg_of_perigee(self, value: float) -> None:
+        """Set the argument of perigee, degrees"""
 
     @property
     def mean_motion_dot(self) -> float:
@@ -113,17 +135,27 @@ class TLE:
             the "1/2" is because that is how number is stored in the TLE
         """
 
+    def set_mean_motion_dot(self, value: float) -> None:
+        """Set the 1/2 of first derivative of mean motion, in revs/day^2"""
+
     @property
     def mean_motion_dot_dot(self) -> float:
         """1/6 of 2nd derivative of mean motion, in revs/day^3
 
         Note:
             The "1/6" is because that is how number is stored in the TLE
+
         """
+
+    def set_mean_motion_dot_dot(self, value: float) -> None:
+        """Set the 1/6 of 2nd derivative of mean motion, in revs/day^3"""
 
     @property
     def name(self) -> str:
         """The name of the satellite"""
+
+    def set_name(self, value: str) -> None:
+        """Set the name of the satellite"""        
 
     @property
     def bstar(self) -> str:
@@ -134,6 +166,9 @@ class TLE:
         Units (which are strange) is multiples of
         1 / Earth radius
         """
+
+    def set_bstar(self, value: float) -> None:
+        """Set the drag of the satellite"""
 
     def to_2line(self) -> list[str]:
         """
@@ -1427,6 +1462,7 @@ class duration:
 
         A day is defined as 86,400 seconds
         """
+
 
     @property
     def hours(self) -> float:
