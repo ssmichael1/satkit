@@ -93,7 +93,7 @@ jobs:
 
       # Details of cibuildwheel are set in pyproject.toml
       - name: Build ${{ matrix.platform || matrix.os }} wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v3.2.0
         with:
           package-dir: .
           output-dir: wheelhouse
