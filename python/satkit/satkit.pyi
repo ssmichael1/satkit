@@ -82,7 +82,7 @@ class TLE:
         """Satellite number, or equivalently the NORAD ID"""
 
     @satnum.setter
-    def set_satnum(self, value: int) -> None:
+    def satnum(self, value: int) -> None:
         """Set the satellite number (NORAD ID)"""
 
     @property
@@ -90,7 +90,7 @@ class TLE:
         """Right Ascension of Ascending Node, in degrees"""
 
     @raan.setter
-    def set_raan(self, value: float) -> None:
+    def raan(self, value: float) -> None:
         """Set the Right Ascension of Ascending Node, in degrees"""
 
     @property
@@ -98,7 +98,7 @@ class TLE:
         """Satellite eccentricity, in range [0,1]"""
 
     @eccen.setter
-    def set_eccentricity(self, value: float) -> None:
+    def eccen(self, value: float) -> None:
         """Set the satellite eccentricity"""
 
     @property
@@ -106,21 +106,23 @@ class TLE:
         """Mean anomaly in degrees"""
 
     @mean_anomaly.setter
-    def set_mean_anomaly(self, value: float) -> None:
+    def mean_anomaly(self, value: float) -> None:
         """Set the satellite mean anomaly"""
 
     @property
     def mean_motion(self) -> float:
         """Mean motion in revs / day"""
 
-    def set_mean_motion(self, value: float) -> None:
+    @mean_motion.setter
+    def mean_motion(self, value: float) -> None:
         """Set the satellite mean motion"""
 
     @property
     def inclination(self) -> float:
         """Inclination, in degrees"""
 
-    def set_inclination(self, value: float) -> None:
+    @inclination.setter
+    def inclination(self, value: float) -> None:
         """Set the satellite inclination, degrees"""
 
     @property
@@ -128,15 +130,15 @@ class TLE:
         """TLE epoch"""
 
     @epoch.setter
-    def set_epoch(self, value: time) -> None:
+    def epoch(self, value: time) -> None:
         """Set the TLE epoch"""
 
     @property
-    def arg_of_perigee(self) -> time:
+    def arg_of_perigee(self) -> float:
         """Argument of Perigee, in degrees"""
 
     @arg_of_perigee.setter
-    def set_arg_of_perigee(self, value: float) -> None:
+    def arg_of_perigee(self, value: float) -> None:
         """Set the argument of perigee, degrees"""
 
     @property
@@ -183,7 +185,7 @@ class TLE:
         """
 
     @bstar.setter
-    def set_bstar(self, value: float) -> None:
+    def bstar(self, value: float) -> None:
         """Set the drag of the satellite"""
 
     def to_2line(self) -> list[str]:

@@ -85,63 +85,63 @@ impl PyTLE {
     }
 
     /// Satellite NORAD Catalog Number
-    #[getter]
+    #[getter(satnum)]
     const fn get_satnum(&self) -> i32 {
         self.0.sat_num
     }
 
-    #[setter]
+    #[setter(satnum)]
     fn set_satnum(&mut self, value: i32) {
         self.0.sat_num = value;
     }
 
     /// Orbit eccentricity
-    #[getter]
+    #[getter(eccen)]
     const fn get_eccen(&self) -> f64 {
         self.0.eccen
     }
 
-    #[setter]
+    #[setter(eccen)]
     fn set_eccen(&mut self, value: f64) {
         self.0.eccen = value;
     }
 
     /// Mean anomaly in degrees
-    #[getter]
+    #[getter(mean_anomaly)]
     const fn get_mean_anomaly(&self) -> f64 {
         self.0.mean_anomaly
     }
-    #[setter]
+    #[setter(mean_anomaly)]
     fn set_mean_anomaly(&mut self, value: f64) {
         self.0.mean_anomaly = value;
     }
 
     /// Mean motion in revs / day
-    #[getter]
+    #[getter(mean_motion)]
     const fn get_mean_motion(&self) -> f64 {
         self.0.mean_motion
     }
-    #[setter]
+    #[setter(mean_motion)]
     fn set_mean_motion(&mut self, value: f64) {
         self.0.mean_motion = value;
     }
 
     /// inclination in degrees
-    #[getter]
+    #[getter(inclination)]
     const fn get_inclination(&self) -> f64 {
         self.0.inclination
     }
-    #[setter]
+    #[setter(inclination)]
     fn set_inclination(&mut self, value: f64) {
         self.0.inclination = value;
     }
 
     /// Epoch time of TLE
-    #[getter]
+    #[getter(epoch)]
     fn get_epoch(&self, py: Python) -> PyResult<PyObject> {
         self.0.epoch.into_py_any(py)
     }
-    #[setter]
+    #[setter(epoch)]
     fn set_epoch(&mut self, value: &Bound<'_, PyAny>) -> Result<()> {
         let epoch = value.to_time_vec()?;
         if epoch.is_empty() {
@@ -152,57 +152,61 @@ impl PyTLE {
     }
 
     /// argument of perigee, degrees
-    #[getter]
+    #[getter(arg_of_perigee)]
     const fn get_arg_of_perigee(&self) -> f64 {
         self.0.arg_of_perigee
     }
-    #[setter]
+    #[setter(arg_of_perigee)]
     fn set_arg_of_perigee(&mut self, value: f64) {
         self.0.arg_of_perigee = value;
     }
 
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
-    #[getter]
+    #[getter(mean_motion_dot)]
     const fn get_mean_motion_dot(&self) -> f64 {
         self.0.mean_motion_dot
     }
+    #[setter(mean_motion_dot)]
+    fn set_mean_motion_dot(&mut self, value: f64) {
+        self.0.mean_motion_dot = value;
+    }
 
     /// One sixth of 2nd derivative of mean motion wrt time, in revs/day^3
-    #[getter]
+    #[getter(mean_motion_dot_dot)]
     const fn get_mean_motion_dot_dot(&self) -> f64 {
         self.0.mean_motion_dot_dot
     }
-    #[setter]
+    #[setter(mean_motion_dot_dot)]
     fn set_mean_motion_dot_dot(&mut self, value: f64) {
         self.0.mean_motion_dot_dot = value;
     }
 
     /// Right Ascension of the Ascending Node, degrees
-    #[getter]
+    #[getter(raan)]
     const fn get_raan(&self) -> f64 {
         self.0.raan
     }
-    #[setter]
+    #[setter(raan)]
     fn set_raan(&mut self, value: f64) {
         self.0.raan = value;
     }
 
     /// Name of satellite
-    #[getter]
+    #[getter(name)]
     fn name(&self) -> String {
         self.0.name.clone()
     }
-    #[setter]
+    #[setter(name)]
     fn set_name(&mut self, value: String) {
         self.0.name = value;
     }
 
     // Drag
-    #[getter]
+    #[getter(bstar)]
     const fn bstar(&self) -> f64 {
         self.0.bstar
     }
-    #[setter]
+    #[setter(bstar)]
     fn set_bstar(&mut self, value: f64) {
         self.0.bstar = value;
     }
