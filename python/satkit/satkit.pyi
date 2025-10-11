@@ -81,14 +81,23 @@ class TLE:
     def satnum(self) -> int:
         """Satellite number, or equivalently the NORAD ID"""
 
+    @satnum.setter
     def set_satnum(self, value: int) -> None:
         """Set the satellite number (NORAD ID)"""
-        
+
+    @property
+    def raan(self) -> float:
+        """Right Ascension of Ascending Node, in degrees"""
+
+    @raan.setter
+    def set_raan(self, value: float) -> None:
+        """Set the Right Ascension of Ascending Node, in degrees"""
 
     @property
     def eccen(self) -> float:
         """Satellite eccentricity, in range [0,1]"""
 
+    @eccen.setter
     def set_eccentricity(self, value: float) -> None:
         """Set the satellite eccentricity"""
 
@@ -96,6 +105,7 @@ class TLE:
     def mean_anomaly(self) -> float:
         """Mean anomaly in degrees"""
 
+    @mean_anomaly.setter
     def set_mean_anomaly(self, value: float) -> None:
         """Set the satellite mean anomaly"""
 
@@ -117,13 +127,15 @@ class TLE:
     def epoch(self) -> time:
         """TLE epoch"""
 
+    @epoch.setter
     def set_epoch(self, value: time) -> None:
-        """Set the TLE epoch"""        
+        """Set the TLE epoch"""
 
     @property
     def arg_of_perigee(self) -> time:
         """Argument of Perigee, in degrees"""
 
+    @arg_of_perigee.setter
     def set_arg_of_perigee(self, value: float) -> None:
         """Set the argument of perigee, degrees"""
 
@@ -135,6 +147,7 @@ class TLE:
             the "1/2" is because that is how number is stored in the TLE
         """
 
+    @mean_motion_dot.setter
     def set_mean_motion_dot(self, value: float) -> None:
         """Set the 1/2 of first derivative of mean motion, in revs/day^2"""
 
@@ -147,6 +160,7 @@ class TLE:
 
         """
 
+    @mean_motion_dot_dot.setter
     def set_mean_motion_dot_dot(self, value: float) -> None:
         """Set the 1/6 of 2nd derivative of mean motion, in revs/day^3"""
 
@@ -154,11 +168,12 @@ class TLE:
     def name(self) -> str:
         """The name of the satellite"""
 
+    @name.setter
     def set_name(self, value: str) -> None:
-        """Set the name of the satellite"""        
+        """Set the name of the satellite"""
 
     @property
-    def bstar(self) -> str:
+    def bstar(self) -> float:
         """Drag of the satellite
 
         should be rho0 * Cd * A / 2 / m
@@ -167,6 +182,7 @@ class TLE:
         1 / Earth radius
         """
 
+    @bstar.setter
     def set_bstar(self, value: float) -> None:
         """Set the drag of the satellite"""
 
@@ -1462,7 +1478,6 @@ class duration:
 
         A day is defined as 86,400 seconds
         """
-
 
     @property
     def hours(self) -> float:

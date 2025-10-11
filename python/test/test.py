@@ -746,6 +746,39 @@ class TestSatState:
         assert np.array([0.0, 0.0, 1.0]) == pytest.approx(rz, abs=1e-10)
 
 
+class TestTLE:
+    def test_tle_setting(self):
+        """
+        Test setting TLE parameters
+        """
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        tle = sk.TLE.from_lines([line1, line2])
+        if isinstance(tle, list):
+            tle = tle[0]
+        assert tle.inclination == pytest.approx(51.6432, rel=1e-7)
+        assert tle.raan == pytest.approx(351.4697, rel=1e-7)
+        assert tle.eccen == pytest.approx(0.0007417, rel=1e-7)
+        assert tle.arg_of_perigee == pytest.approx(130.5364, rel=1e-7)
+        assert tle.mean_anomaly == pytest.approx(329.6482, rel=1e-7)
+        assert tle.mean_motion == pytest.approx(15.48915330, rel=1e-7)
+        assert tle.bstar == pytest.approx(0.00010270, rel=1e-4)
+        assert abs((tle.epoch - sk.time(2021, 10, 2, 14, 10, 59.0)).seconds) < 1
+
+        tle.raan = 50.0
+        assert tle.raan == pytest.approx(50.0, rel=1e-7)
+        tle.eccen = 0.1
+        assert tle.eccen == pytest.approx(0.1, rel=1e-7)
+        tle.arg_of_perigee = 40.0
+        assert tle.arg_of_perigee == pytest.approx(40.0, rel=1e-7)
+        tle.mean_anomaly = 300.0
+        assert tle.mean_anomaly == pytest.approx(300.0, rel=1e-7)
+        tle.mean_motion = 14.0
+        assert tle.mean_motion == pytest.approx(14.0, rel=1e-7)
+        tle.bstar = 0.0002
+        assert tle.bstar == pytest.approx(0.0002, rel=1e-4)
+
+
 class TestTLEFitting:
     def test_tle_fit(self):
         """

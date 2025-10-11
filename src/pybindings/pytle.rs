@@ -13,9 +13,6 @@ use std::fs::File;
 use std::io;
 use std::io::BufRead;
 
-
-
-
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
 impl<'py> IntoPyObject<'py> for TLE {
@@ -180,6 +177,15 @@ impl PyTLE {
         self.0.mean_motion_dot_dot = value;
     }
 
+    /// Right Ascension of the Ascending Node, degrees
+    #[getter]
+    const fn get_raan(&self) -> f64 {
+        self.0.raan
+    }
+    #[setter]
+    fn set_raan(&mut self, value: f64) {
+        self.0.raan = value;
+    }
 
     /// Name of satellite
     #[getter]
@@ -190,7 +196,6 @@ impl PyTLE {
     fn set_name(&mut self, value: String) {
         self.0.name = value;
     }
-
 
     // Drag
     #[getter]

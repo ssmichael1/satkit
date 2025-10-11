@@ -115,3 +115,6 @@
 
 ### Allow TLE setting of parameters
   - Allow setting of TLE parameters in python bindings
+
+### Support for Python 3.14
+  - Build wheels for Python 3.14
