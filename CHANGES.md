@@ -110,3 +110,11 @@
 
 ### Fix _version.py
   - export "version" and "_version"
+
+## Python 0.8.2
+
+### Allow TLE setting of parameters
+  - Allow setting of TLE parameters in python bindings
+
+### Support for Python 3.14
+  - Build wheels for Python 3.14

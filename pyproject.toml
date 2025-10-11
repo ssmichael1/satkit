@@ -9,7 +9,7 @@ requires-python = ">= 3.8"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
-version = "0.8.1"
+version = "0.8.2"
 license = { file = "LICENSE" }
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
@@ -35,6 +35,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 
@@ -44,7 +45,15 @@ include = ["satkit*"]
 exclude = ["test*", "docs*", "examples*"]
 
 [tool.cibuildwheel]
-build = ["cp313-*", "cp312-*", "cp311-* cp310-* cp39-* cp38-*"]
+build = [
+    "cp314-*",
+    "cp313-*",
+    "cp312-*",
+    "cp311-*",
+    "cp310-*",
+    "cp39-*",
+    "cp38-*",
+]
 test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
 skip = ["pp*", "*_i686", "*_s390x", "*_ppc64le", "*-musllinux*"]
 
