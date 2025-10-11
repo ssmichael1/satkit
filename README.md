@@ -111,7 +111,7 @@ Satkit is available via pypi.org, and can be installed via the `pip` command:
 python -m pip install satkit
 ```
 
-Binaries are available for Windows (AMD64), Mac (Intel, Apple Silicon) and Linux (x86_64, aarch64) for python versions 3.8 through 3.13.
+Binaries are available for Windows (AMD64), Mac (Intel, Apple Silicon) and Linux (x86_64, aarch64) for python versions 3.8 through 3.14.
 
 Once installed, make sure you download the most-recent [data files](#data-dependencies) necessary for many calculations.  This only needs to be done once, unless more-recent space weather and Earth orientation parameter data is required (these are updated at least daily).
 ```python
