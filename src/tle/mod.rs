@@ -551,7 +551,7 @@ impl TLE {
     fn epoch_to_tle_ydoy(&self) -> Result<(u8, f64)> {
         let (year, _, _, _, _, _) = self.epoch.as_datetime();
 
-        if (year < 1957) || (year > 2056) {
+        if !(1957..=2056).contains(&year) {
             bail!("Year out of range for TLE: {}", year);
         }
 
@@ -1154,7 +1154,7 @@ mod tests {
         let line2 = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537";
 
         let mut tle = TLE::load_2line(line1, line2)?;
-        tle.epoch = Instant::from_date(1952, 06, 13)?;
+        tle.epoch = Instant::from_date(1952, 6, 13)?;
 
         let result = tle.to_2line();
 
@@ -1170,7 +1170,7 @@ mod tests {
         let line2 = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537";
 
         let mut tle = TLE::load_2line(line1, line2)?;
-        tle.epoch = Instant::from_date(2057, 06, 13)?;
+        tle.epoch = Instant::from_date(2057, 6, 13)?;
 
         let result = tle.to_2line();
 
