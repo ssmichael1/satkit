@@ -1,3 +1,12 @@
+//!
+//! Mathematical types used throughout the library
+//!
+//! This module defines commonly used mathematical types such as vectors, matrices, and quaternions using the `nalgebra` crate.
+//! These types are used for representing positions, velocities, orientations, and other mathematical constructs in the library.
+//!
+//! There may be an attempt to abstract over the underlying math library in the future, but for now we directly use `nalgebra` types.
+//!
+
 pub type Vec3 = nalgebra::Vector3<f64>;
 pub type Quaternion = nalgebra::UnitQuaternion<f64>;
 pub type Vector<const T: usize> = nalgebra::SVector<f64, T>;

@@ -3,9 +3,11 @@ use super::pyquaternion::PyQuaternion;
 
 use crate::mathtypes::*;
 use crate::Instant;
+
 use nalgebra as na;
 use numpy as np;
 use numpy::ndarray;
+
 use numpy::PyArrayMethods;
 use numpy::PyUntypedArrayMethods;
 use numpy::{PyArray1, PyArray2};
