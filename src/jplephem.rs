@@ -19,18 +19,13 @@
 //! For big-endian systems, download from the "SunOS" subdirectory
 //!
 
-extern crate nalgebra;
-use nalgebra::DMatrix;
-
 use crate::solarsystem::SolarSystem;
-use nalgebra as na;
-pub type Vec3 = na::Vector3<f64>;
-pub type Quat = na::UnitQuaternion<f64>;
 
 use crate::utils::{datadir, download_if_not_exist};
 
 use once_cell::sync::OnceCell;
 
+use crate::mathtypes::*;
 use crate::{Instant, TimeScale};
 
 use anyhow::{bail, Result};
@@ -282,7 +277,7 @@ impl JPLEphem {
 
         let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
 
-        let mut t = na::Vector::<f64, na::Const<N>, na::ArrayStorage<f64, N, 1>>::zeros();
+        let mut t = Vector::<N>::zeros();
         t[0] = 1.0;
         t[1] = t_seg;
         for j in 2..ncoeff {
@@ -394,8 +389,8 @@ impl JPLEphem {
 
         let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
 
-        let mut t = na::Vector::<f64, na::Const<N>, na::ArrayStorage<f64, N, 1>>::zeros();
-        let mut v = na::Vector::<f64, na::Const<N>, na::ArrayStorage<f64, N, 1>>::zeros();
+        let mut t = Vector::<N>::zeros();
+        let mut v = Vector::<N>::zeros();
         t[0] = 1.0;
         t[1] = t_seg;
         v[0] = 0.0;

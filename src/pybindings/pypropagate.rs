@@ -8,9 +8,9 @@ use pyo3::IntoPyObjectExt;
 
 use nalgebra as na;
 
+use crate::mathtypes::*;
 use crate::orbitprop::SatProperties;
 use crate::orbitprop::SatPropertiesStatic;
-use crate::types::*;
 use crate::Duration;
 use crate::Instant;
 

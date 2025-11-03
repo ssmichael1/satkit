@@ -1,8 +1,7 @@
 use super::pyinstant::PyInstant;
 use super::pypropsettings::PyPropSettings;
-use super::pyquaternion::Quaternion;
+use super::pyquaternion::PyQuaternion;
 
-use nalgebra as na;
 use numpy as np;
 use numpy::PyArrayMethods;
 use numpy::PyUntypedArrayMethods;
@@ -11,6 +10,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyNone, PyTuple};
 use pyo3::IntoPyObjectExt;
 
+use crate::mathtypes::*;
 use crate::orbitprop::{PropSettings, SatState, StateCov};
 use crate::pybindings::PyDuration;
 use crate::Instant;
@@ -37,15 +37,24 @@ impl PySatState {
 
         let mut state = SatState::from_pv(
             &time.0,
-            &na::Vector3::<f64>::from_row_slice(unsafe { pos.as_slice().unwrap() }),
-            &na::Vector3::<f64>::from_row_slice(unsafe { vel.as_slice().unwrap() }),
+            &crate::vector![
+                pos.get_owned(0).unwrap(),
+                pos.get_owned(1).unwrap(),
+                pos.get_owned(2).unwrap()
+            ],
+            &crate::vector![
+                vel.get_owned(0).unwrap(),
+                vel.get_owned(1).unwrap(),
+                vel.get_owned(2).unwrap()
+            ],
         );
+
         if let Some(cov) = cov {
             let dims = cov.dims();
             if dims[0] != 6 || dims[1] != 6 {
                 bail!("Covariance must be 6x6 numpy array");
             }
-            let nacov = na::Matrix6::<f64>::from_row_slice(unsafe { cov.as_slice().unwrap() });
+            let nacov = Matrix6::from_row_slice(unsafe { cov.as_slice().unwrap() });
             state.set_cov(StateCov::PVCov(nacov));
         }
 
@@ -68,8 +77,7 @@ impl PySatState {
                 "Position uncertainty must be 1-d numpy array with length 3",
             ));
         }
-        let na_sigma_pvh =
-            na::Vector3::<f64>::from_row_slice(unsafe { sigma_pvh.as_slice().unwrap() });
+        let na_sigma_pvh = Vector3::from_row_slice(unsafe { sigma_pvh.as_slice().unwrap() });
 
         self.0.set_lvlh_pos_uncertainty(&na_sigma_pvh);
         Ok(())
@@ -89,8 +97,7 @@ impl PySatState {
         if sigma_cart.len() != 3 {
             bail!("Position uncertainty must be 1-d numpy array with length 3");
         }
-        let na_sigma_cart =
-            na::Vector3::<f64>::from_row_slice(unsafe { sigma_cart.as_slice().unwrap() });
+        let na_sigma_cart = Vector3::from_row_slice(unsafe { sigma_cart.as_slice().unwrap() });
 
         self.0.set_gcrf_pos_uncertainty(&na_sigma_cart);
         Ok(())
@@ -110,7 +117,7 @@ impl PySatState {
                 "Covariance must be 6x6 numpy array",
             ));
         }
-        let na_cov = na::Matrix6::from_row_slice(unsafe { cov.as_slice().unwrap() });
+        let na_cov = Matrix6::from_row_slice(unsafe { cov.as_slice().unwrap() });
         self.0.cov = StateCov::PVCov(na_cov);
         Ok(())
     }
@@ -170,7 +177,7 @@ impl PySatState {
     /// Returns:
     ///     satkit.quaternion: quaternion to go from gcrf to lvlh frame
     #[getter]
-    fn get_qgcrf2lvlh(&self) -> Quaternion {
+    fn get_qgcrf2lvlh(&self) -> PyQuaternion {
         self.0.qgcrf2lvlh().into()
     }
 
@@ -259,13 +266,13 @@ impl PySatState {
             crate::TimeScale::TAI,
         );
 
-        let pv = na::Vector6::<f64>::from_row_slice(unsafe {
+        let pv = Vector6::from_row_slice(unsafe {
             std::slice::from_raw_parts(state[8..56].as_ptr() as *const f64, 6)
         });
         self.0.time = time;
         self.0.pv = pv;
         if state.len() >= 92 {
-            let cov = na::Matrix6::<f64>::from_row_slice(unsafe {
+            let cov = Matrix6::from_row_slice(unsafe {
                 std::slice::from_raw_parts(state[56..].as_ptr() as *const f64, 36)
             });
             self.0.cov = StateCov::PVCov(cov);

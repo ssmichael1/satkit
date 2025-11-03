@@ -9,7 +9,7 @@ use numpy::PyUntypedArrayMethods;
 use pyo3::exceptions::PyValueError;
 
 use crate::pybindings::pyutils::*;
-use crate::types::*;
+use crate::mathtypes::*;
 
 enum UKFType {
     None,

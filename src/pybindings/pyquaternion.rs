@@ -1,5 +1,4 @@
 use anyhow::Context;
-use nalgebra as na;
 use numpy as np;
 use numpy::PyArrayMethods;
 use numpy::PyUntypedArrayMethods;
@@ -8,8 +7,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
 use pyo3::IntoPyObjectExt;
 
-type Quat = na::UnitQuaternion<f64>;
-type Vec3 = na::Vector3<f64>;
+use crate::mathtypes::*;
 
 use anyhow::{bail, Result};
 
@@ -36,33 +34,33 @@ use anyhow::{bail, Result};
 ///
 #[pyclass(name = "quaternion", module = "satkit")]
 #[derive(PartialEq, Copy, Clone, Debug)]
-pub struct Quaternion(pub Quat);
+pub struct PyQuaternion(pub Quaternion);
 
 #[pyclass(name = "quaternion_array", module = "satkit")]
 #[derive(PartialEq, Clone, Debug)]
-pub struct QuaternionVec(Vec<Quat>);
+pub struct PyQuaternionVec(Vec<Quaternion>);
 
-impl From<Quat> for Quaternion {
-    fn from(q: Quat) -> Self {
+impl From<Quaternion> for PyQuaternion {
+    fn from(q: Quaternion) -> Self {
         Self(q)
     }
 }
 
 #[pymethods]
-impl Quaternion {
+impl PyQuaternion {
     #[new]
     #[pyo3(signature=(*args))]
     fn py_new(args: &Bound<'_, PyTuple>) -> Result<Self> {
         if args.len() == 0 {
-            Ok(Quat::identity().into())
+            Ok(Quaternion::identity().into())
         } else if args.len() == 4 {
             let w = args.get_item(0)?.extract::<f64>()?;
             let x = args.get_item(1)?.extract::<f64>()?;
             let y = args.get_item(2)?.extract::<f64>()?;
             let z = args.get_item(3)?.extract::<f64>()?;
             // Create a nalgebra quaternion from 4 input scalars
-            let quat = na::Quaternion::<f64>::new(w, x, y, z);
-            Ok(Quat::from_quaternion(quat).into())
+            let q = nalgebra::Quaternion::<f64>::new(w, x, y, z);
+            Ok(Quaternion::from_quaternion(q).into())
         } else {
             bail!("Invalid input.  Must be empty or 4 floats");
         }
@@ -81,7 +79,7 @@ impl Quaternion {
     ///     e.g. rotation of +xhat 90 degrees by +zhat gives +yhat
     #[staticmethod]
     fn rotx(theta_rad: f64) -> Result<Self> {
-        Ok(Quat::from_axis_angle(&Vec3::x_axis(), theta_rad).into())
+        Ok(Quaternion::from_axis_angle(&Vec3::x_axis(), theta_rad).into())
     }
 
     /// Quaternion representing rotation about yhat axis by `theta-rad` degrees
@@ -98,14 +96,14 @@ impl Quaternion {
     ///     
     #[staticmethod]
     fn roty(theta_rad: f64) -> Result<Self> {
-        Ok(Quat::from_axis_angle(&Vec3::y_axis(), theta_rad).into())
+        Ok(Quaternion::from_axis_angle(&Vec3::y_axis(), theta_rad).into())
     }
 
     /// Quaternion representing rotation about
     /// zhat axis by `theta-rad` degrees
     #[staticmethod]
     fn rotz(theta_rad: f64) -> Result<Self> {
-        Ok(Quat::from_axis_angle(&Vec3::z_axis(), theta_rad).into())
+        Ok(Quaternion::from_axis_angle(&Vec3::z_axis(), theta_rad).into())
     }
 
     /// Quaternion representing rotation about given axis by given angle in radians
@@ -121,12 +119,12 @@ impl Quaternion {
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> Result<Self> {
         let v = Vec3::from_row_slice(axis.as_slice()?);
-        let u = na::UnitVector3::try_new(v, 1.0e-9);
+        let u = nalgebra::UnitVector3::try_new(v, 1.0e-9);
         if let Some(unit_axis) = u {
-            Ok(Quat::from_axis_angle(&unit_axis, angle).into())
+            Ok(Quaternion::from_axis_angle(&unit_axis, angle).into())
         } else {
             // If the axis is zero, return identity quaternion
-            Ok(Quat::identity().into())
+            Ok(Quaternion::identity().into())
         }
     }
 
@@ -162,8 +160,8 @@ impl Quaternion {
                 *v2.get(2).unwrap(),
             ]),
         };
-        let q =
-            Quat::rotation_between(&v1, &v2).context("Norms are 0 or vectors are 180° apart")?;
+        let q = Quaternion::rotation_between(&v1, &v2)
+            .context("Norms are 0 or vectors are 180° apart")?;
 
         Ok(q.into())
     }
@@ -181,9 +179,10 @@ impl Quaternion {
             bail!("Invalid DCM.  Must be 3x3 matrix");
         }
         let dcm = dcm.as_array();
-        let mat = na::Matrix3::from_iterator(dcm.iter().cloned());
-        let rot = na::Rotation3::from_matrix(&mat.transpose());
-        Ok(Quat::from_rotation_matrix(&rot).into())
+        let mat = nalgebra::Matrix3::from_iterator(dcm.iter().cloned());
+        let rot = nalgebra::Rotation3::from_matrix(&mat.transpose());
+
+        Ok(Quaternion::from_rotation_matrix(&rot).into())
     }
 
     /// Return rotation matrix representing identical rotation to quaternion
@@ -215,10 +214,10 @@ impl Quaternion {
     }
 
     fn __str__(&self) -> Result<String> {
-        let ax: na::Unit<Vec3> = self
-            .0
-            .axis()
-            .map_or_else(|| na::Unit::new_normalize(Vec3::new(1.0, 0.0, 0.0)), |v| v);
+        let ax: nalgebra::Unit<Vec3> = self.0.axis().map_or_else(
+            || nalgebra::Unit::new_normalize(Vec3::new(1.0, 0.0, 0.0)),
+            |v| v,
+        );
         let angle = self.0.angle();
         Ok(format!(
             "Quaternion(Axis = [{:6.4}, {:6.4}, {:6.4}], Angle = {:6.4} rad)",
@@ -241,7 +240,7 @@ impl Quaternion {
         let x = f64::from_le_bytes(state[8..16].try_into()?);
         let y = f64::from_le_bytes(state[16..24].try_into()?);
         let z = f64::from_le_bytes(state[24..32].try_into()?);
-        self.0 = Quat::from_quaternion(na::Quaternion::<f64>::new(w, x, y, z));
+        self.0 = Quaternion::from_quaternion(nalgebra::Quaternion::<f64>::new(w, x, y, z));
         Ok(())
     }
 
@@ -307,9 +306,7 @@ impl Quaternion {
     #[pyo3(signature=(other, frac,  epsilon=1.0e-6))]
     fn slerp(&self, other: &Self, frac: f64, epsilon: f64) -> Result<Self> {
         self.0.try_slerp(&other.0, frac, epsilon).map_or_else(
-            || {
-                bail!("Quaternions cannot be 180 deg apart")
-            },
+            || bail!("Quaternions cannot be 180 deg apart"),
             |v| Ok(v.into()),
         )
     }
@@ -341,7 +338,7 @@ impl Quaternion {
                 bail!("Invalid rhs.  1D array must be of length 3");
             }
 
-            let m = na::vector![
+            let m = crate::vector![
                 v1d.get_owned(0).unwrap(),
                 v1d.get_owned(1).unwrap(),
                 v1d.get_owned(2).unwrap()

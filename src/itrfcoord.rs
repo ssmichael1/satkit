@@ -3,10 +3,7 @@ use std::f64::consts::PI;
 use crate::consts::WGS84_A;
 use crate::consts::WGS84_F;
 
-use nalgebra as na;
-
-use crate::types::Quaternion as Quat;
-use crate::types::Vec3;
+use crate::mathtypes::*;
 
 use anyhow::Result;
 
@@ -180,7 +177,7 @@ impl ITRFCoord {
     /// ```
     ///
     ///
-    pub const fn from_vector(v: &na::Vector3<f64>) -> Self {
+    pub const fn from_vector(v: &Vector3) -> Self {
         Self { itrf: *v }
     }
 
@@ -519,10 +516,10 @@ impl ITRFCoord {
     /// North-East-Down (NED) coordinate frame to the
     /// ITRF coordinate frame
     #[inline]
-    pub fn q_ned2itrf(&self) -> Quat {
+    pub fn q_ned2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quat::from_axis_angle(&Vec3::z_axis(), lon)
-            * Quat::from_axis_angle(&Vec3::y_axis(), -lat - PI / 2.0)
+        Quaternion::from_axis_angle(&Vec3::z_axis(), lon)
+            * Quaternion::from_axis_angle(&Vec3::y_axis(), -lat - PI / 2.0)
     }
 
     /// Convert coordinate to a North-East-Down (NED)
@@ -557,10 +554,10 @@ impl ITRFCoord {
     /// Return quaternion representing rotation from the
     /// East-North-Up (ENU) coordinate frame to the
     /// ITRF coordinate frame
-    pub fn q_enu2itrf(&self) -> Quat {
+    pub fn q_enu2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quat::from_axis_angle(&Vec3::z_axis(), lon + PI / 2.0)
-            * Quat::from_axis_angle(&Vec3::x_axis(), PI / 2.0 - lat)
+        Quaternion::from_axis_angle(&Vec3::z_axis(), lon + PI / 2.0)
+            * Quaternion::from_axis_angle(&Vec3::x_axis(), PI / 2.0 - lat)
     }
 
     /// Convert coordinate to a East-North-Up (ENU)
@@ -670,7 +667,7 @@ mod tests {
         */
 
         let itrf1 = ITRFCoord::from_geodetic_deg(lat_deg, lon_deg, hae);
-        let itrf2 = itrf1 + itrf1.q_ned2itrf() * na::vector![0.0, 0.0, 10000.0];
+        let itrf2 = itrf1 + itrf1.q_ned2itrf() * crate::vector![0.0, 0.0, 10000.0];
         println!("height diff = {}", itrf2.hae() - itrf1.hae());
     }
 }

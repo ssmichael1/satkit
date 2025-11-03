@@ -43,9 +43,7 @@ pub enum Anomaly {
 }
 
 // External library imports
-use nalgebra::{UnitQuaternion, Vector3};
-type Vec3 = Vector3<f64>;
-type Quat = UnitQuaternion<f64>;
+use crate::mathtypes::*;
 
 /// Keplerian Orbital Elements
 ///
@@ -252,9 +250,9 @@ impl Kepler {
         let r_pqw = Vec3::new(r * self.nu.cos(), r * self.nu.sin(), 0.0);
         let v_pqw = Vec3::new(-self.nu.sin(), self.eccen + self.nu.cos(), 0.0)
             * (crate::consts::MU_EARTH / p).sqrt();
-        let q = Quat::from_axis_angle(&Vec3::z_axis(), self.raan)
-            * Quat::from_axis_angle(&Vec3::x_axis(), self.incl)
-            * Quat::from_axis_angle(&Vec3::z_axis(), self.w);
+        let q = Quaternion::from_axis_angle(&Vec3::z_axis(), self.raan)
+            * Quaternion::from_axis_angle(&Vec3::x_axis(), self.incl)
+            * Quaternion::from_axis_angle(&Vec3::z_axis(), self.w);
         (q * r_pqw, q * v_pqw)
     }
 }

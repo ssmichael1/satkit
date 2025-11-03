@@ -10,7 +10,7 @@ use numpy::PyArrayMethods;
 use numpy::{self as np, ToPyArray};
 
 use crate::orbitprop::PropagationResult;
-use crate::types::*;
+use crate::mathtypes::*;
 use crate::Instant;
 
 use serde::{Deserialize, Serialize};

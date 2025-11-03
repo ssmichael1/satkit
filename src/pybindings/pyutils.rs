@@ -1,8 +1,7 @@
 use super::pyinstant::ToTimeVec;
-use super::pyquaternion::Quaternion;
+use super::pyquaternion::PyQuaternion;
 
-use crate::frametransform::Quat;
-use crate::types::*;
+use crate::mathtypes::*;
 use crate::Instant;
 use nalgebra as na;
 use numpy as np;
@@ -196,18 +195,18 @@ pub fn py_func_of_time_arr<'a, T: IntoPyObject<'a>>(
 
 #[inline]
 pub fn py_quat_from_time_arr(
-    cfunc: fn(&Instant) -> Quat,
+    cfunc: fn(&Instant) -> Quaternion,
     tmarr: &Bound<'_, PyAny>,
 ) -> Result<PyObject> {
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
         1 => Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
-            Quaternion(cfunc(&tm[0])).into_py_any(py)
+            PyQuaternion(cfunc(&tm[0])).into_py_any(py)
         })?),
         _ => Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             tm.iter()
-                .map(|x| Quaternion(cfunc(x)))
-                .collect::<Vec<Quaternion>>()
+                .map(|x| PyQuaternion(cfunc(x)))
+                .collect::<Vec<PyQuaternion>>()
                 .into_py_any(py)
         })?),
     }

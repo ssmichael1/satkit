@@ -6,9 +6,9 @@ use pyo3::IntoPyObjectExt;
 use numpy::{PyArray1, PyReadonlyArray1};
 
 use crate::itrfcoord::ITRFCoord;
-use crate::types::Vec3;
+use crate::mathtypes::Vec3;
 
-use super::Quaternion;
+use super::pyquaternion::PyQuaternion;
 
 use super::pyutils::*;
 
@@ -226,7 +226,7 @@ impl PyITRFCoord {
     /// Returns:
     ///     satkit.quaternion: Quaternion representing rotation from NED to ITRF
     #[getter]
-    fn get_qned2itrf(&self) -> Quaternion {
+    fn get_qned2itrf(&self) -> PyQuaternion {
         self.0.q_ned2itrf().into()
     }
 
@@ -236,7 +236,7 @@ impl PyITRFCoord {
     /// Returns:
     ///     satkit.quaternion: Quaternion representing rotation from ENU to ITRF
     #[getter]
-    fn get_qenu2itrf(&self) -> Quaternion {
+    fn get_qenu2itrf(&self) -> PyQuaternion {
         self.0.q_enu2itrf().into()
     }
 

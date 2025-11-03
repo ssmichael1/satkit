@@ -14,7 +14,7 @@ use lpephem::sun::shadowfunc;
 
 use anyhow::{Context, Result};
 
-use crate::types::*;
+use crate::mathtypes::*;
 
 use crate::consts;
 use crate::orbitprop::SatProperties;

@@ -40,11 +40,8 @@ use crate::Instant;
 use crate::SolarSystem;
 use crate::TimeScale;
 
+use crate::mathtypes::*;
 use anyhow::{bail, Result};
-
-use nalgebra as na;
-type Vec3 = na::Vector3<f64>;
-type Quat = na::UnitQuaternion<f64>;
 
 /// Returns the heliocentric position of a planet
 ///
@@ -459,9 +456,9 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vec3> {
     let xprime = a * (enrad.cos() - eccen);
     let yprime = a * eccen.mul_add(-eccen, 1.0).sqrt() * enrad.sin();
     let rprime = Vec3::new(xprime, yprime, 0.0);
-    let recl = Quat::from_axis_angle(&Vec3::z_axis(), Omega.to_radians())
-        * Quat::from_axis_angle(&Vec3::x_axis(), incl.to_radians())
-        * Quat::from_axis_angle(&Vec3::z_axis(), w.to_radians())
+    let recl = Quaternion::from_axis_angle(&Vec3::z_axis(), Omega.to_radians())
+        * Quaternion::from_axis_angle(&Vec3::x_axis(), incl.to_radians())
+        * Quaternion::from_axis_angle(&Vec3::z_axis(), w.to_radians())
         * rprime;
 
     // Rotate to the equatorial plane
@@ -479,7 +476,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vec3> {
         )
         .to_radians();
 
-    Ok(Quat::from_axis_angle(&Vec3::x_axis(), obliquity) * recl * crate::consts::AU)
+    Ok(Quaternion::from_axis_angle(&Vec3::x_axis(), obliquity) * recl * crate::consts::AU)
 }
 
 #[cfg(test)]
