@@ -211,9 +211,9 @@ impl Kepler {
     ///
     /// * `Kepler` - A new Keplerian orbital element object
     ///
-    pub fn from_pv(r: Vec3, v: Vec3) -> Result<Self> {
+    pub fn from_pv(r: Vector3, v: Vector3) -> Result<Self> {
         let h = r.cross(&v);
-        let n = Vec3::z_axis().cross(&h);
+        let n = Vector3::z_axis().cross(&h);
         let e = ((v.norm_squared() - crate::consts::MU_EARTH / r.norm()) * r - r.dot(&v) * v)
             / crate::consts::MU_EARTH;
         let eccen = e.norm();
@@ -242,17 +242,17 @@ impl Kepler {
     ///
     /// # Returns
     ///
-    /// * `(Vec3, Vec3)` - Position and velocity vectors, meters and meters/second
+    /// * `(Vector3, Vector3)` - Position and velocity vectors, meters and meters/second
     ///
-    pub fn to_pv(&self) -> (Vec3, Vec3) {
+    pub fn to_pv(&self) -> (Vector3, Vector3) {
         let p = self.a * self.eccen.mul_add(-self.eccen, 1.0);
         let r = p / self.eccen.mul_add(self.nu.cos(), 1.0);
-        let r_pqw = Vec3::new(r * self.nu.cos(), r * self.nu.sin(), 0.0);
-        let v_pqw = Vec3::new(-self.nu.sin(), self.eccen + self.nu.cos(), 0.0)
+        let r_pqw = Vector3::new(r * self.nu.cos(), r * self.nu.sin(), 0.0);
+        let v_pqw = Vector3::new(-self.nu.sin(), self.eccen + self.nu.cos(), 0.0)
             * (crate::consts::MU_EARTH / p).sqrt();
-        let q = Quaternion::from_axis_angle(&Vec3::z_axis(), self.raan)
-            * Quaternion::from_axis_angle(&Vec3::x_axis(), self.incl)
-            * Quaternion::from_axis_angle(&Vec3::z_axis(), self.w);
+        let q = Quaternion::from_axis_angle(&Vector3::z_axis(), self.raan)
+            * Quaternion::from_axis_angle(&Vector3::x_axis(), self.incl)
+            * Quaternion::from_axis_angle(&Vector3::z_axis(), self.w);
         (q * r_pqw, q * v_pqw)
     }
 }
@@ -293,15 +293,15 @@ mod tests {
         // Note: values below are not incorrect in the book, but are
         // corrected in the online errata
         // See: https://celestrak.org/software/vallado/ErrataVer4.pdf
-        assert!((r * 1.0e-3 - Vec3::new(6525.368, 6861.532, 6449.119)).norm() < 1e-3);
-        assert!((v * 1.0e-3 - Vec3::new(4.902279, 5.533140, -1.975710)).norm() < 1e-3);
+        assert!((r * 1.0e-3 - Vector3::new(6525.368, 6861.532, 6449.119)).norm() < 1e-3);
+        assert!((v * 1.0e-3 - Vector3::new(4.902279, 5.533140, -1.975710)).norm() < 1e-3);
     }
 
     #[test]
     fn test_frompv() {
         // Vallado example 2-5
-        let r = Vec3::new(6524.834, 6862.875, 6448.296) * 1.0e3;
-        let v = Vec3::new(4.901327, 5.533756, -1.976341) * 1.0e3;
+        let r = Vector3::new(6524.834, 6862.875, 6448.296) * 1.0e3;
+        let v = Vector3::new(4.901327, 5.533756, -1.976341) * 1.0e3;
         let k = Kepler::from_pv(r, v).unwrap();
         assert!((k.a - 36127343_f64).abs() < 1.0e3);
         assert!((k.eccen - 0.83285).abs() < 1e-3);

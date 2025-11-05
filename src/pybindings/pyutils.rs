@@ -66,7 +66,7 @@ pub fn py_vec3_of_time_arr(
     let tm = tmarr.to_time_vec()?;
     match tm.len() {
         1 => {
-            let v: Vec3 = cfunc(&tm[0]);
+            let v: Vector3 = cfunc(&tm[0]);
             pyo3::Python::with_gil(|py| -> Result<PyObject> {
                 Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?)
             })
@@ -76,7 +76,7 @@ pub fn py_vec3_of_time_arr(
             pyo3::Python::with_gil(|py| -> Result<PyObject> {
                 let out = np::PyArray2::<f64>::zeros(py, (n, 3), false);
                 for (idx, time) in tm.iter().enumerate() {
-                    let v: Vec3 = cfunc(time);
+                    let v: Vector3 = cfunc(time);
                     // I cannot figure out how to do this with a "safe" function,
                     // but... careful checking of dimensions above so this should
                     // never fail
@@ -95,7 +95,7 @@ pub fn py_vec3_of_time_arr(
 }
 
 pub fn py_vec3_of_time_result_arr(
-    cfunc: &dyn Fn(&Instant) -> Result<Vec3>,
+    cfunc: &dyn Fn(&Instant) -> Result<Vector3>,
     tmarr: &Bound<'_, PyAny>,
 ) -> Result<PyObject> {
     let tm = tmarr.to_time_vec()?;

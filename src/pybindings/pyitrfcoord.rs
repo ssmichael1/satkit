@@ -6,7 +6,6 @@ use pyo3::IntoPyObjectExt;
 use numpy::{PyArray1, PyReadonlyArray1};
 
 use crate::itrfcoord::ITRFCoord;
-use crate::mathtypes::Vec3;
 
 use super::pyquaternion::PyQuaternion;
 
@@ -248,7 +247,7 @@ impl PyITRFCoord {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of other relative to self
     fn to_enu(&self, other: &Self) -> PyObject {
-        let v: Vec3 = self.0.q_enu2itrf().conjugate() * (self.0.itrf - other.0.itrf);
+        let v = self.0.q_enu2itrf().conjugate() * (self.0.itrf - other.0.itrf);
         pyo3::Python::with_gil(|py| -> PyObject {
             numpy::PyArray::from_slice(py, v.data.as_slice())
                 .into_py_any(py)
@@ -264,7 +263,7 @@ impl PyITRFCoord {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing NED location in meters of other relative to self
     fn to_ned(&self, other: &Self) -> PyObject {
-        let v: Vec3 = self.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
+        let v = self.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
         pyo3::Python::with_gil(|py| -> PyObject {
             numpy::PyArray::from_slice(py, v.data.as_slice())
                 .into_py_any(py)

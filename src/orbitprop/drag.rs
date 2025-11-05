@@ -4,7 +4,7 @@ use crate::Instant;
 
 use crate::mathtypes::*;
 
-const OMEGA_EARTH: Vector3 = crate::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
+const OMEGA_EARTH: Vector3 = nalgebra::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
 const OMEGA_EARTH_MATRIX: Matrix3 = Matrix3::new(
     0.0,
     -crate::consts::OMEGA_EARTH,
@@ -66,9 +66,9 @@ fn compute_rho_drhodr(
 
     // Offset in the NED frame
     let offset_vecs = [
-        crate::vector![dx, 0.0, 0.0],
-        crate::vector![0.0, dx, 0.0],
-        crate::vector![0.0, 0.0, dx],
+        nalgebra::vector![dx, 0.0, 0.0],
+        nalgebra::vector![0.0, dx, 0.0],
+        nalgebra::vector![0.0, 0.0, dx],
     ];
     let (density0, _temperature) = crate::nrlmsise::nrlmsise(
         itrf.hae() / 1.0e3,
@@ -99,7 +99,7 @@ fn compute_rho_drhodr(
     let qned2gcrf = qgcrf2itrf.conjugate() * qned2itrf;
     (
         density0,
-        qned2gcrf * crate::vector![drhodr_ned[0], drhodr_ned[1], drhodr_ned[2]],
+        qned2gcrf * nalgebra::vector![drhodr_ned[0], drhodr_ned[1], drhodr_ned[2]],
     )
 }
 

@@ -37,12 +37,12 @@ impl PySatState {
 
         let mut state = SatState::from_pv(
             &time.0,
-            &crate::vector![
+            &nalgebra::vector![
                 pos.get_owned(0).unwrap(),
                 pos.get_owned(1).unwrap(),
                 pos.get_owned(2).unwrap()
             ],
-            &crate::vector![
+            &nalgebra::vector![
                 vel.get_owned(0).unwrap(),
                 vel.get_owned(1).unwrap(),
                 vel.get_owned(2).unwrap()

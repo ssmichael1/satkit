@@ -14,21 +14,21 @@ pub use qcirs2gcrs::qcirs2gcrs_dxdy;
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_xcoord(theta: f64) -> Quaternion {
-    Quaternion::from_axis_angle(&Vec3::x_axis(), -theta)
+    Quaternion::from_axis_angle(&Vector3::x_axis(), -theta)
 }
 
 /// Right-handed rotation of coordinate sytstem about y axis
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_ycoord(theta: f64) -> Quaternion {
-    Quaternion::from_axis_angle(&Vec3::y_axis(), -theta)
+    Quaternion::from_axis_angle(&Vector3::y_axis(), -theta)
 }
 
 /// Right-handed rotation of coordinate sytstem about z axis
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_zcoord(theta: f64) -> Quaternion {
-    Quaternion::from_axis_angle(&Vec3::z_axis(), -theta)
+    Quaternion::from_axis_angle(&Vector3::z_axis(), -theta)
 }
 
 ///
@@ -462,7 +462,7 @@ mod tests {
         // Input time
         let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
         // Input terrestrial location
-        let pitrf = Vec3::new(-1033.4793830, 7901.2952754, 6380.3565958);
+        let pitrf = Vector3::new(-1033.4793830, 7901.2952754, 6380.3565958);
         let t_tt = (tm.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;
         assert!((t_tt - 0.0426236319).abs() < 1.0e-8);
 

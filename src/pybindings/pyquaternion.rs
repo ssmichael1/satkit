@@ -79,7 +79,7 @@ impl PyQuaternion {
     ///     e.g. rotation of +xhat 90 degrees by +zhat gives +yhat
     #[staticmethod]
     fn rotx(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::from_axis_angle(&Vec3::x_axis(), theta_rad).into())
+        Ok(Quaternion::from_axis_angle(&Vector3::x_axis(), theta_rad).into())
     }
 
     /// Quaternion representing rotation about yhat axis by `theta-rad` degrees
@@ -96,14 +96,14 @@ impl PyQuaternion {
     ///     
     #[staticmethod]
     fn roty(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::from_axis_angle(&Vec3::y_axis(), theta_rad).into())
+        Ok(Quaternion::from_axis_angle(&Vector3::y_axis(), theta_rad).into())
     }
 
     /// Quaternion representing rotation about
     /// zhat axis by `theta-rad` degrees
     #[staticmethod]
     fn rotz(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::from_axis_angle(&Vec3::z_axis(), theta_rad).into())
+        Ok(Quaternion::from_axis_angle(&Vector3::z_axis(), theta_rad).into())
     }
 
     /// Quaternion representing rotation about given axis by given angle in radians
@@ -118,7 +118,7 @@ impl PyQuaternion {
     ///     
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> Result<Self> {
-        let v = Vec3::from_row_slice(axis.as_slice()?);
+        let v = Vector3::from_row_slice(axis.as_slice()?);
         let u = nalgebra::UnitVector3::try_new(v, 1.0e-9);
         if let Some(unit_axis) = u {
             Ok(Quaternion::from_axis_angle(&unit_axis, angle).into())
@@ -145,16 +145,20 @@ impl PyQuaternion {
             bail!("Invalid input.  Must be two 3-element vectors");
         }
         let v1 = match v1.is_contiguous() {
-            true => Vec3::from_row_slice(v1.as_slice().context("Cannot convert v1 to 3D vector")?),
-            false => Vec3::from_row_slice(&[
+            true => {
+                Vector3::from_row_slice(v1.as_slice().context("Cannot convert v1 to 3D vector")?)
+            }
+            false => Vector3::from_row_slice(&[
                 *v1.get(0).unwrap(),
                 *v1.get(1).unwrap(),
                 *v1.get(2).unwrap(),
             ]),
         };
         let v2 = match v2.is_contiguous() {
-            true => Vec3::from_row_slice(v2.as_slice().context("Cannot convert vd2 to 3D vector")?),
-            false => Vec3::from_row_slice(&[
+            true => {
+                Vector3::from_row_slice(v2.as_slice().context("Cannot convert vd2 to 3D vector")?)
+            }
+            false => Vector3::from_row_slice(&[
                 *v2.get(0).unwrap(),
                 *v2.get(1).unwrap(),
                 *v2.get(2).unwrap(),
@@ -214,8 +218,8 @@ impl PyQuaternion {
     }
 
     fn __str__(&self) -> Result<String> {
-        let ax: nalgebra::Unit<Vec3> = self.0.axis().map_or_else(
-            || nalgebra::Unit::new_normalize(Vec3::new(1.0, 0.0, 0.0)),
+        let ax: nalgebra::Unit<Vector3> = self.0.axis().map_or_else(
+            || nalgebra::Unit::new_normalize(Vector3::new(1.0, 0.0, 0.0)),
             |v| v,
         );
         let angle = self.0.angle();
@@ -268,7 +272,7 @@ impl PyQuaternion {
     ///     numpy.ndarray: 3-element numpy array representing axis of rotation
     #[getter]
     fn axis(&self) -> PyResult<PyObject> {
-        let a = self.0.axis().map_or_else(Vec3::x_axis, |ax| ax);
+        let a = self.0.axis().map_or_else(Vector3::x_axis, |ax| ax);
         pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
             numpy::ndarray::arr1(a.as_slice())
                 .to_pyarray(py)
@@ -338,7 +342,7 @@ impl PyQuaternion {
                 bail!("Invalid rhs.  1D array must be of length 3");
             }
 
-            let m = crate::vector![
+            let m = nalgebra::vector![
                 v1d.get_owned(0).unwrap(),
                 v1d.get_owned(1).unwrap(),
                 v1d.get_owned(2).unwrap()

@@ -94,7 +94,7 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 ///   "Satellite Orbits: Models, Methods, Applications",
 ///   O. Montenbruck and B. Gill, Springer, 2012.
 ///
-pub fn accel(pos_itrf: &Vec3, order: usize, model: GravityModel) -> Vec3 {
+pub fn accel(pos_itrf: &Vector3, order: usize, model: GravityModel) -> Vector3 {
     gravhash().get(&model).unwrap().accel(pos_itrf, order)
 }
 
@@ -125,7 +125,7 @@ pub fn accel(pos_itrf: &Vec3, order: usize, model: GravityModel) -> Vec3 {
 ///   O. Montenbruck and B. Gill, Springer, 2012.
 ///
 pub fn accel_and_partials(
-    pos_itrf: &Vec3,
+    pos_itrf: &Vector3,
     order: usize,
     model: GravityModel,
 ) -> (Vector3, Matrix3) {
@@ -169,7 +169,7 @@ type Legendre<const N: usize> = Matrix<N, N>;
 /// See Equation 3.33 of Montenbruck & Gill (referenced above) for
 /// calculation details.
 impl Gravity {
-    pub fn accel(&self, pos: &Vec3, order: usize) -> Vec3 {
+    pub fn accel(&self, pos: &Vector3, order: usize) -> Vector3 {
         // This is tedious, but using generics allows for vectors to be
         // allocated on the stack, which is faster
         if order == 1 {
@@ -351,7 +351,7 @@ impl Gravity {
         (accel, partials)
     }
 
-    fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vec3) -> Vec3 {
+    fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vector3) -> Vector3 {
         let (v, w) = self.compute_legendre::<NP4>(pos);
 
         self.accel_from_legendre_t::<N, NP4>(&v, &w)
@@ -460,8 +460,8 @@ impl Gravity {
         &self,
         v: &Legendre<NP4>,
         w: &Legendre<NP4>,
-    ) -> Vec3 {
-        let mut accel = Vec3::zeros();
+    ) -> Vector3 {
+        let mut accel = Vector3::zeros();
 
         for n in 0..(N + 1) {
             for m in 0..(n + 1) {
@@ -494,7 +494,7 @@ impl Gravity {
         accel * self.gravity_constant / self.radius / self.radius
     }
 
-    fn compute_legendre<const NP4: usize>(&self, pos: &Vec3) -> (Legendre<NP4>, Legendre<NP4>) {
+    fn compute_legendre<const NP4: usize>(&self, pos: &Vector3) -> (Legendre<NP4>, Legendre<NP4>) {
         let rsq = pos.norm_squared();
         let scale = self.radius / rsq;
         let xfac = pos[0] * scale;
@@ -675,7 +675,7 @@ mod tests {
 
     use crate::consts::OMEGA_EARTH;
     use crate::itrfcoord::ITRFCoord;
-    use crate::mathtypes::Vec3;
+    use crate::mathtypes::Vector3;
     use approx::assert_relative_eq;
 
     #[test]
@@ -685,9 +685,9 @@ mod tests {
         let longitude: f64 = -71.2272;
         let altitude: f64 = 0.0;
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
-        let gaccel: Vec3 = jgm3().accel(&coord.into(), 6);
+        let gaccel: Vector3 = jgm3().accel(&coord.itrf, 6);
         let gaccel_truth =
-            crate::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
+            nalgebra::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
         assert_relative_eq!(gaccel, gaccel_truth, max_relative = 1.0e-6);
     }
 
@@ -712,9 +712,9 @@ mod tests {
 
         let g = Gravity::from_file("JGM3.gfc").unwrap();
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
-        let gravitation: Vec3 = g.accel(&coord.into(), 16);
-        let centrifugal: Vec3 =
-            Vec3::new(coord.itrf[0], coord.itrf[1], 0.0) * OMEGA_EARTH * OMEGA_EARTH;
+        let gravitation: Vector3 = g.accel(&coord.itrf, 16);
+        let centrifugal: Vector3 =
+            Vector3::new(coord.itrf[0], coord.itrf[1], 0.0) * OMEGA_EARTH * OMEGA_EARTH;
         let gravity = gravitation + centrifugal;
 
         // Check gravitation matches the reference value
@@ -724,7 +724,7 @@ mod tests {
         assert!(f64::abs(gravity.norm() / reference_gravity - 1.0) < 1.0E-9);
 
         // Rotate to ENU coordinate frame
-        let g_enu: Vec3 = coord.q_enu2itrf().conjugate() * gravity;
+        let g_enu: Vector3 = coord.q_enu2itrf().conjugate() * gravity;
 
         // Compute East/West and North/South deflections, in arcsec
         let ew_deflection: f64 = (-f64::atan2(g_enu[0], -g_enu[2])).to_degrees() * 3600.0;
@@ -756,7 +756,7 @@ mod tests {
             let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
 
             // generate a random shift
-            let dpos = nalgebra::Vector3::<f64>::new(
+            let dpos = Vector3::new(
                 random::<f64>() * 100.0,
                 random::<f64>() * 100.0,
                 random::<f64>() * 100.0,

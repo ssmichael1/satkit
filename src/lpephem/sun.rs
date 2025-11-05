@@ -101,7 +101,7 @@ pub fn pos_mod(time: &Instant) -> Vector3 {
 /// * See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
 ///
 ///
-pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
+pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
     let a = (consts::SUN_RADIUS / (psun - psat).norm()).asin();
     let b = (consts::EARTH_RADIUS / psat.norm()).asin();
     let snorm = psat.norm();
