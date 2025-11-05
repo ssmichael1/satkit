@@ -48,7 +48,7 @@ impl PySatProperties {
                         .iter()
                         .fold(String::from(""), |acc, (k, _v)| {
                             let mut a2 = acc;
-                            a2.push_str(k.downcast::<PyString>().unwrap().to_str().unwrap());
+                            a2.push_str(k.cast::<PyString>().unwrap().to_str().unwrap());
                             a2.push_str(", ");
                             a2
                         });
@@ -107,7 +107,7 @@ impl PySatProperties {
         Ok(())
     }
 
-    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         let mut raw = [0; 16];
         raw[0..8].clone_from_slice(&self.0.craoverm.to_le_bytes());
         raw[8..16].clone_from_slice(&self.0.cdaoverm.to_le_bytes());

@@ -129,7 +129,7 @@ impl PySatState {
 
     #[getter]
     fn get_pos_gcrf(&self) -> Py<PyAny> {
-        pyo3::Python::with_gil(|py| -> Py<PyAny> {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
@@ -138,7 +138,7 @@ impl PySatState {
 
     #[getter]
     fn get_vel_gcrf(&self) -> Py<PyAny> {
-        pyo3::Python::with_gil(|py| -> Py<PyAny> {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
@@ -151,7 +151,7 @@ impl PySatState {
     ///     numpy.ndarray: 6x6 numpy array with state covariance matrix for position (meters) and velocity (m/s)
     #[getter]
     fn get_cov(&self) -> Py<PyAny> {
-        pyo3::Python::with_gil(|py| -> Py<PyAny> {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             match self.0.cov {
                 StateCov::None => PyNone::get(py).into_py_any(py).unwrap(),
                 StateCov::PVCov(cov) => {
@@ -187,7 +187,7 @@ impl PySatState {
     ///     numpy.ndarray: 3-element numpy array with position in GCRF frame.  Units are meters
     #[getter]
     fn get_pos(&self) -> Py<PyAny> {
-        pyo3::Python::with_gil(|py| -> Py<PyAny> {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
@@ -195,7 +195,7 @@ impl PySatState {
     }
     #[getter]
     fn get_vel(&self) -> Py<PyAny> {
-        pyo3::Python::with_gil(|py| -> Py<PyAny> {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
                 .into_py_any(py)
                 .unwrap()
@@ -218,9 +218,14 @@ impl PySatState {
     ) -> Result<Self> {
         let time: Instant = {
             if timedur.is_instance_of::<PyInstant>() {
-                timedur.extract::<PyInstant>()?.0
+                timedur
+                    .extract::<PyInstant>()
+                    .map_err(|e| anyhow::anyhow!("Invalid instant: {}", e))?
+                    .0
             } else if timedur.is_instance_of::<PyDuration>() {
-                let dur = timedur.extract::<PyDuration>()?;
+                let dur = timedur
+                    .extract::<PyDuration>()
+                    .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
                 self.0.time + dur.0
             } else {
                 bail!("1st argument must be satkit.time or satkit.duration");
@@ -232,7 +237,16 @@ impl PySatState {
                 let kw = kwargs.unwrap();
                 match kw.get_item("propsettings")? {
                     None => None,
-                    Some(v) => Some(v.extract::<PyPropSettings>()?.0),
+                    Some(v) => Some(
+                        v.extract::<PyPropSettings>()
+                            .map_err(|e| {
+                                pyo3::exceptions::PyValueError::new_err(format!(
+                                    "Invalid propsettings: {}",
+                                    e
+                                ))
+                            })?
+                            .0,
+                    ),
                 }
             }
             false => None,
@@ -254,7 +268,7 @@ impl PySatState {
         (PyTuple::new(py, vec![tm, pos, vel]).unwrap(), d)
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+    fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> PyResult<()> {
         let state = state.extract::<&[u8]>(py)?;
         if state.len() < 56 {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
@@ -280,7 +294,7 @@ impl PySatState {
         Ok(())
     }
 
-    fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
         let len: usize = 56
             + match self.0.cov {
                 StateCov::None => 0,

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 /// Used with python bindings, returns directory path of the satkit_data package
 pub fn get_datadir_package_path() -> Result<Option<PathBuf>> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let importlib = PyModule::import(py, "importlib.util")?;
         let spec = importlib.call_method1("find_spec", ("satkit_data",))?;
         if spec.is_none() {

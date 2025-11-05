@@ -19,7 +19,7 @@ use anyhow::Result;
 ///   numpy.ndarray: 3-element numpy array or Nx3 numpy
 ///   array representing planet position in ICRF frame at input time[s].  Units are meters
 #[pyfunction]
-pub fn heliocentric_pos(planet: &SolarSystem, time: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn heliocentric_pos(planet: &SolarSystem, time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     pyutils::py_vec3_of_time_arr(
         &|t| lpephem::heliocentric_pos(planet.into(), t).unwrap(),
         time,

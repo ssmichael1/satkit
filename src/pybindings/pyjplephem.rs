@@ -21,7 +21,7 @@ use anyhow::Result;
 pub fn geocentric_state(
     body: &pysolarsystem::SolarSystem,
     tm: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let rbody: SolarSystem = body.into();
     let f = |tm: &Instant| -> Result<(na::Vector3<f64>, na::Vector3<f64>)> {
         jplephem::geocentric_state(rbody, tm)
@@ -50,7 +50,7 @@ pub fn geocentric_state(
 pub fn barycentric_state(
     body: &pysolarsystem::SolarSystem,
     tm: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let rbody: SolarSystem = body.into();
     let f = |tm: &Instant| -> Result<(na::Vector3<f64>, na::Vector3<f64>)> {
         jplephem::barycentric_state(rbody, tm)
@@ -70,7 +70,7 @@ pub fn barycentric_state(
 pub fn geocentric_pos(
     body: &pysolarsystem::SolarSystem,
     tm: &Bound<'_, PyAny>,
-) -> Result<PyObject> {
+) -> Result<Py<PyAny>> {
     let rbody: SolarSystem = body.into();
     let f = |tm: &Instant| -> Result<na::Vector3<f64>> { jplephem::geocentric_pos(rbody, tm) };
     py_vec3_of_time_result_arr(&f, tm)
@@ -95,7 +95,7 @@ pub fn geocentric_pos(
 pub fn barycentric_pos(
     body: &pysolarsystem::SolarSystem,
     tm: &Bound<'_, PyAny>,
-) -> Result<PyObject> {
+) -> Result<Py<PyAny>> {
     let rbody: SolarSystem = body.into();
     let f = |tm: &Instant| -> Result<na::Vector3<f64>> { jplephem::barycentric_pos(rbody, tm) };
     py_vec3_of_time_result_arr(&f, tm)

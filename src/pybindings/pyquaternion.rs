@@ -193,10 +193,10 @@ impl PyQuaternion {
     ///
     /// Returns:
     ///     numpy.ndarray: 3x3 numpy array representing rotation matrix
-    fn as_rotation_matrix(&self) -> PyObject {
+    fn as_rotation_matrix(&self) -> Py<PyAny> {
         let rot = self.0.to_rotation_matrix();
 
-        pyo3::Python::with_gil(|py| -> PyObject {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             let phi = unsafe { np::PyArray2::<f64>::new(py, [3, 3], true) };
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -248,7 +248,7 @@ impl PyQuaternion {
         Ok(())
     }
 
-    fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
         let mut raw = [0; 32];
         raw[0..8].clone_from_slice(f64::to_le_bytes(self.0.w).as_slice());
         raw[8..16].clone_from_slice(f64::to_le_bytes(self.0.i).as_slice());
@@ -271,9 +271,9 @@ impl PyQuaternion {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array representing axis of rotation
     #[getter]
-    fn axis(&self) -> PyResult<PyObject> {
+    fn axis(&self) -> PyResult<Py<PyAny>> {
         let a = self.0.axis().map_or_else(Vector3::x_axis, |ax| ax);
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             numpy::ndarray::arr1(a.as_slice())
                 .to_pyarray(py)
                 .into_py_any(py)
@@ -315,29 +315,31 @@ impl PyQuaternion {
         )
     }
 
-    fn __mul__(&self, other: &Bound<'_, PyAny>) -> Result<PyObject> {
+    fn __mul__(&self, other: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
         // Multiply quaternion by quaternion
         if other.is_instance_of::<Self>() {
-            let q: PyRef<Self> = other.extract()?;
-            Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            let q: PyRef<Self> = other
+                .extract()
+                .map_err(|e| anyhow::anyhow!("Failed to extract quaternion: {}", e))?;
+            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Self(self.0 * q.0).into_py_any(py)
             })?)
         }
         // This incorrectly matches for all PyArray types
-        else if let Ok(v) = other.downcast::<np::PyArray2<f64>>() {
+        else if let Ok(v) = other.cast::<np::PyArray2<f64>>() {
             if v.dims()[1] != 3 {
                 bail!("Invalid rhs.  2nd dimension must be 3 in size");
             }
             let rot = self.0.to_rotation_matrix();
             let qmat = rot.matrix().conjugate();
 
-            Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let nd = unsafe { np::ndarray::ArrayView2::from_shape_ptr((3, 3), qmat.as_ptr()) };
                 let res = v.readonly().as_array().dot(&nd).to_pyarray(py);
 
                 res.into_py_any(py)
             })?)
-        } else if let Ok(v1d) = other.downcast::<np::PyArray1<f64>>() {
+        } else if let Ok(v1d) = other.cast::<np::PyArray1<f64>>() {
             if v1d.len() != 3 {
                 bail!("Invalid rhs.  1D array must be of length 3");
             }
@@ -350,7 +352,7 @@ impl PyQuaternion {
 
             let vout = self.0 * m;
 
-            Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let vnd = np::PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]]);
                 vnd.into_py_any(py)
             })?)

@@ -9,8 +9,8 @@ use pyo3::IntoPyObjectExt;
 use numpy::PyArrayMethods;
 use numpy::{self as np, ToPyArray};
 
-use crate::orbitprop::PropagationResult;
 use crate::mathtypes::*;
+use crate::orbitprop::PropagationResult;
 use crate::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -178,8 +178,8 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn pos(&self) -> PyResult<PyObject> {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn pos(&self) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..3])
                     .to_pyarray(py)
@@ -192,8 +192,8 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn vel(&self) -> PyResult<PyObject> {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn vel(&self) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[3..6])
                     .to_pyarray(py)
@@ -208,8 +208,8 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn state(&self) -> PyResult<PyObject> {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn state(&self) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
                     .to_pyarray(py)
@@ -222,8 +222,8 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn state_end(&self) -> PyResult<PyObject> {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn state_end(&self) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
                     .to_pyarray(py)
@@ -236,8 +236,8 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn state_start(&self) -> PyResult<PyObject> {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn state_start(&self) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             match &self.0 {
                 PyPropResultType::R1(r) => np::ndarray::arr1(r.state_start.as_slice())
                     .to_pyarray(py)
@@ -250,8 +250,8 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn phi(&self) -> PyResult<PyObject> {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn phi(&self) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             match &self.0 {
                 PyPropResultType::R1(_r) => Ok(py.None()),
                 PyPropResultType::R7(r) => {
@@ -297,26 +297,26 @@ impl PyPropResult {
         Ok(())
     }
 
-    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         let p = serde_pickle::to_vec(&self.0, serde_pickle::SerOptions::default()).unwrap();
         PyBytes::new(py, p.as_slice()).into_py_any(py)
     }
 
     #[pyo3(signature=(time, output_phi=false))]
-    fn interp(&self, time: PyInstant, output_phi: bool) -> PyResult<PyObject> {
+    fn interp(&self, time: PyInstant, output_phi: bool) -> PyResult<Py<PyAny>> {
         match &self.0 {
             PyPropResultType::R1(r) => match r.interp(&time.0) {
-                Ok(res) => pyo3::Python::with_gil(|py| -> PyResult<PyObject> { vec2py(py, &res) }),
+                Ok(res) => pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> { vec2py(py, &res) }),
                 Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e.to_string())),
             },
             PyPropResultType::R7(r) => match r.interp(&time.0) {
                 Ok(res) => {
                     if !output_phi {
-                        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                             slice2py1d(py, &res.as_slice()[0..6])
                         })
                     } else {
-                        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                             (
                                 slice2py1d(py, &res.as_slice()[0..6])?,
                                 slice2py2d(py, &res.as_slice()[6..42], 6, 6)?,
