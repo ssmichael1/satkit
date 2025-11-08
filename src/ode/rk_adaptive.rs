@@ -75,7 +75,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         // and is in range [0,1]
         let t = (xinterp - dense.x[idx]) / dense.h[idx];
 
-        // Compute interpolant coefficient as funciton of t
+        // Compute interpolant coefficient as function of t
         // note that t is in range [0,1]
         //
         // This is equation (6) of
@@ -152,7 +152,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         // and is in range [0,1]
         let t = (xinterp - dense.x[idx]) / dense.h[idx];
 
-        // Compute interpolant coefficient as funciton of t
+        // Compute interpolant coefficient as function of t
         // note that t is in range [0,1]
         //
         // This is equation (6) of

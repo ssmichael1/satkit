@@ -30,7 +30,7 @@ The data files can also be manually downloaded with the following command:
 satkit.utils.update_datafiles()
 ```
 
-If the files alaready exist, they will *not* be downloaded, with the exception of the space weather and earth orientation paramters files, as these are regularly updated.
+If the files already exist, they will *not* be downloaded, with the exception of the space weather and earth orientation parameters files, as these are regularly updated.
 
 ## Download location
 

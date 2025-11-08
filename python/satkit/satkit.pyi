@@ -2268,7 +2268,7 @@ class satproperties_static:
     """Satellite properties relevant for drag and radiation pressure
 
     This class lets the satellite radiation pressure and drag
-    paramters be set to static values for duration of propagation
+    parameters be set to static values for duration of propagation
 
     Attributes:
         cdaoverm (float): Coefficient of drag times area over mass in m^2/kg

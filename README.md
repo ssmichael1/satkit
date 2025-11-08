@@ -4,8 +4,6 @@
 
 Satkit provides industrial-grade satellite orbital mechanics calculations with a clean, intuitive API. Built from the ground up in Rust for maximum performance and memory safety, it offers complete Python bindings for all functionality, making advanced orbital mechanics accessible to both systems programmers and data scientists.
 
-Whether you're tracking satellites, planning missions, analyzing orbital dynamics, or building space situational awareness systems, satkit delivers the precision and speed required for production workloads while maintaining ease of use.
-
 ----- 
 
 ![Build Passing?](https://github.com/ssmichael1/satkit/actions/workflows/build.yml/badge.svg)
