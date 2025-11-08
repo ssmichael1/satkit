@@ -17,6 +17,7 @@ plotly = "*"
 jupyter = "*"
 pandas = "*"
 pytest = "*"
+scipy = "*"
 
 [dev-packages]
 
