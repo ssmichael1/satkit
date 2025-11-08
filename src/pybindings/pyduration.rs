@@ -154,15 +154,19 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration|satkit.time: New duration or time object
-    fn __add__(&self, other: &Bound<'_, PyAny>) -> Result<PyObject> {
+    fn __add__(&self, other: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
         if other.is_instance_of::<Self>() {
-            let dur = other.extract::<Self>()?;
-            Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            let dur = other
+                .extract::<Self>()
+                .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
+            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Self(self.0 + dur.0).into_py_any(py)
             })?)
         } else if other.is_instance_of::<PyInstant>() {
-            let tm = other.extract::<PyInstant>()?;
-            Ok(pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            let tm = other
+                .extract::<PyInstant>()
+                .map_err(|e| anyhow::anyhow!("Invalid time object: {}", e))?;
+            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 PyInstant(tm.0 + self.0).into_py_any(py)
             })?)
         } else {
@@ -271,7 +275,7 @@ impl PyDuration {
         Ok(())
     }
 
-    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         PyBytes::new(py, i64::to_le_bytes(self.0.usec).as_slice()).into_py_any(py)
     }
 }

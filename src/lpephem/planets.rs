@@ -40,11 +40,8 @@ use crate::Instant;
 use crate::SolarSystem;
 use crate::TimeScale;
 
+use crate::mathtypes::*;
 use anyhow::{bail, Result};
-
-use nalgebra as na;
-type Vec3 = na::Vector3<f64>;
-type Quat = na::UnitQuaternion<f64>;
 
 /// Returns the heliocentric position of a planet
 ///
@@ -55,7 +52,7 @@ type Quat = na::UnitQuaternion<f64>;
 ///
 /// # Returns
 ///
-/// * `Vec3` - The heliocentric position of the planet
+/// * `Vector3` - The heliocentric position of the planet
 ///
 /// # Example
 ///
@@ -69,7 +66,7 @@ type Quat = na::UnitQuaternion<f64>;
 /// println!("Position of Mars: {}", pos);
 /// ```
 ///
-pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vec3> {
+pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vector3> {
     // Keplerian elements are provided separately and more accurately
     // for times in range of years 1800AD to 2050AD
     let tm0: Instant = Instant::from_date(-3000, 1, 1)?;
@@ -458,10 +455,10 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vec3> {
     // Get heliocentric coordinates in orbital plane
     let xprime = a * (enrad.cos() - eccen);
     let yprime = a * eccen.mul_add(-eccen, 1.0).sqrt() * enrad.sin();
-    let rprime = Vec3::new(xprime, yprime, 0.0);
-    let recl = Quat::from_axis_angle(&Vec3::z_axis(), Omega.to_radians())
-        * Quat::from_axis_angle(&Vec3::x_axis(), incl.to_radians())
-        * Quat::from_axis_angle(&Vec3::z_axis(), w.to_radians())
+    let rprime = Vector3::new(xprime, yprime, 0.0);
+    let recl = Quaternion::from_axis_angle(&Vector3::z_axis(), Omega.to_radians())
+        * Quaternion::from_axis_angle(&Vector3::x_axis(), incl.to_radians())
+        * Quaternion::from_axis_angle(&Vector3::z_axis(), w.to_radians())
         * rprime;
 
     // Rotate to the equatorial plane
@@ -479,7 +476,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vec3> {
         )
         .to_radians();
 
-    Ok(Quat::from_axis_angle(&Vec3::x_axis(), obliquity) * recl * crate::consts::AU)
+    Ok(Quaternion::from_axis_angle(&Vector3::x_axis(), obliquity) * recl * crate::consts::AU)
 }
 
 #[cfg(test)]

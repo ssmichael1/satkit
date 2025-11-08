@@ -3,10 +3,7 @@ use std::f64::consts::PI;
 use crate::consts::WGS84_A;
 use crate::consts::WGS84_F;
 
-use nalgebra as na;
-
-use crate::types::Quaternion as Quat;
-use crate::types::Vec3;
+use crate::mathtypes::*;
 
 use anyhow::Result;
 
@@ -24,7 +21,7 @@ use anyhow::Result;
 ///
 #[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
 pub struct ITRFCoord {
-    pub itrf: Vec3,
+    pub itrf: Vector3,
 }
 
 impl std::fmt::Display for ITRFCoord {
@@ -40,45 +37,45 @@ impl std::fmt::Display for ITRFCoord {
     }
 }
 
-impl std::ops::Add<Vec3> for ITRFCoord {
+impl std::ops::Add<Vector3> for ITRFCoord {
     type Output = Self;
-    fn add(self, other: Vec3) -> Self::Output {
+    fn add(self, other: Vector3) -> Self::Output {
         Self {
             itrf: self.itrf + other,
         }
     }
 }
 
-impl std::ops::Add<Vec3> for &ITRFCoord {
+impl std::ops::Add<Vector3> for &ITRFCoord {
     type Output = ITRFCoord;
-    fn add(self, other: Vec3) -> Self::Output {
+    fn add(self, other: Vector3) -> Self::Output {
         ITRFCoord {
             itrf: self.itrf + other,
         }
     }
 }
 
-impl std::ops::Add<&Vec3> for ITRFCoord {
+impl std::ops::Add<&Vector3> for ITRFCoord {
     type Output = Self;
-    fn add(self, other: &Vec3) -> Self::Output {
+    fn add(self, other: &Vector3) -> Self::Output {
         Self {
             itrf: self.itrf + other,
         }
     }
 }
 
-impl std::ops::Add<&Vec3> for &ITRFCoord {
+impl std::ops::Add<&Vector3> for &ITRFCoord {
     type Output = ITRFCoord;
-    fn add(self, other: &Vec3) -> Self::Output {
+    fn add(self, other: &Vector3) -> Self::Output {
         ITRFCoord {
             itrf: self.itrf + other,
         }
     }
 }
 
-impl std::ops::Sub<Vec3> for ITRFCoord {
+impl std::ops::Sub<Vector3> for ITRFCoord {
     type Output = Self;
-    fn sub(self, other: Vec3) -> Self::Output {
+    fn sub(self, other: Vector3) -> Self::Output {
         Self {
             itrf: self.itrf - other,
         }
@@ -86,29 +83,29 @@ impl std::ops::Sub<Vec3> for ITRFCoord {
 }
 
 impl std::ops::Sub<Self> for ITRFCoord {
-    type Output = Vec3;
-    fn sub(self, other: Self) -> Vec3 {
+    type Output = Vector3;
+    fn sub(self, other: Self) -> Vector3 {
         self.itrf - other.itrf
     }
 }
 
 impl std::ops::Sub<ITRFCoord> for &ITRFCoord {
-    type Output = Vec3;
-    fn sub(self, other: ITRFCoord) -> Vec3 {
+    type Output = Vector3;
+    fn sub(self, other: ITRFCoord) -> Vector3 {
         self.itrf - other.itrf
     }
 }
 
 impl std::ops::Sub<&ITRFCoord> for &ITRFCoord {
-    type Output = Vec3;
-    fn sub(self, other: &ITRFCoord) -> Vec3 {
+    type Output = Vector3;
+    fn sub(self, other: &ITRFCoord) -> Vector3 {
         self.itrf - other.itrf
     }
 }
 
 impl std::ops::Sub<&Self> for ITRFCoord {
-    type Output = Vec3;
-    fn sub(self, other: &Self) -> Vec3 {
+    type Output = Vector3;
+    fn sub(self, other: &Self) -> Vector3 {
         self.itrf - other.itrf
     }
 }
@@ -116,7 +113,7 @@ impl std::ops::Sub<&Self> for ITRFCoord {
 impl std::convert::From<[f64; 3]> for ITRFCoord {
     fn from(v: [f64; 3]) -> Self {
         Self {
-            itrf: Vec3::from(v),
+            itrf: Vector3::from(v),
         }
     }
 }
@@ -125,18 +122,18 @@ impl std::convert::From<&[f64]> for ITRFCoord {
     fn from(v: &[f64]) -> Self {
         assert!(v.len() == 3);
         Self {
-            itrf: Vec3::from_row_slice(v),
+            itrf: Vector3::from_row_slice(v),
         }
     }
 }
 
-impl std::convert::From<Vec3> for ITRFCoord {
-    fn from(v: Vec3) -> Self {
+impl std::convert::From<Vector3> for ITRFCoord {
+    fn from(v: Vector3) -> Self {
         Self { itrf: v }
     }
 }
 
-impl std::convert::From<ITRFCoord> for Vec3 {
+impl std::convert::From<ITRFCoord> for Vector3 {
     fn from(itrf: ITRFCoord) -> Self {
         itrf.itrf
     }
@@ -180,7 +177,7 @@ impl ITRFCoord {
     /// ```
     ///
     ///
-    pub const fn from_vector(v: &na::Vector3<f64>) -> Self {
+    pub const fn from_vector(v: &Vector3) -> Self {
         Self { itrf: *v }
     }
 
@@ -203,7 +200,7 @@ impl ITRFCoord {
             anyhow::bail!("Input slice must have 3 elements");
         }
         Ok(Self {
-            itrf: Vec3::from_row_slice(v),
+            itrf: Vector3::from_row_slice(v),
         })
     }
 
@@ -236,7 +233,7 @@ impl ITRFCoord {
         let s = f2 * c;
 
         Self {
-            itrf: Vec3::from([
+            itrf: Vector3::from([
                 WGS84_A.mul_add(c, hae) * cosp * cosl,
                 WGS84_A.mul_add(c, hae) * cosp * sinl,
                 WGS84_A.mul_add(s, hae) * sinp,
@@ -519,10 +516,10 @@ impl ITRFCoord {
     /// North-East-Down (NED) coordinate frame to the
     /// ITRF coordinate frame
     #[inline]
-    pub fn q_ned2itrf(&self) -> Quat {
+    pub fn q_ned2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quat::from_axis_angle(&Vec3::z_axis(), lon)
-            * Quat::from_axis_angle(&Vec3::y_axis(), -lat - PI / 2.0)
+        Quaternion::from_axis_angle(&Vector3::z_axis(), lon)
+            * Quaternion::from_axis_angle(&Vector3::y_axis(), -lat - PI / 2.0)
     }
 
     /// Convert coordinate to a North-East-Down (NED)
@@ -550,17 +547,17 @@ impl ITRFCoord {
     /// // Should return [0.0, 0.0, 100.0]
     /// ```
     ///
-    pub fn to_ned(&self, ref_coord: &Self) -> Vec3 {
+    pub fn to_ned(&self, ref_coord: &Self) -> Vector3 {
         self.q_ned2itrf().conjugate() * (self.itrf - ref_coord.itrf)
     }
 
     /// Return quaternion representing rotation from the
     /// East-North-Up (ENU) coordinate frame to the
     /// ITRF coordinate frame
-    pub fn q_enu2itrf(&self) -> Quat {
+    pub fn q_enu2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quat::from_axis_angle(&Vec3::z_axis(), lon + PI / 2.0)
-            * Quat::from_axis_angle(&Vec3::x_axis(), PI / 2.0 - lat)
+        Quaternion::from_axis_angle(&Vector3::z_axis(), lon + PI / 2.0)
+            * Quaternion::from_axis_angle(&Vector3::x_axis(), PI / 2.0 - lat)
     }
 
     /// Convert coordinate to a East-North-Up (ENU)
@@ -588,7 +585,7 @@ impl ITRFCoord {
     /// // Should return [0.0, 0.0, -100.0]
     /// ```
     ///
-    pub fn to_enu(&self, other: &Self) -> Vec3 {
+    pub fn to_enu(&self, other: &Self) -> Vector3 {
         self.q_enu2itrf().conjugate() * (self.itrf - other.itrf)
     }
 }
@@ -654,7 +651,7 @@ mod tests {
         assert!(ned[1].abs() < 1.0e-6);
         assert!(((ned[2] + 100.0) / 100.0).abs() < 1.0e-6);
 
-        let dvec = Vec3::from([-100.0, -200.0, 300.0]);
+        let dvec = Vector3::from([-100.0, -200.0, 300.0]);
         let itrf3 = itrf2 + itrf2.q_ned2itrf() * dvec;
         let nedvec = itrf3.to_ned(&itrf2);
         let itrf4 = itrf2 + itrf2.q_enu2itrf() * dvec;
@@ -664,13 +661,13 @@ mod tests {
             assert!(((enuvec[x] - dvec[x]) / nedvec[x]).abs() < 1.0e-3);
         }
         /*
-        let q = Quat::from_axis_angle(&Vec3::z_axis(), -0.003);
+        let q = Quat::from_axis_angle(&Vector3::z_axis(), -0.003);
         println!("{}", q);
         println!("{}", q.to_rotation_matrix());
         */
 
         let itrf1 = ITRFCoord::from_geodetic_deg(lat_deg, lon_deg, hae);
-        let itrf2 = itrf1 + itrf1.q_ned2itrf() * na::vector![0.0, 0.0, 10000.0];
+        let itrf2 = itrf1 + itrf1.q_ned2itrf() * nalgebra::vector![0.0, 0.0, 10000.0];
         println!("height diff = {}", itrf2.hae() - itrf1.hae());
     }
 }

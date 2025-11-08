@@ -353,8 +353,12 @@ pub fn sgp4init(
         coef1 = coef / f64::powf(psisq, 3.5);
         cc2 = coef1
             * satrec.no_unkozai
-            * ao.mul_add(eeta.mul_add(4.0 + etasq, 1.5f64.mul_add(etasq, 1.0)), 0.375 * satrec.j2 * tsi / psisq
-                    * satrec.con41 * (3.0 * etasq).mul_add(8.0 + etasq, 8.0));
+            * ao.mul_add(
+                eeta.mul_add(4.0 + etasq, 1.5f64.mul_add(etasq, 1.0)),
+                0.375 * satrec.j2 * tsi / psisq
+                    * satrec.con41
+                    * (3.0 * etasq).mul_add(8.0 + etasq, 8.0),
+            );
         satrec.cc1 = satrec.bstar * cc2;
         cc3 = 0.0;
         if satrec.ecco > 1.0e-4 {
@@ -366,18 +370,42 @@ pub fn sgp4init(
             * coef1
             * ao
             * omeosq
-            * (satrec.j2 * tsi / (ao * psisq)).mul_add(-(-3.0 * satrec.con41).mul_add(etasq.mul_add(0.5f64.mul_add(-eeta, 1.5), 2.0f64.mul_add(-eeta, 1.0)), 0.75
-                            * satrec.x1mth2
-                            * 2.0f64.mul_add(etasq, -(eeta * (1.0 + etasq))) * f64::cos(2.0 * satrec.argpo)), satrec.eta.mul_add(0.5f64.mul_add(etasq, 2.0), satrec.ecco * 2.0f64.mul_add(etasq, 0.5)));
-        satrec.cc5 = 2.0 * coef1 * ao * omeosq * eeta.mul_add(etasq, 2.75f64.mul_add(etasq + eeta, 1.0));
+            * (satrec.j2 * tsi / (ao * psisq)).mul_add(
+                -(-3.0 * satrec.con41).mul_add(
+                    etasq.mul_add(0.5f64.mul_add(-eeta, 1.5), 2.0f64.mul_add(-eeta, 1.0)),
+                    0.75 * satrec.x1mth2
+                        * 2.0f64.mul_add(etasq, -(eeta * (1.0 + etasq)))
+                        * f64::cos(2.0 * satrec.argpo),
+                ),
+                satrec.eta.mul_add(
+                    0.5f64.mul_add(etasq, 2.0),
+                    satrec.ecco * 2.0f64.mul_add(etasq, 0.5),
+                ),
+            );
+        satrec.cc5 =
+            2.0 * coef1 * ao * omeosq * eeta.mul_add(etasq, 2.75f64.mul_add(etasq + eeta, 1.0));
         cosio4 = cosio2 * cosio2;
         temp1 = 1.5 * satrec.j2 * pinvsq * satrec.no_unkozai;
         temp2 = 0.5 * temp1 * satrec.j2 * pinvsq;
         temp3 = -0.46875 * satrec.j4 * pinvsq * pinvsq * satrec.no_unkozai;
-        satrec.mdot = (0.0625 * temp2 * rteosq).mul_add(137.0f64.mul_add(cosio4, 78.0f64.mul_add(-cosio2, 13.0)), (0.5 * temp1 * rteosq).mul_add(satrec.con41, satrec.no_unkozai));
-        satrec.argpdot = temp3.mul_add(49.0f64.mul_add(cosio4, 36.0f64.mul_add(-cosio2, 3.0)), (-0.5 * temp1).mul_add(con42, 0.0625 * temp2 * 395.0f64.mul_add(cosio4, 114.0f64.mul_add(-cosio2, 7.0))));
+        satrec.mdot = (0.0625 * temp2 * rteosq).mul_add(
+            137.0f64.mul_add(cosio4, 78.0f64.mul_add(-cosio2, 13.0)),
+            (0.5 * temp1 * rteosq).mul_add(satrec.con41, satrec.no_unkozai),
+        );
+        satrec.argpdot = temp3.mul_add(
+            49.0f64.mul_add(cosio4, 36.0f64.mul_add(-cosio2, 3.0)),
+            (-0.5 * temp1).mul_add(
+                con42,
+                0.0625 * temp2 * 395.0f64.mul_add(cosio4, 114.0f64.mul_add(-cosio2, 7.0)),
+            ),
+        );
         xhdot1 = -temp1 * cosio;
-        satrec.nodedot = (0.5 * temp2).mul_add(19.0f64.mul_add(-cosio2, 4.0), 2.0 * temp3 * 7.0f64.mul_add(-cosio2, 3.0)).mul_add(cosio, xhdot1);
+        satrec.nodedot = (0.5 * temp2)
+            .mul_add(
+                19.0f64.mul_add(-cosio2, 4.0),
+                2.0 * temp3 * 7.0f64.mul_add(-cosio2, 3.0),
+            )
+            .mul_add(cosio, xhdot1);
         xpidot = satrec.argpdot + satrec.nodedot;
         satrec.omgcof = satrec.bstar * cc3 * f64::cos(satrec.argpo);
         satrec.xmcof = 0.0;
@@ -388,7 +416,8 @@ pub fn sgp4init(
         satrec.t2cof = 1.5 * satrec.cc1;
         // sgp4fix for divide by zero with xinco = 180 deg
         if f64::abs(cosio + 1.0) > 1.5e-12 {
-            satrec.xlcof = -0.25 * satrec.j3oj2 * sinio * 5.0f64.mul_add(cosio, 3.0) / (1.0 + cosio);
+            satrec.xlcof =
+                -0.25 * satrec.j3oj2 * sinio * 5.0f64.mul_add(cosio, 3.0) / (1.0 + cosio);
         } else {
             satrec.xlcof = -0.25 * satrec.j3oj2 * sinio * 5.0f64.mul_add(cosio, 3.0) / TEMP4;
         }
@@ -628,14 +657,23 @@ pub fn sgp4init(
             satrec.d3 = 17.0f64.mul_add(ao, sfour) * temp;
             satrec.d4 = 0.5 * temp * ao * tsi * 221.0f64.mul_add(ao, 31.0 * sfour) * satrec.cc1;
             satrec.t3cof = 2.0f64.mul_add(cc1sq, satrec.d2);
-            satrec.t4cof =
-                0.25 * 3.0f64.mul_add(satrec.d3, satrec.cc1 * 12.0f64.mul_add(satrec.d2, 10.0 * cc1sq));
+            satrec.t4cof = 0.25
+                * 3.0f64.mul_add(
+                    satrec.d3,
+                    satrec.cc1 * 12.0f64.mul_add(satrec.d2, 10.0 * cc1sq),
+                );
             satrec.t5cof = 0.2
-                * (15.0 * cc1sq).mul_add(2.0f64.mul_add(satrec.d2, cc1sq), (6.0 * satrec.d2).mul_add(satrec.d2, 3.0f64.mul_add(satrec.d4, 12.0 * satrec.cc1 * satrec.d3)));
+                * (15.0 * cc1sq).mul_add(
+                    2.0f64.mul_add(satrec.d2, cc1sq),
+                    (6.0 * satrec.d2).mul_add(
+                        satrec.d2,
+                        3.0f64.mul_add(satrec.d4, 12.0 * satrec.cc1 * satrec.d3),
+                    ),
+                );
         }
     } // if omeosq = 0 ...
 
-    /* finally propogate to zero epoch to initialize all others. */
+    /* finally propagate to zero epoch to initialize all others. */
     // sgp4fix take out check to let satellites process until they are actually below earth surface
     //       if(satrec.error == 0)
     //sgp4(satrec, 0.0, r, v);

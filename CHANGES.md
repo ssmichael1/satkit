@@ -118,3 +118,11 @@
 
 ### Support for Python 3.14
   - Build wheels for Python 3.14
+
+
+## Rust 0.8.1
+  - Remove un-used dependencies
+  
+## Rust 0.8.2
+  - Cleanup of referencing of nalgebra types: commonly used aliases are now all referenced from mathtypes.rs
+  - Improve documentation

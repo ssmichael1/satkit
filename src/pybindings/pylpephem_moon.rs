@@ -14,6 +14,6 @@ use pyo3::prelude::*;
 /// Returns:
 ///     numpy.ndarray: 3-element numpy array or Nx3 numpy array representing moon position in GCRF frame at input time[s].  Units are meters
 #[pyfunction]
-pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> anyhow::Result<PyObject> {
+pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
     pyutils::py_vec3_of_time_arr(&moon::pos_gcrf, time)
 }

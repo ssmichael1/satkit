@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use nalgebra as na;
-type CoeffTable = na::DMatrix<f64>;
+use crate::mathtypes::*;
+type CoeffTable = DMatrix<f64>;
 
-type DivisorTable = na::SMatrix<f64, 44, 44>;
+type DivisorTable = Matrix<44, 44>;
 
 use once_cell::sync::OnceCell;
 
@@ -94,7 +94,7 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 ///   "Satellite Orbits: Models, Methods, Applications",
 ///   O. Montenbruck and B. Gill, Springer, 2012.
 ///
-pub fn accel(pos_itrf: &Vec3, order: usize, model: GravityModel) -> Vec3 {
+pub fn accel(pos_itrf: &Vector3, order: usize, model: GravityModel) -> Vector3 {
     gravhash().get(&model).unwrap().accel(pos_itrf, order)
 }
 
@@ -124,14 +124,18 @@ pub fn accel(pos_itrf: &Vec3, order: usize, model: GravityModel) -> Vec3 {
 ///   "Satellite Orbits: Models, Methods, Applications",
 ///   O. Montenbruck and B. Gill, Springer, 2012.
 ///
-pub fn accel_and_partials(pos_itrf: &Vec3, order: usize, model: GravityModel) -> (Vec3, Mat3) {
+pub fn accel_and_partials(
+    pos_itrf: &Vector3,
+    order: usize,
+    model: GravityModel,
+) -> (Vector3, Matrix3) {
     gravhash()
         .get(&model)
         .unwrap()
         .accel_and_partials(pos_itrf, order)
 }
 
-pub fn accel_jgm3(pos_itrf: &Vec3, order: usize) -> Vec3 {
+pub fn accel_jgm3(pos_itrf: &Vector3, order: usize) -> Vector3 {
     jgm3().accel(pos_itrf, order)
 }
 
@@ -146,9 +150,7 @@ pub struct Gravity {
     pub divisor_table2: DivisorTable,
 }
 
-type Legendre<const N: usize> = na::SMatrix<f64, N, N>;
-type Vec3 = na::Vector3<f64>;
-type Mat3 = na::Matrix3<f64>;
+type Legendre<const N: usize> = Matrix<N, N>;
 
 ///
 /// Return acceleration due to Earth gravity at the input position. The
@@ -167,7 +169,7 @@ type Mat3 = na::Matrix3<f64>;
 /// See Equation 3.33 of Montenbruck & Gill (referenced above) for
 /// calculation details.
 impl Gravity {
-    pub fn accel(&self, pos: &Vec3, order: usize) -> Vec3 {
+    pub fn accel(&self, pos: &Vector3, order: usize) -> Vector3 {
         // This is tedious, but using generics allows for vectors to be
         // allocated on the stack, which is faster
         if order == 1 {
@@ -253,7 +255,7 @@ impl Gravity {
         }
     }
 
-    pub fn accel_and_partials(&self, pos: &Vec3, order: usize) -> (Vec3, na::Matrix3<f64>) {
+    pub fn accel_and_partials(&self, pos: &Vector3, order: usize) -> (Vector3, Matrix3) {
         // This is tedious, but using generics allows for vectors to be
         // allocated on the stack, which is faster
         if order == 1 {
@@ -341,15 +343,15 @@ impl Gravity {
 
     fn accel_and_partials_t<const N: usize, const NP4: usize>(
         &self,
-        pos: &Vec3,
-    ) -> (Vec3, na::Matrix3<f64>) {
+        pos: &Vector3,
+    ) -> (Vector3, Matrix3) {
         let (v, w) = self.compute_legendre::<NP4>(pos);
         let accel = self.accel_from_legendre_t::<N, NP4>(&v, &w);
         let partials = self.partials_from_legendre_t::<N, NP4>(&v, &w);
         (accel, partials)
     }
 
-    fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vec3) -> Vec3 {
+    fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vector3) -> Vector3 {
         let (v, w) = self.compute_legendre::<NP4>(pos);
 
         self.accel_from_legendre_t::<N, NP4>(&v, &w)
@@ -360,7 +362,7 @@ impl Gravity {
         &self,
         v: &Legendre<NP4>,
         w: &Legendre<NP4>,
-    ) -> na::Matrix3<f64> {
+    ) -> Matrix3 {
         let mut daxdx = 0.0;
         let mut daxdy = 0.0;
         let mut daxdz = 0.0;
@@ -447,7 +449,7 @@ impl Gravity {
 
         // From fact that laplacian is zero
         let daydy = -daxdx - dazdz;
-        na::Matrix3::<f64>::new(
+        Matrix3::new(
             daxdx, daxdy, daxdz, daxdy, daydy, daydz, daxdz, daydz, dazdz,
         ) * self.gravity_constant
             / self.radius.powi(3)
@@ -458,8 +460,8 @@ impl Gravity {
         &self,
         v: &Legendre<NP4>,
         w: &Legendre<NP4>,
-    ) -> Vec3 {
-        let mut accel = Vec3::zeros();
+    ) -> Vector3 {
+        let mut accel = Vector3::zeros();
 
         for n in 0..(N + 1) {
             for m in 0..(n + 1) {
@@ -492,7 +494,7 @@ impl Gravity {
         accel * self.gravity_constant / self.radius / self.radius
     }
 
-    fn compute_legendre<const NP4: usize>(&self, pos: &Vec3) -> (Legendre<NP4>, Legendre<NP4>) {
+    fn compute_legendre<const NP4: usize>(&self, pos: &Vector3) -> (Legendre<NP4>, Legendre<NP4>) {
         let rsq = pos.norm_squared();
         let scale = self.radius / rsq;
         let xfac = pos[0] * scale;
@@ -673,7 +675,7 @@ mod tests {
 
     use crate::consts::OMEGA_EARTH;
     use crate::itrfcoord::ITRFCoord;
-    use crate::types::Vec3;
+    use crate::mathtypes::Vector3;
     use approx::assert_relative_eq;
 
     #[test]
@@ -683,8 +685,9 @@ mod tests {
         let longitude: f64 = -71.2272;
         let altitude: f64 = 0.0;
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
-        let gaccel: Vec3 = jgm3().accel(&coord.into(), 6);
-        let gaccel_truth = na::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
+        let gaccel: Vector3 = jgm3().accel(&coord.itrf, 6);
+        let gaccel_truth =
+            nalgebra::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
         assert_relative_eq!(gaccel, gaccel_truth, max_relative = 1.0e-6);
     }
 
@@ -709,9 +712,9 @@ mod tests {
 
         let g = Gravity::from_file("JGM3.gfc").unwrap();
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
-        let gravitation: Vec3 = g.accel(&coord.into(), 16);
-        let centrifugal: Vec3 =
-            Vec3::new(coord.itrf[0], coord.itrf[1], 0.0) * OMEGA_EARTH * OMEGA_EARTH;
+        let gravitation: Vector3 = g.accel(&coord.itrf, 16);
+        let centrifugal: Vector3 =
+            Vector3::new(coord.itrf[0], coord.itrf[1], 0.0) * OMEGA_EARTH * OMEGA_EARTH;
         let gravity = gravitation + centrifugal;
 
         // Check gravitation matches the reference value
@@ -721,7 +724,7 @@ mod tests {
         assert!(f64::abs(gravity.norm() / reference_gravity - 1.0) < 1.0E-9);
 
         // Rotate to ENU coordinate frame
-        let g_enu: Vec3 = coord.q_enu2itrf().conjugate() * gravity;
+        let g_enu: Vector3 = coord.q_enu2itrf().conjugate() * gravity;
 
         // Compute East/West and North/South deflections, in arcsec
         let ew_deflection: f64 = (-f64::atan2(g_enu[0], -g_enu[2])).to_degrees() * 3600.0;
@@ -753,7 +756,7 @@ mod tests {
             let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
 
             // generate a random shift
-            let dpos = nalgebra::Vector3::<f64>::new(
+            let dpos = Vector3::new(
                 random::<f64>() * 100.0,
                 random::<f64>() * 100.0,
                 random::<f64>() * 100.0,

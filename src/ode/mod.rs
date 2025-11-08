@@ -20,7 +20,7 @@ pub mod rk_explicit;
 mod types;
 
 // NAlgebera bindings for ODE state
-mod nalgebra;
+mod nalgebra_bindings;
 
 pub use rk_adaptive::RKAdaptive;
 pub use rk_adaptive_settings::RKAdaptiveSettings;

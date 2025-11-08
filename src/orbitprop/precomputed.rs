@@ -1,6 +1,6 @@
 use crate::frametransform::qgcrf2itrf_approx;
 use crate::jplephem;
-use crate::types::{Quaternion, Vector3};
+use crate::mathtypes::{Quaternion, Vector3};
 use crate::Duration;
 use crate::Instant;
 use crate::SolarSystem;

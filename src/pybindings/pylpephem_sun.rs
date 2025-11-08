@@ -19,7 +19,7 @@ use anyhow::Result;
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in GCRF frame at input time[s]
 #[pyfunction]
-pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     pyutils::py_vec3_of_time_arr(&sun::pos_gcrf, time)
 }
 
@@ -34,7 +34,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s]
 #[pyfunction]
-pub fn pos_mod(time: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn pos_mod(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     pyutils::py_vec3_of_time_arr(&sun::pos_mod, time)
 }
 
@@ -61,10 +61,10 @@ pub fn rise_set(
     time: &PyInstant,
     coord: &PyITRFCoord,
     sigma: Option<f64>,
-) -> PyResult<(PyObject, PyObject)> {
+) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     match sun::riseset(&time.0, &coord.0, sigma) {
         Ok((rise, set)) => {
-            pyo3::Python::with_gil(|py| Ok((rise.into_py_any(py)?, set.into_py_any(py)?)))
+            pyo3::Python::attach(|py| Ok((rise.into_py_any(py)?, set.into_py_any(py)?)))
         }
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
     }

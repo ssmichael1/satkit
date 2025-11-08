@@ -2,13 +2,14 @@ use crate::utils::{self, download_if_not_exist};
 
 use anyhow::Result;
 
-use nalgebra as na;
+use crate::mathtypes::*;
+
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct IERSTable {
-    data: [na::DMatrix<f64>; 6],
+    data: [DMatrix<f64>; 6],
 }
 
 /// IERS Table
@@ -22,12 +23,12 @@ impl IERSTable {
     pub fn from_file(fname: &str) -> Result<Self> {
         let mut table = Self {
             data: [
-                na::DMatrix::<f64>::zeros(0, 0),
-                na::DMatrix::<f64>::zeros(0, 0),
-                na::DMatrix::<f64>::zeros(0, 0),
-                na::DMatrix::<f64>::zeros(0, 0),
-                na::DMatrix::<f64>::zeros(0, 0),
-                na::DMatrix::<f64>::zeros(0, 0),
+                DMatrix::<f64>::zeros(0, 0),
+                DMatrix::<f64>::zeros(0, 0),
+                DMatrix::<f64>::zeros(0, 0),
+                DMatrix::<f64>::zeros(0, 0),
+                DMatrix::<f64>::zeros(0, 0),
+                DMatrix::<f64>::zeros(0, 0),
             ],
         };
 
@@ -58,7 +59,7 @@ impl IERSTable {
                                 fname
                             );
                         }
-                        table.data[tnum as usize] = na::DMatrix::<f64>::zeros(tsize, 17);
+                        table.data[tnum as usize] = DMatrix::<f64>::zeros(tsize, 17);
                         rowcnt = 0;
                         continue;
                     } else if tnum >= 0 {
@@ -67,7 +68,7 @@ impl IERSTable {
                         }
                         table.data[tnum as usize].set_row(
                             rowcnt,
-                            &na::SMatrix::<f64, 1, 17>::from_iterator(
+                            &nalgebra::SMatrix::<f64, 1, 17>::from_iterator(
                                 tline.split_whitespace().map(|x| x.parse().unwrap()),
                             ),
                         );
@@ -80,7 +81,7 @@ impl IERSTable {
         Ok(table)
     }
 
-    pub fn compute(&self, t_tt: f64, delaunay: &na::SVector<f64, 14>) -> f64 {
+    pub fn compute(&self, t_tt: f64, delaunay: &nalgebra::SVector<f64, 14>) -> f64 {
         let mut retval: f64 = 0.0;
         for i in 0..6 {
             // return if finished

@@ -129,7 +129,7 @@ pub fn sgp4(
     tle: &Bound<'_, PyAny>,
     time: &Bound<'_, PyAny>,
     kwds: Option<&Bound<'_, PyDict>>,
-) -> Result<PyObject> {
+) -> Result<Py<PyAny>> {
     let mut output_err = false;
     let mut opsmode: OpsMode = OpsMode::afspc;
     let mut gravconst: GravConst = GravConst::wgs72;
@@ -138,21 +138,27 @@ pub fn sgp4(
             output_err = v.extract::<bool>()?;
         }
         if let Some(v) = kw.get_item("opsmode")? {
-            opsmode = v.extract::<OpsMode>()?;
+            opsmode = v.extract::<OpsMode>().map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid opsmode: {}", e))
+            })?;
         }
         if let Some(v) = kw.get_item("gravconst")? {
-            gravconst = v.extract::<GravConst>()?;
+            gravconst = v.extract::<GravConst>().map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid gravconst: {}", e))
+            })?;
         }
     }
     if tle.is_instance_of::<PyTLE>() {
-        let mut stle: PyRefMut<PyTLE> = tle.extract()?;
+        let mut stle: PyRefMut<PyTLE> = tle
+            .extract()
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e)))?;
         let (r, v, e) = psgp4::sgp4_full(
             &mut stle.0,
             time.to_time_vec()?.as_slice(),
             gravconst.into(),
             opsmode.into(),
         );
-        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let dims = if r.nrows() > 1 && r.ncols() > 1 {
                 vec![r.ncols(), r.nrows()]
             } else {
@@ -190,7 +196,7 @@ pub fn sgp4(
             .map(|tle| psgp4::sgp4(&mut tle.0, tmarray.as_slice()))
             .collect();
 
-        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let n = tles.len() * tmarray.len() * 3;
 
             let parr = PyArray1::zeros(py, [n], false);

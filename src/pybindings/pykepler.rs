@@ -110,9 +110,9 @@ impl PyKepler {
 
     /// Convert Keplerian elements to Cartesian
     /// position (meters) and velocity (meters/second)
-    fn to_pv(&self) -> PyResult<(PyObject, PyObject)> {
+    fn to_pv(&self) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
         let (r, v) = self.0.to_pv();
-        pyo3::Python::with_gil(|py| -> PyResult<(PyObject, PyObject)> {
+        pyo3::Python::attach(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
             Ok((
                 numpy::PyArray::from_slice(py, r.as_slice()).into_py_any(py)?,
                 numpy::PyArray::from_slice(py, v.as_slice()).into_py_any(py)?,
@@ -191,7 +191,7 @@ impl PyKepler {
         format!("{}", self.0)
     }
 
-    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         let mut state = [0; 48];
         state[0..8].clone_from_slice(&self.0.a.to_le_bytes());
         state[8..16].clone_from_slice(&self.0.eccen.to_le_bytes());
@@ -202,7 +202,7 @@ impl PyKepler {
         PyBytes::new(py, &state).into_py_any(py)
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+    fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> PyResult<()> {
         let state = state.extract::<&[u8]>(py)?;
         self.0.a = f64::from_le_bytes(state[0..8].try_into().unwrap());
         self.0.eccen = f64::from_le_bytes(state[8..16].try_into().unwrap());

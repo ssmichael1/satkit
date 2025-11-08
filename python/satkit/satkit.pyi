@@ -1445,32 +1445,6 @@ class duration:
             False
         """
 
-    def __eq__(self, other: duration) -> bool:
-        """Compare two durations for equality
-
-        Args:
-            other (duration): duration to compare with
-        Returns:
-            bool: True if "self" duration is equal to "other" duration, False otherwise
-
-        Example:
-            >>> print(duration.from_hours(1) == duration.from_minutes(60))
-            True
-        """
-
-    def __ne__(self, other: duration) -> bool:
-        """Compare two durations for inequality
-
-        Args:
-            other (duration): duration to compare with
-        Returns:
-            bool: True if "self" duration is not equal to "other" duration, False otherwise
-
-        Example:
-            >>> print(duration.from_hours(1) != duration.from_minutes(30))
-            True
-        """
-
     @property
     def days(self) -> float:
         """Floating point number of days represented by duration
@@ -2294,7 +2268,7 @@ class satproperties_static:
     """Satellite properties relevant for drag and radiation pressure
 
     This class lets the satellite radiation pressure and drag
-    paramters be set to static values for duration of propagation
+    parameters be set to static values for duration of propagation
 
     Attributes:
         cdaoverm (float): Coefficient of drag times area over mass in m^2/kg

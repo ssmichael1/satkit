@@ -57,23 +57,29 @@ impl From<GravModel> for GravityModel {
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 #[pyfunction]
 #[pyo3(signature=(pos, **kwds))]
-pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<PyObject> {
+pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<Py<PyAny>> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("model")? {
-            model = v.extract::<GravModel>()?;
+            model = v
+                .extract::<GravModel>()
+                .map_err(|e| anyhow::anyhow!("Failed to extract gravity model: {}", e))?;
         }
         if let Some(v) = kw.get_item("order")? {
-            order = v.extract::<usize>()?;
+            order = v
+                .extract::<usize>()
+                .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?;
         }
     }
 
     if pos.is_instance_of::<PyITRFCoord>() {
-        let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
+        let pyitrf: PyRef<PyITRFCoord> = pos
+            .extract()
+            .map_err(|e| anyhow::anyhow!("Failed to extract itrfcoord: {}", e))?;
         let itrf: ITRFCoord = pyitrf.0;
         let v = accel(&itrf.itrf, order, model.into());
-        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let vpy = np::PyArray1::<f64>::from_slice(py, v.as_slice());
             Ok(vpy.into_py_any(py)?)
         })
@@ -84,7 +90,7 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
         }
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let a = accel(&v, order, model.into());
-        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let vpy = np::PyArray1::<f64>::from_slice(py, a.as_slice());
             Ok(vpy.into_py_any(py)?)
         })
@@ -114,23 +120,29 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
 pub fn gravity_and_partials(
     pos: &Bound<'_, PyAny>,
     kwds: Option<&Bound<'_, PyDict>>,
-) -> Result<(PyObject, PyObject)> {
+) -> Result<(Py<PyAny>, Py<PyAny>)> {
     let mut order: usize = 6;
     let mut model: GravModel = GravModel::jgm3;
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("model")? {
-            model = v.extract::<GravModel>()?;
+            model = v
+                .extract::<GravModel>()
+                .map_err(|e| anyhow::anyhow!("Failed to extract gravity model: {}", e))?;
         }
         if let Some(v) = kw.get_item("order")? {
-            order = v.extract::<usize>()?;
+            order = v
+                .extract::<usize>()
+                .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?;
         }
     }
 
     if pos.is_instance_of::<PyITRFCoord>() {
-        let pyitrf: PyRef<PyITRFCoord> = pos.extract()?;
+        let pyitrf: PyRef<PyITRFCoord> = pos
+            .extract()
+            .map_err(|e| anyhow::anyhow!("Failed to extract itrfcoord: {}", e))?;
         let itrf: ITRFCoord = pyitrf.0;
         let (g, p) = accel_and_partials(&itrf.itrf, order, model.into());
-        pyo3::Python::with_gil(|py| -> Result<(PyObject, PyObject)> {
+        pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
             let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
             let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {
@@ -145,7 +157,7 @@ pub fn gravity_and_partials(
         }
         let v: na::Vector3<f64> = na::Vector3::<f64>::from_row_slice(vpy.as_slice().unwrap());
         let (g, p) = accel_and_partials(&v, order, model.into());
-        pyo3::Python::with_gil(|py| -> Result<(PyObject, PyObject)> {
+        pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
             let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
             let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {

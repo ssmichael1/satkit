@@ -3,10 +3,8 @@ use crate::ITRFCoord;
 use crate::Instant;
 use crate::TimeScale;
 
+use crate::mathtypes::*;
 use anyhow::Result;
-use nalgebra as na;
-
-type Vec3 = na::Vector3<f64>;
 
 ///
 /// Sun position in the Geocentric Celestial Reference Frame (GCRF)
@@ -26,7 +24,7 @@ type Vec3 = na::Vector3<f64>;
 ///   from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
 ///
 #[inline]
-pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
+pub fn pos_gcrf(time: &Instant) -> Vector3 {
     crate::frametransform::qmod2gcrf(time) * pos_mod(time)
 }
 
@@ -47,7 +45,7 @@ pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
 /// * Algorithm 29 from Vallado for sun in Mean of Date (MOD)
 /// * Valid with accuracy of .01 degrees from 1950 to 2050
 ///
-pub fn pos_mod(time: &Instant) -> na::Vector3<f64> {
+pub fn pos_mod(time: &Instant) -> Vector3 {
     let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
     #[allow(non_upper_case_globals)]
     const deg2rad: f64 = std::f64::consts::PI / 180.;
@@ -76,7 +74,7 @@ pub fn pos_mod(time: &Instant) -> na::Vector3<f64> {
             0.016708617f64.mul_add(-f64::cos(M), 1.000140612),
         );
 
-    na::Vector3::<f64>::new(
+    Vector3::new(
         r * f64::cos(lambda_ecliptic),
         r * f64::sin(lambda_ecliptic) * f64::cos(epsilon),
         r * f64::sin(lambda_ecliptic) * f64::sin(epsilon),
@@ -103,7 +101,7 @@ pub fn pos_mod(time: &Instant) -> na::Vector3<f64> {
 /// * See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
 ///
 ///
-pub fn shadowfunc(psun: &Vec3, psat: &Vec3) -> f64 {
+pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
     let a = (consts::SUN_RADIUS / (psun - psat).norm()).asin();
     let b = (consts::EARTH_RADIUS / psat.norm()).asin();
     let snorm = psat.norm();

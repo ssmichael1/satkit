@@ -41,7 +41,7 @@ impl PyTLE {
     /// * `tle` - a list of TLE objects or a single TLE if lines for
     ///           only 1 are passed in
     #[staticmethod]
-    fn from_file(filename: String) -> Result<PyObject> {
+    fn from_file(filename: String) -> Result<Py<PyAny>> {
         let file = File::open(std::path::PathBuf::from(filename))?;
 
         let lines: Vec<String> = io::BufReader::new(file)
@@ -71,9 +71,9 @@ impl PyTLE {
     /// * `tle` - a list of TLE objects or a single TLE if lines for
     ///           only 1 are passed in
     #[staticmethod]
-    fn from_lines(lines: Vec<String>) -> Result<PyObject> {
+    fn from_lines(lines: Vec<String>) -> Result<Py<PyAny>> {
         TLE::from_lines(&lines).and_then(|v| {
-            pyo3::Python::with_gil(|py| {
+            pyo3::Python::attach(|py| {
                 if v.len() > 1 {
                     v.into_py_any(py)
                 } else {
@@ -138,7 +138,7 @@ impl PyTLE {
 
     /// Epoch time of TLE
     #[getter(epoch)]
-    fn get_epoch(&self, py: Python) -> PyResult<PyObject> {
+    fn get_epoch(&self, py: Python) -> PyResult<Py<PyAny>> {
         self.0.epoch.into_py_any(py)
     }
     #[setter(epoch)]
@@ -241,7 +241,7 @@ impl PyTLE {
 
         Ok((
             Self(tle),
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let dict = pyo3::types::PyDict::new(py);
                 dict.set_item("success", PyMPSuccess::from(status.success))?;
                 dict.set_item("best_norm", status.best_norm)?;
@@ -261,7 +261,7 @@ impl PyTLE {
         ))
     }
 
-    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         let nbytes: usize =
             102 + self.0.name.len() + self.0.intl_desig.len() + self.0.desig_piece.len();
         let mut raw = vec![0u8; nbytes];
@@ -308,7 +308,7 @@ impl PyTLE {
         pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }
 
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
+    fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> PyResult<()> {
         let raw = state.extract::<Vec<u8>>(py)?;
 
         self.0.sat_num = i32::from_le_bytes(raw[0..4].try_into().unwrap());
