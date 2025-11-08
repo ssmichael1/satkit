@@ -121,6 +121,8 @@
 
 
 ## Rust 0.8.1
-
-  - Cleanup of referencing of nalgebra types: commonly used aliases are now all referenced from mathtypes.rs
   - Remove un-used dependencies
+  
+## Rust 0.8.2
+  - Cleanup of referencing of nalgebra types: commonly used aliases are now all referenced from mathtypes.rs
+  - Improve documentation
