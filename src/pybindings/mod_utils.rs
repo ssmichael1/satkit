@@ -69,8 +69,8 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
 /// Returns:
 ///     str: Directory where files are stored
 #[pyfunction]
-fn datadir() -> PyResult<PyObject> {
-    pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+fn datadir() -> PyResult<Py<PyAny>> {
+    pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
         match crate::utils::datadir() {
             Ok(v) => v.to_str().unwrap().into_py_any(py),
             Err(_) => pyo3::types::PyNone::get(py).into_py_any(py),

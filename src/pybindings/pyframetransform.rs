@@ -16,7 +16,7 @@ use anyhow::Result;
 /// Returns:
 ///     float|numpy.array: GMST at input time[s] in radians
 #[pyfunction]
-pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::gmst, tm)
 }
 
@@ -24,7 +24,7 @@ pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Equation of Equinoxes
 ///
 #[pyfunction]
-pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::eqeq, tm)
 }
 
@@ -36,7 +36,7 @@ pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     float|numpy.array: GAST at input time[s] in radians
 #[pyfunction]
-pub fn gast(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::gast, tm)
 }
 
@@ -59,7 +59,7 @@ pub fn gast(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// * ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0))
 ///
 #[pyfunction]
-pub fn earth_rotation_angle(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn earth_rotation_angle(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::earth_rotation_angle, tm)
 }
 
@@ -71,7 +71,7 @@ pub fn earth_rotation_angle(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from ITRF to TIRS at input time[s]
 #[pyfunction]
-pub fn qitrf2tirs(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qitrf2tirs(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qitrf2tirs, tm)
 }
 
@@ -83,7 +83,7 @@ pub fn qitrf2tirs(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from TIRS to CIRS at input time[s]
 #[pyfunction]
-pub fn qtirs2cirs(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qtirs2cirs(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qtirs2cirs, tm)
 }
 
@@ -96,7 +96,7 @@ pub fn qtirs2cirs(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from CIRS to GCRF at input time[s]
 
 #[pyfunction]
-pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qcirs2gcrs, tm)
 }
 
@@ -113,7 +113,7 @@ pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from ITRF to GCRF at input time[s]
 
 #[pyfunction]
-pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qitrf2gcrf, tm)
 }
 
@@ -129,7 +129,7 @@ pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from GCRF to ITRF at input time[s]
 #[pyfunction]
-pub fn qgcrf2itrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qgcrf2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qgcrf2itrf, tm)
 }
 
@@ -144,7 +144,7 @@ pub fn qgcrf2itrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from GCRF to ITRF at input time[s]
 #[pyfunction]
-pub fn qgcrf2itrf_approx(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qgcrf2itrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qgcrf2itrf_approx, tm)
 }
 
@@ -159,7 +159,7 @@ pub fn qgcrf2itrf_approx(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from ITRF to GCRF at input time[s]
 #[pyfunction]
-pub fn qitrf2gcrf_approx(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qitrf2gcrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qitrf2gcrf_approx, tm)
 }
 
@@ -175,7 +175,7 @@ pub fn qitrf2gcrf_approx(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from TEME to ITRF at input time[s]
 #[pyfunction]
-pub fn qteme2itrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qteme2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qteme2itrf, tm)
 }
 
@@ -191,7 +191,7 @@ pub fn qteme2itrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
 /// Returns:
 ///    satkit.quaternion|list: Quaternion or list of quaternions representing rotation from TEME to GCRF at input time[s]
 #[pyfunction]
-pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<PyObject> {
+pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_quat_from_time_arr(ft::qteme2gcrf, tm)
 }
 

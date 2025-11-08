@@ -1,6 +1,6 @@
 # ITRF Coordinates
 
-The **satkit** package contains a special class, `itrfcoord`, for representing coordinates in the International Terrestrial Reference Frame (ITRF).  This class allows for easy conversion between Cartesian and geodetic (latitude, longitude, and altitude) coordinates, and also provides convenience quaternions for maping relative locations into the North-East-Down (NED) or East-North-Up (ENU) frames.
+The **satkit** package contains a special class, `itrfcoord`, for representing coordinates in the International Terrestrial Reference Frame (ITRF).  This class allows for easy conversion between Cartesian and geodetic (latitude, longitude, and altitude) coordinates, and also provides convenience quaternions for mapping relative locations into the North-East-Down (NED) or East-North-Up (ENU) frames.
 
 ## Construction
 

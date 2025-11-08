@@ -38,7 +38,11 @@ pub fn nrlmsise00(
             lon = Some(v.extract::<f64>()?);
         }
         if let Some(v) = kwds.get_item("time")? {
-            tm = Some(v.extract::<PyInstant>()?.0);
+            tm = Some(
+                v.extract::<PyInstant>()
+                    .map_err(|_e| anyhow::anyhow!("Failed to extract time"))?
+                    .0,
+            );
         }
         if let Some(v) = kwds.get_item("use_spaceweather")? {
             use_spaceweather = v.extract::<bool>()?;

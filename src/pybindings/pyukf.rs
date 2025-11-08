@@ -8,8 +8,8 @@ use numpy::PyUntypedArrayMethods;
 
 use pyo3::exceptions::PyValueError;
 
+use crate::mathtypes::*;
 use crate::pybindings::pyutils::*;
-use crate::types::*;
 
 enum UKFType {
     None,
@@ -31,7 +31,7 @@ pub struct PyUKF {
 }
 
 fn pfunc<const N: usize>(x: Matrix<N, 1>, f: &PyObject) -> PyResult<Matrix<N, 1>> {
-    pyo3::Python::with_gil(|py| {
+    pyo3::Python::attach(|py| {
         let x = smatrix_to_py::<N, 1>(&x)?;
         let x = f.call1(py, (x,))?;
         let x = x.extract::<PyReadonlyArray1<f64>>(py)?;
@@ -58,7 +58,7 @@ impl PyUKF {
     }
 
     #[getter]
-    fn get_cov(&self) -> PyResult<PyObject> {
+    fn get_cov(&self) -> PyResult<Py<PyAny>> {
         match self.ukf {
             UKFType::UKF1(ref ukf) => Ok(smatrix_to_py::<1, 1>(&ukf.p)?),
             UKFType::UKF2(ref ukf) => Ok(smatrix_to_py::<2, 2>(&ukf.p)?),
@@ -77,7 +77,7 @@ impl PyUKF {
     }
 
     #[getter]
-    fn get_state(&self) -> PyResult<PyObject> {
+    fn get_state(&self) -> PyResult<Py<PyAny>> {
         match self.ukf {
             UKFType::UKF1(ref ukf) => Ok(smatrix_to_py::<1, 1>(&ukf.x)?),
             UKFType::UKF2(ref ukf) => Ok(smatrix_to_py::<2, 1>(&ukf.x)?),

@@ -15,6 +15,7 @@ mod pykepler;
 mod pylpephem_moon;
 mod pylpephem_planets;
 mod pylpephem_sun;
+mod pympsuccess;
 mod pynrlmsise;
 mod pypropresult;
 mod pyquaternion;
@@ -22,13 +23,11 @@ mod pysatstate;
 mod pysgp4;
 mod pysolarsystem;
 mod pytle;
-mod pympsuccess;
 //mod pyukf;
 
 mod pypropagate;
 mod pypropsettings;
 mod pysatproperties;
-
 
 mod pyutils;
 
@@ -37,13 +36,11 @@ use pyframetransform as pyft;
 use pyinstant::PyInstant;
 use pyitrfcoord::PyITRFCoord;
 use pykepler::PyKepler;
-use pyquaternion::Quaternion;
+use pyquaternion::PyQuaternion;
 use pysolarsystem::SolarSystem;
 
 use pypropsettings::PyPropSettings;
 use pysatstate::PySatState;
-
-
 
 /// JPL Ephemeris Sub-Module
 #[pymodule]
@@ -129,7 +126,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDuration>()?;
     m.add_class::<pyinstant::PyTimeScale>()?;
     m.add_class::<pyinstant::PyWeekday>()?;
-    m.add_class::<Quaternion>()?;
+    m.add_class::<PyQuaternion>()?;
     m.add_class::<pyframes::PyFrame>()?;
     m.add_function(wrap_pyfunction!(pysgp4::sgp4, m)?).unwrap();
 

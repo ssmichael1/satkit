@@ -13,7 +13,7 @@ use super::RKAdaptiveSettings;
 /// ODE state for 1-dimensional harmonic oscillator
 /// y[0] = position
 /// y[1] = velocity
-type State = nalgebra::Vector2<f64>;
+type State = crate::mathtypes::Vector2;
 
 /// Harmonic oscillator ODE y'' = -y
 fn ydot(_t: f64, y: &State) -> ODEResult<State> {

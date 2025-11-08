@@ -6,9 +6,8 @@ use pyo3::IntoPyObjectExt;
 use numpy::{PyArray1, PyReadonlyArray1};
 
 use crate::itrfcoord::ITRFCoord;
-use crate::types::Vec3;
 
-use super::Quaternion;
+use super::pyquaternion::PyQuaternion;
 
 use super::pyutils::*;
 
@@ -198,8 +197,8 @@ impl PyITRFCoord {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing ITRF Cartesian location in meters
     #[getter]
-    fn get_vector(&self) -> PyObject {
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn get_vector(&self) -> Py<PyAny> {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             numpy::PyArray::from_slice(py, self.0.itrf.data.as_slice())
                 .into_py_any(py)
                 .unwrap()
@@ -226,7 +225,7 @@ impl PyITRFCoord {
     /// Returns:
     ///     satkit.quaternion: Quaternion representing rotation from NED to ITRF
     #[getter]
-    fn get_qned2itrf(&self) -> Quaternion {
+    fn get_qned2itrf(&self) -> PyQuaternion {
         self.0.q_ned2itrf().into()
     }
 
@@ -236,7 +235,7 @@ impl PyITRFCoord {
     /// Returns:
     ///     satkit.quaternion: Quaternion representing rotation from ENU to ITRF
     #[getter]
-    fn get_qenu2itrf(&self) -> Quaternion {
+    fn get_qenu2itrf(&self) -> PyQuaternion {
         self.0.q_enu2itrf().into()
     }
 
@@ -247,9 +246,9 @@ impl PyITRFCoord {
     ///
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of other relative to self
-    fn to_enu(&self, other: &Self) -> PyObject {
-        let v: Vec3 = self.0.q_enu2itrf().conjugate() * (self.0.itrf - other.0.itrf);
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn to_enu(&self, other: &Self) -> Py<PyAny> {
+        let v = self.0.q_enu2itrf().conjugate() * (self.0.itrf - other.0.itrf);
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             numpy::PyArray::from_slice(py, v.data.as_slice())
                 .into_py_any(py)
                 .unwrap()
@@ -263,9 +262,9 @@ impl PyITRFCoord {
     ///
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing NED location in meters of other relative to self
-    fn to_ned(&self, other: &Self) -> PyObject {
-        let v: Vec3 = self.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
-        pyo3::Python::with_gil(|py| -> PyObject {
+    fn to_ned(&self, other: &Self) -> Py<PyAny> {
+        let v = self.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             numpy::PyArray::from_slice(py, v.data.as_slice())
                 .into_py_any(py)
                 .unwrap()
@@ -334,7 +333,7 @@ impl PyITRFCoord {
         Ok(())
     }
 
-    fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
         let mut raw = [0; 24];
         raw[0..8].clone_from_slice(f64::to_le_bytes(self.0.itrf[0]).as_slice());
         raw[8..16].clone_from_slice(f64::to_le_bytes(self.0.itrf[1]).as_slice());
@@ -344,9 +343,9 @@ impl PyITRFCoord {
 
     /// 3-vector representing cartesian distance between this
     /// and other point, in meters
-    fn __sub__(&self, other: &Self) -> PyObject {
+    fn __sub__(&self, other: &Self) -> Py<PyAny> {
         let vout = self.0 - other.0;
-        pyo3::Python::with_gil(|py| -> PyObject {
+        pyo3::Python::attach(|py| -> Py<PyAny> {
             let vnd = PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]]);
             vnd.into_py_any(py).unwrap()
         })

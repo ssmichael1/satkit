@@ -2,7 +2,7 @@
 ///
 /// # Enum Values:
 ///
-/// * `UTC` - Univeral Time Coordiante
+/// * `UTC` - Universal Time Coordinated
 /// * `TT` - Terrestrial Time
 /// * `UT1` - Universal Time 1
 /// * `TAI` - International Atomic Time

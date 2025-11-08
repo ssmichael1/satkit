@@ -181,9 +181,11 @@ impl<'py> IntoPyObject<'py> for crate::Instant {
     }
 }
 
-impl<'py> FromPyObject<'py> for Instant {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        let obj = PyInstant::extract_bound(ob)?;
+impl<'a, 'py> FromPyObject<'a, 'py> for Instant {
+    type Error = pyo3::pyclass::PyClassGuardError<'a, 'py>;
+
+    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        let obj = PyInstant::extract(ob)?;
         Ok(obj.0)
     }
 }
@@ -518,8 +520,8 @@ impl PyInstant {
     ///     datetime.datetime:  datetime object matching the input satkit.time
     ///
     #[pyo3(signature = (utc=true))]
-    fn datetime(&self, utc: bool) -> PyResult<PyObject> {
-        pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+    fn datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             let timestamp: f64 = self.as_unixtime();
             let tz = match utc {
                 false => None,
@@ -580,11 +582,11 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time|numpy.ndarray: New time object or numpy array of time objects representing input time plus input duration(s)
-    fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         // Numpy array of floats
         if other.is_instance_of::<np::PyArray1<f64>>() {
             let parr = other.extract::<np::PyReadonlyArray1<f64>>()?;
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let objarr = parr
                     .as_array()
                     .map(|x| {
@@ -593,7 +595,7 @@ impl PyInstant {
                             .unwrap()
                     })
                     .into_iter();
-                let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                let parr = np::PyArray1::<Py<PyAny>>::from_iter(py, objarr);
                 parr.into_py_any(py)
             })
         }
@@ -608,25 +610,25 @@ impl PyInstant {
                             ))
                         },
                         |v| {
-                            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                                 let objarr = v.into_iter().map(|x| {
                                     let pyobj = Self(self.0 + x.0);
                                     pyobj.into_py_any(py).unwrap()
                                 });
 
-                                let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                                let parr = np::PyArray1::<Py<PyAny>>::from_iter(py, objarr);
                                 parr.into_py_any(py)
                             })
                         },
                     )
                 },
                 |v| {
-                    pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+                    pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                         let objarr = v.iter().map(|x| {
                             let pyobj = Self(self.0 + crate::Duration::from_days(*x));
                             pyobj.into_py_any(py).unwrap()
                         });
-                        let parr = np::PyArray1::<PyObject>::from_iter(py, objarr);
+                        let parr = np::PyArray1::<Py<PyAny>>::from_iter(py, objarr);
                         parr.into_py_any(py)
                     })
                 },
@@ -655,15 +657,15 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time|numpy.ndarray|satkit.duration: New time object or numpy array of time objects representing input time minus input duration(s), or duration object representing difference between two time objects
-    fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         // Numpy array of floats
         if other.is_instance_of::<np::PyArray1<f64>>() {
             let parr: np::PyReadonlyArray1<f64> = other.extract().unwrap();
-            let objarr = parr.as_array().into_iter().map(|x| -> PyObject {
+            let objarr = parr.as_array().into_iter().map(|x| -> Py<PyAny> {
                 let obj = Self(self.0 - crate::Duration::from_days(*x));
                 obj.into_py_any(other.py()).unwrap()
             });
-            let parr = np::PyArray1::<PyObject>::from_iter(other.py(), objarr);
+            let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
             parr.into_py_any(other.py())
         }
         // list of floats
@@ -682,7 +684,7 @@ impl PyInstant {
                                 pyobj.into_py_any(other.py()).unwrap()
                             });
 
-                            let parr = np::PyArray1::<PyObject>::from_iter(other.py(), objarr);
+                            let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
                             parr.into_py_any(other.py())
                         },
                     )
@@ -692,7 +694,7 @@ impl PyInstant {
                         let pyobj = Self(self.0 - crate::Duration::from_days(x));
                         pyobj.into_py_any(other.py()).unwrap()
                     });
-                    let parr = np::PyArray1::<PyObject>::from_iter(other.py(), objarr);
+                    let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
                     parr.into_py_any(other.py())
                 },
             )
@@ -702,7 +704,7 @@ impl PyInstant {
             || other.is_instance_of::<pyo3::types::PyInt>()
         {
             let dt: f64 = other.extract::<f64>().unwrap();
-            pyo3::Python::with_gil(|py| -> PyResult<PyObject> {
+            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Self(self.0 - crate::Duration::from_days(dt)).into_py_any(py)
             })
         } else if other.is_instance_of::<PyDuration>() {
@@ -787,7 +789,7 @@ impl PyInstant {
         Ok(())
     }
 
-    fn __getstate__(&mut self, py: Python) -> PyResult<PyObject> {
+    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         Ok(PyBytes::new(py, &i64::to_le_bytes(self.0.raw)).into())
     }
 }
@@ -819,14 +821,14 @@ impl ToTimeVec for &Bound<'_, PyAny> {
             Ok(vec![tm.0])
         } else if self.is_instance_of::<PyDateTime>() {
             let dt: Py<PyDateTime> = self.extract().unwrap();
-            pyo3::Python::with_gil(|py| Ok(vec![datetime_to_instant(dt.bind(py)).unwrap()]))
+            pyo3::Python::attach(|py| Ok(vec![datetime_to_instant(dt.bind(py)).unwrap()]))
         }
         // List case
         else if self.is_instance_of::<pyo3::types::PyList>() {
             match self.extract::<Vec<PyInstant>>() {
                 Ok(v) => Ok(v.iter().map(|x| x.0).collect::<Vec<_>>()),
                 Err(_e) => match self.extract::<Vec<Py<PyDateTime>>>() {
-                    Ok(v) => pyo3::Python::with_gil(|py| {
+                    Ok(v) => pyo3::Python::attach(|py| {
                         Ok(v.iter()
                             .map(|x| datetime_to_instant(x.bind(py)).unwrap())
                             .collect::<Vec<_>>())
@@ -838,9 +840,9 @@ impl ToTimeVec for &Bound<'_, PyAny> {
             }
         }
         // numpy array case
-        else if self.is_instance_of::<numpy::PyArray1<PyObject>>() {
-            match self.extract::<numpy::PyReadonlyArray1<PyObject>>() {
-                Ok(v) => pyo3::Python::with_gil(|py| -> PyResult<Vec<Instant>> {
+        else if self.is_instance_of::<numpy::PyArray1<Py<PyAny>>>() {
+            match self.extract::<numpy::PyReadonlyArray1<Py<PyAny>>>() {
+                Ok(v) => pyo3::Python::attach(|py| -> PyResult<Vec<Instant>> {
                     // Extract times from numpya array of objects
                     let tmarray: Result<Vec<Instant>, _> = v
                         .as_array()
@@ -848,7 +850,7 @@ impl ToTimeVec for &Bound<'_, PyAny> {
                         .map(|p| -> Result<Instant, _> {
                             p.extract::<PyInstant>(py).map_or_else(|_| p.extract::<Py<PyDateTime>>(py).map_or_else(|_| Err(pyo3::exceptions::PyTypeError::new_err(
                                         "Input numpy array must contain satkit.time elements or datetime.datetime elements".to_string()
-                                    )), |v3| pyo3::Python::with_gil(|py| {
+                                    )), |v3| pyo3::Python::attach(|py| {
                                         Ok(datetime_to_instant(v3.bind(py)).unwrap())
                                     })), |v2| Ok(v2.0))
                         })

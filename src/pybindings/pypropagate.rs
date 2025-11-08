@@ -8,9 +8,9 @@ use pyo3::IntoPyObjectExt;
 
 use nalgebra as na;
 
+use crate::mathtypes::*;
 use crate::orbitprop::SatProperties;
 use crate::orbitprop::SatPropertiesStatic;
-use crate::types::*;
 use crate::Duration;
 use crate::Instant;
 
@@ -91,7 +91,7 @@ use anyhow::{bail, Result};
 pub fn propagate(
     args: &Bound<PyTuple>,
     mut kwargs: Option<&Bound<'_, PyDict>>,
-) -> Result<PyObject> {
+) -> Result<Py<PyAny>> {
     let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
     let propsettings = match pypropsettings {
         Some(p) => p.0,
@@ -109,10 +109,22 @@ pub fn propagate(
         state0 = py_to_smatrix(&args.get_item(0)?)?;
     }
     if args.len() > 1 {
-        starttime = args.get_item(1)?.extract::<PyInstant>()?.0;
+        starttime = args
+            .get_item(1)?
+            .extract::<PyInstant>()
+            .map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid start time: {}", e))
+            })?
+            .0;
     }
     if args.len() > 2 {
-        stoptime = args.get_item(2)?.extract::<PyInstant>()?.0;
+        stoptime = args
+            .get_item(2)?
+            .extract::<PyInstant>()
+            .map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid stop time: {}", e))
+            })?
+            .0;
     }
 
     if let Some(kw) = kwargs {
@@ -131,27 +143,54 @@ pub fn propagate(
             kw.del_item("vel")?;
         }
         if let Some(kws) = kw.get_item("start")? {
-            starttime = kws.extract::<PyInstant>()?.0;
+            starttime = kws
+                .extract::<PyInstant>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid start time: {}", e))
+                })?
+                .0;
             kw.del_item("start")?;
         }
         if let Some(kws) = kw.get_item("stop")? {
-            stoptime = kws.extract::<PyInstant>()?.0;
+            stoptime = kws
+                .extract::<PyInstant>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid stop time: {}", e))
+                })?
+                .0;
             kw.del_item("stop")?;
         }
         if let Some(kwd) = kw.get_item("duration")? {
-            stoptime = starttime + kwd.extract::<PyDuration>()?.0;
+            stoptime = starttime
+                + kwd
+                    .extract::<PyDuration>()
+                    .map_err(|e| {
+                        pyo3::exceptions::PyValueError::new_err(format!("Invalid duration: {}", e))
+                    })?
+                    .0;
             kw.del_item("duration")?;
         }
         if let Some(kwd) = kw.get_item("duration_days")? {
-            stoptime = starttime + Duration::from_days(kwd.extract::<f64>()?);
+            stoptime = starttime
+                + Duration::from_days(kwd.extract::<f64>().map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_days: {}", e))
+                })?);
             kw.del_item("duration_days")?;
         }
         if let Some(kwd) = kw.get_item("duration_secs")? {
-            stoptime = starttime + Duration::from_seconds(kwd.extract::<f64>()?);
-            kw.del_item("duration_sec")?;
+            stoptime = starttime
+                + Duration::from_seconds(kwd.extract::<f64>().map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_secs: {}", e))
+                })?);
+            kw.del_item("duration_secs")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {
-            satproperties_static = kws.extract::<PySatProperties>()?.0;
+            satproperties_static = kws
+                .extract::<PySatProperties>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {}", e))
+                })?
+                .0;
             satproperties = Some(&satproperties_static);
             kw.del_item("satproperties")?;
         }
@@ -161,7 +200,7 @@ pub fn propagate(
         if !kw.is_empty() {
             let keystring: String = kw.iter().try_fold(String::from(""), |acc, (k, _v)| {
                 let mut a2 = acc;
-                a2.push_str(k.downcast::<PyString>()?.to_str()?);
+                a2.push_str(k.cast::<PyString>()?.to_str()?);
                 a2.push_str(", ");
                 Ok::<_, PyErr>(a2)
             })?;
@@ -178,7 +217,7 @@ pub fn propagate(
             &propsettings,
             satproperties,
         )?;
-        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             Ok(PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)?)
         })
     }
@@ -192,7 +231,7 @@ pub fn propagate(
 
         let res =
             crate::orbitprop::propagate(&pv, &starttime, &stoptime, &propsettings, satproperties)?;
-        pyo3::Python::with_gil(|py| -> Result<PyObject> {
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
         })
     }

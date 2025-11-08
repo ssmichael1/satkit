@@ -2,7 +2,7 @@ use crate::consts;
 use crate::Instant;
 use crate::TimeScale;
 
-use nalgebra as na;
+use crate::mathtypes::*;
 
 ///
 /// Approximate Moon position in the GCRF Frame
@@ -23,7 +23,7 @@ use nalgebra as na;
 /// * Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
 ///   and 1275 km in range
 ///
-pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
+pub fn pos_gcrf(time: &Instant) -> Vector3 {
     // Julian centuries since Jan 1, 2000 12pm
 
     let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
@@ -87,7 +87,7 @@ pub fn pos_gcrf(time: &Instant) -> na::Vector3<f64> {
 
     let rmag: f64 = consts::EARTH_RADIUS / f64::sin(hparallax);
 
-    rmag * na::Vector3::<f64>::new(
+    rmag * Vector3::new(
         f64::cos(phi_ecliptic) * f64::cos(lambda_ecliptic),
         (f64::cos(epsilon) * f64::cos(phi_ecliptic)).mul_add(
             f64::sin(lambda_ecliptic),

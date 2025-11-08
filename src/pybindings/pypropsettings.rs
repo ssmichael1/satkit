@@ -39,7 +39,7 @@ impl PyPropSettings {
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
                     let mut a2 = acc.clone();
-                    a2.push_str(k.downcast::<PyString>().unwrap().to_str().unwrap());
+                    a2.push_str(k.cast::<PyString>().unwrap().to_str().unwrap());
                     a2.push_str(", ");
                     a2
                 });

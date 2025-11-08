@@ -4,9 +4,7 @@ mod qcirs2gcrs;
 use crate::{Instant, TimeScale};
 use std::f64::consts::PI;
 
-use nalgebra as na;
-type Vec3 = na::Vector3<f64>;
-pub type Quat = na::UnitQuaternion<f64>;
+use crate::mathtypes::*;
 
 use super::earth_orientation_params;
 pub use qcirs2gcrs::qcirs2gcrs;
@@ -15,22 +13,22 @@ pub use qcirs2gcrs::qcirs2gcrs_dxdy;
 /// Right-handed rotation of coordinate sytstem about x axis
 /// (left-handed rotation of vector)
 #[inline]
-pub(crate) fn qrot_xcoord(theta: f64) -> Quat {
-    Quat::from_axis_angle(&Vec3::x_axis(), -theta)
+pub(crate) fn qrot_xcoord(theta: f64) -> Quaternion {
+    Quaternion::from_axis_angle(&Vector3::x_axis(), -theta)
 }
 
 /// Right-handed rotation of coordinate sytstem about y axis
 /// (left-handed rotation of vector)
 #[inline]
-pub(crate) fn qrot_ycoord(theta: f64) -> Quat {
-    Quat::from_axis_angle(&Vec3::y_axis(), -theta)
+pub(crate) fn qrot_ycoord(theta: f64) -> Quaternion {
+    Quaternion::from_axis_angle(&Vector3::y_axis(), -theta)
 }
 
 /// Right-handed rotation of coordinate sytstem about z axis
 /// (left-handed rotation of vector)
 #[inline]
-pub(crate) fn qrot_zcoord(theta: f64) -> Quat {
-    Quat::from_axis_angle(&Vec3::z_axis(), -theta)
+pub(crate) fn qrot_zcoord(theta: f64) -> Quaternion {
+    Quaternion::from_axis_angle(&Vector3::z_axis(), -theta)
 }
 
 ///
@@ -128,7 +126,7 @@ pub fn earth_rotation_angle(tm: &Instant) -> f64 {
 /// valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
 /// they will be set to zero, and a warning will be printed to stderr.
 ///
-pub fn qitrf2tirs(tm: &Instant) -> Quat {
+pub fn qitrf2tirs(tm: &Instant) -> Quaternion {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
     // Get earth oreintation parameters or set them all to zero if not available
     // (function will print warning to stderr if not available)
@@ -158,7 +156,7 @@ pub fn qitrf2tirs(tm: &Instant) -> Quat {
 ///   SGP4 propagator
 /// * This is Equation 3-90 in Vallado
 ///
-pub fn qteme2itrf(tm: &Instant) -> Quat {
+pub fn qteme2itrf(tm: &Instant) -> Quaternion {
     qitrf2tirs(tm).conjugate() * qrot_zcoord(gmst(tm))
 }
 
@@ -180,7 +178,7 @@ pub fn qteme2itrf(tm: &Instant) -> Quat {
 ///   SGP4 propagator
 /// * An approximate rotation, accurate to within 1 arcsec
 ///
-pub fn qteme2gcrf(tm: &Instant) -> Quat {
+pub fn qteme2gcrf(tm: &Instant) -> Quaternion {
     qitrf2gcrf_approx(tm) * qteme2itrf(tm)
 }
 
@@ -200,7 +198,7 @@ pub fn qteme2gcrf(tm: &Instant) -> Quat {
 ///
 /// * Equations 3-88 and 3-89 in Vallado
 ///
-pub fn qmod2gcrf(tm: &Instant) -> Quat {
+pub fn qmod2gcrf(tm: &Instant) -> Quaternion {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
     let tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
 
@@ -259,9 +257,9 @@ pub fn qmod2gcrf(tm: &Instant) -> Quat {
 /// * For a reference, see "Eplanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
 ///
-pub fn qgcrf2itrf_approx(tm: &Instant) -> Quat {
+pub fn qgcrf2itrf_approx(tm: &Instant) -> Quaternion {
     // Neglecting polar motion
-    let qitrf2tod_approx: Quat = qrot_zcoord(-gast(tm));
+    let qitrf2tod_approx: Quaternion = qrot_zcoord(-gast(tm));
 
     (qmod2gcrf(tm) * qtod2mod_approx(tm) * qitrf2tod_approx).conjugate()
 }
@@ -289,7 +287,7 @@ pub fn qgcrf2itrf_approx(tm: &Instant) -> Quat {
 ///
 /// * For a reference, see "Eplanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
-pub fn qitrf2gcrf_approx(tm: &Instant) -> Quat {
+pub fn qitrf2gcrf_approx(tm: &Instant) -> Quaternion {
     qgcrf2itrf_approx(tm).conjugate()
 }
 
@@ -299,7 +297,7 @@ pub fn qitrf2gcrf_approx(tm: &Instant) -> Quat {
 ///
 /// See Vallado section 3.7.3
 ///
-pub fn qtod2mod_approx(tm: &Instant) -> Quat {
+pub fn qtod2mod_approx(tm: &Instant) -> Quaternion {
     let d = tm.as_mjd_with_scale(TimeScale::TT) - 51544.5;
     let t = d / 36525.0;
 
@@ -368,7 +366,7 @@ pub fn qtod2mod_approx(tm: &Instant) -> Quat {
 ///   valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
 ///   they will be set to zero, and a warning will be printed to stderr.
 ///
-pub fn qitrf2gcrf(tm: &Instant) -> Quat {
+pub fn qitrf2gcrf(tm: &Instant) -> Quaternion {
     // w is rotation from international terrestrial reference frame
     // to terrestrial intermediate reference frame
     let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
@@ -411,7 +409,7 @@ pub fn qitrf2gcrf(tm: &Instant) -> Quat {
 ///  * **Note** This is **very** computationally expensive; for most
 ///    applications, the approximate rotation will work just fine
 ///
-pub fn qgcrf2itrf(tm: &Instant) -> Quat {
+pub fn qgcrf2itrf(tm: &Instant) -> Quaternion {
     qitrf2gcrf(tm).conjugate()
 }
 
@@ -435,7 +433,7 @@ pub fn qgcrf2itrf(tm: &Instant) -> Quat {
 /// Equation 5.5
 ///
 #[inline]
-pub fn qtirs2cirs(tm: &Instant) -> Quat {
+pub fn qtirs2cirs(tm: &Instant) -> Quaternion {
     qrot_zcoord(-earth_rotation_angle(tm))
 }
 
@@ -443,7 +441,6 @@ pub fn qtirs2cirs(tm: &Instant) -> Quat {
 mod tests {
     use super::*;
     use crate::{Duration, Instant, TimeScale};
-    type Vec3 = na::Vector3<f64>;
 
     #[test]
     fn test_gmst() {
@@ -465,7 +462,7 @@ mod tests {
         // Input time
         let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
         // Input terrestrial location
-        let pitrf = Vec3::new(-1033.4793830, 7901.2952754, 6380.3565958);
+        let pitrf = Vector3::new(-1033.4793830, 7901.2952754, 6380.3565958);
         let t_tt = (tm.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;
         assert!((t_tt - 0.0426236319).abs() < 1.0e-8);
 
