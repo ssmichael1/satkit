@@ -1,73 +1,133 @@
-//! # "SatKit" : Satellite Tool SatKit
+//! # SatKit: Satellite Toolkit
 //!
+//! A comprehensive, high-performance satellite astrodynamics library combining the speed of Rust
+//! with the convenience of Python. SatKit provides industrial-grade satellite orbital mechanics
+//! calculations with a clean, intuitive API. Built from the ground up in Rust for maximum performance
+//! and memory safety, it offers complete Python bindings for all functionality, making advanced orbital
+//! mechanics accessible to both systems programmers and data scientists.
 //!
-//! # Crate Features:
-//! * Timescale transformations (UTC, GPS, UT1, TBD, TT, ...)
-//! * High-precision coordinate transforms between:
-//!   * International Terrestrial Reference Frame (ITRF)
-//!   * Geocentric Celestial Reference Frame (GCRF) using IAU-2006 reduction
-//!   * True-Equinox Mean Equator (TEME) frame used in SGP4 propagation of TLEs
-//!   * Celestial Intermediate Reference Frame (CIRF)
-//!   * Terrestrial Intermediate Reference Frame (TIRF)
-//!   * Terrestrial Geodetic frame (latitude, longitude)
-//! * Two-Line Element Set (TLE) processing, and propagation with SGP4
-//! * Keplerian orbit propagation
-//! * JPL planetary ephemerides
-//! * High-order gravity models
-//! * High-precision, high-speed numerical satellite orbit propagation with high-order (9/8)
-//!   efficient Runga-Kutta solvers, ability to solve for state transition matrix for covariance propagation,
-//!   and inclusion following forces:
-//!   * High-order Earth gravity with multiple models
-//!   * Solar gravity
-//!   * Lunar gravity
-//!   * Drag, with NRL MISE-00 density model and inclusion of space weather data
-//!   * Radiation pressure
+//! ## Core Features
 //!
-//! # Language Bindings
+//! ### Time Systems
+//! - Comprehensive timescale transformations (UTC, GPS, UT1, TDB, TT, TAI)
+//! - Leap second handling
+//! - High-precision time arithmetic and conversions
 //!
-//! * Standalone Rust library available on on <https://crates.io>
-//! * Python bindings availble on PyPi
+//! ### Coordinate Frame Transformations
+//! High-precision coordinate transforms between multiple reference frames:
+//! - **International Terrestrial Reference Frame (ITRF)**: Earth-fixed frame
+//! - **Geocentric Celestial Reference Frame (GCRF)**: Inertial frame using IAU-2006 reduction
+//! - **True Equinox Mean Equator (TEME)**: Frame used in SGP4 propagation
+//! - **Celestial Intermediate Reference Frame (CIRF)**: IAU-2006 intermediate frame
+//! - **Terrestrial Intermediate Reference Frame (TIRF)**: Earth-rotation intermediate frame
+//! - **Geodetic Coordinates**: Latitude, longitude, altitude conversions
 //!
-//! # Getting started
+//! ### Orbit Propagation
+//! Multiple propagation methods for various accuracy requirements:
+//! - **SGP4**: Simplified General Perturbations for Two-Line Element (TLE) sets with fitting capability
+//! - **Numerical Integration**: High-precision propagation using adaptive Runge-Kutta 9(8) methods
+//! - **Keplerian**: Simplified two-body propagation
+//! - **State Transition Matrix**: Support for covariance propagation
 //!
-//! The library relies on the use of several external data sources for many of the calculations.  These include:
+//! ### Force Models
+//! Comprehensive perturbation modeling:
+//! - High-order Earth gravity (JGM2, JGM3, EGM96, ITU GRACE16)
+//! - Solar and lunar gravity perturbations
+//! - Atmospheric drag using NRLMSISE-00 density model with space weather data
+//! - Solar radiation pressure
 //!
-//! * <a href="https://ssd.jpl.nasa.gov/ephem.html">JPL Planetary Ephemerides</a>
-//! * <a href="http://icgem.gfz-potsdam.de/calculation">Earth Gravity Models</a>
-//! * <a href="https://celestrak.org/SpaceData/">Space Weather Data and Earth orientation parameters</a>
-//! * <a href="https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn36.html">Coefficients for Earth-fixed to Inertial coordinate transforms</a>
+//! ### Ephemerides
+//! - **JPL Ephemerides**: High-precision planetary and lunar positions
+//! - **Low-Precision Ephemerides**: Fast analytical models for sun and moon
 //!
-//! These data sources must be downloaded and placed in a directory that is accessible to the library.
-//! The library provides a utility function to download these files from the internet.
+//! ### Additional Capabilities
+//! - Keplerian orbital elements and conversions
+//! - Geodesic distance calculations
+//! - TLE parsing, generation, and orbit fitting
+//! - Unscented Kalman Filter (UKF) implementation
 //!
-//! The data files need only be downloaded once.  However, the space weather data file (necessary for density calculations that impact satellite drag)
-//! and the Earth Orientation Parameters (necessary for accurate inertial-to-earth frame transformations) are updated daily and should be
-//! refreshed as necessary.
+//! ## Language Bindings
 //!
-//! ## Downloading the data files
+//! - **Rust**: Native library available on [crates.io](https://crates.io/crates/satkit)
+//! - **Python**: Complete Python bindings via PyO3, available on [PyPI](https://pypi.org/project/satkit/)
+//!   - Binary wheels for Windows, macOS (Intel & ARM), and Linux (x86_64 & ARM64)
+//!   - Python versions 3.8 through 3.13
+//!   - Documentation at <https://satellite-toolkit.readthedocs.io/>
+//!
+//! ## Getting Started
+//!
+//! ### Data Files
+//!
+//! The library requires external data files for many calculations:
+//!
+//! - [JPL Planetary Ephemerides](https://ssd.jpl.nasa.gov/ephem.html) - High-precision planetary positions
+//! - [Earth Gravity Models](http://icgem.gfz-potsdam.de/) - Spherical harmonic coefficients
+//! - [Space Weather Data](https://celestrak.org/SpaceData/) - Solar flux and geomagnetic indices
+//! - [Earth Orientation Parameters](https://celestrak.org/SpaceData/) - Polar motion and UT1-UTC
+//! - [IERS Conventions Tables](https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn36.html) - Nutation coefficients
+//!
+//! Data files need to be downloaded once. Space weather and Earth orientation parameter files are
+//! updated daily and should be refreshed periodically for optimal accuracy.
+//!
+//! ### Downloading Data Files
+//!
 //! ```no_run
 //! // Print the directory where data will be stored
 //! println!("Data directory: {:?}", satkit::utils::datadir());
-//! // Update the data files (download those that are missing; refresh those that are out of date)
-//! // This will always download the most-recent space weather data and Earth Orientation Parameters
-//! // Other data files will be skipped if they are already present
+//!
+//! // Download required data files
+//! // - Downloads missing files
+//! // - Updates space weather and Earth orientation parameters
+//! // - Skips files that already exist
 //! satkit::utils::update_datafiles(None, false);
 //! ```
+//!
+//! ## Example Usage
+//!
+//! ```no_run
+//! use satkit::{Instant, Duration, TimeScale, ITRFCoord, SolarSystem};
+//!
+//! // Create a time instant
+//! let time = Instant::from_datetime(2024, 1, 1, 12, 0, 0.0).unwrap();
+//!
+//! // Coordinate frame transformations
+//! let itrf_pos = ITRFCoord::from_geodetic_deg(42.0, -71.0, 100.0);
+//!
+//! // Get planetary ephemeris
+//! let (moon_pos, moon_vel) = satkit::jplephem::geocentric_state(
+//!     SolarSystem::Moon,
+//!     &time
+//! ).unwrap();
+//! ```
+//!
+//! ## References
+//!
+//! This implementation relies heaviliy on the following excellent references:
+//!
+//! - **"Fundamentals of Astrodynamics and Applications, Fourth Edition"**
+//!   by D. Vallado, Microcosm Press and Springer, 2013
+//! - **"Satellite Orbits: Models, Methods, Applications"**
+//!   by O. Montenbruck and E. Gill, Springer, 2000
+//!
+//! ## License
+//!
+//! MIT License - See LICENSE file for details
 
 #![warn(clippy::all, clippy::use_self, clippy::cargo)]
 #![allow(clippy::multiple_crate_versions)]
-// Type definitions
+
+// Math type definitions, mostly nalgebra based
 pub mod mathtypes;
 
 /// Universal constants
 pub mod consts;
-/// Earth orientation parameters (polar motion, delta-UT1, lenth of day)
+/// Earth orientation parameters (polar motion, delta-UT1, length of day)
 pub mod earth_orientation_params;
 /// Zonal gravity model for Earth gravity
 pub mod earthgravity;
 /// Conversion between coordinate frames
 pub mod frametransform;
-/// Internation Terrestrial Reference Frame coordinates &
+/// International Terrestrial Reference Frame coordinates &
 /// transformations to Geodetic, East-North-Up, North-East-Down
 pub mod itrfcoord;
 /// Solar system body ephemerides, as published by the Jet Propulsion Laboratory (JPL)

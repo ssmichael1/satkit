@@ -5,10 +5,10 @@ The ``satkit`` package relies upon a number of data files for certain calculatio
 * **leap-seconds.list** <br/>A list of the UTC leap seconds since 1972.  This is a common file in *nix platforms and is used to keep track of the number of seconds (currently 37) that UTC lags TAI
 <br/>
 
-* **linux_p1550p2650.440**<br>File containing the precice ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboraotry (JPL).  Note: this file is large -- approx. 100 MB -- and may take a long time to download
+* **linux_p1550p2650.440**<br>File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL).  Note: this file is large -- approx. 100 MB -- and may take a long time to download
 
 
-* **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt**<br>Tables from IERS Conventions Technical Note 36, containng coefficients used in the precice rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame.
+* **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt**<br>Tables from IERS Conventions Technical Note 36, containing coefficients used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame.
 
 
 * **EGM96.gfc**, **JGM2.gfc**, **JGM3.gfc**, **ITU-GRACE16.gfc**<br/>Files containing gravity coefficients for various gravity models.  These are used to compute the precise acceleration due to Earth gravity as a function of position in the Earth-fixed ITRF frame.
