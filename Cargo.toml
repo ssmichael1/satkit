@@ -20,7 +20,7 @@ name = "satkit"
 
 [dependencies]
 nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
-ndarray = "0.16.1"
+ndarray = "0.17.1"
 cty = "0.2.2"
 num-traits = "0.2.19"
 thiserror = "2.0"
