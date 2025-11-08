@@ -55,3 +55,8 @@ pybindings = ["pyo3", "numpy", "pyo3-build-config"]
 
 [profile.test]
 opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
