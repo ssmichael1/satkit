@@ -126,3 +126,10 @@
 ## Rust 0.8.2
   - Cleanup of referencing of nalgebra types: commonly used aliases are now all referenced from mathtypes.rs
   - Improve documentation
+
+
+## Pyton 0.8.3
+  - Use pyo3 0.27.1 (transparent to user but annoying API updates)
+  - add typing for property setters that were left out of python bindings (e.g., propsettings)
+  - Allow user to set values for kepler object following object creation
+  - 

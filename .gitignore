@@ -21,6 +21,7 @@ Pipfile.lock
 
 # Ignore local virtual environments
 .venv
+venv
 
 .pytest_cache
 

@@ -219,7 +219,7 @@ Pre-built binary wheels are available for:
 - **Windows**: AMD64
 - **macOS**: Intel (x86_64) and Apple Silicon (ARM64)  
 - **Linux**: x86_64 and ARM64 (aarch64)
-- **Python versions**: 3.8, 3.9, 3.10, 3.11, 3.12, 3.13
+- **Python versions**: 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14
 
 ### Initial Setup
 

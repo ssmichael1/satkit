@@ -199,12 +199,13 @@ pub fn riseset(
             sind(2.0 * msun),
             1.914666471f64.mul_add(sind(msun), lambda_sun),
         );
-        // Longitude in ecliptl
+        // Longitude in ecliptic coordinates
         let epsilon = 0.0130042f64.mul_add(-t, 23.439291);
 
         let sindelta_sun = sind(epsilon) * sind(lambda_ecliptic);
         let deltasun = f64::asin(sindelta_sun) * RAD2DEG;
         //let alpha_sun = f64::atan(tanalpha_sun) * RAD2DEG;
+        // atan2 handles quadrant correctly ... very important!
         let alpha_sun =
             f64::atan2(cosd(epsilon) * sind(lambda_ecliptic), cosd(lambda_ecliptic)) * RAD2DEG;
 

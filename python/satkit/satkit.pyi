@@ -1771,10 +1771,14 @@ class kepler:
     def eccentric_anomaly(self) -> float:
         """Eccentric anomaly, radians"""
 
+    @eccentric_anomaly.setter
+    def eccentric_anomaly(self, value: float) -> None: ...
     @property
     def mean_anomaly(self) -> float:
         """Mean anomaly, radians"""
 
+    @mean_anomaly.setter
+    def mean_anomaly(self, value: float) -> None: ...
     @property
     def period(self) -> float:
         """Orbital period, seconds"""
@@ -1783,26 +1787,38 @@ class kepler:
     def a(self) -> float:
         """Semi-major axis, meters"""
 
+    @a.setter
+    def a(self, value: float) -> None: ...
     @property
-    def eccen(tricity) -> float:
+    def eccen(self) -> float:
         """Eccentricity, unitless"""
 
+    @eccen.setter
+    def eccen(self, value: float) -> None: ...
     @property
     def inclination(self) -> float:
         """Inclination, radians"""
 
+    @inclination.setter
+    def inclination(self, value: float) -> None: ...
     @property
     def raan(self) -> float:
         """Right ascension of ascending node, radians"""
 
+    @raan.setter
+    def raan(self, value: float) -> None: ...
     @property
     def nu(self) -> float:
         """True anomaly, radians"""
 
+    @nu.setter
+    def nu(self, value: float) -> None: ...
     @property
     def w(self) -> float:
         """Argument of perigee, radians"""
 
+    @w.setter
+    def w(self, value: float) -> None: ...
     @staticmethod
     def from_pv(pos: npt.NDArray[np.float64], vel: npt.NDArray[np.float64]) -> kepler:
         """Create Keplerian element set from input position and velocity vectors
@@ -2307,7 +2323,7 @@ class satproperties_static:
             """Coefficient of radiation pressure times area over mass.  Units are m^2/kg"""
 
 class propsettings:
-    """This class contains settings used in the high-precision orbit propgator part of the "satkit" python toolbox
+    """This class contains settings used in the high-precision orbit propagator part of the "satkit" python toolbox
 
     Notes:
 
@@ -2342,12 +2358,14 @@ class propsettings:
 
     @property
     def abs_error(self) -> float:
-        """Maxmum absolute value of error for any element in propagated state following ODE integration
+        """Maximum absolute value of error for any element in propagated state following ODE integration
 
         Returns:
             float: Maximum absolute value of error for any element in propagated state following ODE integration, default is 1e-8
         """
 
+    @abs_error.setter
+    def abs_error(self, value: float) -> None: ...
     @property
     def rel_error(self) -> float:
         """Maximum relative error of any element in propagated state following ODE integration
@@ -2357,6 +2375,8 @@ class propsettings:
 
         """
 
+    @rel_error.setter
+    def rel_error(self, value: float) -> None: ...
     @property
     def gravity_order(self) -> int:
         """Earth gravity order to use in ODE integration
@@ -2366,6 +2386,8 @@ class propsettings:
 
         """
 
+    @gravity_order.setter
+    def gravity_order(self, value: int) -> None: ...
     @property
     def use_spaceweather(self) -> bool:
         """Use space weather data when computing atmospheric density for drag forces
@@ -2382,12 +2404,16 @@ class propsettings:
 
         """
 
+    @use_spaceweather.setter
+    def use_spaceweather(self, value: bool) -> None: ...
     @property
     def enable_interp(self) -> bool:
         """Store intermediate data that allows for fast high-precision interpolation of state between start and stop times
         If not needed, there is a small computational advantage if set to False
         """
 
+    @enable_interp.setter
+    def enable_interp(self, value: bool) -> None: ...
     def precompute_terms(
         self, start: time, stop: time, step: Optional[duration] = None
     ):
