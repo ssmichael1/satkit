@@ -41,6 +41,34 @@ impl Default for PropSettings {
 }
 
 impl PropSettings {
+    /// Precompute terms between start and stop instants
+    ///
+    /// # Arguments
+    /// * `start` - Start instant
+    /// * `stop` - Stop instant
+    ///
+    /// Pre-computes inertial to earth-fixed rotation vector (used for Earth gravity calculation),
+    /// sun, and moon positions between the start and stop instants.  These are used in the
+    /// force model when propagating orbits
+    ///
+    /// Pre-computing these terms means the settings can be used for multiple propagations
+    /// between the same start and stop instants without needing to recompute these terms each time.
+    /// (significant speedup when propagating many orbits over the same time span)
+    ///
+    /// # Errors
+    /// Returns error if precomputation fails
+    ///
+    /// # Example
+    /// ```
+    /// use satkit::orbitprop::PropSettings;
+    /// use satkit::Instant;
+    ///
+    /// let start = Instant::now();
+    /// let stop = start + satkit::Duration::from_hours(1.0);
+    /// let mut props = PropSettings::default();
+    /// props.precompute_terms(&start, &stop).unwrap();
+    ///
+    /// ```
     pub fn precompute_terms(&mut self, start: &Instant, stop: &Instant) -> Result<()> {
         self.precomputed = Some(Precomputed::new(start, stop)?);
         Ok(())

@@ -99,7 +99,7 @@ impl RKAdaptive<7, 4> for RKTS54 {
 
     const ORDER: usize = 5;
 
-    const FSAL: bool = false;
+    const FSAL: bool = true; // Last stage at x+h equals first stage of next step
 
     // From expanding expressions in Tsitorous paper...
     const BI: [[f64; 4]; 7] = [

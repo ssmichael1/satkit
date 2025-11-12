@@ -56,7 +56,6 @@ def pos_gcrf(
     From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
     """
 
-
 @typing.overload
 def pos_mod(time: satkit.time) -> npt.NDArray[np.float64]:
     """
@@ -128,7 +127,7 @@ def rise_set(
                             "Standard": 90 deg, 50 arcmin (90.0+50.0/60.0)
                         "Civil Twilight": 96 deg
                     "Nautical Twilight": 102 deg
-                "satkitnomical Twilight": 108 deg
+                "Astronomical Twilight": 108 deg
 
                 If not passed in, "Standard" is used (90.0 + 50.0/60.0)
 
