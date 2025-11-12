@@ -76,6 +76,13 @@ fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_moon::pos_gcrf, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pylpephem_moon::phase, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pylpephem_moon::phase_name, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pylpephem_moon::illumination, m)?)
+        .unwrap();
+    m.add_class::<pylpephem_moon::MoonPhase>()?;
     Ok(())
 }
 

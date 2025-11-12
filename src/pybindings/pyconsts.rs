@@ -67,9 +67,9 @@ impl Consts {
     /// Mu for Earth per JGM3 Gravity model, m^3/s^2
     #[classattr]
     const jgm3_mu: f64 = cconsts::JGM3_MU;
-    #[classattr]
 
     /// Earth semiparameter per JGM3 gravity model, m^3/s^2
+    #[classattr]
     const jgm3_a: f64 = cconsts::JGM3_A;
 
     /// Earth J2 per JGM3 gravity model

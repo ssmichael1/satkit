@@ -78,10 +78,20 @@ impl PyKepler {
         self.0.a
     }
 
+    #[setter(a)]
+    fn set_a(&mut self, val: f64) {
+        self.0.a = val;
+    }
+
     #[getter]
     /// Eccentricity
     fn get_eccen(&self) -> f64 {
         self.0.eccen
+    }
+
+    #[setter(eccen)]
+    fn set_eccen(&mut self, val: f64) {
+        self.0.eccen = val;
     }
 
     #[getter]
@@ -90,10 +100,20 @@ impl PyKepler {
         self.0.incl
     }
 
+    #[setter(inclination)]
+    fn set_inclination(&mut self, val: f64) {
+        self.0.incl = val;
+    }
+
     #[getter]
     /// Right Ascension of the Ascending Node, radians
     fn get_raan(&self) -> f64 {
         self.0.raan
+    }
+
+    #[setter(raan)]
+    fn set_raan(&mut self, val: f64) {
+        self.0.raan = val;
     }
 
     #[getter]
@@ -102,10 +122,20 @@ impl PyKepler {
         self.0.w
     }
 
+    #[setter(w)]
+    fn set_w(&mut self, val: f64) {
+        self.0.w = val;
+    }
+
     #[getter]
     /// True Anomaly, radians
     fn get_nu(&self) -> f64 {
         self.0.nu
+    }
+
+    #[setter(nu)]
+    fn set_nu(&mut self, val: f64) {
+        self.0.nu = val;
     }
 
     /// Convert Keplerian elements to Cartesian
@@ -151,6 +181,15 @@ impl PyKepler {
         self.0.eccentric_anomaly()
     }
 
+    #[setter(eccentric_anomaly)]
+    fn set_eccentric_anomaly(&mut self, val: f64) {
+        // Convert eccentric anomaly to true anomaly
+        self.0.nu = f64::atan2(
+            val.sin() * self.0.eccen.mul_add(-self.0.eccen, 1.0).sqrt(),
+            val.cos() - self.0.eccen,
+        );
+    }
+
     /// Return the mean motion of the satellite in radians/second
     ///
     /// Returns:
@@ -176,6 +215,30 @@ impl PyKepler {
     #[getter]
     fn mean_anomaly(&self) -> f64 {
         self.0.mean_anomaly()
+    }
+
+    #[setter(mean_anomaly)]
+    fn set_mean_anomaly(&mut self, val: f64) {
+        // Convert mean anomaly to true anomaly via eccentric anomaly
+        // First convert mean to eccentric
+        use std::f64::consts::PI;
+        let mut ea = match (val > PI) || ((val < 0.0) && (val > -PI)) {
+            true => val - self.0.eccen,
+            false => val + self.0.eccen,
+        };
+        loop {
+            let de =
+                self.0.eccen.mul_add(ea.sin(), val - ea) / self.0.eccen.mul_add(-ea.cos(), 1.0);
+            ea += de;
+            if de.abs() < 1.0e-6 {
+                break;
+            }
+        }
+        // Then convert eccentric to true
+        self.0.nu = f64::atan2(
+            ea.sin() * self.0.eccen.mul_add(-self.0.eccen, 1.0).sqrt(),
+            ea.cos() - self.0.eccen,
+        );
     }
 
     /// Return the true anomaly of the satellite in radians

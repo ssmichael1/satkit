@@ -16,8 +16,6 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
     /// First Same as Last
     /// (first compute of next iteration is same as last compute of last iteration)
-    /// (I haven't implemented this yet...)
-    #[allow(dead_code)]
     const FSAL: bool;
 
     fn interpolate<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
@@ -238,15 +236,25 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             }),
         };
 
+        // For FSAL methods, cache the last k evaluation
+        let mut k_last: Option<S> = None;
+
         // OK ... lets integrate!
         loop {
             if (tdir > 0.0 && (x + h) >= stop) || (tdir < 0.0 && (x + h) <= stop) {
                 h = stop - x;
             }
             let mut karr = Vec::with_capacity(N);
-            karr.push(ydot(x, &y)?);
 
-            // Create the "k"s
+            // Use FSAL optimization: reuse last stage from previous step as first stage
+            if Self::FSAL && k_last.is_some() {
+                karr.push(k_last.take().unwrap());
+            } else {
+                karr.push(ydot(x, &y)?);
+                nevals += 1;
+            }
+
+            // Create the remaining "k"s
             for k in 1..N {
                 karr.push(ydot(
                     h.mul_add(Self::C[k], x),
@@ -254,6 +262,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                         acc + ki.clone() * Self::A[k][idx] * h
                     })),
                 )?);
+                nevals += 1;
             }
 
             // Sum the "k"s
@@ -285,7 +294,6 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 let ydiv = yerr.ode_elem_div(&ymax);
                 ydiv.ode_scaled_norm()
             };
-            nevals += N;
 
             if !enorm.is_finite() {
                 return ODEError::StepErrorToSmall.into();
@@ -310,8 +318,13 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                     let astep = accepted_steps.as_mut().unwrap();
                     astep.x.push(x);
                     astep.h.push(h);
-                    astep.yprime.push(karr);
+                    astep.yprime.push(karr.clone());
                     astep.y.push(y.clone());
+                }
+
+                // For FSAL methods, save the last k for next iteration
+                if Self::FSAL {
+                    k_last = Some(karr[N - 1].clone());
                 }
 
                 // Adjust step size
@@ -325,6 +338,10 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                     break;
                 }
             } else {
+                // Step rejected - invalidate cached k for FSAL
+                if Self::FSAL {
+                    k_last = None;
+                }
                 nreject += 1;
                 h /= f64::min(1.0 / settings.minfac, q11 / settings.gamma);
             }

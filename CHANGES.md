@@ -126,3 +126,15 @@
 ## Rust 0.8.2
   - Cleanup of referencing of nalgebra types: commonly used aliases are now all referenced from mathtypes.rs
   - Improve documentation
+
+
+## Python 0.8.3
+  - Use pyo3 0.27.1 (transparent to user but annoying API updates)
+  - add typing for property setters that were left out of python bindings (e.g., propsettings)
+  - Allow user to set values for kepler object following object creation
+
+## Rust 0.8.3, Python 0.8.4
+  - Fix small python typing bugs to allow setting of properties without errors
+  - add additional option for RK integrator
+  - Add functions for phase of moon & fraction of moon illuminated
+  - typo corrections in code

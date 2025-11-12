@@ -2,7 +2,7 @@
 
 **A comprehensive, high-performance satellite astrodynamics library combining the speed of Rust with the convenience of Python.**
 
-Satkit provides industrial-grade satellite orbital mechanics calculations with a clean, intuitive API. Built from the ground up in Rust for maximum performance and memory safety, it offers complete Python bindings for all functionality, making advanced orbital mechanics accessible to both systems programmers and data scientists.
+Satkit provides robust, high-performance satellite orbital mechanics calculations with a clean, intuitive API. Built from the ground up in Rust for maximum performance and memory safety, it offers complete Python bindings for all functionality, making advanced orbital mechanics accessible to both systems programmers and data scientists.
 
 ----- 
 
@@ -27,7 +27,7 @@ Satkit provides industrial-grade satellite orbital mechanics calculations with a
 - **Python**: Comprehensive Python bindings via PyO3, combining Rust performance with Python convenience
   - Install with `pip install satkit`
   - Binary packages available for Windows, macOS (Intel & ARM), and Linux (x86_64 & ARM64)
-  - Python versions 3.8 through 3.13 supported
+  - Python versions 3.8 through 3.14 supported
   - Full documentation at <https://satellite-toolkit.readthedocs.io/latest/>
 
 ## Key Capabilities
@@ -86,6 +86,11 @@ Comprehensive support for all standard astronomical time scales:
 - **Geodesic Calculations**: Accurate distance and azimuth between ground locations using Vincenty's formulae
 - **Coordinate Conversions**: ITRF ↔ Geodetic ↔ East-North-Up ↔ North-East-Down
 - **Elevation/Azimuth**: Topocentric coordinate transformations for ground station analysis
+
+### Sun / Moon Calculations
+- **Sun rise / set**: Compute sun rise / set times as function of day & location
+- **Moon Phase**: Phase of moon and fraction illuminated
+- **Ephemeris**: Fast low-precision ephemeris for sun & moon
 
 ## Technical Details
 
@@ -219,7 +224,7 @@ Pre-built binary wheels are available for:
 - **Windows**: AMD64
 - **macOS**: Intel (x86_64) and Apple Silicon (ARM64)  
 - **Linux**: x86_64 and ARM64 (aarch64)
-- **Python versions**: 3.8, 3.9, 3.10, 3.11, 3.12, 3.13
+- **Python versions**: 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14
 
 ### Initial Setup
 

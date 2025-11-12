@@ -26,6 +26,8 @@ pub use rk_adaptive::RKAdaptive;
 pub use rk_adaptive_settings::RKAdaptiveSettings;
 
 pub mod solvers {
+    #[allow(unused)]
+    pub use super::adaptive_solvers::RKV98Efficient;
     pub use super::adaptive_solvers::RKV98NoInterp;
     #[allow(unused)]
     pub use super::adaptive_solvers::RKF45;
