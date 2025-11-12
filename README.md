@@ -89,7 +89,8 @@ Comprehensive support for all standard astronomical time scales:
 
 ### Sun / Moon Calculations
 - **Sun rise / set**: Compute sun rise / set times as function of day & location
-- **Moon rise /set**: Compute moon rise / set times as function of day & location
+- **Moon Phase**: Phase of moon and fraction illuminated
+- **Ephemeris**: Fast low-precision ephemeris for sun & moon
 
 ## Technical Details
 
