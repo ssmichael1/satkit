@@ -28,6 +28,38 @@ pub fn pos_gcrf(time: &Instant) -> Vector3 {
     crate::frametransform::qmod2gcrf(time) * pos_mod(time)
 }
 
+/// Ecliptic longitude of the sun at given time
+///
+/// # Arguments
+///
+/// * `time` - Instant at which to compute sun ecliptic longitude
+///
+/// Returns:
+///
+/// * Ecliptic longitude of sun, radians
+///
+/// # Notes
+///
+/// See Vallado Algorithm 29
+///
+pub fn ecliptic_longitude(time: &Instant) -> f64 {
+    // Julian centuries since Jan 1, 2000 12pm
+    let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
+
+    // mean anomaly
+    #[allow(non_snake_case)]
+    let M: f64 = (35999.05034f64.mul_add(t, 357.529102)).to_radians();
+
+    let lambda_m: f64 = (36000.771f64.mul_add(t, 280.46)).to_radians();
+
+    let lon: f64 = 0.019994643f64.mul_add(
+        f64::sin(2.0 * M),
+        1.914666471f64.mul_add(f64::sin(M), lambda_m.to_degrees()),
+    );
+
+    lon.to_radians() % (2.0 * std::f64::consts::PI)
+}
+
 ///
 /// Sun position in the Mean-of-Date (MOD) Frame
 ///
@@ -270,6 +302,19 @@ mod tests {
             // as described by Vallado
             assert!(err < 5e-4);
         }
+    }
+
+    #[test]
+    fn test_ecliptic_longitude() {
+        // Example 5-1 in Vallado
+        let t0: Instant = Instant::from_date(2006, 4, 2).unwrap();
+        // Approximate this UTC as TDB to match example...
+        let t = Instant::from_mjd_with_scale(t0.as_mjd(), TimeScale::TDB);
+
+        let lambda = ecliptic_longitude(&t);
+        let lambda_deg = lambda.to_degrees();
+        let ref_lambda_deg = 12.114404; // Vallado example
+        approx::assert_abs_diff_eq!(lambda_deg, ref_lambda_deg, epsilon = 0.5);
     }
 
     #[test]

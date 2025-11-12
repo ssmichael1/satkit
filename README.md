@@ -2,7 +2,7 @@
 
 **A comprehensive, high-performance satellite astrodynamics library combining the speed of Rust with the convenience of Python.**
 
-Satkit provides industrial-grade satellite orbital mechanics calculations with a clean, intuitive API. Built from the ground up in Rust for maximum performance and memory safety, it offers complete Python bindings for all functionality, making advanced orbital mechanics accessible to both systems programmers and data scientists.
+Satkit provides robust, high-performance satellite orbital mechanics calculations with a clean, intuitive API. Built from the ground up in Rust for maximum performance and memory safety, it offers complete Python bindings for all functionality, making advanced orbital mechanics accessible to both systems programmers and data scientists.
 
 ----- 
 
@@ -27,7 +27,7 @@ Satkit provides industrial-grade satellite orbital mechanics calculations with a
 - **Python**: Comprehensive Python bindings via PyO3, combining Rust performance with Python convenience
   - Install with `pip install satkit`
   - Binary packages available for Windows, macOS (Intel & ARM), and Linux (x86_64 & ARM64)
-  - Python versions 3.8 through 3.13 supported
+  - Python versions 3.8 through 3.14 supported
   - Full documentation at <https://satellite-toolkit.readthedocs.io/latest/>
 
 ## Key Capabilities
@@ -86,6 +86,10 @@ Comprehensive support for all standard astronomical time scales:
 - **Geodesic Calculations**: Accurate distance and azimuth between ground locations using Vincenty's formulae
 - **Coordinate Conversions**: ITRF ↔ Geodetic ↔ East-North-Up ↔ North-East-Down
 - **Elevation/Azimuth**: Topocentric coordinate transformations for ground station analysis
+
+### Sun / Moon Calculations
+- **Sun rise / set**: Compute sun rise / set times as function of day & location
+- **Moon rise /set**: Compute moon rise / set times as function of day & location
 
 ## Technical Details
 

@@ -13,9 +13,15 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 ### Setting Up Your Development Environment
 
 1. **Fork and clone the repository**:
+   - First, fork the repository on GitHub by clicking the "Fork" button at [github.com/ssmichael1/satkit](https://github.com/ssmichael1/satkit)
+   - Then clone your fork:
    ```bash
-   git clone https://github.com/ssmichael1/satkit.git
+   git clone https://github.com/YOUR-USERNAME/satkit.git
    cd satkit
+   ```
+   - Add the original repository as an upstream remote:
+   ```bash
+   git remote add upstream https://github.com/ssmichael1/satkit.git
    ```
 
 2. **Download test vectors and data files**:
@@ -79,7 +85,7 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 - Follow [PEP 8](https://pep8.org/) style guidelines
 - Provide type hints in `.pyi` stub files for IDE support
 - Include docstrings for all public functions and classes
-- Test Python bindings separately when making changes
+- Test Python bindings separately when making changes ; see `python/test/test.py`
 
 ### Testing
 
@@ -177,13 +183,6 @@ cargo test ode::ode_tests
 
 ```bash
 cargo test -- --nocapture
-```
-
-### Python Tests
-
-```bash
-# After building with maturin develop
-pytest python/test/test.py
 ```
 
 ## Continuous Integration

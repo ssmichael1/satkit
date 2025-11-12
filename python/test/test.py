@@ -465,6 +465,42 @@ class TestMoon:
         ref_pos = np.array([-134240.626e3, -311571.590e3, -126693.785e3])
         assert p == pytest.approx(ref_pos)
 
+    def test_moon_phase(self):
+        # Checked against https://www.timeanddate.com/moon/phases/
+        t = sk.time(2025, 11, 12, 0, 46, 0)
+        phasename = sk.moon.phase_name(t)
+        assert phasename == sk.moon.moonphase.LastQuarter
+        illumination = sk.moon.illumination(t)
+        assert illumination == pytest.approx(0.52, rel=1e-2)
+
+    def test_moon_phase_name(self):
+        """
+        Test moon phase name function
+        against known moon phases in early 2024
+
+        phases compared against results from https://www.moongiant.com/
+        """
+
+        # New moon - Jan 11 2024
+        t_new = sk.time(2024, 1, 11, 17, 8, 0)
+        phase_new = sk.moon.phase_name(t_new)
+        assert phase_new == sk.moon.moonphase.NewMoon
+
+        # First quarter - Jan 18 2024
+        t_first = sk.time(2024, 1, 18, 12, 0, 0)
+        phase_first = sk.moon.phase_name(t_first)
+        assert phase_first == sk.moon.moonphase.FirstQuarter
+
+        # Full moon - Jan 25 2024
+        t_full = sk.time(2024, 1, 25, 4, 54, 0)
+        phase_full = sk.moon.phase_name(t_full)
+        assert phase_full == sk.moon.moonphase.FullMoon
+
+        # Last quarter - Feb 2 2024
+        t_last = sk.time(2024, 2, 2, 2, 0, 0)
+        phase_last = sk.moon.phase_name(t_last)
+        assert phase_last == sk.moon.moonphase.LastQuarter
+
 
 class TestSun:
     def test_sunpos_mod(self):
