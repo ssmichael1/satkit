@@ -163,7 +163,7 @@ impl From<PyTimeScale> for TimeScale {
 ///     hour (int): Hour of day, in range [0,23] (optional), default is 0
 ///     min (int): Minute of hour, in range [0,59] (optional), default is 0
 ///     sec (float): floating point second of minute, in range [0,60) (optional), defialt is 0
-///     scale (satkit.timescale): Time scale (optional), default is satkit.timescale.UTC    
+///     scale (satkit.timescale): Time scale (optional), default is satkit.timescale.UTC
 ///
 /// Returns:
 ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
@@ -407,7 +407,7 @@ impl PyInstant {
     ///     scale (satkit.timescale): The time scale
     ///
     /// Returns:
-    ///     satkit.time: Time object representing instant of modified julian date with given scale    
+    ///     satkit.time: Time object representing instant of modified julian date with given scale
     #[staticmethod]
     fn from_mjd(mjd: f64, scale: &PyTimeScale) -> Self {
         Self(Instant::from_mjd_with_scale(mjd, scale.into()))
@@ -754,7 +754,7 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time: Time object representing input time plus given number of days
-    ///  
+    ///
     /// Note:
     ///
     /// A UTC days is defined as being exactly 86400 seconds long.  This
@@ -773,8 +773,8 @@ impl PyInstant {
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
         let d = PyDict::new(py);
-        d.set_item("empty", true).unwrap();
-        (PyTuple::empty(py), d)
+        let tp = PyTuple::empty(py);
+        (tp, d)
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {

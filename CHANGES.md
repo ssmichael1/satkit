@@ -87,7 +87,7 @@
 
 
 ## Python 0.8.0.  Rust 0.8.0
-  
+
 ### TLE export to lines
   - functions for generating 69-character TLE lines from a TLE object
 
@@ -122,7 +122,7 @@
 
 ## Rust 0.8.1
   - Remove un-used dependencies
-  
+
 ## Rust 0.8.2
   - Cleanup of referencing of nalgebra types: commonly used aliases are now all referenced from mathtypes.rs
   - Improve documentation
@@ -138,3 +138,8 @@
   - add additional option for RK integrator
   - Add functions for phase of moon & fraction of moon illuminated
   - typo corrections in code
+
+## Rust 0.8.4, Python 0.8.5
+  - Add "x", "y", "z", "w" property getters to quaternion in python
+  - Add pickle serialize/deserialize tests in python testing
+  - allow for duration division by float and by other duration in python
