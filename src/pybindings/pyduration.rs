@@ -196,6 +196,34 @@ impl PyDuration {
         Self(Duration::from_seconds(self.0.as_seconds() * other))
     }
 
+    fn __truediv__(&self, other: &Bound<'_, PyAny>) ->PyResult<Py<PyAny>> {
+        if other.is_instance_of::<Self>() {
+            let dur = other
+                .extract::<Self>()
+                .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
+            pyo3::Python::attach(|py| (self.0.as_seconds() / dur.0.as_seconds()).into_py_any(py))
+        }
+        else if other.is_instance_of::<pyo3::types::PyFloat>() {
+            let scalar = other
+                .extract::<f64>()
+                .map_err(|e| anyhow::anyhow!("Invalid scalar: {}", e))?;
+            pyo3::Python::attach(|py|
+                PyDuration(
+                    Duration::from_seconds(self.0.as_seconds() / scalar)
+                ).into_py_any(py)
+            )
+
+        }
+        else {
+            Err(anyhow::anyhow!("Invalid right-hand side").into())
+        }
+    }
+
+    // Python 2 name kept as an alias for compatibility.
+    fn __div__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        self.__truediv__(other)
+    }
+
     // Comparison methods for duration objects
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0

@@ -6,6 +6,7 @@ import os
 from sp3file import read_sp3file
 from datetime import datetime, timezone
 import satkit as sk
+import pickle
 
 testvec_dir = os.getenv(
     "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
@@ -52,6 +53,38 @@ class TestDateTime:
         assert g1 == pytest.approx(g2)
 
 
+class TestPickle:
+
+    def test_time_pickle(self):
+        """
+        Test pickling and unpickling of time objects
+        """
+        t1 = sk.time(2021, 9, 30, 12, 45, 13.345)
+        p = pickle.dumps(t1)
+        t2 = pickle.loads(p)
+        assert t1 == t2
+
+    def test_quaternion_pickle(self):
+        """
+        Test pickling and unpickling of quaternion objects
+        """
+        q1 = sk.quaternion.rotz(m.pi / 4)
+        p = pickle.dumps(q1)
+        q2 = pickle.loads(p)
+        assert q1.x == pytest.approx(q2.x)
+        assert q1.y == pytest.approx(q2.y)
+        assert q1.z == pytest.approx(q2.z)
+        assert q1
+
+    def test_duration_pickle(self):
+        """
+        Test pickling and unpickling of duration objects
+        """
+        d1 = sk.duration.from_days(10)
+        p = pickle.dumps(d1)
+        d2 = pickle.loads(p)
+        assert d1 == d2
+
 class TestTime:
 
     def test_rfc3339(self):
@@ -96,6 +129,13 @@ class TestTime:
         assert d1 != d2 + d1
         assert d1 < d1 + d2
         assert d1 + d2 > d1
+
+        d3 = sk.duration.from_hours(2.0)
+        assert d3.seconds == 7200
+        assert (d3 / 2.0).seconds == 3600
+        d4 = sk.duration.from_hours(1.0)
+        assert d3 / d4 == 2.0
+
 
     def test_comparison_operators(self):
 
