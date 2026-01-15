@@ -1393,6 +1393,36 @@ class duration:
             Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
         """
 
+    @typing.overload
+    def __truediv__(self, other: float) -> duration:
+        """Divide (or scale) duration by given value
+
+        Args:
+            other (float): value by which to divide duration
+
+        Returns:
+            duration: Duration object representing the input duration divided by the input value
+
+        Example:
+            >>> print(duration.from_days(1) / 2)
+            Duration: 12 hours, 0 minutes, 0.000 seconds
+        """
+
+    @typing.overload
+    def __truediv__(self, other: duration) -> float:
+        """Divide (or scale) duration by another duration to get a dimensionless ratio
+
+        Args:
+            other (duration): duration by which to divide current duration
+
+        Returns:
+            float: Dimensionless ratio of the two durations
+
+        Example:
+            >>> print(duration.from_hours(1) / duration.from_minutes(30))
+            2.0
+        """
+
     def __gt__(self, other: duration) -> bool:
         """Compare two durations for greater than
 
@@ -1648,6 +1678,39 @@ class quaternion:
         Returns:
             satkit.quaternion: Conjugate or inverse of the rotation
         """
+
+    @property
+    def x(self) -> float:
+        """X component of the quaternion
+
+        Returns:
+            float: X component of the quaternion
+        """
+
+    @property
+    def y(self) -> float:
+        """Y component of the quaternion
+
+        Returns:
+            float: Y component of the quaternion
+        """
+
+    @property
+    def z(self) -> float:
+        """Z component of the quaternion
+
+        Returns:
+            float: Z component of the quaternion
+        """
+
+    @property
+    def w(self) -> float:
+        """Scalar component of the quaternion
+
+        Returns:
+            float: Scalar component of the quaternion
+        """
+
 
     @typing.overload
     def __mul__(self, other: quaternion) -> quaternion:

@@ -22,7 +22,7 @@ use anyhow::{bail, Result};
 /// the way it should be done.
 ///
 /// For the uninitiated: quaternions are a more-compact and
-/// computationally efficient way of representing 3D rotations.  
+/// computationally efficient way of representing 3D rotations.
 /// They can also be multipled together and easily renormalized to
 /// avoid problems with floating-point precision eventually causing
 /// changes in the rotated vecdtor norm.
@@ -93,7 +93,7 @@ impl PyQuaternion {
     /// Notes:
     ///     This is a right-handed rotation of the vector
     ///     e.g. rotation of +xhat by +yhat 90 degrees gives -zhat
-    ///     
+    ///
     #[staticmethod]
     fn roty(theta_rad: f64) -> Result<Self> {
         Ok(Quaternion::from_axis_angle(&Vector3::y_axis(), theta_rad).into())
@@ -115,7 +115,7 @@ impl PyQuaternion {
     /// Returns:
     ///     quaternion: Quaternion representing rotation about given axis by given angle.  If axis norm is < 1e-9,
     ///     unit quaternion is returned
-    ///     
+    ///
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> Result<Self> {
         let v = Vector3::from_row_slice(axis.as_slice()?);
@@ -298,6 +298,26 @@ impl PyQuaternion {
         self.0.conjugate().into()
     }
 
+    #[getter]
+    fn x(&self) -> f64 {
+        self.0.i
+    }
+
+    #[getter]
+    fn y(&self) -> f64 {
+        self.0.j
+    }
+
+    #[getter]
+    fn z(&self) -> f64 {
+        self.0.k
+    }
+
+    #[getter]
+    fn w(&self) -> f64 {
+        self.0.w
+    }
+
     /// Spherical linear interpolation between self and other quaternion
     ///
     /// Args:
@@ -306,7 +326,7 @@ impl PyQuaternion {
     ///     epsilon (float): Value below which the sin of the angle separating both quaternion must be to return an error.  Default is 1.0e-6
     ///
     /// Returns:
-    ///     quaternion: Quaterion represention fracional spherical interpolation between self and other    
+    ///     quaternion: Quaterion represention fracional spherical interpolation between self and other
     #[pyo3(signature=(other, frac,  epsilon=1.0e-6))]
     fn slerp(&self, other: &Self, frac: f64, epsilon: f64) -> Result<Self> {
         self.0.try_slerp(&other.0, frac, epsilon).map_or_else(
