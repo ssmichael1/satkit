@@ -1,7 +1,6 @@
 use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
-use crate::tle::TLE;
 use crate::Instant;
 use nalgebra::{Const, Dyn, OMatrix};
 
@@ -77,7 +76,7 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 /// # Arguments
 ///
-/// * `tle` - The TLE on which top operate.  Note that a mutable reference
+/// * `tle` - The TLE (or OMM) on which top operate.  Note that a mutable reference
 ///   is passed, as SGP-4 metadata is stored after each propagation
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience.
@@ -128,8 +127,8 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// ```
 ///
 #[inline]
-pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> anyhow::Result<SGP4State> {
-    sgp4_full(tle, tm, GravConst::WGS84, OpsMode::IMPROVED)
+pub fn sgp4(source: &mut impl SGP4Source, tm: &[Instant]) -> anyhow::Result<SGP4State> {
+    sgp4_full(source, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
 ///

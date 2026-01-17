@@ -143,7 +143,7 @@ where
 ///
 /// See Table 4-1, Table 4-2, Table 4-3 of CCSDS 502.0-B-3
 ///
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct OMM {
     #[serde(rename = "CCSDS_OMM_VERS")] // CCSDS says this is required, but it often is missing
     pub omm_version: Option<String>,

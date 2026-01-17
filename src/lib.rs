@@ -162,6 +162,7 @@ mod ode;
 
 // Orbital Mean-Element Messages
 pub mod omm;
+pub use crate::omm::OMM;
 
 // Time and duration
 mod time;

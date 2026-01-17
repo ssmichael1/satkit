@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyString, PyDateTime};
 use pyo3::IntoPyObjectExt;
 
 use super::pyinstant::ToTimeVec;
@@ -74,6 +74,142 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
     }
 }
 
+/// Convert a Python value to an Instant. can be string, datetime, or PyInstant
+fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<crate::Instant> {
+    if val.is_instance_of::<crate::pybindings::pyinstant::PyInstant>() {
+        let instant: crate::pybindings::pyinstant::PyInstant = val.extract().unwrap();
+        Ok(instant.0)
+    }
+    else if val.is_instance_of::<PyString>() {
+        let s: String = val.extract()?;
+        crate::Instant::from_rfc3339(&s).map_err(|e| {
+            anyhow::anyhow!("Invalid epoch string: {}", e)
+        })
+    }
+    else if val.is_instance_of::<PyDateTime>() {
+        let tm: Py<PyDateTime> = val.extract().unwrap();
+        pyo3::Python::attach(|py| {
+            let ts: f64 = tm
+                .call_method(py, "timestamp", (), None)?
+                .extract::<f64>(py)?;
+            Ok(crate::Instant::from_unixtime(ts))
+        })
+    }
+    else {
+        bail!("Invalid epoch type");
+    }
+}
+
+fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
+    let mut omm = crate::OMM::default();
+
+    omm.inclination = f64::NAN;
+    omm.raan = f64::NAN;
+    omm.eccentricity = f64::NAN;
+    omm.arg_of_pericenter = f64::NAN;
+    omm.mean_anomaly = f64::NAN;
+    omm.mean_motion = f64::NAN;
+    omm.epoch = String::new();
+
+    if let Some(v) = dict.get_item("INCLINATION")? {
+        omm.inclination = v.extract::<f64>()?;
+    }
+    if let Some(v) = dict.get_item("RA_OF_ASC_NODE")? {
+        omm.raan = v.extract::<f64>()?;
+    }
+    if let Some(v) = dict.get_item("ECCENTRICITY")? {
+        omm.eccentricity = v.extract::<f64>()?;
+    }
+    if let Some(v) = dict.get_item("ARG_OF_PERICENTER")? {
+        omm.arg_of_pericenter = v.extract::<f64>()?;
+    }
+    if let Some(v) = dict.get_item("MEAN_ANOMALY")? {
+        omm.mean_anomaly = v.extract::<f64>()?;
+    }
+    if let Some(v) = dict.get_item("MEAN_MOTION")? {
+        omm.mean_motion = v.extract::<f64>()?;
+    }
+    if let Some(v) = dict.get_item("EPOCH")? {
+        omm.epoch = epoch_from_val(&v)?.as_rfc3339();
+    }
+    if let Some(v) = dict.get_item("BSTAR")? {
+        omm.bstar = Some(v.extract::<f64>()?);
+    }
+    if let Some(v) = dict.get_item("MEAN_MOTION_DOT")? {
+        omm.mean_motion_dot = Some(v.extract::<f64>()?);
+    }
+    if let Some(v) = dict.get_item("MEAN_MOTION_DDOT")? {
+        omm.mean_motion_ddot = Some(v.extract::<f64>()?);
+    }
+    if let Some(d) = dict.get_item("meanElements")? {
+        let d = d.cast::<PyDict>().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid MEAN_ELEMENTS dictionary: {}",
+                e
+            ))
+        })?;
+        if let Some(v) = d.get_item("EPOCH")? {
+            omm.epoch = epoch_from_val(&v)?.as_rfc3339();
+        }
+        if let Some(v) = d.get_item("MEAN_MOTION")? {
+            omm.mean_motion = v.extract::<f64>()?;
+        }
+        if let Some(v) = d.get_item("ECCENTRICITY")? {
+            omm.eccentricity = v.extract::<f64>()?;
+        }
+        if let Some(v) = d.get_item("INCLINATION")? {
+            omm.inclination = v.extract::<f64>()?;
+        }
+        if let Some(v) = d.get_item("ARG_OF_PERICENTER")? {
+            omm.arg_of_pericenter = v.extract::<f64>()?;
+        }
+        if let Some(v) = d.get_item("RA_OF_ASC_NODE")? {
+            omm.raan = v.extract::<f64>()?;
+        }
+    }
+    if let Some(d) = dict.get_item("tleParameters")? {
+        let d = d.cast::<PyDict>().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid TLE_PARAMETERS dictionary: {}",
+                e
+            ))
+        })?;
+        if let Some(v) = d.get_item("BSTAR")? {
+            omm.bstar = Some(v.extract::<f64>()?);
+        }
+        if let Some(v) = d.get_item("MEAN_MOTION_DOT")? {
+            omm.mean_motion_dot = Some(v.extract::<f64>()?);
+        }
+        if let Some(v) = d.get_item("MEAN_MOTION_DDOT")? {
+            omm.mean_motion_ddot = Some(v.extract::<f64>()?);
+        }
+    }
+    if omm.epoch.is_empty() {
+        bail!("OMM epoch is required");
+    }
+    if omm.mean_motion.is_nan() {
+        bail!("OMM mean motion is required");
+    }
+    if omm.eccentricity.is_nan() {
+        bail!("OMM eccentricity is required");
+    }
+    if omm.inclination.is_nan() {
+        bail!("OMM inclination is required");
+    }
+    if omm.arg_of_pericenter.is_nan() {
+        bail!("OMM argument of pericenter is required");
+    }
+    if omm.raan.is_nan() {
+        bail!("OMM RA of ascending node is required");
+    }
+    if omm.mean_anomaly.is_nan() {
+        bail!("OMM mean anomaly is required");
+    }
+
+    Ok(omm)
+}
+
+
 /// """SGP-4 propagator for TLE
 ///
 /// Note:
@@ -133,6 +269,8 @@ pub fn sgp4(
     let mut output_err = false;
     let mut opsmode: OpsMode = OpsMode::afspc;
     let mut gravconst: GravConst = GravConst::wgs72;
+
+    // Get keywords for the mode, gravconst, and errflag
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("errflag")? {
             output_err = v.extract::<bool>()?;
@@ -148,6 +286,8 @@ pub fn sgp4(
             })?;
         }
     }
+
+    // Handle input as TLE
     if tle.is_instance_of::<PyTLE>() {
         let mut stle: PyRefMut<PyTLE> = tle
             .extract()
@@ -188,16 +328,76 @@ pub fn sgp4(
                     .into_py_any(py)?)
             }
         })
-    } else if tle.is_instance_of::<PyList>() {
-        let mut tles = tle.extract::<Vec<PyRefMut<PyTLE>>>()?;
+    }
+    // Handle input as dict
+    else if tle.is_instance_of::<PyDict>() {
+        let dict: &Bound<'_, PyDict> = tle.cast().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE dictionary: {}", e))
+        })?;
+        let mut omm = omm_from_pydict(dict)?;
+
+        let states = psgp4::sgp4_full(
+            &mut omm,
+            time.to_time_vec()?.as_slice(),
+            gravconst.into(),
+            opsmode.into(),
+        )?;
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
+            let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
+                vec![states.pos.ncols(), states.pos.nrows()]
+            } else {
+                vec![states.pos.len()]
+            };
+
+            // Note: this is a little confusing: ndarray uses
+            // row major, nalgebra and numpy use column major,
+            // hence the switch
+            if !output_err {
+                Ok((
+                    PyArray1::from_slice(py, states.pos.data.as_slice())
+                        .reshape(dims.clone())?
+                        .into_py_any(py)?,
+                    PyArray1::from_slice(py, states.vel.data.as_slice())
+                        .reshape(dims)?
+                        .into_py_any(py)?,
+                )
+                    .into_py_any(py)?)
+            } else {
+                let eint: Vec<i32> = states.errcode.iter().map(|x| x.clone() as i32).collect();
+                Ok((
+                    PyArray1::from_slice(py, states.pos.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, states.vel.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, eint.as_slice()),
+                )
+                    .into_py_any(py)?)
+            }
+        })
+    }
+    else if tle.is_instance_of::<PyList>() {
+        let plist = tle.cast::<PyList>().unwrap();
         let tmarray = time.to_time_vec()?;
-        let results: Vec<psgp4::SGP4State> = tles
-            .iter_mut()
-            .map(|tle| psgp4::sgp4(&mut tle.0, tmarray.as_slice()))
-            .collect::<Result<Vec<_>>>()?;
+        let results: Vec<psgp4::SGP4State> = plist.iter().map(|item| {
+            if item.is_instance_of::<PyTLE>() {
+                let mut stle: PyRefMut<PyTLE> = item
+                    .extract()
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e)))?;
+                psgp4::sgp4(&mut stle.0, tmarray.as_slice())
+            }
+            else if item.is_instance_of::<PyDict>() {
+                let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE dictionary: {}", e))
+                })?;
+                let mut omm = omm_from_pydict(dict)?;
+                psgp4::sgp4(&mut omm, tmarray.as_slice())
+            }
+            else {
+                bail!("Invalid TLE in list");
+            }
+        }).collect::<Result<Vec<_>>>()?;
+
 
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            let n = tles.len() * tmarray.len() * 3;
+            let n = plist.len() * tmarray.len() * 3;
 
             let parr = PyArray1::zeros(py, [n], false);
             let varr = PyArray1::zeros(py, [n], false);
@@ -211,7 +411,7 @@ pub fn sgp4(
                 PySGP4Error::success.into_py(py),
             );
             */
-            let mut eint = vec![0; ntimes * tle.len()?];
+            let mut eint = vec![0; ntimes * plist.len()];
 
             results.iter().enumerate().for_each(|(idx, states)| {
                 unsafe {
@@ -242,17 +442,17 @@ pub fn sgp4(
             });
 
             // Set dimensions of output to remove singleton dimensions
-            let dims = match (tles.len() > 1, ntimes > 1) {
-                (true, true) => vec![tles.len(), ntimes, 3],
-                (true, false) => vec![tles.len(), 3],
+            let dims = match (plist.len() > 1, ntimes > 1) {
+                (true, true) => vec![plist.len(), ntimes, 3],
+                (true, false) => vec![plist.len(), 3],
                 (false, true) => vec![ntimes, 3],
                 (false, false) => vec![3],
             };
             // Dims for error output
 
-            let edims = match (tles.len() > 1, ntimes > 1) {
-                (true, true) => vec![tles.len(), ntimes],
-                (true, false) => vec![tles.len()],
+            let edims = match (plist.len() > 1, ntimes > 1) {
+                (true, true) => vec![plist.len(), ntimes],
+                (true, false) => vec![plist.len()],
                 (false, true) => vec![ntimes],
                 (false, false) => vec![1],
             };
