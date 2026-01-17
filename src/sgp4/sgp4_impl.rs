@@ -2,7 +2,7 @@ use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
 use crate::tle::TLE;
-use crate::{Instant, TimeScale};
+use crate::Instant;
 use nalgebra::{Const, Dyn, OMatrix};
 
 use thiserror::Error;
@@ -56,9 +56,7 @@ type StateArr = OMatrix<f64, Const<3>, Dyn>;
 pub type SGP4State = (StateArr, StateArr, Vec<SGP4Error>);
 pub type SGP4Result = Result<SGP4State, (SGP4Error, usize)>;
 
-use std::f64::consts::PI;
-
-use super::{GravConst, OpsMode};
+use super::{GravConst, OpsMode, SGP4Source};
 
 ///
 /// Run Simplified General Perturbations (SGP)-4 propagator on
@@ -96,7 +94,7 @@ use super::{GravConst, OpsMode};
 /// ```
 /// // Compute the Geodetic position of a satellite at
 /// // the TLE epoch time
-///     
+///
 /// use satkit::TLE;
 /// use satkit::sgp4::{sgp4, GravConst, OpsMode};
 /// use satkit::frametransform::qteme2itrf;
@@ -141,8 +139,9 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 ///
 /// # Arguments
 ///
-/// * `tle` - The TLE on which top operate.  Note that a mutable reference
-///   is passed, as SGP-4 metadata is stored after each propagation
+/// * `SGP4Source` - The source of SGP4 data, typically a TLE but could be a
+///    orbital mean-elements message (OMM) or other source implementing the
+///   SGP4Source trait
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience.
 ///
@@ -163,7 +162,7 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 /// ```
 /// // Compute the Geodetic position of a satellite at
 /// // the TLE epoch time
-///     
+///
 /// use satkit::TLE;
 /// use satkit::sgp4::{sgp4_full, GravConst, OpsMode};
 /// use satkit::frametransform::qteme2itrf;
@@ -194,41 +193,39 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 /// ```
 ///
 pub fn sgp4_full(
-    tle: &mut TLE,
+    source: &mut impl SGP4Source,
     tm: &[Instant],
     gravconst: GravConst,
     opsmode: OpsMode,
 ) -> SGP4State {
-    const TWOPI: f64 = PI * 2.0;
-
-    if tle.satrec.is_none() {
-        let no = tle.mean_motion / (1440.0 / TWOPI);
-        let bstar = tle.bstar;
-        let ndot = tle.mean_motion_dot / (1440.0 * 1440.0 / TWOPI);
-        let nddot = tle.mean_motion_dot_dot / (1440.0 * 1440.0 * 1440.0 / TWOPI);
-        let inclo = tle.inclination.to_radians();
-        let nodeo = tle.raan.to_radians();
-        let argpo = tle.arg_of_perigee.to_radians();
-        let mo = tle.mean_anomaly.to_radians();
-        let ecco = tle.eccen;
-        let jdsatepoch = tle.epoch.as_jd_with_scale(TimeScale::UTC);
+    if source.satrec_mut().is_none() {
+        let args = match source.sgp4_init_args() {
+            Ok(a) => a,
+            Err(_e) => {
+                let n = tm.len();
+                let rarr = StateArr::zeros(n);
+                let varr = StateArr::zeros(n);
+                let earr = Vec::<SGP4Error>::from_iter((0..n).map(|_x| SGP4Error::SGP4ErrorUnused));
+                return (rarr, varr, earr);
+            }
+        };
 
         match sgp4init(
             gravconst,
             opsmode,
             "satno",
-            jdsatepoch - 2433281.5,
-            bstar,
-            ndot,
-            nddot,
-            ecco,
-            argpo,
-            inclo,
-            mo,
-            no,
-            nodeo,
+            args.jdsatepoch - 2433281.5,
+            args.bstar,
+            args.ndot,
+            args.nddot,
+            args.ecco,
+            args.argpo,
+            args.inclo,
+            args.mo,
+            args.no,
+            args.nodeo,
         ) {
-            Ok(sr) => tle.satrec = Some(sr),
+            Ok(sr) => *source.satrec_mut() = Some(sr),
             Err(e) => {
                 let n = tm.len();
 
@@ -240,7 +237,8 @@ pub fn sgp4_full(
         }
     }
 
-    let s = tle.satrec.as_mut().unwrap();
+    let epoch = source.epoch();
+    let s = source.satrec_mut().as_mut().expect("satrec initialized");
 
     let n = tm.len();
     let mut rarr = StateArr::zeros(n);
@@ -248,7 +246,7 @@ pub fn sgp4_full(
     let mut earr = Vec::<SGP4Error>::with_capacity(n);
 
     for (pos, thetime) in tm.iter().enumerate() {
-        let tsince = (*thetime - tle.epoch).as_days() * 1440.0;
+        let tsince = (*thetime - epoch).as_days() * 1440.0;
 
         match sgp4_lowlevel(s, tsince) {
             Ok((r, v)) => {
