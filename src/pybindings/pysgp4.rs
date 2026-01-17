@@ -449,7 +449,7 @@ pub fn sgp4(
                         ntimes * 3,
                     );
                     if output_err {
-                        let evals = states.errcode.iter().map(|x| x.clone() as i32).collect::<Vec<i32>>();
+                        let evals = states.errcode.iter().map(|&x| x as i32).collect::<Vec<i32>>();
                         std::ptr::copy_nonoverlapping(
                             evals.as_ptr(),
                             eint.as_mut_ptr().add(idx * ntimes),
