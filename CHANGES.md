@@ -146,4 +146,6 @@
 
 ## Rust 0.9.0, Python 0.9.0
   - Support Orbital Mean-Element Messages (OMM) in JSON format
+  - Add OMM documentation, tests, and python example
   - Structured output of SGP4 propagator in rust
+
