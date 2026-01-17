@@ -28,8 +28,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PropagationResult<const T: usize> {
-    pub time_start: Instant,
-    pub state_start: Matrix<6, T>,
+    pub time_begin: Instant,
+    pub state_begin: Matrix<6, T>,
     pub time_end: Instant,
     pub state_end: Matrix<6, T>,
     pub accepted_steps: u32,
@@ -78,8 +78,8 @@ pub enum PropagationError {
 //
 
 ///
-/// High-precision Propagation a satellite state from a given start time
-/// to a given stop time, with input settings and
+/// High-precision Propagation a satellite state from a given begin time
+/// to a given end time, with input settings and
 /// satellite properties
 ///
 /// Uses Runga-kutta methods for integrating the force equations
@@ -110,9 +110,9 @@ pub enum PropagationError {
 ///      The state transition matrix should be initialized to identity when running
 ///      The output of the state transition matrix can be used to compute the evolution of the
 ///      state covariance  (see Montenbruck and Gill for details)
-///  * `start` - The time at the initial state
-///  * `stop` - The time at which to propagate for computing new states
-///  * `step_seconds` - An optional value representing intervals between `start` and `stop` at which
+///  * `begin` - The time at the initial state
+///  * `end` - Propagate to this time from the begin
+///  * `step_seconds` - An optional value representing intervals between `begin` and `end` at which
 ///    the new state will be computed
 ///  * `settings` - Settings for the Runga-Kutta propagator
 ///  * `satprops` - Properties of the satellite, such as ballistic coefficient & susceptibility to
@@ -137,13 +137,13 @@ pub enum PropagationError {
 /// settings.rel_error = 1.0e-14;
 /// settings.gravity_order = 4;
 ///
-/// // Pick an arbitrary start time
-/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
+/// // Pick an arbitrary begin time
+/// let begintime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
 /// // Propagate to 1/2 day ahead
-/// let stoptime = starttime + satkit::Duration::from_days(0.5);
+/// let endtime = begintime + satkit::Duration::from_days(0.5);
 ///
 /// // Look at the results
-/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();
+/// let res = satkit::orbitprop::propagate(&state, &begintime, &endtime, &settings, None).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// // Expect:
@@ -175,13 +175,13 @@ pub enum PropagationError {
 /// settings.rel_error = 1.0e-14;
 /// settings.gravity_order = 4;
 ///
-/// // Pick an arbitrary start time
-/// let starttime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
+/// // Pick an arbitrary begin time
+/// let begintime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
 /// // Propagate to 1/2 day ahead
-/// let stoptime = starttime + satkit::Duration::from_days(0.5);
+/// let endtime = begintime + satkit::Duration::from_days(0.5);
 ///
 /// // Look at the results
-/// let res = satkit::orbitprop::propagate(&state, &starttime, &stoptime, &settings, None).unwrap();
+/// let res = satkit::orbitprop::propagate(&state, &begintime, &endtime, &settings, None).unwrap();
 ///
 /// println!("results = {:?}", res);
 /// ```
@@ -189,13 +189,13 @@ pub enum PropagationError {
 ///
 pub fn propagate<const C: usize>(
     state: &StateType<C>,
-    start: &Instant,
-    stop: &Instant,
+    begin: &Instant,
+    end: &Instant,
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
 ) -> Result<PropagationResult<C>> {
     // Duration to end of integration, in seconds
-    let x_end: f64 = (*stop - *start).as_seconds();
+    let x_end: f64 = (*end - *begin).as_seconds();
 
     let odesettings = crate::ode::RKAdaptiveSettings {
         abserror: settings.abs_error,
@@ -207,28 +207,28 @@ pub fn propagate<const C: usize>(
     // Get or create data for interpolation
     let interp: &Precomputed = {
         if let Some(sinterp) = &settings.precomputed {
-            if stop > start {
-                if (*start >= sinterp.start) && (*stop <= sinterp.stop) {
+            if end > begin {
+                if (*begin >= sinterp.begin) && (*end <= sinterp.end) {
                     sinterp
                 } else {
-                    &Precomputed::new(start, stop)
+                    &Precomputed::new(begin, end)
                         .context("Cannot compute precomputed interpolation data for propagation")?
                 }
-            } else if (*stop >= sinterp.start) && (*start <= sinterp.stop) {
+            } else if (*end >= sinterp.begin) && (*begin <= sinterp.end) {
                 sinterp
             } else {
-                &Precomputed::new(start, stop)
+                &Precomputed::new(begin, end)
                     .context("Cannot compute precomputed interpolation data for propagation")?
             }
         } else {
-            &Precomputed::new(start, stop)
+            &Precomputed::new(begin, end)
                 .context("Cannot compute precomputed interpolation dat for propagation")?
         }
     };
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
         // The time variable in the ODE is in seconds
-        let time: Instant = *start + Duration::from_seconds(x);
+        let time: Instant = *begin + Duration::from_seconds(x);
 
         // get GCRS position & velocity;
         let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
@@ -403,9 +403,9 @@ pub fn propagate<const C: usize>(
             };
 
             Ok(PropagationResult {
-                time_start: *start,
-                state_start: *state,
-                time_end: *stop,
+                time_begin: *begin,
+                state_begin: *state,
+                time_end: *end,
                 state_end: res.y,
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
@@ -416,9 +416,9 @@ pub fn propagate<const C: usize>(
         true => {
             let res = crate::ode::solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)?;
             Ok(PropagationResult {
-                time_start: *start,
-                state_start: *state,
-                time_end: *stop,
+                time_begin: *begin,
+                state_begin: *state,
+                time_end: *end,
                 state_end: res.y,
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
@@ -435,7 +435,7 @@ pub fn interp_propresult<const C: usize>(
 ) -> Result<StateType<C>> {
     if let Some(sol) = &res.odesol {
         if sol.dense.is_some() {
-            let x = (time - res.time_start).as_seconds();
+            let x = (time - res.time_begin).as_seconds();
             let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)
         } else {

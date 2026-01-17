@@ -65,11 +65,11 @@ impl PyPropStats {
 /// and statistics about the propagation
 ///
 /// The result may also include a dense ODE solution that can be used for interpolation of states
-/// between the start and stop times
+/// between the begin and end times
 ///
 /// Attributes:
 ///
-///    time_start: satkit.time object representing the time at which the propagation began
+///    time_begin: satkit.time object representing the time at which the propagation began
 ///          time: satkit.time object representing the time at which the propagation ended
 ///         stats: satkit.propstats object with statistics about the propagation
 ///           pos: 3-element numpy array representing the final position of the satellite in GCRF meters
@@ -77,10 +77,10 @@ impl PyPropStats {
 ///         state: 6-element numpy array representing the final state of the satellite in GCRF,
 ///                a concatenation of pos and vel
 ///           phi: 6x6 numpy array representing the state transition matrix between
-///                the start and stop times, if requested
+///                the begin and end times, if requested
 ///    can_interp: boolean indicating whether the result includes a dense ODE
 ///                solution that can be used for interpolation
-///                of states between the start and stop times
+///                of states between the begin and end times
 ///
 #[pyclass(name = "propresult", module = "satkit")]
 #[derive(Debug, Clone)]
@@ -111,7 +111,7 @@ fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
     s.push_str(format!("             Rejected Steps: {}\n", r.rejected_steps).as_str());
     s.push_str(format!("   Can Interp: {}\n", r.odesol.is_some()).as_str());
     if r.odesol.is_some() {
-        s.push_str(format!("        Start Time: {}", r.time_start).as_str());
+        s.push_str(format!("        Begin Time: {}", r.time_begin).as_str());
     }
     s
 }
@@ -123,8 +123,8 @@ impl PyPropResult {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self(PyPropResultType::R1(Box::new(PropagationResult::<1> {
-            time_start: Instant::INVALID,
-            state_start: Vector::<6>::zeros(),
+            time_begin: Instant::INVALID,
+            state_begin: Vector::<6>::zeros(),
             time_end: Instant::INVALID,
             state_end: Vector::<6>::zeros(),
             num_eval: 0,
@@ -134,16 +134,16 @@ impl PyPropResult {
         })))
     }
 
-    // Get start time
+    // Get begin time
     #[getter]
-    fn time_start(&self) -> PyInstant {
+    fn time_begin(&self) -> PyInstant {
         PyInstant(match &self.0 {
-            PyPropResultType::R1(r) => r.time_start,
-            PyPropResultType::R7(r) => r.time_start,
+            PyPropResultType::R1(r) => r.time_begin,
+            PyPropResultType::R7(r) => r.time_begin,
         })
     }
 
-    /// Get the stop time
+    /// Get the end time
     #[getter]
     fn time(&self) -> PyInstant {
         PyInstant(match &self.0 {
@@ -152,7 +152,7 @@ impl PyPropResult {
         })
     }
 
-    /// Get the stop time
+    /// Get the end time
     #[getter]
     fn time_end(&self) -> PyInstant {
         PyInstant(match &self.0 {
@@ -236,13 +236,13 @@ impl PyPropResult {
     }
 
     #[getter]
-    fn state_start(&self) -> PyResult<Py<PyAny>> {
+    fn state_begin(&self) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             match &self.0 {
-                PyPropResultType::R1(r) => np::ndarray::arr1(r.state_start.as_slice())
+                PyPropResultType::R1(r) => np::ndarray::arr1(r.state_begin.as_slice())
                     .to_pyarray(py)
                     .into_py_any(py),
-                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_start.as_slice()[0..6])
+                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_begin.as_slice()[0..6])
                     .to_pyarray(py)
                     .into_py_any(py),
             }

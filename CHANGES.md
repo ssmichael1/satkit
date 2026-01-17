@@ -1,9 +1,10 @@
 # Changelog
 
+
 ## 0.5.5 - 2025-01-27
 
 ### Low-Precision Ephemeris
- - Coefficients for low-precision planetary ephemerides did not match paper or JPL website referenced in documentation.  Not sure where original numbers came from.  Some plantes (e.g., Mercury) matched.  Others (e.g., Mars) did not, although numbers for Mars did match a google search. Very strange ... regardless, update so they match.  Coefficients for years 1800 to 2050 AD are correct and remain unchanged.
+ - Coefficients for low-precision planetary ephemerides did not match paper or JPL website referenced in documentation.  Not sure where original nu mbers came from.  Some plantes (e.g., Mercury) matched.  Others (e.g., Mars) did not, although numbers for Mars did match a google search. Very strange ... regardless, update so they match.  Coefficients for years 1800 to 2050 AD are correct and remain unchanged.
  - Add Pluto as a planet for low-precision ephemerides (it is included in reference paper, but not JPL website)
 
 ### Two-Line Element Sets
@@ -144,8 +145,13 @@
   - Add pickle serialize/deserialize tests in python testing
   - allow for duration division by float and by other duration in python
 
+-----------------
+
+
 ## Rust 0.9.0, Python 0.9.0
   - Support Orbital Mean-Element Messages (OMM) in JSON format
   - Add OMM documentation, tests, and python example
   - Structured output of SGP4 propagator in rust
+  - add "as_datetime" function in python for satkit.time (for consistent nomenclature)
+  - Rename time-interval boundary nomenclature from `start/stop` to `begin/end` across Rust + Python APIs (including propagation functions and related settings/results).
 

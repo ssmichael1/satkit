@@ -511,6 +511,28 @@ impl PyInstant {
         Ok(Self(Instant::from_unixtime(ts)))
     }
 
+
+    /// Convert to Python datetime object
+    ///
+    /// Args:
+    ///     utc (bool, optional): Use UTC as timezone; if not passed in, defaults to true
+    ///
+    /// Returns:
+    ///     datetime.datetime:  datetime object matching the input satkit.time
+    ///
+    #[pyo3(signature = (utc=true))]
+    fn as_datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
+            let timestamp: f64 = self.as_unixtime();
+            let tz = match utc {
+                false => None,
+                true => Some(PyTzInfo::utc(py)),
+            };
+            let tz = tz.as_ref().map(|r| r.as_ref().unwrap());
+            Ok(PyDateTime::from_timestamp(py, timestamp, tz.map(|v| &**v))?.into())
+        })
+    }
+
     /// Convert to Python datetime object
     ///
     /// Args:
@@ -522,13 +544,14 @@ impl PyInstant {
     #[pyo3(signature = (utc=true))]
     fn datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let timestamp: f64 = self.as_unixtime();
-            let tz = match utc {
-                false => None,
-                true => Some(PyTzInfo::utc(py)),
-            };
-            let tz = tz.as_ref().map(|r| r.as_ref().unwrap());
-            Ok(PyDateTime::from_timestamp(py, timestamp, tz.map(|v| &**v))?.into())
+            let warning_type = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
+            let msg = std::ffi::CString::new(
+                "satkit.time.datetime() is deprecated; use satkit.time.as_datetime() instead.",
+            )
+            .expect("CString::new failed");
+
+            PyErr::warn(py, warning_type.as_any(), msg.as_c_str(), 2)?;
+            self.as_datetime(utc)
         })
     }
 

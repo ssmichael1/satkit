@@ -27,7 +27,7 @@ class TestDateTime:
         tm1 = sk.time(2023, 3, 4, 12, 5, 6)
         tm2 = datetime(2023, 3, 4, 12, 5, 6, tzinfo=timezone.utc)
 
-        assert tm1.datetime() == tm2
+        assert tm1.as_datetime() == tm2
         # Check that function calls work
         # Pick gmst as the test function call for time
         # it can be anything since under the hood the same function call is used
@@ -738,10 +738,10 @@ class TestHighPrecisionPropagation:
 
         # Propagate forward
         res1 = sk.propagate(
-            np.concatenate((pos, vel)), starttime, stop=stoptime, propsettings=settings
+            np.concatenate((pos, vel)), starttime, end=stoptime, propsettings=settings
         )
         # Propagate backward and see if we recover original result
-        res2 = sk.propagate(res1.state, stoptime, stop=starttime, propsettings=settings)
+        res2 = sk.propagate(res1.state, stoptime, end=starttime, propsettings=settings)
 
         assert res2.state[0:3] == pytest.approx(pos, abs=0.5)
         assert res2.state[3:6] == pytest.approx(vel, abs=1e-5)
@@ -786,7 +786,7 @@ class TestHighPrecisionPropagation:
         res = sk.propagate(
             np.concatenate((pgcrf[0, :], fitparam[0:3])),
             timearr[0],
-            stop=timearr[-1],
+            end=timearr[-1],
             propsettings=settings,
             satproperties=satprops,
         )
@@ -871,7 +871,7 @@ class TestTLEFitting:
         sp = sk.satproperties_static(cdaoverm=2.0 * 10 / 3500)
         tm = sk.time(2016, 5, 16, 12, 0, 0)
         res = sk.propagate(
-            state0, tm, stop=tm + sk.duration.from_days(1), satproperties=sp
+            state0, tm, end=tm + sk.duration.from_days(1), satproperties=sp
         )
         time_arr = [tm + sk.duration(seconds=x * 10) for x in range(8640)]
         state_arr = [res.interp(t) for t in time_arr]
