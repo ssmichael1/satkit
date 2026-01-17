@@ -7,7 +7,7 @@ use nalgebra::{Const, Dyn, OMatrix};
 
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq, Copy )]
 pub enum SGP4Error {
     #[error("Success")]
     SGP4Success = 0,
@@ -53,8 +53,13 @@ impl From<SGP4Error> for i32 {
 }
 
 type StateArr = OMatrix<f64, Const<3>, Dyn>;
-pub type SGP4State = (StateArr, StateArr, Vec<SGP4Error>);
-pub type SGP4Result = Result<SGP4State, (SGP4Error, usize)>;
+
+pub struct SGP4State {
+    pub pos: StateArr,
+    pub vel: StateArr,
+    pub errcode: Vec<SGP4Error>,
+}
+
 
 use super::{GravConst, OpsMode, SGP4Source};
 
@@ -80,10 +85,10 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 /// # Return
 ///
-/// Result object containing either an OK value containing a tuple with
+/// Result object containing either an OK value containing a SGP4State struct with
 /// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
-/// times in the slice) or an Err value containing
-/// a tuple with error code and error string
+/// times in the slice) and err codes at each time, or an Err value containing
+/// a description of the error
 ///
 /// # Note:
 ///
@@ -112,18 +117,18 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// let tm = tle.epoch;
 ///
 /// // SGP4 runs on a slice of times
-/// let (pteme, vteme, errs) = sgp4(&mut tle,
+/// let result = sgp4(&mut tle,
 ///     &[tm]
-///     );
+///     ).unwrap();
 ///
-/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * pteme;
+/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * result.pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
 ///
 /// ```
 ///
 #[inline]
-pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
+pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> anyhow::Result<SGP4State> {
     sgp4_full(tle, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
@@ -180,13 +185,13 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 /// let tm = tle.epoch;
 ///
 /// // SGP4 runs on a slice of times
-/// let (pteme, vteme, errs) = sgp4_full(&mut tle,
+/// let result = sgp4_full(&mut tle,
 ///     &[tm],
 ///     GravConst::WGS84,
 ///     OpsMode::IMPROVED
-///     );
+///     ).unwrap();
 ///
-/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * pteme;
+/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * result.pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
 ///
@@ -197,20 +202,11 @@ pub fn sgp4_full(
     tm: &[Instant],
     gravconst: GravConst,
     opsmode: OpsMode,
-) -> SGP4State {
+) -> anyhow::Result<SGP4State> {
     if source.satrec_mut().is_none() {
-        let args = match source.sgp4_init_args() {
-            Ok(a) => a,
-            Err(_e) => {
-                let n = tm.len();
-                let rarr = StateArr::zeros(n);
-                let varr = StateArr::zeros(n);
-                let earr = Vec::<SGP4Error>::from_iter((0..n).map(|_x| SGP4Error::SGP4ErrorUnused));
-                return (rarr, varr, earr);
-            }
-        };
+        let args = source.sgp4_init_args()?;
 
-        match sgp4init(
+        *source.satrec_mut() = Some(sgp4init(
             gravconst,
             opsmode,
             "satno",
@@ -224,17 +220,7 @@ pub fn sgp4_full(
             args.mo,
             args.no,
             args.nodeo,
-        ) {
-            Ok(sr) => *source.satrec_mut() = Some(sr),
-            Err(e) => {
-                let n = tm.len();
-
-                let rarr = StateArr::zeros(n);
-                let varr = StateArr::zeros(n);
-                let earr = Vec::<SGP4Error>::from_iter((0..n).map(|_x| SGP4Error::from(e)));
-                return (rarr, varr, earr);
-            }
-        }
+        ).map_err(|e| anyhow::anyhow!("SGP4 init error: {}", e))?);
     }
 
     let epoch = source.epoch();
@@ -257,7 +243,11 @@ pub fn sgp4_full(
             Err(e) => earr.push(e.into()),
         }
     }
-    (rarr * 1.0e3, varr * 1.0e3, earr)
+    Ok(SGP4State {
+        pos: rarr * 1.0e3,
+        vel: varr * 1.0e3,
+        errcode: earr,
+    })
 }
 
 #[cfg(test)]
@@ -278,8 +268,8 @@ mod tests {
         let mut tle = TLE::load_3line(line0, line1, line2).unwrap();
         let tm = tle.epoch;
 
-        let (_pos, _vel, err) = sgp4(&mut tle, &[tm]);
-        assert!(err[0] == SGP4Error::SGP4Success);
+        let states = sgp4(&mut tle, &[tm]).unwrap();
+        assert!(states.errcode[0] == SGP4Error::SGP4Success);
     }
 
     #[test]
@@ -341,8 +331,19 @@ mod tests {
                 let tm = tle.epoch + crate::Duration::from_seconds(testvec[0]);
 
                 // Test vectors assume WGS72 gravity model and AFSPC ops mode
-                let (pos, vel, err) = sgp4_full(&mut tle, &[tm], GravConst::WGS72, OpsMode::AFSPC);
-                if err[0] != SGP4Error::SGP4Success {
+                let states = sgp4_full(&mut tle, &[tm], GravConst::WGS72, OpsMode::AFSPC);
+                let states = match states {
+                    Ok(s) => s,
+                    Err(e) => {
+                        // We know one of the test vectors is supposed to fail
+                        if tle.sat_num == 33334 {
+                            continue;
+                        }
+                        return Err(e);
+
+                    }
+                };
+                if states.errcode[0] != SGP4Error::SGP4Success {
                     continue;
                 }
                 for idx in 0..3 {
@@ -354,9 +355,9 @@ mod tests {
                         maxvelerr = 1.0e-2;
                     }
                     let poserr =
-                        (pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
+                        (states.pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
                     let velerr =
-                        (vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
+                        (states.vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
                     assert!(poserr < maxposerr);
                     assert!(velerr < maxvelerr);
                 }

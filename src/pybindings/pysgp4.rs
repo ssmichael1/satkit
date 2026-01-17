@@ -75,7 +75,7 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
 }
 
 /// """SGP-4 propagator for TLE
-///    
+///
 /// Note:
 ///     Run Simplified General Perturbations (SGP)-4 propagator on Two-Line Element Set to
 ///     output satellite position and velocity at given time
@@ -152,17 +152,17 @@ pub fn sgp4(
         let mut stle: PyRefMut<PyTLE> = tle
             .extract()
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e)))?;
-        let (r, v, e) = psgp4::sgp4_full(
+        let states = psgp4::sgp4_full(
             &mut stle.0,
             time.to_time_vec()?.as_slice(),
             gravconst.into(),
             opsmode.into(),
-        );
+        )?;
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            let dims = if r.nrows() > 1 && r.ncols() > 1 {
-                vec![r.ncols(), r.nrows()]
+            let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
+                vec![states.pos.ncols(), states.pos.nrows()]
             } else {
-                vec![r.len()]
+                vec![states.pos.len()]
             };
 
             // Note: this is a little confusing: ndarray uses
@@ -170,19 +170,19 @@ pub fn sgp4(
             // hence the switch
             if !output_err {
                 Ok((
-                    PyArray1::from_slice(py, r.data.as_slice())
+                    PyArray1::from_slice(py, states.pos.data.as_slice())
                         .reshape(dims.clone())?
                         .into_py_any(py)?,
-                    PyArray1::from_slice(py, v.data.as_slice())
+                    PyArray1::from_slice(py, states.vel.data.as_slice())
                         .reshape(dims)?
                         .into_py_any(py)?,
                 )
                     .into_py_any(py)?)
             } else {
-                let eint: Vec<i32> = e.into_iter().map(|x| x as i32).collect();
+                let eint: Vec<i32> = states.errcode.iter().map(|x| x.clone() as i32).collect();
                 Ok((
-                    PyArray1::from_slice(py, r.data.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice(py, v.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, states.pos.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, states.vel.data.as_slice()).reshape(dims.clone())?,
                     PyArray1::from_slice(py, eint.as_slice()),
                 )
                     .into_py_any(py)?)
@@ -194,7 +194,7 @@ pub fn sgp4(
         let results: Vec<psgp4::SGP4State> = tles
             .iter_mut()
             .map(|tle| psgp4::sgp4(&mut tle.0, tmarray.as_slice()))
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let n = tles.len() * tmarray.len() * 3;
@@ -212,23 +212,24 @@ pub fn sgp4(
             );
             */
             let mut eint = vec![0; ntimes * tle.len()?];
-            results.iter().enumerate().for_each(|(idx, (p, v, e))| {
+
+            results.iter().enumerate().for_each(|(idx, states)| {
                 unsafe {
                     let pdata: *mut f64 = parr.data();
 
                     std::ptr::copy_nonoverlapping(
-                        p.as_ptr(),
+                        states.pos.as_ptr(),
                         pdata.add(idx * ntimes * 3),
                         ntimes * 3,
                     );
                     let vdata: *mut f64 = varr.data();
                     std::ptr::copy_nonoverlapping(
-                        v.as_ptr(),
+                        states.vel.as_ptr(),
                         vdata.add(idx * ntimes * 3),
                         ntimes * 3,
                     );
                     if output_err {
-                        let evals = e.iter().map(|x| x.clone() as i32).collect::<Vec<i32>>();
+                        let evals = states.errcode.iter().map(|x| x.clone() as i32).collect::<Vec<i32>>();
                         std::ptr::copy_nonoverlapping(
                             evals.as_ptr(),
                             eint.as_mut_ptr().add(idx * ntimes),

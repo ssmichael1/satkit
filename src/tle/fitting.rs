@@ -56,11 +56,12 @@ impl<'a> Problem<'a> {
 impl<'a> MPFitter for Problem<'a> {
     fn eval(&mut self, params: &[f64], deviates: &mut [f64]) -> MPResult<()> {
         let mut tle = self.tle_from_params(params);
-        let (pteme, _, _) = crate::sgp4::sgp4(&mut tle, self.times);
+        let states= crate::sgp4::sgp4(&mut tle, self.times)
+            .map_err(|_e| rmpfit::MPError::Eval)?;
 
         for (i, state) in self.states.iter().enumerate() {
             for j in 0..3 {
-                deviates[i * 3 + j] = pteme[(j, i)] - state[j];
+                deviates[i * 3 + j] = states.pos[(j, i)] - state[j];
             }
         }
 
@@ -99,7 +100,7 @@ impl TLE {
     /// * The fitting process is performed in the TEME frame, with SGP4 used to generate
     ///   the states from the TLE.  The input GCRF states are rotated into the TEME frame
     ///   by this function.
-    ///    
+    ///
     /// * First and second derivatives of mean motion are ignored, as they are not
     ///   used by SGP4.
     ///
@@ -115,7 +116,7 @@ impl TLE {
     /// # Example:
     ///
     /// ```rust
-    /// // Construct a GCRF state vector    
+    /// // Construct a GCRF state vector
     /// let altitude = 400.0e3;
     /// let r0 = satkit::consts::EARTH_RADIUS + altitude;
     /// let v0 = (satkit::consts::MU_EARTH / r0).sqrt();

@@ -42,7 +42,6 @@ mod sgp4init;
 pub use sgp4_impl::sgp4;
 pub use sgp4_impl::sgp4_full;
 pub use sgp4_impl::SGP4Error;
-pub use sgp4_impl::SGP4Result;
 pub use sgp4_impl::SGP4State;
 
 /// Canonical inputs required to initialize an SGP4 `SatRec`.

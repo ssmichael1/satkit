@@ -47,19 +47,19 @@ const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 /// let tm = Instant::from_datetime(2006, 5, 1, 11, 0, 0.0).unwrap();
 ///
 /// // Use SGP4 to get position,
-/// let (pTEME, vTEME, errs) = sgp4(&mut tle, &[tm]);
+/// let states = sgp4(&mut tle, &[tm]).unwrap();
 ///
-/// println!("pTEME = {}", pTEME);
+/// println!("pTEME = {}", states.pos);
 /// // Rotate the position to the ITRF frame (Earth-fixed)
 /// // Since pTEME is a 3xN array where N is the number of times
 /// // (we are just using a single time)
 /// // we need to convert to a fixed matrix to rotate
-/// let pITRF = frametransform::qteme2itrf(&tm) * pTEME.fixed_view::<3,1>(0,0);
+/// let pITRF = frametransform::qteme2itrf(&tm) * states.pos.fixed_view::<3,1>(0,0);
 ///
 /// println!("pITRF = {}", pITRF);
 ///
 /// // Convert to an "ITRF Coordinate" and print geodetic position
-/// let itrf = ITRFCoord::from_slice(&pTEME.fixed_view::<3,1>(0,0).as_slice()).unwrap();
+/// let itrf = ITRFCoord::from_slice(&states.pos.fixed_view::<3,1>(0,0).as_slice()).unwrap();
 ///
 /// println!("latitude = {} deg", itrf.latitude_deg());
 /// println!("longitude = {} deg", itrf.longitude_deg());
