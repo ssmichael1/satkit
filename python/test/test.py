@@ -27,7 +27,7 @@ class TestDateTime:
         tm1 = sk.time(2023, 3, 4, 12, 5, 6)
         tm2 = datetime(2023, 3, 4, 12, 5, 6, tzinfo=timezone.utc)
 
-        assert tm1.datetime() == tm2
+        assert tm1.as_datetime() == tm2
         # Check that function calls work
         # Pick gmst as the test function call for time
         # it can be anything since under the hood the same function call is used
