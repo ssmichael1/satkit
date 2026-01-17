@@ -37,6 +37,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
+[project.optional-dependencies]
+test = ["pytest", "xmltodict"]
 
 
 [tool.setuptools.packages.find]

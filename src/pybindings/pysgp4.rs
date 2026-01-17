@@ -183,6 +183,9 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
         if let Some(v) = d.get_item("RA_OF_ASC_NODE")? {
             omm.raan = float_from_py(&v)?;
         }
+        if let Some(v) = d.get_item("MEAN_ANOMALY")? {
+            omm.mean_anomaly = float_from_py(&v)?;
+        }
     }
     if let Some(d) = dict.get_item("tleParameters")? {
         let d = d.cast::<PyDict>().map_err(|e| {
