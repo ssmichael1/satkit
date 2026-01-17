@@ -10,37 +10,37 @@ pub type InterpType = (Quaternion, Vector3, Vector3);
 use anyhow::Result;
 #[derive(Debug, Clone)]
 pub struct Precomputed {
-    pub start: Instant,
-    pub stop: Instant,
+    pub begin: Instant,
+    pub end: Instant,
     pub step: f64,
     data: Vec<InterpType>,
 }
 
 impl Precomputed {
-    pub fn new(start: &Instant, stop: &Instant) -> Result<Self> {
+    pub fn new(begin: &Instant, end: &Instant) -> Result<Self> {
         let step: f64 = 60.0;
 
-        let (pstart, pstop) = match stop > start {
+        let (pbegin, pend) = match end > begin {
             true => (
-                start - Duration::from_seconds(240.0),
-                stop + Duration::from_seconds(240.0),
+                begin - Duration::from_seconds(240.0),
+                end + Duration::from_seconds(240.0),
             ),
             false => (
-                stop - Duration::from_seconds(240.0),
-                start + Duration::from_seconds(240.0),
+                end - Duration::from_seconds(240.0),
+                begin + Duration::from_seconds(240.0),
             ),
         };
 
         Ok(Self {
-            start: pstart,
-            stop: pstop,
+            begin: pbegin,
+            end: pend,
             step,
             data: {
                 let nsteps: usize =
-                    2 + ((pstop - pstart).as_seconds() / step.abs()).ceil() as usize;
+                    2 + ((pend - pbegin).as_seconds() / step.abs()).ceil() as usize;
                 let mut data = Vec::with_capacity(nsteps);
                 for idx in 0..nsteps {
-                    let t = pstart + Duration::from_seconds((idx as f64) * step);
+                    let t = pbegin + Duration::from_seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
                     let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
                     let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
@@ -52,16 +52,16 @@ impl Precomputed {
     }
 
     pub fn interp(&self, t: &Instant) -> Result<InterpType> {
-        if *t < self.start || *t > self.stop {
+        if *t < self.begin || *t > self.end {
             anyhow::bail!(
                 "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
                 *t,
-                self.start,
-                self.stop
+                self.begin,
+                self.end
             );
         }
 
-        let idx = (t - self.start).as_seconds() / self.step;
+        let idx = (t - self.begin).as_seconds() / self.step;
         let delta = idx - idx.floor();
         let idx = idx.floor() as usize;
 

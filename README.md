@@ -54,19 +54,20 @@ Multiple propagation methods optimized for different accuracy and performance re
     - Support TLE and Orbital Mean-Element Messages
   - **Keplerian**: Fast analytical two-body propagation for preliminary analysis
 
-### Force Models
+### Numerical Integration Force Models
 Comprehensive perturbation modeling for high-fidelity orbit propagation:
   - **Earth Gravity**: Spherical harmonic models up to degree/order 360
     - Multiple models: JGM2, JGM3, EGM96, ITU GRACE16
     - Efficient computation with configurable truncation order
     - Gravity gradient support for state transition matrix
   - **Third-Body Gravity**: Solar and lunar perturbations using JPL ephemerides
-  - **Atmospheric Drag**: NRLMSISE-00 density model with space weather integration
+  - **Atmospheric Drag**:
+    - NRLMSISE-00 density model with space weather integration
     - Automatic space weather data updates (F10.7, Ap index)
     - Configurable ballistic coefficients
   - **Solar Radiation Pressure**: Cannon-ball model with shadow function
 
-### Ephemerides
+### Solar System Ephemerides
 Access to high-precision solar system body positions:
   - **JPL DE440/DE441**: State-of-the-art planetary ephemerides
     - Chebyshev polynomial interpolation for accuracy
@@ -295,7 +296,7 @@ settings.gravity_order = 8
 result = sk.propagate(
     state0,
     time0,
-    stop=time0 + sk.duration.from_days(1),
+    end=time0 + sk.duration.from_days(1),
     propsettings=settings
 )
 
