@@ -261,7 +261,7 @@ class TLE:
         """
 
 def sgp4(
-    tle: TLE | list[TLE],
+    tle: TLE | list[TLE] | dict,
     tm: time | list[time] | npt.ArrayLike,
     **kwargs,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -276,7 +276,7 @@ def sgp4(
         https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
 
     Args:
-        tle (TLE | list[TLE]): TLE (or list of TLES) on which to operate
+        tle (TLE | list[TLE] | dict): TLE or OMM (or list of TLES) on which to operate
         tm (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
 
     Keyword Args:
@@ -293,6 +293,12 @@ def sgp4(
 
         Additional return value if errflag is True:
         list[sgp4_error]: list of errors for each TLE and time output, if errflag is True
+
+    Note:
+        Now supports propagation of OMM (Orbital Mean-Element Message) dictionaries
+        The dictionaries must follow the structure used by https://www.celestrak.org or
+        https://www.space-track.org.
+
 
     Example:
         >>> lines = [
@@ -317,6 +323,20 @@ def sgp4(
         >>> # Print ITRF coordinate object location
         >>> print(coord)
         ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
+
+    Example 2:
+        >>> import requests
+        >>> import json
+        >>>
+        >>> # Query ephemeris for the International Space Station (ISS)
+        >>> url = 'https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json'
+        >>> with requests.get(url) as response:
+        >>>     omm = response.json()
+        >>> # Get a representative time from the output
+        >>> epoch = sk.time(omm[0]['EPOCH'])
+        >>> # Compute TEME position & velocity at epoch
+        >>> pteme, vteme = satkit.sgp4(omm[0], epoch)
+
     """
 
 class sgp4_gravconst:

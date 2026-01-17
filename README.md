@@ -4,7 +4,7 @@
 
 Satkit provides robust, high-performance satellite orbital mechanics calculations with a clean, intuitive API. Built from the ground up in Rust for maximum performance and memory safety, it offers complete Python bindings for all functionality, making advanced orbital mechanics accessible to both systems programmers and data scientists.
 
------ 
+-----
 
 ![Build Passing?](https://github.com/ssmichael1/satkit/actions/workflows/build.yml/badge.svg)
 ![Wheel Passing?](https://github.com/ssmichael1/satkit/actions/workflows/wheels.yml/badge.svg)
@@ -18,7 +18,7 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
 ![PyPI - Status](https://img.shields.io/pypi/status/satkit)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/satkit)
 ![Read the Docs](https://img.shields.io/readthedocs/satellite-toolkit)
- 
+
 ------
 
 ## Language Bindings
@@ -40,7 +40,7 @@ High-precision conversions between multiple reference frames with full support f
   - **CIRF** - Celestial Intermediate Reference Frame (IAU-2006 intermediate)
   - **TIRF** - Terrestrial Intermediate Reference Frame (Earth-rotation intermediate)
   - **Geodetic** - Latitude, longitude, altitude with WGS-84 ellipsoid
-  
+
 ### Orbit Propagation
 Multiple propagation methods optimized for different accuracy and performance requirements:
   - **Numerical Integration**: High-precision propagation using adaptive Runge-Kutta 9(8) methods with dense output
@@ -51,8 +51,9 @@ Multiple propagation methods optimized for different accuracy and performance re
     - Full AFSPC and improved mode support
     - TLE fitting from high-precision states with drag estimation
     - Batch processing for multiple satellites
+    - Support TLE and Orbital Mean-Element Messages
   - **Keplerian**: Fast analytical two-body propagation for preliminary analysis
-  
+
 ### Force Models
 Comprehensive perturbation modeling for high-fidelity orbit propagation:
   - **Earth Gravity**: Spherical harmonic models up to degree/order 360
@@ -64,14 +65,14 @@ Comprehensive perturbation modeling for high-fidelity orbit propagation:
     - Automatic space weather data updates (F10.7, Ap index)
     - Configurable ballistic coefficients
   - **Solar Radiation Pressure**: Cannon-ball model with shadow function
-  
+
 ### Ephemerides
 Access to high-precision solar system body positions:
   - **JPL DE440/DE441**: State-of-the-art planetary ephemerides
     - Chebyshev polynomial interpolation for accuracy
     - Support for all major planets, sun, moon, and solar system barycenter
   - **Low-Precision Models**: Fast analytical models for sun and moon when high precision isn't required
-  
+
 ### Time Systems
 Comprehensive support for all standard astronomical time scales:
   - **UTC** - Coordinated Universal Time with leap second handling
@@ -81,7 +82,7 @@ Comprehensive support for all standard astronomical time scales:
   - **UT1** - Universal Time with Earth orientation corrections
   - **GPS** - GPS Time
   - Automatic conversion between all time scales with microsecond precision
-  
+
 ### Geodetic Utilities
 - **Geodesic Calculations**: Accurate distance and azimuth between ground locations using Vincenty's formulae
 - **Coordinate Conversions**: ITRF ↔ Geodetic ↔ East-North-Up ↔ North-East-Down
@@ -134,12 +135,12 @@ The library requires external data files for various calculations. These are aut
   - DE440/DE441 planetary ephemerides (~100 MB)
   - Provides positions of sun, moon, planets, and solar system barycenter
   - Valid for years 1550-2650 CE
-  
+
 - **Gravity Models** ([ICGEM](http://icgem.gfz-potsdam.de/home))
   - JGM2, JGM3, EGM96, ITU GRACE16 spherical harmonic coefficients
   - International Centre for Global Earth Models standardized format
   - Up to degree/order 360 for high-fidelity propagation
-  
+
 - **IERS Nutation Tables** ([IERS Conventions](https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn36.html))
   - IAU-2006 nutation series coefficients
   - Required for GCRF ↔ ITRF transformations
@@ -152,7 +153,7 @@ The library requires external data files for various calculations. These are aut
   - Ap geomagnetic index
   - Critical for atmospheric density modeling and drag calculations
   - Updated daily by NOAA Space Weather Prediction Center
-  
+
 - **Earth Orientation Parameters** ([Celestrak](https://celestrak.org/SpaceData/))
   - Polar motion (x, y)
   - UT1-UTC time difference
@@ -174,15 +175,15 @@ The library includes comprehensive test suites ensuring correctness of calculati
 - **JPL Ephemerides**: Validated against JPL-provided test vectors for Chebyshev polynomial interpolation
   - Over 10,000 test cases covering all planets and time ranges
   - Accuracy verified to within JPL's published tolerances (sub-meter precision)
-  
+
 - **SGP4**: Verified using official test vectors from the original C++ distribution
   - All test cases from Vallado's SGP4 implementation
   - Includes edge cases and error conditions
-  
+
 - **Coordinate Transformations**: Cross-validated against multiple reference implementations
   - SOFA library comparisons for IAU-2006 transformations
   - Vallado test cases for GCRF ↔ ITRF conversions
-  
+
 - **Numerical Propagation**: Validated against high-precision commercial tools
   - Orbit fits to GPS SP3 ephemerides
   - Multi-day propagations with sub-meter accuracy
@@ -222,7 +223,7 @@ pip install satkit
 
 Pre-built binary wheels are available for:
 - **Windows**: AMD64
-- **macOS**: Intel (x86_64) and Apple Silicon (ARM64)  
+- **macOS**: Intel (x86_64) and Apple Silicon (ARM64)
 - **Linux**: x86_64 and ARM64 (aarch64)
 - **Python versions**: 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14
 
@@ -292,8 +293,8 @@ settings.gravity_order = 8
 
 # Propagate for 1 day
 result = sk.propagate(
-    state0, 
-    time0, 
+    state0,
+    time0,
     stop=time0 + sk.duration.from_days(1),
     propsettings=settings
 )
@@ -331,13 +332,13 @@ use satkit::{Instant, SolarSystem, jplephem};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create time instant
     let time = Instant::from_datetime(2024, 1, 1, 0, 0, 0.0)?;
-    
+
     // Get Moon position and velocity in GCRF
     let (pos, vel) = jplephem::geocentric_state(SolarSystem::Moon, &time)?;
-    
+
     println!("Moon position: {:?}", pos);
     println!("Moon velocity: {:?}", vel);
-    
+
     Ok(())
 }
 ```

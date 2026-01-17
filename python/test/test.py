@@ -7,6 +7,8 @@ from sp3file import read_sp3file
 from datetime import datetime, timezone
 import satkit as sk
 import pickle
+import json
+import xmltodict
 
 testvec_dir = os.getenv(
     "SATKIT_TESTVEC_ROOT", default="." + os.path.sep + "satkit-testvecs" + os.path.sep
@@ -929,6 +931,53 @@ class TestSGP4:
 
         lines2 = tle.to_3line()
         assert lines == lines2
+
+    def test_omm(self):
+        """
+        Test propagation of Orbital Mean-Element Message (OMM)
+        which is represented as a dictionary
+        """
+
+        basedir = testvec_dir + os.path.sep + "omm" + os.path.sep
+        fname = basedir + "spacetrack_omm.json"
+        with open(fname, "r") as fh:
+            omm_list = json.load(fh)
+        epoch = sk.time(omm_list[0]["EPOCH"])
+        # Run SGP4 on first OMM in list
+        _p, _v = sk.sgp4(omm_list[0], epoch)
+        # Run SGP4 on list of OMMs
+        _p, _v = sk.sgp4(omm_list[0:3], epoch)
+
+        fname = basedir + "celestrak_omm.json"
+        with open(fname, "r") as fh:
+            omm_list = json.load(fh)
+        epoch = sk.time(omm_list[0]["EPOCH"])
+        # Run SGP4 on first OMM in list
+        _p, _v = sk.sgp4(omm_list[0], epoch)
+        # Run SPG4 on list of OMMs
+        _p, _v = sk.sgp4(omm_list[0:3], epoch)
+
+        # Now try XML files
+        fname = basedir + "spacetrack_omm.xml"
+        with open(fname, "r") as fh:
+            omm_xml = xmltodict.parse(fh.read())
+        omm_xml = omm_xml["ndm"]["omm"]
+        omm_xml = [d["body"]['segment']['data'] for d in omm_xml]
+        epoch = sk.time(omm_xml[0]["meanElements"]["EPOCH"])
+        _p, _v = sk.sgp4(omm_xml[0], epoch)
+        _p, _v = sk.sgp4(omm_xml[0:3], epoch)
+
+        fname = basedir + "celestrak_omm.xml"
+        with open(fname, "r") as fh:
+            omm_xml = xmltodict.parse(fh.read())
+        omm_xml = omm_xml["ndm"]["omm"]
+        omm_xml = [d["body"]['segment']['data'] for d in omm_xml]
+        epoch = sk.time(omm_xml[0]["meanElements"]["EPOCH"])
+        _p, _v = sk.sgp4(omm_xml[0], epoch)
+        _p, _v = sk.sgp4(omm_xml[0:3], epoch)
+
+
+
 
     def test_sgp4_vallado(self):
         """

@@ -1,13 +1,12 @@
 use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
-use crate::tle::TLE;
-use crate::{Instant, TimeScale};
+use crate::Instant;
 use nalgebra::{Const, Dyn, OMatrix};
 
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq, Copy )]
 pub enum SGP4Error {
     #[error("Success")]
     SGP4Success = 0,
@@ -53,12 +52,15 @@ impl From<SGP4Error> for i32 {
 }
 
 type StateArr = OMatrix<f64, Const<3>, Dyn>;
-pub type SGP4State = (StateArr, StateArr, Vec<SGP4Error>);
-pub type SGP4Result = Result<SGP4State, (SGP4Error, usize)>;
 
-use std::f64::consts::PI;
+pub struct SGP4State {
+    pub pos: StateArr,
+    pub vel: StateArr,
+    pub errcode: Vec<SGP4Error>,
+}
 
-use super::{GravConst, OpsMode};
+
+use super::{GravConst, OpsMode, SGP4Source};
 
 ///
 /// Run Simplified General Perturbations (SGP)-4 propagator on
@@ -74,7 +76,7 @@ use super::{GravConst, OpsMode};
 ///
 /// # Arguments
 ///
-/// * `tle` - The TLE on which top operate.  Note that a mutable reference
+/// * `tle` - The TLE (or OMM) on which top operate.  Note that a mutable reference
 ///   is passed, as SGP-4 metadata is stored after each propagation
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience.
@@ -82,10 +84,10 @@ use super::{GravConst, OpsMode};
 ///
 /// # Return
 ///
-/// Result object containing either an OK value containing a tuple with
+/// Result object containing either an OK value containing a SGP4State struct with
 /// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
-/// times in the slice) or an Err value containing
-/// a tuple with error code and error string
+/// times in the slice) and err codes at each time, or an Err value containing
+/// a description of the error
 ///
 /// # Note:
 ///
@@ -96,7 +98,7 @@ use super::{GravConst, OpsMode};
 /// ```
 /// // Compute the Geodetic position of a satellite at
 /// // the TLE epoch time
-///     
+///
 /// use satkit::TLE;
 /// use satkit::sgp4::{sgp4, GravConst, OpsMode};
 /// use satkit::frametransform::qteme2itrf;
@@ -114,19 +116,19 @@ use super::{GravConst, OpsMode};
 /// let tm = tle.epoch;
 ///
 /// // SGP4 runs on a slice of times
-/// let (pteme, vteme, errs) = sgp4(&mut tle,
+/// let result = sgp4(&mut tle,
 ///     &[tm]
-///     );
+///     ).unwrap();
 ///
-/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * pteme;
+/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * result.pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
 ///
 /// ```
 ///
 #[inline]
-pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
-    sgp4_full(tle, tm, GravConst::WGS84, OpsMode::IMPROVED)
+pub fn sgp4(source: &mut impl SGP4Source, tm: &[Instant]) -> anyhow::Result<SGP4State> {
+    sgp4_full(source, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
 ///
@@ -141,8 +143,9 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 ///
 /// # Arguments
 ///
-/// * `tle` - The TLE on which top operate.  Note that a mutable reference
-///   is passed, as SGP-4 metadata is stored after each propagation
+/// * `SGP4Source` - The source of SGP4 data, typically a TLE but could be a
+///    orbital mean-elements message (OMM) or other source implementing the
+///   SGP4Source trait
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience.
 ///
@@ -154,7 +157,7 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 /// # Return
 ///
 /// Result object containing either an OK value containing a tuple with
-/// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
+/// position (m) and velocity (m/s) Nx3 matrices (where N is the number of input
 /// times in the slice) or an Err value containing
 /// a tuple with error code and error string
 ///
@@ -163,7 +166,7 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 /// ```
 /// // Compute the Geodetic position of a satellite at
 /// // the TLE epoch time
-///     
+///
 /// use satkit::TLE;
 /// use satkit::sgp4::{sgp4_full, GravConst, OpsMode};
 /// use satkit::frametransform::qteme2itrf;
@@ -181,66 +184,46 @@ pub fn sgp4(tle: &mut TLE, tm: &[Instant]) -> SGP4State {
 /// let tm = tle.epoch;
 ///
 /// // SGP4 runs on a slice of times
-/// let (pteme, vteme, errs) = sgp4_full(&mut tle,
+/// let result = sgp4_full(&mut tle,
 ///     &[tm],
 ///     GravConst::WGS84,
 ///     OpsMode::IMPROVED
-///     );
+///     ).unwrap();
 ///
-/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * pteme;
+/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * result.pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
 ///
 /// ```
 ///
 pub fn sgp4_full(
-    tle: &mut TLE,
+    source: &mut impl SGP4Source,
     tm: &[Instant],
     gravconst: GravConst,
     opsmode: OpsMode,
-) -> SGP4State {
-    const TWOPI: f64 = PI * 2.0;
+) -> anyhow::Result<SGP4State> {
+    if source.satrec_mut().is_none() {
+        let args = source.sgp4_init_args()?;
 
-    if tle.satrec.is_none() {
-        let no = tle.mean_motion / (1440.0 / TWOPI);
-        let bstar = tle.bstar;
-        let ndot = tle.mean_motion_dot / (1440.0 * 1440.0 / TWOPI);
-        let nddot = tle.mean_motion_dot_dot / (1440.0 * 1440.0 * 1440.0 / TWOPI);
-        let inclo = tle.inclination.to_radians();
-        let nodeo = tle.raan.to_radians();
-        let argpo = tle.arg_of_perigee.to_radians();
-        let mo = tle.mean_anomaly.to_radians();
-        let ecco = tle.eccen;
-        let jdsatepoch = tle.epoch.as_jd_with_scale(TimeScale::UTC);
-
-        match sgp4init(
+        *source.satrec_mut() = Some(sgp4init(
             gravconst,
             opsmode,
             "satno",
-            jdsatepoch - 2433281.5,
-            bstar,
-            ndot,
-            nddot,
-            ecco,
-            argpo,
-            inclo,
-            mo,
-            no,
-            nodeo,
-        ) {
-            Ok(sr) => tle.satrec = Some(sr),
-            Err(e) => {
-                let n = tm.len();
-
-                let rarr = StateArr::zeros(n);
-                let varr = StateArr::zeros(n);
-                let earr = Vec::<SGP4Error>::from_iter((0..n).map(|_x| SGP4Error::from(e)));
-                return (rarr, varr, earr);
-            }
-        }
+            args.jdsatepoch - 2433281.5,
+            args.bstar,
+            args.ndot,
+            args.nddot,
+            args.ecco,
+            args.argpo,
+            args.inclo,
+            args.mo,
+            args.no,
+            args.nodeo,
+        ).map_err(|e| anyhow::anyhow!("SGP4 init error: {}", e))?);
     }
 
-    let s = tle.satrec.as_mut().unwrap();
+    let epoch = source.epoch();
+    let s = source.satrec_mut().as_mut().expect("satrec initialized");
 
     let n = tm.len();
     let mut rarr = StateArr::zeros(n);
@@ -248,7 +231,7 @@ pub fn sgp4_full(
     let mut earr = Vec::<SGP4Error>::with_capacity(n);
 
     for (pos, thetime) in tm.iter().enumerate() {
-        let tsince = (*thetime - tle.epoch).as_days() * 1440.0;
+        let tsince = (*thetime - epoch).as_days() * 1440.0;
 
         match sgp4_lowlevel(s, tsince) {
             Ok((r, v)) => {
@@ -259,7 +242,11 @@ pub fn sgp4_full(
             Err(e) => earr.push(e.into()),
         }
     }
-    (rarr * 1.0e3, varr * 1.0e3, earr)
+    Ok(SGP4State {
+        pos: rarr * 1.0e3,
+        vel: varr * 1.0e3,
+        errcode: earr,
+    })
 }
 
 #[cfg(test)]
@@ -280,8 +267,8 @@ mod tests {
         let mut tle = TLE::load_3line(line0, line1, line2).unwrap();
         let tm = tle.epoch;
 
-        let (_pos, _vel, err) = sgp4(&mut tle, &[tm]);
-        assert!(err[0] == SGP4Error::SGP4Success);
+        let states = sgp4(&mut tle, &[tm]).unwrap();
+        assert!(states.errcode[0] == SGP4Error::SGP4Success);
     }
 
     #[test]
@@ -343,8 +330,19 @@ mod tests {
                 let tm = tle.epoch + crate::Duration::from_seconds(testvec[0]);
 
                 // Test vectors assume WGS72 gravity model and AFSPC ops mode
-                let (pos, vel, err) = sgp4_full(&mut tle, &[tm], GravConst::WGS72, OpsMode::AFSPC);
-                if err[0] != SGP4Error::SGP4Success {
+                let states = sgp4_full(&mut tle, &[tm], GravConst::WGS72, OpsMode::AFSPC);
+                let states = match states {
+                    Ok(s) => s,
+                    Err(e) => {
+                        // We know one of the test vectors is supposed to fail
+                        if tle.sat_num == 33334 {
+                            continue;
+                        }
+                        return Err(e);
+
+                    }
+                };
+                if states.errcode[0] != SGP4Error::SGP4Success {
                     continue;
                 }
                 for idx in 0..3 {
@@ -356,9 +354,9 @@ mod tests {
                         maxvelerr = 1.0e-2;
                     }
                     let poserr =
-                        (pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
+                        (states.pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
                     let velerr =
-                        (vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
+                        (states.vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
                     assert!(poserr < maxposerr);
                     assert!(velerr < maxvelerr);
                 }

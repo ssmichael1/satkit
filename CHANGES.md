@@ -143,3 +143,9 @@
   - Add "x", "y", "z", "w" property getters to quaternion in python
   - Add pickle serialize/deserialize tests in python testing
   - allow for duration division by float and by other duration in python
+
+## Rust 0.9.0, Python 0.9.0
+  - Support Orbital Mean-Element Messages (OMM) in JSON format
+  - Add OMM documentation, tests, and python example
+  - Structured output of SGP4 propagator in rust
+
