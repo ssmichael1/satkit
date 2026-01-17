@@ -71,7 +71,7 @@ before-build = [
 ]
 environment = { PATH = "$PATH:$HOME/.cargo/bin", MACOSX_DEPLOYMENT_TARGET = "10.12" }
 # Skip trying to test arm64 builds on Intel Macs
-test-requires = "pytest"
+test-requires = "pytest xmltodict"
 test-command = [
     "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
 ]
@@ -85,7 +85,7 @@ before-build = [
     "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y",
     "rustup show",
 ]
-test-requires = "pytest"
+test-requires = "pytest xmltodict"
 test-command = [
     "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
 ]
@@ -100,7 +100,7 @@ before-build = [
     "rustup override set stable-x86_64-pc-windows-msvc",
     "rustup show",
 ]
-test-requires = "pytest"
+test-requires = "pytest xmltodict"
 before-test = [
     "set SATKIT_DATA={package}\\astro-data",
     "set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs",
