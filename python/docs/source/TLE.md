@@ -87,7 +87,7 @@ print(coord)
 
 ```
 
-### SGP4 State Computation from OMM representation of International Space Station(ISS)
+### SGP4 State Computation from OMM representation of International Space Station (ISS)
 
 ```python
 
