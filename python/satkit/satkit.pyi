@@ -988,8 +988,29 @@ class time:
             satkit.time: Time object representing the same instant in time as the input "datetime.datetime" object
         """
 
-    def datetime(self, utc: bool = True) -> datetime.datetime:
+    def as_datetime(self, utc: bool = True) -> datetime.datetime:
         """Convert object to "datetime.datetime" object representing same instant in time.
+
+        Args:
+            utc (bool, optional): Whether to make the "datetime.datetime" object represent time in the local timezone or "UTC".  Default is True
+
+        Returns:
+            datetime.datetime: "datetime.datetime" object representing the same instant in time as the "satkit.time" object
+
+        Example:
+            >>> dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(True)
+            >>> print(dt)
+            2023-06-03 06:19:34+00:00
+            >>>
+            >>> dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(False)
+            >>> print(dt)
+            2023-06-03 02:19:34
+        """
+
+    def datetime(self, utc: bool = True) -> datetime.datetime:
+        """Deprecated: use :meth:`satkit.time.as_datetime`.
+
+        Convert object to "datetime.datetime" object representing same instant in time.
 
         Args:
             utc (bool, optional): Whether to make the "datetime.datetime" object represent time in the local timezone or "UTC".  Default is True
@@ -2255,7 +2276,7 @@ class propresult:
 
     Notes:
 
-    * If "enable_interp" is set to True in the propagation settings, the propresult object can be used to interpolate solutions at any time between the start and stop times of the propagation via the "interp" method
+    * If "enable_interp" is set to True in the propagation settings, the propresult object can be used to interpolate solutions at any time between the begin and end times of the propagation via the "interp" method
 
     """
 
@@ -2296,10 +2317,10 @@ class propresult:
         """
 
     @property
-    def state_start(self) -> npt.NDArray[np.float64]:
-        """6-element state (pos + vel) of satellite in meters & meters/second at start of propagation
+    def state_begin(self) -> npt.NDArray[np.float64]:
+        """6-element state (pos + vel) of satellite in meters & meters/second at begin of propagation
         Returns:
-            npt.NDArray[np.float64]: 6-element numpy array representing state of satellite in meters & meters/second at start of propagation
+            npt.NDArray[np.float64]: 6-element numpy array representing state of satellite in meters & meters/second at begin of propagation
         """
 
     @property
@@ -2322,12 +2343,12 @@ class propresult:
         """
 
     @property
-    def time_start(self) -> time:
-        """Time at which state_start is valid
+    def time_begin(self) -> time:
+        """Time at which state_begin is valid
 
 
         Returns:
-            satkit.time: Time at which state_start is valid
+            satkit.time: Time at which state_begin is valid
         """
 
     @property
@@ -2418,7 +2439,7 @@ class propsettings:
         * use_jplephem: True
         * enable_interp: True
 
-    * enable_interp enables high-preciion interpolation of state between start and stop times via the returned function,
+        * enable_interp enables high-preciion interpolation of state between begin and end times via the returned function,
       it is enabled by default.  There is a small increase in computational efficiency if set to false
 
     """
@@ -2432,7 +2453,7 @@ class propsettings:
             gravity_order (int, optional keyword): Earth gravity order to use in ODE integration. Default is 4
             use_spaceweather (bool, optional keyword): Use space weather data when computing atmospheric density for drag forces. Default is True
             use_jplephem (bool, optional keyword): Use JPL ephemeris for solar system bodies. Default is True
-            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between start and stop times. Default is True
+            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
 
 
         Returns:
@@ -2491,30 +2512,30 @@ class propsettings:
     def use_spaceweather(self, value: bool) -> None: ...
     @property
     def enable_interp(self) -> bool:
-        """Store intermediate data that allows for fast high-precision interpolation of state between start and stop times
+        """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times
         If not needed, there is a small computational advantage if set to False
         """
 
     @enable_interp.setter
     def enable_interp(self, value: bool) -> None: ...
     def precompute_terms(
-        self, start: time, stop: time, step: Optional[duration] = None
+        self, begin: time, end: time, step: Optional[duration] = None
     ):
-        """Precompute terms for fast interpolation of state between start and stop times
+        """Precompute terms for fast interpolation of state between begin and end times
 
         This can be used, for example, to compute sun and moon positions only once if propagating many satellites over the same time period
 
         Args:
-            start (satkit.time): Start time of propagation
-            stop (satkit.time): Stop time of propagation
+            begin (satkit.time): Begin time of propagation
+            end (satkit.time): End time of propagation
             step (satkit.duration, optional): Step size for interpolation.  Default = 60 seconds
 
         """
 
 def propagate(
     state: npt.NDArray[np.float64],
-    start: time,
-    stop: time,
+    begin: time,
+    end: time,
     **kwargs,
 ) -> propresult:
     """High-precision orbit propagator
@@ -2523,12 +2544,12 @@ def propagate(
 
     Args:
         state (npt.ArrayLike[float], optional): 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second
-        start (satkit.time, optional): satkit.time object representing instant at which satellite is at "pos" & "vel"
-        stop (satkit.time, optional keyword): satkit.time object representing instant at which new position and velocity will be computed
-        duration (satkit.duration, optional keyword): duration from "start" at which new position & velocity will be computed.
-        duration_secs (float, optional keyword): duration in seconds from "start" for at which new position and velocity will be computed.
-        duration_days (float, optional keyword): duration in days from "start" at which new position and velocity will be computed.
-        output_phi (bool, optional keyword): Output 6x6 state transition matrix between "starttime" and "stoptime" (and at intervals, if specified)
+        begin (satkit.time, optional): satkit.time object representing instant at which satellite is at "pos" & "vel"
+        end (satkit.time, optional keyword): satkit.time object representing instant at which new position and velocity will be computed
+        duration (satkit.duration, optional keyword): duration from "begin" at which new position & velocity will be computed.
+        duration_secs (float, optional keyword): duration in seconds from "begin" for at which new position and velocity will be computed.
+        duration_days (float, optional keyword): duration in days from "begin" at which new position and velocity will be computed.
+        output_phi (bool, optional keyword): Output 6x6 state transition matrix between "begintime" and "endtime" (and at intervals, if specified)
         propsettings (propsettings, optional keyword): "propsettings" object with input settings for the propagation. if left out, default will be used.
         satproperties (satproperties_static, optional keyword): "sat_properties_static" object with drag and radiation pressure succeptibility of satellite.
 
@@ -2544,7 +2565,7 @@ def propagate(
         * Sun, Moon gravity
         * Radiation pressured
         * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (which can be large)
-    * Stop time must be set by keyword argument, either explicitely or by duration
+    * End time must be set by keyword argument, either explicitely or by duration
     * Solid Earth tides are not (yet) included in the model
 
     """

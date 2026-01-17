@@ -46,16 +46,16 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         if sol.x < xinterp {
             return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
-                start: dense.x[0],
-                stop: sol.x,
+                begin: dense.x[0],
+                end: sol.x,
             }
             .into();
         }
         if xinterp < dense.x[0] {
             return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
-                start: dense.x[0],
-                stop: sol.x,
+                begin: dense.x[0],
+                end: sol.x,
             }
             .into();
         }
@@ -123,16 +123,16 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         if sol.x > xinterp {
             return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
-                start: dense.x[0],
-                stop: sol.x,
+                begin: dense.x[0],
+                end: sol.x,
             }
             .into();
         }
         if xinterp > dense.x[0] {
             return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
-                start: dense.x[0],
-                stop: sol.x,
+                begin: dense.x[0],
+                end: sol.x,
             }
             .into();
         }
@@ -188,8 +188,8 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
     }
 
     fn integrate<S: ODEState>(
-        start: f64,
-        stop: f64,
+        begin: f64,
+        end: f64,
         y0: &S,
         ydot: impl Fn(f64, &S) -> ODEResult<S>,
         settings: &RKAdaptiveSettings,
@@ -197,11 +197,11 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         let mut nevals: usize = 0;
         let mut naccept: usize = 0;
         let mut nreject: usize = 0;
-        let mut x = start;
+        let mut x = begin;
         let mut y = y0.clone();
 
         let mut qold: f64 = 1.0e-4;
-        let tdir = match stop > start {
+        let tdir = match end > begin {
             true => 1.0,
             false => -1.0,
         };
@@ -212,11 +212,11 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             let sci = (y0.ode_abs() * settings.relerror).ode_scalar_add(settings.abserror);
 
             let d0 = y0.ode_elem_div(&sci).ode_scaled_norm();
-            let ydot0 = ydot(start, y0)?;
+            let ydot0 = ydot(begin, y0)?;
             let d1 = ydot0.ode_elem_div(&sci).ode_scaled_norm();
             let h0 = 0.01 * d0 / d1 * tdir;
             let y1 = y0.clone() + ydot0.clone() * h0;
-            let ydot1 = ydot(start + h0, &y1)?;
+            let ydot1 = ydot(begin + h0, &y1)?;
             let d2 = (ydot1 - ydot0).ode_elem_div(&sci).ode_scaled_norm() / h0;
             let dmax = f64::max(d1, d2);
             let h1: f64 = match dmax < 1e-15 {
@@ -241,8 +241,8 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
         // OK ... lets integrate!
         loop {
-            if (tdir > 0.0 && (x + h) >= stop) || (tdir < 0.0 && (x + h) <= stop) {
-                h = stop - x;
+            if (tdir > 0.0 && (x + h) >= end) || (tdir < 0.0 && (x + h) <= end) {
+                h = end - x;
             }
             let mut karr = Vec::with_capacity(N);
 
@@ -334,7 +334,7 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 h /= q;
 
                 naccept += 1;
-                if (tdir > 0.0 && x >= stop) || (tdir < 0.0 && x <= stop) {
+                if (tdir > 0.0 && x >= end) || (tdir < 0.0 && x <= end) {
                     break;
                 }
             } else {

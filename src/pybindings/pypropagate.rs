@@ -26,10 +26,10 @@ use anyhow::{bail, Result};
 /// Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
 ///
 /// Inputs:
-///   
+///
 ///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
-///      start (satkit.time, optional): Start time of propagation, time of "state0"
-///       stop (satkit.time, optional): Stop time of propagation
+///      begin (satkit.time, optional): Begin time of propagation, time of "state0"
+///        end (satkit.time, optional): End time of propagation
 ///
 ///
 /// Optional keyword arguments:
@@ -37,13 +37,13 @@ use anyhow::{bail, Result};
 ///
 /// 4 ways of setting propagation end:
 /// (one of these must be used)
-///   
-///             stop: (satkit.time, optional): instant at which new position and
+///
+///              end: (satkit.time, optional): instant at which new position and
 ///                   velocity will be computed
 ///    duration_secs: (float, optional): duration in seconds from "tm" for at which new
-///                   position and velocity will be computed.  
+///                   position and velocity will be computed.
 ///    duration_days: (float, optional): duration in days from "tm" at which new position and
-///                   velocity will be computed.  
+///                   velocity will be computed.
 ///         duration: (satkit.duration, optional): An astro.duration object setting duration
 ///                   from "tm" at which new position & velocity will be computed.
 ///
@@ -51,7 +51,7 @@ use anyhow::{bail, Result};
 ///
 ///
 ///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
-///                   between "starttime" and "stoptime"
+///                   between "begintime" and "endtime"
 ///                   default is False
 ///     propsettings (satkit.propsettings): Settings for
 ///                   the propagation. if left out, default will be used.
@@ -62,19 +62,19 @@ use anyhow::{bail, Result};
 ///                   yet implemented
 ///     output_dense (bool): boolean indicacting output dense ODE solution that can
 ///                   be used for interpolation of state between
-///                  "starttime" and "stoptime".  Default is False
-///           
+///                  "begintime" and "endtime".  Default is False
+///
 ///
 /// Returns:
 ///
 ///    satkit.propresult: object with new position and velocity, and possibly
-///                       state transition matrix between "starttime" and "stoptime",
+///                       state transition matrix between "begintime" and "endtime",
 ///                       and dense ODE solution that allow for interpolation, if requested
 ///
 /// Raises:
 ///
 ///   RuntimeError: If "pos" or "vel" are not 3-element numpy arrays
-///   RuntimeError: If neither "stoptime", "duration", "duration_secs", or "duration_days" are set
+///   RuntimeError: If neither "end", "duration", "duration_secs", or "duration_days" are set
 ///   RuntimeError: If extraneous keyword arguments are passed
 ///
 ///
@@ -84,7 +84,7 @@ use anyhow::{bail, Result};
 ///            * Sun, Moon gravity
 ///            * Radiation pressure
 ///            * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (can be large)
-///        * Stop time must be set by keyword argument, either explicitely or by duration
+///        * End time must be set by keyword argument, either explicitely or by duration
 ///        * Solid Earth tides are not (yet) included in the model
 ///
 #[pyfunction(signature=(*args, **kwargs))]
@@ -99,8 +99,8 @@ pub fn propagate(
     };
 
     let mut state0 = Vector6::zeros();
-    let mut starttime: Instant = Instant::INVALID;
-    let mut stoptime: Instant = Instant::INVALID;
+    let mut begintime: Instant = Instant::INVALID;
+    let mut endtime: Instant = Instant::INVALID;
     let mut output_phi: bool = false;
     let mut satproperties: Option<&dyn SatProperties> = None;
     let satproperties_static: SatPropertiesStatic;
@@ -109,20 +109,20 @@ pub fn propagate(
         state0 = py_to_smatrix(&args.get_item(0)?)?;
     }
     if args.len() > 1 {
-        starttime = args
+        begintime = args
             .get_item(1)?
             .extract::<PyInstant>()
             .map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("Invalid start time: {}", e))
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {}", e))
             })?
             .0;
     }
     if args.len() > 2 {
-        stoptime = args
+        endtime = args
             .get_item(2)?
             .extract::<PyInstant>()
             .map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("Invalid stop time: {}", e))
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {}", e))
             })?
             .0;
     }
@@ -142,26 +142,26 @@ pub fn propagate(
             state0[5] = vel[2];
             kw.del_item("vel")?;
         }
-        if let Some(kws) = kw.get_item("start")? {
-            starttime = kws
+        if let Some(kws) = kw.get_item("begin")? {
+            begintime = kws
                 .extract::<PyInstant>()
                 .map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid start time: {}", e))
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {}", e))
                 })?
                 .0;
-            kw.del_item("start")?;
+            kw.del_item("begin")?;
         }
-        if let Some(kws) = kw.get_item("stop")? {
-            stoptime = kws
+        if let Some(kws) = kw.get_item("end")? {
+            endtime = kws
                 .extract::<PyInstant>()
                 .map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid stop time: {}", e))
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {}", e))
                 })?
                 .0;
-            kw.del_item("stop")?;
+            kw.del_item("end")?;
         }
         if let Some(kwd) = kw.get_item("duration")? {
-            stoptime = starttime
+            endtime = begintime
                 + kwd
                     .extract::<PyDuration>()
                     .map_err(|e| {
@@ -171,14 +171,14 @@ pub fn propagate(
             kw.del_item("duration")?;
         }
         if let Some(kwd) = kw.get_item("duration_days")? {
-            stoptime = starttime
+            endtime = begintime
                 + Duration::from_days(kwd.extract::<f64>().map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_days: {}", e))
                 })?);
             kw.del_item("duration_days")?;
         }
         if let Some(kwd) = kw.get_item("duration_secs")? {
-            stoptime = starttime
+            endtime = begintime
                 + Duration::from_seconds(kwd.extract::<f64>().map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_secs: {}", e))
                 })?);
@@ -212,8 +212,8 @@ pub fn propagate(
     if !output_phi {
         let res = crate::orbitprop::propagate(
             &state0,
-            &starttime,
-            &stoptime,
+            &begintime,
+            &endtime,
             &propsettings,
             satproperties,
         )?;
@@ -230,7 +230,7 @@ pub fn propagate(
             .copy_from(&Matrix6::identity());
 
         let res =
-            crate::orbitprop::propagate(&pv, &starttime, &stoptime, &propsettings, satproperties)?;
+            crate::orbitprop::propagate(&pv, &begintime, &endtime, &propsettings, satproperties)?;
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
         })
