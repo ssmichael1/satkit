@@ -100,6 +100,23 @@ fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<crate::Instant> {
     }
 }
 
+/// OMM files can have floats as either strings or numbers
+/// so handle both cases here
+///
+/// (very annoying!)
+fn float_from_py(val: &Bound<'_, PyAny>) -> Result<f64> {
+    if val.is_instance_of::<PyString>() {
+        let s: String = val.extract()?;
+        s.parse::<f64>().map_err(|e| {
+            anyhow::anyhow!("Invalid float string: {}", e)
+        })
+    } else {
+        val.extract::<f64>().map_err(|e| {
+            anyhow::anyhow!("Invalid float value: {}", e)
+        })
+    }
+}
+
 fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
     let mut omm = crate::OMM::default();
 
@@ -112,34 +129,34 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
     omm.epoch = String::new();
 
     if let Some(v) = dict.get_item("INCLINATION")? {
-        omm.inclination = v.extract::<f64>()?;
+        omm.inclination = float_from_py(&v)?;
     }
     if let Some(v) = dict.get_item("RA_OF_ASC_NODE")? {
-        omm.raan = v.extract::<f64>()?;
+        omm.raan = float_from_py(&v)?;
     }
     if let Some(v) = dict.get_item("ECCENTRICITY")? {
-        omm.eccentricity = v.extract::<f64>()?;
+        omm.eccentricity = float_from_py(&v)?;
     }
     if let Some(v) = dict.get_item("ARG_OF_PERICENTER")? {
-        omm.arg_of_pericenter = v.extract::<f64>()?;
+        omm.arg_of_pericenter = float_from_py(&v)?;
     }
     if let Some(v) = dict.get_item("MEAN_ANOMALY")? {
-        omm.mean_anomaly = v.extract::<f64>()?;
+        omm.mean_anomaly = float_from_py(&v)?;
     }
     if let Some(v) = dict.get_item("MEAN_MOTION")? {
-        omm.mean_motion = v.extract::<f64>()?;
+        omm.mean_motion = float_from_py(&v)?;
     }
     if let Some(v) = dict.get_item("EPOCH")? {
         omm.epoch = epoch_from_val(&v)?.as_rfc3339();
     }
     if let Some(v) = dict.get_item("BSTAR")? {
-        omm.bstar = Some(v.extract::<f64>()?);
+        omm.bstar = Some(float_from_py(&v)?);
     }
     if let Some(v) = dict.get_item("MEAN_MOTION_DOT")? {
-        omm.mean_motion_dot = Some(v.extract::<f64>()?);
+        omm.mean_motion_dot = Some(float_from_py(&v)?);
     }
     if let Some(v) = dict.get_item("MEAN_MOTION_DDOT")? {
-        omm.mean_motion_ddot = Some(v.extract::<f64>()?);
+        omm.mean_motion_ddot = Some(float_from_py(&v)?);
     }
     if let Some(d) = dict.get_item("meanElements")? {
         let d = d.cast::<PyDict>().map_err(|e| {
@@ -152,19 +169,19 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
             omm.epoch = epoch_from_val(&v)?.as_rfc3339();
         }
         if let Some(v) = d.get_item("MEAN_MOTION")? {
-            omm.mean_motion = v.extract::<f64>()?;
+            omm.mean_motion = float_from_py(&v)?;
         }
         if let Some(v) = d.get_item("ECCENTRICITY")? {
-            omm.eccentricity = v.extract::<f64>()?;
+            omm.eccentricity = float_from_py(&v)?;
         }
         if let Some(v) = d.get_item("INCLINATION")? {
-            omm.inclination = v.extract::<f64>()?;
+            omm.inclination = float_from_py(&v)?;
         }
         if let Some(v) = d.get_item("ARG_OF_PERICENTER")? {
-            omm.arg_of_pericenter = v.extract::<f64>()?;
+            omm.arg_of_pericenter = float_from_py(&v)?;
         }
         if let Some(v) = d.get_item("RA_OF_ASC_NODE")? {
-            omm.raan = v.extract::<f64>()?;
+            omm.raan = float_from_py(&v)?;
         }
     }
     if let Some(d) = dict.get_item("tleParameters")? {
@@ -175,13 +192,13 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
             ))
         })?;
         if let Some(v) = d.get_item("BSTAR")? {
-            omm.bstar = Some(v.extract::<f64>()?);
+            omm.bstar = Some(float_from_py(&v)?);
         }
         if let Some(v) = d.get_item("MEAN_MOTION_DOT")? {
-            omm.mean_motion_dot = Some(v.extract::<f64>()?);
+            omm.mean_motion_dot = Some(float_from_py(&v)?);
         }
         if let Some(v) = d.get_item("MEAN_MOTION_DDOT")? {
-            omm.mean_motion_ddot = Some(v.extract::<f64>()?);
+            omm.mean_motion_ddot = Some(float_from_py(&v)?);
         }
     }
     if omm.epoch.is_empty() {
