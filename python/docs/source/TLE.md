@@ -1,28 +1,55 @@
-
-# Two-Line Element Sets (TLEs)
-
-A **Two-Line Element Set**, or **TLE**, is an ancient method, originally designed for computer punchcards, to describe satellite orbits.  Despite it's age, this format continues to be commonly used, likely because it is a compact way of describing satellite orbits with sufficient accuracy for *most* applications.  TLEs contain the "classic" Keplerian elements, as well as elements that describe purturbations such as drag and derivatives of the mean motion.
-
-TLEs are designed to be used with the **Simplified General Perturbation Model** version 4, or **SGP-4**, an analytic model that produces orbital state vectors -- position and velocity -- from the augmented Keplerian elements in the TLE.  The purturbations to the Keplerian elements include factoring in the Earth oblateness (which procudes procession) and drag.
-
-The TLEs will often be prepended by an additional line that provides the name of the satellite.  For an overview, see: <https://en.wikipedia.org/wiki/Two-line_element_set>
+# SGP4, Two-Line Element Sets (TLEs), and Orbital Mean-Element Messages (OMMs)
 
 ## Satellite Catalog
 
-The United States maintains a public catalog of all Earth-orbiting satellites, to include active satellites, rocket bodies, debris, etc... 
+The United States maintains a public catalog of Earth-orbiting objects, including active satellites, rocket bodies, and debris.
 
-The publicly-available catalog describes satellites as two-line element sets.  There are multiple places to access the catalog, including:
+There are multiple places to access the catalog, including:
 * <https://www.celestrak.org/>
 * <https://www.space-track.org/>
 
+## SGP4
+
+**SGP4 (Simplified General Perturbations No. 4)** is an analytical orbital propagation model created in the **1960s–1970s by NORAD** to efficiently predict the motion of **Earth-orbiting satellites** from **Two-Line Element (TLE)** data.
+
+It was developed to support U.S. space surveillance as a fast, closed-form alternative to numerical integration, modeling Earth’s oblateness (J2–J4), atmospheric drag via the TLE *B\** term, and key secular and periodic perturbations.
+
+Today, SGP4 is the standard propagator for TLEs published by organizations like NORAD and CelesTrak, and is widely used for satellite tracking, visualization, conjunction screening, and mission planning—though its accuracy is fundamentally limited by TLE quality and simplifying assumptions.
+
+## Ephemeris Representation
+
+### TLE
+A **Two-Line Element Set (TLE)** is a compact, legacy format (originally constrained by punch-card era line lengths) for describing satellite orbits. Despite its age, it remains widely used because it is easy to publish and often provides sufficient accuracy for many applications.
+
+In addition to the familiar (mean) Keplerian elements, TLEs include parameters related to perturbations (e.g., atmospheric drag via $B^*$, and derivatives of mean motion).
+
+TLEs are designed to be used with **SGP4**, an analytic model that produces orbital state vectors (position and velocity) from the augmented mean elements in the TLE. The perturbations modeled include Earth oblateness (which produces precession) and drag.
+
+TLEs are often preceded by an additional “line 0” containing the satellite name. For an overview, see <https://en.wikipedia.org/wiki/Two-line_element_set>.
+
+### Orbital Mean-Element Messages
+**Orbital Mean-Element Messages (OMMs)** are a more modern way of representing mean-element ephemerides. They are described by a CCSDS standard (<https://ccsds.org/Pubs/502x0b3e1.pdf>), although real-world sources may not adhere to the standard perfectly.
+
+OMMs are commonly published as:
+* JSON
+* XML
+* KVN (key–value notation)
+
+The satkit Python interface does not load OMM files directly. Instead, it expects you to provide the decoded OMM as a Python `dict` (for example, parsed from JSON or XML). The interface supports OMM dictionary layouts produced by CelesTrak and Space-Track.
+
+
+
+
 ## Example Usage
+
+### SGP4 state computation from TLE
 
 ```python
 import satkit as sk
 
 # The two-line element set
-# Lets pick a random StarLink satellite
-# The lines below were downloaded from https://www.celestrack.org
+# Let's pick a random Starlink satellite
+# The lines below were downloaded from https://www.celestrak.org
 tle_lines = [
     '0 STARLINK-30477',
     '1 57912U 23146X   24099.49439401  .00006757  00000+0  51475-3 0  9997',
@@ -51,11 +78,41 @@ pITRF = sk.frametransform.qteme2itrf(thetime) * pTEME
 # Now lets make a "ITRFCoord" object to extract geodetic coordinates
 coord = sk.itrfcoord(pITRF)
 
-# Get the latitude, longitude, and 
+# Get the latitude, longitude, and
 # altitude (height above ellipsoid, or hae) of the satellite
 print(coord)
 
 # this should produce:
 # ITRFCoord(lat:  29.3890 deg, lon: 170.8051 deg, hae: 560.11 km)
+
+```
+
+### SGP4 State Computation from OMM representation of International Space Station(ISS)
+
+```python
+
+import satkit as sk
+import requests
+import json
+
+# Query the current ephemeris for the International Space Station (ISS)
+# from celestrak.org
+url = 'https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json'
+with requests.get(url) as response:
+    omm = response.json()
+
+# Get a representative time from the output
+epoch = sk.time(omm[0]['EPOCH'])
+# create a list of times .. once every 10 minutes
+time_array = [epoch + sk.duration(minutes=i*10) for i in range(6)]
+
+# TEME (inertial) output from SGP4
+pTEME, _vTEME = sk.sgp4(omm[0], time_array)
+
+# Rotate to Earth-fixed
+pITRF = [sk.frametransform.qteme2itrf(t) * p for t, p in zip(time_array, pTEME)]
+
+# Geodetic coordinates of space station at given times
+coord = [sk.itrfcoord(x) for x in pITRF]
 
 ```
