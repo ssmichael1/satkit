@@ -1,11 +1,11 @@
-# "SatKit" 
+# "SatKit"
 
 ![PyPI - Version](https://img.shields.io/pypi/v/satkit)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/satkit)
 ![PyPI - Implementation](https://img.shields.io/pypi/implementation/satkit)
 ![PyPI - Status](https://img.shields.io/pypi/status/satkit)
 
-**SatKit** is a python library providing tools that enable computation and prediction of satellite orbits, satellite maneuvers, and (soon) satellite attitude dynamics.  
+**SatKit** is a python library providing tools that enable computation and prediction of satellite orbits, satellite maneuvers, and (soon) satellite attitude dynamics.
 
 The SatKit core code is written in [rust](https://www.rust-lang.org) for speed and safety.  The python bindings are done via the [pyo3](https://pyo3.rs) package.  All calculations are performed natively in rust, making the package much faster than a pure-python equivalent.
 
@@ -79,6 +79,7 @@ Please reach out of you find errors in code or calculations, are interested in c
   examples/riseset.ipynb
   examples/TLE Fitting.ipynb
   examples/High Precision Propagation.ipynb
+  examples/Orbital Mean-Element Message.ipynb
 
 .. toctree::
   :caption: API Reference

@@ -160,6 +160,10 @@ mod frames;
 // Integrate ordinary differential equations
 mod ode;
 
+// Orbital Mean-Element Messages
+pub mod omm;
+pub use crate::omm::OMM;
+
 // Time and duration
 mod time;
 pub use time::{Duration, Instant, TimeScale, Weekday};
@@ -171,3 +175,4 @@ pub use solarsystem::SolarSystem;
 pub use tle::TLE;
 #[cfg(feature = "pybindings")]
 pub mod pybindings;
+

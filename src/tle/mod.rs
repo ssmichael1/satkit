@@ -1,5 +1,8 @@
 use crate::sgp4::SatRec;
 use crate::Instant;
+use crate::TimeScale;
+
+use crate::sgp4::{SGP4InitArgs, SGP4Source};
 
 // TLE fitting from state vectors
 mod fitting;
@@ -44,19 +47,19 @@ const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 /// let tm = Instant::from_datetime(2006, 5, 1, 11, 0, 0.0).unwrap();
 ///
 /// // Use SGP4 to get position,
-/// let (pTEME, vTEME, errs) = sgp4(&mut tle, &[tm]);
+/// let states = sgp4(&mut tle, &[tm]).unwrap();
 ///
-/// println!("pTEME = {}", pTEME);
+/// println!("pTEME = {}", states.pos);
 /// // Rotate the position to the ITRF frame (Earth-fixed)
 /// // Since pTEME is a 3xN array where N is the number of times
 /// // (we are just using a single time)
 /// // we need to convert to a fixed matrix to rotate
-/// let pITRF = frametransform::qteme2itrf(&tm) * pTEME.fixed_view::<3,1>(0,0);
+/// let pITRF = frametransform::qteme2itrf(&tm) * states.pos.fixed_view::<3,1>(0,0);
 ///
 /// println!("pITRF = {}", pITRF);
 ///
 /// // Convert to an "ITRF Coordinate" and print geodetic position
-/// let itrf = ITRFCoord::from_slice(&pTEME.fixed_view::<3,1>(0,0).as_slice()).unwrap();
+/// let itrf = ITRFCoord::from_slice(&states.pos.fixed_view::<3,1>(0,0).as_slice()).unwrap();
 ///
 /// println!("latitude = {} deg", itrf.latitude_deg());
 /// println!("longitude = {} deg", itrf.longitude_deg());
@@ -107,6 +110,37 @@ pub struct TLE {
     pub rev_num: i32,
 
     pub(crate) satrec: Option<SatRec>,
+}
+
+impl SGP4Source for TLE {
+    fn epoch(&self) -> Instant {
+        self.epoch
+    }
+
+    fn satrec_mut(&mut self) -> &mut Option<SatRec> {
+        &mut self.satrec
+    }
+
+    fn sgp4_init_args(&self) -> anyhow::Result<SGP4InitArgs> {
+        use std::f64::consts::PI;
+
+        const TWOPI: f64 = PI * 2.0;
+
+        Ok(SGP4InitArgs {
+            // Vallado expects JD UTC and then subtracts 2433281.5 inside the legacy interface.
+            jdsatepoch: self.epoch.as_jd_with_scale(TimeScale::UTC),
+            bstar: self.bstar,
+            // Convert rev/day(+derivatives) to rad/min(+derivatives), matching sgp4_impl.
+            no: self.mean_motion / (1440.0 / TWOPI),
+            ndot: self.mean_motion_dot / (1440.0 * 1440.0 / TWOPI),
+            nddot: self.mean_motion_dot_dot / (1440.0 * 1440.0 * 1440.0 / TWOPI),
+            ecco: self.eccen,
+            inclo: self.inclination.to_radians(),
+            nodeo: self.raan.to_radians(),
+            argpo: self.arg_of_perigee.to_radians(),
+            mo: self.mean_anomaly.to_radians(),
+        })
+    }
 }
 
 impl TLE {
@@ -449,7 +483,7 @@ impl TLE {
     ///
     /// // Show that we can re-create the same lines
     /// assert_eq!(tle.to_2line().unwrap()[0], lines[1]);
-    /// assert_eq!(tle.to_2line().unwrap()[1], lines[2]);    
+    /// assert_eq!(tle.to_2line().unwrap()[1], lines[2]);
     /// ```
     ///
     pub fn to_2line(&self) -> Result<[String; 2]> {
@@ -539,7 +573,7 @@ impl TLE {
     /// // Show that we can re-create the same lines
     /// assert_eq!(tle.to_3line().unwrap()[0], lines[0]);
     /// assert_eq!(tle.to_3line().unwrap()[1], lines[1]);
-    /// assert_eq!(tle.to_3line().unwrap()[2], lines[2]);    
+    /// assert_eq!(tle.to_3line().unwrap()[2], lines[2]);
     /// ```
     //////
     pub fn to_3line(&self) -> Result<[String; 3]> {

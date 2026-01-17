@@ -1,6 +1,6 @@
 [package]
 name = "satkit"
-version = "0.8.3"
+version = "0.9.0"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
@@ -12,7 +12,7 @@ keywords = ["satellite", "orbit", "ephemeris", "tle", "astrodynamics"]
 categories = ["aerospace", "algorithms", "mathematics", "science"]
 
 
-# See more keys and their definitions at 
+# See more keys and their definitions at
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "satkit"
@@ -34,6 +34,7 @@ ureq = "3.1.2"
 json = "0.12.4"
 process_path = "0.1.4"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 serde-pickle = "1.2.0"
 itertools = "0.14.0"
 anyhow = "1"
