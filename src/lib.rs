@@ -176,17 +176,3 @@ pub use tle::TLE;
 #[cfg(feature = "pybindings")]
 pub mod pybindings;
 
-/*
-pub mod prelude {
-    pub use crate::consts;
-    pub use crate::time::{Duration, Instant, TimeScale, Weekday};
-    pub use crate::mathtypes::*;
-    pub use crate::itrfcoord::ITRFCoord;
-    pub use crate::frametransform;
-    pub use crate::tle::TLE;
-    pub use crate::solarsystem::SolarSystem;
-    pub use crate::sgp4::*;
-    pub use crate::orbitprop;
-    pub use crate::nrlmsise::*;
-}
-*/

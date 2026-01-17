@@ -945,7 +945,7 @@ class TestSGP4:
         epoch = sk.time(omm_list[0]["EPOCH"])
         # Run SGP4 on first OMM in list
         _p, _v = sk.sgp4(omm_list[0], epoch)
-        # Run SPG4 on list of OMMs
+        # Run SGP4 on list of OMMs
         _p, _v = sk.sgp4(omm_list[0:3], epoch)
 
         fname = basedir + "celestrak_omm.json"

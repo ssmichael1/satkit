@@ -161,7 +161,7 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
     if let Some(d) = dict.get_item("meanElements")? {
         let d = d.cast::<PyDict>().map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "Invalid MEAN_ELEMENTS dictionary: {}",
+                "Invalid meanElements dictionary: {}",
                 e
             ))
         })?;
@@ -190,7 +190,7 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
     if let Some(d) = dict.get_item("tleParameters")? {
         let d = d.cast::<PyDict>().map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "Invalid TLE_PARAMETERS dictionary: {}",
+                "Invalid tleParameters dictionary: {}",
                 e
             ))
         })?;
@@ -339,7 +339,7 @@ pub fn sgp4(
                 )
                     .into_py_any(py)?)
             } else {
-                let eint: Vec<i32> = states.errcode.iter().map(|x| x.clone() as i32).collect();
+                let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
                 Ok((
                     PyArray1::from_slice(py, states.pos.data.as_slice()).reshape(dims.clone())?,
                     PyArray1::from_slice(py, states.vel.data.as_slice()).reshape(dims.clone())?,

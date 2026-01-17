@@ -157,7 +157,7 @@ pub fn sgp4(source: &mut impl SGP4Source, tm: &[Instant]) -> anyhow::Result<SGP4
 /// # Return
 ///
 /// Result object containing either an OK value containing a tuple with
-/// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
+/// position (m) and velocity (m/s) Nx3 matrices (where N is the number of input
 /// times in the slice) or an Err value containing
 /// a tuple with error code and error string
 ///
