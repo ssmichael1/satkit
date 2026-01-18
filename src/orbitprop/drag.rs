@@ -31,7 +31,7 @@ pub fn drag_force(
         itrf.hae() / 1.0e3,
         Some(itrf.latitude_rad()),
         Some(itrf.longitude_rad()),
-        Some(*time),
+        Some(time),
         use_spaceweather,
     );
 
@@ -74,7 +74,7 @@ fn compute_rho_drhodr(
         itrf.hae() / 1.0e3,
         Some(itrf.latitude_rad()),
         Some(itrf.longitude_rad()),
-        Some(*time),
+        Some(time),
         use_spaceweather,
     );
 
@@ -88,7 +88,7 @@ fn compute_rho_drhodr(
                 itrf_off.hae() / 1.0e3,
                 Some(itrf_off.latitude_rad()),
                 Some(itrf_off.longitude_rad()),
-                Some(*time),
+                Some(time),
                 use_spaceweather,
             );
             (density - density0) / dx

@@ -3,6 +3,7 @@ use cty;
 use crate::spaceweather;
 use crate::Duration;
 use crate::Instant;
+use crate::TimeLike;
 
 /// Array containing the following magnetic values:
 ///   0 : daily AP
@@ -20,7 +21,7 @@ struct ap_array {
     a: [cty::c_double; 7],
 }
 
-///  
+///
 ///   Switches: to turn on and off particular variations use these switches.
 ///   0 is off, 1 is on, and 2 is main effects off but cross terms on.
 ///
@@ -91,7 +92,7 @@ extern "C" {
 ///
 /// # Outputs
 ///
-///   Tuple with two elements:      
+///   Tuple with two elements:
 ///      * Atmosphere mass density in kg / m^3
 ///      * Temperature in Kelvin
 ///
@@ -99,7 +100,7 @@ pub fn nrlmsise(
     alt_km: f64,
     lat_option: Option<f64>,
     lon_option: Option<f64>,
-    time_option: Option<Instant>,
+    time_option: Option<&impl TimeLike>,
     use_spaceweather: bool,
 ) -> (f64, f64) {
     let lat: f64 = lat_option.unwrap_or(0.0);
@@ -112,13 +113,15 @@ pub fn nrlmsise(
     let mut ap: f64 = 4.0;
 
     if let Some(time) = time_option {
+        let time = time.as_instant();
         let (year, _mon, _day, dhour, dmin, dsec) = time.as_datetime();
         let fday: f64 = (time - Instant::from_date(year, 1, 1).unwrap()).as_days() + 1.0;
         day_of_year = fday.floor() as i32;
         sec_of_day = (dhour as f64).mul_add(3600.0, dmin as f64 * 60.0) + dsec;
 
         if use_spaceweather {
-            if let Ok(r) = spaceweather::get(time - Duration::from_days(1.0)) {
+            let sw_time = time - Duration::from_days(1.0);
+            if let Ok(r) = spaceweather::get(&sw_time) {
                 f107a = r.f10p7_adj_c81;
                 f107 = r.f10p7_adj;
                 ap = r.ap_avg as f64;
@@ -176,6 +179,7 @@ mod tests {
     fn test_nrlmsise() {
         let tm: Instant = Instant::from_date(2010, 1, 1).unwrap()
             + Duration::from_days(171.0 + 29000.0 / 86400.0);
-        let (_density, _temperature) = nrlmsise(400.0, Some(60.0), Some(-70.0), Some(tm), true);
+        let (_density, _temperature) =
+            nrlmsise(400.0, Some(60.0), Some(-70.0), Some(&tm), true);
     }
 }

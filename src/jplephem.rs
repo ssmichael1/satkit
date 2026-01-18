@@ -26,7 +26,7 @@ use crate::utils::{datadir, download_if_not_exist};
 use once_cell::sync::OnceCell;
 
 use crate::mathtypes::*;
-use crate::{Instant, TimeScale};
+use crate::{Instant, TimeLike, TimeScale};
 
 use anyhow::{bail, Result};
 
@@ -499,11 +499,12 @@ pub fn consts(s: &String) -> Option<&f64> {
 ///  * EMB (2) is the Earth-Moon barycenter
 ///  * The sun position is relative to the solar system barycenter
 ///    (it will be close to origin)
-pub fn barycentric_pos(body: SolarSystem, tm: &Instant) -> Result<Vector3> {
+pub fn barycentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3> {
+    let tm = tm.as_instant();
     jplephem_singleton()
         .as_ref()
         .unwrap()
-        .barycentric_pos(body, tm)
+        .barycentric_pos(body, &tm)
 }
 
 /// Return the position and velocity of the given body in
@@ -519,11 +520,12 @@ pub fn barycentric_pos(body: SolarSystem, tm: &Instant) -> Result<Vector3> {
 ///     * 3-vector of cartesian Geocentric velocity in meters / second
 ///       Note: velocity is relative to Earth
 ///
-pub fn geocentric_state(body: SolarSystem, tm: &Instant) -> Result<(Vector3, Vector3)> {
+pub fn geocentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vector3, Vector3)> {
+    let tm = tm.as_instant();
     jplephem_singleton()
         .as_ref()
         .unwrap()
-        .geocentric_state(body, tm)
+        .geocentric_state(body, &tm)
 }
 
 /// Return the position of the given body in
@@ -536,11 +538,12 @@ pub fn geocentric_state(body: SolarSystem, tm: &Instant) -> Result<(Vector3, Vec
 /// # Returns
 ///    3-vector of Cartesian Geocentric position in meters
 ///
-pub fn geocentric_pos(body: SolarSystem, tm: &Instant) -> Result<Vector3> {
+pub fn geocentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3> {
+    let tm = tm.as_instant();
     jplephem_singleton()
         .as_ref()
         .unwrap()
-        .geocentric_pos(body, tm)
+        .geocentric_pos(body, &tm)
 }
 
 /// Return the position & velocity the given body in the barycentric coordinate system
@@ -562,11 +565,12 @@ pub fn geocentric_pos(body: SolarSystem, tm: &Instant) -> Result<Vector3> {
 ///  * EMB (2) is the Earth-Moon barycenter
 ///  * The sun position is relative to the solar system barycenter
 ///    (it will be close to origin)
-pub fn barycentric_state(body: SolarSystem, tm: &Instant) -> Result<(Vector3, Vector3)> {
+pub fn barycentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vector3, Vector3)> {
+    let tm = tm.as_instant();
     jplephem_singleton()
         .as_ref()
         .unwrap()
-        .barycentric_state(body, tm)
+        .barycentric_state(body, &tm)
 }
 
 #[cfg(test)]
@@ -602,9 +606,9 @@ mod tests {
         if !testvecfile.is_file() {
             println!(
                 "Required JPL ephemeris test vectors file: \"{}\" does not exist
-                clone test vectors repo at 
-                https://github.com/StevenSamirMichael/satkit-testvecs.git 
-                from root of repo or set \"SATKIT_TESTVEC_ROOT\" 
+                clone test vectors repo at
+                https://github.com/StevenSamirMichael/satkit-testvecs.git
+                from root of repo or set \"SATKIT_TESTVEC_ROOT\"
                 to point to directory",
                 testvecfile.to_string_lossy()
             );

@@ -49,5 +49,11 @@ pub fn nrlmsise00(
         }
     }
 
-    Ok(nrlmsise::nrlmsise(alt_km, lat, lon, tm, use_spaceweather))
+    Ok(nrlmsise::nrlmsise(
+        alt_km,
+        lat,
+        lon,
+        tm.as_ref(),
+        use_spaceweather,
+    ))
 }

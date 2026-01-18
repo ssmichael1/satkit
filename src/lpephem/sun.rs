@@ -1,6 +1,7 @@
 use crate::consts;
 use crate::ITRFCoord;
 use crate::Instant;
+use crate::TimeLike;
 use crate::TimeScale;
 
 use crate::mathtypes::*;
@@ -24,8 +25,9 @@ use anyhow::Result;
 ///   from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
 ///
 #[inline]
-pub fn pos_gcrf(time: &Instant) -> Vector3 {
-    crate::frametransform::qmod2gcrf(time) * pos_mod(time)
+pub fn pos_gcrf<T: TimeLike>(time: &T) -> Vector3 {
+    let time = time.as_instant();
+    crate::frametransform::qmod2gcrf(&time) * pos_mod(&time)
 }
 
 /// Ecliptic longitude of the sun at given time
@@ -42,7 +44,8 @@ pub fn pos_gcrf(time: &Instant) -> Vector3 {
 ///
 /// See Vallado Algorithm 29
 ///
-pub fn ecliptic_longitude(time: &Instant) -> f64 {
+pub fn ecliptic_longitude<T: TimeLike>(time: &T) -> f64 {
+    let time = time.as_instant();
     // Julian centuries since Jan 1, 2000 12pm
     let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
 
@@ -77,7 +80,8 @@ pub fn ecliptic_longitude(time: &Instant) -> f64 {
 /// * Algorithm 29 from Vallado for sun in Mean of Date (MOD)
 /// * Valid with accuracy of .01 degrees from 1950 to 2050
 ///
-pub fn pos_mod(time: &Instant) -> Vector3 {
+pub fn pos_mod<T: TimeLike>(time: &T) -> Vector3 {
+    let time = time.as_instant();
     let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
     #[allow(non_upper_case_globals)]
     const deg2rad: f64 = std::f64::consts::PI / 180.;
@@ -158,7 +162,7 @@ pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
 /// # Compute sunrise and sunset
 ///
 /// Sunrise and sunset times on the day given by input time
-/// and at the given location.  
+/// and at the given location.
 ///
 /// Since sunrise and sunset are local, the input time will have its
 /// local hour angle subtracted off to compute the sunrise and sunset
@@ -185,7 +189,7 @@ pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
 ///    * "Civil Twilight": 96 deg
 ///    * "Nautical Twilight": 102 deg
 ///    * "Astronomical Twilight": 108 deg
-///      
+///
 /// If None is passed in, "Standard" is used (90.0 + 50.0/60.0)
 ///
 /// # Returns
@@ -196,11 +200,12 @@ pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
 ///
 /// * Vallado Algorithm 30
 ///
-pub fn riseset(
-    time: &Instant,
+pub fn riseset<T: TimeLike>(
+    time: &T,
     coord: &ITRFCoord,
     osigma: Option<f64>,
 ) -> Result<(Instant, Instant)> {
+    let time = time.as_instant();
     use std::f64::consts::PI;
     let sigma = osigma.unwrap_or(90.0 + 50.0 / 60.0);
     let latitude: f64 = coord.latitude_deg();
