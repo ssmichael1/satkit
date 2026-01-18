@@ -14,6 +14,9 @@ pub use timelike::TimeLike;
 pub use timescale::TimeScale;
 pub use weekday::Weekday;
 
+#[cfg(feature = "chrono")]
+mod chrono;
+
 /// Put all tests in a separate module
 #[cfg(test)]
 mod tests;
