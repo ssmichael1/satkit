@@ -39,7 +39,7 @@ serde-pickle = "1.2.0"
 itertools = "0.14.0"
 anyhow = "1"
 rmpfit = "0.3.0"
-
+chrono = { version = "0.4.38", optional = true }
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }
@@ -52,7 +52,8 @@ approx = "0.5"
 rand_distr = "0.5.1"
 
 [features]
-pybindings = ["pyo3", "numpy", "pyo3-build-config"]
+pybindings = ["dep:pyo3", "dep:numpy", "dep:pyo3-build-config"]
+chrono = ["dep:chrono"]
 
 [profile.test]
 opt-level = 3

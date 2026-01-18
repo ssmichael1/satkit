@@ -155,3 +155,7 @@
   - add "as_datetime" function in python for satkit.time (for consistent nomenclature)
   - Rename time-interval boundary nomenclature from `start/stop` to `begin/end` across Rust + Python APIs (including propagation functions and related settings/results).
 
+
+## Rust 0.9.1
+  - Functions that accept time as input now accept structs that implement the new `TimeLike` trait.
+  - Add a `chrono` feature that enables interoperability with the chrono crate.  implement `TimeLike` for `chrono::DateTime`

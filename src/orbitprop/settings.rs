@@ -1,7 +1,7 @@
 //! Orbit Propagation Settings
 
 use crate::orbitprop::Precomputed;
-use crate::Instant;
+use crate::TimeLike;
 
 use anyhow::Result;
 
@@ -69,7 +69,7 @@ impl PropSettings {
     /// props.precompute_terms(&begin, &end).unwrap();
     ///
     /// ```
-    pub fn precompute_terms(&mut self, begin: &Instant, end: &Instant) -> Result<()> {
+    pub fn precompute_terms<T: TimeLike>(&mut self, begin: &T, end: &T) -> Result<()> {
         self.precomputed = Some(Precomputed::new(begin, end)?);
         Ok(())
     }
