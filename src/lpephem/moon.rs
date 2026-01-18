@@ -1,5 +1,5 @@
 use crate::consts;
-use crate::Instant;
+use crate::TimeLike;
 use crate::TimeScale;
 
 use crate::mathtypes::*;
@@ -18,7 +18,8 @@ use crate::mathtypes::*;
 ///
 /// See Vallado Algorithm 31
 ///
-pub fn ecliptic_longitude(time: &Instant) -> f64 {
+pub fn ecliptic_longitude<T: TimeLike>(time: &T) -> f64 {
+    let time = time.as_instant();
     // Julian centuries since Jan 1, 2000 12pm
     let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
 
@@ -62,9 +63,10 @@ pub fn ecliptic_longitude(time: &Instant) -> f64 {
 ///
 /// See Vallado Section 5.2.3
 ///
-pub fn phase(time: &Instant) -> f64 {
-    let lambda_moon = ecliptic_longitude(time);
-    let lambda_sun = crate::lpephem::sun::ecliptic_longitude(time);
+pub fn phase<T: TimeLike>(time: &T) -> f64 {
+    let time = time.as_instant();
+    let lambda_moon = ecliptic_longitude(&time);
+    let lambda_sun = crate::lpephem::sun::ecliptic_longitude(&time);
 
     let phase = (lambda_moon - lambda_sun) % (2.0 * std::f64::consts::PI);
     if phase < 0.0 {
@@ -89,8 +91,9 @@ pub fn phase(time: &Instant) -> f64 {
 /// # Notes
 ///
 /// See Vallado Section 5.2.3
-pub fn illumination(time: &Instant) -> f64 {
-    let phase = phase(time);
+pub fn illumination<T: TimeLike>(time: &T) -> f64 {
+    let time = time.as_instant();
+    let phase = phase(&time);
     0.5 * (1.0 - f64::cos(phase))
 }
 
@@ -153,8 +156,9 @@ impl MoonPhase {
 /// - Last Quarter: 247.5° - 292.5°
 /// - Waning Crescent: 292.5° - 337.5°
 ///
-pub fn phase_name(time: &Instant) -> MoonPhase {
-    let phase_rad = phase(time);
+pub fn phase_name<T: TimeLike>(time: &T) -> MoonPhase {
+    let time = time.as_instant();
+    let phase_rad = phase(&time);
     let phase_deg = phase_rad.to_degrees();
 
     // Normalize to 0-360 range
@@ -198,7 +202,8 @@ pub fn phase_name(time: &Instant) -> MoonPhase {
 /// * Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
 ///   and 1275 km in range
 ///
-pub fn pos_gcrf(time: &Instant) -> Vector3 {
+pub fn pos_gcrf<T: TimeLike>(time: &T) -> Vector3 {
+    let time = time.as_instant();
     // Julian centuries since Jan 1, 2000 12pm
 
     let t: f64 = (time.as_jd_with_scale(TimeScale::TDB) - 2451545.0) / 36525.0;
@@ -278,6 +283,7 @@ pub fn pos_gcrf(time: &Instant) -> Vector3 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Instant;
 
     #[test]
     fn moonpos() {

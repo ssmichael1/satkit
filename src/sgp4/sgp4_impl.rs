@@ -1,7 +1,7 @@
 use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
-use crate::Instant;
+use crate::TimeLike;
 use nalgebra::{Const, Dyn, OMatrix};
 
 use thiserror::Error;
@@ -127,7 +127,7 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// ```
 ///
 #[inline]
-pub fn sgp4(source: &mut impl SGP4Source, tm: &[Instant]) -> anyhow::Result<SGP4State> {
+pub fn sgp4<T: TimeLike>(source: &mut impl SGP4Source, tm: &[T]) -> anyhow::Result<SGP4State> {
     sgp4_full(source, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
@@ -196,9 +196,9 @@ pub fn sgp4(source: &mut impl SGP4Source, tm: &[Instant]) -> anyhow::Result<SGP4
 ///
 /// ```
 ///
-pub fn sgp4_full(
+pub fn sgp4_full<T: TimeLike>(
     source: &mut impl SGP4Source,
-    tm: &[Instant],
+    tm: &[T],
     gravconst: GravConst,
     opsmode: OpsMode,
 ) -> anyhow::Result<SGP4State> {
@@ -231,7 +231,7 @@ pub fn sgp4_full(
     let mut earr = Vec::<SGP4Error>::with_capacity(n);
 
     for (pos, thetime) in tm.iter().enumerate() {
-        let tsince = (*thetime - epoch).as_days() * 1440.0;
+        let tsince = (thetime.as_instant() - epoch).as_days() * 1440.0;
 
         match sgp4_lowlevel(s, tsince) {
             Ok((r, v)) => {

@@ -37,6 +37,7 @@
 //!
 
 use crate::Instant;
+use crate::TimeLike;
 use crate::SolarSystem;
 use crate::TimeScale;
 
@@ -66,7 +67,8 @@ use anyhow::{bail, Result};
 /// println!("Position of Mars: {}", pos);
 /// ```
 ///
-pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vector3> {
+pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vector3> {
+    let time = time.as_instant();
     // Keplerian elements are provided separately and more accurately
     // for times in range of years 1800AD to 2050AD
     let tm0: Instant = Instant::from_date(-3000, 1, 1)?;
@@ -77,7 +79,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vector3> {
 
     #[allow(non_snake_case)]
     let (a, eccen, incl, l, wbar, Omega, terms) = {
-        if time > &tmp0 && time < &tmp1 {
+        if time > tmp0 && time < tmp1 {
             let a: [f64; 6] = match body {
                 SolarSystem::Mercury => [
                     0.38709927,
@@ -239,7 +241,7 @@ pub fn heliocentric_pos(body: SolarSystem, time: &Instant) -> Result<Vector3> {
                 jcen.mul_add(adot[5], a[5]),
                 None,
             )
-        } else if time > &tm0 && time < &tm1 {
+        } else if time > tm0 && time < tm1 {
             let a: [f64; 6] = match body {
                 SolarSystem::Mercury => [
                     0.38709843,

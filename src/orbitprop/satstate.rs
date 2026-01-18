@@ -3,6 +3,7 @@ use nalgebra as na;
 use crate::orbitprop;
 use crate::orbitprop::PropSettings;
 use crate::Instant;
+use crate::TimeLike;
 
 use anyhow::Result;
 
@@ -40,9 +41,9 @@ pub struct SatState {
 }
 
 impl SatState {
-    pub fn from_pv(time: &Instant, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> Self {
+    pub fn from_pv<T: TimeLike>(time: &T, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> Self {
         Self {
-            time: *time,
+            time: time.as_instant(),
             pv: na::vector![pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]],
             cov: StateCov::None,
         }
@@ -133,7 +134,7 @@ impl SatState {
     ///
     /// # Arguments
     ///
-    /// * `sigma_gcrf` - 3-vector with 1-sigma position uncertainty in GCRF frame    
+    /// * `sigma_gcrf` - 3-vector with 1-sigma position uncertainty in GCRF frame
     ///
     pub fn set_gcrf_pos_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
         self.cov = StateCov::PVCov({
@@ -154,7 +155,7 @@ impl SatState {
     ///
     /// # Arguments
     ///
-    /// * `sigma_gcrf` - 3-vector with 1-sigma velocity uncertainty in GCRF frame    
+    /// * `sigma_gcrf` - 3-vector with 1-sigma velocity uncertainty in GCRF frame
     ///
     pub fn set_gcrf_vel_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
         self.cov = StateCov::PVCov({
@@ -184,17 +185,18 @@ impl SatState {
     ///
     pub fn propagate(
         &self,
-        time: &Instant,
+        time: &impl TimeLike,
         option_settings: Option<&PropSettings>,
     ) -> Result<Self> {
+        let time = time.as_instant();
         let default = orbitprop::PropSettings::default();
         let settings = option_settings.unwrap_or(&default);
         match self.cov {
             // Simple case: do not compute state transition matrix, since covariance is not set
             StateCov::None => {
-                let res = orbitprop::propagate(&self.pv, &self.time, time, settings, None)?;
+                let res = orbitprop::propagate(&self.pv, &self.time, &time, settings, None)?;
                 Ok(Self {
-                    time: *time,
+                    time,
                     pv: res.state_end,
                     cov: StateCov::None,
                 })
@@ -214,10 +216,10 @@ impl SatState {
                     .copy_from(&na::Matrix6::<f64>::identity());
 
                 // Propagate
-                let res = orbitprop::propagate(&state, &self.time, time, settings, None)?;
+                let res = orbitprop::propagate(&state, &self.time, &time, settings, None)?;
 
                 Ok(Self {
-                    time: *time,
+                    time,
                     pv: res.state_end.fixed_view::<6, 1>(0, 0).into(),
                     cov: {
                         // Extract state transition matrix from the propagated state

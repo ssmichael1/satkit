@@ -46,7 +46,7 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
             itrf.hae() / 1.0e3,
             Some(itrf.latitude_rad()),
             Some(itrf.longitude_rad()),
-            time,
+            time.as_ref(),
             true,
         ))
     } else if args.get_item(0)?.is_instance_of::<PyFloat>() {
@@ -69,7 +69,7 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
             altitude / 1.0e3,
             latitude,
             longitude,
-            time,
+            time.as_ref(),
             true,
         ))
     } else {
