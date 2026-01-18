@@ -73,7 +73,6 @@ mod chrono_impls {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::TimeLike;
