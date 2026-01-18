@@ -43,7 +43,6 @@ where
     }
 }
 
-#[cfg(feature = "chrono")]
 mod chrono_impls {
     use crate::{Instant, TimeLike, TimeScale};
 
