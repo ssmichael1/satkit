@@ -9,7 +9,7 @@ use crate::ode::ODEError;
 use crate::ode::ODEResult;
 use crate::ode::RKAdaptive;
 use crate::orbitprop::Precomputed;
-use crate::{Duration, Instant};
+use crate::{Duration, Instant, TimeLike};
 use lpephem::sun::shadowfunc;
 
 use anyhow::{Context, Result};
@@ -39,7 +39,7 @@ pub struct PropagationResult<const T: usize> {
 }
 
 impl<const T: usize> PropagationResult<T> {
-    pub fn interp(&self, time: &Instant) -> Result<Matrix<6, T>> {
+    pub fn interp<U: TimeLike>(&self, time: &U) -> Result<Matrix<6, T>> {
         interp_propresult(self, time)
     }
 }
@@ -187,15 +187,17 @@ pub enum PropagationError {
 /// ```
 ///
 ///
-pub fn propagate<const C: usize>(
+pub fn propagate<const C: usize, T: TimeLike>(
     state: &StateType<C>,
-    begin: &Instant,
-    end: &Instant,
+    begin: &T,
+    end: &T,
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
 ) -> Result<PropagationResult<C>> {
+    let begin = begin.as_instant();
+    let end = end.as_instant();
     // Duration to end of integration, in seconds
-    let x_end: f64 = (*end - *begin).as_seconds();
+    let x_end: f64 = (end - begin).as_seconds();
 
     let odesettings = crate::ode::RKAdaptiveSettings {
         abserror: settings.abs_error,
@@ -208,27 +210,27 @@ pub fn propagate<const C: usize>(
     let interp: &Precomputed = {
         if let Some(sinterp) = &settings.precomputed {
             if end > begin {
-                if (*begin >= sinterp.begin) && (*end <= sinterp.end) {
+                if (begin >= sinterp.begin) && (end <= sinterp.end) {
                     sinterp
                 } else {
-                    &Precomputed::new(begin, end)
+                    &Precomputed::new(&begin, &end)
                         .context("Cannot compute precomputed interpolation data for propagation")?
                 }
-            } else if (*end >= sinterp.begin) && (*begin <= sinterp.end) {
+            } else if (end >= sinterp.begin) && (begin <= sinterp.end) {
                 sinterp
             } else {
-                &Precomputed::new(begin, end)
+                &Precomputed::new(&begin, &end)
                     .context("Cannot compute precomputed interpolation data for propagation")?
             }
         } else {
-            &Precomputed::new(begin, end)
+            &Precomputed::new(&begin, &end)
                 .context("Cannot compute precomputed interpolation dat for propagation")?
         }
     };
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
         // The time variable in the ODE is in seconds
-        let time: Instant = *begin + Duration::from_seconds(x);
+        let time: Instant = begin + Duration::from_seconds(x);
 
         // get GCRS position & velocity;
         let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
@@ -403,9 +405,9 @@ pub fn propagate<const C: usize>(
             };
 
             Ok(PropagationResult {
-                time_begin: *begin,
+                time_begin: begin,
                 state_begin: *state,
-                time_end: *end,
+                time_end: end,
                 state_end: res.y,
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
@@ -416,9 +418,9 @@ pub fn propagate<const C: usize>(
         true => {
             let res = crate::ode::solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)?;
             Ok(PropagationResult {
-                time_begin: *begin,
+                time_begin: begin,
                 state_begin: *state,
-                time_end: *end,
+                time_end: end,
                 state_end: res.y,
                 accepted_steps: res.naccept as u32,
                 rejected_steps: res.nreject as u32,
@@ -429,12 +431,13 @@ pub fn propagate<const C: usize>(
     }
 }
 
-pub fn interp_propresult<const C: usize>(
+pub fn interp_propresult<const C: usize, T: TimeLike>(
     res: &PropagationResult<C>,
-    time: &Instant,
+    time: &T,
 ) -> Result<StateType<C>> {
     if let Some(sol) = &res.odesol {
         if sol.dense.is_some() {
+            let time = time.as_instant();
             let x = (time - res.time_begin).as_seconds();
             let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)

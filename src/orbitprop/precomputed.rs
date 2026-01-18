@@ -3,6 +3,7 @@ use crate::jplephem;
 use crate::mathtypes::{Quaternion, Vector3};
 use crate::Duration;
 use crate::Instant;
+use crate::TimeLike;
 use crate::SolarSystem;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
@@ -17,7 +18,9 @@ pub struct Precomputed {
 }
 
 impl Precomputed {
-    pub fn new(begin: &Instant, end: &Instant) -> Result<Self> {
+    pub fn new<T: TimeLike>(begin: &T, end: &T) -> Result<Self> {
+        let begin = begin.as_instant();
+        let end = end.as_instant();
         let step: f64 = 60.0;
 
         let (pbegin, pend) = match end > begin {
@@ -51,11 +54,12 @@ impl Precomputed {
         })
     }
 
-    pub fn interp(&self, t: &Instant) -> Result<InterpType> {
-        if *t < self.begin || *t > self.end {
+    pub fn interp<T: TimeLike>(&self, t: &T) -> Result<InterpType> {
+        let t = t.as_instant();
+        if t < self.begin || t > self.end {
             anyhow::bail!(
                 "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
-                *t,
+                t,
                 self.begin,
                 self.end
             );
