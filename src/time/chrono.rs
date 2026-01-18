@@ -5,6 +5,14 @@ use chrono::TimeZone;
 
 use crate::Instant;
 
+#[inline]
+fn datetime_to_unixtime<Tz>(dt: &chrono::DateTime<Tz>) -> f64
+where
+    Tz: chrono::TimeZone,
+{
+    dt.timestamp() as f64 + dt.timestamp_subsec_nanos() as f64 * 1.0e-9
+}
+
 impl From<Instant> for chrono::DateTime<chrono::Utc> {
     fn from(inst: Instant) -> Self {
         let unixtime = inst.as_unixtime();
@@ -28,8 +36,7 @@ where
     TZ: chrono::TimeZone,
 {
     fn from(dt: chrono::DateTime<TZ>) -> Self {
-        let unixtime = dt.timestamp() as f64 + dt.timestamp_subsec_nanos() as f64 * 1.0e-9;
-        Instant::from_unixtime(unixtime)
+        Instant::from_unixtime(datetime_to_unixtime(&dt))
     }
 }
 
@@ -38,21 +45,13 @@ where
     TZ: chrono::TimeZone,
 {
     fn from(dt: &chrono::DateTime<TZ>) -> Self {
-        let unixtime = dt.timestamp() as f64 + dt.timestamp_subsec_nanos() as f64 * 1.0e-9;
-        Instant::from_unixtime(unixtime)
+        Instant::from_unixtime(datetime_to_unixtime(dt))
     }
 }
 
 mod chrono_impls {
     use crate::{Instant, TimeLike, TimeScale};
-
-    #[inline]
-    fn datetime_to_unixtime<Tz>(dt: &chrono::DateTime<Tz>) -> f64
-    where
-        Tz: chrono::TimeZone,
-    {
-        dt.timestamp() as f64 + dt.timestamp_subsec_nanos() as f64 * 1.0e-9
-    }
+    use super::datetime_to_unixtime;
 
     impl<Tz> TimeLike for chrono::DateTime<Tz>
     where
