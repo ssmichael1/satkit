@@ -54,6 +54,11 @@
 //!   - Python versions 3.8 through 3.13
 //!   - Documentation at <https://satellite-toolkit.readthedocs.io/>
 //!
+//! ## Optional Features
+//!
+//! - **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
+//!   Activate with Cargo feature `chrono`.
+//!
 //! ## Getting Started
 //!
 //! ### Data Files
@@ -166,7 +171,7 @@ pub use crate::omm::OMM;
 
 // Time and duration
 mod time;
-pub use time::{Duration, Instant, TimeScale, Weekday};
+pub use time::{Duration, Instant, TimeLike, TimeScale, Weekday};
 
 // Objects available at crate level
 pub use frames::Frame;

@@ -30,6 +30,11 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
   - Python versions 3.8 through 3.14 supported
   - Full documentation at <https://satellite-toolkit.readthedocs.io/latest/>
 
+## Optional Features
+
+- **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
+  Activate with Cargo feature `chrono`.
+
 ## Key Capabilities
 
 ### Coordinate Frame Transformations

@@ -1,6 +1,6 @@
 use super::ierstable::IERSTable;
 use crate::frametransform::{qrot_ycoord, qrot_zcoord};
-use crate::{Instant, TimeScale};
+use crate::{TimeLike, TimeScale};
 
 use crate::mathtypes::*;
 
@@ -25,7 +25,7 @@ fn table5d_singleton() -> &'static IERSTable {
     INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2d.txt").unwrap())
 }
 
-pub fn qcirs2gcrs_dxdy(tm: &Instant, dxdy: Option<(f64, f64)>) -> Quaternion {
+pub fn qcirs2gcrs_dxdy<T: TimeLike>(tm: &T, dxdy: Option<(f64, f64)>) -> Quaternion {
     let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
 
@@ -163,8 +163,8 @@ pub fn qcirs2gcrs_dxdy(tm: &Instant, dxdy: Option<(f64, f64)>) -> Quaternion {
 ///
 /// * See Vallado Ch. 3.7
 /// * Also see [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf)
-///    
-pub fn qcirs2gcrs(tm: &Instant) -> Quaternion {
+///
+pub fn qcirs2gcrs<T: TimeLike>(tm: &T) -> Quaternion {
     let dxdy: Option<(f64, f64)> = crate::earth_orientation_params::get(tm).map(|v| (v[4], v[5]));
     qcirs2gcrs_dxdy(tm, dxdy)
 }

@@ -178,7 +178,7 @@ pub fn update() -> Result<()> {
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
         bail!(
-            r#"Data directory is read-only. 
+            r#"Data directory is read-only.
              Try setting the environment variable SATKIT_DATA
              to a writeable directory and re-starting or explicitly set
              data directory"#
@@ -236,7 +236,7 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 
                     This warning will only be shown once for each library load.
 
-                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`                                                        
+                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`
                     ",
                     mjd_utc
                 );
@@ -251,7 +251,7 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 
                     This warning will only be shown once for each library load.
 
-                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`                                                        
+                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`
                     ",
                     mjd_utc
                 );
@@ -269,10 +269,10 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
                     eprintln!(
                         r"
                     Warning: EOP data not available for MJD UTC = {} (too early).
-                   
+
                     This warning will only be shown once for each library load.
 
-                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`                                                        
+                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`
                     ",
                         mjd_utc
                     );
@@ -280,11 +280,11 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
                     #[cfg(not(feature = "pybindings"))]
                     eprintln!(
                 "
-                    Warning: EOP data not available for MJD UTC = {} (too early).          
+                    Warning: EOP data not available for MJD UTC = {} (too early).
 
                     This warning will only be shown once for each library load.
 
-                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`                                                        
+                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`
                     ",
                     mjd_utc
                 );
@@ -336,7 +336,7 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 /// ```
 ///
 #[inline]
-pub fn get(tm: &crate::Instant) -> Option<[f64; 6]> {
+pub fn get<T: crate::TimeLike>(tm: &T) -> Option<[f64; 6]> {
     eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC))
 }
 
