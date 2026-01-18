@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use crate::utils::{datadir, download_file, download_if_not_exist};
 use crate::Instant;
+use crate::TimeLike;
 use anyhow::{bail, Context, Result};
 
 use std::sync::RwLock;
@@ -15,7 +16,7 @@ use once_cell::sync::OnceCell;
 pub struct SpaceWeatherRecord {
     /// Date of record
     pub date: Instant,
-    /// Bartels Solar Radiation Number.  
+    /// Bartels Solar Radiation Number.
     /// A sequence of 27-day intervals counted continuously from 1832 February 8
     pub bsrn: i32,
     /// Number of day within the bsrn
@@ -146,7 +147,8 @@ fn space_weather_singleton() -> &'static RwLock<Result<Vec<SpaceWeatherRecord>>>
 /// # Notes:
 ///
 /// * Space weather is updated daily in a file: sw19571001.txt
-pub fn get(tm: Instant) -> Result<SpaceWeatherRecord> {
+pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
+    let tm = tm.as_instant();
     let sw_lock = space_weather_singleton().read().unwrap();
     let sw = sw_lock.as_ref().unwrap();
 
@@ -169,7 +171,7 @@ pub fn update() -> Result<()> {
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
         bail!(
-            r#"Data directory is read-only. 
+            r#"Data directory is read-only.
              Try setting the environment variable SATKIT_DATA
              to a writeable directory and re-starting or explicitly set
              data directory to writeable directory"#
@@ -191,7 +193,7 @@ mod tests {
     #[test]
     fn test_load() {
         let tm: Instant = Instant::from_datetime(2023, 11, 14, 0, 0, 0.0).unwrap();
-        let r = get(tm);
+        let r = get(&tm);
         println!("r = {:?}", r);
         println!("rdate = {}", r.unwrap().date);
     }
