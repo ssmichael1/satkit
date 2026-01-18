@@ -39,11 +39,11 @@ serde-pickle = "1.2.0"
 itertools = "0.14.0"
 anyhow = "1"
 rmpfit = "0.3.0"
-chrono = { version = "0.4.38", optional = true }
+chrono = { version = "0.4", optional = true }
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }
-chrono = "0.4.38"
+chrono = "0.4"
 pyo3-build-config = { version = "0.27.1", optional = true }
 
 [dev-dependencies]

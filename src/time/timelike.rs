@@ -54,30 +54,3 @@ impl TimeLike for Instant {
     }
 }
 
-#[cfg(feature = "chrono")]
-mod chrono_impls {
-    use super::{Instant, TimeLike, TimeScale};
-
-    impl<Tz> TimeLike for chrono::DateTime<Tz>
-    where
-        Tz: chrono::TimeZone,
-    {
-        #[inline]
-        fn as_mjd_with_scale(&self, scale: TimeScale) -> f64 {
-            let unixtime = self.timestamp() as f64 + self.timestamp_subsec_nanos() as f64 * 1.0e-9;
-            Instant::from_unixtime(unixtime).as_mjd_with_scale(scale)
-        }
-
-        #[inline]
-        fn as_jd_with_scale(&self, scale: TimeScale) -> f64 {
-            let unixtime = self.timestamp() as f64 + self.timestamp_subsec_nanos() as f64 * 1.0e-9;
-            Instant::from_unixtime(unixtime).as_jd_with_scale(scale)
-        }
-
-        #[inline]
-        fn as_instant(&self) -> Instant {
-            let unixtime = self.timestamp() as f64 + self.timestamp_subsec_nanos() as f64 * 1.0e-9;
-            Instant::from_unixtime(unixtime)
-        }
-    }
-}
