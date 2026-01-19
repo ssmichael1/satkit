@@ -64,7 +64,7 @@ jobs:
         run: |
           python -m pip install requests
           python python/test/download_data.py ${{matrix.data_path}}
-        
+
 
       # Try to recover satkit test vectors from cache
       - name: Cache Satkit Test Vectors
@@ -79,7 +79,7 @@ jobs:
       - name: Download Satkit Test Vectors
         if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
         run: |
-          python -m pip install requests 
+          python -m pip install requests
           python python/test/download_testvecs.py ${{matrix.testvec_path}}
 
       - name: Cargo Cache
@@ -91,16 +91,16 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/            
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Build
         run: cargo build --release
-      
+
       - name: Test
-        run: cargo test
+        run: cargo  --features chrono
 
       - name: Doc
-        run: cargo doc --no-deps 
+        run: cargo doc --no-deps
 
