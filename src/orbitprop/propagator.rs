@@ -224,7 +224,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
             }
         } else {
             &Precomputed::new(&begin, &end)
-                .context("Cannot compute precomputed interpolation dat for propagation")?
+                .context("Cannot compute precomputed interpolation data for propagation")?
         }
     };
 
