@@ -198,7 +198,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
     let end = end.as_instant();
 
     // Check for zero-duration case and return immediately
-    if end-begin == Duration::zero() {
+    if end == begin {
         return Ok(PropagationResult {
             time_begin: begin,
             state_begin: *state,
