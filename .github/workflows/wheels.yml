@@ -32,7 +32,7 @@ jobs:
             platform: linux
             testvec_path: satkit-testvecs
             data_path: astro-data
-            activatestr: source .venv/bin/activate          
+            activatestr: source .venv/bin/activate
           - os: windows-latest
             testvec_path: satkit-testvecs
             data_path: astro-data
@@ -63,7 +63,7 @@ jobs:
           key: satkit-data-cache
 
       # Download data if it is not in the cache
-      - name: Download Satkit Data 
+      - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'
         run: |
           python -m venv .venv
@@ -79,11 +79,11 @@ jobs:
         with:
           path: ${{matrix.testvec_path}}
           enableCrossOsArchive: True
-          key: satkit-testvecs-cache        
+          key: satkit-testvecs-cache
 
       # Download test vectors if they are not in the cache
-      - name: Download Satkit Test Vectors 
-        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true' 
+      - name: Download Satkit Test Vectors
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
         run: |
           python -m venv .venv
           ${{matrix.activatestr}}
@@ -106,7 +106,7 @@ jobs:
           source .venv/bin/activate
           python -m pip install build
           python -m build --sdist . -o wheelhouse
-          
+
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -135,3 +135,31 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+
+  readthedocs:
+      runs-on: ubuntu-latest
+      needs: publish_wheels
+      environment: readthedocs
+      steps:
+        - name: Trigger Read the Docs builds (stable + latest)
+          env:
+            RTD_TOKEN: ${{ secrets.RTD_TOKEN }}   # store this in the 'readthedocs' Environment secrets
+            RTD_HOST: app.readthedocs.org
+            RTD_PROJECT: satellite-toolkit
+          run: |
+            set -euo pipefail
+
+            # Give PyPI a moment to propagate the new release
+            sleep 20
+
+            # Optional: sync versions/tags
+            curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/sync-versions/" \
+              -H "Authorization: Token ${RTD_TOKEN}"
+
+            # Build stable
+            curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/versions/stable/builds/" \
+              -H "Authorization: Token ${RTD_TOKEN}"
+
+            # Build latest
+            curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/versions/latest/builds/" \
+              -H "Authorization: Token ${RTD_TOKEN}"
