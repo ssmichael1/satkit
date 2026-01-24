@@ -78,7 +78,8 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 /// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
 ///    orbital mean-elements message (OMM) or other source implementing the
-///   SGP4Source trait
+///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
+///   in the source object after first call to avoid re-initialization on subsequent calls
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
 ///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`
@@ -147,7 +148,8 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> anyhow::
 ///
 /// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
 ///    orbital mean-elements message (OMM) or other source implementing the
-///   SGP4Source trait
+///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
+///   in the source object after first call to avoid re-initialization on subsequent calls.
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
 ///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`

@@ -453,6 +453,9 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
     if let Some(sol) = &res.odesol {
         if sol.dense.is_some() {
             let time = time.as_instant();
+            if time == res.time_begin {
+                return Ok(res.state_begin);
+            }
             let x = (time - res.time_begin).as_seconds();
             let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)
