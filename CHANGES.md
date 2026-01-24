@@ -162,3 +162,5 @@
 
 ## Rust 0.9.2, Python 0.9.1
   - bugfix: handle high-precision propagation without error when duration is zero
+  - Fix Rust documentation for SGP4 to accurately represent sgp4 source
+  - Add a "zero" static function for duration to represent zero duration
