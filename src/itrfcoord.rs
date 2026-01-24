@@ -581,7 +581,7 @@ impl ITRFCoord {
     /// let itrf2 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 250.0);
     ///
     /// // Get ENU of itrf1 relative to itrf2
-    /// let enu = itrf1.to_ned(&itrf2);
+    /// let enu = itrf1.to_enu(&itrf2);
     /// // Should return [0.0, 0.0, -100.0]
     /// ```
     ///

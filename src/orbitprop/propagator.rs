@@ -196,6 +196,21 @@ pub fn propagate<const C: usize, T: TimeLike>(
 ) -> Result<PropagationResult<C>> {
     let begin = begin.as_instant();
     let end = end.as_instant();
+
+    // Check for zero-duration case and return immediately
+    if end == begin {
+        return Ok(PropagationResult {
+            time_begin: begin,
+            state_begin: *state,
+            time_end: end,
+            state_end: *state,
+            accepted_steps: 0,
+            rejected_steps: 0,
+            num_eval: 0,
+            odesol: None,
+        });
+    }
+
     // Duration to end of integration, in seconds
     let x_end: f64 = (end - begin).as_seconds();
 
@@ -438,6 +453,9 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
     if let Some(sol) = &res.odesol {
         if sol.dense.is_some() {
             let time = time.as_instant();
+            if time == res.time_begin {
+                return Ok(res.state_begin);
+            }
             let x = (time - res.time_begin).as_seconds();
             let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
             Ok(y)
