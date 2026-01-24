@@ -159,3 +159,6 @@
 ## Rust 0.9.1
   - Functions that accept time as input now accept structs that implement the new `TimeLike` trait.
   - Add a `chrono` feature that enables interoperability with the chrono crate.  implement `TimeLike` for `chrono::DateTime`
+
+## Rust 0.9.2, Python 0.9.1
+  - bugfix: handle high-precision propagation without error when duration is zero
