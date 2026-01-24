@@ -10,7 +10,7 @@ authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
 version = "0.9.1"
-license = { file = "LICENSE" }
+license = "MIT"
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
     "satellite",
@@ -40,6 +40,8 @@ classifiers = [
 [project.optional-dependencies]
 test = ["pytest", "xmltodict"]
 
+[tool.setuptools]
+license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 where = ["python"]
