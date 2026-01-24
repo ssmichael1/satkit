@@ -648,7 +648,8 @@ mod tests {
                         .unwrap()
                         .geocentric_state(SolarSystem::Moon, &tm)
                         .unwrap();
-                    // Scale Earth velocity
+                    // Earth velocity from EMB velocity minus scaled
+                    // moon velocity
                     tvel -= mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
                 }
                 if src == 3 {
@@ -658,21 +659,11 @@ mod tests {
                         .unwrap()
                         .geocentric_state(SolarSystem::Moon, &tm)
                         .unwrap();
-                    //Scale Earth velocity
+                    // Earth velocity from EMB velocity minus scaled
+                    // moon velocity
                     svel -= mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
                 }
-                if src == 10 {
-                    // Compute moon velocity in barycentric frame (not relative to Earth)
-                    let (_embpos, embvel): (Vector3, Vector3) =
-                        jpl.geocentric_state(SolarSystem::EMB, &tm).unwrap();
-                    svel = svel + (embvel - svel / (1.0 + jpl.emrat));
-                }
-                if tar == 10 {
-                    // Comput moon velocity in barycentric frame (not relative to Earth)
-                    let (_embpos, embvel): (Vector3, Vector3) =
-                        jpl.geocentric_state(SolarSystem::EMB, &tm).unwrap();
-                    tvel = tvel + (embvel - tvel / (1.0 + jpl.emrat));
-                }
+
 
                 // Comparing positions
                 if coord <= 3 {

@@ -96,6 +96,13 @@ impl Duration {
         }
     }
 
+    /// A zero-duration object
+    /// # Returns
+    /// A `Duration` object representing zero time
+    pub const fn zero() -> Self {
+        Self { usec: 0 }
+    }
+
     /// Represent duration as days
     ///
     /// # Returns

@@ -76,10 +76,13 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 /// # Arguments
 ///
-/// * `tle` - The TLE (or OMM) on which top operate.  Note that a mutable reference
-///   is passed, as SGP-4 metadata is stored after each propagation
+/// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
+///    orbital mean-elements message (OMM) or other source implementing the
+///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
+///   in the source object after first call to avoid re-initialization on subsequent calls
 /// * `tm` -  The time at which to compute position and velocity
-///   Input as a slice for convenience.
+///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
+///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`
 ///
 ///
 /// # Return
@@ -127,8 +130,8 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// ```
 ///
 #[inline]
-pub fn sgp4<T: TimeLike>(source: &mut impl SGP4Source, tm: &[T]) -> anyhow::Result<SGP4State> {
-    sgp4_full(source, tm, GravConst::WGS84, OpsMode::IMPROVED)
+pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> anyhow::Result<SGP4State> {
+    sgp4_full(sgp4source, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
 ///
@@ -143,11 +146,13 @@ pub fn sgp4<T: TimeLike>(source: &mut impl SGP4Source, tm: &[T]) -> anyhow::Resu
 ///
 /// # Arguments
 ///
-/// * `SGP4Source` - The source of SGP4 data, typically a TLE but could be a
+/// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
 ///    orbital mean-elements message (OMM) or other source implementing the
-///   SGP4Source trait
+///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
+///   in the source object after first call to avoid re-initialization on subsequent calls.
 /// * `tm` -  The time at which to compute position and velocity
-///   Input as a slice for convenience.
+///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
+///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`
 ///
 /// * `gravconst` - The gravitational constant to use.
 ///
@@ -197,15 +202,15 @@ pub fn sgp4<T: TimeLike>(source: &mut impl SGP4Source, tm: &[T]) -> anyhow::Resu
 /// ```
 ///
 pub fn sgp4_full<T: TimeLike>(
-    source: &mut impl SGP4Source,
+    sgp4source: &mut impl SGP4Source,
     tm: &[T],
     gravconst: GravConst,
     opsmode: OpsMode,
 ) -> anyhow::Result<SGP4State> {
-    if source.satrec_mut().is_none() {
-        let args = source.sgp4_init_args()?;
+    if sgp4source.satrec_mut().is_none() {
+        let args = sgp4source.sgp4_init_args()?;
 
-        *source.satrec_mut() = Some(sgp4init(
+        *sgp4source.satrec_mut() = Some(sgp4init(
             gravconst,
             opsmode,
             "satno",
@@ -222,8 +227,8 @@ pub fn sgp4_full<T: TimeLike>(
         ).map_err(|e| anyhow::anyhow!("SGP4 init error: {}", e))?);
     }
 
-    let epoch = source.epoch();
-    let s = source.satrec_mut().as_mut().expect("satrec initialized");
+    let epoch = sgp4source.epoch();
+    let s = sgp4source.satrec_mut().as_mut().expect("satrec initialized");
 
     let n = tm.len();
     let mut rarr = StateArr::zeros(n);

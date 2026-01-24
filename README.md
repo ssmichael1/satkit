@@ -41,7 +41,7 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
 High-precision conversions between multiple reference frames with full support for time-varying Earth orientation:
   - **ITRF** - International Terrestrial Reference Frame (Earth-fixed)
   - **GCRF** - Geocentric Celestial Reference Frame using IAU-2000/2006 reduction (inertial)
-  - **TEME** - True Equinox Mean Equator frame used in SGP4 propagation
+  - **TEME** - True Equinox Mean Equator frame used in SGP4 propagation (almost inertial)
   - **CIRF** - Celestial Intermediate Reference Frame (IAU-2006 intermediate)
   - **TIRF** - Terrestrial Intermediate Reference Frame (Earth-rotation intermediate)
   - **Geodetic** - Latitude, longitude, altitude with WGS-84 ellipsoid
@@ -56,7 +56,7 @@ Multiple propagation methods optimized for different accuracy and performance re
     - Full AFSPC and improved mode support
     - TLE fitting from high-precision states with drag estimation
     - Batch processing for multiple satellites
-    - Support TLE and Orbital Mean-Element Messages
+    - Support TLE and Orbital Mean-Element Messages inputs
   - **Keplerian**: Fast analytical two-body propagation for preliminary analysis
 
 ### Numerical Integration Force Models
@@ -83,21 +83,21 @@ Access to high-precision solar system body positions:
 Comprehensive support for all standard astronomical time scales:
   - **UTC** - Coordinated Universal Time with leap second handling
   - **TAI** - International Atomic Time
-  - **TT** - Terrestrial Time
+  - **TT**  - Terrestrial Time
   - **TDB** - Barycentric Dynamical Time
   - **UT1** - Universal Time with Earth orientation corrections
   - **GPS** - GPS Time
   - Automatic conversion between all time scales with microsecond precision
 
 ### Geodetic Utilities
-- **Geodesic Calculations**: Accurate distance and azimuth between ground locations using Vincenty's formulae
-- **Coordinate Conversions**: ITRF ↔ Geodetic ↔ East-North-Up ↔ North-East-Down
-- **Elevation/Azimuth**: Topocentric coordinate transformations for ground station analysis
+- **Geodesic Calculations** - Accurate distance and azimuth between ground locations using Vincenty's formulae
+- **Coordinate Conversions** - ITRF ↔ Geodetic ↔ East-North-Up ↔ North-East-Down
+- **Elevation/Azimuth** - Topocentric coordinate transformations for ground station analysis
 
 ### Sun / Moon Calculations
-- **Sun rise / set**: Compute sun rise / set times as function of day & location
-- **Moon Phase**: Phase of moon and fraction illuminated
-- **Ephemeris**: Fast low-precision ephemeris for sun & moon
+- **Sun rise / set** - Compute sun rise / set times as function of day & location
+- **Moon Phase** - Phase of moon and fraction illuminated
+- **Ephemeris** - Fast low-precision ephemeris for sun & moon
 
 ## Technical Details
 
