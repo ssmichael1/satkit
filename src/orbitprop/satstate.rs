@@ -189,6 +189,13 @@ impl SatState {
         option_settings: Option<&PropSettings>,
     ) -> Result<Self> {
         let time = time.as_instant();
+
+        // Handle zero-duration propagation: return current state unchanged
+        // This avoids numerical issues in the ODE integrator when dt=0
+        if time == self.time {
+            return Ok(self.clone());
+        }
+
         let default = orbitprop::PropSettings::default();
         let settings = option_settings.unwrap_or(&default);
         match self.cov {
@@ -330,6 +337,57 @@ mod test {
 
         let _state2 =
             satstate.propagate(&(satstate.time + crate::Duration::from_days(1.0)), None)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_zero_duration_propagation() -> Result<()> {
+        // Test that propagating with dt=0 returns the same state
+        let satstate = SatState::from_pv(
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
+            &na::vector![consts::GEO_R, 0.0, 0.0],
+            &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
+        );
+
+        // Propagate to the same time (zero duration)
+        let state2 = satstate.propagate(&satstate.time, None)?;
+
+        // Verify the state is unchanged
+        assert_abs_diff_eq!(satstate.pos_gcrf(), state2.pos_gcrf(), epsilon = 1e-15);
+        assert_abs_diff_eq!(satstate.vel_gcrf(), state2.vel_gcrf(), epsilon = 1e-15);
+        assert_eq!(satstate.time, state2.time);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_zero_duration_propagation_with_cov() -> Result<()> {
+        // Test that propagating with dt=0 returns the same state including covariance
+        let mut satstate = SatState::from_pv(
+            &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
+            &na::vector![consts::GEO_R, 0.0, 0.0],
+            &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
+        );
+        satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
+
+        // Propagate to the same time (zero duration)
+        let state2 = satstate.propagate(&satstate.time, None)?;
+
+        // Verify the state is unchanged
+        assert_abs_diff_eq!(satstate.pos_gcrf(), state2.pos_gcrf(), epsilon = 1e-15);
+        assert_abs_diff_eq!(satstate.vel_gcrf(), state2.vel_gcrf(), epsilon = 1e-15);
+
+        // Verify covariance is unchanged
+        let cov1 = match satstate.cov() {
+            StateCov::PVCov(v) => v,
+            StateCov::None => anyhow::bail!("cov is not none"),
+        };
+        let cov2 = match state2.cov() {
+            StateCov::PVCov(v) => v,
+            StateCov::None => anyhow::bail!("cov is not none"),
+        };
+        assert_abs_diff_eq!(cov1, cov2, epsilon = 1e-15);
 
         Ok(())
     }
