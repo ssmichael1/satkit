@@ -523,7 +523,8 @@ impl ITRFCoord {
     }
 
     /// Convert coordinate to a North-East-Down (NED)
-    /// coordinate relative to a reference coordinate
+    /// position relative to a reference coordinate
+    /// (in the NED frame of the reference coordinate)
     ///
     /// # Arguments
     ///
@@ -533,6 +534,10 @@ impl ITRFCoord {
     ///
     /// * `nalgebra::Vector3<f64>` representing NED position
     ///   relative to reference.  Units are meters
+    ///
+    /// # Note:
+    ///   Equivalent to:
+    ///         `ref_coord.q_ned2itrf().conjugate() * (self.itrf - ref_coord.itrf)`
     ///
     /// # Examples:
     /// ```
@@ -548,7 +553,7 @@ impl ITRFCoord {
     /// ```
     ///
     pub fn to_ned(&self, ref_coord: &Self) -> Vector3 {
-        self.q_ned2itrf().conjugate() * (self.itrf - ref_coord.itrf)
+        ref_coord.q_ned2itrf().conjugate() * (self.itrf - ref_coord.itrf)
     }
 
     /// Return quaternion representing rotation from the
@@ -561,7 +566,8 @@ impl ITRFCoord {
     }
 
     /// Convert coordinate to a East-North-Up (ENU)
-    /// coordinate relative to a reference coordinate
+    /// position relative to a reference coordinate
+    /// (in the ENU frame of the reference coordinate)
     ///
     /// # Arguments
     ///
@@ -571,6 +577,11 @@ impl ITRFCoord {
     ///
     /// * `nalgebra::Vector3<f64>` representing ENU position
     ///   relative to reference.  Units are meters
+    ///
+    ///
+    /// # Note:
+    ///   Equivalent to:
+    ///       `ref_coord.q_enu2itrf().conjugate() * (self.itrf - ref_coord.itrf)`
     ///
     /// # Examples:
     /// ```
@@ -585,8 +596,8 @@ impl ITRFCoord {
     /// // Should return [0.0, 0.0, -100.0]
     /// ```
     ///
-    pub fn to_enu(&self, other: &Self) -> Vector3 {
-        self.q_enu2itrf().conjugate() * (self.itrf - other.itrf)
+    pub fn to_enu(&self, ref_coord: &Self) -> Vector3 {
+        ref_coord.q_enu2itrf().conjugate() * (self.itrf - ref_coord.itrf)
     }
 }
 
@@ -667,7 +678,25 @@ mod tests {
         */
 
         let itrf1 = ITRFCoord::from_geodetic_deg(lat_deg, lon_deg, hae);
-        let itrf2 = itrf1 + itrf1.q_ned2itrf() * nalgebra::vector![0.0, 0.0, 10000.0];
-        println!("height diff = {}", itrf2.hae() - itrf1.hae());
+
+        // Go east 10 meters
+        let itrf3 = itrf1 + itrf1.q_enu2itrf() * nalgebra::vector![10.0, 0.0, 0.0];
+        let (lat3, lon3, _h3) = itrf3.to_geodetic_deg();
+        assert!(((lat3 - lat_deg) / lat_deg).abs() < 1.0e-6);
+        assert!(((lon3 - (lon_deg + 0.000129)) / lon_deg).abs() < 1.0e-6);
+
+        // Go north 10 meters
+        let itrf4 = itrf1 + itrf1.q_enu2itrf() * nalgebra::vector![0.0, 10.0, 0.0];
+        let (lat4, lon4, _h4) = itrf4.to_geodetic_deg();
+        assert!(((lat4 - (lat_deg + 0.000090)) / lat_deg).abs() < 1.0e-6);
+        assert!(((lon4 - lon_deg) / lon_deg).abs() < 1.0e-6);
+
+        // Go up 10 meters
+        let itrf5 = itrf1 + itrf1.q_enu2itrf() * nalgebra::vector![0.0, 0.0, 10.0];
+        let (lat5, lon5, h5) = itrf5.to_geodetic_deg();
+        assert!(((lat5 - lat_deg) / lat_deg).abs() < 1.0e-6);
+        assert!(((lon5 - lon_deg) / lon_deg).abs() < 1.0e-6);
+        assert!(((h5 - (hae + 10.0)) / hae).abs() < 1.0e-6);
+
     }
 }

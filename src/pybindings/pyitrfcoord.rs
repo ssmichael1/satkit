@@ -26,7 +26,7 @@ use super::pyutils::*;
 ///
 /// Args:
 ///     vec (numpy.ndarray, list, or 3-element tuple of floats, optional): ITRF Cartesian location in meters
-///  
+///
 /// Keyword Args:
 ///     latitude_deg (float, optional): Latitude in degrees
 ///     longitude_deg (float, optional): Longitude in degrees
@@ -34,13 +34,13 @@ use super::pyutils::*;
 ///     longitude_rad (float, optional): Longitude in radians
 ///     altitude (float, optional): Height above ellipsoid, meters
 ///     height (float, optional): Height above ellipsoid, meters
-///     
+///
 ///
 /// Returns:
 ///     itrfcoord: New ITRF coordinate
 ///
 /// Example:
-///     * Create ITRF coord from Cartesian        
+///     * Create ITRF coord from Cartesian
 ///        >>> coord = itrfcoord([ 1523128.63570828 -4461395.28873207  4281865.94218203 ])
 ///        >>> print(coord)
 ///        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
@@ -50,7 +50,7 @@ use super::pyutils::*;
 ///        >>> coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
 ///        >>> print(coord)
 ///        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
-///       
+///
 ///
 #[pyclass(name = "itrfcoord", module = "satkit")]
 #[derive(Clone)]
@@ -239,15 +239,15 @@ impl PyITRFCoord {
         self.0.q_enu2itrf().into()
     }
 
-    /// Return East-North-Up location of input coordinate relative to self
+    /// Return East-North-Up location of self relative to input reference coordinate
     ///
     /// Args:
-    ///     other (itrfcoord): ITRF coordinate for which to compute ENU location
+    ///     refcoord (itrfcoord): ITRF reference coordinate against which to compute ENU location
     ///
     /// Returns:
-    ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of other relative to self
-    fn to_enu(&self, other: &Self) -> Py<PyAny> {
-        let v = self.0.q_enu2itrf().conjugate() * (self.0.itrf - other.0.itrf);
+    ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of self relative to other
+    fn to_enu(&self, refcoord: &Self) -> Py<PyAny> {
+        let v = refcoord.0.q_enu2itrf().conjugate() * (self.0.itrf - refcoord.0.itrf);
         pyo3::Python::attach(|py| -> Py<PyAny> {
             numpy::PyArray::from_slice(py, v.data.as_slice())
                 .into_py_any(py)
@@ -255,15 +255,15 @@ impl PyITRFCoord {
         })
     }
 
-    /// Return North-East-Down location of input coordinate relative to self
+    /// Return North-East-Down location of self relative to input reference coordinate
     ///
     /// Args:
-    ///     other (itrfcoord): ITRF coordinate for which to compute NED location
+    ///     refcoord (itrfcoord): ITRF reference coordinate against which to compute NED location
     ///
     /// Returns:
-    ///     numpy.ndarray: 3-element numpy array of floats representing NED location in meters of other relative to self
+    ///     numpy.ndarray: 3-element numpy array of floats representing NED location in meters of self relative to other
     fn to_ned(&self, other: &Self) -> Py<PyAny> {
-        let v = self.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
+        let v = other.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
         pyo3::Python::attach(|py| -> Py<PyAny> {
             numpy::PyArray::from_slice(py, v.data.as_slice())
                 .into_py_any(py)
