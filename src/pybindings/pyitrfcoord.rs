@@ -245,7 +245,7 @@ impl PyITRFCoord {
     ///     refcoord (itrfcoord): ITRF reference coordinate against which to compute ENU location
     ///
     /// Returns:
-    ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of self relative to other
+    ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of self relative to refcoord
     fn to_enu(&self, refcoord: &Self) -> Py<PyAny> {
         let v = refcoord.0.q_enu2itrf().conjugate() * (self.0.itrf - refcoord.0.itrf);
         pyo3::Python::attach(|py| -> Py<PyAny> {
