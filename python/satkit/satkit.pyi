@@ -2066,6 +2066,34 @@ class itrfcoord:
             satkit.quaternion: Quaternion representiong rotation from East-North-Up (ENU) to ITRF at this location
         """
 
+    def to_enu(self, refcoord: itrfcoord) -> npt.NDArray[np.float64]:
+        """Return vector from reference coordinate to this coordinate in East-North-Up (ENU) frame of the reference coordinate
+
+        Args:
+            refcoord (itrfcoord): Reference ITRF coordinate representing origin of ENU frame
+
+        Returns:
+            npt.NDArray[np.float64]: 3-element numpy array representing vector from reference coordinate to this coordinate in East-North-Up (ENU) frame of reference at the reference coordinate
+
+        Note:
+            * This is equivalent to calling: refcoord.qenu2itrf.conj * (self - refcoord)
+
+        """
+
+    def to_ned(self, refcoord: itrfcoord) -> npt.NDArray[np.float64]:
+        """Return vector from reference coordinate to this coordinate in North-East-Down (NED) at the reference coordinate
+
+        Args:
+            refcoord (itrfcoord): Reference ITRF coordinate representing origin of NED frame
+
+        Returns:
+            npt.NDArray[np.float64]: 3-element numpy array representing vector from reference coordinate to this coordinate in North-East-Down (NED) frame of reference at the reference coordinate
+
+        Note:
+            * This is equivalent to calling: refcoord.qned2itrf.conj * (self - refcoord)
+
+        """
+
     def __sub__(self, other: itrfcoord) -> npt.NDArray[np.float64]:
         """Subtract another ITRF coordinate from this one
 

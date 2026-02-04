@@ -492,6 +492,85 @@ class TestITRFCoord:
         assert itrf.longitude_deg == pytest.approx(46.4464)
 
 
+    def test_ned_enu(self):
+
+        """
+        Test NED and ENU conversions
+        """
+        refcoord = sk.itrfcoord(
+            latitude_deg=30.0, longitude_deg=-90.0, altitude=0.0
+        )
+        testcoord = sk.itrfcoord(
+            latitude_deg=30.0, longitude_deg=-90.0, altitude=100.0
+        )
+
+        ned = testcoord.to_ned(refcoord)
+        enu = testcoord.to_enu(refcoord)
+
+        # Check NED values
+        # North component
+        assert ned[0] == pytest.approx(0, abs=1e-8)
+        # East component
+        assert ned[1] == pytest.approx(0, abs=1e-8)
+        # Down component
+        assert ned[2] == pytest.approx(-100.0, rel=1e-8)
+
+        # Check ENU values
+        # East component
+        assert enu[0] == pytest.approx(0, abs=1e-8)
+        # North component
+        assert enu[1] == pytest.approx(0, abs=1e-8)
+        # Up component
+        assert enu[2] == pytest.approx(100.0, abs=1e-8)
+
+        coord1 = sk.itrfcoord(latitude_deg=42.466, longitude_deg=-71.1516, altitude=10.0)
+
+        # Go east 10 meters and check
+        coord2 = sk.itrfcoord(coord1.vector + coord1.qenu2itrf * np.array([10.0, 0.0, 0.0]))
+        enu = coord2.to_enu(coord1)
+        assert enu[0] == pytest.approx(10.0, abs=1e-8)
+        assert enu[1] == pytest.approx(0.0, abs=1e-8)
+        assert enu[2] == pytest.approx(0.0, abs=1e-8)
+
+        # Go north 10 meters and check
+        coord2 = sk.itrfcoord(coord1.vector + coord1.qenu2itrf * np.array([0.0, 10.0, 0.0]))
+        enu = coord2.to_enu(coord1)
+        assert enu[0] == pytest.approx(0.0, abs=1e-8)
+        assert enu[1] == pytest.approx(10.0, abs=1e-8)
+        assert enu[2] == pytest.approx(0.0, abs=1e-8)
+
+        # Go up 10 meters and check
+        coord2 = sk.itrfcoord(coord1.vector + coord1.qenu2itrf * np.array([0.0, 0.0, 10.0]))
+        enu = coord2.to_enu(coord1)
+        assert enu[0] == pytest.approx(0.0, abs=1e-8)
+        assert enu[1] == pytest.approx(0.0, abs=1e-8)
+        assert enu[2] == pytest.approx(10.0, abs=1e-8)
+
+        for ix in range(50):
+            # Create random coordinates
+            lat1 = np.random.uniform(-90.0, 90.0)
+            lon1 = np.random.uniform(-180.0, 180.0)
+            alt1 = np.random.uniform(100.0, 40000.0)
+            lat2 = np.random.uniform(-90.0, 90.0)
+            lon2 = np.random.uniform(-180.0, 180.0)
+            alt2 = np.random.uniform(100.0, 40000.0)
+            coord1 = sk.itrfcoord(latitude_deg=lat1, longitude_deg=lon1, altitude=alt1)
+            coord2 = sk.itrfcoord(latitude_deg=lat2, longitude_deg=lon2, altitude=alt2)
+
+            # Check to_ned, to_enu against manually computed values
+            ned = coord2.to_ned(coord1)
+            enu = coord2.to_enu(coord1)
+            ned2 = coord1.qned2itrf.conj * (coord2-coord1)
+            enu2 = coord1.qenu2itrf.conj * (coord2-coord1)
+            assert ned[0] == pytest.approx(ned2[0], rel=1e-8)
+            assert ned[1] == pytest.approx(ned2[1], rel=1e-8)
+            assert ned[2] == pytest.approx(ned2[2], rel=1e-8)
+            assert enu[0] == pytest.approx(enu2[0], rel=1e-8)
+            assert enu[1] == pytest.approx(enu2[1], rel=1e-8)
+            assert enu[2] == pytest.approx(enu2[2], rel=1e-8)
+
+
+
 class TestMoon:
     def test_moonpos(self):
         """
