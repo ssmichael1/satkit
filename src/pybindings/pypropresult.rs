@@ -325,7 +325,7 @@ impl PyPropResult {
                             let rsphi = res.fixed_view::<6, 6>(0, 1).transpose();
                             (
                                 slice2py1d(py, &res.as_slice()[0..6])?,
-                                slice2py2d(py, &rsphi.as_slice(), 6, 6)?,
+                                slice2py2d(py, rsphi.as_slice(), 6, 6)?,
                             )
                                 .into_py_any(py)
                         })

@@ -71,19 +71,6 @@ pub enum PyWeekday {
 
 #[pymethods]
 impl PyWeekday {
-    fn __doc__(&self) -> &'static str {
-        match self {
-            PyWeekday::Sunday => "Sunday",
-            PyWeekday::Monday => "Monday",
-            PyWeekday::Tuesday => "Tuesday",
-            PyWeekday::Wednesday => "Wednesday",
-            PyWeekday::Thursday => "Thursday",
-            PyWeekday::Friday => "Friday",
-            PyWeekday::Saturday => "Saturday",
-            PyWeekday::Invalid => "Invalid weekday",
-        }
-    }
-
     #[new]
     fn new() -> Self {
         PyWeekday::Sunday
