@@ -831,6 +831,44 @@ class TestHighPrecisionPropagation:
 
         assert istate1 == pytest.approx(istate2, rel=1e-7)
 
+
+    def test_state_transition(self):
+        # Test that state transition matrix is computed correctly
+        # Define an orbit ... 30 deg inclined at 550km perigee, 1000km apogee
+        perigee = sk.consts.earth_radius + 550e3
+        apogee = sk.consts.earth_radius + 1000e3
+        eccentricity = (apogee - perigee) / (apogee + perigee)
+        semiparameter = (perigee + apogee) / 2
+        k = sk.kepler(semiparameter, eccentricity, m.radians(30), 0, 0, 0)
+
+        state0 = np.concatenate((k.to_pv()))
+        epoch = sk.time(2025, 1, 1, 0, 0, 0)
+        duration = sk.duration(hours=6)
+
+        settings = sk.propsettings()
+
+        # a small perterbation in the initial state, used to test state transition matrix
+        dstate0 = [30.3, -5.2, 8.4, 0.01, -0.02, 0.05]
+
+        res0 = sk.propagate(state0, epoch, epoch+duration, output_phi=True, propsettings=settings)
+        resd = sk.propagate(state0 + dstate0, epoch, epoch+duration, output_phi=True, propsettings=settings)
+
+        # Check that the state transition matrix correctly maps the initial
+        # state perturbation to propagated state perturbation
+        assert resd.state_end == pytest.approx(
+            res0.state_end + res0.phi @ dstate0, rel=1e-7
+        )
+
+        # Check on interpolated state transition
+        for x in range(5):
+            tinterp = epoch + sk.duration(hours= x * 6.0 / 5.0)
+            tinterp = epoch + sk.duration(hours=3.0)
+            mstate0, mphi = res0.interp(tinterp, output_phi=True)
+            mdstate0 = resd.interp(tinterp)
+            assert mdstate0 == pytest.approx(
+                mstate0 + mphi @ dstate0, rel=1e-7
+            )
+
     def test_gps(self):
 
         # File contains test calculation vectors provided by NASA
