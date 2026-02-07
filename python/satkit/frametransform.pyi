@@ -121,7 +121,7 @@ def earth_rotation_angle(
 
 @typing.overload
 def qitrf2tirs(
-    tm: time,
+    tm: time | datetime.datetime,
 ) -> quaternion:
     """Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
 
@@ -397,7 +397,7 @@ def qteme2itrf(
     """
 
 def earth_orientation_params(
-    time: time,
+    time: time | datetime.datetime,
 ) -> tuple[float, float, float, float, float, float]:
     """Get Earth Orientation Parameters at given instant
 
