@@ -69,6 +69,61 @@ pub enum PyWeekday {
     Invalid = -1,
 }
 
+#[pymethods]
+impl PyWeekday {
+    fn __doc__(&self) -> &'static str {
+        match self {
+            PyWeekday::Sunday => "Sunday",
+            PyWeekday::Monday => "Monday",
+            PyWeekday::Tuesday => "Tuesday",
+            PyWeekday::Wednesday => "Wednesday",
+            PyWeekday::Thursday => "Thursday",
+            PyWeekday::Friday => "Friday",
+            PyWeekday::Saturday => "Saturday",
+            PyWeekday::Invalid => "Invalid weekday",
+        }
+    }
+
+    #[new]
+    fn new() -> Self {
+        PyWeekday::Sunday
+    }
+
+
+    fn __getstate__(&self) -> u8 {
+        match self {
+            PyWeekday::Sunday => 0,
+            PyWeekday::Monday => 1,
+            PyWeekday::Tuesday => 2,
+            PyWeekday::Wednesday => 3,
+            PyWeekday::Thursday => 4,
+            PyWeekday::Friday => 5,
+            PyWeekday::Saturday => 6,
+            PyWeekday::Invalid => 255,
+        }
+    }
+
+    fn __setstate__(&mut self, state: u8) -> PyResult<()> {
+        *self = match state {
+            0 => PyWeekday::Sunday,
+            1 => PyWeekday::Monday,
+            2 => PyWeekday::Tuesday,
+            3 => PyWeekday::Wednesday,
+            4 => PyWeekday::Thursday,
+            5 => PyWeekday::Friday,
+            6 => PyWeekday::Saturday,
+            255 => PyWeekday::Invalid,
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Invalid state for PyWeekday",
+                ))
+            }
+        };
+        Ok(())
+    }
+
+}
+
 impl From<&PyWeekday> for Weekday {
     fn from(w: &PyWeekday) -> Self {
         match w {

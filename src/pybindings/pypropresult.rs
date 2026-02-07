@@ -257,8 +257,12 @@ impl PyPropResult {
                 PyPropResultType::R7(r) => {
                     let phi = unsafe { np::PyArray2::<f64>::new(py, [6, 6], false) };
                     unsafe {
+                        // Take transpose to swap to numpy ordering
+                        let rsphi = r.state_end
+                            .fixed_view::<6, 6>(0, 1)
+                            .transpose();
                         std::ptr::copy_nonoverlapping(
-                            r.state_end.as_ptr().offset(6),
+                            rsphi.as_ptr(),
                             phi.as_raw_array_mut().as_mut_ptr(),
                             36,
                         );
@@ -317,9 +321,11 @@ impl PyPropResult {
                         })
                     } else {
                         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
+                            // Take transpose to swap to numpy ordering
+                            let rsphi = res.fixed_view::<6, 6>(0, 1).transpose();
                             (
                                 slice2py1d(py, &res.as_slice()[0..6])?,
-                                slice2py2d(py, &res.as_slice()[6..42], 6, 6)?,
+                                slice2py2d(py, &rsphi.as_slice(), 6, 6)?,
                             )
                                 .into_py_any(py)
                         })

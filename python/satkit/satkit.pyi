@@ -11,20 +11,8 @@ import numpy as np
 import datetime
 
 from collections.abc import Callable
-from typing import Any, Generic, TypeVar, Optional
+from typing import Any, Generic, TypeVar, Optional, ClassVar
 
-R = TypeVar("R")
-
-class static_property(Generic[R]):
-    def __init__(self, getter: Callable[[Any], R]) -> None:
-        self.__getter = getter
-
-    def __get__(self, obj: object, objtype: type) -> R:
-        return self.__getter(objtype)
-
-    @staticmethod
-    def __call__(getter_fn: Callable[[Any], R]) -> "static_property[R]":
-        return static_property(getter_fn)
 
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
@@ -340,63 +328,72 @@ def sgp4(
     """
 
 class sgp4_gravconst:
-    """Gravity constant to use for SGP4 propagation"""
+    """
+    Gravity constant to use for SGP4 propagation
 
-    @static_property
-    def wgs72(self) -> sgp4_gravconst:
-        """WGS-72"""
+    Attributes:
+    * `wgs72`: The "WGS72" gravity constant, which is the default for SGP4 propagation
+    * `wgs72old`: The "WGS72old" gravity constant, which is the original WGS72 gravity constant used in the original SGP4 code
+    * `wgs84`: The "WGS84" gravity constant, which is the default for other orbit propagators in this package, but not SGP4
+    """
 
-    @static_property
-    def wgs72old(self) -> sgp4_gravconst:
-        """WGS-72 Old"""
+    wgs72: ClassVar[sgp4_gravconst]
+    """The "WGS72" gravity constant, which is the default for SGP4 propagation"""
+    wgs72old: ClassVar[sgp4_gravconst]
+    """The "WGS72old" gravity constant, which is the original WGS72 gravity constant used in the original SGP4 code"""
+    wgs84: ClassVar[sgp4_gravconst]
+    """The "WGS84" gravity constant, which is the default for other orbit propagators in this package, but not SGP4"""
 
-    @static_property
-    def wgs84(self) -> sgp4_gravconst:
-        """WGS-84"""
 
 class sgp4_opsmode:
-    """Ops Mode for SGP4 Propagation"""
+    """
+    Ops Mode for SGP4 Propagation
 
-    @static_property
-    def afspc(self) -> int:
-        """afspc (Air Force Space Command), the default"""
+    Attributes:
+    * `afspc`: Air Force Space Command, the default
+    * `improved`: Improved
 
-    @property
-    def improved(self) -> int:
-        """Improved"""
+    """
+
+    afspc: ClassVar[int]
+    """afspc (Air Force Space Command), the default"""
+
+    improved: ClassVar[int]
+    """Improved"""
 
 class gravmodel:
     """
     Earth gravity models available for use
 
     For details, see: http://icgem.gfz-potsdam.de/
+
+    Attributes:
+    * `jgm3`: The "JGM3" gravity model, which is the default in the orbit propagators
+    * `jgm2`: The "JGM2" gravity model
+    * `egm96`: The "EGM96" gravity model
+    * `egm2008`: The "EGM2008" gravity model
+    * `itugrace16`: The "ITU Grace 16" gravity model, which is the most recent and highest-precision gravity model available
     """
 
-    @static_property
-    def jgm3(self) -> gravmodel:
-        """
-        The "JGM3" gravity model
+    jgm3: ClassVar[gravmodel]
+    """ The "JGM3" gravity model
 
         This model is used by default in the orbit propagators
-        """
+    """
 
-    @static_property
-    def jgm2(self) -> gravmodel:
-        """
-        The "JGM2" gravity model
-        """
+    jgm2: ClassVar[gravmodel]
+    """The "JGM2" gravity model"""
 
-    @static_property
-    def egm96(self) -> gravmodel:
-        """
-        The "EGM96" gravity model
-        """
+    egm96: ClassVar[gravmodel]
+    """The "EGM96" gravity model"""
 
-    @static_property
-    def itugrace16(self) -> gravmodel:
-        """
-        the ITU Grace 16 gravity model
-        """
+
+    egm2008: ClassVar[gravmodel]
+    """The "EGM2008" gravity model"""
+
+    itugrace16: ClassVar[gravmodel]
+    """ The "ITU Grace 16" gravity model, which is the most recent and highest-precision gravity model available"""
+
 
 def gravity(
     pos: list[float] | itrfcoord | npt.ArrayLike, **kwargs
@@ -441,82 +438,65 @@ def gravity_and_partials(
     """
 
 class solarsystem:
-    """Solar system bodies for which high-precision ephemeris can be computed"""
+    """
+    Solar system bodies for which high-precision ephemeris can be computed
 
-    @static_property
-    def Mercury(self) -> solarsystem:
-        """Mercury"""
+    Attributes:
+    * `Mercury` - Mercury
+    * `Venus` - Venus
+    * `EMB` - Earth-Moon Barycenter
+    * `Mars` - Mars
+    * `Jupiter` - Jupiter
+    * `Saturn` - Saturn
+    * `Uranus` - Uranus
+    * `Neptune` - Neptune
+    * `Pluto` - Pluto
+    * `Moon` - Moon
+    * `Sun` - Sun
+    """
 
-    @static_property
-    def Venus(self) -> solarsystem:
-        """Venus"""
 
-    @static_property
-    def EMB(self) -> solarsystem:
-        """Earth-Moon Barycenter"""
-
-    @static_property
-    def Mars(self) -> solarsystem:
-        """Mars"""
-
-    @static_property
-    def Jupiter(self) -> solarsystem:
-        """Jupiter"""
-
-    @static_property
-    def Saturn(self) -> solarsystem:
-        """Saturn"""
-
-    @static_property
-    def Uranus(self) -> solarsystem:
-        """Uranus"""
-
-    @static_property
-    def Neptune(self) -> solarsystem:
-        """Neptune"""
-
-    @static_property
-    def Pluto(self) -> solarsystem:
-        """Pluto"""
-
-    @static_property
-    def Moon(self) -> solarsystem:
-        """Moon"""
-
-    @static_property
-    def Sun(self) -> solarsystem:
-        """Sun"""
+    Mercury: ClassVar[solarsystem]
+    """Mercury"""
+    Venus: ClassVar[solarsystem]
+    """Venus"""
+    EMB: ClassVar[solarsystem]
+    """Earth-Moon Barycenter"""
+    Mars: ClassVar[solarsystem]
+    """Mars"""
+    Jupiter: ClassVar[solarsystem]
+    """Jupiter"""
+    Saturn: ClassVar[solarsystem]
+    """Saturn"""
+    Uranus: ClassVar[solarsystem]
+    """Uranus"""
+    Neptune: ClassVar[solarsystem]
+    """Neptune"""
+    Pluto: ClassVar[solarsystem]
+    """Pluto"""
+    Moon: ClassVar[solarsystem]
+    """Moon"""
+    Sun: ClassVar[solarsystem]
+    """Sun"""
 
 class sgp4_error:
     """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""
 
-    @static_property
-    def success(self) -> sgp4_error:
-        """Success"""
+    success: ClassVar[sgp4_error]
+    """Success"""
+    eccen: ClassVar[sgp4_error]
+    """Eccentricity < 0 or > 1"""
+    mean_motion: ClassVar[sgp4_error]
+    """Mean motion (revs / day) < 0"""
+    perturb_eccen: ClassVar[sgp4_error]
+    """Perturbed eccentricity < 0 or > 1"""
+    semi_latus_rectum: ClassVar[sgp4_error]
+    """Semi-Latus Rectum < 0"""
+    unused: ClassVar[sgp4_error]
+    """Unused, but in base code, so keeping for completeness"""
+    orbit_decay: ClassVar[sgp4_error]
+    """Orbit decayed"""
 
-    @static_property
-    def eccen(self) -> sgp4_error:
-        """Eccentricity < 0 or > 1"""
-
-    @static_property
-    def mean_motion(self) -> sgp4_error:
-        """Mean motion (revs / day) < 0"""
-
-    @static_property
-    def perturb_eccen(self) -> sgp4_error:
-        """Perturbed eccentricity < 0 or > 1"""
-
-    @static_property
-    def semi_latus_rectum(self) -> sgp4_error:
-        """Semi-Latus Rectum < 0"""
-
-    @static_property
-    def unused(self) -> sgp4_error:
-        """Unused, but in base code, so keeping for completeness"""
-
-    @static_property
-    def orbit_decay(self) -> sgp4_error:
-        """Orbit decayed"""
 
 class weekday:
     """
@@ -533,33 +513,21 @@ class weekday:
     * `Saturday`
     """
 
-    @static_property
-    def Sunday(self) -> weekday:
-        """Sunday"""
+    Sunday: ClassVar[weekday]
+    """Sunday"""
+    Monday: ClassVar[weekday]
+    """Monday"""
+    Tuesday: ClassVar[weekday]
+    """Tuesday"""
+    Wednesday: ClassVar[weekday]
+    """Wednesday"""
+    Thursday: ClassVar[weekday]
+    """Thursday"""
+    Friday: ClassVar[weekday]
+    """Friday"""
+    Saturday: ClassVar[weekday]
+    """Saturday"""
 
-    @static_property
-    def Monday(self) -> weekday:
-        """Monday"""
-
-    @static_property
-    def Tuesday(self) -> weekday:
-        """Tuesday"""
-
-    @static_property
-    def Wednesday(self) -> weekday:
-        """Wednesday"""
-
-    @static_property
-    def Thursday(self) -> weekday:
-        """Thursday"""
-
-    @static_property
-    def Friday(self) -> weekday:
-        """Friday"""
-
-    @static_property
-    def Saturday(self) -> weekday:
-        """Saturday"""
 
 class mpsuccess:
     """
@@ -580,41 +548,25 @@ class mpsuccess:
     * `Gtol`: gtol is too small; no further improvement
     """
 
-    @static_property
-    def NotDone(self) -> mpsuccess:
-        """Not finished iterations"""
+    NotDone: ClassVar[mpsuccess]
+    """Not finished iterations"""
+    Chi: ClassVar[mpsuccess]
+    """Convergence in chi-square value"""
+    Par: ClassVar[mpsuccess]
+    """Convergence in parameter value"""
+    Both: ClassVar[mpsuccess]
+    """Convergence in both chi-square and parameter values"""
+    Dir: ClassVar[mpsuccess]
+    """Convergence in orthogonality"""
+    MaxIter: ClassVar[mpsuccess]
+    """Maximum iterations reached"""
+    Ftol: ClassVar[mpsuccess]
+    """ftol is too small; no further improvement"""
+    Xtol: ClassVar[mpsuccess]
+    """xtol is too small; no further improvement"""
+    Gtol: ClassVar[mpsuccess]
+    """gtol is too small; no further improvement"""
 
-    @static_property
-    def Chi(self) -> mpsuccess:
-        """Convergence in chi-square value"""
-
-    @static_property
-    def Par(self) -> mpsuccess:
-        """Convergence in parameter value"""
-
-    @static_property
-    def Both(self) -> mpsuccess:
-        """Convergence in both chi-square and parameter values"""
-
-    @static_property
-    def Dir(self) -> mpsuccess:
-        """Convergence in orthogonality"""
-
-    @static_property
-    def MaxIter(self) -> mpsuccess:
-        """Maximum iterations reached"""
-
-    @static_property
-    def Ftol(self) -> mpsuccess:
-        """ftol is too small; no further improvement"""
-
-    @static_property
-    def Xtol(self) -> mpsuccess:
-        """xtol is too small; no further improvement"""
-
-    @static_property
-    def Gtol(self) -> mpsuccess:
-        """gtol is too small; no further improvement"""
 
 class timescale:
     """
@@ -639,35 +591,23 @@ class timescale:
     * `TDB`: Barycentric Dynamical Time
     """
 
-    @static_property
-    def Invalid(self) -> timescale:
-        """Invalid time scale"""
+    Invalid: ClassVar[timescale]
+    """Invalid time scale"""
+    UTC: ClassVar[timescale]
+    """Universal Time Coordinate"""
+    TT: ClassVar[timescale]
+    """Terrestrial Time"""
+    UT1: ClassVar[timescale]
+    """UT1, which is based on the rotation of the Earth and is not monotonically increasing, but is needed for precise Earth-fixed to inertial frame transformations"""
+    TAI: ClassVar[timescale]
+    """International Atomic Time
+    (nice because it is monotonically increasing)
+    """
+    GPS: ClassVar[timescale]
+    """Global Positioning System (GPS) time"""
+    TDB: ClassVar[timescale]
+    """Barycentric Dynamical Time"""
 
-    @static_property
-    def UTC(self) -> timescale:
-        """Universal Time Coordinate"""
-
-    @static_property
-    def TT(self) -> timescale:
-        """Terrestrial Time"""
-
-    @static_property
-    def UT1(self) -> timescale:
-        """UT1"""
-
-    @static_property
-    def TAI(self) -> timescale:
-        """International Atomic Time
-        (nice because it is monotonically increasing)
-        """
-
-    @static_property
-    def GPS(self) -> timescale:
-        """Global Positioning System (GPS) time"""
-
-    @static_property
-    def TDB(self) -> timescale:
-        """Barycentric Dynamical Time"""
 
 class time:
     """Representation of an instant in time
@@ -2132,75 +2072,64 @@ class itrfcoord:
         """
 
 class consts:
-    """Some constants that are useful for saetllite dynamics"""
+    """
+    Some constants that are useful for saetllite dynamics
 
-    @static_property
-    def wgs84_a(self) -> float:
-        """WGS-84 semiparameter, in meters"""
+    Attributes:
+        wgs84_a (float): WGS-84 semiparameter, in meters
+        wgs84_f (float): WGS-84 flattening in meters
+        earth_radius (float): Earth radius along major axis, meters
+        mu_earth (float): Gravitational parameter of Earth, m^3/s^
+        mu_moon (float): Gravitational parameter of Moon, m^3/s^2
+        mu_sun (float): Gravitational parameter of sun, m^3/s^
+        GM (float): Gravitational parameter of Earth, m^3/s^2
+        omega_earth (float): Scalar Earth rotation rate, rad/s
+        c (float): Speed of light, m/s
+        au (float): Astronomical Unit, mean Earth-Sun distance, meters
+        sun_radius (float): Radius of sun, meters
+        moon_radius (float): Radius of moon, meters
+        earth_moon_mass_ratio (float): Earth mass over Moon mass, unitless
+        geo_r (float): Distance to Geosynchronous orbit from Earth center, meters
+        jgm3_mu (float): Earth gravitational parameter from JGM3 gravity model, m
+        jgm3_a (float): Earth semiparameter from JGM3 gravity model, m
+        jgm3_j2 (float): "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless
+    """
 
-    @static_property
-    def wgs84_f(self) -> float:
-        """WGS-84 flattening in meters"""
+    wgs84_a: ClassVar[float]
+    """WGS-84 semiparameter, in meters"""
+    wgs84_f: ClassVar[float]
+    """WGS-84 flattening in meters"""
+    earth_radius: ClassVar[float]
+    """Earth radius along major axis, meters"""
+    mu_earth: ClassVar[float]
+    """Gravitational parameter of Earth, m^3/s^2"""
+    mu_moon: ClassVar[float]
+    """Gravitational parameter of Moon, m^3/s^2"""
+    mu_sun: ClassVar[float]
+    """Gravitational parameter of sun, m^3/s^2"""
+    GM: ClassVar[float]
+    """Gravitational parameter of Earth, m^3/s^2"""
+    omega_earth: ClassVar[float]
+    """Scalar Earth rotation rate, rad/s"""
+    c: ClassVar[float]
+    """Speed of light, m/s"""
+    au: ClassVar[float]
+    """Astronomical Unit, mean Earth-Sun distance, meters"""
+    sun_radius: ClassVar[float]
+    """Radius of sun, meters"""
+    moon_radius: ClassVar[float]
+    """Radius of moon, meters"""
+    earth_moon_mass_ratio: ClassVar[float]
+    """Earth mass over Moon mass, unitless"""
+    geo_r: ClassVar[float]
+    """Distance to Geosynchronous orbit from Earth center, meters"""
+    jgm3_mu: ClassVar[float]
+    """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
+    jgm3_a: ClassVar[float]
+    """Earth semiparameter from JGM3 gravity model, m"""
+    jgm3_j2: ClassVar[float]
+    """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
-    @static_property
-    def earth_radius(self) -> float:
-        """Earth radius along major axis, meters"""
-
-    @static_property
-    def mu_earth(self) -> float:
-        """Gravitational parameter of Earth, m^3/s^2"""
-
-    @static_property
-    def mu_moon(self) -> float:
-        """Gravitational parameter of Moon, m^3/s^2"""
-
-    @static_property
-    def mu_sun(self) -> float:
-        """Gravitational parameter of sun, m^3/s^2"""
-
-    @static_property
-    def GM(self) -> float:
-        """Gravitational parameter of Earth, m^3/s^2"""
-
-    @static_property
-    def omega_earth(self) -> float:
-        """Scalar Earth rotation rate, rad/s"""
-
-    @static_property
-    def c(self) -> float:
-        """Speed of light, m/s"""
-
-    @static_property
-    def au(self) -> float:
-        """Astronomical Unit, mean Earth-Sun distance, meters"""
-
-    @static_property
-    def sun_radius(self) -> float:
-        """Radius of sun, meters"""
-
-    @static_property
-    def moon_radius(self) -> float:
-        """Radius of moon, meters"""
-
-    @static_property
-    def earth_moon_mass_ratio(self) -> float:
-        """Earth mass over Moon mass, unitless"""
-
-    @static_property
-    def geo_r(self) -> float:
-        """Distance to Geosynchronous orbit from Earth center, meters"""
-
-    @static_property
-    def jgm3_mu(self) -> float:
-        """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
-
-    @static_property
-    def jgm3_a(self) -> float:
-        """Earth semiparameter from JGM3 gravity model, m"""
-
-    @static_property
-    def jgm3_j2(self) -> float:
-        """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
 class satstate:
     """

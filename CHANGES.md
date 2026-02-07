@@ -167,3 +167,6 @@
 
 ## Rust 0.9.3, Python 0.9.2
   - bugfix: Fix (and document in python) the `to_enu` and `to_ned` functions in ITRFCoord
+
+# Python 0.9.3
+  - Update python docs, stub files

@@ -75,4 +75,30 @@ impl Consts {
     /// Earth J2 per JGM3 gravity model
     #[classattr]
     const jgm3_j2: f64 = cconsts::JGM3_J2;
+
+
+    fn __doc__(&self) -> &'static str {
+        r#"
+        Physical and astronomical constants
+
+        Attributes:
+        * `wgs84_a`: WGS-84 semiparameter, in meters
+        * `wgs84_f`: WGS-84 flattening
+        * `earth_radius`: WGS-84 Earth radius, meters
+        * `mu_earth`: Gravitational parameter of Earth, m^3/s^2
+        * `mu_moon`: Gravitational parameter of moon, m^3/s^2
+        * `mu_sun`: Gravitational parameter of sun, m^3/s^2
+        * `GM`: Alternative notation for gravitational parameter of Earth, m^3/s^2
+        * `omega_earth`: Rotation rate of Earth on own axis, rad/s
+        * `c`: Speed of light, m/s
+        * `au`: Mean distance Earth to Sun, meters
+        * `sun_radius`: Radius of sun, meters
+        * `moon_radius`: Radius of moon, meters
+        * `earth_moon_mass_ratio`: Earth-moon mass ratio
+        * `geo_r`: Semiparameter for Geosynchronous orbits, meters
+        * `jgm3_mu`: Mu for Earth per JGM3 Gravity model, m^3/s^2
+        * `jgm3_a`: Earth semiparameter per JGM3 gravity model, m^3/s^2
+        * `jgm3_j2`: Earth J2 per JGM3 gravity model
+        "#
+    }
 }

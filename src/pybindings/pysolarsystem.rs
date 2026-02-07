@@ -13,7 +13,7 @@ use crate::SolarSystem as SS;
 ///   * EMB (2) is the Earth-Moon barycenter
 ///   * The sun position is relative to the solar system barycenter
 ///     (it will be close to origin)
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[pyclass(name = "solarsystem", eq, eq_int)]
 pub enum SolarSystem {
     Mercury = SS::Mercury as isize,
@@ -45,5 +45,52 @@ impl From<&SolarSystem> for SS {
             SolarSystem::Moon => Self::Moon,
             SolarSystem::Sun => Self::Sun,
         }
+    }
+}
+
+#[pymethods]
+impl SolarSystem {
+
+    fn __doc__(&self) -> &'static str {
+        match self {
+            SolarSystem::Mercury => "Mercury",
+            SolarSystem::Venus => "Venus",
+            SolarSystem::EMB => "Earth-Moon Barycenter",
+            SolarSystem::Mars => "Mars",
+            SolarSystem::Jupiter => "Jupiter",
+            SolarSystem::Saturn => "Saturn",
+            SolarSystem::Uranus => "Uranus",
+            SolarSystem::Neptune => "Neptune",
+            SolarSystem::Pluto => "Pluto",
+            SolarSystem::Moon => "Moon (relative to Earth)",
+            SolarSystem::Sun => "Sun (relative to solar system barycenter)",
+        }
+    }
+
+    #[new]
+    fn new() -> Self {
+        SolarSystem::Mercury
+    }
+
+    fn __getstate__(&self) -> isize {
+        (*self).clone() as isize
+    }
+
+    fn __setstate__(&mut self, state: isize) -> PyResult<()> {
+        *self = match state {
+            0 => SolarSystem::Mercury,
+            1 => SolarSystem::Venus,
+            2 => SolarSystem::EMB,
+            3 => SolarSystem::Mars,
+            4 => SolarSystem::Jupiter,
+            5 => SolarSystem::Saturn,
+            6 => SolarSystem::Uranus,
+            7 => SolarSystem::Neptune,
+            8 => SolarSystem::Pluto,
+            9 => SolarSystem::Moon,
+            10 => SolarSystem::Sun,
+            _ => return Err(pyo3::exceptions::PyValueError::new_err("Invalid state for SolarSystem")),
+        };
+        Ok(())
     }
 }
