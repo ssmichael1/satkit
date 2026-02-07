@@ -51,22 +51,6 @@ impl From<&SolarSystem> for SS {
 #[pymethods]
 impl SolarSystem {
 
-    fn __doc__(&self) -> &'static str {
-        match self {
-            SolarSystem::Mercury => "Mercury",
-            SolarSystem::Venus => "Venus",
-            SolarSystem::EMB => "Earth-Moon Barycenter",
-            SolarSystem::Mars => "Mars",
-            SolarSystem::Jupiter => "Jupiter",
-            SolarSystem::Saturn => "Saturn",
-            SolarSystem::Uranus => "Uranus",
-            SolarSystem::Neptune => "Neptune",
-            SolarSystem::Pluto => "Pluto",
-            SolarSystem::Moon => "Moon (relative to Earth)",
-            SolarSystem::Sun => "Sun (relative to solar system barycenter)",
-        }
-    }
-
     #[new]
     fn new() -> Self {
         SolarSystem::Mercury

@@ -13,6 +13,11 @@ import datetime
 from collections.abc import Callable
 from typing import Any, Generic, TypeVar, Optional, ClassVar
 
+# Helper for static properties in stub files
+class static_property(property):
+    """Type stub helper for static properties"""
+    pass
+
 
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
@@ -2073,15 +2078,15 @@ class itrfcoord:
 
 class consts:
     """
-    Some constants that are useful for saetllite dynamics
+    Some constants that are useful for satellite dynamics
 
     Attributes:
         wgs84_a (float): WGS-84 semiparameter, in meters
         wgs84_f (float): WGS-84 flattening in meters
         earth_radius (float): Earth radius along major axis, meters
-        mu_earth (float): Gravitational parameter of Earth, m^3/s^
+        mu_earth (float): Gravitational parameter of Earth, m^3/s^2
         mu_moon (float): Gravitational parameter of Moon, m^3/s^2
-        mu_sun (float): Gravitational parameter of sun, m^3/s^
+        mu_sun (float): Gravitational parameter of sun, m^3/s^2
         GM (float): Gravitational parameter of Earth, m^3/s^2
         omega_earth (float): Scalar Earth rotation rate, rad/s
         c (float): Speed of light, m/s
@@ -2090,7 +2095,7 @@ class consts:
         moon_radius (float): Radius of moon, meters
         earth_moon_mass_ratio (float): Earth mass over Moon mass, unitless
         geo_r (float): Distance to Geosynchronous orbit from Earth center, meters
-        jgm3_mu (float): Earth gravitational parameter from JGM3 gravity model, m
+        jgm3_mu (float): Earth gravitational parameter from JGM3 gravity model, m^3/s^2
         jgm3_a (float): Earth semiparameter from JGM3 gravity model, m
         jgm3_j2 (float): "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless
     """
