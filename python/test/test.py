@@ -838,8 +838,8 @@ class TestHighPrecisionPropagation:
         perigee = sk.consts.earth_radius + 550e3
         apogee = sk.consts.earth_radius + 1000e3
         eccentricity = (apogee - perigee) / (apogee + perigee)
-        semiparameter = (perigee + apogee) / 2
-        k = sk.kepler(semiparameter, eccentricity, m.radians(30), 0, 0, 0)
+        semimajor_axis = (perigee + apogee) / 2
+        k = sk.kepler(semimajor_axis, eccentricity, m.radians(30), 0, 0, 0)
 
         state0 = np.concatenate((k.to_pv()))
         epoch = sk.time(2025, 1, 1, 0, 0, 0)
@@ -847,7 +847,7 @@ class TestHighPrecisionPropagation:
 
         settings = sk.propsettings()
 
-        # a small perterbation in the initial state, used to test state transition matrix
+        # a small perturbation in the initial state, used to test state transition matrix
         dstate0 = [30.3, -5.2, 8.4, 0.01, -0.02, 0.05]
 
         res0 = sk.propagate(state0, epoch, epoch+duration, output_phi=True, propsettings=settings)
@@ -861,8 +861,7 @@ class TestHighPrecisionPropagation:
 
         # Check on interpolated state transition
         for x in range(5):
-            tinterp = epoch + sk.duration(hours= x * 6.0 / 5.0)
-            tinterp = epoch + sk.duration(hours=3.0)
+            tinterp = epoch + sk.duration(hours=x * 6.0 / 5.0)
             mstate0, mphi = res0.interp(tinterp, output_phi=True)
             mdstate0 = resd.interp(tinterp)
             assert mdstate0 == pytest.approx(
