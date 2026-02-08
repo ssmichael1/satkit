@@ -10,6 +10,7 @@ on:
       - "CHANGES.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
+      - ".readthedocs.yaml"
   pull_request:
     branches:
       - "*"
@@ -25,7 +26,7 @@ on:
       - "CHANGES.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
-  workflow_dispatch:
+      - ".readthedocs.yaml"
 
 jobs:
   build:
