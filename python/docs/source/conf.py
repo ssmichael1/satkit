@@ -62,7 +62,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "SatKit"
-copyright = "2024 Steven Michael"
+copyright = "2026 Steven Michael"
 author = "Steven Michael (ssmichael@gmail.com)"
 
 # ghissue config
