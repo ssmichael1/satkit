@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "python/docs/**"
+      - ".readthedocs.yaml"
   workflow_dispatch:
 
 permissions:
