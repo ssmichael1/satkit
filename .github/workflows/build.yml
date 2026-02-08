@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - "*"
+    paths-ignore:
+      - "python/docs/**"
+      - "README.md"
+      - "CHANGES.md"
+      - "CONTRIBUTING.md"
+      - "LICENSE"
   pull_request:
     branches:
       - "*"
@@ -13,6 +19,12 @@ on:
       - synchronize
       - reopened
       - closed
+    paths-ignore:
+      - "python/docs/**"
+      - "README.md"
+      - "CHANGES.md"
+      - "CONTRIBUTING.md"
+      - "LICENSE"
   workflow_dispatch:
 
 jobs:
