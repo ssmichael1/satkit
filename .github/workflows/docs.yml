@@ -1,0 +1,37 @@
+name: Publish Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "python/docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readthedocs:
+    runs-on: ubuntu-latest
+    environment: readthedocs
+    steps:
+      - name: Trigger Read the Docs builds (stable + latest)
+        env:
+          RTD_TOKEN: ${{ secrets.RTD_TOKEN }}
+          RTD_HOST: app.readthedocs.org
+          RTD_PROJECT: satellite-toolkit
+        run: |
+          set -euo pipefail
+
+          # Optional: sync versions/tags
+          curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/sync-versions/" \
+            -H "Authorization: Token ${RTD_TOKEN}"
+
+          # Build stable
+          curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/versions/stable/builds/" \
+            -H "Authorization: Token ${RTD_TOKEN}"
+
+          # Build latest
+          curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/versions/latest/builds/" \
+            -H "Authorization: Token ${RTD_TOKEN}"
