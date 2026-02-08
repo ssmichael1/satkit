@@ -13,4 +13,6 @@ pytz==2024.2
 requests==2.32.3
 scipy==1.16.2
 xmltodict==1.0.2
+jupyter==1.1.1
+ipykernel==6.29.5
 satkit
