@@ -4,7 +4,7 @@
 
 The ``satkit.frametransform`` module provides functions for transforming between various coordinate
 frames used in satellite tracking and orbit determination.  These include multiple variations of "inertial"
-coordinate frames, and multiple verisons of "Earth-fixed" coordinate frames.
+coordinate frames, and multiple versions of "Earth-fixed" coordinate frames.
 
 Some notes:
 

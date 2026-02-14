@@ -47,7 +47,7 @@
 ## 0.6.2 - 2025-07-14
 
 ### Jupyter notebook example fixes
-- Fix jupyter notbook examples to work with time and duration casting as properties
+- Fix jupyter notebook examples to work with time and duration casting as properties
 
 
 ## 0.7.0 - 2025-07-17

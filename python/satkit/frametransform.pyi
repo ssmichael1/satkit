@@ -32,7 +32,7 @@ def gmst(tm: time | datetime.datetime) -> float:
         tm (satkit.time | datetime.datetime): scalar time at which to calculate output
 
     Returns:
-        float: Greenwich Mean Sideral Time, radians, at intput time
+        float: Greenwich Mean Sidereal Time, radians, at input time
     """
 
 @typing.overload
@@ -50,33 +50,33 @@ def gmst(
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
 
     Returns:
-        float | npt.ArrayLike[np.float]: Greenwich Mean Sideral Time, radians, at intput time(s)
+        float | npt.ArrayLike[np.float]: Greenwich Mean Sidereal Time, radians, at input time(s)
     """
 
 @typing.overload
 def gast(
     tm: time | datetime.datetime,
 ) -> float:
-    """Greenwich Apparent Sideral Time
+    """Greenwich Apparent Sidereal Time
 
     Args:
         tm (satkit.time): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
 
     Returns:
-        float : Greenwich apparant sidereal time, radians, at input time(s)
+        float : Greenwich apparent sidereal time, radians, at input time(s)
     """
 
 @typing.overload
 def gast(
     tm: npt.ArrayLike | list[time] | list[datetime.datetime],
 ) -> npt.NDArray[np.float64]:
-    """Greenwich Apparent Sideral Time
+    """Greenwich Apparent Sidereal Time
 
     Args:
         tm (npt.ArrayLike[datetime.datetime] | npt.ArrayLike[time]): list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
 
     Returns:
-        npt.ArrayLike[np.float]: Greenwich apparant sidereal time, radians, at input time(s)
+        npt.ArrayLike[np.float]: Greenwich apparent sidereal time, radians, at input time(s)
     """
 
 @typing.overload
