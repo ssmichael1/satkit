@@ -69,7 +69,7 @@ thetime = sk.time(2024, 4, 9, 12, 0, 0)
 # for now we will ignore the velocity
 pTEME, _vTEME = sk.sgp4(starlink30477, thetime)
 
-# Suppose we want currrent latitude, longitude, and altitude of satellite:
+# Suppose we want current latitude, longitude, and altitude of satellite:
 # we need to rotate into an Earth-fixed frame, the ITRF
 # We use a "quaternion" to represent the rotation.  Quaternion rotations
 # in the satkit toolbox can be represented as multiplications of a 3-vector

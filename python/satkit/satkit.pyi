@@ -1050,7 +1050,7 @@ class time:
 
         (seconds since Jan 1, 1970 UTC, excluding leap seconds)
 
-        Includes fractional comopnent of seconds
+        Includes fractional component of seconds
         """
 
     def as_iso8601(self) -> str:
@@ -1559,7 +1559,7 @@ class quaternion:
 
     For the uninitiated: quaternions are a more-compact and
     computationally efficient way of representing 3D rotations.
-    They can also be multipled together and easily renormalized to
+    They can also be multiplied together and easily renormalized to
     avoid problems with floating-point precision eventually causing
     changes in the rotated vecdtor norm.
 
@@ -1665,7 +1665,7 @@ class quaternion:
     def rotation_between(
         v1: npt.NDArray[np.float64], v2: npt.NDArray[np.float64]
     ) -> quaternion:
-        """Quaternion represention rotation between two input vectors
+        """Quaternion representation rotation between two input vectors
 
         Args:
             v1 (npt.ArrayLike[np.float64]): vector rotating from

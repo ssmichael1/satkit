@@ -2,10 +2,10 @@
 
 The **satkit** package includes a `time` module that is able to represent and transform between times with various time scale, or epochs.
 
-The `time` module duplicates much of the functionality of the native `datetime` package provided by python.  This separate module is necessary in the native rust implementaiton many low-level calculations, as these often require knowlege of time with various epochs (UTC, UT1, TT, GPS, etc..).  The native `datetime` package provides only **UTC** time.  
+The `time` module duplicates much of the functionality of the native `datetime` package provided by python.  This separate module is necessary in the native rust implementation for many low-level calculations, as these often require knowledge of time with various epochs (UTC, UT1, TT, GPS, etc..).  The native `datetime` package provides only **UTC** time.
 
 ```{tip}
-Many functions within the python package (e.g., frame transforms) require time as an input variable.  For *all* functions of time in the **satkit** package, for convenience, inputs can either either `satkit.time` object or `datetime.datetime` object.  For `datetime.datetime` objects, inputs are taken to be UTC.
+Many functions within the python package (e.g., frame transforms) require time as an input variable.  For *all* functions of time in the **satkit** package, for convenience, inputs can be either `satkit.time` objects or `datetime.datetime` objects.  For `datetime.datetime` objects, inputs are taken to be UTC.
 ```
 
 ```{warning}
@@ -21,7 +21,7 @@ The `satkit.time` object can represent times with the following time scales, or 
 * `UT1`: UT1
 * `TAI`: International Atomic Time
 * `GPS`: Global Positioning System (GPS) time
-* `TDB`: Barycentric Dynamical Time    
+* `TDB`: Barycentric Dynamical Time
 
 A description of the above time systems is at:
 <https://gssc.esa.int/navipedia/index.php/Transformations_between_Time_Systems>

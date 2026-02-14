@@ -1,6 +1,6 @@
 # Data Files
 
-The ``satkit`` package relies upon a number of data files for certain calculations: 
+The ``satkit`` package relies upon a number of data files for certain calculations:
 
 * **leap-seconds.list** <br/>A list of the UTC leap seconds since 1972.  This is a common file in *nix platforms and is used to keep track of the number of seconds (currently 37) that UTC lags TAI
 <br/>
@@ -15,7 +15,7 @@ The ``satkit`` package relies upon a number of data files for certain calculatio
 
 
 * **SW-All.csv**<br/>Space Weather.  The solar flux at $\lambda~=~10.7cm$ (2800 Mhz) is an indication of solar activity, which in turn is an important predictor of air density at altitudes relevant for low-Earth orbits.
-This file is updated at [celestrack.org](https://www.celestrak.org) every 3 hours with the most-recent space weather information. 
+This file is updated at [celestrack.org](https://www.celestrak.org) every 3 hours with the most-recent space weather information.
 
 
 * **EOP-All.csv**<br/>Earth orientation parameters.  This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis.  This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org)
@@ -50,7 +50,7 @@ The ``satkit`` package will search for the data files in the following locations
 
 * ``$DYLIB_PATH/share/satkit-data`` where ``$DYLIB_PATH`` is the location of the satkit shared library called by python.
 <br/>
-* *For Mac users only* : ``$HOME/Libary/Application Support/satkit-data``
+* *For Mac users only* : ``$HOME/Library/Application Support/satkit-data``
 <br/>
 * ``$HOME/satkit-data``
 <br/>
