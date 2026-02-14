@@ -54,6 +54,8 @@ rand_distr = "0.5.1"
 [features]
 pybindings = ["dep:pyo3", "dep:numpy", "dep:pyo3-build-config"]
 chrono = ["dep:chrono"]
+nrlmsis2 = []
+default = ["nrlmsis2"]
 
 [profile.test]
 opt-level = 3
