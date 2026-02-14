@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString, PyDateTime};
+use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
 use super::pyinstant::ToTimeVec;
@@ -79,14 +79,10 @@ fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<crate::Instant> {
     if val.is_instance_of::<crate::pybindings::pyinstant::PyInstant>() {
         let instant: crate::pybindings::pyinstant::PyInstant = val.extract().unwrap();
         Ok(instant.0)
-    }
-    else if val.is_instance_of::<PyString>() {
+    } else if val.is_instance_of::<PyString>() {
         let s: String = val.extract()?;
-        crate::Instant::from_rfc3339(&s).map_err(|e| {
-            anyhow::anyhow!("Invalid epoch string: {}", e)
-        })
-    }
-    else if val.is_instance_of::<PyDateTime>() {
+        crate::Instant::from_rfc3339(&s).map_err(|e| anyhow::anyhow!("Invalid epoch string: {}", e))
+    } else if val.is_instance_of::<PyDateTime>() {
         let tm: Py<PyDateTime> = val.extract().unwrap();
         pyo3::Python::attach(|py| {
             let ts: f64 = tm
@@ -94,8 +90,7 @@ fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<crate::Instant> {
                 .extract::<f64>(py)?;
             Ok(crate::Instant::from_unixtime(ts))
         })
-    }
-    else {
+    } else {
         bail!("Invalid epoch type");
     }
 }
@@ -107,18 +102,16 @@ fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<crate::Instant> {
 fn float_from_py(val: &Bound<'_, PyAny>) -> Result<f64> {
     if val.is_instance_of::<PyString>() {
         let s: String = val.extract()?;
-        s.parse::<f64>().map_err(|e| {
-            anyhow::anyhow!("Invalid float string: {}", e)
-        })
+        s.parse::<f64>()
+            .map_err(|e| anyhow::anyhow!("Invalid float string: {}", e))
     } else {
-        val.extract::<f64>().map_err(|e| {
-            anyhow::anyhow!("Invalid float value: {}", e)
-        })
+        val.extract::<f64>()
+            .map_err(|e| anyhow::anyhow!("Invalid float value: {}", e))
     }
 }
 
-fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
-    let mut omm = crate::OMM::default();
+fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::omm::OMM> {
+    let mut omm = crate::omm::OMM::default();
 
     omm.inclination = f64::NAN;
     omm.raan = f64::NAN;
@@ -228,7 +221,6 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::OMM> {
 
     Ok(omm)
 }
-
 
 /// """SGP-4 propagator for TLE
 ///
@@ -392,29 +384,31 @@ pub fn sgp4(
                     .into_py_any(py)?)
             }
         })
-    }
-    else if tle.is_instance_of::<PyList>() {
+    } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
         let tmarray = time.to_time_vec()?;
-        let results: Vec<psgp4::SGP4State> = plist.iter().map(|item| {
-            if item.is_instance_of::<PyTLE>() {
-                let mut stle: PyRefMut<PyTLE> = item
-                    .extract()
-                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e)))?;
-                psgp4::sgp4(&mut stle.0, tmarray.as_slice())
-            }
-            else if item.is_instance_of::<PyDict>() {
-                let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE dictionary: {}", e))
-                })?;
-                let mut omm = omm_from_pydict(dict)?;
-                psgp4::sgp4(&mut omm, tmarray.as_slice())
-            }
-            else {
-                bail!("Invalid TLE in list");
-            }
-        }).collect::<Result<Vec<_>>>()?;
-
+        let results: Vec<psgp4::SGP4State> = plist
+            .iter()
+            .map(|item| {
+                if item.is_instance_of::<PyTLE>() {
+                    let mut stle: PyRefMut<PyTLE> = item.extract().map_err(|e| {
+                        pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e))
+                    })?;
+                    psgp4::sgp4(&mut stle.0, tmarray.as_slice())
+                } else if item.is_instance_of::<PyDict>() {
+                    let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
+                        pyo3::exceptions::PyValueError::new_err(format!(
+                            "Invalid TLE dictionary: {}",
+                            e
+                        ))
+                    })?;
+                    let mut omm = omm_from_pydict(dict)?;
+                    psgp4::sgp4(&mut omm, tmarray.as_slice())
+                } else {
+                    bail!("Invalid TLE in list");
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let n = plist.len() * tmarray.len() * 3;
@@ -449,7 +443,11 @@ pub fn sgp4(
                         ntimes * 3,
                     );
                     if output_err {
-                        let evals = states.errcode.iter().map(|&x| x as i32).collect::<Vec<i32>>();
+                        let evals = states
+                            .errcode
+                            .iter()
+                            .map(|&x| x as i32)
+                            .collect::<Vec<i32>>();
                         std::ptr::copy_nonoverlapping(
                             evals.as_ptr(),
                             eint.as_mut_ptr().add(idx * ntimes),
