@@ -24,11 +24,14 @@ where $\vec{p}(t)$ and $\vec{v}(t)$ are the position and velocity vectors, respe
 For a ballistic satellite orbiting the Earth, the forces acting upon the satellite are accurately known.  These are:
 
 * **Earth Gravity**
-The Earth's gravity is the largest force acting on the satellite.  For simpler Keplerian orbit models, the Earth is approximated as a point mass, which is valid if the Earth were spherical with a constant density.  However, the Earth actually has a much more complex shape.  The force of gravity is computed by taking an expansion of Legendre polynomials with coefficients determined by shape and density of the Earth.  For example, the Earth bulges at the center, creating extra mass that pulls inclined orbits toward the equator and causes *precession*.  This is commonly known as the **J2** term in the Legendre expansion.
-Multiple experiments have attempted to measure the Legendre coefficients for Earth gravity.  The University of Potsdam maintains a catalog of gravity models [here](https://icgem.gfz-potsdam.de/home).  The ``satkit`` package is able to compute gravity using several of the models published at this site.
+
+> The Earth's gravity is the largest force acting on the satellite.  For simpler Keplerian orbit models, the Earth is approximated as a point mass, which is valid if the Earth were spherical with a constant density.  However, the Earth actually has a much more complex shape.  The force of gravity is computed by taking an expansion of Legendre polynomials with coefficients determined by shape and density of the Earth.  For example, the Earth bulges at the center, creating extra mass that pulls inclined orbits toward the equator and causes *precession*.  This is commonly known as the **J2** term in the Legendre expansion.
+Multiple experiments have attempted to measure the Legendre coefficients for Earth gravity.  The University of Potsdam maintains a catalog of gravity models [here](https://icgem.gfz-potsdam.de/home).  The ``satkit`` package is able to compute gravity using several of the models published at this site with a user-settable degree of accuracy.
 <br/><br/>
+
 * **Solar gravity**
-The sun acts as a point mass pulling the satellite toward it.  The sun also pulls the earth towards it, so the force from the sun produces an acceleration in the geocentric frame that must be subtracted from the acceleration due to the
+
+>The sun acts as a point mass pulling the satellite toward it.  The sun also pulls the earth towards it, so the force from the sun produces an acceleration in the geocentric frame that must be subtracted from the acceleration due to the
 Earth:
 
 $$
@@ -39,7 +42,8 @@ $$
 
 
 * **Lunar gravity**
-The moon, like the sun, acts as a point mass pulling the satellite towards it, and the expression for the acceleration of the satellite due to the moon is very similar to above:
+
+>The moon, like the sun, acts as a point mass pulling the satellite towards it, and the expression for the acceleration of the satellite due to the moon is very similar to above:
 
 $$
     \vec{a}~=~GM_{moon}~\left [ \frac{\vec{p} - \vec{p}_{moon}}{|\vec{p} - \vec{p}_{moon}|^3}  - \frac{\vec{p}_{moon}}{|\vec{p}_{moon}|^3} \right ]
@@ -48,7 +52,8 @@ $$
 > where $G$ is the gravitational constant, $M_{moon}$ is the mass of the sun, and $\vec{p}_{moon}$ is the position of the moon.
 
 * **Drag**
-At about 600km altitude and below, there is enough atmosphere to impose a drag force on the satellite.  The force takes a standard form:
+
+>At about 600km altitude and below, there is enough atmosphere to impose a drag force on the satellite.  The force takes a standard form:
 
 $$
 \vec{a}~=~-\frac{1}{2}~C_d~\frac{A}{m}~\rho~\vec{v}_r~|\vec{v}_r|
@@ -57,13 +62,19 @@ $$
 > where $C_d$ is the unitless coefficient of drag (generally a number between 1.5 and 3), $A$ is the satellite cross-sectional area, $m$ is the mass, $\rho$ is the air density, and $\vec{v}_r$ is the satellite velocity relative to the surrounding air (which is generally assumed to be zero in the *Earth-fixed* frame).  The propagator uses the [NRL-MSISE00](https://ccmc.gsfc.nasa.gov/models/NRLMSIS~00/) density model, and includes space weather effects.
 
 * **Solar Radiation Pressure**
-Momentum transfer to the satellite from solar photons that are scattered or absorbed adds an additional force:
+
+>Momentum transfer to the satellite from solar photons that are scattered or absorbed adds an additional force:
 
 $$
-\vec{a}~=~-P_{sun}~\cos(\theta)~A\left [ (1-\epsilon) \hat{p}_{sun} + 2 \epsilon \cos(\theta) \hat{n} \right ]
+\vec{a}~=~-P_{sun}~\cos(\theta)~\frac{A}{m}\left [ (1-\epsilon) \hat{p}_{sun} + 2 \epsilon \cos(\theta) \hat{n} \right ]
 $$
 
-> where $P_{sun}\approx 4.56\cdot10^{-6}~Nm^{-2}$ is the solar radiation pressure in the vicinity of the Earth, $A\cos(\theta)$ is the cross-section of the satellite illuminated by the sun ($\theta$ is the incidence angle), $\epsilon$ is the fraction of light scattered by the satellite (1-$\epsilon$ is absorption), and $\hat{n}$ is the half-angle between the incoming and reflected rays. The propagator includes an additional computation that considers if the sun is shadowed by the Earth.
+> where $P_{sun}\approx 4.56\cdot10^{-6}~Nm^{-2}$ is the solar radiation pressure in the vicinity of the Earth, $A\cos(\theta)$ is the cross-section of the satellite illuminated by the sun ($\theta$ is the incidence angle), $\epsilon$ is the fraction of light scattered by the satellite (1-$\epsilon$ is absorption), $m$ is the satellite mass, and $\hat{n}$ is the half-angle between the incoming and reflected rays. The propagator includes an additional computation that considers if the sun is shadowed by the Earth.  Saetllite surfaces can be complex, so the most-accurate representation of the expression above would integrate $dA \cos(\theta)$ over the full cross-sectional area.
+
+> The `satkit` package greatly simplifies the above expression by assuming that the surface normals all point in the direction of the sun (this is *mostly* true for active satellites that have large solar panels pointed at the sun).  The expression above is then simplified:
+$$\vec{a}~=~-P_{sun}~C_R\frac{A}{m}\hat{p}_{sun}$$
+
+> To include this force, the user sets a static $C_R\frac{A}{m}$ value in the `satproperties_static` object used in the propagation.  The ingegrator takes care of computing the sun position and Earth occlusion.
 
 ## Un-modeled forces
 
@@ -82,19 +93,16 @@ The high-precision propagator makes use of standard Runga-Kutta-Fehlberg methods
 ## State Transition Matrix
 The state transition matrix, $\Phi$ describes the partial derivative of the propagated position and velocity with respect to the initial position and velocity:
 
-$$
-
-\Phi~=~\frac{\partial (\vec{p},\vec{v})}{\partial (\vec{p}_0,\vec{v}_0)}
-
-$$
+$$\Phi~=~\frac{\partial (\vec{p},\vec{v})}{\partial (\vec{p}_0,\vec{v}_0)}$$
 
 This 6x6 matrix can be computed by numerically integrating the partial derivatives of the accelerations described above, and is useful for "propagating" the 6x6 state covariance, via the equation below.   Details for computing $\Phi$ are found in [Montenbruck & Gill](montenbruck-gill)
 
-$$
 
+$$
 \sigma^2_{p,v}~=~\Phi~\sigma^2_{p_0,v_0}~\Phi^T
-
 $$
+
+The state transition matrix is also useful when estimating a satellite state from a series of observations (e.g., radar or optical)
 
 The ``satkit`` package includes the option to compute the state transition matrix when solving for the new state.
 
