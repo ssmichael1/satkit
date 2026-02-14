@@ -1,3 +1,148 @@
 .wy-nav-content {
     max-width: 1024px !important;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(17, 24, 39, 0.06);
+}
+
+.wy-nav-content-wrap {
+    background: linear-gradient(180deg, #f7f9fc 0%, #eef3fa 100%);
+}
+
+.wy-side-nav-search {
+    background-color: #1f6fb2 !important;
+}
+
+.wy-nav-side {
+    background: #1f2937;
+}
+
+.wy-menu-vertical p.caption,
+.wy-menu-vertical header {
+    color: #93c5fd;
+}
+
+.wy-menu-vertical a {
+    color: #dbeafe;
+}
+
+.wy-menu-vertical a:hover {
+    background-color: #2b3a50;
+}
+
+.wy-nav-content {
+    font-size: 16px;
+}
+
+.rst-content {
+    color: #1f2937;
+}
+
+.rst-content h1,
+.rst-content h2,
+.rst-content h3,
+.rst-content h4 {
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.rst-content a {
+    color: #0b63b6;
+}
+
+.rst-content a:hover {
+    color: #084c8a;
+}
+
+.rst-content code,
+.rst-content tt,
+code {
+    border-radius: 6px;
+    color: #0f172a;
+}
+
+.rst-content code.literal,
+.rst-content tt.literal {
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.rst-content pre.literal-block,
+.rst-content div[class^=highlight] {
+    border-radius: 10px;
+    border-color: #dbe4f0;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+}
+
+.rst-content table.docutils,
+.rst-content table.field-list,
+.wy-table {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.rst-content table.docutils td,
+.rst-content table.docutils th,
+.rst-content table.field-list td,
+.rst-content table.field-list th,
+.wy-table td,
+.wy-table th {
+    border-color: #e2e8f0 !important;
+}
+
+.rst-content .admonition,
+.rst-content .note,
+.rst-content .warning,
+.rst-content .tip,
+.rst-content .important,
+.rst-content .seealso {
+    border-radius: 10px;
+    border: 1px solid rgba(100, 116, 139, 0.22);
+}
+
+.wy-breadcrumbs {
+    color: #64748b;
+}
+
+.rst-content dl.py.attribute>dt {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.rst-content dl.py.attribute>dt::before {
+    content: "PROPERTY";
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #0f766e;
+    background: #ccfbf1;
+    border: 1px solid #99f6e4;
+    border-radius: 999px;
+    padding: 0.12rem 0.45rem;
+    line-height: 1.2;
+}
+
+.rst-content dl.field-list>dd ul.simple {
+    margin-top: 0.35em;
+}
+
+.rst-content dl.field-list>dd ul.simple>li {
+    margin-bottom: 1.2em !important;
+    line-height: 1.5;
+}
+
+.rst-content dl.field-list>dd ul.simple>li>p {
+    margin: 0.2em 0 0.45em 0 !important;
+}
+
+.rst-content dl.field-list>dd ul.simple>li>p>code.docutils.literal.notranslate {
+    display: block;
+    width: fit-content;
+    margin-bottom: 0.25em;
+}
+
+.rst-content dl.field-list>dd ul.simple>li:last-child {
+    margin-bottom: 0 !important;
 }

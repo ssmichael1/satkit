@@ -1,13 +1,12 @@
 # Earth Gravity Models
 
 ```{eval-rst}
-.. autoapiclass:: satkit.gravmodel
+.. autoclass:: satkit.gravmodel
     :members:
 
-.. autoapifunction:: satkit.gravity
+.. autofunction:: satkit.gravity
 
-.. autoapifunction:: satkit.gravity_and_partials
+.. autofunction:: satkit.gravity_and_partials
 ```
 
 
- 

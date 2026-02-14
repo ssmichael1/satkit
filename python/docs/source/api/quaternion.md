@@ -4,7 +4,7 @@
 ## Introduction
 
 Quaternions are a mathematical concept that extends the idea of complex numbers to four dimensions.
-They are used in many fields, including computer graphics, robotics, and physics.  In the context of 
+They are used in many fields, including computer graphics, robotics, and physics.  In the context of
 this toolkit, they represent rotations in 3D space and are operationally equivalent to rotation matrices.
 
 They have several advantages over rotation matrices, including:
@@ -24,7 +24,7 @@ For an excellent description of quaternions, see [here](https://en.wikipedia.org
 ## Class Reference
 
 ```{eval-rst}
-.. autoapiclass:: satkit.quaternion
+.. autoclass:: satkit.quaternion
    :members:
    :special-members:
 ```
