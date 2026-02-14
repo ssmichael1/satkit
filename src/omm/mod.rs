@@ -14,6 +14,9 @@ use serde::{Deserialize, Deserializer};
 
 use anyhow::Result;
 
+#[cfg(feature = "omm-xml")]
+mod xml;
+
 use crate::sgp4::{SGP4InitArgs, SGP4Source, SatRec};
 use crate::{Instant, TimeScale};
 
@@ -285,14 +288,73 @@ pub struct OMM {
 }
 
 impl OMM {
+    /// Parses `self.epoch` (RFC 3339 string) into an [`Instant`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `epoch` is not a valid RFC 3339 timestamp.
     pub fn epoch_instant(&self) -> anyhow::Result<Instant> {
         Ok(Instant::from_rfc3339(&self.epoch).map_err(|e| anyhow::anyhow!(e))?)
     }
 
+    /// Deserializes one or more OMM records from a JSON string.
+    ///
+    /// The expected format is a JSON array of OMM objects as provided by
+    /// Space-Track/CelesTrak JSON endpoints.
+    ///
+    /// # Arguments
+    /// - `s`: JSON string containing an array of OMM records.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use satkit::prelude::OMM;
+    ///
+    /// let json = r#"[
+    ///   {
+    ///     "OBJECT_NAME": "ISS (ZARYA)",
+    ///     "OBJECT_ID": "1998-067A",
+    ///     "EPOCH": "2026-02-14T05:08:48.534432",
+    ///     "MEAN_MOTION": 15.4859353,
+    ///     "ECCENTRICITY": 0.00110623,
+    ///     "INCLINATION": 51.6315,
+    ///     "RA_OF_ASC_NODE": 188.3997,
+    ///     "ARG_OF_PERICENTER": 96.9141,
+    ///     "MEAN_ANOMALY": 263.3106
+    ///   }
+    /// ]"#;
+    ///
+    /// let omms = OMM::from_json_string(json)?;
+    /// assert_eq!(omms.len(), 1);
+    /// assert_eq!(omms[0].object_id, "1998-067A");
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the JSON is malformed or required OMM fields are missing/invalid.
     pub fn from_json_string(s: &str) -> Result<Vec<OMM>> {
         serde_json::from_str(s).map_err(|e| anyhow::anyhow!(e))
     }
 
+    /// Deserializes one or more OMM records from a JSON file.
+    ///
+    /// # Arguments
+    /// - `path`: Path to a JSON file containing an array of OMM records.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use satkit::prelude::OMM;
+    ///
+    /// let omms = OMM::from_json_file("/path/to/omm.json")?;
+    /// println!("Loaded {} OMM records", omms.len());
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the JSON payload is invalid.
     pub fn from_json_file<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<OMM>> {
         let file = std::fs::File::open(path).map_err(|e| anyhow::anyhow!(e))?;
         let reader = std::io::BufReader::new(file);

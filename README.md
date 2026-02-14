@@ -32,6 +32,10 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
 
 ## Optional Features
 
+- **omm-xml** *(enabled by default)*: Enables XML OMM deserialization support via `quick-xml`.
+  - Disable for lean builds: `cargo build --no-default-features`
+  - Enable explicitly: `cargo build --no-default-features --features omm-xml`
+
 - **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
   Activate with Cargo feature `chrono`.
 
