@@ -262,7 +262,7 @@ class TLE:
 
 def sgp4(
     tle: TLE | list[TLE] | dict,
-    tm: time | list[time] | npt.ArrayLike,
+    tm: time | list[time] | list[datetime.datetime] | npt.ArrayLike,
     **kwargs,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """SGP-4 propagator for TLE
@@ -277,7 +277,7 @@ def sgp4(
 
     Args:
         tle (TLE | list[TLE] | dict): TLE or OMM (or list of TLES) on which to operate
-        tm (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
+        tm (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity
 
     Keyword Args:
         gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
@@ -294,10 +294,15 @@ def sgp4(
         Additional return value if errflag is True:
         list[sgp4_error]: list of errors for each TLE and time output, if errflag is True
 
-    Note:
+    Note 1:
         Now supports propagation of OMM (Orbital Mean-Element Message) dictionaries
         The dictionaries must follow the structure used by https://www.celestrak.org or
         https://www.space-track.org.
+
+    Note 2:
+        The "TEME" frame of the SGP4 state vectors is not a truly inertial frame.  It is a "True Equator Mean Equinox"
+        frame, which is a non-rotating frame with respect to the mean equator and mean equinox of the epoch of the TLE.
+        It is close to a true inertial frame, but can be offset by small amounts due to precession and nutation.
 
 
     Example:
