@@ -75,7 +75,6 @@ Please reach out of you find errors in code or calculations, are interested in c
   examples/Two-Line Element Set.ipynb
   examples/Eclipse.ipynb
   examples/Plots.ipynb
-  examples/sunrise_sunset.ipynb
   examples/riseset.ipynb
   examples/TLE Fitting.ipynb
   examples/High Precision Propagation.ipynb
@@ -93,6 +92,7 @@ Please reach out of you find errors in code or calculations, are interested in c
   api/earthgravity.md
   api/satstate.md
   api/tle.md
+  api/orbital_mean_elements.md
   api/consts.md
   api/kepler.md
   api/utils.md

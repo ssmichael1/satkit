@@ -1,16 +1,19 @@
+(satprop-doc)=
 # High-Precision Orbit Propagator
 
 ```{eval-rst}
 
-.. autoapifunction:: satkit.propagate
+.. autofunction:: satkit.propagate
 
-.. autoapiclass:: satkit.propresult
+.. autoclass:: satkit.propresult
    :members:
 
-.. autoapiclass:: satkit.propstats
+.. autoclass:: satkit.propstats
    :members:
 
-.. autoapiclass:: satkit.propsettings
-   :members:
+.. autoclass:: satkit.propsettings
+   :members: use_spaceweather, enable_interp, precompute_terms
+
+.. automethod:: satkit.propsettings.precompute_terms
 
 ```

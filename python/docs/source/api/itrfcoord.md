@@ -1,7 +1,7 @@
 # ITRF (International Terrestrial Reference Frame) Coordinate
 
 ```{eval-rst}
-.. autoapiclass:: satkit.itrfcoord
+.. autoclass:: satkit.itrfcoord
    :members:
    :undoc-members:
    :show-inheritance:

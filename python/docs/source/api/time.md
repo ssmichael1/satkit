@@ -5,16 +5,16 @@ The ``satkit`` package makes use of a custom time class.  This is wrapper around
 However, *all* functions in the ``satkit`` package that take time as an input can accept either the ``satkit.time`` class or the more commonly-used ``datetime.datetime`` class.  For the latter, times are taken to have  the *UTC* epoch.
 
 ```{eval-rst}
-.. autoapiclass:: satkit.timescale
+.. autoclass:: satkit.timescale
    :members:
 
-.. autoapiclass:: satkit.time
+.. autoclass:: satkit.time
    :members:
    :undoc-members:
    :show-inheritance:
    :inherited-members:
 
-.. autoapiclass:: satkit.duration
+.. autoclass:: satkit.duration
    :members:
    :undoc-members:
    :show-inheritance:

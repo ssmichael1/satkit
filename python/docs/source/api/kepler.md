@@ -1,9 +1,12 @@
 # Kepleriean orbital elements
 
 ```{eval-rst}
-.. autoapimodule:: satkit.kepler
+.. autoclass:: satkit.kepler
    :members:
+   :exclude-members: propagate
    :undoc-members:
    :show-inheritance:
    :inherited-members:
+
+.. automethod:: satkit.kepler.propagate
 ```

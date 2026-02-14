@@ -1,7 +1,7 @@
 # Air Density Model(s)
 
 ```{eval-rst}
-.. autoapimodule:: satkit.density
+.. automodule:: satkit.density
    :members:
    :undoc-members:
    :show-inheritance:

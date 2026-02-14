@@ -29,18 +29,18 @@ class static_property(Generic[R]):
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
 
-    Stucture representing a Two-Line Element Set (TLE), a satellite
+    Structure representing a Two-Line Element Set (TLE), a satellite
     ephemeris format from the 1970s that is still somehow in use
     today and can be used to calculate satellite position and
-    velcocity in the "TEME" frame (not-quite GCRF) using the
-    "Simplified General Perturbations-4" (SGP-4) mathemematical
+    velocity in the "TEME" frame (not-quite GCRF) using the
+    "Simplified General Perturbations-4" (SGP-4) mathematical
     model that is also included in this package.
 
     For details, see: https://en.wikipedia.org/wiki/Two-line_element_set
 
     The TLE format is still commonly used to represent satellite
     ephemerides, and satellite ephemerides catalogs in this format
-    are publicly availalble at www.space-track.org (registration
+    are publicly available at www.space-track.org (registration
     required)
 
     TLEs sometimes have a "line 0" that includes the name of the satellite
@@ -55,7 +55,7 @@ class TLE:
         be output, rather than a list with a single TLE element
 
         Args:
-            filename (str): name of textfile lines for TLE(s) to load
+              filename (str): name of text file lines for TLE(s) to load
 
         Returns:
             list[TLE] | TLE: a list of TLE objects or a single TLE of lines for
@@ -255,7 +255,7 @@ class TLE:
                 * `n_pegged`: Number of pegged parameters
                 * `n_func`: Number of residuals
                 * `resid`: Final residuals
-                * `xerror`: Final parameter uncertanties (1-sigma)
+                * `xerror`: Final parameter uncertainties (1-sigma)
                 * `covar`: Final parameter covariance matrix
 
         """
@@ -2467,7 +2467,7 @@ class propsettings:
         * use_jplephem: True
         * enable_interp: True
 
-        * enable_interp enables high-preciion interpolation of state between begin and end times via the returned function,
+        * enable_interp enables high-precision interpolation of state between begin and end times via the returned function,
       it is enabled by default.  There is a small increase in computational efficiency if set to false
 
     """
@@ -2568,7 +2568,7 @@ def propagate(
 ) -> propresult:
     """High-precision orbit propagator
 
-    Propagate orbits with high-precision force modeling via adaptive Runga-Kutta methods (default is order 9/8).
+    Propagate orbits with high-precision force modeling via adaptive Runge-Kutta methods (default is order 9/8).
 
     Args:
         state (npt.ArrayLike[float], optional): 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second
@@ -2579,21 +2579,21 @@ def propagate(
         duration_days (float, optional keyword): duration in days from "begin" at which new position and velocity will be computed.
         output_phi (bool, optional keyword): Output 6x6 state transition matrix between "begintime" and "endtime" (and at intervals, if specified)
         propsettings (propsettings, optional keyword): "propsettings" object with input settings for the propagation. if left out, default will be used.
-        satproperties (satproperties_static, optional keyword): "sat_properties_static" object with drag and radiation pressure succeptibility of satellite.
+        satproperties (satproperties_static, optional keyword): "sat_properties_static" object with drag and radiation pressure susceptibility of satellite.
 
     Returns:
         (propresult): Propagation result object holding state outputs, statistics, and dense output if requested
 
     Notes:
 
-    * Propagates statellite ephemeris (position, velocity in gcrs & time) to new time and output new position and velocity via Runge-Kutta integration.
+    * Propagates satellite ephemeris (position, velocity in gcrs & time) to new time and output new position and velocity via Runge-Kutta integration.
     * Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
-    * Propagator uses advanced Runga-Kutta integrators and includes the following forces:
+    * Propagator uses advanced Runge-Kutta integrators and includes the following forces:
         * Earth gravity with higher-order zonal terms
         * Sun, Moon gravity
         * Radiation pressured
         * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (which can be large)
-    * End time must be set by keyword argument, either explicitely or by duration
+    * End time must be set by keyword argument, either explicitly or by duration
     * Solid Earth tides are not (yet) included in the model
 
     """

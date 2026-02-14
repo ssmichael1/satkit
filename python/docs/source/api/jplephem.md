@@ -1,7 +1,7 @@
 # JPL Ephemeris
 
 ```{eval-rst}
-.. autoapimodule:: satkit.jplephem
+.. automodule:: satkit.jplephem
    :members:
    :undoc-members:
    :show-inheritance:

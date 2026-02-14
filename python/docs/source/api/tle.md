@@ -2,23 +2,39 @@
 
 
 ```{eval-rst}
-.. autoapiclass:: satkit.TLE
+.. autoclass:: satkit.TLE
    :members:
+    :exclude-members: from_file, from_lines, fit_from_states, to_2line, to_3line
    :undoc-members:
    :show-inheritance:
    :inherited-members:
 
-.. autoapiclass:: satkit.sgp4_opsmode
+.. automethod:: satkit.TLE.from_file
+    :no-index:
+
+.. automethod:: satkit.TLE.from_lines
+    :no-index:
+
+.. automethod:: satkit.TLE.fit_from_states
+    :no-index:
+
+.. automethod:: satkit.TLE.to_2line
+    :no-index:
+
+.. automethod:: satkit.TLE.to_3line
+    :no-index:
+
+.. autoclass:: satkit.sgp4_opsmode
     :members:
     :undoc-members:
     :show-inheritance:
     :inherited-members:
 
-.. autoapiclass:: satkit.sgp4_gravconst
+.. autoclass:: satkit.sgp4_gravconst
     :members:
     :undoc-members:
     :show-inheritance:
     :inherited-members:
 
-.. autoapifunction:: satkit.sgp4
+.. autofunction:: satkit.sgp4
 ```

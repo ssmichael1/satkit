@@ -13,6 +13,8 @@ import os
 import shutil
 import sys
 import pathlib
+import ast
+import re
 import satkit as sk
 
 sys.path.insert(0, "python/satkit")
@@ -29,7 +31,6 @@ sys.path.insert(0, "../satkit")
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.doctest",
-    "autoapi.extension",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
@@ -37,10 +38,6 @@ extensions = [
     "nbsphinx",
     "myst_parser",
 ]
-
-autoapi_dirs = ["../../satkit"]
-autoapi_generate_api_docs = False
-autoapi_member_order = "bysource"
 
 
 myst_enable_extensions = ["html_image", "amsmath", "dollarmath"]
@@ -52,7 +49,7 @@ templates_path = ["_templates"]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
-source_suffix = [".md"]
+source_suffix = {".md": "markdown"}
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'
@@ -100,6 +97,8 @@ language = "en"
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 exclude_patterns = [
+    "_build/**",
+    "html/**",
     "examples/Notebook/.ipynb_checkpoints",
     "examples/Notebook/nbpackage/*.ipynb",
     "examples/Notebook/nbpackage/nbs/*.ipynb",
@@ -139,7 +138,6 @@ todo_include_todos = False
 # a list of builtin themes.
 # html_theme = "alabaster"
 html_theme = "sphinx_rtd_theme"
-# html_theme = "furo"
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
@@ -169,8 +167,180 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 
+def _rewrite_google_sections(lines: list[str]) -> list[str]:
+    out: list[str] = []
+    i = 0
+
+    arg_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\))?\s*:\s*(.*)$")
+    typed_re = re.compile(r"^([^:]+?)\s*:\s*(.*)$")
+
+    while i < len(lines):
+        line = lines[i]
+        header = line.strip()
+        if header not in {"Args:", "Arguments:", "Returns:", "Raises:"}:
+            out.append(line)
+            i += 1
+            continue
+
+        out.append(header)
+        out.append("")
+        i += 1
+
+        current_item_lines: list[str] | None = None
+
+        while i < len(lines):
+            raw = lines[i]
+            stripped = raw.strip()
+
+            if not stripped:
+                i += 1
+                continue
+
+            if not raw.startswith("    "):
+                break
+
+            m = arg_re.match(stripped) if header in {"Args:", "Arguments:"} else typed_re.match(stripped)
+            if m:
+                if current_item_lines is not None:
+                    out.extend(current_item_lines)
+
+                if header in {"Args:", "Arguments:"}:
+                    arg_name, arg_type, arg_desc = m.group(1), m.group(2), m.group(3)
+                    if arg_type:
+                        current_item_lines = [
+                            f"- ``{arg_name} ({arg_type})``",
+                            f"  {arg_desc}",
+                        ]
+                    else:
+                        current_item_lines = [
+                            f"- ``{arg_name}``",
+                            f"  {arg_desc}",
+                        ]
+                else:
+                    ret_type, ret_desc = m.group(1).strip(), m.group(2).strip()
+                    current_item_lines = [
+                        f"- ``{ret_type}``",
+                        f"  {ret_desc}",
+                    ]
+            elif current_item_lines is not None:
+                if len(current_item_lines) >= 2:
+                    current_item_lines[1] = f"{current_item_lines[1]} {stripped}"
+                else:
+                    current_item_lines[-1] = f"{current_item_lines[-1]} {stripped}"
+            else:
+                out.append(stripped)
+
+            i += 1
+
+        if current_item_lines is not None:
+            out.extend(current_item_lines)
+
+        out.append("")
+
+    return out
+
+
+def _normalize_doc_lines(lines: list[str]) -> list[str]:
+    lines = _rewrite_google_sections(lines)
+    normalized: list[str] = []
+    for line in lines:
+        is_bullet = line.lstrip().startswith("* ")
+        is_dash_bullet = line.lstrip().startswith("- ")
+        prev_is_bullet = bool(normalized) and normalized[-1].lstrip().startswith("* ")
+        prev_is_dash_bullet = bool(normalized) and normalized[-1].lstrip().startswith("- ")
+
+        if is_bullet and normalized and normalized[-1].strip():
+            normalized.append("")
+        if is_dash_bullet and normalized and normalized[-1].strip():
+            normalized.append("")
+        if not is_bullet and prev_is_bullet and line.strip():
+            normalized.append("")
+        if not is_dash_bullet and prev_is_dash_bullet and line.strip():
+            normalized.append("")
+
+        normalized.append(line)
+
+    return normalized
+
+
+def _module_names_for_stub(stub_path: pathlib.Path) -> list[str]:
+    if stub_path.name == "satkit.pyi":
+        return ["satkit", "satkit.satkit"]
+    if stub_path.name == "__init__.pyi":
+        return ["satkit"]
+    return [f"satkit.{stub_path.stem}"]
+
+
+def _collect_stub_docstrings() -> dict[str, list[str]]:
+    stub_docs: dict[str, list[str]] = {}
+    stub_dir = cwd.parent.parent / "satkit"
+
+    for stub_path in stub_dir.glob("*.pyi"):
+        module_names = _module_names_for_stub(stub_path)
+
+        try:
+            tree = ast.parse(stub_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        module_doc = ast.get_docstring(tree, clean=True)
+        if module_doc:
+            doc_lines = _normalize_doc_lines(module_doc.splitlines())
+            for module_name in module_names:
+                stub_docs[module_name] = doc_lines
+
+        for node in tree.body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                obj_doc = ast.get_docstring(node, clean=True)
+                if obj_doc:
+                    doc_lines = _normalize_doc_lines(obj_doc.splitlines())
+                    for module_name in module_names:
+                        stub_docs[f"{module_name}.{node.name}"] = doc_lines
+
+                if isinstance(node, ast.ClassDef):
+                    for child in node.body:
+                        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            child_doc = ast.get_docstring(child, clean=True)
+                            if child_doc:
+                                doc_lines = _normalize_doc_lines(child_doc.splitlines())
+                                for module_name in module_names:
+                                    stub_docs[f"{module_name}.{node.name}.{child.name}"] = (
+                                        doc_lines
+                                    )
+
+    return stub_docs
+
+
+_STUB_DOCS = _collect_stub_docstrings()
+
+
+def _inject_stub_docstring(_app, _what, name, _obj, _options, lines):
+    if name in {"satkit.satstate.propagate", "satkit.satkit.satstate.propagate"}:
+        lines[:] = [
+            "Propagates the satellite state to a target time or duration.",
+        ]
+        return
+
+    if name in {"satkit.sgp4", "satkit.satkit.sgp4"}:
+        lines[:] = [
+            "Runs SGP4 propagation for one or more TLE/OMM inputs at one or more times.",
+        ]
+        return
+
+    doc_lines = _STUB_DOCS.get(name)
+
+    if doc_lines is None and name.startswith("satkit.satkit."):
+        doc_lines = _STUB_DOCS.get(f"satkit.{name.removeprefix('satkit.satkit.')}")
+    if doc_lines is None and name.startswith("satkit."):
+        doc_lines = _STUB_DOCS.get(f"satkit.satkit.{name.removeprefix('satkit.')}")
+
+    if doc_lines is not None:
+        lines[:] = doc_lines
+
+
 def setup(app):
     app.add_css_file("theme_mods.css")
+    app.connect("autodoc-process-docstring", _inject_stub_docstring, priority=100)
 
 
 # Add any extra paths that contain custom files (such as robots.txt or
