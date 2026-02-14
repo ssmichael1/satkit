@@ -79,6 +79,7 @@ Please reach out of you find errors in code or calculations, are interested in c
   examples/TLE Fitting.ipynb
   examples/High Precision Propagation.ipynb
   examples/Orbital Mean-Element Message.ipynb
+  examples/Optical Observations of Satellites.ipynb
 
 .. toctree::
   :caption: API Reference
