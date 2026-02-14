@@ -160,6 +160,7 @@ pub mod utils;
 pub mod filters;
 
 /// Coordinate frames
+/// Currently not used
 mod frames;
 
 // Integrate ordinary differential equations
@@ -167,7 +168,6 @@ mod ode;
 
 // Orbital Mean-Element Messages
 pub mod omm;
-pub use crate::omm::OMM;
 
 // Time and duration
 mod time;
@@ -178,10 +178,14 @@ pub use frames::Frame;
 pub use itrfcoord::ITRFCoord;
 pub use solarsystem::SolarSystem;
 pub use tle::TLE;
+
+// Python bindings
 #[cfg(feature = "pybindings")]
 pub mod pybindings;
 
 // Prelude
+// Note that Duration, Instant, TimeLike, TimeScale, and Weekday
+// are also re-exported at the crate level for convenience, but they are also included in the prelude for easy import.
 pub mod prelude {
     pub use crate::consts::*;
     pub use crate::earthgravity::*;
@@ -191,11 +195,12 @@ pub mod prelude {
     pub use crate::kepler::*;
     pub use crate::lpephem::*;
     pub use crate::nrlmsise::*;
+    pub use crate::omm::*;
     pub use crate::orbitprop::*;
     pub use crate::sgp4::*;
+    pub use crate::solarsystem::SolarSystem;
     pub use crate::spaceweather::*;
+    pub use crate::time::{Duration, Instant, TimeLike, TimeScale, Weekday};
     pub use crate::tle::*;
     pub use crate::utils::*;
-    pub use crate::solarsystem::SolarSystem;
-    pub use crate::time::{Duration, Instant, TimeLike, TimeScale, Weekday};
 }

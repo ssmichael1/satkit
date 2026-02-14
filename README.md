@@ -210,7 +210,7 @@ Add satkit to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-satkit = "0.8"
+satkit = "0.9.4"
 ```
 
 Or use cargo add:

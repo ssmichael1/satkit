@@ -170,3 +170,8 @@
 
 ## Python 0.9.3
   - bugfix: Fixed transposed state transition matrix in python bindings for high-precision propagator
+
+## Rust 0.9.4
+  - Add prelude to expose commonly-used structs and methods
+  - OMM no-longer exposed at top crate level (but is expose via prelude)
+  - Make `epoch_instant` function public in OMM
