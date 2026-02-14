@@ -141,6 +141,9 @@ pub mod jplephem;
 pub mod kepler;
 /// Low-precision ephemeris for sun and moon
 pub mod lpephem;
+/// NRLMSIS 2.1 Density model (native Rust)
+#[cfg(feature = "nrlmsis2")]
+pub mod nrlmsis2;
 /// NRL-MISE00 Density model
 pub mod nrlmsise;
 /// High-Precision Orbit Propagation via Runga-Kutta 9(8) Integration
@@ -181,3 +184,23 @@ pub use tle::TLE;
 #[cfg(feature = "pybindings")]
 pub mod pybindings;
 
+// Prelude
+pub mod prelude {
+    pub use crate::consts;
+    pub use crate::earthgravity;
+    pub use crate::frametransform;
+    pub use crate::itrfcoord::*;
+    pub use crate::jplephem::*;
+    pub use crate::kepler::*;
+    pub use crate::lpephem;
+    #[cfg(feature = "nrlmsis2")]
+    pub use crate::nrlmsis2;
+    pub use crate::nrlmsise;
+    pub use crate::orbitprop::*;
+    pub use crate::sgp4::*;
+    pub use crate::solarsystem::SolarSystem;
+    pub use crate::spaceweather::*;
+    pub use crate::time::{Duration, Instant, TimeLike, TimeScale, Weekday};
+    pub use crate::tle::*;
+    pub use crate::utils;
+}
