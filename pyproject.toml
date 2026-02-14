@@ -114,6 +114,7 @@ test-command = [
 
 [[tool.setuptools-rust.ext-modules]]
 features = ["pybindings"]
+no-default-features = true
 args = ["--crate-type", "cdylib"]
 target = "satkit/satkit"
 path = "Cargo.toml"

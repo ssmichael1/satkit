@@ -14,7 +14,10 @@ use serde::{Deserialize, Deserializer};
 
 use anyhow::Result;
 
-use crate::sgp4::{SatRec, SGP4InitArgs, SGP4Source};
+#[cfg(feature = "omm-xml")]
+mod xml;
+
+use crate::sgp4::{SGP4InitArgs, SGP4Source, SatRec};
 use crate::{Instant, TimeScale};
 
 fn de_f64_from_number_or_string<'de, D>(deserializer: D) -> Result<f64, D::Error>
@@ -26,16 +29,13 @@ where
 
     let v = Value::deserialize(deserializer)?;
     match v {
-        Value::Number(n) => n
-            .as_f64()
-            .ok_or_else(|| Error::custom("invalid number")),
+        Value::Number(n) => n.as_f64().ok_or_else(|| Error::custom("invalid number")),
         Value::String(s) => s
             .parse::<f64>()
             .map_err(|e| Error::custom(format!("invalid float string: {e}"))),
         _ => Err(Error::custom("expected number or string")),
     }
 }
-
 
 fn de_opt_f64_from_number_or_string<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
 where
@@ -65,9 +65,7 @@ where
     }
 }
 
-fn de_opt_u32_from_number_or_string<'de, D>(
-    deserializer: D,
-) -> Result<Option<u32>, D::Error>
+fn de_opt_u32_from_number_or_string<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -102,9 +100,7 @@ where
     }
 }
 
-fn de_opt_u8_from_number_or_string<'de, D>(
-    deserializer: D,
-) -> Result<Option<u8>, D::Error>
+fn de_opt_u8_from_number_or_string<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -143,6 +139,52 @@ where
 ///
 /// See Table 4-1, Table 4-2, Table 4-3 of CCSDS 502.0-B-3
 ///
+///
+/// # Example Usage:
+///
+/// ```
+/// use satkit::prelude::*;
+///
+/// // JSON structure based on Spacetrack OMM format
+/// let json_str = r#"
+/// [
+///    {
+///        "OBJECT_NAME": "ISS (ZARYA)",
+///        "OBJECT_ID": "1998-067A",
+///        "EPOCH": "2026-02-14T05:08:48.534432",
+///        "MEAN_MOTION": 15.4859353,
+///        "ECCENTRICITY": 0.00110623,
+///        "INCLINATION": 51.6315,
+///        "RA_OF_ASC_NODE": 188.3997,
+///        "ARG_OF_PERICENTER": 96.9141,
+///        "MEAN_ANOMALY": 263.3106,
+///        "EPHEMERIS_TYPE": 0,
+///        "CLASSIFICATION_TYPE": "U",
+///        "NORAD_CAT_ID": 25544,
+///        "ELEMENT_SET_NO": 999,
+///        "REV_AT_EPOCH": 55269,
+///        "BSTAR": 0.00016303535,
+///        "MEAN_MOTION_DOT": 8.429e-5,
+///        "MEAN_MOTION_DDOT": 0
+///    }
+/// ]
+/// "#;
+///
+/// let omms = OMM::from_json_string(json_str).unwrap();
+/// println!("Parsed OMMs: {:#?}", omms);
+///
+///  // Test Run initialization from OMM
+///  let mut omm = omms[0].clone();
+///  let epoch = omm.epoch_instant().unwrap();
+///  println!("OMM epoch: {}", epoch);
+///  let times = vec![epoch, epoch + Duration::from_minutes(10.0)];
+///  let states = sgp4(
+///      &mut omm,
+///      &times,
+///  )
+///  .unwrap();
+/// ```
+
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct OMM {
     #[serde(rename = "CCSDS_OMM_VERS")] // CCSDS says this is required, but it often is missing
@@ -207,33 +249,33 @@ pub struct OMM {
     #[serde(rename = "DRAG_COEFF")] // Optional
     #[serde(default, deserialize_with = "de_opt_f64_from_number_or_string")]
     pub drag_coeff: Option<f64>,
-    #[serde(rename="EPHEMERIS_TYPE")] // Optional
+    #[serde(rename = "EPHEMERIS_TYPE")] // Optional
     #[serde(default, deserialize_with = "de_opt_u8_from_number_or_string")]
     pub ephemeris_type: Option<u8>,
-    #[serde(rename="CLASSIFICATION_TYPE")] // Optional
+    #[serde(rename = "CLASSIFICATION_TYPE")] // Optional
     pub classification_type: Option<String>,
-    #[serde(rename="NORAD_CAT_ID")] // Optional
+    #[serde(rename = "NORAD_CAT_ID")] // Optional
     #[serde(default, deserialize_with = "de_opt_u32_from_number_or_string")]
     pub norad_cat_id: Option<u32>,
-    #[serde(rename="ELEMENT_SET_NO")] // Optional
+    #[serde(rename = "ELEMENT_SET_NO")] // Optional
     #[serde(default, deserialize_with = "de_opt_u32_from_number_or_string")]
     pub element_set_no: Option<u32>,
-    #[serde(rename="REV_AT_EPOCH")] // Optional
+    #[serde(rename = "REV_AT_EPOCH")] // Optional
     #[serde(default, deserialize_with = "de_opt_u32_from_number_or_string")]
     pub rev_at_epoch: Option<u32>,
-    #[serde(rename="BSTAR")] // Optional
+    #[serde(rename = "BSTAR")] // Optional
     #[serde(default, deserialize_with = "de_opt_f64_from_number_or_string")]
     pub bstar: Option<f64>,
-    #[serde(rename="BTERM")] // Optional
+    #[serde(rename = "BTERM")] // Optional
     #[serde(default, deserialize_with = "de_opt_f64_from_number_or_string")]
     pub bterm: Option<f64>,
-    #[serde(rename="MEAN_MOTION_DOT")] // Optional
+    #[serde(rename = "MEAN_MOTION_DOT")] // Optional
     #[serde(default, deserialize_with = "de_opt_f64_from_number_or_string")]
     pub mean_motion_dot: Option<f64>,
-    #[serde(rename="MEAN_MOTION_DDOT")] // Optional
+    #[serde(rename = "MEAN_MOTION_DDOT")] // Optional
     #[serde(default, deserialize_with = "de_opt_f64_from_number_or_string")]
     pub mean_motion_ddot: Option<f64>,
-    #[serde(rename="AGOM")] // Optional
+    #[serde(rename = "AGOM")] // Optional
     #[serde(default, deserialize_with = "de_opt_f64_from_number_or_string")]
     pub agom: Option<f64>,
 
@@ -246,14 +288,73 @@ pub struct OMM {
 }
 
 impl OMM {
-    fn epoch_instant(&self) -> anyhow::Result<Instant> {
+    /// Parses `self.epoch` (RFC 3339 string) into an [`Instant`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `epoch` is not a valid RFC 3339 timestamp.
+    pub fn epoch_instant(&self) -> anyhow::Result<Instant> {
         Ok(Instant::from_rfc3339(&self.epoch).map_err(|e| anyhow::anyhow!(e))?)
     }
 
+    /// Deserializes one or more OMM records from a JSON string.
+    ///
+    /// The expected format is a JSON array of OMM objects as provided by
+    /// Space-Track/CelesTrak JSON endpoints.
+    ///
+    /// # Arguments
+    /// - `s`: JSON string containing an array of OMM records.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use satkit::prelude::OMM;
+    ///
+    /// let json = r#"[
+    ///   {
+    ///     "OBJECT_NAME": "ISS (ZARYA)",
+    ///     "OBJECT_ID": "1998-067A",
+    ///     "EPOCH": "2026-02-14T05:08:48.534432",
+    ///     "MEAN_MOTION": 15.4859353,
+    ///     "ECCENTRICITY": 0.00110623,
+    ///     "INCLINATION": 51.6315,
+    ///     "RA_OF_ASC_NODE": 188.3997,
+    ///     "ARG_OF_PERICENTER": 96.9141,
+    ///     "MEAN_ANOMALY": 263.3106
+    ///   }
+    /// ]"#;
+    ///
+    /// let omms = OMM::from_json_string(json)?;
+    /// assert_eq!(omms.len(), 1);
+    /// assert_eq!(omms[0].object_id, "1998-067A");
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the JSON is malformed or required OMM fields are missing/invalid.
     pub fn from_json_string(s: &str) -> Result<Vec<OMM>> {
         serde_json::from_str(s).map_err(|e| anyhow::anyhow!(e))
     }
 
+    /// Deserializes one or more OMM records from a JSON file.
+    ///
+    /// # Arguments
+    /// - `path`: Path to a JSON file containing an array of OMM records.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use satkit::prelude::OMM;
+    ///
+    /// let omms = OMM::from_json_file("/path/to/omm.json")?;
+    /// println!("Loaded {} OMM records", omms.len());
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the JSON payload is invalid.
     pub fn from_json_file<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<OMM>> {
         let file = std::fs::File::open(path).map_err(|e| anyhow::anyhow!(e))?;
         let reader = std::io::BufReader::new(file);
@@ -306,7 +407,6 @@ impl SGP4Source for OMM {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
 
@@ -326,16 +426,20 @@ mod tests {
         // Test SGP4 initialization from first OMM
         let mut omm = msg[0].clone();
 
-
         // Actually run SGP4 propagation for 10 minutes past epoch
         let epoch = omm.epoch_instant().unwrap();
         println!("OMM epoch: {}", epoch);
         let times = vec![epoch, epoch + crate::time::Duration::from_minutes(10.0)];
-        let states = crate::sgp4::sgp4_full(&mut omm, &times, crate::sgp4::GravConst::WGS72, crate::sgp4::OpsMode::IMPROVED).unwrap();
+        let states = crate::sgp4::sgp4_full(
+            &mut omm,
+            &times,
+            crate::sgp4::GravConst::WGS72,
+            crate::sgp4::OpsMode::IMPROVED,
+        )
+        .unwrap();
         for (i, _t) in times.iter().enumerate() {
             assert!(states.errcode[i] == crate::sgp4::SGP4Error::SGP4Success);
         }
-
     }
 
     #[test]
@@ -348,6 +452,4 @@ mod tests {
         println!("number of OMMs: {}", msg.len());
         println!("first OMM: {:#?}", msg[0]);
     }
-
-
 }
