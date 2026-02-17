@@ -2,7 +2,6 @@
 /Cargo.lock
 /testdata/vallado*
 /testdata/testpo*
-.vscode
 *.whl
 build
 *.egg-info
