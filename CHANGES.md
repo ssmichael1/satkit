@@ -176,3 +176,6 @@
   - OMM no-longer exposed at top crate level (but is expose via prelude)
   - Make `epoch_instant` function public in OMM
   - OMM supports import of xml files with `omm-xml` feature (enabled by default)
+
+## Python 0.9.4
+  - Build python packages in release mode
