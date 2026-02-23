@@ -178,4 +178,4 @@
   - OMM supports import of xml files with `omm-xml` feature (enabled by default)
 
 ## Python 0.9.4
-  - Build python packages in release mode
+  - ensure python packages are built in release mode (they have been, but adding additoinal flags)
