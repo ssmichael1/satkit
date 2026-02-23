@@ -5,11 +5,11 @@ use pyo3::IntoPyObjectExt;
 
 use numpy::{PyArray1, PyReadonlyArray1};
 
-use crate::itrfcoord::ITRFCoord;
+use satkit::itrfcoord::ITRFCoord;
 
-use super::pyquaternion::PyQuaternion;
+use crate::pyquaternion::PyQuaternion;
 
-use super::pyutils::*;
+use crate::pyutils::*;
 
 ///
 /// Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)

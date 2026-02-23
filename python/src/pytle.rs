@@ -1,13 +1,13 @@
 use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 
-use crate::tle::TLE;
+use satkit::tle::TLE;
 
-use crate::pybindings::pyinstant::ToTimeVec;
+use crate::pyinstant::ToTimeVec;
 use anyhow::{bail, Result};
 
 // Import PyMPSuccess from its module (adjust the path if needed)
-use crate::pybindings::pympsuccess::PyMPSuccess;
+use crate::pympsuccess::PyMPSuccess;
 
 use std::fs::File;
 use std::io;
@@ -15,14 +15,10 @@ use std::io::BufRead;
 
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
-impl<'py> IntoPyObject<'py> for TLE {
-    type Target = PyAny; // the Python type
-    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
-    type Error = std::convert::Infallible;
 
-    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        Ok(PyTLE(self).into_bound_py_any(py).unwrap())
-    }
+/// Convert a satkit::TLE into a Python PyTLE object
+pub fn tle_into_py(tle: TLE, py: Python<'_>) -> Py<PyAny> {
+    PyTLE(tle).into_py_any(py).unwrap()
 }
 
 #[pymethods]
@@ -73,11 +69,14 @@ impl PyTLE {
     #[staticmethod]
     fn from_lines(lines: Vec<String>) -> Result<Py<PyAny>> {
         TLE::from_lines(&lines).and_then(|v| {
-            pyo3::Python::attach(|py| {
+            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 if v.len() > 1 {
-                    v.into_py_any(py)
+                    v.into_iter()
+                        .map(|t| tle_into_py(t, py))
+                        .collect::<Vec<_>>()
+                        .into_py_any(py)
                 } else {
-                    v[0].clone().into_py_any(py)
+                    Ok(tle_into_py(v.into_iter().next().unwrap(), py))
                 }
             })
             .map_err(|e| e.into())
@@ -139,7 +138,7 @@ impl PyTLE {
     /// Epoch time of TLE
     #[getter(epoch)]
     fn get_epoch(&self, py: Python) -> PyResult<Py<PyAny>> {
-        self.0.epoch.into_py_any(py)
+        Ok(crate::pyinstant::instant_into_py(self.0.epoch, py))
     }
     #[setter(epoch)]
     fn set_epoch(&mut self, value: &Bound<'_, PyAny>) -> Result<()> {
@@ -281,7 +280,7 @@ impl PyTLE {
             &self
                 .0
                 .epoch
-                .as_mjd_with_scale(crate::TimeScale::TAI)
+                .as_mjd_with_scale(satkit::TimeScale::TAI)
                 .to_le_bytes(),
         );
         raw[92..96].clone_from_slice(&self.0.rev_num.to_le_bytes());
@@ -323,9 +322,9 @@ impl PyTLE {
         self.0.arg_of_perigee = f64::from_le_bytes(raw[60..68].try_into().unwrap());
         self.0.mean_anomaly = f64::from_le_bytes(raw[68..76].try_into().unwrap());
         self.0.mean_motion = f64::from_le_bytes(raw[76..84].try_into().unwrap());
-        self.0.epoch = crate::Instant::from_mjd_with_scale(
+        self.0.epoch = satkit::Instant::from_mjd_with_scale(
             f64::from_le_bytes(raw[84..92].try_into().unwrap()),
-            crate::TimeScale::TAI,
+            satkit::TimeScale::TAI,
         );
         self.0.rev_num = i32::from_le_bytes(raw[92..96].try_into().unwrap());
 

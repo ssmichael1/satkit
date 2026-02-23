@@ -23,7 +23,7 @@ const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 pub struct Instant {
     /// The number of microseconds since
     /// Unix epoch (1970-01-01 00:00:00 UTC)
-    pub(crate) raw: i64,
+    pub raw: i64,
 }
 
 /// For conversian between Julian day and

@@ -7,10 +7,6 @@ use std::sync::Mutex;
 
 use anyhow::{bail, Result};
 
-#[cfg(feature = "pybindings")]
-use super::pypackage::get_datadir_package_path;
-
-
 // Pointer to the one and only data directory
 static DATADIR_SINGLETON: Mutex<OnceCell<Option<PathBuf>>> = Mutex::new(OnceCell::new());
 
@@ -20,13 +16,6 @@ pub fn testdirs() -> Vec<PathBuf> {
     // Look for paths in environment variable
     if let Ok(val) = std::env::var("SATKIT_DATA") {
         testdirs.push(Path::new(&val).to_path_buf())
-    }
-
-    // If a python package, look for the "satkit_data" package
-    // and use its path as a data directory
-    #[cfg(feature = "pybindings")]
-    if let Ok(Some(v)) = get_datadir_package_path() {
-        testdirs.push(v.join("data"));
     }
 
     // Look for paths in a satkit_data subdirectory

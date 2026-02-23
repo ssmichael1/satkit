@@ -22,6 +22,4 @@ fn main() {
         .output()
         .unwrap();
     println!("cargo:rustc-env=GIT_TAG={}", String::from_utf8(output.stdout).unwrap());
-    #[cfg(feature = "pybindings")]
-    pyo3_build_config::add_extension_module_link_args();
 }

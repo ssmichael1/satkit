@@ -1,6 +1,8 @@
-from .satkit import * # type: ignore
+from importlib.metadata import version
+__version__ = version("satkit")
 
-from ._version import *
+from .satkit import *  # type: ignore
+
 import sys
 
 if utils.datafiles_exist() == False:  # type: ignore

@@ -1,6 +1,6 @@
-use super::pyinstant::PyInstant;
-use super::pypropsettings::PyPropSettings;
-use super::pyquaternion::PyQuaternion;
+use crate::pyinstant::PyInstant;
+use crate::pypropsettings::PyPropSettings;
+use crate::pyquaternion::PyQuaternion;
 
 use numpy as np;
 use numpy::PyArrayMethods;
@@ -10,10 +10,10 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyNone, PyTuple};
 use pyo3::IntoPyObjectExt;
 
-use crate::mathtypes::*;
-use crate::orbitprop::{PropSettings, SatState, StateCov};
-use crate::pybindings::PyDuration;
-use crate::Instant;
+use satkit::mathtypes::*;
+use satkit::orbitprop::{PropSettings, SatState, StateCov};
+use crate::PyDuration;
+use satkit::Instant;
 
 use anyhow::{bail, Result};
 
@@ -277,7 +277,7 @@ impl PySatState {
         }
         let time = Instant::from_mjd_with_scale(
             f64::from_le_bytes(state[0..8].try_into().unwrap()),
-            crate::TimeScale::TAI,
+            satkit::TimeScale::TAI,
         );
 
         let pv = Vector6::from_row_slice(unsafe {
@@ -305,7 +305,7 @@ impl PySatState {
             &self
                 .0
                 .time
-                .as_mjd_with_scale(crate::TimeScale::TAI)
+                .as_mjd_with_scale(satkit::TimeScale::TAI)
                 .to_le_bytes(),
         );
         unsafe {

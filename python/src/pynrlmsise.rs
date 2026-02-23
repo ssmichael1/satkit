@@ -1,9 +1,9 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use super::PyInstant;
-use crate::nrlmsise;
-use crate::Instant;
+use crate::PyInstant;
+use satkit::nrlmsise;
+use satkit::Instant;
 
 ///
 /// NRL-MSISE00 Atmospheric Model

@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use crate::consts as cconsts;
+use satkit::consts as cconsts;
 
 #[pyclass(name = "consts")]
 pub struct Consts {}

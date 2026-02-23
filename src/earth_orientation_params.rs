@@ -225,27 +225,10 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
         None => {
             let mut shown = warning_shown().write().unwrap();
             if !*shown {
-                // Warning for python:
-                #[cfg(feature = "pybindings")]
-                eprintln!(
-                    r"
-                    Warning: EOP data not available for MJD UTC = {} (too late).
-                    Run `satkit.frametransform.update()` to download
-                    the most recent data.  Valid times are 1962 to present,
-                    and predicts go to ~ 4 months into the future
-
-                    This warning will only be shown once for each library load.
-
-                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`
-                    ",
-                    mjd_utc
-                );
-
-                #[cfg(not(feature = "pybindings"))]
                 eprintln!(
                 "
                     Warning: EOP data not available for MJD UTC = {} (too late).
-                    Run `satkit.frametransform.update()` to download
+                    Run `satkit::utils::update_datafiles()` to download
                     the most recent data.  Valid times are 1962 to present,
                     and predicts go to ~ 4 months into the future
 
@@ -264,20 +247,6 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
             if v == 0_usize {
                 let mut shown = warning_shown().write().unwrap();
                 if !*shown {
-                    // Warning for python:
-                    #[cfg(feature = "pybindings")]
-                    eprintln!(
-                        r"
-                    Warning: EOP data not available for MJD UTC = {} (too early).
-
-                    This warning will only be shown once for each library load.
-
-                    To disable this warning, run `satkit.frametransform.disable_eop_time_warning()`
-                    ",
-                        mjd_utc
-                    );
-
-                    #[cfg(not(feature = "pybindings"))]
                     eprintln!(
                 "
                     Warning: EOP data not available for MJD UTC = {} (too early).

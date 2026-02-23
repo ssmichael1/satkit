@@ -1,6 +1,6 @@
-use super::pyutils;
-use crate::lpephem::moon;
-use crate::Instant;
+use crate::pyutils;
+use satkit::lpephem::moon;
+use satkit::Instant;
 use pyo3::prelude::*;
 
 #[derive(PartialEq, Eq)]

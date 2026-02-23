@@ -1,8 +1,8 @@
-use super::pyinstant::ToTimeVec;
-use super::pyquaternion::PyQuaternion;
+use crate::pyinstant::ToTimeVec;
+use crate::pyquaternion::PyQuaternion;
 
-use crate::mathtypes::*;
-use crate::Instant;
+use satkit::mathtypes::*;
+use satkit::Instant;
 
 use nalgebra as na;
 use numpy as np;

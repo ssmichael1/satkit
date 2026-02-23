@@ -4,11 +4,11 @@ use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
 use pyo3::IntoPyObjectExt;
 
-use crate::kepler::{Anomaly, Kepler};
+use satkit::kepler::{Anomaly, Kepler};
 
-use super::pyduration::PyDuration;
-use super::pyutils::kwargs_or_none;
-use super::pyutils::py_to_smatrix;
+use crate::pyduration::PyDuration;
+use crate::pyutils::kwargs_or_none;
+use crate::pyutils::py_to_smatrix;
 
 ///
 /// Representation of Keplerian orbital elements
@@ -164,7 +164,7 @@ impl PyKepler {
     fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<Self> {
         if dt.is_instance_of::<pyo3::types::PyFloat>() {
             let dt = dt.extract::<f64>()?;
-            let dt = crate::Duration::from_seconds(dt);
+            let dt = satkit::Duration::from_seconds(dt);
             Ok(Self(self.0.propagate(&dt)))
         } else {
             let dt: PyDuration = dt.extract()?;

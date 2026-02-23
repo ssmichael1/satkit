@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use crate::SolarSystem as SS;
+use satkit::SolarSystem as SS;
 
 /// Solar system bodies
 ///

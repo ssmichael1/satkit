@@ -2,11 +2,11 @@ use pyo3::prelude::*;
 use pyo3::types::{PyFloat, PyTuple};
 use pyo3::wrap_pyfunction;
 
-use crate::nrlmsise;
-use crate::Instant;
+use satkit::nrlmsise;
+use satkit::Instant;
 
-use super::PyITRFCoord;
-use super::PyInstant;
+use crate::PyITRFCoord;
+use crate::PyInstant;
 
 ///
 /// NRL MSISE-00 Density Model

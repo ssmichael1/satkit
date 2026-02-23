@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use crate::filters::ukf::UKF;
+use satkit::filters::ukf::UKF;
 use numpy::PyArray1;
 use numpy::PyReadonlyArray1;
 use numpy::PyReadonlyArray2;
@@ -8,8 +8,8 @@ use numpy::PyUntypedArrayMethods;
 
 use pyo3::exceptions::PyValueError;
 
-use crate::mathtypes::*;
-use crate::pybindings::pyutils::*;
+use satkit::mathtypes::*;
+use crate::pyutils::*;
 
 enum UKFType {
     None,

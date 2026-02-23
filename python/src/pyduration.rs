@@ -1,6 +1,6 @@
-use crate::Duration;
+use satkit::Duration;
 
-use super::pyinstant::PyInstant;
+use crate::pyinstant::PyInstant;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDict;

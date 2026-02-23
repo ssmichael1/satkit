@@ -1,10 +1,8 @@
-use super::pyinstant::PyInstant;
-use super::pyitrfcoord::PyITRFCoord;
-use super::pyutils;
-use crate::lpephem::sun;
+use crate::pyinstant::PyInstant;
+use crate::pyitrfcoord::PyITRFCoord;
+use crate::pyutils;
+use satkit::lpephem::sun;
 use pyo3::prelude::*;
-use pyo3::IntoPyObjectExt;
-
 use anyhow::Result;
 
 /// Sun position in the Geocentric Celestial Reference Frame (GCRF)
@@ -64,7 +62,12 @@ pub fn rise_set(
 ) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     match sun::riseset(&time.0, &coord.0, sigma) {
         Ok((rise, set)) => {
-            pyo3::Python::attach(|py| Ok((rise.into_py_any(py)?, set.into_py_any(py)?)))
+            pyo3::Python::attach(|py| {
+                Ok((
+                    crate::pyinstant::instant_into_py(rise, py),
+                    crate::pyinstant::instant_into_py(set, py),
+                ))
+            })
         }
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
     }

@@ -1,4 +1,4 @@
-use crate::frames::Frame;
+use satkit::Frame;
 use pyo3::prelude::*;
 
 #[derive(PartialEq, Eq)]
