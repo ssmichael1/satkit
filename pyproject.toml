@@ -114,13 +114,12 @@ test-command = [
 
 [[tool.setuptools-rust.ext-modules]]
 features = ["pybindings"]
-no-default-features = true
-args = ["--crate-type", "cdylib"]
+args = ["--no-default-features", "--crate-type", "cdylib"]
 target = "satkit/satkit"
 path = "Cargo.toml"
 binding = "PyO3"
 py-limited-api = "auto"
-release = true
+debug = false
 
 [tool.setuptools_scm]
 version_file = "python/satkit/_version.py"
