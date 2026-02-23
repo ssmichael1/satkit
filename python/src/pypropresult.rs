@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
-use super::pyinstant::PyInstant;
-use super::pyutils::*;
+use crate::pyinstant::PyInstant;
+use crate::pyutils::*;
 
 use pyo3::types::{PyBytes, PyDict, PyTuple};
 use pyo3::IntoPyObjectExt;
@@ -9,9 +9,9 @@ use pyo3::IntoPyObjectExt;
 use numpy::PyArrayMethods;
 use numpy::{self as np, ToPyArray};
 
-use crate::mathtypes::*;
-use crate::orbitprop::PropagationResult;
-use crate::Instant;
+use satkit::mathtypes::*;
+use satkit::orbitprop::PropagationResult;
+use satkit::Instant;
 
 use serde::{Deserialize, Serialize};
 
@@ -342,7 +342,6 @@ mod test {
         let sol = PyPropResult::new();
         println!("sol = {:?}", sol);
         let v = serde_pickle::to_vec(&sol.0, serde_pickle::SerOptions::default()).unwrap();
-        //print!("v = {:?}", v);
         let sol2 = PyPropResult(
             serde_pickle::from_slice(v.as_slice(), serde_pickle::DeOptions::default()).unwrap(),
         );

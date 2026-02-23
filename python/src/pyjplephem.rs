@@ -1,10 +1,10 @@
 use pyo3::prelude::*;
 
-use super::pysolarsystem;
-use super::pyutils::*;
-use crate::jplephem;
-use crate::solarsystem::SolarSystem;
-use crate::Instant;
+use crate::pysolarsystem;
+use crate::pyutils::*;
+use satkit::jplephem;
+use satkit::SolarSystem;
+use satkit::Instant;
 use nalgebra as na;
 
 use anyhow::Result;

@@ -6,9 +6,9 @@ use pyo3::types::PyTuple;
 use pyo3::types::PyTzInfo;
 use pyo3::IntoPyObjectExt;
 
-use crate::{Instant, TimeScale, Weekday};
+use satkit::{Instant, TimeScale, Weekday};
 
-use super::pyduration::PyDuration;
+use crate::pyduration::PyDuration;
 
 use anyhow::{bail, Result};
 
@@ -98,25 +98,10 @@ impl From<Weekday> for PyWeekday {
         }
     }
 }
-impl<'py> IntoPyObject<'py> for crate::Weekday {
-    type Target = PyAny; // the Python type
-    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
-    type Error = std::convert::Infallible;
-
-    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        Ok(match self {
-            Self::Sunday => PyWeekday::Sunday,
-            Self::Monday => PyWeekday::Monday,
-            Self::Tuesday => PyWeekday::Tuesday,
-            Self::Wednesday => PyWeekday::Wednesday,
-            Self::Thursday => PyWeekday::Thursday,
-            Self::Friday => PyWeekday::Friday,
-            Self::Saturday => PyWeekday::Saturday,
-            Self::Invalid => PyWeekday::Invalid,
-        }
-        .into_bound_py_any(py)
-        .unwrap())
-    }
+/// Convert a satkit::Weekday into a Python PyWeekday object
+#[allow(dead_code)]
+pub fn weekday_into_py(w: Weekday, py: Python<'_>) -> Py<PyAny> {
+    PyWeekday::from(w).into_py_any(py).unwrap()
 }
 
 impl From<&PyTimeScale> for TimeScale {
@@ -171,23 +156,16 @@ impl From<PyTimeScale> for TimeScale {
 #[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyInstant(pub Instant);
 
-impl<'py> IntoPyObject<'py> for crate::Instant {
-    type Target = PyAny; // the Python type
-    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
-    type Error = std::convert::Infallible;
-
-    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        Ok(PyInstant(self).into_bound_py_any(py).unwrap())
-    }
+/// Convert a satkit::Instant into a Python PyInstant object
+pub fn instant_into_py(instant: Instant, py: Python<'_>) -> Py<PyAny> {
+    PyInstant(instant).into_py_any(py).unwrap()
 }
 
-impl<'a, 'py> FromPyObject<'a, 'py> for Instant {
-    type Error = pyo3::pyclass::PyClassGuardError<'a, 'py>;
-
-    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-        let obj = PyInstant::extract(ob)?;
-        Ok(obj.0)
-    }
+/// Extract a satkit::Instant from a Python object (expects PyInstant)
+#[allow(dead_code)]
+pub fn instant_from_py(ob: &Bound<'_, PyAny>) -> PyResult<Instant> {
+    let obj = ob.extract::<PyInstant>()?;
+    Ok(obj.0)
 }
 
 #[pymethods]
@@ -613,7 +591,7 @@ impl PyInstant {
                 let objarr = parr
                     .as_array()
                     .map(|x| {
-                        Self(self.0 + crate::Duration::from_days(*x))
+                        Self(self.0 + satkit::Duration::from_days(*x))
                             .into_py_any(py)
                             .unwrap()
                     })
@@ -648,7 +626,7 @@ impl PyInstant {
                 |v| {
                     pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                         let objarr = v.iter().map(|x| {
-                            let pyobj = Self(self.0 + crate::Duration::from_days(*x));
+                            let pyobj = Self(self.0 + satkit::Duration::from_days(*x));
                             pyobj.into_py_any(py).unwrap()
                         });
                         let parr = np::PyArray1::<Py<PyAny>>::from_iter(py, objarr);
@@ -662,7 +640,7 @@ impl PyInstant {
             || other.is_instance_of::<pyo3::types::PyInt>()
         {
             let dt: f64 = other.extract::<f64>().unwrap();
-            Self(self.0 + crate::Duration::from_days(dt)).into_py_any(other.py())
+            Self(self.0 + satkit::Duration::from_days(dt)).into_py_any(other.py())
         } else if other.is_instance_of::<PyDuration>() {
             let dur: PyDuration = other.extract::<PyDuration>().unwrap();
             Self(self.0 + dur.0).into_py_any(other.py())
@@ -685,7 +663,7 @@ impl PyInstant {
         if other.is_instance_of::<np::PyArray1<f64>>() {
             let parr: np::PyReadonlyArray1<f64> = other.extract().unwrap();
             let objarr = parr.as_array().into_iter().map(|x| -> Py<PyAny> {
-                let obj = Self(self.0 - crate::Duration::from_days(*x));
+                let obj = Self(self.0 - satkit::Duration::from_days(*x));
                 obj.into_py_any(other.py()).unwrap()
             });
             let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
@@ -714,7 +692,7 @@ impl PyInstant {
                 },
                 |v| {
                     let objarr = v.into_iter().map(|x| {
-                        let pyobj = Self(self.0 - crate::Duration::from_days(x));
+                        let pyobj = Self(self.0 - satkit::Duration::from_days(x));
                         pyobj.into_py_any(other.py()).unwrap()
                     });
                     let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
@@ -728,7 +706,7 @@ impl PyInstant {
         {
             let dt: f64 = other.extract::<f64>().unwrap();
             pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                Self(self.0 - crate::Duration::from_days(dt)).into_py_any(py)
+                Self(self.0 - satkit::Duration::from_days(dt)).into_py_any(py)
             })
         } else if other.is_instance_of::<PyDuration>() {
             let dur: PyDuration = other.extract::<PyDuration>().unwrap();
@@ -814,12 +792,6 @@ impl PyInstant {
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         Ok(PyBytes::new(py, &i64::to_le_bytes(self.0.raw)).into())
-    }
-}
-
-impl<'b> From<&'b PyInstant> for &'b Instant {
-    fn from(s: &PyInstant) -> &Instant {
-        &s.0
     }
 }
 

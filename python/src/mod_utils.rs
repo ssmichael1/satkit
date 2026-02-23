@@ -50,7 +50,7 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
         },
     };
 
-    crate::utils::update_datafiles(datadir, overwrite_files)
+    satkit::utils::update_datafiles(datadir, overwrite_files)
 }
 
 /// Get directory where astronomy data is stored
@@ -71,7 +71,7 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
 #[pyfunction]
 fn datadir() -> PyResult<Py<PyAny>> {
     pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-        match crate::utils::datadir() {
+        match satkit::utils::datadir() {
             Ok(v) => v.to_str().unwrap().into_py_any(py),
             Err(_) => pyo3::types::PyNone::get(py).into_py_any(py),
         }
@@ -92,7 +92,7 @@ fn datadir() -> PyResult<Py<PyAny>> {
 #[pyfunction]
 fn set_datadir(datadir: String) -> Result<()> {
     let d = PathBuf::from(datadir);
-    crate::utils::set_datadir(&d)
+    satkit::utils::set_datadir(&d)
 }
 
 /// Check if data files are found
@@ -103,7 +103,7 @@ fn set_datadir(datadir: String) -> Result<()> {
 ///
 #[pyfunction]
 fn datafiles_exist() -> bool {
-    crate::utils::data_found()
+    satkit::utils::data_found()
 }
 
 /// Git hash of compiled library
@@ -112,7 +112,7 @@ fn datafiles_exist() -> bool {
 ///     str: Git hash of compiled library
 #[pyfunction]
 fn githash() -> String {
-    String::from(crate::utils::githash())
+    String::from(satkit::utils::githash())
 }
 
 /// Version of satkit
@@ -121,7 +121,7 @@ fn githash() -> String {
 ///    str: Version of satkit
 #[pyfunction]
 fn version() -> String {
-    String::from(crate::utils::gittag())
+    String::from(satkit::utils::gittag())
 }
 
 /// Location of the compiled library
@@ -141,7 +141,7 @@ fn dylib_path() -> Result<String> {
 ///     str: Build date of compiled library
 #[pyfunction]
 fn build_date() -> PyResult<String> {
-    Ok(String::from(crate::utils::build_date()))
+    Ok(String::from(satkit::utils::build_date()))
 }
 
 /// Astro utility functions

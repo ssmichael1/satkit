@@ -1,6 +1,6 @@
-use super::pyutils;
-use crate::lpephem;
-use crate::pybindings::pysolarsystem::SolarSystem;
+use crate::pyutils;
+use satkit::lpephem;
+use crate::pysolarsystem::SolarSystem;
 use pyo3::prelude::*;
 
 use anyhow::Result;

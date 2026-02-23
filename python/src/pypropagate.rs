@@ -1,18 +1,18 @@
-use super::pyduration::PyDuration;
-use super::pyinstant::PyInstant;
-use super::pypropresult::{PyPropResult, PyPropResultType};
-use super::pypropsettings::PyPropSettings;
-use super::pysatproperties::PySatProperties;
-use super::pyutils::*;
+use crate::pyduration::PyDuration;
+use crate::pyinstant::PyInstant;
+use crate::pypropresult::{PyPropResult, PyPropResultType};
+use crate::pypropsettings::PyPropSettings;
+use crate::pysatproperties::PySatProperties;
+use crate::pyutils::*;
 use pyo3::IntoPyObjectExt;
 
 use nalgebra as na;
 
-use crate::mathtypes::*;
-use crate::orbitprop::SatProperties;
-use crate::orbitprop::SatPropertiesStatic;
-use crate::Duration;
-use crate::Instant;
+use satkit::mathtypes::*;
+use satkit::orbitprop::SatProperties;
+use satkit::orbitprop::SatPropertiesStatic;
+use satkit::Duration;
+use satkit::Instant;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
@@ -95,7 +95,7 @@ pub fn propagate(
     let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
     let propsettings = match pypropsettings {
         Some(p) => p.0,
-        None => crate::orbitprop::PropSettings::default(),
+        None => satkit::orbitprop::PropSettings::default(),
     };
 
     let mut state0 = Vector6::zeros();
@@ -210,7 +210,7 @@ pub fn propagate(
 
     // Simple sate propagation
     if !output_phi {
-        let res = crate::orbitprop::propagate(
+        let res = satkit::orbitprop::propagate(
             &state0,
             &begintime,
             &endtime,
@@ -230,7 +230,7 @@ pub fn propagate(
             .copy_from(&Matrix6::identity());
 
         let res =
-            crate::orbitprop::propagate(&pv, &begintime, &endtime, &propsettings, satproperties)?;
+            satkit::orbitprop::propagate(&pv, &begintime, &endtime, &propsettings, satproperties)?;
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
         })

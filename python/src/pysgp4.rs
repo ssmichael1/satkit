@@ -2,9 +2,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
-use super::pyinstant::ToTimeVec;
-use super::pytle::PyTLE;
-use crate::sgp4 as psgp4;
+use crate::pyinstant::ToTimeVec;
+use crate::pytle::PyTLE;
+use satkit::sgp4 as psgp4;
 use numpy::PyArray1;
 use numpy::PyArrayMethods;
 
@@ -75,20 +75,20 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
 }
 
 /// Convert a Python value to an Instant. can be string, datetime, or PyInstant
-fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<crate::Instant> {
-    if val.is_instance_of::<crate::pybindings::pyinstant::PyInstant>() {
-        let instant: crate::pybindings::pyinstant::PyInstant = val.extract().unwrap();
+fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> {
+    if val.is_instance_of::<crate::pyinstant::PyInstant>() {
+        let instant: crate::pyinstant::PyInstant = val.extract().unwrap();
         Ok(instant.0)
     } else if val.is_instance_of::<PyString>() {
         let s: String = val.extract()?;
-        crate::Instant::from_rfc3339(&s).map_err(|e| anyhow::anyhow!("Invalid epoch string: {}", e))
+        satkit::Instant::from_rfc3339(&s).map_err(|e| anyhow::anyhow!("Invalid epoch string: {}", e))
     } else if val.is_instance_of::<PyDateTime>() {
         let tm: Py<PyDateTime> = val.extract().unwrap();
         pyo3::Python::attach(|py| {
             let ts: f64 = tm
                 .call_method(py, "timestamp", (), None)?
                 .extract::<f64>(py)?;
-            Ok(crate::Instant::from_unixtime(ts))
+            Ok(satkit::Instant::from_unixtime(ts))
         })
     } else {
         bail!("Invalid epoch type");
@@ -110,8 +110,8 @@ fn float_from_py(val: &Bound<'_, PyAny>) -> Result<f64> {
     }
 }
 
-fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<crate::omm::OMM> {
-    let mut omm = crate::omm::OMM::default();
+fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<satkit::omm::OMM> {
+    let mut omm = satkit::omm::OMM::default();
 
     omm.inclination = f64::NAN;
     omm.raan = f64::NAN;

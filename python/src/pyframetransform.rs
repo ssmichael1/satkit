@@ -1,6 +1,6 @@
-use super::pyutils::*;
-use super::PyInstant;
-use crate::frametransform as ft;
+use crate::pyutils::*;
+use crate::PyInstant;
+use satkit::frametransform as ft;
 use pyo3::prelude::*;
 
 use anyhow::Result;
@@ -215,7 +215,7 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///
 #[pyfunction(name = "earth_orientation_params")]
 pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
-    crate::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
+    satkit::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
 }
 
 ///
@@ -232,5 +232,5 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
 ///
 #[pyfunction(name = "disable_eop_time_warning")]
 pub fn disable_eop_time_warning() {
-    crate::earth_orientation_params::disable_eop_time_warning();
+    satkit::earth_orientation_params::disable_eop_time_warning();
 }

@@ -46,7 +46,7 @@ license-files = ["LICENSE"]
 [tool.setuptools.packages.find]
 where = ["python"]
 include = ["satkit*"]
-exclude = ["test*", "docs*", "examples*"]
+exclude = ["test*", "docs*", "examples*", "src*"]
 
 [tool.cibuildwheel]
 build = [
@@ -113,13 +113,7 @@ test-command = [
 
 
 [[tool.setuptools-rust.ext-modules]]
-features = ["pybindings"]
-args = ["--no-default-features", "--crate-type", "cdylib"]
 target = "satkit/satkit"
-path = "Cargo.toml"
+path = "python/Cargo.toml"
 binding = "PyO3"
-py-limited-api = "auto"
 debug = false
-
-[tool.setuptools_scm]
-version_file = "python/satkit/_version.py"

@@ -1,6 +1,6 @@
-use crate::orbitprop::SatPropertiesStatic;
+use satkit::orbitprop::SatPropertiesStatic;
 
-use super::pyutils::kwargs_or_default;
+use crate::pyutils::kwargs_or_default;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
 use pyo3::IntoPyObjectExt;

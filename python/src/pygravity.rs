@@ -1,9 +1,9 @@
 use pyo3::prelude::*;
 
-use crate::earthgravity::{accel, accel_and_partials, GravityModel};
+use satkit::earthgravity::{accel, accel_and_partials, GravityModel};
 
-use super::pyitrfcoord::PyITRFCoord;
-use crate::itrfcoord::ITRFCoord;
+use crate::pyitrfcoord::PyITRFCoord;
+use satkit::itrfcoord::ITRFCoord;
 use nalgebra as na;
 use numpy as np;
 use numpy::PyArrayMethods;

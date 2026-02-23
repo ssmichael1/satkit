@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
-use crate::orbitprop::PropSettings;
-use crate::pybindings::PyInstant;
+use satkit::orbitprop::PropSettings;
+use crate::PyInstant;
 
 use pyo3::types::{PyDict, PyString};
 

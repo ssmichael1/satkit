@@ -5,7 +5,7 @@
 /// Duration is represented natively in microseconds.
 #[derive(Clone, Copy)]
 pub struct Duration {
-    pub(crate) usec: i64,
+    pub usec: i64,
 }
 
 impl Duration {
