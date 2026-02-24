@@ -1,67 +1,43 @@
 """
-satkitdynamic calculations related to the moon
+Astrodynamic calculations related to the moon
 """
 
 from __future__ import annotations
 import typing
 import numpy.typing as npt
 import numpy as np
-import satkit
+from typing import ClassVar
 
-from satkit import static_property
+import satkit
 
 class moonphase:
     """
     Enum representing moon phases
     """
 
-    @static_property
-    def NewMoon(self) -> moonphase:
-        """
-        New Moon (0° - 22.5°)
-        """
+    NewMoon: ClassVar[moonphase]
+    """New Moon (0 - 22.5)"""
 
-    @static_property
-    def WaxingCrescent(self) -> moonphase:
-        """
-        Waxing Crescent (22.5° - 67.5°)
-        """
+    WaxingCrescent: ClassVar[moonphase]
+    """Waxing Crescent (22.5 - 67.5)"""
 
-    @static_property
-    def FirstQuarter(self) -> moonphase:
-        """
-        First Quarter (67.5° - 112.5°)
-        """
+    FirstQuarter: ClassVar[moonphase]
+    """First Quarter (67.5 - 112.5)"""
 
-    @static_property
-    def WaxingGibbous(self) -> moonphase:
-        """
-        Waxing Gibbous (112.5° - 157.5°)
-        """
+    WaxingGibbous: ClassVar[moonphase]
+    """Waxing Gibbous (112.5 - 157.5)"""
 
-    @static_property
-    def FullMoon(self) -> moonphase:
-        """
-        Full Moon (157.5° - 202.5°)
-        """
+    FullMoon: ClassVar[moonphase]
+    """Full Moon (157.5 - 202.5)"""
 
-    @static_property
-    def WaningGibbous(self) -> moonphase:
-        """
-        Waning Gibbous (202.5° - 247.5°)
-        """
+    WaningGibbous: ClassVar[moonphase]
+    """Waning Gibbous (202.5 - 247.5)"""
 
-    @static_property
-    def LastQuarter(self) -> moonphase:
-        """
-        Last Quarter (247.5° - 292.5°)
-        """
+    LastQuarter: ClassVar[moonphase]
+    """Last Quarter (247.5 - 292.5)"""
 
-    @static_property
-    def WaningCrescent(self) -> moonphase:
-        """
-        Waning Crescent (292.5° - 337.5°)
-        """
+    WaningCrescent: ClassVar[moonphase]
+    """Waning Crescent (292.5 - 337.5)"""
 
 @typing.overload
 def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
@@ -70,17 +46,18 @@ def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
 
     From Vallado Algorithm 31
 
-    Input:
+    Args:
+        time (satkit.time): time at which to compute position
 
-    time:  satkit.time object,
-    Output:
+    Returns:
+        npt.NDArray[np.float64]: 3-element numpy array representing moon position in GCRF frame
+        at given time.  Units are meters
 
-    3-element numpy array representing moon position in GCRF frame
-    at given time.  Units are meters
-
-    Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
-    and 1275 km in range
+    Notes:
+        Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
+        and 1275 km in range
     """
+    ...
 
 @typing.overload
 def pos_gcrf(
@@ -91,19 +68,19 @@ def pos_gcrf(
 
     From Vallado Algorithm 31
 
-    Input:
-
-    time:  satkit.time list, or numpy array
+    Args:
+        time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time
             for which to compute position
 
-    Output:
+    Returns:
+        npt.NDArray[np.float64]: Nx3 numpy array representing moon position in GCRF frame
+        at given times.  Units are meters
 
-    Nx3 numpy array representing moon position in GCRF frame
-    at given times.  Units are meters
-
-    Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
-    and 1275 km in range
+    Notes:
+        Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
+        and 1275 km in range
     """
+    ...
 
 def illumination(
     time: satkit.time | npt.ArrayLike | list[satkit.time],
@@ -111,15 +88,14 @@ def illumination(
     """
     Fractional illumination of moon
 
-    Input:
-
-    time:  satkit.time object, list, or numpy array
+    Args:
+        time (satkit.time | npt.ArrayLike | list[satkit.time]): time object, list, or numpy array
             for which to compute illumination
 
-    Output:
-
-    float or numpy array of floats representing fractional illumination of moon at given time(s).
+    Returns:
+        float | npt.NDArray[np.float64]: float or numpy array of floats representing fractional illumination of moon at given time(s).
     """
+    ...
 
 def phase(
     time: satkit.time | npt.ArrayLike | list[satkit.time],
@@ -127,15 +103,14 @@ def phase(
     """
     Phase of moon in radians
 
-    Input:
-
-    time:  satkit.time object, list, or numpy array
+    Args:
+        time (satkit.time | npt.ArrayLike | list[satkit.time]): time object, list, or numpy array
             for which to compute phase
 
-    Output:
-
-    float or numpy array of floats representing moon phase in radians at given time(s).
+    Returns:
+        float | npt.NDArray[np.float64]: float or numpy array of floats representing moon phase in radians at given time(s).
     """
+    ...
 
 def phase_name(
     time: satkit.time | npt.ArrayLike | list[satkit.time],
@@ -143,12 +118,11 @@ def phase_name(
     """
     Phase name of moon
 
-    Input:
-
-    time:  satkit.time object, list, or numpy array
+    Args:
+        time (satkit.time | npt.ArrayLike | list[satkit.time]): time object, list, or numpy array
             for which to compute phase name
 
-    Output:
-
-    moonphase or list of moonphase representing moon phase name at given time(s).
+    Returns:
+        moonphase | list[moonphase]: moonphase or list of moonphase representing moon phase name at given time(s).
     """
+    ...

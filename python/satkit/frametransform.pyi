@@ -2,7 +2,7 @@
 Transformations between coordinate frames, and associated utility functions
 
 Coordinate frame transforms are mostly pulled from Vallado:
-https://www.google.com/books/edition/Fundamentals_of_satkitdynamics_and_Applic/PJLlWzMBKjkC?hl=en&gbpv=0
+https://www.google.com/books/edition/Fundamentals_of_Astrodynamics_and_Applic/PJLlWzMBKjkC?hl=en&gbpv=0
 
 or the IERS:
 https://www.iers.org/
@@ -16,8 +16,6 @@ import numpy as np
 import datetime
 
 from .satkit import time, quaternion
-
-import datetime
 
 @typing.overload
 def gmst(tm: time | datetime.datetime) -> float:
@@ -34,6 +32,7 @@ def gmst(tm: time | datetime.datetime) -> float:
     Returns:
         float: Greenwich Mean Sidereal Time, radians, at input time
     """
+    ...
 
 @typing.overload
 def gmst(
@@ -52,6 +51,7 @@ def gmst(
     Returns:
         float | npt.ArrayLike[np.float]: Greenwich Mean Sidereal Time, radians, at input time(s)
     """
+    ...
 
 @typing.overload
 def gast(
@@ -65,6 +65,7 @@ def gast(
     Returns:
         float : Greenwich apparent sidereal time, radians, at input time(s)
     """
+    ...
 
 @typing.overload
 def gast(
@@ -78,6 +79,7 @@ def gast(
     Returns:
         npt.ArrayLike[np.float]: Greenwich apparent sidereal time, radians, at input time(s)
     """
+    ...
 
 @typing.overload
 def earth_rotation_angle(
@@ -98,6 +100,7 @@ def earth_rotation_angle(
     Returns:
         float: Earth Rotation Angle at input time[s] in radians
     """
+    ...
 
 @typing.overload
 def earth_rotation_angle(
@@ -118,6 +121,7 @@ def earth_rotation_angle(
     Returns:
         npt.ArrayLike[np.float]: Earth Rotation Angle at input time[s] in radians
     """
+    ...
 
 @typing.overload
 def qitrf2tirs(
@@ -131,6 +135,7 @@ def qitrf2tirs(
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to TIRS at input time(s)
     """
+    ...
 
 @typing.overload
 def qitrf2tirs(
@@ -144,6 +149,7 @@ def qitrf2tirs(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to TIRS at input time(s)
     """
+    ...
 
 @typing.overload
 def qteme2gcrf(
@@ -157,6 +163,7 @@ def qteme2gcrf(
     Returns:
         quaternion : Quaternion representing rotation from TEME to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qteme2gcrf(
@@ -170,6 +177,7 @@ def qteme2gcrf(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from TEME to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qcirs2gcrf(
@@ -183,6 +191,7 @@ def qcirs2gcrf(
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from CIRS to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qcirs2gcrf(
@@ -196,6 +205,7 @@ def qcirs2gcrf(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from CIRS to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qtirs2cirs(
@@ -209,6 +219,7 @@ def qtirs2cirs(
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from TIRS to CIRS at input time(s)
     """
+    ...
 
 @typing.overload
 def qtirs2cirs(
@@ -222,6 +233,7 @@ def qtirs2cirs(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from TIRS to CIRS at input time(s)
     """
+    ...
 
 @typing.overload
 def qgcrf2itrf_approx(
@@ -238,6 +250,7 @@ def qgcrf2itrf_approx(
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from GCRF to ITRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qgcrf2itrf_approx(
@@ -254,6 +267,7 @@ def qgcrf2itrf_approx(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from GCRF to ITRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qitrf2gcrf_approx(
@@ -270,6 +284,7 @@ def qitrf2gcrf_approx(
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qitrf2gcrf_approx(
@@ -286,6 +301,7 @@ def qitrf2gcrf_approx(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qgcrf2itrf(
@@ -305,6 +321,7 @@ def qgcrf2itrf(
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from GCRF to ITRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qgcrf2itrf(
@@ -324,6 +341,7 @@ def qgcrf2itrf(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from GCRF to ITRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qitrf2gcrf(
@@ -342,6 +360,7 @@ def qitrf2gcrf(
     Returns:
         quaternion : Quaternion representing rotation from ITRF to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qitrf2gcrf(
@@ -361,6 +380,7 @@ def qitrf2gcrf(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to GCRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qteme2itrf(
@@ -378,6 +398,7 @@ def qteme2itrf(
     Returns:
         quaternion: Quaternion representing rotation from TEME to ITRF at input time(s)
     """
+    ...
 
 @typing.overload
 def qteme2itrf(
@@ -395,6 +416,7 @@ def qteme2itrf(
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from TEME to ITRF at input time(s)
     """
+    ...
 
 def earth_orientation_params(
     time: time,
@@ -420,6 +442,7 @@ def earth_orientation_params(
         * See: https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html
 
     """
+    ...
 
 def disable_eop_time_warning() -> None:
     """Disable the warning printed to stderr when Earth Orientation Parameters (EOP) are not available for a given time.
@@ -428,3 +451,4 @@ def disable_eop_time_warning() -> None:
         * This function is used to disable the warning printed when EOP are not available for a given time.
         * If not disabled, warning will be shown only once per library load,
     """
+    ...

@@ -10,21 +10,7 @@ import numpy as np
 
 import datetime
 
-from collections.abc import Callable
-from typing import Any, Generic, TypeVar, Optional
-
-R = TypeVar("R")
-
-class static_property(Generic[R]):
-    def __init__(self, getter: Callable[[Any], R]) -> None:
-        self.__getter = getter
-
-    def __get__(self, obj: object, objtype: type) -> R:
-        return self.__getter(objtype)
-
-    @staticmethod
-    def __call__(getter_fn: Callable[[Any], R]) -> "static_property[R]":
-        return static_property(getter_fn)
+from typing import Any, ClassVar, Optional
 
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
@@ -61,6 +47,7 @@ class TLE:
             list[TLE] | TLE: a list of TLE objects or a single TLE of lines for
             only 1 are passed in
         """
+        ...
 
     @staticmethod
     def from_lines(lines: list[str]) -> list[TLE] | TLE:
@@ -76,70 +63,87 @@ class TLE:
             list[TLE] | TLE: a list of TLE objects or a single TLE of lines for
             only 1 are passed in
         """
+        ...
 
     @property
     def satnum(self) -> int:
         """Satellite number, or equivalently the NORAD ID"""
+        ...
 
     @satnum.setter
     def satnum(self, value: int) -> None:
         """Set the satellite number (NORAD ID)"""
+        ...
 
     @property
     def raan(self) -> float:
         """Right Ascension of Ascending Node, in degrees"""
+        ...
 
     @raan.setter
     def raan(self, value: float) -> None:
         """Set the Right Ascension of Ascending Node, in degrees"""
+        ...
 
     @property
     def eccen(self) -> float:
         """Satellite eccentricity, in range [0,1]"""
+        ...
 
     @eccen.setter
     def eccen(self, value: float) -> None:
         """Set the satellite eccentricity"""
+        ...
 
     @property
     def mean_anomaly(self) -> float:
         """Mean anomaly in degrees"""
+        ...
 
     @mean_anomaly.setter
     def mean_anomaly(self, value: float) -> None:
         """Set the satellite mean anomaly"""
+        ...
 
     @property
     def mean_motion(self) -> float:
         """Mean motion in revs / day"""
+        ...
 
     @mean_motion.setter
     def mean_motion(self, value: float) -> None:
         """Set the satellite mean motion"""
+        ...
 
     @property
     def inclination(self) -> float:
         """Inclination, in degrees"""
+        ...
 
     @inclination.setter
     def inclination(self, value: float) -> None:
         """Set the satellite inclination, degrees"""
+        ...
 
     @property
     def epoch(self) -> time:
         """TLE epoch"""
+        ...
 
     @epoch.setter
     def epoch(self, value: time) -> None:
         """Set the TLE epoch"""
+        ...
 
     @property
     def arg_of_perigee(self) -> float:
         """Argument of Perigee, in degrees"""
+        ...
 
     @arg_of_perigee.setter
     def arg_of_perigee(self, value: float) -> None:
         """Set the argument of perigee, degrees"""
+        ...
 
     @property
     def mean_motion_dot(self) -> float:
@@ -148,10 +152,12 @@ class TLE:
         Note:
             the "1/2" is because that is how number is stored in the TLE
         """
+        ...
 
     @mean_motion_dot.setter
-    def set_mean_motion_dot(self, value: float) -> None:
+    def mean_motion_dot(self, value: float) -> None:
         """Set the 1/2 of first derivative of mean motion, in revs/day^2"""
+        ...
 
     @property
     def mean_motion_dot_dot(self) -> float:
@@ -161,18 +167,22 @@ class TLE:
             The "1/6" is because that is how number is stored in the TLE
 
         """
+        ...
 
     @mean_motion_dot_dot.setter
-    def set_mean_motion_dot_dot(self, value: float) -> None:
+    def mean_motion_dot_dot(self, value: float) -> None:
         """Set the 1/6 of 2nd derivative of mean motion, in revs/day^3"""
+        ...
 
     @property
     def name(self) -> str:
         """The name of the satellite"""
+        ...
 
     @name.setter
-    def set_name(self, value: str) -> None:
+    def name(self, value: str) -> None:
         """Set the name of the satellite"""
+        ...
 
     @property
     def bstar(self) -> float:
@@ -183,10 +193,12 @@ class TLE:
         Units (which are strange) is multiples of
         1 / Earth radius
         """
+        ...
 
     @bstar.setter
     def bstar(self, value: float) -> None:
         """Set the drag of the satellite"""
+        ...
 
     def to_2line(self) -> list[str]:
         """
@@ -195,6 +207,7 @@ class TLE:
         Returns:
             list[str]: 2 canonical TLE Lines
         """
+        ...
 
     def to_3line(self) -> list[str]:
         """
@@ -203,6 +216,7 @@ class TLE:
         Returns:
             list[str]: 3-line element set, name line then 2 canonical TLE lines
         """
+        ...
 
     @staticmethod
     def fit_from_states(
@@ -259,6 +273,7 @@ class TLE:
                 * `covar`: Final parameter covariance matrix
 
         """
+        ...
 
 def sgp4(
     tle: TLE | list[TLE] | dict,
@@ -343,32 +358,30 @@ def sgp4(
         >>> pteme, vteme = satkit.sgp4(omm[0], epoch)
 
     """
+    ...
 
 class sgp4_gravconst:
     """Gravity constant to use for SGP4 propagation"""
 
-    @static_property
-    def wgs72(self) -> sgp4_gravconst:
-        """WGS-72"""
+    wgs72: ClassVar[sgp4_gravconst]
+    """WGS-72"""
 
-    @static_property
-    def wgs72old(self) -> sgp4_gravconst:
-        """WGS-72 Old"""
+    wgs72old: ClassVar[sgp4_gravconst]
+    """WGS-72 Old"""
 
-    @static_property
-    def wgs84(self) -> sgp4_gravconst:
-        """WGS-84"""
+    wgs84: ClassVar[sgp4_gravconst]
+    """WGS-84"""
 
 class sgp4_opsmode:
     """Ops Mode for SGP4 Propagation"""
 
-    @static_property
-    def afspc(self) -> int:
-        """afspc (Air Force Space Command), the default"""
+    afspc: ClassVar[int]
+    """afspc (Air Force Space Command), the default"""
 
     @property
     def improved(self) -> int:
         """Improved"""
+        ...
 
 class gravmodel:
     """
@@ -377,31 +390,27 @@ class gravmodel:
     For details, see: http://icgem.gfz-potsdam.de/
     """
 
-    @static_property
-    def jgm3(self) -> gravmodel:
-        """
-        The "JGM3" gravity model
+    jgm3: ClassVar[gravmodel]
+    """
+    The "JGM3" gravity model
 
-        This model is used by default in the orbit propagators
-        """
+    This model is used by default in the orbit propagators
+    """
 
-    @static_property
-    def jgm2(self) -> gravmodel:
-        """
-        The "JGM2" gravity model
-        """
+    jgm2: ClassVar[gravmodel]
+    """
+    The "JGM2" gravity model
+    """
 
-    @static_property
-    def egm96(self) -> gravmodel:
-        """
-        The "EGM96" gravity model
-        """
+    egm96: ClassVar[gravmodel]
+    """
+    The "EGM96" gravity model
+    """
 
-    @static_property
-    def itugrace16(self) -> gravmodel:
-        """
-        the ITU Grace 16 gravity model
-        """
+    itugrace16: ClassVar[gravmodel]
+    """
+    the ITU Grace 16 gravity model
+    """
 
 def gravity(
     pos: list[float] | itrfcoord | npt.ArrayLike, **kwargs
@@ -423,6 +432,7 @@ def gravity(
         *  For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 
     """
+    ...
 
 def gravity_and_partials(
     pos: itrfcoord | npt.NDArray[np.float64], **kwargs
@@ -444,84 +454,67 @@ def gravity_and_partials(
     For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 
     """
+    ...
 
 class solarsystem:
     """Solar system bodies for which high-precision ephemeris can be computed"""
 
-    @static_property
-    def Mercury(self) -> solarsystem:
-        """Mercury"""
+    Mercury: ClassVar[solarsystem]
+    """Mercury"""
 
-    @static_property
-    def Venus(self) -> solarsystem:
-        """Venus"""
+    Venus: ClassVar[solarsystem]
+    """Venus"""
 
-    @static_property
-    def EMB(self) -> solarsystem:
-        """Earth-Moon Barycenter"""
+    EMB: ClassVar[solarsystem]
+    """Earth-Moon Barycenter"""
 
-    @static_property
-    def Mars(self) -> solarsystem:
-        """Mars"""
+    Mars: ClassVar[solarsystem]
+    """Mars"""
 
-    @static_property
-    def Jupiter(self) -> solarsystem:
-        """Jupiter"""
+    Jupiter: ClassVar[solarsystem]
+    """Jupiter"""
 
-    @static_property
-    def Saturn(self) -> solarsystem:
-        """Saturn"""
+    Saturn: ClassVar[solarsystem]
+    """Saturn"""
 
-    @static_property
-    def Uranus(self) -> solarsystem:
-        """Uranus"""
+    Uranus: ClassVar[solarsystem]
+    """Uranus"""
 
-    @static_property
-    def Neptune(self) -> solarsystem:
-        """Neptune"""
+    Neptune: ClassVar[solarsystem]
+    """Neptune"""
 
-    @static_property
-    def Pluto(self) -> solarsystem:
-        """Pluto"""
+    Pluto: ClassVar[solarsystem]
+    """Pluto"""
 
-    @static_property
-    def Moon(self) -> solarsystem:
-        """Moon"""
+    Moon: ClassVar[solarsystem]
+    """Moon"""
 
-    @static_property
-    def Sun(self) -> solarsystem:
-        """Sun"""
+    Sun: ClassVar[solarsystem]
+    """Sun"""
 
 class sgp4_error:
     """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""
 
-    @static_property
-    def success(self) -> sgp4_error:
-        """Success"""
+    success: ClassVar[sgp4_error]
+    """Success"""
 
-    @static_property
-    def eccen(self) -> sgp4_error:
-        """Eccentricity < 0 or > 1"""
+    eccen: ClassVar[sgp4_error]
+    """Eccentricity < 0 or > 1"""
 
-    @static_property
-    def mean_motion(self) -> sgp4_error:
-        """Mean motion (revs / day) < 0"""
+    mean_motion: ClassVar[sgp4_error]
+    """Mean motion (revs / day) < 0"""
 
-    @static_property
-    def perturb_eccen(self) -> sgp4_error:
-        """Perturbed eccentricity < 0 or > 1"""
+    perturb_eccen: ClassVar[sgp4_error]
+    """Perturbed eccentricity < 0 or > 1"""
 
-    @static_property
-    def semi_latus_rectum(self) -> sgp4_error:
-        """Semi-Latus Rectum < 0"""
+    semi_latus_rectum: ClassVar[sgp4_error]
+    """Semi-Latus Rectum < 0"""
 
-    @static_property
-    def unused(self) -> sgp4_error:
-        """Unused, but in base code, so keeping for completeness"""
+    unused: ClassVar[sgp4_error]
+    """Unused, but in base code, so keeping for completeness"""
 
-    @static_property
-    def orbit_decay(self) -> sgp4_error:
-        """Orbit decayed"""
+    orbit_decay: ClassVar[sgp4_error]
+    """Orbit decayed"""
 
 class weekday:
     """
@@ -538,33 +531,26 @@ class weekday:
     * `Saturday`
     """
 
-    @static_property
-    def Sunday(self) -> weekday:
-        """Sunday"""
+    Sunday: ClassVar[weekday]
+    """Sunday"""
 
-    @static_property
-    def Monday(self) -> weekday:
-        """Monday"""
+    Monday: ClassVar[weekday]
+    """Monday"""
 
-    @static_property
-    def Tuesday(self) -> weekday:
-        """Tuesday"""
+    Tuesday: ClassVar[weekday]
+    """Tuesday"""
 
-    @static_property
-    def Wednesday(self) -> weekday:
-        """Wednesday"""
+    Wednesday: ClassVar[weekday]
+    """Wednesday"""
 
-    @static_property
-    def Thursday(self) -> weekday:
-        """Thursday"""
+    Thursday: ClassVar[weekday]
+    """Thursday"""
 
-    @static_property
-    def Friday(self) -> weekday:
-        """Friday"""
+    Friday: ClassVar[weekday]
+    """Friday"""
 
-    @static_property
-    def Saturday(self) -> weekday:
-        """Saturday"""
+    Saturday: ClassVar[weekday]
+    """Saturday"""
 
 class mpsuccess:
     """
@@ -585,41 +571,32 @@ class mpsuccess:
     * `Gtol`: gtol is too small; no further improvement
     """
 
-    @static_property
-    def NotDone(self) -> mpsuccess:
-        """Not finished iterations"""
+    NotDone: ClassVar[mpsuccess]
+    """Not finished iterations"""
 
-    @static_property
-    def Chi(self) -> mpsuccess:
-        """Convergence in chi-square value"""
+    Chi: ClassVar[mpsuccess]
+    """Convergence in chi-square value"""
 
-    @static_property
-    def Par(self) -> mpsuccess:
-        """Convergence in parameter value"""
+    Par: ClassVar[mpsuccess]
+    """Convergence in parameter value"""
 
-    @static_property
-    def Both(self) -> mpsuccess:
-        """Convergence in both chi-square and parameter values"""
+    Both: ClassVar[mpsuccess]
+    """Convergence in both chi-square and parameter values"""
 
-    @static_property
-    def Dir(self) -> mpsuccess:
-        """Convergence in orthogonality"""
+    Dir: ClassVar[mpsuccess]
+    """Convergence in orthogonality"""
 
-    @static_property
-    def MaxIter(self) -> mpsuccess:
-        """Maximum iterations reached"""
+    MaxIter: ClassVar[mpsuccess]
+    """Maximum iterations reached"""
 
-    @static_property
-    def Ftol(self) -> mpsuccess:
-        """ftol is too small; no further improvement"""
+    Ftol: ClassVar[mpsuccess]
+    """ftol is too small; no further improvement"""
 
-    @static_property
-    def Xtol(self) -> mpsuccess:
-        """xtol is too small; no further improvement"""
+    Xtol: ClassVar[mpsuccess]
+    """xtol is too small; no further improvement"""
 
-    @static_property
-    def Gtol(self) -> mpsuccess:
-        """gtol is too small; no further improvement"""
+    Gtol: ClassVar[mpsuccess]
+    """gtol is too small; no further improvement"""
 
 class timescale:
     """
@@ -644,35 +621,28 @@ class timescale:
     * `TDB`: Barycentric Dynamical Time
     """
 
-    @static_property
-    def Invalid(self) -> timescale:
-        """Invalid time scale"""
+    Invalid: ClassVar[timescale]
+    """Invalid time scale"""
 
-    @static_property
-    def UTC(self) -> timescale:
-        """Universal Time Coordinate"""
+    UTC: ClassVar[timescale]
+    """Universal Time Coordinate"""
 
-    @static_property
-    def TT(self) -> timescale:
-        """Terrestrial Time"""
+    TT: ClassVar[timescale]
+    """Terrestrial Time"""
 
-    @static_property
-    def UT1(self) -> timescale:
-        """UT1"""
+    UT1: ClassVar[timescale]
+    """UT1"""
 
-    @static_property
-    def TAI(self) -> timescale:
-        """International Atomic Time
-        (nice because it is monotonically increasing)
-        """
+    TAI: ClassVar[timescale]
+    """International Atomic Time
+    (nice because it is monotonically increasing)
+    """
 
-    @static_property
-    def GPS(self) -> timescale:
-        """Global Positioning System (GPS) time"""
+    GPS: ClassVar[timescale]
+    """Global Positioning System (GPS) time"""
 
-    @static_property
-    def TDB(self) -> timescale:
-        """Barycentric Dynamical Time"""
+    TDB: ClassVar[timescale]
+    """Barycentric Dynamical Time"""
 
 class time:
     """Representation of an instant in time
@@ -739,6 +709,7 @@ class time:
             >>> print(satkit.time(2023, 3, 5))
             2023-03-05 00:00:00.000Z
         """
+        ...
 
     @staticmethod
     def now() -> time:
@@ -748,6 +719,7 @@ class time:
         Returns:
             satkit.time: Time object representing the current time
         """
+        ...
 
     @staticmethod
     def from_string(str: str) -> time:
@@ -768,6 +740,7 @@ class time:
             >>> print(satkit.time.from_string("2023-03-05 11:03:45.453Z"))
             2023-03-05 11:03:45.453Z
         """
+        ...
 
     @staticmethod
     def from_rfc3339(rfc: str) -> time:
@@ -787,6 +760,7 @@ class time:
             >>> print(satkit.time.from_rfctime("2023-03-05T11:03:45.453Z"))
             2023-03-05 11:03:45.453Z
         """
+        ...
 
     @staticmethod
     def strptime(str: str, format: str) -> time:
@@ -819,6 +793,7 @@ class time:
             >>> print(satkit.time.strptime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
             2023-03-05 11:03:45.453Z
         """
+        ...
 
     @staticmethod
     def from_date(year: int, month: int, day: int) -> time:
@@ -832,6 +807,7 @@ class time:
         Returns:
             satkit.time: Time object representing the start of the input day (midnight)
         """
+        ...
 
     @staticmethod
     def from_jd(jd: float, scale: timescale = timescale.UTC) -> time:
@@ -844,6 +820,7 @@ class time:
         Returns:
             satkit.time: Time object representing input Julian date and time scale
         """
+        ...
 
     @staticmethod
     def from_unixtime(ut: float) -> time:
@@ -856,6 +833,7 @@ class time:
         Returns:
             satkit.time: Time object representing input unixtime
         """
+        ...
 
     @staticmethod
     def from_gps_week_and_second(week: int, sec: float) -> time:
@@ -869,6 +847,7 @@ class time:
         Returns:
             satkit.time: Time object representing input GPS week and second
         """
+        ...
 
     def weekday(self) -> weekday:
         """
@@ -877,6 +856,7 @@ class time:
         Returns:
             satkit.weekday: Day of the week
         """
+        ...
 
     def day_of_year(self) -> int:
         """
@@ -885,6 +865,7 @@ class time:
         Returns:
             int: The 1-based day of the year
         """
+        ...
 
     @staticmethod
     def from_mjd(mjd: float, scale: timescale = timescale.UTC) -> time:
@@ -897,6 +878,7 @@ class time:
         Returns:
             satkit.time: Time object representing input modified Julian date and time scale
         """
+        ...
 
     def as_date(self) -> tuple[int, int, int]:
         """Return tuple representing as UTC Gegorian date of the time object.
@@ -908,6 +890,7 @@ class time:
         Month is in range [1,12]
         Day is in range [1,31]
         """
+        ...
 
     @typing.overload
     @staticmethod
@@ -938,6 +921,7 @@ class time:
             >>> print(satkit.time.from_datetime(2023, 3, 5, 11, 3,45.453))
             2023-03-05 11:03:45.453Z
         """
+        ...
 
     def as_gregorian(
         self, scale=timescale.UTC
@@ -953,6 +937,7 @@ class time:
         Month is in range [1,12]
         Day is in range [1,31]
         """
+        ...
 
     @staticmethod
     def from_gregorian(
@@ -980,6 +965,7 @@ class time:
             >>> print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
             2023-03-05 11:03:45.453Z
         """
+        ...
 
     @typing.overload
     @staticmethod
@@ -992,6 +978,7 @@ class time:
         Returns:
             satkit.time: Time object representing the same instant in time as the input "datetime.datetime" object
         """
+        ...
 
     def as_datetime(self, utc: bool = True) -> datetime.datetime:
         """Convert object to "datetime.datetime" object representing same instant in time.
@@ -1011,6 +998,7 @@ class time:
             >>> print(dt)
             2023-06-03 02:19:34
         """
+        ...
 
     def datetime(self, utc: bool = True) -> datetime.datetime:
         """Deprecated: use :meth:`satkit.time.as_datetime`.
@@ -1032,6 +1020,7 @@ class time:
             >>> print(dt)
             2023-06-03 02:19:34
         """
+        ...
 
     def as_mjd(self, scale: timescale = timescale.UTC) -> float:
         """
@@ -1040,6 +1029,7 @@ class time:
 
         If no time scale is provided, default is satkit.timescale.UTC
         """
+        ...
 
     def as_jd(self, scale: timescale = timescale.UTC) -> float:
         """
@@ -1048,6 +1038,7 @@ class time:
 
         If no time scale is provided, default is satkit.timescale.UTC
         """
+        ...
 
     def as_unixtime(self) -> float:
         """
@@ -1057,6 +1048,7 @@ class time:
 
         Includes fractional component of seconds
         """
+        ...
 
     def as_iso8601(self) -> str:
         """
@@ -1065,6 +1057,7 @@ class time:
         Returns:
             str: ISO 8601 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
         """
+        ...
 
     def as_rfc3339(self) -> str:
         """
@@ -1073,6 +1066,7 @@ class time:
         Returns:
             str: RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
         """
+        ...
 
     def strftime(self, format: str) -> str:
         """
@@ -1101,6 +1095,7 @@ class time:
             >>> print(satkit.time(2023, 6, 3, 6, 19, 34).strptime("%Y-%m-%d %H:%M:%S"))
             2023-06-03 06:19:34
         """
+        ...
 
     @typing.overload
     def __add__(self, other: duration) -> time:
@@ -1114,6 +1109,7 @@ class time:
             satkit.time: Time object representing the input duration added to the current time
 
         """
+        ...
 
     @typing.overload
     def __add__(self, other: float) -> time:
@@ -1127,6 +1123,7 @@ class time:
             satkit.time: Time object representing the input number of days added to the current time
 
         """
+        ...
 
     @typing.overload
     def __add__(self, other: list[duration]) -> npt.NDArray[Any]:
@@ -1139,6 +1136,7 @@ class time:
         Returns:
             npt.ArrayLike[time]: Array of time objects representing the element-wise addition of days to the current time
         """
+        ...
 
     def __le__(self, other: time) -> bool:
         """
@@ -1150,6 +1148,7 @@ class time:
         Returns:
             bool: True if "self" time is less than or equal to "other" time, False otherwise
         """
+        ...
 
     def __lt__(self, other: time) -> bool:
         """
@@ -1161,6 +1160,7 @@ class time:
         Returns:
             bool: True if "self" time is less than "other" time, False otherwise
         """
+        ...
 
     def __ge__(self, other: time) -> bool:
         """
@@ -1172,6 +1172,7 @@ class time:
         Returns:
             bool: True if "self" time is greater than or equal to "other" time, False otherwise
         """
+        ...
 
     def __gt__(self, other: time) -> bool:
         """
@@ -1183,6 +1184,7 @@ class time:
         Returns:
             bool: True if "self" time is greater than "other" time, False otherwise
         """
+        ...
 
     def __eq__(self, value: object) -> bool:
         """
@@ -1194,6 +1196,7 @@ class time:
         Returns:
             bool: True if "self" time is equal to "value", False otherwise
         """
+        ...
 
     def __ne__(self, value: object) -> bool:
         """
@@ -1205,6 +1208,7 @@ class time:
         Returns:
             bool: True if "self" time is not equal to "value", False otherwise
         """
+        ...
 
     @typing.overload
     def __add__(self, other: npt.NDArray[Any]) -> npt.NDArray[Any]:
@@ -1218,6 +1222,7 @@ class time:
             npt.ArrayLike[time]: Array of time objects representing the element-wise addition of durations to the current time
 
         """
+        ...
 
     @typing.overload
     def __sub__(self, other: duration) -> time:
@@ -1231,6 +1236,7 @@ class time:
             satkit.time: Time object representing the input duration subtracted from the current time
 
         """
+        ...
 
     @typing.overload
     def __sub__(self, other: time) -> duration:
@@ -1244,6 +1250,7 @@ class time:
             satkit.duration: Duration object representing the difference between the two times
 
         """
+        ...
 
     @typing.overload
     def __sub__(self, other: float) -> time:
@@ -1257,6 +1264,7 @@ class time:
             satkit.time: Time object representing the input number of days subtracted from the current time
 
         """
+        ...
 
     @typing.overload
     def __sub__(self, other: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
@@ -1270,6 +1278,7 @@ class time:
             npt.ArrayLike[time]: Array of time objects representing the element-wise subtraction of days from the current time
 
         """
+        ...
 
     @typing.overload
     def __sub__(self, other: list[duration]) -> npt.NDArray[Any]:
@@ -1282,6 +1291,7 @@ class time:
         Returns:
             npt.ArrayLike[time]: Array of time objects representing the element-wise subtraction of durations from the current time
         """
+        ...
 
     @typing.overload
     def __sub__(self, other: list[time]) -> npt.NDArray[Any]:
@@ -1294,6 +1304,7 @@ class time:
         Returns:
             npt.ArrayLike[duration]: Array of duration objects representing the element-wise subtraction of times from the current time
         """
+        ...
 
 class duration:
     """
@@ -1321,6 +1332,7 @@ class duration:
             Duration: 1 days, 2 hours, 3 minutes, 4.500 seconds
 
         """
+        ...
 
     @staticmethod
     def from_days(d: float) -> duration:
@@ -1332,6 +1344,7 @@ class duration:
         Returns:
             satkit.duration: Duration object representing input number of days
         """
+        ...
 
     @staticmethod
     def from_seconds(s: float) -> duration:
@@ -1343,6 +1356,7 @@ class duration:
         Returns:
             satkit.duration: Duration object representing input number of seconds
         """
+        ...
 
     @staticmethod
     def from_minutes(m: float) -> duration:
@@ -1354,6 +1368,7 @@ class duration:
         Returns:
             satkit.duration: Duration object representing input number of minutes
         """
+        ...
 
     @staticmethod
     def from_hours(h: float) -> duration:
@@ -1365,6 +1380,7 @@ class duration:
         Returns:
             satkit.duration: Duration object representing input number of hours
         """
+        ...
 
     @typing.overload
     def __add__(self, other: duration) -> duration:
@@ -1380,6 +1396,7 @@ class duration:
             >>> print(duration.from_hours(1) + duration.from_minutes(1))
             Duration: 1 hours, 1 minutes, 0.000 seconds
         """
+        ...
 
     @typing.overload
     def __add__(self, other: float) -> duration:
@@ -1395,6 +1412,7 @@ class duration:
             >>> print(duration.from_days(1) + 2.5)
             Duration: 3 days, 0 hours, 0 minutes, 0.000 seconds
         """
+        ...
 
     @typing.overload
     def __add__(self, other: time) -> time:
@@ -1410,6 +1428,7 @@ class duration:
             >>> print(duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
             2023-06-04 13:30:00.000Z
         """
+        ...
 
     def __sub__(self, other: duration) -> duration:
         """Take the difference between two durations
@@ -1424,6 +1443,7 @@ class duration:
             >>> print(duration.from_hours(1) - duration.from_minutes(1))
             Duration: 59 minutes, 0.000 seconds
         """
+        ...
 
     def __mul__(self, other: float) -> duration:
         """Multiply (or scale) duration by given value
@@ -1438,6 +1458,7 @@ class duration:
             >>> print(duration.from_days(1) * 2.5)
             Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
         """
+        ...
 
     @typing.overload
     def __truediv__(self, other: float) -> duration:
@@ -1453,6 +1474,7 @@ class duration:
             >>> print(duration.from_days(1) / 2)
             Duration: 12 hours, 0 minutes, 0.000 seconds
         """
+        ...
 
     @typing.overload
     def __truediv__(self, other: duration) -> float:
@@ -1468,6 +1490,7 @@ class duration:
             >>> print(duration.from_hours(1) / duration.from_minutes(30))
             2.0
         """
+        ...
 
     def __gt__(self, other: duration) -> bool:
         """Compare two durations for greater than
@@ -1481,6 +1504,7 @@ class duration:
             >>> print(duration.from_hours(1) > duration.from_minutes(30))
             True
         """
+        ...
 
     def __lt__(self, other: duration) -> bool:
         """Compare two durations for less than
@@ -1494,6 +1518,7 @@ class duration:
             >>> print(duration.from_hours(1) < duration.from_minutes(30))
             False
         """
+        ...
 
     def __ge__(self, other: duration) -> bool:
         """Compare two durations for greater than or equal to
@@ -1507,6 +1532,7 @@ class duration:
             >>> print(duration.from_hours(1) >= duration.from_minutes(30))
             True
         """
+        ...
 
     def __le__(self, other: duration) -> bool:
         """Compare two durations for less than or equal to
@@ -1520,6 +1546,7 @@ class duration:
             >>> print(duration.from_hours(1) <= duration.from_minutes(30))
             False
         """
+        ...
 
     @property
     def days(self) -> float:
@@ -1530,6 +1557,7 @@ class duration:
 
         A day is defined as 86,400 seconds
         """
+        ...
 
     @property
     def hours(self) -> float:
@@ -1538,6 +1566,7 @@ class duration:
         Returns:
             float: Floating point number of hours represented by duration
         """
+        ...
 
     @property
     def minutes(self) -> float:
@@ -1546,6 +1575,7 @@ class duration:
         Returns:
             float: Floating point number of minutes represented by duration
         """
+        ...
 
     @property
     def seconds(self) -> float:
@@ -1554,6 +1584,7 @@ class duration:
         Returns:
             float: Floating point number of seconds represented by duration
         """
+        ...
 
 class quaternion:
     """Quaternion representing rotation of 3D Cartesian axes
@@ -1588,6 +1619,7 @@ class quaternion:
         Returns:
             satkit.quaternion: Quaternion representing input values, or if not provided, the identity quaternion
         """
+        ...
 
     @staticmethod
     def from_axis_angle(axis: npt.NDArray[np.float64], angle: float) -> quaternion:
@@ -1600,6 +1632,7 @@ class quaternion:
         Returns:
             satkit.quaternion: Quaternion representing rotation by "angle" degrees about the given axis
         """
+        ...
 
     @staticmethod
     def from_rotation_matrix(
@@ -1613,6 +1646,7 @@ class quaternion:
         Returns:
             satkit.quaternion: Quaternion representing identical rotation to input 3x3 rotation matrix
         """
+        ...
 
     @staticmethod
     def rotx(theta) -> quaternion:
@@ -1630,6 +1664,7 @@ class quaternion:
             | 0    cos(theta)  -sin(theta)|
             | 0    sin(theta)   cos(theta)|
         """
+        ...
 
     @staticmethod
     def roty(theta) -> quaternion:
@@ -1648,6 +1683,7 @@ class quaternion:
             |           0     1             0|
             | -sin(theta)     0    cos(theta)|
         """
+        ...
 
     @staticmethod
     def rotz(theta) -> quaternion:
@@ -1665,6 +1701,7 @@ class quaternion:
             |  sin(theta)      cos(theta)   0|
             |           0               0   1|
         """
+        ...
 
     @staticmethod
     def rotation_between(
@@ -1679,6 +1716,7 @@ class quaternion:
         Returns:
             satkit.quaternion: Quaternion that rotates from v1 to v2
         """
+        ...
 
     def as_rotation_matrix(self) -> npt.NDArray[np.float64]:
         """Return 3x3 rotation matrix representing equivalent rotation
@@ -1686,6 +1724,7 @@ class quaternion:
         Returns:
             npt.ArrayLike[np.float64]: 3x3 rotation matrix representing equivalent rotation
         """
+        ...
 
     def as_euler(self) -> tuple[float, float, float]:
         """Return equivalent rotation angle represented as rotation angles: ("roll", "pitch", "yaw") in radians:
@@ -1694,6 +1733,7 @@ class quaternion:
             tuple[float, float, float]: Tuple with 3 elements representing the rotation angles in radians
 
         """
+        ...
 
     def angle(self) -> float:
         """Return the angle in radians of the rotation
@@ -1701,6 +1741,7 @@ class quaternion:
         Returns:
             float: Angle in radians of the rotation
         """
+        ...
 
     def axis(self) -> npt.NDArray[np.float64]:
         """Return the axis of rotation as a unit vector
@@ -1708,6 +1749,7 @@ class quaternion:
         Returns:
             npt.ArrayLike[np.float64]: 3-element array representing the axis of rotation as a unit vector
         """
+        ...
 
     @property
     def conj(self) -> quaternion:
@@ -1716,6 +1758,7 @@ class quaternion:
         Returns:
             satkit.quaternion: Conjugate or inverse of the rotation
         """
+        ...
 
     @property
     def conjugate(self) -> quaternion:
@@ -1724,6 +1767,7 @@ class quaternion:
         Returns:
             satkit.quaternion: Conjugate or inverse of the rotation
         """
+        ...
 
     @property
     def x(self) -> float:
@@ -1732,6 +1776,7 @@ class quaternion:
         Returns:
             float: X component of the quaternion
         """
+        ...
 
     @property
     def y(self) -> float:
@@ -1740,6 +1785,7 @@ class quaternion:
         Returns:
             float: Y component of the quaternion
         """
+        ...
 
     @property
     def z(self) -> float:
@@ -1748,6 +1794,7 @@ class quaternion:
         Returns:
             float: Z component of the quaternion
         """
+        ...
 
     @property
     def w(self) -> float:
@@ -1756,6 +1803,7 @@ class quaternion:
         Returns:
             float: Scalar component of the quaternion
         """
+        ...
 
 
     @typing.overload
@@ -1771,6 +1819,7 @@ class quaternion:
         Returns:
             quaternion: Quaternion representing concatenation of the two rotations
         """
+        ...
 
     @typing.overload
     def __mul__(self, other: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
@@ -1788,6 +1837,7 @@ class quaternion:
             >>> print(q * xhat)
             [0, 1, 0]
         """
+        ...
 
     def slerp(
         self, other: quaternion, frac: float, epsilon: float = 1.0e-6
@@ -1802,6 +1852,7 @@ class quaternion:
         Returns:
             quaternion: Quaternion representing interpolation between self and other
         """
+        ...
 
 class kepler:
     """Represent Keplerian element sets and convert between cartesian
@@ -1847,6 +1898,7 @@ class kepler:
         Returns:
             satkit.kepler: Keplerian element set object
         """
+        ...
 
     def to_pv(
         self,
@@ -1856,6 +1908,7 @@ class kepler:
         Returns:
             tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: Tuple with two elements representing the position and velocity vectors
         """
+        ...
 
     def propagate(self, dt: duration | float) -> kepler:
         """Propagate Keplerian element set by input duration
@@ -1867,64 +1920,76 @@ class kepler:
         Returns:
             satkit.kepler: Keplerian element set object after propagation
         """
+        ...
 
     @property
     def mean_motion(self) -> float:
         """Mean motion, radians / second"""
+        ...
 
     @property
     def true_anomaly(self) -> float:
         """True anomaly, radians"""
+        ...
 
     @property
     def eccentric_anomaly(self) -> float:
         """Eccentric anomaly, radians"""
+        ...
 
     @eccentric_anomaly.setter
     def eccentric_anomaly(self, value: float) -> None: ...
     @property
     def mean_anomaly(self) -> float:
         """Mean anomaly, radians"""
+        ...
 
     @mean_anomaly.setter
     def mean_anomaly(self, value: float) -> None: ...
     @property
     def period(self) -> float:
         """Orbital period, seconds"""
+        ...
 
     @property
     def a(self) -> float:
         """Semi-major axis, meters"""
+        ...
 
     @a.setter
     def a(self, value: float) -> None: ...
     @property
     def eccen(self) -> float:
         """Eccentricity, unitless"""
+        ...
 
     @eccen.setter
     def eccen(self, value: float) -> None: ...
     @property
     def inclination(self) -> float:
         """Inclination, radians"""
+        ...
 
     @inclination.setter
     def inclination(self, value: float) -> None: ...
     @property
     def raan(self) -> float:
         """Right ascension of ascending node, radians"""
+        ...
 
     @raan.setter
     def raan(self, value: float) -> None: ...
     @property
     def nu(self) -> float:
         """True anomaly, radians"""
+        ...
 
     @nu.setter
     def nu(self, value: float) -> None: ...
     @property
     def w(self) -> float:
         """Argument of perigee, radians"""
+        ...
 
     @w.setter
     def w(self, value: float) -> None: ...
@@ -1939,6 +2004,7 @@ class kepler:
         Returns:
             satkit.kepler: Keplerian element set object
         """
+        ...
 
 class itrfcoord:
     """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
@@ -2010,26 +2076,32 @@ class itrfcoord:
 
 
         """
+        ...
 
     @property
     def latitude_deg(self) -> float:
         """Latitude in degrees"""
+        ...
 
     @property
     def longitude_deg(self) -> float:
         """Longitude in degrees"""
+        ...
 
     @property
     def latitude_rad(self) -> float:
         """Latitude in radians"""
+        ...
 
     @property
     def longitude_rad(self) -> float:
         """Longitude in radians"""
+        ...
 
     @property
     def altitude(self) -> float:
         """Altitude above ellipsoid, in meters"""
+        ...
 
     @property
     def geodetic_rad(self) -> tuple[float, float, float]:
@@ -2038,6 +2110,7 @@ class itrfcoord:
         Returns:
             tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in radians, second is longitude in radians, and third is altitude in meters
         """
+        ...
 
     @property
     def geodetic_deg(self) -> tuple[float, float, float]:
@@ -2046,6 +2119,7 @@ class itrfcoord:
         Returns:
             tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in degrees, second is longitude in degrees, and third is altitude in meters
         """
+        ...
 
     @property
     def vector(self) -> npt.NDArray[np.float64]:
@@ -2054,6 +2128,7 @@ class itrfcoord:
         Returns:
             npt.NDArray[np.float64]: 3-element numpy array representing the ITRF Cartesian coordinate in meters
         """
+        ...
 
     @property
     def qned2itrf(self) -> quaternion:
@@ -2062,6 +2137,7 @@ class itrfcoord:
         Returns:
             satkit.quaternion: Quaternion representiong rotation from North-East-Down (NED) to ITRF at this location
         """
+        ...
 
     @property
     def qenu2itrf(self) -> quaternion:
@@ -2070,6 +2146,7 @@ class itrfcoord:
         Returns:
             satkit.quaternion: Quaternion representiong rotation from East-North-Up (ENU) to ITRF at this location
         """
+        ...
 
     def to_enu(self, refcoord: itrfcoord) -> npt.NDArray[np.float64]:
         """Return vector from reference coordinate to this coordinate in East-North-Up (ENU) frame of the reference coordinate
@@ -2084,6 +2161,7 @@ class itrfcoord:
             * This is equivalent to calling: refcoord.qenu2itrf.conj * (self - refcoord)
 
         """
+        ...
 
     def to_ned(self, refcoord: itrfcoord) -> npt.NDArray[np.float64]:
         """Return vector from reference coordinate to this coordinate in North-East-Down (NED) at the reference coordinate
@@ -2098,6 +2176,7 @@ class itrfcoord:
             * This is equivalent to calling: refcoord.qned2itrf.conj * (self - refcoord)
 
         """
+        ...
 
     def __sub__(self, other: itrfcoord) -> npt.NDArray[np.float64]:
         """Subtract another ITRF coordinate from this one
@@ -2108,6 +2187,7 @@ class itrfcoord:
         Returns:
             npt.NDArray[np.float64]: 3-element numpy array representing the difference in meters between the two ITRF coordinates
         """
+        ...
 
     def geodesic_distance(self, other: itrfcoord) -> tuple[float, float, float]:
         """Use Vincenty formula to compute geodesic distance:
@@ -2117,6 +2197,7 @@ class itrfcoord:
             tuple[float, float, float]: (distance in meters, initial heading in radians, heading at destination in radians)
 
         """
+        ...
 
     def move_with_heading(self, distance: float, heading_rad: float) -> itrfcoord:
         """Move a distance along the Earth surface with a given initial heading
@@ -2135,77 +2216,61 @@ class itrfcoord:
             tuple[float, float, float]: (distance in meters, initial heading in radians, heading at destination in radians)
 
         """
+        ...
 
 class consts:
     """Some constants that are useful for saetllite dynamics"""
 
-    @static_property
-    def wgs84_a(self) -> float:
-        """WGS-84 semiparameter, in meters"""
+    wgs84_a: ClassVar[float]
+    """WGS-84 semiparameter, in meters"""
 
-    @static_property
-    def wgs84_f(self) -> float:
-        """WGS-84 flattening in meters"""
+    wgs84_f: ClassVar[float]
+    """WGS-84 flattening in meters"""
 
-    @static_property
-    def earth_radius(self) -> float:
-        """Earth radius along major axis, meters"""
+    earth_radius: ClassVar[float]
+    """Earth radius along major axis, meters"""
 
-    @static_property
-    def mu_earth(self) -> float:
-        """Gravitational parameter of Earth, m^3/s^2"""
+    mu_earth: ClassVar[float]
+    """Gravitational parameter of Earth, m^3/s^2"""
 
-    @static_property
-    def mu_moon(self) -> float:
-        """Gravitational parameter of Moon, m^3/s^2"""
+    mu_moon: ClassVar[float]
+    """Gravitational parameter of Moon, m^3/s^2"""
 
-    @static_property
-    def mu_sun(self) -> float:
-        """Gravitational parameter of sun, m^3/s^2"""
+    mu_sun: ClassVar[float]
+    """Gravitational parameter of sun, m^3/s^2"""
 
-    @static_property
-    def GM(self) -> float:
-        """Gravitational parameter of Earth, m^3/s^2"""
+    GM: ClassVar[float]
+    """Gravitational parameter of Earth, m^3/s^2"""
 
-    @static_property
-    def omega_earth(self) -> float:
-        """Scalar Earth rotation rate, rad/s"""
+    omega_earth: ClassVar[float]
+    """Scalar Earth rotation rate, rad/s"""
 
-    @static_property
-    def c(self) -> float:
-        """Speed of light, m/s"""
+    c: ClassVar[float]
+    """Speed of light, m/s"""
 
-    @static_property
-    def au(self) -> float:
-        """Astronomical Unit, mean Earth-Sun distance, meters"""
+    au: ClassVar[float]
+    """Astronomical Unit, mean Earth-Sun distance, meters"""
 
-    @static_property
-    def sun_radius(self) -> float:
-        """Radius of sun, meters"""
+    sun_radius: ClassVar[float]
+    """Radius of sun, meters"""
 
-    @static_property
-    def moon_radius(self) -> float:
-        """Radius of moon, meters"""
+    moon_radius: ClassVar[float]
+    """Radius of moon, meters"""
 
-    @static_property
-    def earth_moon_mass_ratio(self) -> float:
-        """Earth mass over Moon mass, unitless"""
+    earth_moon_mass_ratio: ClassVar[float]
+    """Earth mass over Moon mass, unitless"""
 
-    @static_property
-    def geo_r(self) -> float:
-        """Distance to Geosynchronous orbit from Earth center, meters"""
+    geo_r: ClassVar[float]
+    """Distance to Geosynchronous orbit from Earth center, meters"""
 
-    @static_property
-    def jgm3_mu(self) -> float:
-        """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
+    jgm3_mu: ClassVar[float]
+    """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
 
-    @static_property
-    def jgm3_a(self) -> float:
-        """Earth semiparameter from JGM3 gravity model, m"""
+    jgm3_a: ClassVar[float]
+    """Earth semiparameter from JGM3 gravity model, m"""
 
-    @static_property
-    def jgm3_j2(self) -> float:
-        """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
+    jgm3_j2: ClassVar[float]
+    """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
 class satstate:
     """
@@ -2234,6 +2299,7 @@ class satstate:
         Returns:
             satstate: New satellite state object
         """
+        ...
 
     @property
     def pos(self) -> npt.NDArray[np.float64]:
@@ -2242,6 +2308,7 @@ class satstate:
         Returns:
             npt.ArrayLike[np.float64]: 3-element numpy array representing position in meters in GCRF frame
         """
+        ...
 
     @property
     def vel(self) -> npt.NDArray[np.float64]:
@@ -2250,6 +2317,7 @@ class satstate:
         Returns:
             npt.ArrayLike[np.float64]: 3-element numpy array representing velocity in meters / second in GCRF frame
         """
+        ...
 
     @property
     def qgcrf2lvlh(self) -> quaternion:
@@ -2258,6 +2326,7 @@ class satstate:
         Returns:
             satkit.quaternion: Quaternion that rotates from the GCRF to the LVLH frame for the current state
         """
+        ...
 
     @property
     def cov(self) -> npt.NDArray[np.float64] | None:
@@ -2266,6 +2335,7 @@ class satstate:
         Returns:
             npt.ArrayLike[np.float64] | None: 6x6 numpy array representing state covariance in GCRF frame or None if not set
         """
+        ...
 
     @property
     def time(self) -> time:
@@ -2274,6 +2344,7 @@ class satstate:
         Returns:
             satkit.time: Time instant of this state
         """
+        ...
 
     def propagate(self, time: time | duration, propsettings=None) -> satstate:
         """Propagate this state to a new time, specified by the "time" input, updating the position, the velocity, and the covariance if set
@@ -2286,6 +2357,7 @@ class satstate:
         Returns:
             satstate: New satellite state object representing the state at the new time
         """
+        ...
 
 class propstats:
     """Statistics of a satellite propagation"""
@@ -2293,14 +2365,17 @@ class propstats:
     @property
     def num_eval(self) -> int:
         """Number of function evaluations"""
+        ...
 
     @property
     def num_accept(self) -> int:
         """Number of accepted steps in adaptive RK integrator"""
+        ...
 
     @property
     def num_reject(self) -> int:
         """Number of rejected steps in adaptive RK integrator"""
+        ...
 
 class propresult:
     """Results of a satellite propagation
@@ -2321,6 +2396,7 @@ class propresult:
             npt.ArrayLike[float]: 3-element numpy array representing GCRF position (meters) at end of propagation
 
         """
+        ...
 
     @property
     def vel(self) -> npt.NDArray[np.float64]:
@@ -2329,6 +2405,7 @@ class propresult:
         Returns:
             npt.ArrayLike[float]: 3-element numpy array representing GCRF velocity in meters/second at end of propagation
         """
+        ...
 
     @property
     def state(self) -> npt.NDArray[np.float64]:
@@ -2337,6 +2414,7 @@ class propresult:
         Returns:
             npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second
         """
+        ...
 
     @property
     def state_end(self) -> npt.NDArray[np.float64]:
@@ -2348,6 +2426,7 @@ class propresult:
         Returns:
             npt.ArrayLike[float]: 6-element numpy array representing state of satellite in meters & meters/second
         """
+        ...
 
     @property
     def state_begin(self) -> npt.NDArray[np.float64]:
@@ -2355,6 +2434,7 @@ class propresult:
         Returns:
             npt.NDArray[np.float64]: 6-element numpy array representing state of satellite in meters & meters/second at begin of propagation
         """
+        ...
 
     @property
     def time(self) -> time:
@@ -2363,6 +2443,7 @@ class propresult:
         Returns:
             satkit.time: Time at which state is valid
         """
+        ...
 
     @property
     def time_end(self) -> time:
@@ -2374,6 +2455,7 @@ class propresult:
         Returns:
             satkit.time: Time at which state is valid
         """
+        ...
 
     @property
     def time_begin(self) -> time:
@@ -2383,6 +2465,7 @@ class propresult:
         Returns:
             satkit.time: Time at which state_begin is valid
         """
+        ...
 
     @property
     def stats(self) -> propstats:
@@ -2391,6 +2474,7 @@ class propresult:
         Returns:
             propstats: Object containing statistics of propagation
         """
+        ...
 
     @property
     def phi(self) -> npt.NDArray[np.float64] | None:
@@ -2399,6 +2483,7 @@ class propresult:
         Returns:
             npt.ArrayLike[np.float64] | None: 6x6 numpy array representing state transition matrix or None if not computed
         """
+        ...
 
     def interp(
         self, time: time, output_phi: bool = False
@@ -2416,6 +2501,7 @@ class propresult:
         Returns:
             npt.ArrayLike[np.float64] | tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: 6-element vector representing state at given time. if output_phi, also output 6x6 state transition matrix at given time
         """
+        ...
 
 class satproperties_static:
     """Satellite properties relevant for drag and radiation pressure
@@ -2429,13 +2515,12 @@ class satproperties_static:
 
     """
 
-    def __init__(self, cdaoverm: float = 0, craoverm: float = 0):  # type: ignore
+    def __init__(self, cdaoverm: float = 0, craoverm: float = 0) -> None:
         """Create a satproperties_static object with given craoverm and cdaoverm in m^2/kg
 
         Args:
             cdaoverm (float, optional): Coefficient of drag times area over mass in m^2/kg
             craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
-
 
         Notes:
 
@@ -2450,14 +2535,23 @@ class satproperties_static:
         >>> properties = satproperties_static(0.5, 0.4)
 
         """
+        ...
 
-        @property
-        def cdaoverm(self) -> float:
-            """Coeffecient of drag times area over mass.  Units are m^2/kg"""
+    @property
+    def cdaoverm(self) -> float:
+        """Coefficient of drag times area over mass.  Units are m^2/kg"""
+        ...
 
-        @property
-        def craoverm(self) -> float:
-            """Coefficient of radiation pressure times area over mass.  Units are m^2/kg"""
+    @cdaoverm.setter
+    def cdaoverm(self, value: float) -> None: ...
+
+    @property
+    def craoverm(self) -> float:
+        """Coefficient of radiation pressure times area over mass.  Units are m^2/kg"""
+        ...
+
+    @craoverm.setter
+    def craoverm(self, value: float) -> None: ...
 
 class propsettings:
     """This class contains settings used in the high-precision orbit propagator part of the "satkit" python toolbox
@@ -2469,7 +2563,6 @@ class propsettings:
         * rel_error: 1e-8
         * gravity_order: 4
         * use_spaceweather: True
-        * use_jplephem: True
         * enable_interp: True
 
         * enable_interp enables high-precision interpolation of state between begin and end times via the returned function,
@@ -2477,7 +2570,7 @@ class propsettings:
 
     """
 
-    def __init__(**kwargs):
+    def __init__(self, **kwargs) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
 
         Args:
@@ -2485,13 +2578,12 @@ class propsettings:
             rel_error (float, optional keyword): Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
             gravity_order (int, optional keyword): Earth gravity order to use in ODE integration. Default is 4
             use_spaceweather (bool, optional keyword): Use space weather data when computing atmospheric density for drag forces. Default is True
-            use_jplephem (bool, optional keyword): Use JPL ephemeris for solar system bodies. Default is True
             enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
-
 
         Returns:
             propsettings: New propsettings object with default settings
         """
+        ...
 
     @property
     def abs_error(self) -> float:
@@ -2500,6 +2592,7 @@ class propsettings:
         Returns:
             float: Maximum absolute value of error for any element in propagated state following ODE integration, default is 1e-8
         """
+        ...
 
     @abs_error.setter
     def abs_error(self, value: float) -> None: ...
@@ -2511,6 +2604,7 @@ class propsettings:
             float: Maximum relative error of any element in propagated state following ODE integration, default is 1e-8
 
         """
+        ...
 
     @rel_error.setter
     def rel_error(self, value: float) -> None: ...
@@ -2522,6 +2616,7 @@ class propsettings:
             int: Earth gravity order to use in ODE integration, default is 4
 
         """
+        ...
 
     @gravity_order.setter
     def gravity_order(self, value: int) -> None: ...
@@ -2540,6 +2635,7 @@ class propsettings:
             bool: Indicate whether or not space weather data should be used when computing atmospheric density for drag forces
 
         """
+        ...
 
     @use_spaceweather.setter
     def use_spaceweather(self, value: bool) -> None: ...
@@ -2548,6 +2644,7 @@ class propsettings:
         """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times
         If not needed, there is a small computational advantage if set to False
         """
+        ...
 
     @enable_interp.setter
     def enable_interp(self, value: bool) -> None: ...
@@ -2564,6 +2661,7 @@ class propsettings:
             step (satkit.duration, optional): Step size for interpolation.  Default = 60 seconds
 
         """
+        ...
 
 def propagate(
     state: npt.NDArray[np.float64],
@@ -2602,3 +2700,4 @@ def propagate(
     * Solid Earth tides are not (yet) included in the model
 
     """
+    ...

@@ -29,3 +29,4 @@ def heliocentric_pos(
         numpy.ndarray: 3-vector of Cartesian position in meters, with the origin at the Sun.
                        If input is list or numpy array of N times, then r will be Nx3 array
     """
+    ...

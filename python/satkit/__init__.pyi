@@ -7,7 +7,8 @@ from . import sun
 from . import density
 from . import utils
 from . import planets
-from ._version import __version__
+
+__version__: str
 
 __all__ = [
     "time",
@@ -30,13 +31,10 @@ __all__ = [
     "sun",
     "planets",
     "satstate",
-    "density",
-    "utils",
     "propagate",
     "propsettings",
     "satproperties_static",
     "propresult",
     "propstats",
-    "satstate",
     "__version__",
 ]
