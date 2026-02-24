@@ -1,3 +1,3 @@
-# JPL Ephemeris
+# JPL Ephemerides
 
 ::: satkit.jplephem

@@ -113,6 +113,9 @@ nav:
       - Frame Transforms: api/frametransform.md
       - Propagation: api/satprop.md
       - Satellite State: api/satstate.md
+      - Sun: api/sun.md
+      - Moon: api/moon.md
+      - Planets: api/planets.md
       - JPL Ephemerides: api/jplephem.md
       - Density: api/density.md
       - Gravity: api/gravity.md
