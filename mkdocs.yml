@@ -73,6 +73,7 @@ plugins:
       execute: true
       kernel_name: python3
       include_source: true
+      include_requirejs: false
       execute_ignore:
         - "tutorials/.ipynb_checkpoints/*"
 
