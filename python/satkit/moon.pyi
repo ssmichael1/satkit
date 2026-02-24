@@ -56,6 +56,14 @@ def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
     Notes:
         Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
         and 1275 km in range
+
+    Example:
+        ```python
+        import numpy as np
+        t = satkit.time(2024, 1, 1)
+        moon = satkit.moon.pos_gcrf(t)
+        print(f"Moon distance: {np.linalg.norm(moon)/1e3:.0f} km")
+        ```
     """
     ...
 
@@ -94,6 +102,13 @@ def illumination(
 
     Returns:
         float | npt.NDArray[np.float64]: float or numpy array of floats representing fractional illumination of moon at given time(s).
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        illum = satkit.moon.illumination(t)
+        print(f"Moon illumination: {illum*100:.1f}%")
+        ```
     """
     ...
 
@@ -124,5 +139,13 @@ def phase_name(
 
     Returns:
         moonphase | list[moonphase]: moonphase or list of moonphase representing moon phase name at given time(s).
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        p = satkit.moon.phase_name(t)
+        print(p)
+        # e.g., moonphase.WaningGibbous
+        ```
     """
     ...
