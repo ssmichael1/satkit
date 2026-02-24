@@ -382,11 +382,12 @@ impl PyInstant {
     ///
     /// Args:
     ///   mjd (float): The Modified Julian Date
-    ///     scale (satkit.timescale): The time scale
+    ///   scale (satkit.timescale, optional): The time scale. Default is satkit.timescale.UTC
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of modified julian date with given scale
     #[staticmethod]
+    #[pyo3(signature=(mjd, scale=&PyTimeScale::UTC))]
     fn from_mjd(mjd: f64, scale: &PyTimeScale) -> Self {
         Self(Instant::from_mjd_with_scale(mjd, scale.into()))
     }
@@ -413,6 +414,7 @@ impl PyInstant {
     /// Returns:
     ///     satkit.time: Time object representing instant of julian date with given scale
     #[staticmethod]
+    #[pyo3(signature=(jd, scale=&PyTimeScale::UTC))]
     fn from_jd(jd: f64, scale: &PyTimeScale) -> Self {
         Self(Instant::from_jd_with_scale(jd, scale.into()))
     }
@@ -488,7 +490,6 @@ impl PyInstant {
             .unwrap();
         Ok(Self(Instant::from_unixtime(ts)))
     }
-
 
     /// Convert to Python datetime object
     ///
