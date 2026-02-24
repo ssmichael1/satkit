@@ -188,3 +188,7 @@
   - Add explanatory markdown to all Jupyter notebook tutorials
   - Fix MathJax rendering in notebook tutorials
   - Remove ReadTheDocs workflow; docs now deployed via GitHub Pages
+  - Streamline CI: merge `wheels.yml` and `cargo-publish.yml` into single `release.yml` on `v*` tags
+  - Add Python bindings test job to `build.yml` (runs on every push)
+  - Move cibuildwheel testing out of `pyproject.toml` into dedicated CI job
+  - Update PyO3 to 0.28.2 and numpy to 0.28
