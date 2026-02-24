@@ -5,12 +5,11 @@ on:
     branches:
       - "*"
     paths-ignore:
-      - "python/docs/**"
+      - "docs/**"
       - "README.md"
       - "CHANGES.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
-      - ".readthedocs.yaml"
   pull_request:
     branches:
       - "*"
@@ -21,12 +20,11 @@ on:
       - reopened
       - closed
     paths-ignore:
-      - "python/docs/**"
+      - "docs/**"
       - "README.md"
       - "CHANGES.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
-      - ".readthedocs.yaml"
 
 jobs:
   build:

@@ -26,7 +26,7 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
 - **Python**: Comprehensive Python bindings via PyO3, combining Rust performance with Python convenience
   - Install with `pip install satkit`
   - Binary packages available for Windows, macOS (Intel & ARM), and Linux (x86_64 & ARM64)
-  - Python versions 3.8 through 3.14 supported
+  - Python versions 3.10 through 3.14 supported
   - Full documentation at <https://ssmichael1.github.io/satkit/>
 
 ## Optional Features
@@ -234,7 +234,7 @@ Pre-built binary wheels are available for:
 - **Windows**: AMD64
 - **macOS**: Intel (x86_64) and Apple Silicon (ARM64)
 - **Linux**: x86_64 and ARM64 (aarch64)
-- **Python versions**: 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14
+- **Python versions**: 3.10, 3.11, 3.12, 3.13, 3.14
 
 ### Initial Setup
 
