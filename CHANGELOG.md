@@ -193,6 +193,9 @@
   - Move cibuildwheel testing out of `pyproject.toml` into dedicated CI job
   - Update PyO3 to 0.28.2 and numpy to 0.28
 
-## Rust 0.10.0
+## 0.10.0
+
+Starting with this release, Rust and Python versions are tracked with identical version numbers.
+
   - Add 20 unit tests for core physics modules: frame transforms, point gravity, atmospheric drag, ITRFCoord, Kepler elements, and earth gravity
   - Test count increases from 79 to 99 library tests
