@@ -16,6 +16,8 @@
 
 Satkit is a high-performance orbital mechanics library written in Rust with complete Python bindings via PyO3. It handles coordinate transforms, orbit propagation, time systems, gravity models, atmospheric density, and JPL ephemerides -- everything needed for satellite astrodynamics work.
 
+**[Python documentation and tutorials](https://ssmichael1.github.io/satkit/)** | **[Rust API docs](https://docs.rs/satkit/)**
+
 ## Installation
 
 **Rust:**
