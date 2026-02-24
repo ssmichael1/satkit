@@ -184,3 +184,7 @@
   - Migrate documentation from Sphinx/Read the Docs to MkDocs + Material theme + GitHub Pages
   - Replace `pytz` with stdlib `zoneinfo` in sunrise/sunset tutorial
   - Add `cargo-release` config to sync `pyproject.toml` version from `Cargo.toml`
+  - Drop Python 3.8 and 3.9 support; minimum is now Python 3.10
+  - Add explanatory markdown to all Jupyter notebook tutorials
+  - Fix MathJax rendering in notebook tutorials
+  - Remove ReadTheDocs workflow; docs now deployed via GitHub Pages

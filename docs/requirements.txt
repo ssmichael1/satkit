@@ -4,6 +4,7 @@ mkdocstrings[python]>=0.27
 mkdocs-jupyter>=0.25
 
 # Notebook execution dependencies
+satkit-data>=0.9.0
 numpy
 plotly
 ipykernel
