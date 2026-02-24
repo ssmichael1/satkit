@@ -1,0 +1,39 @@
+/* Widen the main content area */
+.md-grid {
+    max-width: 1440px;
+}
+
+/* Constrain notebook cell outputs to the content width */
+.jp-OutputArea-output,
+.jp-RenderedHTMLCommon,
+.cell_output {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Constrain HTML tables inside notebook outputs */
+.jp-RenderedHTMLCommon table,
+.cell_output table {
+    max-width: 100%;
+    width: auto;
+}
+
+/* Constrain Plotly and other large embedded figures */
+.jp-OutputArea-output > div,
+.cell_output > div {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Plotly figures: scale to fit container */
+.plotly-graph-div {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+/* Images inside notebook outputs */
+.jp-RenderedHTMLCommon img,
+.cell_output img {
+    max-width: 100%;
+    height: auto;
+}

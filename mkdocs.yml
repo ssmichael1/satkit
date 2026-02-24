@@ -1,0 +1,118 @@
+site_name: SatKit
+site_description: Satellite orbital mechanics library with Python bindings
+site_url: https://ssmichael1.github.io/satkit/
+repo_url: https://github.com/ssmichael1/satkit
+repo_name: ssmichael1/satkit
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.instant
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [python]
+          options:
+            allow_inspection: false
+            show_source: false
+            show_bases: false
+            members_order: source
+            docstring_style: google
+            show_root_heading: true
+            show_root_full_path: false
+            heading_level: 2
+  - mkdocs-jupyter:
+      execute: true
+      kernel_name: python3
+      include_source: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Data Files: getting-started/datafiles.md
+  - User Guide:
+      - Time: guide/time.md
+      - Quaternion: guide/quaternion.md
+      - Frame Transforms: guide/frametransform.md
+      - Two-Line Elements: guide/tle.md
+      - ITRF Coordinates: guide/itrfcoord.md
+      - Orbit Propagation: guide/satprop.md
+      - Satellite State: guide/satstate.md
+      - Atmospheric Density: guide/density.md
+      - References: guide/references.md
+  - Tutorials:
+      - tutorials/index.md
+      - ITRF Coordinates: tutorials/ITRF Coordinates.ipynb
+      - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
+      - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
+      - Eclipse: tutorials/Eclipse.ipynb
+      - Plots: tutorials/Plots.ipynb
+      - Sunrise & Sunset: tutorials/riseset.ipynb
+      - TLE Fitting: tutorials/TLE Fitting.ipynb
+      - High Precision Propagation: tutorials/High Precision Propagation.ipynb
+      - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
+      - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
+  - API Reference:
+      - Overview: api/index.md
+      - time: api/time.md
+      - quaternion: api/quaternion.md
+      - TLE & SGP4: api/tle.md
+      - itrfcoord: api/itrfcoord.md
+      - Frame Transforms: api/frametransform.md
+      - Propagation: api/satprop.md
+      - Satellite State: api/satstate.md
+      - JPL Ephemerides: api/jplephem.md
+      - Density: api/density.md
+      - Gravity: api/gravity.md
+      - Kepler: api/kepler.md
+      - Constants: api/consts.md
+      - Utilities: api/utils.md
