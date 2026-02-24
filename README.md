@@ -7,7 +7,7 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
 -----
 
 ![Build Passing?](https://github.com/ssmichael1/satkit/actions/workflows/build.yml/badge.svg)
-![Wheel Passing?](https://github.com/ssmichael1/satkit/actions/workflows/wheels.yml/badge.svg)
+![Release](https://github.com/ssmichael1/satkit/actions/workflows/release.yml/badge.svg)
 ![GitHub License](https://img.shields.io/github/license/ssmichael1/satkit)
 
 ![Crates.io Version](https://img.shields.io/crates/v/satkit)
@@ -213,7 +213,7 @@ Add satkit to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-satkit = "0.9.4"
+satkit = "0.10.0"
 ```
 
 Or use cargo add:
