@@ -179,3 +179,8 @@
 
 ## Python 0.9.4
   - ensure python packages are built in release mode (they have been, but adding additoinal flags)
+  - Restructure into Cargo workspace with separate Python bindings crate
+  - Fix and modernize Python `.pyi` stub files: explicit typed signatures for `time`, `duration`, `itrfcoord`, `quaternion`, `kepler`, `propsettings`, and `propagate` (replaces `*args`/`**kwargs`)
+  - Migrate documentation from Sphinx/Read the Docs to MkDocs + Material theme + GitHub Pages
+  - Replace `pytz` with stdlib `zoneinfo` in sunrise/sunset tutorial
+  - Add `cargo-release` config to sync `pyproject.toml` version from `Cargo.toml`

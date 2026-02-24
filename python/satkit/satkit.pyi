@@ -228,10 +228,9 @@ class TLE:
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
 
         Args:
-            states (list[np.ndarray]): List of GCRF states to fit to.  Each state is a 6-element vector.  The first 3
-            values are positions in meters.  The last 3 values are velocities in meters / second
-            times (list[time] | list[datetime.datetime]): List of times corresponding to the states
-            epoch (time|datetime.datetime): Epoch time for the TLE.  Must be within range of times
+            states: List of GCRF states to fit to. Each state is a 6-element vector. The first 3 values are positions in meters. The last 3 values are velocities in meters / second.
+            times: List of times corresponding to the states
+            epoch: Epoch time for the TLE. Must be within range of times.
 
         Returns:
             tuple[TLE, dict]: Fitted TLE and fitting results in a dictionary
@@ -657,18 +656,6 @@ class time:
         * If year is passed in, month and day must also be passed in
         * If hour is passed in, minute and second must also be passed in
 
-    Args:
-        year (int, optional): Gregorian year (e.g., 2024)
-        month (int, optional): Gregorian month (1 = January, 2 = February, ...)
-        day (int, optional): Day of month, beginning with 1
-        hour (int, optional): Hour of day, in range [0,23] (optional), default is 0
-        min (int, optional): Minute of hour, in range [0,59], default is 0
-        sec (float, optional): floating point second of minute, in range [0,60), default is 0
-        scale (satkit.timescale, optional): Time scale , default is satkit.timescale.UTC
-        str (str, optional): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
-    Returns:
-        satkit.time: Time object representing input date and time, or if no arguments, the current date and time
-
     Example:
         >>> print(satkit.time(2023, 3, 5, 11, 3, 45.453))
         2023-03-05 11:03:45.453Z
@@ -678,7 +665,18 @@ class time:
 
     """
 
-    def __init__(self, *args):
+    def __init__(
+        self,
+        year: int = ...,
+        month: int = ...,
+        day: int = ...,
+        hour: int = 0,
+        min: int = 0,
+        sec: float = 0.0,
+        *,
+        scale: timescale = ...,
+        str: str = ...,
+    ):
         """Create a time object representing input date and time
 
         This has functionality similar to the "datetime" object, and in fact has
@@ -688,22 +686,21 @@ class time:
 
         Notes:
             * If no arguments are passed in, the created object represents the current time
+            * If year is passed in, month and day must also be passed in
+            * If hour is passed in, minute and second must also be passed in
 
         Args:
-            year (int, optional): Gregorian year (e.g., 2024)
-            month (int, optional): Gregorian month (1 = January, 2 = February, ...)
-            day (int, optional): Day of month, beginning with 1
-            hour (int, optional): Hour of day, in range [0,23] (optional), default is 0
-            min (int, optional): Minute of hour, in range [0,59], default is 0
-            sec (float, optional): floating point second of minute, in range [0,60), default is 0
-            scale (satkit.timescale, optional): Time scale , default is satkit.timescale.UTC
-            str (str, optional): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
-
-        Returns:
-            satkit.time: Time object representing input date and time, or if no arguments, the current date and time
+            year: Gregorian year (e.g., 2024)
+            month: Gregorian month (1 = January, 2 = February, ...)
+            day: Day of month, beginning with 1
+            hour: Hour of day, in range [0,23], default is 0
+            min: Minute of hour, in range [0,59], default is 0
+            sec: Floating point second of minute, in range [0,60), default is 0
+            scale: Time scale, default is satkit.timescale.UTC
+            str: String representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
 
         Example:
-            >>> print(satkit.time(2023, 3, 5, 11, 3,45.453))
+            >>> print(satkit.time(2023, 3, 5, 11, 3, 45.453))
             2023-03-05 11:03:45.453Z
 
             >>> print(satkit.time(2023, 3, 5))
@@ -727,8 +724,7 @@ class time:
         Create a "time" object from input string
 
         Args:
-            str (str): string representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try
-            to intelligently parse, but no guarantees
+            str: String representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to intelligently parse, but no guarantees
 
         Note:
             * This is probably not what you want.  Use with caution.
@@ -840,9 +836,8 @@ class time:
         """Return a time object representing input GPS week and second
 
         Args:
-            week (int): GPS week number
-            sec (float): GPS seconds of week
-            scale (timescale, optional): Time scale.  Default is satkit.timescale.GPS
+            week: GPS week number
+            sec: GPS seconds of week
 
         Returns:
             satkit.time: Time object representing input GPS week and second
@@ -1311,21 +1306,26 @@ class duration:
     Representation of a duration, or interval of time
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        *,
+        days: float = 0,
+        hours: float = 0,
+        minutes: float = 0,
+        seconds: float = 0.0,
+        microseconds: float = 0.0,
+    ):
         """Create a duration object representing input time duration
 
         Args:
-            days (float, optional): Number of days, default is 0
-            hours (float, optional): Number of hours, default is 0
-            minutes (float, optional): Number of minutes, default is 0
-            seconds (float, optional): Number of seconds, default is 0.0
-            microseconds(float, optional): Number of microseconds, default is 0.0
+            days: Number of days, default is 0
+            hours: Number of hours, default is 0
+            minutes: Number of minutes, default is 0
+            seconds: Number of seconds, default is 0.0
+            microseconds: Number of microseconds, default is 0.0
 
         Notes:
             * If no arguments are passed in, the created object represents a duration of 0 seconds
-
-        Returns:
-            satkit.duration: Duration object representing input time duration
 
         Example:
             >>> print(satkit.duration(days=1, hours=2, minutes=3, seconds=4.5))
@@ -1610,14 +1610,11 @@ class quaternion:
     def __init__(self, w: float = 1.0, x: float = 0.0, y: float = 0.0, z: float = 0.0):
         """Return quaternion with input (w,x,y,z) values
 
-        Optional Args:
-            w (float): Scalar component of the quaternion
-            x (float): X component of the quaternion
-            y (float): Y component of the quaternion
-            z (float): Z component of the quaternion
-
-        Returns:
-            satkit.quaternion: Quaternion representing input values, or if not provided, the identity quaternion
+        Args:
+            w: Scalar component of the quaternion
+            x: X component of the quaternion
+            y: Y component of the quaternion
+            z: Z component of the quaternion
         """
         ...
 
@@ -1873,30 +1870,29 @@ class kepler:
         i: float,
         raan: float,
         argp: float,
-        nu: float,
-        **kwargs,
+        nu: float = ...,
+        *,
+        true_anomaly: float = ...,
+        mean_anomaly: float = ...,
+        eccentric_anomaly: float = ...,
     ):
         """Create Keplerian element set object from input elements
 
-
         Args:
-            a (float) : Semi-major axis, meters
-            e (float) : Eccentricity, unitless
-            i (float) : Inclination, radians
-            raan (float) : Right ascension of ascending node, radians
-            argp (float) : Argument of perigee, radians
-            nu (float) : True anomaly, radians
-            true_anomaly (float, optional keyword) : True anomaly, radians
-            mean_anomaly (float, optional keyword) : Mean anomaly, radians
-            eccentric_anomaly (float, optional keyword) : Eccentric anomaly, radians
+            a: Semi-major axis, meters
+            e: Eccentricity, unitless
+            i: Inclination, radians
+            raan: Right ascension of ascending node, radians
+            argp: Argument of perigee, radians
+            nu: True anomaly, radians
+            true_anomaly: True anomaly, radians (keyword alternative to nu)
+            mean_anomaly: Mean anomaly, radians (keyword alternative to nu)
+            eccentric_anomaly: Eccentric anomaly, radians (keyword alternative to nu)
 
         Notes:
-        * If "nu" is provided (6th argument), it will be used as the true anomaly
-        * Anomaly may also be set via keyword arguments; if so, the there should only be
-            5 input arguments
-
-        Returns:
-            satkit.kepler: Keplerian element set object
+            If "nu" is provided (6th argument), it will be used as the true anomaly.
+            Anomaly may also be set via keyword arguments; if so, there should only be
+            5 positional input arguments.
         """
         ...
 
@@ -1998,83 +1994,53 @@ class kepler:
         """Create Keplerian element set from input position and velocity vectors
 
         Args:
-            pos (npt.ArrayLike[np.float64]): 3-element array representing position vector
-            vel (npt.ArrayLike[np.float64]): 3-element array representing velocity vector
+            pos: 3-element array representing position vector
+            vel: 3-element array representing velocity vector
 
         Returns:
-            satkit.kepler: Keplerian element set object
+            Keplerian element set object
         """
         ...
 
 class itrfcoord:
     """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 
-    Notes:
-
-    * This coordinate object can be created from and also output to Geodetic coordinates (latitude, longitude, height above ellipsoid).
-    * Functions are also available to provide rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate
-
-
-    Args:
-
-        vec (numpy.ndarray, list, or 3-element tuple of floats, optional): ITRF Cartesian location in meters
-        latitude_deg (float, optional): Latitude in degrees
-        longitude_deg (float, optional): Longitude in degrees
-        latitude_rad (float, optional): Latitude in radians
-        longitude_rad (float, optional): Longitude in radians
-        altitude (float, optional): Height above ellipsoid, meters
-        height (float, optional): Height above ellipsoid, meters
-
-    Returns:
-        itrfcoord: New ITRF coordinate
+    This coordinate object can be created from and also output to Geodetic coordinates
+    (latitude, longitude, height above ellipsoid). Functions are also available to provide
+    rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate.
 
     Example:
+        Create ITRF coord from Cartesian:
 
-        * Create ITRF coord from Cartesian
-        >>> coord = itrfcoord([ 1523128.63570828 -4461395.28873207  4281865.94218203 ])
-        >>> print(coord)
-        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+            coord = itrfcoord([ 1523128.63570828, -4461395.28873207,  4281865.94218203 ])
 
-        * Create ITRF coord from Geodetic
-        >>> coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
-        >>> print(coord)
-        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+        Create ITRF coord from Geodetic:
+
+            coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
 
     """
 
-    def __init__(self, *args, **kwargs):
-        """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
-
-        Notes:
-
-        * This coordinate object can be created from and also output to Geodetic coordinates (latitude, longitude, height above ellipsoid).
-        * Functions are also available to provide rotation quaternions to the East-North-Up frame and North-East-Down frame at this coordinate
+    def __init__(
+        self,
+        vec: npt.NDArray[np.float64] | list[float] | None = None,
+        *,
+        latitude_deg: float = ...,
+        longitude_deg: float = ...,
+        latitude_rad: float = ...,
+        longitude_rad: float = ...,
+        altitude: float = ...,
+        height: float = ...,
+    ):
+        """Create ITRF coordinate from Cartesian vector or geodetic parameters.
 
         Args:
-            vec (numpy.ndarray|list[float]|tuple[float, float, float], optional): ITRF Cartesian location in meters
-            latitude_deg (float, optional): Latitude in degrees
-            longitude_deg (float, optional): Longitude in degrees
-            latitude_rad (float, optional): Latitude in radians
-            longitude_rad (float, optional): Longitude in radians
-            altitude (float, optional): Height above ellipsoid, meters
-            height (float, optional): Height above ellipsoid, meters
-
-
-        Returns:
-            itrfcoord: New ITRF coordinate
-
-        Example:
-            * Create ITRF coord from Cartesian
-            >>> coord = itrfcoord([ 1523128.63570828 -4461395.28873207  4281865.94218203 ])
-            >>> print(coord)
-            ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
-
-            * Create ITRF coord from Geodetic
-            >>> coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
-            >>> print(coord)
-            ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
-
-
+            vec: ITRF Cartesian location in meters (3-element array, list, or tuple)
+            latitude_deg: Latitude in degrees
+            longitude_deg: Longitude in degrees
+            latitude_rad: Latitude in radians
+            longitude_rad: Longitude in radians
+            altitude: Height above ellipsoid, meters
+            height: Height above ellipsoid, meters (alias for altitude)
         """
         ...
 
@@ -2295,9 +2261,6 @@ class satstate:
             pos (npt.NDArray[np.float64]): Position in meters in GCRF frame
             vel (npt.NDArray[np.float64]): Velocity in meters / second in GCRF frame
             cov (npt.NDArray[np.float64]|None, optional): Covariance in GCRF frame. Defaults to None.  If input, should be a 6x6 numpy array
-
-        Returns:
-            satstate: New satellite state object
         """
         ...
 
@@ -2570,18 +2533,26 @@ class propsettings:
 
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        *,
+        abs_error: float = 1e-8,
+        rel_error: float = 1e-8,
+        gravity_order: int = 4,
+        use_spaceweather: bool = True,
+        enable_interp: bool = True,
+    ) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
 
         Args:
-            abs_error (float, optional keyword): Maximum absolute value of error for any element in propagated state following ODE integration. Default is 1e-8
-            rel_error (float, optional keyword): Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
-            gravity_order (int, optional keyword): Earth gravity order to use in ODE integration. Default is 4
-            use_spaceweather (bool, optional keyword): Use space weather data when computing atmospheric density for drag forces. Default is True
-            enable_interp (bool, optional keyword): Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
+            abs_error: Maximum absolute value of error for any element in propagated state following ODE integration. Default is 1e-8
+            rel_error: Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
+            gravity_order: Earth gravity order to use in ODE integration. Default is 4
+            use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
+            enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
 
         Returns:
-            propsettings: New propsettings object with default settings
+            New propsettings object with default settings
         """
         ...
 
@@ -2666,38 +2637,47 @@ class propsettings:
 def propagate(
     state: npt.NDArray[np.float64],
     begin: time,
-    end: time,
-    **kwargs,
+    end: time = ...,
+    *,
+    duration: duration = ...,
+    duration_secs: float = ...,
+    duration_days: float = ...,
+    output_phi: bool = False,
+    propsettings: propsettings = ...,
+    satproperties: satproperties_static = ...,
 ) -> propresult:
     """High-precision orbit propagator
 
     Propagate orbits with high-precision force modeling via adaptive Runge-Kutta methods (default is order 9/8).
 
     Args:
-        state (npt.ArrayLike[float], optional): 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second
-        begin (satkit.time, optional): satkit.time object representing instant at which satellite is at "pos" & "vel"
-        end (satkit.time, optional keyword): satkit.time object representing instant at which new position and velocity will be computed
-        duration (satkit.duration, optional keyword): duration from "begin" at which new position & velocity will be computed.
-        duration_secs (float, optional keyword): duration in seconds from "begin" for at which new position and velocity will be computed.
-        duration_days (float, optional keyword): duration in days from "begin" at which new position and velocity will be computed.
-        output_phi (bool, optional keyword): Output 6x6 state transition matrix between "begintime" and "endtime" (and at intervals, if specified)
-        propsettings (propsettings, optional keyword): "propsettings" object with input settings for the propagation. if left out, default will be used.
-        satproperties (satproperties_static, optional keyword): "sat_properties_static" object with drag and radiation pressure susceptibility of satellite.
+        state: 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second
+        begin: Time at which satellite is at input state
+        end: Time at which new position and velocity will be computed
+        duration: Duration from "begin" at which new position & velocity will be computed
+        duration_secs: Duration in seconds from "begin" at which new position and velocity will be computed
+        duration_days: Duration in days from "begin" at which new position and velocity will be computed
+        output_phi: Output 6x6 state transition matrix between begin and end times
+        propsettings: Settings for the propagation; if omitted, defaults are used
+        satproperties: Drag and radiation pressure susceptibility of satellite
 
     Returns:
-        (propresult): Propagation result object holding state outputs, statistics, and dense output if requested
+        Propagation result object holding state outputs, statistics, and dense output if requested
 
     Notes:
+        Propagates satellite ephemeris (position, velocity in GCRF & time) to new time and
+        outputs new position and velocity via Runge-Kutta integration.
+        Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF).
 
-    * Propagates satellite ephemeris (position, velocity in gcrs & time) to new time and output new position and velocity via Runge-Kutta integration.
-    * Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
-    * Propagator uses advanced Runge-Kutta integrators and includes the following forces:
-        * Earth gravity with higher-order zonal terms
-        * Sun, Moon gravity
-        * Radiation pressured
-        * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (which can be large)
-    * End time must be set by keyword argument, either explicitly or by duration
-    * Solid Earth tides are not (yet) included in the model
+        Included forces:
+
+        - Earth gravity with higher-order zonal terms
+        - Sun, Moon gravity
+        - Radiation pressure
+        - Atmospheric drag: NRL-MSISE 2000 density model, with option to include space weather effects
+
+        End time must be set by keyword argument, either explicitly or by duration.
+        Solid Earth tides are not (yet) included in the model.
 
     """
     ...

@@ -33,9 +33,9 @@
 
 /* --- Layout --- */
 
-/* Widen the main content area */
+/* Widen the main content area (override Material's 61rem default) */
 .md-grid {
-    max-width: 1440px;
+    max-width: 100rem;
 }
 
 /* Constrain notebook cell outputs to the content width */
