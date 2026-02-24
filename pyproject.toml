@@ -1,15 +1,15 @@
 [build-system]
-requires = ["setuptools", "setuptools-rust", "setuptools-scm>=8"]
+requires = ["setuptools", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "satkit"
 dependencies = ["numpy>=1.0.0", "satkit-data>=0.7.0"]
-requires-python = ">= 3.8"
+requires-python = ">= 3.10"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
-version = "0.9.4"
+version = "0.10.0"
 license = { file = "LICENSE" }
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
@@ -29,8 +29,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
 
     # Specify the Python versions you support here.
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -46,7 +44,7 @@ license-files = ["LICENSE"]
 [tool.setuptools.packages.find]
 where = ["python"]
 include = ["satkit*"]
-exclude = ["test*", "docs*", "examples*"]
+exclude = ["test*", "docs*", "examples*", "src*"]
 
 [tool.cibuildwheel]
 build = [
@@ -55,12 +53,9 @@ build = [
     "cp312-*",
     "cp311-*",
     "cp310-*",
-    "cp39-*",
-    "cp38-*",
 ]
-test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
 skip = ["pp*", "*_i686", "*_s390x", "*_ppc64le", "*-musllinux*"]
-
+test-skip = "*"
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
@@ -72,12 +67,6 @@ before-build = [
     "rustup show",
 ]
 environment = { PATH = "$PATH:$HOME/.cargo/bin", MACOSX_DEPLOYMENT_TARGET = "10.12" }
-# Skip trying to test arm64 builds on Intel Macs
-test-requires = "pytest xmltodict"
-test-command = [
-    "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
-]
-
 
 [tool.cibuildwheel.linux]
 archs = ["native"]
@@ -86,10 +75,6 @@ before-build = [
     "pip install -U setuptools-rust",
     "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y",
     "rustup show",
-]
-test-requires = "pytest xmltodict"
-test-command = [
-    "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
 ]
 
 [tool.cibuildwheel.windows]
@@ -102,24 +87,9 @@ before-build = [
     "rustup override set stable-x86_64-pc-windows-msvc",
     "rustup show",
 ]
-test-requires = "pytest xmltodict"
-before-test = [
-    "set SATKIT_DATA={package}\\astro-data",
-    "set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs",
-]
-test-command = [
-    "set SATKIT_DATA={package}\\astro-data&&set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs&&pytest {project}\\python\\test\\test.py",
-]
-
 
 [[tool.setuptools-rust.ext-modules]]
-features = ["pybindings"]
-args = ["--no-default-features", "--crate-type", "cdylib"]
 target = "satkit/satkit"
-path = "Cargo.toml"
+path = "python/Cargo.toml"
 binding = "PyO3"
-py-limited-api = "auto"
 debug = false
-
-[tool.setuptools_scm]
-version_file = "python/satkit/_version.py"

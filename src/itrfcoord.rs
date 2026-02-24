@@ -607,6 +607,59 @@ mod tests {
     use approx::{assert_abs_diff_eq, assert_relative_eq};
 
     #[test]
+    fn test_poles() {
+        use crate::consts::WGS84_A;
+        use crate::consts::WGS84_F;
+        let polar_radius = WGS84_A * (1.0 - WGS84_F);
+
+        // North pole
+        let north = ITRFCoord::from_geodetic_deg(90.0, 0.0, 0.0);
+        assert_abs_diff_eq!(north.itrf[0], 0.0, epsilon = 1.0e-6);
+        assert_abs_diff_eq!(north.itrf[1], 0.0, epsilon = 1.0e-6);
+        assert_abs_diff_eq!(north.itrf[2], polar_radius, epsilon = 1.0e-3);
+
+        // South pole
+        let south = ITRFCoord::from_geodetic_deg(-90.0, 0.0, 0.0);
+        assert_abs_diff_eq!(south.itrf[0], 0.0, epsilon = 1.0e-6);
+        assert_abs_diff_eq!(south.itrf[1], 0.0, epsilon = 1.0e-6);
+        assert_abs_diff_eq!(south.itrf[2], -polar_radius, epsilon = 1.0e-3);
+    }
+
+    #[test]
+    fn test_equator_prime_meridian() {
+        use crate::consts::WGS84_A;
+        let coord = ITRFCoord::from_geodetic_deg(0.0, 0.0, 0.0);
+        assert_abs_diff_eq!(coord.itrf[0], WGS84_A, epsilon = 1.0e-3);
+        assert_abs_diff_eq!(coord.itrf[1], 0.0, epsilon = 1.0e-6);
+        assert_abs_diff_eq!(coord.itrf[2], 0.0, epsilon = 1.0e-6);
+    }
+
+    #[test]
+    fn test_antimeridian() {
+        let c1 = ITRFCoord::from_geodetic_deg(0.0, 180.0, 0.0);
+        let c2 = ITRFCoord::from_geodetic_deg(0.0, -180.0, 0.0);
+        assert_abs_diff_eq!(c1.itrf[0], c2.itrf[0], epsilon = 1.0e-6);
+        assert_abs_diff_eq!(c1.itrf[1], c2.itrf[1], epsilon = 1.0e-6);
+        assert_abs_diff_eq!(c1.itrf[2], c2.itrf[2], epsilon = 1.0e-6);
+    }
+
+    #[test]
+    fn test_geodetic_roundtrip_random() {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        for _ in 0..100 {
+            let lat = rng.random_range(-90.0..90.0_f64);
+            let lon = rng.random_range(-180.0..180.0_f64);
+            let hae = rng.random_range(-500.0..100_000.0_f64);
+            let coord = ITRFCoord::from_geodetic_deg(lat, lon, hae);
+            let (lat2, lon2, hae2) = coord.to_geodetic_deg();
+            assert_abs_diff_eq!(lat, lat2, epsilon = 1.0e-10);
+            assert_abs_diff_eq!(lon, lon2, epsilon = 1.0e-10);
+            assert_abs_diff_eq!(hae, hae2, epsilon = 1.0e-6);
+        }
+    }
+
+    #[test]
     fn test_geodesic() {
         // Lets pick a random point and try it out...
         let mumbai = ITRFCoord::from_geodetic_deg(19.16488608334183, 72.8314881731579, 0.0);

@@ -3,13 +3,12 @@ Utility functions for SatKit
 """
 
 from __future__ import annotations
-import typing
 import numpy.typing as npt
 import numpy as np
 
 import satkit
 
-def update_datafiles(**kwargs):
+def update_datafiles(**kwargs) -> None:
     """Download & store data files needed for "satkit" computations
 
     Keyword Args:
@@ -34,6 +33,7 @@ def update_datafiles(**kwargs):
         * The space weather and earth orientation parameters files are updated
           daily and will always be downloaded regardless of the overwrite flag
     """
+    ...
 
 def datadir() -> str:
     """Return directory currently used to hold necessary data files for the directory
@@ -64,6 +64,34 @@ def datadir() -> str:
         3. ``$HOME/.astro-data``
         4. ``$HOME``
     """
+    ...
+
+def set_datadir(datadir: str) -> None:
+    """Set the data directory
+
+    Args:
+        datadir (str): Path to the data directory
+
+    Raises:
+        RuntimeError: If the directory does not exist
+    """
+    ...
+
+def datafiles_exist() -> bool:
+    """Check if data files are found
+
+    Returns:
+        bool: True if data files are found, False otherwise
+    """
+    ...
+
+def dylib_path() -> str:
+    """Return path to the compiled satkit library
+
+    Returns:
+        str: Path to the compiled library
+    """
+    ...
 
 def githash() -> str:
     """Return git hash of this satkit build
@@ -71,6 +99,7 @@ def githash() -> str:
     Returns:
         str: Git hash of this satkit build
     """
+    ...
 
 def build_date() -> str:
     """Return build date of this satkit library as a string
@@ -78,6 +107,7 @@ def build_date() -> str:
     Returns:
         str: Build date of this satkit library
     """
+    ...
 
 def version() -> str:
     """Return version of this satkit library as a string
@@ -85,3 +115,4 @@ def version() -> str:
     Returns:
         str: Version of this satkit library
     """
+    ...

@@ -27,3 +27,6 @@ venv
 
 wheelhouse
 wheel
+
+# MkDocs build output
+site

@@ -1,0 +1,74 @@
+/* --- Navigation sidebar contrast --- */
+
+/* Section titles (Getting Started, User Guide, etc.) */
+.md-nav__item--nested > .md-nav__link {
+    font-weight: 700;
+    color: var(--md-default-fg-color);
+}
+
+/* Navigation items — ensure readable contrast */
+.md-nav__link {
+    color: var(--md-default-fg-color--light);
+}
+
+.md-nav__link:hover,
+.md-nav__link:focus {
+    color: var(--md-accent-fg-color);
+}
+
+/* Active navigation item */
+.md-nav__link--active {
+    color: var(--md-accent-fg-color);
+    font-weight: 600;
+}
+
+/* Dark mode overrides */
+[data-md-color-scheme="slate"] .md-nav__item--nested > .md-nav__link {
+    color: var(--md-default-fg-color);
+}
+
+[data-md-color-scheme="slate"] .md-nav__link {
+    color: var(--md-default-fg-color--light);
+}
+
+/* --- Layout --- */
+
+/* Widen the main content area (override Material's 61rem default) */
+.md-grid {
+    max-width: 100rem;
+}
+
+/* Constrain notebook cell outputs to the content width */
+.jp-OutputArea-output,
+.jp-RenderedHTMLCommon,
+.cell_output {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Constrain HTML tables inside notebook outputs */
+.jp-RenderedHTMLCommon table,
+.cell_output table {
+    max-width: 100%;
+    width: auto;
+}
+
+/* Constrain Plotly and other large embedded figures */
+.jp-OutputArea-output > div,
+.cell_output > div {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Plotly figures: scale to fit container */
+.plotly-graph-div {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+/* Images inside notebook outputs */
+.jp-RenderedHTMLCommon img,
+.cell_output img {
+    max-width: 100%;
+    height: auto;
+}

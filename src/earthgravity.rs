@@ -679,6 +679,49 @@ mod tests {
     use approx::assert_relative_eq;
 
     #[test]
+    fn test_gravity_order_1() {
+        // Order 1 = point mass: accel should be μ/r², radially inward
+        let r = 7000.0e3; // 7000 km
+        let pos = Vector3::new(r, 0.0, 0.0);
+        let accel = jgm3().accel(&pos, 1);
+        let expected_mag = crate::consts::MU_EARTH / (r * r);
+        assert_relative_eq!(accel.norm(), expected_mag, max_relative = 1.0e-6);
+        // Should point radially inward (negative x)
+        assert!(accel[0] < 0.0);
+        assert!(accel[1].abs() < 1.0e-10);
+        assert!(accel[2].abs() < 1.0e-10);
+    }
+
+    #[test]
+    fn test_gravity_models_agree_order1() {
+        // At order 1 (point mass), all models should agree closely
+        let pos = Vector3::new(7000.0e3, 1000.0e3, 3000.0e3);
+        let a_jgm3 = jgm3().accel(&pos, 1);
+        let a_jgm2 = jgm2().accel(&pos, 1);
+        let a_egm96 = egm96().accel(&pos, 1);
+        let a_grace = itu_grace16().accel(&pos, 1);
+        // All should be very close (small differences due to different GM values)
+        assert_relative_eq!(a_jgm3, a_jgm2, max_relative = 1.0e-6);
+        assert_relative_eq!(a_jgm3, a_egm96, max_relative = 1.0e-6);
+        assert_relative_eq!(a_jgm3, a_grace, max_relative = 1.0e-6);
+    }
+
+    #[test]
+    fn test_gravity_increases_with_order() {
+        // Off-equator point: higher-order (J2 effect) should differ from order 1
+        let coord = ITRFCoord::from_geodetic_deg(60.0, 30.0, 300.0e3);
+        let a1 = jgm3().accel(&coord.itrf, 1);
+        let a16 = jgm3().accel(&coord.itrf, 16);
+        // They should differ (J2 effect is ~1e-3 relative)
+        let diff = (a16 - a1).norm() / a1.norm();
+        assert!(
+            diff > 1.0e-4,
+            "Order 16 vs 1 relative difference is {}, expected > 1e-4",
+            diff
+        );
+    }
+
+    #[test]
     fn test_gravity2() {
         // Lexington, ma
         let latitude: f64 = 42.4473;

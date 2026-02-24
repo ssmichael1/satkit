@@ -138,3 +138,57 @@ pub fn drag_and_partials(
 
     (drag_accel_gcrf, dacceldr, dacceldv)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_drag_force_direction() {
+        // Circular prograde orbit at ~400 km altitude
+        let r = 6778.0e3; // Earth radius + 400 km
+        let v_circ = (crate::consts::MU_EARTH / r).sqrt();
+        let pos_gcrf = Vector3::new(r, 0.0, 0.0);
+        let pos_itrf = pos_gcrf; // Approximate: ignore frame rotation for this test
+        let vel_gcrf = Vector3::new(0.0, v_circ, 0.0); // prograde
+        let time = Instant::from_datetime(2020, 1, 1, 0, 0, 0.0).unwrap();
+        let cd_a_over_m = 0.01; // typical value
+
+        let drag = drag_force(&pos_gcrf, &pos_itrf, &vel_gcrf, &time, cd_a_over_m, false);
+
+        // Drag should oppose relative velocity direction
+        let vrel = vel_gcrf - OMEGA_EARTH.cross(&pos_gcrf);
+        let drag_dot_vrel = drag.dot(&vrel);
+        assert!(
+            drag_dot_vrel < 0.0,
+            "Drag should oppose velocity, dot product = {}",
+            drag_dot_vrel
+        );
+        assert!(drag.norm() > 0.0, "Drag magnitude should be > 0");
+
+        // Drag should scale with cd_a_over_m
+        let drag2 = drag_force(
+            &pos_gcrf, &pos_itrf, &vel_gcrf, &time,
+            cd_a_over_m * 2.0, false,
+        );
+        approx::assert_relative_eq!(drag2.norm(), drag.norm() * 2.0, max_relative = 1.0e-10);
+    }
+
+    #[test]
+    fn test_drag_force_zero_at_high_alt() {
+        // At 2000 km altitude, atmospheric density should be negligible
+        let r = 8378.0e3; // Earth radius + 2000 km
+        let v_circ = (crate::consts::MU_EARTH / r).sqrt();
+        let pos_gcrf = Vector3::new(r, 0.0, 0.0);
+        let pos_itrf = pos_gcrf;
+        let vel_gcrf = Vector3::new(0.0, v_circ, 0.0);
+        let time = Instant::from_datetime(2020, 1, 1, 0, 0, 0.0).unwrap();
+
+        let drag = drag_force(&pos_gcrf, &pos_itrf, &vel_gcrf, &time, 0.01, false);
+        assert!(
+            drag.norm() < 1.0e-10,
+            "Drag at 2000 km = {:.3e}, expected < 1e-10",
+            drag.norm()
+        );
+    }
+}

@@ -1,0 +1,238 @@
+use crate::pyduration::PyDuration;
+use crate::pyinstant::PyInstant;
+use crate::pypropresult::{PyPropResult, PyPropResultType};
+use crate::pypropsettings::PyPropSettings;
+use crate::pysatproperties::PySatProperties;
+use crate::pyutils::*;
+use pyo3::IntoPyObjectExt;
+
+use nalgebra as na;
+
+use satkit::mathtypes::*;
+use satkit::orbitprop::SatProperties;
+use satkit::orbitprop::SatPropertiesStatic;
+use satkit::Duration;
+use satkit::Instant;
+
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyString, PyTuple};
+
+use anyhow::{bail, Result};
+
+/// High-precision orbit propagator
+///
+/// Propagate statellite ephemeris (position, velocity in gcrs & time) to new time via adaptive Runge-Kutta 9/8 ordinary differential equation (ODE) integration
+///
+/// Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
+///
+/// Inputs:
+///
+///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
+///      begin (satkit.time, optional): Begin time of propagation, time of "state0"
+///        end (satkit.time, optional): End time of propagation
+///
+///
+/// Optional keyword arguments:
+///
+///
+/// 4 ways of setting propagation end:
+/// (one of these must be used)
+///
+///              end: (satkit.time, optional): instant at which new position and
+///                   velocity will be computed
+///    duration_secs: (float, optional): duration in seconds from "tm" for at which new
+///                   position and velocity will be computed.
+///    duration_days: (float, optional): duration in days from "tm" at which new position and
+///                   velocity will be computed.
+///         duration: (satkit.duration, optional): An astro.duration object setting duration
+///                   from "tm" at which new position & velocity will be computed.
+///
+///  Other keywords:
+///
+///
+///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
+///                   between "begintime" and "endtime"
+///                   default is False
+///     propsettings (satkit.propsettings): Settings for
+///                   the propagation. if left out, default will be used.
+///    satproperties (satkit.satproperties_static): object with drag and
+///                   radiation pressure succeptibility of satellite.
+///                   If left out, drag and radiation pressure are neglected
+///                   Dynamic drag & radiation pressure models are not
+///                   yet implemented
+///     output_dense (bool): boolean indicacting output dense ODE solution that can
+///                   be used for interpolation of state between
+///                  "begintime" and "endtime".  Default is False
+///
+///
+/// Returns:
+///
+///    satkit.propresult: object with new position and velocity, and possibly
+///                       state transition matrix between "begintime" and "endtime",
+///                       and dense ODE solution that allow for interpolation, if requested
+///
+/// Raises:
+///
+///   RuntimeError: If "pos" or "vel" are not 3-element numpy arrays
+///   RuntimeError: If neither "end", "duration", "duration_secs", or "duration_days" are set
+///   RuntimeError: If extraneous keyword arguments are passed
+///
+///
+///    Notes:
+///        * Propagator uses advanced Runga-Kutta integrators and includes the following forces:
+///            * Earth gravity with higher-order zonal terms
+///            * Sun, Moon gravity
+///            * Radiation pressure
+///            * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (can be large)
+///        * End time must be set by keyword argument, either explicitely or by duration
+///        * Solid Earth tides are not (yet) included in the model
+///
+#[pyfunction(signature=(*args, **kwargs))]
+pub fn propagate(
+    args: &Bound<PyTuple>,
+    mut kwargs: Option<&Bound<'_, PyDict>>,
+) -> Result<Py<PyAny>> {
+    let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
+    let propsettings = match pypropsettings {
+        Some(p) => p.0,
+        None => satkit::orbitprop::PropSettings::default(),
+    };
+
+    let mut state0 = Vector6::zeros();
+    let mut begintime: Instant = Instant::INVALID;
+    let mut endtime: Instant = Instant::INVALID;
+    let mut output_phi: bool = false;
+    let mut satproperties: Option<&dyn SatProperties> = None;
+    let satproperties_static: SatPropertiesStatic;
+
+    if args.len() > 0 {
+        state0 = py_to_smatrix(&args.get_item(0)?)?;
+    }
+    if args.len() > 1 {
+        begintime = args
+            .get_item(1)?
+            .extract::<PyInstant>()
+            .map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {}", e))
+            })?
+            .0;
+    }
+    if args.len() > 2 {
+        endtime = args
+            .get_item(2)?
+            .extract::<PyInstant>()
+            .map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {}", e))
+            })?
+            .0;
+    }
+
+    if let Some(kw) = kwargs {
+        if let Some(kwp) = kw.get_item("pos")? {
+            let pos = py_to_smatrix::<3, 1>(&kwp)?;
+            state0[0] = pos[0];
+            state0[1] = pos[1];
+            state0[2] = pos[2];
+            kw.del_item("pos")?;
+        }
+        if let Some(kwv) = kw.get_item("vel")? {
+            let vel = py_to_smatrix::<3, 1>(&kwv)?;
+            state0[3] = vel[0];
+            state0[4] = vel[1];
+            state0[5] = vel[2];
+            kw.del_item("vel")?;
+        }
+        if let Some(kws) = kw.get_item("begin")? {
+            begintime = kws
+                .extract::<PyInstant>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {}", e))
+                })?
+                .0;
+            kw.del_item("begin")?;
+        }
+        if let Some(kws) = kw.get_item("end")? {
+            endtime = kws
+                .extract::<PyInstant>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {}", e))
+                })?
+                .0;
+            kw.del_item("end")?;
+        }
+        if let Some(kwd) = kw.get_item("duration")? {
+            endtime = begintime
+                + kwd
+                    .extract::<PyDuration>()
+                    .map_err(|e| {
+                        pyo3::exceptions::PyValueError::new_err(format!("Invalid duration: {}", e))
+                    })?
+                    .0;
+            kw.del_item("duration")?;
+        }
+        if let Some(kwd) = kw.get_item("duration_days")? {
+            endtime = begintime
+                + Duration::from_days(kwd.extract::<f64>().map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_days: {}", e))
+                })?);
+            kw.del_item("duration_days")?;
+        }
+        if let Some(kwd) = kw.get_item("duration_secs")? {
+            endtime = begintime
+                + Duration::from_seconds(kwd.extract::<f64>().map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_secs: {}", e))
+                })?);
+            kw.del_item("duration_secs")?;
+        }
+        if let Some(kws) = kw.get_item("satproperties")? {
+            satproperties_static = kws
+                .extract::<PySatProperties>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {}", e))
+                })?
+                .0;
+            satproperties = Some(&satproperties_static);
+            kw.del_item("satproperties")?;
+        }
+
+        output_phi = kwargs_or_default(&mut kwargs, "output_phi", false)?;
+
+        if !kw.is_empty() {
+            let keystring: String = kw.iter().try_fold(String::from(""), |acc, (k, _v)| {
+                let mut a2 = acc;
+                a2.push_str(k.cast::<PyString>()?.to_str()?);
+                a2.push_str(", ");
+                Ok::<_, PyErr>(a2)
+            })?;
+            bail!("Extraneous keyword arguments: {}", keystring);
+        }
+    }
+
+    // Simple sate propagation
+    if !output_phi {
+        let res = satkit::orbitprop::propagate(
+            &state0,
+            &begintime,
+            &endtime,
+            &propsettings,
+            satproperties,
+        )?;
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
+            Ok(PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)?)
+        })
+    }
+    // Propagate with state transition matrix
+    else {
+        // Create the state to propagate
+        let mut pv = na::SMatrix::<f64, 6, 7>::zeros();
+        pv.fixed_view_mut::<6, 1>(0, 0).copy_from(&state0);
+        pv.fixed_view_mut::<6, 6>(0, 1)
+            .copy_from(&Matrix6::identity());
+
+        let res =
+            satkit::orbitprop::propagate(&pv, &begintime, &endtime, &propsettings, satproperties)?;
+        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
+            Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
+        })
+    }
+}
