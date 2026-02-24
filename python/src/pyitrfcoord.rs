@@ -52,7 +52,7 @@ use crate::pyutils::*;
 ///        ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
 ///
 ///
-#[pyclass(name = "itrfcoord", module = "satkit")]
+#[pyclass(name = "itrfcoord", module = "satkit", from_py_object)]
 #[derive(Clone)]
 pub struct PyITRFCoord(pub ITRFCoord);
 

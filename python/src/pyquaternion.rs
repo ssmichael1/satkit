@@ -32,11 +32,11 @@ use anyhow::{bail, Result};
 /// https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation
 ///
 ///
-#[pyclass(name = "quaternion", module = "satkit")]
+#[pyclass(name = "quaternion", module = "satkit", from_py_object)]
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct PyQuaternion(pub Quaternion);
 
-#[pyclass(name = "quaternion_array", module = "satkit")]
+#[pyclass(name = "quaternion_array", module = "satkit", from_py_object)]
 #[derive(PartialEq, Clone, Debug)]
 pub struct PyQuaternionVec(Vec<Quaternion>);
 

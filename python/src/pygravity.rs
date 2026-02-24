@@ -20,7 +20,7 @@ use anyhow::{bail, Result};
 /// http://icgem.gfz-potsdam.de/tom_longtime
 ///
 #[allow(non_camel_case_types)]
-#[pyclass(name = "gravmodel", eq, eq_int)]
+#[pyclass(name = "gravmodel", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum GravModel {
     jgm3 = GravityModel::JGM3 as isize,
