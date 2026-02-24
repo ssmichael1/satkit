@@ -73,6 +73,8 @@ plugins:
       execute: true
       kernel_name: python3
       include_source: true
+      execute_ignore:
+        - "tutorials/.ipynb_checkpoints/*"
 
 nav:
   - Home: index.md
