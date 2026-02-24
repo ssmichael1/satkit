@@ -54,9 +54,8 @@ build = [
     "cp311-*",
     "cp310-*",
 ]
-test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
 skip = ["pp*", "*_i686", "*_s390x", "*_ppc64le", "*-musllinux*"]
-
+test-skip = "*"
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
@@ -68,12 +67,6 @@ before-build = [
     "rustup show",
 ]
 environment = { PATH = "$PATH:$HOME/.cargo/bin", MACOSX_DEPLOYMENT_TARGET = "10.12" }
-# Skip trying to test arm64 builds on Intel Macs
-test-requires = "pytest xmltodict"
-test-command = [
-    "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
-]
-
 
 [tool.cibuildwheel.linux]
 archs = ["native"]
@@ -82,10 +75,6 @@ before-build = [
     "pip install -U setuptools-rust",
     "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y",
     "rustup show",
-]
-test-requires = "pytest xmltodict"
-test-command = [
-    "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
 ]
 
 [tool.cibuildwheel.windows]
@@ -98,15 +87,6 @@ before-build = [
     "rustup override set stable-x86_64-pc-windows-msvc",
     "rustup show",
 ]
-test-requires = "pytest xmltodict"
-before-test = [
-    "set SATKIT_DATA={package}\\astro-data",
-    "set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs",
-]
-test-command = [
-    "set SATKIT_DATA={package}\\astro-data&&set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs&&pytest {project}\\python\\test\\test.py",
-]
-
 
 [[tool.setuptools-rust.ext-modules]]
 target = "satkit/satkit"

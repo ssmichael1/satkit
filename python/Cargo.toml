@@ -10,8 +10,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 satkit = { path = ".." }
-pyo3 = { version = "0.27.1", features = ["extension-module", "anyhow"] }
-numpy = "0.27"
+pyo3 = { version = "0.28.2", features = ["extension-module", "anyhow"] }
+numpy = "0.28"
 nalgebra = "0.34.0"
 ndarray = "0.17.1"
 anyhow = "1"
@@ -21,4 +21,4 @@ rmpfit = "0.3.0"
 process_path = "0.1.4"
 
 [build-dependencies]
-pyo3-build-config = "0.27.1"
+pyo3-build-config = "0.28.2"
