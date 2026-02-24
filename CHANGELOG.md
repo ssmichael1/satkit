@@ -199,3 +199,11 @@ Starting with this release, Rust and Python versions are tracked with identical 
 
   - Add 20 unit tests for core physics modules: frame transforms, point gravity, atmospheric drag, ITRFCoord, Kepler elements, and earth gravity
   - Test count increases from 79 to 99 library tests
+
+## 0.10.1
+
+  - Fix PyO3 0.28 deprecation warnings: add `from_py_object` to all `#[pyclass]` types deriving `Clone`
+  - Use SPDX `license = "MIT"` in Cargo.toml and pyproject.toml (fixes crates.io license detection)
+  - Fix broken release badge in README (wheels.yml was renamed to release.yml)
+  - Rewrite README for clarity and conciseness
+  - Fix `release.toml` regex so `cargo release` correctly syncs all version files
