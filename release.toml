@@ -1,11 +1,11 @@
 [[pre-release-replacements]]
 file = "pyproject.toml"
-search = 'version = "[0-9]+\\.[0-9]+\\.[0-9]+"'
+search = 'version = "[0-9]+\.[0-9]+\.[0-9]+"'
 replace = 'version = "{{version}}"'
 exactly = 1
 
 [[pre-release-replacements]]
 file = "python/Cargo.toml"
-search = 'version = "[0-9]+\\.[0-9]+\\.[0-9]+"'
+search = '^version = "[0-9]+\.[0-9]+\.[0-9]+"'
 replace = 'version = "{{version}}"'
 exactly = 1
