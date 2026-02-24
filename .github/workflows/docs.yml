@@ -55,6 +55,7 @@ jobs:
       - name: Build docs
         env:
           SATKIT_DATA: astro-data
+          PLOTLY_RENDERER: notebook
         run: mkdocs build
 
       - name: Upload pages artifact

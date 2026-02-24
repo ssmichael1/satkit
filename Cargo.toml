@@ -54,6 +54,11 @@ default = ["omm-xml"]
 omm-xml = ["dep:quick-xml"]
 chrono = ["dep:chrono"]
 
+[workspace.metadata.release]
+pre-release-replacements = [
+  { file = "pyproject.toml", search = 'version = "[^"]*"', replace = 'version = "{{version}}"', exactly = 1 },
+]
+
 [profile.test]
 opt-level = 3
 
