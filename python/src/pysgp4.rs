@@ -12,7 +12,7 @@ use anyhow::{bail, Result};
 
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
-#[pyclass(name = "sgp4_error", eq, eq_int)]
+#[pyclass(name = "sgp4_error", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PySGP4Error {
     success = psgp4::SGP4Error::SGP4Success as isize,
@@ -25,7 +25,7 @@ pub enum PySGP4Error {
 }
 
 #[allow(non_camel_case_types)]
-#[pyclass(name = "sgp4_gravconst", eq, eq_int)]
+#[pyclass(name = "sgp4_gravconst", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum GravConst {
     wgs72 = psgp4::GravConst::WGS72 as isize,
@@ -44,7 +44,7 @@ impl From<GravConst> for psgp4::GravConst {
 }
 
 #[allow(non_camel_case_types)]
-#[pyclass(name = "sgp4_opsmode", eq, eq_int)]
+#[pyclass(name = "sgp4_opsmode", eq, eq_int, from_py_object)]
 #[derive(Clone, Eq, PartialEq)]
 pub enum OpsMode {
     afspc = psgp4::OpsMode::AFSPC as isize,

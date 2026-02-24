@@ -33,7 +33,7 @@ use anyhow::{bail, Result};
 /// >>> instant = satkit.time(2023, 3, 5)
 /// >>> plus1day = instant + duration(days=1.0)
 ///
-#[pyclass(name = "duration", module = "satkit")]
+#[pyclass(name = "duration", module = "satkit", from_py_object)]
 #[derive(Clone)]
 pub struct PyDuration(pub Duration);
 

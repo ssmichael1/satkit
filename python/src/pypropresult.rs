@@ -82,7 +82,7 @@ impl PyPropStats {
 ///                solution that can be used for interpolation
 ///                of states between the begin and end times
 ///
-#[pyclass(name = "propresult", module = "satkit")]
+#[pyclass(name = "propresult", module = "satkit", from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyPropResult(pub PyPropResultType);
 
