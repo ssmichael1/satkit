@@ -7,7 +7,7 @@ use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
-#[pyclass(name = "satproperties_static", module = "satkit")]
+#[pyclass(name = "satproperties_static", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySatProperties(pub SatPropertiesStatic);
 

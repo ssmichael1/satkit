@@ -17,7 +17,7 @@ use satkit::Instant;
 
 use anyhow::{bail, Result};
 
-#[pyclass(name = "satstate", module = "satkit")]
+#[pyclass(name = "satstate", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySatState(SatState);
 

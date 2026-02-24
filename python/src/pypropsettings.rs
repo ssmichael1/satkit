@@ -5,7 +5,7 @@ use crate::PyInstant;
 
 use pyo3::types::{PyDict, PyString};
 
-#[pyclass(name = "propsettings")]
+#[pyclass(name = "propsettings", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PyPropSettings(pub PropSettings);
 

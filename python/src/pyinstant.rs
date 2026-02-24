@@ -32,7 +32,7 @@ use numpy as np;
 /// * TDB = Barycentric Dynamical Time
 ///
 #[derive(Clone, PartialEq, Eq)]
-#[pyclass(name = "timescale", module = "satkit", eq, eq_int)]
+#[pyclass(name = "timescale", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyTimeScale {
     /// Invalid time scale
     Invalid = TimeScale::Invalid as isize,
@@ -57,7 +57,7 @@ pub enum PyTimeScale {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-#[pyclass(name = "weekday", module = "satkit", eq, eq_int)]
+#[pyclass(name = "weekday", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyWeekday {
     Sunday = 0,
     Monday = 1,
@@ -152,7 +152,7 @@ impl From<PyTimeScale> for TimeScale {
 ///
 /// Returns:
 ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
-#[pyclass(name = "time", module = "satkit")]
+#[pyclass(name = "time", module = "satkit", from_py_object)]
 #[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyInstant(pub Instant);
 

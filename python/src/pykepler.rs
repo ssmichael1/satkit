@@ -34,7 +34,7 @@ use crate::pyutils::py_to_smatrix;
 /// Returns:
 ///     Kepler: Keplerian orbital elements
 ///
-#[pyclass(name = "kepler", module = "satkit")]
+#[pyclass(name = "kepler", module = "satkit", from_py_object)]
 #[derive(Clone)]
 pub struct PyKepler(pub Kepler);
 

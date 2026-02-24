@@ -10,7 +10,7 @@ authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
 version = "0.10.0"
-license = { file = "LICENSE" }
+license = "MIT"
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
     "satellite",
