@@ -456,6 +456,59 @@ mod tests {
     }
 
     #[test]
+    fn test_qitrf2gcrf_roundtrip() {
+        let tm = Instant::from_datetime(2020, 6, 15, 12, 0, 0.0).unwrap();
+        let v_itrf = Vector3::new(1000.0, 2000.0, 3000.0);
+        let v_gcrf = qitrf2gcrf(&tm) * v_itrf;
+        let v_back = qgcrf2itrf(&tm) * v_gcrf;
+        assert!((v_back - v_itrf).norm() < 1.0e-12 * v_itrf.norm());
+    }
+
+    #[test]
+    fn test_earth_rotation_angle() {
+        // At J2000.0 epoch (2000-01-01 12:00:00 UT1), ERA should be ~280.46061837°
+        // J2000.0 is JD 2451545.0
+        let tm = Instant::from_jd(2451545.0);
+        let era = earth_rotation_angle(&tm).to_degrees().rem_euclid(360.0);
+        assert!((era - 280.46061837).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_approx_vs_full() {
+        let tm = Instant::from_datetime(2010, 3, 15, 6, 0, 0.0).unwrap();
+        let v_itrf = Vector3::new(6378137.0, 0.0, 0.0);
+
+        let v_approx = qitrf2gcrf_approx(&tm) * v_itrf;
+        let v_full = qitrf2gcrf(&tm) * v_itrf;
+
+        // Should agree within 1 arcsec (~30 m at Earth surface)
+        let angle_rad = (v_approx.dot(&v_full) / (v_approx.norm() * v_full.norm())).acos();
+        let angle_arcsec = angle_rad.to_degrees() * 3600.0;
+        assert!(
+            angle_arcsec < 1.0,
+            "Approx vs full differ by {:.4} arcsec, expected < 1",
+            angle_arcsec
+        );
+    }
+
+    #[test]
+    fn test_qteme2gcrf() {
+        // Vallado Example 3-15: verify TEME→GCRF transform
+        // Using the same time as test_gcrs2itrf (Vallado Example 3-14)
+        let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
+        // TEME position from SGP4 output (Vallado example)
+        let pitrf = Vector3::new(-1033.4793830, 7901.2952754, 6380.3565958);
+        // Get GCRF via ITRF path (known good from test_gcrs2itrf)
+        let pgcrf_via_itrf = qitrf2gcrf(tm) * pitrf;
+        // Get GCRF via TEME path
+        let pteme = qteme2itrf(tm).conjugate() * pitrf;
+        let pgcrf_via_teme = qteme2gcrf(tm) * pteme;
+
+        // Both paths should give the same GCRF result
+        assert!((pgcrf_via_itrf - pgcrf_via_teme).norm() < 0.1);
+    }
+
+    #[test]
     fn test_gcrs2itrf() {
         // Example 3-14 from Vallado
         // With verification fo intermediate calculations

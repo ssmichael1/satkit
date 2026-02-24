@@ -277,6 +277,105 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_circular_orbit() {
+        use std::f64::consts::PI;
+        let a = 7000.0e3; // 7000 km
+        let k = Kepler::new(a, 0.0, 0.5, 1.0, 0.0, Anomaly::True(0.5));
+        let (r, v) = k.to_pv();
+        let k2 = Kepler::from_pv(r, v).unwrap();
+        let (r2, v2) = k2.to_pv();
+        assert!((r - r2).norm() < 1.0e-6);
+        assert!((v - v2).norm() < 1.0e-6);
+
+        // Verify period = 2π√(a³/μ)
+        let period = 2.0 * PI * (a.powi(3) / crate::consts::MU_EARTH).sqrt();
+        assert!((k.period() - period).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_equatorial_orbit() {
+        // Near-equatorial orbit (i=0 is singular for from_pv)
+        let a = 8000.0e3;
+        let k = Kepler::new(a, 0.1, 1.0e-6, 0.0, 0.5, Anomaly::True(1.0));
+        let (r, v) = k.to_pv();
+        // z-component should be near zero for equatorial orbit
+        assert!(r[2].abs() / r.norm() < 1.0e-4);
+        assert!(v[2].abs() / v.norm() < 1.0e-4);
+
+        let k2 = Kepler::from_pv(r, v).unwrap();
+        let (r2, v2) = k2.to_pv();
+        assert!((r - r2).norm() / r.norm() < 1.0e-6);
+        assert!((v - v2).norm() / v.norm() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_polar_orbit() {
+        use std::f64::consts::FRAC_PI_2;
+        let a = 7500.0e3;
+        let k = Kepler::new(a, 0.05, FRAC_PI_2, 0.0, 0.3, Anomaly::True(0.8));
+        let (r, v) = k.to_pv();
+        let k2 = Kepler::from_pv(r, v).unwrap();
+        let (r2, v2) = k2.to_pv();
+        assert!((r - r2).norm() < 1.0e-3);
+        assert!((v - v2).norm() < 1.0e-3);
+        assert!((k2.incl - FRAC_PI_2).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_propagate_period() {
+        let k = Kepler::new(7000.0e3, 0.01, 0.5, 1.0, 0.3, Anomaly::True(0.5));
+        let (r0, v0) = k.to_pv();
+        let period = k.period();
+        let dt = crate::Duration::from_seconds(period);
+        let k2 = k.propagate(&dt);
+        let (r1, v1) = k2.to_pv();
+        assert!(
+            (r0 - r1).norm() < 0.01,
+            "Position after one period differs by {} m",
+            (r0 - r1).norm()
+        );
+        assert!(
+            (v0 - v1).norm() < 1.0e-5,
+            "Velocity after one period differs by {} m/s",
+            (v0 - v1).norm()
+        );
+    }
+
+    #[test]
+    fn test_anomaly_conversions() {
+        use std::f64::consts::PI;
+        for &e in &[0.0, 0.1, 0.5, 0.9] {
+            // For a range of mean anomalies, verify M→E→ν→E→M roundtrip
+            for i in 0..10 {
+                let m_orig = (i as f64) * 2.0 * PI / 10.0;
+                let ea = mean2eccentric(m_orig, e);
+                let nu = eccentric2true(ea, e);
+
+                // Reconstruct eccentric anomaly from true anomaly
+                let ea2 = f64::atan2(
+                    nu.sin() * e.mul_add(-e, 1.0).sqrt(),
+                    e + nu.cos(),
+                );
+                // Reconstruct mean anomaly from eccentric anomaly
+                let m_back = e.mul_add(-ea2.sin(), ea2);
+
+                // Normalize both to [0, 2π) for comparison
+                let m_orig_norm = m_orig.rem_euclid(2.0 * PI);
+                let m_back_norm = m_back.rem_euclid(2.0 * PI);
+                let diff = (m_orig_norm - m_back_norm).abs();
+                let diff = diff.min((2.0 * PI - diff).abs());
+                assert!(
+                    diff < 1.0e-10,
+                    "Anomaly roundtrip failed for e={}, M={}: diff={}",
+                    e,
+                    m_orig,
+                    diff
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_topv() {
         // Example 2-6 from Vallado
         let p = 11067790.0;
