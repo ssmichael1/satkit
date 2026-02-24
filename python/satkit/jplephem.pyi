@@ -23,6 +23,7 @@ def geocentric_pos(
     Returns:
         numpy.ndarray: 3-vector of cartesian Geocentric position in meters. If input is list or numpy array of N times, then r will be Nx3 array
     """
+    ...
 
 def barycentric_pos(
     body: satkit.solarsystem,
@@ -44,11 +45,12 @@ def barycentric_pos(
      * The sun position is relative to the solar system barycenter
        (it will be close to origin)
     """
+    ...
 
 def geocentric_state(
     body: satkit.solarsystem,
     tm: satkit.time | list[satkit.time] | npt.ArrayLike,
-) -> typing.Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Return the position and velocity of the given body in Geocentric coordinate system (GCRF)
 
     Args:
@@ -58,11 +60,12 @@ def geocentric_state(
     Returns:
         tuple: (r, v) where r is the position in meters and v is the velocity in meters / second.  If input is list or numpy array of N times, then r and v will be Nx3 arrays
     """
+    ...
 
 def barycentric_state(
     body: satkit.solarsystem,
     tm: satkit.time | list[satkit.time] | npt.ArrayLike,
-) -> typing.Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Return the position & velocity the given body in the barycentric coordinate system (origin is solar system barycenter)
 
 
@@ -81,3 +84,4 @@ def barycentric_state(
        (it will be close to origin)
 
     """
+    ...
