@@ -28,5 +28,13 @@ def heliocentric_pos(
     Returns:
         numpy.ndarray: 3-vector of Cartesian position in meters, with the origin at the Sun.
                        If input is list or numpy array of N times, then r will be Nx3 array
+
+    Example:
+        ```python
+        import numpy as np
+        t = satkit.time(2024, 1, 1)
+        pos = satkit.planets.heliocentric_pos(satkit.solarsystem.Mars, t)
+        print(f"Mars distance from Sun: {np.linalg.norm(pos)/satkit.consts.au:.2f} AU")
+        ```
     """
     ...

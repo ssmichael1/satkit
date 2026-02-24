@@ -31,6 +31,14 @@ def gmst(tm: time | datetime.datetime) -> float:
 
     Returns:
         float: Greenwich Mean Sidereal Time, radians, at input time
+
+    Example:
+        ```python
+        import math
+        t = satkit.time(2024, 1, 1)
+        theta = satkit.frametransform.gmst(t)
+        print(f"GMST: {math.degrees(theta):.4f} deg")
+        ```
     """
     ...
 
@@ -64,6 +72,12 @@ def gast(
 
     Returns:
         float : Greenwich apparent sidereal time, radians, at input time(s)
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        theta = satkit.frametransform.gast(t)
+        ```
     """
     ...
 
@@ -99,6 +113,12 @@ def earth_rotation_angle(
 
     Returns:
         float: Earth Rotation Angle at input time[s] in radians
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        era = satkit.frametransform.earth_rotation_angle(t)
+        ```
     """
     ...
 
@@ -162,6 +182,12 @@ def qteme2gcrf(
 
     Returns:
         quaternion : Quaternion representing rotation from TEME to GCRF at input time(s)
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        q = satkit.frametransform.qteme2gcrf(t)
+        ```
     """
     ...
 
@@ -320,6 +346,18 @@ def qgcrf2itrf(
 
     Returns:
         quaternion | npt.ArrayLike[quaternion]: Quaternion representing rotation from GCRF to ITRF at input time(s)
+
+    Example:
+        ```python
+        import numpy as np
+
+        t = satkit.time(2024, 1, 1)
+        q = satkit.frametransform.qgcrf2itrf(t)
+
+        # Rotate a GCRF position vector to ITRF
+        pos_gcrf = np.array([6.781e6, 0, 0])
+        pos_itrf = q * pos_gcrf
+        ```
     """
     ...
 
@@ -359,6 +397,12 @@ def qitrf2gcrf(
         tm (satkit.time  datetime.datetime): Time[s] at which to calculate the quaternion
     Returns:
         quaternion : Quaternion representing rotation from ITRF to GCRF at input time(s)
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        q = satkit.frametransform.qitrf2gcrf(t)
+        ```
     """
     ...
 
@@ -397,6 +441,18 @@ def qteme2itrf(
 
     Returns:
         quaternion: Quaternion representing rotation from TEME to ITRF at input time(s)
+
+    Example:
+        ```python
+        import numpy as np
+
+        t = satkit.time(2024, 1, 1)
+        q = satkit.frametransform.qteme2itrf(t)
+
+        # Convert SGP4 TEME output to ITRF
+        pos_teme = np.array([6.781e6, 0, 0])
+        pos_itrf = q * pos_teme
+        ```
     """
     ...
 
@@ -441,6 +497,14 @@ def earth_orientation_params(
         * If EOP are not available, all values will be set to zero, and a warning will be printed to stderr
         * See: https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html
 
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        eop = satkit.frametransform.earth_orientation_params(t)
+        if eop is not None:
+            ut1_utc, xp, yp, lod, dx, dy = eop
+            print(f"UT1-UTC: {ut1_utc:.6f} s")
+        ```
     """
     ...
 

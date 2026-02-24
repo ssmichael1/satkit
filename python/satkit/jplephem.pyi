@@ -22,6 +22,14 @@ def geocentric_pos(
 
     Returns:
         numpy.ndarray: 3-vector of cartesian Geocentric position in meters. If input is list or numpy array of N times, then r will be Nx3 array
+
+    Example:
+        ```python
+        import numpy as np
+        t = satkit.time(2024, 1, 1)
+        pos = satkit.jplephem.geocentric_pos(satkit.solarsystem.Sun, t)
+        print(f"Sun distance from Earth: {np.linalg.norm(pos)/1e9:.3f} million km")
+        ```
     """
     ...
 
@@ -59,6 +67,14 @@ def geocentric_state(
 
     Returns:
         tuple: (r, v) where r is the position in meters and v is the velocity in meters / second.  If input is list or numpy array of N times, then r and v will be Nx3 arrays
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        pos, vel = satkit.jplephem.geocentric_state(satkit.solarsystem.Moon, t)
+        print(f"Moon position (GCRF): {pos} m")
+        print(f"Moon velocity (GCRF): {vel} m/s")
+        ```
     """
     ...
 

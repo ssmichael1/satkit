@@ -46,6 +46,13 @@ class TLE:
         Returns:
             list[TLE] | TLE: a list of TLE objects or a single TLE of lines for
             only 1 are passed in
+
+        Example:
+            ```python
+            tles = satkit.TLE.from_file("gps-ops.txt")
+            for tle in tles:
+                print(tle.name, tle.satnum)
+            ```
         """
         ...
 
@@ -62,6 +69,18 @@ class TLE:
         Returns:
             list[TLE] | TLE: a list of TLE objects or a single TLE of lines for
             only 1 are passed in
+
+        Example:
+            ```python
+            lines = [
+                "0 ISS (ZARYA)",
+                "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
+                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878"
+            ]
+            tle = satkit.TLE.from_lines(lines)
+            print(tle.name)
+            # ISS (ZARYA)
+            ```
         """
         ...
 
@@ -206,6 +225,15 @@ class TLE:
 
         Returns:
             list[str]: 2 canonical TLE Lines
+
+        Example:
+            ```python
+            lines = tle.to_2line()
+            print(lines[0])
+            # 1 25544U 98067A  ...
+            print(lines[1])
+            # 2 25544  51.6442 ...
+            ```
         """
         ...
 
@@ -215,6 +243,13 @@ class TLE:
 
         Returns:
             list[str]: 3-line element set, name line then 2 canonical TLE lines
+
+        Example:
+            ```python
+            lines = tle.to_3line()
+            for line in lines:
+                print(line)
+            ```
         """
         ...
 
@@ -271,6 +306,19 @@ class TLE:
                 * `xerror`: Final parameter uncertainties (1-sigma)
                 * `covar`: Final parameter covariance matrix
 
+        Example:
+            ```python
+            import numpy as np
+
+            # Given a list of GCRF states and times
+            states = [np.array([pos0[0], pos0[1], pos0[2], vel0[0], vel0[1], vel0[2]])]
+            times = [satkit.time(2024, 1, 1)]
+            epoch = satkit.time(2024, 1, 1)
+
+            tle, results = satkit.TLE.fit_from_states(states, times, epoch)
+            if results["success"] == satkit.mpsuccess.MP_OK_CHI:
+                print("Fit successful")
+            ```
         """
         ...
 
@@ -434,6 +482,13 @@ def gravity(
     Notes:
         *  For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 
+    Example:
+        ```python
+        coord = satkit.itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=0)
+        accel = satkit.gravity(coord)
+        print(accel)
+        # array with acceleration in m/s^2 in ITRF
+        ```
     """
     ...
 
@@ -816,6 +871,13 @@ class time:
 
         Returns:
             satkit.time: Time object representing the start of the input day (midnight)
+
+        Example:
+            ```python
+            t = satkit.time.from_date(2023, 6, 15)
+            print(t)
+            # 2023-06-15 00:00:00.000Z
+            ```
         """
         ...
 
@@ -829,6 +891,12 @@ class time:
 
         Returns:
             satkit.time: Time object representing input Julian date and time scale
+
+        Example:
+            ```python
+            t = satkit.time.from_jd(2460000.5)
+            print(t)
+            ```
         """
         ...
 
@@ -842,6 +910,13 @@ class time:
 
         Returns:
             satkit.time: Time object representing input unixtime
+
+        Example:
+            ```python
+            t = satkit.time.from_unixtime(1700000000)
+            print(t)
+            # 2023-11-14 22:13:20.000Z
+            ```
         """
         ...
 
@@ -886,6 +961,12 @@ class time:
 
         Returns:
             satkit.time: Time object representing input modified Julian date and time scale
+
+        Example:
+            ```python
+            t = satkit.time.from_mjd(60000.0)
+            print(t)
+            ```
         """
         ...
 
@@ -1369,6 +1450,13 @@ class duration:
 
         Returns:
             satkit.duration: Duration object representing input number of days
+
+        Example:
+            ```python
+            d = satkit.duration.from_days(1.5)
+            print(d.hours)
+            # 36.0
+            ```
         """
         ...
 
@@ -1381,6 +1469,13 @@ class duration:
 
         Returns:
             satkit.duration: Duration object representing input number of seconds
+
+        Example:
+            ```python
+            d = satkit.duration.from_seconds(3600)
+            print(d.hours)
+            # 1.0
+            ```
         """
         ...
 
@@ -1660,6 +1755,16 @@ class quaternion:
 
         Args:
             w: Scalar component of the quaternion
+
+        Example:
+            ```python
+            # Identity quaternion (no rotation)
+            q = satkit.quaternion()
+
+            # 90 degree rotation about z-axis
+            import math
+            q = satkit.quaternion.rotz(math.radians(90))
+            ```
             x: X component of the quaternion
             y: Y component of the quaternion
             z: Z component of the quaternion
@@ -1760,6 +1865,16 @@ class quaternion:
 
         Returns:
             satkit.quaternion: Quaternion that rotates from v1 to v2
+
+        Example:
+            ```python
+            import numpy as np
+            v1 = np.array([1, 0, 0])
+            v2 = np.array([0, 1, 0])
+            q = satkit.quaternion.rotation_between(v1, v2)
+            print(q * v1)
+            # [0, 1, 0]
+            ```
         """
         ...
 
@@ -1897,6 +2012,16 @@ class quaternion:
 
         Returns:
             quaternion: Quaternion representing interpolation between self and other
+
+        Example:
+            ```python
+            import math
+            q1 = satkit.quaternion.rotz(math.radians(0))
+            q2 = satkit.quaternion.rotz(math.radians(90))
+            q_mid = q1.slerp(q2, 0.5)
+            print(f"Mid-rotation angle: {math.degrees(q_mid.angle()):.1f} deg")
+            # Mid-rotation angle: 45.0 deg
+            ```
         """
         ...
 
@@ -1942,6 +2067,21 @@ class kepler:
             If "nu" is provided (6th argument), it will be used as the true anomaly.
             Anomaly may also be set via keyword arguments; if so, there should only be
             5 positional input arguments.
+
+        Example:
+            ```python
+            import math
+
+            # Create a ~400 km circular LEO orbit
+            k = satkit.kepler(
+                a=6.781e6,        # semi-major axis, meters
+                e=0.001,          # near-circular
+                i=math.radians(51.6),
+                raan=math.radians(0),
+                argp=math.radians(0),
+                nu=math.radians(0),
+            )
+            ```
         """
         ...
 
@@ -1952,6 +2092,13 @@ class kepler:
 
         Returns:
             tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: Tuple with two elements representing the position and velocity vectors
+
+        Example:
+            ```python
+            pos, vel = k.to_pv()
+            print(f"Position: {pos} m")
+            print(f"Velocity: {vel} m/s")
+            ```
         """
         ...
 
@@ -1964,6 +2111,12 @@ class kepler:
 
         Returns:
             satkit.kepler: Keplerian element set object after propagation
+
+        Example:
+            ```python
+            # Propagate orbit by one orbital period
+            k2 = k.propagate(k.period)
+            ```
         """
         ...
 
@@ -2048,6 +2201,16 @@ class kepler:
 
         Returns:
             Keplerian element set object
+
+        Example:
+            ```python
+            import numpy as np
+            pos = np.array([6.781e6, 0, 0])  # meters, GCRF
+            vel = np.array([0, 7.5e3, 0])    # m/s, GCRF
+            k = satkit.kepler.from_pv(pos, vel)
+            print(f"Semi-major axis: {k.a/1e3:.1f} km")
+            print(f"Eccentricity: {k.e:.6f}")
+            ```
         """
         ...
 
@@ -2179,6 +2342,13 @@ class itrfcoord:
         Note:
             * This is equivalent to calling: refcoord.qenu2itrf.conj * (self - refcoord)
 
+        Example:
+            ```python
+            station = satkit.itrfcoord(latitude_deg=42.36, longitude_deg=-71.06, altitude=0)
+            target = satkit.itrfcoord(latitude_deg=42.37, longitude_deg=-71.06, altitude=1000)
+            enu = target.to_enu(station)
+            print(f"East: {enu[0]:.1f} m, North: {enu[1]:.1f} m, Up: {enu[2]:.1f} m")
+            ```
         """
         ...
 
@@ -2215,6 +2385,13 @@ class itrfcoord:
         Returns:
             tuple[float, float, float]: (distance in meters, initial heading in radians, heading at destination in radians)
 
+        Example:
+            ```python
+            boston = satkit.itrfcoord(latitude_deg=42.36, longitude_deg=-71.06, altitude=0)
+            nyc = satkit.itrfcoord(latitude_deg=40.71, longitude_deg=-74.01, altitude=0)
+            dist, heading_start, heading_end = boston.geodesic_distance(nyc)
+            print(f"Distance: {dist/1000:.1f} km")
+            ```
         """
         ...
 
@@ -2234,6 +2411,14 @@ class itrfcoord:
         Returns:
             tuple[float, float, float]: (distance in meters, initial heading in radians, heading at destination in radians)
 
+        Example:
+            ```python
+            import math
+            start = satkit.itrfcoord(latitude_deg=42.36, longitude_deg=-71.06, altitude=0)
+            # Move 100 km due north
+            dest = start.move_with_heading(100e3, math.radians(0))
+            print(f"Destination: {dest.latitude_deg:.2f} deg lat, {dest.longitude_deg:.2f} deg lon")
+            ```
         """
         ...
 
@@ -2314,6 +2499,16 @@ class satstate:
             pos (npt.NDArray[np.float64]): Position in meters in GCRF frame
             vel (npt.NDArray[np.float64]): Velocity in meters / second in GCRF frame
             cov (npt.NDArray[np.float64]|None, optional): Covariance in GCRF frame. Defaults to None.  If input, should be a 6x6 numpy array
+
+        Example:
+            ```python
+            import numpy as np
+
+            t = satkit.time(2024, 1, 1)
+            pos = np.array([6.781e6, 0, 0])       # meters, GCRF
+            vel = np.array([0, 7.5e3, 0])          # m/s, GCRF
+            state = satkit.satstate(t, pos, vel)
+            ```
         """
         ...
 
@@ -2372,6 +2567,13 @@ class satstate:
 
         Returns:
             satstate: New satellite state object representing the state at the new time
+
+        Example:
+            ```python
+            # Propagate forward by 90 minutes
+            new_state = state.propagate(satkit.duration(minutes=90))
+            print(new_state.pos)
+            ```
         """
         ...
 
@@ -2516,6 +2718,15 @@ class propresult:
 
         Returns:
             npt.ArrayLike[np.float64] | tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: 6-element vector representing state at given time. if output_phi, also output 6x6 state transition matrix at given time
+
+        Example:
+            ```python
+            # After propagation with enable_interp=True
+            result = satkit.propagate(state, t0, duration_days=1.0)
+            t_mid = t0 + satkit.duration(hours=12)
+            mid_state = result.interp(t_mid)
+            print(f"Position at 12h: {mid_state[0:3]} m")
+            ```
         """
         ...
 
@@ -2607,6 +2818,15 @@ class propsettings:
 
         Returns:
             New propsettings object with default settings
+
+        Example:
+            ```python
+            settings = satkit.propsettings(
+                gravity_order=16,
+                abs_error=1e-10,
+                rel_error=1e-10,
+            )
+            ```
         """
         ...
 
@@ -2731,5 +2951,22 @@ def propagate(
         End time must be set by keyword argument, either explicitly or by duration.
         Solid Earth tides are not (yet) included in the model.
 
+    Example:
+        ```python
+        import numpy as np
+
+        # Define initial state in GCRF (position in meters, velocity in m/s)
+        state = np.array([6.781e6, 0, 0, 0, 7.5e3, 0])
+        t0 = satkit.time(2024, 1, 1)
+
+        # Propagate forward by 1 day
+        result = satkit.propagate(state, t0, duration_days=1.0)
+        print(f"End position: {result.pos} m")
+        print(f"End velocity: {result.vel} m/s")
+
+        # Interpolate at intermediate time
+        t_mid = t0 + satkit.duration(hours=12)
+        mid_state = result.interp(t_mid)
+        ```
     """
     ...

@@ -32,6 +32,15 @@ def update_datafiles(**kwargs) -> None:
 
         * The space weather and earth orientation parameters files are updated
           daily and will always be downloaded regardless of the overwrite flag
+
+    Example:
+        ```python
+        # Download all data files to the default data directory
+        satkit.utils.update_datafiles()
+
+        # Force re-download of all files
+        satkit.utils.update_datafiles(overwrite=True)
+        ```
     """
     ...
 
@@ -63,6 +72,12 @@ def datadir() -> str:
         2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is location of compiled python satkit library
         3. ``$HOME/.astro-data``
         4. ``$HOME``
+
+    Example:
+        ```python
+        print(satkit.utils.datadir())
+        # /Users/user/.astro-data
+        ```
     """
     ...
 

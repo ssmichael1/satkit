@@ -26,6 +26,14 @@ def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
 
     Notes:
         From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+
+    Example:
+        ```python
+        import numpy as np
+        t = satkit.time(2024, 6, 21)
+        sun = satkit.sun.pos_gcrf(t)
+        print(f"Sun distance: {np.linalg.norm(sun)/1e9:.3f} million km")
+        ```
     """
     ...
 
@@ -119,6 +127,15 @@ def rise_set(
 
     Returns:
         tuple[satkit.time, satkit.time]: (sunrise, sunset)
+
+    Example:
+        ```python
+        coord = satkit.itrfcoord(latitude_deg=42.36, longitude_deg=-71.06, altitude=0)
+        t = satkit.time.from_date(2024, 6, 21)
+        sunrise, sunset = satkit.sun.rise_set(t, coord)
+        print(f"Sunrise: {sunrise}")
+        print(f"Sunset:  {sunset}")
+        ```
     """
     ...
 
@@ -137,5 +154,17 @@ def shadowfunc(
 
     Returns:
         float: number in range [0,1] indicating no sun or full sun (no occlusion) hitting satellite
+
+    Example:
+        ```python
+        t = satkit.time(2024, 1, 1)
+        sun = satkit.sun.pos_gcrf(t)
+        sat_pos = np.array([6.781e6, 0, 0])  # satellite position, GCRF, meters
+        shadow = satkit.sun.shadowfunc(sun, sat_pos)
+        if shadow < 0.01:
+            print("Satellite is in Earth shadow")
+        else:
+            print(f"Illumination fraction: {shadow:.2f}")
+        ```
     """
     ...
