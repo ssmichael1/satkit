@@ -320,41 +320,41 @@ def sgp4(
 
 
     Example:
-        >>> lines = [
-        >>>        "0 INTELSAT 902",
-        >>>     "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
-        >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981"
-        >>> ]
-        >>>
-        >>> tle = satkit.TLE.single_from_lines(lines)
-        >>>
-        >>> # Compute TEME position & velocity at epoch
-        >>> pteme, vteme = satkit.sgp4(tle, tle.epoch)
-        >>>
-        >>> # Rotate to ITRF frame
-        >>> q = satkit.frametransform.qteme2itrf(tm)
-        >>> pitrf = q * pteme
-        >>> vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
-        >>>
-        >>> # convert to ITRF coordinate object
-        >>> coord = satkit.itrfcoord.from_vector(pitrf)
-        >>>
-        >>> # Print ITRF coordinate object location
-        >>> print(coord)
+        lines = [
+               "0 INTELSAT 902",
+            "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
+            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981"
+        ]
+        
+        tle = satkit.TLE.single_from_lines(lines)
+        
+        # Compute TEME position & velocity at epoch
+        pteme, vteme = satkit.sgp4(tle, tle.epoch)
+        
+        # Rotate to ITRF frame
+        q = satkit.frametransform.qteme2itrf(tm)
+        pitrf = q * pteme
+        vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
+        
+        # convert to ITRF coordinate object
+        coord = satkit.itrfcoord.from_vector(pitrf)
+        
+        # Print ITRF coordinate object location
+        print(coord)
         ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
 
     Example 2:
-        >>> import requests
-        >>> import json
-        >>>
-        >>> # Query ephemeris for the International Space Station (ISS)
-        >>> url = 'https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json'
-        >>> with requests.get(url) as response:
-        >>>     omm = response.json()
-        >>> # Get a representative time from the output
-        >>> epoch = sk.time(omm[0]['EPOCH'])
-        >>> # Compute TEME position & velocity at epoch
-        >>> pteme, vteme = satkit.sgp4(omm[0], epoch)
+        import requests
+        import json
+        
+        # Query ephemeris for the International Space Station (ISS)
+        url = 'https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json'
+        with requests.get(url) as response:
+            omm = response.json()
+        # Get a representative time from the output
+        epoch = sk.time(omm[0]['EPOCH'])
+        # Compute TEME position & velocity at epoch
+        pteme, vteme = satkit.sgp4(omm[0], epoch)
 
     """
     ...
@@ -657,10 +657,10 @@ class time:
         * If hour is passed in, minute and second must also be passed in
 
     Example:
-        >>> print(satkit.time(2023, 3, 5, 11, 3, 45.453))
+        print(satkit.time(2023, 3, 5, 11, 3, 45.453))
         2023-03-05 11:03:45.453Z
 
-        >>> print(satkit.time(2023, 3, 5))
+        print(satkit.time(2023, 3, 5))
         2023-03-05 00:00:00.000Z
 
     """
@@ -700,10 +700,10 @@ class time:
             str: String representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
 
         Example:
-            >>> print(satkit.time(2023, 3, 5, 11, 3, 45.453))
+            print(satkit.time(2023, 3, 5, 11, 3, 45.453))
             2023-03-05 11:03:45.453Z
 
-            >>> print(satkit.time(2023, 3, 5))
+            print(satkit.time(2023, 3, 5))
             2023-03-05 00:00:00.000Z
         """
         ...
@@ -733,7 +733,7 @@ class time:
             satkit.time: Time object representing input string
 
         Example:
-            >>> print(satkit.time.from_string("2023-03-05 11:03:45.453Z"))
+            print(satkit.time.from_string("2023-03-05 11:03:45.453Z"))
             2023-03-05 11:03:45.453Z
         """
         ...
@@ -753,7 +753,7 @@ class time:
             satkit.time: Time object representing input RFC 3339 string
 
         Example:
-            >>> print(satkit.time.from_rfctime("2023-03-05T11:03:45.453Z"))
+            print(satkit.time.from_rfctime("2023-03-05T11:03:45.453Z"))
             2023-03-05 11:03:45.453Z
         """
         ...
@@ -786,7 +786,7 @@ class time:
 
         Example:
             # Note the microsecond %f actually is represented as milliseconds in the input string
-            >>> print(satkit.time.strptime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
+            print(satkit.time.strptime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
             2023-03-05 11:03:45.453Z
         """
         ...
@@ -913,7 +913,7 @@ class time:
             satkit.time: Time object representing input UTC Gregorian time
 
         Example:
-            >>> print(satkit.time.from_datetime(2023, 3, 5, 11, 3,45.453))
+            print(satkit.time.from_datetime(2023, 3, 5, 11, 3,45.453))
             2023-03-05 11:03:45.453Z
         """
         ...
@@ -957,7 +957,7 @@ class time:
             satkit.time: Time object representing input UTC Gregorian time
 
         Example:
-            >>> print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
+            print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
             2023-03-05 11:03:45.453Z
         """
         ...
@@ -985,12 +985,12 @@ class time:
             datetime.datetime: "datetime.datetime" object representing the same instant in time as the "satkit.time" object
 
         Example:
-            >>> dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(True)
-            >>> print(dt)
+            dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(True)
+            print(dt)
             2023-06-03 06:19:34+00:00
-            >>>
-            >>> dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(False)
-            >>> print(dt)
+            
+            dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(False)
+            print(dt)
             2023-06-03 02:19:34
         """
         ...
@@ -1007,12 +1007,12 @@ class time:
             datetime.datetime: "datetime.datetime" object representing the same instant in time as the "satkit.time" object
 
         Example:
-            >>> dt = satkit.time(2023, 6, 3, 6, 19, 34).datetime(True)
-            >>> print(dt)
+            dt = satkit.time(2023, 6, 3, 6, 19, 34).datetime(True)
+            print(dt)
             2023-06-03 06:19:34+00:00
-            >>>
-            >>> dt = satkit.time(2023, 6, 3, 6, 19, 34).datetime(False)
-            >>> print(dt)
+            
+            dt = satkit.time(2023, 6, 3, 6, 19, 34).datetime(False)
+            print(dt)
             2023-06-03 02:19:34
         """
         ...
@@ -1087,7 +1087,7 @@ class time:
             str: string representation of time
 
         Example:
-            >>> print(satkit.time(2023, 6, 3, 6, 19, 34).strptime("%Y-%m-%d %H:%M:%S"))
+            print(satkit.time(2023, 6, 3, 6, 19, 34).strptime("%Y-%m-%d %H:%M:%S"))
             2023-06-03 06:19:34
         """
         ...
@@ -1328,7 +1328,7 @@ class duration:
             * If no arguments are passed in, the created object represents a duration of 0 seconds
 
         Example:
-            >>> print(satkit.duration(days=1, hours=2, minutes=3, seconds=4.5))
+            print(satkit.duration(days=1, hours=2, minutes=3, seconds=4.5))
             Duration: 1 days, 2 hours, 3 minutes, 4.500 seconds
 
         """
@@ -1393,7 +1393,7 @@ class duration:
             duration: Duration object representing the sum, or concatenation, of both durations
 
         Example:
-            >>> print(duration.from_hours(1) + duration.from_minutes(1))
+            print(duration.from_hours(1) + duration.from_minutes(1))
             Duration: 1 hours, 1 minutes, 0.000 seconds
         """
         ...
@@ -1409,7 +1409,7 @@ class duration:
             duration: Duration object representing the input number of days added to the current duration
 
         Example:
-            >>> print(duration.from_days(1) + 2.5)
+            print(duration.from_days(1) + 2.5)
             Duration: 3 days, 0 hours, 0 minutes, 0.000 seconds
         """
         ...
@@ -1425,7 +1425,7 @@ class duration:
             time: Time object representing the input time plus the duration
 
         Example:
-            >>> print(duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
+            print(duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
             2023-06-04 13:30:00.000Z
         """
         ...
@@ -1440,7 +1440,7 @@ class duration:
             duration: Duration object representing the difference between the two durations
 
         Example:
-            >>> print(duration.from_hours(1) - duration.from_minutes(1))
+            print(duration.from_hours(1) - duration.from_minutes(1))
             Duration: 59 minutes, 0.000 seconds
         """
         ...
@@ -1455,7 +1455,7 @@ class duration:
             duration: Duration object representing the input duration scaled by the input value
 
         Example:
-            >>> print(duration.from_days(1) * 2.5)
+            print(duration.from_days(1) * 2.5)
             Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
         """
         ...
@@ -1471,7 +1471,7 @@ class duration:
             duration: Duration object representing the input duration divided by the input value
 
         Example:
-            >>> print(duration.from_days(1) / 2)
+            print(duration.from_days(1) / 2)
             Duration: 12 hours, 0 minutes, 0.000 seconds
         """
         ...
@@ -1487,7 +1487,7 @@ class duration:
             float: Dimensionless ratio of the two durations
 
         Example:
-            >>> print(duration.from_hours(1) / duration.from_minutes(30))
+            print(duration.from_hours(1) / duration.from_minutes(30))
             2.0
         """
         ...
@@ -1501,7 +1501,7 @@ class duration:
             bool: True if "self" duration is greater than "other" duration, False otherwise
 
         Example:
-            >>> print(duration.from_hours(1) > duration.from_minutes(30))
+            print(duration.from_hours(1) > duration.from_minutes(30))
             True
         """
         ...
@@ -1515,7 +1515,7 @@ class duration:
             bool: True if "self" duration is less than "other" duration, False otherwise
 
         Example:
-            >>> print(duration.from_hours(1) < duration.from_minutes(30))
+            print(duration.from_hours(1) < duration.from_minutes(30))
             False
         """
         ...
@@ -1529,7 +1529,7 @@ class duration:
             bool: True if "self" duration is greater than or equal to "other" duration, False otherwise
 
         Example:
-            >>> print(duration.from_hours(1) >= duration.from_minutes(30))
+            print(duration.from_hours(1) >= duration.from_minutes(30))
             True
         """
         ...
@@ -1543,7 +1543,7 @@ class duration:
             bool: True if "self" duration is less than or equal to "other" duration, False otherwise
 
         Example:
-            >>> print(duration.from_hours(1) <= duration.from_minutes(30))
+            print(duration.from_hours(1) <= duration.from_minutes(30))
             False
         """
         ...
@@ -1802,7 +1802,6 @@ class quaternion:
         """
         ...
 
-
     @typing.overload
     def __mul__(self, other: quaternion) -> quaternion:
         """Multiply by another quaternion to concatenate rotations
@@ -1829,9 +1828,9 @@ class quaternion:
             npt.ArrayLike[np.float64]: 3-element array representing rotated vector or Nx3 array of rotated vectors
 
         Example:
-            >>> xhat = np.array([1,0,0])
-            >>> q = satkit.quaternion.rotz(np.pi/2)
-            >>> print(q * xhat)
+            xhat = np.array([1,0,0])
+            q = satkit.quaternion.rotz(np.pi/2)
+            print(q * xhat)
             [0, 1, 0]
         """
         ...
@@ -2491,11 +2490,11 @@ class satproperties_static:
 
         Example:
 
-        >>> properties = satproperties_static(craoverm = 0.5, cdaoverm = 0.4)
+        properties = satproperties_static(craoverm = 0.5, cdaoverm = 0.4)
 
         or with same output
 
-        >>> properties = satproperties_static(0.5, 0.4)
+        properties = satproperties_static(0.5, 0.4)
 
         """
         ...
@@ -2507,7 +2506,6 @@ class satproperties_static:
 
     @cdaoverm.setter
     def cdaoverm(self, value: float) -> None: ...
-
     @property
     def craoverm(self) -> float:
         """Coefficient of radiation pressure times area over mass.  Units are m^2/kg"""
@@ -2619,9 +2617,7 @@ class propsettings:
 
     @enable_interp.setter
     def enable_interp(self, value: bool) -> None: ...
-    def precompute_terms(
-        self, begin: time, end: time, step: Optional[duration] = None
-    ):
+    def precompute_terms(self, begin: time, end: time, step: Optional[duration] = None):
         """Precompute terms for fast interpolation of state between begin and end times
 
         This can be used, for example, to compute sun and moon positions only once if propagating many satellites over the same time period
