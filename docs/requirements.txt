@@ -10,5 +10,4 @@ ipykernel
 pandas
 scipy
 requests
-pytz
 xmltodict

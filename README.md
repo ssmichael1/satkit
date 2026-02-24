@@ -17,7 +17,6 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/satkit)
 ![PyPI - Status](https://img.shields.io/pypi/status/satkit)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/satkit)
-![Read the Docs](https://img.shields.io/readthedocs/satellite-toolkit)
 
 ------
 
@@ -28,7 +27,7 @@ Satkit provides robust, high-performance satellite orbital mechanics calculation
   - Install with `pip install satkit`
   - Binary packages available for Windows, macOS (Intel & ARM), and Linux (x86_64 & ARM64)
   - Python versions 3.8 through 3.14 supported
-  - Full documentation at <https://satellite-toolkit.readthedocs.io/latest/>
+  - Full documentation at <https://ssmichael1.github.io/satkit/>
 
 ## Optional Features
 
@@ -356,10 +355,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Documentation
 
 - **Rust API Documentation**: Available on [docs.rs](https://docs.rs/satkit/)
-- **Python Documentation**: Comprehensive guide at [satellite-toolkit.readthedocs.io](https://satellite-toolkit.readthedocs.io/)
+- **Python Documentation**: Comprehensive guide at [ssmichael1.github.io/satkit](https://ssmichael1.github.io/satkit/)
   - Getting started tutorials
+  - Interactive Jupyter notebook examples
   - API reference with examples
-  - Theory and implementation notes
   - Data file management guide
 
 ## Use Cases
