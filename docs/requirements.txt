@@ -8,6 +8,7 @@ satkit-data>=0.9.0
 numpy
 plotly
 ipykernel
+xmltodict
 pandas
 scipy
 requests
