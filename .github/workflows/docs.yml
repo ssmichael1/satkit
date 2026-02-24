@@ -1,38 +1,75 @@
-name: Publish Docs
+name: Docs
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "python/docs/**"
-      - ".readthedocs.yaml"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
-  readthedocs:
+  build:
     runs-on: ubuntu-latest
-    environment: readthedocs
     steps:
-      - name: Trigger Read the Docs builds (stable + latest)
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-docs-
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Cache astro-data
+        id: cache-astro-data
+        uses: actions/cache@v4
+        with:
+          path: astro-data
+          key: astro-data-v1
+
+      - name: Install satkit
+        run: pip install -e .
+
+      - name: Install docs dependencies
+        run: pip install -r docs/requirements.txt
+
+      - name: Build docs
         env:
-          RTD_TOKEN: ${{ secrets.RTD_TOKEN }}
-          RTD_HOST: app.readthedocs.org
-          RTD_PROJECT: satellite-toolkit
-        run: |
-          set -euo pipefail
+          SATKIT_DATA: astro-data
+          PLOTLY_RENDERER: notebook
+        run: mkdocs build
 
-          # Optional: sync versions/tags
-          curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/sync-versions/" \
-            -H "Authorization: Token ${RTD_TOKEN}"
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
-          # Build stable
-          curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/versions/stable/builds/" \
-            -H "Authorization: Token ${RTD_TOKEN}"
-
-          # Build latest
-          curl -fsS -X POST "https://${RTD_HOST}/api/v3/projects/${RTD_PROJECT}/versions/latest/builds/" \
-            -H "Authorization: Token ${RTD_TOKEN}"
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

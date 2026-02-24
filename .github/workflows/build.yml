@@ -5,12 +5,11 @@ on:
     branches:
       - "*"
     paths-ignore:
-      - "python/docs/**"
+      - "docs/**"
       - "README.md"
       - "CHANGES.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
-      - ".readthedocs.yaml"
   pull_request:
     branches:
       - "*"
@@ -21,83 +20,60 @@ on:
       - reopened
       - closed
     paths-ignore:
-      - "python/docs/**"
+      - "docs/**"
       - "README.md"
       - "CHANGES.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
-      - ".readthedocs.yaml"
 
 jobs:
-  build:
-    name: build and test satkit
+  rust:
+    name: rust build and test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos
-          - ubuntu
-          - windows
-        include:
-          - os: ubuntu
-            testvec_path: satkit-testvecs
-            data_path: astro-data
-            platform: linux
-          - os: macos
-            testvec_path: satkit-testvecs
-            data_path: astro-data
-          - os: windows
-            ls: dir
-            testvec_path: satkit-testvecs
-            data_path: astro-data
+        os: [macos, ubuntu, windows]
 
     runs-on: ${{ format('{0}-latest', matrix.os) }}
 
     env:
-      SATKIT_DATA: ${{matrix.data_path}}
-      SATKIT_TESTVEC_ROOT: ${{matrix.testvec_path}}
+      SATKIT_DATA: astro-data
+      SATKIT_TESTVEC_ROOT: satkit-testvecs
 
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
 
-
-      # Try to recover satkit data from cache
       - name: Cache Satkit Data
         id: cache-satkit-data
         uses: actions/cache@v4
         with:
-          path: ${{matrix.data_path}}
-          enableCrossOsArchive: True
+          path: astro-data
+          enableCrossOsArchive: true
           key: satkit-data-cache
 
-      # Download data if it is not in the cache
       - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'
         run: |
           python -m pip install requests
-          python python/test/download_data.py ${{matrix.data_path}}
+          python python/test/download_data.py astro-data
 
-
-      # Try to recover satkit test vectors from cache
       - name: Cache Satkit Test Vectors
         id: cache-satkit-testvecs
         uses: actions/cache@v4
         with:
-          path: ${{matrix.testvec_path}}
-          enableCrossOsArchive: True
+          path: satkit-testvecs
+          enableCrossOsArchive: true
           key: satkit-testvecs-cache
 
-      # Download test vectors if they are not in the cache
       - name: Download Satkit Test Vectors
         if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
         run: |
           python -m pip install requests
-          python python/test/download_testvecs.py ${{matrix.testvec_path}}
+          python python/test/download_testvecs.py satkit-testvecs
 
       - name: Cargo Cache
         uses: actions/cache@v4
-        continue-on-error: false
         with:
           path: |
             ~/.cargo/bin/
@@ -117,3 +93,63 @@ jobs:
       - name: Doc
         run: cargo doc --no-deps
 
+  python:
+    name: python bindings test
+    runs-on: ubuntu-latest
+
+    env:
+      SATKIT_DATA: astro-data
+      SATKIT_TESTVEC_ROOT: satkit-testvecs
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Cache Satkit Data
+        id: cache-satkit-data
+        uses: actions/cache@v4
+        with:
+          path: astro-data
+          enableCrossOsArchive: true
+          key: satkit-data-cache
+
+      - name: Download Satkit Data
+        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+        run: |
+          pip install requests
+          python python/test/download_data.py astro-data
+
+      - name: Cache Satkit Test Vectors
+        id: cache-satkit-testvecs
+        uses: actions/cache@v4
+        with:
+          path: satkit-testvecs
+          enableCrossOsArchive: true
+          key: satkit-testvecs-cache
+
+      - name: Download Satkit Test Vectors
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
+        run: |
+          pip install requests
+          python python/test/download_testvecs.py satkit-testvecs
+
+      - name: Cargo Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-python-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-python-
+
+      - name: Install satkit
+        run: pip install -e ".[test]"
+
+      - name: Run Python tests
+        run: pytest python/test/test.py

@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+    branches:
+      - wheel*
+  workflow_dispatch:
+
+jobs:
+  check_version:
+    name: verify version
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify tag matches Cargo.toml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "satkit") | .version')
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
+
+  test:
+    name: test before release
+    runs-on: ubuntu-latest
+
+    env:
+      SATKIT_DATA: astro-data
+      SATKIT_TESTVEC_ROOT: satkit-testvecs
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Cache Satkit Data
+        id: cache-satkit-data
+        uses: actions/cache@v4
+        with:
+          path: astro-data
+          enableCrossOsArchive: true
+          key: satkit-data-cache
+
+      - name: Download Satkit Data
+        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+        run: |
+          pip install requests
+          python python/test/download_data.py astro-data
+
+      - name: Cache Satkit Test Vectors
+        id: cache-satkit-testvecs
+        uses: actions/cache@v4
+        with:
+          path: satkit-testvecs
+          enableCrossOsArchive: true
+          key: satkit-testvecs-cache
+
+      - name: Download Satkit Test Vectors
+        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
+        run: |
+          pip install requests
+          python python/test/download_testvecs.py satkit-testvecs
+
+      - name: Rust tests
+        run: cargo test --features chrono
+
+      - name: Install satkit
+        run: pip install -e ".[test]"
+
+      - name: Python tests
+        run: pytest python/test/test.py
+
+  publish_crate:
+    name: publish to crates.io
+    needs: [check_version, test]
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
+
+  build_wheels:
+    name: build wheels (${{ matrix.os }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+          - ubuntu-24.04-arm
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: ubuntu-24.04-arm
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+
+      - name: Set up Rust
+        if: matrix.platform != 'linux'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.2.0
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+          config-file: "{package}/pyproject.toml"
+
+      - name: Create sdist
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pip install build
+          python -m build --sdist . -o wheelhouse
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*
+
+  publish_pypi:
+    name: publish to PyPI
+    needs: build_wheels
+    runs-on: ubuntu-latest
+    environment: PyPiPublish
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: cibw-wheels-*
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

@@ -179,10 +179,6 @@ pub use itrfcoord::ITRFCoord;
 pub use solarsystem::SolarSystem;
 pub use tle::TLE;
 
-// Python bindings
-#[cfg(feature = "pybindings")]
-pub mod pybindings;
-
 // Prelude
 // Note that Duration, Instant, TimeLike, TimeScale, and Weekday
 // are also re-exported at the crate level for convenience, but they are also included in the prelude for easy import.
