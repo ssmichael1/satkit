@@ -1,6 +1,6 @@
 site_name: SatKit
 site_description: Satellite orbital mechanics library with Python bindings
-site_url: https://ssmichael1.github.io/satkit/
+site_url: https://satkit.dev/
 repo_url: https://github.com/ssmichael1/satkit
 repo_name: ssmichael1/satkit
 
