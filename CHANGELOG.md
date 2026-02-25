@@ -207,3 +207,9 @@ Starting with this release, Rust and Python versions are tracked with identical 
   - Fix broken release badge in README (wheels.yml was renamed to release.yml)
   - Rewrite README for clarity and conciseness
   - Fix `release.toml` regex so `cargo release` correctly syncs all version files
+
+## 0.10.3
+
+  - Clean up LICENSE file so GitHub correctly detects MIT license
+  - Point homepage and documentation URLs to satkit.dev
+  - Add CNAME for GitHub Pages custom domain (satkit.dev)
