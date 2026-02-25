@@ -8,9 +8,9 @@ edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
 license = "MIT"
-homepage = "https://github.com/ssmichael1/satkit"
+homepage = "https://satkit.dev"
 repository = "https://github.com/ssmichael1/satkit"
-documentation = "https://docs.rs/satkit"
+documentation = "https://satkit.dev"
 keywords = ["satellite", "orbit", "ephemeris", "tle", "astrodynamics"]
 categories = ["aerospace", "algorithms", "mathematics", "science"]
 
