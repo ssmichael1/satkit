@@ -53,25 +53,25 @@ def datadir() -> str:
 
     * MacOS:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
-        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is location of compiled python satkit library
-        3. ``$HOME/LIBRARY/Application Support/satkit-data``
-        4. ``$HOME/.astro-data``
-        5. ``$HOME``
-        6. ``/usr/share/astro-data``
-        7. ``/Library/Application Support/astro-data``
+        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
+        3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
+        4. ``$HOME/Library/Application Support/satkit-data``
+        5. ``$HOME/.satkit-data``
+        6. ``/usr/share/satkit-data``
+        7. ``/Library/Application Support/satkit-data``
 
     * Linux:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
-        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is location of compiled python satkit library
-        3. ``$HOME/.astro-data``
-        4. ``$HOME``
-        5. ``/usr/share/astro-data``
+        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
+        3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
+        4. ``$HOME/.satkit-data``
+        5. ``/usr/share/satkit-data``
 
     * Windows:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
-        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is location of compiled python satkit library
-        3. ``$HOME/.astro-data``
-        4. ``$HOME``
+        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
+        3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
+        4. ``$HOME/.satkit-data``
 
     Example:
         ```python
