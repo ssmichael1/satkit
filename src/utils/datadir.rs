@@ -20,7 +20,12 @@ pub fn testdirs() -> Vec<PathBuf> {
 
     // Look for paths in a satkit_data subdirectory
     if let Some(v) = get_dylib_path() {
-        testdirs.push(Path::new(&v).parent().unwrap_or(Path::new(".")).join("satkit-data"));
+        let parent = Path::new(&v).parent().unwrap_or(Path::new("."));
+        testdirs.push(parent.join("satkit-data"));
+        // Also look for satkit_data pip package (sibling package in site-packages)
+        if let Some(site_packages) = parent.parent() {
+            testdirs.push(site_packages.join("satkit_data").join("data"));
+        }
     }
 
     // Look for paths under home directory
@@ -70,6 +75,8 @@ pub fn set_datadir(d: &Path) -> Result<()> {
 /// files are found
 ///
 /// *  "SATKIT_DATA" environment variable
+/// *  ${DYLIB}/satkit-data where ${DYLIB} is directory containing the compiled library
+/// *  ${SITE_PACKAGES}/satkit_data/data where ${SITE_PACKAGES} is the parent of ${DYLIB} (for the satkit_data pip package)
 /// *  ${HOME}/Library/Application Support/satkit-data (on MacOS only)
 /// *  ${HOME}/.satkit-data
 /// *  /usr/share/satkit-data

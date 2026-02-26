@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 0.10.4 - 2026-02-26
+
+### Data directory fix
+- Fix data directory resolution for `satkit_data` pip package: the `data/` subdirectory was not being found because the path was missing the `/data` suffix and used the wrong parent level relative to the dylib
+- Python `__init__.py` now uses Python's import system to locate `satkit_data` package and set the data directory, rather than relying solely on Rust-side path heuristics
+- Update documentation to reflect correct data directory search order
+
+
 ## 0.5.5 - 2025-01-27
 
 ### Low-Precision Ephemeris

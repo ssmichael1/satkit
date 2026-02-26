@@ -36,13 +36,11 @@ satkit.utils.datadir()
 
 The `satkit` package will search for the data files in the following locations, in order, stopping when the files are found:
 
-- `data` subdirectory of the `satkit-data` package, if installed (which it should be, as it is a prerequisite)
 - Directory pointed to by the `SATKIT_DATA` environment variable
-- `$HOME/.satkit-data`
-- `$DYLIB_PATH/share/satkit-data` where `$DYLIB_PATH` is the location of the satkit shared library called by Python
+- `$DYLIB/satkit-data` where `$DYLIB` is the directory containing the compiled satkit library
+- `$SITE_PACKAGES/satkit_data/data` where `$SITE_PACKAGES` is the parent of `$DYLIB` (for the `satkit_data` pip package)
 - *macOS only*: `$HOME/Library/Application Support/satkit-data`
-- `$HOME/satkit-data`
-- `$HOME`
+- `$HOME/.satkit-data`
 - `/usr/share/satkit-data`
 - *macOS only*: `/Library/Application Support/satkit-data`
 

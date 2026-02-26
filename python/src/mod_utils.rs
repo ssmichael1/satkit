@@ -59,10 +59,10 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
 /// files are found
 ///
 /// *  "SATKIT_DATA" environment variable
-/// *  ${DYLIB}/satkit-data where ${DYLIB} is location of compiled python library
+/// *  ${DYLIB}/satkit-data where ${DYLIB} is directory containing the compiled python library
+/// *  ${SITE_PACKAGES}/satkit_data/data where ${SITE_PACKAGES} is the parent of ${DYLIB} (for the satkit_data pip package)
 /// *  ${HOME}/Library/Application Support/satkit-data (on MacOS Only)
 /// *  ${HOME}/.satkit-data
-/// *  ${HOME}
 /// *  /usr/share/satkit-data
 /// * /Library/Application Support/satkit-data (on MacOS Only)
 ///
