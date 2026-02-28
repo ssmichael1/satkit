@@ -90,7 +90,7 @@
 //! ## Example Usage
 //!
 //! ```no_run
-//! use satkit::{Instant, Duration, TimeScale, ITRFCoord, SolarSystem};
+//! use satkit::prelude::*;
 //!
 //! // Create a time instant
 //! let time = Instant::from_datetime(2024, 1, 1, 12, 0, 0.0).unwrap();
@@ -107,7 +107,7 @@
 //!
 //! ## References
 //!
-//! This implementation relies heaviliy on the following excellent references:
+//! This implementation relies heavily on the following excellent references:
 //!
 //! - **"Fundamentals of Astrodynamics and Applications, Fourth Edition"**
 //!   by D. Vallado, Microcosm Press and Springer, 2013
@@ -141,9 +141,9 @@ pub mod jplephem;
 pub mod kepler;
 /// Low-precision ephemeris for sun and moon
 pub mod lpephem;
-/// NRL-MISE00 Density model
+/// NRLMSISE-00 Density model
 pub mod nrlmsise;
-/// High-Precision Orbit Propagation via Runga-Kutta 9(8) Integration
+/// High-Precision Orbit Propagation via Runge-Kutta 9(8) Integration
 pub mod orbitprop;
 /// SGP-4 Orbit Propagator
 pub mod sgp4;
@@ -173,30 +173,49 @@ pub mod omm;
 mod time;
 pub use time::{Duration, Instant, TimeLike, TimeScale, Weekday};
 
-// Objects available at crate level
+// Core types available at crate level
 pub use frames::Frame;
-pub use itrfcoord::ITRFCoord;
+pub use itrfcoord::{Geodetic, ITRFCoord};
+pub use kepler::Kepler;
+pub use mathtypes::{Quaternion, Vector3};
+pub use orbitprop::{propagate, PropSettings, SatState};
 pub use solarsystem::SolarSystem;
 pub use tle::TLE;
 
-// Prelude
-// Note that Duration, Instant, TimeLike, TimeScale, and Weekday
-// are also re-exported at the crate level for convenience, but they are also included in the prelude for easy import.
+/// Prelude for convenient wildcard import.
+///
+/// Brings the most commonly used types, traits, and functions into scope.
+///
+/// ```
+/// use satkit::prelude::*;
+/// ```
 pub mod prelude {
-    pub use crate::consts::*;
-    pub use crate::earthgravity::*;
-    pub use crate::frametransform::*;
-    pub use crate::itrfcoord::*;
-    pub use crate::jplephem::*;
-    pub use crate::kepler::*;
-    pub use crate::lpephem::*;
-    pub use crate::nrlmsise::*;
-    pub use crate::omm::*;
-    pub use crate::orbitprop::*;
-    pub use crate::sgp4::*;
-    pub use crate::solarsystem::SolarSystem;
-    pub use crate::spaceweather::*;
+    // Math types
+    pub use crate::mathtypes::{Matrix3, Matrix6, Quaternion, Vector3, Vector6};
+
+    // Time
     pub use crate::time::{Duration, Instant, TimeLike, TimeScale, Weekday};
-    pub use crate::tle::*;
-    pub use crate::utils::*;
+
+    // Core types
+    pub use crate::frames::Frame;
+    pub use crate::itrfcoord::{Geodetic, ITRFCoord};
+    pub use crate::kepler::{Anomaly, Kepler};
+    pub use crate::omm::OMM;
+    pub use crate::solarsystem::SolarSystem;
+    pub use crate::tle::TLE;
+
+    // Propagation
+    pub use crate::orbitprop::{
+        propagate, CovState, PropSettings, PropagationResult, SatProperties,
+        SatPropertiesStatic, SatState, SimpleState, StateCov,
+    };
+
+    // SGP4
+    pub use crate::sgp4::{sgp4, GravConst, OpsMode, SGP4State};
+
+    // Frame transforms
+    pub use crate::frametransform::{qgcrf2itrf, qitrf2gcrf, qteme2gcrf, qteme2itrf};
+
+    // Gravity
+    pub use crate::earthgravity::GravityModel;
 }

@@ -90,7 +90,7 @@ fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
 
             let year: u32 = str2num(lvals[0], 0, 4).context("Cannot read year")?;
             let mon: u32 = str2num(lvals[0], 5, 7).context("Cannot read month")?;
-            let day: u32 = str2num(lvals[0], 8, 10).context("Cannot ready day of month")?;
+            let day: u32 = str2num(lvals[0], 8, 10).context("Cannot read day of month")?;
 
             Ok(SpaceWeatherRecord {
                 date: (Instant::from_date(year as i32, mon as i32, day as i32)?),

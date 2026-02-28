@@ -26,11 +26,12 @@ pub fn drag_force(
     cd_a_over_m: f64,
     use_spaceweather: bool,
 ) -> Vector3 {
-    let itrf = ITRFCoord::from(pos_itrf.as_slice());
+    let itrf = ITRFCoord::from_vector(pos_itrf);
+    let (lat, lon, hae) = itrf.to_geodetic_rad();
     let (density, _temperature) = nrlmsise(
-        itrf.hae() / 1.0e3,
-        Some(itrf.latitude_rad()),
-        Some(itrf.longitude_rad()),
+        hae / 1.0e3,
+        Some(lat),
+        Some(lon),
         Some(time),
         use_spaceweather,
     );
@@ -123,17 +124,18 @@ pub fn drag_and_partials(
     // This is a little confusing, but if you think about it long enough
     // it will make sense
     let vrel = vel_gcrf - OMEGA_EARTH.cross(pos_gcrf);
+    let vrel_norm = vrel.norm();
 
-    let drag_accel_gcrf = -0.5 * cd_a_over_m * density * vrel * vrel.norm();
+    let drag_accel_gcrf = -0.5 * cd_a_over_m * density * vrel * vrel_norm;
 
     // Now partials
     // Equation 7.81 and 7.84
     let dacceldv = -0.5
         * cd_a_over_m
         * density
-        * (vrel * vrel.transpose() / vrel.norm() + vrel.norm() * Matrix3::identity());
+        * (vrel * vrel.transpose() / vrel_norm + vrel_norm * Matrix3::identity());
 
-    let dacceldr = -0.5 * cd_a_over_m * density * vrel * vrel.norm() * drhodr.transpose()
+    let dacceldr = -0.5 * cd_a_over_m * density * vrel * vrel_norm * drhodr.transpose()
         - dacceldv * OMEGA_EARTH_MATRIX;
 
     (drag_accel_gcrf, dacceldr, dacceldv)

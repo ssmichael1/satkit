@@ -19,39 +19,20 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
     const FSAL: bool;
 
     fn interpolate<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
-        if sol.dense.is_none() {
-            return ODEError::NoDenseOutputInSolution.into();
-        }
-        let dense = sol.dense.as_ref().unwrap();
+        let dense = match sol.dense.as_ref() {
+            Some(d) if !d.x.is_empty() => d,
+            _ => return ODEError::NoDenseOutputInSolution.into(),
+        };
 
-        // These could probably be combined into a single function, but...
-        // keeping forward and backward separate makes it simpler in my mind
-        if sol.x > dense.x[0] {
-            Self::interpolate_forward(xinterp, sol)
+        let forward = sol.x > dense.x[0];
+
+        // Bounds check
+        let (lo, hi) = if forward {
+            (dense.x[0], sol.x)
         } else {
-            Self::interpolate_backward(xinterp, sol)
-        }
-    }
-
-    /// Interpolate densely calculated solution onto
-    /// values that are evenly spaced in "x"
-    /// for forward direction
-    fn interpolate_forward<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
-        if sol.dense.is_none() {
-            return ODEError::NoDenseOutputInSolution.into();
-        }
-        let dense = sol.dense.as_ref().unwrap();
-
-        // Check if interpolation point is within bounds
-        if sol.x < xinterp {
-            return ODEError::InterpExceedsSolutionBounds {
-                interp: xinterp,
-                begin: dense.x[0],
-                end: sol.x,
-            }
-            .into();
-        }
-        if xinterp < dense.x[0] {
+            (sol.x, dense.x[0])
+        };
+        if xinterp < lo || xinterp > hi {
             return ODEError::InterpExceedsSolutionBounds {
                 interp: xinterp,
                 begin: dense.x[0],
@@ -60,32 +41,23 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             .into();
         }
 
-        // We know indices are monotonically increasing, so only search from
-        // last found position in the array forward
-        let mut idx = dense
-            .x
-            .iter()
-            .position(|x| *x >= xinterp)
-            .map_or(dense.x.len(), |v| v);
-        idx = idx.saturating_sub(1);
+        // Find the step containing xinterp
+        let idx = if forward {
+            dense.x.iter().position(|&x| x >= xinterp)
+        } else {
+            dense.x.iter().position(|&x| x <= xinterp)
+        }
+        .unwrap_or(dense.x.len())
+        .saturating_sub(1);
 
-        // t is fractional distance beween x at idx and idx+1
-        // and is in range [0,1]
+        // t is fractional distance within the step, in range [0,1]
         let t = (xinterp - dense.x[idx]) / dense.h[idx];
 
-        // Compute interpolant coefficient as function of t
-        // note that t is in range [0,1]
-        //
-        // This is equation (6) of
-        // https://link.springer.com/article/10.1023/A:1021190918665
-        //
-        // Note: equation (6) of paper incorrectly has sum index "j"
-        //       starting from 0.  It should start from 1.
-        //
+        // Compute interpolant coefficients bi[i] = sum_j(BI[i][j] * t^(j+1))
+        // Equation (6) of Verner 2010
         let bi: Vec<f64> = Self::BI
             .iter()
             .map(|biarr| {
-                // Coefficients multiply increasing powers of t
                 let mut tj = 1.0;
                 biarr.iter().fold(0.0, |acc, bij| {
                     tj *= t;
@@ -94,89 +66,8 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             })
             .collect();
 
-        //
         // Compute interpolated value
-        //
-        // This is equation(5) of:
-        // https://link.springer.com/article/10.1023/A:1021190918665
-        //
-        let mut y = dense.yprime[idx]
-            .iter()
-            .enumerate()
-            .fold(dense.y[idx].clone() / dense.h[idx], |acc, (ix, k)| {
-                acc + k.clone() * bi[ix]
-            });
-        y = y * dense.h[idx];
-        Ok(y)
-    }
-
-    /// Interpolate densely calculated solution onto
-    /// values that are evenly spaced in "x"
-    /// for backward direction
-    fn interpolate_backward<S: ODEState>(xinterp: f64, sol: &ODESolution<S>) -> ODEResult<S> {
-        if sol.dense.is_none() {
-            return ODEError::NoDenseOutputInSolution.into();
-        }
-        let dense = sol.dense.as_ref().unwrap();
-
-        // Check if interpolation point is within bounds
-        if sol.x > xinterp {
-            return ODEError::InterpExceedsSolutionBounds {
-                interp: xinterp,
-                begin: dense.x[0],
-                end: sol.x,
-            }
-            .into();
-        }
-        if xinterp > dense.x[0] {
-            return ODEError::InterpExceedsSolutionBounds {
-                interp: xinterp,
-                begin: dense.x[0],
-                end: sol.x,
-            }
-            .into();
-        }
-
-        // We know indices are monotonically increasing, so only search from
-        // last found position in the array forward
-        let mut idx = dense
-            .x
-            .iter()
-            .position(|x| *x <= xinterp)
-            .map_or(dense.x.len(), |v| v);
-        idx = idx.saturating_sub(1);
-
-        // t is fractional distance beween x at idx and idx+1
-        // and is in range [0,1]
-        let t = (xinterp - dense.x[idx]) / dense.h[idx];
-
-        // Compute interpolant coefficient as function of t
-        // note that t is in range [0,1]
-        //
-        // This is equation (6) of
-        // https://link.springer.com/article/10.1023/A:1021190918665
-        //
-        // Note: equation (6) of paper incorrectly has sum index "j"
-        //       starting from 0.  It should start from 1.
-        //
-        let bi: Vec<f64> = Self::BI
-            .iter()
-            .map(|biarr| {
-                // Coefficients multiply increasing powers of t
-                let mut tj = 1.0;
-                biarr.iter().fold(0.0, |acc, bij| {
-                    tj *= t;
-                    acc + bij * tj
-                })
-            })
-            .collect();
-
-        //
-        // Compute interpolated value
-        //
-        // This is equation(5) of:
-        // https://link.springer.com/article/10.1023/A:1021190918665
-        //
+        // Equation (5) of Verner 2010: y_interp = (y/h + sum(k[i] * bi[i])) * h
         let mut y = dense.yprime[idx]
             .iter()
             .enumerate()
@@ -200,7 +91,9 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         let mut x = begin;
         let mut y = y0.clone();
 
-        let mut qold: f64 = 1.0e-4;
+        // PID controller state: two previous error norms (Söderlind & Wang 2006)
+        let mut enorm_prev: f64 = 1.0e-4;
+        let mut enorm_prev2: f64 = 1.0e-4;
         let tdir = match end > begin {
             true => 1.0,
             false => -1.0,
@@ -299,20 +192,28 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 return ODEError::StepErrorToSmall.into();
             }
 
-            // Run proportional-integral controller on error
-            // references Julia's OrdinaryDiffEq.jl
-            let beta1 = 7.0 / (5.0 * Self::ORDER as f64);
-            let beta2 = 2.0 / (5.0 * Self::ORDER as f64);
-            let q11 = enorm.powf(beta1);
-            let q = {
-                let q = q11 / qold.powf(beta2);
-                f64::max(
-                    1.0 / settings.maxfac,
-                    f64::min(1.0 / settings.minfac, q / settings.gamma),
-                )
-            };
+            // PID step-size controller (Söderlind & Wang 2006, §4)
+            //
+            // The step-size ratio is: h_{n+1}/h_n = 1/q, where
+            //   q = (e_n)^β₁ · (e_{n-1})^β₂ · (e_{n-2})^β₃ / safety
+            //
+            // β₁ = 0.7/p, β₂ = -0.4/p, β₃ = 0.1/p
+            // (note β₂ is negative, implemented by dividing by enorm_prev^0.4/p)
+            let order_f = Self::ORDER as f64;
+            let beta1 = 0.7 / order_f;
+            let beta2 = 0.4 / order_f;
+            let beta3 = 0.1 / order_f;
 
             if (enorm < 1.0) || (h.abs() <= settings.dtmin) {
+                // PID controller for accepted steps
+                let q = {
+                    let raw = enorm.powf(beta1)
+                        / enorm_prev.powf(beta2)
+                        * enorm_prev2.powf(beta3)
+                        / settings.gamma;
+                    raw.clamp(1.0 / settings.maxfac, 1.0 / settings.minfac)
+                };
+
                 // If dense output requested, record dense output
                 if settings.dense_output {
                     let astep = accepted_steps.as_mut().unwrap();
@@ -327,8 +228,9 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                     k_last = Some(karr[N - 1].clone());
                 }
 
-                // Adjust step size
-                qold = f64::max(enorm, 1.0e-4);
+                // Update PID history (floor at 1e-4 to avoid division artifacts)
+                enorm_prev2 = enorm_prev;
+                enorm_prev = f64::max(enorm, 1.0e-4);
                 x += h;
                 y = ynp1;
                 h /= q;
@@ -338,12 +240,13 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                     break;
                 }
             } else {
-                // Step rejected - invalidate cached k for FSAL
+                // Step rejected — use P-only controller (more conservative)
                 if Self::FSAL {
                     k_last = None;
                 }
                 nreject += 1;
-                h /= f64::min(1.0 / settings.minfac, q11 / settings.gamma);
+                let reject_q = enorm.powf(beta1) / settings.gamma;
+                h /= reject_q.min(1.0 / settings.minfac);
             }
         }
 

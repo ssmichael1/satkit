@@ -1,11 +1,11 @@
 use super::propagator::SimpleState;
 use crate::Instant;
 
-/// Generic trate for satellite properties
-/// This allows for setting C_d A / M (coeffeicient of drag times area over mass)
+/// Generic trait for satellite properties
+/// This allows for setting C_d A / M (coefficient of drag times area over mass)
 /// in units of m^2/kg as a function of time and state
 ///
-/// And also Cr A over M (coeffeienct of radiation pressure times area over mass)
+/// And also Cr A over M (coefficient of radiation pressure times area over mass)
 /// in units of m^2/kg as function of time and state
 ///
 pub trait SatProperties {
