@@ -135,7 +135,7 @@ pub enum PropagationError {
 /// let mut settings = satkit::orbitprop::PropSettings::default();
 /// settings.abs_error = 1.0e-9;
 /// settings.rel_error = 1.0e-14;
-/// settings.gravity_order = 4;
+/// settings.gravity_degree = 4;
 ///
 /// // Pick an arbitrary begin time
 /// let begintime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
@@ -173,7 +173,7 @@ pub enum PropagationError {
 /// let mut settings = satkit::orbitprop::PropSettings::default();
 /// settings.abs_error = 1.0e-9;
 /// settings.rel_error = 1.0e-14;
-/// settings.gravity_order = 4;
+/// settings.gravity_degree = 4;
 ///
 /// // Pick an arbitrary begin time
 /// let begintime = satkit::Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
@@ -274,16 +274,20 @@ pub fn propagate<const C: usize, T: TimeLike>(
 
             // Gravity in the ITRF frame
             let gravity_itrf =
-                earthgravity::jgm3().accel(&pos_itrf, settings.gravity_order as usize);
+                earthgravity::jgm3().accel(&pos_itrf, settings.gravity_degree as usize, settings.gravity_order as usize);
 
             // Gravity in the GCRS frame
             accel += qitrf2gcrf * gravity_itrf;
 
             // Acceleration due to moon
-            accel += point_gravity(&pos_gcrf, &moon_gcrf, crate::consts::MU_MOON);
+            if settings.use_moon_gravity {
+                accel += point_gravity(&pos_gcrf, &moon_gcrf, crate::consts::MU_MOON);
+            }
 
             // Acceleration due to sun
-            accel += point_gravity(&pos_gcrf, &sun_gcrf, crate::consts::MU_SUN);
+            if settings.use_sun_gravity {
+                accel += point_gravity(&pos_gcrf, &sun_gcrf, crate::consts::MU_SUN);
+            }
 
             // Add solar pressure & drag if that is defined in satellite properties
             if let Some(props) = satprops {
@@ -328,13 +332,9 @@ pub fn propagate<const C: usize, T: TimeLike>(
             // For state transition matrix, we need to compute force partials with respect to position
             // (for all forces but drag, partial with respect to velocity are zero)
             let (gravity_accel, gravity_partials) =
-                earthgravity::jgm3().accel_and_partials(&pos_itrf, settings.gravity_order as usize);
-            let (sun_accel, sun_partials) =
-                point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
-            let (moon_accel, moon_partials) =
-                point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
+                earthgravity::jgm3().accel_and_partials(&pos_itrf, settings.gravity_degree as usize, settings.gravity_order as usize);
 
-            let mut accel = qitrf2gcrf * gravity_accel + sun_accel + moon_accel;
+            let mut accel = qitrf2gcrf * gravity_accel;
 
             // Equation 7.42 in Montenbruck & Gill
             let mut dfdy: StateType<6> = StateType::<6>::zeros();
@@ -344,9 +344,20 @@ pub fn propagate<const C: usize, T: TimeLike>(
             let ritrf2gcrf = qitrf2gcrf.to_rotation_matrix();
             // Sum partials with respect to position for gravity, sun, and moon
             // Note: gravity partials need to be rotated into the gcrf frame from itrf
-            let mut dadr = ritrf2gcrf * gravity_partials * ritrf2gcrf.transpose()
-                + sun_partials
-                + moon_partials;
+            let mut dadr = ritrf2gcrf * gravity_partials * ritrf2gcrf.transpose();
+
+            if settings.use_sun_gravity {
+                let (sun_accel, sun_partials) =
+                    point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
+                accel += sun_accel;
+                dadr += sun_partials;
+            }
+            if settings.use_moon_gravity {
+                let (moon_accel, moon_partials) =
+                    point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
+                accel += moon_accel;
+                dadr += moon_partials;
+            }
 
             // Handle satellite properties for drag and radiation pressure
             if let Some(props) = satprops {
@@ -491,7 +502,7 @@ mod tests {
         let settings = PropSettings {
             abs_error: 1.0e-9,
             rel_error: 1.0e-14,
-            gravity_order: 4,
+            gravity_degree: 4,
             ..Default::default()
         };
 
@@ -513,7 +524,7 @@ mod tests {
         let mut settings = PropSettings {
             abs_error: 1.0e-9,
             rel_error: 1.0e-14,
-            gravity_order: 4,
+            gravity_degree: 4,
             ..Default::default()
         };
         settings.precompute_terms(&starttime, &stoptime)?;
@@ -542,7 +553,7 @@ mod tests {
         let settings = PropSettings {
             abs_error: 1.0e-9,
             rel_error: 1.0e-14,
-            gravity_order: 4,
+            gravity_degree: 4,
             ..Default::default()
         };
 
@@ -592,7 +603,7 @@ mod tests {
         let settings = PropSettings {
             abs_error: 1.0e-9,
             rel_error: 1.0e-14,
-            gravity_order: 4,
+            gravity_degree: 4,
             ..Default::default()
         };
 
@@ -653,7 +664,7 @@ mod tests {
         let settings = PropSettings {
             abs_error: 1.0e-9,
             rel_error: 1.0e-14,
-            gravity_order: 4,
+            gravity_degree: 4,
             ..Default::default()
         };
 
@@ -784,6 +795,167 @@ mod tests {
             for ix in 0..3 {
                 assert!((pgcrf[iv][ix] - interp_state[ix]).abs() < 8.0);
             }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sun_moon_toggles() -> Result<()> {
+        // Verify that disabling sun/moon gravity produces different results
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_days(0.5);
+
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        let settings_all = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_degree: 4,
+            ..Default::default()
+        };
+
+        let settings_no_sun = PropSettings {
+            use_sun_gravity: false,
+            ..settings_all.clone()
+        };
+
+        let settings_no_moon = PropSettings {
+            use_moon_gravity: false,
+            ..settings_all.clone()
+        };
+
+        let settings_no_both = PropSettings {
+            use_sun_gravity: false,
+            use_moon_gravity: false,
+            ..settings_all.clone()
+        };
+
+        let res_all = propagate(&state, &starttime, &stoptime, &settings_all, None)?;
+        let res_no_sun = propagate(&state, &starttime, &stoptime, &settings_no_sun, None)?;
+        let res_no_moon = propagate(&state, &starttime, &stoptime, &settings_no_moon, None)?;
+        let res_no_both = propagate(&state, &starttime, &stoptime, &settings_no_both, None)?;
+
+        // All results should be different from each other
+        let pos_all = res_all.state_end.fixed_view::<3, 1>(0, 0);
+        let pos_no_sun = res_no_sun.state_end.fixed_view::<3, 1>(0, 0);
+        let pos_no_moon = res_no_moon.state_end.fixed_view::<3, 1>(0, 0);
+        let pos_no_both = res_no_both.state_end.fixed_view::<3, 1>(0, 0);
+
+        let diff_sun = (pos_all - pos_no_sun).norm();
+        let diff_moon = (pos_all - pos_no_moon).norm();
+        let diff_both = (pos_all - pos_no_both).norm();
+
+        // Sun and moon perturbations should be measurable over half a day at GEO
+        assert!(
+            diff_sun > 1.0,
+            "Disabling sun gravity should matter, diff = {} m",
+            diff_sun
+        );
+        assert!(
+            diff_moon > 1.0,
+            "Disabling moon gravity should matter, diff = {} m",
+            diff_moon
+        );
+        assert!(
+            diff_both > diff_sun,
+            "Disabling both should differ more than just sun"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_gravity_degree_order_in_propagator() -> Result<()> {
+        // Verify that separate degree and order affect propagation results
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_days(0.25);
+
+        let mut state: SimpleState = SimpleState::zeros();
+        // Use an inclined orbit so tesseral harmonics matter
+        let r = 7000.0e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+        let inc: f64 = std::f64::consts::PI / 4.0;
+        state[0] = r;
+        state[4] = v * inc.cos();
+        state[5] = v * inc.sin();
+
+        let settings_full = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_degree: 8,
+            gravity_order: 8,
+            ..Default::default()
+        };
+
+        let settings_zonal = PropSettings {
+            gravity_order: 0,
+            ..settings_full.clone()
+        };
+
+        let res_full = propagate(&state, &starttime, &stoptime, &settings_full, None)?;
+        let res_zonal = propagate(&state, &starttime, &stoptime, &settings_zonal, None)?;
+
+        let pos_full = res_full.state_end.fixed_view::<3, 1>(0, 0);
+        let pos_zonal = res_zonal.state_end.fixed_view::<3, 1>(0, 0);
+        let diff = (pos_full - pos_zonal).norm();
+
+        assert!(
+            diff > 0.1,
+            "degree=8,order=8 vs degree=8,order=0 should differ, diff = {} m",
+            diff
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_state_transition_with_toggles() -> Result<()> {
+        // Verify state transition matrix still works with sun/moon disabled
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_days(0.5);
+
+        let mut state: CovState = CovState::zeros();
+        let theta = PI / 6.0;
+        state[0] = consts::GEO_R * theta.cos();
+        state[2] = consts::GEO_R * theta.sin();
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.cos();
+        state[5] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.sin();
+        state
+            .fixed_view_mut::<6, 6>(0, 1)
+            .copy_from(&na::Matrix6::<f64>::identity());
+
+        let settings = PropSettings {
+            abs_error: 1.0e-9,
+            rel_error: 1.0e-14,
+            gravity_degree: 4,
+            use_sun_gravity: false,
+            use_moon_gravity: false,
+            ..Default::default()
+        };
+
+        let dstate = na::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
+
+        let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
+        let res2 = propagate(
+            &(state.fixed_view::<6, 1>(0, 0) + dstate),
+            &starttime,
+            &stoptime,
+            &settings,
+            None,
+        )?;
+
+        let dstate_prop = res2.state_end - res.state_end.fixed_view::<6, 1>(0, 0);
+        let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
+
+        for ix in 0..6_usize {
+            assert!(
+                (dstate_prop[ix] - dstate_phi[ix]).abs() / dstate_prop[ix] < 1e-3,
+                "State transition matrix mismatch at index {}",
+                ix
+            );
         }
 
         Ok(())

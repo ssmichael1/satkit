@@ -9,20 +9,26 @@ use anyhow::Result;
 ///
 /// These include
 ///
-/// * `gravity_order` - integer gravity order to use when computing Earth gravity.  Default is 4
-/// * `gravity_interp_dt_seconds` - Interpolation interval for rotation to ITRF frame for gravity calc.  Default is 60 seconds
+/// * `gravity_degree` - maximum degree of spherical harmonic gravity model.  Default is 4
+/// * `gravity_order` - maximum order of spherical harmonic gravity model.  Default is same as `gravity_degree`.
+///    Must be ≤ `gravity_degree`.
 /// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
 /// * `rel_error` - the maximum relative error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
 /// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
+/// * `use_sun_gravity` - Do we include sun third-body gravitational perturbation.  Default is true
+/// * `use_moon_gravity` - Do we include moon third-body gravitational perturbation.  Default is true
 /// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true
 ///   slight computation savings if set to false
 ///
 #[derive(Debug, Clone)]
 pub struct PropSettings {
+    pub gravity_degree: u16,
     pub gravity_order: u16,
     pub abs_error: f64,
     pub rel_error: f64,
     pub use_spaceweather: bool,
+    pub use_sun_gravity: bool,
+    pub use_moon_gravity: bool,
     pub enable_interp: bool,
     pub precomputed: Option<Precomputed>,
 }
@@ -30,10 +36,13 @@ pub struct PropSettings {
 impl Default for PropSettings {
     fn default() -> Self {
         Self {
+            gravity_degree: 4,
             gravity_order: 4,
             abs_error: 1e-8,
             rel_error: 1e-8,
             use_spaceweather: true,
+            use_sun_gravity: true,
+            use_moon_gravity: true,
             enable_interp: true,
             precomputed: None,
         }
@@ -80,16 +89,22 @@ impl std::fmt::Display for PropSettings {
         write!(
             f,
             r#"Orbit Propagation Settings
+            Gravity Degree: {},
             Gravity Order: {},
             Max Abs Error: {:e},
             Max Rel Error: {:e},
             Space Weather: {},
+            Sun Gravity: {},
+            Moon Gravity: {},
             Interpolation: {}
             {}"#,
+            self.gravity_degree,
             self.gravity_order,
             self.abs_error,
             self.rel_error,
             self.use_spaceweather,
+            self.use_sun_gravity,
+            self.use_moon_gravity,
             self.enable_interp,
             self.precomputed.as_ref().map_or_else(
                 || "No Precomputed".to_string(),

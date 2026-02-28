@@ -473,7 +473,8 @@ def gravity(
 
     Keyword Args:
         model (gravmodel): The gravity model to use.  Default is gravmodel.jgm3
-        order (int): The order of the gravity model to use.  Default is 6, maximum is 16
+        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
+        order (int): Maximum order of gravity model to use.  Default is same as degree
 
     Returns:
         npt.ArrayLike[np.float]: acceleration in m/s^2 in the International Terrestrial Reference Frame (ITRF)
@@ -503,7 +504,8 @@ def gravity_and_partials(
 
     Keyword Args:
         model (gravmodel): The gravity model to use.  Default is gravmodel.jgm3
-        order (int): The order of the gravity model to use.  Default is 6, maximum is 16
+        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
+        order (int): Maximum order of gravity model to use.  Default is same as degree
 
     Returns:
         tuple[npt.ArrayLike[np.float], np.arrayLike[np.float]]: acceleration in m/s^2 and partial derivative of acceleration with respect to ITRF Cartesian coordinate in m/s^2 / m
@@ -2789,8 +2791,11 @@ class propsettings:
     * Default settings:
         * abs_error: 1e-8
         * rel_error: 1e-8
+        * gravity_degree: 4
         * gravity_order: 4
         * use_spaceweather: True
+        * use_sun_gravity: True
+        * use_moon_gravity: True
         * enable_interp: True
 
         * enable_interp enables high-precision interpolation of state between begin and end times via the returned function,
@@ -2803,8 +2808,11 @@ class propsettings:
         *,
         abs_error: float = 1e-8,
         rel_error: float = 1e-8,
+        gravity_degree: int = 4,
         gravity_order: int = 4,
         use_spaceweather: bool = True,
+        use_sun_gravity: bool = True,
+        use_moon_gravity: bool = True,
         enable_interp: bool = True,
     ) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
@@ -2812,8 +2820,11 @@ class propsettings:
         Args:
             abs_error: Maximum absolute value of error for any element in propagated state following ODE integration. Default is 1e-8
             rel_error: Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
-            gravity_order: Earth gravity order to use in ODE integration. Default is 4
+            gravity_degree: Maximum degree of spherical harmonic gravity model. Default is 4
+            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree. Default is same as gravity_degree
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
+            use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
+            use_moon_gravity: Include moon third-body gravitational perturbation. Default is True
             enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
 
         Returns:
@@ -2822,7 +2833,7 @@ class propsettings:
         Example:
             ```python
             settings = satkit.propsettings(
-                gravity_order=16,
+                gravity_degree=16,
                 abs_error=1e-10,
                 rel_error=1e-10,
             )
@@ -2854,17 +2865,53 @@ class propsettings:
     @rel_error.setter
     def rel_error(self, value: float) -> None: ...
     @property
-    def gravity_order(self) -> int:
-        """Earth gravity order to use in ODE integration
+    def gravity_degree(self) -> int:
+        """Maximum degree of spherical harmonic gravity model
 
         Returns:
-            int: Earth gravity order to use in ODE integration, default is 4
+            int: Maximum degree of spherical harmonic gravity model, default is 4
+
+        """
+        ...
+
+    @gravity_degree.setter
+    def gravity_degree(self, value: int) -> None: ...
+    @property
+    def gravity_order(self) -> int:
+        """Maximum order of spherical harmonic gravity model
+
+        Returns:
+            int: Maximum order of spherical harmonic gravity model, default is same as gravity_degree
 
         """
         ...
 
     @gravity_order.setter
     def gravity_order(self, value: int) -> None: ...
+    @property
+    def use_sun_gravity(self) -> bool:
+        """Include sun third-body gravitational perturbation
+
+        Returns:
+            bool: Whether sun gravity is enabled, default is True
+
+        """
+        ...
+
+    @use_sun_gravity.setter
+    def use_sun_gravity(self, value: bool) -> None: ...
+    @property
+    def use_moon_gravity(self) -> bool:
+        """Include moon third-body gravitational perturbation
+
+        Returns:
+            bool: Whether moon gravity is enabled, default is True
+
+        """
+        ...
+
+    @use_moon_gravity.setter
+    def use_moon_gravity(self, value: bool) -> None: ...
     @property
     def use_spaceweather(self) -> bool:
         """Use space weather data when computing atmospheric density for drag forces
