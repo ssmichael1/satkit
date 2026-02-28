@@ -15,6 +15,7 @@ impl PyPropSettings {
     #[pyo3(signature=(**kwargs))]
     fn py_new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut ps = PropSettings::default();
+        let mut order_explicitly_set = false;
         if let Some(kw) = kwargs {
             if let Some(abserr) = kw.get_item("abs_error")? {
                 ps.abs_error = abserr.extract::<f64>()?;
@@ -24,8 +25,13 @@ impl PyPropSettings {
                 ps.rel_error = relerr.extract::<f64>()?;
                 kw.del_item("rel_error")?;
             }
+            if let Some(gravdegree) = kw.get_item("gravity_degree")? {
+                ps.gravity_degree = gravdegree.extract::<u16>()?;
+                kw.del_item("gravity_degree")?;
+            }
             if let Some(gravorder) = kw.get_item("gravity_order")? {
                 ps.gravity_order = gravorder.extract::<u16>()?;
+                order_explicitly_set = true;
                 kw.del_item("gravity_order")?;
             }
             if let Some(interp) = kw.get_item("enable_iterp")? {
@@ -36,6 +42,14 @@ impl PyPropSettings {
                 ps.use_spaceweather = sw.extract::<bool>()?;
                 kw.del_item("use_spaceweather")?;
             }
+            if let Some(sun) = kw.get_item("use_sun_gravity")? {
+                ps.use_sun_gravity = sun.extract::<bool>()?;
+                kw.del_item("use_sun_gravity")?;
+            }
+            if let Some(moon) = kw.get_item("use_moon_gravity")? {
+                ps.use_moon_gravity = moon.extract::<bool>()?;
+                kw.del_item("use_moon_gravity")?;
+            }
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
                     let mut a2 = acc.clone();
@@ -45,6 +59,15 @@ impl PyPropSettings {
                 });
                 let s = format!("Invalid kwargs: {}", keystring);
                 return Err(pyo3::exceptions::PyRuntimeError::new_err(s));
+            }
+            if order_explicitly_set {
+                // Clamp order to degree
+                if ps.gravity_order > ps.gravity_degree {
+                    ps.gravity_order = ps.gravity_degree;
+                }
+            } else {
+                // Default order to degree when not explicitly provided
+                ps.gravity_order = ps.gravity_degree;
             }
         }
 
@@ -74,13 +97,54 @@ impl PyPropSettings {
     }
 
     #[getter]
+    fn get_gravity_degree(&self) -> u16 {
+        self.0.gravity_degree
+    }
+
+    #[setter(gravity_degree)]
+    fn set_gravity_degree(&mut self, val: u16) -> PyResult<()> {
+        self.0.gravity_degree = val;
+        if self.0.gravity_order > val {
+            self.0.gravity_order = val;
+        }
+        Ok(())
+    }
+
+    #[getter]
     fn get_gravity_order(&self) -> u16 {
         self.0.gravity_order
     }
 
     #[setter(gravity_order)]
     fn set_gravity_order(&mut self, val: u16) -> PyResult<()> {
+        if val > self.0.gravity_degree {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "gravity_order must be <= gravity_degree",
+            ));
+        }
         self.0.gravity_order = val;
+        Ok(())
+    }
+
+    #[getter]
+    fn get_use_sun_gravity(&self) -> bool {
+        self.0.use_sun_gravity
+    }
+
+    #[setter(use_sun_gravity)]
+    fn set_use_sun_gravity(&mut self, val: bool) -> PyResult<()> {
+        self.0.use_sun_gravity = val;
+        Ok(())
+    }
+
+    #[getter]
+    fn get_use_moon_gravity(&self) -> bool {
+        self.0.use_moon_gravity
+    }
+
+    #[setter(use_moon_gravity)]
+    fn set_use_moon_gravity(&mut self, val: bool) -> PyResult<()> {
+        self.0.use_moon_gravity = val;
         Ok(())
     }
 

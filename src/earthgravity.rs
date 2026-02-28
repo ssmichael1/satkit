@@ -81,41 +81,46 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 ///
 /// * `pos` - nalgebra 3-vector representing ITRF position in meters
 ///
-/// * `order` - The order of the gravity model to use.
-///   Maximum is 16
+/// * `degree` - The maximum degree of the gravity model to use.
+///   Maximum is 40
+///
+/// * `order` - The maximum order of the gravity model to use.
+///   Must be ≤ `degree`.
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
 /// # References
-///    
+///
 /// * For details of models, see: <http://icgem.gfz-potsdam.de/tom_longtime>
 ///
 /// * For details of calculation, see Chapter 3.2 of:
 ///   "Satellite Orbits: Models, Methods, Applications",
 ///   O. Montenbruck and B. Gill, Springer, 2012.
 ///
-pub fn accel(pos_itrf: &Vector3, order: usize, model: GravityModel) -> Vector3 {
-    gravhash().get(&model).unwrap().accel(pos_itrf, order)
+pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityModel) -> Vector3 {
+    gravhash().get(&model).unwrap().accel(pos_itrf, degree, order)
 }
 
 ///
-/// Return acceleration due to Earth gravity at the input position. , as
-/// well as acceleratian partials with respect to ITRF position, e.e.
+/// Return acceleration due to Earth gravity at the input position, as
+/// well as acceleration partials with respect to ITRF position, i.e.
 /// d a / dr
 ///
 /// The acceleration does not include the centrifugal force, and is output
 /// in m/s^2 in the International Terrestrial Reference Frame (ITRF)
 ///
-/// # Inputs Arguments
+/// # Arguments
 ///
 /// * `pos` - nalgebra 3-vector representing ITRF position in meters
 ///
-/// * `order` - The order of the gravity model to use.
-///   Maximum is 16
+/// * `degree` - The maximum degree of the gravity model to use.
+///   Maximum is 40
+///
+/// * `order` - The maximum order of the gravity model to use.
+///   Must be ≤ `degree`.
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
-///  
 /// # References
 ///
 /// * For details of models, see: <http://icgem.gfz-potsdam.de/tom_longtime>
@@ -126,17 +131,18 @@ pub fn accel(pos_itrf: &Vector3, order: usize, model: GravityModel) -> Vector3 {
 ///
 pub fn accel_and_partials(
     pos_itrf: &Vector3,
+    degree: usize,
     order: usize,
     model: GravityModel,
 ) -> (Vector3, Matrix3) {
     gravhash()
         .get(&model)
         .unwrap()
-        .accel_and_partials(pos_itrf, order)
+        .accel_and_partials(pos_itrf, degree, order)
 }
 
-pub fn accel_jgm3(pos_itrf: &Vector3, order: usize) -> Vector3 {
-    jgm3().accel(pos_itrf, order)
+pub fn accel_jgm3(pos_itrf: &Vector3, degree: usize, order: usize) -> Vector3 {
+    jgm3().accel(pos_itrf, degree, order)
 }
 
 #[derive(Debug, Clone)]
@@ -169,192 +175,195 @@ type Legendre<const N: usize> = Matrix<N, N>;
 /// See Equation 3.33 of Montenbruck & Gill (referenced above) for
 /// calculation details.
 impl Gravity {
-    pub fn accel(&self, pos: &Vector3, order: usize) -> Vector3 {
+    pub fn accel(&self, pos: &Vector3, degree: usize, order: usize) -> Vector3 {
+        let max_order = order.min(degree);
         // This is tedious, but using generics allows for vectors to be
         // allocated on the stack, which is faster
-        if order == 1 {
-            self.accel_t::<1, 5>(pos)
-        } else if order == 2 {
-            self.accel_t::<2, 6>(pos)
-        } else if order == 3 {
-            self.accel_t::<3, 7>(pos)
-        } else if order == 4 {
-            self.accel_t::<4, 8>(pos)
-        } else if order == 5 {
-            self.accel_t::<5, 9>(pos)
-        } else if order == 6 {
-            self.accel_t::<6, 10>(pos)
-        } else if order == 7 {
-            self.accel_t::<7, 11>(pos)
-        } else if order == 8 {
-            self.accel_t::<8, 12>(pos)
-        } else if order == 9 {
-            self.accel_t::<9, 13>(pos)
-        } else if order == 10 {
-            self.accel_t::<10, 14>(pos)
-        } else if order == 11 {
-            self.accel_t::<11, 15>(pos)
-        } else if order == 12 {
-            self.accel_t::<12, 16>(pos)
-        } else if order == 13 {
-            self.accel_t::<13, 17>(pos)
-        } else if order == 14 {
-            self.accel_t::<14, 18>(pos)
-        } else if order == 15 {
-            self.accel_t::<15, 19>(pos)
-        } else if order == 16 {
-            self.accel_t::<16, 20>(pos)
-        } else if order == 17 {
-            self.accel_t::<17, 21>(pos)
-        } else if order == 18 {
-            self.accel_t::<18, 22>(pos)
-        } else if order == 19 {
-            self.accel_t::<19, 23>(pos)
-        } else if order == 20 {
-            self.accel_t::<20, 24>(pos)
-        } else if order == 21 {
-            self.accel_t::<21, 25>(pos)
-        } else if order == 22 {
-            self.accel_t::<22, 26>(pos)
-        } else if order == 23 {
-            self.accel_t::<23, 27>(pos)
-        } else if order == 24 {
-            self.accel_t::<24, 28>(pos)
-        } else if order == 25 {
-            self.accel_t::<25, 29>(pos)
-        } else if order == 26 {
-            self.accel_t::<26, 30>(pos)
-        } else if order == 27 {
-            self.accel_t::<27, 31>(pos)
-        } else if order == 28 {
-            self.accel_t::<28, 32>(pos)
-        } else if order == 29 {
-            self.accel_t::<29, 33>(pos)
-        } else if order == 30 {
-            self.accel_t::<30, 34>(pos)
-        } else if order == 31 {
-            self.accel_t::<31, 35>(pos)
-        } else if order == 32 {
-            self.accel_t::<32, 36>(pos)
-        } else if order == 33 {
-            self.accel_t::<33, 37>(pos)
-        } else if order == 34 {
-            self.accel_t::<34, 38>(pos)
-        } else if order == 35 {
-            self.accel_t::<35, 39>(pos)
-        } else if order == 36 {
-            self.accel_t::<36, 40>(pos)
-        } else if order == 37 {
-            self.accel_t::<37, 41>(pos)
-        } else if order == 38 {
-            self.accel_t::<38, 42>(pos)
-        } else if order == 39 {
-            self.accel_t::<39, 43>(pos)
+        if degree == 1 {
+            self.accel_t::<1, 5>(pos, max_order)
+        } else if degree == 2 {
+            self.accel_t::<2, 6>(pos, max_order)
+        } else if degree == 3 {
+            self.accel_t::<3, 7>(pos, max_order)
+        } else if degree == 4 {
+            self.accel_t::<4, 8>(pos, max_order)
+        } else if degree == 5 {
+            self.accel_t::<5, 9>(pos, max_order)
+        } else if degree == 6 {
+            self.accel_t::<6, 10>(pos, max_order)
+        } else if degree == 7 {
+            self.accel_t::<7, 11>(pos, max_order)
+        } else if degree == 8 {
+            self.accel_t::<8, 12>(pos, max_order)
+        } else if degree == 9 {
+            self.accel_t::<9, 13>(pos, max_order)
+        } else if degree == 10 {
+            self.accel_t::<10, 14>(pos, max_order)
+        } else if degree == 11 {
+            self.accel_t::<11, 15>(pos, max_order)
+        } else if degree == 12 {
+            self.accel_t::<12, 16>(pos, max_order)
+        } else if degree == 13 {
+            self.accel_t::<13, 17>(pos, max_order)
+        } else if degree == 14 {
+            self.accel_t::<14, 18>(pos, max_order)
+        } else if degree == 15 {
+            self.accel_t::<15, 19>(pos, max_order)
+        } else if degree == 16 {
+            self.accel_t::<16, 20>(pos, max_order)
+        } else if degree == 17 {
+            self.accel_t::<17, 21>(pos, max_order)
+        } else if degree == 18 {
+            self.accel_t::<18, 22>(pos, max_order)
+        } else if degree == 19 {
+            self.accel_t::<19, 23>(pos, max_order)
+        } else if degree == 20 {
+            self.accel_t::<20, 24>(pos, max_order)
+        } else if degree == 21 {
+            self.accel_t::<21, 25>(pos, max_order)
+        } else if degree == 22 {
+            self.accel_t::<22, 26>(pos, max_order)
+        } else if degree == 23 {
+            self.accel_t::<23, 27>(pos, max_order)
+        } else if degree == 24 {
+            self.accel_t::<24, 28>(pos, max_order)
+        } else if degree == 25 {
+            self.accel_t::<25, 29>(pos, max_order)
+        } else if degree == 26 {
+            self.accel_t::<26, 30>(pos, max_order)
+        } else if degree == 27 {
+            self.accel_t::<27, 31>(pos, max_order)
+        } else if degree == 28 {
+            self.accel_t::<28, 32>(pos, max_order)
+        } else if degree == 29 {
+            self.accel_t::<29, 33>(pos, max_order)
+        } else if degree == 30 {
+            self.accel_t::<30, 34>(pos, max_order)
+        } else if degree == 31 {
+            self.accel_t::<31, 35>(pos, max_order)
+        } else if degree == 32 {
+            self.accel_t::<32, 36>(pos, max_order)
+        } else if degree == 33 {
+            self.accel_t::<33, 37>(pos, max_order)
+        } else if degree == 34 {
+            self.accel_t::<34, 38>(pos, max_order)
+        } else if degree == 35 {
+            self.accel_t::<35, 39>(pos, max_order)
+        } else if degree == 36 {
+            self.accel_t::<36, 40>(pos, max_order)
+        } else if degree == 37 {
+            self.accel_t::<37, 41>(pos, max_order)
+        } else if degree == 38 {
+            self.accel_t::<38, 42>(pos, max_order)
+        } else if degree == 39 {
+            self.accel_t::<39, 43>(pos, max_order)
         } else {
-            self.accel_t::<40, 44>(pos)
+            self.accel_t::<40, 44>(pos, max_order)
         }
     }
 
-    pub fn accel_and_partials(&self, pos: &Vector3, order: usize) -> (Vector3, Matrix3) {
+    pub fn accel_and_partials(&self, pos: &Vector3, degree: usize, order: usize) -> (Vector3, Matrix3) {
+        let max_order = order.min(degree);
         // This is tedious, but using generics allows for vectors to be
         // allocated on the stack, which is faster
-        if order == 1 {
-            self.accel_and_partials_t::<1, 5>(pos)
-        } else if order == 2 {
-            self.accel_and_partials_t::<2, 6>(pos)
-        } else if order == 3 {
-            self.accel_and_partials_t::<3, 7>(pos)
-        } else if order == 4 {
-            self.accel_and_partials_t::<4, 8>(pos)
-        } else if order == 5 {
-            self.accel_and_partials_t::<5, 9>(pos)
-        } else if order == 6 {
-            self.accel_and_partials_t::<6, 10>(pos)
-        } else if order == 7 {
-            self.accel_and_partials_t::<7, 11>(pos)
-        } else if order == 8 {
-            self.accel_and_partials_t::<8, 12>(pos)
-        } else if order == 9 {
-            self.accel_and_partials_t::<9, 13>(pos)
-        } else if order == 10 {
-            self.accel_and_partials_t::<10, 14>(pos)
-        } else if order == 11 {
-            self.accel_and_partials_t::<11, 15>(pos)
-        } else if order == 12 {
-            self.accel_and_partials_t::<12, 16>(pos)
-        } else if order == 13 {
-            self.accel_and_partials_t::<13, 17>(pos)
-        } else if order == 14 {
-            self.accel_and_partials_t::<14, 18>(pos)
-        } else if order == 15 {
-            self.accel_and_partials_t::<15, 19>(pos)
-        } else if order == 16 {
-            self.accel_and_partials_t::<16, 20>(pos)
-        } else if order == 17 {
-            self.accel_and_partials_t::<17, 21>(pos)
-        } else if order == 18 {
-            self.accel_and_partials_t::<18, 22>(pos)
-        } else if order == 19 {
-            self.accel_and_partials_t::<19, 23>(pos)
-        } else if order == 20 {
-            self.accel_and_partials_t::<20, 24>(pos)
-        } else if order == 21 {
-            self.accel_and_partials_t::<21, 25>(pos)
-        } else if order == 22 {
-            self.accel_and_partials_t::<22, 26>(pos)
-        } else if order == 23 {
-            self.accel_and_partials_t::<23, 27>(pos)
-        } else if order == 24 {
-            self.accel_and_partials_t::<24, 28>(pos)
-        } else if order == 25 {
-            self.accel_and_partials_t::<25, 29>(pos)
-        } else if order == 26 {
-            self.accel_and_partials_t::<26, 30>(pos)
-        } else if order == 27 {
-            self.accel_and_partials_t::<27, 31>(pos)
-        } else if order == 28 {
-            self.accel_and_partials_t::<28, 32>(pos)
-        } else if order == 29 {
-            self.accel_and_partials_t::<29, 33>(pos)
-        } else if order == 30 {
-            self.accel_and_partials_t::<30, 34>(pos)
-        } else if order == 31 {
-            self.accel_and_partials_t::<31, 35>(pos)
-        } else if order == 32 {
-            self.accel_and_partials_t::<32, 36>(pos)
-        } else if order == 33 {
-            self.accel_and_partials_t::<33, 37>(pos)
-        } else if order == 34 {
-            self.accel_and_partials_t::<34, 38>(pos)
-        } else if order == 35 {
-            self.accel_and_partials_t::<35, 39>(pos)
-        } else if order == 36 {
-            self.accel_and_partials_t::<36, 40>(pos)
-        } else if order == 37 {
-            self.accel_and_partials_t::<37, 41>(pos)
-        } else if order == 38 {
-            self.accel_and_partials_t::<38, 42>(pos)
-        } else if order == 39 {
-            self.accel_and_partials_t::<39, 43>(pos)
+        if degree == 1 {
+            self.accel_and_partials_t::<1, 5>(pos, max_order)
+        } else if degree == 2 {
+            self.accel_and_partials_t::<2, 6>(pos, max_order)
+        } else if degree == 3 {
+            self.accel_and_partials_t::<3, 7>(pos, max_order)
+        } else if degree == 4 {
+            self.accel_and_partials_t::<4, 8>(pos, max_order)
+        } else if degree == 5 {
+            self.accel_and_partials_t::<5, 9>(pos, max_order)
+        } else if degree == 6 {
+            self.accel_and_partials_t::<6, 10>(pos, max_order)
+        } else if degree == 7 {
+            self.accel_and_partials_t::<7, 11>(pos, max_order)
+        } else if degree == 8 {
+            self.accel_and_partials_t::<8, 12>(pos, max_order)
+        } else if degree == 9 {
+            self.accel_and_partials_t::<9, 13>(pos, max_order)
+        } else if degree == 10 {
+            self.accel_and_partials_t::<10, 14>(pos, max_order)
+        } else if degree == 11 {
+            self.accel_and_partials_t::<11, 15>(pos, max_order)
+        } else if degree == 12 {
+            self.accel_and_partials_t::<12, 16>(pos, max_order)
+        } else if degree == 13 {
+            self.accel_and_partials_t::<13, 17>(pos, max_order)
+        } else if degree == 14 {
+            self.accel_and_partials_t::<14, 18>(pos, max_order)
+        } else if degree == 15 {
+            self.accel_and_partials_t::<15, 19>(pos, max_order)
+        } else if degree == 16 {
+            self.accel_and_partials_t::<16, 20>(pos, max_order)
+        } else if degree == 17 {
+            self.accel_and_partials_t::<17, 21>(pos, max_order)
+        } else if degree == 18 {
+            self.accel_and_partials_t::<18, 22>(pos, max_order)
+        } else if degree == 19 {
+            self.accel_and_partials_t::<19, 23>(pos, max_order)
+        } else if degree == 20 {
+            self.accel_and_partials_t::<20, 24>(pos, max_order)
+        } else if degree == 21 {
+            self.accel_and_partials_t::<21, 25>(pos, max_order)
+        } else if degree == 22 {
+            self.accel_and_partials_t::<22, 26>(pos, max_order)
+        } else if degree == 23 {
+            self.accel_and_partials_t::<23, 27>(pos, max_order)
+        } else if degree == 24 {
+            self.accel_and_partials_t::<24, 28>(pos, max_order)
+        } else if degree == 25 {
+            self.accel_and_partials_t::<25, 29>(pos, max_order)
+        } else if degree == 26 {
+            self.accel_and_partials_t::<26, 30>(pos, max_order)
+        } else if degree == 27 {
+            self.accel_and_partials_t::<27, 31>(pos, max_order)
+        } else if degree == 28 {
+            self.accel_and_partials_t::<28, 32>(pos, max_order)
+        } else if degree == 29 {
+            self.accel_and_partials_t::<29, 33>(pos, max_order)
+        } else if degree == 30 {
+            self.accel_and_partials_t::<30, 34>(pos, max_order)
+        } else if degree == 31 {
+            self.accel_and_partials_t::<31, 35>(pos, max_order)
+        } else if degree == 32 {
+            self.accel_and_partials_t::<32, 36>(pos, max_order)
+        } else if degree == 33 {
+            self.accel_and_partials_t::<33, 37>(pos, max_order)
+        } else if degree == 34 {
+            self.accel_and_partials_t::<34, 38>(pos, max_order)
+        } else if degree == 35 {
+            self.accel_and_partials_t::<35, 39>(pos, max_order)
+        } else if degree == 36 {
+            self.accel_and_partials_t::<36, 40>(pos, max_order)
+        } else if degree == 37 {
+            self.accel_and_partials_t::<37, 41>(pos, max_order)
+        } else if degree == 38 {
+            self.accel_and_partials_t::<38, 42>(pos, max_order)
+        } else if degree == 39 {
+            self.accel_and_partials_t::<39, 43>(pos, max_order)
         } else {
-            self.accel_and_partials_t::<40, 44>(pos)
+            self.accel_and_partials_t::<40, 44>(pos, max_order)
         }
     }
 
     fn accel_and_partials_t<const N: usize, const NP4: usize>(
         &self,
         pos: &Vector3,
+        max_order: usize,
     ) -> (Vector3, Matrix3) {
         let (v, w) = self.compute_legendre::<NP4>(pos);
-        let accel = self.accel_from_legendre_t::<N, NP4>(&v, &w);
-        let partials = self.partials_from_legendre_t::<N, NP4>(&v, &w);
+        let accel = self.accel_from_legendre_t::<N, NP4>(&v, &w, max_order);
+        let partials = self.partials_from_legendre_t::<N, NP4>(&v, &w, max_order);
         (accel, partials)
     }
 
-    fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vector3) -> Vector3 {
+    fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vector3, max_order: usize) -> Vector3 {
         let (v, w) = self.compute_legendre::<NP4>(pos);
 
-        self.accel_from_legendre_t::<N, NP4>(&v, &w)
+        self.accel_from_legendre_t::<N, NP4>(&v, &w, max_order)
     }
 
     // Equations 7.65 to 7.69 in Montenbruck & Gill
@@ -362,6 +371,7 @@ impl Gravity {
         &self,
         v: &Legendre<NP4>,
         w: &Legendre<NP4>,
+        max_order: usize,
     ) -> Matrix3 {
         let mut daxdx = 0.0;
         let mut daxdy = 0.0;
@@ -382,7 +392,8 @@ impl Gravity {
             daydz += fnp1 * cnm * w[(np2, 1)];
             dazdz += fnp21 * cnm * vnp2m;
         }
-        for m in 1..(N + 1) {
+        let max_m = (N + 1).min(max_order + 1);
+        for m in 1..max_m {
             let mm1 = m - 1;
             let mp1 = m + 1;
             let mp2 = m + 2;
@@ -460,11 +471,12 @@ impl Gravity {
         &self,
         v: &Legendre<NP4>,
         w: &Legendre<NP4>,
+        max_order: usize,
     ) -> Vector3 {
         let mut accel = Vector3::zeros();
 
         for n in 0..(N + 1) {
-            for m in 0..(n + 1) {
+            for m in 0..(n + 1).min(max_order + 1) {
                 let cnm = self.coeffs[(n, m)];
                 let mut snm = 0.0;
                 if m > 0 {
@@ -683,7 +695,7 @@ mod tests {
         // Order 1 = point mass: accel should be μ/r², radially inward
         let r = 7000.0e3; // 7000 km
         let pos = Vector3::new(r, 0.0, 0.0);
-        let accel = jgm3().accel(&pos, 1);
+        let accel = jgm3().accel(&pos, 1, 1);
         let expected_mag = crate::consts::MU_EARTH / (r * r);
         assert_relative_eq!(accel.norm(), expected_mag, max_relative = 1.0e-6);
         // Should point radially inward (negative x)
@@ -696,10 +708,10 @@ mod tests {
     fn test_gravity_models_agree_order1() {
         // At order 1 (point mass), all models should agree closely
         let pos = Vector3::new(7000.0e3, 1000.0e3, 3000.0e3);
-        let a_jgm3 = jgm3().accel(&pos, 1);
-        let a_jgm2 = jgm2().accel(&pos, 1);
-        let a_egm96 = egm96().accel(&pos, 1);
-        let a_grace = itu_grace16().accel(&pos, 1);
+        let a_jgm3 = jgm3().accel(&pos, 1, 1);
+        let a_jgm2 = jgm2().accel(&pos, 1, 1);
+        let a_egm96 = egm96().accel(&pos, 1, 1);
+        let a_grace = itu_grace16().accel(&pos, 1, 1);
         // All should be very close (small differences due to different GM values)
         assert_relative_eq!(a_jgm3, a_jgm2, max_relative = 1.0e-6);
         assert_relative_eq!(a_jgm3, a_egm96, max_relative = 1.0e-6);
@@ -710,8 +722,8 @@ mod tests {
     fn test_gravity_increases_with_order() {
         // Off-equator point: higher-order (J2 effect) should differ from order 1
         let coord = ITRFCoord::from_geodetic_deg(60.0, 30.0, 300.0e3);
-        let a1 = jgm3().accel(&coord.itrf, 1);
-        let a16 = jgm3().accel(&coord.itrf, 16);
+        let a1 = jgm3().accel(&coord.itrf, 1, 1);
+        let a16 = jgm3().accel(&coord.itrf, 16, 16);
         // They should differ (J2 effect is ~1e-3 relative)
         let diff = (a16 - a1).norm() / a1.norm();
         assert!(
@@ -728,7 +740,7 @@ mod tests {
         let longitude: f64 = -71.2272;
         let altitude: f64 = 0.0;
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
-        let gaccel: Vector3 = jgm3().accel(&coord.itrf, 6);
+        let gaccel: Vector3 = jgm3().accel(&coord.itrf, 6, 6);
         let gaccel_truth =
             nalgebra::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
         assert_relative_eq!(gaccel, gaccel_truth, max_relative = 1.0e-6);
@@ -755,7 +767,7 @@ mod tests {
 
         let g = Gravity::from_file("JGM3.gfc").unwrap();
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
-        let gravitation: Vector3 = g.accel(&coord.itrf, 16);
+        let gravitation: Vector3 = g.accel(&coord.itrf, 16, 16);
         let centrifugal: Vector3 =
             Vector3::new(coord.itrf[0], coord.itrf[1], 0.0) * OMEGA_EARTH * OMEGA_EARTH;
         let gravity = gravitation + centrifugal;
@@ -806,13 +818,13 @@ mod tests {
             );
 
             // get acceleration and partials at coordinate
-            let (accel1, partials) = g.accel_and_partials(&coord.itrf, 6);
+            let (accel1, partials) = g.accel_and_partials(&coord.itrf, 6, 6);
 
             // apply (small) random shift
             let v2 = coord.itrf + dpos;
 
             // get gravity accelaration at new coordinate
-            let accel2 = g.accel(&v2, 6);
+            let accel2 = g.accel(&v2, 6, 6);
 
             // Get what would be expected from partial derivative
             let accel3 = accel1 + partials * dpos;
@@ -820,5 +832,86 @@ mod tests {
             // show that they are approximately equal
             assert_relative_eq!(accel2, accel3, max_relative = 1.0e-4);
         }
+    }
+
+    #[test]
+    fn test_zonal_only_differs_from_full() {
+        // order=0 means zonal harmonics only (m=0 terms).
+        // This should give a different result than order=degree for
+        // a position that is off the polar axis.
+        let coord = ITRFCoord::from_geodetic_deg(45.0, 30.0, 400.0e3);
+        let a_full = jgm3().accel(&coord.itrf, 8, 8);
+        let a_zonal = jgm3().accel(&coord.itrf, 8, 0);
+
+        // They must differ (tesseral terms are non-zero off-axis)
+        let diff = (a_full - a_zonal).norm();
+        assert!(
+            diff > 1.0e-6,
+            "Zonal-only and full gravity should differ, got diff = {:e}",
+            diff
+        );
+
+        // But both should be reasonable gravity magnitudes
+        assert!(a_full.norm() > 5.0);
+        assert!(a_zonal.norm() > 5.0);
+    }
+
+    #[test]
+    fn test_order_less_than_degree() {
+        // Verify that order < degree gives intermediate results
+        let coord = ITRFCoord::from_geodetic_deg(45.0, 30.0, 400.0e3);
+        let a_order0 = jgm3().accel(&coord.itrf, 8, 0);
+        let a_order4 = jgm3().accel(&coord.itrf, 8, 4);
+        let a_order8 = jgm3().accel(&coord.itrf, 8, 8);
+
+        // All three should be distinct
+        let diff_04 = (a_order4 - a_order0).norm();
+        let diff_48 = (a_order8 - a_order4).norm();
+        let diff_08 = (a_order8 - a_order0).norm();
+        assert!(
+            diff_04 > 1.0e-7,
+            "order=4 and order=0 should differ, diff = {:e}",
+            diff_04
+        );
+        assert!(
+            diff_48 > 1.0e-7,
+            "order=8 and order=4 should differ, diff = {:e}",
+            diff_48
+        );
+        assert!(
+            diff_08 > 1.0e-7,
+            "order=8 and order=0 should differ, diff = {:e}",
+            diff_08
+        );
+    }
+
+    #[test]
+    fn test_order_equals_degree_matches_legacy() {
+        // When order == degree, results should be identical to the old behavior
+        // (which implicitly set order = degree).
+        // We verify this by comparing degree=6,order=6 against the known truth value.
+        let latitude: f64 = 42.4473;
+        let longitude: f64 = -71.2272;
+        let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, 0.0);
+        let gaccel = jgm3().accel(&coord.itrf, 6, 6);
+        let gaccel_truth =
+            nalgebra::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
+        assert_relative_eq!(gaccel, gaccel_truth, max_relative = 1.0e-6);
+    }
+
+    #[test]
+    fn test_partials_with_order_less_than_degree() {
+        // Verify partials are consistent when order < degree
+        let g = Gravity::from_file("JGM3.gfc").unwrap();
+        let coord = ITRFCoord::from_geodetic_deg(45.0, 30.0, 400.0e3);
+        let dpos = Vector3::new(50.0, -30.0, 80.0);
+
+        // Use degree=6, order=2
+        let (accel1, partials) = g.accel_and_partials(&coord.itrf, 6, 2);
+        let v2 = coord.itrf + dpos;
+        let accel2 = g.accel(&v2, 6, 2);
+        let accel3 = accel1 + partials * dpos;
+
+        assert_relative_eq!(accel2, accel3, max_relative = 1.0e-4);
     }
 }

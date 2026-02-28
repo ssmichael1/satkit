@@ -378,7 +378,7 @@ class TestGravity:
         itrf = sk.itrfcoord(
             latitude_deg=latitude_deg, longitude_deg=longitude_deg, altitude=altitude
         )
-        gravitation = sk.gravity(itrf, order=16)
+        gravitation = sk.gravity(itrf, degree=16)
         # Add centrifugal force @ Earth surface
         centrifugal = (
             np.array([itrf.vector[0], itrf.vector[1], 0]) * sk.consts.omega_earth**2
@@ -400,6 +400,70 @@ class TestGravity:
         )
         assert ns_deflection == pytest.approx(reference_ns_deflection_asec, rel=2e-6)
         assert ew_deflection == pytest.approx(reference_ew_deflection_asec, rel=2e-6)
+
+    def test_gravity_degree_order(self):
+        """Test separate degree and order parameters for gravity function"""
+        itrf = sk.itrfcoord(latitude_deg=45.0, longitude_deg=30.0, altitude=400e3)
+
+        # degree=8, order=8 (full) should differ from degree=8, order=0 (zonal only)
+        g_full = sk.gravity(itrf, degree=8, order=8)
+        g_zonal = sk.gravity(itrf, degree=8, order=0)
+        diff = np.linalg.norm(g_full - g_zonal)
+        assert diff > 1e-6, f"Full and zonal-only gravity should differ, diff = {diff}"
+
+        # order defaults to degree
+        g_default = sk.gravity(itrf, degree=8)
+        assert np.allclose(g_full, g_default), "order should default to degree"
+
+    def test_propsettings_new_fields(self):
+        """Test new propsettings fields: gravity_degree, gravity_order, use_sun_gravity, use_moon_gravity"""
+        # Default values
+        s = sk.propsettings()
+        assert s.gravity_degree == 4
+        assert s.gravity_order == 4
+        assert s.use_sun_gravity == True
+        assert s.use_moon_gravity == True
+
+        # Constructor kwargs
+        s = sk.propsettings(gravity_degree=10, gravity_order=5, use_sun_gravity=False, use_moon_gravity=False)
+        assert s.gravity_degree == 10
+        assert s.gravity_order == 5
+        assert s.use_sun_gravity == False
+        assert s.use_moon_gravity == False
+
+        # Setting gravity_degree should clamp gravity_order
+        s = sk.propsettings(gravity_degree=8)
+        assert s.gravity_degree == 8
+        assert s.gravity_order == 8  # defaults to degree when not set
+        s.gravity_degree = 3
+        assert s.gravity_order == 3  # clamped down
+
+        # Setting gravity_order > gravity_degree should raise
+        s = sk.propsettings(gravity_degree=6)
+        with pytest.raises(ValueError):
+            s.gravity_order = 10
+
+    def test_propagate_sun_moon_toggles(self):
+        """Test that disabling sun/moon gravity changes propagation results"""
+        starttime = sk.time(2015, 3, 20)
+        stoptime = starttime + sk.duration.from_days(0.5)
+        pos = np.array([sk.consts.geo_r, 0, 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
+        state0 = np.concatenate((pos, vel))
+
+        settings_all = sk.propsettings()
+        settings_no_sun = sk.propsettings(use_sun_gravity=False)
+        settings_no_moon = sk.propsettings(use_moon_gravity=False)
+
+        res_all = sk.propagate(state0, starttime, end=stoptime, propsettings=settings_all)
+        res_no_sun = sk.propagate(state0, starttime, end=stoptime, propsettings=settings_no_sun)
+        res_no_moon = sk.propagate(state0, starttime, end=stoptime, propsettings=settings_no_moon)
+
+        # Each should produce different final positions
+        diff_sun = np.linalg.norm(res_all.state[0:3] - res_no_sun.state[0:3])
+        diff_moon = np.linalg.norm(res_all.state[0:3] - res_no_moon.state[0:3])
+        assert diff_sun > 1.0, f"Disabling sun gravity should matter, diff = {diff_sun} m"
+        assert diff_moon > 1.0, f"Disabling moon gravity should matter, diff = {diff_moon} m"
 
 
 class TestFrameTransform:

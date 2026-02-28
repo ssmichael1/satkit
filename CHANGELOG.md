@@ -1,6 +1,19 @@
 # Changelog
 
 
+## 0.11.0 - 2026-02-27
+
+### Configurable gravity degree/order and third-body toggles
+
+- **Breaking:** Rename `gravity_order` to `gravity_degree` in `PropSettings` (Rust) and `propsettings` (Python)
+- Add separate `gravity_order` parameter for spherical harmonic order (defaults to `gravity_degree`; must be ≤ `gravity_degree`)
+- Add `use_sun_gravity` and `use_moon_gravity` toggles to enable/disable third-body perturbations (default `true`)
+- Update `gravity()` and `gravity_and_partials()` Python functions: rename `order` kwarg to `degree`, add new `order` kwarg (defaults to `degree`)
+- Update Rust `earthgravity` API to accept separate `degree` and `order` parameters
+- Add 7 new Rust tests and 3 new Python tests for the new functionality
+- Update documentation, type stubs, README, and tutorial notebook
+
+
 ## 0.10.4 - 2026-02-26
 
 ### Data directory fix

@@ -66,7 +66,7 @@ v0 = np.sqrt(sk.consts.mu_earth / r0)
 
 settings = sk.propsettings()
 settings.gravity_model = sk.gravmodel.JGM3
-settings.gravity_order = 8
+settings.gravity_degree = 8
 
 result = sk.propagate(
     np.array([r0, 0, 0, 0, v0, 0]),
