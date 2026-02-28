@@ -158,6 +158,19 @@ pub struct Gravity {
 
 type Legendre<const N: usize> = Matrix<N, N>;
 
+/// Dispatch a runtime `degree` value to a const-generic method call.
+/// NP4 is always degree + 4; the const expression `{ $d + 4 }` preserves
+/// stack allocation for the Legendre matrices.
+macro_rules! dispatch_degree {
+    ($self:expr, $method:ident ($arg1:expr, $arg2:expr), $degree:expr,
+     $($d:literal),+ $(,)?) => {
+        match $degree {
+            $($d => $self.$method::<$d, { $d + 4 }>($arg1, $arg2),)+
+            _ => $self.$method::<40, 44>($arg1, $arg2),
+        }
+    };
+}
+
 ///
 /// Return acceleration due to Earth gravity at the input position. The
 /// acceleration does not include the centrifugal force, and is output
@@ -177,176 +190,22 @@ type Legendre<const N: usize> = Matrix<N, N>;
 impl Gravity {
     pub fn accel(&self, pos: &Vector3, degree: usize, order: usize) -> Vector3 {
         let max_order = order.min(degree);
-        // This is tedious, but using generics allows for vectors to be
-        // allocated on the stack, which is faster
-        if degree == 1 {
-            self.accel_t::<1, 5>(pos, max_order)
-        } else if degree == 2 {
-            self.accel_t::<2, 6>(pos, max_order)
-        } else if degree == 3 {
-            self.accel_t::<3, 7>(pos, max_order)
-        } else if degree == 4 {
-            self.accel_t::<4, 8>(pos, max_order)
-        } else if degree == 5 {
-            self.accel_t::<5, 9>(pos, max_order)
-        } else if degree == 6 {
-            self.accel_t::<6, 10>(pos, max_order)
-        } else if degree == 7 {
-            self.accel_t::<7, 11>(pos, max_order)
-        } else if degree == 8 {
-            self.accel_t::<8, 12>(pos, max_order)
-        } else if degree == 9 {
-            self.accel_t::<9, 13>(pos, max_order)
-        } else if degree == 10 {
-            self.accel_t::<10, 14>(pos, max_order)
-        } else if degree == 11 {
-            self.accel_t::<11, 15>(pos, max_order)
-        } else if degree == 12 {
-            self.accel_t::<12, 16>(pos, max_order)
-        } else if degree == 13 {
-            self.accel_t::<13, 17>(pos, max_order)
-        } else if degree == 14 {
-            self.accel_t::<14, 18>(pos, max_order)
-        } else if degree == 15 {
-            self.accel_t::<15, 19>(pos, max_order)
-        } else if degree == 16 {
-            self.accel_t::<16, 20>(pos, max_order)
-        } else if degree == 17 {
-            self.accel_t::<17, 21>(pos, max_order)
-        } else if degree == 18 {
-            self.accel_t::<18, 22>(pos, max_order)
-        } else if degree == 19 {
-            self.accel_t::<19, 23>(pos, max_order)
-        } else if degree == 20 {
-            self.accel_t::<20, 24>(pos, max_order)
-        } else if degree == 21 {
-            self.accel_t::<21, 25>(pos, max_order)
-        } else if degree == 22 {
-            self.accel_t::<22, 26>(pos, max_order)
-        } else if degree == 23 {
-            self.accel_t::<23, 27>(pos, max_order)
-        } else if degree == 24 {
-            self.accel_t::<24, 28>(pos, max_order)
-        } else if degree == 25 {
-            self.accel_t::<25, 29>(pos, max_order)
-        } else if degree == 26 {
-            self.accel_t::<26, 30>(pos, max_order)
-        } else if degree == 27 {
-            self.accel_t::<27, 31>(pos, max_order)
-        } else if degree == 28 {
-            self.accel_t::<28, 32>(pos, max_order)
-        } else if degree == 29 {
-            self.accel_t::<29, 33>(pos, max_order)
-        } else if degree == 30 {
-            self.accel_t::<30, 34>(pos, max_order)
-        } else if degree == 31 {
-            self.accel_t::<31, 35>(pos, max_order)
-        } else if degree == 32 {
-            self.accel_t::<32, 36>(pos, max_order)
-        } else if degree == 33 {
-            self.accel_t::<33, 37>(pos, max_order)
-        } else if degree == 34 {
-            self.accel_t::<34, 38>(pos, max_order)
-        } else if degree == 35 {
-            self.accel_t::<35, 39>(pos, max_order)
-        } else if degree == 36 {
-            self.accel_t::<36, 40>(pos, max_order)
-        } else if degree == 37 {
-            self.accel_t::<37, 41>(pos, max_order)
-        } else if degree == 38 {
-            self.accel_t::<38, 42>(pos, max_order)
-        } else if degree == 39 {
-            self.accel_t::<39, 43>(pos, max_order)
-        } else {
-            self.accel_t::<40, 44>(pos, max_order)
-        }
+        dispatch_degree!(self, accel_t(pos, max_order), degree,
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+            21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+            31, 32, 33, 34, 35, 36, 37, 38, 39,
+        )
     }
 
     pub fn accel_and_partials(&self, pos: &Vector3, degree: usize, order: usize) -> (Vector3, Matrix3) {
         let max_order = order.min(degree);
-        // This is tedious, but using generics allows for vectors to be
-        // allocated on the stack, which is faster
-        if degree == 1 {
-            self.accel_and_partials_t::<1, 5>(pos, max_order)
-        } else if degree == 2 {
-            self.accel_and_partials_t::<2, 6>(pos, max_order)
-        } else if degree == 3 {
-            self.accel_and_partials_t::<3, 7>(pos, max_order)
-        } else if degree == 4 {
-            self.accel_and_partials_t::<4, 8>(pos, max_order)
-        } else if degree == 5 {
-            self.accel_and_partials_t::<5, 9>(pos, max_order)
-        } else if degree == 6 {
-            self.accel_and_partials_t::<6, 10>(pos, max_order)
-        } else if degree == 7 {
-            self.accel_and_partials_t::<7, 11>(pos, max_order)
-        } else if degree == 8 {
-            self.accel_and_partials_t::<8, 12>(pos, max_order)
-        } else if degree == 9 {
-            self.accel_and_partials_t::<9, 13>(pos, max_order)
-        } else if degree == 10 {
-            self.accel_and_partials_t::<10, 14>(pos, max_order)
-        } else if degree == 11 {
-            self.accel_and_partials_t::<11, 15>(pos, max_order)
-        } else if degree == 12 {
-            self.accel_and_partials_t::<12, 16>(pos, max_order)
-        } else if degree == 13 {
-            self.accel_and_partials_t::<13, 17>(pos, max_order)
-        } else if degree == 14 {
-            self.accel_and_partials_t::<14, 18>(pos, max_order)
-        } else if degree == 15 {
-            self.accel_and_partials_t::<15, 19>(pos, max_order)
-        } else if degree == 16 {
-            self.accel_and_partials_t::<16, 20>(pos, max_order)
-        } else if degree == 17 {
-            self.accel_and_partials_t::<17, 21>(pos, max_order)
-        } else if degree == 18 {
-            self.accel_and_partials_t::<18, 22>(pos, max_order)
-        } else if degree == 19 {
-            self.accel_and_partials_t::<19, 23>(pos, max_order)
-        } else if degree == 20 {
-            self.accel_and_partials_t::<20, 24>(pos, max_order)
-        } else if degree == 21 {
-            self.accel_and_partials_t::<21, 25>(pos, max_order)
-        } else if degree == 22 {
-            self.accel_and_partials_t::<22, 26>(pos, max_order)
-        } else if degree == 23 {
-            self.accel_and_partials_t::<23, 27>(pos, max_order)
-        } else if degree == 24 {
-            self.accel_and_partials_t::<24, 28>(pos, max_order)
-        } else if degree == 25 {
-            self.accel_and_partials_t::<25, 29>(pos, max_order)
-        } else if degree == 26 {
-            self.accel_and_partials_t::<26, 30>(pos, max_order)
-        } else if degree == 27 {
-            self.accel_and_partials_t::<27, 31>(pos, max_order)
-        } else if degree == 28 {
-            self.accel_and_partials_t::<28, 32>(pos, max_order)
-        } else if degree == 29 {
-            self.accel_and_partials_t::<29, 33>(pos, max_order)
-        } else if degree == 30 {
-            self.accel_and_partials_t::<30, 34>(pos, max_order)
-        } else if degree == 31 {
-            self.accel_and_partials_t::<31, 35>(pos, max_order)
-        } else if degree == 32 {
-            self.accel_and_partials_t::<32, 36>(pos, max_order)
-        } else if degree == 33 {
-            self.accel_and_partials_t::<33, 37>(pos, max_order)
-        } else if degree == 34 {
-            self.accel_and_partials_t::<34, 38>(pos, max_order)
-        } else if degree == 35 {
-            self.accel_and_partials_t::<35, 39>(pos, max_order)
-        } else if degree == 36 {
-            self.accel_and_partials_t::<36, 40>(pos, max_order)
-        } else if degree == 37 {
-            self.accel_and_partials_t::<37, 41>(pos, max_order)
-        } else if degree == 38 {
-            self.accel_and_partials_t::<38, 42>(pos, max_order)
-        } else if degree == 39 {
-            self.accel_and_partials_t::<39, 43>(pos, max_order)
-        } else {
-            self.accel_and_partials_t::<40, 44>(pos, max_order)
-        }
+        dispatch_degree!(self, accel_and_partials_t(pos, max_order), degree,
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+            21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+            31, 32, 33, 34, 35, 36, 37, 38, 39,
+        )
     }
 
     fn accel_and_partials_t<const N: usize, const NP4: usize>(
@@ -473,37 +332,43 @@ impl Gravity {
         w: &Legendre<NP4>,
         max_order: usize,
     ) -> Vector3 {
-        let mut accel = Vector3::zeros();
+        let mut ax = 0.0;
+        let mut ay = 0.0;
+        let mut az = 0.0;
 
+        // m = 0 terms
         for n in 0..(N + 1) {
-            for m in 0..(n + 1).min(max_order + 1) {
-                let cnm = self.coeffs[(n, m)];
-                let mut snm = 0.0;
-                if m > 0 {
-                    snm = self.coeffs[(m - 1, n)];
-                }
-                if m == 0 {
-                    accel[0] -= cnm * v[(n + 1, 1)];
-                    accel[1] -= cnm * w[(n + 1, 1)];
-                } else {
-                    accel[0] += 0.5
-                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(
-                            cnm.mul_add(v[(n + 1, m - 1)], snm * w[(n + 1, m - 1)]),
-                            (-cnm).mul_add(v[(n + 1, m + 1)], -(snm * w[(n + 1, m + 1)])),
-                        );
+            let cnm = self.coeffs[(n, 0)];
+            ax -= cnm * v[(n + 1, 1)];
+            ay -= cnm * w[(n + 1, 1)];
+            az -= (n + 1) as f64 * cnm * v[(n + 1, 0)];
+        }
 
-                    accel[1] += 0.5
-                        * ((n - m + 2) as f64 * (n - m + 1) as f64).mul_add(
-                            (-cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]),
-                            (-cnm).mul_add(w[(n + 1, m + 1)], snm * v[(n + 1, m + 1)]),
-                        );
-                }
-                accel[2] +=
-                    (n - m + 1) as f64 * (-cnm).mul_add(v[(n + 1, m)], -(snm * w[(n + 1, m)]));
+        // m > 0 terms
+        let max_m = (N + 1).min(max_order + 1);
+        for m in 1..max_m {
+            for n in m..(N + 1) {
+                let cnm = self.coeffs[(n, m)];
+                let snm = self.coeffs[(m - 1, n)];
+                let fnmmp21 = (n - m + 2) as f64 * (n - m + 1) as f64;
+
+                ax += 0.5
+                    * fnmmp21.mul_add(
+                        cnm.mul_add(v[(n + 1, m - 1)], snm * w[(n + 1, m - 1)]),
+                        (-cnm).mul_add(v[(n + 1, m + 1)], -(snm * w[(n + 1, m + 1)])),
+                    );
+
+                ay += 0.5
+                    * fnmmp21.mul_add(
+                        (-cnm).mul_add(w[(n + 1, m - 1)], snm * v[(n + 1, m - 1)]),
+                        (-cnm).mul_add(w[(n + 1, m + 1)], snm * v[(n + 1, m + 1)]),
+                    );
+
+                az -= (n - m + 1) as f64 * cnm.mul_add(v[(n + 1, m)], snm * w[(n + 1, m)]);
             }
         }
 
-        accel * self.gravity_constant / self.radius / self.radius
+        Vector3::new(ax, ay, az) * self.gravity_constant / self.radius / self.radius
     }
 
     fn compute_legendre<const NP4: usize>(&self, pos: &Vector3) -> (Legendre<NP4>, Legendre<NP4>) {

@@ -21,7 +21,7 @@ pub fn point_gravity(
 
 pub fn point_gravity_and_partials(
     r: &na::Vector3<f64>, // object
-    s: &na::Vector3<f64>, // distant attractur
+    s: &na::Vector3<f64>, // distant attractor
     mu: f64,
 ) -> (na::Vector3<f64>, na::Matrix3<f64>) {
     let rs = r - s;
@@ -29,10 +29,11 @@ pub fn point_gravity_and_partials(
     let rsnorm = rsnorm2.sqrt();
     let snorm2 = s.norm_squared();
     let snorm = snorm2.sqrt();
+    let rsnorm3 = rsnorm2 * rsnorm;
     (
-        -mu * (rs / (rsnorm * rsnorm2) + s / (snorm * snorm2)),
-        -mu * (na::Matrix3::<f64>::identity() / (rsnorm2 * rsnorm)
-            - 3.0 * rs * rs.transpose() / (rsnorm2 * rsnorm2 * rsnorm)),
+        -mu * (rs / rsnorm3 + s / (snorm * snorm2)),
+        -mu * (na::Matrix3::<f64>::identity() / rsnorm3
+            - 3.0 * rs * rs.transpose() / (rsnorm2 * rsnorm3)),
     )
 }
 

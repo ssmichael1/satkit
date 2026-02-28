@@ -7,6 +7,44 @@ use crate::mathtypes::*;
 
 use anyhow::Result;
 
+/// Geodetic coordinates with named fields
+///
+/// Provides latitude, longitude, and height above ellipsoid
+/// as named fields instead of a 3-element tuple.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Geodetic {
+    /// Latitude in radians, [-π/2, π/2]
+    pub latitude_rad: f64,
+    /// Longitude in radians, [-π, π]
+    pub longitude_rad: f64,
+    /// Height above WGS84 ellipsoid in meters
+    pub height_m: f64,
+}
+
+impl Geodetic {
+    /// Return latitude in degrees
+    pub fn latitude_deg(&self) -> f64 {
+        self.latitude_rad.to_degrees()
+    }
+
+    /// Return longitude in degrees
+    pub fn longitude_deg(&self) -> f64 {
+        self.longitude_rad.to_degrees()
+    }
+}
+
+impl std::fmt::Display for Geodetic {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Geodetic(lat: {:8.4} deg, lon: {:8.4} deg, height: {:5.2} m)",
+            self.latitude_deg(),
+            self.longitude_deg(),
+            self.height_m,
+        )
+    }
+}
+
 ///
 /// Representation of a coordinate in the
 /// International Terrestrial Reference Frame (ITRF)
@@ -118,12 +156,15 @@ impl std::convert::From<[f64; 3]> for ITRFCoord {
     }
 }
 
-impl std::convert::From<&[f64]> for ITRFCoord {
-    fn from(v: &[f64]) -> Self {
-        assert!(v.len() == 3);
-        Self {
-            itrf: Vector3::from_row_slice(v),
+impl std::convert::TryFrom<&[f64]> for ITRFCoord {
+    type Error = anyhow::Error;
+    fn try_from(v: &[f64]) -> Result<Self> {
+        if v.len() != 3 {
+            anyhow::bail!("Input slice must have 3 elements, got {}", v.len());
         }
+        Ok(Self {
+            itrf: Vector3::from_row_slice(v),
+        })
     }
 }
 
@@ -241,6 +282,20 @@ impl ITRFCoord {
         }
     }
 
+    /// Returns geodetic coordinates as a named struct
+    ///
+    /// # Returns
+    /// A [`Geodetic`] struct with latitude (radians), longitude (radians),
+    /// and height above ellipsoid (meters)
+    pub fn to_geodetic(&self) -> Geodetic {
+        let (lat, lon, h) = self.to_geodetic_rad();
+        Geodetic {
+            latitude_rad: lat,
+            longitude_rad: lon,
+            height_m: h,
+        }
+    }
+
     /// Returns 3-element tuple representing geodetic coordinates
     ///
     /// # Tuple contents:
@@ -341,17 +396,8 @@ impl ITRFCoord {
     /// * Uses Vincenty's formula
     ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
     ///
-    /// # Arguments:
-    ///
-    /// * `distance_m` - Distance in meters to travel along surface of Earth
-    /// * `heading_rad` - Initial heading, in radians
-    ///
-    /// # Returns:
-    ///
-    /// * ITRFCoord representing final position
-    ///
     pub fn move_with_heading(&self, distance_m: f64, heading_rad: f64) -> Self {
-        let phi1 = self.latitude_rad();
+        let (phi1, lon1, _) = self.to_geodetic_rad();
         #[allow(non_upper_case_globals)]
         const a: f64 = WGS84_A;
         #[allow(non_upper_case_globals)]
@@ -410,8 +456,23 @@ impl ITRFCoord {
             ),
             lam,
         );
-        let lambda2 = delta_lon + self.longitude_rad();
+        let lambda2 = delta_lon + lon1;
         Self::from_geodetic_rad(phi2, lambda2, 0.0)
+    }
+
+    /// Geodesic distance in meters between two coordinates
+    ///
+    /// Returns the shortest distance along the Earth's surface.
+    /// This is a convenience wrapper around [`geodesic_distance`](Self::geodesic_distance)
+    /// that returns only the distance.
+    ///
+    /// # Arguments
+    /// * `other` - ITRF coordinate to measure distance to
+    ///
+    /// # Returns
+    /// Distance in meters
+    pub fn distance_to(&self, other: &Self) -> f64 {
+        self.geodesic_distance(other).0
     }
 
     /// Geodesic distance between two coordinates
@@ -431,9 +492,9 @@ impl ITRFCoord {
     /// * `0` - Distance in meters
     /// * `1` - Starting heading (at self) in radians
     /// * `2` - Final heading (at other) in radians
-    //
+    ///
     /// # References
-    //  * Vincenty's formula inverse
+    /// * Vincenty's formula inverse
     ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
     ///   See: <https://geodesyapps.ga.gov.au/vincenty-inverse>
     ///
@@ -443,16 +504,12 @@ impl ITRFCoord {
         #[allow(non_upper_case_globals)]
         const b: f64 = (1.0 - WGS84_F) * WGS84_A;
 
-        let lata = self.latitude_rad();
-        let latb = other.latitude_rad();
-        let lona = self.longitude_rad();
-        let lonb = other.longitude_rad();
+        let (lata, lona, _) = self.to_geodetic_rad();
+        let (latb, lonb, _) = other.to_geodetic_rad();
         let u1 = ((1.0 - WGS84_F) * lata.tan()).atan();
         let u2 = ((1.0 - WGS84_F) * latb.tan()).atan();
-        let lam = lonb - lona;
-        let londiff = lam;
-
-        let mut lam = lonb - lona;
+        let londiff = lonb - lona;
+        let mut lam = londiff;
         let mut cossqalpha = 0.0;
         let mut sinsigma = 0.0;
         let mut cossigma = 0.0;
@@ -528,7 +585,7 @@ impl ITRFCoord {
     ///
     /// # Arguments
     ///
-    /// * `ref_coord`` - `&ITRFCoord`` representing reference
+    /// * `ref_coord` - `&ITRFCoord` representing reference
     ///
     /// # Return
     ///
@@ -544,7 +601,7 @@ impl ITRFCoord {
     /// use satkit::itrfcoord::ITRFCoord;
     /// // Create coord
     /// let itrf1 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 150.0);
-    /// // Crate 2nd coord 100 meters above
+    /// // Create 2nd coord 100 meters above
     /// let itrf2 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 250.0);
     ///
     /// // Get NED of itrf1 relative to itrf2
@@ -588,7 +645,7 @@ impl ITRFCoord {
     /// use satkit::itrfcoord::ITRFCoord;
     /// // Create coord
     /// let itrf1 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 150.0);
-    /// // Crate 2nd coord 100 meters above
+    /// // Create 2nd coord 100 meters above
     /// let itrf2 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 250.0);
     ///
     /// // Get ENU of itrf1 relative to itrf2
