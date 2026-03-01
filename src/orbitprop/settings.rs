@@ -12,8 +12,8 @@ use anyhow::Result;
 /// * `gravity_degree` - maximum degree of spherical harmonic gravity model.  Default is 4
 /// * `gravity_order` - maximum order of spherical harmonic gravity model.  Default is same as `gravity_degree`.
 ///    Must be ≤ `gravity_degree`.
-/// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
-/// * `rel_error` - the maximum relative error for the infinity norm of the state in Runga-Kutta integrator.  Default is 1e-8
+/// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
+/// * `rel_error` - the maximum relative error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
 /// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
 /// * `use_sun_gravity` - Do we include sun third-body gravitational perturbation.  Default is true
 /// * `use_moon_gravity` - Do we include moon third-body gravitational perturbation.  Default is true
@@ -50,6 +50,27 @@ impl Default for PropSettings {
 }
 
 impl PropSettings {
+    /// Set gravity degree and order, with validation
+    ///
+    /// # Arguments
+    /// * `degree` - Maximum degree of spherical harmonic gravity model
+    /// * `order` - Maximum order (must be ≤ degree)
+    ///
+    /// # Errors
+    /// Returns error if order > degree
+    pub fn set_gravity(&mut self, degree: u16, order: u16) -> Result<()> {
+        if order > degree {
+            anyhow::bail!(
+                "Gravity order ({}) must be ≤ degree ({})",
+                order,
+                degree
+            );
+        }
+        self.gravity_degree = degree;
+        self.gravity_order = order;
+        Ok(())
+    }
+
     /// Precompute terms between begin and end instants
     ///
     /// # Arguments

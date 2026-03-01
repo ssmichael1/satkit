@@ -86,7 +86,7 @@ extern "C" {
 ///
 ///   * `alt_km` -  Altitude in kilometers
 ///   * `lat_option` - Optional latitude in degrees (default: 0)
-///   * `lon_option` - Optional longitude in detrees (default: 0)
+///   * `lon_option` - Optional longitude in degrees (default: 0)
 ///   * `time_option` -  Optional time, for when using space weather
 ///   * `use_spaceweather` -  Boolean to use space weather data
 ///

@@ -178,8 +178,8 @@ fn test_gps() {
 #[test]
 fn test_jd() {
     let time = Instant::from_datetime(2024, 11, 24, 12, 0, 0.0).unwrap();
-    assert!(time.as_jd() == 2_460_639.0);
-    assert!(time.as_mjd() == 60_638.5);
+    assert!(time.as_jd_utc() == 2_460_639.0);
+    assert!(time.as_mjd_utc() == 60_638.5);
 }
 
 #[test]
