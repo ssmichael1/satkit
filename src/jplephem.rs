@@ -9,13 +9,13 @@
 //!
 //! # Links
 //!
-//! Ephemerides filess can be found at:
+//! Ephemerides files can be found at:
 //! <https://ssd.jpl.nasa.gov/ftp/eph/planets//>
 //!
 //!
 //! # Notes
 //!
-//! for little-endian systems, download from the "Linux" subdirectory
+//! For little-endian systems, download from the "Linux" subdirectory
 //! For big-endian systems, download from the "SunOS" subdirectory
 //!
 
@@ -52,7 +52,7 @@ impl TryFrom<i32> for SolarSystem {
 
 /// JPL Ephemeris Structure
 ///
-/// included ephemerides and solar system constants loaded from the
+/// Included ephemerides and solar system constants loaded from the
 /// JPL ephemerides file.
 ///
 /// Also includes functions to compute heliocentric and geocentric
@@ -79,14 +79,68 @@ struct JPLEphem {
     cheby: DMatrix<f64>,
 }
 
+/// Pre-computed parameters for Chebyshev polynomial evaluation
+struct ChebySetup {
+    t_seg: f64,
+    offset0: usize,
+    int_num: usize,
+    nsubint: usize,
+    ncoeff: usize,
+}
+
+macro_rules! dispatch_ncoeff {
+    ($self:expr, $method:ident, $setup:expr) => {
+        match $setup.ncoeff {
+            6 => $self.$method::<6>($setup),
+            7 => $self.$method::<7>($setup),
+            8 => $self.$method::<8>($setup),
+            10 => $self.$method::<10>($setup),
+            11 => $self.$method::<11>($setup),
+            12 => $self.$method::<12>($setup),
+            13 => $self.$method::<13>($setup),
+            14 => $self.$method::<14>($setup),
+            _ => bail!("Invalid body"),
+        }
+    };
+}
+
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
     static INSTANCE: OnceCell<Result<JPLEphem>> = OnceCell::new();
     INSTANCE.get_or_init(|| JPLEphem::from_file("linux_p1550p2650.440"))
 }
 
 impl JPLEphem {
-    fn consts(&self, s: &String) -> Option<&f64> {
+    fn consts(&self, s: &str) -> Option<&f64> {
         self.consts.get(s)
+    }
+
+    /// Compute Chebyshev setup parameters for a given body and time
+    fn cheby_setup(&self, body: SolarSystem, tm: &Instant) -> Result<ChebySetup> {
+        let tt = tm.as_jd_with_scale(TimeScale::TT);
+        if self.jd_start > tt || self.jd_stop < tt {
+            bail!("Invalid Julian date: {}", tt);
+        }
+
+        let t_int = (tt - self.jd_start) / self.jd_step;
+        let int_num = t_int.floor() as usize;
+        let bidx = body as usize;
+
+        let ncoeff = self.ipt[bidx][1];
+        let nsubint = self.ipt[bidx][2];
+
+        let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
+        let sub_int_num = t_int_2.floor() as usize;
+        let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
+
+        let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
+
+        Ok(ChebySetup {
+            t_seg,
+            offset0,
+            int_num,
+            nsubint,
+            ncoeff,
+        })
     }
 
     /// Construct a JPL Ephemerides object from the provided binary data file
@@ -250,50 +304,20 @@ impl JPLEphem {
         })
     }
 
-    // Optimized function for computing body position
-    // (Matrix is allocated on stack, not heap)
-    fn body_pos_optimized<const N: usize>(
-        &self,
-        body: SolarSystem,
-        tm: &Instant,
-    ) -> Result<Vector3> {
-        // Terrestrial time
-        let tt = tm.as_jd_with_scale(TimeScale::TT);
-        if (self.jd_start > tt) || (self.jd_stop < tt) {
-            bail!("Invalid julian date: {}", tt);
-        }
-
-        // Get record index
-        let t_int: f64 = (tt - self.jd_start) / self.jd_step;
-        let int_num = t_int.floor() as i32;
-        // Body index
-        let bidx = body as usize;
-
-        // # of coefficients and subintervals for this body
-        let ncoeff = self.ipt[bidx][1];
-        let nsubint = self.ipt[bidx][2];
-
-        // Fractional way into step
-        let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
-        let sub_int_num: usize = t_int_2.floor() as usize;
-        // Scale from -1 to 1
-        let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
-
-        let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
-
+    fn body_pos_optimized<const N: usize>(&self, setup: &ChebySetup) -> Result<Vector3> {
         let mut t = Vector::<N>::zeros();
         t[0] = 1.0;
-        t[1] = t_seg;
-        for j in 2..ncoeff {
-            t[j] = (2.0 * t_seg).mul_add(t[j - 1], -t[j - 2]);
+        t[1] = setup.t_seg;
+        for j in 2..N {
+            t[j] = (2.0 * setup.t_seg).mul_add(t[j - 1], -t[j - 2]);
         }
 
-        let mut pos: Vector3 = Vector3::zeros();
+        let mut pos = Vector3::zeros();
         for ix in 0..3 {
             let m = self
                 .cheby
-                .fixed_view::<N, 1>(offset0 + N * ix, int_num as usize);
-            pos[ix] = (m.transpose() * t)[(0, 0)];
+                .fixed_view::<N, 1>(setup.offset0 + N * ix, setup.int_num);
+            pos[ix] = m.column(0).dot(&t);
         }
 
         Ok(pos * 1.0e3)
@@ -319,17 +343,8 @@ impl JPLEphem {
     ///  * The sun position is relative to the solar system barycenter
     ///    (it will be close to origin)
     fn barycentric_pos(&self, body: SolarSystem, tm: &Instant) -> Result<Vector3> {
-        match self.ipt[body as usize][1] {
-            6 => self.body_pos_optimized::<6>(body, tm),
-            7 => self.body_pos_optimized::<7>(body, tm),
-            8 => self.body_pos_optimized::<8>(body, tm),
-            10 => self.body_pos_optimized::<10>(body, tm),
-            11 => self.body_pos_optimized::<11>(body, tm),
-            12 => self.body_pos_optimized::<12>(body, tm),
-            13 => self.body_pos_optimized::<13>(body, tm),
-            14 => self.body_pos_optimized::<14>(body, tm),
-            _ => bail!("Invalid body"),
-        }
+        let setup = self.cheby_setup(body, tm)?;
+        dispatch_ncoeff!(self, body_pos_optimized, &setup)
     }
     /// Return the position & velocity the given body in the barycentric coordinate system
     /// (origin is solar system barycenter)
@@ -351,72 +366,38 @@ impl JPLEphem {
     ///  * The sun position is relative to the solar system barycenter
     ///    (it will be close to origin)
     fn barycentric_state(&self, body: SolarSystem, tm: &Instant) -> Result<(Vector3, Vector3)> {
-        match self.ipt[body as usize][1] {
-            6 => self.body_state_optimized::<6>(body, tm),
-            7 => self.body_state_optimized::<7>(body, tm),
-            8 => self.body_state_optimized::<8>(body, tm),
-            10 => self.body_state_optimized::<10>(body, tm),
-            11 => self.body_state_optimized::<11>(body, tm),
-            12 => self.body_state_optimized::<12>(body, tm),
-            13 => self.body_state_optimized::<13>(body, tm),
-            14 => self.body_state_optimized::<14>(body, tm),
-            _ => bail!("Invalid body"),
-        }
+        let setup = self.cheby_setup(body, tm)?;
+        dispatch_ncoeff!(self, body_state_optimized, &setup)
     }
 
     fn body_state_optimized<const N: usize>(
         &self,
-        body: SolarSystem,
-        tm: &Instant,
+        setup: &ChebySetup,
     ) -> Result<(Vector3, Vector3)> {
-        // Terrestrial time
-        let tt = tm.as_jd_with_scale(TimeScale::TT);
-        if (self.jd_start > tt) || (self.jd_stop < tt) {
-            bail!("Invalid Julian date: {}", tt);
-        }
-
-        // Get record index
-        let t_int: f64 = (tt - self.jd_start) / self.jd_step;
-        let int_num = t_int.floor() as i32;
-        // Body index
-        let bidx = body as usize;
-
-        // # of coefficients and subintervals for this body
-        let ncoeff = self.ipt[bidx][1];
-        let nsubint = self.ipt[bidx][2];
-
-        // Fractional way into step
-        let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
-        let sub_int_num: usize = t_int_2.floor() as usize;
-        // Scale from -1 to 1
-        let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
-
-        let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
-
         let mut t = Vector::<N>::zeros();
         let mut v = Vector::<N>::zeros();
         t[0] = 1.0;
-        t[1] = t_seg;
+        t[1] = setup.t_seg;
         v[0] = 0.0;
         v[1] = 1.0;
-        for j in 2..ncoeff {
-            t[j] = (2.0 * t_seg).mul_add(t[j - 1], -t[j - 2]);
-            v[j] = 2.0f64.mul_add(t[j - 1], (2.0 * t_seg).mul_add(v[j - 1], -v[j - 2]));
+        for j in 2..N {
+            t[j] = (2.0 * setup.t_seg).mul_add(t[j - 1], -t[j - 2]);
+            v[j] = 2.0f64.mul_add(t[j - 1], (2.0 * setup.t_seg).mul_add(v[j - 1], -v[j - 2]));
         }
 
-        let mut pos: Vector3 = Vector3::zeros();
-        let mut vel: Vector3 = Vector3::zeros();
+        let mut pos = Vector3::zeros();
+        let mut vel = Vector3::zeros();
         for ix in 0..3 {
             let m = self
                 .cheby
-                .fixed_view::<N, 1>(offset0 + N * ix, int_num as usize);
-            pos[ix] = (m.transpose() * t)[(0, 0)];
-            vel[ix] = (m.transpose() * v)[(0, 0)];
+                .fixed_view::<N, 1>(setup.offset0 + N * ix, setup.int_num);
+            pos[ix] = m.column(0).dot(&t);
+            vel[ix] = m.column(0).dot(&v);
         }
 
         Ok((
             pos * 1.0e3,
-            vel * 2.0e3 * nsubint as f64 / self.jd_step / 86400.0,
+            vel * 2.0e3 * setup.nsubint as f64 / self.jd_step / 86400.0,
         ))
     }
 
@@ -478,7 +459,7 @@ impl JPLEphem {
     }
 }
 
-pub fn consts(s: &String) -> Option<&f64> {
+pub fn consts(s: &str) -> Option<&f64> {
     jplephem_singleton().as_ref().unwrap().consts(s)
 }
 

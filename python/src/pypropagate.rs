@@ -79,12 +79,12 @@ use anyhow::{bail, Result};
 ///
 ///
 ///    Notes:
-///        * Propagator uses advanced Runga-Kutta integrators and includes the following forces:
+///        * Propagator uses advanced Runge-Kutta integrators and includes the following forces:
 ///            * Earth gravity with higher-order zonal terms
 ///            * Sun, Moon gravity
 ///            * Radiation pressure
-///            * Atmospheric drag: NRL-MISE 2000 density model, with option to include space weather effects (can be large)
-///        * End time must be set by keyword argument, either explicitely or by duration
+///            * Atmospheric drag: NRLMSISE-00 density model, with option to include space weather effects (can be large)
+///        * End time must be set by keyword argument, either explicitly or by duration
 ///        * Solid Earth tides are not (yet) included in the model
 ///
 #[pyfunction(signature=(*args, **kwargs))]

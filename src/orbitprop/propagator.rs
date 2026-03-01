@@ -77,19 +77,31 @@ pub enum PropagationError {
 // See Montenbruk & Gill for details (Chapter 7)
 //
 
+/// Solar radiation pressure acceleration in GCRF
+fn solar_pressure_accel(
+    sun_gcrf: &Vector3,
+    pos_gcrf: &Vector3,
+    time: &Instant,
+    props: &dyn SatProperties,
+    state: &SimpleState,
+) -> Vector3 {
+    -shadowfunc(sun_gcrf, pos_gcrf) * props.cr_a_over_m(time, state) * 4.56e-6 * sun_gcrf
+        / sun_gcrf.norm()
+}
+
 ///
-/// High-precision Propagation a satellite state from a given begin time
+/// High-precision propagation of a satellite state from a given begin time
 /// to a given end time, with input settings and
 /// satellite properties
 ///
-/// Uses Runga-kutta methods for integrating the force equations
+/// Uses Runge-Kutta methods for integrating the force equations
 ///
-/// The default propagator uses a Runga-Kutta 9(8) integrator
+/// The default propagator uses a Runge-Kutta 9(8) integrator
 /// with coefficients computed by Verner:
 /// <https://www.sfu.a/~jverner//>
 ///
-/// This works much better than lower-order Runga-Kutta solvers such as
-/// Dorumund-Prince, and I don't know why it isn't more popular in
+/// This works much better than lower-order Runge-Kutta solvers such as
+/// Dormand-Prince, and I don't know why it isn't more popular in
 /// numerical packages
 ///
 /// # Forces included in the propagator:
@@ -114,7 +126,7 @@ pub enum PropagationError {
 ///  * `end` - Propagate to this time from the begin
 ///  * `step_seconds` - An optional value representing intervals between `begin` and `end` at which
 ///    the new state will be computed
-///  * `settings` - Settings for the Runga-Kutta propagator
+///  * `settings` - Settings for the Runge-Kutta propagator
 ///  * `satprops` - Properties of the satellite, such as ballistic coefficient & susceptibility to
 ///    radiation pressure
 ///
@@ -221,26 +233,12 @@ pub fn propagate<const C: usize, T: TimeLike>(
         ..Default::default()
     };
 
-    // Get or create data for interpolation
-    let interp: &Precomputed = {
-        if let Some(sinterp) = &settings.precomputed {
-            if end > begin {
-                if (begin >= sinterp.begin) && (end <= sinterp.end) {
-                    sinterp
-                } else {
-                    &Precomputed::new(&begin, &end)
-                        .context("Cannot compute precomputed interpolation data for propagation")?
-                }
-            } else if (end >= sinterp.begin) && (begin <= sinterp.end) {
-                sinterp
-            } else {
-                &Precomputed::new(&begin, &end)
-                    .context("Cannot compute precomputed interpolation data for propagation")?
-            }
-        } else {
-            &Precomputed::new(&begin, &end)
-                .context("Cannot compute precomputed interpolation data for propagation")?
-        }
+    // Get or create precomputed ephemeris data
+    let (tmin, tmax) = if end > begin { (begin, end) } else { (end, begin) };
+    let interp: &Precomputed = match &settings.precomputed {
+        Some(p) if tmin >= p.begin && tmax <= p.end => p,
+        _ => &Precomputed::new(&begin, &end)
+            .context("Cannot compute precomputed interpolation data")?,
     };
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
@@ -261,151 +259,91 @@ pub fn propagate<const C: usize, T: TimeLike>(
         // Position in ITRF coordinates
         let pos_itrf = qgcrf2itrf * pos_gcrf;
 
-        const fn is_one<const C2: usize>() -> bool {
-            C2 == 1
-        }
-        const fn is_seven<const C2: usize>() -> bool {
-            C2 == 7
-        }
+        if C == 1 {
+            // Simple state propagation (position + velocity only)
+            let mut accel = qitrf2gcrf
+                * earthgravity::jgm3().accel(
+                    &pos_itrf,
+                    settings.gravity_degree as usize,
+                    settings.gravity_order as usize,
+                );
 
-        // Propagating a "simple" 6-dof (position, velocity) state
-        if is_one::<C>() {
-            let mut accel = Vector3::zeros();
-
-            // Gravity in the ITRF frame
-            let gravity_itrf =
-                earthgravity::jgm3().accel(&pos_itrf, settings.gravity_degree as usize, settings.gravity_order as usize);
-
-            // Gravity in the GCRS frame
-            accel += qitrf2gcrf * gravity_itrf;
-
-            // Acceleration due to moon
             if settings.use_moon_gravity {
-                accel += point_gravity(&pos_gcrf, &moon_gcrf, crate::consts::MU_MOON);
+                accel += point_gravity(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
             }
-
-            // Acceleration due to sun
             if settings.use_sun_gravity {
-                accel += point_gravity(&pos_gcrf, &sun_gcrf, crate::consts::MU_SUN);
+                accel += point_gravity(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
             }
 
-            // Add solar pressure & drag if that is defined in satellite properties
             if let Some(props) = satprops {
-                let ss = y.fixed_view::<6, 1>(0, 0);
-
-                // Compute solar pressure
-                let solarpressure = -shadowfunc(&sun_gcrf, &pos_gcrf)
-                    * props.cr_a_over_m(&time, &ss.into())
-                    * 4.56e-6
-                    * sun_gcrf
-                    / sun_gcrf.norm();
-                accel += solarpressure;
-
-                // Compute drag
-                if pos_gcrf.norm() < 700.0e3 + crate::consts::EARTH_RADIUS {
-                    let cd_a_over_m = props.cd_a_over_m(&time, &ss.into());
-
+                let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
+                accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
+                if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
+                    let cd_a_over_m = props.cd_a_over_m(&time, &ss);
                     if cd_a_over_m > 1e-6 {
                         accel += drag_force(
-                            &pos_gcrf,
-                            &pos_itrf,
-                            &vel_gcrf,
-                            &time,
-                            cd_a_over_m,
-                            settings.use_spaceweather,
+                            &pos_gcrf, &pos_itrf, &vel_gcrf, &time,
+                            cd_a_over_m, settings.use_spaceweather,
                         );
                     }
                 }
-            } // end of handling drag & solarpressure
+            }
 
             let mut dy = Matrix::<6, C>::zeros();
-            // change in position is velocity
             dy.fixed_view_mut::<3, 1>(0, 0).copy_from(&vel_gcrf);
-
-            // Change in velocity is acceleration
             dy.fixed_view_mut::<3, 1>(3, 0).copy_from(&accel);
-
             Ok(dy)
         }
-        // If C==7, we are also integrating the state transition matrix
-        else if is_seven::<C>() {
-            // For state transition matrix, we need to compute force partials with respect to position
-            // (for all forces but drag, partial with respect to velocity are zero)
+        else if C == 7 {
+            // State + state transition matrix propagation
             let (gravity_accel, gravity_partials) =
-                earthgravity::jgm3().accel_and_partials(&pos_itrf, settings.gravity_degree as usize, settings.gravity_order as usize);
+                earthgravity::jgm3().accel_and_partials(
+                    &pos_itrf,
+                    settings.gravity_degree as usize,
+                    settings.gravity_order as usize,
+                );
 
             let mut accel = qitrf2gcrf * gravity_accel;
-
-            // Equation 7.42 in Montenbruck & Gill
-            let mut dfdy: StateType<6> = StateType::<6>::zeros();
-            dfdy.fixed_view_mut::<3, 3>(0, 3)
-                .copy_from(&na::Matrix3::<f64>::identity());
-
             let ritrf2gcrf = qitrf2gcrf.to_rotation_matrix();
-            // Sum partials with respect to position for gravity, sun, and moon
-            // Note: gravity partials need to be rotated into the gcrf frame from itrf
             let mut dadr = ritrf2gcrf * gravity_partials * ritrf2gcrf.transpose();
+            let mut dadv = Matrix3::zeros();
 
             if settings.use_sun_gravity {
-                let (sun_accel, sun_partials) =
-                    point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
-                accel += sun_accel;
-                dadr += sun_partials;
+                let (a, p) = point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
+                accel += a;
+                dadr += p;
             }
             if settings.use_moon_gravity {
-                let (moon_accel, moon_partials) =
-                    point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
-                accel += moon_accel;
-                dadr += moon_partials;
+                let (a, p) = point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
+                accel += a;
+                dadr += p;
             }
 
-            // Handle satellite properties for drag and radiation pressure
             if let Some(props) = satprops {
-                // Satellite state as 6-element position, velcoity matrix
-                // used to query cd_a_over_m
-                let ss = y.fixed_view::<6, 1>(0, 0);
+                let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
+                accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
 
-                // Compute solar pressure
-                // Partials for this are very small since the sun is very very far away, changes in
-                // satellite position don't change radiaion pressure much, so we will ignore...
-                let solarpressure = -shadowfunc(&sun_gcrf, &pos_gcrf)
-                    * props.cr_a_over_m(&time, &ss.into())
-                    * 4.56e-6
-                    * sun_gcrf
-                    / sun_gcrf.norm();
-                accel += solarpressure;
-
-                // We know drag is negligible above 700 km, so ignore if this is the case
-                if pos_gcrf.norm() < 700.0e3 + crate::consts::EARTH_RADIUS {
-                    let cd_a_over_m = props.cd_a_over_m(&time, &ss.into());
+                if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
+                    let cd_a_over_m = props.cd_a_over_m(&time, &ss);
                     if cd_a_over_m > 1e-6 {
-                        let (drag_accel, ddragaccel_dr, ddragaccel_dv) = drag_and_partials(
-                            &pos_gcrf,
-                            &qgcrf2itrf,
-                            &vel_gcrf,
-                            &time,
-                            cd_a_over_m,
-                            settings.use_spaceweather,
+                        let (drag_a, drag_dr, drag_dv) = drag_and_partials(
+                            &pos_gcrf, &qgcrf2itrf, &vel_gcrf, &time,
+                            cd_a_over_m, settings.use_spaceweather,
                         );
-
-                        // Add acceleration from drag to accel vector
-                        accel += drag_accel;
-
-                        // Add drag partials with respect to position to
-                        // daccel dr
-                        dadr += ddragaccel_dr;
-
-                        // Drag is the only force term that produces a finite partial with respect
-                        // to velocity, so copy it directly into dfdy here.
-                        dfdy.fixed_view_mut::<3, 3>(3, 3).copy_from(&ddragaccel_dv);
+                        accel += drag_a;
+                        dadr += drag_dr;
+                        dadv = drag_dv;
                     }
                 }
             }
-            dfdy.fixed_view_mut::<3, 3>(3, 0).copy_from(&dadr);
 
-            // Derivative of state transition matrix is dfdy * state transition matrix
-            let dphi: na::Matrix<f64, na::Const<6>, na::Const<6>, na::ArrayStorage<f64, 6, 6>> =
-                dfdy * y.fixed_view::<6, 6>(0, 1);
+            // Equation 7.42: dfdy * state_transition_matrix
+            let mut dfdy = StateType::<6>::zeros();
+            dfdy.fixed_view_mut::<3, 3>(0, 3)
+                .copy_from(&na::Matrix3::<f64>::identity());
+            dfdy.fixed_view_mut::<3, 3>(3, 0).copy_from(&dadr);
+            dfdy.fixed_view_mut::<3, 3>(3, 3).copy_from(&dadv);
+            let dphi = dfdy * y.fixed_view::<6, 6>(0, 1);
 
             let mut dy = Matrix::<6, C>::zero();
             dy.fixed_view_mut::<3, 1>(0, 0).copy_from(&vel_gcrf);
@@ -417,65 +355,40 @@ pub fn propagate<const C: usize, T: TimeLike>(
         }
     };
 
-    match settings.enable_interp {
-        false => {
-            let res = match crate::ode::solvers::RKV98NoInterp::integrate(
-                0.0,
-                x_end,
-                state,
-                ydot,
-                &odesettings,
-            ) {
-                Ok(res) => res,
-                Err(e) => return Err(PropagationError::ODEError(e).into()),
-            };
-
-            Ok(PropagationResult {
-                time_begin: begin,
-                state_begin: *state,
-                time_end: end,
-                state_end: res.y,
-                accepted_steps: res.naccept as u32,
-                rejected_steps: res.nreject as u32,
-                num_eval: res.nevals as u32,
-                odesol: Some(res),
-            })
-        }
-        true => {
-            let res = crate::ode::solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)?;
-            Ok(PropagationResult {
-                time_begin: begin,
-                state_begin: *state,
-                time_end: end,
-                state_end: res.y,
-                accepted_steps: res.naccept as u32,
-                rejected_steps: res.nreject as u32,
-                num_eval: res.nevals as u32,
-                odesol: Some(res),
-            })
-        }
+    let res = if settings.enable_interp {
+        crate::ode::solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)
+    } else {
+        crate::ode::solvers::RKV98NoInterp::integrate(0.0, x_end, state, ydot, &odesettings)
     }
+    .map_err(PropagationError::ODEError)?;
+
+    Ok(PropagationResult {
+        time_begin: begin,
+        state_begin: *state,
+        time_end: end,
+        state_end: res.y,
+        accepted_steps: res.naccept as u32,
+        rejected_steps: res.nreject as u32,
+        num_eval: res.nevals as u32,
+        odesol: Some(res),
+    })
 }
 
 pub fn interp_propresult<const C: usize, T: TimeLike>(
     res: &PropagationResult<C>,
     time: &T,
 ) -> Result<StateType<C>> {
-    if let Some(sol) = &res.odesol {
-        if sol.dense.is_some() {
-            let time = time.as_instant();
-            if time == res.time_begin {
-                return Ok(res.state_begin);
-            }
-            let x = (time - res.time_begin).as_seconds();
-            let y = crate::ode::solvers::RKV98::interpolate(x, sol)?;
-            Ok(y)
-        } else {
-            Err(PropagationError::NoDenseOutputInSolution.into())
-        }
-    } else {
-        Err(PropagationError::NoDenseOutputInSolution.into())
+    let sol = res
+        .odesol
+        .as_ref()
+        .filter(|s| s.dense.is_some())
+        .ok_or(PropagationError::NoDenseOutputInSolution)?;
+    let time = time.as_instant();
+    if time == res.time_begin {
+        return Ok(res.state_begin);
     }
+    let x = (time - res.time_begin).as_seconds();
+    Ok(crate::ode::solvers::RKV98::interpolate(x, sol)?)
 }
 
 #[cfg(test)]

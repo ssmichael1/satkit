@@ -13,18 +13,18 @@ use anyhow::{bail, Context, Result};
 const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 ///
-/// Stucture representing a Two-Line Element Set (TLE), a satellite
+/// Structure representing a Two-Line Element Set (TLE), a satellite
 /// ephemeris format from the 1970s that is still somehow in use
 /// today and can be used to calculate satellite position and
-/// velcocity in the "TEME" frame (not-quite GCRF) using the
-/// "Simplified General Perturbations-4" (SGP-4) mathemematical
+/// velocity in the "TEME" frame (not-quite GCRF) using the
+/// "Simplified General Perturbations-4" (SGP-4) mathematical
 /// model that is also included in this package.
 ///
 /// For details, see: <https://en.wikipedia.org/wiki/Two-line_element_set>
 ///
 /// The TLE format is still commonly used to represent satellite
 /// ephemerides, and satellite ephemerides catalogs in this format
-/// are publicly availalble at www.space-track.org (registration
+/// are publicly available at www.space-track.org (registration
 /// required)
 ///
 /// TLEs sometimes have a "line 0" that includes the name of the satellite
@@ -595,7 +595,7 @@ impl TLE {
         // Fraction of day.
         // Note: This works with days that have leap seconds
         // (in which second of day is normalized to 86401 instead of 86400).
-        let frac = self.epoch.as_mjd() % 1.0;
+        let frac = self.epoch.as_mjd_utc() % 1.0;
         let doy = (doy_int as f64) + frac;
         // Years >= 1957 = 1900s
         // Years < 1957 = 2000s

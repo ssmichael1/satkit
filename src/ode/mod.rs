@@ -1,7 +1,7 @@
 //! Ordinary Differential Equation (ODE) solvers.
 //!
 //! This module provides a set of adaptive and non-adaptive ODE solvers.
-//! All use Runga-Kutta methods to solve the ODEs.
+//! All use Runge-Kutta methods to solve the ODEs.
 //!
 //! Solvers are adapted from Julia's DifferentialEquations.jl package.
 //!
