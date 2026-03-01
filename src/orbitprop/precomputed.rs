@@ -69,7 +69,7 @@ impl Precomputed {
         let delta = idx - idx.floor();
         let idx = idx.floor() as usize;
 
-        let q = self.data[idx].0.nlerp(&self.data[idx + 1].0, delta);
+        let q = self.data[idx].0.slerp(&self.data[idx + 1].0, delta);
         let psun = self.data[idx].1 + (self.data[idx + 1].1 - self.data[idx].1) * delta;
         let pmoon = self.data[idx].2 + (self.data[idx + 1].2 - self.data[idx].2) * delta;
         Ok((q, psun, pmoon))

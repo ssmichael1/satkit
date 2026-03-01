@@ -25,7 +25,6 @@
 - **`drag.rs`**: replace separate `itrf.hae()` + `itrf.latitude_rad()` + `itrf.longitude_rad()` calls with single `itrf.to_geodetic_rad()` (eliminates 2 redundant iterative Bowring geodetic conversions per call)
 - **`drag.rs`**: cache `vrel.norm()` in `drag_and_partials` (was computed 3 times, now 1)
 - **`point_gravity.rs`**: cache `rsnorm2 * rsnorm` as `rsnorm3` (was computed twice per call)
-- **`precomputed.rs`**: replace `slerp` with `nlerp` for quaternion interpolation at 60-second steps (~0.004 rad rotation, well within nlerp accuracy)
 - **`jplephem.rs`**: replace `(m.transpose() * t)[(0,0)]` with `m.column(0).dot(&t)` in Chebyshev evaluation (avoids transposed-matrix allocation for a dot product)
 
 ### Documentation
