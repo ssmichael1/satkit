@@ -2216,6 +2216,32 @@ class kepler:
         """
         ...
 
+class geodetic:
+    """Geodetic coordinates with named fields
+
+    Attributes:
+        latitude_rad (float): Latitude in radians
+        longitude_rad (float): Longitude in radians
+        height_m (float): Height above WGS84 ellipsoid in meters
+        latitude_deg (float): Latitude in degrees (computed)
+        longitude_deg (float): Longitude in degrees (computed)
+    """
+
+    latitude_rad: float
+    longitude_rad: float
+    height_m: float
+
+    @property
+    def latitude_deg(self) -> float:
+        """Latitude in degrees"""
+        ...
+
+    @property
+    def longitude_deg(self) -> float:
+        """Longitude in degrees"""
+        ...
+
+
 class itrfcoord:
     """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 
@@ -2288,20 +2314,12 @@ class itrfcoord:
         ...
 
     @property
-    def geodetic_rad(self) -> tuple[float, float, float]:
-        """Geodetic position in radians
+    def geodetic(self) -> geodetic:
+        """Geodetic coordinates as a named struct
 
         Returns:
-            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in radians, second is longitude in radians, and third is altitude in meters
-        """
-        ...
-
-    @property
-    def geodetic_deg(self) -> tuple[float, float, float]:
-        """Geodetic position in degrees
-
-        Returns:
-            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in degrees, second is longitude in degrees, and third is altitude in meters
+            satkit.geodetic: Geodetic struct with latitude_rad, longitude_rad, height_m fields
+                and latitude_deg, longitude_deg computed properties
         """
         ...
 

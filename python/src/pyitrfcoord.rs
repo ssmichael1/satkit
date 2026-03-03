@@ -5,11 +5,68 @@ use pyo3::IntoPyObjectExt;
 
 use numpy::{PyArray1, PyReadonlyArray1};
 
-use satkit::itrfcoord::ITRFCoord;
+use satkit::itrfcoord::{Geodetic, ITRFCoord};
 
 use crate::pyquaternion::PyQuaternion;
 
 use crate::pyutils::*;
+
+/// Geodetic coordinates with named fields
+///
+/// Attributes:
+///     latitude_rad (float): Latitude in radians
+///     longitude_rad (float): Longitude in radians
+///     height_m (float): Height above WGS84 ellipsoid in meters
+///     latitude_deg (float): Latitude in degrees
+///     longitude_deg (float): Longitude in degrees
+#[pyclass(name = "geodetic", module = "satkit", get_all, from_py_object)]
+#[derive(Clone, Copy, Debug)]
+pub struct PyGeodet {
+    /// Latitude in radians
+    pub latitude_rad: f64,
+    /// Longitude in radians
+    pub longitude_rad: f64,
+    /// Height above WGS84 ellipsoid in meters
+    pub height_m: f64,
+}
+
+impl From<Geodetic> for PyGeodet {
+    fn from(g: Geodetic) -> Self {
+        Self {
+            latitude_rad: g.latitude_rad,
+            longitude_rad: g.longitude_rad,
+            height_m: g.height_m,
+        }
+    }
+}
+
+#[pymethods]
+impl PyGeodet {
+    /// Latitude in degrees
+    #[getter]
+    fn latitude_deg(&self) -> f64 {
+        self.latitude_rad.to_degrees()
+    }
+
+    /// Longitude in degrees
+    #[getter]
+    fn longitude_deg(&self) -> f64 {
+        self.longitude_rad.to_degrees()
+    }
+
+    fn __str__(&self) -> String {
+        format!(
+            "geodetic(lat: {:8.4} deg, lon: {:8.4} deg, height: {:5.2} m)",
+            self.latitude_deg(),
+            self.longitude_deg(),
+            self.height_m,
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+}
 
 ///
 /// Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
@@ -174,22 +231,14 @@ impl PyITRFCoord {
         self.0.hae()
     }
 
-    /// Return Tuple with latitude in rad, longitude in rad, height above ellipsoid in meters
+    /// Geodetic coordinates as a named struct
     ///
     /// Returns:
-    ///     tuple: (latitude_rad, longitude_rad, height)
+    ///     satkit.geodetic: Geodetic struct with latitude_rad, longitude_rad, height_m fields
+    ///         and latitude_deg, longitude_deg computed properties
     #[getter]
-    fn get_geodetic_rad(&self) -> (f64, f64, f64) {
-        self.0.to_geodetic_rad()
-    }
-
-    /// Return tuple with latitude in deg, longitude in deg, height above ellipsoid in meters
-    ///
-    /// Returns:
-    ///     tuple: (latitude_deg, longitude_deg, height)
-    #[getter]
-    fn get_geodetic_deg(&self) -> (f64, f64, f64) {
-        self.0.to_geodetic_deg()
+    fn get_geodetic(&self) -> PyGeodet {
+        self.0.to_geodetic().into()
     }
 
     /// Return vector representing ITRF Cartesian coordinate in meters
