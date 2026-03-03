@@ -1,3 +1,30 @@
+//! Coordinate Frame Transformations
+//!
+//! This module provides quaternion-based rotations between reference frames
+//! used in satellite astrodynamics.
+//!
+//! # Available Transforms
+//!
+//! | Function | From | To | Accuracy | Notes |
+//! |---|---|---|---|---|
+//! | [`qitrf2gcrf`] | ITRF | GCRF | Full IAU-2006 | Computationally expensive; requires EOP |
+//! | [`qgcrf2itrf`] | GCRF | ITRF | Full IAU-2006 | Conjugate of `qitrf2gcrf` |
+//! | [`qitrf2gcrf_approx`] | ITRF | GCRF | ~1 arcsec | IAU-76/FK5 approximation; fast |
+//! | [`qgcrf2itrf_approx`] | GCRF | ITRF | ~1 arcsec | Conjugate of `qitrf2gcrf_approx` |
+//! | [`qteme2itrf`] | TEME | ITRF | Exact | For SGP4 output; Vallado Eq. 3-90 |
+//! | [`qteme2gcrf`] | TEME | GCRF | ~1 arcsec | Composes TEME→ITRF via `qitrf2gcrf_approx` |
+//! | [`qmod2gcrf`] | MOD | GCRF | Full | Vallado Eqs. 3-88, 3-89 |
+//! | [`qtirs2cirs`] | TIRS | CIRS | Full | Earth rotation angle only |
+//!
+//! # Frame Descriptions
+//!
+//! - **GCRF** (Geocentric Celestial Reference Frame): Inertial frame, IAU-2006
+//! - **ITRF** (International Terrestrial Reference Frame): Earth-fixed frame
+//! - **TEME** (True Equator Mean Equinox): Frame used by SGP4 propagator
+//! - **TIRS** (Terrestrial Intermediate Reference System): IAU-2006 intermediate frame
+//! - **CIRS** (Celestial Intermediate Reference System): IAU-2006 intermediate frame
+//! - **MOD** (Mean of Date): Precession-only frame
+
 mod ierstable;
 mod qcirs2gcrs;
 
@@ -10,21 +37,21 @@ use super::earth_orientation_params;
 pub use qcirs2gcrs::qcirs2gcrs;
 pub use qcirs2gcrs::qcirs2gcrs_dxdy;
 
-/// Right-handed rotation of coordinate sytstem about x axis
+/// Right-handed rotation of coordinate system about x axis
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_xcoord(theta: f64) -> Quaternion {
     Quaternion::from_axis_angle(&Vector3::x_axis(), -theta)
 }
 
-/// Right-handed rotation of coordinate sytstem about y axis
+/// Right-handed rotation of coordinate system about y axis
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_ycoord(theta: f64) -> Quaternion {
     Quaternion::from_axis_angle(&Vector3::y_axis(), -theta)
 }
 
-/// Right-handed rotation of coordinate sytstem about z axis
+/// Right-handed rotation of coordinate system about z axis
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_zcoord(theta: f64) -> Quaternion {
@@ -172,11 +199,16 @@ pub fn qteme2itrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// * Quaternion representing rotation from TEME to GCRF
 ///
+/// # Accuracy
+///
+/// **Approximate**: accurate to within ~1 arcsec (~30 m at Earth's surface).
+/// Uses the approximate IAU-76/FK5 reduction internally via
+/// [`qitrf2gcrf_approx`] composed with [`qteme2itrf`].
+///
 /// # Notes
 ///
 /// * The TEME frame is the default frame output by the
 ///   SGP4 propagator
-/// * An approximate rotation, accurate to within 1 arcsec
 ///
 pub fn qteme2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
     qitrf2gcrf_approx(tm) * qteme2itrf(tm)
@@ -468,7 +500,7 @@ mod tests {
     fn test_earth_rotation_angle() {
         // At J2000.0 epoch (2000-01-01 12:00:00 UT1), ERA should be ~280.46061837°
         // J2000.0 is JD 2451545.0
-        let tm = Instant::from_jd(2451545.0);
+        let tm = Instant::from_jd_utc(2451545.0);
         let era = earth_rotation_angle(&tm).to_degrees().rem_euclid(360.0);
         assert!((era - 280.46061837).abs() < 0.01);
     }

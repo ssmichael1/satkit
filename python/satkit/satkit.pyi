@@ -10,7 +10,7 @@ import numpy as np
 
 import datetime
 
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional, Union
 
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
@@ -2216,6 +2216,32 @@ class kepler:
         """
         ...
 
+class geodetic:
+    """Geodetic coordinates with named fields
+
+    Attributes:
+        latitude_rad (float): Latitude in radians
+        longitude_rad (float): Longitude in radians
+        height_m (float): Height above WGS84 ellipsoid in meters
+        latitude_deg (float): Latitude in degrees (computed)
+        longitude_deg (float): Longitude in degrees (computed)
+    """
+
+    latitude_rad: float
+    longitude_rad: float
+    height_m: float
+
+    @property
+    def latitude_deg(self) -> float:
+        """Latitude in degrees"""
+        ...
+
+    @property
+    def longitude_deg(self) -> float:
+        """Longitude in degrees"""
+        ...
+
+
 class itrfcoord:
     """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 
@@ -2288,20 +2314,12 @@ class itrfcoord:
         ...
 
     @property
-    def geodetic_rad(self) -> tuple[float, float, float]:
-        """Geodetic position in radians
+    def geodetic(self) -> geodetic:
+        """Geodetic coordinates as a named struct
 
         Returns:
-            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in radians, second is longitude in radians, and third is altitude in meters
-        """
-        ...
-
-    @property
-    def geodetic_deg(self) -> tuple[float, float, float]:
-        """Geodetic position in degrees
-
-        Returns:
-            tuple[float, float, float]: Tuple with 3 elements representing the geodetic position. First element is latitude in degrees, second is longitude in degrees, and third is altitude in meters
+            satkit.geodetic: Geodetic struct with latitude_rad, longitude_rad, height_m fields
+                and latitude_deg, longitude_deg computed properties
         """
         ...
 
@@ -2706,20 +2724,28 @@ class propresult:
         ...
 
     def interp(
-        self, time: time, output_phi: bool = False
+        self,
+        time: Union[time, datetime.datetime, list[Union[time, datetime.datetime]]],
+        output_phi: bool = False,
     ) -> (
         npt.NDArray[np.float64]
         | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+        | list[npt.NDArray[np.float64]]
+        | list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]
     ):
-        """Interpolate state at given time
+        """Interpolate state at given time or list of times
 
         Args:
-            time (satkit.time): Time at which to interpolate state
-            output_phi (bool, optional): Output 6x6 state transition matrix at the interpolated time
-                Default is False
+            time (satkit.time | datetime.datetime | list): Time or list of times at which to interpolate state.
+                datetime.datetime objects are interpreted as UTC.
+            output_phi (bool, optional): Output 6x6 state transition matrix at the interpolated time.
+                Default is False.
 
         Returns:
-            npt.ArrayLike[np.float64] | tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: 6-element vector representing state at given time. if output_phi, also output 6x6 state transition matrix at given time
+            If a single time is given:
+                npt.NDArray[np.float64]: 6-element state vector. If output_phi, a tuple of (state, 6x6 phi matrix).
+            If a list of times is given:
+                list[npt.NDArray[np.float64]]: list of 6-element state vectors. If output_phi, a list of (state, phi) tuples.
 
         Example:
             ```python
@@ -2728,6 +2754,10 @@ class propresult:
             t_mid = t0 + satkit.duration(hours=12)
             mid_state = result.interp(t_mid)
             print(f"Position at 12h: {mid_state[0:3]} m")
+
+            # Interpolate at multiple times
+            times = [t0 + satkit.duration(hours=h) for h in range(25)]
+            states = result.interp(times)
             ```
         """
         ...
@@ -2940,7 +2970,7 @@ class propsettings:
 
     @enable_interp.setter
     def enable_interp(self, value: bool) -> None: ...
-    def precompute_terms(self, begin: time, end: time, step: Optional[duration] = None):
+    def precompute_terms(self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None):
         """Precompute terms for fast interpolation of state between begin and end times
 
         This can be used, for example, to compute sun and moon positions only once if propagating many satellites over the same time period
@@ -2948,7 +2978,7 @@ class propsettings:
         Args:
             begin (satkit.time): Begin time of propagation
             end (satkit.time): End time of propagation
-            step (satkit.duration, optional): Step size for interpolation.  Default = 60 seconds
+            step (satkit.duration | float | datetime.timedelta, optional): Step size for interpolation.  Default = 60 seconds.  float is interpreted as seconds.
 
         """
         ...

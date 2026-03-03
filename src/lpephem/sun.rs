@@ -266,8 +266,8 @@ pub fn riseset<T: TimeLike>(
     };
 
     Ok((
-        Instant::from_jd(jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.25),
-        Instant::from_jd(jdsunset + criseset(jdsunset, |x| x)? - 0.75),
+        Instant::from_jd_utc(jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.25),
+        Instant::from_jd_utc(jdsunset + criseset(jdsunset, |x| x)? - 0.75),
     ))
 }
 
@@ -296,7 +296,7 @@ mod tests {
         // Example 5-1 in Vallado
         let t0: Instant = Instant::from_date(2006, 4, 2).unwrap();
         // Approximate this UTC as TDB to match example...
-        let t = Instant::from_mjd_with_scale(t0.as_mjd(), TimeScale::TDB);
+        let t = Instant::from_mjd_with_scale(t0.as_mjd_utc(), TimeScale::TDB);
 
         let pos = pos_gcrf(&t);
         // Below value is from Vallado example
@@ -314,7 +314,7 @@ mod tests {
         // Example 5-1 in Vallado
         let t0: Instant = Instant::from_date(2006, 4, 2).unwrap();
         // Approximate this UTC as TDB to match example...
-        let t = Instant::from_mjd_with_scale(t0.as_mjd(), TimeScale::TDB);
+        let t = Instant::from_mjd_with_scale(t0.as_mjd_utc(), TimeScale::TDB);
 
         let lambda = ecliptic_longitude(&t);
         let lambda_deg = lambda.to_degrees();
