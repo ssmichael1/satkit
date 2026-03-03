@@ -43,6 +43,8 @@
 
 ### Python Binding Improvements
 
+- **`satkit.geodetic` class** — new Python class wrapping the Rust `Geodetic` struct with named fields `latitude_rad`, `longitude_rad`, `height_m` and computed properties `latitude_deg`, `longitude_deg`
+- **`itrfcoord.geodetic` property** — replaces `geodetic_rad` and `geodetic_deg` tuple properties with a single `geodetic` property returning `satkit.geodetic`
 - **`propsettings.precompute_terms`**: `step` argument now accepts `satkit.duration`, `float` (seconds), or `datetime.timedelta`; adds `Precomputed::new_with_step` and `PropSettings::precompute_terms_with_step` in Rust core
 - **`propresult.interp`**: `time` argument now accepts `satkit.time` or `datetime.datetime`; also accepts a `list` of either type, returning a `list` of interpolated state arrays
 - **`instant_from_pyany`**: internal utility for extracting a single `satkit::Instant` from either `satkit.time` or `datetime.datetime`, for use across Python binding functions
