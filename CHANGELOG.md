@@ -1,7 +1,7 @@
 # Changelog
 
 
-## 0.12.0
+## 0.12.0 - 2026-03-02
 
 ### API Improvements
 
@@ -40,6 +40,12 @@
 - Curate prelude with explicit imports instead of wildcard re-exports
 - Add root-level re-exports for `Frame`, `ITRFCoord`, `Kepler`, `Quaternion`, `Vector3`, `propagate`, `PropSettings`, `SatState`, `SolarSystem`, `TLE`
 - Fix "attractur" → "attractor" typo in `point_gravity.rs`
+
+### Python Binding Improvements
+
+- **`propsettings.precompute_terms`**: `step` argument now accepts `satkit.duration`, `float` (seconds), or `datetime.timedelta`; adds `Precomputed::new_with_step` and `PropSettings::precompute_terms_with_step` in Rust core
+- **`propresult.interp`**: `time` argument now accepts `satkit.time` or `datetime.datetime`; also accepts a `list` of either type, returning a `list` of interpolated state arrays
+- **`instant_from_pyany`**: internal utility for extracting a single `satkit::Instant` from either `satkit.time` or `datetime.datetime`, for use across Python binding functions
 
 
 ## 0.11.0 - 2026-02-27
