@@ -34,7 +34,7 @@ mod pyutils;
 use pyduration::PyDuration;
 use pyframetransform as pyft;
 use pyinstant::PyInstant;
-use pyitrfcoord::PyITRFCoord;
+use pyitrfcoord::{PyGeodet, PyITRFCoord};
 use pykepler::PyKepler;
 use pyquaternion::PyQuaternion;
 use pysolarsystem::SolarSystem;
@@ -155,6 +155,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pytle::PyTLE>()?;
     m.add_class::<pympsuccess::PyMPSuccess>()?;
 
+    m.add_class::<PyGeodet>()?;
     m.add_class::<PyITRFCoord>()?;
 
     m.add_class::<PyKepler>()?;
