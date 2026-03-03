@@ -1,9 +1,9 @@
 use pyo3::prelude::*;
 
 use satkit::orbitprop::PropSettings;
-use crate::PyInstant;
+use crate::{PyInstant, PyDuration};
 
-use pyo3::types::{PyDict, PyString};
+use pyo3::types::{PyDelta, PyDeltaAccess, PyDict, PyString};
 
 #[pyclass(name = "propsettings", from_py_object)]
 #[derive(Clone, Debug)]
@@ -174,8 +174,41 @@ impl PyPropSettings {
         self.0.to_string()
     }
 
-    fn precompute_terms(&mut self, begin: &PyInstant, end: &PyInstant) -> PyResult<()> {
-        match self.0.precompute_terms(&begin.0, &end.0) {
+    #[pyo3(signature=(begin, end, step=None))]
+    fn precompute_terms(
+        &mut self,
+        begin: &PyInstant,
+        end: &PyInstant,
+        step: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let step_secs: Option<f64> = match step {
+            None => None,
+            Some(obj) => {
+                if let Ok(d) = obj.extract::<PyDuration>() {
+                    Some(d.0.as_seconds())
+                } else if let Ok(secs) = obj.extract::<f64>() {
+                    Some(secs)
+                } else if let Ok(delta) = {
+                    #[allow(deprecated)]
+                    obj.downcast::<PyDelta>()
+                } {
+                    Some(
+                        delta.get_days() as f64 * 86400.0
+                            + delta.get_seconds() as f64
+                            + delta.get_microseconds() as f64 * 1e-6,
+                    )
+                } else {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "step must be a satkit.duration, float (seconds), or datetime.timedelta",
+                    ));
+                }
+            }
+        };
+        let result = match step_secs {
+            Some(s) => self.0.precompute_terms_with_step(&begin.0, &end.0, s),
+            None => self.0.precompute_terms(&begin.0, &end.0),
+        };
+        match result {
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
             Ok(_) => Ok(()),
         }

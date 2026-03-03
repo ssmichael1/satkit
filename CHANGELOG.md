@@ -1,6 +1,55 @@
 # Changelog
 
 
+## 0.12.0 - 2026-03-02
+
+### API Improvements
+
+- **`Instant::utc()` convenience constructor** — shorter alias for `from_datetime()`: `Instant::utc(2024, 1, 1, 12, 0, 0.0)`
+- **Explicit time scale method names** — add `as_mjd_utc()`, `as_jd_utc()`, `from_mjd_utc()`, `from_jd_utc()` with explicit scale in the name. Deprecate the old implicit-UTC methods `as_mjd()`, `as_jd()`, `from_mjd()`, `from_jd()` with messages pointing to the new names
+- **`Geodetic` named struct** — new `Geodetic { latitude_rad, longitude_rad, height_m }` struct with `latitude_deg()`/`longitude_deg()` helpers and `Display` impl. Add `ITRFCoord::to_geodetic()` returning it. Exported from crate root and prelude
+- **`ITRFCoord::distance_to()`** — convenience method returning geodesic distance in meters (wraps `geodesic_distance().0`)
+- **`Kepler` convenience constructors** — add `with_true_anomaly()`, `with_mean_anomaly()`, `with_eccentric_anomaly()` to avoid requiring the `Anomaly` enum directly
+- **`PropSettings::set_gravity()`** — validated setter for gravity degree/order, returns error if `order > degree`
+- **`Duration` now derives `Debug`**
+- Remove 10 redundant `&Duration` / `&mut Instant` operator impl variants — both types are `Copy`, so ref-based operators are unnecessary
+- **`Display` for `Kepler`** — shows all 6 elements in a readable format
+
+### Breaking Changes
+
+- **`ITRFCoord`: `From<&[f64]>` replaced with `TryFrom<&[f64]>`** — the old impl panicked via `assert!` on wrong-length slices; now returns `Result` with a descriptive error message
+- **`as_mjd()`, `as_jd()`, `from_mjd()`, `from_jd()`** are deprecated (still functional). Use `as_mjd_utc()`, `as_jd_utc()`, `from_mjd_utc()`, `from_jd_utc()` or the `_with_scale()` variants
+
+### Performance
+
+- **`drag.rs`**: replace separate `itrf.hae()` + `itrf.latitude_rad()` + `itrf.longitude_rad()` calls with single `itrf.to_geodetic_rad()` (eliminates 2 redundant iterative Bowring geodetic conversions per call)
+- **`drag.rs`**: cache `vrel.norm()` in `drag_and_partials` (was computed 3 times, now 1)
+- **`point_gravity.rs`**: cache `rsnorm2 * rsnorm` as `rsnorm3` (was computed twice per call)
+- **`jplephem.rs`**: replace `(m.transpose() * t)[(0,0)]` with `m.column(0).dot(&t)` in Chebyshev evaluation (avoids transposed-matrix allocation for a dot product)
+
+### Documentation
+
+- **Frame transform reference table** — add module-level docs to `frametransform` with accuracy and description table for all available transforms (ITRF, GCRF, TEME, TIRS, CIRS, MOD)
+- **`qteme2gcrf` accuracy note** — prominently document ~1 arcsec approximate accuracy in function docs
+- Fix ~20 spelling/grammar errors across the codebase: "Runga-Kutta" → "Runge-Kutta", "Dorumund-Prince" → "Dormand-Prince", "coeffeicient" → "coefficient", "velcocity" → "velocity", and others
+
+### Internal
+
+- **`jplephem.rs`**: extract `ChebySetup` struct and `dispatch_ncoeff!` macro, deduplicating ~40 lines across `body_pos_optimized`/`body_state_optimized`/`barycentric_pos`/`barycentric_state`
+- **`itrfcoord.rs`**: deduplicate geodetic conversions in `geodesic_distance()` and `move_with_heading()`
+- Curate prelude with explicit imports instead of wildcard re-exports
+- Add root-level re-exports for `Frame`, `ITRFCoord`, `Kepler`, `Quaternion`, `Vector3`, `propagate`, `PropSettings`, `SatState`, `SolarSystem`, `TLE`
+- Fix "attractur" → "attractor" typo in `point_gravity.rs`
+
+### Python Binding Improvements
+
+- **`satkit.geodetic` class** — new Python class wrapping the Rust `Geodetic` struct with named fields `latitude_rad`, `longitude_rad`, `height_m` and computed properties `latitude_deg`, `longitude_deg`
+- **`itrfcoord.geodetic` property** — replaces `geodetic_rad` and `geodetic_deg` tuple properties with a single `geodetic` property returning `satkit.geodetic`
+- **`propsettings.precompute_terms`**: `step` argument now accepts `satkit.duration`, `float` (seconds), or `datetime.timedelta`; adds `Precomputed::new_with_step` and `PropSettings::precompute_terms_with_step` in Rust core
+- **`propresult.interp`**: `time` argument now accepts `satkit.time` or `datetime.datetime`; also accepts a `list` of either type, returning a `list` of interpolated state arrays
+- **`instant_from_pyany`**: internal utility for extracting a single `satkit::Instant` from either `satkit.time` or `datetime.datetime`, for use across Python binding functions
+
+
 ## 0.11.0 - 2026-02-27
 
 ### Configurable gravity degree/order and third-body toggles

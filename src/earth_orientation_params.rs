@@ -19,14 +19,13 @@
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::Once;
 
 use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
 
 use anyhow::{bail, Context, Result};
-
-use once_cell::sync::OnceCell;
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -145,16 +144,32 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
     Ok(eopvec)
 }
 
-/// Singleton to track if warning has been shown
-fn warning_shown() -> &'static RwLock<bool> {
-    static INSTANCE: OnceCell<RwLock<bool>> = OnceCell::new();
-    INSTANCE.get_or_init(|| RwLock::new(false))
+static WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+static EOP_INIT: Once = Once::new();
+static EOP_PTR: AtomicPtr<Vec<EOPEntry>> = AtomicPtr::new(std::ptr::null_mut());
+
+/// Ensure EOP data is loaded (runs at most once).
+fn ensure_eop_loaded() {
+    EOP_INIT.call_once(|| {
+        let data = Box::new(load_eop_file_csv(None).unwrap_or_default());
+        EOP_PTR.store(Box::into_raw(data), Ordering::Release);
+    });
+}
+
+/// Get a lock-free reference to the EOP data.
+///
+/// SAFETY: After `ensure_eop_loaded()`, `EOP_PTR` is non-null and points to
+/// a valid `Vec<EOPEntry>`. The data is never freed — old allocations are
+/// intentionally leaked on `update()` since other threads may reference them.
+fn eop_data() -> &'static Vec<EOPEntry> {
+    ensure_eop_loaded();
+    unsafe { &*EOP_PTR.load(Ordering::Acquire) }
 }
 
 ///
 /// Disable warning about out-of-range EOP data.
 ///
-/// Warning is shown only once, but to prevent it from begin shown,
+/// Warning is shown only once, but to prevent it from being shown,
 /// run this function.
 ///
 /// # Example
@@ -164,17 +179,11 @@ fn warning_shown() -> &'static RwLock<bool> {
 /// ```
 ///
 pub fn disable_eop_time_warning() {
-    *warning_shown().write().unwrap() = true;
-}
-
-fn eop_params_singleton() -> &'static RwLock<Vec<EOPEntry>> {
-    static INSTANCE: OnceCell<RwLock<Vec<EOPEntry>>> = OnceCell::new();
-    INSTANCE.get_or_init(|| RwLock::new(load_eop_file_csv(None).unwrap_or_default()))
+    WARNING_SHOWN.store(true, Ordering::Relaxed);
 }
 
 /// Download new Earth Orientation Parameters file, and load it.
 pub fn update() -> Result<()> {
-    // Get data directory
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
         bail!(
@@ -185,13 +194,14 @@ pub fn update() -> Result<()> {
         );
     }
 
-    // Download most-recent EOP
-    //let url = "https://datacenter.iers.org/data/9/finals2000A.all";
     let url = "http://celestrak.org/SpaceData/EOP-All.csv";
     download_file(url, &d, true)?;
 
-    // Re-load the params
-    *eop_params_singleton().write().unwrap() = load_eop_file_csv(None).unwrap();
+    // Ensure initial pointer is valid, then swap in new data.
+    // Old allocation is intentionally leaked (other threads may reference it).
+    ensure_eop_loaded();
+    let new_data = Box::into_raw(Box::new(load_eop_file_csv(None)?));
+    EOP_PTR.store(new_data, Ordering::Release);
 
     Ok(())
 }
@@ -218,65 +228,36 @@ pub fn update() -> Result<()> {
 ///   (but only once per library load)
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
-    let eop = eop_params_singleton().read().unwrap();
+    let eop = eop_data();
 
-    let idx = eop.iter().position(|x| x.mjd_utc > mjd_utc);
-    match idx {
-        None => {
-            let mut shown = warning_shown().write().unwrap();
-            if !*shown {
-                eprintln!(
-                "
-                    Warning: EOP data not available for MJD UTC = {} (too late).
-                    Run `satkit::utils::update_datafiles()` to download
-                    the most recent data.  Valid times are 1962 to present,
-                    and predicts go to ~ 4 months into the future
+    // Binary search: find first entry with mjd_utc > query (O(log n) vs O(n) linear scan)
+    let idx = eop.partition_point(|x| x.mjd_utc <= mjd_utc);
 
-                    This warning will only be shown once for each library load.
-
-                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`
-                    ",
-                    mjd_utc
-                );
-
-                *shown = true;
-            }
-            None
+    if idx == 0 || idx >= eop.len() {
+        if !WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+            let bound = if idx == 0 { "too early" } else { "too late" };
+            eprintln!(
+                "Warning: EOP data not available for MJD UTC = {mjd_utc} ({bound}).\n\
+                 Run `satkit::utils::update_datafiles()` to download the most recent data.\n\
+                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()`"
+            );
         }
-        Some(v) => {
-            if v == 0_usize {
-                let mut shown = warning_shown().write().unwrap();
-                if !*shown {
-                    eprintln!(
-                "
-                    Warning: EOP data not available for MJD UTC = {} (too early).
-
-                    This warning will only be shown once for each library load.
-
-                    To disable this warning, run `satkit::earth_orientation_params::disable_eop_time_warning()`
-                    ",
-                    mjd_utc
-                );
-
-                    *shown = true;
-                }
-                return None;
-            }
-            // Linear interpolation
-            let g1: f64 = (mjd_utc - eop[v - 1].mjd_utc) / (eop[v].mjd_utc - eop[v - 1].mjd_utc);
-            let g0: f64 = 1.0 - g1;
-            let v1: &EOPEntry = &eop[v];
-            let v0: &EOPEntry = &eop[v - 1];
-            Some([
-                g0.mul_add(v0.dut1, g1 * v1.dut1),
-                g0.mul_add(v0.xp, g1 * v1.xp),
-                g0.mul_add(v0.yp, g1 * v1.yp),
-                g0.mul_add(v0.lod, g1 * v1.lod),
-                g0.mul_add(v0.dX, g1 * v1.dX),
-                g0.mul_add(v0.dY, g1 * v1.dY),
-            ])
-        }
+        return None;
     }
+
+    // Linear interpolation between bracketing entries
+    let v0 = &eop[idx - 1];
+    let v1 = &eop[idx];
+    let g1 = (mjd_utc - v0.mjd_utc) / (v1.mjd_utc - v0.mjd_utc);
+    let g0 = 1.0 - g1;
+    Some([
+        g0.mul_add(v0.dut1, g1 * v1.dut1),
+        g0.mul_add(v0.xp, g1 * v1.xp),
+        g0.mul_add(v0.yp, g1 * v1.yp),
+        g0.mul_add(v0.lod, g1 * v1.lod),
+        g0.mul_add(v0.dX, g1 * v1.dX),
+        g0.mul_add(v0.dY, g1 * v1.dY),
+    ])
 }
 
 ///
@@ -317,7 +298,7 @@ mod tests {
     /// Check that data is loaded
     #[test]
     fn loaded() {
-        assert!(eop_params_singleton().read().unwrap()[0].mjd_utc >= 0.0);
+        assert!(eop_data()[0].mjd_utc >= 0.0);
     }
 
     #[test]
@@ -334,7 +315,7 @@ mod tests {
     #[test]
     fn checkval() {
         let tm = crate::Instant::from_rfc3339("2006-04-16T17:52:50.805408Z").unwrap();
-        let v: Option<[f64; 6]> = eop_from_mjd_utc(tm.as_mjd());
+        let v: Option<[f64; 6]> = eop_from_mjd_utc(tm.as_mjd_utc());
         assert!(v.is_some());
 
         let v = eop_from_mjd_utc(59464.00).unwrap();

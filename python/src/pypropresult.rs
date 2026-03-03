@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use crate::pyinstant::PyInstant;
+use crate::pyinstant::{PyInstant, ToTimeVec};
 use crate::pyutils::*;
 
 use pyo3::types::{PyBytes, PyDict, PyTuple};
@@ -304,13 +304,30 @@ impl PyPropResult {
     }
 
     #[pyo3(signature=(time, output_phi=false))]
-    fn interp(&self, time: PyInstant, output_phi: bool) -> PyResult<Py<PyAny>> {
+    fn interp(&self, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
+        let is_list = time.is_instance_of::<pyo3::types::PyList>()
+            || time.is_instance_of::<numpy::PyArray1<Py<PyAny>>>();
+
+        let times = (&time).to_time_vec()?;
+
+        if is_list {
+            let results: PyResult<Vec<Py<PyAny>>> =
+                times.iter().map(|t| self.interp_at(t, output_phi)).collect();
+            pyo3::Python::attach(|py| results?.into_py_any(py))
+        } else {
+            self.interp_at(&times[0], output_phi)
+        }
+    }
+}
+
+impl PyPropResult {
+    fn interp_at(&self, time: &Instant, output_phi: bool) -> PyResult<Py<PyAny>> {
         match &self.0 {
-            PyPropResultType::R1(r) => match r.interp(&time.0) {
+            PyPropResultType::R1(r) => match r.interp(time) {
                 Ok(res) => pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> { vec2py(py, &res) }),
                 Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e.to_string())),
             },
-            PyPropResultType::R7(r) => match r.interp(&time.0) {
+            PyPropResultType::R7(r) => match r.interp(time) {
                 Ok(res) => {
                     if !output_phi {
                         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {

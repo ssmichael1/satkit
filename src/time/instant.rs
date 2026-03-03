@@ -26,7 +26,7 @@ pub struct Instant {
     pub raw: i64,
 }
 
-/// For conversian between Julian day and
+/// For conversion between Julian day and
 /// Gregorian calendar date
 /// See: <https://en.wikipedia.org/wiki/Julian_day>
 /// or Expl. Suppl. Astron. Almanac, P. 619
@@ -174,7 +174,7 @@ impl Instant {
     }
 
     /// J2000 epoch is 2000-01-01 12:00:00 TT
-    /// TT (Terristrial Time) is 32.184 seconds ahead of TAI
+    /// TT (Terrestrial Time) is 32.184 seconds ahead of TAI
     pub const J2000: Self = Self {
         raw: 946728064184000,
     };
@@ -200,7 +200,7 @@ impl Instant {
     ///
     /// See: <https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week>
     pub fn day_of_week(&self) -> super::Weekday {
-        let jd = self.as_jd();
+        let jd = self.as_jd_utc();
         super::Weekday::from(((jd + 1.5) % 7.0).floor() as i32)
     }
 
@@ -208,31 +208,63 @@ impl Instant {
     /// Days since 1858-11-17 00:00:00 UTC
     /// where each day is 86,400 seconds
     /// (no leap seconds)
+    #[deprecated(note = "Use as_mjd_utc() for explicit scale, or as_mjd_with_scale()")]
     pub fn as_mjd(&self) -> f64 {
-        // Make sure to account for leap seconds
+        self.as_mjd_utc()
+    }
+
+    /// As Modified Julian Date (UTC)
+    /// Days since 1858-11-17 00:00:00 UTC
+    /// where each day is 86,400 seconds
+    /// (no leap seconds)
+    pub fn as_mjd_utc(&self) -> f64 {
         self.as_mjd_with_scale(TimeScale::UTC)
     }
 
     /// Create Instant from Modified Julian Date (UTC)
     ///
     /// # Arguments
-    /// * `mjd` - Modified Julian Date
+    /// * `mjd` - Modified Julian Date (UTC)
     ///
     /// # Returns
     /// A new Instant object representing the given MJD
+    #[deprecated(note = "Use from_mjd_utc() for explicit scale, or from_mjd_with_scale()")]
     pub fn from_mjd(mjd: f64) -> Self {
+        Self::from_mjd_utc(mjd)
+    }
+
+    /// Create Instant from Modified Julian Date (UTC)
+    ///
+    /// # Arguments
+    /// * `mjd` - Modified Julian Date (UTC)
+    ///
+    /// # Returns
+    /// A new Instant object representing the given MJD
+    pub fn from_mjd_utc(mjd: f64) -> Self {
         Self::from_mjd_with_scale(mjd, TimeScale::UTC)
     }
 
     /// Create Instant from Julian Date (UTC)
     ///
     /// # Arguments
-    /// * `jd` - Julian Date
+    /// * `jd` - Julian Date (UTC)
     ///
     /// # Returns
     /// A new Instant object representing the given JD
+    #[deprecated(note = "Use from_jd_utc() for explicit scale, or from_jd_with_scale()")]
     pub fn from_jd(jd: f64) -> Self {
-        Self::from_mjd(jd - 2400000.5)
+        Self::from_jd_utc(jd)
+    }
+
+    /// Create Instant from Julian Date (UTC)
+    ///
+    /// # Arguments
+    /// * `jd` - Julian Date (UTC)
+    ///
+    /// # Returns
+    /// A new Instant object representing the given JD
+    pub fn from_jd_utc(jd: f64) -> Self {
+        Self::from_mjd_utc(jd - 2400000.5)
     }
 
     /// Create Instant from Julian Date with given time scale
@@ -309,8 +341,18 @@ impl Instant {
     /// Days since 4713 BC January 1, 12:00 UTC
     /// where each day is 86,400 seconds
     /// (no leap seconds)
+    #[deprecated(note = "Use as_jd_utc() for explicit scale, or as_jd_with_scale()")]
+    #[allow(deprecated)]
     pub fn as_jd(&self) -> f64 {
         self.as_mjd() + 2400000.5
+    }
+
+    /// As Julian Date (UTC)
+    /// Days since 4713 BC January 1, 12:00 UTC
+    /// where each day is 86,400 seconds
+    /// (no leap seconds)
+    pub fn as_jd_utc(&self) -> f64 {
+        self.as_mjd_utc() + 2400000.5
     }
 
     /// As Julian Date with given time scale
@@ -368,7 +410,7 @@ impl Instant {
                 (self.raw - Self::MJD_EPOCH.raw + 32_184_000) as f64 / 86_400_000_000.0
             }
             TimeScale::UT1 => {
-                let mjd_utc = self.as_mjd();
+                let mjd_utc = self.as_mjd_utc();
                 let eop =
                     crate::earth_orientation_params::eop_from_mjd_utc(mjd_utc).unwrap_or([0.0; 6]);
                 let dut1 = eop[0] as f64;
@@ -428,7 +470,7 @@ impl Instant {
         /// See: https://en.wikipedia.org/wiki/Julian_day
         /// or Expl. Suppl. Astron. Almanac, P. 619
         use gregorian_coefficients as gc;
-        let mut jd = self.as_jd().floor() as i64;
+        let mut jd = self.as_jd_utc().floor() as i64;
         jd += jdadd;
         let f = jd + gc::j + (((4 * jd + gc::B) / 146097) * 3) / 4 + gc::C;
         let e = gc::r * f + gc::v;
@@ -493,6 +535,31 @@ impl Instant {
             };
         }
         doy as u32
+    }
+
+    /// Convenience alias for `from_datetime`
+    ///
+    /// Construct an instant from a given Gregorian UTC date and time
+    ///
+    /// # Arguments
+    /// * `year` - The year
+    /// * `month` - The month (1-12)
+    /// * `day` - The day (1-31)
+    /// * `hour` - The hour (0-23)
+    /// * `minute` - The minute (0-59)
+    /// * `second` - The second (0.0-60.0)
+    ///
+    /// # Returns
+    /// A new Instant object representing the given date and time, or error if invalid
+    pub fn utc(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second: f64,
+    ) -> Result<Self> {
+        Self::from_datetime(year, month, day, hour, minute, second)
     }
 
     /// Construct an instant from a given Gregorian UTC date and time

@@ -19,9 +19,13 @@ pub struct Precomputed {
 
 impl Precomputed {
     pub fn new<T: TimeLike>(begin: &T, end: &T) -> Result<Self> {
+        Self::new_with_step(begin, end, 60.0)
+    }
+
+    pub fn new_with_step<T: TimeLike>(begin: &T, end: &T, step_secs: f64) -> Result<Self> {
         let begin = begin.as_instant();
         let end = end.as_instant();
-        let step: f64 = 60.0;
+        let step: f64 = step_secs;
 
         let (pbegin, pend) = match end > begin {
             true => (

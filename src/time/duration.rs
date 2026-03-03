@@ -3,7 +3,7 @@
 /// an `Instant` object.
 ///
 /// Duration is represented natively in microseconds.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Duration {
     pub usec: i64,
 }

@@ -129,6 +129,59 @@ impl Kepler {
         }
     }
 
+    /// Create a new Keplerian orbital element object with true anomaly
+    ///
+    /// # Arguments
+    /// * `a` - Semi-major axis, meters
+    /// * `eccen` - Eccentricity
+    /// * `incl` - Inclination, radians
+    /// * `raan` - Right Ascension of the Ascending Node, radians
+    /// * `argp` - Argument of Perigee, radians
+    /// * `nu` - True anomaly, radians
+    pub fn with_true_anomaly(a: f64, eccen: f64, incl: f64, raan: f64, argp: f64, nu: f64) -> Self {
+        Self::new(a, eccen, incl, raan, argp, Anomaly::True(nu))
+    }
+
+    /// Create a new Keplerian orbital element object with mean anomaly
+    ///
+    /// # Arguments
+    /// * `a` - Semi-major axis, meters
+    /// * `eccen` - Eccentricity
+    /// * `incl` - Inclination, radians
+    /// * `raan` - Right Ascension of the Ascending Node, radians
+    /// * `argp` - Argument of Perigee, radians
+    /// * `ma` - Mean anomaly, radians
+    pub fn with_mean_anomaly(
+        a: f64,
+        eccen: f64,
+        incl: f64,
+        raan: f64,
+        argp: f64,
+        ma: f64,
+    ) -> Self {
+        Self::new(a, eccen, incl, raan, argp, Anomaly::Mean(ma))
+    }
+
+    /// Create a new Keplerian orbital element object with eccentric anomaly
+    ///
+    /// # Arguments
+    /// * `a` - Semi-major axis, meters
+    /// * `eccen` - Eccentricity
+    /// * `incl` - Inclination, radians
+    /// * `raan` - Right Ascension of the Ascending Node, radians
+    /// * `argp` - Argument of Perigee, radians
+    /// * `ea` - Eccentric anomaly, radians
+    pub fn with_eccentric_anomaly(
+        a: f64,
+        eccen: f64,
+        incl: f64,
+        raan: f64,
+        argp: f64,
+        ea: f64,
+    ) -> Self {
+        Self::new(a, eccen, incl, raan, argp, Anomaly::Eccentric(ea))
+    }
+
     /// Return the semiparameter of the satellite orbit
     ///
     /// The semiparameter is also known as the semi-latus rectum
@@ -140,7 +193,7 @@ impl Kepler {
     }
 
     /// Propagate the orbit forward (or backward) in time
-    /// by givend duration
+    /// by given duration
     ///
     /// # Arguments
     ///
