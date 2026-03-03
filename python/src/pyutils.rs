@@ -291,3 +291,18 @@ where
         }
     }
 }
+
+#[allow(dead_code)]
+/// Extract a single `satkit::Instant` from a Python object.
+///
+/// Accepts `satkit.time` (PyInstant) or `datetime.datetime` (interpreted as UTC).
+/// Returns a `PyTypeError` if the object is neither.
+pub fn instant_from_pyany(obj: &Bound<'_, PyAny>) -> PyResult<Instant> {
+    let v = obj.to_time_vec()?;
+    if v.len() != 1 {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "Expected a single time value (satkit.time or datetime.datetime)",
+        ));
+    }
+    Ok(v[0])
+}

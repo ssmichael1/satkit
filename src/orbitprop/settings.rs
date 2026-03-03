@@ -103,6 +103,16 @@ impl PropSettings {
         self.precomputed = Some(Precomputed::new(begin, end)?);
         Ok(())
     }
+
+    pub fn precompute_terms_with_step<T: TimeLike>(
+        &mut self,
+        begin: &T,
+        end: &T,
+        step_secs: f64,
+    ) -> Result<()> {
+        self.precomputed = Some(Precomputed::new_with_step(begin, end, step_secs)?);
+        Ok(())
+    }
 }
 
 impl std::fmt::Display for PropSettings {
