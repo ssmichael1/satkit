@@ -149,6 +149,8 @@ pub mod orbitprop;
 pub mod sgp4;
 /// Solar system bodies
 mod solarsystem;
+/// Solar Cycle Forecast (NOAA/SWPC predicted F10.7)
+pub mod solar_cycle_forecast;
 /// Space Weather
 pub mod spaceweather;
 /// Two-line Element Set

@@ -21,6 +21,8 @@ pub enum PyIntegrator {
     rkv65 = 3,
     /// Tsitouras 5(4) with FSAL, 7 stages
     rkts54 = 4,
+    /// RODAS4 — L-stable Rosenbrock 4(3), 6 stages. For stiff problems.
+    rodas4 = 5,
 }
 
 impl From<PyIntegrator> for Integrator {
@@ -31,6 +33,7 @@ impl From<PyIntegrator> for Integrator {
             PyIntegrator::rkv87 => Integrator::RKV87,
             PyIntegrator::rkv65 => Integrator::RKV65,
             PyIntegrator::rkts54 => Integrator::RKTS54,
+            PyIntegrator::rodas4 => Integrator::RODAS4,
         }
     }
 }
@@ -43,6 +46,7 @@ impl From<Integrator> for PyIntegrator {
             Integrator::RKV87 => PyIntegrator::rkv87,
             Integrator::RKV65 => PyIntegrator::rkv65,
             Integrator::RKTS54 => PyIntegrator::rkts54,
+            Integrator::RODAS4 => PyIntegrator::rodas4,
         }
     }
 }

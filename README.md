@@ -64,9 +64,11 @@ import numpy as np
 r0 = 6378e3 + 500e3  # 500 km altitude
 v0 = np.sqrt(sk.consts.mu_earth / r0)
 
-settings = sk.propsettings()
-settings.gravity_model = sk.gravmodel.JGM3
-settings.gravity_degree = 8
+settings = sk.propsettings(
+    gravity_model=sk.gravmodel.jgm3,
+    gravity_degree=8,
+    integrator=sk.integrator.rkv98,  # default; also rkv87, rkv65, rkts54
+)
 
 result = sk.propagate(
     np.array([r0, 0, 0, 0, v0, 0]),
@@ -118,7 +120,7 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 
 ### Orbit Propagation
 
-- **Numerical** -- Adaptive Runge-Kutta 9(8) with dense output, state transition matrix, and configurable force models
+- **Numerical** -- Selectable adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4)) with dense output, state transition matrix, and configurable force models
 - **SGP4** -- Standard TLE/OMM propagator with TLE fitting from precision states
 - **Keplerian** -- Analytical two-body propagation
 
@@ -163,7 +165,7 @@ The library is validated against:
 - **ICGEM** reference values for gravity field calculations
 - **GPS SP3** precise ephemerides for multi-day numerical propagation
 
-99 unit tests and 35 doc-tests run on every commit across Linux, macOS, and Windows.
+106 unit tests and 36 doc-tests run on every commit across Linux, macOS, and Windows.
 
 ## Documentation
 

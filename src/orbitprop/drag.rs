@@ -46,62 +46,48 @@ pub fn drag_force(
     -0.5 * cd_a_over_m * density * vrel * vrel.norm()
 }
 
-// Partials are used for computing state transition matrix
-// and must be explicitly computed ... ughhh.
+// Compute density and its gradient with respect to GCRF position.
 //
-// Return density (rho)
-// and density partials (drho / dr)
-// All in the gcrf frame
-
+// Density varies almost entirely with altitude. We compute dρ/dh via
+// a single forward difference in altitude, then project along the
+// geodetic normal (the direction in which altitude increases) to get
+// the full 3D gradient in GCRF.
+//
+// This replaces an earlier approach that did 3 finite differences
+// in the NED frame (4 NRLMSISE calls total). The new version uses
+// only 2 NRLMSISE calls and is more physically motivated.
 fn compute_rho_drhodr(
     pgcrf: &Vector3,
     qgcrf2itrf: &Quaternion,
     time: &Instant,
     use_spaceweather: bool,
 ) -> (f64, Vector3) {
-    let dx = 100.0;
-
     let pitrf = qgcrf2itrf * pgcrf;
     let itrf = ITRFCoord::from(pitrf);
-    let qned2itrf = itrf.q_ned2itrf();
+    let hae = itrf.hae();
+    let lat = itrf.latitude_rad();
+    let lon = itrf.longitude_rad();
 
-    // Offset in the NED frame
-    let offset_vecs = [
-        nalgebra::vector![dx, 0.0, 0.0],
-        nalgebra::vector![0.0, dx, 0.0],
-        nalgebra::vector![0.0, 0.0, dx],
-    ];
-    let (density0, _temperature) = crate::nrlmsise::nrlmsise(
-        itrf.hae() / 1.0e3,
-        Some(itrf.latitude_rad()),
-        Some(itrf.longitude_rad()),
+    let (rho0, _) = nrlmsise(hae / 1.0e3, Some(lat), Some(lon), Some(time), use_spaceweather);
+
+    // Forward difference in altitude only (same lat/lon)
+    let dh = 100.0; // meters
+    let (rho1, _) = nrlmsise(
+        (hae + dh) / 1.0e3,
+        Some(lat),
+        Some(lon),
         Some(time),
         use_spaceweather,
     );
+    let drho_dh = (rho1 - rho0) / dh;
 
-    // Compute drhodr in the ned frame
-    let drhodr_ned: Vec<f64> = offset_vecs
-        .iter()
-        .map(|v| {
-            let itrf_off = itrf + qned2itrf * v;
+    // Geodetic "up" direction in ITRF: NED down is [0,0,1], so up is [0,0,-1]
+    // rotated to ITRF via q_ned2itrf
+    let up_itrf = itrf.q_ned2itrf() * nalgebra::vector![0.0, 0.0, -1.0];
 
-            let (density, _temperature) = crate::nrlmsise::nrlmsise(
-                itrf_off.hae() / 1.0e3,
-                Some(itrf_off.latitude_rad()),
-                Some(itrf_off.longitude_rad()),
-                Some(time),
-                use_spaceweather,
-            );
-            (density - density0) / dx
-        })
-        .collect();
-    // note: we have checked ... this appears to be correct in ned frame
-
-    let qned2gcrf = qgcrf2itrf.conjugate() * qned2itrf;
-    (
-        density0,
-        qned2gcrf * nalgebra::vector![drhodr_ned[0], drhodr_ned[1], drhodr_ned[2]],
-    )
+    // Rotate to GCRF and scale by dρ/dh
+    let up_gcrf = qgcrf2itrf.conjugate() * up_itrf;
+    (rho0, drho_dh * up_gcrf)
 }
 
 // Compute drag force and partials with respect to
@@ -128,14 +114,18 @@ pub fn drag_and_partials(
 
     let drag_accel_gcrf = -0.5 * cd_a_over_m * density * vrel * vrel_norm;
 
-    // Now partials
-    // Equation 7.81 and 7.84
+    // Partials of drag acceleration (Montenbruck & Gill, §3.5 / eq 7.81, 7.84)
+    //
+    // ∂a/∂v = -0.5 * CdA/m * ρ * (v_rel * v_rel^T / |v_rel| + |v_rel| * I)
     let dacceldv = -0.5
         * cd_a_over_m
         * density
         * (vrel * vrel.transpose() / vrel_norm + vrel_norm * Matrix3::identity());
 
-    let dacceldr = -0.5 * cd_a_over_m * density * vrel * vrel_norm * drhodr.transpose()
+    // ∂a/∂r has two terms:
+    //   1) from ρ(r):    -0.5 * CdA/m * v_rel * |v_rel| * (∂ρ/∂r)^T
+    //   2) from v_rel(r): (∂a/∂v) * (∂v_rel/∂r) = (∂a/∂v) * (-[ω×])
+    let dacceldr = -0.5 * cd_a_over_m * vrel * vrel_norm * drhodr.transpose()
         - dacceldv * OMEGA_EARTH_MATRIX;
 
     (drag_accel_gcrf, dacceldr, dacceldv)

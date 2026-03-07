@@ -224,8 +224,9 @@ pub fn update() -> Result<()> {
 ///     * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
 ///     * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
 ///
-/// * If time is outside range of file, returns None and print warning to stderr
+/// * If time is before range of file, returns None and prints warning to stderr
 ///   (but only once per library load)
+/// * If time is after range of file, returns the last entry's values (constant extrapolation)
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     let eop = eop_data();
@@ -233,16 +234,21 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     // Binary search: find first entry with mjd_utc > query (O(log n) vs O(n) linear scan)
     let idx = eop.partition_point(|x| x.mjd_utc <= mjd_utc);
 
-    if idx == 0 || idx >= eop.len() {
+    if idx == 0 {
         if !WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            let bound = if idx == 0 { "too early" } else { "too late" };
             eprintln!(
-                "Warning: EOP data not available for MJD UTC = {mjd_utc} ({bound}).\n\
+                "Warning: EOP data not available for MJD UTC = {mjd_utc} (too early).\n\
                  Run `satkit::utils::update_datafiles()` to download the most recent data.\n\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()`"
             );
         }
         return None;
+    }
+
+    // For dates beyond the file, use the last entry's values
+    if idx >= eop.len() {
+        let last = &eop[eop.len() - 1];
+        return Some([last.dut1, last.xp, last.yp, last.lod, last.dX, last.dY]);
     }
 
     // Linear interpolation between bracketing entries
@@ -303,9 +309,12 @@ mod tests {
 
     #[test]
     fn test_time_bound() {
+        // Future dates should return last entry's values (constant extrapolation)
         let tm = crate::Instant::from_rfc3339("2056-04-16T17:52:50.805408Z").unwrap();
         let eop = eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC));
-        assert!(eop.is_none());
+        assert!(eop.is_some());
+
+        // Past dates before file start should return None
         let tm = crate::Instant::from_rfc3339("1950-04-16T17:52:50.805408Z").unwrap();
         let eop = eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC));
         assert!(eop.is_none());

@@ -492,9 +492,9 @@ def earth_orientation_params(
             5 : dY wrt IAU-2000A nutation, milli-arcsecs
 
     Notes:
-        * Returns None if the time is outside the range of available Earth Orientation Parameters (EOP)
-        * EOP are only available from 1962 to current, and predict to current + ~ 4 months
-        * If EOP are not available, all values will be set to zero, and a warning will be printed to stderr
+        * Returns None if the time is before the range of available EOP data
+        * For times after the last available EOP data, the last entry's values are returned (constant extrapolation)
+        * EOP data is available from 1962 to current, with predictions ~4 months ahead
         * See: https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html
 
     Example:

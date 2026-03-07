@@ -17,6 +17,8 @@ mod adaptive_solvers;
 pub mod rk_adaptive;
 pub mod rk_adaptive_settings;
 pub mod rk_explicit;
+mod rosenbrock;
+mod rodas4;
 mod types;
 
 // NAlgebera bindings for ODE state
@@ -24,6 +26,7 @@ mod nalgebra_bindings;
 
 pub use rk_adaptive::RKAdaptive;
 pub use rk_adaptive_settings::RKAdaptiveSettings;
+pub use rosenbrock::Rosenbrock;
 
 pub mod solvers {
     #[allow(unused)]
@@ -35,6 +38,7 @@ pub mod solvers {
     pub use super::adaptive_solvers::RKV65;
     pub use super::adaptive_solvers::RKV87;
     pub use super::adaptive_solvers::RKV98;
+    pub use super::rodas4::RODAS4;
     #[allow(unused)]
     pub use super::rk_explicit::Midpoint;
     #[allow(unused)]

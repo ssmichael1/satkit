@@ -143,5 +143,11 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
         String::from("https://storage.googleapis.com/astrokit-astro-data/files_refresh.json"),
         &downloaddir,
     )?;
+
+    println!("  Solar Cycle Forecast");
+    if let Err(e) = crate::solar_cycle_forecast::update() {
+        eprintln!("Warning: could not download solar cycle forecast: {e}");
+    }
+
     Ok(())
 }

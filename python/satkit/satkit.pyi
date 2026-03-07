@@ -2832,12 +2832,14 @@ class integrator:
     * ``rkv87`` - Verner 8(7) with 8th-order dense output, 21 stages
     * ``rkv65`` - Verner 6(5), 10 stages
     * ``rkts54`` - Tsitouras 5(4) with FSAL, 7 stages
+    * ``rodas4`` - RODAS4 L-stable Rosenbrock 4(3), 6 stages. For stiff problems.
 
     Higher-order integrators can take larger time steps for the same accuracy,
     so despite having more stages per step, they often require fewer total
     function evaluations. For typical orbit propagation, ``rkv98`` (the default)
     is recommended. For faster but lower-accuracy propagation, ``rkts54`` or
-    ``rkv65`` can be used.
+    ``rkv65`` can be used. For stiff problems (re-entry, very low perigee),
+    ``rodas4`` is recommended.
     """
 
     rkv98: ClassVar[integrator]
@@ -2863,6 +2865,14 @@ class integrator:
     """Tsitouras 5(4) with FSAL, 7 stages
 
     Fastest integrator. Good for quick propagations where high accuracy is not critical.
+    """
+
+    rodas4: ClassVar[integrator]
+    """RODAS4 — L-stable Rosenbrock 4(3), 6 stages
+
+    Implicit solver for stiff problems such as re-entry or very low perigee orbits.
+    Uses analytical Jacobian. Does not support dense output interpolation or
+    state transition matrix (``output_phi``) propagation.
     """
 
 class propsettings:
@@ -3111,6 +3121,12 @@ def propagate(
 
         End time must be set by keyword argument, either explicitly or by duration.
         Solid Earth tides are not (yet) included in the model.
+
+        For future propagation (beyond available data files):
+
+        - Earth orientation parameters use the last available values (constant extrapolation)
+        - Space weather uses the NOAA/SWPC solar cycle forecast for predicted F10.7 values;
+          Ap defaults to 4. If no forecast is available, F10.7 defaults to 150.
 
     Example:
         ```python

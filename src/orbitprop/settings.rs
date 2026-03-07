@@ -9,16 +9,19 @@ use anyhow::Result;
 /// Choice of ODE integrator for orbit propagation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Integrator {
-    /// Verner 9(8) with dense output, 21 stages (default)
+    /// Verner 9(8) with 9th-order dense output, 26 stages (default)
     RKV98,
     /// Verner 9(8) without interpolation, 16 stages
     RKV98NoInterp,
-    /// Verner 8(7), 17 stages
+    /// Verner 8(7) with 8th-order dense output, 21 stages
     RKV87,
     /// Verner 6(5), 10 stages
     RKV65,
     /// Tsitouras 5(4) with FSAL, 7 stages
     RKTS54,
+    /// RODAS4 — L-stable Rosenbrock 4(3), 6 stages. For stiff problems (re-entry, low perigee).
+    /// Does not support state transition matrix propagation or dense output interpolation.
+    RODAS4,
 }
 
 impl Default for Integrator {
@@ -30,11 +33,12 @@ impl Default for Integrator {
 impl std::fmt::Display for Integrator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Integrator::RKV98 => write!(f, "RKV98 (9th order, 21 stages)"),
+            Integrator::RKV98 => write!(f, "RKV98 (9th order, 26 stages)"),
             Integrator::RKV98NoInterp => write!(f, "RKV98NoInterp (9th order, 16 stages)"),
-            Integrator::RKV87 => write!(f, "RKV87 (8th order, 17 stages)"),
+            Integrator::RKV87 => write!(f, "RKV87 (8th order, 21 stages)"),
             Integrator::RKV65 => write!(f, "RKV65 (6th order, 10 stages)"),
             Integrator::RKTS54 => write!(f, "RKTS54 (5th order, 7 stages, FSAL)"),
+            Integrator::RODAS4 => write!(f, "RODAS4 (4th order, 6 stages, L-stable)"),
         }
     }
 }
