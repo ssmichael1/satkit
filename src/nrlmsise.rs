@@ -1,5 +1,6 @@
 use cty;
 
+use crate::solar_cycle_forecast;
 use crate::spaceweather;
 use crate::Duration;
 use crate::Instant;
@@ -125,6 +126,12 @@ pub fn nrlmsise(
                 f107a = r.f10p7_adj_c81;
                 f107 = r.f10p7_adj;
                 ap = r.ap_avg as f64;
+            } else if let Some(predicted) = solar_cycle_forecast::get_predicted_f107(&time) {
+                // Use solar cycle forecast for future dates
+                // Monthly predictions serve as both daily and 81-day average
+                f107 = predicted;
+                f107a = predicted;
+                // Ap not available in forecast; use moderate default
             }
         }
     }

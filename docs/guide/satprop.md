@@ -102,8 +102,9 @@ Several integrators are available, selected via the `integrator` parameter of `p
 | `rkv87` | 8(7) | 21 | 8th-order | Good balance of speed and accuracy. |
 | `rkv65` | 6(5) | 10 | None | Faster, moderate accuracy. |
 | `rkts54` | 5(4) | 7 | None | Fastest. Good for quick propagations. |
+| `rodas4` | 4(3) | 6 | None | L-stable Rosenbrock (implicit). For stiff problems. No STM support. |
 
-Higher-order integrators can take larger time steps for the same accuracy, so despite more stages per step, they often require fewer total function evaluations. For most orbit propagation tasks, the default `rkv98` is recommended.
+Higher-order integrators can take larger time steps for the same accuracy, so despite more stages per step, they often require fewer total function evaluations. For most orbit propagation tasks, the default `rkv98` is recommended. For stiff problems (re-entry, very low perigee), `rodas4` uses an implicit method with analytical Jacobian.
 
 ```python
 import satkit as sk
@@ -117,7 +118,20 @@ settings = sk.propsettings(
     gravity_model=sk.gravmodel.egm96,
     gravity_degree=16,
 )
+
+# Use RODAS4 for a very low orbit with high drag
+# (implicit solver handles stiff dynamics from rapid density changes)
+settings = sk.propsettings(
+    integrator=sk.integrator.rodas4,
+    gravity_degree=8,
+)
+satprops = sk.satproperties_static(cd_a_over_m=2.2 * 0.01 / 1.0)
 ```
+
+!!! note
+    The `rodas4` integrator does not support dense output interpolation or
+    state transition matrix propagation (`output_phi=True`).  Attempting
+    to use `output_phi=True` with `rodas4` will raise a `RuntimeError`.
 
 ### Gravity Model Selection
 
@@ -131,6 +145,14 @@ The gravity model used in propagation can be selected via the `gravity_model` pa
 | `itugrace16` | ITU GRACE 2016 |
 
 The `gravity_degree` and `gravity_order` parameters control the maximum degree and order of the spherical harmonic expansion.
+
+## Future Propagation
+
+When propagating into the future (beyond the date range of downloaded data files), the following behavior applies:
+
+- **Earth Orientation Parameters** ($\Delta UT1$, $x_p$, $y_p$): The last available values from the EOP file are used (constant extrapolation). This is much more accurate than defaulting to zero, since these parameters change slowly.
+
+- **Space Weather** (F10.7 solar flux, Ap geomagnetic index): When historical space weather data is not available, the [NOAA/SWPC solar cycle forecast](https://www.swpc.noaa.gov/products/solar-cycle-progression) is used for predicted F10.7 values (out ~5 years). The Ap geomagnetic index is not included in the forecast and defaults to 4. If neither source is available, fixed defaults are used (F10.7 = 150, Ap = 4). Run `satkit.utils.update_datafiles()` to download the latest forecast.
 
 ## State Transition Matrix
 

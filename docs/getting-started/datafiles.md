@@ -12,7 +12,9 @@ The `satkit` package relies upon a number of data files for certain calculations
 
 - **SW-All.csv** — Space Weather. The solar flux at $\lambda = 10.7\text{cm}$ (2800 MHz) is an indication of solar activity, which in turn is an important predictor of air density at altitudes relevant for low-Earth orbits. This file is updated at [celestrak.org](https://www.celestrak.org) every 3 hours with the most-recent space weather information.
 
-- **EOP-All.csv** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis. This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org).
+- **predicted-solar-cycle.json** — NOAA/SWPC solar cycle forecast. Monthly predicted F10.7 solar flux values extending ~5 years into the future. Used as a fallback for atmospheric density calculations when propagating beyond the range of historical space weather data.
+
+- **EOP-All.csv** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis. This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org). For dates beyond the file, the last entry's values are used (constant extrapolation).
 
 ## Acquiring the Data Files
 

@@ -7,6 +7,7 @@ use crate::ode;
 use crate::ode::ODEError;
 use crate::ode::ODEResult;
 use crate::ode::RKAdaptive;
+use crate::ode::Rosenbrock;
 use crate::orbitprop::Precomputed;
 use crate::{Duration, Instant, TimeLike};
 use lpephem::sun::shadowfunc;
@@ -60,6 +61,8 @@ pub enum PropagationError {
     NoDenseOutputInSolution,
     #[error("ODE Error: {0}")]
     ODEError(ode::ODEError),
+    #[error("RODAS4 does not support state transition matrix propagation")]
+    RODAS4NoSTM,
 }
 
 //
@@ -224,6 +227,11 @@ pub fn propagate<const C: usize, T: TimeLike>(
         });
     }
 
+    // RODAS4 does not support state transition matrix (C==7)
+    if C == 7 && settings.integrator == crate::orbitprop::Integrator::RODAS4 {
+        return Err(PropagationError::RODAS4NoSTM.into());
+    }
+
     // Duration to end of integration, in seconds
     let x_end: f64 = (end - begin).as_seconds();
 
@@ -245,90 +253,73 @@ pub fn propagate<const C: usize, T: TimeLike>(
     let gravity = settings.gravity_model.get();
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
-        // The time variable in the ODE is in seconds
         let time: Instant = begin + Duration::from_seconds(x);
-
-        // get GCRS position & velocity;
         let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
         let vel_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(3, 0).into();
 
-        // Get interpolated values
         let (qgcrf2itrf, sun_gcrf, moon_gcrf) = match interp.interp(&time) {
             Ok(v) => v,
             Err(e) => return Err(ODEError::YDotError(e.to_string())),
         };
         let qitrf2gcrf = qgcrf2itrf.conjugate();
-
-        // Position in ITRF coordinates
         let pos_itrf = qgcrf2itrf * pos_gcrf;
 
-        if C == 1 {
-            // Simple state propagation (position + velocity only)
-            let mut accel = qitrf2gcrf
-                * gravity.accel(
-                    &pos_itrf,
-                    settings.gravity_degree as usize,
-                    settings.gravity_order as usize,
-                );
+        // Decide whether to compute partials:
+        // - C == 7: always (state transition matrix)
+        // - C == 1: never (explicit integrators don't need partials in ydot)
+        let need_partials = C == 7;
 
-            if settings.use_moon_gravity {
-                accel += point_gravity(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
-            }
-            if settings.use_sun_gravity {
-                accel += point_gravity(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
-            }
-
-            if let Some(props) = satprops {
-                let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
-                accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
-                if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
-                    let cd_a_over_m = props.cd_a_over_m(&time, &ss);
-                    if cd_a_over_m > 1e-6 {
-                        accel += drag_force(
-                            &pos_gcrf, &pos_itrf, &vel_gcrf, &time,
-                            cd_a_over_m, settings.use_spaceweather,
-                        );
-                    }
-                }
-            }
-
-            let mut dy = Matrix::<6, C>::zeros();
-            dy.fixed_view_mut::<3, 1>(0, 0).copy_from(&vel_gcrf);
-            dy.fixed_view_mut::<3, 1>(3, 0).copy_from(&accel);
-            Ok(dy)
-        }
-        else if C == 7 {
-            // State + state transition matrix propagation
-            let (gravity_accel, gravity_partials) =
-                gravity.accel_and_partials(
-                    &pos_itrf,
-                    settings.gravity_degree as usize,
-                    settings.gravity_order as usize,
-                );
-
-            let mut accel = qitrf2gcrf * gravity_accel;
+        let (mut accel, mut dadr, mut dadv) = if need_partials {
+            let (ga, gp) = gravity.accel_and_partials(
+                &pos_itrf,
+                settings.gravity_degree as usize,
+                settings.gravity_order as usize,
+            );
             let ritrf2gcrf = qitrf2gcrf.to_rotation_matrix();
-            let mut dadr = ritrf2gcrf * gravity_partials * ritrf2gcrf.transpose();
-            let mut dadv = Matrix3::zeros();
+            (
+                qitrf2gcrf * ga,
+                ritrf2gcrf * gp * ritrf2gcrf.transpose(),
+                Matrix3::zeros(),
+            )
+        } else {
+            (
+                qitrf2gcrf
+                    * gravity.accel(
+                        &pos_itrf,
+                        settings.gravity_degree as usize,
+                        settings.gravity_order as usize,
+                    ),
+                Matrix3::zeros(),
+                Matrix3::zeros(),
+            )
+        };
 
-            if settings.use_sun_gravity {
+        if settings.use_sun_gravity {
+            if need_partials {
                 let (a, p) = point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
                 accel += a;
                 dadr += p;
+            } else {
+                accel += point_gravity(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
             }
-            if settings.use_moon_gravity {
+        }
+        if settings.use_moon_gravity {
+            if need_partials {
                 let (a, p) = point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
                 accel += a;
                 dadr += p;
+            } else {
+                accel += point_gravity(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
             }
+        }
 
-            if let Some(props) = satprops {
-                let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
-                accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
-
-                if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
-                    let cd_a_over_m = props.cd_a_over_m(&time, &ss);
-                    if cd_a_over_m > 1e-6 {
+        if let Some(props) = satprops {
+            let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
+            accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
+            if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
+                let cd_a_over_m = props.cd_a_over_m(&time, &ss);
+                if cd_a_over_m > 1e-6 {
+                    if need_partials {
                         let (drag_a, drag_dr, drag_dv) = drag_and_partials(
                             &pos_gcrf, &qgcrf2itrf, &vel_gcrf, &time,
                             cd_a_over_m, settings.use_spaceweather,
@@ -336,10 +327,22 @@ pub fn propagate<const C: usize, T: TimeLike>(
                         accel += drag_a;
                         dadr += drag_dr;
                         dadv = drag_dv;
+                    } else {
+                        accel += drag_force(
+                            &pos_gcrf, &pos_itrf, &vel_gcrf, &time,
+                            cd_a_over_m, settings.use_spaceweather,
+                        );
                     }
                 }
             }
+        }
 
+        if C == 1 {
+            let mut dy = Matrix::<6, C>::zeros();
+            dy.fixed_view_mut::<3, 1>(0, 0).copy_from(&vel_gcrf);
+            dy.fixed_view_mut::<3, 1>(3, 0).copy_from(&accel);
+            Ok(dy)
+        } else if C == 7 {
             // Equation 7.42: dfdy * state_transition_matrix
             let mut dfdy = StateType::<6>::zeros();
             dfdy.fixed_view_mut::<3, 3>(0, 3)
@@ -358,24 +361,82 @@ pub fn propagate<const C: usize, T: TimeLike>(
         }
     };
 
+    // Jacobian closure for RODAS4: computes the 6x6 ∂f/∂y matrix
+    let jac_fn = |x: f64, y: &Matrix<6, C>| -> ODEResult<na::SMatrix<f64, 6, 6>> {
+        let time: Instant = begin + Duration::from_seconds(x);
+        let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
+        let vel_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(3, 0).into();
+
+        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = match interp.interp(&time) {
+            Ok(v) => v,
+            Err(e) => return Err(ODEError::YDotError(e.to_string())),
+        };
+        let qitrf2gcrf = qgcrf2itrf.conjugate();
+        let pos_itrf = qgcrf2itrf * pos_gcrf;
+
+        let (_, gp) = gravity.accel_and_partials(
+            &pos_itrf,
+            settings.gravity_degree as usize,
+            settings.gravity_order as usize,
+        );
+        let ritrf2gcrf = qitrf2gcrf.to_rotation_matrix();
+        let mut dadr = ritrf2gcrf * gp * ritrf2gcrf.transpose();
+        let mut dadv = Matrix3::zeros();
+
+        if settings.use_sun_gravity {
+            let (_, p) = point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
+            dadr += p;
+        }
+        if settings.use_moon_gravity {
+            let (_, p) = point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
+            dadr += p;
+        }
+
+        if let Some(props) = satprops {
+            let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
+            if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
+                let cd_a_over_m = props.cd_a_over_m(&time, &ss);
+                if cd_a_over_m > 1e-6 {
+                    let (_, drag_dr, drag_dv) = drag_and_partials(
+                        &pos_gcrf, &qgcrf2itrf, &vel_gcrf, &time,
+                        cd_a_over_m, settings.use_spaceweather,
+                    );
+                    dadr += drag_dr;
+                    dadv = drag_dv;
+                }
+            }
+        }
+
+        // Build the 6x6 Jacobian: df/dy where f = [vel; accel]
+        let mut dfdy = na::SMatrix::<f64, 6, 6>::zeros();
+        dfdy.fixed_view_mut::<3, 3>(0, 3)
+            .copy_from(&na::Matrix3::<f64>::identity());
+        dfdy.fixed_view_mut::<3, 3>(3, 0).copy_from(&dadr);
+        dfdy.fixed_view_mut::<3, 3>(3, 3).copy_from(&dadv);
+        Ok(dfdy)
+    };
+
     use crate::ode::solvers;
     use crate::orbitprop::Integrator;
 
     let res = match settings.integrator {
         Integrator::RKV98 => {
-            solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)
+            solvers::RKV98::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKV98NoInterp => {
-            solvers::RKV98NoInterp::integrate(0.0, x_end, state, ydot, &odesettings)
+            solvers::RKV98NoInterp::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKV87 => {
-            solvers::RKV87::integrate(0.0, x_end, state, ydot, &odesettings)
+            solvers::RKV87::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKV65 => {
-            solvers::RKV65::integrate(0.0, x_end, state, ydot, &odesettings)
+            solvers::RKV65::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKTS54 => {
-            solvers::RKTS54::integrate(0.0, x_end, state, ydot, &odesettings)
+            solvers::RKTS54::integrate(0.0, x_end, state, &ydot, &odesettings)
+        }
+        Integrator::RODAS4 => {
+            solvers::RODAS4::integrate(0.0, x_end, state, &ydot, &jac_fn, &odesettings)
         }
     }
     .map_err(PropagationError::ODEError)?;
@@ -416,6 +477,7 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         Integrator::RKV87 => solvers::RKV87::interpolate(x, sol)?,
         Integrator::RKV65 => solvers::RKV65::interpolate(x, sol)?,
         Integrator::RKTS54 => solvers::RKTS54::interpolate(x, sol)?,
+        Integrator::RODAS4 => solvers::RODAS4::interpolate(x, sol)?,
     })
 }
 
@@ -900,5 +962,85 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn test_rodas4_low_orbit() -> Result<()> {
+        // Propagate a low orbit (200 km) with drag using RODAS4.
+        // Compare result with the default RKV98 integrator to verify consistency.
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_hours(2.0);
+
+        let mut state: SimpleState = SimpleState::zeros();
+
+        // ~200 km altitude circular orbit
+        let r = consts::EARTH_RADIUS + 200.0e3;
+        state[0] = r;
+        state[4] = (consts::MU_EARTH / r).sqrt();
+
+        // Typical small satellite: Cd=2.2, A=0.01 m², mass=1 kg
+        let satprops = SatPropertiesStatic::new(2.2 * 0.01 / 1.0, 0.0);
+
+        let settings_rodas4 = PropSettings {
+            abs_error: 1.0e-8,
+            rel_error: 1.0e-8,
+            gravity_degree: 4,
+            integrator: crate::orbitprop::Integrator::RODAS4,
+            ..Default::default()
+        };
+
+        let settings_rkv98 = PropSettings {
+            abs_error: 1.0e-8,
+            rel_error: 1.0e-8,
+            gravity_degree: 4,
+            ..Default::default()
+        };
+
+        let res_rodas4 = propagate(
+            &state, &starttime, &stoptime, &settings_rodas4, Some(&satprops),
+        )?;
+        let res_rkv98 = propagate(
+            &state, &starttime, &stoptime, &settings_rkv98, Some(&satprops),
+        )?;
+
+        // Position agreement within 100 m over 2 hours at this altitude
+        let pos_diff = (res_rodas4.state_end.fixed_view::<3, 1>(0, 0)
+            - res_rkv98.state_end.fixed_view::<3, 1>(0, 0))
+        .norm();
+        assert!(
+            pos_diff < 100.0,
+            "RODAS4 vs RKV98 position diff = {} m (expected < 100 m)",
+            pos_diff
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_rodas4_rejects_stm() {
+        // RODAS4 should return an error when asked to propagate with STM
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
+        let stoptime = starttime + Duration::from_hours(1.0);
+
+        let mut state: CovState = CovState::zeros();
+        state[0] = consts::EARTH_RADIUS + 400.0e3;
+        state[4] = (consts::MU_EARTH / state[0]).sqrt();
+        state
+            .fixed_view_mut::<6, 6>(0, 1)
+            .copy_from(&na::Matrix6::<f64>::identity());
+
+        let settings = PropSettings {
+            integrator: crate::orbitprop::Integrator::RODAS4,
+            ..Default::default()
+        };
+
+        let result = propagate(&state, &starttime, &stoptime, &settings, None);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("state transition matrix"),
+            "Expected STM error, got: {}",
+            err_msg
+        );
     }
 }
