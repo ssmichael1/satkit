@@ -31,13 +31,9 @@ pub mod solvers {
     pub use super::adaptive_solvers::RKV98NoInterp;
     #[allow(unused)]
     pub use super::adaptive_solvers::RKF45;
-    #[allow(unused)]
     pub use super::adaptive_solvers::RKTS54;
-    #[allow(unused)]
     pub use super::adaptive_solvers::RKV65;
-    #[allow(unused)]
     pub use super::adaptive_solvers::RKV87;
-    #[allow(unused)]
     pub use super::adaptive_solvers::RKV98;
     #[allow(unused)]
     pub use super::rk_explicit::Midpoint;

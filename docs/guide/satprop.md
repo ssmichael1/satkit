@@ -89,7 +89,48 @@ The high-precision propagator does not include several additional forces that ar
 
 ## ODE Solver
 
-The high-precision propagator makes use of standard Runge-Kutta-Fehlberg methods for integrating the equations of motion and error estimation. The default integrator is a 9th-order RKF integrator with an error estimator of order 8. A proportional-integral controller is used to set the adaptive step size such that the errors stay within user-defined bounds. The Butcher table for the default integrator is provided by the *delightful* web page of [Jim Verner](https://www.sfu.ca/~jverner/), and is the same table used in the ODE solver of the same order for the *Julia* programming language.
+The high-precision propagator makes use of adaptive Runge-Kutta methods for integrating the equations of motion, with embedded error estimation for automatic step-size control. A proportional-integral-derivative (PID) controller adjusts the step size to keep errors within user-defined bounds. The Butcher tableaux are provided by the *delightful* web page of [Jim Verner](https://www.sfu.ca/~jverner/).
+
+### Integrator Choices
+
+Several integrators are available, selected via the `integrator` parameter of `propsettings`:
+
+| Integrator | Order | Stages | Dense Output | Notes |
+|---|---|---|---|---|
+| `rkv98` | 9(8) | 26 | 9th-order | Default. Best accuracy for precision work. |
+| `rkv98_nointerp` | 9(8) | 16 | None | Same stepping accuracy, faster when interpolation is not needed. |
+| `rkv87` | 8(7) | 21 | 8th-order | Good balance of speed and accuracy. |
+| `rkv65` | 6(5) | 10 | None | Faster, moderate accuracy. |
+| `rkts54` | 5(4) | 7 | None | Fastest. Good for quick propagations. |
+
+Higher-order integrators can take larger time steps for the same accuracy, so despite more stages per step, they often require fewer total function evaluations. For most orbit propagation tasks, the default `rkv98` is recommended.
+
+```python
+import satkit as sk
+
+# Use the faster Tsitouras 5(4) integrator
+settings = sk.propsettings(integrator=sk.integrator.rkts54)
+
+# Use the 8(7) integrator with EGM96 gravity
+settings = sk.propsettings(
+    integrator=sk.integrator.rkv87,
+    gravity_model=sk.gravmodel.egm96,
+    gravity_degree=16,
+)
+```
+
+### Gravity Model Selection
+
+The gravity model used in propagation can be selected via the `gravity_model` parameter. Available models are:
+
+| Model | Description |
+|---|---|
+| `jgm3` | Joint Gravity Model 3 (default) |
+| `jgm2` | Joint Gravity Model 2 |
+| `egm96` | Earth Gravitational Model 1996 |
+| `itugrace16` | ITU GRACE 2016 |
+
+The `gravity_degree` and `gravity_order` parameters control the maximum degree and order of the spherical harmonic expansion.
 
 ## State Transition Matrix
 

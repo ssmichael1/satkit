@@ -58,6 +58,9 @@ pub trait ODEState:
 
     // zero
     fn ode_zero() -> Self;
+
+    // self += other * scale (in-place fused multiply-add)
+    fn ode_add_scaled(&mut self, other: &Self, scale: f64);
 }
 
 pub trait ODESystem {

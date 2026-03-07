@@ -13,4 +13,4 @@ pub use propagator::*;
 pub use satproperties::SatProperties;
 pub use satproperties::SatPropertiesStatic;
 pub use satstate::{SatState, StateCov};
-pub use settings::PropSettings;
+pub use settings::{Integrator, PropSettings};

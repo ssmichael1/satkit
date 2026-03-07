@@ -9,7 +9,6 @@ mod rkv87;
 mod rkv87_table;
 
 mod rkv98;
-mod rkv98_table;
 
 mod rkv98_nointerp;
 mod rkv98_nointerp_table;

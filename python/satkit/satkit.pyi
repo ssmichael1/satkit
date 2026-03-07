@@ -2715,6 +2715,15 @@ class propresult:
         ...
 
     @property
+    def can_interp(self) -> bool:
+        """Whether this result supports interpolation
+
+        Returns:
+            bool: True if dense output is available for interpolation
+        """
+        ...
+
+    @property
     def phi(self) -> npt.NDArray[np.float64] | None:
         """State transition matrix
 
@@ -2813,6 +2822,49 @@ class satproperties_static:
     @craoverm.setter
     def craoverm(self, value: float) -> None: ...
 
+class integrator:
+    """Choice of ODE integrator for orbit propagation
+
+    Available integrators, from highest to lowest order:
+
+    * ``rkv98`` - Verner 9(8) with 9th-order dense output, 26 stages (default)
+    * ``rkv98_nointerp`` - Verner 9(8) without interpolation, 16 stages
+    * ``rkv87`` - Verner 8(7) with 8th-order dense output, 21 stages
+    * ``rkv65`` - Verner 6(5), 10 stages
+    * ``rkts54`` - Tsitouras 5(4) with FSAL, 7 stages
+
+    Higher-order integrators can take larger time steps for the same accuracy,
+    so despite having more stages per step, they often require fewer total
+    function evaluations. For typical orbit propagation, ``rkv98`` (the default)
+    is recommended. For faster but lower-accuracy propagation, ``rkts54`` or
+    ``rkv65`` can be used.
+    """
+
+    rkv98: ClassVar[integrator]
+    """Verner 9(8) with 9th-order dense output, 26 stages (default)
+
+    Highest accuracy integrator. Recommended for precision orbit propagation.
+    """
+
+    rkv98_nointerp: ClassVar[integrator]
+    """Verner 9(8) without interpolation, 16 stages
+
+    Same stepping accuracy as ``rkv98`` but skips interpolation stages.
+    Slightly faster when dense output is not needed (``enable_interp=False``).
+    """
+
+    rkv87: ClassVar[integrator]
+    """Verner 8(7) with 8th-order dense output, 21 stages"""
+
+    rkv65: ClassVar[integrator]
+    """Verner 6(5), 10 stages"""
+
+    rkts54: ClassVar[integrator]
+    """Tsitouras 5(4) with FSAL, 7 stages
+
+    Fastest integrator. Good for quick propagations where high accuracy is not critical.
+    """
+
 class propsettings:
     """This class contains settings used in the high-precision orbit propagator part of the "satkit" python toolbox
 
@@ -2823,10 +2875,12 @@ class propsettings:
         * rel_error: 1e-8
         * gravity_degree: 4
         * gravity_order: 4
+        * gravity_model: gravmodel.jgm3
         * use_spaceweather: True
         * use_sun_gravity: True
         * use_moon_gravity: True
         * enable_interp: True
+        * integrator: integrator.rkv98
 
         * enable_interp enables high-precision interpolation of state between begin and end times via the returned function,
       it is enabled by default.  There is a small increase in computational efficiency if set to false
@@ -2840,10 +2894,12 @@ class propsettings:
         rel_error: float = 1e-8,
         gravity_degree: int = 4,
         gravity_order: int = 4,
+        gravity_model: gravmodel = ...,
         use_spaceweather: bool = True,
         use_sun_gravity: bool = True,
         use_moon_gravity: bool = True,
         enable_interp: bool = True,
+        integrator: integrator = ...,
     ) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
 
@@ -2852,10 +2908,12 @@ class propsettings:
             rel_error: Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
             gravity_degree: Maximum degree of spherical harmonic gravity model. Default is 4
             gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree. Default is same as gravity_degree
+            gravity_model: Gravity model to use. Default is gravmodel.jgm3
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
             use_moon_gravity: Include moon third-body gravitational perturbation. Default is True
             enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
+            integrator: ODE integrator to use. Default is integrator.rkv98
 
         Returns:
             New propsettings object with default settings
@@ -2866,6 +2924,8 @@ class propsettings:
                 gravity_degree=16,
                 abs_error=1e-10,
                 rel_error=1e-10,
+                gravity_model=satkit.gravmodel.egm96,
+                integrator=satkit.integrator.rkts54,
             )
             ```
         """
@@ -2970,6 +3030,30 @@ class propsettings:
 
     @enable_interp.setter
     def enable_interp(self, value: bool) -> None: ...
+    @property
+    def gravity_model(self) -> gravmodel:
+        """Gravity model used for Earth gravity computation
+
+        Returns:
+            gravmodel: The gravity model, default is gravmodel.jgm3
+
+        """
+        ...
+
+    @gravity_model.setter
+    def gravity_model(self, value: gravmodel) -> None: ...
+    @property
+    def integrator(self) -> integrator:
+        """ODE integrator used for orbit propagation
+
+        Returns:
+            integrator: The integrator, default is integrator.rkv98
+
+        """
+        ...
+
+    @integrator.setter
+    def integrator(self, value: integrator) -> None: ...
     def precompute_terms(self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None):
         """Precompute terms for fast interpolation of state between begin and end times
 

@@ -2,7 +2,6 @@ use super::drag::{drag_and_partials, drag_force};
 use super::point_gravity::{point_gravity, point_gravity_and_partials};
 use super::settings::PropSettings;
 
-use crate::earthgravity;
 use crate::lpephem;
 use crate::ode;
 use crate::ode::ODEError;
@@ -36,6 +35,7 @@ pub struct PropagationResult<const T: usize> {
     pub rejected_steps: u32,
     pub num_eval: u32,
     pub odesol: Option<ode::ODESolution<Matrix<6, T>>>,
+    pub integrator: super::settings::Integrator,
 }
 
 impl<const T: usize> PropagationResult<T> {
@@ -220,6 +220,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
             rejected_steps: 0,
             num_eval: 0,
             odesol: None,
+            integrator: settings.integrator,
         });
     }
 
@@ -240,6 +241,8 @@ pub fn propagate<const C: usize, T: TimeLike>(
         _ => &Precomputed::new(&begin, &end)
             .context("Cannot compute precomputed interpolation data")?,
     };
+
+    let gravity = settings.gravity_model.get();
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
         // The time variable in the ODE is in seconds
@@ -262,7 +265,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         if C == 1 {
             // Simple state propagation (position + velocity only)
             let mut accel = qitrf2gcrf
-                * earthgravity::jgm3().accel(
+                * gravity.accel(
                     &pos_itrf,
                     settings.gravity_degree as usize,
                     settings.gravity_order as usize,
@@ -297,7 +300,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         else if C == 7 {
             // State + state transition matrix propagation
             let (gravity_accel, gravity_partials) =
-                earthgravity::jgm3().accel_and_partials(
+                gravity.accel_and_partials(
                     &pos_itrf,
                     settings.gravity_degree as usize,
                     settings.gravity_order as usize,
@@ -355,10 +358,25 @@ pub fn propagate<const C: usize, T: TimeLike>(
         }
     };
 
-    let res = if settings.enable_interp {
-        crate::ode::solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)
-    } else {
-        crate::ode::solvers::RKV98NoInterp::integrate(0.0, x_end, state, ydot, &odesettings)
+    use crate::ode::solvers;
+    use crate::orbitprop::Integrator;
+
+    let res = match settings.integrator {
+        Integrator::RKV98 => {
+            solvers::RKV98::integrate(0.0, x_end, state, ydot, &odesettings)
+        }
+        Integrator::RKV98NoInterp => {
+            solvers::RKV98NoInterp::integrate(0.0, x_end, state, ydot, &odesettings)
+        }
+        Integrator::RKV87 => {
+            solvers::RKV87::integrate(0.0, x_end, state, ydot, &odesettings)
+        }
+        Integrator::RKV65 => {
+            solvers::RKV65::integrate(0.0, x_end, state, ydot, &odesettings)
+        }
+        Integrator::RKTS54 => {
+            solvers::RKTS54::integrate(0.0, x_end, state, ydot, &odesettings)
+        }
     }
     .map_err(PropagationError::ODEError)?;
 
@@ -371,6 +389,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         rejected_steps: res.nreject as u32,
         num_eval: res.nevals as u32,
         odesol: Some(res),
+        integrator: settings.integrator,
     })
 }
 
@@ -378,6 +397,9 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
     res: &PropagationResult<C>,
     time: &T,
 ) -> Result<StateType<C>> {
+    use crate::ode::solvers;
+    use crate::orbitprop::Integrator;
+
     let sol = res
         .odesol
         .as_ref()
@@ -388,7 +410,13 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         return Ok(res.state_begin);
     }
     let x = (time - res.time_begin).as_seconds();
-    Ok(crate::ode::solvers::RKV98::interpolate(x, sol)?)
+    Ok(match res.integrator {
+        Integrator::RKV98 => solvers::RKV98::interpolate(x, sol)?,
+        Integrator::RKV98NoInterp => solvers::RKV98NoInterp::interpolate(x, sol)?,
+        Integrator::RKV87 => solvers::RKV87::interpolate(x, sol)?,
+        Integrator::RKV65 => solvers::RKV65::interpolate(x, sol)?,
+        Integrator::RKTS54 => solvers::RKTS54::interpolate(x, sol)?,
+    })
 }
 
 #[cfg(test)]

@@ -131,6 +131,7 @@ impl PyPropResult {
             accepted_steps: 0,
             rejected_steps: 0,
             odesol: None,
+            integrator: satkit::orbitprop::Integrator::default(),
         })))
     }
 

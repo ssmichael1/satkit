@@ -33,6 +33,7 @@ __all__ = [
     "satstate",
     "propagate",
     "propsettings",
+    "integrator",
     "satproperties_static",
     "propresult",
     "propstats",

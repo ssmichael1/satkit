@@ -36,4 +36,9 @@ impl<const R: usize, const C: usize> ODEState for nalgebra::SMatrix<f64, R, C> {
     fn ode_zero() -> Self {
         Self::zeros()
     }
+
+    #[inline(always)]
+    fn ode_add_scaled(&mut self, other: &Self, scale: f64) {
+        *self += other * scale;
+    }
 }
