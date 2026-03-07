@@ -6,6 +6,8 @@
 
 ::: satkit.propsettings
 
+::: satkit.integrator
+
 ::: satkit.propstats
 
 ::: satkit.satproperties_static

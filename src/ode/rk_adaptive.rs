@@ -55,25 +55,20 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
 
         // Compute interpolant coefficients bi[i] = sum_j(BI[i][j] * t^(j+1))
         // Equation (6) of Verner 2010
-        let bi: Vec<f64> = Self::BI
-            .iter()
-            .map(|biarr| {
-                let mut tj = 1.0;
-                biarr.iter().fold(0.0, |acc, bij| {
-                    tj *= t;
-                    acc + bij * tj
-                })
+        let bi: [f64; N] = std::array::from_fn(|i| {
+            let mut tj = 1.0;
+            Self::BI[i].iter().fold(0.0, |acc, bij| {
+                tj *= t;
+                acc + bij * tj
             })
-            .collect();
+        });
 
         // Compute interpolated value
         // Equation (5) of Verner 2010: y_interp = (y/h + sum(k[i] * bi[i])) * h
-        let mut y = dense.yprime[idx]
-            .iter()
-            .enumerate()
-            .fold(dense.y[idx].clone() / dense.h[idx], |acc, (ix, k)| {
-                acc + k.clone() * bi[ix]
-            });
+        let mut y = dense.y[idx].clone() / dense.h[idx];
+        for (ix, k) in dense.yprime[idx].iter().enumerate() {
+            y.ode_add_scaled(k, bi[ix]);
+        }
         y = y * dense.h[idx];
         Ok(y)
     }
@@ -132,12 +127,24 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
         // For FSAL methods, cache the last k evaluation
         let mut k_last: Option<S> = None;
 
+        // Pre-allocate stage array (avoids heap allocation per step)
+        let mut karr: Vec<S> = Vec::with_capacity(N);
+        // Scratch state for computing stage inputs
+        let mut ytmp = y0.clone();
+
+        // PID controller constants
+        let order_f = Self::ORDER as f64;
+        let beta1 = 0.7 / order_f;
+        let beta2 = 0.4 / order_f;
+        let beta3 = 0.1 / order_f;
+
         // OK ... lets integrate!
         loop {
             if (tdir > 0.0 && (x + h) >= end) || (tdir < 0.0 && (x + h) <= end) {
                 h = end - x;
             }
-            let mut karr = Vec::with_capacity(N);
+
+            karr.clear();
 
             // Use FSAL optimization: reuse last stage from previous step as first stage
             if Self::FSAL && k_last.is_some() {
@@ -147,45 +154,43 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
                 nevals += 1;
             }
 
-            // Create the remaining "k"s
+            // Create the remaining "k"s using in-place accumulation
             for k in 1..N {
-                karr.push(ydot(
-                    h.mul_add(Self::C[k], x),
-                    &(karr.iter().enumerate().fold(y.clone(), |acc, (idx, ki)| {
-                        acc + ki.clone() * Self::A[k][idx] * h
-                    })),
-                )?);
+                // Build ytmp = y + h * sum(A[k][i] * karr[i])
+                ytmp.clone_from(&y);
+                for (idx, ki) in karr.iter().enumerate() {
+                    let a = Self::A[k][idx];
+                    if a.abs() > 1.0e-30 {
+                        ytmp.ode_add_scaled(ki, a * h);
+                    }
+                }
+                karr.push(ydot(h.mul_add(Self::C[k], x), &ytmp)?);
                 nevals += 1;
             }
 
-            // Sum the "k"s
-            let ynp1 = karr
-                .iter()
-                .enumerate()
-                .fold(y.clone() * 1.0 / h, |acc, (idx, k)| {
-                    acc + k.clone() * Self::B[idx]
-                })
-                * h;
+            // Compute ynp1 = y + h * sum(B[i] * karr[i]) using in-place accumulation
+            let mut ynp1 = y.clone();
+            for (idx, k) in karr.iter().enumerate() {
+                let b = Self::B[idx];
+                if b.abs() > 1.0e-30 {
+                    ynp1.ode_add_scaled(k, b * h);
+                }
+            }
 
             // Compute the "error" state by differencing the p and p* orders
-            let yerr = karr
-                .iter()
-                .enumerate()
-                .fold(S::ode_zero(), |acc, (idx, k)| {
-                    if Self::BERR[idx].abs() > 1.0e-9 {
-                        acc + k.clone() * Self::BERR[idx]
-                    } else {
-                        acc
-                    }
-                })
-                * h;
+            let mut yerr = S::ode_zero();
+            for (idx, k) in karr.iter().enumerate() {
+                let berr = Self::BERR[idx];
+                if berr.abs() > 1.0e-9 {
+                    yerr.ode_add_scaled(k, berr * h);
+                }
+            }
 
             // Compute normalized error
             let enorm = {
-                let mut ymax = y.ode_abs().ode_elem_max(&ynp1.ode_abs()) * settings.relerror;
-                ymax = ymax.ode_scalar_add(settings.abserror);
-                let ydiv = yerr.ode_elem_div(&ymax);
-                ydiv.ode_scaled_norm()
+                let ymax = y.ode_abs().ode_elem_max(&ynp1.ode_abs()) * settings.relerror;
+                let ymax = ymax.ode_scalar_add(settings.abserror);
+                yerr.ode_elem_div(&ymax).ode_scaled_norm()
             };
 
             if !enorm.is_finite() {
@@ -199,10 +204,6 @@ pub trait RKAdaptive<const N: usize, const NI: usize> {
             //
             // β₁ = 0.7/p, β₂ = -0.4/p, β₃ = 0.1/p
             // (note β₂ is negative, implemented by dividing by enorm_prev^0.4/p)
-            let order_f = Self::ORDER as f64;
-            let beta1 = 0.7 / order_f;
-            let beta2 = 0.4 / order_f;
-            let beta3 = 0.1 / order_f;
 
             if (enorm < 1.0) || (h.abs() <= settings.dtmin) {
                 // PID controller for accepted steps

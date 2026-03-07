@@ -40,6 +40,17 @@ impl From<GravModel> for GravityModel {
     }
 }
 
+impl From<GravityModel> for GravModel {
+    fn from(g: GravityModel) -> Self {
+        match g {
+            GravityModel::JGM3 => Self::jgm3,
+            GravityModel::JGM2 => Self::jgm2,
+            GravityModel::EGM96 => Self::egm96,
+            GravityModel::ITUGrace16 => Self::itugrace16,
+        }
+    }
+}
+
 /// Acceleration vector due to Earth gravity
 ///
 ///

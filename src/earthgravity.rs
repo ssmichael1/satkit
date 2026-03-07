@@ -17,12 +17,35 @@ use once_cell::sync::OnceCell;
 /// For details of models, see:
 /// <http://icgem.gfz-potsdam.de/tom_longtime>
 ///
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GravityModel {
     JGM3,
     JGM2,
     EGM96,
     ITUGrace16,
+}
+
+impl std::fmt::Display for GravityModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            GravityModel::JGM3 => write!(f, "JGM3"),
+            GravityModel::JGM2 => write!(f, "JGM2"),
+            GravityModel::EGM96 => write!(f, "EGM96"),
+            GravityModel::ITUGrace16 => write!(f, "ITU_GRACE16"),
+        }
+    }
+}
+
+impl GravityModel {
+    /// Get the singleton Gravity instance for this model
+    pub fn get(&self) -> &'static Gravity {
+        match self {
+            GravityModel::JGM3 => jgm3(),
+            GravityModel::JGM2 => jgm2(),
+            GravityModel::EGM96 => egm96(),
+            GravityModel::ITUGrace16 => itu_grace16(),
+        }
+    }
 }
 
 ///

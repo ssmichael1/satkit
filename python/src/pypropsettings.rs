@@ -1,9 +1,51 @@
 use pyo3::prelude::*;
 
-use satkit::orbitprop::PropSettings;
-use crate::{PyInstant, PyDuration};
+use crate::pygravity::GravModel;
+use crate::{PyDuration, PyInstant};
+use satkit::orbitprop::{Integrator, PropSettings};
 
 use pyo3::types::{PyDelta, PyDeltaAccess, PyDict, PyString};
+
+/// Choice of ODE integrator for orbit propagation
+#[allow(non_camel_case_types)]
+#[pyclass(name = "integrator", eq, eq_int, from_py_object)]
+#[derive(Clone, PartialEq, Eq)]
+pub enum PyIntegrator {
+    /// Verner 9(8) with 9th-order dense output, 26 stages (default)
+    rkv98 = 0,
+    /// Verner 9(8) without interpolation, 16 stages
+    rkv98_nointerp = 1,
+    /// Verner 8(7) with 8th-order dense output, 21 stages
+    rkv87 = 2,
+    /// Verner 6(5), 10 stages
+    rkv65 = 3,
+    /// Tsitouras 5(4) with FSAL, 7 stages
+    rkts54 = 4,
+}
+
+impl From<PyIntegrator> for Integrator {
+    fn from(i: PyIntegrator) -> Self {
+        match i {
+            PyIntegrator::rkv98 => Integrator::RKV98,
+            PyIntegrator::rkv98_nointerp => Integrator::RKV98NoInterp,
+            PyIntegrator::rkv87 => Integrator::RKV87,
+            PyIntegrator::rkv65 => Integrator::RKV65,
+            PyIntegrator::rkts54 => Integrator::RKTS54,
+        }
+    }
+}
+
+impl From<Integrator> for PyIntegrator {
+    fn from(i: Integrator) -> Self {
+        match i {
+            Integrator::RKV98 => PyIntegrator::rkv98,
+            Integrator::RKV98NoInterp => PyIntegrator::rkv98_nointerp,
+            Integrator::RKV87 => PyIntegrator::rkv87,
+            Integrator::RKV65 => PyIntegrator::rkv65,
+            Integrator::RKTS54 => PyIntegrator::rkts54,
+        }
+    }
+}
 
 #[pyclass(name = "propsettings", from_py_object)]
 #[derive(Clone, Debug)]
@@ -49,6 +91,22 @@ impl PyPropSettings {
             if let Some(moon) = kw.get_item("use_moon_gravity")? {
                 ps.use_moon_gravity = moon.extract::<bool>()?;
                 kw.del_item("use_moon_gravity")?;
+            }
+            if let Some(gm) = kw.get_item("gravity_model")? {
+                let model: GravModel = gm.extract::<GravModel>()
+                    .map_err(|_| pyo3::exceptions::PyValueError::new_err(
+                        "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.jgm3)"
+                    ))?;
+                ps.gravity_model = model.into();
+                kw.del_item("gravity_model")?;
+            }
+            if let Some(integ) = kw.get_item("integrator")? {
+                let integrator: PyIntegrator = integ.extract::<PyIntegrator>()
+                    .map_err(|_| pyo3::exceptions::PyValueError::new_err(
+                        "integrator must be a satkit.integrator enum value (e.g. satkit.integrator.rkv98)"
+                    ))?;
+                ps.integrator = integrator.into();
+                kw.del_item("integrator")?;
             }
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
@@ -167,6 +225,28 @@ impl PyPropSettings {
     #[setter(use_spaceweather)]
     fn set_use_spacewather(&mut self, val: bool) -> PyResult<()> {
         self.0.use_spaceweather = val;
+        Ok(())
+    }
+
+    #[getter]
+    fn get_gravity_model(&self) -> GravModel {
+        self.0.gravity_model.into()
+    }
+
+    #[setter(gravity_model)]
+    fn set_gravity_model(&mut self, val: GravModel) -> PyResult<()> {
+        self.0.gravity_model = val.into();
+        Ok(())
+    }
+
+    #[getter]
+    fn get_integrator(&self) -> PyIntegrator {
+        self.0.integrator.into()
+    }
+
+    #[setter(integrator)]
+    fn set_integrator(&mut self, val: PyIntegrator) -> PyResult<()> {
+        self.0.integrator = val.into();
         Ok(())
     }
 

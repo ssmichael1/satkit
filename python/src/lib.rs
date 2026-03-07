@@ -162,6 +162,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySatState>()?;
 
     m.add_class::<PyPropSettings>()?;
+    m.add_class::<pypropsettings::PyIntegrator>()?;
     m.add_class::<pysatproperties::PySatProperties>()?;
     m.add_class::<pypropresult::PyPropResult>()?;
     m.add_class::<pypropresult::PyPropStats>()?;
