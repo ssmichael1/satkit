@@ -58,9 +58,7 @@ impl PyQuaternion {
             let x = args.get_item(1)?.extract::<f64>()?;
             let y = args.get_item(2)?.extract::<f64>()?;
             let z = args.get_item(3)?.extract::<f64>()?;
-            // Create a nalgebra quaternion from 4 input scalars
-            let q = nalgebra::Quaternion::<f64>::new(w, x, y, z);
-            Ok(Quaternion::from_quaternion(q).into())
+            Ok(Quaternion::new(w, x, y, z).into())
         } else {
             bail!("Invalid input.  Must be empty or 4 floats");
         }
@@ -79,7 +77,7 @@ impl PyQuaternion {
     ///     e.g. rotation of +xhat 90 degrees by +zhat gives +yhat
     #[staticmethod]
     fn rotx(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::from_axis_angle(&Vector3::x_axis(), theta_rad).into())
+        Ok(Quaternion::rotx(theta_rad).into())
     }
 
     /// Quaternion representing rotation about yhat axis by `theta-rad` degrees
@@ -96,14 +94,14 @@ impl PyQuaternion {
     ///
     #[staticmethod]
     fn roty(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::from_axis_angle(&Vector3::y_axis(), theta_rad).into())
+        Ok(Quaternion::roty(theta_rad).into())
     }
 
     /// Quaternion representing rotation about
     /// zhat axis by `theta-rad` degrees
     #[staticmethod]
     fn rotz(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::from_axis_angle(&Vector3::z_axis(), theta_rad).into())
+        Ok(Quaternion::rotz(theta_rad).into())
     }
 
     /// Quaternion representing rotation about given axis by given angle in radians
@@ -118,13 +116,14 @@ impl PyQuaternion {
     ///
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> Result<Self> {
-        let v = Vector3::from_row_slice(axis.as_slice()?);
-        let u = nalgebra::UnitVector3::try_new(v, 1.0e-9);
-        if let Some(unit_axis) = u {
-            Ok(Quaternion::from_axis_angle(&unit_axis, angle).into())
-        } else {
+        let s = axis.as_slice()?;
+        let v = numeris::vector![s[0], s[1], s[2]];
+        let n = v.norm();
+        if n < 1.0e-9 {
             // If the axis is zero, return identity quaternion
             Ok(Quaternion::identity().into())
+        } else {
+            Ok(Quaternion::from_axis_angle(v, angle).into())
         }
     }
 
@@ -146,27 +145,41 @@ impl PyQuaternion {
         }
         let v1 = match v1.is_contiguous() {
             true => {
-                Vector3::from_row_slice(v1.as_slice().context("Cannot convert v1 to 3D vector")?)
+                let s = v1.as_slice().context("Cannot convert v1 to 3D vector")?;
+                numeris::vector![s[0], s[1], s[2]]
             }
-            false => Vector3::from_row_slice(&[
+            false => numeris::vector![
                 *v1.get(0).unwrap(),
                 *v1.get(1).unwrap(),
                 *v1.get(2).unwrap(),
-            ]),
+            ],
         };
         let v2 = match v2.is_contiguous() {
             true => {
-                Vector3::from_row_slice(v2.as_slice().context("Cannot convert vd2 to 3D vector")?)
+                let s = v2.as_slice().context("Cannot convert v2 to 3D vector")?;
+                numeris::vector![s[0], s[1], s[2]]
             }
-            false => Vector3::from_row_slice(&[
+            false => numeris::vector![
                 *v2.get(0).unwrap(),
                 *v2.get(1).unwrap(),
                 *v2.get(2).unwrap(),
-            ]),
+            ],
         };
-        let q = Quaternion::rotation_between(&v1, &v2)
-            .context("Norms are 0 or vectors are 180° apart")?;
 
+        // Compute rotation between two vectors
+        let n1 = v1.norm();
+        let n2 = v2.norm();
+        if n1 < 1.0e-9 || n2 < 1.0e-9 {
+            bail!("Norms are 0 or vectors are 180° apart");
+        }
+        let u1 = v1 * (1.0 / n1);
+        let u2 = v2 * (1.0 / n2);
+        let cross = u1.cross(&u2);
+        let dot = u1.dot(&u2);
+        if cross.norm() < 1.0e-9 && dot < 0.0 {
+            bail!("Norms are 0 or vectors are 180° apart");
+        }
+        let q = Quaternion::from_axis_angle(cross, dot.clamp(-1.0, 1.0).acos());
         Ok(q.into())
     }
 
@@ -183,10 +196,13 @@ impl PyQuaternion {
             bail!("Invalid DCM.  Must be 3x3 matrix");
         }
         let dcm = dcm.as_array();
-        let mat = nalgebra::Matrix3::from_iterator(dcm.iter().cloned());
-        let rot = nalgebra::Rotation3::from_matrix(&mat.transpose());
-
-        Ok(Quaternion::from_rotation_matrix(&rot).into())
+        // numpy arrays are row-major, build Matrix3 row-by-row
+        let mat = Matrix3::new([
+            [dcm[(0, 0)], dcm[(0, 1)], dcm[(0, 2)]],
+            [dcm[(1, 0)], dcm[(1, 1)], dcm[(1, 2)]],
+            [dcm[(2, 0)], dcm[(2, 1)], dcm[(2, 2)]],
+        ]);
+        Ok(Quaternion::from_rotation_matrix(&mat).into())
     }
 
     /// Return rotation matrix representing identical rotation to quaternion
@@ -200,7 +216,7 @@ impl PyQuaternion {
             let phi = unsafe { np::PyArray2::<f64>::new(py, [3, 3], true) };
             unsafe {
                 std::ptr::copy_nonoverlapping(
-                    rot.matrix().as_ptr(),
+                    rot.as_slice().as_ptr(),
                     phi.as_raw_array_mut().as_mut_ptr(),
                     9,
                 );
@@ -214,15 +230,17 @@ impl PyQuaternion {
     /// Returns:
     ///     (f64, f64, f64): Tuple of roll, pitch, yaw angles in radians
     fn as_euler(&self) -> (f64, f64, f64) {
-        self.0.euler_angles()
+        self.0.to_euler()
     }
 
     fn __str__(&self) -> Result<String> {
-        let ax: nalgebra::Unit<Vector3> = self.0.axis().map_or_else(
-            || nalgebra::Unit::new_normalize(Vector3::new(1.0, 0.0, 0.0)),
-            |v| v,
-        );
-        let angle = self.0.angle();
+        let (ax, angle) = self.0.to_axis_angle();
+        let n = ax.norm();
+        let ax = if n < 1.0e-9 {
+            numeris::vector![1.0, 0.0, 0.0]
+        } else {
+            ax * (1.0 / n)
+        };
         Ok(format!(
             "Quaternion(Axis = [{:6.4}, {:6.4}, {:6.4}], Angle = {:6.4} rad)",
             ax[0], ax[1], ax[2], angle
@@ -244,16 +262,16 @@ impl PyQuaternion {
         let x = f64::from_le_bytes(state[8..16].try_into()?);
         let y = f64::from_le_bytes(state[16..24].try_into()?);
         let z = f64::from_le_bytes(state[24..32].try_into()?);
-        self.0 = Quaternion::from_quaternion(nalgebra::Quaternion::<f64>::new(w, x, y, z));
+        self.0 = Quaternion::new(w, x, y, z);
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
         let mut raw = [0; 32];
         raw[0..8].clone_from_slice(f64::to_le_bytes(self.0.w).as_slice());
-        raw[8..16].clone_from_slice(f64::to_le_bytes(self.0.i).as_slice());
-        raw[16..24].clone_from_slice(f64::to_le_bytes(self.0.j).as_slice());
-        raw[24..32].clone_from_slice(f64::to_le_bytes(self.0.k).as_slice());
+        raw[8..16].clone_from_slice(f64::to_le_bytes(self.0.x).as_slice());
+        raw[16..24].clone_from_slice(f64::to_le_bytes(self.0.y).as_slice());
+        raw[24..32].clone_from_slice(f64::to_le_bytes(self.0.z).as_slice());
         PyBytes::new(py, &raw).into_py_any(py)
     }
 
@@ -263,7 +281,7 @@ impl PyQuaternion {
     ///     float: Angle of rotation in radians
     #[getter]
     fn angle(&self) -> f64 {
-        self.0.angle()
+        self.0.to_axis_angle().1
     }
 
     /// Axis of rotation
@@ -272,7 +290,13 @@ impl PyQuaternion {
     ///     numpy.ndarray: 3-element numpy array representing axis of rotation
     #[getter]
     fn axis(&self) -> PyResult<Py<PyAny>> {
-        let a = self.0.axis().map_or_else(Vector3::x_axis, |ax| ax);
+        let (ax, _) = self.0.to_axis_angle();
+        let n = ax.norm();
+        let a = if n < 1.0e-9 {
+            numeris::vector![1.0, 0.0, 0.0]
+        } else {
+            ax * (1.0 / n)
+        };
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
             numpy::ndarray::arr1(a.as_slice())
                 .to_pyarray(py)
@@ -300,17 +324,17 @@ impl PyQuaternion {
 
     #[getter]
     fn x(&self) -> f64 {
-        self.0.i
+        self.0.x
     }
 
     #[getter]
     fn y(&self) -> f64 {
-        self.0.j
+        self.0.y
     }
 
     #[getter]
     fn z(&self) -> f64 {
-        self.0.k
+        self.0.z
     }
 
     #[getter]
@@ -327,12 +351,10 @@ impl PyQuaternion {
     ///
     /// Returns:
     ///     quaternion: Quaterion represention fracional spherical interpolation between self and other
-    #[pyo3(signature=(other, frac,  epsilon=1.0e-6))]
+    #[pyo3(signature=(other, frac, epsilon=1.0e-6))]
+    #[allow(unused_variables)]
     fn slerp(&self, other: &Self, frac: f64, epsilon: f64) -> Result<Self> {
-        self.0.try_slerp(&other.0, frac, epsilon).map_or_else(
-            || bail!("Quaternions cannot be 180 deg apart"),
-            |v| Ok(v.into()),
-        )
+        Ok(self.0.slerp(&other.0, frac).into())
     }
 
     fn __mul__(&self, other: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
@@ -351,10 +373,10 @@ impl PyQuaternion {
                 bail!("Invalid rhs.  2nd dimension must be 3 in size");
             }
             let rot = self.0.to_rotation_matrix();
-            let qmat = rot.matrix().conjugate();
+            let qmat = rot.transpose();
 
             Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let nd = unsafe { np::ndarray::ArrayView2::from_shape_ptr((3, 3), qmat.as_ptr()) };
+                let nd = unsafe { np::ndarray::ArrayView2::from_shape_ptr((3, 3), qmat.as_slice().as_ptr()) };
                 let res = v.readonly().as_array().dot(&nd).to_pyarray(py);
 
                 res.into_py_any(py)
@@ -364,10 +386,10 @@ impl PyQuaternion {
                 bail!("Invalid rhs.  1D array must be of length 3");
             }
 
-            let m = nalgebra::vector![
+            let m = numeris::vector![
                 v1d.get_owned(0).unwrap(),
                 v1d.get_owned(1).unwrap(),
-                v1d.get_owned(2).unwrap()
+                v1d.get_owned(2).unwrap(),
             ];
 
             let vout = self.0 * m;

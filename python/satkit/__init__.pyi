@@ -32,6 +32,7 @@ __all__ = [
     "planets",
     "satstate",
     "propagate",
+    "lambert",
     "propsettings",
     "integrator",
     "satproperties_static",

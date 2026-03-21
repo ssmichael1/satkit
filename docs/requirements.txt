@@ -6,10 +6,12 @@ mkdocs-jupyter>=0.25
 # Notebook execution dependencies
 satkit-data>=0.9.0
 numpy
-plotly
+matplotlib
+scienceplots
+cartopy
+certifi
 ipykernel
 xmltodict
 pandas
 scipy
 requests
-xmltodict

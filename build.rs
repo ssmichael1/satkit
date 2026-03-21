@@ -1,10 +1,7 @@
 use std::process::Command;
 
 fn main() {
-    cc::Build::new()
-        .file("extern/nrlmsise/nrlmsise-00.c")
-        .file("extern/nrlmsise/nrlmsise-00_data.c")
-        .compile("nrlmsise");
+    // NRLMSISE-00 is now pure Rust (src/nrlmsise.rs), no C compilation needed
 
     // Record git hash to compile-time environment variable
     let output = Command::new("git")

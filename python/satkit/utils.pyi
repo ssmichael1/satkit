@@ -17,21 +17,21 @@ def update_datafiles(**kwargs) -> None:
       dir(string): Target directory for files.  Uses existing data directory if not specified. (see "datadir" function)
 
     Notes:
-        * Files include:
-            * ``EGM96.gfc`` :   EGM-96 Gravity Model Coefficients
-            * ``JGM3.gfc`` :    JGM-3 Gravity Model Coefficients
-            * ``JGM2.gfc`` :    JGM-2 Gravity Model Coefficients
-            * ``ITU_GRACE16.gfc`` : ITU Grace 16 Gravity
-            * ``tab5.2a.txt`` : Coefficients for GCRS to GCRF conversion
-            * ``tab5.2b.txt`` : Coefficients for GCRS to GCRF conversion
-            * ``tab5.2d.txt`` : Coefficients for GCRS to GCRF conversion
-            * ``SW-ALL.csv`` : Space weather data, updated daily
-            * ``predicted-solar-cycle.json`` : NOAA/SWPC solar cycle forecast (~5 years of predicted F10.7)
-            * ``leap-seconds.txt`` : Leap seconds (UTC vs TAI)
-            * ``EOP-All.csv`` : Earth orientation parameters, updated daily
-            * ``linux_p1550p2650.440`` : JPL Ephemeris version 440 (~ 100 MB)
+        - Files include:
+            - ``EGM96.gfc`` :   EGM-96 Gravity Model Coefficients
+            - ``JGM3.gfc`` :    JGM-3 Gravity Model Coefficients
+            - ``JGM2.gfc`` :    JGM-2 Gravity Model Coefficients
+            - ``ITU_GRACE16.gfc`` : ITU Grace 16 Gravity
+            - ``tab5.2a.txt`` : Coefficients for GCRS to GCRF conversion
+            - ``tab5.2b.txt`` : Coefficients for GCRS to GCRF conversion
+            - ``tab5.2d.txt`` : Coefficients for GCRS to GCRF conversion
+            - ``SW-ALL.csv`` : Space weather data, updated daily
+            - ``predicted-solar-cycle.json`` : NOAA/SWPC solar cycle forecast (~5 years of predicted F10.7)
+            - ``leap-seconds.txt`` : Leap seconds (UTC vs TAI)
+            - ``EOP-All.csv`` : Earth orientation parameters, updated daily
+            - ``linux_p1550p2650.440`` : JPL Ephemeris version 440 (~ 100 MB)
 
-        * The space weather and earth orientation parameters files are updated
+        - The space weather and earth orientation parameters files are updated
           daily and will always be downloaded regardless of the overwrite flag
 
     Example:
@@ -52,7 +52,7 @@ def datadir() -> str:
     Data directory is 1st of following directories search that contains
     the data files listed in "update_datafiles"
 
-    * MacOS:
+    - MacOS:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
         2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
         3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
@@ -61,14 +61,14 @@ def datadir() -> str:
         6. ``/usr/share/satkit-data``
         7. ``/Library/Application Support/satkit-data``
 
-    * Linux:
+    - Linux:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
         2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
         3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
         4. ``$HOME/.satkit-data``
         5. ``/usr/share/satkit-data``
 
-    * Windows:
+    - Windows:
         1. Directory pointed to by ``SATKIT_DATA`` environment variable
         2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
         3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)

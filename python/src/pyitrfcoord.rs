@@ -248,7 +248,7 @@ impl PyITRFCoord {
     #[getter]
     fn get_vector(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
-            numpy::PyArray::from_slice(py, self.0.itrf.data.as_slice())
+            numpy::PyArray::from_slice(py, self.0.itrf.as_slice())
                 .into_py_any(py)
                 .unwrap()
         })
@@ -298,7 +298,7 @@ impl PyITRFCoord {
     fn to_enu(&self, refcoord: &Self) -> Py<PyAny> {
         let v = refcoord.0.q_enu2itrf().conjugate() * (self.0.itrf - refcoord.0.itrf);
         pyo3::Python::attach(|py| -> Py<PyAny> {
-            numpy::PyArray::from_slice(py, v.data.as_slice())
+            numpy::PyArray::from_slice(py, v.as_slice())
                 .into_py_any(py)
                 .unwrap()
         })
@@ -314,7 +314,7 @@ impl PyITRFCoord {
     fn to_ned(&self, other: &Self) -> Py<PyAny> {
         let v = other.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
         pyo3::Python::attach(|py| -> Py<PyAny> {
-            numpy::PyArray::from_slice(py, v.data.as_slice())
+            numpy::PyArray::from_slice(py, v.as_slice())
                 .into_py_any(py)
                 .unwrap()
         })
@@ -378,7 +378,7 @@ impl PyITRFCoord {
         let x = f64::from_le_bytes(s[0..8].try_into()?);
         let y = f64::from_le_bytes(s[8..16].try_into()?);
         let z = f64::from_le_bytes(s[16..24].try_into()?);
-        self.0.itrf = nalgebra::Vector3::<f64>::new(x, y, z);
+        self.0.itrf = numeris::vector![x, y, z];
         Ok(())
     }
 

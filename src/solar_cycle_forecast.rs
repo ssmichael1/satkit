@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 pub struct ForecastRecord {
@@ -72,7 +72,7 @@ fn parse_forecast_json(contents: &str) -> Result<Vec<ForecastRecord>> {
 }
 
 fn forecast_singleton() -> &'static RwLock<Option<Vec<ForecastRecord>>> {
-    static INSTANCE: OnceCell<RwLock<Option<Vec<ForecastRecord>>>> = OnceCell::new();
+    static INSTANCE: OnceLock<RwLock<Option<Vec<ForecastRecord>>>> = OnceLock::new();
     INSTANCE.get_or_init(|| RwLock::new(load_forecast().ok()))
 }
 

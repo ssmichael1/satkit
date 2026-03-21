@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 
 use std::sync::RwLock;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 pub struct SpaceWeatherRecord {
@@ -127,7 +127,7 @@ fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
 }
 
 fn space_weather_singleton() -> &'static RwLock<Result<Vec<SpaceWeatherRecord>>> {
-    static INSTANCE: OnceCell<RwLock<Result<Vec<SpaceWeatherRecord>>>> = OnceCell::new();
+    static INSTANCE: OnceLock<RwLock<Result<Vec<SpaceWeatherRecord>>>> = OnceLock::new();
     INSTANCE.get_or_init(|| RwLock::new(load_space_weather_csv()))
 }
 
