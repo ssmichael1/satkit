@@ -25,6 +25,16 @@ The `nalgebra` dependency has been replaced with `numeris` 0.5.5 for all linear 
 
 The `satkit::ode` module (7 adaptive solvers, Rosenbrock, ODEState trait, ~2,500 lines) has been removed. Orbit propagation now uses `numeris::ode` solvers directly. The same solver algorithms are available (RKF45, RKTS54, RKV65, RKV87, RKV98, RKV98NoInterp, RODAS4). The `PropSettings` API and `Integrator` enum are unchanged.
 
+### nalgebra Interoperability
+
+If you need nalgebra types for interoperability with other crates, enable the `nalgebra` feature on `numeris`:
+
+```toml
+numeris = { version = "0.5.5", features = ["nalgebra"] }
+```
+
+This provides zero-cost `From`/`Into` conversions between numeris and nalgebra matrix, vector, and dynamic matrix types. Both libraries use identical column-major storage, so conversions are a `memcpy`.
+
 ### Python Bindings
 
 - No breaking changes to the Python API

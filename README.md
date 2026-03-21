@@ -141,6 +141,14 @@ Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with ful
 - Fast analytical Sun/Moon models for lower-precision work
 - Sunrise/sunset and Moon phase calculations
 
+### Linear Algebra
+
+SatKit uses [numeris](https://crates.io/crates/numeris) for all linear algebra (vectors, matrices, quaternions, ODE integration). If you also use nalgebra in your project, enable the `nalgebra` feature on numeris for zero-cost `From`/`Into` conversions between types:
+
+```toml
+numeris = { version = "0.5.5", features = ["nalgebra"] }
+```
+
 ### Cargo Features
 
 | Feature | Default | Description |
@@ -165,7 +173,7 @@ The library is validated against:
 - **ICGEM** reference values for gravity field calculations
 - **GPS SP3** precise ephemerides for multi-day numerical propagation
 
-106 unit tests and 36 doc-tests run on every commit across Linux, macOS, and Windows.
+142 tests (106 unit + 36 doc-tests) run on every commit across Linux, macOS, and Windows.
 
 ## Documentation
 

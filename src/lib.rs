@@ -54,6 +54,17 @@
 //!   - Python versions 3.8 through 3.13
 //!   - Documentation at <https://satellite-toolkit.readthedocs.io/>
 //!
+//! ## Linear Algebra
+//!
+//! SatKit uses the [`numeris`](https://crates.io/crates/numeris) crate for all linear algebra
+//! (vectors, matrices, quaternions, ODE solvers). Types are re-exported via [`mathtypes`].
+//! If you need nalgebra types for interoperability with other crates, enable the `nalgebra`
+//! feature on `numeris` for zero-cost `From`/`Into` conversions:
+//!
+//! ```toml
+//! numeris = { version = "0.5.5", features = ["nalgebra"] }
+//! ```
+//!
 //! ## Optional Features
 //!
 //! - **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
