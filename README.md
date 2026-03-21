@@ -175,6 +175,28 @@ The library is validated against:
 
 142 tests (106 unit + 36 doc-tests) run on every commit across Linux, macOS, and Windows.
 
+### Running Tests Locally
+
+Tests require two sets of external data: the **astro-data** files (gravity models, ephemerides, etc.) and the **test vectors** (reference outputs for validation). Download both before running:
+
+```bash
+# Install the download helper
+pip install requests
+
+# Download test vectors
+python python/test/download_testvecs.py
+```
+
+Then run tests with the environment variables pointing to the downloaded directories:
+
+```bash
+# Rust tests
+SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs cargo test
+
+# Python tests
+SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs pytest python/test/test.py
+```
+
 ## Documentation
 
 - **Rust**: [docs.rs/satkit](https://docs.rs/satkit/)
