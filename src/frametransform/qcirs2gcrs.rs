@@ -150,7 +150,7 @@ pub fn qcirs2gcrs_dxdy<T: TimeLike>(tm: &T, dxdy: Option<(f64, f64)>) -> Quatern
 }
 
 ///
-/// Return quatnerion represention rotation
+/// Return quaternion representing rotation
 /// from the CIRS (Celestial Intermediate Reference System) to the
 /// GCRS (Geocentric Celestial Reference Frame) at given instant
 ///

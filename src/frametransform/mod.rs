@@ -135,7 +135,7 @@ pub fn earth_rotation_angle<T: TimeLike>(tm: &T) -> f64 {
 ///
 pub fn qitrf2tirs<T: TimeLike>(tm: &T) -> Quaternion {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
-    // Get earth oreintation parameters or set them all to zero if not available
+    // Get earth orientation parameters or set them all to zero if not available
     // (function will print warning to stderr if not available)
     let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
     let xp = eop[1] * ASEC2RAD;
@@ -195,8 +195,8 @@ pub fn qteme2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 }
 
 ///
-/// Rotate from Mean Equinix of Date (MOD) coordinate frame
-/// to Geocentric Celestrial Reference Frame
+/// Rotate from Mean Equinox of Date (MOD) coordinate frame
+/// to Geocentric Celestial Reference Frame
 ///
 /// # Arguments
 ///
@@ -247,7 +247,7 @@ pub fn qmod2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 
 ///
 /// Approximate rotation from
-/// Geocentric Celestrial Reference Frame to
+/// Geocentric Celestial Reference Frame to
 /// International Terrestrial Reference Frame
 ///
 ///
@@ -266,7 +266,7 @@ pub fn qmod2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 /// * This uses an approximation of the IAU-76/FK5 Reduction
 ///   See Vallado section 3.7.3
 ///
-/// * For a reference, see "Eplanatory Supplement to the
+/// * For a reference, see "Explanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
 ///
 pub fn qgcrf2itrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
@@ -279,7 +279,7 @@ pub fn qgcrf2itrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// Approximate rotation from
 /// International Terrestrial Reference Frame to
-/// Geocentric Celestrial Reference Frame
+/// Geocentric Celestial Reference Frame
 ///
 ///
 ///  Arguments
@@ -297,7 +297,7 @@ pub fn qgcrf2itrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
 /// * This uses an approximation of the IAU-76/FK5 Reduction
 ///   See Vallado section 3.7.3
 ///
-/// * For a reference, see "Eplanatory Supplement to the
+/// * For a reference, see "Explanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
 pub fn qitrf2gcrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
     qgcrf2itrf_approx(tm).conjugate()
@@ -369,7 +369,7 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///  * This is **very** computationally expensive; for most
 ///    applications, the approximate rotation will work just fine
 ///
-/// * This computatation **does not** include impact of the
+/// * This computation **does not** include impact of the
 ///   Earth solid tides, but it does include polar motion,
 ///   precession, and nutation
 ///
@@ -406,7 +406,7 @@ pub fn qitrf2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Arguments
 ///
-/// * `tm` - Time instanc at which to compute rotation
+/// * `tm` - Time instant at which to compute rotation
 ///
 /// # Returns
 ///
@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn test_gcrs2itrf() {
         // Example 3-14 from Vallado
-        // With verification fo intermediate calculations
+        // With verification of intermediate calculations
         // Input time
         let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
         // Input terrestrial location

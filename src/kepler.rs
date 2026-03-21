@@ -29,9 +29,9 @@ impl<T> From<KeplerError> for Result<T> {
 ///   representation, but is an angle that increases monotonically in time
 ///   between 0 and 2π over the course of a single orbit.
 ///
-/// * `Eccentric Anomaly` - Denoted E, is the Periaps-C-B
-///   angle in the orbital plane, wehre "C" is the center of the orbital
-///   ellipse, and "B" is a point on the auxilliary circle (the circle
+/// * `Eccentric Anomaly` - Denoted E, is the Periapsis-C-B
+///   angle in the orbital plane, where "C" is the center of the orbital
+///   ellipse, and "B" is a point on the auxiliary circle (the circle
 ///   bounding the orbital ellipse) along a line from the satellite
 ///   and perpendicular to the semimajor axis.  The eccentric anomaly is
 ///   a useful prerequisite to compute the mean anomaly
@@ -54,7 +54,7 @@ use crate::mathtypes::*;
 /// RAAN: Right Ascension of the Ascending Node, radians
 /// w: Argument of Perigee, radians
 /// an: Anomaly of given type, radians
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Kepler {
     pub a: f64,
     pub eccen: f64,
