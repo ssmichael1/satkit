@@ -47,7 +47,7 @@ This provides zero-cost `From`/`Into` conversions between numeris and nalgebra m
 - Use `Quaternion::rotation_between()` from numeris instead of hand-rolled helper
 - Remove `qrot_xcoord`/`qrot_ycoord`/`qrot_zcoord` wrappers; use `Quaternion::rotx`/`roty`/`rotz` directly
 - Remove `satkit::filters` module (UKF); use `numeris::estimate::Ukf` instead
-- Enable `estimate` and `interp` features on numeris
+- Enable `estimate` feature on numeris
 
 ### Internal
 
