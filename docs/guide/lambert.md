@@ -84,8 +84,6 @@ For sufficiently long times of flight, multiple orbits can connect the same two 
 
 ## Usage
 
-### Python
-
 ```python
 import satkit
 import numpy as np
@@ -116,32 +114,19 @@ r2 = np.array([-r2_mag, 0, 0])  # 180-degree transfer
 
 # Hohmann transfer time
 a_transfer = (r1_mag + r2_mag) / 2
-tof = np.pi * np.sqrt(a_transfer**3 / satkit.consts.MU_EARTH)
+tof = np.pi * np.sqrt(a_transfer**3 / satkit.consts.mu_earth)
 
 solutions = satkit.lambert(r1, r2, tof)
 v1, v2 = solutions[0]
 
 # Compute delta-v
-v_circ_1 = np.sqrt(satkit.consts.MU_EARTH / r1_mag)
-v_circ_2 = np.sqrt(satkit.consts.MU_EARTH / r2_mag)
+v_circ_1 = np.sqrt(satkit.consts.mu_earth / r1_mag)
+v_circ_2 = np.sqrt(satkit.consts.mu_earth / r2_mag)
 dv1 = np.linalg.norm(v1) - v_circ_1
 dv2 = v_circ_2 - np.linalg.norm(v2)
 print(f"Delta-v at departure: {dv1:.1f} m/s")
 print(f"Delta-v at arrival:   {dv2:.1f} m/s")
 print(f"Total delta-v:        {dv1 + dv2:.1f} m/s")
-```
-
-### Rust
-
-```rust
-use satkit::lambert::lambert;
-use satkit::consts::MU_EARTH;
-
-let r1 = numeris::vector![7000.0e3, 0.0, 0.0];
-let r2 = numeris::vector![0.0, 7000.0e3, 0.0];
-
-let solutions = lambert(&r1, &r2, 3600.0, MU_EARTH, true).unwrap();
-let (v1, v2) = &solutions[0];
 ```
 
 ### Parameters
