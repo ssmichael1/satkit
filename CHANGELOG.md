@@ -1,6 +1,52 @@
 # Changelog
 
 
+## 0.14.0 - 2026-03-20
+
+### Breaking: Replace nalgebra with numeris
+
+The `nalgebra` dependency has been replaced with `numeris` 0.5.5 for all linear algebra. The built-in ODE solver module (`src/ode/`) has been removed in favor of the ODE solvers provided by `numeris`. This is a **breaking change** for Rust API consumers; the Python API is unchanged.
+
+### Rust API Changes
+
+- **Math types** (`satkit::mathtypes`): All type aliases now point to `numeris` types instead of `nalgebra`. `Vector<N>`, `Matrix<M,N>`, `Quaternion`, and `DMatrix<T>` remain available with the same names.
+- **Vector construction**: `Vector3::new(x, y, z)` is replaced by `Vector3::from_array([x, y, z])`
+- **Matrix construction**: `Matrix3::new(a,b,c,d,e,f,g,h,i)` is replaced by `Matrix3::new([[a,b,c],[d,e,f],[g,h,i]])`
+- **Identity matrix**: `Matrix::identity()` is replaced by `Matrix::eye()`
+- **Quaternion axis rotations**: `Quaternion::from_axis_angle(&Vector3::z_axis(), θ)` is replaced by `Quaternion::rotz(θ)` (also `rotx`, `roty`)
+- **Quaternion vector rotation**: `q.transform_vector(&v)` is replaced by `q * v`
+- **Quaternion storage order**: Changed from nalgebra's `[x,y,z,w]` to numeris `[w,x,y,z]` (scalar-first). Component access uses `.w`, `.x`, `.y`, `.z` fields.
+- **Block extraction**: `m.fixed_view::<R,C>(i,j)` is replaced by `m.block::<R,C>(i,j)` (returns owned copy)
+- **Block insertion**: `m.fixed_view_mut::<R,C>(i,j).copy_from(&src)` is replaced by `m.set_block(i, j, &src)`
+- **Matrix inverse**: `m.try_inverse()` (returning `Option`) is replaced by `m.inverse()` (returning `Result`)
+- **Cholesky**: `m.cholesky()` now returns `Result<CholeskyDecomposition, LinalgError>` instead of `Option`
+
+### ODE Module Removed
+
+The `satkit::ode` module (7 adaptive solvers, Rosenbrock, ODEState trait, ~2,500 lines) has been removed. Orbit propagation now uses `numeris::ode` solvers directly. The same solver algorithms are available (RKF45, RKTS54, RKV65, RKV87, RKV98, RKV98NoInterp, RODAS4). The `PropSettings` API and `Integrator` enum are unchanged.
+
+### Python Bindings
+
+- No breaking changes to the Python API
+- All internal conversions updated for numeris types
+- Quaternion component order handling updated internally (transparent to Python users)
+
+### Internal
+
+- Net reduction of ~11,000 lines of code (removed ODE module)
+- 142 Rust tests pass (106 lib + 36 doc)
+- 52 Python tests pass
+
+
+## 0.13.0 - 2026-03-15
+
+### Integrator and Gravity Model Selection
+
+- Add `Integrator` enum to `PropSettings` for selecting ODE solver (RKV98, RKV87, RKV65, RKTS54, RODAS4)
+- Add `GravityModel` enum for selecting Earth gravity model (JGM3, JGM2, EGM96, ITU GRACE16)
+- Optimize ODE solver hot paths
+
+
 ## 0.12.0 - 2026-03-02
 
 ### API Improvements

@@ -1,5 +1,4 @@
 use super::ierstable::IERSTable;
-use crate::frametransform::{qrot_ycoord, qrot_zcoord};
 use crate::{TimeLike, TimeScale};
 
 use crate::mathtypes::*;
@@ -147,7 +146,7 @@ pub fn qcirs2gcrs_dxdy<T: TimeLike>(tm: &T, dxdy: Option<(f64, f64)>) -> Quatern
     // Equations 5.6 & 5.7 of IERS technical note 36
     let e = f64::atan2(y, x);
     let d = f64::asin(f64::sqrt(x.mul_add(x, y * y)));
-    qrot_zcoord(-e) * qrot_ycoord(-d) * qrot_zcoord(e + s)
+    Quaternion::rotz(e) * Quaternion::roty(d) * Quaternion::rotz(-(e + s))
 }
 
 ///

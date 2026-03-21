@@ -37,26 +37,6 @@ use super::earth_orientation_params;
 pub use qcirs2gcrs::qcirs2gcrs;
 pub use qcirs2gcrs::qcirs2gcrs_dxdy;
 
-/// Right-handed rotation of coordinate system about x axis
-/// (left-handed rotation of vector)
-#[inline]
-pub(crate) fn qrot_xcoord(theta: f64) -> Quaternion {
-    Quaternion::rotx(-theta)
-}
-
-/// Right-handed rotation of coordinate system about y axis
-/// (left-handed rotation of vector)
-#[inline]
-pub(crate) fn qrot_ycoord(theta: f64) -> Quaternion {
-    Quaternion::roty(-theta)
-}
-
-/// Right-handed rotation of coordinate system about z axis
-/// (left-handed rotation of vector)
-#[inline]
-pub(crate) fn qrot_zcoord(theta: f64) -> Quaternion {
-    Quaternion::rotz(-theta)
-}
 
 ///
 /// Greenwich Mean Sidereal Time
@@ -162,7 +142,7 @@ pub fn qitrf2tirs<T: TimeLike>(tm: &T) -> Quaternion {
     let yp = eop[2] * ASEC2RAD;
     let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
     let sp = -47.0e-6 * ASEC2RAD * t_tt;
-    qrot_zcoord(-sp) * qrot_ycoord(xp) * qrot_xcoord(yp)
+    Quaternion::rotz(sp) * Quaternion::roty(-xp) * Quaternion::rotx(-yp)
 }
 
 ///
@@ -184,7 +164,7 @@ pub fn qitrf2tirs<T: TimeLike>(tm: &T) -> Quaternion {
 /// * This is Equation 3-90 in Vallado
 ///
 pub fn qteme2itrf<T: TimeLike>(tm: &T) -> Quaternion {
-    qitrf2tirs(tm).conjugate() * qrot_zcoord(gmst(tm))
+    qitrf2tirs(tm).conjugate() * Quaternion::rotz(-gmst(tm))
 }
 
 ///
@@ -262,7 +242,7 @@ pub fn qmod2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
             ),
             2004.191903,
         );
-    qrot_zcoord(zeta * ASEC2RAD) * qrot_ycoord(-theta * ASEC2RAD) * qrot_zcoord(z * ASEC2RAD)
+    Quaternion::rotz(-zeta * ASEC2RAD) * Quaternion::roty(theta * ASEC2RAD) * Quaternion::rotz(-z * ASEC2RAD)
 }
 
 ///
@@ -291,7 +271,7 @@ pub fn qmod2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 pub fn qgcrf2itrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
     // Neglecting polar motion
-    let qitrf2tod_approx: Quaternion = qrot_zcoord(-gast(tm));
+    let qitrf2tod_approx: Quaternion = Quaternion::rotz(gast(tm));
 
     (qmod2gcrf(tm) * qtod2mod_approx(tm) * qitrf2tod_approx).conjugate()
 }
@@ -362,7 +342,7 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
             23.0 + 26.0 / 60.0 + 21.406 / 3600.0,
         );
     let epsilon = epsilon_a + delta_epsilon;
-    qrot_xcoord(-epsilon_a) * qrot_zcoord(delta_psi) * qrot_xcoord(epsilon)
+    Quaternion::rotx(epsilon_a) * Quaternion::rotz(-delta_psi) * Quaternion::rotx(-epsilon)
 }
 
 ///
@@ -411,7 +391,7 @@ pub fn qitrf2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
         let yp = eop[2] * ASEC2RAD;
         let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
         let sp = -47.0e-6 * ASEC2RAD * t_tt;
-        qrot_zcoord(-sp) * qrot_ycoord(xp) * qrot_xcoord(yp)
+        Quaternion::rotz(sp) * Quaternion::roty(-xp) * Quaternion::rotx(-yp)
     };
     let r = qtirs2cirs(tm);
     let q = qcirs2gcrs_dxdy(tm, Some((eop[4], eop[5])));
@@ -466,7 +446,7 @@ pub fn qgcrf2itrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 #[inline]
 pub fn qtirs2cirs<T: TimeLike>(tm: &T) -> Quaternion {
-    qrot_zcoord(-earth_rotation_angle(tm))
+    Quaternion::rotz(earth_rotation_angle(tm))
 }
 
 #[cfg(test)]
@@ -568,7 +548,7 @@ mod tests {
         assert!((ptirs[2] - 6380.3445327).abs() < 1.0e-4);
         let era = earth_rotation_angle(tm);
         assert!((era.to_degrees() - 312.7552829).abs() < 1.0e-5);
-        let pcirs = qrot_zcoord(-era) * ptirs;
+        let pcirs = Quaternion::rotz(era) * ptirs;
         assert!((pcirs[0] - 5100.0184047).abs() < 1e-3);
         assert!((pcirs[1] - 6122.7863648).abs() < 1e-3);
         assert!((pcirs[2] - 6380.3446237).abs() < 1e-3);

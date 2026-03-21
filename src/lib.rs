@@ -121,7 +121,7 @@
 #![warn(clippy::all, clippy::use_self, clippy::cargo)]
 #![allow(clippy::multiple_crate_versions)]
 
-// Math type definitions, mostly nalgebra based
+// Math type definitions using the numeris crate
 pub mod mathtypes;
 
 /// Universal constants
@@ -143,7 +143,7 @@ pub mod kepler;
 pub mod lpephem;
 /// NRLMSISE-00 Density model
 pub mod nrlmsise;
-/// High-Precision Orbit Propagation via Runge-Kutta 9(8) Integration
+/// High-Precision Orbit Propagation using numeris ODE solvers
 pub mod orbitprop;
 /// SGP-4 Orbit Propagator
 pub mod sgp4;

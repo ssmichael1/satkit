@@ -589,7 +589,7 @@ impl ITRFCoord {
     ///
     /// # Return
     ///
-    /// * `nalgebra::Vector3<f64>` representing NED position
+    /// * `Vector3` representing NED position
     ///   relative to reference.  Units are meters
     ///
     /// # Note:
@@ -632,7 +632,7 @@ impl ITRFCoord {
     ///
     /// # Return
     ///
-    /// * `nalgebra::Vector3<f64>` representing ENU position
+    /// * `Vector3` representing ENU position
     ///   relative to reference.  Units are meters
     ///
     ///

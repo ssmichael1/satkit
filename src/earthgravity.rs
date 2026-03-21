@@ -102,7 +102,7 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 ///
 /// # Arguments
 ///
-/// * `pos` - nalgebra 3-vector representing ITRF position in meters
+/// * `pos` - 3-vector representing ITRF position in meters
 ///
 /// * `degree` - The maximum degree of the gravity model to use.
 ///   Maximum is 40
@@ -134,7 +134,7 @@ pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityMode
 ///
 /// # Arguments
 ///
-/// * `pos` - nalgebra 3-vector representing ITRF position in meters
+/// * `pos` - 3-vector representing ITRF position in meters
 ///
 /// * `degree` - The maximum degree of the gravity model to use.
 ///   Maximum is 40
