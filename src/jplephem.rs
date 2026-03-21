@@ -23,7 +23,7 @@ use crate::solarsystem::SolarSystem;
 
 use crate::utils::{datadir, download_if_not_exist};
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 use crate::mathtypes::*;
 use crate::{Instant, TimeLike, TimeScale};
@@ -105,7 +105,7 @@ macro_rules! dispatch_ncoeff {
 }
 
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
-    static INSTANCE: OnceCell<Result<JPLEphem>> = OnceCell::new();
+    static INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
     INSTANCE.get_or_init(|| JPLEphem::from_file("linux_p1550p2650.440"))
 }
 

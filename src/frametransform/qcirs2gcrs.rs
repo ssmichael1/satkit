@@ -7,20 +7,20 @@ type Delaunay = numeris::Vector<f64, 14>;
 
 use std::f64::consts::PI;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 fn table5a_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceCell<IERSTable> = OnceCell::new();
+    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
     INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2a.txt").unwrap())
 }
 
 fn table5b_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceCell<IERSTable> = OnceCell::new();
+    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
     INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2b.txt").unwrap())
 }
 
 fn table5d_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceCell<IERSTable> = OnceCell::new();
+    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
     INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2d.txt").unwrap())
 }
 
