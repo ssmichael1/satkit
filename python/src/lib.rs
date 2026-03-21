@@ -25,6 +25,7 @@ mod pysolarsystem;
 mod pytle;
 //mod pyukf;
 
+mod pylambert;
 mod pypropagate;
 mod pypropsettings;
 mod pysatproperties;
@@ -167,6 +168,8 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pypropresult::PyPropResult>()?;
     m.add_class::<pypropresult::PyPropStats>()?;
     m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pylambert::lambert, m)?)
         .unwrap();
 
     m.add_wrapped(wrap_pymodule!(frametransform))?;

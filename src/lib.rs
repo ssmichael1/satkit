@@ -150,6 +150,8 @@ pub mod itrfcoord;
 pub mod jplephem;
 /// Keplerian orbital elements
 pub mod kepler;
+/// Lambert's problem solver for orbital targeting
+pub mod lambert;
 /// Low-precision ephemeris for sun and moon
 pub mod lpephem;
 /// NRLMSISE-00 Density model
@@ -208,6 +210,7 @@ pub mod prelude {
     pub use crate::frames::Frame;
     pub use crate::itrfcoord::{Geodetic, ITRFCoord};
     pub use crate::kepler::{Anomaly, Kepler};
+    pub use crate::lambert::lambert;
     pub use crate::omm::OMM;
     pub use crate::solarsystem::SolarSystem;
     pub use crate::tle::TLE;

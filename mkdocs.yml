@@ -89,6 +89,7 @@ nav:
       - Two-Line Elements: guide/tle.md
       - ITRF Coordinates: guide/itrfcoord.md
       - Orbit Propagation: guide/satprop.md
+      - Lambert Targeting: guide/lambert.md
       - Satellite State: guide/satstate.md
       - Atmospheric Density: guide/density.md
       - References: guide/references.md
@@ -120,5 +121,6 @@ nav:
       - Density: api/density.md
       - Gravity: api/gravity.md
       - Kepler: api/kepler.md
+      - Lambert: api/lambert.md
       - Constants: api/consts.md
       - Utilities: api/utils.md
