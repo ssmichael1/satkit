@@ -9,24 +9,26 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: blue grey
+      accent: blue grey
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: blue grey
+      accent: blue grey
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - content.code.copy
-    - navigation.instant
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - content.code.copy
+    - content.code.annotate
     - search.highlight
     - search.suggest
     - toc.follow
@@ -94,7 +96,7 @@ nav:
       - Atmospheric Density: guide/density.md
       - References: guide/references.md
   - Tutorials:
-      - tutorials/index.md
+      - Overview: tutorials/index.md
       - ITRF Coordinates: tutorials/ITRF Coordinates.ipynb
       - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
       - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
@@ -105,6 +107,7 @@ nav:
       - High Precision Propagation: tutorials/High Precision Propagation.ipynb
       - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
       - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
+      - Lambert Targeting: tutorials/Lambert Targeting.ipynb
   - API Reference:
       - Overview: api/index.md
       - time: api/time.md

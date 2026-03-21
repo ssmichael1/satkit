@@ -1,3 +1,13 @@
+/* --- Link colors --- */
+
+:root {
+    --md-typeset-a-color: #4a7c96;
+}
+
+[data-md-color-scheme="slate"] {
+    --md-typeset-a-color: #6fa8c4;
+}
+
 /* --- Navigation sidebar contrast --- */
 
 /* Section titles (Getting Started, User Guide, etc.) */
@@ -53,17 +63,11 @@
     width: auto;
 }
 
-/* Constrain Plotly and other large embedded figures */
+/* Constrain large embedded figures */
 .jp-OutputArea-output > div,
 .cell_output > div {
     max-width: 100%;
     overflow-x: auto;
-}
-
-/* Plotly figures: scale to fit container */
-.plotly-graph-div {
-    max-width: 100% !important;
-    height: auto !important;
 }
 
 /* Images inside notebook outputs */

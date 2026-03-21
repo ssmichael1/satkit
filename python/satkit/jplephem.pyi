@@ -1,7 +1,7 @@
 """
 High-precision JPL ephemerides for solar-system bodies
 
-For details, see: https://ssd.jpl.nasa.gov/
+For details, see: <https://ssd.jpl.nasa.gov/>
 """
 
 from __future__ import annotations
@@ -47,10 +47,10 @@ def barycentric_pos(
         numpy.ndarray: 3-vector of Cartesian position in meters, with the origin at the solar system barycenter. If input is list or numpy array of N times, then r will be Nx3 array
 
     Notes:
-     * Positions for all bodies are natively relative to solar system barycenter,
+     - Positions for all bodies are natively relative to solar system barycenter,
        with exception of moon, which is computed in Geocentric system
-     * EMB (2) is the Earth-Moon barycenter
-     * The sun position is relative to the solar system barycenter
+     - EMB (2) is the Earth-Moon barycenter
+     - The sun position is relative to the solar system barycenter
        (it will be close to origin)
     """
     ...
@@ -93,10 +93,10 @@ def barycentric_state(
         tuple: (r, v) where r is the position in meters and v is the velocity in meters / second, with the origin at the solar system barycenter.  If input is list or numpy array of N times, then r and v will be Nx3 arrays
 
     Notes:
-     * Positions for all bodies are natively relative to solar system barycenter,
+     - Positions for all bodies are natively relative to solar system barycenter,
        with exception of moon, which is computed in Geocentric system
-     * EMB (2) is the Earth-Moon barycenter
-     * The sun position is relative to the solar system barycenter
+     - EMB (2) is the Earth-Moon barycenter
+     - The sun position is relative to the solar system barycenter
        (it will be close to origin)
 
     """

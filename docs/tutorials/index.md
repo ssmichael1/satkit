@@ -19,3 +19,4 @@ Interactive Jupyter notebook tutorials demonstrating various features of the `sa
 | [Planetary Ephemerides](Planetary%20Ephemerides.ipynb) | JPL DE440 and low-precision Sun/Moon/planet positions |
 | [Atmospheric Density](Atmospheric%20Density.ipynb) | NRLMSISE-00 density profiles, solar activity effects, and drag |
 | [Covariance Propagation](Covariance%20Propagation.ipynb) | State transition matrix, uncertainty growth, and LVLH frame |
+| [Lambert Targeting](Lambert%20Targeting.ipynb) | Orbit transfer design with delta-v computation and pork-chop plots |

@@ -1,6 +1,36 @@
 # Changelog
 
 
+## 0.14.1 - 2026-03-21
+
+### Lambert Targeting
+
+- Add Lambert's problem solver using Izzo's algorithm (2015) with Householder 4th-order iteration
+- Handles all orbit types (elliptic, parabolic, hyperbolic) and 180-degree transfers
+- Multi-revolution solution support
+- Rust API: `satkit::lambert::lambert()` in new `lambert` module
+- Python API: `satkit.lambert()` with full type stub and docstring
+- 9 Rust tests, 6 Python tests
+
+### Documentation Overhaul
+
+- Switch all tutorial plots from Plotly to matplotlib with SciencePlots
+- STIX serif fonts, SVG output, colorblind-friendly palette matching numeris docs
+- Match numeris site theme: blue grey header with navigation tabs
+- Muted steel blue link color (#4a7c96)
+- Static SVG plots (density, forces) generated at build time via `docs/examples/gen_plots.py`
+- Add Lambert Targeting tutorial with delta-v analysis, pork-chop plot, and orbit visualization
+- Add Lambert solver to User Guide and API Reference
+- Fix docstring formatting across all Python stubs: bullet style, Returns sections, clickable URLs, Notes admonitions
+- Add concrete defs for all `@typing.overload` functions so mkdocstrings renders them
+- Add `@typing.overload` signatures to `propresult.interp` for all call patterns
+- CI/CD: add cartopy/certifi system deps, generate plots before build, remove plotly
+
+### Internal
+
+- 114 Rust tests pass (9 new Lambert)
+- 58 Python tests pass (6 new Lambert)
+
 ## 0.14.0 - 2026-03-20
 
 ### Breaking: Replace nalgebra with numeris
