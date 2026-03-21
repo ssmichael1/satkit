@@ -116,6 +116,21 @@
 //! ).unwrap();
 //! ```
 //!
+//! ## Running Tests
+//!
+//! Tests require external data files and test vectors. Download them with the provided scripts:
+//!
+//! ```bash
+//! pip install requests
+//! python python/test/download_testvecs.py
+//! ```
+//!
+//! Then run with the environment variables set:
+//!
+//! ```bash
+//! SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs cargo test
+//! ```
+//!
 //! ## References
 //!
 //! This implementation relies heavily on the following excellent references:
@@ -160,10 +175,10 @@ pub mod nrlmsise;
 pub mod orbitprop;
 /// SGP-4 Orbit Propagator
 pub mod sgp4;
-/// Solar system bodies
-mod solarsystem;
 /// Solar Cycle Forecast (NOAA/SWPC predicted F10.7)
 pub mod solar_cycle_forecast;
+/// Solar system bodies
+mod solarsystem;
 /// Space Weather
 pub mod spaceweather;
 /// Two-line Element Set
@@ -174,7 +189,6 @@ pub mod utils;
 /// Coordinate frames
 /// Currently not used
 mod frames;
-
 
 // Orbital Mean-Element Messages
 pub mod omm;
@@ -217,8 +231,8 @@ pub mod prelude {
 
     // Propagation
     pub use crate::orbitprop::{
-        propagate, CovState, PropSettings, PropagationResult, SatProperties,
-        SatPropertiesStatic, SatState, SimpleState, StateCov,
+        propagate, CovState, PropSettings, PropagationResult, SatProperties, SatPropertiesStatic,
+        SatState, SimpleState, StateCov,
     };
 
     // SGP4
