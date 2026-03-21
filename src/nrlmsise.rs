@@ -1,4 +1,4 @@
-use cty;
+use std::ffi::{c_double, c_int};
 
 use crate::solar_cycle_forecast;
 use crate::spaceweather;
@@ -19,7 +19,7 @@ use crate::TimeLike;
 #[allow(non_camel_case_types)]
 #[repr(C)]
 struct ap_array {
-    a: [cty::c_double; 7],
+    a: [c_double; 7],
 }
 
 ///
@@ -32,24 +32,24 @@ struct ap_array {
 #[repr(C)]
 #[allow(non_camel_case_types)]
 struct nrlmsise_flags {
-    switches: [cty::c_int; 24],
-    sw: [cty::c_double; 24],
-    swc: [cty::c_double; 24],
+    switches: [c_int; 24],
+    sw: [c_double; 24],
+    swc: [c_double; 24],
 }
 
 #[repr(C)]
 #[allow(non_camel_case_types)]
 struct nrlmsise_input {
-    year: cty::c_int,     /* Year, currently ignored */
-    day: cty::c_int,      /* day of year */
-    sec: cty::c_double,   // seconds in day (UT)
-    alt: cty::c_double,   // altitude in km
-    g_lat: cty::c_double, // geodetic latitude (deg?)
-    g_lon: cty::c_double, // geodetic longitude (deg?)
-    lst: cty::c_double,   // local apparant solar time (hours)
-    f107a: cty::c_double, // 81-day average of f10.7 flux
-    f107: cty::c_double,  // daily F10.7 flux for previous day
-    ap: cty::c_double,    // magnetic index (daily)
+    year: c_int,     /* Year, currently ignored */
+    day: c_int,      /* day of year */
+    sec: c_double,   // seconds in day (UT)
+    alt: c_double,   // altitude in km
+    g_lat: c_double, // geodetic latitude (deg?)
+    g_lon: c_double, // geodetic longitude (deg?)
+    lst: c_double,   // local apparant solar time (hours)
+    f107a: c_double, // 81-day average of f10.7 flux
+    f107: c_double,  // daily F10.7 flux for previous day
+    ap: c_double,    // magnetic index (daily)
     ap_a: *const ap_array,
 }
 
@@ -68,8 +68,8 @@ struct nrlmsise_input {
 #[repr(C)]
 #[allow(non_camel_case_types)]
 struct nrlmsise_output {
-    d: [cty::c_double; 9],
-    t: [cty::c_double; 2],
+    d: [c_double; 9],
+    t: [c_double; 2],
 }
 
 extern "C" {

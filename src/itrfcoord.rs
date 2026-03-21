@@ -84,33 +84,6 @@ impl std::ops::Add<Vector3> for ITRFCoord {
     }
 }
 
-impl std::ops::Add<Vector3> for &ITRFCoord {
-    type Output = ITRFCoord;
-    fn add(self, other: Vector3) -> Self::Output {
-        ITRFCoord {
-            itrf: self.itrf + other,
-        }
-    }
-}
-
-impl std::ops::Add<&Vector3> for ITRFCoord {
-    type Output = Self;
-    fn add(self, other: &Vector3) -> Self::Output {
-        Self {
-            itrf: self.itrf + other,
-        }
-    }
-}
-
-impl std::ops::Add<&Vector3> for &ITRFCoord {
-    type Output = ITRFCoord;
-    fn add(self, other: &Vector3) -> Self::Output {
-        ITRFCoord {
-            itrf: self.itrf + other,
-        }
-    }
-}
-
 impl std::ops::Sub<Vector3> for ITRFCoord {
     type Output = Self;
     fn sub(self, other: Vector3) -> Self::Output {
@@ -123,27 +96,6 @@ impl std::ops::Sub<Vector3> for ITRFCoord {
 impl std::ops::Sub<Self> for ITRFCoord {
     type Output = Vector3;
     fn sub(self, other: Self) -> Vector3 {
-        self.itrf - other.itrf
-    }
-}
-
-impl std::ops::Sub<ITRFCoord> for &ITRFCoord {
-    type Output = Vector3;
-    fn sub(self, other: ITRFCoord) -> Vector3 {
-        self.itrf - other.itrf
-    }
-}
-
-impl std::ops::Sub<&ITRFCoord> for &ITRFCoord {
-    type Output = Vector3;
-    fn sub(self, other: &ITRFCoord) -> Vector3 {
-        self.itrf - other.itrf
-    }
-}
-
-impl std::ops::Sub<&Self> for ITRFCoord {
-    type Output = Vector3;
-    fn sub(self, other: &Self) -> Vector3 {
         self.itrf - other.itrf
     }
 }
