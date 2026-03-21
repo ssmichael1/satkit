@@ -54,7 +54,7 @@ const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 /// // Since pTEME is a 3xN array where N is the number of times
 /// // (we are just using a single time)
 /// // we need to convert to a fixed matrix to rotate
-/// let pos = numeris::Vector3::from_array([states.pos[(0,0)], states.pos[(1,0)], states.pos[(2,0)]]);
+/// let pos = numeris::vector![states.pos[(0,0)], states.pos[(1,0)], states.pos[(2,0)]];
 /// let pITRF = frametransform::qteme2itrf(&tm) * pos;
 ///
 /// println!("pITRF = {:?}", pITRF);

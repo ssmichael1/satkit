@@ -37,16 +37,16 @@ impl PySatState {
 
         let mut state = SatState::from_pv(
             &time.0,
-            &Vector3::from_array([
+            &numeris::vector![
                 pos.get_owned(0).unwrap(),
                 pos.get_owned(1).unwrap(),
                 pos.get_owned(2).unwrap(),
-            ]),
-            &Vector3::from_array([
+            ],
+            &numeris::vector![
                 vel.get_owned(0).unwrap(),
                 vel.get_owned(1).unwrap(),
                 vel.get_owned(2).unwrap(),
-            ]),
+            ],
         );
 
         if let Some(cov) = cov {

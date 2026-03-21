@@ -40,37 +40,11 @@ pub struct SatState {
     pub cov: StateCov,
 }
 
-/// Compute a quaternion that rotates vector `from` to align with vector `to`.
-/// Returns `None` if either vector is zero-length or they are exactly anti-parallel.
-fn rotation_between(from: &Vector3, to: &Vector3) -> Option<Quaternion> {
-    let from_n = from.norm();
-    let to_n = to.norm();
-    if from_n < 1e-15 || to_n < 1e-15 {
-        return None;
-    }
-    let a = Vector3::from_array([from[0] / from_n, from[1] / from_n, from[2] / from_n]);
-    let b = Vector3::from_array([to[0] / to_n, to[1] / to_n, to[2] / to_n]);
-    let dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-
-    if dot > 1.0 - 1e-12 {
-        // Vectors are parallel
-        return Some(Quaternion::identity());
-    }
-    if dot < -1.0 + 1e-12 {
-        // Vectors are anti-parallel — no unique rotation
-        return None;
-    }
-
-    let axis = a.cross(&b).normalize();
-    let angle = dot.acos();
-    Some(Quaternion::from_axis_angle(axis, angle))
-}
-
 impl SatState {
     pub fn from_pv<T: TimeLike>(time: &T, pos: &Vector3, vel: &Vector3) -> Self {
         Self {
             time: time.as_instant(),
-            pv: Vector::from_array([pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]]),
+            pv: numeris::vector![pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]],
             cov: StateCov::None,
         }
     }
@@ -107,11 +81,11 @@ impl SatState {
         let v = self.vel_gcrf();
         let h = p.cross(&v);
         let neg_p = p * -1.0;
-        let neg_h_dir = Vector3::from_array([0.0, 0.0, 1.0]);
-        let q1 = rotation_between(&neg_p, &neg_h_dir).unwrap();
+        let neg_h_dir = numeris::vector![0.0, 0.0, 1.0];
+        let q1 = Quaternion::rotation_between(neg_p, neg_h_dir);
         let rotated_h = q1 * (h * -1.0);
-        let y_axis = Vector3::from_array([0.0, 1.0, 0.0]);
-        let q2 = rotation_between(&rotated_h, &y_axis).unwrap();
+        let y_axis = numeris::vector![0.0, 1.0, 0.0];
+        let q2 = Quaternion::rotation_between(rotated_h, y_axis);
         q2 * q1
     }
 
@@ -298,8 +272,8 @@ mod test {
     fn test_qgcrf2lvlh() -> Result<()> {
         let satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &Vector::from_array([consts::GEO_R, 0.0, 0.0]),
-            &Vector::from_array([0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0]),
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
 
         let state2 =
@@ -310,9 +284,9 @@ mod test {
         let ry = (state2.qgcrf2lvlh() * h) * (-1.0 / h.norm());
         let rx = (state2.qgcrf2lvlh() * state2.vel_gcrf()) * (1.0 / state2.vel_gcrf().norm());
 
-        let z_axis = Vector3::from_array([0.0, 0.0, 1.0]);
-        let y_axis = Vector3::from_array([0.0, 1.0, 0.0]);
-        let x_axis = Vector3::from_array([1.0, 0.0, 0.0]);
+        let z_axis = numeris::vector![0.0, 0.0, 1.0];
+        let y_axis = numeris::vector![0.0, 1.0, 0.0];
+        let x_axis = numeris::vector![1.0, 0.0, 0.0];
         assert!((rz - z_axis).norm() < 1.0e-6);
         assert!((ry - y_axis).norm() < 1.0e-6);
         assert!((rx - x_axis).norm() < 1.0e-4);
@@ -324,11 +298,11 @@ mod test {
     fn test_satstate() -> Result<()> {
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &Vector::from_array([consts::GEO_R, 0.0, 0.0]),
-            &Vector::from_array([0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0]),
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&Vector::from_array([1.0, 1.0, 1.0]));
-        satstate.set_lvlh_vel_uncertainty(&Vector::from_array([0.01, 0.02, 0.03]));
+        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
+        satstate.set_lvlh_vel_uncertainty(&numeris::vector![0.01, 0.02, 0.03]);
 
         let state2 =
             satstate.propagate(&(satstate.time + crate::Duration::from_days(0.5)), None)?;
@@ -356,10 +330,10 @@ mod test {
     fn test_satcov() -> Result<()> {
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &Vector::from_array([consts::GEO_R, 0.0, 0.0]),
-            &Vector::from_array([0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0]),
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&Vector::from_array([1.0, 1.0, 1.0]));
+        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
 
         let _state2 =
             satstate.propagate(&(satstate.time + crate::Duration::from_days(1.0)), None)?;
@@ -372,8 +346,8 @@ mod test {
         // Test that propagating with dt=0 returns the same state
         let satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &Vector::from_array([consts::GEO_R, 0.0, 0.0]),
-            &Vector::from_array([0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0]),
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
 
         // Propagate to the same time (zero duration)
@@ -392,10 +366,10 @@ mod test {
         // Test that propagating with dt=0 returns the same state including covariance
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &Vector::from_array([consts::GEO_R, 0.0, 0.0]),
-            &Vector::from_array([0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0]),
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&Vector::from_array([1.0, 1.0, 1.0]));
+        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
 
         // Propagate to the same time (zero duration)
         let state2 = satstate.propagate(&satstate.time, None)?;

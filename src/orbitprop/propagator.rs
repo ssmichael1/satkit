@@ -187,8 +187,8 @@ fn solar_pressure_accel(
 /// // and initial velocity along the y axis
 /// use satkit::mathtypes::*;
 /// let mut state = satkit::orbitprop::CovState::zeros();
-/// state.set_block(0, 0, &Vector::from_array([satkit::consts::GEO_R, 0.0, 0.0]));
-/// state.set_block(3, 0, &Vector::from_array([0.0, (satkit::consts::MU_EARTH/satkit::consts::GEO_R).sqrt(), 0.0]));
+/// state.set_block(0, 0, &numeris::vector![satkit::consts::GEO_R, 0.0, 0.0]);
+/// state.set_block(3, 0, &numeris::vector![0.0, (satkit::consts::MU_EARTH/satkit::consts::GEO_R).sqrt(), 0.0]);
 /// // initialize state transition matrix to identity
 /// state.set_block(0, 1, &Matrix6::eye());
 ///
@@ -677,7 +677,7 @@ mod tests {
         };
 
         // Made-up small variations in the state
-        let dstate = Vector::from_array([6.0, -10.0, 120.5, 0.1, 0.2, -0.3]);
+        let dstate = numeris::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
 
         // Propagate state (and state-transition matrix)
         let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
@@ -720,8 +720,8 @@ mod tests {
 
         let mut state: CovState = CovState::zeros();
 
-        let pgcrf = Vector::from_array([3059573.85713792, 5855177.98848048, -7191.45042671]);
-        let vgcrf = Vector::from_array([916.08123489, -468.22498656, 7700.48460839]);
+        let pgcrf = numeris::vector![3059573.85713792, 5855177.98848048, -7191.45042671];
+        let vgcrf = numeris::vector![916.08123489, -468.22498656, 7700.48460839];
 
         // 30-deg inclination
         state.set_block(0, 0, &pgcrf);
@@ -738,7 +738,7 @@ mod tests {
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(2.0 * 0.3 * 0.1 / 5.0, 0.0);
 
         // Made-up small variations in the state
-        let dstate = Vector::from_array([2.0, -4.0, 20.5, 0.05, 0.02, -0.01]);
+        let dstate = numeris::vector![2.0, -4.0, 20.5, 0.05, 0.02, -0.01];
 
         // Propagate state (and state-transition matrix)
 
@@ -818,7 +818,7 @@ mod tests {
                 let px: f64 = lvals[1].parse()?;
                 let py: f64 = lvals[2].parse()?;
                 let pz: f64 = lvals[3].parse()?;
-                Ok(Vector::from_array([px, py, pz]) * 1.0e3)
+                Ok(numeris::vector![px, py, pz] * 1.0e3)
             })
             .collect::<Result<Vec<Vector3>>>()?;
 
@@ -832,14 +832,14 @@ mod tests {
             })
             .collect();
 
-        let v0 = Vector::from_array([
+        let v0 = numeris::vector![
             2.47130562e+03,
             2.94682753e+03,
             -5.34172176e+02,
             2.32565692e-02,
-        ]);
+        ];
 
-        let state0 = Vector::from_array([pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]]);
+        let state0 = numeris::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, v0[3]);
 
         let settings = PropSettings {
@@ -1001,7 +1001,7 @@ mod tests {
             ..Default::default()
         };
 
-        let dstate = Vector::from_array([6.0, -10.0, 120.5, 0.1, 0.2, -0.3]);
+        let dstate = numeris::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
 
         let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
         let res2 = propagate(

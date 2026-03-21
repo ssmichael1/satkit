@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 satkit = { path = ".." }
 pyo3 = { version = "0.28.2", features = ["extension-module", "anyhow"] }
 numpy = "0.28"
-numeris = { version = "0.5.5", features = ["serde"] }
+numeris = { version = "0.5.6", features = ["serde", "estimate", "interp"] }
 ndarray = "0.17.1"
 anyhow = "1"
 serde = { version = "1.0", features = ["derive"] }

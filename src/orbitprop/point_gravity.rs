@@ -45,8 +45,8 @@ mod tests {
     fn test_point_gravity_known() {
         // Moon at ~384,400 km from Earth center, satellite at GEO (~42,164 km)
         let mu_moon = 4.9048695e12; // m³/s²
-        let s_moon = Vector3::from_array([384_400.0e3, 0.0, 0.0]); // Moon position
-        let r_sat = Vector3::from_array([42_164.0e3, 0.0, 0.0]); // GEO satellite
+        let s_moon = numeris::vector![384_400.0e3, 0.0, 0.0]; // Moon position
+        let r_sat = numeris::vector![42_164.0e3, 0.0, 0.0]; // GEO satellite
 
         let accel = point_gravity(&r_sat, &s_moon, mu_moon);
         // Lunar perturbation at GEO should be ~1e-6 m/s² order of magnitude
@@ -61,9 +61,9 @@ mod tests {
     #[test]
     fn test_point_gravity_partials() {
         let mu = 4.9048695e12;
-        let s = Vector3::from_array([384_400.0e3, 50_000.0e3, 20_000.0e3]);
-        let r = Vector3::from_array([42_164.0e3, 1000.0e3, 500.0e3]);
-        let dr = Vector3::from_array([10.0, 20.0, -15.0]);
+        let s = numeris::vector![384_400.0e3, 50_000.0e3, 20_000.0e3];
+        let r = numeris::vector![42_164.0e3, 1000.0e3, 500.0e3];
+        let dr = numeris::vector![10.0, 20.0, -15.0];
 
         let (accel0, partials) = point_gravity_and_partials(&r, &s, mu);
         let accel1 = point_gravity(&(r + dr), &s, mu);

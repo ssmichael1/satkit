@@ -117,7 +117,7 @@ impl PyQuaternion {
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> Result<Self> {
         let s = axis.as_slice()?;
-        let v = Vector3::from_array([s[0], s[1], s[2]]);
+        let v = numeris::vector![s[0], s[1], s[2]];
         let n = v.norm();
         if n < 1.0e-9 {
             // If the axis is zero, return identity quaternion
@@ -146,24 +146,24 @@ impl PyQuaternion {
         let v1 = match v1.is_contiguous() {
             true => {
                 let s = v1.as_slice().context("Cannot convert v1 to 3D vector")?;
-                Vector3::from_array([s[0], s[1], s[2]])
+                numeris::vector![s[0], s[1], s[2]]
             }
-            false => Vector3::from_array([
+            false => numeris::vector![
                 *v1.get(0).unwrap(),
                 *v1.get(1).unwrap(),
                 *v1.get(2).unwrap(),
-            ]),
+            ],
         };
         let v2 = match v2.is_contiguous() {
             true => {
                 let s = v2.as_slice().context("Cannot convert v2 to 3D vector")?;
-                Vector3::from_array([s[0], s[1], s[2]])
+                numeris::vector![s[0], s[1], s[2]]
             }
-            false => Vector3::from_array([
+            false => numeris::vector![
                 *v2.get(0).unwrap(),
                 *v2.get(1).unwrap(),
                 *v2.get(2).unwrap(),
-            ]),
+            ],
         };
 
         // Compute rotation between two vectors
@@ -237,7 +237,7 @@ impl PyQuaternion {
         let (ax, angle) = self.0.to_axis_angle();
         let n = ax.norm();
         let ax = if n < 1.0e-9 {
-            Vector3::from_array([1.0, 0.0, 0.0])
+            numeris::vector![1.0, 0.0, 0.0]
         } else {
             ax * (1.0 / n)
         };
@@ -293,7 +293,7 @@ impl PyQuaternion {
         let (ax, _) = self.0.to_axis_angle();
         let n = ax.norm();
         let a = if n < 1.0e-9 {
-            Vector3::from_array([1.0, 0.0, 0.0])
+            numeris::vector![1.0, 0.0, 0.0]
         } else {
             ax * (1.0 / n)
         };
@@ -386,11 +386,11 @@ impl PyQuaternion {
                 bail!("Invalid rhs.  1D array must be of length 3");
             }
 
-            let m = Vector3::from_array([
+            let m = numeris::vector![
                 v1d.get_owned(0).unwrap(),
                 v1d.get_owned(1).unwrap(),
                 v1d.get_owned(2).unwrap(),
-            ]);
+            ];
 
             let vout = self.0 * m;
 

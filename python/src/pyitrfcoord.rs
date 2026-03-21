@@ -378,7 +378,7 @@ impl PyITRFCoord {
         let x = f64::from_le_bytes(s[0..8].try_into()?);
         let y = f64::from_le_bytes(s[8..16].try_into()?);
         let z = f64::from_le_bytes(s[16..24].try_into()?);
-        self.0.itrf = satkit::mathtypes::Vector3::from_array([x, y, z]);
+        self.0.itrf = numeris::vector![x, y, z];
         Ok(())
     }
 

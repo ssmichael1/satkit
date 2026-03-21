@@ -169,9 +169,6 @@ pub mod tle;
 /// Utility functions
 pub mod utils;
 
-// Filters
-pub mod filters;
-
 /// Coordinate frames
 /// Currently not used
 mod frames;

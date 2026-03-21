@@ -393,7 +393,7 @@ impl Gravity {
             }
         }
 
-        Vector3::from_array([ax, ay, az]) * self.gravity_constant / self.radius / self.radius
+        numeris::vector![ax, ay, az] * self.gravity_constant / self.radius / self.radius
     }
 
     fn compute_legendre<const NP4: usize>(&self, pos: &Vector3) -> (Legendre<NP4>, Legendre<NP4>) {
@@ -584,7 +584,7 @@ mod tests {
     fn test_gravity_order_1() {
         // Order 1 = point mass: accel should be μ/r², radially inward
         let r = 7000.0e3; // 7000 km
-        let pos = Vector3::from_array([r, 0.0, 0.0]);
+        let pos = numeris::vector![r, 0.0, 0.0];
         let accel = jgm3().accel(&pos, 1, 1);
         let expected_mag = crate::consts::MU_EARTH / (r * r);
         assert_relative_eq!(accel.norm(), expected_mag, max_relative = 1.0e-6);
@@ -597,7 +597,7 @@ mod tests {
     #[test]
     fn test_gravity_models_agree_order1() {
         // At order 1 (point mass), all models should agree closely
-        let pos = Vector3::from_array([7000.0e3, 1000.0e3, 3000.0e3]);
+        let pos = numeris::vector![7000.0e3, 1000.0e3, 3000.0e3];
         let a_jgm3 = jgm3().accel(&pos, 1, 1);
         let a_jgm2 = jgm2().accel(&pos, 1, 1);
         let a_egm96 = egm96().accel(&pos, 1, 1);
@@ -632,7 +632,7 @@ mod tests {
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
         let gaccel: Vector3 = jgm3().accel(&coord.itrf, 6, 6);
         let gaccel_truth =
-            Vector3::from_array([-2.3360599811572618, 6.8730769266931615, -6.616497962860285]);
+            numeris::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
         assert!((gaccel - gaccel_truth).norm() < 1.0e-6 * gaccel.norm().max(gaccel_truth.norm()));
     }
 
@@ -659,7 +659,7 @@ mod tests {
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
         let gravitation: Vector3 = g.accel(&coord.itrf, 16, 16);
         let centrifugal: Vector3 =
-            Vector3::from_array([coord.itrf[0], coord.itrf[1], 0.0]) * OMEGA_EARTH * OMEGA_EARTH;
+            numeris::vector![coord.itrf[0], coord.itrf[1], 0.0] * OMEGA_EARTH * OMEGA_EARTH;
         let gravity = gravitation + centrifugal;
 
         // Check gravitation matches the reference value
@@ -701,11 +701,11 @@ mod tests {
             let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, altitude);
 
             // generate a random shift
-            let dpos = Vector3::from_array([
+            let dpos = numeris::vector![
                 random::<f64>() * 100.0,
                 random::<f64>() * 100.0,
                 random::<f64>() * 100.0,
-            ]);
+            ];
 
             // get acceleration and partials at coordinate
             let (accel1, partials) = g.accel_and_partials(&coord.itrf, 6, 6);
@@ -785,7 +785,7 @@ mod tests {
         let coord = ITRFCoord::from_geodetic_deg(latitude, longitude, 0.0);
         let gaccel = jgm3().accel(&coord.itrf, 6, 6);
         let gaccel_truth =
-            Vector3::from_array([-2.3360599811572618, 6.8730769266931615, -6.616497962860285]);
+            numeris::vector![-2.3360599811572618, 6.8730769266931615, -6.616497962860285];
         assert!((gaccel - gaccel_truth).norm() < 1.0e-6 * gaccel.norm().max(gaccel_truth.norm()));
     }
 
@@ -794,7 +794,7 @@ mod tests {
         // Verify partials are consistent when order < degree
         let g = Gravity::from_file("JGM3.gfc").unwrap();
         let coord = ITRFCoord::from_geodetic_deg(45.0, 30.0, 400.0e3);
-        let dpos = Vector3::from_array([50.0, -30.0, 80.0]);
+        let dpos = numeris::vector![50.0, -30.0, 80.0];
 
         // Use degree=6, order=2
         let (accel1, partials) = g.accel_and_partials(&coord.itrf, 6, 2);

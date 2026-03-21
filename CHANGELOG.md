@@ -41,10 +41,18 @@ This provides zero-cost `From`/`Into` conversions between numeris and nalgebra m
 - All internal conversions updated for numeris types
 - Quaternion component order handling updated internally (transparent to Python users)
 
+### Code Simplification
+
+- Use `numeris::vector!` macro throughout instead of `Vector3::from_array([...])`
+- Use `Quaternion::rotation_between()` from numeris instead of hand-rolled helper
+- Remove `qrot_xcoord`/`qrot_ycoord`/`qrot_zcoord` wrappers; use `Quaternion::rotx`/`roty`/`rotz` directly
+- Remove `satkit::filters` module (UKF); use `numeris::estimate::Ukf` instead
+- Enable `estimate` and `interp` features on numeris
+
 ### Internal
 
-- Net reduction of ~11,000 lines of code (removed ODE module)
-- 142 Rust tests pass (106 lib + 36 doc)
+- Net reduction of ~11,000 lines of code (removed ODE module and filters module)
+- 141 Rust tests pass (105 lib + 36 doc)
 - 52 Python tests pass
 
 

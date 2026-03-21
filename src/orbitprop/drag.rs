@@ -5,7 +5,7 @@ use crate::Instant;
 use crate::mathtypes::*;
 
 fn omega_earth() -> Vector3 {
-    Vector3::from_array([0.0, 0.0, crate::consts::OMEGA_EARTH])
+    numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH]
 }
 
 fn omega_earth_matrix() -> Matrix3 {
@@ -82,7 +82,7 @@ fn compute_rho_drhodr(
 
     // Geodetic "up" direction in ITRF: NED down is [0,0,1], so up is [0,0,-1]
     // rotated to ITRF via q_ned2itrf
-    let up_itrf = itrf.q_ned2itrf() * Vector3::from_array([0.0, 0.0, -1.0]);
+    let up_itrf = itrf.q_ned2itrf() * numeris::vector![0.0, 0.0, -1.0];
 
     // Rotate to GCRF and scale by dρ/dh
     let up_gcrf = qgcrf2itrf.conjugate() * up_itrf;
@@ -139,9 +139,9 @@ mod tests {
         // Circular prograde orbit at ~400 km altitude
         let r = 6778.0e3; // Earth radius + 400 km
         let v_circ = (crate::consts::MU_EARTH / r).sqrt();
-        let pos_gcrf = Vector3::from_array([r, 0.0, 0.0]);
+        let pos_gcrf = numeris::vector![r, 0.0, 0.0];
         let pos_itrf = pos_gcrf; // Approximate: ignore frame rotation for this test
-        let vel_gcrf = Vector3::from_array([0.0, v_circ, 0.0]); // prograde
+        let vel_gcrf = numeris::vector![0.0, v_circ, 0.0]; // prograde
         let time = Instant::from_datetime(2020, 1, 1, 0, 0, 0.0).unwrap();
         let cd_a_over_m = 0.01; // typical value
 
@@ -170,9 +170,9 @@ mod tests {
         // At 2000 km altitude, atmospheric density should be negligible
         let r = 8378.0e3; // Earth radius + 2000 km
         let v_circ = (crate::consts::MU_EARTH / r).sqrt();
-        let pos_gcrf = Vector3::from_array([r, 0.0, 0.0]);
+        let pos_gcrf = numeris::vector![r, 0.0, 0.0];
         let pos_itrf = pos_gcrf;
-        let vel_gcrf = Vector3::from_array([0.0, v_circ, 0.0]);
+        let vel_gcrf = numeris::vector![0.0, v_circ, 0.0];
         let time = Instant::from_datetime(2020, 1, 1, 0, 0, 0.0).unwrap();
 
         let drag = drag_force(&pos_gcrf, &pos_itrf, &vel_gcrf, &time, 0.01, false);

@@ -110,11 +110,11 @@ pub fn pos_mod<T: TimeLike>(time: &T) -> Vector3 {
             0.016708617f64.mul_add(-f64::cos(M), 1.000140612),
         );
 
-    Vector3::from_array([
+    numeris::vector![
         r * f64::cos(lambda_ecliptic),
         r * f64::sin(lambda_ecliptic) * f64::cos(epsilon),
         r * f64::sin(lambda_ecliptic) * f64::sin(epsilon),
-    ])
+    ]
 }
 
 ///

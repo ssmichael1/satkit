@@ -121,7 +121,7 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///     ).unwrap();
 ///
 /// // rotate position to ITRF and create ITRFCoord
-/// let pos = numeris::Vector3::from_array([result.pos[(0,0)], result.pos[(1,0)], result.pos[(2,0)]]);
+/// let pos = numeris::vector![result.pos[(0,0)], result.pos[(1,0)], result.pos[(2,0)]];
 /// let pitrf = qteme2itrf(&tm) * pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
@@ -194,7 +194,7 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> anyhow::
 ///     ).unwrap();
 ///
 /// // rotate position to ITRF and create ITRFCoord
-/// let pos = numeris::Vector3::from_array([result.pos[(0,0)], result.pos[(1,0)], result.pos[(2,0)]]);
+/// let pos = numeris::vector![result.pos[(0,0)], result.pos[(1,0)], result.pos[(2,0)]];
 /// let pitrf = qteme2itrf(&tm) * pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
