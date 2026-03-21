@@ -5,12 +5,12 @@
 
 ### Breaking: Replace nalgebra with numeris
 
-The `nalgebra` dependency has been replaced with `numeris` 0.5.5 for all linear algebra. The built-in ODE solver module (`src/ode/`) has been removed in favor of the ODE solvers provided by `numeris`. This is a **breaking change** for Rust API consumers; the Python API is unchanged.
+The `nalgebra` dependency has been replaced with `numeris` 0.5.6 for all linear algebra. The built-in ODE solver module (`src/ode/`) has been removed in favor of the ODE solvers provided by `numeris`. This is a **breaking change** for Rust API consumers; the Python API is unchanged.
 
 ### Rust API Changes
 
 - **Math types** (`satkit::mathtypes`): All type aliases now point to `numeris` types instead of `nalgebra`. `Vector<N>`, `Matrix<M,N>`, `Quaternion`, and `DMatrix<T>` remain available with the same names.
-- **Vector construction**: `Vector3::new(x, y, z)` is replaced by `Vector3::from_array([x, y, z])`
+- **Vector construction**: `Vector3::new(x, y, z)` is replaced by `numeris::vector![x, y, z]`
 - **Matrix construction**: `Matrix3::new(a,b,c,d,e,f,g,h,i)` is replaced by `Matrix3::new([[a,b,c],[d,e,f],[g,h,i]])`
 - **Identity matrix**: `Matrix::identity()` is replaced by `Matrix::eye()`
 - **Quaternion axis rotations**: `Quaternion::from_axis_angle(&Vector3::z_axis(), θ)` is replaced by `Quaternion::rotz(θ)` (also `rotx`, `roty`)
@@ -30,7 +30,7 @@ The `satkit::ode` module (7 adaptive solvers, Rosenbrock, ODEState trait, ~2,500
 If you need nalgebra types for interoperability with other crates, enable the `nalgebra` feature on `numeris`:
 
 ```toml
-numeris = { version = "0.5.5", features = ["nalgebra"] }
+numeris = { version = "0.5.6", features = ["nalgebra"] }
 ```
 
 This provides zero-cost `From`/`Into` conversions between numeris and nalgebra matrix, vector, and dynamic matrix types. Both libraries use identical column-major storage, so conversions are a `memcpy`.
@@ -48,6 +48,14 @@ This provides zero-cost `From`/`Into` conversions between numeris and nalgebra m
 - Remove `qrot_xcoord`/`qrot_ycoord`/`qrot_zcoord` wrappers; use `Quaternion::rotx`/`roty`/`rotz` directly
 - Remove `satkit::filters` module (UKF); use `numeris::estimate::Ukf` instead
 - Enable `estimate` feature on numeris
+
+### Dependency Cleanup
+
+- Remove `nalgebra` dependency entirely
+- Remove `ndarray` dependency (unused; `numpy` crate re-exports it for Python bindings)
+- Remove `cty` dependency; use `std::ffi::{c_double, c_int}` instead
+- Remove `once_cell` dependency; use `std::sync::OnceLock` (stable since Rust 1.70)
+- Remove redundant reference-based `Add`/`Sub` operator impls from `ITRFCoord` (both types are `Copy`)
 
 ### Internal
 
