@@ -1,11 +1,11 @@
-use nalgebra as na;
+use crate::mathtypes::*;
 
 // Equation 3.37 in Montenbruck & Gill
 pub fn point_gravity(
-    r: &na::Vector3<f64>, // object
-    s: &na::Vector3<f64>, // distant attractor
+    r: &Vector3, // object
+    s: &Vector3, // distant attractor
     mu: f64,
-) -> na::Vector3<f64> {
+) -> Vector3 {
     let sr = s - r;
     let srnorm2 = sr.norm_squared();
     let srnorm = srnorm2.sqrt();
@@ -20,10 +20,10 @@ pub fn point_gravity(
 // Equation 7.75 in Montenbruck & Gill for partials
 
 pub fn point_gravity_and_partials(
-    r: &na::Vector3<f64>, // object
-    s: &na::Vector3<f64>, // distant attractor
+    r: &Vector3, // object
+    s: &Vector3, // distant attractor
     mu: f64,
-) -> (na::Vector3<f64>, na::Matrix3<f64>) {
+) -> (Vector3, Matrix3) {
     let rs = r - s;
     let rsnorm2 = rs.norm_squared();
     let rsnorm = rsnorm2.sqrt();
@@ -32,7 +32,7 @@ pub fn point_gravity_and_partials(
     let rsnorm3 = rsnorm2 * rsnorm;
     (
         -mu * (rs / rsnorm3 + s / (snorm * snorm2)),
-        -mu * (na::Matrix3::<f64>::identity() / rsnorm3
+        -mu * (Matrix3::eye() / rsnorm3
             - 3.0 * rs * rs.transpose() / (rsnorm2 * rsnorm3)),
     )
 }
@@ -45,8 +45,8 @@ mod tests {
     fn test_point_gravity_known() {
         // Moon at ~384,400 km from Earth center, satellite at GEO (~42,164 km)
         let mu_moon = 4.9048695e12; // m³/s²
-        let s_moon = na::Vector3::new(384_400.0e3, 0.0, 0.0); // Moon position
-        let r_sat = na::Vector3::new(42_164.0e3, 0.0, 0.0); // GEO satellite
+        let s_moon = Vector3::from_array([384_400.0e3, 0.0, 0.0]); // Moon position
+        let r_sat = Vector3::from_array([42_164.0e3, 0.0, 0.0]); // GEO satellite
 
         let accel = point_gravity(&r_sat, &s_moon, mu_moon);
         // Lunar perturbation at GEO should be ~1e-6 m/s² order of magnitude
@@ -61,9 +61,9 @@ mod tests {
     #[test]
     fn test_point_gravity_partials() {
         let mu = 4.9048695e12;
-        let s = na::Vector3::new(384_400.0e3, 50_000.0e3, 20_000.0e3);
-        let r = na::Vector3::new(42_164.0e3, 1000.0e3, 500.0e3);
-        let dr = na::Vector3::new(10.0, 20.0, -15.0);
+        let s = Vector3::from_array([384_400.0e3, 50_000.0e3, 20_000.0e3]);
+        let r = Vector3::from_array([42_164.0e3, 1000.0e3, 500.0e3]);
+        let dr = Vector3::from_array([10.0, 20.0, -15.0]);
 
         let (accel0, partials) = point_gravity_and_partials(&r, &s, mu);
         let accel1 = point_gravity(&(r + dr), &s, mu);

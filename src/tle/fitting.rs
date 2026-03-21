@@ -121,7 +121,7 @@ impl TLE {
     /// let r0 = satkit::consts::EARTH_RADIUS + altitude;
     /// let v0 = (satkit::consts::MU_EARTH / r0).sqrt();
     /// let inc: f64 = 97.0_f64.to_radians();
-    /// let state0 = nalgebra::vector![r0, 0.0, 0.0, 0.0, v0 * inc.cos(), v0 * inc.sin()];
+    /// let state0 = numeris::Vector::from_array([r0, 0.0, 0.0, 0.0, v0 * inc.cos(), v0 * inc.sin()]);
     /// let time0 = satkit::Instant::from_datetime(2016, 5, 16, 12, 0, 0.0).unwrap();
     ///
     /// // High-fidelity orbit propagation settings
@@ -209,15 +209,15 @@ impl TLE {
             .enumerate()
             .map(|(i, time)| {
                 let q = crate::frametransform::qteme2gcrf(time).conjugate();
-                let p = q.transform_vector(&nalgebra::vector![
+                let p = q * Vector3::from_array([
                     states_gcrf[i][0],
                     states_gcrf[i][1],
-                    states_gcrf[i][2]
+                    states_gcrf[i][2],
                 ]);
-                let v = q.transform_vector(&nalgebra::vector![
+                let v = q * Vector3::from_array([
                     states_gcrf[i][3],
                     states_gcrf[i][4],
-                    states_gcrf[i][5]
+                    states_gcrf[i][5],
                 ]);
                 [p[0], p[1], p[2], v[0], v[1], v[2]]
             })
@@ -227,8 +227,8 @@ impl TLE {
         let closest_state = states_teme[closest_index];
         // Kepler representation
         let mut kepler = crate::kepler::Kepler::from_pv(
-            Vector3::from_column_slice(&closest_state[..3]),
-            Vector3::from_column_slice(&closest_state[3..]),
+            Vector3::from_array([closest_state[0], closest_state[1], closest_state[2]]),
+            Vector3::from_array([closest_state[3], closest_state[4], closest_state[5]]),
         )
         .context("Could not convert state to Keplerian elements")?;
 
@@ -271,7 +271,7 @@ mod tests {
         let r0 = crate::consts::GEO_R;
         let v0 = (crate::consts::MU_EARTH / r0).sqrt();
         let inc: f64 = 15.0_f64.to_radians();
-        let state0 = nalgebra::vector![r0, 0.0, 0.0, 0.0, v0 * inc.cos(), v0 * inc.sin()];
+        let state0 = numeris::Vector::from_array([r0, 0.0, 0.0, 0.0, v0 * inc.cos(), v0 * inc.sin()]);
         let time0: Instant = Instant::from_datetime(2022, 5, 16, 12, 0, 0.0)?;
 
         let settings = crate::orbitprop::PropSettings {
@@ -308,7 +308,7 @@ mod tests {
         let r0 = crate::consts::EARTH_RADIUS + altitude;
         let v0 = (crate::consts::MU_EARTH / r0).sqrt();
         let inc: f64 = 97.0_f64.to_radians();
-        let state0 = nalgebra::vector![r0, 0.0, 0.0, 0.0, v0 * inc.cos(), v0 * inc.sin()];
+        let state0 = numeris::Vector::from_array([r0, 0.0, 0.0, 0.0, v0 * inc.cos(), v0 * inc.sin()]);
         let time0: Instant = Instant::from_datetime(2016, 5, 16, 12, 0, 0.0)?;
 
         let settings = crate::orbitprop::PropSettings {

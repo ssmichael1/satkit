@@ -2,7 +2,7 @@ use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
 use crate::TimeLike;
-use nalgebra::{Const, Dyn, OMatrix};
+use crate::mathtypes::DMatrix;
 
 use thiserror::Error;
 
@@ -51,11 +51,9 @@ impl From<SGP4Error> for i32 {
     }
 }
 
-type StateArr = OMatrix<f64, Const<3>, Dyn>;
-
 pub struct SGP4State {
-    pub pos: StateArr,
-    pub vel: StateArr,
+    pub pos: DMatrix<f64>,
+    pub vel: DMatrix<f64>,
     pub errcode: Vec<SGP4Error>,
 }
 
@@ -106,7 +104,6 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// use satkit::sgp4::{sgp4, GravConst, OpsMode};
 /// use satkit::frametransform::qteme2itrf;
 /// use satkit::itrfcoord::ITRFCoord;
-/// use nalgebra as na;
 ///
 /// let line0: &str = "0 INTELSAT 902";
 /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
@@ -123,7 +120,9 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///     &[tm]
 ///     ).unwrap();
 ///
-/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * result.pos;
+/// // rotate position to ITRF and create ITRFCoord
+/// let pos = numeris::Vector3::from_array([result.pos[(0,0)], result.pos[(1,0)], result.pos[(2,0)]]);
+/// let pitrf = qteme2itrf(&tm) * pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
 ///
@@ -176,7 +175,6 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> anyhow::
 /// use satkit::sgp4::{sgp4_full, GravConst, OpsMode};
 /// use satkit::frametransform::qteme2itrf;
 /// use satkit::itrfcoord::ITRFCoord;
-/// use nalgebra as na;
 ///
 /// let line0: &str = "0 INTELSAT 902";
 /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
@@ -195,7 +193,9 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> anyhow::
 ///     OpsMode::IMPROVED
 ///     ).unwrap();
 ///
-/// let pitrf = qteme2itrf(&tm).to_rotation_matrix() * result.pos;
+/// // rotate position to ITRF and create ITRFCoord
+/// let pos = numeris::Vector3::from_array([result.pos[(0,0)], result.pos[(1,0)], result.pos[(2,0)]]);
+/// let pitrf = qteme2itrf(&tm) * pos;
 /// let itrf = ITRFCoord::from_slice(pitrf.as_slice()).unwrap();
 /// println!("Satellite position is: {}", itrf);
 ///
@@ -231,8 +231,8 @@ pub fn sgp4_full<T: TimeLike>(
     let s = sgp4source.satrec_mut().as_mut().expect("satrec initialized");
 
     let n = tm.len();
-    let mut rarr = StateArr::zeros(n);
-    let mut varr = StateArr::zeros(n);
+    let mut rarr = DMatrix::<f64>::zeros(3, n);
+    let mut varr = DMatrix::<f64>::zeros(3, n);
     let mut earr = Vec::<SGP4Error>::with_capacity(n);
 
     for (pos, thetime) in tm.iter().enumerate() {
@@ -240,8 +240,10 @@ pub fn sgp4_full<T: TimeLike>(
 
         match sgp4_lowlevel(s, tsince) {
             Ok((r, v)) => {
-                rarr.index_mut((.., pos)).copy_from_slice(&r);
-                varr.index_mut((.., pos)).copy_from_slice(&v);
+                for i in 0..3 {
+                    rarr[(i, pos)] = r[i];
+                    varr[(i, pos)] = v[i];
+                }
                 earr.push(SGP4Error::SGP4Success)
             }
             Err(e) => earr.push(e.into()),
@@ -359,9 +361,9 @@ mod tests {
                         maxvelerr = 1.0e-2;
                     }
                     let poserr =
-                        (states.pos[idx].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
+                        (states.pos[(idx, 0)].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
                     let velerr =
-                        (states.vel[idx].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
+                        (states.vel[(idx, 0)].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
                     assert!(poserr < maxposerr);
                     assert!(velerr < maxvelerr);
                 }

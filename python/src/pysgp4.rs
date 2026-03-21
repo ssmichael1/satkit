@@ -314,18 +314,18 @@ pub fn sgp4(
             let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
                 vec![states.pos.ncols(), states.pos.nrows()]
             } else {
-                vec![states.pos.len()]
+                vec![states.pos.as_slice().len()]
             };
 
             // Note: this is a little confusing: ndarray uses
-            // row major, nalgebra and numpy use column major,
+            // row major, numeris and numpy use column major,
             // hence the switch
             if !output_err {
                 Ok((
-                    PyArray1::from_slice(py, states.pos.data.as_slice())
+                    PyArray1::from_slice(py, states.pos.as_slice())
                         .reshape(dims.clone())?
                         .into_py_any(py)?,
-                    PyArray1::from_slice(py, states.vel.data.as_slice())
+                    PyArray1::from_slice(py, states.vel.as_slice())
                         .reshape(dims)?
                         .into_py_any(py)?,
                 )
@@ -333,8 +333,8 @@ pub fn sgp4(
             } else {
                 let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
                 Ok((
-                    PyArray1::from_slice(py, states.pos.data.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice(py, states.vel.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims.clone())?,
                     PyArray1::from_slice(py, eint.as_slice()),
                 )
                     .into_py_any(py)?)
@@ -358,18 +358,18 @@ pub fn sgp4(
             let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
                 vec![states.pos.ncols(), states.pos.nrows()]
             } else {
-                vec![states.pos.len()]
+                vec![states.pos.as_slice().len()]
             };
 
             // Note: this is a little confusing: ndarray uses
-            // row major, nalgebra and numpy use column major,
+            // row major, numeris and numpy use column major,
             // hence the switch
             if !output_err {
                 Ok((
-                    PyArray1::from_slice(py, states.pos.data.as_slice())
+                    PyArray1::from_slice(py, states.pos.as_slice())
                         .reshape(dims.clone())?
                         .into_py_any(py)?,
-                    PyArray1::from_slice(py, states.vel.data.as_slice())
+                    PyArray1::from_slice(py, states.vel.as_slice())
                         .reshape(dims)?
                         .into_py_any(py)?,
                 )
@@ -377,8 +377,8 @@ pub fn sgp4(
             } else {
                 let eint: Vec<i32> = states.errcode.iter().map(|x| x.clone() as i32).collect();
                 Ok((
-                    PyArray1::from_slice(py, states.pos.data.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice(py, states.vel.data.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?,
+                    PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims.clone())?,
                     PyArray1::from_slice(py, eint.as_slice()),
                 )
                     .into_py_any(py)?)
@@ -432,13 +432,13 @@ pub fn sgp4(
                     let pdata: *mut f64 = parr.data();
 
                     std::ptr::copy_nonoverlapping(
-                        states.pos.as_ptr(),
+                        states.pos.as_slice().as_ptr(),
                         pdata.add(idx * ntimes * 3),
                         ntimes * 3,
                     );
                     let vdata: *mut f64 = varr.data();
                     std::ptr::copy_nonoverlapping(
-                        states.vel.as_ptr(),
+                        states.vel.as_slice().as_ptr(),
                         vdata.add(idx * ntimes * 3),
                         ntimes * 3,
                     );

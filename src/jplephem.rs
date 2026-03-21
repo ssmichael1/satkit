@@ -286,7 +286,7 @@ impl JPLEphem {
                 let ncoeff: usize = (kernel_size / 2) as usize;
                 let nrecords = ((jd_stop - jd_start) / jd_step) as usize;
                 let record_size = (kernel_size * 4) as usize;
-                let mut v: DMatrix<f64> = DMatrix::repeat(ncoeff, nrecords, 0.0);
+                let mut v: DMatrix<f64> = DMatrix::zeros(ncoeff, nrecords);
 
                 if raw.len() < record_size * 2 + ncoeff * nrecords * 8 {
                     bail!("Invalid record size for cheby data");
@@ -295,7 +295,7 @@ impl JPLEphem {
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         raw.as_ptr().add(record_size * 2) as *const f64,
-                        v.as_mut_ptr(),
+                        v.as_mut_slice().as_mut_ptr(),
                         ncoeff * nrecords,
                     );
                 }
@@ -314,10 +314,11 @@ impl JPLEphem {
 
         let mut pos = Vector3::zeros();
         for ix in 0..3 {
-            let m = self
-                .cheby
-                .fixed_view::<N, 1>(setup.offset0 + N * ix, setup.int_num);
-            pos[ix] = m.column(0).dot(&t);
+            let mut sum = 0.0;
+            for k in 0..N {
+                sum += self.cheby[(setup.offset0 + N * ix + k, setup.int_num)] * t[k];
+            }
+            pos[ix] = sum;
         }
 
         Ok(pos * 1.0e3)
@@ -388,11 +389,15 @@ impl JPLEphem {
         let mut pos = Vector3::zeros();
         let mut vel = Vector3::zeros();
         for ix in 0..3 {
-            let m = self
-                .cheby
-                .fixed_view::<N, 1>(setup.offset0 + N * ix, setup.int_num);
-            pos[ix] = m.column(0).dot(&t);
-            vel[ix] = m.column(0).dot(&v);
+            let mut psum = 0.0;
+            let mut vsum = 0.0;
+            for k in 0..N {
+                let coeff = self.cheby[(setup.offset0 + N * ix + k, setup.int_num)];
+                psum += coeff * t[k];
+                vsum += coeff * v[k];
+            }
+            pos[ix] = psum;
+            vel[ix] = vsum;
         }
 
         Ok((

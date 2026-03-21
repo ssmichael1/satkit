@@ -1,13 +1,10 @@
 //! Unscented Kalman Filter
-//!
-//! Uses nalgebra for state and covariance matrices
-
 
 /// Generic float vector type of fixed size
-type Vector<const T: usize> = nalgebra::SVector<f64, T>;
+type Vector<const T: usize> = numeris::Vector<f64, T>;
 
 /// Generic float matrix type of fixed size
-type Matrix<const M: usize, const N: usize> = nalgebra::SMatrix<f64, M, N>;
+type Matrix<const M: usize, const N: usize> = numeris::Matrix<f64, M, N>;
 use anyhow::{anyhow, Result};
 
 /// Unscented Kalman Filter
@@ -96,22 +93,21 @@ impl<const N: usize> UKF<N> {
     ) -> Result<()> {
         let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
-        let cp = c.sqrt()
-            * self
+        let cp = self
                 .p
                 .cholesky()
-                .ok_or_else(|| anyhow!("Cannot take Cholesky decomposition"))?
-                .l();
+                .map_err(|e| anyhow!("Cannot take Cholesky decomposition: {e}"))?
+                .l_full() * c.sqrt();
 
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
         // Create prior weights
         x_sigma_points.push(self.x);
         for i in 0..N {
-            x_sigma_points.push(self.x + cp.column(i));
+            x_sigma_points.push(self.x + cp.col(i));
         }
         for i in 0..N {
-            x_sigma_points.push(self.x - cp.column(i));
+            x_sigma_points.push(self.x - cp.col(i));
         }
 
         // Compute predict with sigma values
@@ -143,8 +139,8 @@ impl<const N: usize> UKF<N> {
 
         let kalman_gain = p_xy
             * p_yy
-                .try_inverse()
-                .ok_or_else(|| anyhow!("Cannot take inverse of kalman gain; it is singular"))?;
+                .inverse()
+                .map_err(|_| anyhow!("Cannot take inverse of kalman gain; it is singular"))?;
         self.x += kalman_gain * (y - yhat);
         self.p -= kalman_gain * p_yy * kalman_gain.transpose();
         Ok(())
@@ -166,22 +162,21 @@ impl<const N: usize> UKF<N> {
     pub fn predict(&mut self, f: impl Fn(Vector<N>) -> Result<Vector<N>>) -> Result<()> {
         let c = self.alpha.powi(2) * (N as f64 + self.kappa);
 
-        let cp = c.sqrt()
-            * self
+        let cp = self
                 .p
                 .cholesky()
-                .ok_or_else(|| anyhow!("Cannot take cholesky decomposition in predict step"))?
-                .l();
+                .map_err(|e| anyhow!("Cannot take cholesky decomposition in predict step: {e}"))?
+                .l_full() * c.sqrt();
 
         let mut x_sigma_points = Vec::<Vector<N>>::with_capacity(2 * N + 1);
 
         // Create prior weights
         x_sigma_points.push(self.x);
         for i in 0..N {
-            x_sigma_points.push(self.x + cp.column(i));
+            x_sigma_points.push(self.x + cp.col(i));
         }
         for i in 0..N {
-            x_sigma_points.push(self.x - cp.column(i));
+            x_sigma_points.push(self.x - cp.col(i));
         }
 
         // Compute predict with sigma values
@@ -222,22 +217,22 @@ mod tests {
 
         let normal = Normal::new(0.0, 1.0).unwrap();
 
-        let ytruth = Vector::<2>::new(3.0, 4.0);
-        let y_cov = Matrix::<2, 2>::new(1.0, 0.0, 0.0, 1.0);
+        let ytruth = Vector::<2>::from_array([3.0, 4.0]);
+        let y_cov = Matrix::<2, 2>::new([[1.0, 0.0], [0.0, 1.0]]);
         let v = normal.sample(&mut rand::rng());
         let w = normal.sample(&mut rand::rng());
-        let ysample = ytruth + Vector::<2>::new(v, w);
-        let offset = Vector::<2>::new(5.0, 8.0);
+        let ysample = ytruth + Vector::<2>::from_array([v, w]);
+        let offset = Vector::<2>::from_array([5.0, 8.0]);
         let observe = |x: Vector<2>| Ok(x + offset);
 
         // Process noise
-        let q = Matrix::<2, 2>::new(1.0e-12, 0.0, 0.0, 1.0e-12);
+        let q = Matrix::<2, 2>::new([[1.0e-12, 0.0], [0.0, 1.0e-12]]);
         ukf.x = ysample;
         ukf.p = y_cov;
         for _ix in 0..500 {
             let v = normal.sample(&mut rand::rng());
             let w = normal.sample(&mut rand::rng());
-            let ysample = observe(ytruth + Vector::<2>::new(v, w)).unwrap();
+            let ysample = observe(ytruth + Vector::<2>::from_array([v, w])).unwrap();
             ukf.update(&ysample, &y_cov, observe).unwrap();
             ukf.p += q;
         }

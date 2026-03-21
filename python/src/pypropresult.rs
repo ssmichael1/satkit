@@ -87,21 +87,22 @@ impl PyPropStats {
 pub struct PyPropResult(pub PyPropResultType);
 
 fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
+    let se = r.state_end.as_slice();
     let mut s = "Propagation Results\n".to_string();
     s.push_str(format!("  Time: {}\n", r.time_end).as_str());
     s.push_str(
         format!(
             "   Pos: [{:.3}, {:.3}, {:.3}] km\n",
-            r.state_end[0] * 1.0e-3,
-            r.state_end[1] * 1.0e-3,
-            r.state_end[2] * 1.0e-3
+            se[0] * 1.0e-3,
+            se[1] * 1.0e-3,
+            se[2] * 1.0e-3
         )
         .as_str(),
     );
     s.push_str(
         format!(
             "   Vel: [{:.3}, {:.3}, {:.3}] m/s\n",
-            r.state_end[3], r.state_end[4], r.state_end[5]
+            se[3], se[4], se[5]
         )
         .as_str(),
     );
@@ -200,7 +201,8 @@ impl PyPropResult {
                     .to_pyarray(py)
                     .into_py_any(py),
                 PyPropResultType::R7(r) => {
-                    np::ndarray::arr1(&r.state_end.column(0).as_slice()[3..6])
+                    let col0 = r.state_end.col(0);
+                    np::ndarray::arr1(&col0.as_slice()[3..6])
                         .to_pyarray(py)
                         .into_py_any(py)
                 }
@@ -257,10 +259,10 @@ impl PyPropResult {
                 PyPropResultType::R1(_r) => Ok(py.None()),
                 PyPropResultType::R7(r) => {
                     let phi = unsafe { np::PyArray2::<f64>::new(py, [6, 6], false) };
-                    let rsphi = r.state_end.fixed_view::<6, 6>(0, 1).transpose();
+                    let rsphi = r.state_end.block::<6, 6>(0, 1).transpose();
                     unsafe {
                         std::ptr::copy_nonoverlapping(
-                            rsphi.as_ptr(),
+                            rsphi.as_slice().as_ptr(),
                             phi.as_raw_array_mut().as_mut_ptr(),
                             36,
                         );
@@ -335,7 +337,7 @@ impl PyPropResult {
                             slice2py1d(py, &res.as_slice()[0..6])
                         })
                     } else {
-                        let rsphi = res.fixed_view::<6, 6>(0, 1).transpose();
+                        let rsphi = res.block::<6, 6>(0, 1).transpose();
                         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                             (
                                 slice2py1d(py, &res.as_slice()[0..6])?,

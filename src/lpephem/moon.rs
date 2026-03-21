@@ -267,7 +267,7 @@ pub fn pos_gcrf<T: TimeLike>(time: &T) -> Vector3 {
 
     let rmag: f64 = consts::EARTH_RADIUS / f64::sin(hparallax);
 
-    rmag * Vector3::new(
+    rmag * Vector3::from_array([
         f64::cos(phi_ecliptic) * f64::cos(lambda_ecliptic),
         (f64::cos(epsilon) * f64::cos(phi_ecliptic)).mul_add(
             f64::sin(lambda_ecliptic),
@@ -277,7 +277,7 @@ pub fn pos_gcrf<T: TimeLike>(time: &T) -> Vector3 {
             f64::sin(lambda_ecliptic),
             f64::cos(epsilon) * f64::sin(phi_ecliptic),
         ),
-    )
+    ])
 }
 
 #[cfg(test)]

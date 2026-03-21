@@ -165,8 +165,6 @@ pub mod filters;
 /// Currently not used
 mod frames;
 
-// Integrate ordinary differential equations
-mod ode;
 
 // Orbital Mean-Element Messages
 pub mod omm;

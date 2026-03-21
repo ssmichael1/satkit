@@ -54,12 +54,13 @@ const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 /// // Since pTEME is a 3xN array where N is the number of times
 /// // (we are just using a single time)
 /// // we need to convert to a fixed matrix to rotate
-/// let pITRF = frametransform::qteme2itrf(&tm) * states.pos.fixed_view::<3,1>(0,0);
+/// let pos = numeris::Vector3::from_array([states.pos[(0,0)], states.pos[(1,0)], states.pos[(2,0)]]);
+/// let pITRF = frametransform::qteme2itrf(&tm) * pos;
 ///
-/// println!("pITRF = {}", pITRF);
+/// println!("pITRF = {:?}", pITRF);
 ///
 /// // Convert to an "ITRF Coordinate" and print geodetic position
-/// let itrf = ITRFCoord::from_slice(&states.pos.fixed_view::<3,1>(0,0).as_slice()).unwrap();
+/// let itrf = ITRFCoord::from_slice(pITRF.as_slice()).unwrap();
 ///
 /// println!("latitude = {} deg", itrf.latitude_deg());
 /// println!("longitude = {} deg", itrf.longitude_deg());

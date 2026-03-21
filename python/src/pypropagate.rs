@@ -6,8 +6,6 @@ use crate::pysatproperties::PySatProperties;
 use crate::pyutils::*;
 use pyo3::IntoPyObjectExt;
 
-use nalgebra as na;
-
 use satkit::mathtypes::*;
 use satkit::orbitprop::SatProperties;
 use satkit::orbitprop::SatPropertiesStatic;
@@ -224,10 +222,9 @@ pub fn propagate(
     // Propagate with state transition matrix
     else {
         // Create the state to propagate
-        let mut pv = na::SMatrix::<f64, 6, 7>::zeros();
-        pv.fixed_view_mut::<6, 1>(0, 0).copy_from(&state0);
-        pv.fixed_view_mut::<6, 6>(0, 1)
-            .copy_from(&Matrix6::identity());
+        let mut pv = Matrix67::zeros();
+        pv.set_block(0, 0, &state0);
+        pv.set_block(0, 1, &Matrix6::eye());
 
         let res =
             satkit::orbitprop::propagate(&pv, &begintime, &endtime, &propsettings, satproperties)?;

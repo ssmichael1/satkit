@@ -57,7 +57,7 @@ impl std::fmt::Display for Geodetic {
 /// quaternions to the East-North-Up frame
 /// and North-East-Down frame at this coordinate
 ///
-#[derive(PartialEq, PartialOrd, Copy, Clone, Debug)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub struct ITRFCoord {
     pub itrf: Vector3,
 }
@@ -151,7 +151,7 @@ impl std::ops::Sub<&Self> for ITRFCoord {
 impl std::convert::From<[f64; 3]> for ITRFCoord {
     fn from(v: [f64; 3]) -> Self {
         Self {
-            itrf: Vector3::from(v),
+            itrf: Vector3::from_array(v),
         }
     }
 }
@@ -163,7 +163,7 @@ impl std::convert::TryFrom<&[f64]> for ITRFCoord {
             anyhow::bail!("Input slice must have 3 elements, got {}", v.len());
         }
         Ok(Self {
-            itrf: Vector3::from_row_slice(v),
+            itrf: Vector3::from_array([v[0], v[1], v[2]]),
         })
     }
 }
@@ -206,15 +206,15 @@ impl ITRFCoord {
     ///
     /// # Arguments:
     ///
-    /// * `v` - `nalgebra::Vector3<f64>` representing ITRF coordinates in meters
+    /// * `v` - `Vector3` representing ITRF coordinates in meters
     ///
     /// # Examples:
     ///
     /// ```
     /// // Create coord for ~ Boston, MA
     /// use satkit::itrfcoord::ITRFCoord;
-    /// use nalgebra as na;
-    /// let itrf = ITRFCoord::from_vector(&na::Vector3::new(1522386.15660978, -4459627.78585002,  4284030.6890791));
+    /// let v = numeris::Vector3::from_array([1522386.15660978, -4459627.78585002, 4284030.6890791]);
+    /// let itrf = ITRFCoord::from_vector(&v);
     /// ```
     ///
     ///
@@ -241,7 +241,7 @@ impl ITRFCoord {
             anyhow::bail!("Input slice must have 3 elements");
         }
         Ok(Self {
-            itrf: Vector3::from_row_slice(v),
+            itrf: Vector3::from_array([v[0], v[1], v[2]]),
         })
     }
 
@@ -274,7 +274,7 @@ impl ITRFCoord {
         let s = f2 * c;
 
         Self {
-            itrf: Vector3::from([
+            itrf: Vector3::from_array([
                 WGS84_A.mul_add(c, hae) * cosp * cosl,
                 WGS84_A.mul_add(c, hae) * cosp * sinl,
                 WGS84_A.mul_add(s, hae) * sinp,
@@ -575,8 +575,8 @@ impl ITRFCoord {
     #[inline]
     pub fn q_ned2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quaternion::from_axis_angle(&Vector3::z_axis(), lon)
-            * Quaternion::from_axis_angle(&Vector3::y_axis(), -lat - PI / 2.0)
+        Quaternion::rotz(lon)
+            * Quaternion::roty(-lat - PI / 2.0)
     }
 
     /// Convert coordinate to a North-East-Down (NED)
@@ -618,8 +618,8 @@ impl ITRFCoord {
     /// ITRF coordinate frame
     pub fn q_enu2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quaternion::from_axis_angle(&Vector3::z_axis(), lon + PI / 2.0)
-            * Quaternion::from_axis_angle(&Vector3::x_axis(), PI / 2.0 - lat)
+        Quaternion::rotz(lon + PI / 2.0)
+            * Quaternion::rotx(PI / 2.0 - lat)
     }
 
     /// Convert coordinate to a East-North-Up (ENU)
@@ -772,7 +772,7 @@ mod tests {
         assert!(ned[1].abs() < 1.0e-6);
         assert!(((ned[2] + 100.0) / 100.0).abs() < 1.0e-6);
 
-        let dvec = Vector3::from([-100.0, -200.0, 300.0]);
+        let dvec = Vector3::from_array([-100.0, -200.0, 300.0]);
         let itrf3 = itrf2 + itrf2.q_ned2itrf() * dvec;
         let nedvec = itrf3.to_ned(&itrf2);
         let itrf4 = itrf2 + itrf2.q_enu2itrf() * dvec;
@@ -790,19 +790,19 @@ mod tests {
         let itrf1 = ITRFCoord::from_geodetic_deg(lat_deg, lon_deg, hae);
 
         // Go east 10 meters
-        let itrf3 = itrf1 + itrf1.q_enu2itrf() * nalgebra::vector![10.0, 0.0, 0.0];
+        let itrf3 = itrf1 + itrf1.q_enu2itrf() * Vector3::from_array([10.0, 0.0, 0.0]);
         let (lat3, lon3, _h3) = itrf3.to_geodetic_deg();
         assert!(((lat3 - lat_deg) / lat_deg).abs() < 1.0e-6);
         assert!(((lon3 - (lon_deg + 0.000129)) / lon_deg).abs() < 1.0e-6);
 
         // Go north 10 meters
-        let itrf4 = itrf1 + itrf1.q_enu2itrf() * nalgebra::vector![0.0, 10.0, 0.0];
+        let itrf4 = itrf1 + itrf1.q_enu2itrf() * Vector3::from_array([0.0, 10.0, 0.0]);
         let (lat4, lon4, _h4) = itrf4.to_geodetic_deg();
         assert!(((lat4 - (lat_deg + 0.000090)) / lat_deg).abs() < 1.0e-6);
         assert!(((lon4 - lon_deg) / lon_deg).abs() < 1.0e-6);
 
         // Go up 10 meters
-        let itrf5 = itrf1 + itrf1.q_enu2itrf() * nalgebra::vector![0.0, 0.0, 10.0];
+        let itrf5 = itrf1 + itrf1.q_enu2itrf() * Vector3::from_array([0.0, 0.0, 10.0]);
         let (lat5, lon5, h5) = itrf5.to_geodetic_deg();
         assert!(((lat5 - lat_deg) / lat_deg).abs() < 1.0e-6);
         assert!(((lon5 - lon_deg) / lon_deg).abs() < 1.0e-6);

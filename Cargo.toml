@@ -3,7 +3,7 @@ members = [".", "python"]
 
 [package]
 name = "satkit"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
@@ -22,7 +22,7 @@ name = "satkit"
 
 
 [dependencies]
-nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
+numeris = { version = "0.5.5", features = ["serde"] }
 ndarray = "0.17.1"
 cty = "0.2.2"
 num-traits = "0.2.19"

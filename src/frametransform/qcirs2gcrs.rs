@@ -4,7 +4,7 @@ use crate::{TimeLike, TimeScale};
 
 use crate::mathtypes::*;
 
-type Delaunay = nalgebra::SVector<f64, 14>;
+type Delaunay = numeris::Vector<f64, 14>;
 
 use std::f64::consts::PI;
 

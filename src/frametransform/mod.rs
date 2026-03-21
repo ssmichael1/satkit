@@ -41,21 +41,21 @@ pub use qcirs2gcrs::qcirs2gcrs_dxdy;
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_xcoord(theta: f64) -> Quaternion {
-    Quaternion::from_axis_angle(&Vector3::x_axis(), -theta)
+    Quaternion::rotx(-theta)
 }
 
 /// Right-handed rotation of coordinate system about y axis
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_ycoord(theta: f64) -> Quaternion {
-    Quaternion::from_axis_angle(&Vector3::y_axis(), -theta)
+    Quaternion::roty(-theta)
 }
 
 /// Right-handed rotation of coordinate system about z axis
 /// (left-handed rotation of vector)
 #[inline]
 pub(crate) fn qrot_zcoord(theta: f64) -> Quaternion {
-    Quaternion::from_axis_angle(&Vector3::z_axis(), -theta)
+    Quaternion::rotz(-theta)
 }
 
 ///
@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn test_qitrf2gcrf_roundtrip() {
         let tm = Instant::from_datetime(2020, 6, 15, 12, 0, 0.0).unwrap();
-        let v_itrf = Vector3::new(1000.0, 2000.0, 3000.0);
+        let v_itrf = Vector3::from_array([1000.0, 2000.0, 3000.0]);
         let v_gcrf = qitrf2gcrf(&tm) * v_itrf;
         let v_back = qgcrf2itrf(&tm) * v_gcrf;
         assert!((v_back - v_itrf).norm() < 1.0e-12 * v_itrf.norm());
@@ -508,7 +508,7 @@ mod tests {
     #[test]
     fn test_approx_vs_full() {
         let tm = Instant::from_datetime(2010, 3, 15, 6, 0, 0.0).unwrap();
-        let v_itrf = Vector3::new(6378137.0, 0.0, 0.0);
+        let v_itrf = Vector3::from_array([6378137.0, 0.0, 0.0]);
 
         let v_approx = qitrf2gcrf_approx(&tm) * v_itrf;
         let v_full = qitrf2gcrf(&tm) * v_itrf;
@@ -529,7 +529,7 @@ mod tests {
         // Using the same time as test_gcrs2itrf (Vallado Example 3-14)
         let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
         // TEME position from SGP4 output (Vallado example)
-        let pitrf = Vector3::new(-1033.4793830, 7901.2952754, 6380.3565958);
+        let pitrf = Vector3::from_array([-1033.4793830, 7901.2952754, 6380.3565958]);
         // Get GCRF via ITRF path (known good from test_gcrs2itrf)
         let pgcrf_via_itrf = qitrf2gcrf(tm) * pitrf;
         // Get GCRF via TEME path
@@ -547,7 +547,7 @@ mod tests {
         // Input time
         let tm = &Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
         // Input terrestrial location
-        let pitrf = Vector3::new(-1033.4793830, 7901.2952754, 6380.3565958);
+        let pitrf = Vector3::from_array([-1033.4793830, 7901.2952754, 6380.3565958]);
         let t_tt = (tm.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;
         assert!((t_tt - 0.0426236319).abs() < 1.0e-8);
 
