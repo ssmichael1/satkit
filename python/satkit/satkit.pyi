@@ -271,35 +271,18 @@ class TLE:
             Fitted TLE and fitting results in a dictionary
 
         Notes:
+            SGP4 propagator is used to match TLE to the states.
+            Input GCRF states are rotated into TEME frame used by SGP4.
+            First and second derivatives of mean motion are ignored, as they are not used by SGP4.
 
-            - SGP4 propagator is used to match TLE to the states
-            - Input GCRF states are rotated into TEME frame used by SGP4
-            - First and second derivatives of mean motion are ignored, as they are not
-              used by SGP4
-            - Non-linear Levenberg-Marquardt optimization is performed to fit the TLE parameters to the provided states.
-              TLE parameters used in fit include:
-                - Inclination
-                - Eccentricity
-                - Right Ascension of Ascending Node
-                - Argument of Perigee
-                - Mean Anomaly
-                - Mean motion
-                - Drag (bstar)
-            - Rust crate "rmpfit" is used to perform the optimization
-              (https://crates.io/crates/rmpfit)
-            - Results dictionary includes the following keys:
-                - `success` : "mpsuccess" value describing result of minimization
-                - `best_norm`: Final chi-squared value
-                - `orig_norm`: Initial chi-squared value
-                - `n_iter`: Number of iterations performed
-                - `n_fev`: Number of function evaluations performed
-                - `n_par`: Total number of parameters being optimized
-                - `n_free`: Number of free parameters
-                - `n_pegged`: Number of pegged parameters
-                - `n_func`: Number of residuals
-                - `resid`: Final residuals
-                - `xerror`: Final parameter uncertainties (1-sigma)
-                - `covar`: Final parameter covariance matrix
+            Non-linear Levenberg-Marquardt optimization (via the Rust ``rmpfit`` crate)
+            is performed to fit inclination, eccentricity, RAAN, argument of perigee,
+            mean anomaly, mean motion, and drag (bstar) to the provided states.
+
+            The results dictionary includes the following keys:
+            ``success``, ``best_norm``, ``orig_norm``, ``n_iter``, ``n_fev``,
+            ``n_par``, ``n_free``, ``n_pegged``, ``n_func``, ``resid``,
+            ``xerror``, ``covar``.
 
         Example:
             ```python
@@ -1878,11 +1861,20 @@ class quaternion:
         ...
 
     def as_euler(self) -> tuple[float, float, float]:
-        """Return equivalent rotation angle represented as rotation angles: ("roll", "pitch", "yaw") in radians:
+        """Return equivalent rotation as intrinsic ZYX Euler angles (yaw, pitch, roll).
+
+        The decomposition follows the aerospace convention (Tait-Bryan angles):
+        the rotation is equivalent to first rotating by yaw about Z,
+        then pitch about the new Y, then roll about the new X.
 
         Returns:
-            Tuple with 3 elements representing the rotation angles in radians
+            tuple[float, float, float]: ``(roll, pitch, yaw)`` in radians
 
+        Example:
+            ```python
+            q = satkit.quaternion.rotz(0.1) * satkit.quaternion.roty(0.2)
+            roll, pitch, yaw = q.as_euler()
+            ```
         """
         ...
 
