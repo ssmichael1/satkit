@@ -46,16 +46,23 @@ jobs:
           path: astro-data
           key: astro-data-v1
 
+      - name: Install system dependencies for cartopy
+        run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data
+
       - name: Install satkit
         run: pip install -e .
 
       - name: Install docs dependencies
         run: pip install -r docs/requirements.txt
 
+      - name: Generate static plots
+        env:
+          SATKIT_DATA: astro-data
+        run: python docs/examples/gen_plots.py
+
       - name: Build docs
         env:
           SATKIT_DATA: astro-data
-          PLOTLY_RENDERER: notebook
         run: mkdocs build
 
       - name: Upload pages artifact

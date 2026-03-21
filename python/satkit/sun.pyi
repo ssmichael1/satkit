@@ -60,6 +60,33 @@ def pos_gcrf(
     """
     ...
 
+def pos_gcrf(*args, **kwargs):
+    """
+    Sun position in the Geocentric Celestial Reference Frame (GCRF)
+
+    Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated
+    from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
+
+    Args:
+        time (satkit.time): time at which to compute position
+
+    Returns:
+        3-element numpy array representing sun position in GCRF frame
+        at given time.  Units are meters
+
+    Notes:
+        From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+
+    Example:
+        ```python
+        import numpy as np
+        t = satkit.time(2024, 6, 21)
+        sun = satkit.sun.pos_gcrf(t)
+        print(f"Sun distance: {np.linalg.norm(sun)/1e9:.3f} million km")
+        ```
+    """
+    ...
+
 @typing.overload
 def pos_mod(time: satkit.time) -> npt.NDArray[np.float64]:
     """
@@ -95,6 +122,24 @@ def pos_mod(
     Returns:
         npt.NDArray[np.float64]: Nx3 numpy array representing sun position in MOD frame
         at given times.  Units are meters
+
+    Notes:
+        From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+    """
+    ...
+
+def pos_mod(*args, **kwargs):
+    """
+    Sun position in the Mean-of-Date Frame
+
+    Algorithm 29 from Vallado for sun in Mean of Date (MOD)
+
+    Args:
+        time (satkit.time): time at which to compute position
+
+    Returns:
+        3-element numpy array representing sun position in MOD frame
+        at given time.  Units are meters
 
     Notes:
         From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
@@ -150,7 +195,7 @@ def shadowfunc(
         satpos (npt.NDArray[np.float64]): geocentric satellite position, meters
 
     Notes:
-        * See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
+        - See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
 
     Returns:
         float: number in range [0,1] indicating no sun or full sun (no occlusion) hitting satellite

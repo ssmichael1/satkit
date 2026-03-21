@@ -1,27 +1,26 @@
 use super::ierstable::IERSTable;
-use crate::frametransform::{qrot_ycoord, qrot_zcoord};
 use crate::{TimeLike, TimeScale};
 
 use crate::mathtypes::*;
 
-type Delaunay = nalgebra::SVector<f64, 14>;
+type Delaunay = numeris::Vector<f64, 14>;
 
 use std::f64::consts::PI;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 fn table5a_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceCell<IERSTable> = OnceCell::new();
+    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
     INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2a.txt").unwrap())
 }
 
 fn table5b_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceCell<IERSTable> = OnceCell::new();
+    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
     INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2b.txt").unwrap())
 }
 
 fn table5d_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceCell<IERSTable> = OnceCell::new();
+    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
     INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2d.txt").unwrap())
 }
 
@@ -147,11 +146,11 @@ pub fn qcirs2gcrs_dxdy<T: TimeLike>(tm: &T, dxdy: Option<(f64, f64)>) -> Quatern
     // Equations 5.6 & 5.7 of IERS technical note 36
     let e = f64::atan2(y, x);
     let d = f64::asin(f64::sqrt(x.mul_add(x, y * y)));
-    qrot_zcoord(-e) * qrot_ycoord(-d) * qrot_zcoord(e + s)
+    Quaternion::rotz(e) * Quaternion::roty(d) * Quaternion::rotz(-(e + s))
 }
 
 ///
-/// Return quatnerion represention rotation
+/// Return quaternion representing rotation
 /// from the CIRS (Celestial Intermediate Reference System) to the
 /// GCRS (Geocentric Celestial Reference Frame) at given instant
 ///

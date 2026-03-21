@@ -30,3 +30,6 @@ wheel
 
 # MkDocs build output
 site
+
+# Generated doc plots (built by docs/examples/gen_plots.py)
+docs/images/*.svg

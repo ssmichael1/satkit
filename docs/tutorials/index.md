@@ -14,3 +14,9 @@ Interactive Jupyter notebook tutorials demonstrating various features of the `sa
 | [High Precision Propagation](High%20Precision%20Propagation.ipynb) | Numerical orbit propagation with force models |
 | [Orbital Mean-Element Message](Orbital%20Mean-Element%20Message.ipynb) | Working with OMM records |
 | [Optical Observations](Optical%20Observations%20of%20Satellites.ipynb) | Simulating optical satellite observations |
+| [Coordinate Frame Transforms](Coordinate%20Frame%20Transforms.ipynb) | GCRF, ITRF, and TEME rotations with comparison of approximate vs full IAU-2006 |
+| [Keplerian Elements](Keplerian%20Elements.ipynb) | Orbital elements, Cartesian conversion, and two-body vs numerical propagation |
+| [Planetary Ephemerides](Planetary%20Ephemerides.ipynb) | JPL DE440 and low-precision Sun/Moon/planet positions |
+| [Atmospheric Density](Atmospheric%20Density.ipynb) | NRLMSISE-00 density profiles, solar activity effects, and drag |
+| [Covariance Propagation](Covariance%20Propagation.ipynb) | State transition matrix, uncertainty growth, and LVLH frame |
+| [Lambert Targeting](Lambert%20Targeting.ipynb) | Orbit transfer design with delta-v computation and pork-chop plots |

@@ -1212,3 +1212,114 @@ class TestSGP4:
                         assert eflag == sk.sgp4_error.perturb_eccen
                 except RuntimeError:
                     print("Caught runtime error; this is expected in test vectors")
+
+
+class TestLambert:
+    """Tests for the Lambert solver"""
+
+    def test_90deg_transfer(self):
+        """90-degree prograde transfer at constant radius"""
+        r1 = np.array([7000e3, 0, 0])
+        r2 = np.array([0, 7000e3, 0])
+        period = 2 * np.pi * np.sqrt(7000e3**3 / sk.consts.mu_earth)
+        tof = period / 4.0
+
+        sols = sk.lambert(r1, r2, tof)
+        assert len(sols) >= 1
+        v1, v2 = sols[0]
+
+        # Energy conservation
+        e1 = np.dot(v1, v1) / 2 - sk.consts.mu_earth / np.linalg.norm(r1)
+        e2 = np.dot(v2, v2) / 2 - sk.consts.mu_earth / np.linalg.norm(r2)
+        assert e1 == pytest.approx(e2, rel=1e-8)
+
+        # Angular momentum conservation
+        h1 = np.cross(r1, v1)
+        h2 = np.cross(r2, v2)
+        np.testing.assert_allclose(h1, h2, rtol=1e-8)
+
+        # Symmetric transfer: speeds should match
+        assert np.linalg.norm(v1) == pytest.approx(np.linalg.norm(v2), rel=1e-6)
+
+    def test_hohmann(self):
+        """Hohmann (180-degree) transfer between circular orbits"""
+        r1_mag = 7000e3
+        r2_mag = 10000e3
+        r1 = np.array([r1_mag, 0, 0])
+        r2 = np.array([-r2_mag, 0, 0])
+
+        a_t = (r1_mag + r2_mag) / 2
+        tof = np.pi * np.sqrt(a_t**3 / sk.consts.mu_earth)
+
+        sols = sk.lambert(r1, r2, tof)
+        v1, v2 = sols[0]
+
+        # Radial velocity should be ~0 for Hohmann
+        assert abs(v1[0]) < 10.0
+        # Tangential velocity should be positive (prograde)
+        assert v1[1] > 0
+
+        # Energy conservation
+        e1 = np.dot(v1, v1) / 2 - sk.consts.mu_earth / r1_mag
+        e2 = np.dot(v2, v2) / 2 - sk.consts.mu_earth / r2_mag
+        assert e1 == pytest.approx(e2, rel=1e-8)
+
+    def test_retrograde(self):
+        """Retrograde transfer"""
+        r1 = np.array([7000e3, 0, 0])
+        r2 = np.array([0, 7000e3, 0])
+        period = 2 * np.pi * np.sqrt(7000e3**3 / sk.consts.mu_earth)
+        tof = period * 0.75
+
+        sols = sk.lambert(r1, r2, tof, prograde=False)
+        assert len(sols) >= 1
+        v1, v2 = sols[0]
+
+        e1 = np.dot(v1, v1) / 2 - sk.consts.mu_earth / np.linalg.norm(r1)
+        e2 = np.dot(v2, v2) / 2 - sk.consts.mu_earth / np.linalg.norm(r2)
+        assert e1 == pytest.approx(e2, rel=1e-8)
+
+    def test_inclined(self):
+        """Transfer with inclination change"""
+        r1 = np.array([7000e3, 0, 0])
+        r2 = np.array([0, 5000e3, 5000e3])
+        tof = 3600.0
+
+        sols = sk.lambert(r1, r2, tof)
+        v1, v2 = sols[0]
+
+        e1 = np.dot(v1, v1) / 2 - sk.consts.mu_earth / np.linalg.norm(r1)
+        e2 = np.dot(v2, v2) / 2 - sk.consts.mu_earth / np.linalg.norm(r2)
+        assert e1 == pytest.approx(e2, rel=1e-8)
+
+        h1 = np.cross(r1, v1)
+        h2 = np.cross(r2, v2)
+        np.testing.assert_allclose(h1, h2, rtol=1e-8)
+
+    def test_custom_mu(self):
+        """Lambert with custom gravitational parameter (e.g. Sun)"""
+        mu_sun = sk.consts.mu_sun
+        r1 = np.array([1.496e11, 0, 0])  # ~1 AU
+        r2 = np.array([0, 2.279e11, 0])  # ~Mars orbit
+        tof = 200 * 86400  # 200 days
+
+        sols = sk.lambert(r1, r2, tof, mu=mu_sun)
+        v1, v2 = sols[0]
+
+        e1 = np.dot(v1, v1) / 2 - mu_sun / np.linalg.norm(r1)
+        e2 = np.dot(v2, v2) / 2 - mu_sun / np.linalg.norm(r2)
+        assert e1 == pytest.approx(e2, rel=1e-8)
+
+    def test_invalid_inputs(self):
+        """Invalid inputs should raise ValueError"""
+        r1 = np.array([7000e3, 0, 0])
+        r2 = np.array([0, 7000e3, 0])
+
+        with pytest.raises(ValueError):
+            sk.lambert(r1, r2, -1.0)  # negative TOF
+
+        with pytest.raises(ValueError):
+            sk.lambert(r1, r2, 3600.0, mu=-1.0)  # negative mu
+
+        with pytest.raises(ValueError):
+            sk.lambert(np.array([0.0, 0.0, 0.0]), r2, 3600.0)  # zero position

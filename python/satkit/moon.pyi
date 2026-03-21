@@ -90,6 +90,33 @@ def pos_gcrf(
     """
     ...
 
+def pos_gcrf(*args, **kwargs):
+    """
+    Approximate Moon position in the GCRF Frame
+
+    From Vallado Algorithm 31
+
+    Args:
+        time (satkit.time): time at which to compute position
+
+    Returns:
+        3-element numpy array representing moon position in GCRF frame
+        at given time.  Units are meters
+
+    Notes:
+        Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
+        and 1275 km in range
+
+    Example:
+        ```python
+        import numpy as np
+        t = satkit.time(2024, 1, 1)
+        moon = satkit.moon.pos_gcrf(t)
+        print(f"Moon distance: {np.linalg.norm(moon)/1e3:.0f} km")
+        ```
+    """
+    ...
+
 def illumination(
     time: satkit.time | npt.ArrayLike | list[satkit.time],
 ) -> npt.NDArray[np.float64] | float:

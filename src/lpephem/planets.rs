@@ -457,10 +457,10 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
     // Get heliocentric coordinates in orbital plane
     let xprime = a * (enrad.cos() - eccen);
     let yprime = a * eccen.mul_add(-eccen, 1.0).sqrt() * enrad.sin();
-    let rprime = Vector3::new(xprime, yprime, 0.0);
-    let recl = Quaternion::from_axis_angle(&Vector3::z_axis(), Omega.to_radians())
-        * Quaternion::from_axis_angle(&Vector3::x_axis(), incl.to_radians())
-        * Quaternion::from_axis_angle(&Vector3::z_axis(), w.to_radians())
+    let rprime = numeris::vector![xprime, yprime, 0.0];
+    let recl = Quaternion::rotz(Omega.to_radians())
+        * Quaternion::rotx(incl.to_radians())
+        * Quaternion::rotz(w.to_radians())
         * rprime;
 
     // Rotate to the equatorial plane
@@ -478,7 +478,7 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
         )
         .to_radians();
 
-    Ok(Quaternion::from_axis_angle(&Vector3::x_axis(), obliquity) * recl * crate::consts::AU)
+    Ok(Quaternion::rotx(obliquity) * recl * crate::consts::AU)
 }
 
 #[cfg(test)]

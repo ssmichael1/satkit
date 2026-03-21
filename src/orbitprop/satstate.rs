@@ -1,13 +1,13 @@
-use nalgebra as na;
-
 use crate::orbitprop;
 use crate::orbitprop::PropSettings;
 use crate::Instant;
 use crate::TimeLike;
 
+use crate::mathtypes::*;
+
 use anyhow::Result;
 
-type PVCovType = na::SMatrix<f64, 6, 6>;
+type PVCovType = Matrix<6, 6>;
 
 #[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -36,25 +36,25 @@ pub enum StateCov {
 #[derive(Clone, Debug)]
 pub struct SatState {
     pub time: Instant,
-    pub pv: na::Vector6<f64>,
+    pub pv: Vector6,
     pub cov: StateCov,
 }
 
 impl SatState {
-    pub fn from_pv<T: TimeLike>(time: &T, pos: &na::Vector3<f64>, vel: &na::Vector3<f64>) -> Self {
+    pub fn from_pv<T: TimeLike>(time: &T, pos: &Vector3, vel: &Vector3) -> Self {
         Self {
             time: time.as_instant(),
-            pv: na::vector![pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]],
+            pv: numeris::vector![pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]],
             cov: StateCov::None,
         }
     }
 
-    pub fn pos_gcrf(&self) -> na::Vector3<f64> {
-        self.pv.fixed_view::<3, 1>(0, 0).into()
+    pub fn pos_gcrf(&self) -> Vector3 {
+        self.pv.block::<3, 1>(0, 0)
     }
 
-    pub fn vel_gcrf(&self) -> na::Vector3<f64> {
-        self.pv.fixed_view::<3, 1>(3, 0).into()
+    pub fn vel_gcrf(&self) -> Vector3 {
+        self.pv.block::<3, 1>(3, 0)
     }
 
     /// Set covariance
@@ -76,14 +76,16 @@ impl SatState {
     ///       z axis = -r (nadir)
     ///       y axis = -h (h = p cross v)
     ///       x axis such that x cross y = z
-    pub fn qgcrf2lvlh(&self) -> na::UnitQuaternion<f64> {
-        type Quat = na::UnitQuaternion<f64>;
-
+    pub fn qgcrf2lvlh(&self) -> Quaternion {
         let p = self.pos_gcrf();
         let v = self.vel_gcrf();
         let h = p.cross(&v);
-        let q1 = Quat::rotation_between(&(-1.0 * p), &na::Vector3::z_axis()).unwrap();
-        let q2 = Quat::rotation_between(&(-1.0 * (q1 * h)), &na::Vector3::y_axis()).unwrap();
+        let neg_p = p * -1.0;
+        let neg_h_dir = numeris::vector![0.0, 0.0, 1.0];
+        let q1 = Quaternion::rotation_between(neg_p, neg_h_dir);
+        let rotated_h = q1 * (h * -1.0);
+        let y_axis = numeris::vector![0.0, 1.0, 0.0];
+        let q2 = Quaternion::rotation_between(rotated_h, y_axis);
         q2 * q1
     }
 
@@ -98,15 +100,16 @@ impl SatState {
     ///
     /// * `sigma_lvlh` - 3-vector with 1-sigma position uncertainty in LVLH frame
     ///
-    pub fn set_lvlh_pos_uncertainty(&mut self, sigma_lvlh: &na::Vector3<f64>) {
+    pub fn set_lvlh_pos_uncertainty(&mut self, sigma_lvlh: &Vector3) {
         let dcm = self.qgcrf2lvlh().to_rotation_matrix();
 
-        let mut pcov = na::Matrix3::<f64>::zeros();
-        pcov.set_diagonal(&sigma_lvlh.map(|x| x * x));
+        let mut pcov = Matrix3::zeros();
+        pcov[(0, 0)] = sigma_lvlh[0] * sigma_lvlh[0];
+        pcov[(1, 1)] = sigma_lvlh[1] * sigma_lvlh[1];
+        pcov[(2, 2)] = sigma_lvlh[2] * sigma_lvlh[2];
 
-        let mut m = na::Matrix6::<f64>::zeros();
-        m.fixed_view_mut::<3, 3>(0, 0)
-            .copy_from(&(dcm.transpose() * pcov * dcm));
+        let mut m = Matrix6::zeros();
+        m.set_block(0, 0, &(dcm.transpose() * pcov * dcm));
         self.cov = StateCov::PVCov(m);
     }
 
@@ -117,15 +120,16 @@ impl SatState {
     ///
     /// * `sigma_lvlh` - 3-vector with 1-sigma velocity uncertainty in LVLH frame
     ///
-    pub fn set_lvlh_vel_uncertainty(&mut self, sigma_lvlh: &na::Vector3<f64>) {
+    pub fn set_lvlh_vel_uncertainty(&mut self, sigma_lvlh: &Vector3) {
         let dcm = self.qgcrf2lvlh().to_rotation_matrix();
 
-        let mut pcov = na::Matrix3::<f64>::zeros();
-        pcov.set_diagonal(&sigma_lvlh.map(|x| x * x));
+        let mut pcov = Matrix3::zeros();
+        pcov[(0, 0)] = sigma_lvlh[0] * sigma_lvlh[0];
+        pcov[(1, 1)] = sigma_lvlh[1] * sigma_lvlh[1];
+        pcov[(2, 2)] = sigma_lvlh[2] * sigma_lvlh[2];
 
-        let mut m = na::Matrix6::<f64>::zeros();
-        m.fixed_view_mut::<3, 3>(3, 3)
-            .copy_from(&(dcm.transpose() * pcov * dcm));
+        let mut m = Matrix6::zeros();
+        m.set_block(3, 3, &(dcm.transpose() * pcov * dcm));
         self.cov = StateCov::PVCov(m);
     }
 
@@ -136,16 +140,14 @@ impl SatState {
     ///
     /// * `sigma_gcrf` - 3-vector with 1-sigma position uncertainty in GCRF frame
     ///
-    pub fn set_gcrf_pos_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
+    pub fn set_gcrf_pos_uncertainty(&mut self, sigma_cart: &Vector3) {
         self.cov = StateCov::PVCov({
             let mut m = PVCovType::zeros();
-            let mut diag = na::Vector3::<f64>::zeros();
-            diag[0] = sigma_cart[0] * sigma_cart[0];
-            diag[1] = sigma_cart[1] * sigma_cart[1];
-            diag[2] = sigma_cart[2] * sigma_cart[2];
-            let mut pcov = na::Matrix3::<f64>::zeros();
-            pcov.set_diagonal(&diag);
-            m.fixed_view_mut::<3, 3>(0, 0).copy_from(&pcov);
+            let mut pcov = Matrix3::zeros();
+            pcov[(0, 0)] = sigma_cart[0] * sigma_cart[0];
+            pcov[(1, 1)] = sigma_cart[1] * sigma_cart[1];
+            pcov[(2, 2)] = sigma_cart[2] * sigma_cart[2];
+            m.set_block(0, 0, &pcov);
             m
         })
     }
@@ -157,16 +159,14 @@ impl SatState {
     ///
     /// * `sigma_gcrf` - 3-vector with 1-sigma velocity uncertainty in GCRF frame
     ///
-    pub fn set_gcrf_vel_uncertainty(&mut self, sigma_cart: &na::Vector3<f64>) {
+    pub fn set_gcrf_vel_uncertainty(&mut self, sigma_cart: &Vector3) {
         self.cov = StateCov::PVCov({
             let mut m = PVCovType::zeros();
-            let mut diag = na::Vector3::<f64>::zeros();
-            diag[0] = sigma_cart[0] * sigma_cart[0];
-            diag[1] = sigma_cart[1] * sigma_cart[1];
-            diag[2] = sigma_cart[2] * sigma_cart[2];
-            let mut pcov = na::Matrix3::<f64>::zeros();
-            pcov.set_diagonal(&diag);
-            m.fixed_view_mut::<3, 3>(3, 3).copy_from(&pcov);
+            let mut pcov = Matrix3::zeros();
+            pcov[(0, 0)] = sigma_cart[0] * sigma_cart[0];
+            pcov[(1, 1)] = sigma_cart[1] * sigma_cart[1];
+            pcov[(2, 2)] = sigma_cart[2] * sigma_cart[2];
+            m.set_block(3, 3, &pcov);
             m
         })
     }
@@ -210,27 +210,25 @@ impl SatState {
             }
             // Compute state transition matrix & propagate covariance as well
             StateCov::PVCov(cov) => {
-                let mut state = na::SMatrix::<f64, 6, 7>::zeros();
+                let mut state = Matrix::<6, 7>::zeros();
 
                 // First row of state is 6-element position & velocity
-                state.fixed_view_mut::<6, 1>(0, 0).copy_from(&self.pv);
+                state.set_block(0, 0, &self.pv);
 
                 // See equation 7.42 of Montenbruck & Gill
                 // State transition matrix initializes to identity matrix
                 // State transition matrix is columns 1-7 of state (0-based)
-                state
-                    .fixed_view_mut::<6, 6>(0, 1)
-                    .copy_from(&na::Matrix6::<f64>::identity());
+                state.set_block(0, 1, &Matrix6::eye());
 
                 // Propagate
                 let res = orbitprop::propagate(&state, &self.time, &time, settings, None)?;
 
                 Ok(Self {
                     time,
-                    pv: res.state_end.fixed_view::<6, 1>(0, 0).into(),
+                    pv: res.state_end.block::<6, 1>(0, 0),
                     cov: {
                         // Extract state transition matrix from the propagated state
-                        let phi = res.state_end.fixed_view::<6, 6>(0, 1);
+                        let phi = res.state_end.block::<6, 6>(0, 1);
                         // Evolve the covariance
                         StateCov::PVCov(phi * cov * phi.transpose())
                     },
@@ -251,11 +249,11 @@ impl std::fmt::Display for SatState {
         );
         match self.cov {
             StateCov::None => {}
-            StateCov::PVCov(cov) => {
+            StateCov::PVCov(ref cov) => {
                 s1.push_str(
                     format!(
                         r#"
-            Covariance: {cov:+8.2e}"#
+            Covariance: {cov:?}"#
                     )
                     .as_str(),
                 );
@@ -269,27 +267,29 @@ impl std::fmt::Display for SatState {
 mod test {
     use super::*;
     use crate::consts;
-    use approx::{assert_abs_diff_eq, assert_relative_eq};
 
     #[test]
     fn test_qgcrf2lvlh() -> Result<()> {
         let satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &na::vector![consts::GEO_R, 0.0, 0.0],
-            &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
 
         let state2 =
             satstate.propagate(&(satstate.time + crate::Duration::from_hours(3.56)), None)?;
 
-        let rz = -1.0 / state2.pos_gcrf().norm() * (state2.qgcrf2lvlh() * state2.pos_gcrf());
+        let rz = (state2.qgcrf2lvlh() * state2.pos_gcrf()) * (-1.0 / state2.pos_gcrf().norm());
         let h = state2.pos_gcrf().cross(&state2.vel_gcrf());
-        let ry = -1.0 / h.norm() * (state2.qgcrf2lvlh() * h);
-        let rx = 1.0 / state2.vel_gcrf().norm() * (state2.qgcrf2lvlh() * state2.vel_gcrf());
+        let ry = (state2.qgcrf2lvlh() * h) * (-1.0 / h.norm());
+        let rx = (state2.qgcrf2lvlh() * state2.vel_gcrf()) * (1.0 / state2.vel_gcrf().norm());
 
-        assert_relative_eq!(rz, na::Vector3::z_axis(), epsilon = 1.0e-6);
-        assert_relative_eq!(ry, na::Vector3::y_axis(), epsilon = 1.0e-6);
-        assert_relative_eq!(rx, na::Vector3::x_axis(), epsilon = 1.0e-4);
+        let z_axis = numeris::vector![0.0, 0.0, 1.0];
+        let y_axis = numeris::vector![0.0, 1.0, 0.0];
+        let x_axis = numeris::vector![1.0, 0.0, 0.0];
+        assert!((rz - z_axis).norm() < 1.0e-6);
+        assert!((ry - y_axis).norm() < 1.0e-6);
+        assert!((rx - x_axis).norm() < 1.0e-4);
 
         Ok(())
     }
@@ -298,11 +298,11 @@ mod test {
     fn test_satstate() -> Result<()> {
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &na::vector![consts::GEO_R, 0.0, 0.0],
-            &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
-        satstate.set_lvlh_vel_uncertainty(&na::vector![0.01, 0.02, 0.03]);
+        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
+        satstate.set_lvlh_vel_uncertainty(&numeris::vector![0.01, 0.02, 0.03]);
 
         let state2 =
             satstate.propagate(&(satstate.time + crate::Duration::from_days(0.5)), None)?;
@@ -311,8 +311,8 @@ mod test {
         let state0 = state2.propagate(&satstate.time, None)?;
 
         // Check that propagating backwards in time results in the original state
-        assert_abs_diff_eq!(satstate.pos_gcrf(), state0.pos_gcrf(), epsilon = 0.1);
-        assert_abs_diff_eq!(satstate.vel_gcrf(), state0.vel_gcrf(), epsilon = 0.001);
+        assert!((satstate.pos_gcrf() - state0.pos_gcrf()).norm() < 0.1);
+        assert!((satstate.vel_gcrf() - state0.vel_gcrf()).norm() < 0.001);
         let cov1 = match satstate.cov() {
             StateCov::PVCov(v) => v,
             StateCov::None => anyhow::bail!("cov is not none"),
@@ -321,7 +321,7 @@ mod test {
             StateCov::PVCov(v) => v,
             StateCov::None => anyhow::bail!("cov is not none"),
         };
-        assert_abs_diff_eq!(cov1, cov2, epsilon = 0.001);
+        assert!((cov1 - cov2).norm_inf() < 0.001);
 
         Ok(())
     }
@@ -330,10 +330,10 @@ mod test {
     fn test_satcov() -> Result<()> {
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &na::vector![consts::GEO_R, 0.0, 0.0],
-            &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
+        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
 
         let _state2 =
             satstate.propagate(&(satstate.time + crate::Duration::from_days(1.0)), None)?;
@@ -346,16 +346,16 @@ mod test {
         // Test that propagating with dt=0 returns the same state
         let satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &na::vector![consts::GEO_R, 0.0, 0.0],
-            &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
 
         // Propagate to the same time (zero duration)
         let state2 = satstate.propagate(&satstate.time, None)?;
 
         // Verify the state is unchanged
-        assert_abs_diff_eq!(satstate.pos_gcrf(), state2.pos_gcrf(), epsilon = 1e-15);
-        assert_abs_diff_eq!(satstate.vel_gcrf(), state2.vel_gcrf(), epsilon = 1e-15);
+        assert!((satstate.pos_gcrf() - state2.pos_gcrf()).norm() < 1e-15);
+        assert!((satstate.vel_gcrf() - state2.vel_gcrf()).norm() < 1e-15);
         assert_eq!(satstate.time, state2.time);
 
         Ok(())
@@ -366,17 +366,17 @@ mod test {
         // Test that propagating with dt=0 returns the same state including covariance
         let mut satstate = SatState::from_pv(
             &Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap(),
-            &na::vector![consts::GEO_R, 0.0, 0.0],
-            &na::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
+            &numeris::vector![consts::GEO_R, 0.0, 0.0],
+            &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&na::vector![1.0, 1.0, 1.0]);
+        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
 
         // Propagate to the same time (zero duration)
         let state2 = satstate.propagate(&satstate.time, None)?;
 
         // Verify the state is unchanged
-        assert_abs_diff_eq!(satstate.pos_gcrf(), state2.pos_gcrf(), epsilon = 1e-15);
-        assert_abs_diff_eq!(satstate.vel_gcrf(), state2.vel_gcrf(), epsilon = 1e-15);
+        assert!((satstate.pos_gcrf() - state2.pos_gcrf()).norm() < 1e-15);
+        assert!((satstate.vel_gcrf() - state2.vel_gcrf()).norm() < 1e-15);
 
         // Verify covariance is unchanged
         let cov1 = match satstate.cov() {
@@ -387,7 +387,7 @@ mod test {
             StateCov::PVCov(v) => v,
             StateCov::None => anyhow::bail!("cov is not none"),
         };
-        assert_abs_diff_eq!(cov1, cov2, epsilon = 1e-15);
+        assert!((cov1 - cov2).norm_inf() < 1e-15);
 
         Ok(())
     }

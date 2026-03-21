@@ -4,18 +4,17 @@ use crate::Instant;
 
 use crate::mathtypes::*;
 
-const OMEGA_EARTH: Vector3 = nalgebra::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
-const OMEGA_EARTH_MATRIX: Matrix3 = Matrix3::new(
-    0.0,
-    -crate::consts::OMEGA_EARTH,
-    0.0,
-    crate::consts::OMEGA_EARTH,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-);
+fn omega_earth() -> Vector3 {
+    numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH]
+}
+
+fn omega_earth_matrix() -> Matrix3 {
+    Matrix3::new([
+        [0.0, -crate::consts::OMEGA_EARTH, 0.0],
+        [crate::consts::OMEGA_EARTH, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+    ])
+}
 
 // Compute and return force from drag in the gcrf frame
 pub fn drag_force(
@@ -41,7 +40,7 @@ pub fn drag_force(
     // to get velocity relative to wind in gcrf frame
     // This is a little confusing, but if you think about it long enough
     // it will make sense
-    let vrel = vel_gcrf - OMEGA_EARTH.cross(pos_gcrf);
+    let vrel = vel_gcrf - omega_earth().cross(pos_gcrf);
 
     -0.5 * cd_a_over_m * density * vrel * vrel.norm()
 }
@@ -83,7 +82,7 @@ fn compute_rho_drhodr(
 
     // Geodetic "up" direction in ITRF: NED down is [0,0,1], so up is [0,0,-1]
     // rotated to ITRF via q_ned2itrf
-    let up_itrf = itrf.q_ned2itrf() * nalgebra::vector![0.0, 0.0, -1.0];
+    let up_itrf = itrf.q_ned2itrf() * numeris::vector![0.0, 0.0, -1.0];
 
     // Rotate to GCRF and scale by dρ/dh
     let up_gcrf = qgcrf2itrf.conjugate() * up_itrf;
@@ -109,7 +108,7 @@ pub fn drag_and_partials(
     // to get velocity relative to wind in gcrf frame
     // This is a little confusing, but if you think about it long enough
     // it will make sense
-    let vrel = vel_gcrf - OMEGA_EARTH.cross(pos_gcrf);
+    let vrel = vel_gcrf - omega_earth().cross(pos_gcrf);
     let vrel_norm = vrel.norm();
 
     let drag_accel_gcrf = -0.5 * cd_a_over_m * density * vrel * vrel_norm;
@@ -120,13 +119,13 @@ pub fn drag_and_partials(
     let dacceldv = -0.5
         * cd_a_over_m
         * density
-        * (vrel * vrel.transpose() / vrel_norm + vrel_norm * Matrix3::identity());
+        * (vrel * vrel.transpose() / vrel_norm + vrel_norm * Matrix3::eye());
 
     // ∂a/∂r has two terms:
     //   1) from ρ(r):    -0.5 * CdA/m * v_rel * |v_rel| * (∂ρ/∂r)^T
     //   2) from v_rel(r): (∂a/∂v) * (∂v_rel/∂r) = (∂a/∂v) * (-[ω×])
     let dacceldr = -0.5 * cd_a_over_m * vrel * vrel_norm * drhodr.transpose()
-        - dacceldv * OMEGA_EARTH_MATRIX;
+        - dacceldv * omega_earth_matrix();
 
     (drag_accel_gcrf, dacceldr, dacceldv)
 }
@@ -140,16 +139,16 @@ mod tests {
         // Circular prograde orbit at ~400 km altitude
         let r = 6778.0e3; // Earth radius + 400 km
         let v_circ = (crate::consts::MU_EARTH / r).sqrt();
-        let pos_gcrf = Vector3::new(r, 0.0, 0.0);
+        let pos_gcrf = numeris::vector![r, 0.0, 0.0];
         let pos_itrf = pos_gcrf; // Approximate: ignore frame rotation for this test
-        let vel_gcrf = Vector3::new(0.0, v_circ, 0.0); // prograde
+        let vel_gcrf = numeris::vector![0.0, v_circ, 0.0]; // prograde
         let time = Instant::from_datetime(2020, 1, 1, 0, 0, 0.0).unwrap();
         let cd_a_over_m = 0.01; // typical value
 
         let drag = drag_force(&pos_gcrf, &pos_itrf, &vel_gcrf, &time, cd_a_over_m, false);
 
         // Drag should oppose relative velocity direction
-        let vrel = vel_gcrf - OMEGA_EARTH.cross(&pos_gcrf);
+        let vrel = vel_gcrf - omega_earth().cross(&pos_gcrf);
         let drag_dot_vrel = drag.dot(&vrel);
         assert!(
             drag_dot_vrel < 0.0,
@@ -163,7 +162,7 @@ mod tests {
             &pos_gcrf, &pos_itrf, &vel_gcrf, &time,
             cd_a_over_m * 2.0, false,
         );
-        approx::assert_relative_eq!(drag2.norm(), drag.norm() * 2.0, max_relative = 1.0e-10);
+        assert!((drag2.norm() - drag.norm() * 2.0).abs() < 1.0e-10 * drag.norm());
     }
 
     #[test]
@@ -171,9 +170,9 @@ mod tests {
         // At 2000 km altitude, atmospheric density should be negligible
         let r = 8378.0e3; // Earth radius + 2000 km
         let v_circ = (crate::consts::MU_EARTH / r).sqrt();
-        let pos_gcrf = Vector3::new(r, 0.0, 0.0);
+        let pos_gcrf = numeris::vector![r, 0.0, 0.0];
         let pos_itrf = pos_gcrf;
-        let vel_gcrf = Vector3::new(0.0, v_circ, 0.0);
+        let vel_gcrf = numeris::vector![0.0, v_circ, 0.0];
         let time = Instant::from_datetime(2020, 1, 1, 0, 0, 0.0).unwrap();
 
         let drag = drag_force(&pos_gcrf, &pos_itrf, &vel_gcrf, &time, 0.01, false);

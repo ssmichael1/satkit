@@ -37,15 +37,15 @@ impl PySatState {
 
         let mut state = SatState::from_pv(
             &time.0,
-            &nalgebra::vector![
+            &numeris::vector![
                 pos.get_owned(0).unwrap(),
                 pos.get_owned(1).unwrap(),
-                pos.get_owned(2).unwrap()
+                pos.get_owned(2).unwrap(),
             ],
-            &nalgebra::vector![
+            &numeris::vector![
                 vel.get_owned(0).unwrap(),
                 vel.get_owned(1).unwrap(),
-                vel.get_owned(2).unwrap()
+                vel.get_owned(2).unwrap(),
             ],
         );
 
@@ -54,7 +54,7 @@ impl PySatState {
             if dims[0] != 6 || dims[1] != 6 {
                 bail!("Covariance must be 6x6 numpy array");
             }
-            let nacov = Matrix6::from_row_slice(unsafe { cov.as_slice().unwrap() });
+            let nacov = Matrix6::from_slice(unsafe { cov.as_slice().unwrap() }).transpose();
             state.set_cov(StateCov::PVCov(nacov));
         }
 
@@ -77,7 +77,7 @@ impl PySatState {
                 "Position uncertainty must be 1-d numpy array with length 3",
             ));
         }
-        let na_sigma_pvh = Vector3::from_row_slice(unsafe { sigma_pvh.as_slice().unwrap() });
+        let na_sigma_pvh = Vector3::from_slice(unsafe { sigma_pvh.as_slice().unwrap() });
 
         self.0.set_lvlh_pos_uncertainty(&na_sigma_pvh);
         Ok(())
@@ -97,7 +97,7 @@ impl PySatState {
         if sigma_cart.len() != 3 {
             bail!("Position uncertainty must be 1-d numpy array with length 3");
         }
-        let na_sigma_cart = Vector3::from_row_slice(unsafe { sigma_cart.as_slice().unwrap() });
+        let na_sigma_cart = Vector3::from_slice(unsafe { sigma_cart.as_slice().unwrap() });
 
         self.0.set_gcrf_pos_uncertainty(&na_sigma_cart);
         Ok(())
@@ -117,7 +117,7 @@ impl PySatState {
                 "Covariance must be 6x6 numpy array",
             ));
         }
-        let na_cov = Matrix6::from_row_slice(unsafe { cov.as_slice().unwrap() });
+        let na_cov = Matrix6::from_slice(unsafe { cov.as_slice().unwrap() }).transpose();
         self.0.cov = StateCov::PVCov(na_cov);
         Ok(())
     }
@@ -130,7 +130,7 @@ impl PySatState {
     #[getter]
     fn get_pos_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
+            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[0..3])
                 .into_py_any(py)
                 .unwrap()
         })
@@ -139,7 +139,7 @@ impl PySatState {
     #[getter]
     fn get_vel_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
+            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[3..6])
                 .into_py_any(py)
                 .unwrap()
         })
@@ -188,7 +188,7 @@ impl PySatState {
     #[getter]
     fn get_pos(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(0, 0).as_slice())
+            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[0..3])
                 .into_py_any(py)
                 .unwrap()
         })
@@ -196,7 +196,7 @@ impl PySatState {
     #[getter]
     fn get_vel(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, self.0.pv.fixed_view::<3, 1>(3, 0).as_slice())
+            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[3..6])
                 .into_py_any(py)
                 .unwrap()
         })
@@ -280,13 +280,13 @@ impl PySatState {
             satkit::TimeScale::TAI,
         );
 
-        let pv = Vector6::from_row_slice(unsafe {
+        let pv = Vector6::from_slice(unsafe {
             std::slice::from_raw_parts(state[8..56].as_ptr() as *const f64, 6)
         });
         self.0.time = time;
         self.0.pv = pv;
         if state.len() >= 92 {
-            let cov = Matrix6::from_row_slice(unsafe {
+            let cov = Matrix6::from_slice(unsafe {
                 std::slice::from_raw_parts(state[56..].as_ptr() as *const f64, 36)
             });
             self.0.cov = StateCov::PVCov(cov);
@@ -310,14 +310,14 @@ impl PySatState {
         );
         unsafe {
             buffer[8..56].clone_from_slice(std::slice::from_raw_parts(
-                self.0.pv.as_ptr() as *const u8,
+                self.0.pv.as_slice().as_ptr() as *const u8,
                 48,
             ));
         }
         if let StateCov::PVCov(cov) = self.0.cov {
             unsafe {
                 buffer[56..].clone_from_slice(std::slice::from_raw_parts(
-                    cov.as_ptr() as *const u8,
+                    cov.as_slice().as_ptr() as *const u8,
                     36 * 8,
                 ));
             }

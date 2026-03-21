@@ -66,12 +66,10 @@ impl IERSTable {
                         if table.data[tnum as usize].ncols() < 17 {
                             anyhow::bail!("Error parsing file {}, table not initialized", fname);
                         }
-                        table.data[tnum as usize].set_row(
-                            rowcnt,
-                            &nalgebra::SMatrix::<f64, 1, 17>::from_iterator(
-                                tline.split_whitespace().map(|x| x.parse().unwrap()),
-                            ),
-                        );
+                        let vals: Vec<f64> = tline.split_whitespace().map(|x| x.parse().unwrap()).collect();
+                        for (c, &val) in vals.iter().enumerate() {
+                            table.data[tnum as usize][(rowcnt, c)] = val;
+                        }
                         rowcnt += 1;
                     }
                 }
@@ -81,7 +79,7 @@ impl IERSTable {
         Ok(table)
     }
 
-    pub fn compute(&self, t_tt: f64, delaunay: &nalgebra::SVector<f64, 14>) -> f64 {
+    pub fn compute(&self, t_tt: f64, delaunay: &numeris::Vector<f64, 14>) -> f64 {
         let mut retval: f64 = 0.0;
         for i in 0..6 {
             // return if finished

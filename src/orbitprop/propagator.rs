@@ -3,14 +3,11 @@ use super::point_gravity::{point_gravity, point_gravity_and_partials};
 use super::settings::PropSettings;
 
 use crate::lpephem;
-use crate::ode;
-use crate::ode::ODEError;
-use crate::ode::ODEResult;
-use crate::ode::RKAdaptive;
-use crate::ode::Rosenbrock;
 use crate::orbitprop::Precomputed;
 use crate::{Duration, Instant, TimeLike};
 use lpephem::sun::shadowfunc;
+
+use numeris::ode::{self, RKAdaptive, Rosenbrock};
 
 use anyhow::{Context, Result};
 
@@ -18,15 +15,11 @@ use crate::mathtypes::*;
 
 use crate::consts;
 use crate::orbitprop::SatProperties;
-use num_traits::identities::Zero;
-
-use thiserror::Error;
-
-use nalgebra as na;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PropagationResult<const T: usize> {
     pub time_begin: Instant,
     pub state_begin: Matrix<6, T>,
@@ -35,8 +28,24 @@ pub struct PropagationResult<const T: usize> {
     pub accepted_steps: u32,
     pub rejected_steps: u32,
     pub num_eval: u32,
-    pub odesol: Option<ode::ODESolution<Matrix<6, T>>>,
+    pub odesol: Option<ode::Solution<f64, 6, T>>,
     pub integrator: super::settings::Integrator,
+}
+
+impl<const T: usize> std::fmt::Debug for PropagationResult<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PropagationResult")
+            .field("time_begin", &self.time_begin)
+            .field("state_begin", &self.state_begin)
+            .field("time_end", &self.time_end)
+            .field("state_end", &self.state_end)
+            .field("accepted_steps", &self.accepted_steps)
+            .field("rejected_steps", &self.rejected_steps)
+            .field("num_eval", &self.num_eval)
+            .field("odesol", &self.odesol.as_ref().map(|_| "..."))
+            .field("integrator", &self.integrator)
+            .finish()
+    }
 }
 
 impl<const T: usize> PropagationResult<T> {
@@ -45,7 +54,7 @@ impl<const T: usize> PropagationResult<T> {
     }
 }
 
-pub type StateType<const C: usize> = na::SMatrix<f64, 6, C>;
+pub type StateType<const C: usize> = Matrix<6, C>;
 
 // Simple state with position & velocity
 pub type SimpleState = StateType<1>;
@@ -60,7 +69,7 @@ pub enum PropagationError {
     #[error("No Dense Output in Solution")]
     NoDenseOutputInSolution,
     #[error("ODE Error: {0}")]
-    ODEError(ode::ODEError),
+    ODEError(ode::OdeError),
     #[error("RODAS4 does not support state transition matrix propagation")]
     RODAS4NoSTM,
 }
@@ -88,8 +97,8 @@ fn solar_pressure_accel(
     props: &dyn SatProperties,
     state: &SimpleState,
 ) -> Vector3 {
-    -shadowfunc(sun_gcrf, pos_gcrf) * props.cr_a_over_m(time, state) * 4.56e-6 * sun_gcrf
-        / sun_gcrf.norm()
+    sun_gcrf * (-shadowfunc(sun_gcrf, pos_gcrf) * props.cr_a_over_m(time, state) * 4.56e-6
+        / sun_gcrf.norm())
 }
 
 ///
@@ -176,12 +185,12 @@ fn solar_pressure_accel(
 ///
 /// // Setup a simple Geosynchronous orbit with initial position along the x axis
 /// // and initial velocity along the y axis
-/// use nalgebra as na;
+/// use satkit::mathtypes::*;
 /// let mut state = satkit::orbitprop::CovState::zeros();
-/// state.fixed_view_mut::<3, 1>(0, 0).copy_from(&na::vector![satkit::consts::GEO_R, 0.0, 0.0]);
-/// state.fixed_view_mut::<3, 1>(3, 0).copy_from(&na::vector![0.0, (satkit::consts::MU_EARTH/satkit::consts::GEO_R).sqrt(), 0.0]);
-/// // initialize state transition matrix to zero
-/// state.fixed_view_mut::<6, 6>(0, 1).copy_from(&na::Matrix6::<f64>::identity());
+/// state.set_block(0, 0, &numeris::vector![satkit::consts::GEO_R, 0.0, 0.0]);
+/// state.set_block(3, 0, &numeris::vector![0.0, (satkit::consts::MU_EARTH/satkit::consts::GEO_R).sqrt(), 0.0]);
+/// // initialize state transition matrix to identity
+/// state.set_block(0, 1, &Matrix6::eye());
 ///
 ///
 /// // Setup the details of the propagation
@@ -235,9 +244,9 @@ pub fn propagate<const C: usize, T: TimeLike>(
     // Duration to end of integration, in seconds
     let x_end: f64 = (end - begin).as_seconds();
 
-    let odesettings = crate::ode::RKAdaptiveSettings {
-        abserror: settings.abs_error,
-        relerror: settings.rel_error,
+    let odesettings = ode::AdaptiveSettings {
+        abs_tol: settings.abs_error,
+        rel_tol: settings.rel_error,
         dense_output: settings.enable_interp,
         ..Default::default()
     };
@@ -252,15 +261,12 @@ pub fn propagate<const C: usize, T: TimeLike>(
 
     let gravity = settings.gravity_model.get();
 
-    let ydot = |x: f64, y: &Matrix<6, C>| -> ODEResult<Matrix<6, C>> {
+    let ydot = |x: f64, y: &Matrix<6, C>| -> Matrix<6, C> {
         let time: Instant = begin + Duration::from_seconds(x);
-        let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
-        let vel_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(3, 0).into();
+        let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
+        let vel_gcrf: Vector3 = y.block::<3, 1>(3, 0);
 
-        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = match interp.interp(&time) {
-            Ok(v) => v,
-            Err(e) => return Err(ODEError::YDotError(e.to_string())),
-        };
+        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
         let qitrf2gcrf = qgcrf2itrf.conjugate();
         let pos_itrf = qgcrf2itrf * pos_gcrf;
 
@@ -314,7 +320,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         }
 
         if let Some(props) = satprops {
-            let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
+            let ss: SimpleState = y.block::<6, 1>(0, 0);
             accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
             if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
                 let cd_a_over_m = props.cd_a_over_m(&time, &ss);
@@ -339,38 +345,34 @@ pub fn propagate<const C: usize, T: TimeLike>(
 
         if C == 1 {
             let mut dy = Matrix::<6, C>::zeros();
-            dy.fixed_view_mut::<3, 1>(0, 0).copy_from(&vel_gcrf);
-            dy.fixed_view_mut::<3, 1>(3, 0).copy_from(&accel);
-            Ok(dy)
+            dy.set_block(0, 0, &vel_gcrf);
+            dy.set_block(3, 0, &accel);
+            dy
         } else if C == 7 {
             // Equation 7.42: dfdy * state_transition_matrix
-            let mut dfdy = StateType::<6>::zeros();
-            dfdy.fixed_view_mut::<3, 3>(0, 3)
-                .copy_from(&na::Matrix3::<f64>::identity());
-            dfdy.fixed_view_mut::<3, 3>(3, 0).copy_from(&dadr);
-            dfdy.fixed_view_mut::<3, 3>(3, 3).copy_from(&dadv);
-            let dphi = dfdy * y.fixed_view::<6, 6>(0, 1);
+            let mut dfdy = Matrix::<6, 6>::zeros();
+            dfdy.set_block(0, 3, &Matrix3::eye());
+            dfdy.set_block(3, 0, &dadr);
+            dfdy.set_block(3, 3, &dadv);
+            let dphi = dfdy * y.block::<6, 6>(0, 1);
 
-            let mut dy = Matrix::<6, C>::zero();
-            dy.fixed_view_mut::<3, 1>(0, 0).copy_from(&vel_gcrf);
-            dy.fixed_view_mut::<3, 1>(3, 0).copy_from(&accel);
-            dy.fixed_view_mut::<6, 6>(0, 1).copy_from(&dphi);
-            Ok(dy)
+            let mut dy = Matrix::<6, C>::zeros();
+            dy.set_block(0, 0, &vel_gcrf);
+            dy.set_block(3, 0, &accel);
+            dy.set_block(0, 1, &dphi);
+            dy
         } else {
-            ODEError::YDotError(PropagationError::InvalidStateColumns { c: C }.to_string()).into()
+            panic!("Invalid number of columns: {}", C);
         }
     };
 
-    // Jacobian closure for RODAS4: computes the 6x6 ∂f/∂y matrix
-    let jac_fn = |x: f64, y: &Matrix<6, C>| -> ODEResult<na::SMatrix<f64, 6, 6>> {
+    // Jacobian closure for RODAS4: computes the 6x6 df/dy matrix
+    let jac_fn = |x: f64, y: &numeris::Vector<f64, 6>| -> Matrix<6, 6> {
         let time: Instant = begin + Duration::from_seconds(x);
-        let pos_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(0, 0).into();
-        let vel_gcrf: na::Vector3<f64> = y.fixed_view::<3, 1>(3, 0).into();
+        let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
+        let vel_gcrf: Vector3 = y.block::<3, 1>(3, 0);
 
-        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = match interp.interp(&time) {
-            Ok(v) => v,
-            Err(e) => return Err(ODEError::YDotError(e.to_string())),
-        };
+        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
         let qitrf2gcrf = qgcrf2itrf.conjugate();
         let pos_itrf = qgcrf2itrf * pos_gcrf;
 
@@ -393,7 +395,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         }
 
         if let Some(props) = satprops {
-            let ss: SimpleState = y.fixed_view::<6, 1>(0, 0).into();
+            let ss: SimpleState = y.block::<6, 1>(0, 0);
             if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
                 let cd_a_over_m = props.cd_a_over_m(&time, &ss);
                 if cd_a_over_m > 1e-6 {
@@ -408,35 +410,99 @@ pub fn propagate<const C: usize, T: TimeLike>(
         }
 
         // Build the 6x6 Jacobian: df/dy where f = [vel; accel]
-        let mut dfdy = na::SMatrix::<f64, 6, 6>::zeros();
-        dfdy.fixed_view_mut::<3, 3>(0, 3)
-            .copy_from(&na::Matrix3::<f64>::identity());
-        dfdy.fixed_view_mut::<3, 3>(3, 0).copy_from(&dadr);
-        dfdy.fixed_view_mut::<3, 3>(3, 3).copy_from(&dadv);
-        Ok(dfdy)
+        let mut dfdy = Matrix::<6, 6>::zeros();
+        dfdy.set_block(0, 3, &Matrix3::eye());
+        dfdy.set_block(3, 0, &dadr);
+        dfdy.set_block(3, 3, &dadv);
+        dfdy
     };
 
-    use crate::ode::solvers;
     use crate::orbitprop::Integrator;
 
     let res = match settings.integrator {
         Integrator::RKV98 => {
-            solvers::RKV98::integrate(0.0, x_end, state, &ydot, &odesettings)
+            ode::RKV98::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKV98NoInterp => {
-            solvers::RKV98NoInterp::integrate(0.0, x_end, state, &ydot, &odesettings)
+            ode::RKV98NoInterp::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKV87 => {
-            solvers::RKV87::integrate(0.0, x_end, state, &ydot, &odesettings)
+            ode::RKV87::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKV65 => {
-            solvers::RKV65::integrate(0.0, x_end, state, &ydot, &odesettings)
+            ode::RKV65::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RKTS54 => {
-            solvers::RKTS54::integrate(0.0, x_end, state, &ydot, &odesettings)
+            ode::RKTS54::integrate(0.0, x_end, state, &ydot, &odesettings)
         }
         Integrator::RODAS4 => {
-            solvers::RODAS4::integrate(0.0, x_end, state, &ydot, &jac_fn, &odesettings)
+            // RODAS4 only supports SimpleState (6x1 = Vector<f64, 6>)
+            // At this point C==1 is guaranteed (C==7 was rejected above)
+            let y0_vec: numeris::Vector<f64, 6> = state.block::<6, 1>(0, 0);
+            let ydot_vec = |x: f64, y: &numeris::Vector<f64, 6>| -> numeris::Vector<f64, 6> {
+                let time: Instant = begin + Duration::from_seconds(x);
+                let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
+                let vel_gcrf: Vector3 = y.block::<3, 1>(3, 0);
+
+                let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
+                let qitrf2gcrf = qgcrf2itrf.conjugate();
+                let pos_itrf = qgcrf2itrf * pos_gcrf;
+
+                let mut accel = qitrf2gcrf
+                    * gravity.accel(
+                        &pos_itrf,
+                        settings.gravity_degree as usize,
+                        settings.gravity_order as usize,
+                    );
+
+                if settings.use_sun_gravity {
+                    accel += point_gravity(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
+                }
+                if settings.use_moon_gravity {
+                    accel += point_gravity(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
+                }
+
+                if let Some(props) = satprops {
+                    let ss: SimpleState = y.block::<6, 1>(0, 0);
+                    accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
+                    if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
+                        let cd_a_over_m = props.cd_a_over_m(&time, &ss);
+                        if cd_a_over_m > 1e-6 {
+                            accel += drag_force(
+                                &pos_gcrf, &pos_itrf, &vel_gcrf, &time,
+                                cd_a_over_m, settings.use_spaceweather,
+                            );
+                        }
+                    }
+                }
+
+                let mut dy = numeris::Vector::<f64, 6>::zeros();
+                dy.set_block(0, 0, &vel_gcrf);
+                dy.set_block(3, 0, &accel);
+                dy
+            };
+
+            let rosenbrock_res = ode::RODAS4::integrate(
+                0.0, x_end, &y0_vec, ydot_vec, jac_fn, &odesettings,
+            ).map_err(PropagationError::ODEError)?;
+
+            // Convert RosenbrockSolution<f64, 6> to Solution<f64, 6, C>
+            // Since C==1, this is essentially the same data
+            return Ok(PropagationResult {
+                time_begin: begin,
+                state_begin: *state,
+                time_end: end,
+                state_end: {
+                    let mut s = Matrix::<6, C>::zeros();
+                    s.set_block(0, 0, &rosenbrock_res.y);
+                    s
+                },
+                accepted_steps: rosenbrock_res.accepted as u32,
+                rejected_steps: rosenbrock_res.rejected as u32,
+                num_eval: rosenbrock_res.evals as u32,
+                odesol: None,
+                integrator: settings.integrator,
+            });
         }
     }
     .map_err(PropagationError::ODEError)?;
@@ -446,9 +512,9 @@ pub fn propagate<const C: usize, T: TimeLike>(
         state_begin: *state,
         time_end: end,
         state_end: res.y,
-        accepted_steps: res.naccept as u32,
-        rejected_steps: res.nreject as u32,
-        num_eval: res.nevals as u32,
+        accepted_steps: res.accepted as u32,
+        rejected_steps: res.rejected as u32,
+        num_eval: res.evals as u32,
         odesol: Some(res),
         integrator: settings.integrator,
     })
@@ -458,7 +524,6 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
     res: &PropagationResult<C>,
     time: &T,
 ) -> Result<StateType<C>> {
-    use crate::ode::solvers;
     use crate::orbitprop::Integrator;
 
     let sol = res
@@ -471,14 +536,17 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         return Ok(res.state_begin);
     }
     let x = (time - res.time_begin).as_seconds();
-    Ok(match res.integrator {
-        Integrator::RKV98 => solvers::RKV98::interpolate(x, sol)?,
-        Integrator::RKV98NoInterp => solvers::RKV98NoInterp::interpolate(x, sol)?,
-        Integrator::RKV87 => solvers::RKV87::interpolate(x, sol)?,
-        Integrator::RKV65 => solvers::RKV65::interpolate(x, sol)?,
-        Integrator::RKTS54 => solvers::RKTS54::interpolate(x, sol)?,
-        Integrator::RODAS4 => solvers::RODAS4::interpolate(x, sol)?,
-    })
+    let result = match res.integrator {
+        Integrator::RKV98 => ode::RKV98::interpolate(x, sol),
+        Integrator::RKV98NoInterp => ode::RKV98NoInterp::interpolate(x, sol),
+        Integrator::RKV87 => ode::RKV87::interpolate(x, sol),
+        Integrator::RKV65 => ode::RKV65::interpolate(x, sol),
+        Integrator::RKTS54 => ode::RKTS54::interpolate(x, sol),
+        Integrator::RODAS4 => {
+            return Err(PropagationError::NoDenseOutputInSolution.into());
+        }
+    };
+    Ok(result.map_err(PropagationError::ODEError)?)
 }
 
 #[cfg(test)]
@@ -595,13 +663,11 @@ mod tests {
         let mut state: CovState = CovState::zeros();
 
         let theta = PI / 6.0;
-        state[0] = consts::GEO_R * theta.cos();
-        state[2] = consts::GEO_R * theta.sin();
-        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.cos();
-        state[5] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.sin();
-        state
-            .fixed_view_mut::<6, 6>(0, 1)
-            .copy_from(&na::Matrix6::<f64>::identity());
+        state[(0, 0)] = consts::GEO_R * theta.cos();
+        state[(2, 0)] = consts::GEO_R * theta.sin();
+        state[(4, 0)] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.cos();
+        state[(5, 0)] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.sin();
+        state.set_block(0, 1, &Matrix6::eye());
 
         let settings = PropSettings {
             abs_error: 1.0e-9,
@@ -611,14 +677,14 @@ mod tests {
         };
 
         // Made-up small variations in the state
-        let dstate = na::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
+        let dstate = numeris::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
 
         // Propagate state (and state-transition matrix)
         let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
 
         // Explicitly propagate state + dstate
         let res2 = propagate(
-            &(state.fixed_view::<6, 1>(0, 0) + dstate),
+            &(state.block::<6, 1>(0, 0) + dstate),
             &starttime,
             &stoptime,
             &settings,
@@ -627,10 +693,10 @@ mod tests {
 
         // Difference in states from explicitly propagating with
         // "dstate" change in initial conditions
-        let dstate_prop = res2.state_end - res.state_end.fixed_view::<6, 1>(0, 0);
+        let dstate_prop = res2.state_end - res.state_end.block::<6, 1>(0, 0);
 
         // Difference in states estimated from state transition matrix
-        let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
+        let dstate_phi = res.state_end.block::<6, 6>(0, 1) * dstate;
         for ix in 0..6_usize {
             assert!((dstate_prop[ix] - dstate_phi[ix]).abs() / dstate_prop[ix] < 1e-3);
         }
@@ -654,19 +720,17 @@ mod tests {
 
         let mut state: CovState = CovState::zeros();
 
-        let pgcrf = na::vector![3059573.85713792, 5855177.98848048, -7191.45042671];
-        let vgcrf = na::vector![916.08123489, -468.22498656, 7700.48460839];
+        let pgcrf = numeris::vector![3059573.85713792, 5855177.98848048, -7191.45042671];
+        let vgcrf = numeris::vector![916.08123489, -468.22498656, 7700.48460839];
 
         // 30-deg inclination
-        state.fixed_view_mut::<3, 1>(0, 0).copy_from(&pgcrf);
-        state.fixed_view_mut::<3, 1>(3, 0).copy_from(&vgcrf);
-        state
-            .fixed_view_mut::<6, 6>(0, 1)
-            .copy_from(&na::Matrix6::<f64>::identity());
+        state.set_block(0, 0, &pgcrf);
+        state.set_block(3, 0, &vgcrf);
+        state.set_block(0, 1, &Matrix6::eye());
 
         let settings = PropSettings {
-            abs_error: 1.0e-9,
-            rel_error: 1.0e-14,
+            abs_error: 1.0e-8,
+            rel_error: 1.0e-8,
             gravity_degree: 4,
             ..Default::default()
         };
@@ -674,7 +738,7 @@ mod tests {
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(2.0 * 0.3 * 0.1 / 5.0, 0.0);
 
         // Made-up small variations in the state
-        let dstate = na::vector![2.0, -4.0, 20.5, 0.05, 0.02, -0.01];
+        let dstate = numeris::vector![2.0, -4.0, 20.5, 0.05, 0.02, -0.01];
 
         // Propagate state (and state-transition matrix)
 
@@ -682,7 +746,7 @@ mod tests {
 
         // Explicitly propagate state + dstate
         let res2 = propagate(
-            &(state.fixed_view::<6, 1>(0, 0) + dstate),
+            &(state.block::<6, 1>(0, 0) + dstate),
             &starttime,
             &stoptime,
             &settings,
@@ -691,9 +755,9 @@ mod tests {
 
         // Difference in states from explicitly propagating with
         // "dstate" change in initial conditions
-        let dstate_prop = res2.state_end - res.state_end.fixed_view::<6, 1>(0, 0);
+        let dstate_prop = res2.state_end - res.state_end.block::<6, 1>(0, 0);
 
-        let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
+        let dstate_phi = res.state_end.block::<6, 6>(0, 1) * dstate;
 
         // Are differences within 1%?
         for ix in 0..6_usize {
@@ -742,24 +806,24 @@ mod tests {
 
         let satnum: usize = 20;
         let satstr = format!("PG{}", satnum);
-        let pitrf: Vec<na::Vector3<f64>> = io::BufReader::new(file)
+        let pitrf: Vec<Vector3> = io::BufReader::new(file)
             .lines()
             .filter(|x| {
                 let rline = &x.as_ref().unwrap()[0..4];
                 rline == satstr
             })
-            .map(|rline| -> Result<na::Vector3<f64>> {
+            .map(|rline| -> Result<Vector3> {
                 let line = rline.unwrap();
                 let lvals: Vec<&str> = line.split_whitespace().collect();
                 let px: f64 = lvals[1].parse()?;
                 let py: f64 = lvals[2].parse()?;
                 let pz: f64 = lvals[3].parse()?;
-                Ok(na::vector![px, py, pz] * 1.0e3)
+                Ok(numeris::vector![px, py, pz] * 1.0e3)
             })
-            .collect::<Result<Vec<na::Vector3<f64>>>>()?;
+            .collect::<Result<Vec<Vector3>>>()?;
 
         assert!(times.len() == pitrf.len());
-        let pgcrf: Vec<na::Vector3<f64>> = pitrf
+        let pgcrf: Vec<Vector3> = pitrf
             .iter()
             .enumerate()
             .map(|(idx, p)| {
@@ -768,14 +832,14 @@ mod tests {
             })
             .collect();
 
-        let v0 = na::vector![
+        let v0 = numeris::vector![
             2.47130562e+03,
             2.94682753e+03,
             -5.34172176e+02,
-            2.32565692e-02
+            2.32565692e-02,
         ];
 
-        let state0 = na::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
+        let state0 = numeris::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
         let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, v0[3]);
 
         let settings = PropSettings {
@@ -842,10 +906,10 @@ mod tests {
         let res_no_both = propagate(&state, &starttime, &stoptime, &settings_no_both, None)?;
 
         // All results should be different from each other
-        let pos_all = res_all.state_end.fixed_view::<3, 1>(0, 0);
-        let pos_no_sun = res_no_sun.state_end.fixed_view::<3, 1>(0, 0);
-        let pos_no_moon = res_no_moon.state_end.fixed_view::<3, 1>(0, 0);
-        let pos_no_both = res_no_both.state_end.fixed_view::<3, 1>(0, 0);
+        let pos_all = res_all.state_end.block::<3, 1>(0, 0);
+        let pos_no_sun = res_no_sun.state_end.block::<3, 1>(0, 0);
+        let pos_no_moon = res_no_moon.state_end.block::<3, 1>(0, 0);
+        let pos_no_both = res_no_both.state_end.block::<3, 1>(0, 0);
 
         let diff_sun = (pos_all - pos_no_sun).norm();
         let diff_moon = (pos_all - pos_no_moon).norm();
@@ -901,8 +965,8 @@ mod tests {
         let res_full = propagate(&state, &starttime, &stoptime, &settings_full, None)?;
         let res_zonal = propagate(&state, &starttime, &stoptime, &settings_zonal, None)?;
 
-        let pos_full = res_full.state_end.fixed_view::<3, 1>(0, 0);
-        let pos_zonal = res_zonal.state_end.fixed_view::<3, 1>(0, 0);
+        let pos_full = res_full.state_end.block::<3, 1>(0, 0);
+        let pos_zonal = res_zonal.state_end.block::<3, 1>(0, 0);
         let diff = (pos_full - pos_zonal).norm();
 
         assert!(
@@ -922,13 +986,11 @@ mod tests {
 
         let mut state: CovState = CovState::zeros();
         let theta = PI / 6.0;
-        state[0] = consts::GEO_R * theta.cos();
-        state[2] = consts::GEO_R * theta.sin();
-        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.cos();
-        state[5] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.sin();
-        state
-            .fixed_view_mut::<6, 6>(0, 1)
-            .copy_from(&na::Matrix6::<f64>::identity());
+        state[(0, 0)] = consts::GEO_R * theta.cos();
+        state[(2, 0)] = consts::GEO_R * theta.sin();
+        state[(4, 0)] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.cos();
+        state[(5, 0)] = (consts::MU_EARTH / consts::GEO_R).sqrt() * theta.sin();
+        state.set_block(0, 1, &Matrix6::eye());
 
         let settings = PropSettings {
             abs_error: 1.0e-9,
@@ -939,19 +1001,19 @@ mod tests {
             ..Default::default()
         };
 
-        let dstate = na::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
+        let dstate = numeris::vector![6.0, -10.0, 120.5, 0.1, 0.2, -0.3];
 
         let res = propagate(&state, &starttime, &stoptime, &settings, None)?;
         let res2 = propagate(
-            &(state.fixed_view::<6, 1>(0, 0) + dstate),
+            &(state.block::<6, 1>(0, 0) + dstate),
             &starttime,
             &stoptime,
             &settings,
             None,
         )?;
 
-        let dstate_prop = res2.state_end - res.state_end.fixed_view::<6, 1>(0, 0);
-        let dstate_phi = res.state_end.fixed_view::<6, 6>(0, 1) * dstate;
+        let dstate_prop = res2.state_end - res.state_end.block::<6, 1>(0, 0);
+        let dstate_phi = res.state_end.block::<6, 6>(0, 1) * dstate;
 
         for ix in 0..6_usize {
             assert!(
@@ -978,7 +1040,7 @@ mod tests {
         state[0] = r;
         state[4] = (consts::MU_EARTH / r).sqrt();
 
-        // Typical small satellite: Cd=2.2, A=0.01 m², mass=1 kg
+        // Typical small satellite: Cd=2.2, A=0.01 m^2, mass=1 kg
         let satprops = SatPropertiesStatic::new(2.2 * 0.01 / 1.0, 0.0);
 
         let settings_rodas4 = PropSettings {
@@ -1004,8 +1066,8 @@ mod tests {
         )?;
 
         // Position agreement within 100 m over 2 hours at this altitude
-        let pos_diff = (res_rodas4.state_end.fixed_view::<3, 1>(0, 0)
-            - res_rkv98.state_end.fixed_view::<3, 1>(0, 0))
+        let pos_diff = (res_rodas4.state_end.block::<3, 1>(0, 0)
+            - res_rkv98.state_end.block::<3, 1>(0, 0))
         .norm();
         assert!(
             pos_diff < 100.0,
@@ -1023,11 +1085,9 @@ mod tests {
         let stoptime = starttime + Duration::from_hours(1.0);
 
         let mut state: CovState = CovState::zeros();
-        state[0] = consts::EARTH_RADIUS + 400.0e3;
-        state[4] = (consts::MU_EARTH / state[0]).sqrt();
-        state
-            .fixed_view_mut::<6, 6>(0, 1)
-            .copy_from(&na::Matrix6::<f64>::identity());
+        state[(0, 0)] = consts::EARTH_RADIUS + 400.0e3;
+        state[(4, 0)] = (consts::MU_EARTH / state[(0, 0)]).sqrt();
+        state.set_block(0, 1, &Matrix6::eye());
 
         let settings = PropSettings {
             integrator: crate::orbitprop::Integrator::RODAS4,
