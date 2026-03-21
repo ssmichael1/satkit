@@ -22,7 +22,7 @@ name = "satkit"
 
 
 [dependencies]
-numeris = { version = "0.5.6", features = ["serde", "estimate"] }
+numeris = { version = "0.5.6", features = ["serde", "estimate", "ode"] }
 num-traits = "0.2.19"
 thiserror = "2.0"
 ureq = "3.1.2"
