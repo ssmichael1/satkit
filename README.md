@@ -18,6 +18,9 @@ Satkit is a high-performance orbital mechanics library written in Rust with comp
 
 **[Documentation and tutorials](https://satkit.dev/)** (Python examples, but the concepts and API apply equally to Rust) | **[Rust API reference](https://docs.rs/satkit/)**
 
+> [!NOTE]
+> **Version 0.14.1** replaces `nalgebra` with [`numeris`](https://crates.io/crates/numeris) for all linear algebra (matrices, quaternions, ODE solvers). `numeris` is a standalone, `no_std`-compatible library that unifies these in a single crate, making them available to projects beyond satkit. Performance is equivalent, and all tests pass with matching residuals. If your code uses `nalgebra` types, enable the `nalgebra` feature on `numeris` for zero-cost conversions. Please open an issue if you hit any problems.
+
 ## Installation
 
 **Rust:**
