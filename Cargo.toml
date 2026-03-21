@@ -38,7 +38,6 @@ rmpfit = "0.3.0"
 chrono = { version = "0.4", optional = true }
 
 [build-dependencies]
-cc = { version = "1.2", features = ["parallel"] }
 chrono = "0.4"
 
 [dev-dependencies]
