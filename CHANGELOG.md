@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 0.14.3 - 2026-03-25
+
+### Performance
+
+- **Binary search interpolation**: Replace linear scan with `partition_point` for dense output step lookup (O(log n) vs O(n))
+- **Batch interpolation**: Add `interp_batch` method to `PropagationResult` — single-pass walk over sorted query times (O(n+m) vs O(m log n))
+- **Vectorized Python interp**: `result.interp(time_list)` now returns an Nx6 numpy array in one FFI round-trip instead of N individual calls (~4x speedup at 10k points)
+- Requires numeris 0.5.7 (`interpolate_batch` support)
+
 ## 0.14.2 - 2026-03-25
 
 ### Bug Fixes
