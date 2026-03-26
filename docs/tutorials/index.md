@@ -20,3 +20,6 @@ Interactive Jupyter notebook tutorials demonstrating various features of the `sa
 | [Atmospheric Density](Atmospheric%20Density.ipynb) | NRLMSISE-00 density profiles, solar activity effects, and drag |
 | [Covariance Propagation](Covariance%20Propagation.ipynb) | State transition matrix, uncertainty growth, and LVLH frame |
 | [Lambert Targeting](Lambert%20Targeting.ipynb) | Orbit transfer design with delta-v computation and pork-chop plots |
+| [Time Systems](Time%20Systems.ipynb) | UTC, TAI, TT, TDB, UT1, GPS conversions and why they matter |
+| [Quaternions](Quaternions.ipynb) | Constructing, composing, and interpolating 3D rotations |
+| [SGP4 vs Numerical Propagation](SGP4%20vs%20Numerical%20Propagation.ipynb) | Comparing analytical and numerical orbit propagation |

@@ -1878,6 +1878,7 @@ class quaternion:
         """
         ...
 
+    @property
     def angle(self) -> float:
         """Return the angle in radians of the rotation
 
@@ -1886,6 +1887,7 @@ class quaternion:
         """
         ...
 
+    @property
     def axis(self) -> npt.NDArray[np.float64]:
         """Return the axis of rotation as a unit vector
 

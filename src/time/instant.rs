@@ -133,7 +133,7 @@ impl Instant {
     ///
     pub fn from_gps_week_and_second(week: i32, sow: f64) -> Self {
         let week = week as i64;
-        let raw = week * 14_515_200_000_000 + (sow * 1.0e6) as i64 + Self::GPS_EPOCH.raw;
+        let raw = week * 604_800_000_000 + (sow * 1.0e6) as i64 + Self::GPS_EPOCH.raw;
         Self { raw }
     }
 
@@ -176,7 +176,7 @@ impl Instant {
     /// J2000 epoch is 2000-01-01 12:00:00 TT
     /// TT (Terrestrial Time) is 32.184 seconds ahead of TAI
     pub const J2000: Self = Self {
-        raw: 946728064184000,
+        raw: 946727967816000,
     };
 
     /// Unix epoch is 1970-01-01 00:00:00 UTC
@@ -317,18 +317,14 @@ impl Instant {
                 Self::from_mjd_with_scale(mjd - dut1 / 86_400.0, TimeScale::UTC)
             }
             TimeScale::GPS => {
-                if mjd >= 44244.0 {
-                    let raw = (mjd * 86_400_000_000.0) as i64 + Self::GPS_EPOCH.raw + 19_000_000;
-                    Self { raw }
-                } else {
-                    let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
-                    Self { raw }
-                }
+                // GPS = TAI - 19 seconds
+                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw + 19_000_000;
+                Self { raw }
             }
             TimeScale::Invalid => Self::INVALID,
             TimeScale::TDB => {
-                let ttc: f64 = (mjd - (2451545.0 - 2400000.4)) / 36525.0;
-                let mjd = (0.01657f64 / 86400.0f64).mul_add(
+                let ttc: f64 = (mjd - (2451545.0 - 2400000.5)) / 36525.0;
+                let mjd = (0.001657f64 / 86400.0f64).mul_add(
                     -(std::f64::consts::PI / 180.0 * 628.3076f64.mul_add(ttc, 6.2401)).sin(),
                     mjd,
                 ) - 32.184 / 86400.0;
@@ -418,15 +414,12 @@ impl Instant {
             }
             TimeScale::TAI => (self.raw - Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0,
             TimeScale::GPS => {
-                if self > &Self::GPS_EPOCH {
-                    (self.raw - Self::GPS_EPOCH.raw - 19_000_000) as f64 / 86_400_000_000.0
-                } else {
-                    (self.raw - Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0
-                }
+                // GPS = TAI - 19 seconds
+                (self.raw - Self::MJD_EPOCH.raw - 19_000_000) as f64 / 86_400_000_000.0
             }
             TimeScale::TDB => {
                 let tt: f64 = self.as_mjd_with_scale(TimeScale::TT);
-                let ttc: f64 = (tt - (2451545.0f64 - 2400000.4f64)) / 36525.0;
+                let ttc: f64 = (tt - (2451545.0f64 - 2400000.5f64)) / 36525.0;
                 (0.001657f64 / 86400.0f64).mul_add(
                     (std::f64::consts::PI / 180.0 * 628.3076f64.mul_add(ttc, 6.2401)).sin(),
                     tt,

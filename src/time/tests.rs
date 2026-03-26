@@ -7,10 +7,10 @@ fn test_j2000() {
     assert!(g.0 == 2000);
     assert!(g.1 == 1);
     assert!(g.2 == 1);
-    assert!(g.3 == 12);
-    assert!(g.4 == 0);
-    // J2000 is TT time, which is 32.184 seconds
-    assert!((g.5 - 32.184).abs() < 1.0e-7);
+    assert!(g.3 == 11);
+    assert!(g.4 == 58);
+    // J2000 is 2000-01-01 12:00:00 TT = 11:58:55.816 UTC
+    assert!((g.5 - 55.816).abs() < 1.0e-7);
 }
 
 #[test]
@@ -276,4 +276,108 @@ fn test_strptime() {
     assert!(g.3 == 22);
     assert!(g.4 == 27);
     assert!(g.5 == 19.0);
+}
+
+#[test]
+fn test_from_gps_week_and_second() {
+    // GPS epoch: January 6, 1980 00:00:00 UTC
+    let gps_epoch = Instant::from_gps_week_and_second(0, 0.0);
+    let g = gps_epoch.as_datetime();
+    assert_eq!(g.0, 1980);
+    assert_eq!(g.1, 1);
+    assert_eq!(g.2, 6);
+    assert_eq!(g.3, 0);
+    assert_eq!(g.4, 0);
+    assert!((g.5 - 0.0).abs() < 1.0e-6);
+
+    // Week 1 should be 7 days later: January 13, 1980
+    let week1 = Instant::from_gps_week_and_second(1, 0.0);
+    let g = week1.as_datetime();
+    assert_eq!(g.0, 1980);
+    assert_eq!(g.1, 1);
+    assert_eq!(g.2, 13);
+
+    // Difference between week 0 and week 1 should be exactly 7 days
+    let diff = week1 - gps_epoch;
+    assert!((diff.as_seconds() - 604800.0).abs() < 1.0e-6);
+
+    // Week 0, second 86400 should be January 7, 1980
+    let day2 = Instant::from_gps_week_and_second(0, 86400.0);
+    let g = day2.as_datetime();
+    assert_eq!(g.0, 1980);
+    assert_eq!(g.1, 1);
+    assert_eq!(g.2, 7);
+
+    // Verify consistency: from_gps_week_and_second(0, N) should equal
+    // GPS epoch + N seconds
+    let gps_epoch = Instant::from_gps_week_and_second(0, 0.0);
+    let t_100k = Instant::from_gps_week_and_second(0, 100000.0);
+    assert!((t_100k - gps_epoch).as_seconds() - 100000.0 < 1.0e-6);
+
+    // Week 2, second 43200 = 14 days + 12 hours from GPS epoch
+    let t_2w = Instant::from_gps_week_and_second(2, 43200.0);
+    let expected_seconds = 2.0 * 604800.0 + 43200.0;
+    assert!((t_2w - gps_epoch).as_seconds() - expected_seconds < 1.0e-6);
+
+    // GPS MJD at GPS epoch should be 44244.0 (same as UTC MJD at that time)
+    let gps_mjd = gps_epoch.as_mjd_with_scale(crate::TimeScale::GPS);
+    assert!(
+        (gps_mjd - 44244.0).abs() < 1.0e-6,
+        "GPS MJD at GPS epoch: expected 44244.0, got {}",
+        gps_mjd
+    );
+
+    // GPS MJD round-trip: from_mjd(GPS) -> as_mjd(GPS) should be identity
+    let t = Instant::from_mjd_with_scale(60000.0, crate::TimeScale::GPS);
+    let mjd_back = t.as_mjd_with_scale(crate::TimeScale::GPS);
+    assert!(
+        (mjd_back - 60000.0).abs() < 1.0e-6,
+        "GPS MJD round-trip: expected 60000.0, got {}",
+        mjd_back
+    );
+
+    // GPS MJD should differ from UTC MJD by accumulated leap seconds
+    // At a modern time, TAI-UTC = 37s, so GPS-UTC = 37-19 = 18s
+    let t_modern = Instant::from_datetime(2024, 6, 15, 12, 0, 0.0).unwrap();
+    let utc_mjd = t_modern.as_mjd_with_scale(crate::TimeScale::UTC);
+    let gps_mjd = t_modern.as_mjd_with_scale(crate::TimeScale::GPS);
+    let diff_seconds = (gps_mjd - utc_mjd) * 86400.0;
+    assert!(
+        (diff_seconds - 18.0).abs() < 1.0e-3,
+        "GPS-UTC offset: expected 18s, got {}s",
+        diff_seconds
+    );
+}
+
+#[test]
+fn test_rfc3339_with_timezone_offset() {
+    // UTC (Z suffix)
+    let t_z = Instant::from_rfc3339("2024-01-01T12:00:00Z").unwrap();
+    let g = t_z.as_datetime();
+    assert_eq!(g.0, 2024);
+    assert_eq!(g.3, 12);
+
+    // +00:00 should be same as Z
+    let t_plus0 = Instant::from_rfc3339("2024-01-01T12:00:00+00:00").unwrap();
+    assert!((t_z - t_plus0).as_seconds().abs() < 1.0e-6);
+
+    // -05:00 means local time is 5 hours behind UTC
+    // So 00:00:00-05:00 = 05:00:00 UTC
+    let t_minus5 = Instant::from_rfc3339("2024-01-01T00:00:00-05:00").unwrap();
+    let g = t_minus5.as_datetime();
+    assert_eq!(g.3, 5);
+    assert_eq!(g.4, 0);
+
+    // +05:30 means local time is 5.5 hours ahead of UTC
+    // So 12:00:00+05:30 = 06:30:00 UTC
+    let t_plus530 = Instant::from_rfc3339("2024-01-01T12:00:00+05:30").unwrap();
+    let g = t_plus530.as_datetime();
+    assert_eq!(g.3, 6);
+    assert_eq!(g.4, 30);
+
+    // With fractional seconds and offset
+    let t_frac = Instant::from_rfc3339("2024-06-15T12:30:00.123456-03:00").unwrap();
+    let g = t_frac.as_datetime();
+    assert_eq!(g.3, 15);
+    assert_eq!(g.4, 30);
 }

@@ -51,6 +51,11 @@ impl Instant {
     /// # Raises:
     /// SCErr: If the string cannot be parsed
     pub fn from_string(s: &str) -> Result<Self> {
+        // Try RFC 3339 first — it's unambiguous and common
+        if let Ok(r) = Self::from_rfc3339(s) {
+            return Ok(r);
+        }
+
         let mut chars = s.chars().peekable();
         let mut year = -1;
         let mut month = -1;
@@ -58,10 +63,10 @@ impl Instant {
         let mut hour = -1;
         let mut minute = -1;
         let mut second = -1;
-        let mut microsecond = -1;
+        let mut microsecond = 0i32;
+        let mut microsecond_set = false;
 
         let mut thelist = Vec::<ParseVal>::new();
-        // Find numbers in the string
 
         let mut isperiod: bool = false;
         while let Some(c) = chars.peek() {
@@ -96,52 +101,38 @@ impl Instant {
             } else if let Some(c) = chars.next() {
                 isperiod = c == '.';
             }
-        } // end of while
+        }
 
+        // Look for month names (full or abbreviated)
         let mut to_remove = Vec::new();
         thelist.iter().enumerate().for_each(|(idx, x)| match x {
             ParseVal::Num(_) => {}
             ParseVal::Str(s) => {
                 if month == -1 {
-                    month = match MONTH_NAMES.iter().position(|&m| m == *s) {
-                        Some(m) => {
-                            println!("match month name: {}", m);
-                            if idx < thelist.len() - 1 {
-                                if let ParseVal::Num(n) = thelist[idx + 1] {
-                                    println!("day = {}", n);
-                                    day = n;
-                                    to_remove.push(idx + 1);
-                                }
+                    let found = MONTH_NAMES
+                        .iter()
+                        .position(|&m| m == *s)
+                        .or_else(|| MONTH_ABBRS.iter().position(|&m| m == *s));
+                    if let Some(m) = found {
+                        if idx < thelist.len() - 1 {
+                            if let ParseVal::Num(n) = thelist[idx + 1] {
+                                day = n;
+                                to_remove.push(idx + 1);
                             }
-                            to_remove.push(idx);
-                            m as i32 + 1
                         }
-                        None => month,
-                    };
-                }
-                if month == -1 {
-                    month = match MONTH_ABBRS.iter().position(|&m| m == *s) {
-                        Some(m) => {
-                            if idx < thelist.len() - 1 {
-                                if let ParseVal::Num(n) = thelist[idx + 1] {
-                                    day = n;
-                                    to_remove.push(idx + 1);
-                                }
-                            }
-                            to_remove.push(idx);
-                            m as i32 + 1
-                        }
-                        None => month,
-                    };
+                        to_remove.push(idx);
+                        month = m as i32 + 1;
+                    }
                 }
             }
-        }); // look for month names
-
-        for &idx in to_remove.iter() {
+        });
+        // Remove in reverse order so indices stay valid
+        to_remove.sort_unstable_by(|a, b| b.cmp(a));
+        for idx in to_remove {
             thelist.remove(idx);
         }
 
-        // Look for ??:??:?? for time
+        // Look for HH:MM:SS[.ffffff] time pattern
         if let Some(p) = thelist
             .iter()
             .position(|x| *x == ParseVal::Str(String::from(":")))
@@ -159,87 +150,93 @@ impl Instant {
                 if let ParseVal::Num(s) = thelist[p + 3] {
                     second = s;
                 }
-                if let ParseVal::Num(m) = thelist[p + 5] {
-                    microsecond = m;
+                // Microseconds follow seconds (period is not tokenized)
+                if p + 4 < thelist.len() {
+                    if let ParseVal::Num(m) = thelist[p + 4] {
+                        microsecond = m;
+                        microsecond_set = true;
+                    }
                 }
             }
         }
+
+        // Helper: extract date from a separator pattern like ??/??/???? or ??-??-????
+        let extract_date = |thelist: &[ParseVal], sep: &str| -> Option<(i32, i32, i32, Vec<usize>)> {
+            let p = thelist
+                .iter()
+                .position(|x| *x == ParseVal::Str(String::from(sep)))?;
+            if p == 0 || p >= thelist.len() - 4 {
+                return None;
+            }
+            if thelist[p + 2] != ParseVal::Str(String::from(sep)) {
+                return None;
+            }
+            let mut y = -1i32;
+            let mut m = -1i32;
+            let mut d = -1i32;
+            let mut remove = Vec::new();
+            if let ParseVal::Num(n) = thelist[p + 3] {
+                y = n;
+                remove.push(p + 3);
+            }
+            if let ParseVal::Num(n) = thelist[p + 1] {
+                d = n;
+                remove.push(p + 1);
+            }
+            if let ParseVal::Num(n) = thelist[p - 1] {
+                if n > 1900 {
+                    // First field is a year (YYYY-MM-DD)
+                    let tmp = y;
+                    y = n;
+                    // What was in position 3 is actually day
+                    if d != -1 {
+                        m = d;
+                        d = tmp;
+                    }
+                } else {
+                    m = n;
+                }
+                remove.push(p - 1);
+            }
+            // Also remove the separators
+            remove.push(p + 2);
+            remove.push(p);
+            Some((y, m, d, remove))
+        };
 
         // Look for ??/??/???? for date
-        let mut to_remove = Vec::new();
-        if let Some(p) = thelist
-            .iter()
-            .position(|x| *x == ParseVal::Str(String::from("/")))
-        {
-            if (p > 0)
-                && (p < thelist.len() - 4)
-                && (thelist[p + 2] == ParseVal::Str(String::from("/")))
-            {
-                if let ParseVal::Num(y) = thelist[p + 3] {
-                    if year >= 0 {
-                        month = y;
-                    } else {
-                        year = y;
+        if year == -1 || month == -1 || day == -1 {
+            if let Some((y, m, d, remove)) = extract_date(&thelist, "/") {
+                if year == -1 && y != -1 { year = y; }
+                if month == -1 && m != -1 { month = m; }
+                if day == -1 && d != -1 { day = d; }
+                let mut remove = remove;
+                remove.sort_unstable_by(|a, b| b.cmp(a));
+                for idx in remove {
+                    if idx < thelist.len() {
+                        thelist.remove(idx);
                     }
-                    to_remove.push(p + 3);
-                }
-                if let ParseVal::Num(d) = thelist[p + 1] {
-                    day = d;
-                    to_remove.push(p + 1);
-                }
-                if let ParseVal::Num(m) = thelist[p - 1] {
-                    if m > 1900 {
-                        year = m;
-                    } else {
-                        month = m;
-                    }
-                    to_remove.push(p - 1);
                 }
             }
         }
-        to_remove.iter().for_each(|&idx| {
-            thelist.remove(idx);
-        });
 
-        let mut to_remove = Vec::new();
         // Look for ??-??-???? for date
-        if let Some(p) = thelist
-            .iter()
-            .position(|x| *x == ParseVal::Str(String::from("-")))
-        {
-            if (p > 0)
-                && (p < thelist.len() - 4)
-                && (thelist[p + 2] == ParseVal::Str(String::from("-")))
-            {
-                if let ParseVal::Num(y) = thelist[p + 3] {
-                    if year >= 0 {
-                        month = y;
-                    } else {
-                        year = y;
+        if year == -1 || month == -1 || day == -1 {
+            if let Some((y, m, d, remove)) = extract_date(&thelist, "-") {
+                if year == -1 && y != -1 { year = y; }
+                if month == -1 && m != -1 { month = m; }
+                if day == -1 && d != -1 { day = d; }
+                let mut remove = remove;
+                remove.sort_unstable_by(|a, b| b.cmp(a));
+                for idx in remove {
+                    if idx < thelist.len() {
+                        thelist.remove(idx);
                     }
-                    to_remove.push(p + 3);
-                }
-
-                if let ParseVal::Num(d) = thelist[p + 1] {
-                    day = d;
-                    to_remove.push(p + 1);
-                }
-                if let ParseVal::Num(m) = thelist[p - 1] {
-                    if m > 1900 {
-                        year = m;
-                    } else {
-                        month = m;
-                    }
-                    to_remove.push(p - 1);
                 }
             }
         }
-        to_remove.iter().for_each(|&idx| {
-            thelist.remove(idx);
-        });
 
-        // Go throuth remaining members of list trying to
-        // fill out remaining empty fields
+        // Fill remaining fields from leftover numbers
         thelist.iter().for_each(|x| match x {
             ParseVal::Num(x) => {
                 if year == -1 {
@@ -254,8 +251,9 @@ impl Instant {
                     minute = *x;
                 } else if second == -1 {
                     second = *x;
-                } else if microsecond == -1 {
+                } else if !microsecond_set {
                     microsecond = *x;
+                    microsecond_set = true;
                 }
             }
             ParseVal::Str(_) => {}
@@ -435,16 +433,48 @@ impl Instant {
     /// # Returns:
     ///   Instant: The instant object
     pub fn from_rfc3339(rfc3339: &str) -> std::result::Result<Self, InstantError> {
+        // Try formats ending with 'Z' (UTC) first
         if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%fZ") {
             return Ok(r);
         }
+        if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%SZ") {
+            return Ok(r);
+        }
+
+        // Try formats with timezone offset (+HH:MM or -HH:MM)
+        // RFC 3339 allows offsets like +00:00, -05:00, etc.
+        let s = rfc3339.trim();
+        if s.len() >= 6 {
+            let offset_start = s.len() - 6;
+            let maybe_offset = &s[offset_start..];
+            if (maybe_offset.starts_with('+') || maybe_offset.starts_with('-'))
+                && maybe_offset.chars().nth(3) == Some(':')
+            {
+                let sign: f64 = if maybe_offset.starts_with('+') {
+                    1.0
+                } else {
+                    -1.0
+                };
+                if let (Ok(offset_hours), Ok(offset_mins)) = (
+                    maybe_offset[1..3].parse::<f64>(),
+                    maybe_offset[4..6].parse::<f64>(),
+                ) {
+                    let offset_seconds = sign * (offset_hours * 3600.0 + offset_mins * 60.0);
+                    let base = &s[..offset_start];
+                    let r = Self::strptime(base, "%Y-%m-%dT%H:%M:%S.%f")
+                        .or_else(|_| Self::strptime(base, "%Y-%m-%dT%H:%M:%S"));
+                    if let Ok(r) = r {
+                        return Ok(r - crate::Duration::from_seconds(offset_seconds));
+                    }
+                }
+            }
+        }
+
+        // Try bare formats (no timezone indicator — assume UTC)
         if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S.%f") {
             return Ok(r);
         }
         if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:%S") {
-            return Ok(r);
-        }
-        if let Ok(r) = Self::strptime(rfc3339, "%Y-%m-%dT%H:%M:SZ") {
             return Ok(r);
         }
         Err(InstantError::InvalidString(rfc3339.to_string()))
