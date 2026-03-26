@@ -149,19 +149,26 @@ impl std::fmt::Display for Duration {
         if self.usec < 1_000_000 {
             return write!(f, "{} usec", self.usec);
         } else {
-            if self.usec > 86_400_000_000 {
-                write!(f, "{} days ", self.usec / 86_400_000_000)?;
+            let mut rem = self.usec;
+            if rem >= 86_400_000_000 {
+                let days = rem / 86_400_000_000;
+                write!(f, "{} days ", days)?;
+                rem -= days * 86_400_000_000;
             }
-            if self.usec > 3_600_000_000 {
-                write!(f, "{} hours ", self.usec / 3_600_000_000)?;
+            if rem >= 3_600_000_000 {
+                let hours = rem / 3_600_000_000;
+                write!(f, "{} hours ", hours)?;
+                rem -= hours * 3_600_000_000;
             }
-            if self.usec > 60_000_000 {
-                write!(f, "{} minutes ", self.usec / 60_000_000)?;
+            if rem >= 60_000_000 {
+                let minutes = rem / 60_000_000;
+                write!(f, "{} minutes ", minutes)?;
+                rem -= minutes * 60_000_000;
             }
             write!(
                 f,
                 "{:.6} seconds",
-                (self.usec % 60_000_000) as f64 / 1_000_000.0
+                rem as f64 / 1_000_000.0
             )?;
         }
         Ok(())

@@ -1,6 +1,33 @@
 # Changelog
 
 
+## 0.14.2 - 2026-03-25
+
+### Bug Fixes
+
+- **`from_gps_week_and_second`**: Fix week constant (was 168 days instead of 7 days)
+- **GPS MJD conversions**: `as_mjd(GPS)` and `from_mjd(GPS)` now return proper Modified Julian Dates instead of days since GPS epoch
+- **J2000 constant**: Fix ~96-second error where TT offset was applied in the wrong direction
+- **TDB coefficient**: Fix 10x error in `from_mjd(TDB)` amplitude (`0.01657` -> `0.001657`)
+- **TDB J2000 reference**: Fix JD-to-MJD offset (`2400000.4` -> `2400000.5`)
+- **RFC 3339 timezone offsets**: `from_rfc3339` now correctly parses timezone offsets (e.g., `-05:00`, `+05:30`) instead of silently ignoring them
+- **`from_string` parser**: Remove debug `println!`, fix microsecond default causing `-0.000001s` error, guard out-of-bounds access, fix index-shifting bug when removing parsed tokens
+- **Cartopy `DownloadWarning`**: Fix warning filter in tutorial notebooks (`category=UserWarning` didn't match cartopy's `DownloadWarning`)
+- **Python stubs**: Mark `quaternion.angle` and `quaternion.axis` as `@property` (were incorrectly declared as methods)
+
+### Improvements
+
+- **Duration display**: Show remaining units instead of cumulative totals (e.g., "1 days 1 hours" instead of "1 days 25 hours")
+- **Typo fix**: "Coordinate Univeral Time" -> "Coordinated Universal Time"
+
+### Documentation
+
+- New tutorials: Time Systems, Quaternions, SGP4 vs Numerical Propagation
+- Add 5 missing tutorials to mkdocs navigation
+- Update homepage with quick-start examples and feature summary
+- New Rust tests for GPS week/second and RFC 3339 timezone parsing
+- New Python test for GPS week/second
+
 ## 0.14.1 - 2026-03-21
 
 ### Lambert Targeting

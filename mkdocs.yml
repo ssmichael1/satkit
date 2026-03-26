@@ -113,6 +113,9 @@ nav:
       - Atmospheric Density: tutorials/Atmospheric Density.ipynb
       - Covariance Propagation: tutorials/Covariance Propagation.ipynb
       - Lambert Targeting: tutorials/Lambert Targeting.ipynb
+      - Time Systems: tutorials/Time Systems.ipynb
+      - Quaternions: tutorials/Quaternions.ipynb
+      - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
   - API Reference:
       - Overview: api/index.md
       - time: api/time.md

@@ -213,6 +213,41 @@ class TestTime:
         t = sk.time(2025, 8, 16)
         assert t.day_of_year() == 228
 
+    def test_from_gps_week_and_second(self):
+        """
+        Test GPS week and second-of-week conversion
+        """
+        # GPS epoch: January 6, 1980 00:00:00 UTC
+        gps_epoch = sk.time.from_gps_week_and_second(0, 0)
+        g = gps_epoch.as_gregorian()
+        assert g[0] == 1980
+        assert g[1] == 1
+        assert g[2] == 6
+        assert g[3] == 0
+
+        # Week 1 should be 7 days later: January 13, 1980
+        week1 = sk.time.from_gps_week_and_second(1, 0)
+        g = week1.as_gregorian()
+        assert g[0] == 1980
+        assert g[1] == 1
+        assert g[2] == 13
+
+        # Difference between week 0 and week 1 should be exactly 7 days
+        diff = week1 - gps_epoch
+        assert diff.seconds == pytest.approx(604800.0, abs=1e-3)
+
+        # Day 2 of week 0: January 7, 1980
+        day2 = sk.time.from_gps_week_and_second(0, 86400)
+        g = day2.as_gregorian()
+        assert g[0] == 1980
+        assert g[1] == 1
+        assert g[2] == 7
+
+        # Consistency: week * 604800 + sow seconds from GPS epoch
+        t = sk.time.from_gps_week_and_second(2, 43200)
+        expected_sec = 2 * 604800 + 43200
+        assert (t - gps_epoch).seconds == pytest.approx(expected_sec, abs=1e-3)
+
 
 class TestKepler:
     def test_kepler_from_pv(self):

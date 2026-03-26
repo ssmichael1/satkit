@@ -49,7 +49,7 @@ impl std::fmt::Display for TimeScale {
             f,
             "{}",
             match self {
-                Self::UTC => "Coordinate Univeral Time",
+                Self::UTC => "Coordinated Universal Time",
                 Self::TT => "Terrestrial Time",
                 Self::UT1 => "Universal Time 1",
                 Self::TAI => "International Atomic Time",
