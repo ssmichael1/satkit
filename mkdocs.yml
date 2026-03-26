@@ -107,6 +107,11 @@ nav:
       - High Precision Propagation: tutorials/High Precision Propagation.ipynb
       - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
       - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
+      - Coordinate Frame Transforms: tutorials/Coordinate Frame Transforms.ipynb
+      - Keplerian Elements: tutorials/Keplerian Elements.ipynb
+      - Planetary Ephemerides: tutorials/Planetary Ephemerides.ipynb
+      - Atmospheric Density: tutorials/Atmospheric Density.ipynb
+      - Covariance Propagation: tutorials/Covariance Propagation.ipynb
       - Lambert Targeting: tutorials/Lambert Targeting.ipynb
   - API Reference:
       - Overview: api/index.md
