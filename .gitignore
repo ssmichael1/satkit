@@ -16,6 +16,9 @@ _build
 html
 Pipfile.lock
 
+# Claude code
+.claude
+
 # GPS files
 *.sp3
 
