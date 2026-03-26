@@ -52,6 +52,10 @@ impl<const T: usize> PropagationResult<T> {
     pub fn interp<U: TimeLike>(&self, time: &U) -> Result<Matrix<6, T>> {
         interp_propresult(self, time)
     }
+
+    pub fn interp_batch(&self, times: &[Instant]) -> Result<Vec<StateType<T>>> {
+        interp_propresult_batch(self, times)
+    }
 }
 
 pub type StateType<const C: usize> = Matrix<6, C>;
@@ -547,6 +551,36 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         }
     };
     Ok(result.map_err(PropagationError::ODEError)?)
+}
+
+pub fn interp_propresult_batch<const C: usize>(
+    res: &PropagationResult<C>,
+    times: &[Instant],
+) -> Result<Vec<StateType<C>>> {
+    use crate::orbitprop::Integrator;
+
+    let sol = res
+        .odesol
+        .as_ref()
+        .filter(|s| s.dense.is_some())
+        .ok_or(PropagationError::NoDenseOutputInSolution)?;
+
+    let xs: Vec<f64> = times
+        .iter()
+        .map(|t| (*t - res.time_begin).as_seconds())
+        .collect();
+
+    let results = match res.integrator {
+        Integrator::RKV98 => ode::RKV98::interpolate_batch(&xs, sol),
+        Integrator::RKV98NoInterp => ode::RKV98NoInterp::interpolate_batch(&xs, sol),
+        Integrator::RKV87 => ode::RKV87::interpolate_batch(&xs, sol),
+        Integrator::RKV65 => ode::RKV65::interpolate_batch(&xs, sol),
+        Integrator::RKTS54 => ode::RKTS54::interpolate_batch(&xs, sol),
+        Integrator::RODAS4 => {
+            return Err(PropagationError::NoDenseOutputInSolution.into());
+        }
+    };
+    Ok(results.map_err(PropagationError::ODEError)?)
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ members = [".", "python"]
 
 [package]
 name = "satkit"
-version = "0.14.2"
+version = "0.14.3"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
@@ -22,7 +22,7 @@ name = "satkit"
 
 
 [dependencies]
-numeris = { version = "0.5.6", features = ["serde", "estimate", "ode"] }
+numeris = { version = "0.5.7", features = ["serde", "estimate", "ode"] }
 num-traits = "0.2.19"
 thiserror = "2.0"
 ureq = "3.1.2"
