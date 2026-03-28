@@ -25,8 +25,9 @@ theme:
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
-    - navigation.expand
+    - navigation.indexes
     - navigation.top
+    - navigation.path
     - content.code.copy
     - content.code.annotate
     - search.highlight
@@ -84,19 +85,8 @@ nav:
   - Getting Started:
       - Installation: getting-started/installation.md
       - Data Files: getting-started/datafiles.md
-  - User Guide:
-      - Time: guide/time.md
-      - Quaternion: guide/quaternion.md
-      - Frame Transforms: guide/frametransform.md
-      - Two-Line Elements: guide/tle.md
-      - ITRF Coordinates: guide/itrfcoord.md
-      - Orbit Propagation: guide/satprop.md
-      - Lambert Targeting: guide/lambert.md
-      - Satellite State: guide/satstate.md
-      - Atmospheric Density: guide/density.md
-      - References: guide/references.md
-  - Tutorials:
-      - Overview: tutorials/index.md
+  - Learn:
+      - tutorials/index.md
       - Foundations:
           - Time Systems: tutorials/Time Systems.ipynb
           - Quaternions: tutorials/Quaternions.ipynb
@@ -104,6 +94,8 @@ nav:
           - Coordinate Frame Transforms: tutorials/Coordinate Frame Transforms.ipynb
           - Keplerian Elements: tutorials/Keplerian Elements.ipynb
       - Orbit Propagation:
+          - "Theory: Force Models & Propagation": guide/satprop.md
+          - "Theory: TLEs, SGP4 & OMMs": guide/tle.md
           - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
           - High Precision Propagation: tutorials/High Precision Propagation.ipynb
           - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
@@ -115,13 +107,15 @@ nav:
           - Sunrise & Sunset: tutorials/riseset.ipynb
           - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
       - Advanced Topics:
+          - "Theory: Lambert's Problem": guide/lambert.md
+          - Lambert Targeting: tutorials/Lambert Targeting.ipynb
           - Planetary Ephemerides: tutorials/Planetary Ephemerides.ipynb
           - Atmospheric Density: tutorials/Atmospheric Density.ipynb
           - Covariance Propagation: tutorials/Covariance Propagation.ipynb
-          - Lambert Targeting: tutorials/Lambert Targeting.ipynb
           - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
+      - References: guide/references.md
   - API Reference:
-      - Overview: api/index.md
+      - api/index.md
       - time: api/time.md
       - quaternion: api/quaternion.md
       - TLE & SGP4: api/tle.md

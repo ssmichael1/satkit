@@ -1,6 +1,6 @@
-# Tutorials
+# Learn
 
-Interactive Jupyter notebook tutorials demonstrating various features of the `satkit` package. Tutorials are organized from foundational concepts to advanced applications.
+Interactive tutorials and reference material for the `satkit` package, organized from foundational concepts to advanced applications. Tutorials are Jupyter notebooks with runnable code; theory pages provide deeper mathematical background.
 
 ## Foundations
 
@@ -18,8 +18,10 @@ Core concepts that underpin the rest of the library.
 
 Propagating satellite orbits using analytical and numerical methods.
 
-| Tutorial | Description |
+| | Description |
 |----------|-------------|
+| [Theory: Force Models & Propagation](../guide/satprop.md) | Mathematical basis, gravity models, drag, SRP, integrator selection |
+| [Theory: TLEs, SGP4 & OMMs](../guide/tle.md) | TLE/OMM formats, SGP4 history, and mean-element ephemeris concepts |
 | [Two-Line Element Set](Two-Line%20Element%20Set.ipynb) | Loading and using TLEs with SGP4 |
 | [High Precision Propagation](High%20Precision%20Propagation.ipynb) | Numerical orbit propagation with force models |
 | [SGP4 vs Numerical Propagation](SGP4%20vs%20Numerical%20Propagation.ipynb) | Comparing analytical and numerical orbit propagation |
@@ -41,10 +43,11 @@ Common tasks built on top of the core library.
 
 Specialized capabilities for mission analysis and design.
 
-| Tutorial | Description |
+| | Description |
 |----------|-------------|
+| [Theory: Lambert's Problem](../guide/lambert.md) | Algorithm details: Izzo's method, Lancaster-Blanchard parameterization, multi-revolution solutions |
+| [Lambert Targeting](Lambert%20Targeting.ipynb) | Orbit transfer design with delta-v computation and pork-chop plots |
 | [Planetary Ephemerides](Planetary%20Ephemerides.ipynb) | JPL DE440 and low-precision Sun/Moon/planet positions |
 | [Atmospheric Density](Atmospheric%20Density.ipynb) | NRLMSISE-00 density profiles, solar activity effects, and drag |
 | [Covariance Propagation](Covariance%20Propagation.ipynb) | State transition matrix, uncertainty growth, and LVLH frame |
-| [Lambert Targeting](Lambert%20Targeting.ipynb) | Orbit transfer design with delta-v computation and pork-chop plots |
 | [Orbital Mean-Element Message](Orbital%20Mean-Element%20Message.ipynb) | Working with OMM records |
