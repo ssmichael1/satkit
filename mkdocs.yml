@@ -97,25 +97,29 @@ nav:
       - References: guide/references.md
   - Tutorials:
       - Overview: tutorials/index.md
-      - ITRF Coordinates: tutorials/ITRF Coordinates.ipynb
-      - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
-      - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
-      - Eclipse: tutorials/Eclipse.ipynb
-      - Plots: tutorials/Plots.ipynb
-      - Sunrise & Sunset: tutorials/riseset.ipynb
-      - TLE Fitting: tutorials/TLE Fitting.ipynb
-      - High Precision Propagation: tutorials/High Precision Propagation.ipynb
-      - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
-      - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
-      - Coordinate Frame Transforms: tutorials/Coordinate Frame Transforms.ipynb
-      - Keplerian Elements: tutorials/Keplerian Elements.ipynb
-      - Planetary Ephemerides: tutorials/Planetary Ephemerides.ipynb
-      - Atmospheric Density: tutorials/Atmospheric Density.ipynb
-      - Covariance Propagation: tutorials/Covariance Propagation.ipynb
-      - Lambert Targeting: tutorials/Lambert Targeting.ipynb
-      - Time Systems: tutorials/Time Systems.ipynb
-      - Quaternions: tutorials/Quaternions.ipynb
-      - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
+      - Foundations:
+          - Time Systems: tutorials/Time Systems.ipynb
+          - Quaternions: tutorials/Quaternions.ipynb
+          - ITRF Coordinates: tutorials/ITRF Coordinates.ipynb
+          - Coordinate Frame Transforms: tutorials/Coordinate Frame Transforms.ipynb
+          - Keplerian Elements: tutorials/Keplerian Elements.ipynb
+      - Orbit Propagation:
+          - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
+          - High Precision Propagation: tutorials/High Precision Propagation.ipynb
+          - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
+          - TLE Fitting: tutorials/TLE Fitting.ipynb
+      - Applications:
+          - Plots: tutorials/Plots.ipynb
+          - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
+          - Eclipse: tutorials/Eclipse.ipynb
+          - Sunrise & Sunset: tutorials/riseset.ipynb
+          - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
+      - Advanced Topics:
+          - Planetary Ephemerides: tutorials/Planetary Ephemerides.ipynb
+          - Atmospheric Density: tutorials/Atmospheric Density.ipynb
+          - Covariance Propagation: tutorials/Covariance Propagation.ipynb
+          - Lambert Targeting: tutorials/Lambert Targeting.ipynb
+          - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
   - API Reference:
       - Overview: api/index.md
       - time: api/time.md
