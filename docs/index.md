@@ -124,8 +124,7 @@ Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with ful
 |---|---|
 | **[Installation](getting-started/installation.md)** | Install from PyPI or build from source |
 | **[Data Files](getting-started/datafiles.md)** | Required data files for calculations |
-| **[User Guide](guide/time.md)** | Learn how to use the library |
-| **[Tutorials](tutorials/index.md)** | Interactive Jupyter notebook examples |
+| **[Learn](tutorials/index.md)** | Tutorials and theory — from basics to advanced topics |
 | **[API Reference](api/index.md)** | Full Python API documentation |
 | **[Rust API (docs.rs)](https://docs.rs/satkit/)** | Rust API reference |
 | **[GitHub](https://github.com/ssmichael1/satkit)** | Source code and issue tracker |
