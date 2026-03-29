@@ -1,5 +1,6 @@
-use satkit::orbitprop::SatPropertiesStatic;
+use satkit::orbitprop::SatPropertiesSimple;
 
+use crate::pythrust::{py_thrusts_to_profile, PyThrust};
 use crate::pyutils::kwargs_or_default;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
@@ -7,9 +8,9 @@ use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
-#[pyclass(name = "satproperties_static", module = "satkit", from_py_object)]
+#[pyclass(name = "satproperties", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PySatProperties(pub SatPropertiesStatic);
+pub struct PySatProperties(pub SatPropertiesSimple);
 
 #[pymethods]
 impl PySatProperties {
@@ -22,6 +23,9 @@ impl PySatProperties {
     /// and Cd A / m (m^2/kg), drag pressure
     /// passed in as arguments in that order, or set explicitly
     /// via the "craoverm" and "cdaoverm" keyword arguments
+    ///
+    /// Optionally, set continuous thrust arcs via the "thrusts"
+    /// keyword argument, which takes a list of satkit.thrust objects
     ///
     /// If these are not set, default is 0
     ///
@@ -41,10 +45,20 @@ impl PySatProperties {
         if kwargs.is_some() {
             craoverm = kwargs_or_default(&mut kwargs, "craoverm", craoverm)?;
             cdaoverm = kwargs_or_default(&mut kwargs, "cdaoverm", cdaoverm)?;
-            if !kwargs.unwrap().is_empty() {
+        }
+
+        let mut props = SatPropertiesSimple::new(cdaoverm, craoverm);
+
+        // Handle thrusts keyword
+        if let Some(kw) = kwargs {
+            if let Some(thrusts_obj) = kw.get_item("thrusts")? {
+                let thrusts: Vec<PyThrust> = thrusts_obj.extract()?;
+                props = props.with_thrust(py_thrusts_to_profile(thrusts));
+                kw.del_item("thrusts")?;
+            }
+            if !kw.is_empty() {
                 let keystring: String =
-                    kwargs
-                        .unwrap()
+                    kw
                         .iter()
                         .fold(String::from(""), |acc, (k, _v)| {
                             let mut a2 = acc;
@@ -56,7 +70,7 @@ impl PySatProperties {
             }
         }
 
-        Ok(Self(SatPropertiesStatic::new(cdaoverm, craoverm)))
+        Ok(Self(props))
     }
 
     /// Get the satellite's susceptibility to radiation pressure
@@ -95,22 +109,98 @@ impl PySatProperties {
         self.0.cdaoverm = cdaoverm;
     }
 
+    /// Get the list of thrust arcs
+    ///
+    /// Returns:
+    ///     list[satkit.thrust]: List of continuous thrust arcs
+    #[getter]
+    fn get_thrusts(&self) -> Vec<PyThrust> {
+        self.0
+            .thrust
+            .thrusts
+            .iter()
+            .map(|t| PyThrust(t.clone()))
+            .collect()
+    }
+
+    /// Set the thrust arcs
+    ///
+    /// Args:
+    ///     thrusts (list[satkit.thrust]): List of continuous thrust arcs
+    #[setter]
+    fn set_thrusts(&mut self, thrusts: Vec<PyThrust>) {
+        self.0.thrust = py_thrusts_to_profile(thrusts);
+    }
+
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {
         let state = state.as_bytes(py);
-        if state.len() != 16 {
+        if state.len() < 16 {
             bail!("Invalid serialization length");
         }
         let craoverm = f64::from_le_bytes(state[0..8].try_into()?);
         let cdaoverm = f64::from_le_bytes(state[8..16].try_into()?);
         self.0.cdaoverm = cdaoverm;
         self.0.craoverm = craoverm;
+        self.0.thrust = satkit::orbitprop::ThrustProfile::default();
+
+        // Each thrust arc: 24 (accel) + 1 (frame tag) + 8 (start) + 8 (end) = 41 bytes
+        let mut offset = 16;
+        while offset + 41 <= state.len() {
+            let accel = satkit::mathtypes::Vector3::from_slice(unsafe {
+                std::slice::from_raw_parts(state[offset..].as_ptr() as *const f64, 3)
+            });
+            offset += 24;
+            let frame = match state[offset] {
+                1 => satkit::Frame::RIC,
+                _ => satkit::Frame::GCRF,
+            };
+            offset += 1;
+            let start = satkit::Instant::from_mjd_with_scale(
+                f64::from_le_bytes(state[offset..offset + 8].try_into()?),
+                satkit::TimeScale::TAI,
+            );
+            offset += 8;
+            let end = satkit::Instant::from_mjd_with_scale(
+                f64::from_le_bytes(state[offset..offset + 8].try_into()?),
+                satkit::TimeScale::TAI,
+            );
+            offset += 8;
+            self.0.thrust.thrusts.push(
+                satkit::orbitprop::ContinuousThrust::new(accel, frame, start, end),
+            );
+        }
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        let mut raw = [0; 16];
+        // Each thrust arc: 24 (accel) + 1 (frame tag) + 8 (start) + 8 (end) = 41 bytes
+        let thrust_len = self.0.thrust.thrusts.len() * 41;
+        let mut raw = vec![0u8; 16 + thrust_len];
         raw[0..8].clone_from_slice(&self.0.craoverm.to_le_bytes());
         raw[8..16].clone_from_slice(&self.0.cdaoverm.to_le_bytes());
+        let mut offset = 16;
+        for t in &self.0.thrust.thrusts {
+            unsafe {
+                raw[offset..offset + 24].clone_from_slice(std::slice::from_raw_parts(
+                    t.accel.as_slice().as_ptr() as *const u8,
+                    24,
+                ));
+            }
+            offset += 24;
+            raw[offset] = match t.frame {
+                satkit::Frame::RIC => 1,
+                _ => 0,
+            };
+            offset += 1;
+            raw[offset..offset + 8].clone_from_slice(
+                &t.start.as_mjd_with_scale(satkit::TimeScale::TAI).to_le_bytes(),
+            );
+            offset += 8;
+            raw[offset..offset + 8].clone_from_slice(
+                &t.end.as_mjd_with_scale(satkit::TimeScale::TAI).to_le_bytes(),
+            );
+            offset += 8;
+        }
         pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }
 

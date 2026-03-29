@@ -10,4 +10,6 @@
 
 ::: satkit.propstats
 
-::: satkit.satproperties_static
+::: satkit.satproperties
+
+::: satkit.thrust

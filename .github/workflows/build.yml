@@ -152,4 +152,4 @@ jobs:
         run: pip install -e ".[test]"
 
       - name: Run Python tests
-        run: pytest python/test/test.py
+        run: pytest python/test/

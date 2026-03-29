@@ -5,7 +5,6 @@ For details, see: <https://ssd.jpl.nasa.gov/>
 """
 
 from __future__ import annotations
-import typing
 import numpy.typing as npt
 import numpy as np
 

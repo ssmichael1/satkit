@@ -129,10 +129,10 @@ impl TLE {
     /// };
     ///
     /// // Satellite has finite drag
-    /// let satprops = satkit::orbitprop::SatPropertiesStatic {
-    ///     cdaoverm: 2.0 * 10.0 / 3500.0,
-    ///     craoverm: 10.0 / 3500.0,
-    /// };
+    /// let satprops = satkit::orbitprop::SatPropertiesSimple::new(
+    ///     2.0 * 10.0 / 3500.0,
+    ///     10.0 / 3500.0,
+    /// );
     ///
     /// // Propagate over a day
     /// let res = satkit::orbitprop::propagate(
@@ -314,10 +314,10 @@ mod tests {
             ..Default::default()
         };
 
-        let satprops = crate::orbitprop::SatPropertiesStatic {
-            cdaoverm: 2.0 * 10.0 / 3500.0,
-            craoverm: 10.0 / 3500.0,
-        };
+        let satprops = crate::orbitprop::SatPropertiesSimple::new(
+            2.0 * 10.0 / 3500.0,
+            10.0 / 3500.0,
+        );
 
         let res = crate::orbitprop::propagate(
             &state0,

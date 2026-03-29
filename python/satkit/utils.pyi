@@ -3,10 +3,7 @@ Utility functions for SatKit
 """
 
 from __future__ import annotations
-import numpy.typing as npt
-import numpy as np
 
-import satkit
 
 def update_datafiles(**kwargs) -> None:
     """Download & store data files needed for "satkit" computations

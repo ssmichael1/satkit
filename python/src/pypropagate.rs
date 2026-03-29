@@ -8,7 +8,7 @@ use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
 use satkit::orbitprop::SatProperties;
-use satkit::orbitprop::SatPropertiesStatic;
+use satkit::orbitprop::SatPropertiesSimple;
 use satkit::Duration;
 use satkit::Instant;
 
@@ -53,11 +53,9 @@ use anyhow::{bail, Result};
 ///                   default is False
 ///     propsettings (satkit.propsettings): Settings for
 ///                   the propagation. if left out, default will be used.
-///    satproperties (satkit.satproperties_static): object with drag and
-///                   radiation pressure succeptibility of satellite.
-///                   If left out, drag and radiation pressure are neglected
-///                   Dynamic drag & radiation pressure models are not
-///                   yet implemented
+///    satproperties (satkit.satproperties): object with drag,
+///                   radiation pressure, and thrust properties of satellite.
+///                   If left out, drag, radiation pressure, and thrust are neglected
 ///     output_dense (bool): boolean indicacting output dense ODE solution that can
 ///                   be used for interpolation of state between
 ///                  "begintime" and "endtime".  Default is False
@@ -101,7 +99,7 @@ pub fn propagate(
     let mut endtime: Instant = Instant::INVALID;
     let mut output_phi: bool = false;
     let mut satproperties: Option<&dyn SatProperties> = None;
-    let satproperties_static: SatPropertiesStatic;
+    let satproperties_simple: SatPropertiesSimple;
 
     if args.len() > 0 {
         state0 = py_to_smatrix(&args.get_item(0)?)?;
@@ -183,13 +181,13 @@ pub fn propagate(
             kw.del_item("duration_secs")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {
-            satproperties_static = kws
+            satproperties_simple = kws
                 .extract::<PySatProperties>()
                 .map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {}", e))
                 })?
                 .0;
-            satproperties = Some(&satproperties_static);
+            satproperties = Some(&satproperties_simple);
             kw.del_item("satproperties")?;
         }
 

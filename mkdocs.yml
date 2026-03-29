@@ -99,6 +99,7 @@ nav:
           - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
           - High Precision Propagation: tutorials/High Precision Propagation.ipynb
           - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
+          - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
           - TLE Fitting: tutorials/TLE Fitting.ipynb
       - Applications:
           - Plots: tutorials/Plots.ipynb
