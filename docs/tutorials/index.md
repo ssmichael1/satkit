@@ -20,11 +20,12 @@ Propagating satellite orbits using analytical and numerical methods.
 
 | | Description |
 |----------|-------------|
-| [Theory: Force Models & Propagation](../guide/satprop.md) | Mathematical basis, gravity models, drag, SRP, integrator selection |
+| [Theory: Force Models & Propagation](../guide/satprop.md) | Mathematical basis, gravity models, drag, SRP, thrust, integrator selection |
 | [Theory: TLEs, SGP4 & OMMs](../guide/tle.md) | TLE/OMM formats, SGP4 history, and mean-element ephemeris concepts |
 | [Two-Line Element Set](Two-Line%20Element%20Set.ipynb) | Loading and using TLEs with SGP4 |
 | [High Precision Propagation](High%20Precision%20Propagation.ipynb) | Numerical orbit propagation with force models |
 | [SGP4 vs Numerical Propagation](SGP4%20vs%20Numerical%20Propagation.ipynb) | Comparing analytical and numerical orbit propagation |
+| [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Hohmann transfer, Lambert targeting, and low-thrust orbit raising |
 | [TLE Fitting](TLE%20Fitting.ipynb) | Fitting TLEs from state vectors |
 
 ## Applications
@@ -49,5 +50,5 @@ Specialized capabilities for mission analysis and design.
 | [Lambert Targeting](Lambert%20Targeting.ipynb) | Orbit transfer design with delta-v computation and pork-chop plots |
 | [Planetary Ephemerides](Planetary%20Ephemerides.ipynb) | JPL DE440 and low-precision Sun/Moon/planet positions |
 | [Atmospheric Density](Atmospheric%20Density.ipynb) | NRLMSISE-00 density profiles, solar activity effects, and drag |
-| [Covariance Propagation](Covariance%20Propagation.ipynb) | State transition matrix, uncertainty growth, and LVLH frame |
+| [Covariance Propagation](Covariance%20Propagation.ipynb) | State transition matrix, uncertainty growth, and orbital frame analysis |
 | [Orbital Mean-Element Message](Orbital%20Mean-Element%20Message.ipynb) | Working with OMM records |

@@ -18,6 +18,8 @@ pub enum Frame {
     ICRF,
     /// Local Vertical Local Horizontal
     LVLH,
+    /// Radial / In-track / Cross-track
+    RIC,
 }
 
 impl std::fmt::Display for Frame {
@@ -31,6 +33,7 @@ impl std::fmt::Display for Frame {
             Self::EME2000 => write!(f, "EME2000"),
             Self::ICRF => write!(f, "ICRF"),
             Self::LVLH => write!(f, "LVLH"),
+            Self::RIC => write!(f, "RIC"),
         }
     }
 }
@@ -48,6 +51,7 @@ impl std::str::FromStr for Frame {
             "EME2000" => Ok(Self::EME2000),
             "ICRF" => Ok(Self::ICRF),
             "LVLH" => Ok(Self::LVLH),
+            "RIC" => Ok(Self::RIC),
             _ => bail!("Invalid Frame"),
         }
     }

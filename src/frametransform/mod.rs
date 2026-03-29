@@ -449,6 +449,51 @@ pub fn qtirs2cirs<T: TimeLike>(tm: &T) -> Quaternion {
     Quaternion::rotz(earth_rotation_angle(tm))
 }
 
+/// Compute the RIC-to-GCRF rotation matrix from position and velocity
+///
+/// RIC frame convention (CCSDS standard):
+///   x = radial (away from Earth center)
+///   y = in-track (along velocity, perpendicular to radial in orbital plane)
+///   z = cross-track (orbit normal, completes right-handed triad)
+///
+/// # Arguments
+///
+/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `vel_gcrf` - Velocity vector in GCRF [m/s]
+///
+/// # Returns
+///
+/// 3x3 rotation matrix that transforms vectors from RIC to GCRF
+///
+pub fn ric_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    let r_hat = pos_gcrf.normalize();
+    let h = pos_gcrf.cross(vel_gcrf);
+    let h_hat = h.normalize();
+    let i_hat = h_hat.cross(&r_hat);
+    let mut dcm = Matrix3::zeros();
+    dcm.set_block(0, 0, &r_hat);
+    dcm.set_block(0, 1, &i_hat);
+    dcm.set_block(0, 2, &h_hat);
+    dcm
+}
+
+/// Compute the GCRF-to-RIC rotation matrix from position and velocity
+///
+/// This is the transpose of `ric_to_gcrf`.
+///
+/// # Arguments
+///
+/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `vel_gcrf` - Velocity vector in GCRF [m/s]
+///
+/// # Returns
+///
+/// 3x3 rotation matrix that transforms vectors from GCRF to RIC
+///
+pub fn gcrf_to_ric(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    ric_to_gcrf(pos_gcrf, vel_gcrf).transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

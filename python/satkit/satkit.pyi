@@ -677,6 +677,67 @@ class timescale:
     TDB: ClassVar[timescale]
     """Barycentric Dynamical Time"""
 
+class frame:
+    """Coordinate reference frame
+
+    Used to specify the frame for thrust vectors and maneuvers.
+
+    Available frames:
+
+    - ``GCRF`` - Geocentric Celestial Reference Frame (inertial)
+    - ``ITRF`` - International Terrestrial Reference Frame (Earth-fixed)
+    - ``TEME`` - True Equator Mean Equinox (SGP4 output frame)
+    - ``CIRS`` - Celestial Intermediate Reference System
+    - ``TIRS`` - Terrestrial Intermediate Reference System
+    - ``EME2000`` - Earth Mean Equator 2000
+    - ``ICRF`` - International Celestial Reference Frame
+    - ``LVLH`` - Local Vertical Local Horizontal
+    - ``RIC`` - Radial / In-track / Cross-track
+
+    Example:
+
+    ```python
+    import satkit as sk
+
+    # Use RIC frame for in-track thrust
+    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+    ```
+    """
+
+    GCRF: ClassVar[frame]
+    """Geocentric Celestial Reference Frame (inertial)"""
+
+    ITRF: ClassVar[frame]
+    """International Terrestrial Reference Frame (Earth-fixed)"""
+
+    TEME: ClassVar[frame]
+    """True Equator Mean Equinox"""
+
+    CIRS: ClassVar[frame]
+    """Celestial Intermediate Reference System"""
+
+    TIRS: ClassVar[frame]
+    """Terrestrial Intermediate Reference System"""
+
+    EME2000: ClassVar[frame]
+    """Earth Mean Equator 2000"""
+
+    ICRF: ClassVar[frame]
+    """International Celestial Reference Frame"""
+
+    LVLH: ClassVar[frame]
+    """Local Vertical Local Horizontal"""
+
+    RIC: ClassVar[frame]
+    """Radial / In-track / Cross-track (CCSDS standard)
+
+    Components: [radial, in-track, cross-track]
+
+    - Radial: away from Earth center
+    - In-track: along velocity direction
+    - Cross-track: orbit normal
+    """
+
 class time:
     """Representation of an instant in time
 
@@ -2560,22 +2621,58 @@ class satstate:
         """
         ...
 
-    def propagate(self, time: time | duration, propsettings=None) -> satstate:
-        """Propagate this state to a new time, specified by the "time" input, updating the position, the velocity, and the covariance if set
+    def add_maneuver(
+        self,
+        time: time,
+        delta_v: npt.ArrayLike,
+        frame: frame = frame.GCRF,
+    ) -> None:
+        """Add an impulsive maneuver (instantaneous delta-v)
 
         Args:
-            time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
-            propsettings (satkit.propsettings, optional): object describing settings to use in the propagation.
-                If omitted, default is used
-
-        Returns:
-            satstate: New satellite state object representing the state at the new time
+            time (satkit.time): Time at which to apply the maneuver
+            delta_v (array-like): 3-element delta-v vector [m/s]
+            frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF).
+                For frame.RIC, components are [radial, in-track, cross-track]
 
         Example:
             ```python
-            # Propagate forward by 90 minutes
-            new_state = state.propagate(satkit.duration(minutes=90))
-            print(new_state.pos)
+            sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+            ```
+        """
+        ...
+
+    @property
+    def num_maneuvers(self) -> int:
+        """Number of impulsive maneuvers scheduled on this state"""
+        ...
+
+    def propagate(
+        self,
+        time: time | duration,
+        *,
+        propsettings: propsettings | None = None,
+        satproperties: satproperties | None = None,
+    ) -> satstate:
+        """Propagate this state to a new time
+
+        Automatically segments propagation at impulsive maneuver times,
+        applying delta-v at each maneuver epoch.
+
+        Args:
+            time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
+            propsettings (satkit.propsettings, optional): Propagation settings. If omitted, default is used
+            satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
+
+        Returns:
+            satstate: New satellite state object representing the state at the new time.
+                Maneuvers are preserved on the returned state.
+
+        Example:
+            ```python
+            sat = sk.satstate(time=t0, pos=r, vel=v)
+            sat.add_maneuver(t_burn, [0, 100, 0], frame=sk.frame.RIC)
+            new_state = sat.propagate(t_end)
             ```
         """
         ...
@@ -2817,37 +2914,110 @@ class propresult:
         """
         ...
 
-class satproperties_static:
-    """Satellite properties relevant for drag and radiation pressure
+class thrust:
+    """Continuous thrust acceleration for orbit maneuvers
 
-    This class lets the satellite radiation pressure and drag
-    parameters be set to static values for duration of propagation
+    Represents a constant thrust acceleration over a time window,
+    specified in either the GCRF (inertial) or RIC (Radial/In-track/Cross-track) frame.
+
+    RIC components are [radial, in-track, cross-track].
+
+    Example:
+
+    ```python
+    import satkit as sk
+
+    t0 = sk.time(2024, 1, 1)
+    t1 = t0 + sk.duration.from_hours(2)
+
+    # In-track thrust in RIC frame
+    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+
+    # Fixed direction thrust in GCRF frame
+    t = sk.thrust.constant([0, 0, 1e-3], t0, t1, frame=sk.frame.GCRF)
+    ```
+    """
+
+    @staticmethod
+    def constant(
+        accel: npt.ArrayLike,
+        start: time,
+        end: time,
+        frame: frame = frame.GCRF,
+    ) -> thrust:
+        """Create a constant thrust acceleration
+
+        Args:
+            accel (array-like): 3-element acceleration vector [m/s^2]
+            start (satkit.time): Start time of thrust arc
+            end (satkit.time): End time of thrust arc
+            frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF)
+
+        Returns:
+            thrust: Thrust object
+
+        """
+        ...
+
+    @property
+    def accel(self) -> list[float]:
+        """Acceleration vector [m/s^2]"""
+        ...
+
+    @property
+    def frame(self) -> frame:
+        """Coordinate frame"""
+        ...
+
+    @property
+    def start(self) -> time:
+        """Start time of thrust arc"""
+        ...
+
+    @property
+    def end(self) -> time:
+        """End time of thrust arc"""
+        ...
+
+class satproperties:
+    """Satellite properties relevant for drag, radiation pressure, and thrust
+
+    This class lets the satellite radiation pressure, drag,
+    and thrust parameters be set for duration of propagation.
 
     Attributes:
         cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
         craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
+        thrusts (list[thrust]): List of continuous thrust arcs
 
     """
 
-    def __init__(self, cdaoverm: float = 0, craoverm: float = 0) -> None:
-        """Create a satproperties_static object with given craoverm and cdaoverm in m^2/kg
+    def __init__(
+        self,
+        cdaoverm: float = 0,
+        craoverm: float = 0,
+        *,
+        thrusts: list[thrust] | None = None,
+    ) -> None:
+        """Create a satproperties object
 
         Args:
             cdaoverm (float, optional): Coefficient of drag times area over mass in m^2/kg
             craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
-
-        Notes:
-
-        - The two arguments can be passed as positional arguments or as keyword arguments
+            thrusts (list[thrust], optional): List of continuous thrust arcs
 
         Example:
 
         ```python
-        properties = satproperties_static(craoverm = 0.5, cdaoverm = 0.4)
+        import satkit as sk
 
-        # or with same output
+        t0 = sk.time(2024, 1, 1)
+        t1 = t0 + sk.duration.from_hours(2)
 
-        properties = satproperties_static(0.5, 0.4)
+        props = sk.satproperties(
+            cdaoverm=0.01,
+            thrusts=[sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)]
+        )
         ```
 
         """
@@ -2867,6 +3037,14 @@ class satproperties_static:
 
     @craoverm.setter
     def craoverm(self, value: float) -> None: ...
+
+    @property
+    def thrusts(self) -> list[thrust]:
+        """List of continuous thrust arcs"""
+        ...
+
+    @thrusts.setter
+    def thrusts(self, value: list[thrust]) -> None: ...
 
 class integrator:
     """Choice of ODE integrator for orbit propagation
@@ -3171,7 +3349,7 @@ def propagate(
     duration_days: float | None = None,
     output_phi: bool = False,
     propsettings: propsettings | None = None,
-    satproperties: satproperties_static | None = None,
+    satproperties: satproperties | None = None,
 ) -> propresult:
     """High-precision orbit propagator
 

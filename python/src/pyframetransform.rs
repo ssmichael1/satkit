@@ -1,7 +1,11 @@
 use crate::pyutils::*;
 use crate::PyInstant;
 use satkit::frametransform as ft;
+use satkit::mathtypes::*;
 use pyo3::prelude::*;
+use pyo3::IntoPyObjectExt;
+use numpy as np;
+use numpy::PyArrayMethods;
 
 use anyhow::Result;
 
@@ -230,6 +234,57 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
 /// satkit.frametransform.disable_eop_warning()
 /// ```
 ///
+/// Compute the RIC-to-GCRF rotation matrix from position and velocity
+///
+/// RIC frame convention (CCSDS standard):
+///   * x = radial (away from Earth center)
+///   * y = in-track (along velocity, perpendicular to radial in orbital plane)
+///   * z = cross-track (orbit normal, completes right-handed triad)
+///
+/// Args:
+///     pos (numpy.ndarray): 3-element position vector in GCRF [m]
+///     vel (numpy.ndarray): 3-element velocity vector in GCRF [m/s]
+///
+/// Returns:
+///     numpy.ndarray: 3x3 rotation matrix (RIC to GCRF)
+#[pyfunction]
+pub fn ric_to_gcrf(
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+) -> Result<Py<PyAny>> {
+    let pos_vec: Vector3 = py_to_smatrix(pos)?;
+    let vel_vec: Vector3 = py_to_smatrix(vel)?;
+    let dcm = ft::ric_to_gcrf(&pos_vec, &vel_vec);
+    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
+        let arr = np::PyArray1::from_slice(py, dcm.as_slice());
+        Ok(arr.reshape(vec![3, 3])?.into_py_any(py)?)
+    })
+}
+
+/// Compute the GCRF-to-RIC rotation matrix from position and velocity
+///
+/// This is the transpose of `ric_to_gcrf`.
+///
+/// Args:
+///     pos (numpy.ndarray): 3-element position vector in GCRF [m]
+///     vel (numpy.ndarray): 3-element velocity vector in GCRF [m/s]
+///
+/// Returns:
+///     numpy.ndarray: 3x3 rotation matrix (GCRF to RIC)
+#[pyfunction]
+pub fn gcrf_to_ric(
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+) -> Result<Py<PyAny>> {
+    let pos_vec: Vector3 = py_to_smatrix(pos)?;
+    let vel_vec: Vector3 = py_to_smatrix(vel)?;
+    let dcm = ft::gcrf_to_ric(&pos_vec, &vel_vec);
+    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
+        let arr = np::PyArray1::from_slice(py, dcm.as_slice());
+        Ok(arr.reshape(vec![3, 3])?.into_py_any(py)?)
+    })
+}
+
 #[pyfunction(name = "disable_eop_time_warning")]
 pub fn disable_eop_time_warning() {
     satkit::earth_orientation_params::disable_eop_time_warning();

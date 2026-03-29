@@ -181,6 +181,21 @@ pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> Resu
                 m[(row, col)] = arr[(row, col)];
             }
         }
+    } else {
+        // Fallback: try to extract as a flat sequence of floats (lists, tuples, etc.)
+        let vals: Vec<f64> = obj.extract().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "Cannot convert to {M}x{N} matrix: {e}"
+            ))
+        })?;
+        if vals.len() != M * N {
+            anyhow::bail!(
+                "Expected {} elements for {M}x{N} matrix, got {}",
+                M * N,
+                vals.len()
+            );
+        }
+        m.as_mut_slice().copy_from_slice(&vals);
     }
     Ok(m)
 }

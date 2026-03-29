@@ -1,5 +1,6 @@
-use satkit::orbitprop::SatPropertiesStatic;
+use satkit::orbitprop::SatPropertiesSimple;
 
+use crate::pythrust::{py_thrusts_to_profile, PyThrust};
 use crate::pyutils::kwargs_or_default;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
@@ -7,9 +8,9 @@ use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
-#[pyclass(name = "satproperties_static", module = "satkit", from_py_object)]
+#[pyclass(name = "satproperties", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PySatProperties(pub SatPropertiesStatic);
+pub struct PySatProperties(pub SatPropertiesSimple);
 
 #[pymethods]
 impl PySatProperties {
@@ -22,6 +23,9 @@ impl PySatProperties {
     /// and Cd A / m (m^2/kg), drag pressure
     /// passed in as arguments in that order, or set explicitly
     /// via the "craoverm" and "cdaoverm" keyword arguments
+    ///
+    /// Optionally, set continuous thrust arcs via the "thrusts"
+    /// keyword argument, which takes a list of satkit.thrust objects
     ///
     /// If these are not set, default is 0
     ///
@@ -41,10 +45,20 @@ impl PySatProperties {
         if kwargs.is_some() {
             craoverm = kwargs_or_default(&mut kwargs, "craoverm", craoverm)?;
             cdaoverm = kwargs_or_default(&mut kwargs, "cdaoverm", cdaoverm)?;
-            if !kwargs.unwrap().is_empty() {
+        }
+
+        let mut props = SatPropertiesSimple::new(cdaoverm, craoverm);
+
+        // Handle thrusts keyword
+        if let Some(kw) = kwargs {
+            if let Some(thrusts_obj) = kw.get_item("thrusts")? {
+                let thrusts: Vec<PyThrust> = thrusts_obj.extract()?;
+                props = props.with_thrust(py_thrusts_to_profile(thrusts));
+                kw.del_item("thrusts")?;
+            }
+            if !kw.is_empty() {
                 let keystring: String =
-                    kwargs
-                        .unwrap()
+                    kw
                         .iter()
                         .fold(String::from(""), |acc, (k, _v)| {
                             let mut a2 = acc;
@@ -56,7 +70,7 @@ impl PySatProperties {
             }
         }
 
-        Ok(Self(SatPropertiesStatic::new(cdaoverm, craoverm)))
+        Ok(Self(props))
     }
 
     /// Get the satellite's susceptibility to radiation pressure
@@ -93,6 +107,29 @@ impl PySatProperties {
     #[setter]
     fn set_cdaoverm(&mut self, cdaoverm: f64) {
         self.0.cdaoverm = cdaoverm;
+    }
+
+    /// Get the list of thrust arcs
+    ///
+    /// Returns:
+    ///     list[satkit.thrust]: List of continuous thrust arcs
+    #[getter]
+    fn get_thrusts(&self) -> Vec<PyThrust> {
+        self.0
+            .thrust
+            .thrusts
+            .iter()
+            .map(|t| PyThrust(t.clone()))
+            .collect()
+    }
+
+    /// Set the thrust arcs
+    ///
+    /// Args:
+    ///     thrusts (list[satkit.thrust]): List of continuous thrust arcs
+    #[setter]
+    fn set_thrusts(&mut self, thrusts: Vec<PyThrust>) {
+        self.0.thrust = py_thrusts_to_profile(thrusts);
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {

@@ -231,7 +231,7 @@ pub mod prelude {
 
     // Propagation
     pub use crate::orbitprop::{
-        propagate, CovState, PropSettings, PropagationResult, SatProperties, SatPropertiesStatic,
+        propagate, CovState, PropSettings, PropagationResult, SatProperties, SatPropertiesSimple,
         SatState, SimpleState, StateCov,
     };
 
