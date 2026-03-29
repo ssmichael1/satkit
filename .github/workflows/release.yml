@@ -77,7 +77,7 @@ jobs:
         run: pip install -e ".[test]"
 
       - name: Python tests
-        run: pytest python/test/test.py
+        run: pytest python/test/
 
   publish_crate:
     name: publish to crates.io
