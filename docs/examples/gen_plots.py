@@ -16,28 +16,8 @@ import numpy as np
 
 import scienceplots  # noqa: F401
 
-plt.style.use(["science", "no-latex"])
-
-plt.rcParams.update({
-    "mathtext.fontset": "stix",
-    "font.family": "serif",
-    "font.serif": ["STIX Two Text", "STIXGeneral", "DejaVu Serif"],
-    "font.size": 13,
-    "axes.labelsize": 14,
-    "axes.titlesize": 15,
-    "xtick.labelsize": 12,
-    "ytick.labelsize": 12,
-    "legend.fontsize": 12,
-    "axes.formatter.use_mathtext": True,
-    "svg.fonttype": "none",
-    "axes.grid": True,
-    "grid.alpha": 0.3,
-    "grid.linestyle": "--",
-    "axes.prop_cycle": plt.cycler(color=[
-        "#0077BB", "#EE7733", "#009988", "#CC3311",
-        "#33BBEE", "#EE3377", "#BBBBBB",
-    ]),
-})
+plt.style.use(["science", "no-latex",
+    str(Path(__file__).resolve().parent.parent / "satkit.mplstyle")])
 
 IMAGES = Path(__file__).resolve().parent.parent / "images"
 

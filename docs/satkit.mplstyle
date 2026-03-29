@@ -1,0 +1,23 @@
+## satkit matplotlib style
+## Usage: plt.style.use(["science", "no-latex", "../satkit.mplstyle"])
+
+mathtext.fontset: stix
+font.family: serif
+font.serif: STIX Two Text, STIXGeneral, DejaVu Serif
+font.size: 13
+
+axes.labelsize: 14
+axes.titlesize: 15
+axes.formatter.use_mathtext: True
+axes.grid: True
+axes.prop_cycle: cycler('color', ['0077BB', 'EE7733', '009988', 'CC3311', '33BBEE', 'EE3377', 'BBBBBB'])
+
+xtick.labelsize: 12
+ytick.labelsize: 12
+
+legend.fontsize: 12
+
+grid.alpha: 0.3
+grid.linestyle: --
+
+svg.fonttype: none
