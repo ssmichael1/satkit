@@ -1,8 +1,8 @@
 use satkit::Frame;
 use pyo3::prelude::*;
 
-#[derive(PartialEq, Eq)]
-#[pyclass(name = "frame", module = "satkit", eq, eq_int)]
+#[derive(Clone, PartialEq, Eq)]
+#[pyclass(name = "frame", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyFrame {
     /// International Terrestrial Reference Frame
     #[allow(clippy::upper_case_acronyms)]
@@ -27,6 +27,9 @@ pub enum PyFrame {
     /// Local Vertical Local Horizontal
     #[allow(clippy::upper_case_acronyms)]
     LVLH,
+    /// Radial / In-track / Cross-track
+    #[allow(clippy::upper_case_acronyms)]
+    RIC,
 }
 
 impl From<Frame> for PyFrame {
@@ -40,6 +43,7 @@ impl From<Frame> for PyFrame {
             Frame::EME2000 => Self::EME2000,
             Frame::ICRF => Self::ICRF,
             Frame::LVLH => Self::LVLH,
+            Frame::RIC => Self::RIC,
         }
     }
 }
@@ -55,6 +59,7 @@ impl From<PyFrame> for Frame {
             PyFrame::EME2000 => Self::EME2000,
             PyFrame::ICRF => Self::ICRF,
             PyFrame::LVLH => Self::LVLH,
+            PyFrame::RIC => Self::RIC,
         }
     }
 }

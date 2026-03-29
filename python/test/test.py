@@ -995,7 +995,7 @@ class TestHighPrecisionPropagation:
         )
 
         # Values for craoverm and velocity come from orbitprop_gps_fit.py
-        satprops = sk.satproperties_static()
+        satprops = sk.satproperties()
         satprops.craoverm = fitparam[3]  # type: ignore
 
         res = sk.propagate(
@@ -1083,7 +1083,7 @@ class TestTLEFitting:
         inc = 97 * m.pi / 180
         state0 = np.array([r0, 0, 0, 0, v0 * m.cos(inc), v0 * m.sin(inc)])
 
-        sp = sk.satproperties_static(cdaoverm=2.0 * 10 / 3500)
+        sp = sk.satproperties(cdaoverm=2.0 * 10 / 3500)
         tm = sk.time(2016, 5, 16, 12, 0, 0)
         res = sk.propagate(
             state0, tm, end=tm + sk.duration.from_days(1), satproperties=sp
@@ -1358,3 +1358,140 @@ class TestLambert:
 
         with pytest.raises(ValueError):
             sk.lambert(np.array([0.0, 0.0, 0.0]), r2, 3600.0)  # zero position
+
+
+class TestThrust:
+    def test_continuous_thrust_ric(self):
+        """Test in-track thrust in RIC frame raises orbit"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        t1 = t0 + sk.duration.from_hours(2)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        state = np.array([r, 0, 0, 0, v, 0])
+
+        res_no = sk.propagate(state, t0, end=t1)
+
+        # In-track thrust in RIC: [radial, in-track, cross-track]
+        thrust = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+        props = sk.satproperties(thrusts=[thrust])
+        res_th = sk.propagate(state, t0, end=t1, satproperties=props)
+
+        r_no = np.linalg.norm(res_no.pos)
+        r_th = np.linalg.norm(res_th.pos)
+        assert r_th > r_no, "In-track thrust should raise orbit"
+        assert r_th - r_no > 100, "Thrust effect should be > 100 m"
+
+    def test_continuous_thrust_gcrf(self):
+        """Test +Z thrust in GCRF increases Z position"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        t1 = t0 + sk.duration.from_minutes(10)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        state = np.array([r, 0, 0, 0, v, 0])
+
+        res_no = sk.propagate(state, t0, end=t1)
+        thrust = sk.thrust.constant([0, 0, 1e-3], t0, t1, frame=sk.frame.GCRF)
+        props = sk.satproperties(thrusts=[thrust])
+        res_th = sk.propagate(state, t0, end=t1, satproperties=props)
+
+        assert res_th.state[2] > res_no.state[2], "+Z thrust should increase Z position"
+
+    def test_thrust_properties(self):
+        """Test thrust object properties"""
+        t0 = sk.time(2024, 1, 1)
+        t1 = t0 + sk.duration.from_hours(1)
+        thrust = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RIC)
+
+        assert thrust.frame == sk.frame.RIC
+        assert thrust.accel == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
+
+    def test_multiple_thrust_arcs(self):
+        """Test multiple thrust arcs"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        t1 = t0 + sk.duration.from_hours(1)
+        t2 = t1 + sk.duration.from_hours(1)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        state = np.array([r, 0, 0, 0, v, 0])
+
+        thrust1 = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+        thrust2 = sk.thrust.constant([0, 1e-4, 0], t1, t2, frame=sk.frame.RIC)
+        props = sk.satproperties(thrusts=[thrust1, thrust2])
+        assert len(props.thrusts) == 2
+
+        res = sk.propagate(state, t0, end=t2, satproperties=props)
+        res_no = sk.propagate(state, t0, end=t2)
+
+        # Two hours of thrust should have a bigger effect than no thrust
+        pos_diff = np.linalg.norm(res.pos - res_no.pos)
+        assert pos_diff > 1000, f"Two thrust arcs should produce large effect: {pos_diff} m"
+
+
+class TestImpulsiveManeuver:
+    def test_impulsive_gcrf(self):
+        """Test impulsive maneuver in GCRF raises orbit"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        t_burn = t0 + sk.duration.from_hours(1)
+        t_end = t0 + sk.duration.from_hours(3)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        sat_no = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+
+        sat.add_maneuver(t_burn, [0, 0, 10], frame=sk.frame.GCRF)
+        assert sat.num_maneuvers == 1
+
+        result = sat.propagate(t_end)
+        result_no = sat_no.propagate(t_end)
+
+        pos_diff = np.linalg.norm(result.pos - result_no.pos)
+        assert pos_diff > 100, f"Maneuver should change position: {pos_diff} m"
+        assert result.num_maneuvers == 1, "Maneuvers should persist"
+
+    def test_impulsive_ric(self):
+        """Test in-track impulsive maneuver in RIC frame"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        t_burn = t0 + sk.duration.from_hours(1)
+        t_end = t0 + sk.duration.from_hours(3)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        sat_no = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+
+        # 10 m/s in-track in RIC [radial, in-track, cross-track]
+        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+        result = sat.propagate(t_end)
+        result_no = sat_no.propagate(t_end)
+
+        pos_diff = np.linalg.norm(result.pos - result_no.pos)
+        assert pos_diff > 10000, f"10 m/s prograde should produce large effect: {pos_diff} m"
+
+    def test_backward_propagation(self):
+        """Test forward then backward propagation recovers original state"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        t_burn = t0 + sk.duration.from_hours(1)
+        t_end = t0 + sk.duration.from_hours(2)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        sat.add_maneuver(t_burn, [0, 0, 5], frame=sk.frame.GCRF)
+
+        fwd = sat.propagate(t_end)
+        back = fwd.propagate(t0)
+
+        assert np.linalg.norm(sat.pos - back.pos) < 1.0, "Should recover original position"
+        assert np.linalg.norm(sat.vel - back.vel) < 0.01, "Should recover original velocity"
+
+    def test_ric_to_gcrf(self):
+        """Test frametransform.ric_to_gcrf and gcrf_to_ric"""
+        pos = np.array([6878e3, 0, 0])
+        vel = np.array([0, 7612, 0])
+
+        dcm = sk.frametransform.ric_to_gcrf(pos, vel)
+        assert dcm.shape == (3, 3)
+
+        dcm_inv = sk.frametransform.gcrf_to_ric(pos, vel)
+        assert np.allclose(dcm @ dcm_inv, np.eye(3), atol=1e-10)

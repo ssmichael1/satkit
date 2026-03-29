@@ -729,6 +729,55 @@ def earth_orientation_params(
     """
     ...
 
+def ric_to_gcrf(
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> npt.NDArray[np.float64]:
+    """Compute the RIC-to-GCRF rotation matrix from position and velocity
+
+    RIC frame convention (CCSDS standard):
+        - x = radial (away from Earth center)
+        - y = in-track (along velocity, perpendicular to radial in orbital plane)
+        - z = cross-track (orbit normal, completes right-handed triad)
+
+    Args:
+        pos (array-like): 3-element position vector in GCRF [m]
+        vel (array-like): 3-element velocity vector in GCRF [m/s]
+
+    Returns:
+        numpy.ndarray: 3x3 rotation matrix that transforms vectors from RIC to GCRF
+
+    Example:
+        ```python
+        dcm = sk.frametransform.ric_to_gcrf(pos_gcrf, vel_gcrf)
+        vec_gcrf = dcm @ vec_ric
+        ```
+    """
+    ...
+
+def gcrf_to_ric(
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> npt.NDArray[np.float64]:
+    """Compute the GCRF-to-RIC rotation matrix from position and velocity
+
+    This is the transpose of ``ric_to_gcrf``.
+
+    Args:
+        pos (array-like): 3-element position vector in GCRF [m]
+        vel (array-like): 3-element velocity vector in GCRF [m/s]
+
+    Returns:
+        numpy.ndarray: 3x3 rotation matrix that transforms vectors from GCRF to RIC
+
+    Example:
+        ```python
+        dcm = sk.frametransform.gcrf_to_ric(pos_gcrf, vel_gcrf)
+        vec_ric = dcm @ vec_gcrf
+        ```
+    """
+    ...
+
 def disable_eop_time_warning() -> None:
     """Disable the warning printed to stderr when Earth Orientation Parameters (EOP) are not available for a given time.
 

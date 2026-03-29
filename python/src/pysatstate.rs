@@ -1,6 +1,9 @@
+use crate::pyframes::PyFrame;
 use crate::pyinstant::PyInstant;
 use crate::pypropsettings::PyPropSettings;
 use crate::pyquaternion::PyQuaternion;
+use crate::pysatproperties::PySatProperties;
+use crate::PyDuration;
 
 use numpy as np;
 use numpy::PyArrayMethods;
@@ -11,9 +14,8 @@ use pyo3::types::{PyDict, PyNone, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
-use satkit::orbitprop::{PropSettings, SatState, StateCov};
-use crate::PyDuration;
-use satkit::Instant;
+use satkit::orbitprop::{ImpulsiveManeuver, PropSettings, SatState, StateCov};
+use satkit::{Frame, Instant};
 
 use anyhow::{bail, Result};
 
@@ -202,11 +204,48 @@ impl PySatState {
         })
     }
 
+    /// Add an impulsive maneuver (instantaneous delta-v) to the state
+    ///
+    /// Args:
+    ///     time (satkit.time): Time at which to apply the maneuver
+    ///     delta_v (array-like): 3-element delta-v vector [m/s]
+    ///     frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF).
+    ///         For frame.RIC, components are [radial, in-track, cross-track]
+    ///
+    /// Returns:
+    ///     None
+    #[pyo3(signature=(time, delta_v, frame=PyFrame::GCRF))]
+    fn add_maneuver(
+        &mut self,
+        time: PyInstant,
+        delta_v: &Bound<'_, PyAny>,
+        frame: PyFrame,
+    ) -> Result<()> {
+        let dv: Vector3 = crate::pyutils::py_to_smatrix(delta_v)?;
+        let rust_frame: Frame = frame.into();
+        self.0
+            .add_maneuver(ImpulsiveManeuver::new(time.0, dv, rust_frame));
+        Ok(())
+    }
+
+    /// Get the list of maneuvers
+    ///
+    /// Returns:
+    ///     int: Number of impulsive maneuvers
+    #[getter]
+    fn get_num_maneuvers(&self) -> usize {
+        self.0.maneuvers.len()
+    }
+
     /// Propagate state to a new time
+    ///
+    /// Automatically segments propagation at impulsive maneuver times.
     ///
     /// Args:
     ///     time (satkit.time|satkit.duration): Time for which to compute new state or alternatively
-    ///     a duration to propagate from the current time
+    ///         a duration to propagate from the current time
+    ///     propsettings (satkit.propsettings, optional): Propagation settings
+    ///     satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
     ///
     /// Returns:
     ///     satkit.satstate: New state at input time
@@ -232,27 +271,36 @@ impl PySatState {
             }
         };
 
-        let propsettings: Option<PropSettings> = match kwargs.is_some() {
-            true => {
-                let kw = kwargs.unwrap();
-                match kw.get_item("propsettings")? {
-                    None => None,
-                    Some(v) => Some(
-                        v.extract::<PyPropSettings>()
-                            .map_err(|e| {
-                                pyo3::exceptions::PyValueError::new_err(format!(
-                                    "Invalid propsettings: {}",
-                                    e
-                                ))
-                            })?
-                            .0,
-                    ),
-                }
-            }
-            false => None,
-        };
+        let mut propsettings: Option<PropSettings> = None;
+        let mut satprops_obj: Option<PySatProperties> = None;
 
-        self.0.propagate(&time, propsettings.as_ref()).map(Self)
+        if let Some(kw) = kwargs {
+            if let Some(v) = kw.get_item("propsettings")? {
+                propsettings = Some(
+                    v.extract::<PyPropSettings>()
+                        .map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid propsettings: {}",
+                                e
+                            ))
+                        })?
+                        .0,
+                );
+            }
+            if let Some(v) = kw.get_item("satproperties")? {
+                satprops_obj = Some(v.extract::<PySatProperties>().map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {}", e))
+                })?);
+            }
+        }
+
+        let satprops_ref = satprops_obj
+            .as_ref()
+            .map(|s| &s.0 as &dyn satkit::orbitprop::SatProperties);
+
+        self.0
+            .propagate(&time, propsettings.as_ref(), satprops_ref)
+            .map(Self)
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
