@@ -172,6 +172,69 @@ The state transition matrix is also useful when estimating a satellite state fro
 
 The `satkit` package includes the option to compute the state transition matrix when solving for the new state.
 
+## The `satstate` Class
+
+The free function `propagate()` operates on raw 6-element state vectors. The `satstate` class wraps a state vector with additional capabilities:
+
+| Feature | `propagate()` | `satstate.propagate()` |
+|---|---|---|
+| Position + velocity | Yes | Yes |
+| Covariance propagation | Manual (output_phi + matrix math) | Automatic via STM |
+| Impulsive maneuvers | Not supported | Automatic segmentation |
+| Continuous thrust | Via `satproperties` | Via `satproperties` |
+
+### Basic Usage
+
+```python
+import satkit as sk
+import numpy as np
+
+r = sk.consts.earth_radius + 500e3
+v = np.sqrt(sk.consts.mu_earth / r)
+sat = sk.satstate(sk.time(2024, 1, 1), np.array([r, 0, 0]), np.array([0, v, 0]))
+
+# Propagate forward 6 hours
+new_state = sat.propagate(sat.time + sk.duration.from_hours(6))
+print(new_state.pos)  # position at t + 6h
+```
+
+### Covariance Propagation
+
+Attach position and/or velocity uncertainty, and it will be propagated automatically via the state transition matrix:
+
+```python
+# Set 1-sigma position uncertainty in the LVLH frame (x, y, z) in meters
+sat.set_lvlh_pos_uncertainty(np.array([100.0, 200.0, 50.0]))
+
+# Or set it directly in GCRF
+sat.set_gcrf_pos_uncertainty(np.array([150.0, 150.0, 150.0]))
+
+# Or set the full 6x6 covariance matrix
+sat.cov = my_6x6_matrix
+
+# Propagate -- covariance propagates automatically
+new_state = sat.propagate(sat.time + sk.duration.from_hours(6))
+print(new_state.cov)  # 6x6 covariance at the new time
+```
+
+The LVLH (Local Vertical Local Horizontal) frame is often more intuitive for specifying uncertainty: z is nadir, y is opposite the angular momentum vector, and x is approximately along-track.
+
+### Impulsive Maneuvers
+
+Add delta-v events at scheduled times. The propagator automatically segments at each maneuver time and applies the burn:
+
+```python
+t_burn = sat.time + sk.duration.from_hours(1)
+
+# 10 m/s prograde burn in RIC frame
+sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+
+# Propagate past the burn -- delta-v is applied at t_burn
+new_state = sat.propagate(sat.time + sk.duration.from_hours(3))
+```
+
+Multiple maneuvers can be added and will be applied in chronological order. Backward propagation reverses the maneuvers automatically.
+
 ## Forces vs Altitude
 
 The plot below, modeled on a similar plot in Montenbruck and Gill, gives a sense of the various contributors to satellite acceleration as a function of altitude:

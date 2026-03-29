@@ -105,6 +105,51 @@ impl PySatState {
         Ok(())
     }
 
+    /// Set velocity uncertainty (1-sigma, m/s) in the LVLH (local-vertical, local-horizontal) frame
+    ///
+    /// LVLH frame:
+    ///     * z axis = -r (nadir, pointing toward Earth center)
+    ///     * y axis = -h (opposite angular momentum, h = r x v)
+    ///     * x axis completes right-handed system
+    ///
+    /// Args:
+    ///     sigma_lvlh (numpy.ndarray): 3-element numpy array with 1-sigma velocity uncertainty in LVLH frame.  Units are m/s
+    ///
+    /// Returns:
+    ///     None
+    fn set_lvlh_vel_uncertainty(
+        &mut self,
+        sigma_lvlh: &Bound<'_, np::PyArray1<f64>>,
+    ) -> PyResult<()> {
+        if sigma_lvlh.len() != 3 {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                "Velocity uncertainty must be 1-d numpy array with length 3",
+            ));
+        }
+        let na_sigma = Vector3::from_slice(unsafe { sigma_lvlh.as_slice().unwrap() });
+        self.0.set_lvlh_vel_uncertainty(&na_sigma);
+        Ok(())
+    }
+
+    /// Set velocity uncertainty (1-sigma, m/s) in the GCRF (Geocentric Celestial Reference Frame)
+    ///
+    /// Args:
+    ///     sigma_gcrf (numpy.ndarray): 3-element numpy array with 1-sigma velocity uncertainty in GCRF frame.  Units are m/s
+    ///
+    /// Returns:
+    ///     None
+    fn set_gcrf_vel_uncertainty(
+        &mut self,
+        sigma_gcrf: &Bound<'_, np::PyArray1<f64>>,
+    ) -> Result<()> {
+        if sigma_gcrf.len() != 3 {
+            bail!("Velocity uncertainty must be 1-d numpy array with length 3");
+        }
+        let na_sigma = Vector3::from_slice(unsafe { sigma_gcrf.as_slice().unwrap() });
+        self.0.set_gcrf_vel_uncertainty(&na_sigma);
+        Ok(())
+    }
+
     /// Set full 6x6 state covariance matrix
     ///
     /// Args:
