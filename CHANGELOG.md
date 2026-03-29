@@ -1,6 +1,42 @@
 # Changelog
 
 
+## 0.15.0 - 2026-03-29
+
+### Orbit Maneuvers
+
+- **Impulsive maneuvers**: Add `ImpulsiveManeuver` to `SatState` — instantaneous delta-v applied at a scheduled time during propagation. Supports GCRF and RIC frames. Propagation automatically segments at maneuver times and applies delta-v, including backward propagation with sign reversal.
+- **Continuous thrust**: Add `ContinuousThrust` and `ThrustProfile` types for constant-acceleration thrust arcs over time windows. Integrated into the force model via the `SatProperties` trait. Supports GCRF and RIC frames with automatic frame rotation.
+- **RIC frame transforms**: Add `ric_to_gcrf()` and `gcrf_to_ric()` rotation matrix functions to `frametransform`
+- **`Frame::RIC` and `Frame::LVLH`**: New coordinate frame variants with explicit axis definitions in all docs
+
+### Python Bindings
+
+- `satstate.add_maneuver(time, delta_v, frame)` — add impulsive maneuvers to satellite state
+- `thrust.constant(accel, start, end, frame)` — create continuous thrust arcs
+- `satproperties(thrusts=[...])` — attach thrust arcs to satellite properties
+- `frametransform.ric_to_gcrf(pos, vel)` and `frametransform.gcrf_to_ric(pos, vel)`
+- Full type stubs and docstrings for all new types
+
+### Code Quality
+
+- **Frame safety**: Replace `_ =>` catch-all match arms in thrust/maneuver frame handling with explicit variants; unsupported frames now panic with descriptive messages
+- **Pickle round-trip**: `satstate` pickle now serializes maneuvers; `satproperties` pickle now serializes thrust arcs (backwards compatible with old format)
+- **Coordinate frame docs**: Add explicit LVLH and RIC axis definitions across Rust doc comments, Python docstrings, and type stubs
+- **Test split**: Split monolithic `test.py` (1,563 lines) into 6 domain-specific test files (`test_time`, `test_coordinates`, `test_frames`, `test_ephemeris`, `test_propagation`, `test_sgp4`)
+- **`__init__.pyi`**: Fix `__all__` export list — add missing `frame`, `weekday`, `sgp4_error`, `sgp4_gravconst`, `sgp4_opsmode`, `geodetic`, `gravity_and_partials`, `nrlmsise00`
+- **CI**: Update `build.yml` and `release.yml` to discover all test files via `pytest python/test/`
+
+### Documentation
+
+- New tutorial: Orbit Maneuvers (Jupyter notebook)
+- Unified Learn section merging User Guide and Tutorials
+
+### Internal
+
+- 133 Rust tests + 37 doc-tests pass
+- 71 Python tests pass (4 new pickle round-trip tests, 10 new maneuver/thrust tests)
+
 ## 0.14.3 - 2026-03-25
 
 ### Performance
