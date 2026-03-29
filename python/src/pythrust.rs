@@ -25,7 +25,8 @@ impl PyThrust {
     ///     end (satkit.time): End time of thrust arc
     ///     frame (satkit.frame): Coordinate frame - frame.GCRF or frame.RIC (default: frame.GCRF)
     ///
-    /// RIC components are [radial, in-track, cross-track]
+    /// RIC components are [R, I, C] where R = radial (outward),
+    /// I = in-track (along velocity), C = cross-track (along angular momentum)
     #[staticmethod]
     #[pyo3(signature = (accel, start, end, frame=PyFrame::GCRF))]
     fn constant(

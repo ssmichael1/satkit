@@ -25,9 +25,13 @@ pub enum PyFrame {
     #[allow(clippy::upper_case_acronyms)]
     ICRF,
     /// Local Vertical Local Horizontal
+    ///
+    /// z = -r (nadir), y = -h (opposite angular momentum), x completes right-handed system
     #[allow(clippy::upper_case_acronyms)]
     LVLH,
     /// Radial / In-track / Cross-track
+    ///
+    /// R = radial (outward), I = in-track (along velocity), C = cross-track (along angular momentum)
     #[allow(clippy::upper_case_acronyms)]
     RIC,
 }

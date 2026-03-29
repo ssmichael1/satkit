@@ -17,8 +17,16 @@ pub enum Frame {
     /// International Celestial Reference Frame
     ICRF,
     /// Local Vertical Local Horizontal
+    ///
+    /// * z axis = -r (nadir)
+    /// * y axis = -h (opposite angular momentum, h = r × v)
+    /// * x axis completes the right-handed system (approximately velocity direction for circular orbits)
     LVLH,
     /// Radial / In-track / Cross-track
+    ///
+    /// * R (radial): unit vector along position (outward from Earth center)
+    /// * I (in-track): unit vector along velocity projected perpendicular to R (approximately velocity direction for circular orbits)
+    /// * C (cross-track): completes right-handed system (along angular momentum, h = r × v)
     RIC,
 }
 
