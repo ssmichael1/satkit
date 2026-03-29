@@ -127,6 +127,12 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 - **SGP4** -- Standard TLE/OMM propagator with TLE fitting from precision states
 - **Keplerian** -- Analytical two-body propagation
 
+### Orbit Maneuvers
+
+- **Impulsive maneuvers** -- Instantaneous delta-v applied at a scheduled time during propagation, in GCRF or RIC (radial/in-track/cross-track) frames
+- **Continuous thrust** -- Constant-acceleration thrust arcs over time windows, integrated directly into the force model
+- **Automatic segmentation** -- Propagation through maneuver sequences is handled transparently, including backward propagation
+
 ### Force Models
 
 - **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 360)
@@ -197,7 +203,7 @@ Then run tests with the environment variables pointing to the downloaded directo
 SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs cargo test
 
 # Python tests
-SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs pytest python/test/test.py
+SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs pytest python/test/
 ```
 
 ## Documentation

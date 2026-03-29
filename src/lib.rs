@@ -29,12 +29,18 @@
 //! - **Keplerian**: Simplified two-body propagation
 //! - **State Transition Matrix**: Support for covariance propagation
 //!
+//! ### Orbit Maneuvers
+//! - **Impulsive maneuvers**: Instantaneous delta-v at scheduled times in GCRF or RIC frames
+//! - **Continuous thrust**: Constant-acceleration arcs integrated into the force model
+//! - Automatic propagation segmentation through maneuver sequences
+//!
 //! ### Force Models
 //! Comprehensive perturbation modeling:
 //! - High-order Earth gravity (JGM2, JGM3, EGM96, ITU GRACE16)
 //! - Solar and lunar gravity perturbations
 //! - Atmospheric drag using NRLMSISE-00 density model with space weather data
 //! - Solar radiation pressure
+//! - Continuous thrust acceleration
 //!
 //! ### Ephemerides
 //! - **JPL Ephemerides**: High-precision planetary and lunar positions
