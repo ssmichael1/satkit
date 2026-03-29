@@ -51,26 +51,27 @@ impl ImpulsiveManeuver {
     }
 }
 
+/// A satellite state: position, velocity, optional covariance, and maneuvers
 ///
-/// A Satellite State object
+/// `SatState` bundles a GCRF position/velocity with optional covariance and
+/// a list of impulsive maneuvers into a single propagatable object. Use it
+/// instead of the free [`propagate()`] function when you need:
 ///
-/// This is a convenience structure for representing
-/// a satellite state and state uncertainty, where a state is
-/// represented as a position (meters) and velocity (meters) in the
-/// Geocentric Celestial Reference Frame (GCRS)
+/// * **Covariance propagation** -- attach a 6x6 uncertainty matrix and it
+///   will be propagated via the state transition matrix automatically.
+/// * **Maneuver scheduling** -- add impulsive delta-v events at future times
+///   and propagation will segment around them, applying each burn in order.
+/// * **Round-trip propagation** -- propagate forward, then backward, recovering
+///   the original state (maneuvers are reversed automatically).
 ///
-/// The structure allows for propagation of the state to a new time
-/// using the high-precision orbit propagator associated with this package
+/// For simple state-vector propagation without covariance or maneuvers,
+/// the free function [`propagate()`] is more direct.
 ///
-/// The satellite state can also include a 6x6 covariance matrix representing
-/// the uncertainty in position and velocity.
+/// # Units
 ///
-/// If the state is propagated, the state uncertainty will be propagated as well
-/// via the state transition matrix
-///
-/// Impulsive maneuvers can be added to the state. When propagating, the
-/// propagator automatically segments at each maneuver time and applies
-/// the delta-v.
+/// * Position: meters in GCRF
+/// * Velocity: meters/second in GCRF
+/// * Covariance: meters² and (m/s)² in GCRF
 ///
 #[derive(Clone, Debug)]
 pub struct SatState {
@@ -81,6 +82,13 @@ pub struct SatState {
 }
 
 impl SatState {
+    /// Create a new satellite state from position and velocity vectors
+    ///
+    /// # Arguments
+    ///
+    /// * `time` - Epoch of the state
+    /// * `pos` - Position vector in GCRF [meters]
+    /// * `vel` - Velocity vector in GCRF [meters/second]
     pub fn from_pv<T: TimeLike>(time: &T, pos: &Vector3, vel: &Vector3) -> Self {
         Self {
             time: time.as_instant(),
@@ -90,10 +98,12 @@ impl SatState {
         }
     }
 
+    /// Position vector in GCRF [meters]
     pub fn pos_gcrf(&self) -> Vector3 {
         self.pv.block::<3, 1>(0, 0)
     }
 
+    /// Velocity vector in GCRF [meters/second]
     pub fn vel_gcrf(&self) -> Vector3 {
         self.pv.block::<3, 1>(3, 0)
     }
@@ -135,6 +145,10 @@ impl SatState {
         q2 * q1
     }
 
+    /// Return a clone of the state covariance
+    ///
+    /// Returns `StateCov::None` if no covariance has been set,
+    /// or `StateCov::PVCov(matrix)` with a 6x6 position/velocity covariance.
     pub fn cov(&self) -> StateCov {
         self.cov.clone()
     }

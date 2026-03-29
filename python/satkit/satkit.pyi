@@ -2544,12 +2544,42 @@ class consts:
     """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
 class satstate:
-    """
-    A convenience class representing a satellite position and velocity, and
-    optionally 6x6 position/velocity covariance at a particular instant in time
+    """Satellite state: position, velocity, optional covariance, and maneuvers
 
-    This class can be used to propagate the position, velocity, and optional
-    covariance to different points in time.
+    Bundles a GCRF position/velocity with optional 6x6 covariance and a list
+    of impulsive maneuvers into a single propagatable object. Use ``satstate``
+    instead of the free :func:`propagate` function when you need:
+
+    - **Covariance propagation** -- attach uncertainty and it propagates
+      automatically via the state transition matrix.
+    - **Maneuver scheduling** -- add impulsive delta-v events at future times;
+      propagation segments around them automatically.
+    - **Round-trip propagation** -- propagate forward then backward, recovering
+      the original state (maneuvers are reversed).
+
+    For simple state-vector propagation without covariance or maneuvers,
+    :func:`propagate` is more direct.
+
+    This class supports ``pickle`` serialization (all fields including
+    covariance and maneuvers are preserved).
+
+    Example:
+        ```python
+        import satkit as sk
+        import numpy as np
+
+        # Create state at 500 km altitude
+        r = sk.consts.earth_radius + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        sat = sk.satstate(sk.time(2024, 1, 1), np.array([r, 0, 0]), np.array([0, v, 0]))
+
+        # Add covariance and maneuver
+        sat.set_lvlh_pos_uncertainty(np.array([100.0, 200.0, 50.0]))
+        sat.add_maneuver(sat.time + sk.duration.from_hours(1), [0, 10, 0], frame=sk.frame.RIC)
+
+        # Propagate -- covariance and maneuver handled automatically
+        new_state = sat.propagate(sat.time + sk.duration.from_hours(3))
+        ```
     """
 
     def __init__(
@@ -2562,15 +2592,13 @@ class satstate:
         """Create a new satellite state
 
         Args:
-            time (satkit.time): Time instant of this state
-            pos (npt.NDArray[np.float64]): Position in meters in GCRF frame
-            vel (npt.NDArray[np.float64]): Velocity in meters / second in GCRF frame
-            cov (npt.NDArray[np.float64]|None, optional): Covariance in GCRF frame. Defaults to None.  If input, should be a 6x6 numpy array
+            time (satkit.time): Epoch of the state
+            pos (npt.NDArray[np.float64]): Position in meters, GCRF frame
+            vel (npt.NDArray[np.float64]): Velocity in m/s, GCRF frame
+            cov (npt.NDArray[np.float64]|None, optional): 6x6 covariance matrix in GCRF. Defaults to None.
 
         Example:
             ```python
-            import numpy as np
-
             t = satkit.time(2024, 1, 1)
             pos = np.array([6.781e6, 0, 0])       # meters, GCRF
             vel = np.array([0, 7.5e3, 0])          # m/s, GCRF
@@ -2581,51 +2609,110 @@ class satstate:
 
     @property
     def pos(self) -> npt.NDArray[np.float64]:
-        """state position in meters in GCRF frame
-
-        Returns:
-            3-element numpy array representing position in meters in GCRF frame
-        """
+        """Position in meters, GCRF frame (alias for pos_gcrf)"""
         ...
 
     @property
     def vel(self) -> npt.NDArray[np.float64]:
-        """Return this state velocity in meters / second in GCRF
+        """Velocity in m/s, GCRF frame (alias for vel_gcrf)"""
+        ...
 
-        Returns:
-            3-element numpy array representing velocity in meters / second in GCRF frame
-        """
+    @property
+    def pos_gcrf(self) -> npt.NDArray[np.float64]:
+        """Position in meters, GCRF frame"""
+        ...
+
+    @property
+    def vel_gcrf(self) -> npt.NDArray[np.float64]:
+        """Velocity in m/s, GCRF frame"""
         ...
 
     @property
     def qgcrf2lvlh(self) -> quaternion:
-        """Quaternion that rotates from the GCRF to the LVLH frame for the current state
+        """Quaternion rotating from GCRF to the LVLH frame for the current state
 
         LVLH frame:
             - z axis: -r (nadir, pointing toward Earth center)
             - y axis: -h (opposite orbital angular momentum, h = r x v)
             - x axis: completes right-handed system
-
-        Returns:
-            Quaternion that rotates from the GCRF to the LVLH frame for the current state
         """
         ...
 
     @property
     def cov(self) -> npt.NDArray[np.float64] | None:
-        """6x6 state covariance matrix in GCRF frame
+        """6x6 state covariance matrix in GCRF, or None if not set
 
-        Returns:
-            6x6 numpy array representing state covariance in GCRF frame or None if not set
+        Upper-left 3x3 is position covariance (m^2), lower-right 3x3 is
+        velocity covariance ((m/s)^2), off-diagonal blocks are cross-covariance.
+        """
+        ...
+
+    @cov.setter
+    def cov(self, value: npt.NDArray[np.float64]) -> None:
+        """Set the full 6x6 state covariance matrix
+
+        Args:
+            value: 6x6 numpy array with state covariance for position (m) and velocity (m/s)
         """
         ...
 
     @property
     def time(self) -> time:
-        """Return time of this satellite state
+        """Epoch of this satellite state"""
+        ...
 
-        Returns:
-            Time instant of this state
+    def set_lvlh_pos_uncertainty(
+        self, sigma_lvlh: npt.NDArray[np.float64]
+    ) -> None:
+        """Set position uncertainty (1-sigma) in the LVLH frame
+
+        Constructs a diagonal covariance from the given 1-sigma values,
+        rotates it from LVLH to GCRF, and stores it as the position block
+        of the state covariance.
+
+        LVLH frame: z = -r (nadir), y = -h (opposite angular momentum),
+        x completes right-handed system.
+
+        Args:
+            sigma_lvlh: 3-element array with 1-sigma position uncertainty [meters]
+        """
+        ...
+
+    def set_lvlh_vel_uncertainty(
+        self, sigma_lvlh: npt.NDArray[np.float64]
+    ) -> None:
+        """Set velocity uncertainty (1-sigma) in the LVLH frame
+
+        Constructs a diagonal covariance from the given 1-sigma values,
+        rotates it from LVLH to GCRF, and stores it as the velocity block
+        of the state covariance.
+
+        Args:
+            sigma_lvlh: 3-element array with 1-sigma velocity uncertainty [m/s]
+        """
+        ...
+
+    def set_gcrf_pos_uncertainty(
+        self, sigma_gcrf: npt.NDArray[np.float64]
+    ) -> None:
+        """Set position uncertainty (1-sigma) in GCRF
+
+        Constructs a diagonal position covariance from the given 1-sigma values.
+
+        Args:
+            sigma_gcrf: 3-element array with 1-sigma position uncertainty [meters]
+        """
+        ...
+
+    def set_gcrf_vel_uncertainty(
+        self, sigma_gcrf: npt.NDArray[np.float64]
+    ) -> None:
+        """Set velocity uncertainty (1-sigma) in GCRF
+
+        Constructs a diagonal velocity covariance from the given 1-sigma values.
+
+        Args:
+            sigma_gcrf: 3-element array with 1-sigma velocity uncertainty [m/s]
         """
         ...
 
@@ -2665,17 +2752,18 @@ class satstate:
     ) -> satstate:
         """Propagate this state to a new time
 
-        Automatically segments propagation at impulsive maneuver times,
-        applying delta-v at each maneuver epoch.
+        If covariance is set, it is propagated via the state transition matrix.
+        If maneuvers are scheduled between the current and target time, propagation
+        automatically segments at each maneuver epoch and applies the delta-v.
+        Maneuvers are preserved on the returned state.
 
         Args:
-            time (satkit.time|satkit.duration): Time or duration from current time to which to propagate the state
-            propsettings (satkit.propsettings, optional): Propagation settings. If omitted, default is used
+            time (satkit.time|satkit.duration): Target time, or duration from current time
+            propsettings (satkit.propsettings, optional): Propagation settings
             satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
 
         Returns:
-            satstate: New satellite state object representing the state at the new time.
-                Maneuvers are preserved on the returned state.
+            satstate: New state at the target time
 
         Example:
             ```python
