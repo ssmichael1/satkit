@@ -186,8 +186,7 @@ pub mod tle;
 /// Utility functions
 pub mod utils;
 
-/// Coordinate frames
-/// Currently not used
+/// Coordinate frames (re-exported as `Frame` at crate root)
 mod frames;
 
 // Orbital Mean-Element Messages
