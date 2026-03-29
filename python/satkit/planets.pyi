@@ -3,7 +3,6 @@ Low-precision planetary ephemerides from https://ssd.jpl.nasa.gov/?planet_pos
 """
 
 from __future__ import annotations
-import typing
 import numpy.typing as npt
 import numpy as np
 

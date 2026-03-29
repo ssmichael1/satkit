@@ -186,8 +186,7 @@ pub mod tle;
 /// Utility functions
 pub mod utils;
 
-/// Coordinate frames
-/// Currently not used
+/// Coordinate frames (re-exported as `Frame` at crate root)
 mod frames;
 
 // Orbital Mean-Element Messages
@@ -231,7 +230,7 @@ pub mod prelude {
 
     // Propagation
     pub use crate::orbitprop::{
-        propagate, CovState, PropSettings, PropagationResult, SatProperties, SatPropertiesStatic,
+        propagate, CovState, PropSettings, PropagationResult, SatProperties, SatPropertiesSimple,
         SatState, SimpleState, StateCov,
     };
 

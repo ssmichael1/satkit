@@ -6,8 +6,6 @@ Currently only contains NRL MSISE-00 air density model
 
 from __future__ import annotations
 import typing
-import numpy.typing as npt
-import numpy as np
 
 import satkit
 

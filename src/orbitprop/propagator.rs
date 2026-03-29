@@ -345,6 +345,10 @@ pub fn propagate<const C: usize, T: TimeLike>(
                     }
                 }
             }
+            // Continuous thrust acceleration
+            if let Some(a_thrust) = props.thrust_accel(&time, &pos_gcrf, &vel_gcrf) {
+                accel += a_thrust;
+            }
         }
 
         if C == 1 {
@@ -478,6 +482,10 @@ pub fn propagate<const C: usize, T: TimeLike>(
                             );
                         }
                     }
+                    // Continuous thrust acceleration
+                    if let Some(a_thrust) = props.thrust_accel(&time, &pos_gcrf, &vel_gcrf) {
+                        accel += a_thrust;
+                    }
                 }
 
                 let mut dy = numeris::Vector::<f64, 6>::zeros();
@@ -586,7 +594,7 @@ pub fn interp_propresult_batch<const C: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{consts, orbitprop::SatPropertiesStatic};
+    use crate::{consts, orbitprop::SatPropertiesSimple};
     use std::f64::consts::PI;
 
     use std::fs::File;
@@ -769,7 +777,7 @@ mod tests {
             ..Default::default()
         };
 
-        let satprops: SatPropertiesStatic = SatPropertiesStatic::new(2.0 * 0.3 * 0.1 / 5.0, 0.0);
+        let satprops: SatPropertiesSimple = SatPropertiesSimple::new(2.0 * 0.3 * 0.1 / 5.0, 0.0);
 
         // Made-up small variations in the state
         let dstate = numeris::vector![2.0, -4.0, 20.5, 0.05, 0.02, -0.01];
@@ -874,7 +882,7 @@ mod tests {
         ];
 
         let state0 = numeris::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
-        let satprops: SatPropertiesStatic = SatPropertiesStatic::new(0.0, v0[3]);
+        let satprops: SatPropertiesSimple = SatPropertiesSimple::new(0.0, v0[3]);
 
         let settings = PropSettings {
             enable_interp: true,
@@ -1075,7 +1083,7 @@ mod tests {
         state[4] = (consts::MU_EARTH / r).sqrt();
 
         // Typical small satellite: Cd=2.2, A=0.01 m^2, mass=1 kg
-        let satprops = SatPropertiesStatic::new(2.2 * 0.01 / 1.0, 0.0);
+        let satprops = SatPropertiesSimple::new(2.2 * 0.01 / 1.0, 0.0);
 
         let settings_rodas4 = PropSettings {
             abs_error: 1.0e-8,
@@ -1136,5 +1144,105 @@ mod tests {
             "Expected STM error, got: {}",
             err_msg
         );
+    }
+
+    #[test]
+    fn test_continuous_thrust() -> Result<()> {
+        use crate::orbitprop::{ContinuousThrust, ThrustProfile};
+        use crate::Frame;
+
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_hours(2.0);
+
+        // Circular orbit at 500 km
+        let r = consts::EARTH_RADIUS + 500.0e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = r;
+        state[4] = v;
+
+        let settings = PropSettings {
+            gravity_degree: 4,
+            ..Default::default()
+        };
+
+        // Propagate without thrust
+        let res_no_thrust = propagate(&state, &starttime, &stoptime, &settings, None)?;
+
+        // Propagate with in-track thrust in RIC
+        let thrust = ThrustProfile::new(vec![ContinuousThrust::new(
+            numeris::vector![0.0, 1.0e-4, 0.0], // 0.1 mm/s^2 in-track
+            Frame::RIC,
+            starttime,
+            stoptime,
+        )]);
+        let satprops = SatPropertiesSimple::default().with_thrust(thrust);
+
+        let res_thrust = propagate(&state, &starttime, &stoptime, &settings, Some(&satprops))?;
+
+        // Thrust should increase the orbit — final radius should be larger
+        let r_no_thrust = res_no_thrust.state_end.block::<3, 1>(0, 0).norm();
+        let r_thrust = res_thrust.state_end.block::<3, 1>(0, 0).norm();
+        assert!(
+            r_thrust > r_no_thrust,
+            "Along-track thrust should raise orbit: r_thrust={}, r_no_thrust={}",
+            r_thrust, r_no_thrust
+        );
+
+        // The states should differ meaningfully (thrust had an effect)
+        let pos_diff = (res_thrust.state_end.block::<3, 1>(0, 0)
+            - res_no_thrust.state_end.block::<3, 1>(0, 0))
+        .norm();
+        assert!(
+            pos_diff > 100.0,
+            "Thrust should produce significant position difference: {} m",
+            pos_diff
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_continuous_thrust_gcrf() -> Result<()> {
+        use crate::orbitprop::{ContinuousThrust, ThrustProfile};
+        use crate::Frame;
+
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        // Short propagation to verify GCRF thrust direction is respected
+        let stoptime = starttime + Duration::from_minutes(10.0);
+
+        let r = consts::EARTH_RADIUS + 500.0e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = r;
+        state[4] = v;
+
+        let settings = PropSettings {
+            gravity_degree: 4,
+            ..Default::default()
+        };
+
+        // Thrust in +Z GCRF direction
+        let thrust = ThrustProfile::new(vec![ContinuousThrust::new(
+            numeris::vector![0.0, 0.0, 1.0e-3], // 1 mm/s^2 in +Z
+            Frame::GCRF,
+            starttime,
+            stoptime,
+        )]);
+        let satprops = SatPropertiesSimple::default().with_thrust(thrust);
+
+        let res_no_thrust = propagate(&state, &starttime, &stoptime, &settings, None)?;
+        let res_thrust = propagate(&state, &starttime, &stoptime, &settings, Some(&satprops))?;
+
+        // Z component of position should be larger with +Z thrust
+        let z_no_thrust = res_no_thrust.state_end[(2, 0)];
+        let z_thrust = res_thrust.state_end[(2, 0)];
+        assert!(
+            z_thrust > z_no_thrust,
+            "+Z thrust should increase Z position: z_thrust={}, z_no_thrust={}",
+            z_thrust, z_no_thrust
+        );
+
+        Ok(())
     }
 }

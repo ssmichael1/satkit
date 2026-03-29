@@ -76,7 +76,7 @@ $$
 \vec{a}~=~-P_{sun}~C_R\frac{A}{m}\hat{p}_{sun}
 $$
 
-To include this force, the user sets a static $C_R\frac{A}{m}$ value in the `satproperties_static` object used in the propagation. The integrator takes care of computing the sun position and Earth occlusion.
+To include this force, the user sets a static $C_R\frac{A}{m}$ value in the `satproperties` object used in the propagation. The integrator takes care of computing the sun position and Earth occlusion.
 
 ## Un-modeled Forces
 
@@ -125,7 +125,7 @@ settings = sk.propsettings(
     integrator=sk.integrator.rodas4,
     gravity_degree=8,
 )
-satprops = sk.satproperties_static(cd_a_over_m=2.2 * 0.01 / 1.0)
+satprops = sk.satproperties(cd_a_over_m=2.2 * 0.01 / 1.0)
 ```
 
 !!! note

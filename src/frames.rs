@@ -17,7 +17,17 @@ pub enum Frame {
     /// International Celestial Reference Frame
     ICRF,
     /// Local Vertical Local Horizontal
+    ///
+    /// * z axis = -r (nadir)
+    /// * y axis = -h (opposite angular momentum, h = r × v)
+    /// * x axis completes the right-handed system (approximately velocity direction for circular orbits)
     LVLH,
+    /// Radial / In-track / Cross-track
+    ///
+    /// * R (radial): unit vector along position (outward from Earth center)
+    /// * I (in-track): unit vector along velocity projected perpendicular to R (approximately velocity direction for circular orbits)
+    /// * C (cross-track): completes right-handed system (along angular momentum, h = r × v)
+    RIC,
 }
 
 impl std::fmt::Display for Frame {
@@ -31,6 +41,7 @@ impl std::fmt::Display for Frame {
             Self::EME2000 => write!(f, "EME2000"),
             Self::ICRF => write!(f, "ICRF"),
             Self::LVLH => write!(f, "LVLH"),
+            Self::RIC => write!(f, "RIC"),
         }
     }
 }
@@ -48,6 +59,7 @@ impl std::str::FromStr for Frame {
             "EME2000" => Ok(Self::EME2000),
             "ICRF" => Ok(Self::ICRF),
             "LVLH" => Ok(Self::LVLH),
+            "RIC" => Ok(Self::RIC),
             _ => bail!("Invalid Frame"),
         }
     }
