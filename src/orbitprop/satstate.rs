@@ -41,11 +41,12 @@ impl ImpulsiveManeuver {
     /// Compute the delta-v in GCRF given the state at maneuver time
     fn delta_v_gcrf(&self, pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Vector3 {
         match self.frame {
+            Frame::GCRF => self.delta_v,
             Frame::RIC => {
                 let dcm = frametransform::ric_to_gcrf(pos_gcrf, vel_gcrf);
                 dcm * self.delta_v
             }
-            _ => self.delta_v, // GCRF and others treated as inertial
+            _ => panic!("Unsupported frame for maneuver: {}. Must be GCRF or RIC", self.frame)
         }
     }
 }
@@ -126,8 +127,8 @@ impl SatState {
         let v = self.vel_gcrf();
         let h = p.cross(&v);
         let neg_p = p * -1.0;
-        let neg_h_dir = numeris::vector![0.0, 0.0, 1.0];
-        let q1 = Quaternion::rotation_between(neg_p, neg_h_dir);
+        let z_target = numeris::vector![0.0, 0.0, 1.0];
+        let q1 = Quaternion::rotation_between(neg_p, z_target);
         let rotated_h = q1 * (h * -1.0);
         let y_axis = numeris::vector![0.0, 1.0, 0.0];
         let q2 = Quaternion::rotation_between(rotated_h, y_axis);

@@ -451,10 +451,10 @@ pub fn qtirs2cirs<T: TimeLike>(tm: &T) -> Quaternion {
 
 /// Compute the RIC-to-GCRF rotation matrix from position and velocity
 ///
-/// RIC frame convention (CCSDS standard):
-///   x = radial (away from Earth center)
-///   y = in-track (along velocity, perpendicular to radial in orbital plane)
-///   z = cross-track (orbit normal, completes right-handed triad)
+/// RIC frame:
+///   R = radial (outward from Earth center)
+///   I = in-track (along velocity, perpendicular to R in orbital plane)
+///   C = cross-track (along angular momentum, h = r x v, completes right-handed system)
 ///
 /// # Arguments
 ///

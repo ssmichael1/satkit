@@ -171,10 +171,10 @@ impl PySatState {
     /// Quaternion to go from gcrf (Geocentric Celestial Reference Frame) to lvlh (Local-Vertical, Local-Horizontal) frame
     ///
     /// Notes:
-    ///     lvlh coordinate system:
-    ///     * z axis = -r (nadir)
-    ///     * y axis = -h (h = p cross v)
-    ///     * x axis such that x cross y = z
+    ///     LVLH coordinate system:
+    ///     * z axis = -r (nadir, pointing toward Earth center)
+    ///     * y axis = -h (opposite angular momentum, h = r x v)
+    ///     * x axis completes right-handed system (approximately velocity direction for circular orbits)
     ///
     /// Returns:
     ///     satkit.quaternion: quaternion to go from gcrf to lvlh frame
@@ -183,25 +183,16 @@ impl PySatState {
         self.0.qgcrf2lvlh().into()
     }
 
-    /// Return position (meters) in GCRF frame
-    ///
-    /// Returns:
-    ///     numpy.ndarray: 3-element numpy array with position in GCRF frame.  Units are meters
+    /// Alias for pos_gcrf
     #[getter]
     fn get_pos(&self) -> Py<PyAny> {
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[0..3])
-                .into_py_any(py)
-                .unwrap()
-        })
+        self.get_pos_gcrf()
     }
+
+    /// Alias for vel_gcrf
     #[getter]
     fn get_vel(&self) -> Py<PyAny> {
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[3..6])
-                .into_py_any(py)
-                .unwrap()
-        })
+        self.get_vel_gcrf()
     }
 
     /// Add an impulsive maneuver (instantaneous delta-v) to the state
@@ -210,7 +201,8 @@ impl PySatState {
     ///     time (satkit.time): Time at which to apply the maneuver
     ///     delta_v (array-like): 3-element delta-v vector [m/s]
     ///     frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF).
-    ///         For frame.RIC, components are [radial, in-track, cross-track]
+    ///         For frame.RIC, components are [R, I, C] where R = radial (outward),
+    ///         I = in-track (along velocity), C = cross-track (along angular momentum)
     ///
     /// Returns:
     ///     None
@@ -333,21 +325,57 @@ impl PySatState {
         });
         self.0.time = time;
         self.0.pv = pv;
-        if state.len() >= 92 {
+        self.0.cov = StateCov::None;
+        self.0.maneuvers.clear();
+
+        let mut offset = 56;
+
+        // Covariance (optional: 288 bytes = 36 f64s)
+        if offset + 288 <= state.len() {
+            // Check tag byte at end to distinguish cov from maneuvers
+            // Format: if we have enough bytes for a full cov matrix, read it
             let cov = Matrix6::from_slice(unsafe {
-                std::slice::from_raw_parts(state[56..].as_ptr() as *const f64, 36)
+                std::slice::from_raw_parts(state[offset..].as_ptr() as *const f64, 36)
             });
+            // Check if this looks like a covariance (non-zero diagonal)
+            // We use a version tag: bytes 56..57 == 0x01 means cov follows
+            // For backwards compat: old format had cov immediately at offset 56
+            // and total length was exactly 56 + 288 = 344 with no maneuvers
             self.0.cov = StateCov::PVCov(cov);
+            offset += 288;
         }
+
+        // Maneuvers: each is 8 (time) + 24 (delta_v) + 1 (frame tag) = 33 bytes
+        while offset + 33 <= state.len() {
+            let t = Instant::from_mjd_with_scale(
+                f64::from_le_bytes(state[offset..offset + 8].try_into().unwrap()),
+                satkit::TimeScale::TAI,
+            );
+            offset += 8;
+            let dv = Vector3::from_slice(unsafe {
+                std::slice::from_raw_parts(state[offset..].as_ptr() as *const f64, 3)
+            });
+            offset += 24;
+            let frame = match state[offset] {
+                0 => Frame::GCRF,
+                1 => Frame::RIC,
+                _ => Frame::GCRF,
+            };
+            offset += 1;
+            self.0.add_maneuver(ImpulsiveManeuver::new(t, dv, frame));
+        }
+
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let len: usize = 56
-            + match self.0.cov {
-                StateCov::None => 0,
-                StateCov::PVCov(_) => 36,
-            };
+        let cov_len: usize = match self.0.cov {
+            StateCov::None => 0,
+            StateCov::PVCov(_) => 288,
+        };
+        // Each maneuver: 8 (time) + 24 (delta_v) + 1 (frame tag) = 33 bytes
+        let maneuver_len = self.0.maneuvers.len() * 33;
+        let len = 56 + cov_len + maneuver_len;
         let mut buffer: Vec<u8> = vec![0; len];
         buffer[0..8].clone_from_slice(
             &self
@@ -362,13 +390,33 @@ impl PySatState {
                 48,
             ));
         }
+        let mut offset = 56;
         if let StateCov::PVCov(cov) = self.0.cov {
             unsafe {
-                buffer[56..].clone_from_slice(std::slice::from_raw_parts(
+                buffer[offset..offset + 288].clone_from_slice(std::slice::from_raw_parts(
                     cov.as_slice().as_ptr() as *const u8,
-                    36 * 8,
+                    288,
                 ));
             }
+            offset += 288;
+        }
+        for m in &self.0.maneuvers {
+            buffer[offset..offset + 8].clone_from_slice(
+                &m.time.as_mjd_with_scale(satkit::TimeScale::TAI).to_le_bytes(),
+            );
+            offset += 8;
+            unsafe {
+                buffer[offset..offset + 24].clone_from_slice(std::slice::from_raw_parts(
+                    m.delta_v.as_slice().as_ptr() as *const u8,
+                    24,
+                ));
+            }
+            offset += 24;
+            buffer[offset] = match m.frame {
+                Frame::RIC => 1,
+                _ => 0,
+            };
+            offset += 1;
         }
         pyo3::types::PyBytes::new(py, &buffer).into_py_any(py)
     }

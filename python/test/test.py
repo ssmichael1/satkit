@@ -1039,6 +1039,72 @@ class TestSatState:
         assert np.array([0.0, 0.0, 1.0]) == pytest.approx(rz, abs=1e-10)
 
 
+    def test_satstate_pickle(self):
+        """Test that satstate pickle round-trips all fields including maneuvers"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        t_burn = t0 + sk.duration.from_hours(1)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+        sat.add_maneuver(t_burn + sk.duration.from_hours(1), [5, 0, 0], frame=sk.frame.GCRF)
+
+        restored = pickle.loads(pickle.dumps(sat))
+
+        assert restored.time == sat.time
+        assert np.allclose(restored.pos, sat.pos)
+        assert np.allclose(restored.vel, sat.vel)
+        assert restored.num_maneuvers == 2
+
+    def test_satstate_pickle_with_cov(self):
+        """Test that satstate pickle round-trips covariance and maneuvers together"""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        sat.set_lvlh_pos_uncertainty(np.array([100.0, 200.0, 50.0]))
+        sat.add_maneuver(t0 + sk.duration.from_hours(1), [0, 5, 0], frame=sk.frame.RIC)
+
+        restored = pickle.loads(pickle.dumps(sat))
+
+        assert restored.time == sat.time
+        assert np.allclose(restored.pos, sat.pos)
+        assert np.allclose(restored.vel, sat.vel)
+        assert restored.cov is not None
+        assert np.allclose(restored.cov, sat.cov)
+        assert restored.num_maneuvers == 1
+
+
+class TestSatPropertiesPickle:
+    def test_satproperties_pickle_basic(self):
+        """Test that satproperties pickle round-trips drag/SRP coefficients"""
+        props = sk.satproperties(craoverm=0.02, cdaoverm=0.01)
+        restored = pickle.loads(pickle.dumps(props))
+        assert restored.craoverm == pytest.approx(0.02)
+        assert restored.cdaoverm == pytest.approx(0.01)
+
+    def test_satproperties_pickle_with_thrust(self):
+        """Test that satproperties pickle round-trips thrust arcs"""
+        t0 = sk.time(2024, 1, 1)
+        t1 = t0 + sk.duration.from_hours(1)
+        t2 = t1 + sk.duration.from_hours(1)
+
+        thrust1 = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RIC)
+        thrust2 = sk.thrust.constant([0, 0, 5e-3], t1, t2, frame=sk.frame.GCRF)
+        props = sk.satproperties(cdaoverm=0.01, thrusts=[thrust1, thrust2])
+
+        restored = pickle.loads(pickle.dumps(props))
+
+        assert restored.cdaoverm == pytest.approx(0.01)
+        assert len(restored.thrusts) == 2
+        assert restored.thrusts[0].frame == sk.frame.RIC
+        assert restored.thrusts[0].accel == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
+        assert restored.thrusts[1].frame == sk.frame.GCRF
+        assert restored.thrusts[1].accel == [pytest.approx(0), pytest.approx(0), pytest.approx(5e-3)]
+
+
 class TestTLE:
     def test_tle_setting(self):
         """

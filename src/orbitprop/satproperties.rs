@@ -40,7 +40,7 @@ pub struct SatPropertiesSimple {
 }
 
 impl SatPropertiesSimple {
-    pub const fn new(cdaoverm: f64, craoverm: f64) -> Self {
+    pub fn new(cdaoverm: f64, craoverm: f64) -> Self {
         Self {
             cdaoverm,
             craoverm,

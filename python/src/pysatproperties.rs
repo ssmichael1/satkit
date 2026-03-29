@@ -134,20 +134,73 @@ impl PySatProperties {
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {
         let state = state.as_bytes(py);
-        if state.len() != 16 {
+        if state.len() < 16 {
             bail!("Invalid serialization length");
         }
         let craoverm = f64::from_le_bytes(state[0..8].try_into()?);
         let cdaoverm = f64::from_le_bytes(state[8..16].try_into()?);
         self.0.cdaoverm = cdaoverm;
         self.0.craoverm = craoverm;
+        self.0.thrust = satkit::orbitprop::ThrustProfile::default();
+
+        // Each thrust arc: 24 (accel) + 1 (frame tag) + 8 (start) + 8 (end) = 41 bytes
+        let mut offset = 16;
+        while offset + 41 <= state.len() {
+            let accel = satkit::mathtypes::Vector3::from_slice(unsafe {
+                std::slice::from_raw_parts(state[offset..].as_ptr() as *const f64, 3)
+            });
+            offset += 24;
+            let frame = match state[offset] {
+                1 => satkit::Frame::RIC,
+                _ => satkit::Frame::GCRF,
+            };
+            offset += 1;
+            let start = satkit::Instant::from_mjd_with_scale(
+                f64::from_le_bytes(state[offset..offset + 8].try_into()?),
+                satkit::TimeScale::TAI,
+            );
+            offset += 8;
+            let end = satkit::Instant::from_mjd_with_scale(
+                f64::from_le_bytes(state[offset..offset + 8].try_into()?),
+                satkit::TimeScale::TAI,
+            );
+            offset += 8;
+            self.0.thrust.thrusts.push(
+                satkit::orbitprop::ContinuousThrust::new(accel, frame, start, end),
+            );
+        }
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        let mut raw = [0; 16];
+        // Each thrust arc: 24 (accel) + 1 (frame tag) + 8 (start) + 8 (end) = 41 bytes
+        let thrust_len = self.0.thrust.thrusts.len() * 41;
+        let mut raw = vec![0u8; 16 + thrust_len];
         raw[0..8].clone_from_slice(&self.0.craoverm.to_le_bytes());
         raw[8..16].clone_from_slice(&self.0.cdaoverm.to_le_bytes());
+        let mut offset = 16;
+        for t in &self.0.thrust.thrusts {
+            unsafe {
+                raw[offset..offset + 24].clone_from_slice(std::slice::from_raw_parts(
+                    t.accel.as_slice().as_ptr() as *const u8,
+                    24,
+                ));
+            }
+            offset += 24;
+            raw[offset] = match t.frame {
+                satkit::Frame::RIC => 1,
+                _ => 0,
+            };
+            offset += 1;
+            raw[offset..offset + 8].clone_from_slice(
+                &t.start.as_mjd_with_scale(satkit::TimeScale::TAI).to_le_bytes(),
+            );
+            offset += 8;
+            raw[offset..offset + 8].clone_from_slice(
+                &t.end.as_mjd_with_scale(satkit::TimeScale::TAI).to_le_bytes(),
+            );
+            offset += 8;
+        }
         pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }
 

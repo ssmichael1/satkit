@@ -691,8 +691,8 @@ class frame:
     - ``TIRS`` - Terrestrial Intermediate Reference System
     - ``EME2000`` - Earth Mean Equator 2000
     - ``ICRF`` - International Celestial Reference Frame
-    - ``LVLH`` - Local Vertical Local Horizontal
-    - ``RIC`` - Radial / In-track / Cross-track
+    - ``LVLH`` - Local Vertical Local Horizontal: z = -r (nadir), y = -h (opposite angular momentum), x completes right-handed system
+    - ``RIC`` - Radial / In-track / Cross-track: R = radial (outward), I = in-track (along velocity), C = cross-track (along angular momentum)
 
     Example:
 
@@ -726,16 +726,19 @@ class frame:
     """International Celestial Reference Frame"""
 
     LVLH: ClassVar[frame]
-    """Local Vertical Local Horizontal"""
+    """Local Vertical Local Horizontal
+
+    - z axis: -r (nadir, pointing toward Earth center)
+    - y axis: -h (opposite orbital angular momentum, h = r x v)
+    - x axis: completes right-handed system (approximately velocity direction for circular orbits)
+    """
 
     RIC: ClassVar[frame]
-    """Radial / In-track / Cross-track (CCSDS standard)
+    """Radial / In-track / Cross-track
 
-    Components: [radial, in-track, cross-track]
-
-    - Radial: away from Earth center
-    - In-track: along velocity direction
-    - Cross-track: orbit normal
+    - R (radial): unit vector along position (outward from Earth center)
+    - I (in-track): velocity projected perpendicular to R (approximately velocity direction for circular orbits)
+    - C (cross-track): completes right-handed system (along angular momentum, h = r x v)
     """
 
 class time:
@@ -2598,6 +2601,11 @@ class satstate:
     def qgcrf2lvlh(self) -> quaternion:
         """Quaternion that rotates from the GCRF to the LVLH frame for the current state
 
+        LVLH frame:
+            - z axis: -r (nadir, pointing toward Earth center)
+            - y axis: -h (opposite orbital angular momentum, h = r x v)
+            - x axis: completes right-handed system
+
         Returns:
             Quaternion that rotates from the GCRF to the LVLH frame for the current state
         """
@@ -2633,7 +2641,8 @@ class satstate:
             time (satkit.time): Time at which to apply the maneuver
             delta_v (array-like): 3-element delta-v vector [m/s]
             frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF).
-                For frame.RIC, components are [radial, in-track, cross-track]
+                For frame.RIC, components are [R, I, C] where R = radial (outward),
+                I = in-track (along velocity), C = cross-track (along angular momentum)
 
         Example:
             ```python
@@ -2918,9 +2927,10 @@ class thrust:
     """Continuous thrust acceleration for orbit maneuvers
 
     Represents a constant thrust acceleration over a time window,
-    specified in either the GCRF (inertial) or RIC (Radial/In-track/Cross-track) frame.
+    specified in either the GCRF (inertial) or RIC frame.
 
-    RIC components are [radial, in-track, cross-track].
+    RIC components are [R, I, C] where R = radial (outward from Earth center),
+    I = in-track (along velocity), C = cross-track (along angular momentum, h = r x v).
 
     Example:
 

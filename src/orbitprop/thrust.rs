@@ -44,7 +44,7 @@ impl ContinuousThrust {
                 let dcm = frametransform::ric_to_gcrf(pos_gcrf, vel_gcrf);
                 dcm * self.accel
             }
-            _ => self.accel, // other frames treated as GCRF for now
+            _ => panic!("Unsupported frame for thrust: {}. Must be GCRF or RIC", self.frame)
         })
     }
 }
