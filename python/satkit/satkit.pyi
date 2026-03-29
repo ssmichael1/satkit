@@ -84,6 +84,26 @@ class TLE:
         """
         ...
 
+    @staticmethod
+    def from_url(url: str) -> list[TLE] | TLE:
+        """Load TLE(s) from a URL
+
+        Fetches the content at the given URL and parses it as TLE lines.
+        Works with any URL that returns plain-text TLE data.
+
+        Args:
+            url (str): URL to fetch TLE data from
+
+        Returns:
+            Single TLE or list of TLEs parsed from the response
+
+        Example:
+            ```python
+            tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
+            ```
+        """
+        ...
+
     @property
     def satnum(self) -> int:
         """Satellite number, or equivalently the NORAD ID"""
@@ -3507,6 +3527,29 @@ def propagate(
         # Interpolate at intermediate time
         t_mid = t0 + satkit.duration(hours=12)
         mid_state = result.interp(t_mid)
+        ```
+    """
+    ...
+
+def omm_from_url(url: str) -> list[dict]:
+    """Load OMM(s) from a URL as a list of dictionaries
+
+    Fetches the content at the given URL and auto-detects JSON vs XML format.
+    Returns a list of dictionaries that can be passed directly to :func:`sgp4`.
+
+    Args:
+        url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
+
+    Returns:
+        list[dict]: List of OMM dictionaries with standard CCSDS keys
+            (OBJECT_NAME, EPOCH, MEAN_MOTION, ECCENTRICITY, etc.)
+
+    Example:
+        ```python
+        import satkit as sk
+
+        omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json")
+        pos, vel = sk.sgp4(omms[0], sk.time(2024, 1, 1))
         ```
     """
     ...

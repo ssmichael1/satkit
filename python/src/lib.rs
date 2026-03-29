@@ -31,6 +31,7 @@ mod pypropsettings;
 mod pysatproperties;
 mod pythrust;
 
+mod pyomm;
 mod pyutils;
 
 use pyduration::PyDuration;
@@ -176,6 +177,8 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pylambert::lambert, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyomm::omm_from_url, m)?)
         .unwrap();
 
     m.add_wrapped(wrap_pymodule!(frametransform))?;

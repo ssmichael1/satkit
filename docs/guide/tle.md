@@ -39,18 +39,36 @@ OMMs are commonly published as:
 - XML
 - KVN (key-value notation)
 
-The satkit Python interface does not load OMM files directly. Instead, it expects you to provide the decoded OMM as a Python `dict` (for example, parsed from JSON or XML). The interface supports OMM dictionary layouts produced by CelesTrak and Space-Track.
+OMMs are commonly published as JSON or XML. The `satkit.omm_from_url()` function fetches OMMs from a URL and auto-detects the format, returning a list of Python dictionaries that can be passed directly to `satkit.sgp4()`.
+
+You can also provide OMM dictionaries manually (e.g. parsed from a local JSON file).
+
+## Loading from URLs
+
+Both TLEs and OMMs can be loaded directly from a URL:
+
+```python
+import satkit as sk
+
+# Load TLEs from a URL
+tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
+
+# Load OMMs from a URL (auto-detects JSON vs XML)
+omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json")
+
+# OMMs work directly with sgp4()
+pos, vel = sk.sgp4(omms[0], sk.time(2024, 6, 1))
+```
 
 ## Example Usage
 
-### SGP4 State Computation from TLE
+### SGP4 from TLE lines
 
 ```python
 import satkit as sk
 
 # The two-line element set
 # Let's pick a random Starlink satellite
-# The lines below were downloaded from https://www.celestrak.org
 tle_lines = [
     '0 STARLINK-30477',
     '1 57912U 23146X   24099.49439401  .00006757  00000+0  51475-3 0  9997',
@@ -60,57 +78,50 @@ tle_lines = [
 # Create a TLE object
 starlink30477 = sk.TLE.from_lines(tle_lines)
 
-# We want the orbital state at April 9 2024, 12:00pm UTC
+# The state is output in the "TEME" frame
+pTEME, _vTEME = sk.sgp4(starlink30477, sk.time(2024, 4, 9, 12, 0, 0))
+
+# Rotate to Earth-fixed (ITRF) and get geodetic coordinates
 thetime = sk.time(2024, 4, 9, 12, 0, 0)
-
-# The state is output in the "TEME" frame, which is an approximate inertial
-# frame that does not include precession or nutation
-# pTEME is geocentric position in meters
-# vTEME is geocentric velocity in meters / second
-# for now we will ignore the velocity
-pTEME, _vTEME = sk.sgp4(starlink30477, thetime)
-
-# Suppose we want current latitude, longitude, and altitude of satellite:
-# we need to rotate into an Earth-fixed frame, the ITRF
-# We use a "quaternion" to represent the rotation.  Quaternion rotations
-# in the satkit toolbox can be represented as multiplications of a 3-vector
 pITRF = sk.frametransform.qteme2itrf(thetime) * pTEME
-
-# Now lets make a "ITRFCoord" object to extract geodetic coordinates
 coord = sk.itrfcoord(pITRF)
-
-# Get the latitude, longitude, and
-# altitude (height above ellipsoid, or hae) of the satellite
 print(coord)
-
-# this should produce:
 # ITRFCoord(lat:  29.3890 deg, lon: 170.8051 deg, hae: 560.11 km)
 ```
 
-### SGP4 State Computation from OMM (International Space Station)
+### SGP4 from a URL (TLE)
 
 ```python
 import satkit as sk
-import requests
-import json
 
-# Query the current ephemeris for the International Space Station (ISS)
-# from celestrak.org
-url = 'https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json'
-with requests.get(url) as response:
-    omm = response.json()
+# Load all space station TLEs directly from CelesTrak
+tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
+iss = tles[0]  # ISS is first
 
-# Get a representative time from the output
-epoch = sk.time(omm[0]['EPOCH'])
-# create a list of times .. once every 10 minutes
+pos, vel = sk.sgp4(iss, sk.time(2024, 6, 1))
+```
+
+### SGP4 from a URL (OMM)
+
+```python
+import satkit as sk
+
+# Load ISS ephemeris as OMM from CelesTrak
+omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json")
+
+epoch = sk.time(omms[0]['EPOCH'])
 time_array = [epoch + sk.duration(minutes=i*10) for i in range(6)]
 
-# TEME (inertial) output from SGP4
-pTEME, _vTEME = sk.sgp4(omm[0], time_array)
+# SGP4 propagation
+pTEME, _vTEME = sk.sgp4(omms[0], time_array)
 
-# Rotate to Earth-fixed
+# Rotate to Earth-fixed and get geodetic coordinates
 pITRF = [sk.frametransform.qteme2itrf(t) * p for t, p in zip(time_array, pTEME)]
-
-# Geodetic coordinates of space station at given times
 coord = [sk.itrfcoord(x) for x in pITRF]
+```
+
+XML format works the same way -- just change the URL:
+
+```python
+omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=xml")
 ```
