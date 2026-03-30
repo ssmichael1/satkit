@@ -1,6 +1,25 @@
 # Changelog
 
 
+## 0.15.1 - 2026-03-29
+
+### URL Loading
+
+- **`TLE.from_url(url)`**: Load TLE(s) directly from a URL returning plain-text TLE data
+- **`OMM.from_url(url)`** (Rust): Load OMM(s) from a URL with auto-detection of JSON vs XML format
+- **`omm_from_url(url)`** (Python): Fetch OMMs from a URL and return as a list of dictionaries, compatible with `sgp4()`
+
+### SatState Documentation
+
+- Expose `set_lvlh_vel_uncertainty()` and `set_gcrf_vel_uncertainty()` in Python bindings
+- Rewrite `SatState` struct and type stub documentation: when to use it vs `propagate()`, units, pickle support
+- Add `SatState` section to user guide with comparison table and code examples
+- Add all missing method stubs to `satkit.pyi`
+
+### Plot Styling
+
+- Extract shared matplotlib style to `docs/satkit.mplstyle`, replacing duplicated `rcParams` blocks across 18 notebooks (22 occurrences, -386 lines)
+
 ## 0.15.0 - 2026-03-29
 
 ### Orbit Maneuvers
