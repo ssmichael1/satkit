@@ -70,7 +70,8 @@ v0 = np.sqrt(sk.consts.mu_earth / r0)
 settings = sk.propsettings(
     gravity_model=sk.gravmodel.jgm3,
     gravity_degree=8,
-    integrator=sk.integrator.rkv98,  # default; also rkv87, rkv65, rkts54
+    integrator=sk.integrator.rkv98,  # default; also rkv87, rkv65, rkts54,
+                                     # gauss_jackson8 (fixed-step multistep)
 )
 
 result = sk.propagate(
@@ -123,14 +124,14 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 
 ### Orbit Propagation
 
-- **Numerical** -- Selectable adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4)) with dense output, state transition matrix, and configurable force models
+- **Numerical** -- Selectable adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4)) plus RODAS4 (stiff) and Gauss-Jackson 8 (fixed-step multistep for high-precision long-duration propagation), with dense output, state transition matrix, and configurable force models
 - **SGP4** -- Standard TLE/OMM propagator with TLE fitting from precision states
 - **Keplerian** -- Analytical two-body propagation
 
 ### Orbit Maneuvers
 
-- **Impulsive maneuvers** -- Instantaneous delta-v applied at a scheduled time during propagation, in GCRF or RIC (radial/in-track/cross-track) frames
-- **Continuous thrust** -- Constant-acceleration thrust arcs over time windows, integrated directly into the force model
+- **Impulsive maneuvers** -- Instantaneous delta-v applied at a scheduled time during propagation. Supported frames: GCRF (inertial), RTN (radial/tangential/normal — the CCSDS OEM convention, also exposed as `RSW` and `RIC` aliases), NTW (normal/tangent/cross-track — natural for prograde burns on eccentric orbits), and LVLH (Local Vertical / Local Horizontal). Ergonomic helpers `add_prograde` / `add_retrograde` / `add_radial` / `add_normal` for common scalar-magnitude burns.
+- **Continuous thrust** -- Constant-acceleration thrust arcs over time windows in any of the frames above, integrated directly into the force model
 - **Automatic segmentation** -- Propagation through maneuver sequences is handled transparently, including backward propagation
 
 ### Force Models

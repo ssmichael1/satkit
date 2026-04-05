@@ -26,7 +26,7 @@ impl PyThrust {
     ///     frame (satkit.frame): Coordinate frame. Supported values:
     ///
     ///         - ``frame.GCRF`` — inertial Cartesian
-    ///         - ``frame.RIC`` — radial / in-track / cross-track (a.k.a. RSW, RTN)
+    ///         - ``frame.RTN`` — radial / tangential / normal (a.k.a. RSW, RIC)
     ///         - ``frame.NTW`` — normal-to-velocity / tangent / cross-track
     ///           (use this for thrust along the velocity vector)
     ///         - ``frame.LVLH`` — Local Vertical / Local Horizontal
@@ -43,10 +43,10 @@ impl PyThrust {
         let rust_frame: Frame = frame.into();
 
         match rust_frame {
-            Frame::GCRF | Frame::RIC | Frame::NTW | Frame::LVLH => {}
+            Frame::GCRF | Frame::RTN | Frame::NTW | Frame::LVLH => {}
             Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME
             | Frame::EME2000 | Frame::ICRF => anyhow::bail!(
-                "Invalid frame for thrust: {}. Must be frame.GCRF, frame.RIC, frame.NTW, or frame.LVLH",
+                "Invalid frame for thrust: {}. Must be frame.GCRF, frame.RTN, frame.NTW, or frame.LVLH",
                 rust_frame
             ),
         }

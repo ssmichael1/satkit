@@ -1529,7 +1529,7 @@ mod tests {
         // Propagate with in-track thrust in RIC
         let thrust = ThrustProfile::new(vec![ContinuousThrust::new(
             numeris::vector![0.0, 1.0e-4, 0.0], // 0.1 mm/s^2 in-track
-            Frame::RIC,
+            Frame::RTN,
             starttime,
             stoptime,
         )]);

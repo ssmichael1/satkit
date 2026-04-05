@@ -1,7 +1,13 @@
 window.MathJax = {
   tex: {
-    inlineMath: [["\\(", "\\)"]],
-    displayMath: [["\\[", "\\]"]],
+    // Accept both the pymdownx.arithmatex delimiters \(...\) / \[...\] (used
+    // in plain Markdown files via the arithmatex extension) AND the
+    // Jupyter / standard LaTeX $...$ and $$...$$ delimiters (used in the
+    // notebook cells under docs/tutorials/). Both are needed because
+    // mkdocs-jupyter passes raw notebook markdown through to MathJax
+    // without going through pymdownx.arithmatex.
+    inlineMath: [["\\(", "\\)"], ["$", "$"]],
+    displayMath: [["\\[", "\\]"], ["$$", "$$"]],
     processEscapes: true,
     processEnvironments: true,
   },

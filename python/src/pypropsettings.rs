@@ -105,7 +105,7 @@ impl PyPropSettings {
             if let Some(gm) = kw.get_item("gravity_model")? {
                 let model: GravModel = gm.extract::<GravModel>()
                     .map_err(|_| pyo3::exceptions::PyValueError::new_err(
-                        "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.jgm3)"
+                        "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.egm96)"
                     ))?;
                 ps.gravity_model = model.into();
                 kw.del_item("gravity_model")?;

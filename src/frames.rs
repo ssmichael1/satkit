@@ -28,31 +28,36 @@ pub enum Frame {
     /// * y axis = -h (opposite angular momentum, h = r × v)
     /// * x axis completes the right-handed system (approximately velocity direction for circular orbits)
     LVLH,
-    /// Radial / In-track / Cross-track.
+    /// Radial / Tangential / Normal — CCSDS OEM/OMM/ODM convention.
     ///
-    /// Also known as **RSW** (Vallado) or **RTN** (CCSDS) — the axes are
-    /// identical; different communities use different names. Compile-time
-    /// aliases [`Frame::RSW`] and [`Frame::RTN`] are available for
-    /// readability when transcribing formulas from those conventions.
+    /// Also known as **RSW** (Vallado's *Fundamentals of Astrodynamics*)
+    /// or **RIC** (Radial / In-track / Cross-track, older NASA usage and
+    /// Clohessy-Wiltshire literature). The three names refer to the
+    /// same axes; different communities use different letters. Compile-
+    /// time aliases [`Frame::RSW`] and [`Frame::RIC`] are available so
+    /// user code can spell the frame whichever way matches the source
+    /// it's transcribing from — all three resolve to the same enum
+    /// variant.
     ///
     /// * **R** (radial): unit vector along position, outward from Earth centre
-    /// * **I** (in-track): perpendicular to R in the orbit plane, in the
-    ///   prograde direction. **Not** parallel to the velocity vector unless
-    ///   the flight-path angle is zero (circular orbit, or perigee/apogee of
-    ///   an eccentric orbit). For eccentric orbits at non-apsidal true
-    ///   anomaly, use [`Frame::NTW`] if you want an axis parallel to
-    ///   velocity.
-    /// * **C** (cross-track): along the angular momentum direction h = r × v,
-    ///   completing the right-handed system
+    /// * **T** (tangential / in-track): perpendicular to R in the orbit
+    ///   plane, in the prograde direction. **Not** parallel to the
+    ///   velocity vector unless the flight-path angle is zero (circular
+    ///   orbit, or perigee/apogee of an eccentric orbit). For eccentric
+    ///   orbits at non-apsidal true anomaly, use [`Frame::NTW`] if you
+    ///   want an axis parallel to velocity.
+    /// * **N** (normal / cross-track): along the angular momentum
+    ///   direction h = r × v, completing the right-handed system
     ///
-    /// This frame is the standard choice for **relative motion** (Hill /
-    /// Clohessy-Wiltshire equations), for **CCSDS OEM / OMM covariance
-    /// messages** (under the "RTN" name), and for **radial/normal burn
-    /// components** whose physical meaning is tied to the position
-    /// vector. `satkit`'s state-vector uncertainty API accepts RIC as
-    /// one of several frames — see
+    /// This frame is the standard choice for **CCSDS OEM / OMM / ODM
+    /// orbit data messages** (which label it RTN), for **relative
+    /// motion** formulations (Hill / Clohessy-Wiltshire equations, often
+    /// written in RIC), and for **radial/normal burn components** whose
+    /// physical meaning is tied to the position vector. `satkit`'s
+    /// state-vector uncertainty API accepts RTN as one of several
+    /// frames — see
     /// [`SatState::set_pos_uncertainty`](crate::orbitprop::SatState::set_pos_uncertainty).
-    RIC,
+    RTN,
     /// Velocity-aligned orbital frame (Vallado §3.3).
     ///
     /// * **N** (normal-to-velocity, in-plane): T̂ × Ŵ. For a circular orbit
@@ -68,25 +73,29 @@ pub enum Frame {
     /// true anomalies, NTW and RIC differ by the flight-path angle, so the
     /// choice matters. Use NTW when planning prograde/retrograde burns,
     /// Hohmann transfers, or anything else where "along velocity" is the
-    /// physically meaningful direction. Use [`Frame::RIC`] when you want
+    /// physically meaningful direction. Use [`Frame::RTN`] when you want
     /// "perpendicular to position" semantics or when interoperating with
-    /// CCSDS OEM / OMM covariance messages (which use RIC under the
-    /// "RTN" name).
+    /// CCSDS OEM / OMM covariance messages (which use this frame under
+    /// the RTN name).
     NTW,
 }
 
 impl Frame {
-    /// Compile-time alias for [`Frame::RIC`] — Vallado's name for the same
+    /// Compile-time alias for [`Frame::RTN`] — Vallado's name for the same
     /// Radial / S=(W×R) / W=(R×V) orbital frame. Provided so code
     /// transcribing formulas from Vallado's *Fundamentals of Astrodynamics*
     /// can use the source's variable names verbatim. Semantically identical
-    /// to `Frame::RIC`; `Display` always renders as `RIC`.
-    pub const RSW: Self = Self::RIC;
+    /// to `Frame::RTN`; `Display` always renders as `RTN`.
+    pub const RSW: Self = Self::RTN;
 
-    /// Compile-time alias for [`Frame::RIC`] — CCSDS OEM/ODM name for the
-    /// same Radial / Tangential / Normal orbital frame. Semantically
-    /// identical to `Frame::RIC`; `Display` always renders as `RIC`.
-    pub const RTN: Self = Self::RIC;
+    /// Compile-time alias for [`Frame::RTN`] — the older NASA /
+    /// Clohessy-Wiltshire literature name for the same axes (Radial /
+    /// In-track / Cross-track). Provided for backward compatibility with
+    /// code that was written against the previous canonical name in
+    /// earlier satkit versions, and for readers of papers that use
+    /// "RIC" rather than "RTN". Semantically identical to `Frame::RTN`;
+    /// `Display` always renders as `RTN`.
+    pub const RIC: Self = Self::RTN;
 }
 
 impl std::fmt::Display for Frame {
@@ -100,7 +109,7 @@ impl std::fmt::Display for Frame {
             Self::EME2000 => write!(f, "EME2000"),
             Self::ICRF => write!(f, "ICRF"),
             Self::LVLH => write!(f, "LVLH"),
-            Self::RIC => write!(f, "RIC"),
+            Self::RTN => write!(f, "RTN"),
             Self::NTW => write!(f, "NTW"),
         }
     }
@@ -119,8 +128,9 @@ impl std::str::FromStr for Frame {
             "EME2000" => Ok(Self::EME2000),
             "ICRF" => Ok(Self::ICRF),
             "LVLH" => Ok(Self::LVLH),
-            // RIC / RSW / RTN are three names for the same frame.
-            "RIC" | "RSW" | "RTN" => Ok(Self::RIC),
+            // RTN / RSW / RIC are three names for the same frame;
+            // canonical is RTN.
+            "RTN" | "RSW" | "RIC" => Ok(Self::RTN),
             "NTW" => Ok(Self::NTW),
             _ => bail!("Invalid Frame"),
         }
@@ -133,20 +143,24 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn rsw_rtn_are_aliases_for_ric() {
+    fn ric_rsw_are_aliases_for_rtn() {
         // Associated-constant aliases resolve to the same enum variant
-        assert!(matches!(Frame::RSW, Frame::RIC));
-        assert!(matches!(Frame::RTN, Frame::RIC));
-        // Display is always the canonical name
-        assert_eq!(Frame::RSW.to_string(), "RIC");
-        assert_eq!(Frame::RTN.to_string(), "RIC");
+        assert!(matches!(Frame::RIC, Frame::RTN));
+        assert!(matches!(Frame::RSW, Frame::RTN));
+        // The three are equal as values (Frame derives PartialEq)
+        assert_eq!(Frame::RIC, Frame::RTN);
+        assert_eq!(Frame::RSW, Frame::RTN);
+        // Display is always the canonical name (RTN)
+        assert_eq!(Frame::RTN.to_string(), "RTN");
+        assert_eq!(Frame::RIC.to_string(), "RTN");
+        assert_eq!(Frame::RSW.to_string(), "RTN");
     }
 
     #[test]
     fn from_str_accepts_aliases() {
-        assert!(matches!(Frame::from_str("RSW").unwrap(), Frame::RIC));
-        assert!(matches!(Frame::from_str("RTN").unwrap(), Frame::RIC));
-        assert!(matches!(Frame::from_str("RIC").unwrap(), Frame::RIC));
+        assert!(matches!(Frame::from_str("RTN").unwrap(), Frame::RTN));
+        assert!(matches!(Frame::from_str("RSW").unwrap(), Frame::RTN));
+        assert!(matches!(Frame::from_str("RIC").unwrap(), Frame::RTN));
         assert!(matches!(Frame::from_str("NTW").unwrap(), Frame::NTW));
     }
 }

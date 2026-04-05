@@ -33,9 +33,9 @@ impl ContinuousThrust {
 
     /// Compute thrust acceleration in GCRF at the given time and state.
     ///
-    /// Supported frames: [`Frame::GCRF`], [`Frame::RIC`], [`Frame::NTW`],
+    /// Supported frames: [`Frame::GCRF`], [`Frame::RTN`], [`Frame::NTW`],
     /// [`Frame::LVLH`]. Use NTW for thrust-along-velocity scenarios (most
-    /// electric-propulsion mission profiles); use RIC for position-tied
+    /// electric-propulsion mission profiles); use RTN for position-tied
     /// burn components; use LVLH if you're porting GN&C code written in
     /// the crewed-spaceflight / body-pointing convention.
     ///
@@ -46,8 +46,8 @@ impl ContinuousThrust {
         }
         Some(match self.frame {
             Frame::GCRF => self.accel,
-            Frame::RIC => {
-                let dcm = frametransform::ric_to_gcrf(pos_gcrf, vel_gcrf);
+            Frame::RTN => {
+                let dcm = frametransform::rtn_to_gcrf(pos_gcrf, vel_gcrf);
                 dcm * self.accel
             }
             Frame::NTW => {
@@ -64,7 +64,7 @@ impl ContinuousThrust {
             | Frame::TEME
             | Frame::EME2000
             | Frame::ICRF => panic!(
-                "Unsupported frame for thrust: {}. Must be GCRF, RIC, NTW, or LVLH",
+                "Unsupported frame for thrust: {}. Must be GCRF, RTN, NTW, or LVLH",
                 self.frame
             ),
         })

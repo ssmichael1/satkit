@@ -56,6 +56,69 @@ class TestFrameTransform:
         assert pGCRF[1] == pytest.approx(6123011.403)
         assert pGCRF[2] == pytest.approx(6378136.925)
 
+    def test_itrf2gcrf_state(self):
+        """
+        IAU-2000 Reduction applied to a full state (position + velocity)
+        in a single call via ``itrf_to_gcrf_state``.
+
+        Vallado Example 3-14 (4th ed) provides both the ITRF state and
+        the expected GCRF state. The position part is verified by
+        :meth:`test_itrf2gcrf` above; this test additionally checks that
+        the velocity transform correctly accounts for Earth's rotation
+        (the ``omega_earth × r`` term, ~465 m/s at this altitude), which
+        a plain quaternion rotation of velocity would miss entirely.
+
+        Expected GCRF state from Vallado Example 3-14:
+            r_GCRF = [ 5102.508959,  6123.011403,  6378.136925] km
+            v_GCRF = [-4.7432196,    0.7905366,    5.5337561  ] km/s
+        """
+        pITRF = np.array([-1033.479383, 7901.2952754, 6380.3565958]) * 1e3
+        vITRF = np.array([-3.225636520, -2.872451450, 5.531924446]) * 1e3
+        tm = sk.time(2004, 4, 6, 7, 51, 28.386009)
+
+        # Single-call full state transform
+        pGCRF, vGCRF = sk.frametransform.itrf_to_gcrf_state(pITRF, vITRF, tm)
+
+        # Position must match the existing Vallado 3-14 reference
+        assert pGCRF[0] == pytest.approx(5102508.959, rel=1e-7)
+        assert pGCRF[1] == pytest.approx(6123011.403, rel=1e-7)
+        assert pGCRF[2] == pytest.approx(6378136.925, rel=1e-7)
+
+        # Velocity must match Vallado's expected GCRF velocity.
+        # The Coriolis-style omega × r term (~465 m/s) is included
+        # automatically by itrf_to_gcrf_state.
+        assert vGCRF[0] == pytest.approx(-4743.2196, rel=1e-6)
+        assert vGCRF[1] == pytest.approx(790.5366, rel=1e-6)
+        assert vGCRF[2] == pytest.approx(5533.7561, rel=1e-6)
+
+        # Round-trip: GCRF -> ITRF -> GCRF should recover the original
+        # state to well under a millimeter / nanometer per second.
+        pITRF_back, vITRF_back = sk.frametransform.gcrf_to_itrf_state(
+            pGCRF, vGCRF, tm
+        )
+        assert np.allclose(pITRF_back, pITRF, atol=1e-6)
+        assert np.allclose(vITRF_back, vITRF, atol=1e-9)
+
+        # Sanity: rotating velocity alone with qitrf2gcrf (the naive
+        # approach) gives a wrong answer because it misses the
+        # Earth-rotation sweep term omega × r.
+        q = sk.frametransform.qitrf2gcrf(tm)
+        vGCRF_naive = q * vITRF
+        naive_error = np.linalg.norm(vGCRF - vGCRF_naive)
+        # Expected error = |omega_earth × r| = omega_earth · |r| · sin(theta),
+        # where theta is the angle between r and Earth's rotation axis.
+        # Vallado 3-14 state has |r| ≈ 10208 km at ~51° latitude off
+        # the equator (z_itrf ≈ 6380 km out of 10208 km radius), so
+        # sin(theta) ≈ 0.78 and the expected sweep is ~581 m/s.
+        r_norm = np.linalg.norm(pITRF)
+        xy_norm = np.linalg.norm(pITRF[:2])
+        omega_earth = 7.2921150e-5
+        expected_naive_err = omega_earth * r_norm * (xy_norm / r_norm)
+        assert abs(naive_error - expected_naive_err) < 0.1, (
+            f"Naive-rotation velocity error = {naive_error:.3f} m/s, "
+            f"expected ω⊕·|r_xy| = {expected_naive_err:.3f} m/s"
+        )
+
     def test_gmst(self):
         """
         Test GMST : vallado example 3-5

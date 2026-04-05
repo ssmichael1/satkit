@@ -62,7 +62,7 @@ impl std::fmt::Display for Integrator {
 /// * `gravity_degree` - maximum degree of spherical harmonic gravity model.  Default is 4
 /// * `gravity_order` - maximum order of spherical harmonic gravity model.  Default is same as `gravity_degree`.
 ///    Must be ≤ `gravity_degree`.
-/// * `gravity_model` - gravity model to use.  Default is JGM3.  Options: JGM3, JGM2, EGM96, ITUGrace16
+/// * `gravity_model` - gravity model to use.  Default is EGM96.  Options: EGM96, JGM3, JGM2, ITUGrace16
 /// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
 /// * `rel_error` - the maximum relative error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
 /// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
@@ -96,7 +96,7 @@ impl Default for PropSettings {
         Self {
             gravity_degree: 4,
             gravity_order: 4,
-            gravity_model: GravityModel::JGM3,
+            gravity_model: GravityModel::EGM96,
             abs_error: 1e-8,
             rel_error: 1e-8,
             use_spaceweather: true,

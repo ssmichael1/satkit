@@ -10,7 +10,7 @@ satellite's instantaneous state at the burn time.
 | Frame | Axis definition | Best used for |
 |---|---|---|
 | `GCRF` | Inertial Earth-centred Cartesian | Burns specified in inertial axes |
-| `RIC` (a.k.a. `RSW`, `RTN`) | Radial / In-track / Cross-track (tied to position) | Covariance, relative motion, radial/cross-track components |
+| `RTN` (a.k.a. `RSW`, `RIC`) | Radial / Tangential / Normal (tied to position) | CCSDS OEM covariance, relative motion, radial/cross-track components |
 | `NTW` | Normal / Tangent / Cross-track (tied to velocity) | Prograde/retrograde burns, Hohmann transfers |
 | `LVLH` | Local Vertical / Local Horizontal (nadir-pointing) | Porting crewed-spaceflight / GN&C code |
 
@@ -34,6 +34,13 @@ The three non-inertial frames all use some permutation and sign of these
 three directions, but they do **not** all use the same "in-plane prograde"
 axis. That's where the subtlety lives.
 
+![RTN, NTW, and LVLH axes on a circular orbit](../images/frames_circular.svg)
+
+On a circular orbit ($\gamma = 0$) all three frames coincide up to sign
+conventions — RTN's radial is LVLH's $-\hat{z}$, NTW's tangent is RTN's
+$\hat{I}$, and so on. The axes overlap in the figure above. The difference
+only appears on eccentric orbits.
+
 ## The flight-path angle
 
 For a **circular** orbit, the position vector $\vec{r}$ and velocity vector
@@ -54,53 +61,70 @@ distinction below doesn't matter in practice. For a GTO ($e = 0.73$) at
 mid-anomaly the flight-path angle can reach ~45° and the distinction
 matters a lot.
 
-## RIC (RSW / RTN) — position-tied
+![RTN vs NTW axes on an eccentric orbit showing the flight-path angle γ](../images/frames_eccentric.svg)
+
+On the eccentric orbit ($e = 0.3$, $\nu = 60°$) above, RTN's $\hat{T}$ and
+NTW's $\hat{T}$ are no longer the same direction — they differ by the
+flight-path angle $\gamma \approx 12.7°$. Likewise RTN's radial $\hat{R}$
+and NTW's in-plane-normal $\hat{N}$ differ by the same angle. This is the
+geometric origin of every issue in the rest of this guide.
+
+## RTN (RSW / RIC) — position-tied
 
 ```
 R = r̂                    (radial, outward)
-I = ĥ × r̂                (in-track, perpendicular to R in the orbit plane)
-C = ĥ                    (cross-track, along angular momentum)
+T = ĥ × r̂                (tangential / in-track, perpendicular to R in the orbit plane)
+N = ĥ                    (normal / cross-track, along angular momentum)
 ```
 
-The **in-track** (I) axis is perpendicular to the position vector, *not* to
+The **tangential** (T) axis is perpendicular to the position vector, *not* to
 the velocity vector. For a circular orbit these are the same thing, but for
-an eccentric orbit at non-apsidal anomaly they differ by $\gamma$. Other
-common names for this frame: **RSW** (Vallado's convention) and **RTN**
-(CCSDS OEM/ODM spec). The axes are identical; only the name differs.
+an eccentric orbit at non-apsidal anomaly they differ by $\gamma$. Two other
+common names for this same frame:
 
-**When to use RIC for maneuvers:**
+- **RSW** — Vallado's convention (R, S=Ŵ×R̂, W=ĥ). The prevailing name in
+  astrodynamics textbooks.
+- **RIC** — older NASA usage (Radial / In-track / Cross-track), common in
+  Clohessy-Wiltshire relative-motion literature.
 
-- You want to specify burn components in the "radial / along-track /
-  cross-track" basis that's conventional for **relative motion**
-  (Clohessy-Wiltshire, Hill's equations).
+satkit's canonical name is **RTN** (matching the CCSDS OEM/OMM/ODM
+convention); `Frame::RSW` and `Frame::RIC` are provided as compile-time
+aliases so code can spell the frame whichever way matches the source
+it's transcribing from. In Python, `sk.frame.RSW` and `sk.frame.RIC` are
+class-level aliases that compare equal to `sk.frame.RTN`, so
+`sk.frame.RSW == sk.frame.RTN` is `True`.
+
+**When to use RTN for maneuvers:**
+
 - You're reading or generating **CCSDS OEM / OMM / ODM messages**, whose
   covariance and delta-v blocks are standardised on the RTN frame.
-- You're translating formulas from Vallado or the CCSDS spec that use RSW
-  or RTN.
+- You want to specify burn components in the "radial / along-track /
+  cross-track" basis that's conventional for **relative motion**
+  (Clohessy-Wiltshire, Hill's equations — these papers usually write it
+  as RIC).
+- You're translating formulas from Vallado (written as RSW) or the CCSDS
+  spec (written as RTN).
 
 !!! note "Covariance convention in `satkit`"
     `satkit`'s state-vector uncertainty API — `SatState.set_pos_uncertainty`
-    and `set_vel_uncertainty` — accepts any of `GCRF`, `LVLH`, `RIC`, or
-    `NTW` via a `frame` parameter. Pass `frame=sk.frame.RIC` if you're
-    loading covariance values from a CCSDS OEM file, or
-    `frame=sk.frame.LVLH` (the default) if you're thinking in
-    nadir/along-track/cross-track sigmas.
+    and `set_vel_uncertainty` — accepts any of `GCRF`, `LVLH`, `RTN`, or
+    `NTW` via a `frame` parameter. Pass `frame=sk.frame.RTN` if you're
+    loading covariance values from a CCSDS OEM file (or use the
+    equivalent `sk.frame.RIC` / `sk.frame.RSW` aliases), or
+    `frame=sk.frame.LVLH` if you're thinking in nadir/along-track/
+    cross-track sigmas.
 
-**When *not* to use RIC:**
+**When *not* to use RTN:**
 
 - You want "10 m/s along velocity" to mean exactly that, for an eccentric
-  orbit. A RIC +I burn of 10 m/s only increases $|\vec{v}|$ by
+  orbit. A RTN +T burn of 10 m/s only increases $|\vec{v}|$ by
   $10\cos\gamma$, not by 10. Use NTW instead.
-
-`satkit` exposes RSW and RTN as compile-time aliases for RIC — you can
-write `Frame::RIC`, `Frame::RSW`, or `Frame::RTN` in Rust and they all
-resolve to the same value. In Python, use `satkit.frame.RIC`.
 
 ## NTW — velocity-tied
 
 ```
 T = v̂                    (tangent, along velocity)
-W = ĥ                    (cross-track, along angular momentum — same as RIC's C)
+W = ĥ                    (cross-track, along angular momentum — same as RTN's N)
 N = T̂ × Ŵ                (in-plane normal to velocity)
 ```
 
@@ -139,14 +163,14 @@ and most crewed / Earth-pointing vehicles for attitude control. The
 distinguishing feature is that **z points down** — the frame assumes you
 want the satellite pointing at Earth.
 
-Geometrically LVLH spans the same orbital plane as RIC. The axes are just
+Geometrically LVLH spans the same orbital plane as RTN. The axes are just
 relabeled and sign-flipped:
 
-- LVLH $+\hat{x}$ = RIC $+\hat{I}$ (in-track; perpendicular to R, not V)
-- LVLH $-\hat{z}$ = RIC $+\hat{R}$ (radial outward)
-- LVLH $-\hat{y}$ = RIC $+\hat{C}$ (cross-track)
+- LVLH $+\hat{x}$ = RTN $+\hat{T}$ (tangential; perpendicular to R, not V)
+- LVLH $-\hat{z}$ = RTN $+\hat{R}$ (radial outward)
+- LVLH $-\hat{y}$ = RTN $+\hat{N}$ (cross-track)
 
-So LVLH has the same "in-track is not quite velocity" caveat as RIC for
+So LVLH has the same "in-track is not quite velocity" caveat as RTN for
 eccentric orbits.
 
 **When to use LVLH for maneuvers:**
@@ -154,9 +178,9 @@ eccentric orbits.
 - You're translating GN&C code originally written in LVLH body-frame
   conventions.
 - You think in "nadir / in-track / out-of-plane" rather than
-  "radial / in-track / cross-track".
+  "radial / tangential / normal".
 
-For everything else, RIC or NTW will be more natural.
+For everything else, RTN or NTW will be more natural.
 
 ## The key distinction, in numbers
 
@@ -168,13 +192,25 @@ frame with the "prograde-like" component equal to 10 m/s:
 | Frame | Specification | $\Delta |\vec{v}|$ actually added |
 |---|---|---|
 | NTW | `(0, 10, 0)` — +T | **10.000 m/s** (exact) |
-| RIC | `(0, 10, 0)` — +I | 9.755 m/s |
-| LVLH | `(10, 0, 0)` — +x | 9.755 m/s (same as RIC +I) |
+| RTN | `(0, 10, 0)` — +T (tangential) | 9.755 m/s |
+| LVLH | `(10, 0, 0)` — +x | 9.755 m/s (same as RTN +T) |
 
-The loss of 0.245 m/s in the RIC / LVLH case is exactly $10(1 -
+The loss of 0.245 m/s in the RTN / LVLH case is exactly $10(1 -
 \cos\gamma)$. For a high-precision Hohmann transfer injection burn, a
 quarter-meter-per-second error is a lot. This is why NTW is the right
 choice when you care about "energy added along velocity".
+
+![Velocity-space view of NTW +T vs RTN +T burns on an eccentric orbit](../images/frames_burn_comparison.svg)
+
+The figure above shows a velocity-space view of the same eccentric state.
+The black arrow is the current velocity $\vec{v}$; the orange and blue
+arrows are two hypothetical 1.5 km/s $\Delta v$ burns (exaggerated from
+10 m/s for visibility) specified in NTW and RTN respectively. Both burns
+have the same nominal magnitude, but the NTW burn points *along* $\vec{v}$
+while the RTN burn points *perpendicular to the position vector* — and
+those are not the same direction on an eccentric orbit. The dotted
+circles show the resulting $|\vec{v}|$ after each burn; the NTW circle is
+farther from the origin, meaning it added more speed.
 
 ## Cheat sheet
 
@@ -182,25 +218,28 @@ choice when you care about "energy added along velocity".
   `sat.add_prograde(time, 10.0)` (Python) / `ImpulsiveManeuver::prograde`
   (Rust). These helpers pick NTW for you.
 - **"I want a radial-out burn of 1 m/s"** → NTW +N
-  (`sat.add_radial(time, 1.0)`), or RIC +R if you want strict outward-r.
-- **"I want a cross-track burn of 0.5 m/s"** → NTW +W or RIC +C — they're
+  (`sat.add_radial(time, 1.0)`), or RTN +R if you want strict outward-r.
+- **"I want a cross-track burn of 0.5 m/s"** → NTW +W or RTN +N — they're
   the same axis.
-- **"I'm porting code from Vallado that uses RSW"** → RIC (`frame.RIC`
-  in Python; `Frame::RSW` or `Frame::RIC` in Rust, they're the same value).
-- **"I'm porting code from CCSDS OEM that uses RTN"** → RIC (`Frame::RTN`
-  is an alias in Rust).
+- **"I'm porting code from CCSDS OEM that uses RTN"** → RTN
+  (`frame.RTN` in Python; `Frame::RTN` in Rust).
+- **"I'm porting code from Vallado that uses RSW"** → use `frame.RSW` /
+  `Frame::RSW` — it's an alias for the same frame as RTN.
+- **"I'm porting code from the Clohessy-Wiltshire / relative-motion
+  literature that uses RIC"** → use `frame.RIC` / `Frame::RIC` — also
+  an alias for the same frame.
 - **"My delta-v vector is already in ECI / J2000 inertial"** → GCRF.
 - **"I'm porting GN&C code written in LVLH"** → LVLH.
 
 ## Summary table
 
-| Property | GCRF | RIC / RSW / RTN | NTW | LVLH |
+| Property | GCRF | RTN / RSW / RIC | NTW | LVLH |
 |---|---|---|---|---|
 | Inertial? | Yes | No | No | No |
 | Prograde axis parallel to $\hat{v}$? | — | Only if $\gamma = 0$ | **Always** | Only if $\gamma = 0$ |
 | Cross-track axis | — | $+\hat{h}$ | $+\hat{h}$ | $-\hat{h}$ |
 | Radial-out axis | — | $+\hat{R}$ | $+\hat{N}$ (only on circular) | $-\hat{z}$ |
-| `satkit` covariance uncertainty API | **Yes** | **Yes** (default) | **Yes** | **Yes** |
+| `satkit` covariance uncertainty API | **Yes** | **Yes** | **Yes** | **Yes** |
 | CCSDS OEM covariance convention | No | **Yes** (as RTN) | No | No |
 | Natural for prograde burns | No | Only on circular | **Yes** | Only on circular |
 | Natural for crewed-flight GN&C | No | No | No | **Yes** |

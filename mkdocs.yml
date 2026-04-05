@@ -122,6 +122,7 @@ nav:
       - quaternion: api/quaternion.md
       - TLE & SGP4: api/tle.md
       - itrfcoord: api/itrfcoord.md
+      - Frame: api/frame.md
       - Frame Transforms: api/frametransform.md
       - Propagation: api/satprop.md
       - Satellite State: api/satstate.md

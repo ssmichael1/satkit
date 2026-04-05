@@ -230,11 +230,12 @@ print(new_state.pos)  # position at t + 6h
 Attach position and/or velocity uncertainty, and it will be propagated automatically via the state transition matrix. The `set_pos_uncertainty` and `set_vel_uncertainty` methods accept the 1-sigma components along any supported satellite-local or inertial frame:
 
 ```python
-# 1-sigma position uncertainty in LVLH (default frame if none is given)
+# 1-sigma position uncertainty in LVLH (frame is required — no default)
 sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
 
-# Or in RIC — the convention used in CCSDS OEM messages
-sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RIC)
+# Or in RTN — the convention used in CCSDS OEM messages (RSW and RIC
+# are Python-level aliases for the same frame)
+sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RTN)
 
 # Or directly in GCRF
 sat.set_pos_uncertainty(np.array([150.0, 150.0, 150.0]), frame=sk.frame.GCRF)
@@ -268,7 +269,7 @@ sat.add_normal(t_burn, 1.0)        # +1 m/s cross-track (NTW +W)
 
 # Option 2: explicit delta-v vector in a chosen frame.
 sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.NTW)  # tangent = along velocity
-sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)  # in-track ≠ velocity on eccentric orbits
+sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)  # tangential ≠ velocity on eccentric orbits
 sat.add_maneuver(t_burn, [0, 0, 5], frame=sk.frame.GCRF)  # 5 m/s in inertial +Z
 
 # Propagate past the burn -- delta-v is applied at t_burn
@@ -277,7 +278,7 @@ new_state = sat.propagate(sat.time + sk.duration.from_hours(3))
 
 Multiple maneuvers can be added and will be applied in chronological order. Backward propagation reverses the maneuvers automatically.
 
-Supported maneuver frames are `frame.GCRF`, `frame.RIC` (a.k.a. RSW, RTN),
+Supported maneuver frames are `frame.GCRF`, `frame.RTN` (a.k.a. RSW, RIC),
 `frame.NTW`, and `frame.LVLH`. For circular orbits the three non-inertial
 frames are equivalent; for eccentric orbits they differ by the flight-path
 angle in ways that matter for precision maneuver planning. See the

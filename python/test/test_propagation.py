@@ -120,7 +120,7 @@ class TestHighPrecisionPropagation:
         sat_ric.add_maneuver(
             t0 + sk.duration.from_seconds(1.0),
             [0.0, 10.0, 0.0],
-            frame=sk.frame.RIC,
+            frame=sk.frame.RTN,
         )
         sat_ric_after = sat_ric.propagate(t0 + sk.duration.from_seconds(2.0))
         speed_after_ric = np.linalg.norm(sat_ric_after.vel)
@@ -155,7 +155,7 @@ class TestHighPrecisionPropagation:
         # LVLH: x = in-track direction
         sat_lvlh.add_maneuver(t_burn, [10.0, 0.0, 0.0], frame=sk.frame.LVLH)
         # RIC: I = in-track direction (same axis)
-        sat_ric.add_maneuver(t_burn, [0.0, 10.0, 0.0], frame=sk.frame.RIC)
+        sat_ric.add_maneuver(t_burn, [0.0, 10.0, 0.0], frame=sk.frame.RTN)
 
         s_lvlh = sat_lvlh.propagate(t_end)
         s_ric = sat_ric.propagate(t_end)
@@ -321,7 +321,7 @@ class TestSatState:
         v = np.sqrt(sk.consts.mu_earth / r)
 
         sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
-        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)
         sat.add_maneuver(t_burn + sk.duration.from_hours(1), [5, 0, 0], frame=sk.frame.GCRF)
 
         restored = pickle.loads(pickle.dumps(sat))
@@ -341,7 +341,7 @@ class TestSatState:
         state0 = (np.array([r, 0, 0]), np.array([0, v, 0]))
 
         # Every supported frame should succeed
-        for frm in [sk.frame.GCRF, sk.frame.LVLH, sk.frame.RIC, sk.frame.NTW]:
+        for frm in [sk.frame.GCRF, sk.frame.LVLH, sk.frame.RTN, sk.frame.NTW]:
             sat = sk.satstate(time=t0, pos=state0[0], vel=state0[1])
             sat.set_pos_uncertainty(np.array([10.0, 20.0, 30.0]), frame=frm)
             assert sat.cov is not None
@@ -384,7 +384,7 @@ class TestSatState:
 
         sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
         sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
-        sat.add_maneuver(t0 + sk.duration.from_hours(1), [0, 5, 0], frame=sk.frame.RIC)
+        sat.add_maneuver(t0 + sk.duration.from_hours(1), [0, 5, 0], frame=sk.frame.RTN)
 
         restored = pickle.loads(pickle.dumps(sat))
 
@@ -410,7 +410,7 @@ class TestSatPropertiesPickle:
         t1 = t0 + sk.duration.from_hours(1)
         t2 = t1 + sk.duration.from_hours(1)
 
-        thrust1 = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RIC)
+        thrust1 = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RTN)
         thrust2 = sk.thrust.constant([0, 0, 5e-3], t1, t2, frame=sk.frame.GCRF)
         props = sk.satproperties(cdaoverm=0.01, thrusts=[thrust1, thrust2])
 
@@ -418,7 +418,7 @@ class TestSatPropertiesPickle:
 
         assert restored.cdaoverm == pytest.approx(0.01)
         assert len(restored.thrusts) == 2
-        assert restored.thrusts[0].frame == sk.frame.RIC
+        assert restored.thrusts[0].frame == sk.frame.RTN
         assert restored.thrusts[0].accel == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
         assert restored.thrusts[1].frame == sk.frame.GCRF
         assert restored.thrusts[1].accel == [pytest.approx(0), pytest.approx(0), pytest.approx(5e-3)]
@@ -436,7 +436,7 @@ class TestThrust:
         res_no = sk.propagate(state, t0, end=t1)
 
         # In-track thrust in RIC: [radial, in-track, cross-track]
-        thrust = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+        thrust = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
         props = sk.satproperties(thrusts=[thrust])
         res_th = sk.propagate(state, t0, end=t1, satproperties=props)
 
@@ -464,9 +464,9 @@ class TestThrust:
         """Test thrust object properties"""
         t0 = sk.time(2024, 1, 1)
         t1 = t0 + sk.duration.from_hours(1)
-        thrust = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RIC)
+        thrust = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RTN)
 
-        assert thrust.frame == sk.frame.RIC
+        assert thrust.frame == sk.frame.RTN
         assert thrust.accel == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
 
     def test_multiple_thrust_arcs(self):
@@ -478,8 +478,8 @@ class TestThrust:
         v = np.sqrt(sk.consts.mu_earth / r)
         state = np.array([r, 0, 0, 0, v, 0])
 
-        thrust1 = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
-        thrust2 = sk.thrust.constant([0, 1e-4, 0], t1, t2, frame=sk.frame.RIC)
+        thrust1 = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
+        thrust2 = sk.thrust.constant([0, 1e-4, 0], t1, t2, frame=sk.frame.RTN)
         props = sk.satproperties(thrusts=[thrust1, thrust2])
         assert len(props.thrusts) == 2
 
@@ -525,7 +525,7 @@ class TestImpulsiveManeuver:
         sat_no = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
 
         # 10 m/s in-track in RIC [radial, in-track, cross-track]
-        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)
         result = sat.propagate(t_end)
         result_no = sat_no.propagate(t_end)
 
@@ -549,16 +549,113 @@ class TestImpulsiveManeuver:
         assert np.linalg.norm(sat.pos - back.pos) < 1.0, "Should recover original position"
         assert np.linalg.norm(sat.vel - back.vel) < 0.01, "Should recover original velocity"
 
-    def test_ric_to_gcrf(self):
-        """Test frametransform.ric_to_gcrf and gcrf_to_ric"""
+    def test_itrf_gcrf_state_transform(self):
+        """The ITRF <-> GCRF state transform must handle the Earth-rotation
+        sweep term that a raw quaternion rotation ignores. Demonstrates
+        the ~470 m/s gap between the naive rotation and the correct full
+        state transform for a LEO satellite parked on Earth.
+        """
+        t = sk.time(2024, 3, 15, 12, 34, 56)
+
+        # A point at rest on Earth's surface near the equator (LEO altitude)
+        pos_itrf = np.array([6.378e6 + 500e3, 0.0, 0.0])
+        vel_itrf = np.array([0.0, 0.0, 0.0])
+
+        pos_gcrf, vel_gcrf = sk.frametransform.itrf_to_gcrf_state(
+            pos_itrf, vel_itrf, t
+        )
+
+        # |pos| preserved
+        assert abs(np.linalg.norm(pos_gcrf) - np.linalg.norm(pos_itrf)) < 1e-6
+
+        # |vel_gcrf| ≈ OMEGA_EARTH · |r_itrf| ≈ 501 m/s
+        omega_earth = 7.2921150e-5
+        expected_speed = omega_earth * np.linalg.norm(pos_itrf)
+        assert abs(np.linalg.norm(vel_gcrf) - expected_speed) < 1.0, (
+            f"ITRF-rest LEO GCRF velocity {np.linalg.norm(vel_gcrf):.3f} m/s, "
+            f"expected ≈{expected_speed:.3f}"
+        )
+
+        # Round-trip: GCRF -> ITRF -> GCRF should recover the input
+        pos_gcrf_in = np.array([6.878e6, 1.23e5, -4.56e5])
+        vel_gcrf_in = np.array([-123.4, 7600.0, 89.0])
+        pos_itrf_out, vel_itrf_out = sk.frametransform.gcrf_to_itrf_state(
+            pos_gcrf_in, vel_gcrf_in, t
+        )
+        pos_back, vel_back = sk.frametransform.itrf_to_gcrf_state(
+            pos_itrf_out, vel_itrf_out, t
+        )
+        assert np.allclose(pos_back, pos_gcrf_in, atol=1e-6)
+        assert np.allclose(vel_back, vel_gcrf_in, atol=1e-9)
+
+        # Demonstrate the gap between "naive rotation" and the correct
+        # full state transform: rotating velocity with qitrf2gcrf alone
+        # (ignoring the omega × r term) is wrong by ~501 m/s for a LEO
+        # state at rest in ITRF.
+        q = sk.frametransform.qitrf2gcrf(t)
+        vel_gcrf_naive = q * vel_itrf  # zero, trivially
+        assert np.linalg.norm(vel_gcrf_naive) < 1e-10
+        # ...whereas the correct answer has |v| ≈ 501 m/s
+        naive_vs_correct_gap = np.linalg.norm(vel_gcrf - vel_gcrf_naive)
+        assert abs(naive_vs_correct_gap - expected_speed) < 1.0
+
+    def test_frame_ric_rsw_are_aliases_for_rtn(self):
+        """satkit's canonical name for the Radial / Tangential / Normal
+        orbital frame is ``frame.RTN``; ``frame.RIC`` and ``frame.RSW``
+        are Python-level aliases that resolve to the same enum value.
+        All three should be interchangeable.
+        """
+        # Identity: all three compare equal
+        assert sk.frame.RIC == sk.frame.RTN
+        assert sk.frame.RSW == sk.frame.RTN
+        assert sk.frame.RIC == sk.frame.RSW
+
+        # Functionally equivalent when passed to the maneuver API
+        t0 = sk.time(2024, 1, 1)
+        pos = np.array([sk.consts.geo_r, 0, 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
+
+        sat_rtn = sk.satstate(time=t0, pos=pos, vel=vel)
+        sat_ric = sk.satstate(time=t0, pos=pos, vel=vel)
+        sat_rsw = sk.satstate(time=t0, pos=pos, vel=vel)
+
+        t_burn = t0 + sk.duration.from_hours(0.5)
+        t_end = t0 + sk.duration.from_hours(2.0)
+
+        sat_rtn.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)
+        sat_ric.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+        sat_rsw.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RSW)
+
+        s_rtn = sat_rtn.propagate(t_end)
+        s_ric = sat_ric.propagate(t_end)
+        s_rsw = sat_rsw.propagate(t_end)
+
+        assert np.allclose(s_rtn.pos, s_ric.pos)
+        assert np.allclose(s_rtn.pos, s_rsw.pos)
+        assert np.allclose(s_rtn.vel, s_ric.vel)
+        assert np.allclose(s_rtn.vel, s_rsw.vel)
+
+    def test_frametransform_to_from_gcrf(self):
+        """Test the unified frametransform.to_gcrf / from_gcrf dispatch
+        across all supported satellite-local frames."""
         pos = np.array([6878e3, 0, 0])
         vel = np.array([0, 7612, 0])
 
-        dcm = sk.frametransform.ric_to_gcrf(pos, vel)
-        assert dcm.shape == (3, 3)
+        # GCRF dispatch returns identity
+        dcm_gcrf = sk.frametransform.to_gcrf(sk.frame.GCRF, pos, vel)
+        assert np.allclose(dcm_gcrf, np.eye(3))
 
-        dcm_inv = sk.frametransform.gcrf_to_ric(pos, vel)
-        assert np.allclose(dcm @ dcm_inv, np.eye(3), atol=1e-10)
+        # All four supported frames: to_gcrf and from_gcrf are mutual inverses
+        for frm in [sk.frame.GCRF, sk.frame.LVLH, sk.frame.RTN, sk.frame.NTW]:
+            dcm = sk.frametransform.to_gcrf(frm, pos, vel)
+            assert dcm.shape == (3, 3)
+            dcm_inv = sk.frametransform.from_gcrf(frm, pos, vel)
+            assert np.allclose(dcm @ dcm_inv, np.eye(3), atol=1e-12)
+
+        # Unsupported frames raise
+        for bad in [sk.frame.ITRF, sk.frame.TEME, sk.frame.ICRF]:
+            with pytest.raises(Exception):
+                sk.frametransform.to_gcrf(bad, pos, vel)
 
 
 class TestLambert:

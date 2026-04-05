@@ -75,7 +75,7 @@ impl PySatState {
     ///         components along the frame's axes. Units: meters.
     ///     frame (satkit.frame): Coordinate frame — **required**, no
     ///         default (matching the Rust API). Supported values:
-    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RIC`` (= RSW = RTN),
+    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RTN`` (= RSW = RIC),
     ///         ``frame.NTW``.
     ///
     /// Raises:
@@ -106,7 +106,7 @@ impl PySatState {
     ///         components along the frame's axes. Units: m/s.
     ///     frame (satkit.frame): Coordinate frame — **required**, no
     ///         default (matching the Rust API). Supported values:
-    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RIC``, ``frame.NTW``.
+    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RTN``, ``frame.NTW``.
     ///
     /// Raises:
     ///     RuntimeError: if the frame is not one of the supported
@@ -224,9 +224,9 @@ impl PySatState {
     ///         default (matching the Rust API). Supported frames:
     ///
     ///         * ``frame.GCRF`` — inertial Cartesian
-    ///         * ``frame.RIC`` — radial / in-track / cross-track (a.k.a. RSW,
-    ///           RTN). I is perpendicular to R in the orbit plane; for
-    ///           eccentric orbits it is **not** strictly along velocity.
+    ///         * ``frame.RTN`` — radial / tangential / normal (a.k.a.
+    ///           RSW, RIC). T is perpendicular to R in the orbit plane;
+    ///           for eccentric orbits it is **not** strictly along velocity.
     ///         * ``frame.NTW`` — normal-to-velocity / tangent / cross-track.
     ///           T is along velocity, so a pure +T delta-v of magnitude Δv
     ///           adds *exactly* Δv to |v|. Use this for prograde/retrograde
@@ -440,7 +440,7 @@ impl PySatState {
             offset += 24;
             let frame = match state[offset] {
                 0 => Frame::GCRF,
-                1 => Frame::RIC,
+                1 => Frame::RTN,
                 _ => Frame::GCRF,
             };
             offset += 1;
@@ -495,7 +495,7 @@ impl PySatState {
             }
             offset += 24;
             buffer[offset] = match m.frame {
-                Frame::RIC => 1,
+                Frame::RTN => 1,
                 _ => 0,
             };
             offset += 1;

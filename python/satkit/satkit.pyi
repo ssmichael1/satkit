@@ -465,7 +465,7 @@ def gravity(
         pos (list[float] | satkit.itrfcoord | npt.ArrayLike[np.float]): Position as ITRF coordinate or numpy 3-vector representing ITRF position in meters
 
     Keyword Args:
-        model (gravmodel): The gravity model to use.  Default is gravmodel.jgm3
+        model (gravmodel): The gravity model to use.  Default is gravmodel.egm96
         degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
         order (int): Maximum order of gravity model to use.  Default is same as degree
 
@@ -496,7 +496,7 @@ def gravity_and_partials(
 
 
     Keyword Args:
-        model (gravmodel): The gravity model to use.  Default is gravmodel.jgm3
+        model (gravmodel): The gravity model to use.  Default is gravmodel.egm96
         degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
         order (int): Maximum order of gravity model to use.  Default is same as degree
 
@@ -712,15 +712,19 @@ class frame:
     - ``EME2000`` - Earth Mean Equator 2000
     - ``ICRF`` - International Celestial Reference Frame
     - ``LVLH`` - Local Vertical Local Horizontal: z = -r (nadir), y = -h (opposite angular momentum), x completes right-handed system
-    - ``RIC`` - Radial / In-track / Cross-track: R = radial (outward), I = in-track (along velocity), C = cross-track (along angular momentum)
+    - ``RTN`` - Radial / Tangential / Normal (CCSDS OEM convention; also
+      exposed as ``RSW`` and ``RIC`` aliases for Vallado / older-NASA naming):
+      R = radial (outward), T = tangential (in-track), N = normal (cross-track)
+    - ``NTW`` - Normal-to-velocity / Tangent / Cross-track (velocity-aligned):
+      T = along velocity, N = in-plane perpendicular to v, W = cross-track
 
     Example:
 
     ```python
     import satkit as sk
 
-    # Use RIC frame for in-track thrust
-    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+    # Use RTN frame for in-track thrust (RSW and RIC are aliases and work too)
+    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
     ```
     """
 
@@ -754,12 +758,12 @@ class frame:
     - y axis: -h (opposite orbital angular momentum, h = r × v)
     - x axis: completes right-handed system (approximately velocity direction for circular orbits)
 
-    Geometrically spans the same orbital plane as ``frame.RIC`` but with
+    Geometrically spans the same orbital plane as ``frame.RTN`` but with
     different labels and sign conventions:
 
-    - LVLH +x = RIC +I (in-track; perpendicular to R, not strictly along v)
-    - LVLH -z = RIC +R (radial outward)
-    - LVLH -y = RIC +C (cross-track)
+    - LVLH +x = RTN +T (in-track; perpendicular to R, not strictly along v)
+    - LVLH -z = RTN +R (radial outward)
+    - LVLH -y = RTN +N (cross-track)
 
     Supported as a maneuver frame — useful when porting GN&C code written
     in LVLH body-frame conventions. For eccentric orbits, note that LVLH
@@ -767,22 +771,40 @@ class frame:
     for strict along-velocity semantics use ``frame.NTW`` instead.
     """
 
-    RIC: ClassVar[frame]
-    """Radial / In-track / Cross-track (a.k.a. RSW in Vallado, RTN in CCSDS).
+    RTN: ClassVar[frame]
+    """Radial / Tangential / Normal — CCSDS OEM/OMM/ODM convention.
+
+    Also known as **RSW** (Vallado) or **RIC** (older NASA / Clohessy-
+    Wiltshire literature). The three names refer to the same axes;
+    Python-level aliases ``frame.RSW`` and ``frame.RTN`` resolve to the
+    same enum value as ``frame.RTN``, so all three compare equal and can
+    be used interchangeably.
 
     - R (radial): unit vector along position (outward from Earth center)
-    - I (in-track): perpendicular to R in the orbit plane, in the prograde
-      direction. **Not** strictly along velocity for eccentric orbits — for
-      "along velocity" semantics use ``frame.NTW`` instead.
-    - C (cross-track): completes right-handed system (along angular momentum, h = r x v)
+    - T (tangential / in-track): perpendicular to R in the orbit plane,
+      in the prograde direction. **Not** strictly along velocity for
+      eccentric orbits — for "along velocity" semantics use ``frame.NTW``
+      instead.
+    - N (normal / cross-track): along angular momentum (h = r × v)
 
-    This is the standard choice for relative-motion (Hill/Clohessy-Wiltshire)
-    equations and for CCSDS OEM/OMM covariance messages (under the "RTN"
-    name). The names RSW and RTN refer to the same axes.
+    This is the standard choice for CCSDS OEM/OMM covariance messages,
+    for relative-motion (Hill / Clohessy-Wiltshire) equations, and for
+    radial/normal burn components whose physical meaning is tied to the
+    position vector.
+    """
 
-    ``satkit``'s covariance-uncertainty API (``satstate.set_pos_uncertainty``
-    / ``set_vel_uncertainty``) accepts RIC as one of several valid
-    frames — see those methods for details.
+    RSW: ClassVar[frame]
+    """Alias for ``frame.RTN`` — Vallado's name for the same orbital
+    frame (Radial / S=Ŵ×R̂ / W=ĥ). ``frame.RSW == frame.RTN`` is True.
+    See [`RTN`][frame.RTN] for the axis definition.
+    """
+
+    RIC: ClassVar[frame]
+    """Alias for ``frame.RTN`` — the older NASA / Clohessy-Wiltshire name
+    (Radial / In-track / Cross-track). ``frame.RIC == frame.RTN`` is
+    True. Kept for backward compatibility with code written against
+    earlier satkit versions where ``RIC`` was the canonical name. See
+    [`RTN`][frame.RTN] for the axis definition.
     """
 
     NTW: ClassVar[frame]
@@ -792,7 +814,7 @@ class frame:
       coincides with the outward radial direction; for eccentric orbits it
       leans off-radial by the flight-path angle.
     - T (tangent): v̂, unit velocity vector
-    - W (cross-track): (r × v) / |r × v|, same as RIC's C axis
+    - W (cross-track): (r × v) / |r × v|, same as RTN's N axis
 
     The natural frame for prograde/retrograde maneuvers: a pure +T delta-v
     of magnitude Δv adds *exactly* Δv to |v|, regardless of orbit eccentricity.
@@ -2738,7 +2760,7 @@ class satstate:
 
                 - ``frame.GCRF`` — inertial Cartesian
                 - ``frame.LVLH`` — Local Vertical / Local Horizontal
-                - ``frame.RIC`` — Radial / In-track / Cross-track (= RSW = RTN)
+                - ``frame.RTN`` — Radial / In-track / Cross-track (= RSW = RTN)
                 - ``frame.NTW`` — Normal-to-velocity / Tangent / Cross-track
 
         Raises:
@@ -2750,7 +2772,7 @@ class satstate:
             sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
 
             # RIC: 10 m radial, 200 m in-track, 30 m cross-track
-            sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RIC)
+            sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RTN)
             ```
         """
         ...
@@ -2771,7 +2793,7 @@ class satstate:
                 along the frame's axes. Units: m/s.
             frame: Coordinate frame — **required**, no default (matching
                 the Rust API). Supported values: ``frame.GCRF``,
-                ``frame.LVLH``, ``frame.RIC``, ``frame.NTW``.
+                ``frame.LVLH``, ``frame.RTN``, ``frame.NTW``.
 
         Raises:
             RuntimeError: if the frame is not one of the supported frames.
@@ -2793,7 +2815,7 @@ class satstate:
                 default (matching the Rust API). Supported frames:
 
                 - ``frame.GCRF`` — inertial Cartesian
-                - ``frame.RIC`` — radial / in-track / cross-track (a.k.a. RSW, RTN).
+                - ``frame.RTN`` — radial / in-track / cross-track (a.k.a. RSW, RTN).
                   The I axis is perpendicular to R in the orbit plane — for
                   eccentric orbits this is **not** strictly along velocity.
                 - ``frame.NTW`` — normal-to-velocity / tangent / cross-track.
@@ -2817,7 +2839,7 @@ class satstate:
             ```python
             # Explicit frame selection
             sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.NTW)  # +10 m/s along velocity
-            sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)  # +10 m/s in RIC in-track
+            sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)  # +10 m/s in RIC in-track
             ```
         """
         ...
@@ -2906,7 +2928,7 @@ class satstate:
         Example:
             ```python
             sat = sk.satstate(time=t0, pos=r, vel=v)
-            sat.add_maneuver(t_burn, [0, 100, 0], frame=sk.frame.RIC)
+            sat.add_maneuver(t_burn, [0, 100, 0], frame=sk.frame.RTN)
             new_state = sat.propagate(t_end)
             ```
         """
@@ -3153,10 +3175,12 @@ class thrust:
     """Continuous thrust acceleration for orbit maneuvers
 
     Represents a constant thrust acceleration over a time window,
-    specified in either the GCRF (inertial) or RIC frame.
+    specified in GCRF (inertial), RTN (CCSDS-standard orbital frame,
+    also known as RSW or RIC), NTW (velocity-aligned), or LVLH.
 
-    RIC components are [R, I, C] where R = radial (outward from Earth center),
-    I = in-track (along velocity), C = cross-track (along angular momentum, h = r x v).
+    RTN components are [R, T, N] where R = radial (outward from Earth
+    centre), T = tangential / in-track, N = normal / cross-track (along
+    angular momentum, h = r × v).
 
     Example:
 
@@ -3166,8 +3190,8 @@ class thrust:
     t0 = sk.time(2024, 1, 1)
     t1 = t0 + sk.duration.from_hours(2)
 
-    # In-track thrust in RIC frame
-    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+    # In-track thrust in the RTN (a.k.a. RSW, RIC) frame
+    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
 
     # Fixed direction thrust in GCRF frame
     t = sk.thrust.constant([0, 0, 1e-3], t0, t1, frame=sk.frame.GCRF)
@@ -3191,7 +3215,7 @@ class thrust:
                 default (matching the Rust API). Supported values:
 
                 - ``frame.GCRF`` — inertial Cartesian
-                - ``frame.RIC`` — radial / in-track / cross-track
+                - ``frame.RTN`` — radial / in-track / cross-track
                 - ``frame.NTW`` — normal-to-velocity / tangent / cross-track
                   (use this for thrust along the velocity vector)
                 - ``frame.LVLH`` — Local Vertical / Local Horizontal
@@ -3258,7 +3282,7 @@ class satproperties:
 
         props = sk.satproperties(
             cdaoverm=0.01,
-            thrusts=[sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)]
+            thrusts=[sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)]
         )
         ```
 
@@ -3372,7 +3396,7 @@ class propsettings:
             - rel_error: 1e-8
             - gravity_degree: 4
             - gravity_order: 4
-            - gravity_model: gravmodel.jgm3
+            - gravity_model: gravmodel.egm96
             - use_spaceweather: True
             - use_sun_gravity: True
             - use_moon_gravity: True
@@ -3405,7 +3429,7 @@ class propsettings:
             rel_error: Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
             gravity_degree: Maximum degree of spherical harmonic gravity model. Default is 4
             gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree. Default is same as gravity_degree
-            gravity_model: Gravity model to use. Default is gravmodel.jgm3
+            gravity_model: Gravity model to use. Default is gravmodel.egm96
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
             use_moon_gravity: Include moon third-body gravitational perturbation. Default is True
@@ -3535,7 +3559,7 @@ class propsettings:
         """Gravity model used for Earth gravity computation
 
         Returns:
-            gravmodel: The gravity model, default is gravmodel.jgm3
+            gravmodel: The gravity model, default is gravmodel.egm96
 
         """
         ...

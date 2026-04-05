@@ -25,7 +25,7 @@ pub enum StateCov {
 ///
 /// * [`Frame::GCRF`] — inertial Cartesian, useful for directly specifying
 ///   delta-v components along inertial axes.
-/// * [`Frame::RIC`] (a.k.a. RSW/RTN) — radial / in-track / cross-track,
+/// * [`Frame::RTN`] (a.k.a. RSW/RTN) — radial / in-track / cross-track,
 ///   tied to the position vector. Natural for radial and cross-track
 ///   burn components, and the CCSDS OEM covariance-message convention.
 ///   Note: `satkit`'s own covariance-uncertainty API uses LVLH (see
@@ -64,7 +64,7 @@ pub struct ImpulsiveManeuver {
     /// Delta-v vector in the specified frame [m/s]
     pub delta_v: Vector3,
     /// Coordinate frame for the delta-v vector. Must be one of
-    /// [`Frame::GCRF`], [`Frame::RIC`], or [`Frame::NTW`].
+    /// [`Frame::GCRF`], [`Frame::RTN`], or [`Frame::NTW`].
     pub frame: Frame,
 }
 
@@ -120,7 +120,7 @@ impl ImpulsiveManeuver {
     /// Arbitrary delta-v vector in the RIC (a.k.a. RSW / RTN) frame.
     /// Components are (radial, in-track, cross-track).
     pub fn ric(time: Instant, delta_v: Vector3) -> Self {
-        Self::new(time, delta_v, Frame::RIC)
+        Self::new(time, delta_v, Frame::RTN)
     }
 
     /// Arbitrary delta-v vector in the NTW frame. Components are
@@ -133,8 +133,8 @@ impl ImpulsiveManeuver {
     fn delta_v_gcrf(&self, pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Vector3 {
         match self.frame {
             Frame::GCRF => self.delta_v,
-            Frame::RIC => {
-                let dcm = frametransform::ric_to_gcrf(pos_gcrf, vel_gcrf);
+            Frame::RTN => {
+                let dcm = frametransform::rtn_to_gcrf(pos_gcrf, vel_gcrf);
                 dcm * self.delta_v
             }
             Frame::NTW => {
@@ -270,7 +270,7 @@ impl SatState {
         match frame {
             Frame::GCRF => Ok(None),
             Frame::LVLH => Ok(Some(frametransform::lvlh_to_gcrf(&pos, &vel))),
-            Frame::RIC => Ok(Some(frametransform::ric_to_gcrf(&pos, &vel))),
+            Frame::RTN => Ok(Some(frametransform::rtn_to_gcrf(&pos, &vel))),
             Frame::NTW => Ok(Some(frametransform::ntw_to_gcrf(&pos, &vel))),
             Frame::ITRF
             | Frame::TIRS
@@ -299,7 +299,7 @@ impl SatState {
     /// * `sigma` — 3-vector of 1-sigma position uncertainty components
     ///   along the `frame`'s axes [m]
     /// * `frame` — coordinate frame. Supported: [`Frame::GCRF`],
-    ///   [`Frame::LVLH`], [`Frame::RIC`] (= RSW = RTN), [`Frame::NTW`].
+    ///   [`Frame::LVLH`], [`Frame::RTN`] (= RSW = RTN), [`Frame::NTW`].
     ///
     /// # Errors
     ///
@@ -315,7 +315,7 @@ impl SatState {
     /// #     &numeris::vector![7.0e6, 0.0, 0.0],
     /// #     &numeris::vector![0.0, 7.5e3, 0.0]);
     /// // 100 m radial, 200 m along-track, 50 m cross-track uncertainty
-    /// sat.set_pos_uncertainty(&numeris::vector![100.0, 200.0, 50.0], Frame::RIC).unwrap();
+    /// sat.set_pos_uncertainty(&numeris::vector![100.0, 200.0, 50.0], Frame::RTN).unwrap();
     /// ```
     pub fn set_pos_uncertainty(&mut self, sigma: &Vector3, frame: Frame) -> Result<()> {
         let dcm_opt = self.cov_frame_to_gcrf(frame)?;
@@ -355,7 +355,7 @@ impl SatState {
     /// * `sigma` — 3-vector of 1-sigma velocity uncertainty components
     ///   along the `frame`'s axes [m/s]
     /// * `frame` — coordinate frame. Supported: [`Frame::GCRF`],
-    ///   [`Frame::LVLH`], [`Frame::RIC`], [`Frame::NTW`].
+    ///   [`Frame::LVLH`], [`Frame::RTN`], [`Frame::NTW`].
     ///
     /// # Errors
     ///
@@ -742,7 +742,7 @@ mod test {
         sat.add_maneuver(ImpulsiveManeuver::new(
             t_burn,
             numeris::vector![0.0, 10.0, 0.0], // [radial, in-track, cross-track]
-            Frame::RIC,
+            Frame::RTN,
         ));
 
         let state_burn = sat.propagate(&t_end, None, None)?;
@@ -881,7 +881,7 @@ mod test {
         let dv_ric = numeris::vector![0.0, 10.0, 0.0]; // +I (in-track)
 
         let ntw_dcm = crate::frametransform::ntw_to_gcrf(&pos, &vel);
-        let ric_dcm = crate::frametransform::ric_to_gcrf(&pos, &vel);
+        let ric_dcm = crate::frametransform::rtn_to_gcrf(&pos, &vel);
 
         let dv_ntw_gcrf = ntw_dcm * dv_ntw;
         let dv_ric_gcrf = ric_dcm * dv_ric;
@@ -950,7 +950,7 @@ mod test {
 
         // Apply a 10 m/s "in-track" burn via RIC — should add *less* than
         // 10 m/s to |v| (the loss is O(γ²) for small γ).
-        let ric_dcm = crate::frametransform::ric_to_gcrf(&pos, &vel);
+        let ric_dcm = crate::frametransform::rtn_to_gcrf(&pos, &vel);
         let dv_ric_gcrf = ric_dcm * numeris::vector![0.0, 10.0, 0.0];
         let v_after_ric = vel + dv_ric_gcrf;
         let dv_ric_along_v = v_after_ric.norm() - vel.norm();
@@ -1024,7 +1024,7 @@ mod test {
             &numeris::vector![0.0, v, 0.0],
         );
 
-        for frame in [Frame::GCRF, Frame::LVLH, Frame::RIC, Frame::NTW] {
+        for frame in [Frame::GCRF, Frame::LVLH, Frame::RTN, Frame::NTW] {
             let mut sat = sat0.clone();
             sat.set_pos_uncertainty(&numeris::vector![10.0, 20.0, 30.0], frame)?;
             match sat.cov() {
@@ -1087,7 +1087,7 @@ mod test {
         let dv_ric: Vector3 = numeris::vector![-2.0, 5.0, -3.0];
 
         let lvlh_dcm = crate::frametransform::lvlh_to_gcrf(&pos, &vel);
-        let ric_dcm = crate::frametransform::ric_to_gcrf(&pos, &vel);
+        let ric_dcm = crate::frametransform::rtn_to_gcrf(&pos, &vel);
 
         let dv_lvlh_gcrf = lvlh_dcm * dv_lvlh;
         let dv_ric_gcrf = ric_dcm * dv_ric;
