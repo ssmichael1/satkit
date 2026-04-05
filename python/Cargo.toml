@@ -1,6 +1,6 @@
 [package]
 name = "satkit-python"
-version = "0.16.0"
+version = "0.16.1"
 edition = "2021"
 publish = false
 
@@ -16,7 +16,6 @@ numeris = { version = "0.5.6", features = ["serde", "estimate"] }
 anyhow = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.2.0"
-rmpfit = "0.3.0"
 process_path = "0.1.4"
 
 [build-dependencies]

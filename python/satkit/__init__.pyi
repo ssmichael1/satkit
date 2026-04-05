@@ -48,5 +48,6 @@ __all__ = [
     "propresult",
     "propstats",
     "omm_from_url",
+    "tlefitstatus",
     "__version__",
 ]

@@ -295,14 +295,15 @@ class TLE:
             Input GCRF states are rotated into TEME frame used by SGP4.
             First and second derivatives of mean motion are ignored, as they are not used by SGP4.
 
-            Non-linear Levenberg-Marquardt optimization (via the Rust ``rmpfit`` crate)
-            is performed to fit inclination, eccentricity, RAAN, argument of perigee,
-            mean anomaly, mean motion, and drag (bstar) to the provided states.
+            Non-linear Levenberg-Marquardt optimization is performed to fit
+            inclination, eccentricity, RAAN, argument of perigee, mean anomaly,
+            mean motion, and drag (bstar) to the provided states. The solver
+            is built on top of the ``numeris`` linear algebra crate.
 
             The results dictionary includes the following keys:
-            ``success``, ``best_norm``, ``orig_norm``, ``n_iter``, ``n_fev``,
-            ``n_par``, ``n_free``, ``n_pegged``, ``n_func``, ``resid``,
-            ``xerror``, ``covar``.
+            ``status`` (a :class:`tlefitstatus`), ``converged`` (bool),
+            ``orig_norm``, ``best_norm``, ``grad_norm``, ``n_iter``,
+            ``n_res_evals``.
 
         Example:
             ```python
@@ -314,7 +315,7 @@ class TLE:
             epoch = satkit.time(2024, 1, 1)
 
             tle, results = satkit.TLE.fit_from_states(states, times, epoch)
-            if results["success"] == satkit.mpsuccess.MP_OK_CHI:
+            if results["converged"]:
                 print("Fit successful")
             ```
         """
@@ -605,51 +606,38 @@ class weekday:
     Saturday: ClassVar[weekday]
     """Saturday"""
 
-class mpsuccess:
+class tlefitstatus:
     """
-    State of Levenberg-Marquardt optimization from the `rmpfit` rust library
-
-    For details see: <https://docs.rs/rmpfit/latest/rmpfit/>
+    Termination status of the TLE non-linear least-squares fit performed by
+    :meth:`TLE.fit_from_states`.
 
     Values:
 
-    - `NotDone`: Not finished iterations
-    - `Chi`: Convergence in chi-square value
-    - `Par`: Convergence in parameter value
-    - `Both`: Convergence in both chi-square and parameter values
-    - `Dir`: Convergence in orthogonality
-    - `MaxIter`: Maximum iterations reached
-    - `Ftol`: ftol is too small; no further improvement
-    - `Xtol`: xtol is too small; no further improvement
-    - `Gtol`: gtol is too small; no further improvement
+    - ``GradientConverged``: converged on gradient norm tolerance
+    - ``StepConverged``: converged on relative step size tolerance
+    - ``CostConverged``: converged on relative cost change tolerance
+    - ``MaxIterations``: maximum number of iterations reached
+    - ``DampingSaturated``: Levenberg-Marquardt damping parameter saturated
     """
 
-    NotDone: ClassVar[mpsuccess]
-    """Not finished iterations"""
+    GradientConverged: ClassVar[tlefitstatus]
+    """Converged on gradient norm tolerance"""
 
-    Chi: ClassVar[mpsuccess]
-    """Convergence in chi-square value"""
+    StepConverged: ClassVar[tlefitstatus]
+    """Converged on relative step size tolerance"""
 
-    Par: ClassVar[mpsuccess]
-    """Convergence in parameter value"""
+    CostConverged: ClassVar[tlefitstatus]
+    """Converged on relative cost change tolerance"""
 
-    Both: ClassVar[mpsuccess]
-    """Convergence in both chi-square and parameter values"""
+    MaxIterations: ClassVar[tlefitstatus]
+    """Maximum number of iterations reached"""
 
-    Dir: ClassVar[mpsuccess]
-    """Convergence in orthogonality"""
+    DampingSaturated: ClassVar[tlefitstatus]
+    """Levenberg-Marquardt damping parameter saturated"""
 
-    MaxIter: ClassVar[mpsuccess]
-    """Maximum iterations reached"""
-
-    Ftol: ClassVar[mpsuccess]
-    """ftol is too small; no further improvement"""
-
-    Xtol: ClassVar[mpsuccess]
-    """xtol is too small; no further improvement"""
-
-    Gtol: ClassVar[mpsuccess]
-    """gtol is too small; no further improvement"""
+    def converged(self) -> bool:
+        """True if the fit converged successfully."""
+        ...
 
 class timescale:
     """

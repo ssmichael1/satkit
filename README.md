@@ -19,7 +19,7 @@ Satkit is a high-performance orbital mechanics library written in Rust with comp
 **[Documentation and tutorials](https://satkit.dev/)** (Python examples, but the concepts and API apply equally to Rust) | **[Rust API reference](https://docs.rs/satkit/)**
 
 > [!NOTE]
-> **Version 0.14.1** replaces `nalgebra` with [`numeris`](https://crates.io/crates/numeris) for all linear algebra (matrices, quaternions, ODE solvers). `numeris` is a standalone library that unifies these in a single crate, making them available to projects beyond satkit. Performance is equivalent, and all tests pass with matching residuals. If your code uses `nalgebra` types, enable the `nalgebra` feature on `numeris` for zero-cost conversions. Please open an issue if you hit any problems.
+> **Version 0.16.0** introduces several breaking changes: `Frame::RIC` is renamed to the canonical `Frame::RTN` (with `RIC` / `RSW` remaining as aliases, so existing code still compiles); a new `Frame::NTW` (velocity-aligned) is added; `LVLH` is now accepted as a maneuver/thrust frame; the uncertainty API is unified into `set_pos_uncertainty(sigma, frame)` / `set_vel_uncertainty(sigma, frame)` (the four old per-frame methods are removed, not deprecated); `PropSettings::default()` now uses `GravityModel::EGM96` instead of `JGM3`; the **Gauss-Jackson 8** fixed-step multistep integrator is available for long-duration propagation; and `PropSettings::max_steps` is now configurable. See `CHANGELOG.md` for the full list.
 
 ## Installation
 
@@ -130,7 +130,7 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 
 ### Orbit Maneuvers
 
-- **Impulsive maneuvers** -- Instantaneous delta-v applied at a scheduled time during propagation. Supported frames: GCRF (inertial), RTN (radial/tangential/normal — the CCSDS OEM convention, also exposed as `RSW` and `RIC` aliases), NTW (normal/tangent/cross-track — natural for prograde burns on eccentric orbits), and LVLH (Local Vertical / Local Horizontal). Ergonomic helpers `add_prograde` / `add_retrograde` / `add_radial` / `add_normal` for common scalar-magnitude burns.
+- **Impulsive maneuvers** -- Instantaneous delta-v applied at a scheduled time during propagation. Supported frames: GCRF (inertial), RTN (radial/tangential/normal — the CCSDS OEM convention, also exposed as `RSW` and `RIC` aliases), NTW (velocity-aligned — natural for prograde burns on eccentric orbits, where a pure +T delta-v adds exactly Δv to |v|), and LVLH (Local Vertical / Local Horizontal). Ergonomic helpers `add_prograde` / `add_retrograde` / `add_radial` / `add_normal` for common scalar-magnitude burns.
 - **Continuous thrust** -- Constant-acceleration thrust arcs over time windows in any of the frames above, integrated directly into the force model
 - **Automatic segmentation** -- Propagation through maneuver sequences is handled transparently, including backward propagation
 
@@ -156,7 +156,7 @@ Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with ful
 SatKit uses [numeris](https://crates.io/crates/numeris) for all linear algebra (vectors, matrices, quaternions, ODE integration). If you also use nalgebra in your project, enable the `nalgebra` feature on numeris for zero-cost `From`/`Into` conversions between types:
 
 ```toml
-numeris = { version = "0.5.5", features = ["nalgebra"] }
+numeris = { version = "0.5.7", features = ["nalgebra"] }
 ```
 
 ### Cargo Features
@@ -183,7 +183,7 @@ The library is validated against:
 - **ICGEM** reference values for gravity field calculations
 - **GPS SP3** precise ephemerides for multi-day numerical propagation
 
-142 tests (106 unit + 36 doc-tests) run on every commit across Linux, macOS, and Windows.
+157 Rust tests and 81 Python tests run on every commit across Linux, macOS, and Windows.
 
 ### Running Tests Locally
 

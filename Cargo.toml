@@ -3,7 +3,7 @@ members = [".", "python"]
 
 [package]
 name = "satkit"
-version = "0.16.0"
+version = "0.16.1"
 edition = "2021"
 description = "Satellite Toolkit"
 readme = "README.md"
@@ -26,15 +26,11 @@ numeris = { version = "0.5.7", features = ["serde", "estimate", "ode"] }
 num-traits = "0.2.19"
 thiserror = "2.0"
 ureq = "3.1.2"
-json = "0.12.4"
 process_path = "0.1.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 quick-xml = { version = "0.38", features = ["serialize"], optional = true }
-serde-pickle = "1.2.0"
-itertools = "0.14.0"
 anyhow = "1"
-rmpfit = "0.3.0"
 chrono = { version = "0.4", optional = true }
 
 [build-dependencies]

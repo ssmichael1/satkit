@@ -1,6 +1,27 @@
 # Changelog
 
 
+## 0.16.1 - 2026-04-05
+
+### Dependency Cleanup
+
+- **`rmpfit` removed.** `TLE::fit_from_states` previously used the `rmpfit` crate (a thin wrapper around the `cmpfit` C library) for Levenberg-Marquardt. Replaced with a small local LM loop built on top of `numeris` fixed-size linear algebra (7×7 normal equations, finite-difference Jacobian, numeris `LuDecomposition` for the damped solve). SGP4 failures on perturbed or trial parameters are now handled as step rejections rather than hard errors, so fits that previously aborted mid-way (e.g. the 400 km LEO + drag test case) now converge.
+- **`rmpfit::MPStatus` → `satkit::tle::TleFitResult`.** New public types `TleFitStatus` (enum) and `TleFitResult` (struct with `orig_norm`, `best_norm`, `grad_norm`, `n_iter`, `n_res_evals`) replace the rmpfit-specific return type. The Python `tle.fit_from_states` now returns a dict with keys `status`, `converged`, `orig_norm`, `best_norm`, `grad_norm`, `n_iter`, `n_res_evals`, and the Python `mpsuccess` class is replaced by `tlefitstatus` with variants `GradientConverged`, `StepConverged`, `CostConverged`, `MaxIterations`, `DampingSaturated` plus a `.converged()` helper.
+- **`itertools` removed.** The crate was used for a single method (`take_while_ref`) at 5 call sites in `time/instantparse.rs`. Replaced with a local `take_while_peek` helper on `Peekable<Chars>`.
+- **`json` crate removed.** The two usages (`utils/update_data.rs`, `solar_cycle_forecast.rs`) migrated to `serde_json`, which was already a dependency. Reduces crate graph by one JSON parser.
+- **`serde-pickle` removed from the top-level crate.** It was only actually used in `python/src/pypropresult.rs`; the root `Cargo.toml` declaration was dead. Still a dependency of the `satkit-python` crate.
+
+### Bug Fixes
+
+- **Clippy**: fix `clone_on_copy` on a `Copy` error enum in `pysgp4.rs`; factor a `LambertSolution` type alias in `pylambert.rs` to silence `type_complexity` warnings. Full workspace now builds clean under `cargo clippy --all-targets`.
+
+### Documentation
+
+- **README.md** and **lib.rs** crate-level docs updated for 0.16: canonical `Frame::RTN` (with `RIC`/`RSW` aliases) and new `NTW` / `LVLH` frames in the maneuver list, Gauss-Jackson 8 in the integrator list, updated Python version range (3.10–3.14), corrected docs URL (<https://satkit.dev/>), bumped `numeris` example version to 0.5.7, and refreshed test counts (157 Rust + 81 Python).
+- **High Precision Propagation** tutorial: dropped three unused imports (`math`, `numpy.typing`, `scipy.optimize.minimize_scalar`).
+- **Two-Line Element Set**, **Orbital Mean-Element Message**, and **Optical Observations of Satellites** tutorials: replaced hand-rolled `requests.get` / `xmltodict` / hardcoded TLE-line blocks with the built-in `sk.TLE.from_url(url)` and `sk.omm_from_url(url)` helpers introduced in 0.15.1. The OMM notebook no longer depends on `requests` or `xmltodict` at all; the Optical Observations notebook now derives all sample times from `tle.epoch` so the fit is reproducible against the current TLE.
+
+
 ## 0.16.0 - 2026-04-05
 
 ### Gauss-Jackson 8 Integrator

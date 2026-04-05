@@ -7,6 +7,8 @@ use crate::sgp4::{SGP4InitArgs, SGP4Source};
 // TLE fitting from state vectors
 mod fitting;
 
+pub use fitting::{TleFitResult, TleFitStatus};
+
 use anyhow::{bail, Context, Result};
 
 // 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1

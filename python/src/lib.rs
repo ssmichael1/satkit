@@ -15,7 +15,7 @@ mod pykepler;
 mod pylpephem_moon;
 mod pylpephem_planets;
 mod pylpephem_sun;
-mod pympsuccess;
+mod pytlefitstatus;
 mod pynrlmsise;
 mod pypropresult;
 mod pyquaternion;
@@ -168,7 +168,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pyconsts::Consts>()?;
     m.add_class::<SolarSystem>()?;
     m.add_class::<pytle::PyTLE>()?;
-    m.add_class::<pympsuccess::PyMPSuccess>()?;
+    m.add_class::<pytlefitstatus::PyTleFitStatus>()?;
 
     m.add_class::<PyGeodet>()?;
     m.add_class::<PyITRFCoord>()?;

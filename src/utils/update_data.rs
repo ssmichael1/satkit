@@ -1,7 +1,7 @@
 use super::download_file_async;
 use super::download_to_string;
 use crate::utils::datadir;
-use json::JsonValue;
+use serde_json::Value;
 use std::path::PathBuf;
 use std::thread::JoinHandle;
 
@@ -9,13 +9,19 @@ use anyhow::{bail, Result};
 
 /// Download a list of files from a JSON file
 fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> Result<()> {
-    let json_base: JsonValue = json::parse(download_to_string(json_url.as_str())?.as_str())?;
-    let vresult: Vec<std::thread::JoinHandle<Result<bool>>> = json_base
-        .members()
-        .map(|url| -> JoinHandle<Result<bool>> {
-            download_file_async(url.to_string(), basedir, true)
+    let json_base: Value = serde_json::from_str(download_to_string(json_url.as_str())?.as_str())?;
+    let arr = json_base
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("Expected JSON array of file URLs"))?;
+    let vresult: Vec<std::thread::JoinHandle<Result<bool>>> = arr
+        .iter()
+        .map(|url| -> Result<JoinHandle<Result<bool>>> {
+            let url_str = url
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("Expected string URL"))?;
+            Ok(download_file_async(url_str.to_string(), basedir, true))
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     // Wait for all the threads to funish
     for jh in vresult {
         jh.join().unwrap()?;
@@ -26,23 +32,23 @@ fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> Result
 
 /// Download a list of files from a JSON file
 fn download_from_json(
-    v: &JsonValue,
+    v: &Value,
     basedir: std::path::PathBuf,
     baseurl: String,
     overwrite: &bool,
     thandles: &mut Vec<JoinHandle<Result<bool>>>,
 ) -> Result<()> {
-    if v.is_object() {
-        let r1: Vec<Result<()>> = v
-            .entries()
-            .map(|entry: (&str, &JsonValue)| -> Result<()> {
-                let pbnew = basedir.join(entry.0);
+    if let Some(obj) = v.as_object() {
+        let r1: Vec<Result<()>> = obj
+            .iter()
+            .map(|(key, val)| -> Result<()> {
+                let pbnew = basedir.join(key);
                 if !pbnew.is_dir() {
                     std::fs::create_dir_all(pbnew.clone())?;
                 }
                 let mut newurl = baseurl.clone();
-                newurl.push_str(format!("/{}", entry.0).as_str());
-                download_from_json(entry.1, pbnew, newurl, overwrite, thandles)?;
+                newurl.push_str(format!("/{key}").as_str());
+                download_from_json(val, pbnew, newurl, overwrite, thandles)?;
                 Ok(())
             })
             .filter(|res| res.is_err())
@@ -50,9 +56,9 @@ fn download_from_json(
         if !r1.is_empty() {
             bail!("Could not parse entries");
         }
-    } else if v.is_array() {
-        let r2: Vec<Result<()>> = v
-            .members()
+    } else if let Some(arr) = v.as_array() {
+        let r2: Vec<Result<()>> = arr
+            .iter()
             .map(|val| -> Result<()> {
                 download_from_json(val, basedir.clone(), baseurl.clone(), overwrite, thandles)?;
                 Ok(())
@@ -62,9 +68,9 @@ fn download_from_json(
         if !r2.is_empty() {
             bail!("could not parse array entries");
         }
-    } else if v.is_string() {
+    } else if let Some(s) = v.as_str() {
         let mut newurl = baseurl;
-        newurl.push_str(format!("/{}", v).as_str());
+        newurl.push_str(format!("/{s}").as_str());
         thandles.push(download_file_async(newurl, &basedir, *overwrite));
     } else {
         bail!("invalid json for downloading files??!!");
@@ -81,7 +87,7 @@ fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> Resu
     let mut fileurl = baseurl.clone();
     fileurl.push_str("/files.json");
 
-    let json_base: JsonValue = json::parse(download_to_string(fileurl.as_str())?.as_str())?;
+    let json_base: Value = serde_json::from_str(download_to_string(fileurl.as_str())?.as_str())?;
     let mut thandles: Vec<JoinHandle<Result<bool>>> = Vec::new();
     download_from_json(&json_base, basedir, baseurl, overwrite, &mut thandles)?;
     // Wait for all the threads to funish
