@@ -6,30 +6,30 @@ repo_name: ssmichael1/satkit
 
 theme:
   name: material
+  font:
+    text: Inter
+    code: JetBrains Mono
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: blue grey
-      accent: blue grey
+      primary: brown
+      accent: amber
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: blue grey
-      accent: blue grey
+      primary: brown
+      accent: amber
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - navigation.tabs
-    - navigation.tabs.sticky
-    - navigation.sections
-    - navigation.indexes
-    - navigation.top
-    - navigation.path
     - content.code.copy
-    - content.code.annotate
+    - navigation.instant
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
     - search.highlight
     - search.suggest
     - toc.follow
@@ -96,6 +96,7 @@ nav:
       - Orbit Propagation:
           - "Theory: Force Models & Propagation": guide/satprop.md
           - "Theory: TLEs, SGP4 & OMMs": guide/tle.md
+          - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
           - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
           - High Precision Propagation: tutorials/High Precision Propagation.ipynb
           - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb

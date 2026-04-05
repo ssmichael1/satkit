@@ -31,9 +31,15 @@ impl ContinuousThrust {
         *time >= self.start && *time <= self.end
     }
 
-    /// Compute thrust acceleration in GCRF at the given time and state
+    /// Compute thrust acceleration in GCRF at the given time and state.
     ///
-    /// Returns None if thrust is not active at this time
+    /// Supported frames: [`Frame::GCRF`], [`Frame::RIC`], [`Frame::NTW`],
+    /// [`Frame::LVLH`]. Use NTW for thrust-along-velocity scenarios (most
+    /// electric-propulsion mission profiles); use RIC for position-tied
+    /// burn components; use LVLH if you're porting GN&C code written in
+    /// the crewed-spaceflight / body-pointing convention.
+    ///
+    /// Returns `None` if thrust is not active at this time.
     pub fn accel_gcrf(&self, time: &Instant, pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Option<Vector3> {
         if !self.is_active(time) {
             return None;
@@ -44,7 +50,23 @@ impl ContinuousThrust {
                 let dcm = frametransform::ric_to_gcrf(pos_gcrf, vel_gcrf);
                 dcm * self.accel
             }
-            _ => panic!("Unsupported frame for thrust: {}. Must be GCRF or RIC", self.frame)
+            Frame::NTW => {
+                let dcm = frametransform::ntw_to_gcrf(pos_gcrf, vel_gcrf);
+                dcm * self.accel
+            }
+            Frame::LVLH => {
+                let dcm = frametransform::lvlh_to_gcrf(pos_gcrf, vel_gcrf);
+                dcm * self.accel
+            }
+            Frame::ITRF
+            | Frame::TIRS
+            | Frame::CIRS
+            | Frame::TEME
+            | Frame::EME2000
+            | Frame::ICRF => panic!(
+                "Unsupported frame for thrust: {}. Must be GCRF, RIC, NTW, or LVLH",
+                self.frame
+            ),
         })
     }
 }

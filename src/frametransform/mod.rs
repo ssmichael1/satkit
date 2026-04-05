@@ -494,6 +494,85 @@ pub fn gcrf_to_ric(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
     ric_to_gcrf(pos_gcrf, vel_gcrf).transpose()
 }
 
+/// Compute the NTW-to-GCRF rotation matrix from position and velocity.
+///
+/// NTW frame (Vallado §3.3):
+/// * **N** (in-plane normal to velocity): T̂ × Ŵ. For circular orbits this
+///   coincides with the outward radial direction; for eccentric orbits it
+///   leans off-radial by the flight-path angle.
+/// * **T** (tangent, along velocity): v̂ = v / |v|
+/// * **W** (cross-track, along angular momentum): (r × v) / |r × v|
+///
+/// Unlike [`ric_to_gcrf`], the tangent axis is parallel to the velocity
+/// vector regardless of orbit eccentricity, so a +T delta-v adds that exact
+/// magnitude to |v|. This makes NTW the natural frame for thrust-along-
+/// velocity maneuver planning.
+///
+/// # Arguments
+/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `vel_gcrf` - Velocity vector in GCRF [m/s]
+///
+/// # Returns
+/// 3x3 rotation matrix that transforms vectors from NTW to GCRF.
+pub fn ntw_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    let t_hat = vel_gcrf.normalize();
+    let h = pos_gcrf.cross(vel_gcrf);
+    let w_hat = h.normalize();
+    let n_hat = t_hat.cross(&w_hat);
+    let mut dcm = Matrix3::zeros();
+    dcm.set_block(0, 0, &n_hat);
+    dcm.set_block(0, 1, &t_hat);
+    dcm.set_block(0, 2, &w_hat);
+    dcm
+}
+
+/// Compute the GCRF-to-NTW rotation matrix. Transpose of [`ntw_to_gcrf`].
+pub fn gcrf_to_ntw(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    ntw_to_gcrf(pos_gcrf, vel_gcrf).transpose()
+}
+
+/// Compute the LVLH-to-GCRF rotation matrix from position and velocity.
+///
+/// Local-Vertical / Local-Horizontal, the classical crewed-spaceflight and
+/// GN&C "body-pointing" frame used on the ISS and most Earth-pointing
+/// vehicles:
+///
+/// * **z** = −r̂ (nadir; pointing toward Earth centre)
+/// * **y** = −ĥ (opposite angular momentum; "right" for a prograde mission)
+/// * **x** = ŷ × ẑ = ĥ × r̂ / |ĥ × r̂| (completes right-handed system;
+///   roughly velocity-aligned for circular orbits)
+///
+/// Geometrically the axes span the same orbital plane as [`ric_to_gcrf`]
+/// (RIC/RSW/RTN) but with different labels and sign conventions — LVLH +x
+/// equals RIC +I, LVLH −z equals RIC +R, and LVLH −y equals RIC +C. For
+/// eccentric orbits neither LVLH's x nor RIC's I is strictly along
+/// velocity; use [`ntw_to_gcrf`] if you need that property.
+///
+/// # Arguments
+/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `vel_gcrf` - Velocity vector in GCRF [m/s]
+///
+/// # Returns
+/// 3x3 rotation matrix that transforms vectors from LVLH to GCRF.
+pub fn lvlh_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    let r_hat = pos_gcrf.normalize();
+    let h = pos_gcrf.cross(vel_gcrf);
+    let h_hat = h.normalize();
+    let z_hat = r_hat * -1.0;
+    let y_hat = h_hat * -1.0;
+    let x_hat = y_hat.cross(&z_hat);
+    let mut dcm = Matrix3::zeros();
+    dcm.set_block(0, 0, &x_hat);
+    dcm.set_block(0, 1, &y_hat);
+    dcm.set_block(0, 2, &z_hat);
+    dcm
+}
+
+/// Compute the GCRF-to-LVLH rotation matrix. Transpose of [`lvlh_to_gcrf`].
+pub fn gcrf_to_lvlh(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    lvlh_to_gcrf(pos_gcrf, vel_gcrf).transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

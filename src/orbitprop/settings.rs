@@ -22,6 +22,17 @@ pub enum Integrator {
     /// RODAS4 — L-stable Rosenbrock 4(3), 6 stages. For stiff problems (re-entry, low perigee).
     /// Does not support state transition matrix propagation or dense output interpolation.
     RODAS4,
+    /// Gauss-Jackson 8 — 8th-order fixed-step multistep predictor-corrector
+    /// specialised for 2nd-order ODEs (Berry & Healy 2004). The dominant
+    /// integrator in high-precision astrodynamics codes (GMAT, STK, ODTK).
+    /// Typically uses 3-10× fewer force evaluations than a Runge-Kutta method
+    /// of comparable accuracy on smooth orbit propagation problems.
+    ///
+    /// Uses a fixed step size set via [`PropSettings::gj_step_seconds`].
+    /// Does not support state transition matrix propagation (C=7) or dense
+    /// output interpolation. Not recommended for highly eccentric orbits or
+    /// integration across discontinuities (eclipse boundaries, maneuvers).
+    GaussJackson8,
 }
 
 impl Default for Integrator {
@@ -39,6 +50,7 @@ impl std::fmt::Display for Integrator {
             Integrator::RKV65 => write!(f, "RKV65 (6th order, 10 stages)"),
             Integrator::RKTS54 => write!(f, "RKTS54 (5th order, 7 stages, FSAL)"),
             Integrator::RODAS4 => write!(f, "RODAS4 (4th order, 6 stages, L-stable)"),
+            Integrator::GaussJackson8 => write!(f, "Gauss-Jackson 8 (8th order, fixed-step multistep)"),
         }
     }
 }
@@ -72,6 +84,10 @@ pub struct PropSettings {
     pub use_moon_gravity: bool,
     pub enable_interp: bool,
     pub integrator: Integrator,
+    /// Fixed step size (seconds) used by [`Integrator::GaussJackson8`].
+    /// Ignored by adaptive integrators. Typical values: 30-120 s for LEO,
+    /// 60-300 s for MEO, 300-600 s for GEO. Default: 60 s.
+    pub gj_step_seconds: f64,
     pub precomputed: Option<Precomputed>,
 }
 
@@ -88,6 +104,7 @@ impl Default for PropSettings {
             use_moon_gravity: true,
             enable_interp: true,
             integrator: Integrator::default(),
+            gj_step_seconds: 60.0,
             precomputed: None,
         }
     }
@@ -115,6 +132,33 @@ impl PropSettings {
         Ok(())
     }
 
+    /// Compute the required padding (in seconds) beyond the nominal
+    /// propagation interval when building a [`Precomputed`] interp table
+    /// for these settings.
+    ///
+    /// Most integrators only evaluate the force within the nominal
+    /// interval and need the default padding. The
+    /// [`Integrator::GaussJackson8`] integrator, however, runs a
+    /// symmetric ±4·h_gj startup around the starting epoch — requiring
+    /// the interp table to cover times up to `4·gj_step_seconds` outside
+    /// the interval on the startup side. A small safety margin is added
+    /// to guard against floating-point round-off.
+    pub fn required_precompute_padding(&self) -> f64 {
+        match self.integrator {
+            Integrator::GaussJackson8 => {
+                // 4 startup steps backward from epoch + safety margin
+                (4.0 * self.gj_step_seconds.abs() + 60.0)
+                    .max(crate::orbitprop::precomputed::DEFAULT_PADDING_SECS)
+            }
+            Integrator::RKV98
+            | Integrator::RKV98NoInterp
+            | Integrator::RKV87
+            | Integrator::RKV65
+            | Integrator::RKTS54
+            | Integrator::RODAS4 => crate::orbitprop::precomputed::DEFAULT_PADDING_SECS,
+        }
+    }
+
     /// Precompute terms between begin and end instants
     ///
     /// # Arguments
@@ -128,6 +172,12 @@ impl PropSettings {
     /// Pre-computing these terms means the settings can be used for multiple propagations
     /// between the same begin and end instants without needing to recompute these terms each time.
     /// (significant speedup when propagating many orbits over the same time span)
+    ///
+    /// The precomputed range is automatically padded to accommodate the
+    /// selected integrator. For [`Integrator::GaussJackson8`] the padding
+    /// is extended to `4·gj_step_seconds + 60 s` on each end to cover the
+    /// backward RK4 startup stencil; for other integrators a default
+    /// 240 s padding is used.
     ///
     /// # Errors
     /// Returns error if precomputation fails
@@ -144,7 +194,8 @@ impl PropSettings {
     ///
     /// ```
     pub fn precompute_terms<T: TimeLike>(&mut self, begin: &T, end: &T) -> Result<()> {
-        self.precomputed = Some(Precomputed::new(begin, end)?);
+        let padding = self.required_precompute_padding();
+        self.precomputed = Some(Precomputed::new_padded(begin, end, 60.0, padding)?);
         Ok(())
     }
 
@@ -154,7 +205,8 @@ impl PropSettings {
         end: &T,
         step_secs: f64,
     ) -> Result<()> {
-        self.precomputed = Some(Precomputed::new_with_step(begin, end, step_secs)?);
+        let padding = self.required_precompute_padding();
+        self.precomputed = Some(Precomputed::new_padded(begin, end, step_secs, padding)?);
         Ok(())
     }
 }

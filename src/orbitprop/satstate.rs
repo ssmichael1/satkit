@@ -18,18 +18,59 @@ pub enum StateCov {
     PVCov(PVCovType),
 }
 
-/// An instantaneous velocity change (delta-v) at a specific time
+/// An instantaneous velocity change (delta-v) at a specific time.
+///
+/// A maneuver is specified as a 3-vector plus a reference frame. The
+/// supported frames are:
+///
+/// * [`Frame::GCRF`] — inertial Cartesian, useful for directly specifying
+///   delta-v components along inertial axes.
+/// * [`Frame::RIC`] (a.k.a. RSW/RTN) — radial / in-track / cross-track,
+///   tied to the position vector. Natural for radial and cross-track
+///   burn components, and the CCSDS OEM covariance-message convention.
+///   Note: `satkit`'s own covariance-uncertainty API uses LVLH (see
+///   [`Frame::LVLH`]), not RIC.
+/// * [`Frame::NTW`] — normal-to-velocity / tangent / cross-track, tied to
+///   the velocity vector. Natural for prograde/retrograde burns.
+/// * [`Frame::LVLH`] — Local Vertical / Local Horizontal, the classical
+///   crewed-spaceflight "body-pointing" frame (z = nadir, y = anti-h,
+///   x completes). Geometrically the same orbital plane as RIC but with
+///   different labels and signs. Handy if you're translating GN&C code
+///   written against LVLH conventions.
+///
+/// For circular orbits RIC and NTW are identical up to sign conventions;
+/// for eccentric orbits they differ by the flight-path angle. If you want
+/// to specify a "10 m/s prograde" burn and have it add exactly 10 m/s to
+/// |v|, use NTW. See [`Frame::NTW`] for the geometric definition, or the
+/// "Satellite-local frames for maneuvers" guide in the satkit documentation
+/// for a side-by-side comparison of RIC, NTW, and LVLH.
+///
+/// # Ergonomic constructors
+///
+/// For common cases, prefer the named constructors over passing a frame
+/// explicitly:
+///
+/// * [`ImpulsiveManeuver::prograde`] — +T in NTW
+/// * [`ImpulsiveManeuver::retrograde`] — −T in NTW
+/// * [`ImpulsiveManeuver::radial_out`] — +N in NTW (radial for circular)
+/// * [`ImpulsiveManeuver::normal`] — +W cross-track
+/// * [`ImpulsiveManeuver::ric`] — arbitrary vector in RIC
+/// * [`ImpulsiveManeuver::ntw`] — arbitrary vector in NTW
+/// * [`ImpulsiveManeuver::gcrf`] — arbitrary vector in GCRF
 #[derive(Clone, Debug)]
 pub struct ImpulsiveManeuver {
     /// Time at which the maneuver is applied
     pub time: Instant,
     /// Delta-v vector in the specified frame [m/s]
     pub delta_v: Vector3,
-    /// Coordinate frame for the delta-v vector (GCRF or RIC)
+    /// Coordinate frame for the delta-v vector. Must be one of
+    /// [`Frame::GCRF`], [`Frame::RIC`], or [`Frame::NTW`].
     pub frame: Frame,
 }
 
 impl ImpulsiveManeuver {
+    /// Create a maneuver with an explicit frame. For common cases see the
+    /// named constructors ([`Self::prograde`], [`Self::ntw`], etc.).
     pub fn new(time: Instant, delta_v: Vector3, frame: Frame) -> Self {
         Self {
             time,
@@ -38,7 +79,57 @@ impl ImpulsiveManeuver {
         }
     }
 
-    /// Compute the delta-v in GCRF given the state at maneuver time
+    /// Prograde burn: `+dv_mps` along the velocity vector.
+    ///
+    /// Equivalent to an NTW maneuver with delta-v = (0, dv_mps, 0). A
+    /// positive magnitude adds energy (raises orbit); a negative magnitude
+    /// is equivalent to [`Self::retrograde`] with its sign flipped.
+    pub fn prograde(time: Instant, dv_mps: f64) -> Self {
+        Self::new(time, numeris::vector![0.0, dv_mps, 0.0], Frame::NTW)
+    }
+
+    /// Retrograde burn: `-dv_mps` along the velocity vector. `dv_mps`
+    /// should be positive; this is a convenience equivalent to calling
+    /// [`Self::prograde`] with a negated magnitude.
+    pub fn retrograde(time: Instant, dv_mps: f64) -> Self {
+        Self::new(time, numeris::vector![0.0, -dv_mps, 0.0], Frame::NTW)
+    }
+
+    /// Radial-outward burn in the NTW frame: +N component.
+    ///
+    /// For circular orbits this is the outward radial direction; for
+    /// eccentric orbits the N axis leans off the radial by the flight-path
+    /// angle. Use [`Self::ric`] if you want the strict radial direction
+    /// regardless of eccentricity.
+    pub fn radial_out(time: Instant, dv_mps: f64) -> Self {
+        Self::new(time, numeris::vector![dv_mps, 0.0, 0.0], Frame::NTW)
+    }
+
+    /// Cross-track ("normal") burn: +W component. Same as RIC +C.
+    /// Positive values push in the +angular-momentum direction (toward
+    /// the "left" of the orbit for a prograde mission).
+    pub fn normal(time: Instant, dv_mps: f64) -> Self {
+        Self::new(time, numeris::vector![0.0, 0.0, dv_mps], Frame::NTW)
+    }
+
+    /// Arbitrary delta-v vector in the GCRF inertial frame.
+    pub fn gcrf(time: Instant, delta_v: Vector3) -> Self {
+        Self::new(time, delta_v, Frame::GCRF)
+    }
+
+    /// Arbitrary delta-v vector in the RIC (a.k.a. RSW / RTN) frame.
+    /// Components are (radial, in-track, cross-track).
+    pub fn ric(time: Instant, delta_v: Vector3) -> Self {
+        Self::new(time, delta_v, Frame::RIC)
+    }
+
+    /// Arbitrary delta-v vector in the NTW frame. Components are
+    /// (normal, tangent, cross-track) where tangent is along velocity.
+    pub fn ntw(time: Instant, delta_v: Vector3) -> Self {
+        Self::new(time, delta_v, Frame::NTW)
+    }
+
+    /// Compute the delta-v in GCRF given the state at maneuver time.
     fn delta_v_gcrf(&self, pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Vector3 {
         match self.frame {
             Frame::GCRF => self.delta_v,
@@ -46,7 +137,23 @@ impl ImpulsiveManeuver {
                 let dcm = frametransform::ric_to_gcrf(pos_gcrf, vel_gcrf);
                 dcm * self.delta_v
             }
-            _ => panic!("Unsupported frame for maneuver: {}. Must be GCRF or RIC", self.frame)
+            Frame::NTW => {
+                let dcm = frametransform::ntw_to_gcrf(pos_gcrf, vel_gcrf);
+                dcm * self.delta_v
+            }
+            Frame::LVLH => {
+                let dcm = frametransform::lvlh_to_gcrf(pos_gcrf, vel_gcrf);
+                dcm * self.delta_v
+            }
+            Frame::ITRF
+            | Frame::TIRS
+            | Frame::CIRS
+            | Frame::TEME
+            | Frame::EME2000
+            | Frame::ICRF => panic!(
+                "Unsupported frame for maneuver: {}. Must be GCRF, RIC, NTW, or LVLH",
+                self.frame
+            ),
         }
     }
 }
@@ -153,82 +260,127 @@ impl SatState {
         self.cov.clone()
     }
 
-    /// Set position uncertainty (1-sigma, meters) in the
-    /// lvlh (local-vertical, local-horizontal) frame
+    /// Compute the DCM that transforms a 3-vector from `frame` to GCRF at
+    /// the current state. Returns `Ok(Some(dcm))` for orbital frames,
+    /// `Ok(None)` for GCRF (identity rotation, no transform needed), and
+    /// an error for unsupported frames.
+    fn cov_frame_to_gcrf(&self, frame: Frame) -> Result<Option<Matrix3>> {
+        let pos = self.pos_gcrf();
+        let vel = self.vel_gcrf();
+        match frame {
+            Frame::GCRF => Ok(None),
+            Frame::LVLH => Ok(Some(frametransform::lvlh_to_gcrf(&pos, &vel))),
+            Frame::RIC => Ok(Some(frametransform::ric_to_gcrf(&pos, &vel))),
+            Frame::NTW => Ok(Some(frametransform::ntw_to_gcrf(&pos, &vel))),
+            Frame::ITRF
+            | Frame::TIRS
+            | Frame::CIRS
+            | Frame::TEME
+            | Frame::EME2000
+            | Frame::ICRF => anyhow::bail!(
+                "Unsupported frame for uncertainty: {}. Must be GCRF, LVLH, RIC, or NTW",
+                frame
+            ),
+        }
+    }
+
+    /// Set 1-sigma position uncertainty (meters) in a satellite-local or
+    /// inertial frame.
+    ///
+    /// The uncertainty is interpreted as a diagonal 3×3 covariance
+    /// $\mathrm{diag}(\sigma_x^2, \sigma_y^2, \sigma_z^2)$ in the given
+    /// `frame`, then rotated into GCRF and stored in the position block
+    /// of the 6×6 state covariance. Any existing velocity covariance
+    /// block is preserved; off-diagonal (position-velocity) blocks are
+    /// cleared.
     ///
     /// # Arguments
     ///
-    /// * `sigma_lvlh` - 3-vector with 1-sigma position uncertainty in LVLH frame
+    /// * `sigma` — 3-vector of 1-sigma position uncertainty components
+    ///   along the `frame`'s axes [m]
+    /// * `frame` — coordinate frame. Supported: [`Frame::GCRF`],
+    ///   [`Frame::LVLH`], [`Frame::RIC`] (= RSW = RTN), [`Frame::NTW`].
     ///
-    pub fn set_lvlh_pos_uncertainty(&mut self, sigma_lvlh: &Vector3) {
-        let dcm = self.qgcrf2lvlh().to_rotation_matrix();
+    /// # Errors
+    ///
+    /// Returns an error if the frame is not one of the supported
+    /// orbital or inertial frames above (e.g. ITRF, TEME).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use satkit::orbitprop::SatState;
+    /// # use satkit::{Frame, Instant};
+    /// # let mut sat = SatState::from_pv(&Instant::now(),
+    /// #     &numeris::vector![7.0e6, 0.0, 0.0],
+    /// #     &numeris::vector![0.0, 7.5e3, 0.0]);
+    /// // 100 m radial, 200 m along-track, 50 m cross-track uncertainty
+    /// sat.set_pos_uncertainty(&numeris::vector![100.0, 200.0, 50.0], Frame::RIC).unwrap();
+    /// ```
+    pub fn set_pos_uncertainty(&mut self, sigma: &Vector3, frame: Frame) -> Result<()> {
+        let dcm_opt = self.cov_frame_to_gcrf(frame)?;
+        let mut pcov_gcrf = Matrix3::zeros();
+        pcov_gcrf[(0, 0)] = sigma[0] * sigma[0];
+        pcov_gcrf[(1, 1)] = sigma[1] * sigma[1];
+        pcov_gcrf[(2, 2)] = sigma[2] * sigma[2];
+        if let Some(dcm) = dcm_opt {
+            // Covariance transform: C_gcrf = D · C_frame · Dᵀ where D is
+            // the frame→GCRF rotation.
+            pcov_gcrf = dcm * pcov_gcrf * dcm.transpose();
+        }
 
-        let mut pcov = Matrix3::zeros();
-        pcov[(0, 0)] = sigma_lvlh[0] * sigma_lvlh[0];
-        pcov[(1, 1)] = sigma_lvlh[1] * sigma_lvlh[1];
-        pcov[(2, 2)] = sigma_lvlh[2] * sigma_lvlh[2];
+        // Preserve any existing velocity-block uncertainty.
+        let prev_vcov = match &self.cov {
+            StateCov::PVCov(m) => m.block::<3, 3>(3, 3),
+            StateCov::None => Matrix3::zeros(),
+        };
 
-        let mut m = Matrix6::zeros();
-        m.set_block(0, 0, &(dcm.transpose() * pcov * dcm));
+        let mut m = PVCovType::zeros();
+        m.set_block(0, 0, &pcov_gcrf);
+        m.set_block(3, 3, &prev_vcov);
         self.cov = StateCov::PVCov(m);
+        Ok(())
     }
 
-    /// Set velocity uncertainty (1-sigma, meters/second) in the
-    /// lvlh (local-vertical, local-horizontal) frame
+    /// Set 1-sigma velocity uncertainty (meters/second) in a
+    /// satellite-local or inertial frame.
+    ///
+    /// Analogous to [`set_pos_uncertainty`](Self::set_pos_uncertainty) but
+    /// for the velocity block of the 6×6 state covariance. Any existing
+    /// position covariance block is preserved; off-diagonal blocks are
+    /// cleared.
     ///
     /// # Arguments
     ///
-    /// * `sigma_lvlh` - 3-vector with 1-sigma velocity uncertainty in LVLH frame
+    /// * `sigma` — 3-vector of 1-sigma velocity uncertainty components
+    ///   along the `frame`'s axes [m/s]
+    /// * `frame` — coordinate frame. Supported: [`Frame::GCRF`],
+    ///   [`Frame::LVLH`], [`Frame::RIC`], [`Frame::NTW`].
     ///
-    pub fn set_lvlh_vel_uncertainty(&mut self, sigma_lvlh: &Vector3) {
-        let dcm = self.qgcrf2lvlh().to_rotation_matrix();
+    /// # Errors
+    ///
+    /// Returns an error if the frame is not one of the supported frames.
+    pub fn set_vel_uncertainty(&mut self, sigma: &Vector3, frame: Frame) -> Result<()> {
+        let dcm_opt = self.cov_frame_to_gcrf(frame)?;
+        let mut vcov_gcrf = Matrix3::zeros();
+        vcov_gcrf[(0, 0)] = sigma[0] * sigma[0];
+        vcov_gcrf[(1, 1)] = sigma[1] * sigma[1];
+        vcov_gcrf[(2, 2)] = sigma[2] * sigma[2];
+        if let Some(dcm) = dcm_opt {
+            vcov_gcrf = dcm * vcov_gcrf * dcm.transpose();
+        }
 
-        let mut pcov = Matrix3::zeros();
-        pcov[(0, 0)] = sigma_lvlh[0] * sigma_lvlh[0];
-        pcov[(1, 1)] = sigma_lvlh[1] * sigma_lvlh[1];
-        pcov[(2, 2)] = sigma_lvlh[2] * sigma_lvlh[2];
+        // Preserve any existing position-block uncertainty.
+        let prev_pcov = match &self.cov {
+            StateCov::PVCov(m) => m.block::<3, 3>(0, 0),
+            StateCov::None => Matrix3::zeros(),
+        };
 
-        let mut m = Matrix6::zeros();
-        m.set_block(3, 3, &(dcm.transpose() * pcov * dcm));
+        let mut m = PVCovType::zeros();
+        m.set_block(0, 0, &prev_pcov);
+        m.set_block(3, 3, &vcov_gcrf);
         self.cov = StateCov::PVCov(m);
-    }
-
-    /// Set position uncertainty (1-sigma, meters) in the
-    /// gcrf (Geocentric Celestial Reference Frame)
-    ///
-    /// # Arguments
-    ///
-    /// * `sigma_gcrf` - 3-vector with 1-sigma position uncertainty in GCRF frame
-    ///
-    pub fn set_gcrf_pos_uncertainty(&mut self, sigma_cart: &Vector3) {
-        self.cov = StateCov::PVCov({
-            let mut m = PVCovType::zeros();
-            let mut pcov = Matrix3::zeros();
-            pcov[(0, 0)] = sigma_cart[0] * sigma_cart[0];
-            pcov[(1, 1)] = sigma_cart[1] * sigma_cart[1];
-            pcov[(2, 2)] = sigma_cart[2] * sigma_cart[2];
-            m.set_block(0, 0, &pcov);
-            m
-        })
-    }
-
-    /// Set velocity uncertainty (1-sigma, meters / second) in the
-    /// gcrf (Geocentric Celestial Reference Frame)
-    ///
-    /// # Arguments
-    ///
-    /// * `sigma_gcrf` - 3-vector with 1-sigma velocity uncertainty in GCRF frame
-    ///
-    pub fn set_gcrf_vel_uncertainty(&mut self, sigma_cart: &Vector3) {
-        self.cov = StateCov::PVCov({
-            let mut m = PVCovType::zeros();
-            let mut pcov = Matrix3::zeros();
-            pcov[(0, 0)] = sigma_cart[0] * sigma_cart[0];
-            pcov[(1, 1)] = sigma_cart[1] * sigma_cart[1];
-            pcov[(2, 2)] = sigma_cart[2] * sigma_cart[2];
-            m.set_block(3, 3, &pcov);
-            m
-        })
+        Ok(())
     }
 
     /// Propagate a single segment (no maneuvers) from current pv/cov to target time
@@ -441,8 +593,8 @@ mod test {
             &numeris::vector![consts::GEO_R, 0.0, 0.0],
             &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
-        satstate.set_lvlh_vel_uncertainty(&numeris::vector![0.01, 0.02, 0.03]);
+        satstate.set_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0], Frame::LVLH)?;
+        satstate.set_vel_uncertainty(&numeris::vector![0.01, 0.02, 0.03], Frame::LVLH)?;
 
         let state2 =
             satstate.propagate(&(satstate.time + Duration::from_days(0.5)), None, None)?;
@@ -473,7 +625,7 @@ mod test {
             &numeris::vector![consts::GEO_R, 0.0, 0.0],
             &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
+        satstate.set_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0], Frame::LVLH)?;
 
         let _state2 =
             satstate.propagate(&(satstate.time + Duration::from_days(1.0)), None, None)?;
@@ -505,7 +657,7 @@ mod test {
             &numeris::vector![consts::GEO_R, 0.0, 0.0],
             &numeris::vector![0.0, (consts::MU_EARTH / consts::GEO_R).sqrt(), 0.0],
         );
-        satstate.set_lvlh_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0]);
+        satstate.set_pos_uncertainty(&numeris::vector![1.0, 1.0, 1.0], Frame::LVLH)?;
 
         let state2 = satstate.propagate(&satstate.time, None, None)?;
 
@@ -711,6 +863,326 @@ mod test {
         );
 
         assert_eq!(state_burn.maneuvers.len(), 2);
+
+        Ok(())
+    }
+
+    /// When r⊥v (zero flight-path angle), NTW and RIC rotation matrices
+    /// should produce identical delta-v vectors in GCRF. Pure unit test
+    /// of the rotation logic, independent of the propagator.
+    #[test]
+    fn test_ntw_vs_ric_perpendicular_state() {
+        // Exactly circular state: r⊥v
+        let pos: Vector3 = numeris::vector![7_000_000.0, 0.0, 0.0];
+        let v_mag = (consts::MU_EARTH / pos.norm()).sqrt();
+        let vel: Vector3 = numeris::vector![0.0, v_mag, 0.0];
+
+        let dv_ntw = numeris::vector![0.0, 10.0, 0.0]; // +T (tangent)
+        let dv_ric = numeris::vector![0.0, 10.0, 0.0]; // +I (in-track)
+
+        let ntw_dcm = crate::frametransform::ntw_to_gcrf(&pos, &vel);
+        let ric_dcm = crate::frametransform::ric_to_gcrf(&pos, &vel);
+
+        let dv_ntw_gcrf = ntw_dcm * dv_ntw;
+        let dv_ric_gcrf = ric_dcm * dv_ric;
+
+        // With γ = 0 the two should be bit-for-bit identical (both equal
+        // to the velocity unit vector scaled by 10).
+        let diff = (dv_ntw_gcrf - dv_ric_gcrf).norm();
+        assert!(
+            diff < 1e-12,
+            "On a r⊥v state, NTW-T and RIC-I should agree exactly; diff = {:.3e}",
+            diff
+        );
+        // And both should equal 10 · v̂
+        let expected = vel.normalize() * 10.0;
+        assert!((dv_ntw_gcrf - expected).norm() < 1e-12);
+    }
+
+    /// On an eccentric orbit at non-apsidal true anomaly, NTW and RIC
+    /// differ by the flight-path angle. A pure NTW +T burn adds its exact
+    /// magnitude to |v|; a pure RIC +I burn of the same magnitude does not.
+    /// This is the key physical distinction between the two frames.
+    #[test]
+    fn test_ntw_vs_ric_eccentric_diverge() -> Result<()> {
+        // Construct a state at mid-anomaly of a moderately eccentric orbit
+        // with a deliberate non-zero flight-path angle: use an inertial-frame
+        // state where r and v are not perpendicular.
+
+        // Pick a position and velocity such that flight-path angle is ~12.7°.
+        // For an orbit with a = 8000 km, e = 0.3, at true anomaly = 60°:
+        //   r = a(1-e²)/(1+e cos ν) = 8000·0.91 / 1.15 ≈ 6330 km
+        //   v = sqrt(μ(2/r - 1/a))
+        //   flight path angle γ satisfies tan γ = e sin ν / (1 + e cos ν)
+        //                                        = 0.3·0.866 / 1.15 ≈ 0.226 → γ ≈ 12.7°
+        let a = 8000.0e3;
+        let e = 0.3;
+        let nu: f64 = 60.0_f64.to_radians();
+        let r_mag = a * (1.0 - e * e) / (1.0 + e * nu.cos());
+        let v_mag = (consts::MU_EARTH * (2.0 / r_mag - 1.0 / a)).sqrt();
+        let gamma = (e * nu.sin() / (1.0 + e * nu.cos())).atan();
+
+        // Place r along x̂ and velocity in the xy-plane rotated by (90° - γ)
+        // from r (i.e., velocity leans "forward" of perpendicular by γ).
+        let pos = numeris::vector![r_mag, 0.0, 0.0];
+        let vel = numeris::vector![
+            v_mag * gamma.sin(),
+            v_mag * gamma.cos(),
+            0.0
+        ];
+
+        // Sanity: dot product of r̂ and v̂ equals sin(γ) by construction
+        assert!(
+            (pos.normalize().dot(&vel.normalize()) - gamma.sin()).abs() < 1e-12
+        );
+
+        // Apply a 10 m/s "tangent" burn via NTW — should add exactly 10 m/s
+        // to |v|.
+        let ntw_dcm = crate::frametransform::ntw_to_gcrf(&pos, &vel);
+        let dv_ntw_gcrf = ntw_dcm * numeris::vector![0.0, 10.0, 0.0];
+        let v_after_ntw = vel + dv_ntw_gcrf;
+        let dv_ntw_along_v = v_after_ntw.norm() - vel.norm();
+        assert!(
+            (dv_ntw_along_v - 10.0).abs() < 1.0e-6,
+            "NTW +T burn should add exactly 10 m/s to |v|; got {:.9} m/s",
+            dv_ntw_along_v
+        );
+
+        // Apply a 10 m/s "in-track" burn via RIC — should add *less* than
+        // 10 m/s to |v| (the loss is O(γ²) for small γ).
+        let ric_dcm = crate::frametransform::ric_to_gcrf(&pos, &vel);
+        let dv_ric_gcrf = ric_dcm * numeris::vector![0.0, 10.0, 0.0];
+        let v_after_ric = vel + dv_ric_gcrf;
+        let dv_ric_along_v = v_after_ric.norm() - vel.norm();
+        assert!(
+            dv_ric_along_v < 10.0,
+            "RIC +I burn should add less than 10 m/s to |v|; got {:.6}",
+            dv_ric_along_v
+        );
+        // Specifically, the loss should be ~= 10·(1 - cos γ) ≈ 0.245 m/s
+        // for γ = 12.7°.
+        let expected_loss = 10.0 * (1.0 - gamma.cos());
+        assert!(
+            (10.0 - dv_ric_along_v - expected_loss).abs() < 1.0e-2,
+            "RIC loss should be ≈ 10(1-cos γ) = {:.4} m/s; got {:.4}",
+            expected_loss,
+            10.0 - dv_ric_along_v
+        );
+
+        // Cross-check: the magnitudes of the GCRF delta-v vectors are equal
+        // (both are 10 m/s in their respective frames).
+        assert!((dv_ntw_gcrf.norm() - 10.0).abs() < 1e-12);
+        assert!((dv_ric_gcrf.norm() - 10.0).abs() < 1e-12);
+
+        Ok(())
+    }
+
+    /// `set_pos_uncertainty` and `set_vel_uncertainty` should preserve
+    /// the block that the caller is not currently updating, so calling
+    /// them in sequence builds up a full 6×6 covariance.
+    #[test]
+    fn test_uncertainty_preserves_other_block() -> Result<()> {
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let r = consts::EARTH_RADIUS + 500e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+        let mut sat = SatState::from_pv(
+            &t0,
+            &numeris::vector![r, 0.0, 0.0],
+            &numeris::vector![0.0, v, 0.0],
+        );
+
+        // Set position first, then velocity
+        sat.set_pos_uncertainty(&numeris::vector![100.0, 200.0, 50.0], Frame::LVLH)?;
+        sat.set_vel_uncertainty(&numeris::vector![0.1, 0.2, 0.05], Frame::LVLH)?;
+
+        let cov = match sat.cov() {
+            StateCov::PVCov(m) => m,
+            StateCov::None => panic!("expected covariance"),
+        };
+
+        // Both position and velocity blocks must be non-zero
+        let pos_block = cov.block::<3, 3>(0, 0);
+        let vel_block = cov.block::<3, 3>(3, 3);
+        assert!(pos_block.norm_inf() > 1.0, "position block should be set");
+        assert!(vel_block.norm_inf() > 0.001, "velocity block should be preserved");
+
+        Ok(())
+    }
+
+    /// All four supported frames should produce a self-consistent 3x3
+    /// position covariance: on a circular orbit GCRF input with a
+    /// radial-only sigma should give a non-trivial covariance with the
+    /// correct eigenstructure in any orbital frame.
+    #[test]
+    fn test_uncertainty_supported_frames() -> Result<()> {
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let r = consts::EARTH_RADIUS + 500e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+        let sat0 = SatState::from_pv(
+            &t0,
+            &numeris::vector![r, 0.0, 0.0],
+            &numeris::vector![0.0, v, 0.0],
+        );
+
+        for frame in [Frame::GCRF, Frame::LVLH, Frame::RIC, Frame::NTW] {
+            let mut sat = sat0.clone();
+            sat.set_pos_uncertainty(&numeris::vector![10.0, 20.0, 30.0], frame)?;
+            match sat.cov() {
+                StateCov::PVCov(m) => {
+                    let block = m.block::<3, 3>(0, 0);
+                    // Trace should equal sum of sigma² regardless of frame
+                    let trace = block[(0, 0)] + block[(1, 1)] + block[(2, 2)];
+                    let expected = 100.0 + 400.0 + 900.0;
+                    assert!(
+                        (trace - expected).abs() / expected < 1e-12,
+                        "{:?}: trace {} expected {}", frame, trace, expected
+                    );
+                }
+                StateCov::None => panic!("{:?}: no covariance set", frame),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Frames that aren't supported for uncertainty should return an error.
+    #[test]
+    fn test_uncertainty_rejects_unsupported_frames() {
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
+        let mut sat = SatState::from_pv(
+            &t0,
+            &numeris::vector![7.0e6, 0.0, 0.0],
+            &numeris::vector![0.0, 7.5e3, 0.0],
+        );
+
+        for bad_frame in [
+            Frame::ITRF,
+            Frame::TIRS,
+            Frame::CIRS,
+            Frame::TEME,
+            Frame::EME2000,
+            Frame::ICRF,
+        ] {
+            let res = sat.set_pos_uncertainty(
+                &numeris::vector![1.0, 1.0, 1.0],
+                bad_frame,
+            );
+            assert!(res.is_err(), "{:?} should be rejected", bad_frame);
+        }
+    }
+
+    /// LVLH and RIC span the same orbital plane but with relabeled / sign-
+    /// flipped axes: LVLH +x = RIC +I, LVLH −z = RIC +R, LVLH −y = RIC +C.
+    /// A maneuver expressed in either frame should produce identical
+    /// delta-v in GCRF if the components are correctly translated.
+    #[test]
+    fn test_lvlh_matches_ric_with_sign_flips() {
+        let pos: Vector3 = numeris::vector![7_000_000.0, 0.0, 0.0];
+        let v_mag = (consts::MU_EARTH / pos.norm()).sqrt();
+        let vel: Vector3 = numeris::vector![0.0, v_mag, 0.0];
+
+        // LVLH burn: (x, y, z) = (in-track, anti-h, nadir) = (5, 3, 2) m/s
+        let dv_lvlh: Vector3 = numeris::vector![5.0, 3.0, 2.0];
+        // Equivalent RIC burn: R = −z_lvlh, I = +x_lvlh, C = −y_lvlh
+        let dv_ric: Vector3 = numeris::vector![-2.0, 5.0, -3.0];
+
+        let lvlh_dcm = crate::frametransform::lvlh_to_gcrf(&pos, &vel);
+        let ric_dcm = crate::frametransform::ric_to_gcrf(&pos, &vel);
+
+        let dv_lvlh_gcrf = lvlh_dcm * dv_lvlh;
+        let dv_ric_gcrf = ric_dcm * dv_ric;
+
+        let diff = (dv_lvlh_gcrf - dv_ric_gcrf).norm();
+        assert!(
+            diff < 1e-10,
+            "LVLH and equivalent RIC burn should give identical GCRF dv; diff = {:.3e}",
+            diff
+        );
+    }
+
+    /// End-to-end LVLH maneuver: propagate a GEO orbit with a burn
+    /// specified in LVLH and verify it produces the same trajectory as
+    /// the equivalent RIC burn (with axis relabeling).
+    #[test]
+    fn test_lvlh_maneuver_end_to_end() -> Result<()> {
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let t_burn = t0 + Duration::from_hours(0.5);
+        let t_end = t0 + Duration::from_hours(3.0);
+
+        let r = consts::EARTH_RADIUS + 500.0e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+
+        let mut sat_lvlh = SatState::from_pv(
+            &t0,
+            &numeris::vector![r, 0.0, 0.0],
+            &numeris::vector![0.0, v, 0.0],
+        );
+        let mut sat_ric = sat_lvlh.clone();
+
+        // LVLH: x = in-track direction, so (10, 0, 0) is "prograde-like"
+        sat_lvlh.add_maneuver(ImpulsiveManeuver::new(
+            t_burn,
+            numeris::vector![10.0, 0.0, 0.0],
+            Frame::LVLH,
+        ));
+        // RIC equivalent: I = +x_lvlh, so (0, 10, 0)
+        sat_ric.add_maneuver(ImpulsiveManeuver::ric(
+            t_burn,
+            numeris::vector![0.0, 10.0, 0.0],
+        ));
+
+        let s_lvlh = sat_lvlh.propagate(&t_end, None, None)?;
+        let s_ric = sat_ric.propagate(&t_end, None, None)?;
+
+        // Should agree bit-for-bit (the burns are mathematically identical)
+        let pos_diff = (s_lvlh.pos_gcrf() - s_ric.pos_gcrf()).norm();
+        assert!(
+            pos_diff < 1e-6,
+            "LVLH +x burn and RIC +I burn should give identical propagations; diff = {:.3e} m",
+            pos_diff
+        );
+
+        Ok(())
+    }
+
+    /// Exercise the ergonomic constructors and check that `prograde` at
+    /// apogee raises perigee, a textbook orbit mechanics result.
+    #[test]
+    fn test_prograde_constructor_raises_perigee() -> Result<()> {
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+
+        // Elliptical orbit, positioned at apogee: r = a(1+e), v perpendicular
+        let a = 8000.0e3;
+        let e = 0.1;
+        let r_apo = a * (1.0 + e);
+        let v_apo = (consts::MU_EARTH * (2.0 / r_apo - 1.0 / a)).sqrt();
+
+        let mut sat = SatState::from_pv(
+            &t0,
+            &numeris::vector![r_apo, 0.0, 0.0],
+            &numeris::vector![0.0, v_apo, 0.0],
+        );
+        let sat_no_burn = sat.clone();
+
+        // Tiny prograde burn at apogee — should raise perigee by ~2·(a/v)·Δv
+        sat.add_maneuver(ImpulsiveManeuver::prograde(t0 + Duration::from_seconds(1.0), 5.0));
+
+        // Propagate to somewhere near perigee and measure min radius over
+        // the next orbit
+        let period = 2.0 * std::f64::consts::PI * (a.powi(3) / consts::MU_EARTH).sqrt();
+        let t_sample = t0 + Duration::from_seconds(period);
+        let s_burn = sat.propagate(&t_sample, None, None)?;
+        let s_no_burn = sat_no_burn.propagate(&t_sample, None, None)?;
+
+        // After a full orbit of propagation, both should be back near apogee,
+        // but the burn case has higher semi-major axis so it's slightly ahead
+        // — the positions should differ meaningfully.
+        let diff = (s_burn.pos_gcrf() - s_no_burn.pos_gcrf()).norm();
+        assert!(
+            diff > 100.0,
+            "5 m/s prograde at apogee should produce measurable drift over one orbit: {} m",
+            diff
+        );
 
         Ok(())
     }

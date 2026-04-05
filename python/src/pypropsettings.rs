@@ -23,6 +23,10 @@ pub enum PyIntegrator {
     rkts54 = 4,
     /// RODAS4 — L-stable Rosenbrock 4(3), 6 stages. For stiff problems.
     rodas4 = 5,
+    /// Gauss-Jackson 8 — 8th-order fixed-step multistep predictor-corrector
+    /// for high-precision orbit propagation. Requires setting
+    /// `gj_step_seconds` on the propsettings. No STM or dense output support.
+    gauss_jackson8 = 6,
 }
 
 impl From<PyIntegrator> for Integrator {
@@ -34,6 +38,7 @@ impl From<PyIntegrator> for Integrator {
             PyIntegrator::rkv65 => Integrator::RKV65,
             PyIntegrator::rkts54 => Integrator::RKTS54,
             PyIntegrator::rodas4 => Integrator::RODAS4,
+            PyIntegrator::gauss_jackson8 => Integrator::GaussJackson8,
         }
     }
 }
@@ -47,6 +52,7 @@ impl From<Integrator> for PyIntegrator {
             Integrator::RKV65 => PyIntegrator::rkv65,
             Integrator::RKTS54 => PyIntegrator::rkts54,
             Integrator::RODAS4 => PyIntegrator::rodas4,
+            Integrator::GaussJackson8 => PyIntegrator::gauss_jackson8,
         }
     }
 }
@@ -111,6 +117,10 @@ impl PyPropSettings {
                     ))?;
                 ps.integrator = integrator.into();
                 kw.del_item("integrator")?;
+            }
+            if let Some(gjstep) = kw.get_item("gj_step_seconds")? {
+                ps.gj_step_seconds = gjstep.extract::<f64>()?;
+                kw.del_item("gj_step_seconds")?;
             }
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
@@ -251,6 +261,17 @@ impl PyPropSettings {
     #[setter(integrator)]
     fn set_integrator(&mut self, val: PyIntegrator) -> PyResult<()> {
         self.0.integrator = val.into();
+        Ok(())
+    }
+
+    #[getter]
+    fn get_gj_step_seconds(&self) -> f64 {
+        self.0.gj_step_seconds
+    }
+
+    #[setter(gj_step_seconds)]
+    fn set_gj_step_seconds(&mut self, val: f64) -> PyResult<()> {
+        self.0.gj_step_seconds = val;
         Ok(())
     }
 

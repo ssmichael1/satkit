@@ -29,11 +29,22 @@ pub enum PyFrame {
     /// z = -r (nadir), y = -h (opposite angular momentum), x completes right-handed system
     #[allow(clippy::upper_case_acronyms)]
     LVLH,
-    /// Radial / In-track / Cross-track
+    /// Radial / In-track / Cross-track (a.k.a. RSW in Vallado, RTN in CCSDS).
     ///
-    /// R = radial (outward), I = in-track (along velocity), C = cross-track (along angular momentum)
+    /// R = radial (outward), I = in-track (perpendicular to R in the orbit
+    /// plane, **not** strictly along velocity for eccentric orbits),
+    /// C = cross-track (along angular momentum). For "along velocity"
+    /// semantics on eccentric orbits, use [`PyFrame::NTW`] instead.
     #[allow(clippy::upper_case_acronyms)]
     RIC,
+    /// Velocity-aligned orbital frame (Vallado §3.3).
+    ///
+    /// N = in-plane normal to velocity, T = tangent (along v̂),
+    /// W = cross-track (along angular momentum). The natural frame for
+    /// prograde/retrograde maneuvers: a pure +T delta-v of magnitude Δv
+    /// adds *exactly* Δv to |v|.
+    #[allow(clippy::upper_case_acronyms)]
+    NTW,
 }
 
 impl From<Frame> for PyFrame {
@@ -48,6 +59,7 @@ impl From<Frame> for PyFrame {
             Frame::ICRF => Self::ICRF,
             Frame::LVLH => Self::LVLH,
             Frame::RIC => Self::RIC,
+            Frame::NTW => Self::NTW,
         }
     }
 }
@@ -64,6 +76,7 @@ impl From<PyFrame> for Frame {
             PyFrame::ICRF => Self::ICRF,
             PyFrame::LVLH => Self::LVLH,
             PyFrame::RIC => Self::RIC,
+            PyFrame::NTW => Self::NTW,
         }
     }
 }

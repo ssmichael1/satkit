@@ -37,6 +37,175 @@ class TestHighPrecisionPropagation:
         assert istate1 == pytest.approx(istate2, rel=1e-7)
 
 
+    def test_gauss_jackson8(self):
+        """Propagate a GEO orbit with Gauss-Jackson 8 and compare against
+        the default RKV98 integrator. Also exercise dense-output interpolation
+        through the Python bindings.
+        """
+        starttime = sk.time(2015, 3, 20, 0, 0, 0)
+        stoptime = starttime + sk.duration.from_hours(6.0)
+
+        pos = np.array([sk.consts.geo_r, 0, 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
+        state0 = np.concatenate((pos, vel))
+
+        # Gauss-Jackson 8 with 60-second fixed step
+        settings_gj = sk.propsettings(
+            integrator=sk.integrator.gauss_jackson8,
+            gj_step_seconds=60.0,
+        )
+        # Default RKV98 reference
+        settings_rk = sk.propsettings()
+
+        res_gj = sk.propagate(state0, starttime, end=stoptime, propsettings=settings_gj)
+        res_rk = sk.propagate(state0, starttime, end=stoptime, propsettings=settings_rk)
+
+        # Endpoint agreement: sub-meter on a smooth 6-hour GEO arc
+        assert res_gj.state[0:3] == pytest.approx(res_rk.state[0:3], abs=1.0)
+        assert res_gj.state[3:6] == pytest.approx(res_rk.state[3:6], abs=1e-4)
+
+        # Interpolation should work (quintic Hermite dense output)
+        assert res_gj.can_interp is True
+
+        mid = starttime + sk.duration.from_hours(3.7)
+        istate_gj = res_gj.interp(mid)
+        istate_rk = res_rk.interp(mid)
+        # Quintic Hermite is 5th-order while RKV98 dense is 8th-order — a few
+        # meters of disagreement is expected at GEO with 60-s steps.
+        assert istate_gj[0:3] == pytest.approx(istate_rk[0:3], abs=10.0)
+
+        # Batch interpolation
+        times = [starttime + sk.duration.from_hours(h) for h in [1.0, 2.5, 4.0, 5.5]]
+        batch_gj = res_gj.interp(times)
+        batch_rk = res_rk.interp(times)
+        assert batch_gj.shape == (4, 6)
+        for i in range(4):
+            assert batch_gj[i, 0:3] == pytest.approx(batch_rk[i, 0:3], abs=10.0)
+
+    def test_ntw_prograde_adds_exactly_to_speed(self):
+        """An NTW prograde (+T) burn adds its exact magnitude to |v|
+        regardless of orbit eccentricity. A RIC in-track (+I) burn of the
+        same magnitude does not, because the RIC I axis is perpendicular
+        to position, not to velocity. This test exercises the NTW binding
+        end-to-end on an eccentric orbit.
+        """
+        t0 = sk.time(2015, 3, 20, 0, 0, 0)
+
+        # Eccentric orbit at mid-anomaly — non-zero flight-path angle
+        a = 8000e3
+        e = 0.3
+        nu = m.radians(60.0)
+        r_mag = a * (1.0 - e * e) / (1.0 + e * m.cos(nu))
+        v_mag = m.sqrt(sk.consts.mu_earth * (2.0 / r_mag - 1.0 / a))
+        gamma = m.atan(e * m.sin(nu) / (1.0 + e * m.cos(nu)))
+
+        pos = np.array([r_mag, 0.0, 0.0])
+        vel = np.array([v_mag * m.sin(gamma), v_mag * m.cos(gamma), 0.0])
+        speed_before = np.linalg.norm(vel)
+
+        # NTW +T burn — should add exactly 10 m/s to |v|
+        sat_ntw = sk.satstate(time=t0, pos=pos, vel=vel)
+        sat_ntw.add_prograde(t0 + sk.duration.from_seconds(1.0), 10.0)
+        # Propagate just past the burn
+        sat_ntw_after = sat_ntw.propagate(t0 + sk.duration.from_seconds(2.0))
+        speed_after_ntw = np.linalg.norm(sat_ntw_after.vel)
+        # The burn adds ~10 m/s; 1 second of propagation in the eccentric
+        # orbit changes |v| by up to a few m/s due to gravity, so check a
+        # loose tolerance — what we really care about is that NTW is closer
+        # to +10 than RIC is.
+        ntw_delta = speed_after_ntw - speed_before
+
+        # RIC +I burn with the same magnitude
+        sat_ric = sk.satstate(time=t0, pos=pos, vel=vel)
+        sat_ric.add_maneuver(
+            t0 + sk.duration.from_seconds(1.0),
+            [0.0, 10.0, 0.0],
+            frame=sk.frame.RIC,
+        )
+        sat_ric_after = sat_ric.propagate(t0 + sk.duration.from_seconds(2.0))
+        speed_after_ric = np.linalg.norm(sat_ric_after.vel)
+        ric_delta = speed_after_ric - speed_before
+
+        # NTW should give a bigger |v| increase than RIC (by roughly
+        # 10·(1-cos γ) ≈ 0.24 m/s for γ ≈ 12.7°).
+        assert ntw_delta > ric_delta, (
+            f"NTW prograde should add more to |v| than RIC in-track: "
+            f"NTW Δ|v| = {ntw_delta:.4f}, RIC Δ|v| = {ric_delta:.4f}"
+        )
+        # And the difference should be roughly the expected 10·(1-cos γ).
+        expected_gap = 10.0 * (1.0 - m.cos(gamma))
+        assert abs((ntw_delta - ric_delta) - expected_gap) < 0.05, (
+            f"Gap between NTW and RIC Δ|v| should be ≈ {expected_gap:.4f}; "
+            f"got {ntw_delta - ric_delta:.4f}"
+        )
+
+    def test_lvlh_maneuver(self):
+        """LVLH +x burn should give the same trajectory as the equivalent
+        RIC +I burn (they are the same axis, just relabeled)."""
+        t0 = sk.time(2015, 3, 20, 0, 0, 0)
+        pos = np.array([sk.consts.geo_r, 0, 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
+
+        sat_lvlh = sk.satstate(time=t0, pos=pos, vel=vel)
+        sat_ric = sk.satstate(time=t0, pos=pos, vel=vel)
+
+        t_burn = t0 + sk.duration.from_hours(0.5)
+        t_end = t0 + sk.duration.from_hours(2.0)
+
+        # LVLH: x = in-track direction
+        sat_lvlh.add_maneuver(t_burn, [10.0, 0.0, 0.0], frame=sk.frame.LVLH)
+        # RIC: I = in-track direction (same axis)
+        sat_ric.add_maneuver(t_burn, [0.0, 10.0, 0.0], frame=sk.frame.RIC)
+
+        s_lvlh = sat_lvlh.propagate(t_end)
+        s_ric = sat_ric.propagate(t_end)
+
+        assert s_lvlh.pos == pytest.approx(s_ric.pos, abs=1e-3)
+        assert s_lvlh.vel == pytest.approx(s_ric.vel, abs=1e-6)
+
+    def test_maneuver_ergonomic_constructors(self):
+        """Smoke-test the add_prograde / add_retrograde / add_radial /
+        add_normal helpers — they should all dispatch through the NTW
+        path and leave the propagation in a valid state."""
+        t0 = sk.time(2015, 3, 20, 0, 0, 0)
+        pos = np.array([sk.consts.geo_r, 0, 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
+
+        sat = sk.satstate(time=t0, pos=pos, vel=vel)
+        sat.add_prograde(t0 + sk.duration.from_hours(1.0), 1.0)
+        sat.add_retrograde(t0 + sk.duration.from_hours(2.0), 0.5)
+        sat.add_radial(t0 + sk.duration.from_hours(3.0), 0.5)
+        sat.add_normal(t0 + sk.duration.from_hours(4.0), 0.5)
+
+        assert sat.num_maneuvers == 4
+
+        final = sat.propagate(t0 + sk.duration.from_hours(5.0))
+        # Just check the final state is finite and reasonable
+        assert np.all(np.isfinite(final.pos))
+        assert np.all(np.isfinite(final.vel))
+        # Still close to GEO radius
+        assert abs(np.linalg.norm(final.pos) - sk.consts.geo_r) < 1e5
+
+    def test_gauss_jackson8_rejects_stm(self):
+        """GJ8 should raise when asked to propagate with state-transition
+        matrix output (output_phi=True)."""
+        starttime = sk.time(2015, 3, 20, 0, 0, 0)
+        stoptime = starttime + sk.duration.from_hours(1.0)
+        pos = np.array([sk.consts.geo_r, 0, 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
+        state0 = np.concatenate((pos, vel))
+
+        settings = sk.propsettings(
+            integrator=sk.integrator.gauss_jackson8,
+            gj_step_seconds=60.0,
+        )
+        with pytest.raises(Exception):
+            sk.propagate(
+                state0, starttime, end=stoptime,
+                output_phi=True, propsettings=settings,
+            )
+
+
     def test_state_transition(self):
         # Test that state transition matrix is computed correctly
         # Define an orbit ... 30 deg inclined at 550km perigee, 1000km apogee
@@ -162,6 +331,51 @@ class TestSatState:
         assert np.allclose(restored.vel, sat.vel)
         assert restored.num_maneuvers == 2
 
+    def test_uncertainty_frames(self):
+        """The unified set_pos_uncertainty / set_vel_uncertainty API should
+        accept GCRF, LVLH, RIC, NTW frames and preserve the other block
+        when called in sequence."""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        state0 = (np.array([r, 0, 0]), np.array([0, v, 0]))
+
+        # Every supported frame should succeed
+        for frm in [sk.frame.GCRF, sk.frame.LVLH, sk.frame.RIC, sk.frame.NTW]:
+            sat = sk.satstate(time=t0, pos=state0[0], vel=state0[1])
+            sat.set_pos_uncertainty(np.array([10.0, 20.0, 30.0]), frame=frm)
+            assert sat.cov is not None
+            pos_trace = sat.cov[0, 0] + sat.cov[1, 1] + sat.cov[2, 2]
+            # Trace is frame-invariant for diagonal input
+            assert abs(pos_trace - (100 + 400 + 900)) / 1400 < 1e-12
+
+        # Calling pos then vel should preserve both blocks
+        sat = sk.satstate(time=t0, pos=state0[0], vel=state0[1])
+        sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
+        sat.set_vel_uncertainty(np.array([0.1, 0.2, 0.05]), frame=sk.frame.LVLH)
+        # Position block trace should be preserved
+        pos_trace = sat.cov[0, 0] + sat.cov[1, 1] + sat.cov[2, 2]
+        vel_trace = sat.cov[3, 3] + sat.cov[4, 4] + sat.cov[5, 5]
+        assert abs(pos_trace - (10000 + 40000 + 2500)) / 52500 < 1e-12
+        assert abs(vel_trace - (0.01 + 0.04 + 0.0025)) / 0.0525 < 1e-12
+
+        # The frame argument is required — calling without it raises
+        sat_missing = sk.satstate(time=t0, pos=state0[0], vel=state0[1])
+        with pytest.raises(TypeError):
+            sat_missing.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]))
+
+    def test_uncertainty_rejects_unsupported_frame(self):
+        """Frames that aren't valid for uncertainty (ITRF, TEME, etc.)
+        should raise."""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+
+        for bad in [sk.frame.ITRF, sk.frame.TEME, sk.frame.ICRF]:
+            with pytest.raises(Exception):
+                sat.set_pos_uncertainty(np.array([1.0, 1.0, 1.0]), frame=bad)
+
     def test_satstate_pickle_with_cov(self):
         """Test that satstate pickle round-trips covariance and maneuvers together"""
         t0 = sk.time(2024, 1, 1, 12, 0, 0)
@@ -169,7 +383,7 @@ class TestSatState:
         v = np.sqrt(sk.consts.mu_earth / r)
 
         sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
-        sat.set_lvlh_pos_uncertainty(np.array([100.0, 200.0, 50.0]))
+        sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
         sat.add_maneuver(t0 + sk.duration.from_hours(1), [0, 5, 0], frame=sk.frame.RIC)
 
         restored = pickle.loads(pickle.dumps(sat))
