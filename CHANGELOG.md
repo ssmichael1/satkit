@@ -1,6 +1,94 @@
 # Changelog
 
 
+## 0.16.0 - 2026-04-05
+
+### Gauss-Jackson 8 Integrator
+
+- **`Integrator::GaussJackson8`**: fixed-step 8th-order multistep predictor-corrector specialised for orbit propagation. Typically 3-10x fewer force evaluations than RKV98 for smooth long-duration runs. Combined Gauss-Jackson + Summed-Adams formulation handles velocity-dependent forces (drag, SRP) natively. Per-step dense output via quintic Hermite interpolation.
+- Selected with `Integrator::GaussJackson8` and a user-supplied `gj_step_seconds` (Rust) / `propsettings(integrator=satkit.integrator.gauss_jackson8, gj_step_seconds=...)` (Python). No STM support.
+- Lives in a new `satkit::orbitprop::ode` submodule (astrodynamics-specific enough that it doesn't belong in `numeris`).
+- **Precompute bounds fix**: `Precomputed::new_padded` now takes an explicit padding; `PropSettings::required_precompute_padding` automatically extends interp-table bounds to cover the GJ8 backward startup stencil (4 × `gj_step_seconds` on each end). Previously silently failed for `gj_step_seconds > 60`.
+
+### Coordinate Frames: RTN canonical, NTW, LVLH maneuvers
+
+- **Breaking: `Frame::RIC` renamed to `Frame::RTN`** as the canonical name (matches the CCSDS OEM convention). `Frame::RIC` and `Frame::RSW` remain as compile-time aliases (`pub const RIC: Self = Self::RTN`), so existing code using either name still compiles and `Frame::RIC == Frame::RTN` is `true`. Python exposes `frame.RIC` and `frame.RSW` as class-level aliases of `frame.RTN`.
+- **`Frame::NTW`** (velocity-aligned: T=v̂, W=ĥ, N=T×W). Natural for prograde/retrograde burns on eccentric orbits: a pure +T delta-v of magnitude Δv adds exactly Δv to |v|, while an in-track RTN burn of the same magnitude loses a factor of cos γ where γ is the flight-path angle. Accepted by maneuvers, thrust, uncertainty, and frame transforms.
+- **LVLH** is now a supported maneuver/thrust coordinate frame (previously valid only for uncertainty).
+- **Unified frame-transform API**: `frametransform::to_gcrf(frame, pos, vel)` and `from_gcrf(frame, pos, vel)` replace the combinatorial explosion of per-frame helpers. `state_to_gcrf` / `gcrf_to_state` handle the position+velocity pair with the correct **TIRS-frame** Earth-rotation term (`ω⊕ × r_tirs`) for ITRF↔GCRF. Validated against Vallado Example 3-14.
+- **New guide: "Theory: Maneuver Coordinate Frames"** (`docs/guide/maneuver_frames.md`) — side-by-side GCRF / RTN / NTW / LVLH comparison with flight-path-angle derivation, a worked numeric example on an e=0.3 orbit showing the 0.245 m/s discrepancy, a cheat sheet, and a summary table.
+
+### Breaking: Unified Uncertainty API
+
+- **`SatState::set_pos_uncertainty(sigma, frame)` and `set_vel_uncertainty(sigma, frame)`** replace the four per-frame methods (`set_lvlh_pos_uncertainty`, `set_lvlh_vel_uncertainty`, etc.). Supports `GCRF`, `LVLH`, `RTN`, and `NTW`. Each call preserves the 3×3 block it is not updating, so pos-then-vel correctly builds a full 6×6 covariance — the old methods silently overwrote the whole matrix. **Old methods are removed, not deprecated.**
+- **Doc fix**: the default covariance frame is `LVLH`, not `RIC` as previously documented in several places.
+
+### Breaking: Python API Parity with Rust
+
+- `satstate.add_maneuver(time, delta_v, frame)`, `set_pos_uncertainty`, `set_vel_uncertainty`, and `thrust.constant` now all require an **explicit** `frame` argument from Python, matching Rust (no silent defaults).
+- Added ergonomic helpers on `satstate`: `add_prograde`, `add_retrograde`, `add_radial`, `add_normal` alongside the generic `add_maneuver`.
+- Added matching Rust constructors on `ImpulsiveManeuver`: `prograde`, `retrograde`, `radial_out`, `normal`, plus `gcrf` / `rtn` / `ntw` for arbitrary-vector burns.
+
+### Default Gravity Model: EGM96
+
+- **Breaking (subtle)**: `PropSettings::default()` now uses `GravityModel::EGM96` instead of `JGM3`. EGM96 is a more modern and more widely used model; the numerical difference for typical LEO propagation is sub-meter over a day, but the default selection changes. Python `propsettings()` and the standalone `gravity()` / `gravity_and_partials()` helpers pick up the new default automatically.
+
+### Documentation
+
+- **Coordinate Frame Transforms tutorial** rewritten: explicit GCRS/ICRF and ITRS definitions (quasar VLBI realisation vs. ground-tracking realisation), geodetic-vs-geocentric explanation, ground-track overlay on a cartopy `PlateCarree` map, time-series plot of `qgcrf2itrf_approx` vs full IAU-2006/2010 error over 30 years. Dropped the low-value 24-hour Earth-rotation section.
+- **New API reference page**: `docs/api/frame.md` documenting the `Frame` enum with all variants and aliases.
+- **MathJax** now accepts both `\(...\)` / `\[...\]` and `$...$` / `$$...$$` delimiters, so equations render correctly in Jupyter-notebook tutorials (previously broken in `Quaternions.ipynb` and others).
+- **Covariance Propagation** tutorial simplified to use the unified uncertainty API (dropped the hand-rolled LVLH→GCRF rotation).
+- **High Precision Propagation**, **satprop guide**, **maneuver/covariance examples** updated for the new API.
+
+### Tutorial Reorganization
+
+- **Renamed "Coordinate Frame Transforms" → "Coordinate Frames"**. The tutorial is primarily a description of the frames themselves (GCRF, ITRF, TEME), not just the rotations between them.
+- **Renamed "ITRF Coordinates" → "Geodetic Coordinates"**. This tutorial is about the `itrfcoord` data type (geodetic / Cartesian / ENU / NED / geodesic distance), not the ITRF reference frame. The old name made it sound like two views of the same topic as Coordinate Frames.
+- Nav reordered so **Coordinate Frames** (frame theory) comes before **Geodetic Coordinates** (data type built on top). Reciprocal cross-reference notes added at the top of both tutorials.
+- **Expanded TEME section** in Coordinate Frames: origin of the "True Equator, Mean Equinox" name (intentional half-and-half construction), the three practical awkwardness points (not uniquely defined, time-dependent orientation, positions cannot be compared directly), API table, and Vallado 2006 reference.
+- **"Why yet another time type?" section** added at the top of the Time Systems tutorial, covering time-scale-as-first-class, high-precision internal representation, correct leap-second handling, built-in UT1/TDB, and the single-type-across-Rust-and-Python story.
+
+### Propagator: Configurable `max_steps`
+
+- **`PropSettings::max_steps`** (Rust) / **`propsettings(max_steps=...)`** (Python): configurable maximum number of integrator steps before the propagator aborts with a max-steps error. Applies uniformly to the adaptive Runge-Kutta / Rosenbrock solvers (via `numeris::ode::AdaptiveSettings::max_steps`) and the Gauss-Jackson 8 solver (via its own internal settings). Default: 1_000_000, which matches the previous hard-coded Gauss-Jackson 8 ceiling and is a loosening of the previously inherited numeris RK default of 100_000. This covers very long arcs (≈700 days of GJ8 at 60 s step) with headroom; lower for a tighter runaway-propagation safeguard.
+
+### Release Tooling
+
+- **`release.yml` `check_version`**: now verifies the tag matches *all three* version strings — root `Cargo.toml`, `python/Cargo.toml`, and `pyproject.toml`. Previously only the root Cargo.toml was checked, which allowed `python/Cargo.toml` to drift silently if a version bump was applied by hand instead of through `cargo release`. Any future drift will hard-block the release workflow.
+
+### Bug Fixes
+
+- **MathJax in Jupyter notebooks**: remove the `ignoreHtmlClass` / `processHtmlClass: "arithmatex"` restriction in `docs/javascripts/mathjax.js` that caused MathJax to skip notebook HTML entirely (mkdocs-jupyter does not wrap notebook-cell math in an `.arithmatex` span). Equations in the Quaternions tutorial and all other notebooks now render. Plain markdown pages still work because pymdownx.arithmatex (generic mode) emits raw delimiters that MathJax picks up under default scanning.
+- **`test_gravity`**: explicitly pin to `model=sk.gravmodel.jgm3`. The ICGEM reference values in that test are for JGM3 specifically; previously they relied on the default, which switched to EGM96 in this release.
+
+### Internal
+
+- `Frame` derives `Copy + PartialEq + Eq`; `PyFrame::NTW`, `PyIntegrator::gauss_jackson8`, `PyPropSettings::gj_step_seconds`, `PyPropResult::gj_dense` exposed in the Python bindings.
+- `.pyi` stubs updated throughout: new frame variants, new integrator variant, `gj_step_seconds`, unified uncertainty API, ergonomic maneuver helpers, corrected frame docstrings.
+- All 20 tutorial notebooks re-executed and stripped of outputs (mkdocs-jupyter re-executes at build time).
+- 157 Rust tests + 81 Python tests pass (up from 133 / 71 at 0.15.1).
+
+
+## 0.15.1 - 2026-03-29
+
+### URL Loading
+
+- **`TLE.from_url(url)`**: Load TLE(s) directly from a URL returning plain-text TLE data
+- **`OMM.from_url(url)`** (Rust): Load OMM(s) from a URL with auto-detection of JSON vs XML format
+- **`omm_from_url(url)`** (Python): Fetch OMMs from a URL and return as a list of dictionaries, compatible with `sgp4()`
+
+### SatState Documentation
+
+- Expose `set_lvlh_vel_uncertainty()` and `set_gcrf_vel_uncertainty()` in Python bindings
+- Rewrite `SatState` struct and type stub documentation: when to use it vs `propagate()`, units, pickle support
+- Add `SatState` section to user guide with comparison table and code examples
+- Add all missing method stubs to `satkit.pyi`
+
+### Plot Styling
+
+- Extract shared matplotlib style to `docs/satkit.mplstyle`, replacing duplicated `rcParams` blocks across 18 notebooks (22 occurrences, -386 lines)
+
 ## 0.15.0 - 2026-03-29
 
 ### Orbit Maneuvers

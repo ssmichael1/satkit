@@ -132,6 +132,7 @@ impl PyPropResult {
             accepted_steps: 0,
             rejected_steps: 0,
             odesol: None,
+            gj_dense: None,
             integrator: satkit::orbitprop::Integrator::default(),
         })))
     }
@@ -283,8 +284,8 @@ impl PyPropResult {
     #[getter]
     const fn can_interp(&self) -> bool {
         match &self.0 {
-            PyPropResultType::R1(r) => r.odesol.is_some(),
-            PyPropResultType::R7(r) => r.odesol.is_some(),
+            PyPropResultType::R1(r) => r.odesol.is_some() || r.gj_dense.is_some(),
+            PyPropResultType::R7(r) => r.odesol.is_some() || r.gj_dense.is_some(),
         }
     }
 

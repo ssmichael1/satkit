@@ -29,6 +29,12 @@ pub struct PropagationResult<const T: usize> {
     pub rejected_steps: u32,
     pub num_eval: u32,
     pub odesol: Option<ode::Solution<f64, 6, T>>,
+    /// Dense output from Gauss-Jackson 8 (populated only when the propagation
+    /// used `Integrator::GaussJackson8` with `settings.enable_interp = true`).
+    /// Stores per-step (t, r, v, a) samples for quintic Hermite interpolation
+    /// via [`interp_propresult`]. The RK-based integrators use `odesol`
+    /// instead; exactly one of the two is populated for a given propagation.
+    pub gj_dense: Option<crate::orbitprop::ode::GJDenseOutput<f64, 3>>,
     pub integrator: super::settings::Integrator,
 }
 
@@ -76,6 +82,8 @@ pub enum PropagationError {
     ODEError(ode::OdeError),
     #[error("RODAS4 does not support state transition matrix propagation")]
     RODAS4NoSTM,
+    #[error("Gauss-Jackson 8 does not support state transition matrix propagation")]
+    GaussJackson8NoSTM,
 }
 
 //
@@ -236,6 +244,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
             rejected_steps: 0,
             num_eval: 0,
             odesol: None,
+            gj_dense: None,
             integrator: settings.integrator,
         });
     }
@@ -243,6 +252,10 @@ pub fn propagate<const C: usize, T: TimeLike>(
     // RODAS4 does not support state transition matrix (C==7)
     if C == 7 && settings.integrator == crate::orbitprop::Integrator::RODAS4 {
         return Err(PropagationError::RODAS4NoSTM.into());
+    }
+    // Gauss-Jackson 8 is 2nd-order only and does not propagate STM
+    if C == 7 && settings.integrator == crate::orbitprop::Integrator::GaussJackson8 {
+        return Err(PropagationError::GaussJackson8NoSTM.into());
     }
 
     // Duration to end of integration, in seconds
@@ -252,14 +265,27 @@ pub fn propagate<const C: usize, T: TimeLike>(
         abs_tol: settings.abs_error,
         rel_tol: settings.rel_error,
         dense_output: settings.enable_interp,
+        max_steps: settings.max_steps,
         ..Default::default()
     };
 
-    // Get or create precomputed ephemeris data
+    // Get or create precomputed ephemeris data.
+    //
+    // The integrator determines how far outside the nominal [begin, end]
+    // interval the force closure can be evaluated. For Runge-Kutta methods
+    // this is effectively zero; for Gauss-Jackson 8 the symmetric ±4·h_gj
+    // startup extends the required range by ~4·gj_step_seconds on both
+    // ends. We use `required_precompute_padding()` to size this correctly,
+    // and validate that any user-supplied precomputed table covers the
+    // padded range — not just the nominal interval.
     let (tmin, tmax) = if end > begin { (begin, end) } else { (end, begin) };
+    let padding_secs = settings.required_precompute_padding();
+    let padding = Duration::from_seconds(padding_secs);
+    let required_min = tmin - padding;
+    let required_max = tmax + padding;
     let interp: &Precomputed = match &settings.precomputed {
-        Some(p) if tmin >= p.begin && tmax <= p.end => p,
-        _ => &Precomputed::new(&begin, &end)
+        Some(p) if required_min >= p.begin && required_max <= p.end => p,
+        _ => &Precomputed::new_padded(&begin, &end, 60.0, padding_secs)
             .context("Cannot compute precomputed interpolation data")?,
     };
 
@@ -513,6 +539,96 @@ pub fn propagate<const C: usize, T: TimeLike>(
                 rejected_steps: rosenbrock_res.rejected as u32,
                 num_eval: rosenbrock_res.evals as u32,
                 odesol: None,
+                gj_dense: None,
+                integrator: settings.integrator,
+            });
+        }
+        Integrator::GaussJackson8 => {
+            // Gauss-Jackson 8 is specialised for 2nd-order ODEs: r'' = f(t, r, v).
+            // It takes position and velocity separately (not a flat 6-vector)
+            // and uses a fixed step size. Only supports C==1 (no STM).
+            use crate::orbitprop::ode::{GaussJackson8, GJSettings};
+
+            let r0: Vector3 = state.block::<3, 1>(0, 0);
+            let v0: Vector3 = state.block::<3, 1>(3, 0);
+
+            let accel_fn = |x: f64, r: &Vector3, v: &Vector3| -> Vector3 {
+                let time: Instant = begin + Duration::from_seconds(x);
+                let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
+                let qitrf2gcrf = qgcrf2itrf.conjugate();
+                let pos_itrf = qgcrf2itrf * *r;
+
+                let mut accel = qitrf2gcrf
+                    * gravity.accel(
+                        &pos_itrf,
+                        settings.gravity_degree as usize,
+                        settings.gravity_order as usize,
+                    );
+
+                if settings.use_sun_gravity {
+                    accel += point_gravity(r, &sun_gcrf, consts::MU_SUN);
+                }
+                if settings.use_moon_gravity {
+                    accel += point_gravity(r, &moon_gcrf, consts::MU_MOON);
+                }
+
+                if let Some(props) = satprops {
+                    // Reconstruct SimpleState from (r, v) for the force model's
+                    // state-aware methods (area/mass, drag coefficient, etc.)
+                    let mut ss: SimpleState = SimpleState::zeros();
+                    ss.set_block(0, 0, r);
+                    ss.set_block(3, 0, v);
+
+                    accel += solar_pressure_accel(&sun_gcrf, r, &time, props, &ss);
+
+                    if r.norm() < 700.0e3 + consts::EARTH_RADIUS {
+                        let cd_a_over_m = props.cd_a_over_m(&time, &ss);
+                        if cd_a_over_m > 1e-6 {
+                            accel += drag_force(
+                                r, &pos_itrf, v, &time,
+                                cd_a_over_m, settings.use_spaceweather,
+                            );
+                        }
+                    }
+
+                    if let Some(a_thrust) = props.thrust_accel(&time, r, v) {
+                        accel += a_thrust;
+                    }
+                }
+
+                accel
+            };
+
+            let gj_settings = GJSettings {
+                h: settings.gj_step_seconds,
+                dense_output: settings.enable_interp,
+                max_steps: settings.max_steps,
+                ..GJSettings::default()
+            };
+
+            let mut gj_sol = GaussJackson8::integrate(
+                0.0, x_end, &r0, &v0, accel_fn, &gj_settings,
+            )
+            .map_err(PropagationError::ODEError)?;
+
+            // Assemble final 6x1 state
+            let mut final_state = Matrix::<6, C>::zeros();
+            let mut r_final: numeris::Vector<f64, 6> = numeris::Vector::<f64, 6>::zeros();
+            r_final.set_block(0, 0, &gj_sol.r);
+            r_final.set_block(3, 0, &gj_sol.v);
+            final_state.set_block(0, 0, &r_final);
+
+            let dense = gj_sol.dense.take();
+            return Ok(PropagationResult {
+                time_begin: begin,
+                state_begin: *state,
+                time_end: end,
+                state_end: final_state,
+                accepted_steps: gj_sol.steps as u32,
+                rejected_steps: 0,
+                num_eval: gj_sol.evals as u32,
+                odesol: None,
+                gj_dense: dense,
                 integrator: settings.integrator,
             });
         }
@@ -528,6 +644,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         rejected_steps: res.rejected as u32,
         num_eval: res.evals as u32,
         odesol: Some(res),
+        gj_dense: None,
         integrator: settings.integrator,
     })
 }
@@ -538,16 +655,45 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
 ) -> Result<StateType<C>> {
     use crate::orbitprop::Integrator;
 
-    let sol = res
-        .odesol
-        .as_ref()
-        .filter(|s| s.dense.is_some())
-        .ok_or(PropagationError::NoDenseOutputInSolution)?;
     let time = time.as_instant();
     if time == res.time_begin {
         return Ok(res.state_begin);
     }
     let x = (time - res.time_begin).as_seconds();
+
+    // Gauss-Jackson 8 uses its own dense-output format (per-step (t, r, v, a)
+    // samples with quintic Hermite interpolation) rather than the RK solvers'
+    // stage-based interpolant.
+    if res.integrator == Integrator::GaussJackson8 {
+        let dense = res
+            .gj_dense
+            .as_ref()
+            .ok_or(PropagationError::NoDenseOutputInSolution)?;
+        // Rehydrate a minimal GJSolution just enough for the interpolator
+        let gj_sol = crate::orbitprop::ode::GJSolution::<f64, 3> {
+            t: 0.0, // unused by interpolate
+            r: Vector3::zeros(),
+            v: Vector3::zeros(),
+            evals: 0,
+            steps: 0,
+            startup_iters: 0,
+            dense: Some(dense.clone()),
+        };
+        let (r, v) = crate::orbitprop::ode::GaussJackson8::interpolate(x, &gj_sol)
+            .map_err(PropagationError::ODEError)?;
+        let mut out: StateType<C> = Matrix::<6, C>::zeros();
+        let mut rv: numeris::Vector<f64, 6> = numeris::Vector::<f64, 6>::zeros();
+        rv.set_block(0, 0, &r);
+        rv.set_block(3, 0, &v);
+        out.set_block(0, 0, &rv);
+        return Ok(out);
+    }
+
+    let sol = res
+        .odesol
+        .as_ref()
+        .filter(|s| s.dense.is_some())
+        .ok_or(PropagationError::NoDenseOutputInSolution)?;
     let result = match res.integrator {
         Integrator::RKV98 => ode::RKV98::interpolate(x, sol),
         Integrator::RKV98NoInterp => ode::RKV98NoInterp::interpolate(x, sol),
@@ -557,6 +703,7 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         Integrator::RODAS4 => {
             return Err(PropagationError::NoDenseOutputInSolution.into());
         }
+        Integrator::GaussJackson8 => unreachable!("handled above"),
     };
     Ok(result.map_err(PropagationError::ODEError)?)
 }
@@ -567,16 +714,45 @@ pub fn interp_propresult_batch<const C: usize>(
 ) -> Result<Vec<StateType<C>>> {
     use crate::orbitprop::Integrator;
 
+    let xs: Vec<f64> = times
+        .iter()
+        .map(|t| (*t - res.time_begin).as_seconds())
+        .collect();
+
+    if res.integrator == Integrator::GaussJackson8 {
+        let dense = res
+            .gj_dense
+            .as_ref()
+            .ok_or(PropagationError::NoDenseOutputInSolution)?;
+        let gj_sol = crate::orbitprop::ode::GJSolution::<f64, 3> {
+            t: 0.0,
+            r: Vector3::zeros(),
+            v: Vector3::zeros(),
+            evals: 0,
+            steps: 0,
+            startup_iters: 0,
+            dense: Some(dense.clone()),
+        };
+        let pairs = crate::orbitprop::ode::GaussJackson8::interpolate_batch(&xs, &gj_sol)
+            .map_err(PropagationError::ODEError)?;
+        return Ok(pairs
+            .into_iter()
+            .map(|(r, v)| {
+                let mut out: StateType<C> = Matrix::<6, C>::zeros();
+                let mut rv: numeris::Vector<f64, 6> = numeris::Vector::<f64, 6>::zeros();
+                rv.set_block(0, 0, &r);
+                rv.set_block(3, 0, &v);
+                out.set_block(0, 0, &rv);
+                out
+            })
+            .collect());
+    }
+
     let sol = res
         .odesol
         .as_ref()
         .filter(|s| s.dense.is_some())
         .ok_or(PropagationError::NoDenseOutputInSolution)?;
-
-    let xs: Vec<f64> = times
-        .iter()
-        .map(|t| (*t - res.time_begin).as_seconds())
-        .collect();
 
     let results = match res.integrator {
         Integrator::RKV98 => ode::RKV98::interpolate_batch(&xs, sol),
@@ -587,6 +763,7 @@ pub fn interp_propresult_batch<const C: usize>(
         Integrator::RODAS4 => {
             return Err(PropagationError::NoDenseOutputInSolution.into());
         }
+        Integrator::GaussJackson8 => unreachable!("handled above"),
     };
     Ok(results.map_err(PropagationError::ODEError)?)
 }
@@ -1147,6 +1324,188 @@ mod tests {
     }
 
     #[test]
+    fn test_gauss_jackson8_geo_matches_rkv98() -> Result<()> {
+        // Propagate a GEO orbit for 2 hours with GJ8 and compare against
+        // RKV98. For smooth high-altitude orbits the two should agree to
+        // well within 1 m.
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_hours(2.0);
+
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        let settings_gj8 = PropSettings {
+            gravity_degree: 4,
+            integrator: crate::orbitprop::Integrator::GaussJackson8,
+            gj_step_seconds: 60.0,
+            ..Default::default()
+        };
+        let settings_rkv98 = PropSettings {
+            abs_error: 1.0e-11,
+            rel_error: 1.0e-11,
+            gravity_degree: 4,
+            ..Default::default()
+        };
+
+        let res_gj8 = propagate(&state, &starttime, &stoptime, &settings_gj8, None)?;
+        let res_rkv98 = propagate(&state, &starttime, &stoptime, &settings_rkv98, None)?;
+
+        let pos_diff = (res_gj8.state_end.block::<3, 1>(0, 0)
+            - res_rkv98.state_end.block::<3, 1>(0, 0))
+        .norm();
+        assert!(
+            pos_diff < 1.0,
+            "GJ8 vs RKV98 position diff = {:.3e} m (expected < 1 m)",
+            pos_diff
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_gauss_jackson8_interp_matches_rkv98() -> Result<()> {
+        // Propagate the same GEO orbit with GJ8 and RKV98, then interpolate
+        // both at a grid of intermediate times. The interpolated positions
+        // should agree to ~meter level (quintic Hermite is 5th-order, so we
+        // won't match RKV98's 8th-order dense output perfectly, but for a
+        // smooth GEO orbit the agreement should be excellent).
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_hours(2.0);
+
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        let settings_gj8 = PropSettings {
+            gravity_degree: 4,
+            integrator: crate::orbitprop::Integrator::GaussJackson8,
+            gj_step_seconds: 60.0,
+            enable_interp: true,
+            ..Default::default()
+        };
+        let settings_rkv98 = PropSettings {
+            abs_error: 1.0e-11,
+            rel_error: 1.0e-11,
+            gravity_degree: 4,
+            enable_interp: true,
+            ..Default::default()
+        };
+
+        let res_gj8 = propagate(&state, &starttime, &stoptime, &settings_gj8, None)?;
+        let res_rkv98 = propagate(&state, &starttime, &stoptime, &settings_rkv98, None)?;
+
+        // Interpolate at 12 non-boundary times
+        let dt_hours: Vec<f64> = (1..=12).map(|i| (i as f64) * 2.0 / 13.0).collect();
+        for dt_h in &dt_hours {
+            let t = starttime + Duration::from_hours(*dt_h);
+            let s_gj8 = res_gj8.interp(&t)?;
+            let s_rkv98 = res_rkv98.interp(&t)?;
+            let pos_diff = (s_gj8.block::<3, 1>(0, 0) - s_rkv98.block::<3, 1>(0, 0)).norm();
+            assert!(
+                pos_diff < 10.0,
+                "GJ8 vs RKV98 interp diff at dt={}h = {:.3e} m (expected < 10 m)",
+                dt_h, pos_diff
+            );
+        }
+
+        // Batch interp should match point-wise interp
+        let times: Vec<Instant> = dt_hours
+            .iter()
+            .map(|dt_h| starttime + Duration::from_hours(*dt_h))
+            .collect();
+        let batch = res_gj8.interp_batch(&times)?;
+        for (i, t) in times.iter().enumerate() {
+            let single = res_gj8.interp(t)?;
+            let diff = (batch[i].block::<3, 1>(0, 0) - single.block::<3, 1>(0, 0)).norm();
+            assert!(diff < 1e-9, "batch vs single interp diff = {:.3e}", diff);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_gauss_jackson8_precompute_bounds() -> Result<()> {
+        // GJ8 with a step size larger than 60 s needs the precomputed interp
+        // table extended beyond the default 240-s padding. Before the fix,
+        // `settings.precompute_terms(begin, end)` produced a table that was
+        // too narrow for the backward startup stencil, and propagation
+        // failed with "time outside of precomputed range".
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_hours(2.0);
+
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        // 120-second step — GJ8 startup goes to t0 - 480 s, beyond the
+        // old 240-s default padding.
+        let mut settings = PropSettings {
+            integrator: crate::orbitprop::Integrator::GaussJackson8,
+            gj_step_seconds: 120.0,
+            ..Default::default()
+        };
+
+        // 1. Auto-constructed precomputed (no user call) should work.
+        let res_auto = propagate(&state, &starttime, &stoptime, &settings, None)?;
+
+        // 2. User-precomputed should also work — `precompute_terms` must
+        //    pick up the integrator-specific padding.
+        settings.precompute_terms(&starttime, &stoptime)?;
+        let res_user = propagate(&state, &starttime, &stoptime, &settings, None)?;
+
+        // Both should agree
+        let diff = (res_auto.state_end.block::<3, 1>(0, 0)
+            - res_user.state_end.block::<3, 1>(0, 0))
+        .norm();
+        assert!(
+            diff < 1e-6,
+            "Auto- and user-precomputed GJ8 propagation should agree: diff = {:.3e}",
+            diff
+        );
+
+        // 3. Sanity: the precomputed table's begin must actually be at
+        //    least 4·gj_step before starttime.
+        let pc = settings.precomputed.as_ref().expect("should be set");
+        let pad_needed = Duration::from_seconds(4.0 * 120.0);
+        assert!(
+            pc.begin <= starttime - pad_needed,
+            "Precomputed begin {} should cover startup back to {}",
+            pc.begin,
+            starttime - pad_needed
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_gauss_jackson8_rejects_stm() {
+        // GJ8 should return an error when asked to propagate with STM (C=7)
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0).unwrap();
+        let stoptime = starttime + Duration::from_hours(1.0);
+
+        let mut state: CovState = CovState::zeros();
+        state[(0, 0)] = consts::GEO_R;
+        state[(4, 0)] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+        state.set_block(0, 1, &Matrix6::eye());
+
+        let settings = PropSettings {
+            integrator: crate::orbitprop::Integrator::GaussJackson8,
+            gj_step_seconds: 60.0,
+            ..Default::default()
+        };
+
+        let result = propagate(&state, &starttime, &stoptime, &settings, None);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("state transition matrix"),
+            "Expected STM error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
     fn test_continuous_thrust() -> Result<()> {
         use crate::orbitprop::{ContinuousThrust, ThrustProfile};
         use crate::Frame;
@@ -1172,7 +1531,7 @@ mod tests {
         // Propagate with in-track thrust in RIC
         let thrust = ThrustProfile::new(vec![ContinuousThrust::new(
             numeris::vector![0.0, 1.0e-4, 0.0], // 0.1 mm/s^2 in-track
-            Frame::RIC,
+            Frame::RTN,
             starttime,
             stoptime,
         )]);

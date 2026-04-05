@@ -151,7 +151,7 @@ impl PySatProperties {
             });
             offset += 24;
             let frame = match state[offset] {
-                1 => satkit::Frame::RIC,
+                1 => satkit::Frame::RTN,
                 _ => satkit::Frame::GCRF,
             };
             offset += 1;
@@ -188,7 +188,7 @@ impl PySatProperties {
             }
             offset += 24;
             raw[offset] = match t.frame {
-                satkit::Frame::RIC => 1,
+                satkit::Frame::RTN => 1,
                 _ => 0,
             };
             offset += 1;

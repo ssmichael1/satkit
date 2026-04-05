@@ -61,7 +61,7 @@ impl From<GravityModel> for GravModel {
 ///     numpy.ndarray: 3-element numpy array representing acceleration due to Earth gravity at input position.  Units are m/s^2
 ///
 /// Keyword Args:
-///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.jgm3
+///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm96
 ///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 40
 ///     order (int): maximum order of gravity model to use.  Default is same as degree
 ///
@@ -72,7 +72,7 @@ impl From<GravityModel> for GravModel {
 pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<Py<PyAny>> {
     let mut degree: usize = 6;
     let mut order: Option<usize> = None;
-    let mut model: GravModel = GravModel::jgm3;
+    let mut model: GravModel = GravModel::egm96;
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("model")? {
             model = v
@@ -128,7 +128,7 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
 ///     (numpy.ndarray, numpy.ndarray): tuple of 3-element numpy array representing acceleration due to Earth gravity at input position and 3x3 numpy array of partials of acceleration with respect to position.  Units are m/s^2 for gravity and m/s^2/m for partials
 ///
 /// Keyword Args:
-///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.jgm3
+///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm96
 ///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 40
 ///     order (int): maximum order of gravity model to use.  Default is same as degree
 ///
@@ -143,7 +143,7 @@ pub fn gravity_and_partials(
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
     let mut degree: usize = 6;
     let mut order: Option<usize> = None;
-    let mut model: GravModel = GravModel::jgm3;
+    let mut model: GravModel = GravModel::egm96;
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("model")? {
             model = v

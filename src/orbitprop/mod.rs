@@ -10,6 +10,9 @@ mod point_gravity;
 /// Thrust models for continuous maneuvers
 pub mod thrust;
 
+/// ODE integrators specific to orbit propagation
+pub mod ode;
+
 pub use precomputed::*;
 pub use propagator::*;
 pub use satproperties::SatProperties;

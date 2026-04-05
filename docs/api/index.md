@@ -16,6 +16,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 |--------|-------------|
 | [`quaternion`](quaternion.md) | Unit quaternion for 3D rotations |
 | [`itrfcoord`](itrfcoord.md) | ITRF coordinate with geodetic ↔ Cartesian conversion |
+| [`frame`](frame.md) | Coordinate reference frame identifier (GCRF, ITRF, RTN, NTW, LVLH, …) |
 | [`frametransform`](frametransform.md) | Coordinate frame rotation functions |
 
 ## Orbit Propagation
@@ -28,6 +29,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`propsettings`](satprop.md#satkit.propsettings) | Propagator configuration |
 | [`satstate`](satstate.md) | Satellite state with built-in propagation |
 | [`kepler`](kepler.md) | Keplerian orbital elements |
+| [`lambert`](lambert.md) | Lambert two-point boundary value problem solver |
 
 ## Environment Models
 

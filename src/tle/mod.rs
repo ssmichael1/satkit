@@ -214,6 +214,34 @@ impl TLE {
         Ok(tles)
     }
 
+    /// Load TLE(s) from a URL
+    ///
+    /// Fetches the content at the given URL and parses it as TLE lines.
+    /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - URL to fetch TLE data from
+    ///
+    /// # Returns
+    ///
+    /// A [`Vec`] of [`TLE`] objects parsed from the response
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use satkit::TLE;
+    ///
+    /// let tles = TLE::from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle").unwrap();
+    /// ```
+    pub fn from_url(url: &str) -> Result<Vec<Self>> {
+        let agent = ureq::Agent::new_with_defaults();
+        let mut resp = agent.get(url).call()?;
+        let body = resp.body_mut().read_to_string()?;
+        let lines: Vec<String> = body.lines().map(|l| l.trim_end().to_string()).collect();
+        Self::from_lines(&lines)
+    }
+
     ///
     /// Return a default empty TLE.  Note that values are invalid.
     ///

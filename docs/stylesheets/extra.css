@@ -1,51 +1,65 @@
-/* --- Link colors --- */
-
+/* Apply JetBrains Mono as the monospace font (loaded via mkdocs.yml) */
 :root {
-    --md-typeset-a-color: #4a7c96;
+    --md-code-font: "JetBrains Mono", SFMono-Regular, Consolas, monospace;
 }
 
+/* "Deep Space" palette — light mode */
+[data-md-color-scheme="default"] {
+    --md-primary-fg-color: #1a2744;
+    --md-primary-fg-color--light: #2d3f66;
+    --md-primary-fg-color--dark: #0f1a33;
+    --md-accent-fg-color: #0891b2;
+    --md-default-bg-color: #fafbfc;
+    --md-default-fg-color--light: #475569;
+    --md-typeset-a-color: #0891b2;
+}
+
+/* Cool code block backgrounds — light mode */
+[data-md-color-scheme="default"] .highlight,
+[data-md-color-scheme="default"] .md-typeset code {
+    background-color: #f1f5f9;
+}
+
+/* Admonition accent — light mode */
+[data-md-color-scheme="default"] .md-typeset .admonition,
+[data-md-color-scheme="default"] .md-typeset details {
+    border-color: #0891b2;
+}
+
+/* "Deep Space" palette — dark mode */
 [data-md-color-scheme="slate"] {
-    --md-typeset-a-color: #6fa8c4;
+    --md-primary-fg-color: #0f1a33;
+    --md-primary-fg-color--light: #1e2d4d;
+    --md-primary-fg-color--dark: #0a1226;
+    --md-accent-fg-color: #22d3ee;
+    --md-default-bg-color: #0f1419;
+    --md-default-fg-color: #e2e8f0;
+    --md-default-fg-color--light: #94a3b8;
+    --md-typeset-a-color: #22d3ee;
 }
 
-/* --- Navigation sidebar contrast --- */
-
-/* Section titles (Getting Started, User Guide, etc.) */
-.md-nav__item--nested > .md-nav__link {
-    font-weight: 700;
-    color: var(--md-default-fg-color);
+/* Cool code block backgrounds — dark mode */
+[data-md-color-scheme="slate"] .highlight,
+[data-md-color-scheme="slate"] .md-typeset code {
+    background-color: #1a222e;
 }
 
-/* Navigation items — ensure readable contrast */
-.md-nav__link {
-    color: var(--md-default-fg-color--light);
+/* Sidebar styling */
+[data-md-color-scheme="default"] .md-sidebar {
+    border-right: 1px solid #e2e8f0;
+}
+[data-md-color-scheme="slate"] .md-sidebar {
+    border-right: 1px solid #1e293b;
 }
 
-.md-nav__link:hover,
-.md-nav__link:focus {
-    color: var(--md-accent-fg-color);
-}
-
-/* Active navigation item */
-.md-nav__link--active {
-    color: var(--md-accent-fg-color);
-    font-weight: 600;
-}
-
-/* Dark mode overrides */
-[data-md-color-scheme="slate"] .md-nav__item--nested > .md-nav__link {
-    color: var(--md-default-fg-color);
-}
-
-[data-md-color-scheme="slate"] .md-nav__link {
-    color: var(--md-default-fg-color--light);
-}
-
-/* --- Layout --- */
-
-/* Widen the main content area (override Material's 61rem default) */
+/* Widen the main content area */
 .md-grid {
-    max-width: 100rem;
+    max-width: 1800px;
+}
+
+/* Let the content column use the full grid width */
+.md-content__inner {
+    max-width: 100%;
 }
 
 /* Constrain notebook cell outputs to the content width */
@@ -68,6 +82,12 @@
 .cell_output > div {
     max-width: 100%;
     overflow-x: auto;
+}
+
+/* Plotly figures: scale to fit container */
+.plotly-graph-div {
+    max-width: 100% !important;
+    height: auto !important;
 }
 
 /* Images inside notebook outputs */

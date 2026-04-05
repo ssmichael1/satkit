@@ -63,90 +63,65 @@ impl PySatState {
         Ok(Self(state))
     }
 
-    /// Set position uncertainty (1-sigma, meters) in the lvlh (local-vertical, local-horizontal) frame
+    /// Set 1-sigma position uncertainty in a satellite-local or inertial frame.
+    ///
+    /// The uncertainty is interpreted as a diagonal 3x3 covariance in the
+    /// given ``frame`` (axes aligned with the frame), rotated into GCRF,
+    /// and stored in the position block of the 6x6 state covariance. Any
+    /// existing velocity covariance is preserved.
     ///
     /// Args:
-    ///     sigma_lvlh (numpy.ndarray): 3-element numpy array with 1-sigma position uncertainty in LVLH frame.  Units are meters
+    ///     sigma (numpy.ndarray): 3-element array of 1-sigma position
+    ///         components along the frame's axes. Units: meters.
+    ///     frame (satkit.frame): Coordinate frame — **required**, no
+    ///         default (matching the Rust API). Supported values:
+    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RTN`` (= RSW = RIC),
+    ///         ``frame.NTW``.
     ///
-    /// Returns:
-    ///     None
-    fn set_lvlh_pos_uncertainty(
+    /// Raises:
+    ///     RuntimeError: if the frame is not one of the supported
+    ///         orbital / inertial frames above.
+    fn set_pos_uncertainty(
         &mut self,
-        sigma_pvh: &Bound<'_, np::PyArray1<f64>>,
-    ) -> PyResult<()> {
-        if sigma_pvh.len() != 3 {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Position uncertainty must be 1-d numpy array with length 3",
-            ));
-        }
-        let na_sigma_pvh = Vector3::from_slice(unsafe { sigma_pvh.as_slice().unwrap() });
-
-        self.0.set_lvlh_pos_uncertainty(&na_sigma_pvh);
-        Ok(())
-    }
-
-    /// Set position uncertainty (1-sigma, meters) in the gcrf (Geocentric Celestial Reference Frame)
-    ///
-    /// Args:
-    ///     sigma_gcrf (numpy.ndarray): 3-element numpy array with 1-sigma position uncertainty in GCRF frame.  Units are meters
-    ///
-    /// Returns:
-    ///     None
-    fn set_gcrf_pos_uncertainty(
-        &mut self,
-        sigma_cart: &Bound<'_, np::PyArray1<f64>>,
+        sigma: &Bound<'_, np::PyArray1<f64>>,
+        frame: PyFrame,
     ) -> Result<()> {
-        if sigma_cart.len() != 3 {
+        if sigma.len() != 3 {
             bail!("Position uncertainty must be 1-d numpy array with length 3");
         }
-        let na_sigma_cart = Vector3::from_slice(unsafe { sigma_cart.as_slice().unwrap() });
-
-        self.0.set_gcrf_pos_uncertainty(&na_sigma_cart);
+        let na_sigma = Vector3::from_slice(unsafe { sigma.as_slice().unwrap() });
+        let rust_frame: Frame = frame.into();
+        self.0.set_pos_uncertainty(&na_sigma, rust_frame)?;
         Ok(())
     }
 
-    /// Set velocity uncertainty (1-sigma, m/s) in the LVLH (local-vertical, local-horizontal) frame
+    /// Set 1-sigma velocity uncertainty in a satellite-local or inertial frame.
     ///
-    /// LVLH frame:
-    ///     * z axis = -r (nadir, pointing toward Earth center)
-    ///     * y axis = -h (opposite angular momentum, h = r x v)
-    ///     * x axis completes right-handed system
-    ///
-    /// Args:
-    ///     sigma_lvlh (numpy.ndarray): 3-element numpy array with 1-sigma velocity uncertainty in LVLH frame.  Units are m/s
-    ///
-    /// Returns:
-    ///     None
-    fn set_lvlh_vel_uncertainty(
-        &mut self,
-        sigma_lvlh: &Bound<'_, np::PyArray1<f64>>,
-    ) -> PyResult<()> {
-        if sigma_lvlh.len() != 3 {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Velocity uncertainty must be 1-d numpy array with length 3",
-            ));
-        }
-        let na_sigma = Vector3::from_slice(unsafe { sigma_lvlh.as_slice().unwrap() });
-        self.0.set_lvlh_vel_uncertainty(&na_sigma);
-        Ok(())
-    }
-
-    /// Set velocity uncertainty (1-sigma, m/s) in the GCRF (Geocentric Celestial Reference Frame)
+    /// Analogous to :meth:`set_pos_uncertainty`, but for the velocity
+    /// block of the 6x6 state covariance. Any existing position
+    /// covariance is preserved.
     ///
     /// Args:
-    ///     sigma_gcrf (numpy.ndarray): 3-element numpy array with 1-sigma velocity uncertainty in GCRF frame.  Units are m/s
+    ///     sigma (numpy.ndarray): 3-element array of 1-sigma velocity
+    ///         components along the frame's axes. Units: m/s.
+    ///     frame (satkit.frame): Coordinate frame — **required**, no
+    ///         default (matching the Rust API). Supported values:
+    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RTN``, ``frame.NTW``.
     ///
-    /// Returns:
-    ///     None
-    fn set_gcrf_vel_uncertainty(
+    /// Raises:
+    ///     RuntimeError: if the frame is not one of the supported
+    ///         orbital / inertial frames above.
+    fn set_vel_uncertainty(
         &mut self,
-        sigma_gcrf: &Bound<'_, np::PyArray1<f64>>,
+        sigma: &Bound<'_, np::PyArray1<f64>>,
+        frame: PyFrame,
     ) -> Result<()> {
-        if sigma_gcrf.len() != 3 {
+        if sigma.len() != 3 {
             bail!("Velocity uncertainty must be 1-d numpy array with length 3");
         }
-        let na_sigma = Vector3::from_slice(unsafe { sigma_gcrf.as_slice().unwrap() });
-        self.0.set_gcrf_vel_uncertainty(&na_sigma);
+        let na_sigma = Vector3::from_slice(unsafe { sigma.as_slice().unwrap() });
+        let rust_frame: Frame = frame.into();
+        self.0.set_vel_uncertainty(&na_sigma, rust_frame)?;
         Ok(())
     }
 
@@ -245,13 +220,26 @@ impl PySatState {
     /// Args:
     ///     time (satkit.time): Time at which to apply the maneuver
     ///     delta_v (array-like): 3-element delta-v vector [m/s]
-    ///     frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF).
-    ///         For frame.RIC, components are [R, I, C] where R = radial (outward),
-    ///         I = in-track (along velocity), C = cross-track (along angular momentum)
+    ///     frame (satkit.frame): Coordinate frame — **required**, no
+    ///         default (matching the Rust API). Supported frames:
+    ///
+    ///         * ``frame.GCRF`` — inertial Cartesian
+    ///         * ``frame.RTN`` — radial / tangential / normal (a.k.a.
+    ///           RSW, RIC). T is perpendicular to R in the orbit plane;
+    ///           for eccentric orbits it is **not** strictly along velocity.
+    ///         * ``frame.NTW`` — normal-to-velocity / tangent / cross-track.
+    ///           T is along velocity, so a pure +T delta-v of magnitude Δv
+    ///           adds *exactly* Δv to |v|. Use this for prograde/retrograde
+    ///           burns, especially on eccentric orbits.
+    ///         * ``frame.LVLH`` — Local Vertical / Local Horizontal (classical
+    ///           crewed-spaceflight frame).
     ///
     /// Returns:
     ///     None
-    #[pyo3(signature=(time, delta_v, frame=PyFrame::GCRF))]
+    ///
+    /// See also:
+    ///     :meth:`add_prograde`, :meth:`add_retrograde`, :meth:`add_radial`,
+    ///     :meth:`add_normal` for ergonomic scalar-magnitude alternatives.
     fn add_maneuver(
         &mut self,
         time: PyInstant,
@@ -263,6 +251,55 @@ impl PySatState {
         self.0
             .add_maneuver(ImpulsiveManeuver::new(time.0, dv, rust_frame));
         Ok(())
+    }
+
+    /// Add a prograde impulsive burn (NTW +T axis, along velocity).
+    ///
+    /// A positive ``dv_mps`` adds energy (raises semi-major axis). The burn
+    /// adds exactly ``dv_mps`` to |v| regardless of orbit eccentricity.
+    ///
+    /// Args:
+    ///     time (satkit.time): Time at which to apply the burn
+    ///     dv_mps (float): Magnitude along velocity vector [m/s]
+    fn add_prograde(&mut self, time: PyInstant, dv_mps: f64) {
+        self.0.add_maneuver(ImpulsiveManeuver::prograde(time.0, dv_mps));
+    }
+
+    /// Add a retrograde impulsive burn (NTW -T axis, opposite velocity).
+    ///
+    /// Equivalent to ``add_prograde`` with a negated magnitude. ``dv_mps``
+    /// should be positive; a positive value removes energy from the orbit.
+    ///
+    /// Args:
+    ///     time (satkit.time): Time at which to apply the burn
+    ///     dv_mps (float): Magnitude along anti-velocity vector [m/s]
+    fn add_retrograde(&mut self, time: PyInstant, dv_mps: f64) {
+        self.0.add_maneuver(ImpulsiveManeuver::retrograde(time.0, dv_mps));
+    }
+
+    /// Add a radial-outward impulsive burn (NTW +N axis).
+    ///
+    /// For circular orbits this is the outward radial direction. For
+    /// eccentric orbits the N axis leans off the radial by the flight-path
+    /// angle.
+    ///
+    /// Args:
+    ///     time (satkit.time): Time at which to apply the burn
+    ///     dv_mps (float): Magnitude along in-plane normal-to-velocity [m/s]
+    fn add_radial(&mut self, time: PyInstant, dv_mps: f64) {
+        self.0.add_maneuver(ImpulsiveManeuver::radial_out(time.0, dv_mps));
+    }
+
+    /// Add a cross-track ("normal") impulsive burn (NTW +W axis).
+    ///
+    /// Positive values push in the +angular-momentum direction. Changes
+    /// orbit inclination without altering energy (at apsides).
+    ///
+    /// Args:
+    ///     time (satkit.time): Time at which to apply the burn
+    ///     dv_mps (float): Magnitude along angular momentum direction [m/s]
+    fn add_normal(&mut self, time: PyInstant, dv_mps: f64) {
+        self.0.add_maneuver(ImpulsiveManeuver::normal(time.0, dv_mps));
     }
 
     /// Get the list of maneuvers
@@ -403,7 +440,7 @@ impl PySatState {
             offset += 24;
             let frame = match state[offset] {
                 0 => Frame::GCRF,
-                1 => Frame::RIC,
+                1 => Frame::RTN,
                 _ => Frame::GCRF,
             };
             offset += 1;
@@ -458,7 +495,7 @@ impl PySatState {
             }
             offset += 24;
             buffer[offset] = match m.frame {
-                Frame::RIC => 1,
+                Frame::RTN => 1,
                 _ => 0,
             };
             offset += 1;

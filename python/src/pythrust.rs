@@ -17,18 +17,22 @@ pub struct PyThrust(pub ContinuousThrust);
 
 #[pymethods]
 impl PyThrust {
-    /// Create a constant thrust acceleration
+    /// Create a constant thrust acceleration.
     ///
     /// Args:
     ///     accel (array-like): 3-element acceleration vector [m/s^2]
     ///     start (satkit.time): Start time of thrust arc
     ///     end (satkit.time): End time of thrust arc
-    ///     frame (satkit.frame): Coordinate frame - frame.GCRF or frame.RIC (default: frame.GCRF)
+    ///     frame (satkit.frame): Coordinate frame. Supported values:
     ///
-    /// RIC components are [R, I, C] where R = radial (outward),
-    /// I = in-track (along velocity), C = cross-track (along angular momentum)
+    ///         - ``frame.GCRF`` — inertial Cartesian
+    ///         - ``frame.RTN`` — radial / tangential / normal (a.k.a. RSW, RIC)
+    ///         - ``frame.NTW`` — normal-to-velocity / tangent / cross-track
+    ///           (use this for thrust along the velocity vector)
+    ///         - ``frame.LVLH`` — Local Vertical / Local Horizontal
+    ///
+    ///     The frame argument is required — there is no default.
     #[staticmethod]
-    #[pyo3(signature = (accel, start, end, frame=PyFrame::GCRF))]
     fn constant(
         accel: &Bound<PyAny>,
         start: PyInstant,
@@ -39,9 +43,10 @@ impl PyThrust {
         let rust_frame: Frame = frame.into();
 
         match rust_frame {
-            Frame::GCRF | Frame::RIC => {}
-            _ => anyhow::bail!(
-                "Invalid frame for thrust: {}. Must be frame.GCRF or frame.RIC",
+            Frame::GCRF | Frame::RTN | Frame::NTW | Frame::LVLH => {}
+            Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME
+            | Frame::EME2000 | Frame::ICRF => anyhow::bail!(
+                "Invalid frame for thrust: {}. Must be frame.GCRF, frame.RTN, frame.NTW, or frame.LVLH",
                 rust_frame
             ),
         }
@@ -63,7 +68,7 @@ impl PyThrust {
     /// Get the frame
     #[getter]
     fn get_frame(&self) -> PyFrame {
-        PyFrame::from(self.0.frame.clone())
+        PyFrame::from(self.0.frame)
     }
 
     /// Get the start time

@@ -29,11 +29,46 @@ pub enum PyFrame {
     /// z = -r (nadir), y = -h (opposite angular momentum), x completes right-handed system
     #[allow(clippy::upper_case_acronyms)]
     LVLH,
-    /// Radial / In-track / Cross-track
+    /// Radial / Tangential / Normal — CCSDS OEM/OMM/ODM convention.
     ///
-    /// R = radial (outward), I = in-track (along velocity), C = cross-track (along angular momentum)
+    /// Also known as RSW (Vallado) or RIC (older NASA / Clohessy-Wiltshire
+    /// literature). R = radial (outward), T = tangential (perpendicular
+    /// to R in the orbit plane — **not** strictly along velocity for
+    /// eccentric orbits), N = normal (along angular momentum). For
+    /// "along velocity" semantics on eccentric orbits, use
+    /// [`PyFrame::NTW`] instead. Python-level aliases ``frame.RSW`` and
+    /// ``frame.RIC`` resolve to the same variant as ``frame.RTN``.
     #[allow(clippy::upper_case_acronyms)]
-    RIC,
+    RTN,
+    /// Velocity-aligned orbital frame (Vallado §3.3).
+    ///
+    /// N = in-plane normal to velocity, T = tangent (along v̂),
+    /// W = cross-track (along angular momentum). The natural frame for
+    /// prograde/retrograde maneuvers: a pure +T delta-v of magnitude Δv
+    /// adds *exactly* Δv to |v|.
+    #[allow(clippy::upper_case_acronyms)]
+    NTW,
+}
+
+#[pymethods]
+impl PyFrame {
+    /// Python-level alias for ``frame.RTN`` — Vallado's name for the
+    /// same Radial / S=(W×R) / W=(R×V) orbital frame. Resolves to the
+    /// same enum value as ``frame.RTN``, so ``frame.RSW == frame.RTN``
+    /// is True.
+    #[classattr]
+    #[allow(non_upper_case_globals)]
+    const RSW: PyFrame = PyFrame::RTN;
+
+    /// Python-level alias for ``frame.RTN`` — older NASA / Clohessy-
+    /// Wiltshire name (Radial / In-track / Cross-track). Resolves to the
+    /// same enum value as ``frame.RTN``, so ``frame.RIC == frame.RTN``
+    /// is True. Kept for backward compatibility with code written
+    /// against earlier satkit versions where `RIC` was the canonical
+    /// name.
+    #[classattr]
+    #[allow(non_upper_case_globals)]
+    const RIC: PyFrame = PyFrame::RTN;
 }
 
 impl From<Frame> for PyFrame {
@@ -47,7 +82,8 @@ impl From<Frame> for PyFrame {
             Frame::EME2000 => Self::EME2000,
             Frame::ICRF => Self::ICRF,
             Frame::LVLH => Self::LVLH,
-            Frame::RIC => Self::RIC,
+            Frame::RTN => Self::RTN,
+            Frame::NTW => Self::NTW,
         }
     }
 }
@@ -63,7 +99,8 @@ impl From<PyFrame> for Frame {
             PyFrame::EME2000 => Self::EME2000,
             PyFrame::ICRF => Self::ICRF,
             PyFrame::LVLH => Self::LVLH,
-            PyFrame::RIC => Self::RIC,
+            PyFrame::RTN => Self::RTN,
+            PyFrame::NTW => Self::NTW,
         }
     }
 }

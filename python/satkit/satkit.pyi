@@ -84,6 +84,26 @@ class TLE:
         """
         ...
 
+    @staticmethod
+    def from_url(url: str) -> list[TLE] | TLE:
+        """Load TLE(s) from a URL
+
+        Fetches the content at the given URL and parses it as TLE lines.
+        Works with any URL that returns plain-text TLE data.
+
+        Args:
+            url (str): URL to fetch TLE data from
+
+        Returns:
+            Single TLE or list of TLEs parsed from the response
+
+        Example:
+            ```python
+            tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
+            ```
+        """
+        ...
+
     @property
     def satnum(self) -> int:
         """Satellite number, or equivalently the NORAD ID"""
@@ -445,7 +465,7 @@ def gravity(
         pos (list[float] | satkit.itrfcoord | npt.ArrayLike[np.float]): Position as ITRF coordinate or numpy 3-vector representing ITRF position in meters
 
     Keyword Args:
-        model (gravmodel): The gravity model to use.  Default is gravmodel.jgm3
+        model (gravmodel): The gravity model to use.  Default is gravmodel.egm96
         degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
         order (int): Maximum order of gravity model to use.  Default is same as degree
 
@@ -476,7 +496,7 @@ def gravity_and_partials(
 
 
     Keyword Args:
-        model (gravmodel): The gravity model to use.  Default is gravmodel.jgm3
+        model (gravmodel): The gravity model to use.  Default is gravmodel.egm96
         degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
         order (int): Maximum order of gravity model to use.  Default is same as degree
 
@@ -692,15 +712,19 @@ class frame:
     - ``EME2000`` - Earth Mean Equator 2000
     - ``ICRF`` - International Celestial Reference Frame
     - ``LVLH`` - Local Vertical Local Horizontal: z = -r (nadir), y = -h (opposite angular momentum), x completes right-handed system
-    - ``RIC`` - Radial / In-track / Cross-track: R = radial (outward), I = in-track (along velocity), C = cross-track (along angular momentum)
+    - ``RTN`` - Radial / Tangential / Normal (CCSDS OEM convention; also
+      exposed as ``RSW`` and ``RIC`` aliases for Vallado / older-NASA naming):
+      R = radial (outward), T = tangential (in-track), N = normal (cross-track)
+    - ``NTW`` - Normal-to-velocity / Tangent / Cross-track (velocity-aligned):
+      T = along velocity, N = in-plane perpendicular to v, W = cross-track
 
     Example:
 
     ```python
     import satkit as sk
 
-    # Use RIC frame for in-track thrust
-    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+    # Use RTN frame for in-track thrust (RSW and RIC are aliases and work too)
+    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
     ```
     """
 
@@ -726,19 +750,74 @@ class frame:
     """International Celestial Reference Frame"""
 
     LVLH: ClassVar[frame]
-    """Local Vertical Local Horizontal
+    """Local Vertical Local Horizontal — the classical crewed-spaceflight
+    / GN&C body-pointing frame used on the ISS and most Earth-pointing
+    vehicles.
 
     - z axis: -r (nadir, pointing toward Earth center)
-    - y axis: -h (opposite orbital angular momentum, h = r x v)
+    - y axis: -h (opposite orbital angular momentum, h = r × v)
     - x axis: completes right-handed system (approximately velocity direction for circular orbits)
+
+    Geometrically spans the same orbital plane as ``frame.RTN`` but with
+    different labels and sign conventions:
+
+    - LVLH +x = RTN +T (in-track; perpendicular to R, not strictly along v)
+    - LVLH -z = RTN +R (radial outward)
+    - LVLH -y = RTN +N (cross-track)
+
+    Supported as a maneuver frame — useful when porting GN&C code written
+    in LVLH body-frame conventions. For eccentric orbits, note that LVLH
+    +x is perpendicular to the position vector, not the velocity vector;
+    for strict along-velocity semantics use ``frame.NTW`` instead.
+    """
+
+    RTN: ClassVar[frame]
+    """Radial / Tangential / Normal — CCSDS OEM/OMM/ODM convention.
+
+    Also known as **RSW** (Vallado) or **RIC** (older NASA / Clohessy-
+    Wiltshire literature). The three names refer to the same axes;
+    Python-level aliases ``frame.RSW`` and ``frame.RTN`` resolve to the
+    same enum value as ``frame.RTN``, so all three compare equal and can
+    be used interchangeably.
+
+    - R (radial): unit vector along position (outward from Earth center)
+    - T (tangential / in-track): perpendicular to R in the orbit plane,
+      in the prograde direction. **Not** strictly along velocity for
+      eccentric orbits — for "along velocity" semantics use ``frame.NTW``
+      instead.
+    - N (normal / cross-track): along angular momentum (h = r × v)
+
+    This is the standard choice for CCSDS OEM/OMM covariance messages,
+    for relative-motion (Hill / Clohessy-Wiltshire) equations, and for
+    radial/normal burn components whose physical meaning is tied to the
+    position vector.
+    """
+
+    RSW: ClassVar[frame]
+    """Alias for ``frame.RTN`` — Vallado's name for the same orbital
+    frame (Radial / S=Ŵ×R̂ / W=ĥ). ``frame.RSW == frame.RTN`` is True.
+    See [`RTN`][frame.RTN] for the axis definition.
     """
 
     RIC: ClassVar[frame]
-    """Radial / In-track / Cross-track
+    """Alias for ``frame.RTN`` — the older NASA / Clohessy-Wiltshire name
+    (Radial / In-track / Cross-track). ``frame.RIC == frame.RTN`` is
+    True. Kept for backward compatibility with code written against
+    earlier satkit versions where ``RIC`` was the canonical name. See
+    [`RTN`][frame.RTN] for the axis definition.
+    """
 
-    - R (radial): unit vector along position (outward from Earth center)
-    - I (in-track): velocity projected perpendicular to R (approximately velocity direction for circular orbits)
-    - C (cross-track): completes right-handed system (along angular momentum, h = r x v)
+    NTW: ClassVar[frame]
+    """Velocity-aligned orbital frame (Vallado §3.3).
+
+    - N (in-plane normal to velocity): T̂ × Ŵ. For a circular orbit this
+      coincides with the outward radial direction; for eccentric orbits it
+      leans off-radial by the flight-path angle.
+    - T (tangent): v̂, unit velocity vector
+    - W (cross-track): (r × v) / |r × v|, same as RTN's N axis
+
+    The natural frame for prograde/retrograde maneuvers: a pure +T delta-v
+    of magnitude Δv adds *exactly* Δv to |v|, regardless of orbit eccentricity.
     """
 
 class time:
@@ -2574,8 +2653,8 @@ class satstate:
         sat = sk.satstate(sk.time(2024, 1, 1), np.array([r, 0, 0]), np.array([0, v, 0]))
 
         # Add covariance and maneuver
-        sat.set_lvlh_pos_uncertainty(np.array([100.0, 200.0, 50.0]))
-        sat.add_maneuver(sat.time + sk.duration.from_hours(1), [0, 10, 0], frame=sk.frame.RIC)
+        sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
+        sat.add_prograde(sat.time + sk.duration.from_hours(1), 10.0)
 
         # Propagate -- covariance and maneuver handled automatically
         new_state = sat.propagate(sat.time + sk.duration.from_hours(3))
@@ -2661,58 +2740,63 @@ class satstate:
         """Epoch of this satellite state"""
         ...
 
-    def set_lvlh_pos_uncertainty(
-        self, sigma_lvlh: npt.NDArray[np.float64]
+    def set_pos_uncertainty(
+        self,
+        sigma: npt.NDArray[np.float64],
+        frame: frame,
     ) -> None:
-        """Set position uncertainty (1-sigma) in the LVLH frame
+        """Set 1-sigma position uncertainty in a satellite-local or inertial frame.
 
-        Constructs a diagonal covariance from the given 1-sigma values,
-        rotates it from LVLH to GCRF, and stores it as the position block
-        of the state covariance.
-
-        LVLH frame: z = -r (nadir), y = -h (opposite angular momentum),
-        x completes right-handed system.
+        Constructs a diagonal 3x3 covariance from the given 1-sigma values
+        (interpreted along the ``frame``'s axes), rotates it into GCRF,
+        and stores it as the position block of the 6x6 state covariance.
+        Any existing velocity covariance is preserved.
 
         Args:
-            sigma_lvlh: 3-element array with 1-sigma position uncertainty [meters]
+            sigma: 3-element numpy array of 1-sigma position components
+                along the frame's axes. Units: meters.
+            frame: Coordinate frame — **required**, no default (matching
+                the Rust API). Supported values:
+
+                - ``frame.GCRF`` — inertial Cartesian
+                - ``frame.LVLH`` — Local Vertical / Local Horizontal
+                - ``frame.RTN`` — Radial / In-track / Cross-track (= RSW = RTN)
+                - ``frame.NTW`` — Normal-to-velocity / Tangent / Cross-track
+
+        Raises:
+            RuntimeError: if the frame is not one of the supported frames.
+
+        Example:
+            ```python
+            # LVLH: 100 m along-track, 200 m cross-track, 50 m nadir
+            sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
+
+            # RIC: 10 m radial, 200 m in-track, 30 m cross-track
+            sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RTN)
+            ```
         """
         ...
 
-    def set_lvlh_vel_uncertainty(
-        self, sigma_lvlh: npt.NDArray[np.float64]
+    def set_vel_uncertainty(
+        self,
+        sigma: npt.NDArray[np.float64],
+        frame: frame,
     ) -> None:
-        """Set velocity uncertainty (1-sigma) in the LVLH frame
+        """Set 1-sigma velocity uncertainty in a satellite-local or inertial frame.
 
-        Constructs a diagonal covariance from the given 1-sigma values,
-        rotates it from LVLH to GCRF, and stores it as the velocity block
-        of the state covariance.
+        Analogous to :meth:`set_pos_uncertainty`, but for the velocity
+        block of the 6x6 state covariance. Any existing position
+        covariance is preserved.
 
         Args:
-            sigma_lvlh: 3-element array with 1-sigma velocity uncertainty [m/s]
-        """
-        ...
+            sigma: 3-element numpy array of 1-sigma velocity components
+                along the frame's axes. Units: m/s.
+            frame: Coordinate frame — **required**, no default (matching
+                the Rust API). Supported values: ``frame.GCRF``,
+                ``frame.LVLH``, ``frame.RTN``, ``frame.NTW``.
 
-    def set_gcrf_pos_uncertainty(
-        self, sigma_gcrf: npt.NDArray[np.float64]
-    ) -> None:
-        """Set position uncertainty (1-sigma) in GCRF
-
-        Constructs a diagonal position covariance from the given 1-sigma values.
-
-        Args:
-            sigma_gcrf: 3-element array with 1-sigma position uncertainty [meters]
-        """
-        ...
-
-    def set_gcrf_vel_uncertainty(
-        self, sigma_gcrf: npt.NDArray[np.float64]
-    ) -> None:
-        """Set velocity uncertainty (1-sigma) in GCRF
-
-        Constructs a diagonal velocity covariance from the given 1-sigma values.
-
-        Args:
-            sigma_gcrf: 3-element array with 1-sigma velocity uncertainty [m/s]
+        Raises:
+            RuntimeError: if the frame is not one of the supported frames.
         """
         ...
 
@@ -2720,21 +2804,97 @@ class satstate:
         self,
         time: time,
         delta_v: npt.ArrayLike,
-        frame: frame = frame.GCRF,
+        frame: frame,
     ) -> None:
         """Add an impulsive maneuver (instantaneous delta-v)
 
         Args:
             time (satkit.time): Time at which to apply the maneuver
             delta_v (array-like): 3-element delta-v vector [m/s]
-            frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF).
-                For frame.RIC, components are [R, I, C] where R = radial (outward),
-                I = in-track (along velocity), C = cross-track (along angular momentum)
+            frame (satkit.frame): Coordinate frame — **required**, no
+                default (matching the Rust API). Supported frames:
+
+                - ``frame.GCRF`` — inertial Cartesian
+                - ``frame.RTN`` — radial / in-track / cross-track (a.k.a. RSW, RTN).
+                  The I axis is perpendicular to R in the orbit plane — for
+                  eccentric orbits this is **not** strictly along velocity.
+                - ``frame.NTW`` — normal-to-velocity / tangent / cross-track.
+                  The T axis is along velocity, so a pure +T burn of magnitude
+                  Δv adds exactly Δv to |v|. Preferred for prograde burns on
+                  eccentric orbits.
+                - ``frame.LVLH`` — Local Vertical / Local Horizontal (classical
+                  crewed-spaceflight frame with z=nadir, y=-h, x=forward).
+                  Geometrically equivalent to RIC with relabeled axes; useful
+                  when porting GN&C code written in LVLH conventions.
+
+                See the "Theory: Maneuver Coordinate Frames" guide in the satkit
+                documentation for a side-by-side comparison.
+
+        See Also:
+            :meth:`add_prograde`, :meth:`add_retrograde`, :meth:`add_radial`,
+            :meth:`add_normal` for scalar-magnitude helpers that pick the frame
+            for you.
 
         Example:
             ```python
-            sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+            # Explicit frame selection
+            sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.NTW)  # +10 m/s along velocity
+            sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)  # +10 m/s in RIC in-track
             ```
+        """
+        ...
+
+    def add_prograde(self, time: time, dv_mps: float) -> None:
+        """Add a prograde impulsive burn (NTW +T, along velocity).
+
+        A positive ``dv_mps`` adds energy (raises semi-major axis). The burn
+        adds exactly ``dv_mps`` to |v| regardless of orbit eccentricity.
+
+        Args:
+            time (satkit.time): Time at which to apply the burn
+            dv_mps (float): Magnitude along velocity vector [m/s]
+
+        Example:
+            ```python
+            sat.add_prograde(t_burn, 10.0)  # +10 m/s along velocity
+            ```
+        """
+        ...
+
+    def add_retrograde(self, time: time, dv_mps: float) -> None:
+        """Add a retrograde impulsive burn (NTW -T, opposite velocity).
+
+        Equivalent to ``add_prograde`` with a negated magnitude. ``dv_mps``
+        should be positive; a positive value removes energy from the orbit.
+
+        Args:
+            time (satkit.time): Time at which to apply the burn
+            dv_mps (float): Magnitude along anti-velocity vector [m/s]
+        """
+        ...
+
+    def add_radial(self, time: time, dv_mps: float) -> None:
+        """Add a radial-outward impulsive burn (NTW +N axis).
+
+        For circular orbits this is the outward radial direction. For
+        eccentric orbits the N axis leans off the radial by the
+        flight-path angle.
+
+        Args:
+            time (satkit.time): Time at which to apply the burn
+            dv_mps (float): Magnitude along in-plane normal-to-velocity [m/s]
+        """
+        ...
+
+    def add_normal(self, time: time, dv_mps: float) -> None:
+        """Add a cross-track ("normal") impulsive burn (NTW +W axis).
+
+        Positive values push in the +angular-momentum direction. Changes
+        orbit inclination without altering energy (at apsides).
+
+        Args:
+            time (satkit.time): Time at which to apply the burn
+            dv_mps (float): Magnitude along angular momentum direction [m/s]
         """
         ...
 
@@ -2768,7 +2928,7 @@ class satstate:
         Example:
             ```python
             sat = sk.satstate(time=t0, pos=r, vel=v)
-            sat.add_maneuver(t_burn, [0, 100, 0], frame=sk.frame.RIC)
+            sat.add_maneuver(t_burn, [0, 100, 0], frame=sk.frame.RTN)
             new_state = sat.propagate(t_end)
             ```
         """
@@ -3015,10 +3175,12 @@ class thrust:
     """Continuous thrust acceleration for orbit maneuvers
 
     Represents a constant thrust acceleration over a time window,
-    specified in either the GCRF (inertial) or RIC frame.
+    specified in GCRF (inertial), RTN (CCSDS-standard orbital frame,
+    also known as RSW or RIC), NTW (velocity-aligned), or LVLH.
 
-    RIC components are [R, I, C] where R = radial (outward from Earth center),
-    I = in-track (along velocity), C = cross-track (along angular momentum, h = r x v).
+    RTN components are [R, T, N] where R = radial (outward from Earth
+    centre), T = tangential / in-track, N = normal / cross-track (along
+    angular momentum, h = r × v).
 
     Example:
 
@@ -3028,8 +3190,8 @@ class thrust:
     t0 = sk.time(2024, 1, 1)
     t1 = t0 + sk.duration.from_hours(2)
 
-    # In-track thrust in RIC frame
-    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)
+    # In-track thrust in the RTN (a.k.a. RSW, RIC) frame
+    t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
 
     # Fixed direction thrust in GCRF frame
     t = sk.thrust.constant([0, 0, 1e-3], t0, t1, frame=sk.frame.GCRF)
@@ -3041,7 +3203,7 @@ class thrust:
         accel: npt.ArrayLike,
         start: time,
         end: time,
-        frame: frame = frame.GCRF,
+        frame: frame,
     ) -> thrust:
         """Create a constant thrust acceleration
 
@@ -3049,11 +3211,17 @@ class thrust:
             accel (array-like): 3-element acceleration vector [m/s^2]
             start (satkit.time): Start time of thrust arc
             end (satkit.time): End time of thrust arc
-            frame (satkit.frame, optional): Coordinate frame (default: frame.GCRF)
+            frame (satkit.frame): Coordinate frame — **required**, no
+                default (matching the Rust API). Supported values:
+
+                - ``frame.GCRF`` — inertial Cartesian
+                - ``frame.RTN`` — radial / in-track / cross-track
+                - ``frame.NTW`` — normal-to-velocity / tangent / cross-track
+                  (use this for thrust along the velocity vector)
+                - ``frame.LVLH`` — Local Vertical / Local Horizontal
 
         Returns:
             thrust: Thrust object
-
         """
         ...
 
@@ -3114,7 +3282,7 @@ class satproperties:
 
         props = sk.satproperties(
             cdaoverm=0.01,
-            thrusts=[sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RIC)]
+            thrusts=[sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)]
         )
         ```
 
@@ -3155,13 +3323,20 @@ class integrator:
     - ``rkv65`` - Verner 6(5), 10 stages
     - ``rkts54`` - Tsitouras 5(4) with FSAL, 7 stages
     - ``rodas4`` - RODAS4 L-stable Rosenbrock 4(3), 6 stages. For stiff problems.
+    - ``gauss_jackson8`` - Gauss-Jackson 8, fixed-step multistep predictor-corrector.
+      For high-precision long-duration orbit propagation (days to months).
 
     Higher-order integrators can take larger time steps for the same accuracy,
     so despite having more stages per step, they often require fewer total
     function evaluations. For typical orbit propagation, ``rkv98`` (the default)
     is recommended. For faster but lower-accuracy propagation, ``rkts54`` or
     ``rkv65`` can be used. For stiff problems (re-entry, very low perigee),
-    ``rodas4`` is recommended.
+    ``rodas4`` is recommended. For long-duration high-precision propagation
+    of smooth orbits, ``gauss_jackson8`` typically uses 3-10× fewer force
+    evaluations than ``rkv98`` at comparable accuracy — but it requires a
+    user-chosen fixed step size (``gj_step_seconds``), does not handle
+    discontinuities such as impulsive maneuvers, and needs ≥9 steps of
+    startup, so it's unsuitable for very short propagations.
     """
 
     rkv98: ClassVar[integrator]
@@ -3197,6 +3372,21 @@ class integrator:
     state transition matrix (``output_phi``) propagation.
     """
 
+    gauss_jackson8: ClassVar[integrator]
+    """Gauss-Jackson 8 — 8th-order fixed-step multistep predictor-corrector
+
+    Specialised for 2nd-order ODEs (r'' = f(t, r, v)). The dominant
+    integrator in high-precision astrodynamics codes (GMAT, STK, ODTK).
+    Typically uses 3-10× fewer force evaluations than ``rkv98`` at
+    comparable accuracy on smooth long-duration orbit propagation.
+
+    Uses a fixed step size set via ``propsettings.gj_step_seconds``.
+    Supports dense output interpolation (quintic Hermite, 5th-order).
+    Does not support state transition matrix (``output_phi``) propagation.
+    Not recommended for highly eccentric orbits or integration across
+    discontinuities (eclipse boundaries, impulsive maneuvers).
+    """
+
 class propsettings:
     """This class contains settings used in the high-precision orbit propagator part of the "satkit" python toolbox
 
@@ -3206,12 +3396,14 @@ class propsettings:
             - rel_error: 1e-8
             - gravity_degree: 4
             - gravity_order: 4
-            - gravity_model: gravmodel.jgm3
+            - gravity_model: gravmodel.egm96
             - use_spaceweather: True
             - use_sun_gravity: True
             - use_moon_gravity: True
             - enable_interp: True
             - integrator: integrator.rkv98
+            - gj_step_seconds: 60.0
+            - max_steps: 1_000_000
         - enable_interp enables high-precision interpolation of state between begin and end times via the returned function,
           it is enabled by default.  There is a small increase in computational efficiency if set to false
 
@@ -3230,6 +3422,8 @@ class propsettings:
         use_moon_gravity: bool = True,
         enable_interp: bool = True,
         integrator: integrator = ...,
+        gj_step_seconds: float = 60.0,
+        max_steps: int = 1_000_000,
     ) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
 
@@ -3238,12 +3432,19 @@ class propsettings:
             rel_error: Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
             gravity_degree: Maximum degree of spherical harmonic gravity model. Default is 4
             gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree. Default is same as gravity_degree
-            gravity_model: Gravity model to use. Default is gravmodel.jgm3
+            gravity_model: Gravity model to use. Default is gravmodel.egm96
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
             use_moon_gravity: Include moon third-body gravitational perturbation. Default is True
             enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
             integrator: ODE integrator to use. Default is integrator.rkv98
+            gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
+                Ignored by adaptive integrators. Typical values: 30-120 s for LEO, 60-300 s
+                for MEO, 300-600 s for GEO. Default is 60.0.
+            max_steps: Maximum number of integrator steps before the propagator aborts with
+                a max-steps error. Applies to all integrators (adaptive Runge-Kutta, Rosenbrock,
+                and Gauss-Jackson 8). Default is 1_000_000, which covers very long propagation
+                arcs with plenty of headroom. Lower for a tighter runaway-propagation safeguard.
 
         Returns:
             propsettings: New propsettings object with default settings
@@ -3365,7 +3566,7 @@ class propsettings:
         """Gravity model used for Earth gravity computation
 
         Returns:
-            gravmodel: The gravity model, default is gravmodel.jgm3
+            gravmodel: The gravity model, default is gravmodel.egm96
 
         """
         ...
@@ -3384,6 +3585,35 @@ class propsettings:
 
     @integrator.setter
     def integrator(self, value: integrator) -> None: ...
+    @property
+    def gj_step_seconds(self) -> float:
+        """Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
+
+        Ignored by adaptive integrators. Typical values: 30-120 s for LEO,
+        60-300 s for MEO, 300-600 s for GEO.
+
+        Returns:
+            Fixed step size in seconds, default is 60.0
+        """
+        ...
+
+    @gj_step_seconds.setter
+    def gj_step_seconds(self, value: float) -> None: ...
+    @property
+    def max_steps(self) -> int:
+        """Maximum number of integrator steps before the propagator aborts.
+
+        Applies to all integrators (adaptive Runge-Kutta, Rosenbrock, and
+        Gauss-Jackson 8). Increase for very long propagation arcs or tight
+        tolerances.
+
+        Returns:
+            Maximum steps, default is 1_000_000
+        """
+        ...
+
+    @max_steps.setter
+    def max_steps(self, value: int) -> None: ...
     def precompute_terms(self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None):
         """Precompute terms for fast interpolation of state between begin and end times
 
@@ -3507,6 +3737,29 @@ def propagate(
         # Interpolate at intermediate time
         t_mid = t0 + satkit.duration(hours=12)
         mid_state = result.interp(t_mid)
+        ```
+    """
+    ...
+
+def omm_from_url(url: str) -> list[dict]:
+    """Load OMM(s) from a URL as a list of dictionaries
+
+    Fetches the content at the given URL and auto-detects JSON vs XML format.
+    Returns a list of dictionaries that can be passed directly to :func:`sgp4`.
+
+    Args:
+        url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
+
+    Returns:
+        list[dict]: List of OMM dictionaries with standard CCSDS keys
+            (OBJECT_NAME, EPOCH, MEAN_MOTION, ECCENTRICITY, etc.)
+
+    Example:
+        ```python
+        import satkit as sk
+
+        omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json")
+        pos, vel = sk.sgp4(omms[0], sk.time(2024, 1, 1))
         ```
     """
     ...
