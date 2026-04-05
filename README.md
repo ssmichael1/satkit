@@ -68,10 +68,10 @@ r0 = 6378e3 + 500e3  # 500 km altitude
 v0 = np.sqrt(sk.consts.mu_earth / r0)
 
 settings = sk.propsettings(
-    gravity_model=sk.gravmodel.jgm3,
+    gravity_model=sk.gravmodel.egm96,  # default; also jgm3, jgm2, itugrace16
     gravity_degree=8,
-    integrator=sk.integrator.rkv98,  # default; also rkv87, rkv65, rkts54,
-                                     # gauss_jackson8 (fixed-step multistep)
+    integrator=sk.integrator.rkv98,    # default; also rkv87, rkv65, rkts54,
+                                       # gauss_jackson8 (fixed-step multistep)
 )
 
 result = sk.propagate(

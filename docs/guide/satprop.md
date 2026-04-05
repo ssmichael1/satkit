@@ -144,6 +144,16 @@ settings = sk.propsettings(
     transition matrix propagation (`output_phi=True`). Attempting to use
     `output_phi=True` with either will raise a `RuntimeError`.
 
+!!! note "Integrator step budget: `max_steps`"
+    Every integrator stops with a max-steps error once it exceeds
+    `propsettings.max_steps` total steps. This is a runaway-propagation
+    safeguard, not a quality knob. The default of `1_000_000` comfortably
+    covers the longest realistic arcs — roughly 700 days of `gauss_jackson8`
+    at a 60 s step, or millions of adaptive RK steps at typical tolerances.
+    Lower it if you want to fail-fast on configurations that would take a
+    very long time; raise it if you hit the limit on a genuine long-arc
+    propagation.
+
 !!! note "Gauss-Jackson step-size selection"
     `gauss_jackson8` uses a fixed step size (`gj_step_seconds`) which the
     user must choose based on the orbit regime. Typical values:
@@ -166,9 +176,9 @@ The gravity model used in propagation can be selected via the `gravity_model` pa
 
 | Model | Description |
 |---|---|
-| `jgm3` | Joint Gravity Model 3 (default) |
+| `egm96` | Earth Gravitational Model 1996 (default) |
+| `jgm3` | Joint Gravity Model 3 |
 | `jgm2` | Joint Gravity Model 2 |
-| `egm96` | Earth Gravitational Model 1996 |
 | `itugrace16` | ITU GRACE 2016 |
 
 The `gravity_degree` and `gravity_order` parameters control the maximum degree and order of the spherical harmonic expansion.

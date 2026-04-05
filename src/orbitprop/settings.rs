@@ -71,6 +71,12 @@ impl std::fmt::Display for Integrator {
 /// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true
 ///   slight computation savings if set to false
 /// * `integrator` - which Runge-Kutta integrator to use.  Default is RKV98
+/// * `max_steps` - maximum number of integrator steps before the propagator
+///    aborts with [`numeris::ode::OdeError::MaxStepsExceeded`] (adaptive
+///    solvers) or a Gauss-Jackson max-steps error. Default is 1_000_000,
+///    which covers very long propagation arcs (e.g., ~700 days of GJ8 at
+///    60 s step) with plenty of headroom. Lower if you want a tighter
+///    runaway-propagation safeguard.
 ///
 #[derive(Debug, Clone)]
 pub struct PropSettings {
@@ -88,6 +94,11 @@ pub struct PropSettings {
     /// Ignored by adaptive integrators. Typical values: 30-120 s for LEO,
     /// 60-300 s for MEO, 300-600 s for GEO. Default: 60 s.
     pub gj_step_seconds: f64,
+    /// Maximum number of integrator steps before the propagator aborts
+    /// with a max-steps error. Applies to all integrators (adaptive
+    /// Runge-Kutta / Rosenbrock via [`numeris::ode::AdaptiveSettings`] and
+    /// Gauss-Jackson 8 via its own settings). Default: 1_000_000.
+    pub max_steps: usize,
     pub precomputed: Option<Precomputed>,
 }
 
@@ -105,6 +116,7 @@ impl Default for PropSettings {
             enable_interp: true,
             integrator: Integrator::default(),
             gj_step_seconds: 60.0,
+            max_steps: 1_000_000,
             precomputed: None,
         }
     }
@@ -226,6 +238,7 @@ impl std::fmt::Display for PropSettings {
             Moon Gravity: {},
             Interpolation: {},
             Integrator: {},
+            Max Steps: {},
             {}"#,
             self.gravity_degree,
             self.gravity_order,
@@ -237,6 +250,7 @@ impl std::fmt::Display for PropSettings {
             self.use_moon_gravity,
             self.enable_interp,
             self.integrator,
+            self.max_steps,
             self.precomputed.as_ref().map_or_else(
                 || "No Precomputed".to_string(),
                 |p| format!("Precomputed: {} to {}", p.begin, p.end)

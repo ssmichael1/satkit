@@ -265,6 +265,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         abs_tol: settings.abs_error,
         rel_tol: settings.rel_error,
         dense_output: settings.enable_interp,
+        max_steps: settings.max_steps,
         ..Default::default()
     };
 
@@ -601,6 +602,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
             let gj_settings = GJSettings {
                 h: settings.gj_step_seconds,
                 dense_output: settings.enable_interp,
+                max_steps: settings.max_steps,
                 ..GJSettings::default()
             };
 

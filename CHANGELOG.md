@@ -49,6 +49,14 @@
 - **Expanded TEME section** in Coordinate Frames: origin of the "True Equator, Mean Equinox" name (intentional half-and-half construction), the three practical awkwardness points (not uniquely defined, time-dependent orientation, positions cannot be compared directly), API table, and Vallado 2006 reference.
 - **"Why yet another time type?" section** added at the top of the Time Systems tutorial, covering time-scale-as-first-class, high-precision internal representation, correct leap-second handling, built-in UT1/TDB, and the single-type-across-Rust-and-Python story.
 
+### Propagator: Configurable `max_steps`
+
+- **`PropSettings::max_steps`** (Rust) / **`propsettings(max_steps=...)`** (Python): configurable maximum number of integrator steps before the propagator aborts with a max-steps error. Applies uniformly to the adaptive Runge-Kutta / Rosenbrock solvers (via `numeris::ode::AdaptiveSettings::max_steps`) and the Gauss-Jackson 8 solver (via its own internal settings). Default: 1_000_000, which matches the previous hard-coded Gauss-Jackson 8 ceiling and is a loosening of the previously inherited numeris RK default of 100_000. This covers very long arcs (≈700 days of GJ8 at 60 s step) with headroom; lower for a tighter runaway-propagation safeguard.
+
+### Release Tooling
+
+- **`release.yml` `check_version`**: now verifies the tag matches *all three* version strings — root `Cargo.toml`, `python/Cargo.toml`, and `pyproject.toml`. Previously only the root Cargo.toml was checked, which allowed `python/Cargo.toml` to drift silently if a version bump was applied by hand instead of through `cargo release`. Any future drift will hard-block the release workflow.
+
 ### Bug Fixes
 
 - **MathJax in Jupyter notebooks**: remove the `ignoreHtmlClass` / `processHtmlClass: "arithmatex"` restriction in `docs/javascripts/mathjax.js` that caused MathJax to skip notebook HTML entirely (mkdocs-jupyter does not wrap notebook-cell math in an `.arithmatex` span). Equations in the Quaternions tutorial and all other notebooks now render. Plain markdown pages still work because pymdownx.arithmatex (generic mode) emits raw delimiters that MathJax picks up under default scanning.

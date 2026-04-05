@@ -122,6 +122,10 @@ impl PyPropSettings {
                 ps.gj_step_seconds = gjstep.extract::<f64>()?;
                 kw.del_item("gj_step_seconds")?;
             }
+            if let Some(maxsteps) = kw.get_item("max_steps")? {
+                ps.max_steps = maxsteps.extract::<usize>()?;
+                kw.del_item("max_steps")?;
+            }
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
                     let mut a2 = acc.clone();
@@ -272,6 +276,17 @@ impl PyPropSettings {
     #[setter(gj_step_seconds)]
     fn set_gj_step_seconds(&mut self, val: f64) -> PyResult<()> {
         self.0.gj_step_seconds = val;
+        Ok(())
+    }
+
+    #[getter]
+    fn get_max_steps(&self) -> usize {
+        self.0.max_steps
+    }
+
+    #[setter(max_steps)]
+    fn set_max_steps(&mut self, val: usize) -> PyResult<()> {
+        self.0.max_steps = val;
         Ok(())
     }
 

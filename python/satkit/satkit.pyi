@@ -3402,6 +3402,8 @@ class propsettings:
             - use_moon_gravity: True
             - enable_interp: True
             - integrator: integrator.rkv98
+            - gj_step_seconds: 60.0
+            - max_steps: 1_000_000
         - enable_interp enables high-precision interpolation of state between begin and end times via the returned function,
           it is enabled by default.  There is a small increase in computational efficiency if set to false
 
@@ -3421,6 +3423,7 @@ class propsettings:
         enable_interp: bool = True,
         integrator: integrator = ...,
         gj_step_seconds: float = 60.0,
+        max_steps: int = 1_000_000,
     ) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
 
@@ -3438,6 +3441,10 @@ class propsettings:
             gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
                 Ignored by adaptive integrators. Typical values: 30-120 s for LEO, 60-300 s
                 for MEO, 300-600 s for GEO. Default is 60.0.
+            max_steps: Maximum number of integrator steps before the propagator aborts with
+                a max-steps error. Applies to all integrators (adaptive Runge-Kutta, Rosenbrock,
+                and Gauss-Jackson 8). Default is 1_000_000, which covers very long propagation
+                arcs with plenty of headroom. Lower for a tighter runaway-propagation safeguard.
 
         Returns:
             propsettings: New propsettings object with default settings
@@ -3592,6 +3599,21 @@ class propsettings:
 
     @gj_step_seconds.setter
     def gj_step_seconds(self, value: float) -> None: ...
+    @property
+    def max_steps(self) -> int:
+        """Maximum number of integrator steps before the propagator aborts.
+
+        Applies to all integrators (adaptive Runge-Kutta, Rosenbrock, and
+        Gauss-Jackson 8). Increase for very long propagation arcs or tight
+        tolerances.
+
+        Returns:
+            Maximum steps, default is 1_000_000
+        """
+        ...
+
+    @max_steps.setter
+    def max_steps(self, value: int) -> None: ...
     def precompute_terms(self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None):
         """Precompute terms for fast interpolation of state between begin and end times
 
