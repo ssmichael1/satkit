@@ -68,7 +68,7 @@
 - **Renamed "ITRF Coordinates" → "Geodetic Coordinates"**. This tutorial is about the `itrfcoord` data type (geodetic / Cartesian / ENU / NED / geodesic distance), not the ITRF reference frame. The old name made it sound like two views of the same topic as Coordinate Frames.
 - Nav reordered so **Coordinate Frames** (frame theory) comes before **Geodetic Coordinates** (data type built on top). Reciprocal cross-reference notes added at the top of both tutorials.
 - **Expanded TEME section** in Coordinate Frames: origin of the "True Equator, Mean Equinox" name (intentional half-and-half construction), the three practical awkwardness points (not uniquely defined, time-dependent orientation, positions cannot be compared directly), API table, and Vallado 2006 reference.
-- **"Why yet another time type?" section** added at the top of the Time Systems tutorial, covering time-scale-as-first-class, high-precision internal representation, correct leap-second handling, built-in UT1/TDB, and the single-type-across-Rust-and-Python story.
+- **"Why yet another time type?" section** added at the top of the Time Systems tutorial, covering time-scale-as-first-class, microsecond-precision i64 representation, correct leap-second handling, built-in UT1/TDB, and the single-type-across-Rust-and-Python story.
 
 ### Propagator: Configurable `max_steps`
 
