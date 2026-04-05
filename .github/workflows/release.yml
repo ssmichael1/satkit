@@ -16,14 +16,37 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Verify tag matches Cargo.toml
+      - name: Verify tag matches Cargo.toml, pyproject.toml, and python/Cargo.toml
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          # Root workspace crate
           CARGO_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "satkit") | .version')
+
+          # Python bindings crate (publish = false, but version must still be synced)
+          PY_CARGO_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "satkit-python") | .version')
+
+          # pyproject.toml (the version shipped to PyPI)
+          PYPROJECT_VERSION=$(grep -E '^version = "' pyproject.toml | head -1 | sed -E 's/version = "([^"]*)"/\1/')
+
+          FAIL=0
           if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
             echo "::error::Tag version ($TAG_VERSION) does not match Cargo.toml version ($CARGO_VERSION)"
+            FAIL=1
+          fi
+          if [ "$TAG_VERSION" != "$PY_CARGO_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match python/Cargo.toml version ($PY_CARGO_VERSION)"
+            FAIL=1
+          fi
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match pyproject.toml version ($PYPROJECT_VERSION)"
+            FAIL=1
+          fi
+          if [ "$FAIL" != "0" ]; then
+            echo "::error::Version strings are out of sync. Use 'cargo release <version>' (which runs the pre-release-replacements in release.toml) instead of editing files by hand."
             exit 1
           fi
+          echo "All version strings match tag ($TAG_VERSION)"
 
   test:
     name: test before release

@@ -89,22 +89,26 @@ The high-precision propagator does not include several additional forces that ar
 
 ## ODE Solver
 
-The high-precision propagator makes use of adaptive Runge-Kutta methods for integrating the equations of motion, with embedded error estimation for automatic step-size control. A proportional-integral-derivative (PID) controller adjusts the step size to keep errors within user-defined bounds. The Butcher tableaux are provided by the *delightful* web page of [Jim Verner](https://www.sfu.ca/~jverner/).
+The high-precision propagator supports two families of integrators:
+
+1. **Adaptive Runge-Kutta methods** (the default), with embedded error estimation for automatic step-size control. A proportional-integral-derivative (PID) controller adjusts the step size to keep errors within user-defined bounds. The Butcher tableaux are provided by the *delightful* web page of [Jim Verner](https://www.sfu.ca/~jverner/).
+2. **Gauss-Jackson 8**, an 8th-order fixed-step multistep predictor-corrector method specialised for 2nd-order ODEs (Berry & Healy 2004). This is the integrator used in GMAT, STK, ODTK, and the US Space Surveillance Network for high-precision orbit propagation. For smooth long-duration propagation it typically uses 3-10× fewer force evaluations than `rkv98` at comparable accuracy.
 
 ### Integrator Choices
 
 Several integrators are available, selected via the `integrator` parameter of `propsettings`:
 
-| Integrator | Order | Stages | Dense Output | Notes |
+| Integrator | Order | Type | Dense Output | Notes |
 |---|---|---|---|---|
-| `rkv98` | 9(8) | 26 | 9th-order | Default. Best accuracy for precision work. |
-| `rkv98_nointerp` | 9(8) | 16 | None | Same stepping accuracy, faster when interpolation is not needed. |
-| `rkv87` | 8(7) | 21 | 8th-order | Good balance of speed and accuracy. |
-| `rkv65` | 6(5) | 10 | None | Faster, moderate accuracy. |
-| `rkts54` | 5(4) | 7 | None | Fastest. Good for quick propagations. |
-| `rodas4` | 4(3) | 6 | None | L-stable Rosenbrock (implicit). For stiff problems. No STM support. |
+| `rkv98` | 9(8) | adaptive RK, 26 stages | 9th-order | Default. Best accuracy for precision work. |
+| `rkv98_nointerp` | 9(8) | adaptive RK, 16 stages | None | Same stepping accuracy, faster when interpolation is not needed. |
+| `rkv87` | 8(7) | adaptive RK, 21 stages | 8th-order | Good balance of speed and accuracy. |
+| `rkv65` | 6(5) | adaptive RK, 10 stages | None | Faster, moderate accuracy. |
+| `rkts54` | 5(4) | adaptive RK, 7 stages | None | Fastest. Good for quick propagations. |
+| `rodas4` | 4(3) | Rosenbrock, 6 stages | None | L-stable (implicit). For stiff problems. No STM support. |
+| `gauss_jackson8` | 8 | fixed-step multistep | 5th-order Hermite | High-efficiency for smooth long-duration propagation. No STM support. |
 
-Higher-order integrators can take larger time steps for the same accuracy, so despite more stages per step, they often require fewer total function evaluations. For most orbit propagation tasks, the default `rkv98` is recommended. For stiff problems (re-entry, very low perigee), `rodas4` uses an implicit method with analytical Jacobian.
+Higher-order integrators can take larger time steps for the same accuracy, so despite more stages per step, they often require fewer total function evaluations. For most orbit propagation tasks, the default `rkv98` is recommended. For stiff problems (re-entry, very low perigee), `rodas4` uses an implicit method with analytical Jacobian. For long-duration high-precision propagation of smooth orbits (days to months), `gauss_jackson8` with an appropriate fixed step is typically the fastest choice.
 
 ```python
 import satkit as sk
@@ -126,12 +130,45 @@ settings = sk.propsettings(
     gravity_degree=8,
 )
 satprops = sk.satproperties(cd_a_over_m=2.2 * 0.01 / 1.0)
+
+# Use Gauss-Jackson 8 for a long-duration GEO propagation with
+# a 120-second fixed step (good for MEO/GEO regimes)
+settings = sk.propsettings(
+    integrator=sk.integrator.gauss_jackson8,
+    gj_step_seconds=120.0,
+)
 ```
 
 !!! note
-    The `rodas4` integrator does not support dense output interpolation or
-    state transition matrix propagation (`output_phi=True`).  Attempting
-    to use `output_phi=True` with `rodas4` will raise a `RuntimeError`.
+    The `rodas4` and `gauss_jackson8` integrators do not support state
+    transition matrix propagation (`output_phi=True`). Attempting to use
+    `output_phi=True` with either will raise a `RuntimeError`.
+
+!!! note "Integrator step budget: `max_steps`"
+    Every integrator stops with a max-steps error once it exceeds
+    `propsettings.max_steps` total steps. This is a runaway-propagation
+    safeguard, not a quality knob. The default of `1_000_000` comfortably
+    covers the longest realistic arcs — roughly 700 days of `gauss_jackson8`
+    at a 60 s step, or millions of adaptive RK steps at typical tolerances.
+    Lower it if you want to fail-fast on configurations that would take a
+    very long time; raise it if you hit the limit on a genuine long-arc
+    propagation.
+
+!!! note "Gauss-Jackson step-size selection"
+    `gauss_jackson8` uses a fixed step size (`gj_step_seconds`) which the
+    user must choose based on the orbit regime. Typical values:
+
+    * **LEO** (400-800 km): 30-60 s
+    * **MEO**: 60-300 s
+    * **GEO**: 300-600 s
+    * **HEO / eccentric transfer**: use `rkv98` instead — GJ8's fixed step
+      wastes accuracy at apogee and misses resolution at perigee.
+
+    GJ8 is also unsuitable for propagation across discontinuities such as
+    eclipse boundaries or impulsive maneuvers — use an adaptive RK method
+    for those cases. The integrator needs ≥ 9 steps of startup, so
+    propagations shorter than ~`9 × gj_step_seconds` will fail; use an
+    adaptive RK integrator for such short intervals.
 
 ### Gravity Model Selection
 
@@ -139,9 +176,9 @@ The gravity model used in propagation can be selected via the `gravity_model` pa
 
 | Model | Description |
 |---|---|
-| `jgm3` | Joint Gravity Model 3 (default) |
+| `egm96` | Earth Gravitational Model 1996 (default) |
+| `jgm3` | Joint Gravity Model 3 |
 | `jgm2` | Joint Gravity Model 2 |
-| `egm96` | Earth Gravitational Model 1996 |
 | `itugrace16` | ITU GRACE 2016 |
 
 The `gravity_degree` and `gravity_order` parameters control the maximum degree and order of the spherical harmonic expansion.
@@ -200,16 +237,23 @@ print(new_state.pos)  # position at t + 6h
 
 ### Covariance Propagation
 
-Attach position and/or velocity uncertainty, and it will be propagated automatically via the state transition matrix:
+Attach position and/or velocity uncertainty, and it will be propagated automatically via the state transition matrix. The `set_pos_uncertainty` and `set_vel_uncertainty` methods accept the 1-sigma components along any supported satellite-local or inertial frame:
 
 ```python
-# Set 1-sigma position uncertainty in the LVLH frame (x, y, z) in meters
-sat.set_lvlh_pos_uncertainty(np.array([100.0, 200.0, 50.0]))
+# 1-sigma position uncertainty in LVLH (frame is required — no default)
+sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
 
-# Or set it directly in GCRF
-sat.set_gcrf_pos_uncertainty(np.array([150.0, 150.0, 150.0]))
+# Or in RTN — the convention used in CCSDS OEM messages (RSW and RIC
+# are Python-level aliases for the same frame)
+sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RTN)
 
-# Or set the full 6x6 covariance matrix
+# Or directly in GCRF
+sat.set_pos_uncertainty(np.array([150.0, 150.0, 150.0]), frame=sk.frame.GCRF)
+
+# Set velocity uncertainty the same way — the position block is preserved
+sat.set_vel_uncertainty(np.array([0.1, 0.2, 0.05]), frame=sk.frame.LVLH)
+
+# Or set the full 6x6 covariance matrix directly (in GCRF)
 sat.cov = my_6x6_matrix
 
 # Propagate -- covariance propagates automatically
@@ -217,7 +261,7 @@ new_state = sat.propagate(sat.time + sk.duration.from_hours(6))
 print(new_state.cov)  # 6x6 covariance at the new time
 ```
 
-The LVLH (Local Vertical Local Horizontal) frame is often more intuitive for specifying uncertainty: z is nadir, y is opposite the angular momentum vector, and x is approximately along-track.
+Supported uncertainty frames are `GCRF`, `LVLH`, `RIC` (= RSW = RTN), and `NTW`. See the [Maneuver Coordinate Frames](maneuver_frames.md) guide for a side-by-side comparison of the orbital frames and guidance on which to use.
 
 ### Impulsive Maneuvers
 
@@ -226,14 +270,30 @@ Add delta-v events at scheduled times. The propagator automatically segments at 
 ```python
 t_burn = sat.time + sk.duration.from_hours(1)
 
-# 10 m/s prograde burn in RIC frame
-sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RIC)
+# Option 1: ergonomic constructors (recommended for the common cases).
+# These pick the right coordinate frame for you.
+sat.add_prograde(t_burn, 10.0)     # +10 m/s along velocity (NTW +T)
+sat.add_retrograde(t_burn, 5.0)    # -5 m/s along velocity
+sat.add_radial(t_burn, 2.0)        # +2 m/s radial-out (NTW +N)
+sat.add_normal(t_burn, 1.0)        # +1 m/s cross-track (NTW +W)
+
+# Option 2: explicit delta-v vector in a chosen frame.
+sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.NTW)  # tangent = along velocity
+sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)  # tangential ≠ velocity on eccentric orbits
+sat.add_maneuver(t_burn, [0, 0, 5], frame=sk.frame.GCRF)  # 5 m/s in inertial +Z
 
 # Propagate past the burn -- delta-v is applied at t_burn
 new_state = sat.propagate(sat.time + sk.duration.from_hours(3))
 ```
 
 Multiple maneuvers can be added and will be applied in chronological order. Backward propagation reverses the maneuvers automatically.
+
+Supported maneuver frames are `frame.GCRF`, `frame.RTN` (a.k.a. RSW, RIC),
+`frame.NTW`, and `frame.LVLH`. For circular orbits the three non-inertial
+frames are equivalent; for eccentric orbits they differ by the flight-path
+angle in ways that matter for precision maneuver planning. See the
+[Maneuver Coordinate Frames](maneuver_frames.md) guide for a detailed
+comparison and recommendations on which frame to use.
 
 ## Forces vs Altitude
 

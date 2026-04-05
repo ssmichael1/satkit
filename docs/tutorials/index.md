@@ -10,8 +10,8 @@ Core concepts that underpin the rest of the library.
 |----------|-------------|
 | [Time Systems](Time%20Systems.ipynb) | UTC, TAI, TT, TDB, UT1, GPS conversions and why they matter |
 | [Quaternions](Quaternions.ipynb) | Constructing, composing, and interpolating 3D rotations |
-| [ITRF Coordinates](ITRF%20Coordinates.ipynb) | Working with geodetic and Cartesian coordinates |
-| [Coordinate Frame Transforms](Coordinate%20Frame%20Transforms.ipynb) | GCRF, ITRF, and TEME rotations with comparison of approximate vs full IAU-2006 |
+| [Coordinate Frames](Coordinate%20Frames.ipynb) | GCRF, ITRF, TEME, and the rotations between them |
+| [Geodetic Coordinates](Geodetic%20Coordinates.ipynb) | The `itrfcoord` data type: geodetic, Cartesian, and local tangent planes |
 | [Keplerian Elements](Keplerian%20Elements.ipynb) | Orbital elements, Cartesian conversion, and two-body vs numerical propagation |
 
 ## Orbit Propagation

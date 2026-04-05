@@ -360,6 +360,45 @@ impl OMM {
         let reader = std::io::BufReader::new(file);
         serde_json::from_reader(reader).map_err(|e| anyhow::anyhow!(e))
     }
+
+    /// Load OMM(s) from a URL
+    ///
+    /// Fetches the content at the given URL and auto-detects the format:
+    /// - If the response starts with `[` or `{`, it is parsed as JSON.
+    /// - Otherwise, it is parsed as XML (requires the `omm-xml` feature).
+    ///
+    /// Works with CelesTrak and Space-Track API endpoints.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use satkit::omm::OMM;
+    ///
+    /// let omms = OMM::from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json").unwrap();
+    /// ```
+    pub fn from_url(url: &str) -> Result<Vec<OMM>> {
+        let agent = ureq::Agent::new_with_defaults();
+        let mut resp = agent.get(url).call()?;
+        let body = resp.body_mut().read_to_string()?;
+        let trimmed = body.trim_start();
+        if trimmed.starts_with('[') || trimmed.starts_with('{') {
+            // JSON: wrap bare object in array
+            if trimmed.starts_with('{') {
+                Self::from_json_string(&format!("[{}]", trimmed))
+            } else {
+                Self::from_json_string(trimmed)
+            }
+        } else {
+            #[cfg(feature = "omm-xml")]
+            {
+                Self::from_xml_string(trimmed)
+            }
+            #[cfg(not(feature = "omm-xml"))]
+            {
+                anyhow::bail!("Response appears to be XML but the `omm-xml` feature is not enabled")
+            }
+        }
+    }
 }
 
 impl SGP4Source for OMM {

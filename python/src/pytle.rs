@@ -83,6 +83,37 @@ impl PyTLE {
         })
     }
 
+    /// Load TLE(s) from a URL
+    ///
+    /// Fetches the content at the given URL and parses it as TLE lines.
+    /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
+    ///
+    /// Args:
+    ///     url (str): URL to fetch TLE data from
+    ///
+    /// Returns:
+    ///     TLE or list[TLE]: Single TLE or list of TLEs parsed from the response
+    ///
+    /// Example:
+    ///     ```python
+    ///     tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
+    ///     ```
+    #[staticmethod]
+    fn from_url(url: String) -> Result<Py<PyAny>> {
+        let tles = TLE::from_url(&url)?;
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
+            if tles.len() > 1 {
+                tles.into_iter()
+                    .map(|t| tle_into_py(t, py))
+                    .collect::<Vec<_>>()
+                    .into_py_any(py)
+            } else {
+                Ok(tle_into_py(tles.into_iter().next().unwrap(), py))
+            }
+        })
+        .map_err(|e| e.into())
+    }
+
     /// Satellite NORAD Catalog Number
     #[getter(satnum)]
     const fn get_satnum(&self) -> i32 {

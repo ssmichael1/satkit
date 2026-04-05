@@ -15,7 +15,7 @@ import numpy.typing as npt
 import numpy as np
 import datetime
 
-from .satkit import time, quaternion
+from .satkit import time, quaternion, frame
 
 @typing.overload
 def gmst(tm: time | datetime.datetime) -> float:
@@ -384,6 +384,12 @@ def qgcrf2itrf_approx(
 
     Notes:
         - Accurate to approx. 1 arcsec
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between GCRF and ITRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`gcrf_to_itrf_state` / :func:`itrf_to_gcrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (satkit.time | datetime.datetime): Time[s] at which to calculate the quaternion
@@ -432,6 +438,12 @@ def qitrf2gcrf_approx(
 
     Notes:
         - Accurate to approx. 1 arcsec
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between ITRF and GCRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (satkit.time  | datetime.datetime): Time[s] at which to calculate the quaternion
@@ -483,6 +495,12 @@ def qgcrf2itrf(
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between ITRF and GCRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (satkit.time | datetime.datetime): Time[s] at which to calculate the quaternion
@@ -515,6 +533,12 @@ def qgcrf2itrf(
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between ITRF and GCRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (npt.ArrayLike[satkit.time] | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -532,6 +556,12 @@ def qgcrf2itrf(*args, **kwargs):
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between ITRF and GCRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (satkit.time | datetime.datetime): Time[s] at which to calculate the quaternion
@@ -564,6 +594,12 @@ def qitrf2gcrf(
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between ITRF and GCRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (satkit.time  datetime.datetime): Time[s] at which to calculate the quaternion
@@ -589,6 +625,12 @@ def qitrf2gcrf(
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between ITRF and GCRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (npt.ArrayLike[satkit.time] | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -606,6 +648,12 @@ def qitrf2gcrf(*args, **kwargs):
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
+        - **Velocity transforms**: this quaternion rotates *position* vectors
+          between ITRF and GCRF but **is not sufficient for velocity** on
+          its own. ITRF is a rotating frame, so the velocity transform
+          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
+          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          full state (position + velocity) transforms.
 
     Args:
         tm (satkit.time  datetime.datetime): Time[s] at which to calculate the quaternion
@@ -729,51 +777,210 @@ def earth_orientation_params(
     """
     ...
 
-def ric_to_gcrf(
+@typing.overload
+def qmod2gcrf(tm: time | datetime.datetime) -> quaternion:
+    """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given time.
+
+    Mean-of-Date accounts for precession but not nutation. For the
+    precession+nutation pair see :func:`qcirs2gcrf` or :func:`qitrf2gcrf`.
+    """
+    ...
+
+@typing.overload
+def qmod2gcrf(
+    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
+) -> npt.ArrayLike:
+    """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given times."""
+    ...
+
+def qmod2gcrf(*args, **kwargs):
+    """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given time(s).
+
+    Mean-of-Date accounts for precession but not nutation.
+    """
+    ...
+
+@typing.overload
+def qtod2mod_approx(tm: time | datetime.datetime) -> quaternion:
+    """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at the
+    given time. Accounts for nutation only.
+    """
+    ...
+
+@typing.overload
+def qtod2mod_approx(
+    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
+) -> npt.ArrayLike:
+    """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at
+    the given times. Accounts for nutation only.
+    """
+    ...
+
+def qtod2mod_approx(*args, **kwargs):
+    """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation.
+
+    Accounts for nutation only.
+    """
+    ...
+
+def to_gcrf(
+    frame: frame,
     pos: npt.ArrayLike,
     vel: npt.ArrayLike,
 ) -> npt.NDArray[np.float64]:
-    """Compute the RIC-to-GCRF rotation matrix from position and velocity
+    """Return the 3x3 DCM that transforms a vector from a satellite-local
+    orbital frame into GCRF at the current state.
 
-    RIC frame convention (CCSDS standard):
-        - x = radial (away from Earth center)
-        - y = in-track (along velocity, perpendicular to radial in orbital plane)
-        - z = cross-track (orbit normal, completes right-handed triad)
+    This is the unified dispatch for satellite-local orbital frames.
+    Supported values:
+
+    - ``frame.GCRF`` — returns the 3x3 identity matrix (trivial case)
+    - ``frame.LVLH`` — Local Vertical / Local Horizontal
+    - ``frame.RTN``  — Radial / In-track / Cross-track (= RSW = RTN)
+    - ``frame.NTW``  — Normal-to-velocity / Tangent / Cross-track
+
+    For an arbitrary frame-to-frame rotation, compose with
+    :func:`from_gcrf`::
+
+        # NTW -> RIC
+        dcm = sk.frametransform.from_gcrf(sk.frame.RTN, pos, vel) @ \\
+              sk.frametransform.to_gcrf(sk.frame.NTW, pos, vel)
 
     Args:
-        pos (array-like): 3-element position vector in GCRF [m]
-        vel (array-like): 3-element velocity vector in GCRF [m/s]
+        frame: Source satellite-local frame
+        pos: 3-element position vector in GCRF [m]
+        vel: 3-element velocity vector in GCRF [m/s]
 
     Returns:
-        numpy.ndarray: 3x3 rotation matrix that transforms vectors from RIC to GCRF
+        numpy.ndarray: 3x3 rotation matrix (frame → GCRF)
+
+    Raises:
+        RuntimeError: if ``frame`` is not a satellite-local orbital frame.
+            Earth-fixed / celestial frames (ITRF, TEME, EME2000, etc.) need
+            a time argument for their rotation to GCRF and must use the
+            dedicated quaternion helpers (:func:`qitrf2gcrf`,
+            :func:`qteme2gcrf`, etc.) instead.
 
     Example:
         ```python
-        dcm = sk.frametransform.ric_to_gcrf(pos_gcrf, vel_gcrf)
-        vec_gcrf = dcm @ vec_ric
+        import satkit as sk
+        dcm = sk.frametransform.to_gcrf(sk.frame.NTW, pos_gcrf, vel_gcrf)
+        v_gcrf = dcm @ v_ntw
         ```
     """
     ...
 
-def gcrf_to_ric(
-    pos: npt.ArrayLike,
-    vel: npt.ArrayLike,
-) -> npt.NDArray[np.float64]:
-    """Compute the GCRF-to-RIC rotation matrix from position and velocity
+def itrf_to_gcrf_state(
+    pos_itrf: npt.ArrayLike,
+    vel_itrf: npt.ArrayLike,
+    time: time,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Transform a satellite state (position + velocity) from ITRF to GCRF.
 
-    This is the transpose of ``ric_to_gcrf``.
+    Unlike the raw :func:`qitrf2gcrf` quaternion, this function correctly
+    handles the Earth-rotation contribution to velocity. A point at rest
+    on Earth's surface has zero velocity in ITRF but ~465 m/s in GCRF at
+    the equator, and this function accounts for that term.
+
+    The IAU 2010 ITRF → GCRF reduction decomposes into three stages:
+    polar motion (ITRF → TIRS), Earth rotation about the CIO polar axis
+    (TIRS → CIRS), and precession-nutation (CIRS → GCRF). The
+    Earth-rotation sweep term ``omega_earth x r`` is computed in
+    **TIRS** — not ITRF or GCRF — because TIRS is defined such that
+    Earth's rotation axis is exactly along its +z axis. Computing the
+    sweep anywhere else would introduce either a polar-motion-sized
+    error (~0.3 arcsec in ITRF) or a precession-sized error (tens of
+    degrees in GCRF).
+
+    Implementation:
+
+    1. Rotate ``pos_itrf`` and ``vel_itrf`` into TIRS via polar motion.
+    2. Add ``omega_earth x r_tirs`` to the velocity in TIRS, where
+       ``omega_earth = (0, 0, OMEGA_EARTH)`` exactly.
+    3. Rotate TIRS → CIRS → GCRF via the full IAU 2010 chain.
+
+    Uses the full IAU 2010 reduction (polar motion + Earth rotation +
+    precession-nutation with dX/dY corrections from Earth orientation
+    parameters).
 
     Args:
-        pos (array-like): 3-element position vector in GCRF [m]
-        vel (array-like): 3-element velocity vector in GCRF [m/s]
+        pos_itrf: 3-element position vector in ITRF [m]
+        vel_itrf: 3-element velocity vector *as observed in ITRF* [m/s]
+            (zero for a point at rest on Earth's surface)
+        time: Epoch of the state
 
     Returns:
-        numpy.ndarray: 3x3 rotation matrix that transforms vectors from GCRF to RIC
+        A 2-tuple ``(pos_gcrf, vel_gcrf)`` of numpy arrays with the
+        state expressed in GCRF.
 
     Example:
         ```python
-        dcm = sk.frametransform.gcrf_to_ric(pos_gcrf, vel_gcrf)
-        vec_ric = dcm @ vec_gcrf
+        import satkit as sk
+        import numpy as np
+
+        # Geostationary satellite, stationary in ITRF
+        t = sk.time(2024, 1, 1)
+        pos_itrf = np.array([42164.17e3, 0.0, 0.0])
+        vel_itrf = np.array([0.0, 0.0, 0.0])
+        pos_gcrf, vel_gcrf = sk.frametransform.itrf_to_gcrf_state(
+            pos_itrf, vel_itrf, t)
+        # |vel_gcrf| ≈ 3075 m/s (the GEO orbital speed)
+        ```
+    """
+    ...
+
+def gcrf_to_itrf_state(
+    pos_gcrf: npt.ArrayLike,
+    vel_gcrf: npt.ArrayLike,
+    time: time,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Transform a satellite state (position + velocity) from GCRF to ITRF.
+
+    Inverse of :func:`itrf_to_gcrf_state`. Rotates the state through
+    GCRF → CIRS → TIRS, subtracts the Earth-rotation ``omega_earth x r``
+    term **in TIRS** (where Earth's rotation axis is exactly along +z),
+    then applies inverse polar motion to reach ITRF. A geostationary
+    satellite (whose GCRF velocity is pure orbital motion) produces
+    zero velocity in ITRF. Uses the full IAU 2010 reduction.
+
+    Args:
+        pos_gcrf: 3-element position vector in GCRF [m]
+        vel_gcrf: 3-element velocity vector in GCRF [m/s]
+        time: Epoch of the state
+
+    Returns:
+        A 2-tuple ``(pos_itrf, vel_itrf)`` where ``vel_itrf`` is the
+        velocity as observed in ITRF.
+    """
+    ...
+
+def from_gcrf(
+    frame: frame,
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> npt.NDArray[np.float64]:
+    """Return the 3x3 DCM that transforms a vector from GCRF into a
+    satellite-local orbital frame at the current state.
+
+    Transpose of :func:`to_gcrf`. See that function for the list of
+    supported frames, composition examples, and error conditions.
+
+    Args:
+        frame: Destination satellite-local frame
+        pos: 3-element position vector in GCRF [m]
+        vel: 3-element velocity vector in GCRF [m/s]
+
+    Returns:
+        numpy.ndarray: 3x3 rotation matrix (GCRF → frame)
+
+    Raises:
+        RuntimeError: if ``frame`` is not a satellite-local orbital frame.
+
+    Example:
+        ```python
+        import satkit as sk
+        dcm = sk.frametransform.from_gcrf(sk.frame.RTN, pos_gcrf, vel_gcrf)
+        v_ric = dcm @ v_gcrf
         ```
     """
     ...

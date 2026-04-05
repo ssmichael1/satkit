@@ -47,5 +47,6 @@ __all__ = [
     "thrust",
     "propresult",
     "propstats",
+    "omm_from_url",
     "__version__",
 ]

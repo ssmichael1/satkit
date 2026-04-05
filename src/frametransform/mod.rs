@@ -269,6 +269,15 @@ pub fn qmod2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 /// * For a reference, see "Explanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
 ///
+/// # Note — velocity transforms
+///
+/// This quaternion rotates **position** vectors between GCRF and ITRF
+/// correctly, but **is not sufficient for velocity** on its own. Because
+/// ITRF is a rotating frame, the velocity transform picks up an extra
+/// \\( \\vec{\\omega}_\\oplus \\times \\vec{r} \\) term (~470 m/s at LEO)
+/// that this quaternion does not include. For full state transforms
+/// (position + velocity) use [`gcrf_to_itrf_state`] /
+/// [`itrf_to_gcrf_state`] instead.
 pub fn qgcrf2itrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
     // Neglecting polar motion
     let qitrf2tod_approx: Quaternion = Quaternion::rotz(gast(tm));
@@ -299,6 +308,16 @@ pub fn qgcrf2itrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// * For a reference, see "Explanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
+///
+/// # Note — velocity transforms
+///
+/// This quaternion rotates **position** vectors between ITRF and GCRF
+/// correctly, but **is not sufficient for velocity** on its own. Because
+/// ITRF is a rotating frame, the velocity transform picks up an extra
+/// \\( \\vec{\\omega}_\\oplus \\times \\vec{r} \\) term (~470 m/s at LEO)
+/// that this quaternion does not include. For full state transforms
+/// (position + velocity) use [`itrf_to_gcrf_state`] /
+/// [`gcrf_to_itrf_state`] instead.
 pub fn qitrf2gcrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
     qgcrf2itrf_approx(tm).conjugate()
 }
@@ -378,6 +397,15 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///   valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
 ///   they will be set to zero, and a warning will be printed to stderr.
 ///
+/// # Note — velocity transforms
+///
+/// This quaternion rotates **position** vectors between ITRF and GCRF
+/// correctly, but **is not sufficient for velocity** on its own. Because
+/// ITRF is a rotating frame, the velocity transform picks up an extra
+/// \\( \\vec{\\omega}_\\oplus \\times \\vec{r} \\) term (~470 m/s at LEO)
+/// that this quaternion does not include. For full state transforms
+/// (position + velocity) use [`itrf_to_gcrf_state`] /
+/// [`gcrf_to_itrf_state`] instead.
 pub fn qitrf2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
     // w is rotation from international terrestrial reference frame
     // to terrestrial intermediate reference frame
@@ -421,6 +449,15 @@ pub fn qitrf2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///  * **Note** This is **very** computationally expensive; for most
 ///    applications, the approximate rotation will work just fine
 ///
+/// # Note — velocity transforms
+///
+/// This quaternion rotates **position** vectors between GCRF and ITRF
+/// correctly, but **is not sufficient for velocity** on its own. Because
+/// ITRF is a rotating frame, the velocity transform picks up an extra
+/// \\( \\vec{\\omega}_\\oplus \\times \\vec{r} \\) term (~470 m/s at LEO)
+/// that this quaternion does not include. For full state transforms
+/// (position + velocity) use [`gcrf_to_itrf_state`] /
+/// [`itrf_to_gcrf_state`] instead.
 pub fn qgcrf2itrf<T: TimeLike>(tm: &T) -> Quaternion {
     qitrf2gcrf(tm).conjugate()
 }
@@ -449,12 +486,12 @@ pub fn qtirs2cirs<T: TimeLike>(tm: &T) -> Quaternion {
     Quaternion::rotz(earth_rotation_angle(tm))
 }
 
-/// Compute the RIC-to-GCRF rotation matrix from position and velocity
+/// Compute the RTN-to-GCRF rotation matrix from position and velocity.
 ///
-/// RIC frame:
-///   R = radial (outward from Earth center)
-///   I = in-track (along velocity, perpendicular to R in orbital plane)
-///   C = cross-track (along angular momentum, h = r x v, completes right-handed system)
+/// RTN frame (CCSDS OEM/OMM convention, also known as RIC or RSW):
+///   * R = radial (outward from Earth centre)
+///   * T = tangential / in-track (perpendicular to R in the orbit plane)
+///   * N = normal / cross-track (along angular momentum, h = r × v)
 ///
 /// # Arguments
 ///
@@ -463,35 +500,338 @@ pub fn qtirs2cirs<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Returns
 ///
-/// 3x3 rotation matrix that transforms vectors from RIC to GCRF
-///
-pub fn ric_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+/// 3x3 rotation matrix that transforms vectors from RTN to GCRF.
+pub fn rtn_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
     let r_hat = pos_gcrf.normalize();
     let h = pos_gcrf.cross(vel_gcrf);
     let h_hat = h.normalize();
-    let i_hat = h_hat.cross(&r_hat);
+    let t_hat = h_hat.cross(&r_hat);
     let mut dcm = Matrix3::zeros();
     dcm.set_block(0, 0, &r_hat);
-    dcm.set_block(0, 1, &i_hat);
+    dcm.set_block(0, 1, &t_hat);
     dcm.set_block(0, 2, &h_hat);
     dcm
 }
 
-/// Compute the GCRF-to-RIC rotation matrix from position and velocity
+/// Compute the GCRF-to-RTN rotation matrix from position and velocity.
 ///
-/// This is the transpose of `ric_to_gcrf`.
+/// Transpose of [`rtn_to_gcrf`].
+pub fn gcrf_to_rtn(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    rtn_to_gcrf(pos_gcrf, vel_gcrf).transpose()
+}
+
+/// Backward-compatibility alias for [`rtn_to_gcrf`]. The `ric_to_gcrf`
+/// name was the canonical spelling in earlier satkit versions; new code
+/// should use `rtn_to_gcrf` (which matches the CCSDS OEM/OMM convention),
+/// but this alias is kept so existing Rust callers don't break.
+#[inline]
+pub fn ric_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    rtn_to_gcrf(pos_gcrf, vel_gcrf)
+}
+
+/// Backward-compatibility alias for [`gcrf_to_rtn`]. See [`ric_to_gcrf`]
+/// for rationale.
+#[inline]
+pub fn gcrf_to_ric(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    gcrf_to_rtn(pos_gcrf, vel_gcrf)
+}
+
+/// Compute the NTW-to-GCRF rotation matrix from position and velocity.
+///
+/// NTW frame (Vallado §3.3):
+/// * **N** (in-plane normal to velocity): T̂ × Ŵ. For circular orbits this
+///   coincides with the outward radial direction; for eccentric orbits it
+///   leans off-radial by the flight-path angle.
+/// * **T** (tangent, along velocity): v̂ = v / |v|
+/// * **W** (cross-track, along angular momentum): (r × v) / |r × v|
+///
+/// Unlike [`rtn_to_gcrf`], the tangent axis is parallel to the velocity
+/// vector regardless of orbit eccentricity, so a +T delta-v adds that exact
+/// magnitude to |v|. This makes NTW the natural frame for thrust-along-
+/// velocity maneuver planning.
 ///
 /// # Arguments
-///
 /// * `pos_gcrf` - Position vector in GCRF [m]
 /// * `vel_gcrf` - Velocity vector in GCRF [m/s]
 ///
 /// # Returns
+/// 3x3 rotation matrix that transforms vectors from NTW to GCRF.
+pub fn ntw_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    let t_hat = vel_gcrf.normalize();
+    let h = pos_gcrf.cross(vel_gcrf);
+    let w_hat = h.normalize();
+    let n_hat = t_hat.cross(&w_hat);
+    let mut dcm = Matrix3::zeros();
+    dcm.set_block(0, 0, &n_hat);
+    dcm.set_block(0, 1, &t_hat);
+    dcm.set_block(0, 2, &w_hat);
+    dcm
+}
+
+/// Compute the GCRF-to-NTW rotation matrix. Transpose of [`ntw_to_gcrf`].
+pub fn gcrf_to_ntw(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    ntw_to_gcrf(pos_gcrf, vel_gcrf).transpose()
+}
+
+/// Compute the LVLH-to-GCRF rotation matrix from position and velocity.
 ///
-/// 3x3 rotation matrix that transforms vectors from GCRF to RIC
+/// Local-Vertical / Local-Horizontal, the classical crewed-spaceflight and
+/// GN&C "body-pointing" frame used on the ISS and most Earth-pointing
+/// vehicles:
 ///
-pub fn gcrf_to_ric(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
-    ric_to_gcrf(pos_gcrf, vel_gcrf).transpose()
+/// * **z** = −r̂ (nadir; pointing toward Earth centre)
+/// * **y** = −ĥ (opposite angular momentum; "right" for a prograde mission)
+/// * **x** = ŷ × ẑ = ĥ × r̂ / |ĥ × r̂| (completes right-handed system;
+///   roughly velocity-aligned for circular orbits)
+///
+/// Geometrically the axes span the same orbital plane as [`rtn_to_gcrf`]
+/// (RIC/RSW/RTN) but with different labels and sign conventions — LVLH +x
+/// equals RIC +I, LVLH −z equals RIC +R, and LVLH −y equals RIC +C. For
+/// eccentric orbits neither LVLH's x nor RIC's I is strictly along
+/// velocity; use [`ntw_to_gcrf`] if you need that property.
+///
+/// # Arguments
+/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `vel_gcrf` - Velocity vector in GCRF [m/s]
+///
+/// # Returns
+/// 3x3 rotation matrix that transforms vectors from LVLH to GCRF.
+pub fn lvlh_to_gcrf(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    let r_hat = pos_gcrf.normalize();
+    let h = pos_gcrf.cross(vel_gcrf);
+    let h_hat = h.normalize();
+    let z_hat = r_hat * -1.0;
+    let y_hat = h_hat * -1.0;
+    let x_hat = y_hat.cross(&z_hat);
+    let mut dcm = Matrix3::zeros();
+    dcm.set_block(0, 0, &x_hat);
+    dcm.set_block(0, 1, &y_hat);
+    dcm.set_block(0, 2, &z_hat);
+    dcm
+}
+
+/// Compute the GCRF-to-LVLH rotation matrix. Transpose of [`lvlh_to_gcrf`].
+pub fn gcrf_to_lvlh(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
+    lvlh_to_gcrf(pos_gcrf, vel_gcrf).transpose()
+}
+
+/// Transform a satellite state (position and velocity) from ITRF
+/// (Earth-fixed, rotating) to GCRF (inertial) at a given time.
+///
+/// This is the correct way to convert a state vector between ITRF and
+/// GCRF: it accounts for both the rotation of position and the
+/// Earth-rotation contribution to velocity. A plain quaternion rotation
+/// (via [`qitrf2gcrf`] / [`qitrf2gcrf_approx`]) is fine for position but
+/// gives an incorrect velocity because it ignores the
+/// \\( \\vec{\\omega}_\\oplus \\times \\vec{r} \\) term (~470 m/s at LEO).
+///
+/// # Math
+///
+/// The IAU 2010 ITRF → GCRF reduction decomposes into three stages:
+/// polar motion \\(W\\) (ITRF → TIRS), Earth rotation \\(R\\) (TIRS →
+/// CIRS, a rotation about the CIO pole by the Earth Rotation Angle),
+/// and precession-nutation \\(Q\\) (CIRS → GCRF):
+///
+/// \\[ \\vec{r}_\\mathrm{gcrf} = Q\\,R\\,W\\,\\vec{r}_\\mathrm{itrf} \\]
+///
+/// The only rapid time dependence is \\(R(t)\\). Taking the time
+/// derivative and keeping only the dominant rotation-rate term:
+///
+/// \\[ \\vec{v}_\\mathrm{gcrf} = Q R W\\,\\vec{v}_\\mathrm{itrf}
+///     + Q R\\,(\\vec{\\omega}_\\oplus^\\mathrm{tirs} \\times \\vec{r}_\\mathrm{tirs}) \\]
+///
+/// **The cross product must be evaluated in TIRS**, not in ITRF. In
+/// TIRS, Earth's angular velocity is exactly along \\(\\hat z\\) by
+/// definition — the Earth rotation matrix \\(R\\) is a rotation about
+/// the CIO polar axis, and TIRS is defined such that that axis is its
+/// \\(\\hat z\\). Computing \\(\\vec{\\omega}_\\oplus \\times \\vec{r}\\)
+/// in ITRF would introduce a polar-motion-sized error (~0.3 arcsec,
+/// hence ~11 mm/s at LEO velocities). Computing it in GCRF would be
+/// wildly inaccurate because Earth's rotation axis drifts from GCRF
+/// \\(+\\hat z\\) by the accumulated precession angle (tens of degrees
+/// over a century).
+///
+/// # Implementation
+///
+/// 1. Apply polar motion to get the state in TIRS:
+///    \\(\\vec{r}_\\mathrm{tirs} = W\\,\\vec{r}_\\mathrm{itrf}\\),
+///    \\(\\vec{v}_\\mathrm{tirs} = W\\,\\vec{v}_\\mathrm{itrf}\\).
+/// 2. Add the Earth-rotation sweep in TIRS:
+///    \\(\\vec{v}_\\mathrm{tirs}^\\mathrm{swept} = \\vec{v}_\\mathrm{tirs}
+///       + \\vec{\\omega}_\\oplus \\times \\vec{r}_\\mathrm{tirs}\\)
+///    with \\(\\vec{\\omega}_\\oplus = (0, 0, \\omega_\\oplus)\\) exactly.
+/// 3. Rotate TIRS → CIRS → GCRF via the full IAU 2010 chain.
+///
+/// Uses the full IAU 2010 reduction (polar motion + Earth rotation +
+/// precession-nutation with dX/dY corrections from EOP). This is
+/// computationally expensive by comparison with the approximate
+/// [`qitrf2gcrf_approx`]; if you need speed over correctness, roll your
+/// own using the quaternion helpers.
+///
+/// # Arguments
+///
+/// * `pos_itrf` - Position in ITRF [m]
+/// * `vel_itrf` - Velocity as observed in ITRF [m/s]. For a point at rest
+///   on Earth, this is zero.
+/// * `time` - Epoch of the state
+///
+/// # Returns
+///
+/// `(pos_gcrf, vel_gcrf)` — the state expressed in GCRF.
+pub fn itrf_to_gcrf_state<T: TimeLike>(
+    pos_itrf: &Vector3,
+    vel_itrf: &Vector3,
+    time: &T,
+) -> (Vector3, Vector3) {
+    // Pull EOP once so both polar motion and the CIRS→GCRF dX/dY
+    // correction stay consistent.
+    let eop = crate::earth_orientation_params::get(time).unwrap_or([0.0; 6]);
+
+    // ITRF → TIRS via polar motion. Same construction as the inline
+    // `w` in `qitrf2gcrf` to avoid a second EOP lookup.
+    let q_itrf_to_tirs = {
+        const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
+        let xp = eop[1] * ASEC2RAD;
+        let yp = eop[2] * ASEC2RAD;
+        let t_tt = (time.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
+        let sp = -47.0e-6 * ASEC2RAD * t_tt;
+        Quaternion::rotz(sp) * Quaternion::roty(-xp) * Quaternion::rotx(-yp)
+    };
+
+    // Rotate state into TIRS.
+    let pos_tirs = q_itrf_to_tirs * *pos_itrf;
+    let vel_tirs = q_itrf_to_tirs * *vel_itrf;
+
+    // Add the Earth-rotation sweep term in TIRS, where ω⊕ is exactly
+    // along +z (the CIO polar axis).
+    let omega_tirs: Vector3 = numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
+    let vel_tirs_swept = vel_tirs + omega_tirs.cross(&pos_tirs);
+
+    // TIRS → CIRS → GCRF via the full IAU 2010 chain.
+    let q_tirs_to_gcrf =
+        qcirs2gcrs_dxdy(time, Some((eop[4], eop[5]))) * qtirs2cirs(time);
+
+    let pos_gcrf = q_tirs_to_gcrf * pos_tirs;
+    let vel_gcrf = q_tirs_to_gcrf * vel_tirs_swept;
+
+    (pos_gcrf, vel_gcrf)
+}
+
+/// Transform a satellite state (position and velocity) from GCRF
+/// (inertial) to ITRF (Earth-fixed, rotating) at a given time.
+///
+/// Inverse of [`itrf_to_gcrf_state`]. See that function for the full
+/// mathematical derivation. As for the forward transform, the
+/// Earth-rotation sweep term \\(\\vec{\\omega}_\\oplus \\times \\vec{r}\\)
+/// is computed in **TIRS** (where ω⊕ is exactly along \\(+\\hat z\\)),
+/// not in ITRF or GCRF. Uses the full IAU 2010 reduction.
+///
+/// # Arguments
+///
+/// * `pos_gcrf` - Position in GCRF [m]
+/// * `vel_gcrf` - Velocity in GCRF [m/s]
+/// * `time` - Epoch of the state
+///
+/// # Returns
+///
+/// `(pos_itrf, vel_itrf)` — the state expressed in ITRF, with
+/// `vel_itrf` being the velocity as observed from ITRF.
+pub fn gcrf_to_itrf_state<T: TimeLike>(
+    pos_gcrf: &Vector3,
+    vel_gcrf: &Vector3,
+    time: &T,
+) -> (Vector3, Vector3) {
+    let eop = crate::earth_orientation_params::get(time).unwrap_or([0.0; 6]);
+
+    // GCRF → CIRS → TIRS (inverse of the forward chain above).
+    let q_gcrf_to_tirs =
+        (qcirs2gcrs_dxdy(time, Some((eop[4], eop[5]))) * qtirs2cirs(time)).conjugate();
+
+    // Rotate state into TIRS.
+    let pos_tirs = q_gcrf_to_tirs * *pos_gcrf;
+    let vel_tirs_swept = q_gcrf_to_tirs * *vel_gcrf;
+
+    // Remove the Earth-rotation sweep term in TIRS (same frame where we
+    // added it in the forward transform).
+    let omega_tirs: Vector3 = numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
+    let vel_tirs = vel_tirs_swept - omega_tirs.cross(&pos_tirs);
+
+    // TIRS → ITRF via inverse polar motion.
+    let q_tirs_to_itrf = {
+        const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
+        let xp = eop[1] * ASEC2RAD;
+        let yp = eop[2] * ASEC2RAD;
+        let t_tt = (time.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
+        let sp = -47.0e-6 * ASEC2RAD * t_tt;
+        (Quaternion::rotz(sp) * Quaternion::roty(-xp) * Quaternion::rotx(-yp)).conjugate()
+    };
+
+    let pos_itrf = q_tirs_to_itrf * pos_tirs;
+    let vel_itrf = q_tirs_to_itrf * vel_tirs;
+
+    (pos_itrf, vel_itrf)
+}
+
+/// Unified rotation builder: return the DCM that transforms a 3-vector
+/// from `frame` into GCRF at the current state.
+///
+/// This is the general-purpose dispatch for satellite-local orbital
+/// frames. For arbitrary frame-to-frame rotations, compose with
+/// [`from_gcrf`]:
+///
+/// ```ignore
+/// // NTW -> RIC
+/// let dcm = from_gcrf(Frame::RTN, &pos, &vel)? * to_gcrf(Frame::NTW, &pos, &vel)?;
+/// ```
+///
+/// # Supported frames
+///
+/// * [`Frame::GCRF`] — returns the 3×3 identity (trivial case)
+/// * [`Frame::LVLH`] — dispatches to [`lvlh_to_gcrf`]
+/// * [`Frame::RTN`] (a.k.a. RSW, RIC) — dispatches to [`rtn_to_gcrf`]
+/// * [`Frame::NTW`] — dispatches to [`ntw_to_gcrf`]
+///
+/// # Errors
+///
+/// Returns an error for frames that are not satellite-local orbital
+/// frames (ITRF, TIRS, CIRS, TEME, EME2000, ICRF). Those frames require
+/// a time argument for their rotation to GCRF and are handled by the
+/// dedicated quaternion helpers ([`qteme2gcrf`], [`qitrf2gcrf`], etc.).
+pub fn to_gcrf(
+    frame: crate::Frame,
+    pos_gcrf: &Vector3,
+    vel_gcrf: &Vector3,
+) -> anyhow::Result<Matrix3> {
+    use crate::Frame;
+    match frame {
+        Frame::GCRF => Ok(Matrix3::eye()),
+        Frame::LVLH => Ok(lvlh_to_gcrf(pos_gcrf, vel_gcrf)),
+        Frame::RTN => Ok(rtn_to_gcrf(pos_gcrf, vel_gcrf)),
+        Frame::NTW => Ok(ntw_to_gcrf(pos_gcrf, vel_gcrf)),
+        Frame::ITRF
+        | Frame::TIRS
+        | Frame::CIRS
+        | Frame::TEME
+        | Frame::EME2000
+        | Frame::ICRF => anyhow::bail!(
+            "to_gcrf: frame {} is not a satellite-local orbital frame; use the \
+             time-based quaternion helpers (qitrf2gcrf, qteme2gcrf, etc.) instead",
+            frame
+        ),
+    }
+}
+
+/// Unified rotation builder: return the DCM that transforms a 3-vector
+/// from GCRF into `frame` at the current state.
+///
+/// Transpose of [`to_gcrf`]. See that function's doc for supported
+/// frames and error conditions.
+pub fn from_gcrf(
+    frame: crate::Frame,
+    pos_gcrf: &Vector3,
+    vel_gcrf: &Vector3,
+) -> anyhow::Result<Matrix3> {
+    Ok(to_gcrf(frame, pos_gcrf, vel_gcrf)?.transpose())
 }
 
 #[cfg(test)]
@@ -601,5 +941,149 @@ mod tests {
         assert!((pgcrf[0] - 5102.508959).abs() < 1e-3);
         assert!((pgcrf[1] - 6123.011403).abs() < 1e-3);
         assert!((pgcrf[2] - 6378.136925).abs() < 1e-3);
+    }
+
+    /// Vallado Example 3-14 (4th ed.) full state transform in a single
+    /// call. The existing [`test_gcrs2itrf`] test verifies the *position*
+    /// component by stepping through ITRF → TIRS → CIRS → GCRF; this
+    /// test adds the velocity component and uses [`itrf_to_gcrf_state`]
+    /// as a single high-level entry point.
+    #[test]
+    fn test_vallado_3_14_state_single_call() {
+        let tm = Instant::from_datetime(2004, 4, 6, 7, 51, 28.386009).unwrap();
+        // Vallado 3-14 input state (km, km/s — scale to SI below).
+        let pos_itrf_km: Vector3 =
+            numeris::vector![-1033.4793830, 7901.2952754, 6380.3565958];
+        let vel_itrf_kms: Vector3 =
+            numeris::vector![-3.225636520, -2.872451450, 5.531924446];
+        let pos_itrf = pos_itrf_km * 1.0e3;
+        let vel_itrf = vel_itrf_kms * 1.0e3;
+
+        // Single-call state transform.
+        let (pos_gcrf, vel_gcrf) = itrf_to_gcrf_state(&pos_itrf, &vel_itrf, &tm);
+
+        // Expected GCRF state from Vallado Example 3-14 (SI units).
+        // Position agrees with the existing test_gcrs2itrf case.
+        let pos_gcrf_km = pos_gcrf / 1.0e3;
+        let vel_gcrf_kms = vel_gcrf / 1.0e3;
+
+        assert!((pos_gcrf_km[0] - 5102.508959).abs() < 1.0e-3);
+        assert!((pos_gcrf_km[1] - 6123.011403).abs() < 1.0e-3);
+        assert!((pos_gcrf_km[2] - 6378.136925).abs() < 1.0e-3);
+
+        // Velocity: Vallado 3-14 expected values (km/s). Satkit matches
+        // to sub-mm/s.
+        assert!(
+            (vel_gcrf_kms[0] - (-4.7432196)).abs() < 1.0e-6,
+            "v_x = {}", vel_gcrf_kms[0]
+        );
+        assert!(
+            (vel_gcrf_kms[1] - 0.7905366).abs() < 1.0e-6,
+            "v_y = {}", vel_gcrf_kms[1]
+        );
+        assert!(
+            (vel_gcrf_kms[2] - 5.5337561).abs() < 1.0e-6,
+            "v_z = {}", vel_gcrf_kms[2]
+        );
+
+        // Round-trip: GCRF → ITRF → GCRF recovers the original to
+        // well under a millimeter / nanometer per second.
+        let (pos_back, vel_back) = gcrf_to_itrf_state(&pos_gcrf, &vel_gcrf, &tm);
+        let pos_err = (pos_back - pos_itrf).norm();
+        let vel_err = (vel_back - vel_itrf).norm();
+        assert!(pos_err < 1.0e-6, "pos round-trip err = {} m", pos_err);
+        assert!(vel_err < 1.0e-9, "vel round-trip err = {} m/s", vel_err);
+    }
+
+    /// Round-trip: GCRF → ITRF → GCRF should recover the original state
+    /// to floating-point precision.
+    #[test]
+    fn test_itrf_gcrf_state_roundtrip() {
+        let t = crate::Instant::from_datetime(2024, 3, 15, 12, 34, 56.0).unwrap();
+        // A typical LEO state in GCRF
+        let pos_gcrf: Vector3 = numeris::vector![6.878e6, 1.23e5, -4.56e5];
+        let vel_gcrf: Vector3 = numeris::vector![-123.4, 7600.0, 89.0];
+
+        let (pos_itrf, vel_itrf) = gcrf_to_itrf_state(&pos_gcrf, &vel_gcrf, &t);
+        let (pos_back, vel_back) = itrf_to_gcrf_state(&pos_itrf, &vel_itrf, &t);
+
+        let pos_err = (pos_gcrf - pos_back).norm();
+        let vel_err = (vel_gcrf - vel_back).norm();
+        assert!(pos_err < 1.0e-6, "position round-trip error = {} m", pos_err);
+        assert!(vel_err < 1.0e-9, "velocity round-trip error = {} m/s", vel_err);
+    }
+
+    /// Geostationary sanity check: a satellite that is stationary in ITRF
+    /// (parked over a fixed longitude on the equator) should have a GCRF
+    /// velocity equal to the Earth-rotation sweep speed ω⊕·r. For a GEO
+    /// orbit at ~42,164 km this is ~3074.7 m/s, which also happens to
+    /// equal the GEO orbital speed (that's the whole point of GEO).
+    #[test]
+    fn test_itrf_gcrf_state_geo() {
+        let t = crate::Instant::from_datetime(2024, 6, 1, 0, 0, 0.0).unwrap();
+        let geo_r: f64 = 42_164.17e3; // m
+        // Parked on equator at 0° longitude in ITRF, stationary
+        let pos_itrf: Vector3 = numeris::vector![geo_r, 0.0, 0.0];
+        let vel_itrf: Vector3 = numeris::vector![0.0, 0.0, 0.0];
+
+        let (pos_gcrf, vel_gcrf) = itrf_to_gcrf_state(&pos_itrf, &vel_itrf, &t);
+
+        // Position magnitude preserved
+        assert!((pos_gcrf.norm() - geo_r).abs() < 1.0e-6);
+
+        // Velocity magnitude = ω⊕ · r
+        let v_expected = crate::consts::OMEGA_EARTH * geo_r;
+        let v_mag = vel_gcrf.norm();
+        assert!(
+            (v_mag - v_expected).abs() < 1.0e-3,
+            "GEO sweep speed {} m/s, expected {} m/s",
+            v_mag,
+            v_expected
+        );
+
+        // Velocity is perpendicular to position (pure tangential circular motion)
+        let dot = pos_gcrf.dot(&vel_gcrf);
+        assert!(dot.abs() / (pos_gcrf.norm() * vel_gcrf.norm()) < 1.0e-10);
+    }
+
+    /// Naive-vs-correct comparison: for a LEO state, rotating velocity via
+    /// the raw quaternion (ignoring the Coriolis term) differs from the
+    /// correct state transform by ~|ω⊕ × r| ≈ 470 m/s. This is the
+    /// deliberate-misuse test that demonstrates why `itrf_to_gcrf_state`
+    /// exists.
+    #[test]
+    fn test_naive_itrf_rotation_is_wrong_by_470mps() {
+        let t = crate::Instant::from_datetime(2024, 1, 1, 0, 0, 0.0).unwrap();
+        // LEO position in ITRF, at rest (on Earth surface near equator)
+        let earth_r = crate::consts::EARTH_RADIUS + 500.0e3;
+        let pos_itrf: Vector3 = numeris::vector![earth_r, 0.0, 0.0];
+        let vel_itrf_zero: Vector3 = numeris::vector![0.0, 0.0, 0.0];
+
+        // Correct state transform
+        let (_pos_gcrf, vel_gcrf_correct) =
+            itrf_to_gcrf_state(&pos_itrf, &vel_itrf_zero, &t);
+
+        // Naive transform: just rotate the (zero) velocity with the quaternion
+        let q = qitrf2gcrf_approx(&t);
+        let vel_gcrf_naive = q * vel_itrf_zero;
+        assert!(vel_gcrf_naive.norm() < 1.0e-12, "naive zero stays zero");
+
+        // Difference between correct and naive:
+        // |v_correct - v_naive| ≈ |ω⊕ × r| = ω⊕ · r_equatorial
+        let expected_sweep = crate::consts::OMEGA_EARTH * earth_r;
+        let diff = (vel_gcrf_correct - vel_gcrf_naive).norm();
+        let rel_err = (diff - expected_sweep).abs() / expected_sweep;
+        assert!(
+            rel_err < 1.0e-6,
+            "naive-vs-correct velocity gap = {} m/s, expected {} m/s",
+            diff,
+            expected_sweep
+        );
+        // Sanity: for a 500 km equatorial state, this should be ~501 m/s
+        assert!(
+            (diff - 501.4).abs() < 1.0,
+            "expected ~501 m/s Earth-rotation sweep at 500km equatorial, got {}",
+            diff
+        );
     }
 }

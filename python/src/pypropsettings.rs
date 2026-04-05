@@ -23,6 +23,10 @@ pub enum PyIntegrator {
     rkts54 = 4,
     /// RODAS4 — L-stable Rosenbrock 4(3), 6 stages. For stiff problems.
     rodas4 = 5,
+    /// Gauss-Jackson 8 — 8th-order fixed-step multistep predictor-corrector
+    /// for high-precision orbit propagation. Requires setting
+    /// `gj_step_seconds` on the propsettings. No STM or dense output support.
+    gauss_jackson8 = 6,
 }
 
 impl From<PyIntegrator> for Integrator {
@@ -34,6 +38,7 @@ impl From<PyIntegrator> for Integrator {
             PyIntegrator::rkv65 => Integrator::RKV65,
             PyIntegrator::rkts54 => Integrator::RKTS54,
             PyIntegrator::rodas4 => Integrator::RODAS4,
+            PyIntegrator::gauss_jackson8 => Integrator::GaussJackson8,
         }
     }
 }
@@ -47,6 +52,7 @@ impl From<Integrator> for PyIntegrator {
             Integrator::RKV65 => PyIntegrator::rkv65,
             Integrator::RKTS54 => PyIntegrator::rkts54,
             Integrator::RODAS4 => PyIntegrator::rodas4,
+            Integrator::GaussJackson8 => PyIntegrator::gauss_jackson8,
         }
     }
 }
@@ -99,7 +105,7 @@ impl PyPropSettings {
             if let Some(gm) = kw.get_item("gravity_model")? {
                 let model: GravModel = gm.extract::<GravModel>()
                     .map_err(|_| pyo3::exceptions::PyValueError::new_err(
-                        "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.jgm3)"
+                        "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.egm96)"
                     ))?;
                 ps.gravity_model = model.into();
                 kw.del_item("gravity_model")?;
@@ -111,6 +117,14 @@ impl PyPropSettings {
                     ))?;
                 ps.integrator = integrator.into();
                 kw.del_item("integrator")?;
+            }
+            if let Some(gjstep) = kw.get_item("gj_step_seconds")? {
+                ps.gj_step_seconds = gjstep.extract::<f64>()?;
+                kw.del_item("gj_step_seconds")?;
+            }
+            if let Some(maxsteps) = kw.get_item("max_steps")? {
+                ps.max_steps = maxsteps.extract::<usize>()?;
+                kw.del_item("max_steps")?;
             }
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
@@ -251,6 +265,28 @@ impl PyPropSettings {
     #[setter(integrator)]
     fn set_integrator(&mut self, val: PyIntegrator) -> PyResult<()> {
         self.0.integrator = val.into();
+        Ok(())
+    }
+
+    #[getter]
+    fn get_gj_step_seconds(&self) -> f64 {
+        self.0.gj_step_seconds
+    }
+
+    #[setter(gj_step_seconds)]
+    fn set_gj_step_seconds(&mut self, val: f64) -> PyResult<()> {
+        self.0.gj_step_seconds = val;
+        Ok(())
+    }
+
+    #[getter]
+    fn get_max_steps(&self) -> usize {
+        self.0.max_steps
+    }
+
+    #[setter(max_steps)]
+    fn set_max_steps(&mut self, val: usize) -> PyResult<()> {
+        self.0.max_steps = val;
         Ok(())
     }
 
