@@ -158,7 +158,7 @@ class TestGravity:
         itrf = sk.itrfcoord(
             latitude_deg=latitude_deg, longitude_deg=longitude_deg, altitude=altitude
         )
-        gravitation = sk.gravity(itrf, degree=16)
+        gravitation = sk.gravity(itrf, degree=16, model=sk.gravmodel.jgm3)
         # Add centrifugal force @ Earth surface
         centrifugal = (
             np.array([itrf.vector[0], itrf.vector[1], 0]) * sk.consts.omega_earth**2

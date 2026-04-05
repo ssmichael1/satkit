@@ -90,8 +90,8 @@ nav:
       - Foundations:
           - Time Systems: tutorials/Time Systems.ipynb
           - Quaternions: tutorials/Quaternions.ipynb
-          - ITRF Coordinates: tutorials/ITRF Coordinates.ipynb
-          - Coordinate Frame Transforms: tutorials/Coordinate Frame Transforms.ipynb
+          - Coordinate Frames: tutorials/Coordinate Frames.ipynb
+          - Geodetic Coordinates: tutorials/Geodetic Coordinates.ipynb
           - Keplerian Elements: tutorials/Keplerian Elements.ipynb
       - Orbit Propagation:
           - "Theory: Force Models & Propagation": guide/satprop.md

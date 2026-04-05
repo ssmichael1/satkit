@@ -11,10 +11,12 @@ window.MathJax = {
     processEscapes: true,
     processEnvironments: true,
   },
-  options: {
-    ignoreHtmlClass: ".*|",
-    processHtmlClass: "arithmatex",
-  },
+  // Process the entire page. The previous `ignoreHtmlClass: ".*|"` +
+  // `processHtmlClass: "arithmatex"` restriction caused MathJax to skip
+  // mkdocs-jupyter notebook HTML entirely, since mkdocs-jupyter does not
+  // wrap notebook-cell math in a `.arithmatex` span. pymdownx.arithmatex
+  // (generic mode) still emits raw delimiters inside `span.arithmatex`,
+  // which MathJax picks up with default scanning.
 };
 
 // Re-typeset MathJax after MkDocs Material instant navigation
