@@ -132,7 +132,7 @@ use numeris::ode::OdeError;
 // corresponds to the most-recent acceleration in the 9-point stencil.
 
 const B_COEFFS: [[f64; 9]; 10] = [
-    [-2.869_754_464_285_714_2e-01,
+    [-2.869_754_464_285_714e-1,
      -5.890_197_861_552_028e-01,
      9.640_148_258_377_425e-01,
      -1.240_890_376_984_127e+00,
@@ -156,11 +156,11 @@ const B_COEFFS: [[f64; 9]; 10] = [
      -1.819_133_046_737_213_3e-01,
      1.165_784_832_451_499_1e-01,
      -6.196_676_587_301_587_5e-02,
-     2.312_803_130_511_463_9e-02,
+     2.312_803_130_511_464e-2,
      -5.265_928_130_511_464e-03,
-     5.468_750_000_000_000_5e-04], // j = -2
-    [5.468_750_000_000_000_5e-04,
-     -6.385_857_583_774_250_3e-03,
+     5.468_75e-4], // j = -2
+    [5.468_75e-4,
+     -6.385_857_583_774_25e-3,
      4.075_589_726_631_393_5e-02,
      -4.566_493_055_555_555_5e-01,
      -1.130_070_546_737_213_4e-01,
@@ -172,7 +172,7 @@ const B_COEFFS: [[f64; 9]; 10] = [
      3.643_353_174_603_174_6e-03,
      -1.877_177_028_218_694_8e-02,
      6.965_636_022_927_689e-02,
-     -5.000_000_000_000_000e-01,
+     -5e-1,
      -6.965_636_022_927_689e-02,
      1.877_177_028_218_694_8e-02,
      -3.643_353_174_603_174_6e-03,
@@ -182,17 +182,17 @@ const B_COEFFS: [[f64; 9]; 10] = [
      1.602_926_587_301_587_2e-02,
      -4.767_223_324_514_991e-02,
      1.130_070_546_737_213_4e-01,
-     -5.433_506_944_444_443_9e-01,
+     -5.433_506_944_444_444e-1,
      -4.075_589_726_631_393_5e-02,
-     6.385_857_583_774_250_3e-03,
-     -5.468_750_000_000_000_5e-04], // j =  1
-    [-5.468_750_000_000_000_5e-04,
+     6.385_857_583_774_25e-3,
+     -5.468_75e-4], // j =  1
+    [-5.468_75e-4,
      5.265_928_130_511_464e-03,
-     -2.312_803_130_511_463_9e-02,
+     -2.312_803_130_511_464e-2,
      6.196_676_587_301_587_5e-02,
      -1.165_784_832_451_499_1e-01,
      1.819_133_046_737_213_3e-01,
-     -5.892_881_944_444_444_7e-01,
+     -5.892_881_944_444_445e-1,
      -2.106_839_726_631_393_2e-02,
      1.463_982_583_774_250_5e-03], // j =  2
     [1.463_982_583_774_250_5e-03,
@@ -213,7 +213,7 @@ const B_COEFFS: [[f64; 9]; 10] = [
      -9.640_148_258_377_425e-01,
      5.890_197_861_552_028e-01,
      -7.130_245_535_714_286e-01], // j =  4
-    [2.869_754_464_285_714_2e-01,
+    [2.869_754_464_285_714e-1,
      -2.590_671_571_869_488_6e+00,
      1.040_361_304_012_345_6e+01,
      -2.440_379_216_269_841_2e+01,
@@ -228,10 +228,10 @@ const A_COEFFS: [[f64; 9]; 10] = [
     [6.107_264_986_171_236e-02,
      1.004_385_872_615_039_2e-01,
      -2.179_954_555_475_388_8e-01,
-     3.026_027_386_964_886_8e-01,
+     3.026_027_386_964_887e-1,
      -2.871_720_052_709_636e-01,
      1.846_507_986_612_153_4e-01,
-     -7.709_378_006_253_006_5e-02,
+     -7.709_378_006_253_007e-2,
      1.889_758_197_049_863_6e-02,
      -2.067_782_237_053_070_5e-03], // j = -4
     [-2.067_782_237_053_070_5e-03,
@@ -299,16 +299,16 @@ const A_COEFFS: [[f64; 9]; 10] = [
      -2.067_782_237_053_070_5e-03], // j =  3
     [-2.067_782_237_053_070_5e-03,
      1.889_758_197_049_863_6e-02,
-     -7.709_378_006_253_006_5e-02,
+     -7.709_378_006_253_007e-2,
      1.846_507_986_612_153_4e-01,
      -2.871_720_052_709_636e-01,
-     3.026_027_386_964_886_8e-01,
+     3.026_027_386_964_887e-1,
      -2.179_954_555_475_388_8e-01,
      1.004_385_872_615_039_2e-01,
      6.107_264_986_171_236e-02], // j =  4
     [6.107_264_986_171_236e-02,
      -5.517_216_309_924_643e-01,
-     2.217_512_976_992_143_8e+00,
+     2.217_512_976_992_144,
      -5.207_196_368_446_368e+00,
      7.879_804_681_236_973e+00,
      -7.982_325_887_846_721e+00,
@@ -567,7 +567,7 @@ impl GaussJackson8 {
                 for k in 0..9 {
                     let bk = T::from(B_COEFFS[4][k]).unwrap();
                     if bk != zero {
-                        acc = acc + a[k] * bk;
+                        acc += a[k] * bk;
                     }
                 }
                 v[4] / h - acc
@@ -578,7 +578,7 @@ impl GaussJackson8 {
                 for k in 0..9 {
                     let ak = T::from(A_COEFFS[4][k]).unwrap();
                     if ak != zero {
-                        acc = acc + a[k] * ak;
+                        acc += a[k] * ak;
                     }
                 }
                 r[4] / (h * h) - acc
@@ -622,8 +622,8 @@ impl GaussJackson8 {
                 for k in 0..9 {
                     let bk = T::from(row_b[k]).unwrap();
                     let ak = T::from(row_a[k]).unwrap();
-                    sum_b = sum_b + a[k] * bk;
-                    sum_a = sum_a + a[k] * ak;
+                    sum_b += a[k] * bk;
+                    sum_a += a[k] * ak;
                 }
                 v[i] = (s[i] + sum_b) * h;
                 r[i] = (big_s[i] + sum_a) * (h * h);
@@ -690,7 +690,7 @@ impl GaussJackson8 {
             for k in 0..9 {
                 let bk = T::from(B_COEFFS[4][k]).unwrap();
                 if bk != zero {
-                    acc = acc + a[k] * bk;
+                    acc += a[k] * bk;
                 }
             }
             v[4] / h - acc
@@ -700,7 +700,7 @@ impl GaussJackson8 {
             for k in 0..9 {
                 let ak = T::from(A_COEFFS[4][k]).unwrap();
                 if ak != zero {
-                    acc = acc + a[k] * ak;
+                    acc += a[k] * ak;
                 }
             }
             r[4] / (h * h) - acc
@@ -710,8 +710,8 @@ impl GaussJackson8 {
         //   s[i+1]     = s[i] + a[i+1]
         // Update big_s first since it uses the OLD s.
         for i in 4..8 {
-            big_s_cur = big_s_cur + s_cur;
-            s_cur = s_cur + a[i + 1];
+            big_s_cur += s_cur;
+            s_cur += a[i + 1];
         }
 
         // Initialise dense-output storage with the 5 forward startup samples
@@ -795,8 +795,8 @@ impl GaussJackson8 {
             for k in 0..9 {
                 let bk = T::from(B_COEFFS[9][k]).unwrap();
                 let ak_coef = T::from(A_COEFFS[9][k]).unwrap();
-                sum_b_pred = sum_b_pred + a[k] * bk;
-                sum_a_pred = sum_a_pred + a[k] * ak_coef;
+                sum_b_pred += a[k] * bk;
+                sum_a_pred += a[k] * ak_coef;
             }
             let big_s_new = big_s_cur + s_cur;
             let mut r_new = (big_s_new + sum_a_pred) * (h * h);
@@ -822,8 +822,8 @@ impl GaussJackson8 {
                 // post-slide window index k corresponds to pre-slide index k+1
                 let bk = T::from(B_COEFFS[8][k]).unwrap();
                 let ak_coef = T::from(A_COEFFS[8][k]).unwrap();
-                sum_b_corr_fixed = sum_b_corr_fixed + a[k + 1] * bk;
-                sum_a_corr_fixed = sum_a_corr_fixed + a[k + 1] * ak_coef;
+                sum_b_corr_fixed += a[k + 1] * bk;
+                sum_a_corr_fixed += a[k + 1] * ak_coef;
             }
             let b8 = T::from(B_COEFFS[8][8]).unwrap();
             let a8 = T::from(A_COEFFS[8][8]).unwrap();
@@ -875,7 +875,7 @@ impl GaussJackson8 {
             // point. New-convention: s_new = s_old + a_new, big_s_new was
             // already computed as big_s_old + s_old. After slide, the new
             // latest a_new is at a[8]. (a[7] was the old a[8].)
-            s_cur = s_cur + a[8];
+            s_cur += a[8];
             big_s_cur = big_s_new;
 
             t_current = t_new;
@@ -951,6 +951,7 @@ impl GaussJackson8 {
 
     /// Interpolate at multiple points in one pass. `t_interps` must be sorted
     /// in the same direction as the integration.
+    #[allow(clippy::type_complexity)] // `Vec<(r, v)>` return is self-explanatory
     pub fn interpolate_batch<T: FloatScalar, const D: usize>(
         t_interps: &[T],
         sol: &GJSolution<T, D>,
@@ -1008,6 +1009,7 @@ impl GaussJackson8 {
 /// Matches six constraints (position, velocity, and acceleration at each
 /// endpoint), producing a unique degree-5 polynomial. The interpolation is
 /// 5th-order accurate in the step size.
+#[allow(clippy::too_many_arguments)] // (t, r, v, a) at both endpoints + t_query; a helper struct would only obscure this
 fn quintic_hermite<T, const D: usize>(
     t_a: T, r_a: &Vector<T, D>, v_a: &Vector<T, D>, acc_a: &Vector<T, D>,
     t_b: T, r_b: &Vector<T, D>, v_b: &Vector<T, D>, acc_b: &Vector<T, D>,

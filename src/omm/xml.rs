@@ -200,7 +200,7 @@ impl TryFrom<OmmXmlMessage> for OMM {
                 (None, None, None, None, None)
             };
 
-        Ok(OMM {
+        Ok(Self {
             omm_version: xml.version,
             comments: None,
             originator: xml.header.and_then(|h| h.originator),
@@ -306,16 +306,16 @@ impl OMM {
     /// # Errors
     ///
     /// Returns an error if XML parsing fails or if required OMM fields are missing/invalid.
-    pub fn from_xml_string(s: &str) -> Result<Vec<OMM>> {
+    pub fn from_xml_string(s: &str) -> Result<Vec<Self>> {
         if s.contains("<ndm") {
             let root: OmmXmlRoot = quick_xml::de::from_str(s).map_err(|e| anyhow::anyhow!(e))?;
             root.omms
                 .into_iter()
-                .map(OMM::try_from)
+                .map(Self::try_from)
                 .collect::<Result<Vec<_>>>()
         } else {
             let msg: OmmXmlMessage = quick_xml::de::from_str(s).map_err(|e| anyhow::anyhow!(e))?;
-            Ok(vec![OMM::try_from(msg)?])
+            Ok(vec![Self::try_from(msg)?])
         }
     }
 
@@ -327,7 +327,7 @@ impl OMM {
     ///
     /// Returns an error if the file cannot be read, XML parsing fails, or required
     /// OMM fields are missing/invalid.
-    pub fn from_xml_file<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<OMM>> {
+    pub fn from_xml_file<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Self>> {
         let s = std::fs::read_to_string(path).map_err(|e| anyhow::anyhow!(e))?;
         Self::from_xml_string(&s)
     }

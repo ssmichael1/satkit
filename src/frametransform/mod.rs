@@ -653,13 +653,8 @@ pub fn gcrf_to_lvlh(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
 ///
 /// # Implementation
 ///
-/// 1. Apply polar motion to get the state in TIRS:
-///    \\(\\vec{r}_\\mathrm{tirs} = W\\,\\vec{r}_\\mathrm{itrf}\\),
-///    \\(\\vec{v}_\\mathrm{tirs} = W\\,\\vec{v}_\\mathrm{itrf}\\).
-/// 2. Add the Earth-rotation sweep in TIRS:
-///    \\(\\vec{v}_\\mathrm{tirs}^\\mathrm{swept} = \\vec{v}_\\mathrm{tirs}
-///       + \\vec{\\omega}_\\oplus \\times \\vec{r}_\\mathrm{tirs}\\)
-///    with \\(\\vec{\\omega}_\\oplus = (0, 0, \\omega_\\oplus)\\) exactly.
+/// 1. Apply polar motion to get the state in TIRS: `r_tirs = W r_itrf`, `v_tirs = W v_itrf`.
+/// 2. Add the Earth-rotation sweep in TIRS: `v_tirs += omega_earth x r_tirs`, with `omega_earth = (0, 0, omega_e)` exactly.
 /// 3. Rotate TIRS → CIRS → GCRF via the full IAU 2010 chain.
 ///
 /// Uses the full IAU 2010 reduction (polar motion + Earth rotation +

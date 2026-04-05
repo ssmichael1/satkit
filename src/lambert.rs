@@ -187,6 +187,7 @@ pub fn lambert(
 // ---------------------------------------------------------------------------
 
 /// Reconstruct departure and arrival velocities from the solution parameter x.
+#[allow(clippy::too_many_arguments)] // matches the Izzo (2015) reference formulation
 fn build_velocity(
     ir1: &Vector3,
     ir2: &Vector3,

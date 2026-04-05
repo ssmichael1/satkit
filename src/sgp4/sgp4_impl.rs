@@ -75,7 +75,7 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// # Arguments
 ///
 /// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
-///    orbital mean-elements message (OMM) or other source implementing the
+///   orbital mean-elements message (OMM) or other source implementing the
 ///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
 ///   in the source object after first call to avoid re-initialization on subsequent calls
 /// * `tm` -  The time at which to compute position and velocity
@@ -146,7 +146,7 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> anyhow::
 /// # Arguments
 ///
 /// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
-///    orbital mean-elements message (OMM) or other source implementing the
+///   orbital mean-elements message (OMM) or other source implementing the
 ///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
 ///   in the source object after first call to avoid re-initialization on subsequent calls.
 /// * `tm` -  The time at which to compute position and velocity

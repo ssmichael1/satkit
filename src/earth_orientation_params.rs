@@ -40,14 +40,11 @@ struct EOPEntry {
 }
 
 fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
-    let path: PathBuf = filename.map_or_else(
-        || {
+    let path: PathBuf = filename.unwrap_or_else(|| {
             datadir()
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .join("EOP-All.csv")
-        },
-        |pb| pb,
-    );
+        });
     // Download EOP data from celetrak.org
     download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
 
@@ -77,14 +74,11 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
 
 #[allow(dead_code)]
 fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
-    let path: PathBuf = filename.map_or_else(
-        || {
+    let path: PathBuf = filename.unwrap_or_else(|| {
             datadir()
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .join("finals2000A.all")
-        },
-        |pb| pb,
-    );
+        });
 
     if !path.is_file() {
         bail!(

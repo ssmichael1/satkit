@@ -8,8 +8,10 @@ use anyhow::Result;
 
 /// Choice of ODE integrator for orbit propagation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub enum Integrator {
     /// Verner 9(8) with 9th-order dense output, 26 stages (default)
+    #[default]
     RKV98,
     /// Verner 9(8) without interpolation, 16 stages
     RKV98NoInterp,
@@ -35,22 +37,17 @@ pub enum Integrator {
     GaussJackson8,
 }
 
-impl Default for Integrator {
-    fn default() -> Self {
-        Self::RKV98
-    }
-}
 
 impl std::fmt::Display for Integrator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Integrator::RKV98 => write!(f, "RKV98 (9th order, 26 stages)"),
-            Integrator::RKV98NoInterp => write!(f, "RKV98NoInterp (9th order, 16 stages)"),
-            Integrator::RKV87 => write!(f, "RKV87 (8th order, 21 stages)"),
-            Integrator::RKV65 => write!(f, "RKV65 (6th order, 10 stages)"),
-            Integrator::RKTS54 => write!(f, "RKTS54 (5th order, 7 stages, FSAL)"),
-            Integrator::RODAS4 => write!(f, "RODAS4 (4th order, 6 stages, L-stable)"),
-            Integrator::GaussJackson8 => write!(f, "Gauss-Jackson 8 (8th order, fixed-step multistep)"),
+            Self::RKV98 => write!(f, "RKV98 (9th order, 26 stages)"),
+            Self::RKV98NoInterp => write!(f, "RKV98NoInterp (9th order, 16 stages)"),
+            Self::RKV87 => write!(f, "RKV87 (8th order, 21 stages)"),
+            Self::RKV65 => write!(f, "RKV65 (6th order, 10 stages)"),
+            Self::RKTS54 => write!(f, "RKTS54 (5th order, 7 stages, FSAL)"),
+            Self::RODAS4 => write!(f, "RODAS4 (4th order, 6 stages, L-stable)"),
+            Self::GaussJackson8 => write!(f, "Gauss-Jackson 8 (8th order, fixed-step multistep)"),
         }
     }
 }
@@ -61,7 +58,7 @@ impl std::fmt::Display for Integrator {
 ///
 /// * `gravity_degree` - maximum degree of spherical harmonic gravity model.  Default is 4
 /// * `gravity_order` - maximum order of spherical harmonic gravity model.  Default is same as `gravity_degree`.
-///    Must be ≤ `gravity_degree`.
+///   Must be ≤ `gravity_degree`.
 /// * `gravity_model` - gravity model to use.  Default is EGM96.  Options: EGM96, JGM3, JGM2, ITUGrace16
 /// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
 /// * `rel_error` - the maximum relative error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
@@ -72,11 +69,11 @@ impl std::fmt::Display for Integrator {
 ///   slight computation savings if set to false
 /// * `integrator` - which Runge-Kutta integrator to use.  Default is RKV98
 /// * `max_steps` - maximum number of integrator steps before the propagator
-///    aborts with [`numeris::ode::OdeError::MaxStepsExceeded`] (adaptive
-///    solvers) or a Gauss-Jackson max-steps error. Default is 1_000_000,
-///    which covers very long propagation arcs (e.g., ~700 days of GJ8 at
-///    60 s step) with plenty of headroom. Lower if you want a tighter
-///    runaway-propagation safeguard.
+///   aborts with [`numeris::ode::OdeError::MaxStepsExceeded`] (adaptive
+///   solvers) or a Gauss-Jackson max-steps error. Default is 1_000_000,
+///   which covers very long propagation arcs (e.g., ~700 days of GJ8 at
+///   60 s step) with plenty of headroom. Lower if you want a tighter
+///   runaway-propagation safeguard.
 ///
 #[derive(Debug, Clone)]
 pub struct PropSettings {

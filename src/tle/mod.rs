@@ -664,7 +664,7 @@ impl TLE {
             // digit or a whitespace the standard `.parse()` can be used.
             Some(c) if c.is_ascii_digit() || c.is_whitespace() => match alpha5.trim().parse() {
                 Ok(i) => Ok(i),
-                Err(e) => bail!("Invalid sat num: {}", e.to_string()),
+                Err(e) => bail!("Invalid sat num: {}", e),
             },
             Some(c) if c.is_alphabetic() => {
                 match ALPHA5_MATCHING
@@ -673,7 +673,7 @@ impl TLE {
                 {
                     Some(p) => match alpha5[1..].parse::<i32>() {
                         Ok(i) => Ok((p as i32 + 10) * 10000 + i),
-                        Err(e) => bail!("Invalid sat num: {}", e.to_string()),
+                        Err(e) => bail!("Invalid sat num: {}", e),
                     },
                     None => bail!("Invalid first digit in sat num: {}", c),
                 }

@@ -28,10 +28,10 @@ pub enum GravityModel {
 impl std::fmt::Display for GravityModel {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            GravityModel::JGM3 => write!(f, "JGM3"),
-            GravityModel::JGM2 => write!(f, "JGM2"),
-            GravityModel::EGM96 => write!(f, "EGM96"),
-            GravityModel::ITUGrace16 => write!(f, "ITU_GRACE16"),
+            Self::JGM3 => write!(f, "JGM3"),
+            Self::JGM2 => write!(f, "JGM2"),
+            Self::EGM96 => write!(f, "EGM96"),
+            Self::ITUGrace16 => write!(f, "ITU_GRACE16"),
         }
     }
 }
@@ -40,10 +40,10 @@ impl GravityModel {
     /// Get the singleton Gravity instance for this model
     pub fn get(&self) -> &'static Gravity {
         match self {
-            GravityModel::JGM3 => jgm3(),
-            GravityModel::JGM2 => jgm2(),
-            GravityModel::EGM96 => egm96(),
-            GravityModel::ITUGrace16 => itu_grace16(),
+            Self::JGM3 => jgm3(),
+            Self::JGM2 => jgm2(),
+            Self::EGM96 => egm96(),
+            Self::ITUGrace16 => itu_grace16(),
         }
     }
 }
