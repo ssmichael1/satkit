@@ -41,10 +41,24 @@
 - **Covariance Propagation** tutorial simplified to use the unified uncertainty API (dropped the hand-rolled LVLH→GCRF rotation).
 - **High Precision Propagation**, **satprop guide**, **maneuver/covariance examples** updated for the new API.
 
+### Tutorial Reorganization
+
+- **Renamed "Coordinate Frame Transforms" → "Coordinate Frames"**. The tutorial is primarily a description of the frames themselves (GCRF, ITRF, TEME), not just the rotations between them.
+- **Renamed "ITRF Coordinates" → "Geodetic Coordinates"**. This tutorial is about the `itrfcoord` data type (geodetic / Cartesian / ENU / NED / geodesic distance), not the ITRF reference frame. The old name made it sound like two views of the same topic as Coordinate Frames.
+- Nav reordered so **Coordinate Frames** (frame theory) comes before **Geodetic Coordinates** (data type built on top). Reciprocal cross-reference notes added at the top of both tutorials.
+- **Expanded TEME section** in Coordinate Frames: origin of the "True Equator, Mean Equinox" name (intentional half-and-half construction), the three practical awkwardness points (not uniquely defined, time-dependent orientation, positions cannot be compared directly), API table, and Vallado 2006 reference.
+- **"Why yet another time type?" section** added at the top of the Time Systems tutorial, covering time-scale-as-first-class, high-precision internal representation, correct leap-second handling, built-in UT1/TDB, and the single-type-across-Rust-and-Python story.
+
+### Bug Fixes
+
+- **MathJax in Jupyter notebooks**: remove the `ignoreHtmlClass` / `processHtmlClass: "arithmatex"` restriction in `docs/javascripts/mathjax.js` that caused MathJax to skip notebook HTML entirely (mkdocs-jupyter does not wrap notebook-cell math in an `.arithmatex` span). Equations in the Quaternions tutorial and all other notebooks now render. Plain markdown pages still work because pymdownx.arithmatex (generic mode) emits raw delimiters that MathJax picks up under default scanning.
+- **`test_gravity`**: explicitly pin to `model=sk.gravmodel.jgm3`. The ICGEM reference values in that test are for JGM3 specifically; previously they relied on the default, which switched to EGM96 in this release.
+
 ### Internal
 
 - `Frame` derives `Copy + PartialEq + Eq`; `PyFrame::NTW`, `PyIntegrator::gauss_jackson8`, `PyPropSettings::gj_step_seconds`, `PyPropResult::gj_dense` exposed in the Python bindings.
 - `.pyi` stubs updated throughout: new frame variants, new integrator variant, `gj_step_seconds`, unified uncertainty API, ergonomic maneuver helpers, corrected frame docstrings.
+- All 20 tutorial notebooks re-executed and stripped of outputs (mkdocs-jupyter re-executes at build time).
 - 157 Rust tests + 81 Python tests pass (up from 133 / 71 at 0.15.1).
 
 
