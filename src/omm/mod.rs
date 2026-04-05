@@ -294,7 +294,7 @@ impl OMM {
     ///
     /// Returns an error if `epoch` is not a valid RFC 3339 timestamp.
     pub fn epoch_instant(&self) -> anyhow::Result<Instant> {
-        Ok(Instant::from_rfc3339(&self.epoch).map_err(|e| anyhow::anyhow!(e))?)
+        Instant::from_rfc3339(&self.epoch).map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Deserializes one or more OMM records from a JSON string.
@@ -333,7 +333,7 @@ impl OMM {
     /// # Errors
     ///
     /// Returns an error if the JSON is malformed or required OMM fields are missing/invalid.
-    pub fn from_json_string(s: &str) -> Result<Vec<OMM>> {
+    pub fn from_json_string(s: &str) -> Result<Vec<Self>> {
         serde_json::from_str(s).map_err(|e| anyhow::anyhow!(e))
     }
 
@@ -355,7 +355,7 @@ impl OMM {
     /// # Errors
     ///
     /// Returns an error if the file cannot be read or the JSON payload is invalid.
-    pub fn from_json_file<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<OMM>> {
+    pub fn from_json_file<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Self>> {
         let file = std::fs::File::open(path).map_err(|e| anyhow::anyhow!(e))?;
         let reader = std::io::BufReader::new(file);
         serde_json::from_reader(reader).map_err(|e| anyhow::anyhow!(e))
@@ -376,7 +376,7 @@ impl OMM {
     ///
     /// let omms = OMM::from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json").unwrap();
     /// ```
-    pub fn from_url(url: &str) -> Result<Vec<OMM>> {
+    pub fn from_url(url: &str) -> Result<Vec<Self>> {
         let agent = ureq::Agent::new_with_defaults();
         let mut resp = agent.get(url).call()?;
         let body = resp.body_mut().read_to_string()?;
@@ -417,13 +417,13 @@ impl SGP4Source for OMM {
         const TWOPI: f64 = PI * 2.0;
 
         if let Some(theory) = &self.mean_element_theory {
-            if theory.trim().to_ascii_uppercase() != "SGP4" {
+            if !theory.trim().eq_ignore_ascii_case("SGP4") {
                 anyhow::bail!("Unsupported MEAN_ELEMENT_THEORY: {theory}");
             }
         }
 
         if let Some(ts) = &self.time_system {
-            if ts.trim().to_ascii_uppercase() != "UTC" {
+            if !ts.trim().eq_ignore_ascii_case("UTC") {
                 anyhow::bail!("Unsupported TIME_SYSTEM for SGP4: {ts}");
             }
         }

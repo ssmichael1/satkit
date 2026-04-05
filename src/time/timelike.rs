@@ -40,12 +40,12 @@ pub trait TimeLike {
 impl TimeLike for Instant {
     #[inline]
     fn as_mjd_with_scale(&self, scale: TimeScale) -> f64 {
-        Instant::as_mjd_with_scale(self, scale)
+        Self::as_mjd_with_scale(self, scale)
     }
 
     #[inline]
     fn as_jd_with_scale(&self, scale: TimeScale) -> f64 {
-        Instant::as_jd_with_scale(self, scale)
+        Self::as_jd_with_scale(self, scale)
     }
 
     #[inline]
