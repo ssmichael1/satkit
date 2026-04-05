@@ -4,9 +4,26 @@
 
 use crate::time::InstantError;
 use crate::Instant;
-use itertools::Itertools;
 
 use anyhow::Result;
+
+/// Collect characters from a `Peekable<Chars>` while `pred` holds, leaving the
+/// first non-matching character available for the next read (unlike std's
+/// `take_while`, which consumes and discards it).
+fn take_while_peek(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    mut pred: impl FnMut(char) -> bool,
+) -> String {
+    let mut out = String::new();
+    while let Some(&c) = chars.peek() {
+        if !pred(c) {
+            break;
+        }
+        out.push(c);
+        chars.next();
+    }
+    out
+}
 
 /// Full month names
 const MONTH_NAMES: [&str; 12] = [
@@ -71,9 +88,7 @@ impl Instant {
         let mut isperiod: bool = false;
         while let Some(c) = chars.peek() {
             if c.is_ascii_digit() {
-                let cstr = chars
-                    .take_while_ref(|c| c.is_ascii_digit())
-                    .collect::<String>();
+                let cstr = take_while_peek(&mut chars, |c| c.is_ascii_digit());
                 // If following a period, allow for trailing zeros up to 6 digits
                 let val = match isperiod {
                     true => match cstr.len() {
@@ -93,11 +108,9 @@ impl Instant {
                 };
                 thelist.push(ParseVal::Num(val));
             } else if c.is_alphabetic() {
-                thelist.push(ParseVal::Str(
-                    chars
-                        .take_while_ref(|c| c.is_alphabetic())
-                        .collect::<String>(),
-                ));
+                thelist.push(ParseVal::Str(take_while_peek(&mut chars, |c| {
+                    c.is_alphabetic()
+                })));
             } else if let Some(c) = chars.next() {
                 isperiod = c == '.';
             }
@@ -320,9 +333,8 @@ impl Instant {
                     Some('Y') => year = s_chars.by_ref().take(4).collect::<String>().parse()?,
                     Some('m') => month = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('B') => {
-                        let month_name = s_chars
-                            .take_while_ref(|c| c.is_alphabetic())
-                            .collect::<String>();
+                        let month_name =
+                            take_while_peek(&mut s_chars, |c| c.is_alphabetic());
                         month = MONTH_NAMES
                             .iter()
                             .position(|&m| m == month_name)
@@ -330,9 +342,8 @@ impl Instant {
                             .ok_or(InstantError::InvalidMonthString(month_name))?;
                     }
                     Some('b') => {
-                        let month_abbr = s_chars
-                            .take_while_ref(|c| c.is_alphabetic())
-                            .collect::<String>();
+                        let month_abbr =
+                            take_while_peek(&mut s_chars, |c| c.is_alphabetic());
                         month = MONTH_ABBRS
                             .iter()
                             .position(|&m| m == month_abbr)
@@ -344,9 +355,8 @@ impl Instant {
                     Some('M') => minute = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('S') => second = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('f') => {
-                        let smicro = s_chars
-                            .take_while_ref(|c| c.is_ascii_digit())
-                            .collect::<String>();
+                        let smicro =
+                            take_while_peek(&mut s_chars, |c| c.is_ascii_digit());
                         // This is a little strange ... formating convention allows
                         // for trailing zeros to be omitted.  So we need to determine
                         // the number of digits and multiply by the appropriate factor

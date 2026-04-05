@@ -20,19 +20,32 @@
 //! - **True Equinox Mean Equator (TEME)**: Frame used in SGP4 propagation
 //! - **Celestial Intermediate Reference Frame (CIRF)**: IAU-2006 intermediate frame
 //! - **Terrestrial Intermediate Reference Frame (TIRF)**: Earth-rotation intermediate frame
+//! - **RTN / NTW / LVLH**: Satellite-local frames for maneuvers, thrust, and
+//!   covariance (`RTN` is the CCSDS OEM canonical name; `RIC` and `RSW` are aliases)
 //! - **Geodetic Coordinates**: Latitude, longitude, altitude conversions
+//!
+//! Unified API: [`frametransform::to_gcrf`] / [`frametransform::from_gcrf`] and
+//! [`frametransform::state_to_gcrf`] / [`frametransform::gcrf_to_state`] replace
+//! the per-frame helper explosion.
 //!
 //! ### Orbit Propagation
 //! Multiple propagation methods for various accuracy requirements:
 //! - **SGP4**: Simplified General Perturbations for Two-Line Element (TLE) sets with fitting capability
-//! - **Numerical Integration**: High-precision propagation using adaptive Runge-Kutta 9(8) methods
+//! - **Numerical Integration**: High-precision propagation using adaptive
+//!   Runge-Kutta (9(8), 8(7), 6(5), 5(4)), RODAS4 (stiff), or **Gauss-Jackson 8**
+//!   (fixed-step multistep predictor-corrector specialised for long-duration
+//!   orbit propagation, with per-step dense output)
 //! - **Keplerian**: Simplified two-body propagation
 //! - **State Transition Matrix**: Support for covariance propagation
+//! - **Configurable `max_steps`**: [`PropSettings::max_steps`] bounds runaway propagation
 //!
 //! ### Orbit Maneuvers
-//! - **Impulsive maneuvers**: Instantaneous delta-v at scheduled times in GCRF or RIC frames
+//! - **Impulsive maneuvers**: Instantaneous delta-v at scheduled times in GCRF,
+//!   RTN (= RIC / RSW), NTW, or LVLH frames. Ergonomic helpers (`prograde`,
+//!   `retrograde`, `radial_out`, `normal`) cover the common scalar-magnitude burns.
 //! - **Continuous thrust**: Constant-acceleration arcs integrated into the force model
-//! - Automatic propagation segmentation through maneuver sequences
+//! - Automatic propagation segmentation through maneuver sequences, including
+//!   backward propagation
 //!
 //! ### Force Models
 //! Comprehensive perturbation modeling:
@@ -57,8 +70,8 @@
 //! - **Rust**: Native library available on [crates.io](https://crates.io/crates/satkit)
 //! - **Python**: Complete Python bindings via PyO3, available on [PyPI](https://pypi.org/project/satkit/)
 //!   - Binary wheels for Windows, macOS (Intel & ARM), and Linux (x86_64 & ARM64)
-//!   - Python versions 3.8 through 3.13
-//!   - Documentation at <https://satellite-toolkit.readthedocs.io/>
+//!   - Python versions 3.10 through 3.14
+//!   - Documentation at <https://satkit.dev/>
 //!
 //! ## Linear Algebra
 //!
@@ -68,7 +81,7 @@
 //! feature on `numeris` for zero-cost `From`/`Into` conversions:
 //!
 //! ```toml
-//! numeris = { version = "0.5.5", features = ["nalgebra"] }
+//! numeris = { version = "0.5.7", features = ["nalgebra"] }
 //! ```
 //!
 //! ## Optional Features

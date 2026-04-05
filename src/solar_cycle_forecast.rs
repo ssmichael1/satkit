@@ -36,13 +36,13 @@ fn load_forecast() -> Result<Vec<ForecastRecord>> {
 }
 
 fn parse_forecast_json(contents: &str) -> Result<Vec<ForecastRecord>> {
-    let parsed = json::parse(contents)?;
-    if !parsed.is_array() {
-        bail!("Expected JSON array in solar cycle forecast");
-    }
+    let parsed: serde_json::Value = serde_json::from_str(contents)?;
+    let entries = parsed
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("Expected JSON array in solar cycle forecast"))?;
 
     let mut records = Vec::new();
-    for entry in parsed.members() {
+    for entry in entries {
         let time_tag = entry["time-tag"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing time-tag"))?;

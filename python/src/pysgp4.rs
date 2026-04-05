@@ -375,7 +375,7 @@ pub fn sgp4(
                 )
                     .into_py_any(py)?)
             } else {
-                let eint: Vec<i32> = states.errcode.iter().map(|x| x.clone() as i32).collect();
+                let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
                 Ok((
                     PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?,
                     PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims.clone())?,

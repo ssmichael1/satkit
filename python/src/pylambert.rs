@@ -3,6 +3,8 @@ use pyo3::prelude::*;
 
 use satkit::mathtypes::Vector3;
 
+type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
+
 /// Solve Lambert's problem: find the transfer orbit between two positions.
 ///
 /// Given two position vectors and a time of flight, compute the departure and
@@ -42,7 +44,7 @@ pub fn lambert(
     tof: f64,
     mu: Option<f64>,
     prograde: Option<bool>,
-) -> PyResult<Vec<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)>> {
+) -> PyResult<Vec<LambertSolution>> {
     if r1.len() != 3 {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "r1 must be a 3-element array",
@@ -67,7 +69,7 @@ pub fn lambert(
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     Python::attach(|py| {
-        let result: Vec<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> = solutions
+        let result: Vec<LambertSolution> = solutions
             .iter()
             .map(|(v1, v2)| {
                 let v1_arr = PyArray1::from_slice(py, v1.as_slice()).unbind();
