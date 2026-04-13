@@ -16,9 +16,9 @@
 //! ### Coordinate Frame Transformations
 //! High-precision coordinate transforms between multiple reference frames:
 //! - **International Terrestrial Reference Frame (ITRF)**: Earth-fixed frame
-//! - **Geocentric Celestial Reference Frame (GCRF)**: Inertial frame using IAU-2006 reduction
+//! - **Geocentric Celestial Reference Frame (GCRF)**: Inertial frame using IERS 2010 reduction
 //! - **True Equinox Mean Equator (TEME)**: Frame used in SGP4 propagation
-//! - **Celestial Intermediate Reference Frame (CIRF)**: IAU-2006 intermediate frame
+//! - **Celestial Intermediate Reference Frame (CIRF)**: IERS 2010 intermediate frame
 //! - **Terrestrial Intermediate Reference Frame (TIRF)**: Earth-rotation intermediate frame
 //! - **RTN / NTW / LVLH**: Satellite-local frames for maneuvers, thrust, and
 //!   covariance (`RTN` is the CCSDS OEM canonical name; `RIC` and `RSW` are aliases)

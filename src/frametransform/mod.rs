@@ -7,8 +7,8 @@
 //!
 //! | Function | From | To | Accuracy | Notes |
 //! |---|---|---|---|---|
-//! | [`qitrf2gcrf`] | ITRF | GCRF | Full IAU-2006 | Computationally expensive; requires EOP |
-//! | [`qgcrf2itrf`] | GCRF | ITRF | Full IAU-2006 | Conjugate of `qitrf2gcrf` |
+//! | [`qitrf2gcrf`] | ITRF | GCRF | Full IERS 2010 | Computationally expensive; requires EOP |
+//! | [`qgcrf2itrf`] | GCRF | ITRF | Full IERS 2010 | Conjugate of `qitrf2gcrf` |
 //! | [`qitrf2gcrf_approx`] | ITRF | GCRF | ~1 arcsec | IAU-76/FK5 approximation; fast |
 //! | [`qgcrf2itrf_approx`] | GCRF | ITRF | ~1 arcsec | Conjugate of `qitrf2gcrf_approx` |
 //! | [`qteme2itrf`] | TEME | ITRF | Exact | For SGP4 output; Vallado Eq. 3-90 |
@@ -18,11 +18,11 @@
 //!
 //! # Frame Descriptions
 //!
-//! - **GCRF** (Geocentric Celestial Reference Frame): Inertial frame, IAU-2006
+//! - **GCRF** (Geocentric Celestial Reference Frame): Inertial frame, IERS 2010
 //! - **ITRF** (International Terrestrial Reference Frame): Earth-fixed frame
 //! - **TEME** (True Equator Mean Equinox): Frame used by SGP4 propagator
-//! - **TIRS** (Terrestrial Intermediate Reference System): IAU-2006 intermediate frame
-//! - **CIRS** (Celestial Intermediate Reference System): IAU-2006 intermediate frame
+//! - **TIRS** (Terrestrial Intermediate Reference System): IERS 2010 intermediate frame
+//! - **CIRS** (Celestial Intermediate Reference System): IERS 2010 intermediate frame
 //! - **MOD** (Mean of Date): Precession-only frame
 
 mod ierstable;
@@ -369,7 +369,7 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 /// International Terrestrial Reference Frame (ITRF)
 /// to the Geocentric Celestial Reference Frame (GCRF)
 ///
-/// Performs full IAU-2006 reduction
+/// Performs full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
 ///
 /// # Arguments
 ///
@@ -381,7 +381,7 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Notes:
 ///
-///  * Uses the full IAU2006 reduction, see
+///  * Uses the full IERS 2010 reduction, see
 ///    [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf)
 ///    Equation 5.1
 ///
@@ -442,7 +442,7 @@ pub fn qitrf2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Notes:
 ///
-///  * Uses the full IAU2006 reduction, see
+///  * Uses the full IERS 2010 reduction, see
 ///    [IERS Technical Note 36, Chapter 5](https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf?__blob=publicationFile&v=1)
 ///    Equation 5.1
 ///
@@ -627,7 +627,7 @@ pub fn gcrf_to_lvlh(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
 ///
 /// # Math
 ///
-/// The IAU 2010 ITRF → GCRF reduction decomposes into three stages:
+/// The IERS 2010 ITRF → GCRF reduction decomposes into three stages:
 /// polar motion \\(W\\) (ITRF → TIRS), Earth rotation \\(R\\) (TIRS →
 /// CIRS, a rotation about the CIO pole by the Earth Rotation Angle),
 /// and precession-nutation \\(Q\\) (CIRS → GCRF):
@@ -655,9 +655,9 @@ pub fn gcrf_to_lvlh(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
 ///
 /// 1. Apply polar motion to get the state in TIRS: `r_tirs = W r_itrf`, `v_tirs = W v_itrf`.
 /// 2. Add the Earth-rotation sweep in TIRS: `v_tirs += omega_earth x r_tirs`, with `omega_earth = (0, 0, omega_e)` exactly.
-/// 3. Rotate TIRS → CIRS → GCRF via the full IAU 2010 chain.
+/// 3. Rotate TIRS → CIRS → GCRF via the full IERS 2010 chain.
 ///
-/// Uses the full IAU 2010 reduction (polar motion + Earth rotation +
+/// Uses the full IERS 2010 reduction (polar motion + Earth rotation +
 /// precession-nutation with dX/dY corrections from EOP). This is
 /// computationally expensive by comparison with the approximate
 /// [`qitrf2gcrf_approx`]; if you need speed over correctness, roll your
@@ -702,7 +702,7 @@ pub fn itrf_to_gcrf_state<T: TimeLike>(
     let omega_tirs: Vector3 = numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
     let vel_tirs_swept = vel_tirs + omega_tirs.cross(&pos_tirs);
 
-    // TIRS → CIRS → GCRF via the full IAU 2010 chain.
+    // TIRS → CIRS → GCRF via the full IERS 2010 chain.
     let q_tirs_to_gcrf =
         qcirs2gcrs_dxdy(time, Some((eop[4], eop[5]))) * qtirs2cirs(time);
 
@@ -712,6 +712,27 @@ pub fn itrf_to_gcrf_state<T: TimeLike>(
     (pos_gcrf, vel_gcrf)
 }
 
+/// Approximate version of [`itrf_to_gcrf_state`] using the IAU-76/FK5
+/// reduction (accurate to ~1 arcsec for position).
+///
+/// Neglects polar motion, so ITRF ≡ TIRS for the purposes of this
+/// transform and the Earth-rotation sweep term `omega_earth x r` is
+/// evaluated directly in ITRF (where ω⊕ is along +z to the same
+/// approximation level). Uses [`qitrf2gcrf_approx`] for the rotation;
+/// substantially cheaper than the full [`itrf_to_gcrf_state`] when the
+/// IERS 2010 precision is not required.
+pub fn itrf_to_gcrf_state_approx<T: TimeLike>(
+    pos_itrf: &Vector3,
+    vel_itrf: &Vector3,
+    time: &T,
+) -> (Vector3, Vector3) {
+    let omega: Vector3 = numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
+    let vel_swept = vel_itrf + omega.cross(pos_itrf);
+
+    let q = qitrf2gcrf_approx(time);
+    (q * *pos_itrf, q * vel_swept)
+}
+
 /// Transform a satellite state (position and velocity) from GCRF
 /// (inertial) to ITRF (Earth-fixed, rotating) at a given time.
 ///
@@ -719,7 +740,7 @@ pub fn itrf_to_gcrf_state<T: TimeLike>(
 /// mathematical derivation. As for the forward transform, the
 /// Earth-rotation sweep term \\(\\vec{\\omega}_\\oplus \\times \\vec{r}\\)
 /// is computed in **TIRS** (where ω⊕ is exactly along \\(+\\hat z\\)),
-/// not in ITRF or GCRF. Uses the full IAU 2010 reduction.
+/// not in ITRF or GCRF. Uses the full IERS 2010 reduction.
 ///
 /// # Arguments
 ///
@@ -763,6 +784,25 @@ pub fn gcrf_to_itrf_state<T: TimeLike>(
 
     let pos_itrf = q_tirs_to_itrf * pos_tirs;
     let vel_itrf = q_tirs_to_itrf * vel_tirs;
+
+    (pos_itrf, vel_itrf)
+}
+
+/// Approximate version of [`gcrf_to_itrf_state`] using the IAU-76/FK5
+/// reduction (accurate to ~1 arcsec for position). Inverse of
+/// [`itrf_to_gcrf_state_approx`]; sweep term subtracted in ITRF
+/// (polar motion neglected).
+pub fn gcrf_to_itrf_state_approx<T: TimeLike>(
+    pos_gcrf: &Vector3,
+    vel_gcrf: &Vector3,
+    time: &T,
+) -> (Vector3, Vector3) {
+    let q = qgcrf2itrf_approx(time);
+    let pos_itrf = q * *pos_gcrf;
+    let vel_swept = q * *vel_gcrf;
+
+    let omega: Vector3 = numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
+    let vel_itrf = vel_swept - omega.cross(&pos_itrf);
 
     (pos_itrf, vel_itrf)
 }
@@ -1080,5 +1120,47 @@ mod tests {
             "expected ~501 m/s Earth-rotation sweep at 500km equatorial, got {}",
             diff
         );
+    }
+
+    /// Round-trip for the approximate state transforms: GCRF → ITRF →
+    /// GCRF should recover the original state to floating-point precision
+    /// (the approximation error is in the absolute accuracy vs. IERS 2010,
+    /// not in self-consistency).
+    #[test]
+    fn test_itrf_gcrf_state_approx_roundtrip() {
+        let t = crate::Instant::from_datetime(2024, 3, 15, 12, 34, 56.0).unwrap();
+        let pos_gcrf: Vector3 = numeris::vector![6.878e6, 1.23e5, -4.56e5];
+        let vel_gcrf: Vector3 = numeris::vector![-123.4, 7600.0, 89.0];
+
+        let (pos_itrf, vel_itrf) = gcrf_to_itrf_state_approx(&pos_gcrf, &vel_gcrf, &t);
+        let (pos_back, vel_back) = itrf_to_gcrf_state_approx(&pos_itrf, &vel_itrf, &t);
+
+        let pos_err = (pos_gcrf - pos_back).norm();
+        let vel_err = (vel_gcrf - vel_back).norm();
+        assert!(pos_err < 1.0e-6, "position round-trip error = {} m", pos_err);
+        assert!(vel_err < 1.0e-9, "velocity round-trip error = {} m/s", vel_err);
+    }
+
+    /// Approximate transform should agree with the full IERS 2010 reduction
+    /// to about an arcsecond on position (~30 m at LEO) and a small
+    /// fraction of a m/s on velocity. This is the advertised accuracy of
+    /// the IAU-76/FK5 approximation.
+    #[test]
+    fn test_itrf_gcrf_state_approx_vs_full() {
+        let t = crate::Instant::from_datetime(2024, 3, 15, 12, 34, 56.0).unwrap();
+        let pos_itrf: Vector3 = numeris::vector![-1.0334e6, 7.9013e6, 6.3804e6];
+        let vel_itrf: Vector3 = numeris::vector![-3225.6, -2872.5, 5531.9];
+
+        let (p_full, v_full) = itrf_to_gcrf_state(&pos_itrf, &vel_itrf, &t);
+        let (p_approx, v_approx) = itrf_to_gcrf_state_approx(&pos_itrf, &vel_itrf, &t);
+
+        let pos_diff = (p_full - p_approx).norm();
+        let vel_diff = (v_full - v_approx).norm();
+
+        // 1 arcsec at ~1 Earth radius ≈ 50 m; allow 100 m of headroom.
+        assert!(pos_diff < 100.0, "approx vs full position diff = {} m", pos_diff);
+        // Earth rotation takes ~470 m/s / Earth-radius; at 1 arcsec this
+        // scales to well under 1 m/s.
+        assert!(vel_diff < 1.0, "approx vs full velocity diff = {} m/s", vel_diff);
     }
 }

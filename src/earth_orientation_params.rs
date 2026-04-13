@@ -215,8 +215,8 @@ pub fn update() -> Result<()> {
 ///     * 1 : X polar motion in arcsecs
 ///     * 2 : Y polar motion in arcsecs
 ///     * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
-///     * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
-///     * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
+///     * 4 : dX wrt IAU 2000A nutation, milli-arcsecs
+///     * 5 : dY wrt IAU 2000A nutation, milli-arcsecs
 ///
 /// * If time is before range of file, returns None and prints warning to stderr
 ///   (but only once per library load)
@@ -274,8 +274,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 ///   * 1 : X polar motion in arcsecs
 ///   * 2 : Y polar motion in arcsecs
 ///   * 3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
-///   * 4 : dX wrt IAU-2000 Nutation, milli-arcsecs
-///   * 5 : dY wrt IAU-2000 Nutation, milli-arcsecs
+///   * 4 : dX wrt IAU 2000A nutation, milli-arcsecs
+///   * 5 : dY wrt IAU 2000A nutation, milli-arcsecs
 ///
 ///
 /// # Example:

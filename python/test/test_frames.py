@@ -119,6 +119,74 @@ class TestFrameTransform:
             f"expected ω⊕·|r_xy| = {expected_naive_err:.3f} m/s"
         )
 
+    def test_itrf2gcrf_state_approx(self):
+        """Approximate IAU-76/FK5 state transforms — round-trip self-
+        consistency and agreement with the full IERS 2010 reduction to
+        ~1 arcsec on position, ~1 m/s on velocity."""
+        pITRF = np.array([-1033.479383, 7901.2952754, 6380.3565958]) * 1e3
+        vITRF = np.array([-3.225636520, -2.872451450, 5.531924446]) * 1e3
+        tm = sk.time(2004, 4, 6, 7, 51, 28.386009)
+
+        pGCRF_a, vGCRF_a = sk.frametransform.itrf_to_gcrf_state_approx(
+            pITRF, vITRF, tm
+        )
+
+        # Round trip
+        pITRF_b, vITRF_b = sk.frametransform.gcrf_to_itrf_state_approx(
+            pGCRF_a, vGCRF_a, tm
+        )
+        assert np.allclose(pITRF_b, pITRF, atol=1e-6)
+        assert np.allclose(vITRF_b, vITRF, atol=1e-9)
+
+        # Agreement with full IERS 2010 reduction at the advertised accuracy
+        # (~1 arcsec ≈ 50 m at LEO).
+        pGCRF_f, vGCRF_f = sk.frametransform.itrf_to_gcrf_state(pITRF, vITRF, tm)
+        assert np.linalg.norm(pGCRF_a - pGCRF_f) < 100.0
+        assert np.linalg.norm(vGCRF_a - vGCRF_f) < 1.0
+
+    def test_itrf2gcrf_state_approx_batch(self):
+        """Batched form of the approximate state transform: feeding an
+        (N, 3) array and N times must match per-row scalar calls."""
+        tms = [
+            sk.time(2024, 1, 1, 0, 0, 0.0),
+            sk.time(2024, 6, 1, 12, 0, 0.0),
+            sk.time(2024, 12, 31, 23, 59, 59.0),
+        ]
+        pITRF = np.array(
+            [
+                [7.0e6, 0.0, 0.0],
+                [0.0, 7.1e6, 1.0e5],
+                [-6.9e6, 2.0e5, -3.0e5],
+            ]
+        )
+        vITRF = np.array(
+            [
+                [0.0, 7500.0, 100.0],
+                [-7400.0, 0.0, 50.0],
+                [100.0, 7450.0, -80.0],
+            ]
+        )
+
+        pGCRF, vGCRF = sk.frametransform.itrf_to_gcrf_state_approx(
+            pITRF, vITRF, tms
+        )
+        assert pGCRF.shape == (3, 3)
+        assert vGCRF.shape == (3, 3)
+
+        for i, t in enumerate(tms):
+            p_i, v_i = sk.frametransform.itrf_to_gcrf_state_approx(
+                pITRF[i], vITRF[i], t
+            )
+            assert np.allclose(pGCRF[i], p_i, atol=1e-9)
+            assert np.allclose(vGCRF[i], v_i, atol=1e-12)
+
+        # Batch round trip
+        pITRF_back, vITRF_back = sk.frametransform.gcrf_to_itrf_state_approx(
+            pGCRF, vGCRF, tms
+        )
+        assert np.allclose(pITRF_back, pITRF, atol=1e-6)
+        assert np.allclose(vITRF_back, vITRF, atol=1e-9)
+
     def test_gmst(self):
         """
         Test GMST : vallado example 3-5
