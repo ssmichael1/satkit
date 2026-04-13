@@ -1,6 +1,18 @@
 # Changelog
 
 
+## 0.16.2 - 2026-04-13
+
+### Frame Transforms
+
+- **Batched `itrf_to_gcrf_state` / `gcrf_to_itrf_state` (Python).** Both functions now accept either a single state (length-3 `pos`/`vel` + scalar `time`) or a batch of `N` states (shape `(N, 3)` arrays + length-`N` time array/list) and return matching-shape output. Previously required a Python loop.
+- **New `itrf_to_gcrf_state_approx` / `gcrf_to_itrf_state_approx` (Rust + Python).** Approximate IAU-76/FK5 variants of the full-state transforms (~1 arcsec on position, <1 m/s on velocity vs. full IERS 2010). Substantially cheaper when full precision isn't required; polar motion is neglected so the `ω⊕ × r` sweep is evaluated in ITRF directly. Scalar and batched inputs supported in Python.
+
+### Documentation
+
+- **Nomenclature sweep: "IAU 2006" / "IAU-2000" → "IERS 2010" / "IAU 2000A".** The full reduction chain satkit implements is the IERS 2010 Conventions, which adopt the IAU 2006 precession with the IAU 2000A nutation series — referring to it as "IAU-2006 reduction" or "IAU-2000 nutation" was imprecise. Updated across `README.md`, `docs/index.md`, crate-level `lib.rs` docs, `src/earth_orientation_params.rs` doc comments, and the **Coordinate Frames** and **Plots** tutorials.
+
+
 ## 0.16.1 - 2026-04-05
 
 ### Dependency Cleanup
@@ -56,7 +68,7 @@
 
 ### Documentation
 
-- **Coordinate Frame Transforms tutorial** rewritten: explicit GCRS/ICRF and ITRS definitions (quasar VLBI realisation vs. ground-tracking realisation), geodetic-vs-geocentric explanation, ground-track overlay on a cartopy `PlateCarree` map, time-series plot of `qgcrf2itrf_approx` vs full IAU-2006/2010 error over 30 years. Dropped the low-value 24-hour Earth-rotation section.
+- **Coordinate Frame Transforms tutorial** rewritten: explicit GCRS/ICRF and ITRS definitions (quasar VLBI realisation vs. ground-tracking realisation), geodetic-vs-geocentric explanation, ground-track overlay on a cartopy `PlateCarree` map, time-series plot of `qgcrf2itrf_approx` vs full IERS 2010 error over 30 years. Dropped the low-value 24-hour Earth-rotation section.
 - **New API reference page**: `docs/api/frame.md` documenting the `Frame` enum with all variants and aliases.
 - **MathJax** now accepts both `\(...\)` / `\[...\]` and `$...$` / `$$...$$` delimiters, so equations render correctly in Jupyter-notebook tutorials (previously broken in `Quaternions.ipynb` and others).
 - **Covariance Propagation** tutorial simplified to use the unified uncertainty API (dropped the hand-rolled LVLH→GCRF rotation).

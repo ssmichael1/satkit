@@ -1,13 +1,15 @@
+use crate::pyinstant::ToTimeVec;
 use crate::pyutils::*;
 use crate::PyInstant;
 use satkit::frametransform as ft;
 use satkit::mathtypes::*;
+use satkit::Instant;
 use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 use numpy as np;
-use numpy::PyArrayMethods;
+use numpy::{PyArrayMethods, PyUntypedArrayMethods};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 /// Greenwich Mean Sidereal Time
 ///
@@ -107,7 +109,7 @@ pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 ///
 /// Notes:
-///    * Uses full IAU2010 Reduction; See IERS Technical Note 36, Chapter 5
+///    * Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation); see IERS Technical Note 36, Chapter 5
 ///    * Very computationally expensive
 ///
 /// Args:
@@ -124,7 +126,7 @@ pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 ///
 /// Notes:
-///     * Uses full IAU2010 Reduction; See IERS Technical Note 36, Chapter 5
+///     * Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation); see IERS Technical Note 36, Chapter 5
 ///     * Very computationally expensive
 ///
 /// Args:
@@ -346,7 +348,7 @@ pub fn qtod2mod_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// on Earth's surface has zero velocity in ITRF but ~465 m/s in GCRF
 /// (at the equator), and this function accounts for that term.
 ///
-/// The IAU 2010 ITRF → GCRF reduction decomposes into three stages:
+/// The IERS 2010 ITRF → GCRF reduction decomposes into three stages:
 /// polar motion (ITRF → TIRS), Earth rotation about the CIO polar axis
 /// (TIRS → CIRS), and precession-nutation (CIRS → GCRF). The
 /// Earth-rotation sweep term ``omega_earth x r`` is computed in **TIRS**
@@ -361,9 +363,9 @@ pub fn qtod2mod_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// 1. Rotate position and velocity from ITRF to TIRS via polar motion.
 /// 2. Add ``omega_earth x r_tirs`` to the velocity in TIRS (where ``omega_earth``
 ///    is exactly ``(0, 0, OMEGA_EARTH)``).
-/// 3. Rotate TIRS → CIRS → GCRF via the full IAU 2010 chain.
+/// 3. Rotate TIRS → CIRS → GCRF via the full IERS 2010 chain.
 ///
-/// Uses the full IAU 2010 reduction (includes polar motion, Earth
+/// Uses the full IERS 2010 reduction (includes polar motion, Earth
 /// rotation, precession-nutation with dX/dY corrections from Earth
 /// orientation parameters).
 ///
@@ -380,16 +382,9 @@ pub fn qtod2mod_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 pub fn itrf_to_gcrf_state(
     pos_itrf: &Bound<'_, PyAny>,
     vel_itrf: &Bound<'_, PyAny>,
-    time: &PyInstant,
+    time: &Bound<'_, PyAny>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
-    let pos_vec: Vector3 = py_to_smatrix(pos_itrf)?;
-    let vel_vec: Vector3 = py_to_smatrix(vel_itrf)?;
-    let (pos_gcrf, vel_gcrf) = ft::itrf_to_gcrf_state(&pos_vec, &vel_vec, &time.0);
-    pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-        let p = np::PyArray1::from_slice(py, pos_gcrf.as_slice()).into_py_any(py)?;
-        let v = np::PyArray1::from_slice(py, vel_gcrf.as_slice()).into_py_any(py)?;
-        Ok((p, v))
-    })
+    state_transform_batch(pos_itrf, vel_itrf, time, ft::itrf_to_gcrf_state)
 }
 
 /// Transform a satellite state (position + velocity) from GCRF to ITRF.
@@ -399,7 +394,7 @@ pub fn itrf_to_gcrf_state(
 /// term **in TIRS** (where Earth's rotation axis is exactly along +z),
 /// then applies inverse polar motion to reach ITRF. A geostationary
 /// satellite (whose GCRF velocity is pure orbital motion) produces zero
-/// velocity in ITRF. Uses the full IAU 2010 reduction.
+/// velocity in ITRF. Uses the full IERS 2010 reduction.
 ///
 /// Args:
 ///     pos_gcrf (array-like): 3-element position vector in GCRF [m]
@@ -413,15 +408,113 @@ pub fn itrf_to_gcrf_state(
 pub fn gcrf_to_itrf_state(
     pos_gcrf: &Bound<'_, PyAny>,
     vel_gcrf: &Bound<'_, PyAny>,
-    time: &PyInstant,
+    time: &Bound<'_, PyAny>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
-    let pos_vec: Vector3 = py_to_smatrix(pos_gcrf)?;
-    let vel_vec: Vector3 = py_to_smatrix(vel_gcrf)?;
-    let (pos_itrf, vel_itrf) = ft::gcrf_to_itrf_state(&pos_vec, &vel_vec, &time.0);
+    state_transform_batch(pos_gcrf, vel_gcrf, time, ft::gcrf_to_itrf_state)
+}
+
+/// Approximate ITRF → GCRF state transform using the IAU-76/FK5 reduction.
+///
+/// Faster alternative to :func:`itrf_to_gcrf_state` when the full IERS 2010
+/// precision is not required; accurate to ~1 arcsec on position. Neglects
+/// polar motion, so the Earth-rotation sweep ``omega_earth x r`` is
+/// evaluated in ITRF directly. Accepts scalar or batched inputs like
+/// :func:`itrf_to_gcrf_state`.
+#[pyfunction]
+pub fn itrf_to_gcrf_state_approx(
+    pos_itrf: &Bound<'_, PyAny>,
+    vel_itrf: &Bound<'_, PyAny>,
+    time: &Bound<'_, PyAny>,
+) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    state_transform_batch(pos_itrf, vel_itrf, time, ft::itrf_to_gcrf_state_approx)
+}
+
+/// Approximate GCRF → ITRF state transform using the IAU-76/FK5 reduction.
+///
+/// Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to ~1 arcsec on
+/// position. Accepts scalar or batched inputs like
+/// :func:`gcrf_to_itrf_state`.
+#[pyfunction]
+pub fn gcrf_to_itrf_state_approx(
+    pos_gcrf: &Bound<'_, PyAny>,
+    vel_gcrf: &Bound<'_, PyAny>,
+    time: &Bound<'_, PyAny>,
+) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    state_transform_batch(pos_gcrf, vel_gcrf, time, ft::gcrf_to_itrf_state_approx)
+}
+
+/// Apply a GCRF<->ITRF state transform to either a single state or a batch.
+///
+/// Scalar: ``pos``/``vel`` are 3-element vectors and ``time`` is a single
+/// ``satkit.time`` or ``datetime.datetime``. Batch: ``pos``/``vel`` are
+/// shape ``(N, 3)`` arrays and ``time`` is a length-``N`` time array.
+fn state_transform_batch(
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+    time: &Bound<'_, PyAny>,
+    cfunc: fn(&Vector3, &Vector3, &Instant) -> (Vector3, Vector3),
+) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    if pos.is_instance_of::<np::PyArray2<f64>>() {
+        let parr = pos.extract::<np::PyReadonlyArray2<f64>>().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid pos array: {}", e))
+        })?;
+        let varr = vel.extract::<np::PyReadonlyArray2<f64>>().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid vel array: {}", e))
+        })?;
+        let pshape = parr.shape();
+        let vshape = varr.shape();
+        let n = pshape[0];
+        if pshape[1] != 3 {
+            bail!("pos must have shape (N, 3), got ({}, {})", pshape[0], pshape[1]);
+        }
+        if vshape[0] != n || vshape[1] != 3 {
+            bail!(
+                "vel must have same shape as pos ({}, 3), got ({}, {})",
+                n, vshape[0], vshape[1]
+            );
+        }
+        let tm = time.to_time_vec()?;
+        if tm.len() != n {
+            bail!(
+                "time array length ({}) must match number of states ({})",
+                tm.len(), n
+            );
+        }
+        let pa = parr.as_array();
+        let va = varr.as_array();
+        return pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
+            let pout = np::PyArray2::<f64>::zeros(py, (n, 3), false);
+            let vout = np::PyArray2::<f64>::zeros(py, (n, 3), false);
+            for i in 0..n {
+                let p = Vector3::from_array([pa[(i, 0)], pa[(i, 1)], pa[(i, 2)]]);
+                let v = Vector3::from_array([va[(i, 0)], va[(i, 1)], va[(i, 2)]]);
+                let (po, vo) = cfunc(&p, &v, &tm[i]);
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        po.as_slice().as_ptr(),
+                        pout.as_raw_array_mut().as_mut_ptr().offset(i as isize * 3),
+                        3,
+                    );
+                    std::ptr::copy_nonoverlapping(
+                        vo.as_slice().as_ptr(),
+                        vout.as_raw_array_mut().as_mut_ptr().offset(i as isize * 3),
+                        3,
+                    );
+                }
+            }
+            Ok((pout.into_py_any(py)?, vout.into_py_any(py)?))
+        });
+    }
+
+    let p: Vector3 = py_to_smatrix(pos)?;
+    let v: Vector3 = py_to_smatrix(vel)?;
+    let t = instant_from_pyany(time)?;
+    let (po, vo) = cfunc(&p, &v, &t);
     pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-        let p = np::PyArray1::from_slice(py, pos_itrf.as_slice()).into_py_any(py)?;
-        let v = np::PyArray1::from_slice(py, vel_itrf.as_slice()).into_py_any(py)?;
-        Ok((p, v))
+        Ok((
+            np::PyArray1::from_slice(py, po.as_slice()).into_py_any(py)?,
+            np::PyArray1::from_slice(py, vo.as_slice()).into_py_any(py)?,
+        ))
     })
 }
 

@@ -491,7 +491,7 @@ def qgcrf2itrf(
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        - Uses full IAU2010 Reduction
+        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
@@ -529,7 +529,7 @@ def qgcrf2itrf(
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        - Uses full IAU2010 Reduction
+        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
@@ -552,7 +552,7 @@ def qgcrf2itrf(*args, **kwargs):
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        - Uses full IAU2010 Reduction
+        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
@@ -590,7 +590,7 @@ def qitrf2gcrf(
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
     Notes:
-        - Uses full IAU2010 Reduction
+        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
@@ -621,7 +621,7 @@ def qitrf2gcrf(
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
     Notes:
-        - Uses full IAU2010 Reduction
+        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
@@ -644,7 +644,7 @@ def qitrf2gcrf(*args, **kwargs):
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
     Notes:
-        - Uses full IAU2010 Reduction
+        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
         - See IERS Technical Note 36, Chapter 5
         - Does not include solid tides, ocean tides
         - Very computationally expensive
@@ -873,16 +873,21 @@ def to_gcrf(
 def itrf_to_gcrf_state(
     pos_itrf: npt.ArrayLike,
     vel_itrf: npt.ArrayLike,
-    time: time,
+    time: time | list[time] | npt.NDArray,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Transform a satellite state (position + velocity) from ITRF to GCRF.
+
+    Accepts either a single state (``pos``/``vel`` are length-3 vectors and
+    ``time`` is a single ``satkit.time``) or a batch of ``N`` states
+    (``pos``/``vel`` are shape ``(N, 3)`` arrays and ``time`` is a length-``N``
+    array/list of times). The output shape matches the input.
 
     Unlike the raw :func:`qitrf2gcrf` quaternion, this function correctly
     handles the Earth-rotation contribution to velocity. A point at rest
     on Earth's surface has zero velocity in ITRF but ~465 m/s in GCRF at
     the equator, and this function accounts for that term.
 
-    The IAU 2010 ITRF → GCRF reduction decomposes into three stages:
+    The IERS 2010 ITRF → GCRF reduction decomposes into three stages:
     polar motion (ITRF → TIRS), Earth rotation about the CIO polar axis
     (TIRS → CIRS), and precession-nutation (CIRS → GCRF). The
     Earth-rotation sweep term ``omega_earth x r`` is computed in
@@ -897,9 +902,9 @@ def itrf_to_gcrf_state(
     1. Rotate ``pos_itrf`` and ``vel_itrf`` into TIRS via polar motion.
     2. Add ``omega_earth x r_tirs`` to the velocity in TIRS, where
        ``omega_earth = (0, 0, OMEGA_EARTH)`` exactly.
-    3. Rotate TIRS → CIRS → GCRF via the full IAU 2010 chain.
+    3. Rotate TIRS → CIRS → GCRF via the full IERS 2010 chain.
 
-    Uses the full IAU 2010 reduction (polar motion + Earth rotation +
+    Uses the full IERS 2010 reduction (polar motion + Earth rotation +
     precession-nutation with dX/dY corrections from Earth orientation
     parameters).
 
@@ -932,7 +937,7 @@ def itrf_to_gcrf_state(
 def gcrf_to_itrf_state(
     pos_gcrf: npt.ArrayLike,
     vel_gcrf: npt.ArrayLike,
-    time: time,
+    time: time | list[time] | npt.NDArray,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Transform a satellite state (position + velocity) from GCRF to ITRF.
 
@@ -941,7 +946,12 @@ def gcrf_to_itrf_state(
     term **in TIRS** (where Earth's rotation axis is exactly along +z),
     then applies inverse polar motion to reach ITRF. A geostationary
     satellite (whose GCRF velocity is pure orbital motion) produces
-    zero velocity in ITRF. Uses the full IAU 2010 reduction.
+    zero velocity in ITRF. Uses the full IERS 2010 reduction.
+
+    Accepts either a single state or a batch of ``N`` states: when
+    ``pos``/``vel`` are shape ``(N, 3)`` arrays, ``time`` must be a
+    length-``N`` array/list of times, and the returned arrays have
+    shape ``(N, 3)``.
 
     Args:
         pos_gcrf: 3-element position vector in GCRF [m]
@@ -951,6 +961,32 @@ def gcrf_to_itrf_state(
     Returns:
         A 2-tuple ``(pos_itrf, vel_itrf)`` where ``vel_itrf`` is the
         velocity as observed in ITRF.
+    """
+    ...
+
+def itrf_to_gcrf_state_approx(
+    pos_itrf: npt.ArrayLike,
+    vel_itrf: npt.ArrayLike,
+    time: time | list[time] | npt.NDArray,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Approximate ITRF → GCRF state transform using the IAU-76/FK5
+    reduction (accurate to ~1 arcsec on position).
+
+    Faster alternative to :func:`itrf_to_gcrf_state` when the full IERS
+    2010 precision is not required. Neglects polar motion, so the
+    Earth-rotation sweep ``omega_earth x r`` is evaluated in ITRF directly.
+    Accepts scalar or batched inputs like :func:`itrf_to_gcrf_state`.
+    """
+    ...
+
+def gcrf_to_itrf_state_approx(
+    pos_gcrf: npt.ArrayLike,
+    vel_gcrf: npt.ArrayLike,
+    time: time | list[time] | npt.NDArray,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Approximate GCRF → ITRF state transform using the IAU-76/FK5
+    reduction. Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to
+    ~1 arcsec on position. Accepts scalar or batched inputs.
     """
     ...
 

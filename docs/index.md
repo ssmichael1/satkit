@@ -81,7 +81,7 @@ gcrf_pos = q * coord.vector
 
 ### Coordinate Frames
 
-Full IAU-2006/2000 reduction with Earth orientation parameters:
+Full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation) with Earth orientation parameters:
 
 | Frame | Description |
 |-------|-------------|
