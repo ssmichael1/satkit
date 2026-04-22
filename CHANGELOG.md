@@ -1,6 +1,13 @@
 # Changelog
 
 
+## Unreleased
+
+### Licensing
+
+- **Dual-licensed under MIT OR Apache-2.0.** Previously MIT-only. Apache-2.0 adds an explicit patent grant — important now that the project is taking external contributions, since it binds contributors to a patent peace clause that bare MIT does not. Matches the Rust ecosystem convention. `LICENSE` was renamed to `LICENSE-MIT` and a new `LICENSE-APACHE` was added; `Cargo.toml` and `pyproject.toml` `license` fields updated to `"MIT OR Apache-2.0"`. Downstream users may continue to use the project under either license at their option — no action required.
+
+
 ## 0.16.2 - 2026-04-13
 
 ### Frame Transforms

@@ -1,6 +1,7 @@
 include Cargo.toml
 include Cargo.lock
-include LICENSE
+include LICENSE-MIT
+include LICENSE-APACHE
 include README.md
 include pyproject.toml
 recursive-include src *.rs
