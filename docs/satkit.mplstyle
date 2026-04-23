@@ -20,4 +20,7 @@ legend.fontsize: 12
 grid.alpha: 0.3
 grid.linestyle: --
 
+lines.linewidth: 1.5
+figure.figsize: 6, 3.2
+
 svg.fonttype: none
