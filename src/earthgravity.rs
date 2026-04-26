@@ -1,8 +1,52 @@
 use crate::utils::{datadir, download_if_not_exist};
-use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 use std::io::{self, BufRead};
+use std::num::{ParseFloatError, ParseIntError};
 use std::path::PathBuf;
+use thiserror::Error;
+
+/// Errors produced by the [`earthgravity`](crate::earthgravity) module.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// The header of the gravity model file did not declare a non-zero
+    /// `max_degree`.
+    #[error("Invalid file; did not find max degree")]
+    MissingMaxDegree,
+
+    /// A coefficient line had fewer than the required `n m C [S]` fields.
+    #[error("Invalid line: {0}")]
+    InvalidLine(String),
+
+    /// Failed to open the gravity model file.
+    #[error("Failed to open gravity model file: {0}")]
+    OpenFailed(#[source] std::io::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    ParseFloat(#[from] ParseFloatError),
+
+    #[error(transparent)]
+    ParseInt(#[from] ParseIntError),
+
+    #[error(transparent)]
+    Datadir(#[from] crate::utils::datadir::Error),
+
+    /// Wraps an [`anyhow::Error`] surfaced by the (still-anyhow) download
+    /// helpers in [`crate::utils::download`].
+    #[error("Download failed: {0}")]
+    Download(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Download(e)
+    }
+}
+
+/// Convenient type alias used throughout the `earthgravity` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 use crate::mathtypes::*;
 type CoeffTable = DMatrix<f64>;
@@ -465,7 +509,7 @@ impl Gravity {
         }
         */
 
-        let file = std::fs::File::open(&path).context("Failed to open gravity model file")?;
+        let file = std::fs::File::open(&path).map_err(Error::OpenFailed)?;
 
         let mut name = String::new();
         let mut gravity_constant: f64 = 0.0;
@@ -503,7 +547,7 @@ impl Gravity {
             }
         }
         if max_degree == 0 {
-            bail!("Invalid file; did not find max degree");
+            return Err(Error::MissingMaxDegree);
         }
 
         // Create matrix with lookup values
@@ -512,7 +556,7 @@ impl Gravity {
         for line in &lines[header_cnt..] {
             let s: Vec<&str> = line.split_whitespace().collect();
             if s.len() < 3 {
-                bail!("Invalid line: {}", line);
+                return Err(Error::InvalidLine(line.clone()));
             }
 
             let n: usize = s[1].parse()?;

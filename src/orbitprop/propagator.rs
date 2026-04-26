@@ -1006,7 +1006,7 @@ mod tests {
                 let hour: i32 = lvals[4].parse()?;
                 let min: i32 = lvals[5].parse()?;
                 let sec: f64 = lvals[6].parse()?;
-                Instant::from_datetime(year, mon, day, hour, min, sec)
+                Ok(Instant::from_datetime(year, mon, day, hour, min, sec)?)
             })
             .collect::<Result<Vec<crate::Instant>, _>>()?;
 

@@ -241,7 +241,7 @@ impl PyInstant {
     ///
     #[staticmethod]
     fn from_string(s: &str) -> Result<Self> {
-        Instant::from_string(s).map(Self)
+        Ok(Instant::from_string(s).map(Self)?)
     }
 
     /// Create satkit.time object from string with given format
@@ -269,7 +269,7 @@ impl PyInstant {
     /// %B: Month as locale’s full name
     #[staticmethod]
     fn strptime(s: &str, fmt: &str) -> Result<Self> {
-        Instant::strptime(s, fmt).map(Self)
+        Ok(Instant::strptime(s, fmt).map(Self)?)
     }
 
     /// Format time object as string
@@ -470,7 +470,7 @@ impl PyInstant {
         min: i32,
         sec: f64,
     ) -> Result<Self> {
-        Instant::from_datetime(year, month, day, hour, min, sec).map(Self)
+        Ok(Instant::from_datetime(year, month, day, hour, min, sec).map(Self)?)
     }
 
     /// Convert from Python datetime object
