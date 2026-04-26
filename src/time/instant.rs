@@ -1,7 +1,8 @@
-use super::TimeScale;
+use super::{InstantError, TimeScale};
 use serde::{Deserialize, Serialize};
 
-use anyhow::{bail, Result};
+/// Local result alias used by [`Instant`] constructors.
+type Result<T> = std::result::Result<T, InstantError>;
 
 // Days in the month, neglecting leap years
 const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -580,7 +581,7 @@ impl Instant {
 
         // Bounds checking on input
         if !(1..=12).contains(&month) {
-            bail!("Invalid month: {}", month);
+            return Err(InstantError::InvalidMonth(month));
         }
         let max_day = if month == 2 {
             if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
@@ -592,13 +593,13 @@ impl Instant {
             MDAYS[(month - 1) as usize]
         };
         if day < 1 || day > max_day as i32 {
-            bail!("Invalid day: {}", day);
+            return Err(InstantError::InvalidDay(day));
         }
         if !(0..=23).contains(&hour) {
-            bail!("Invalid hour: {}", hour);
+            return Err(InstantError::InvalidHour(hour));
         }
         if !(0..=59).contains(&minute) {
-            bail!("Invalid minute: {}", minute);
+            return Err(InstantError::InvalidMinute(minute));
         }
         if !(0.0..60.0).contains(&second) {
             // Check for rare case of leap second
@@ -606,7 +607,7 @@ impl Instant {
                 // Are we in a leap second?
                 check_leapsecond = true;
             } else {
-                bail!("Invalid second: {}", second);
+                return Err(InstantError::InvalidSecondF(second));
             }
         }
 
@@ -651,7 +652,7 @@ impl Instant {
                 }
             }
             if !valid_leap_second {
-                bail!("Invalid second");
+                return Err(InstantError::InvalidLeapSecond);
             }
         }
 

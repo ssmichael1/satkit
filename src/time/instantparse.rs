@@ -5,7 +5,8 @@
 use crate::time::InstantError;
 use crate::Instant;
 
-use anyhow::Result;
+/// Local result alias used by [`Instant`] string parsers.
+type Result<T> = std::result::Result<T, InstantError>;
 
 /// Collect characters from a `Peekable<Chars>` while `pred` holds, leaving the
 /// first non-matching character available for the next read (unlike std's
@@ -99,9 +100,7 @@ impl Instant {
                         5 => cstr.parse::<i32>()? * 10,
                         6 => cstr.parse::<i32>()?,
                         _ => {
-                            return Err(
-                                InstantError::InvalidMicrosecond(cstr.parse::<i32>()?).into()
-                            );
+                            return Err(InstantError::InvalidMicrosecond(cstr.parse::<i32>()?));
                         }
                     },
                     false => cstr.parse::<i32>()?,
@@ -273,7 +272,7 @@ impl Instant {
         });
 
         if year == -1 || month == -1 || day == -1 {
-            return Err(InstantError::InvalidString(s.to_string()).into());
+            return Err(InstantError::InvalidString(s.to_string()));
         }
         if hour == -1 || minute == -1 || second < 0 {
             hour = 0;
@@ -370,8 +369,7 @@ impl Instant {
                             _ => {
                                 return Err(InstantError::InvalidMicrosecond(
                                     smicro.parse::<i32>().unwrap(),
-                                )
-                                .into());
+                                ));
                             }
                         }
                     }
@@ -399,10 +397,10 @@ impl Instant {
                         }
                     }
                     Some(t) => {
-                        return Err(InstantError::InvalidFormat(t).into());
+                        return Err(InstantError::InvalidFormat(t));
                     }
                     None => {
-                        return Err(InstantError::InvalidFormat('%').into());
+                        return Err(InstantError::InvalidFormat('%'));
                     }
                 },
                 _ => {
@@ -411,8 +409,7 @@ impl Instant {
                         return Err(InstantError::InvalidString(format!(
                             "{} doesn't match {}",
                             c, n
-                        ))
-                        .into());
+                        )));
                     }
                 }
             }
