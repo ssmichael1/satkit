@@ -7,11 +7,11 @@ pub use datadir::set_datadir;
 pub mod test;
 
 #[cfg(feature = "download")]
-mod update_data;
+pub mod update_data;
 #[cfg(feature = "download")]
 pub use update_data::update_datafiles;
 
-mod download;
+pub mod download;
 pub use download::download_file;
 pub use download::download_file_async;
 pub use download::download_if_not_exist;

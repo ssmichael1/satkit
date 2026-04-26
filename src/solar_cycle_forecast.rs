@@ -58,20 +58,12 @@ pub enum Error {
     #[error(transparent)]
     ParseInt(#[from] ParseIntError),
 
-    /// Wraps an [`anyhow::Error`] surfaced by the (still-anyhow) download
-    /// helpers in [`crate::utils::download`].
-    #[error("Download failed: {0}")]
-    Download(anyhow::Error),
+    #[error(transparent)]
+    Download(#[from] crate::utils::download::Error),
 
     /// The crate was built without the `download` feature enabled.
     #[error("satkit was built without the `download` feature")]
     DownloadFeatureDisabled,
-}
-
-impl From<anyhow::Error> for Error {
-    fn from(e: anyhow::Error) -> Self {
-        Self::Download(e)
-    }
 }
 
 /// Convenient type alias used throughout the `solar_cycle_forecast` module.
