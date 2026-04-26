@@ -3,10 +3,10 @@
 
 ## Unreleased
 
-### Breaking: `ureq` is now optional behind the `download` feature
+### `ureq` is now an optional dep behind the `download` feature
 
-- **`ureq` moved off by default**, gated behind a new non-default `download` Cargo feature. `TLE::from_url`, `OMM::from_url`, `solar_cycle_forecast::update`, and the `satkit::utils::{download_file, download_file_async, download_to_string, download_if_not_exist, update_datafiles}` helpers now require building with `--features download`. Without the feature, `download_if_not_exist` will succeed if the file already exists and otherwise return an error; the other download helpers always return an error. Default Rust builds drop ~25 transitive crates (`ureq`, `rustls`, `ring`, `rustls-webpki`, `webpki-roots`, `flate2`, etc.), substantially shortening compile times for users who only need the offline computation.
-- **Python builds are unaffected.** The `satkit-python` crate enables `download` on its `satkit` path-dependency, so all `satkit.utils.update_datafiles`, `satkit.TLE.from_url`, and `satkit.omm_from_url` functions continue to work exactly as before from Python.
+- **New `download` Cargo feature** (default-on) gates `ureq`. `TLE::from_url`, `OMM::from_url`, `solar_cycle_forecast::update`, and the `satkit::utils::{download_file, download_file_async, download_to_string, download_if_not_exist, update_datafiles}` helpers all live behind it. Default builds are unchanged. Users who want a slim dependency tree can opt out via `cargo build --no-default-features --features omm-xml`, which drops ~25 transitive crates (`ureq`, `rustls`, `ring`, `rustls-webpki`, `webpki-roots`, `flate2`, etc.). Without the feature, `download_if_not_exist` will succeed if the file already exists and otherwise return an error; the other download helpers always return an error.
+- **Python builds are unaffected.**
 
 ### Licensing
 
