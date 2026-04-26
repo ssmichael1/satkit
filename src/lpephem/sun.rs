@@ -5,7 +5,7 @@ use crate::TimeLike;
 use crate::TimeScale;
 
 use crate::mathtypes::*;
-use anyhow::Result;
+use super::{Error, Result};
 
 ///
 /// Sun position in the Geocentric Celestial Reference Frame (GCRF)
@@ -249,10 +249,7 @@ pub fn riseset<T: TimeLike>(
         let coslha = sind(deltasun).mul_add(-sind(latitude), cosd(sigma))
             / (cosd(deltasun) * cosd(latitude));
         if coslha.abs() > 1.0 {
-            anyhow::bail!(
-                "Invalid position.  Sun doesn't rise/set on this day at \
-                 this location (e.g., Alaska in summer)"
-            );
+            return Err(Error::NoSunriseOrSunset);
         }
         let mut lha = f64::acos(coslha) * RAD2DEG;
 

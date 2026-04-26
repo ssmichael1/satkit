@@ -42,7 +42,7 @@ use crate::SolarSystem;
 use crate::TimeScale;
 
 use crate::mathtypes::*;
-use anyhow::{bail, Result};
+use super::{Error, Result};
 
 /// Returns the heliocentric position of a planet
 ///
@@ -153,7 +153,7 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
                     224.06891629,
                     110.30393684,
                 ],
-                _ => bail!("Invalid Body"),
+                _ => return Err(Error::InvalidBody),
             };
 
             let adot: [f64; 6] = match body {
@@ -229,7 +229,7 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
                     -0.04062942,
                     -0.01183482,
                 ],
-                _ => bail!("Invalid Body"),
+                _ => return Err(Error::InvalidBody),
             };
             // Julian century
             (
@@ -315,7 +315,7 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
                     224.09702598,
                     110.30167986,
                 ],
-                _ => bail!("Invalid Body"),
+                _ => return Err(Error::InvalidBody),
             };
             let adot: [f64; 6] = match body {
                 SolarSystem::Mercury => [
@@ -390,7 +390,7 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
                     -0.00968827,
                     -0.00809981,
                 ],
-                _ => bail!("Invalid Body"),
+                _ => return Err(Error::InvalidBody),
             };
             let error_terms: Option<[f64; 4]> = match body {
                 SolarSystem::Jupiter => Some([-0.00012452, 0.06064060, -0.35635438, 38.35125000]),
@@ -410,7 +410,7 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
                 error_terms,
             )
         } else {
-            bail!("Time out of range");
+            return Err(Error::TimeOutOfRange);
         }
     };
 

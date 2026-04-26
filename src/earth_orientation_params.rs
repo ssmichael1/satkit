@@ -18,6 +18,7 @@
 
 use std::fs::File;
 use std::io::{self, BufRead};
+use std::num::ParseFloatError;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Once;
@@ -25,7 +26,68 @@ use std::sync::Once;
 use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
 
-use anyhow::{bail, Context, Result};
+use thiserror::Error;
+
+/// Errors produced by the
+/// [`earth_orientation_params`](crate::earth_orientation_params) module.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// A line in the EOP CSV file has fewer than the expected 12 fields.
+    #[error("Invalid entry in EOP file")]
+    InvalidEntry,
+
+    /// The legacy `finals2000A.all` file could not be located.
+    #[error("Cannot open earth orientation parameters file: {0}")]
+    LegacyFileMissing(String),
+
+    /// Failed to open the legacy `finals2000A.all` file.
+    #[error("Couldn't open {path}: {source}")]
+    LegacyOpenFailed {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to parse a numeric field from the legacy bulletin file.
+    #[error("Could not extract {field} from file")]
+    LegacyFieldParse {
+        field: &'static str,
+        #[source]
+        source: ParseFloatError,
+    },
+
+    /// The configured data directory is read-only and cannot receive an
+    /// updated EOP file.
+    #[error(
+        "Data directory is read-only. Try setting the environment variable SATKIT_DATA \
+         to a writeable directory and re-starting or explicitly set data directory"
+    )]
+    DataDirReadOnly,
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    ParseFloat(#[from] ParseFloatError),
+
+    #[error(transparent)]
+    Datadir(#[from] crate::utils::datadir::Error),
+
+    /// Wraps an [`anyhow::Error`] surfaced by the (still-anyhow) download
+    /// helpers in [`crate::utils::download`].
+    #[error("Download failed: {0}")]
+    Download(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Download(e)
+    }
+}
+
+/// Convenient type alias used throughout the
+/// `earth_orientation_params` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -57,7 +119,7 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
             if lvals.len() < 12 {
-                bail!("Invalid entry in EOP file");
+                return Err(Error::InvalidEntry);
             }
             Ok(EOPEntry {
                 mjd_utc: lvals[1].parse()?,
@@ -81,14 +143,18 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
         });
 
     if !path.is_file() {
-        bail!(
-            "Cannot open earth orientation parameters file: {}",
-            path.to_str().unwrap()
-        );
+        return Err(Error::LegacyFileMissing(
+            path.to_str().unwrap_or_default().to_string(),
+        ));
     }
 
     let file = match File::open(&path) {
-        Err(why) => bail!("Couldn't open {}: {}", path.display(), why),
+        Err(why) => {
+            return Err(Error::LegacyOpenFailed {
+                path: path.display().to_string(),
+                source: why,
+            });
+        }
         Ok(file) => file,
     };
 
@@ -112,22 +178,30 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
                 let dy_str: String = v.chars().skip(116).take(9).collect();
 
                 eopvec.push(EOPEntry {
-                    mjd_utc: mjd_str
-                        .trim()
-                        .parse()
-                        .context("Could not extract MJD from file")?,
-                    xp: xp_str
-                        .trim()
-                        .parse()
-                        .context("Could not extract X polar motion from file")?,
-                    yp: yp_str
-                        .trim()
-                        .parse()
-                        .context("Could not extract Y polar motion from file")?,
-                    dut1: dut1_str
-                        .trim()
-                        .parse()
-                        .context("Could not extract delta UT1 from file")?,
+                    mjd_utc: mjd_str.trim().parse().map_err(|source| {
+                        Error::LegacyFieldParse {
+                            field: "MJD",
+                            source,
+                        }
+                    })?,
+                    xp: xp_str.trim().parse().map_err(|source| {
+                        Error::LegacyFieldParse {
+                            field: "X polar motion",
+                            source,
+                        }
+                    })?,
+                    yp: yp_str.trim().parse().map_err(|source| {
+                        Error::LegacyFieldParse {
+                            field: "Y polar motion",
+                            source,
+                        }
+                    })?,
+                    dut1: dut1_str.trim().parse().map_err(|source| {
+                        Error::LegacyFieldParse {
+                            field: "delta UT1",
+                            source,
+                        }
+                    })?,
                     lod: lod_str.trim().parse().unwrap_or(0.0),
                     dX: dx_str.trim().parse().unwrap_or(0.0),
                     dY: dy_str.trim().parse().unwrap_or(0.0),
@@ -180,12 +254,7 @@ pub fn disable_eop_time_warning() {
 pub fn update() -> Result<()> {
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
-        bail!(
-            r#"Data directory is read-only.
-             Try setting the environment variable SATKIT_DATA
-             to a writeable directory and re-starting or explicitly set
-             data directory"#
-        );
+        return Err(Error::DataDirReadOnly);
     }
 
     let url = "http://celestrak.org/SpaceData/EOP-All.csv";

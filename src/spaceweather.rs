@@ -6,11 +6,56 @@ use std::path::PathBuf;
 use crate::utils::{datadir, download_file, download_if_not_exist};
 use crate::Instant;
 use crate::TimeLike;
-use anyhow::{bail, Context, Result};
+use thiserror::Error;
 
 use std::sync::RwLock;
 
 use std::sync::OnceLock;
+
+/// Errors produced by the [`spaceweather`](crate::spaceweather) module.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// A field in the CSV space-weather record could not be parsed as the
+    /// expected numeric type.
+    #[error("Invalid number in file: {0}")]
+    InvalidNumber(&'static str),
+
+    /// No space-weather record exists for the requested time.
+    #[error("No space weather record found for date")]
+    NoRecordForDate,
+
+    /// The configured data directory is read-only and cannot receive an
+    /// updated space-weather file.
+    #[error(
+        "Data directory is read-only. Try setting the environment variable SATKIT_DATA \
+         to a writeable directory and re-starting or explicitly set data directory to \
+         a writeable directory"
+    )]
+    DataDirReadOnly,
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    InvalidEpoch(#[from] crate::time::InstantError),
+
+    #[error(transparent)]
+    Datadir(#[from] crate::utils::datadir::Error),
+
+    /// Wraps an [`anyhow::Error`] surfaced by the (still-anyhow) download
+    /// helpers in [`crate::utils::download`].
+    #[error("Download failed: {0}")]
+    Download(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Download(e)
+    }
+}
+
+/// Convenient type alias used throughout the `spaceweather` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
 pub struct SpaceWeatherRecord {
@@ -40,14 +85,14 @@ pub struct SpaceWeatherRecord {
     pub f10p7_adj_l81: f64,
 }
 
-fn str2num<T: core::str::FromStr>(s: &str, sidx: usize, eidx: usize) -> Result<T> {
+fn str2num<T: core::str::FromStr>(s: &str, sidx: usize, eidx: usize, field: &'static str) -> Result<T> {
     s.chars()
         .skip(sidx)
         .take(eidx - sidx)
         .collect::<String>()
         .trim()
         .parse()
-        .map_err(|_| anyhow::anyhow!("Invalid number in file"))
+        .map_err(|_| Error::InvalidNumber(field))
 }
 
 impl PartialEq for SpaceWeatherRecord {
@@ -88,9 +133,9 @@ fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
             let line = rline.unwrap();
             let lvals: Vec<&str> = line.split(",").collect();
 
-            let year: u32 = str2num(lvals[0], 0, 4).context("Cannot read year")?;
-            let mon: u32 = str2num(lvals[0], 5, 7).context("Cannot read month")?;
-            let day: u32 = str2num(lvals[0], 8, 10).context("Cannot read day of month")?;
+            let year: u32 = str2num(lvals[0], 0, 4, "year")?;
+            let mon: u32 = str2num(lvals[0], 5, 7, "month")?;
+            let day: u32 = str2num(lvals[0], 8, 10, "day of month")?;
 
             Ok(SpaceWeatherRecord {
                 date: (Instant::from_date(year as i32, mon as i32, day as i32)?),
@@ -162,7 +207,7 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
         .rev()
         .find(|x| x.date <= tm)
         .cloned()
-        .ok_or_else(|| anyhow::anyhow!("No space weather record found for date"))
+        .ok_or(Error::NoRecordForDate)
 }
 
 /// Download new Space Weather file, and load it.
@@ -170,12 +215,7 @@ pub fn update() -> Result<()> {
     // Get data directory
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
-        bail!(
-            r#"Data directory is read-only.
-             Try setting the environment variable SATKIT_DATA
-             to a writeable directory and re-starting or explicitly set
-             data directory to writeable directory"#
-        );
+        return Err(Error::DataDirReadOnly);
     }
 
     // Download most-recent EOP
