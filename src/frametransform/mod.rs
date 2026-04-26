@@ -134,10 +134,18 @@ pub fn earth_rotation_angle<T: TimeLike>(tm: &T) -> f64 {
 /// they will be set to zero, and a warning will be printed to stderr.
 ///
 pub fn qitrf2tirs<T: TimeLike>(tm: &T) -> Quaternion {
-    const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
     // Get earth orientation parameters or set them all to zero if not available
     // (function will print warning to stderr if not available)
     let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
+    qitrf2tirs_with_eop(&eop, tm)
+}
+
+// Polar-motion quaternion (ITRF → TIRS) using pre-fetched EOP. Called
+// from hot paths (`qitrf2gcrf`, `itrf_to_gcrf_state`, `gcrf_to_itrf_state`)
+// where the caller already has the EOP lookup and we want to avoid a
+// second call.
+fn qitrf2tirs_with_eop<T: TimeLike>(eop: &[f64; 6], tm: &T) -> Quaternion {
+    const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
     let xp = eop[1] * ASEC2RAD;
     let yp = eop[2] * ASEC2RAD;
     let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
@@ -411,16 +419,7 @@ pub fn qitrf2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
     // to terrestrial intermediate reference frame
     let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
 
-    // Compute this here instead of using function above, so that
-    // we only have to get earth orientation parameters once
-    let w = {
-        const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
-        let xp = eop[1] * ASEC2RAD;
-        let yp = eop[2] * ASEC2RAD;
-        let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
-        let sp = -47.0e-6 * ASEC2RAD * t_tt;
-        Quaternion::rotz(sp) * Quaternion::roty(-xp) * Quaternion::rotx(-yp)
-    };
+    let w = qitrf2tirs_with_eop(&eop, tm);
     let r = qtirs2cirs(tm);
     let q = qcirs2gcrs_dxdy(tm, Some((eop[4], eop[5])));
     q * r * w
@@ -682,16 +681,7 @@ pub fn itrf_to_gcrf_state<T: TimeLike>(
     // correction stay consistent.
     let eop = crate::earth_orientation_params::get(time).unwrap_or([0.0; 6]);
 
-    // ITRF → TIRS via polar motion. Same construction as the inline
-    // `w` in `qitrf2gcrf` to avoid a second EOP lookup.
-    let q_itrf_to_tirs = {
-        const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
-        let xp = eop[1] * ASEC2RAD;
-        let yp = eop[2] * ASEC2RAD;
-        let t_tt = (time.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
-        let sp = -47.0e-6 * ASEC2RAD * t_tt;
-        Quaternion::rotz(sp) * Quaternion::roty(-xp) * Quaternion::rotx(-yp)
-    };
+    let q_itrf_to_tirs = qitrf2tirs_with_eop(&eop, time);
 
     // Rotate state into TIRS.
     let pos_tirs = q_itrf_to_tirs * *pos_itrf;
@@ -772,15 +762,7 @@ pub fn gcrf_to_itrf_state<T: TimeLike>(
     let omega_tirs: Vector3 = numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
     let vel_tirs = vel_tirs_swept - omega_tirs.cross(&pos_tirs);
 
-    // TIRS → ITRF via inverse polar motion.
-    let q_tirs_to_itrf = {
-        const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
-        let xp = eop[1] * ASEC2RAD;
-        let yp = eop[2] * ASEC2RAD;
-        let t_tt = (time.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
-        let sp = -47.0e-6 * ASEC2RAD * t_tt;
-        (Quaternion::rotz(sp) * Quaternion::roty(-xp) * Quaternion::rotx(-yp)).conjugate()
-    };
+    let q_tirs_to_itrf = qitrf2tirs_with_eop(&eop, time).conjugate();
 
     let pos_itrf = q_tirs_to_itrf * pos_tirs;
     let vel_itrf = q_tirs_to_itrf * vel_tirs;
