@@ -62,6 +62,10 @@ pub enum Error {
     /// helpers in [`crate::utils::download`].
     #[error("Download failed: {0}")]
     Download(anyhow::Error),
+
+    /// The crate was built without the `download` feature enabled.
+    #[error("satkit was built without the `download` feature")]
+    DownloadFeatureDisabled,
 }
 
 impl From<anyhow::Error> for Error {
@@ -191,7 +195,7 @@ pub fn update() -> Result<()> {
 
 #[cfg(not(feature = "download"))]
 pub fn update() -> Result<()> {
-    bail!("satkit was built without the `download` feature")
+    Err(Error::DownloadFeatureDisabled)
 }
 
 #[cfg(test)]
