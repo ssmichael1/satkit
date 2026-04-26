@@ -62,6 +62,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
+    #[cfg(feature = "download")]
     #[error(transparent)]
     Http(#[from] ureq::Error),
 }
