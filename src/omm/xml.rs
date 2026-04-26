@@ -293,7 +293,7 @@ impl OMM {
     /// assert_eq!(omms.len(), 1);
     /// assert_eq!(omms[0].object_id, "1998-067A");
     /// # }
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok::<(), satkit::omm::Error>(())
     /// ```
     ///
     /// # Errors

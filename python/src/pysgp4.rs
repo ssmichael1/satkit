@@ -389,12 +389,12 @@ pub fn sgp4(
         let tmarray = time.to_time_vec()?;
         let results: Vec<psgp4::SGP4State> = plist
             .iter()
-            .map(|item| {
+            .map(|item| -> Result<psgp4::SGP4State> {
                 if item.is_instance_of::<PyTLE>() {
                     let mut stle: PyRefMut<PyTLE> = item.extract().map_err(|e| {
                         pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e))
                     })?;
-                    psgp4::sgp4(&mut stle.0, tmarray.as_slice())
+                    Ok(psgp4::sgp4(&mut stle.0, tmarray.as_slice())?)
                 } else if item.is_instance_of::<PyDict>() {
                     let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
                         pyo3::exceptions::PyValueError::new_err(format!(
@@ -403,7 +403,7 @@ pub fn sgp4(
                         ))
                     })?;
                     let mut omm = omm_from_pydict(dict)?;
-                    psgp4::sgp4(&mut omm, tmarray.as_slice())
+                    Ok(psgp4::sgp4(&mut omm, tmarray.as_slice())?)
                 } else {
                     bail!("Invalid TLE in list");
                 }

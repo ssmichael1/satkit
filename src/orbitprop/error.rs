@@ -49,12 +49,10 @@ pub enum Error {
     },
 
     /// Wraps an error surfaced while building a
-    /// [`Precomputed`](crate::orbitprop::Precomputed) interp table.
-    /// Currently captures stringified errors from the still-anyhow
-    /// `jplephem` module; will become a typed variant when that module
-    /// is migrated in Phase 3.
-    #[error("Cannot compute precomputed interpolation data: {0}")]
-    Precompute(String),
+    /// [`Precomputed`](crate::orbitprop::Precomputed) interp table from
+    /// JPL ephemeris data.
+    #[error(transparent)]
+    Jplephem(#[from] crate::jplephem::Error),
 
     // -- satstate.rs -----------------------------------------------------
     /// Returned by [`SatState::set_pos_uncertainty`](crate::orbitprop::SatState::set_pos_uncertainty),

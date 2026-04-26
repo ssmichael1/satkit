@@ -1,6 +1,6 @@
 use crate::utils::{self, download_if_not_exist};
 
-use anyhow::Result;
+use super::{Error, Result};
 
 use crate::mathtypes::*;
 
@@ -54,17 +54,18 @@ impl IERSTable {
                         let s: Vec<&str> = tline.split_whitespace().collect();
                         let tsize: usize = s[s.len() - 1].parse().unwrap_or(0);
                         if !(0..=5).contains(&tnum) || tsize == 0 {
-                            anyhow::bail!(
-                                "Error parsing file {}, invalid table definition line",
-                                fname
-                            );
+                            return Err(Error::InvalidIersTableDef {
+                                fname: fname.to_string(),
+                            });
                         }
                         table.data[tnum as usize] = DMatrix::<f64>::zeros(tsize, 17);
                         rowcnt = 0;
                         continue;
                     } else if tnum >= 0 {
                         if table.data[tnum as usize].ncols() < 17 {
-                            anyhow::bail!("Error parsing file {}, table not initialized", fname);
+                            return Err(Error::IersTableNotInitialized {
+                                fname: fname.to_string(),
+                            });
                         }
                         let vals: Vec<f64> = tline.split_whitespace().map(|x| x.parse().unwrap()).collect();
                         for (c, &val) in vals.iter().enumerate() {
