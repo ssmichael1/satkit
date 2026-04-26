@@ -23,16 +23,75 @@ use crate::solarsystem::SolarSystem;
 
 use crate::utils::{datadir, download_if_not_exist};
 
+use std::array::TryFromSliceError;
+use std::num::{ParseFloatError, ParseIntError};
+use std::str::Utf8Error;
+use std::string::FromUtf8Error;
 use std::sync::OnceLock;
 
 use crate::mathtypes::*;
 use crate::{Instant, TimeLike, TimeScale};
 
-use anyhow::{bail, Result};
+use thiserror::Error;
+
+/// Errors produced by the [`jplephem`](crate::jplephem) module.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Returned when [`Instant`]'s Julian date falls outside the
+    /// `[jd_start, jd_stop]` window of the loaded ephemerides file.
+    #[error("Invalid Julian date: {0}")]
+    InvalidJulianDate(f64),
+
+    /// The Chebyshev dispatcher hit a coefficient count outside the table
+    /// of supported sizes — typically because the requested body is not
+    /// represented in the loaded ephemeris file.
+    #[error("Invalid body")]
+    InvalidBody,
+
+    /// The opened ephemerides file is shorter than required to hold the
+    /// declared Chebyshev coefficient block.
+    #[error("Invalid record size for cheby data")]
+    InvalidRecordSize,
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Utf8(#[from] Utf8Error),
+
+    #[error(transparent)]
+    FromUtf8(#[from] FromUtf8Error),
+
+    #[error(transparent)]
+    TryFromSlice(#[from] TryFromSliceError),
+
+    #[error(transparent)]
+    ParseInt(#[from] ParseIntError),
+
+    #[error(transparent)]
+    ParseFloat(#[from] ParseFloatError),
+
+    #[error(transparent)]
+    Datadir(#[from] crate::utils::datadir::Error),
+
+    /// Wraps an [`anyhow::Error`] surfaced by the (still-anyhow) download
+    /// helpers in [`crate::utils::download`].
+    #[error("Download failed: {0}")]
+    Download(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Download(e)
+    }
+}
+
+/// Convenient type alias used throughout the `jplephem` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl TryFrom<i32> for SolarSystem {
     type Error = ();
-    fn try_from(v: i32) -> Result<Self, Self::Error> {
+    fn try_from(v: i32) -> std::result::Result<Self, Self::Error> {
         match v {
             x if x == Self::Mercury as i32 => Ok(Self::Mercury),
             x if x == Self::Venus as i32 => Ok(Self::Venus),
@@ -99,7 +158,7 @@ macro_rules! dispatch_ncoeff {
             12 => $self.$method::<12>($setup),
             13 => $self.$method::<13>($setup),
             14 => $self.$method::<14>($setup),
-            _ => bail!("Invalid body"),
+            _ => return Err(Error::InvalidBody),
         }
     };
 }
@@ -118,7 +177,7 @@ impl JPLEphem {
     fn cheby_setup(&self, body: SolarSystem, tm: &Instant) -> Result<ChebySetup> {
         let tt = tm.as_jd_with_scale(TimeScale::TT);
         if self.jd_start > tt || self.jd_stop < tt {
-            bail!("Invalid Julian date: {}", tt);
+            return Err(Error::InvalidJulianDate(tt));
         }
 
         let t_int = (tt - self.jd_start) / self.jd_step;
@@ -289,7 +348,7 @@ impl JPLEphem {
                 let mut v: DMatrix<f64> = DMatrix::zeros(ncoeff, nrecords);
 
                 if raw.len() < record_size * 2 + ncoeff * nrecords * 8 {
-                    bail!("Invalid record size for cheby data");
+                    return Err(Error::InvalidRecordSize);
                 }
 
                 unsafe {
