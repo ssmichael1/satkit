@@ -9,12 +9,67 @@
 
 use crate::utils::{datadir, download_to_string};
 use crate::{Instant, TimeLike};
-use anyhow::{bail, Result};
+use std::num::ParseIntError;
+use thiserror::Error;
 
 use std::path::PathBuf;
 use std::sync::RwLock;
 
 use std::sync::OnceLock;
+
+/// Errors produced by the [`solar_cycle_forecast`](crate::solar_cycle_forecast)
+/// module.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// The cached forecast file is missing on disk.
+    #[error("Solar cycle forecast file not found")]
+    FileNotFound,
+
+    /// The downloaded JSON document is not the expected array of records.
+    #[error("Expected JSON array in solar cycle forecast")]
+    NotJsonArray,
+
+    /// A forecast entry is missing its `time-tag` field.
+    #[error("Missing time-tag")]
+    MissingTimeTag,
+
+    /// A forecast entry is missing its `predicted_f10.7` field.
+    #[error("Missing predicted_f10.7")]
+    MissingPredictedF107,
+
+    /// The downloaded forecast contains zero records.
+    #[error("Downloaded forecast contains no records")]
+    EmptyForecast,
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    InvalidEpoch(#[from] crate::time::InstantError),
+
+    #[error(transparent)]
+    Datadir(#[from] crate::utils::datadir::Error),
+
+    #[error(transparent)]
+    ParseInt(#[from] ParseIntError),
+
+    /// Wraps an [`anyhow::Error`] surfaced by the (still-anyhow) download
+    /// helpers in [`crate::utils::download`].
+    #[error("Download failed: {0}")]
+    Download(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Download(e)
+    }
+}
+
+/// Convenient type alias used throughout the `solar_cycle_forecast` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
 pub struct ForecastRecord {
@@ -29,7 +84,7 @@ fn forecast_path() -> Result<PathBuf> {
 fn load_forecast() -> Result<Vec<ForecastRecord>> {
     let path = forecast_path()?;
     if !path.is_file() {
-        bail!("Solar cycle forecast file not found");
+        return Err(Error::FileNotFound);
     }
     let contents = std::fs::read_to_string(&path)?;
     parse_forecast_json(&contents)
@@ -37,15 +92,11 @@ fn load_forecast() -> Result<Vec<ForecastRecord>> {
 
 fn parse_forecast_json(contents: &str) -> Result<Vec<ForecastRecord>> {
     let parsed: serde_json::Value = serde_json::from_str(contents)?;
-    let entries = parsed
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("Expected JSON array in solar cycle forecast"))?;
+    let entries = parsed.as_array().ok_or(Error::NotJsonArray)?;
 
     let mut records = Vec::new();
     for entry in entries {
-        let time_tag = entry["time-tag"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Missing time-tag"))?;
+        let time_tag = entry["time-tag"].as_str().ok_or(Error::MissingTimeTag)?;
 
         // Parse "YYYY-MM" format
         let parts: Vec<&str> = time_tag.split('-').collect();
@@ -59,7 +110,7 @@ fn parse_forecast_json(contents: &str) -> Result<Vec<ForecastRecord>> {
 
         let f107 = entry["predicted_f10.7"]
             .as_f64()
-            .ok_or_else(|| anyhow::anyhow!("Missing predicted_f10.7"))?;
+            .ok_or(Error::MissingPredictedF107)?;
 
         records.push(ForecastRecord {
             date,
@@ -121,7 +172,7 @@ pub fn update() -> Result<()> {
     // Validate before saving
     let records = parse_forecast_json(&contents)?;
     if records.is_empty() {
-        bail!("Downloaded forecast contains no records");
+        return Err(Error::EmptyForecast);
     }
 
     let path = forecast_path()?;
