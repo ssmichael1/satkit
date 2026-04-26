@@ -216,7 +216,11 @@ pub mod omm;
 
 // Time and duration
 mod time;
-pub use time::{Duration, Instant, TimeLike, TimeScale, Weekday};
+pub use time::{Duration, Instant, InstantError, TimeLike, TimeScale, Weekday};
+
+// Top-level façade error type
+mod error;
+pub use error::{Error, Result};
 
 // Core types available at crate level
 pub use frames::Frame;
