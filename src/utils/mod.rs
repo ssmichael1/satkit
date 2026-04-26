@@ -6,7 +6,9 @@ pub use datadir::set_datadir;
 #[cfg(test)]
 pub mod test;
 
+#[cfg(feature = "download")]
 mod update_data;
+#[cfg(feature = "download")]
 pub use update_data::update_datafiles;
 
 mod download;

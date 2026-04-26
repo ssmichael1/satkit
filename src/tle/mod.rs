@@ -221,6 +221,8 @@ impl TLE {
     /// Fetches the content at the given URL and parses it as TLE lines.
     /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
     ///
+    /// Requires the `download` Cargo feature.
+    ///
     /// # Arguments
     ///
     /// * `url` - URL to fetch TLE data from
@@ -234,8 +236,10 @@ impl TLE {
     /// ```no_run
     /// use satkit::TLE;
     ///
+    /// # #[cfg(feature = "download")]
     /// let tles = TLE::from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle").unwrap();
     /// ```
+    #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
         let agent = ureq::Agent::new_with_defaults();
         let mut resp = agent.get(url).call()?;

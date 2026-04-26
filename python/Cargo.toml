@@ -9,7 +9,7 @@ name = "satkit"
 crate-type = ["cdylib"]
 
 [dependencies]
-satkit = { path = ".." }
+satkit = { path = "..", features = ["download"] }
 pyo3 = { version = "0.28.2", features = ["extension-module", "anyhow"] }
 numpy = "0.28"
 numeris = { version = "0.5.6", features = ["serde", "estimate"] }

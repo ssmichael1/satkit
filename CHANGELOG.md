@@ -3,6 +3,11 @@
 
 ## Unreleased
 
+### Breaking: `ureq` is now optional behind the `download` feature
+
+- **`ureq` moved off by default**, gated behind a new non-default `download` Cargo feature. `TLE::from_url`, `OMM::from_url`, `solar_cycle_forecast::update`, and the `satkit::utils::{download_file, download_file_async, download_to_string, download_if_not_exist, update_datafiles}` helpers now require building with `--features download`. Without the feature, `download_if_not_exist` will succeed if the file already exists and otherwise return an error; the other download helpers always return an error. Default Rust builds drop ~25 transitive crates (`ureq`, `rustls`, `ring`, `rustls-webpki`, `webpki-roots`, `flate2`, etc.), substantially shortening compile times for users who only need the offline computation.
+- **Python builds are unaffected.** The `satkit-python` crate enables `download` on its `satkit` path-dependency, so all `satkit.utils.update_datafiles`, `satkit.TLE.from_url`, and `satkit.omm_from_url` functions continue to work exactly as before from Python.
+
 ### Licensing
 
 - **Dual-licensed under MIT OR Apache-2.0.** Previously MIT-only. Apache-2.0 adds an explicit patent grant — important now that the project is taking external contributions, since it binds contributors to a patent peace clause that bare MIT does not. Matches the Rust ecosystem convention. `LICENSE` was renamed to `LICENSE-MIT` and a new `LICENSE-APACHE` was added; `Cargo.toml` and `pyproject.toml` `license` fields updated to `"MIT OR Apache-2.0"`. Downstream users may continue to use the project under either license at their option — no action required.

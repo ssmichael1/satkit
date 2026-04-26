@@ -24,7 +24,7 @@ name = "satkit"
 [dependencies]
 numeris = { version = "0.5.7", features = ["serde", "estimate", "ode"] }
 thiserror = "2.0"
-ureq = "3.1.2"
+ureq = { version = "3.1.2", optional = true }
 process_path = "0.1.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -41,6 +41,7 @@ rand_distr = "0.5.1"
 default = ["omm-xml"]
 omm-xml = ["dep:quick-xml"]
 chrono = ["dep:chrono"]
+download = ["dep:ureq"]
 
 [workspace.metadata.release]
 pre-release-replacements = [
