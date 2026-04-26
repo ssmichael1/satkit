@@ -206,7 +206,7 @@ pub mod tle;
 pub mod utils;
 
 /// Coordinate frames (re-exported as `Frame` at crate root)
-mod frames;
+pub mod frames;
 
 // Orbital Mean-Element Messages
 pub mod omm;
