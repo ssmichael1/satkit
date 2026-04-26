@@ -38,7 +38,7 @@ approx = "0.5"
 rand_distr = "0.5.1"
 
 [features]
-default = ["omm-xml"]
+default = ["omm-xml", "download"]
 omm-xml = ["dep:quick-xml"]
 chrono = ["dep:chrono"]
 download = ["dep:ureq"]
