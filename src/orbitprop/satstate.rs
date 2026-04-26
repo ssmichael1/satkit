@@ -605,13 +605,11 @@ mod test {
         // Check that propagating backwards in time results in the original state
         assert!((satstate.pos_gcrf() - state0.pos_gcrf()).norm() < 0.1);
         assert!((satstate.vel_gcrf() - state0.vel_gcrf()).norm() < 0.001);
-        let cov1 = match satstate.cov() {
-            StateCov::PVCov(v) => v,
-            StateCov::None => anyhow::bail!("cov is not none"),
+        let StateCov::PVCov(cov1) = satstate.cov() else {
+            panic!("expected covariance");
         };
-        let cov2 = match state0.cov() {
-            StateCov::PVCov(v) => v,
-            StateCov::None => anyhow::bail!("cov is not none"),
+        let StateCov::PVCov(cov2) = state0.cov() else {
+            panic!("expected covariance");
         };
         assert!((cov1 - cov2).norm_inf() < 0.001);
 
@@ -664,13 +662,11 @@ mod test {
         assert!((satstate.pos_gcrf() - state2.pos_gcrf()).norm() < 1e-15);
         assert!((satstate.vel_gcrf() - state2.vel_gcrf()).norm() < 1e-15);
 
-        let cov1 = match satstate.cov() {
-            StateCov::PVCov(v) => v,
-            StateCov::None => anyhow::bail!("cov is not none"),
+        let StateCov::PVCov(cov1) = satstate.cov() else {
+            panic!("expected covariance");
         };
-        let cov2 = match state2.cov() {
-            StateCov::PVCov(v) => v,
-            StateCov::None => anyhow::bail!("cov is not none"),
+        let StateCov::PVCov(cov2) = state2.cov() else {
+            panic!("expected covariance");
         };
         assert!((cov1 - cov2).norm_inf() < 1e-15);
 
@@ -995,9 +991,8 @@ mod test {
         sat.set_pos_uncertainty(&numeris::vector![100.0, 200.0, 50.0], Frame::LVLH)?;
         sat.set_vel_uncertainty(&numeris::vector![0.1, 0.2, 0.05], Frame::LVLH)?;
 
-        let cov = match sat.cov() {
-            StateCov::PVCov(m) => m,
-            StateCov::None => panic!("expected covariance"),
+        let StateCov::PVCov(cov) = sat.cov() else {
+            panic!("expected covariance");
         };
 
         // Both position and velocity blocks must be non-zero
