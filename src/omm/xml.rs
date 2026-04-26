@@ -1,17 +1,16 @@
-use anyhow::Result;
 use serde::Deserialize;
 
-use super::OMM;
+use super::{Error, Result, OMM};
 
-fn parse_required_f64(field: &str, value: Option<String>) -> anyhow::Result<f64> {
-    let value = value.ok_or_else(|| anyhow::anyhow!("Missing required field {field}"))?;
+fn parse_required_f64(field: &'static str, value: Option<String>) -> Result<f64> {
+    let value = value.ok_or(Error::MissingField(field))?;
     value
         .trim()
         .parse::<f64>()
-        .map_err(|e| anyhow::anyhow!("Invalid float for {field}: {e}"))
+        .map_err(|source| Error::InvalidFloatField { field, source })
 }
 
-fn parse_optional_f64(value: Option<String>) -> anyhow::Result<Option<f64>> {
+fn parse_optional_f64(value: Option<String>) -> Result<Option<f64>> {
     match value {
         None => Ok(None),
         Some(s) => {
@@ -19,15 +18,13 @@ fn parse_optional_f64(value: Option<String>) -> anyhow::Result<Option<f64>> {
             if s.is_empty() {
                 Ok(None)
             } else {
-                s.parse::<f64>()
-                    .map(Some)
-                    .map_err(|e| anyhow::anyhow!("Invalid float value: {e}"))
+                s.parse::<f64>().map(Some).map_err(Error::from)
             }
         }
     }
 }
 
-fn parse_optional_u8(value: Option<String>) -> anyhow::Result<Option<u8>> {
+fn parse_optional_u8(value: Option<String>) -> Result<Option<u8>> {
     match value {
         None => Ok(None),
         Some(s) => {
@@ -35,15 +32,13 @@ fn parse_optional_u8(value: Option<String>) -> anyhow::Result<Option<u8>> {
             if s.is_empty() {
                 Ok(None)
             } else {
-                s.parse::<u8>()
-                    .map(Some)
-                    .map_err(|e| anyhow::anyhow!("Invalid u8 value: {e}"))
+                s.parse::<u8>().map(Some).map_err(Error::from)
             }
         }
     }
 }
 
-fn parse_optional_u32(value: Option<String>) -> anyhow::Result<Option<u32>> {
+fn parse_optional_u32(value: Option<String>) -> Result<Option<u32>> {
     match value {
         None => Ok(None),
         Some(s) => {
@@ -51,9 +46,7 @@ fn parse_optional_u32(value: Option<String>) -> anyhow::Result<Option<u32>> {
             if s.is_empty() {
                 Ok(None)
             } else {
-                s.parse::<u32>()
-                    .map(Some)
-                    .map_err(|e| anyhow::anyhow!("Invalid u32 value: {e}"))
+                s.parse::<u32>().map(Some).map_err(Error::from)
             }
         }
     }
@@ -180,9 +173,9 @@ struct OmmXmlTleParameters {
 }
 
 impl TryFrom<OmmXmlMessage> for OMM {
-    type Error = anyhow::Error;
+    type Error = Error;
 
-    fn try_from(xml: OmmXmlMessage) -> std::result::Result<Self, Self::Error> {
+    fn try_from(xml: OmmXmlMessage) -> Result<Self> {
         let metadata = xml.body.segment.metadata;
         let mean = xml.body.segment.data.mean_elements;
         let tle = xml.body.segment.data.tle_parameters;
@@ -308,13 +301,13 @@ impl OMM {
     /// Returns an error if XML parsing fails or if required OMM fields are missing/invalid.
     pub fn from_xml_string(s: &str) -> Result<Vec<Self>> {
         if s.contains("<ndm") {
-            let root: OmmXmlRoot = quick_xml::de::from_str(s).map_err(|e| anyhow::anyhow!(e))?;
+            let root: OmmXmlRoot = quick_xml::de::from_str(s)?;
             root.omms
                 .into_iter()
                 .map(Self::try_from)
                 .collect::<Result<Vec<_>>>()
         } else {
-            let msg: OmmXmlMessage = quick_xml::de::from_str(s).map_err(|e| anyhow::anyhow!(e))?;
+            let msg: OmmXmlMessage = quick_xml::de::from_str(s)?;
             Ok(vec![Self::try_from(msg)?])
         }
     }
@@ -328,7 +321,7 @@ impl OMM {
     /// Returns an error if the file cannot be read, XML parsing fails, or required
     /// OMM fields are missing/invalid.
     pub fn from_xml_file<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Self>> {
-        let s = std::fs::read_to_string(path).map_err(|e| anyhow::anyhow!(e))?;
+        let s = std::fs::read_to_string(path)?;
         Self::from_xml_string(&s)
     }
 }
