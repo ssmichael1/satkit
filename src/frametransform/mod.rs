@@ -25,8 +25,11 @@
 //! - **CIRS** (Celestial Intermediate Reference System): IERS 2010 intermediate frame
 //! - **MOD** (Mean of Date): Precession-only frame
 
+mod error;
 mod ierstable;
 mod qcirs2gcrs;
+
+pub use error::{Error, Result};
 
 use crate::{TimeLike, TimeScale};
 use std::f64::consts::PI;
@@ -818,7 +821,7 @@ pub fn to_gcrf(
     frame: crate::Frame,
     pos_gcrf: &Vector3,
     vel_gcrf: &Vector3,
-) -> anyhow::Result<Matrix3> {
+) -> Result<Matrix3> {
     use crate::Frame;
     match frame {
         Frame::GCRF => Ok(Matrix3::eye()),
@@ -830,11 +833,7 @@ pub fn to_gcrf(
         | Frame::CIRS
         | Frame::TEME
         | Frame::EME2000
-        | Frame::ICRF => anyhow::bail!(
-            "to_gcrf: frame {} is not a satellite-local orbital frame; use the \
-             time-based quaternion helpers (qitrf2gcrf, qteme2gcrf, etc.) instead",
-            frame
-        ),
+        | Frame::ICRF => Err(Error::UnsupportedFrame { frame }),
     }
 }
 
@@ -847,7 +846,7 @@ pub fn from_gcrf(
     frame: crate::Frame,
     pos_gcrf: &Vector3,
     vel_gcrf: &Vector3,
-) -> anyhow::Result<Matrix3> {
+) -> Result<Matrix3> {
     Ok(to_gcrf(frame, pos_gcrf, vel_gcrf)?.transpose())
 }
 

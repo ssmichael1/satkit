@@ -257,8 +257,7 @@ impl TLE {
         let mut kepler = crate::kepler::Kepler::from_pv(
             numeris::vector![closest_state[0], closest_state[1], closest_state[2]],
             numeris::vector![closest_state[3], closest_state[4], closest_state[5]],
-        )
-        .map_err(|e| Error::KeplerConversion(e.to_string()))?;
+        )?;
 
         // Move Kepler state to epoch
         if (epoch - closest_time).as_microseconds().abs() > 10 {
