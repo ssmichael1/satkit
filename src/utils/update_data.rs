@@ -1,30 +1,74 @@
-use super::download_file_async;
-use super::download_to_string;
+use super::download::{self, download_file_async, download_to_string};
 use crate::utils::datadir;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::thread::JoinHandle;
+use thiserror::Error;
 
-use anyhow::{bail, Result};
+/// Errors produced by [`update_datafiles`] and the underlying download
+/// orchestration helpers.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// The downloaded JSON file does not parse as the expected array of
+    /// file URLs.
+    #[error("Expected JSON array of file URLs")]
+    NotJsonArray,
+
+    /// An entry inside the JSON array is not a string URL.
+    #[error("Expected string URL")]
+    NotJsonString,
+
+    /// Encountered an unexpected JSON node while traversing the
+    /// recursive directory manifest.
+    #[error("Invalid JSON manifest entry")]
+    InvalidManifestEntry,
+
+    /// One or more entries in the JSON manifest could not be parsed.
+    #[error("Could not parse manifest entries")]
+    ManifestParseFailed,
+
+    /// The configured data directory is read-only and cannot receive
+    /// new or refreshed files.
+    #[error(
+        "Data directory is read-only. Try setting SATKIT_DATA environment variable \
+         to a writeable directory and re-starting"
+    )]
+    DataDirReadOnly,
+
+    /// A worker thread launched by [`download_file_async`] panicked.
+    #[error("Background download thread panicked")]
+    ThreadPanic,
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Datadir(#[from] crate::utils::datadir::Error),
+
+    #[error(transparent)]
+    Download(#[from] download::Error),
+}
+
+/// Convenient type alias used throughout the `update_data` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Download a list of files from a JSON file
 fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> Result<()> {
     let json_base: Value = serde_json::from_str(download_to_string(json_url.as_str())?.as_str())?;
-    let arr = json_base
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("Expected JSON array of file URLs"))?;
-    let vresult: Vec<std::thread::JoinHandle<Result<bool>>> = arr
+    let arr = json_base.as_array().ok_or(Error::NotJsonArray)?;
+    let vresult: Vec<JoinHandle<download::Result<bool>>> = arr
         .iter()
-        .map(|url| -> Result<JoinHandle<Result<bool>>> {
-            let url_str = url
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("Expected string URL"))?;
+        .map(|url| -> Result<JoinHandle<download::Result<bool>>> {
+            let url_str = url.as_str().ok_or(Error::NotJsonString)?;
             Ok(download_file_async(url_str.to_string(), basedir, true))
         })
         .collect::<Result<Vec<_>>>()?;
-    // Wait for all the threads to funish
+    // Wait for all the threads to finish
     for jh in vresult {
-        jh.join().unwrap()?;
+        jh.join().map_err(|_| Error::ThreadPanic)??;
     }
 
     Ok(())
@@ -36,7 +80,7 @@ fn download_from_json(
     basedir: std::path::PathBuf,
     baseurl: String,
     overwrite: &bool,
-    thandles: &mut Vec<JoinHandle<Result<bool>>>,
+    thandles: &mut Vec<JoinHandle<download::Result<bool>>>,
 ) -> Result<()> {
     if let Some(obj) = v.as_object() {
         let r1: Vec<Result<()>> = obj
@@ -54,7 +98,7 @@ fn download_from_json(
             .filter(|res| res.is_err())
             .collect();
         if !r1.is_empty() {
-            bail!("Could not parse entries");
+            return Err(Error::ManifestParseFailed);
         }
     } else if let Some(arr) = v.as_array() {
         let r2: Vec<Result<()>> = arr
@@ -66,14 +110,14 @@ fn download_from_json(
             .filter(|res| res.is_err())
             .collect();
         if !r2.is_empty() {
-            bail!("could not parse array entries");
+            return Err(Error::ManifestParseFailed);
         }
     } else if let Some(s) = v.as_str() {
         let mut newurl = baseurl;
         newurl.push_str(format!("/{s}").as_str());
         thandles.push(download_file_async(newurl, &basedir, *overwrite));
     } else {
-        bail!("invalid json for downloading files??!!");
+        return Err(Error::InvalidManifestEntry);
     }
 
     Ok(())
@@ -88,11 +132,11 @@ fn download_datadir(basedir: PathBuf, baseurl: String, overwrite: &bool) -> Resu
     fileurl.push_str("/files.json");
 
     let json_base: Value = serde_json::from_str(download_to_string(fileurl.as_str())?.as_str())?;
-    let mut thandles: Vec<JoinHandle<Result<bool>>> = Vec::new();
+    let mut thandles: Vec<JoinHandle<download::Result<bool>>> = Vec::new();
     download_from_json(&json_base, basedir, baseurl, overwrite, &mut thandles)?;
-    // Wait for all the threads to funish
+    // Wait for all the threads to finish
     for jh in thandles {
-        jh.join().unwrap()?;
+        jh.join().map_err(|_| Error::ThreadPanic)??;
     }
     Ok(())
 }
@@ -122,13 +166,7 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
         None => datadir()?,
     };
     if downloaddir.metadata()?.permissions().readonly() {
-        bail!(
-            r#"
-            Data directory is read-only.
-            Try setting SATKIT_DATA environment
-            variable to a writeable directory and re-starting
-            "#
-        );
+        return Err(Error::DataDirReadOnly);
     }
 
     println!(

@@ -125,7 +125,7 @@ impl SGP4Source for TLE {
         &mut self.satrec
     }
 
-    fn sgp4_init_args(&self) -> anyhow::Result<SGP4InitArgs> {
+    fn sgp4_init_args(&self) -> crate::sgp4::Result<SGP4InitArgs> {
         use std::f64::consts::PI;
 
         const TWOPI: f64 = PI * 2.0;
@@ -407,9 +407,7 @@ impl TLE {
         // Note: day_of_year starts from 1, not zero,
         // also, go from Jan 2 to avoid leap-second
         // issues, hence the "-2" at end
-        let epoch = Instant::from_date(year as i32, 1, 2)
-            .map_err(|e| Error::InvalidEpoch(format!("Invalid year, month, or day: {e}")))?
-            .add_utc_days(day_of_year - 2.0);
+        let epoch = Instant::from_date(year as i32, 1, 2)?.add_utc_days(day_of_year - 2.0);
 
         Ok(Self {
             name: "none".to_string(),

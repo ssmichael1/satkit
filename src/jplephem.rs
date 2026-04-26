@@ -74,16 +74,8 @@ pub enum Error {
     #[error(transparent)]
     Datadir(#[from] crate::utils::datadir::Error),
 
-    /// Wraps an [`anyhow::Error`] surfaced by the (still-anyhow) download
-    /// helpers in [`crate::utils::download`].
-    #[error("Download failed: {0}")]
-    Download(anyhow::Error),
-}
-
-impl From<anyhow::Error> for Error {
-    fn from(e: anyhow::Error) -> Self {
-        Self::Download(e)
-    }
+    #[error(transparent)]
+    Download(#[from] crate::utils::download::Error),
 }
 
 /// Convenient type alias used throughout the `jplephem` module.

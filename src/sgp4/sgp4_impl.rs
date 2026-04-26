@@ -129,7 +129,10 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// ```
 ///
 #[inline]
-pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> anyhow::Result<SGP4State> {
+pub fn sgp4<T: TimeLike>(
+    sgp4source: &mut impl SGP4Source,
+    tm: &[T],
+) -> super::Result<SGP4State> {
     sgp4_full(sgp4source, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
@@ -206,25 +209,28 @@ pub fn sgp4_full<T: TimeLike>(
     tm: &[T],
     gravconst: GravConst,
     opsmode: OpsMode,
-) -> anyhow::Result<SGP4State> {
+) -> super::Result<SGP4State> {
     if sgp4source.satrec_mut().is_none() {
         let args = sgp4source.sgp4_init_args()?;
 
-        *sgp4source.satrec_mut() = Some(sgp4init(
-            gravconst,
-            opsmode,
-            "satno",
-            args.jdsatepoch - 2433281.5,
-            args.bstar,
-            args.ndot,
-            args.nddot,
-            args.ecco,
-            args.argpo,
-            args.inclo,
-            args.mo,
-            args.no,
-            args.nodeo,
-        ).map_err(|e| anyhow::anyhow!("SGP4 init error: {}", e))?);
+        *sgp4source.satrec_mut() = Some(
+            sgp4init(
+                gravconst,
+                opsmode,
+                "satno",
+                args.jdsatepoch - 2433281.5,
+                args.bstar,
+                args.ndot,
+                args.nddot,
+                args.ecco,
+                args.argpo,
+                args.inclo,
+                args.mo,
+                args.no,
+                args.nodeo,
+            )
+            .map_err(super::Error::SatRecInit)?,
+        );
     }
 
     let epoch = sgp4source.epoch();
@@ -345,8 +351,7 @@ mod tests {
                         if tle.sat_num == 33334 {
                             continue;
                         }
-                        return Err(e);
-
+                        return Err(e.into());
                     }
                 };
                 if states.errcode[0] != SGP4Error::SGP4Success {

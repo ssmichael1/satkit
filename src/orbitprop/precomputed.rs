@@ -83,10 +83,8 @@ impl Precomputed {
                 for idx in 0..nsteps {
                     let t = pbegin + Duration::from_seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
-                    let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)
-                        .map_err(|e| Error::Precompute(e.to_string()))?;
-                    let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)
-                        .map_err(|e| Error::Precompute(e.to_string()))?;
+                    let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
+                    let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
                     data.push((q, psun, pmoon));
                 }
                 data

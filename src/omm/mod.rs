@@ -335,7 +335,7 @@ impl OMM {
     /// let omms = OMM::from_json_string(json)?;
     /// assert_eq!(omms.len(), 1);
     /// assert_eq!(omms[0].object_id, "1998-067A");
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok::<(), satkit::omm::Error>(())
     /// ```
     ///
     /// # Errors
@@ -357,7 +357,7 @@ impl OMM {
     ///
     /// let omms = OMM::from_json_file("/path/to/omm.json")?;
     /// println!("Loaded {} OMM records", omms.len());
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok::<(), satkit::omm::Error>(())
     /// ```
     ///
     /// # Errors
@@ -423,24 +423,28 @@ impl SGP4Source for OMM {
         &mut self.satrec
     }
 
-    fn sgp4_init_args(&self) -> anyhow::Result<SGP4InitArgs> {
+    fn sgp4_init_args(&self) -> crate::sgp4::Result<SGP4InitArgs> {
         use std::f64::consts::PI;
 
         const TWOPI: f64 = PI * 2.0;
 
         if let Some(theory) = &self.mean_element_theory {
             if !theory.trim().eq_ignore_ascii_case("SGP4") {
-                return Err(Error::UnsupportedMeanElementTheory(theory.clone()).into());
+                return Err(crate::sgp4::Error::source(
+                    Error::UnsupportedMeanElementTheory(theory.clone()),
+                ));
             }
         }
 
         if let Some(ts) = &self.time_system {
             if !ts.trim().eq_ignore_ascii_case("UTC") {
-                return Err(Error::UnsupportedTimeSystem(ts.clone()).into());
+                return Err(crate::sgp4::Error::source(Error::UnsupportedTimeSystem(
+                    ts.clone(),
+                )));
             }
         }
 
-        let epoch = self.epoch_instant()?;
+        let epoch = self.epoch_instant().map_err(crate::sgp4::Error::source)?;
 
         Ok(SGP4InitArgs {
             jdsatepoch: epoch.as_jd_with_scale(TimeScale::UTC),

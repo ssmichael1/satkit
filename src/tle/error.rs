@@ -38,8 +38,8 @@ pub enum Error {
 
     /// Wraps an error from constructing an [`Instant`](crate::time::Instant)
     /// while assembling a TLE epoch.
-    #[error("Invalid TLE epoch: {0}")]
-    InvalidEpoch(String),
+    #[error(transparent)]
+    InvalidEpoch(#[from] crate::time::InstantError),
 
     #[error("States and times must have the same length")]
     StatesTimesLengthMismatch,
@@ -50,8 +50,8 @@ pub enum Error {
     #[error("Epoch is out of range. Must be between {min} and {max}")]
     EpochOutOfRange { min: String, max: String },
 
-    #[error("Could not convert state to Keplerian elements: {0}")]
-    KeplerConversion(String),
+    #[error(transparent)]
+    Kepler(#[from] crate::kepler::Error),
 
     #[error("SGP4 evaluation failed: {0}")]
     Sgp4(String),

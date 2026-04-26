@@ -1,5 +1,30 @@
-use anyhow::Result;
 use std::path::Path;
+use thiserror::Error;
+
+/// Errors produced by the [`utils::download`](crate::utils::download) helpers.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Returned by all download helpers when satkit was built without the
+    /// `download` Cargo feature.
+    #[error("satkit was built without the `download` feature")]
+    FeatureDisabled,
+
+    /// Returned by [`download_if_not_exist`] when the requested file is
+    /// missing on disk and satkit was built without the `download` feature
+    /// to fetch it.
+    #[error("File {path} not found and satkit was built without the `download` feature")]
+    FileNotFoundNoDownload { path: String },
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[cfg(feature = "download")]
+    #[error(transparent)]
+    Http(#[from] ureq::Error),
+}
+
+/// Convenient type alias used throughout the `download` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(feature = "download")]
 pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
@@ -27,10 +52,9 @@ pub fn download_if_not_exist(fname: &Path, _seturl: Option<&str>) -> Result<()> 
     if fname.is_file() {
         Ok(())
     } else {
-        anyhow::bail!(
-            "File {} not found and satkit was built without the `download` feature",
-            fname.display()
-        )
+        Err(Error::FileNotFoundNoDownload {
+            path: fname.display().to_string(),
+        })
     }
 }
 
@@ -57,7 +81,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
 
 #[cfg(not(feature = "download"))]
 pub fn download_file(_url: &str, _downloaddir: &Path, _overwrite_if_exists: bool) -> Result<bool> {
-    anyhow::bail!("satkit was built without the `download` feature")
+    Err(Error::FeatureDisabled)
 }
 
 #[cfg(feature = "download")]
@@ -78,7 +102,7 @@ pub fn download_file_async(
     _downloaddir: &Path,
     _overwrite_if_exists: bool,
 ) -> std::thread::JoinHandle<Result<bool>> {
-    std::thread::spawn(|| anyhow::bail!("satkit was built without the `download` feature"))
+    std::thread::spawn(|| Err(Error::FeatureDisabled))
 }
 
 #[cfg(feature = "download")]
@@ -91,5 +115,5 @@ pub fn download_to_string(url: &str) -> Result<String> {
 
 #[cfg(not(feature = "download"))]
 pub fn download_to_string(_url: &str) -> Result<String> {
-    anyhow::bail!("satkit was built without the `download` feature")
+    Err(Error::FeatureDisabled)
 }
