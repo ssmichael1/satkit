@@ -369,13 +369,17 @@ impl OMM {
     ///
     /// Works with CelesTrak and Space-Track API endpoints.
     ///
+    /// Requires the `download` Cargo feature.
+    ///
     /// # Example
     ///
     /// ```no_run
     /// use satkit::omm::OMM;
     ///
+    /// # #[cfg(feature = "download")]
     /// let omms = OMM::from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json").unwrap();
     /// ```
+    #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
         let agent = ureq::Agent::new_with_defaults();
         let mut resp = agent.get(url).call()?;

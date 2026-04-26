@@ -106,6 +106,8 @@
 //!
 //! ### Downloading Data Files
 //!
+//! Requires building with the `download` Cargo feature.
+//!
 //! ```no_run
 //! // Print the directory where data will be stored
 //! println!("Data directory: {:?}", satkit::utils::datadir());
@@ -114,6 +116,7 @@
 //! // - Downloads missing files
 //! // - Updates space weather and Earth orientation parameters
 //! // - Skips files that already exist
+//! # #[cfg(feature = "download")]
 //! satkit::utils::update_datafiles(None, false);
 //! ```
 //!
