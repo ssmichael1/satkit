@@ -7,7 +7,7 @@ use crate::TimeLike;
 
 use crate::mathtypes::*;
 
-use anyhow::Result;
+use super::error::{Error, Result};
 
 type PVCovType = Matrix<6, 6>;
 
@@ -277,10 +277,7 @@ impl SatState {
             | Frame::CIRS
             | Frame::TEME
             | Frame::EME2000
-            | Frame::ICRF => anyhow::bail!(
-                "Unsupported frame for uncertainty: {}. Must be GCRF, LVLH, RIC, or NTW",
-                frame
-            ),
+            | Frame::ICRF => Err(Error::UnsupportedUncertaintyFrame { frame }),
         }
     }
 
@@ -559,6 +556,11 @@ mod test {
     use super::*;
     use crate::consts;
     use crate::Duration;
+
+    // Tests use anyhow::Result so we can `?`-convert errors from
+    // Instant::from_datetime and similar APIs that aren't part of
+    // orbitprop::Error.
+    use anyhow::Result;
 
     #[test]
     fn test_qgcrf2lvlh() -> Result<()> {
