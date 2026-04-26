@@ -1,4 +1,16 @@
-use anyhow::bail;
+use thiserror::Error;
+
+/// Errors produced by the `frames` module.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Returned by [`Frame::from_str`](std::str::FromStr::from_str) when the
+    /// input string does not match any known frame name.
+    #[error("Invalid Frame")]
+    InvalidFrame,
+}
+
+/// Convenient type alias used throughout the `frames` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Reference frame identifier.
 ///
@@ -116,9 +128,9 @@ impl std::fmt::Display for Frame {
 }
 
 impl std::str::FromStr for Frame {
-    type Err = anyhow::Error;
+    type Err = Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "ITRF" => Ok(Self::ITRF),
             "TIRS" => Ok(Self::TIRS),
@@ -132,7 +144,7 @@ impl std::str::FromStr for Frame {
             // canonical is RTN.
             "RTN" | "RSW" | "RIC" => Ok(Self::RTN),
             "NTW" => Ok(Self::NTW),
-            _ => bail!("Invalid Frame"),
+            _ => Err(Error::InvalidFrame),
         }
     }
 }

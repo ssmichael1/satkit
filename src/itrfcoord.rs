@@ -5,7 +5,19 @@ use crate::consts::WGS84_F;
 
 use crate::mathtypes::*;
 
-use anyhow::Result;
+use thiserror::Error;
+
+/// Errors produced by the `itrfcoord` module.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Returned by [`ITRFCoord::from_slice`] and the [`TryFrom`] impls
+    /// when the input slice does not contain exactly three elements.
+    #[error("Input slice must have 3 elements, got {got}")]
+    InvalidSliceLength { got: usize },
+}
+
+/// Convenient type alias used throughout the `itrfcoord` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Geodetic coordinates with named fields
 ///
@@ -109,10 +121,10 @@ impl std::convert::From<[f64; 3]> for ITRFCoord {
 }
 
 impl std::convert::TryFrom<&[f64]> for ITRFCoord {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(v: &[f64]) -> Result<Self> {
         if v.len() != 3 {
-            anyhow::bail!("Input slice must have 3 elements, got {}", v.len());
+            return Err(Error::InvalidSliceLength { got: v.len() });
         }
         Ok(Self {
             itrf: numeris::vector![v[0], v[1], v[2]],
@@ -190,7 +202,7 @@ impl ITRFCoord {
     ///
     pub fn from_slice(v: &[f64]) -> Result<Self> {
         if v.len() != 3 {
-            anyhow::bail!("Input slice must have 3 elements");
+            return Err(Error::InvalidSliceLength { got: v.len() });
         }
         Ok(Self {
             itrf: numeris::vector![v[0], v[1], v[2]],

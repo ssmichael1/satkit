@@ -372,9 +372,11 @@ impl PySatState {
             .as_ref()
             .map(|s| &s.0 as &dyn satkit::orbitprop::SatProperties);
 
-        self.0
-            .propagate(&time, propsettings.as_ref(), satprops_ref)
-            .map(Self)
+        Ok(Self(self.0.propagate(
+            &time,
+            propsettings.as_ref(),
+            satprops_ref,
+        )?))
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
