@@ -67,19 +67,18 @@ impl PyTLE {
     ///           only 1 are passed in
     #[staticmethod]
     fn from_lines(lines: Vec<String>) -> Result<Py<PyAny>> {
-        TLE::from_lines(&lines).and_then(|v| {
-            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                if v.len() > 1 {
-                    v.into_iter()
-                        .map(|t| tle_into_py(t, py))
-                        .collect::<Vec<_>>()
-                        .into_py_any(py)
-                } else {
-                    Ok(tle_into_py(v.into_iter().next().unwrap(), py))
-                }
-            })
-            .map_err(|e| e.into())
+        let v = TLE::from_lines(&lines)?;
+        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
+            if v.len() > 1 {
+                v.into_iter()
+                    .map(|t| tle_into_py(t, py))
+                    .collect::<Vec<_>>()
+                    .into_py_any(py)
+            } else {
+                Ok(tle_into_py(v.into_iter().next().unwrap(), py))
+            }
         })
+        .map_err(|e| e.into())
     }
 
     /// Load TLE(s) from a URL
@@ -246,12 +245,12 @@ impl PyTLE {
 
     /// Output as 2 canonical TLE Lines
     fn to_2line(&self) -> Result<[String; 2]> {
-        self.0.to_2line()
+        Ok(self.0.to_2line()?)
     }
 
     // Output as 2 canonical TLE lines preceded by a name line (3-line element set)
     fn to_3line(&self) -> Result<[String; 3]> {
-        self.0.to_3line()
+        Ok(self.0.to_3line()?)
     }
 
     // Fit a TLE from GCRF states and times

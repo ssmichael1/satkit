@@ -8,7 +8,7 @@ use crate::SolarSystem;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
 
-use anyhow::Result;
+use super::error::{Error, Result};
 #[derive(Debug, Clone)]
 pub struct Precomputed {
     pub begin: Instant,
@@ -83,8 +83,10 @@ impl Precomputed {
                 for idx in 0..nsteps {
                     let t = pbegin + Duration::from_seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
-                    let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
-                    let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
+                    let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)
+                        .map_err(|e| Error::Precompute(e.to_string()))?;
+                    let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)
+                        .map_err(|e| Error::Precompute(e.to_string()))?;
                     data.push((q, psun, pmoon));
                 }
                 data
@@ -95,12 +97,11 @@ impl Precomputed {
     pub fn interp<T: TimeLike>(&self, t: &T) -> Result<InterpType> {
         let t = t.as_instant();
         if t < self.begin || t > self.end {
-            anyhow::bail!(
-                "Precomputed::interp: time {} is outside of precomputed range : {} to {}",
-                t,
-                self.begin,
-                self.end
-            );
+            return Err(Error::PrecomputedOutOfRange {
+                time: t.to_string(),
+                begin: self.begin.to_string(),
+                end: self.end.to_string(),
+            });
         }
 
         let idx = (t - self.begin).as_seconds() / self.step;

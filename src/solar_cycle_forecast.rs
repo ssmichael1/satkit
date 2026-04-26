@@ -7,7 +7,9 @@
 //! Used as a fallback when historical space weather data is not
 //! available (i.e., for future propagation dates).
 
-use crate::utils::{datadir, download_to_string};
+use crate::utils::datadir;
+#[cfg(feature = "download")]
+use crate::utils::download_to_string;
 use crate::{Instant, TimeLike};
 use std::num::ParseIntError;
 use thiserror::Error;
@@ -165,6 +167,9 @@ pub fn get_predicted_f107<T: TimeLike>(tm: &T) -> Option<f64> {
 }
 
 /// Download the latest solar cycle forecast from NOAA/SWPC.
+///
+/// Requires the `download` Cargo feature.
+#[cfg(feature = "download")]
 pub fn update() -> Result<()> {
     let url = "https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json";
     let contents = download_to_string(url)?;
@@ -182,6 +187,11 @@ pub fn update() -> Result<()> {
     *forecast_singleton().write().unwrap() = Some(records);
 
     Ok(())
+}
+
+#[cfg(not(feature = "download"))]
+pub fn update() -> Result<()> {
+    bail!("satkit was built without the `download` feature")
 }
 
 #[cfg(test)]
@@ -220,6 +230,7 @@ mod tests {
         assert!(get_predicted_f107(&early).is_none());
     }
 
+    #[cfg(feature = "download")]
     #[test]
     fn test_download_and_parse() {
         let url = "https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json";

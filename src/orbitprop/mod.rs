@@ -1,3 +1,4 @@
+mod error;
 mod precomputed;
 pub mod propagator;
 mod satproperties;
@@ -13,6 +14,7 @@ pub mod thrust;
 /// ODE integrators specific to orbit propagation
 pub mod ode;
 
+pub use error::{Error, Result};
 pub use precomputed::*;
 pub use propagator::*;
 pub use satproperties::SatProperties;

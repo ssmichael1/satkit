@@ -7,9 +7,10 @@ use crate::sgp4::{SGP4InitArgs, SGP4Source};
 // TLE fitting from state vectors
 mod fitting;
 
-pub use fitting::{TleFitResult, TleFitStatus};
+mod error;
 
-use anyhow::{bail, Context, Result};
+pub use error::{Error, Result};
+pub use fitting::{TleFitResult, TleFitStatus};
 
 // 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
 const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -221,6 +222,8 @@ impl TLE {
     /// Fetches the content at the given URL and parses it as TLE lines.
     /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
     ///
+    /// Requires the `download` Cargo feature.
+    ///
     /// # Arguments
     ///
     /// * `url` - URL to fetch TLE data from
@@ -234,8 +237,10 @@ impl TLE {
     /// ```no_run
     /// use satkit::TLE;
     ///
+    /// # #[cfg(feature = "download")]
     /// let tles = TLE::from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle").unwrap();
     /// ```
+    #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
         let agent = ureq::Agent::new_with_defaults();
         let mut resp = agent.get(url).call()?;
@@ -308,11 +313,10 @@ impl TLE {
     ///
     pub fn load_3line(line0: &str, line1: &str, line2: &str) -> Result<Self> {
         if line1.len() < 69 || line2.len() < 69 {
-            bail!(
-                "Invalid TLE line lengths: line1 = {}, line2 = {}",
-                line1.len(),
-                line2.len()
-            );
+            return Err(Error::InvalidLineLengths {
+                line1: line1.len(),
+                line2: line2.len(),
+            });
         }
 
         match Self::load_2line(line1, line2) {
@@ -363,22 +367,33 @@ impl TLE {
     ///
     pub fn load_2line(line1: &str, line2: &str) -> Result<Self> {
         if line1.len() < 69 {
-            bail!(
-                "Line 1 too short: expected 69 characters, got {}",
-                line1.len()
-            );
+            return Err(Error::LineTooShort {
+                line: 1,
+                got: line1.len(),
+            });
         }
         if line2.len() < 69 {
-            bail!(
-                "Line 2 too short: expected 69 characters, got {}",
-                line2.len()
-            );
+            return Err(Error::LineTooShort {
+                line: 2,
+                got: line2.len(),
+            });
+        }
+
+        // Helper for converting parse errors into ParseField variants.
+        fn parse_field<F: std::str::FromStr>(s: &str, field: &'static str) -> Result<F>
+        where
+            F::Err: std::fmt::Display,
+        {
+            s.parse::<F>().map_err(|e| Error::ParseField {
+                field,
+                message: e.to_string(),
+            })
         }
 
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
             mstr.push_str(&line1[18..20]);
-            let mut s = mstr.parse().context("Could not parse year")?;
+            let mut s: u32 = parse_field(&mstr, "year")?;
             s -= 100;
             s
         };
@@ -387,35 +402,32 @@ impl TLE {
         // Years < 1957 = 2000s
         let century = if year >= 57 { 1900 } else { 2000 };
         year += century;
-        let day_of_year: f64 = line1[20..32]
-            .parse()
-            .context("Could not parse day of year")?;
+        let day_of_year: f64 = parse_field(&line1[20..32], "day of year")?;
 
         // Note: day_of_year starts from 1, not zero,
         // also, go from Jan 2 to avoid leap-second
         // issues, hence the "-2" at end
         let epoch = Instant::from_date(year as i32, 1, 2)
-            .context("Invalid year, month, or day")?
+            .map_err(|e| Error::InvalidEpoch(format!("Invalid year, month, or day: {e}")))?
             .add_utc_days(day_of_year - 2.0);
 
         Ok(Self {
             name: "none".to_string(),
-            sat_num: Self::alpha5_to_int(&line1[2..7])
-                .context("Could not parse satellite number")?,
+            sat_num: Self::alpha5_to_int(&line1[2..7]).map_err(|e| Error::ParseField {
+                field: "satellite number",
+                message: e.to_string(),
+            })?,
 
             intl_desig: { line1[9..16].trim().to_string() },
             desig_year: { line1[9..11].trim().parse().unwrap_or(70) },
             desig_launch: { line1[11..14].trim().parse().unwrap_or_default() },
-            desig_piece: line1[14..18]
-                .trim()
-                .parse()
-                .context("Could not parse desig_piece")?,
+            desig_piece: parse_field(line1[14..18].trim(), "desig_piece")?,
 
             epoch,
             mean_motion_dot: {
                 let mut mstr: String = "0".to_owned();
                 mstr.push_str(&line1[34..43]);
-                let mut m = mstr.parse().context("Could not parse mean motion dot")?;
+                let mut m: f64 = parse_field(&mstr, "mean motion dot")?;
                 if line1.chars().nth(33).unwrap() == '-' {
                     m *= -1.0;
                 }
@@ -426,10 +438,7 @@ impl TLE {
                 mstr.push_str(&line1[45..50]);
                 mstr.push('E');
                 mstr.push_str(&line1[50..53]);
-                let mut m = mstr
-                    .trim()
-                    .parse()
-                    .context("Coudl not parse mean motion dot dot")?;
+                let mut m: f64 = parse_field(mstr.trim(), "mean motion dot dot")?;
                 if line1.chars().nth(44).unwrap() == '-' {
                     m *= -1.0;
                 }
@@ -440,57 +449,31 @@ impl TLE {
                 mstr.push_str(&line1[54..59]);
                 mstr.push('E');
                 mstr.push_str(&line1[59..62]);
-                let mut m = mstr
-                    .trim()
-                    .parse()
-                    .context("Could not parse bstar (drag)")?;
+                let mut m: f64 = parse_field(mstr.trim(), "bstar (drag)")?;
                 if line1.chars().nth(53).unwrap() == '-' {
                     m *= -1.0;
                 }
                 m
             },
             ephem_type: { line1[62..63].trim().parse().unwrap_or_default() },
-            element_num: line1[64..68]
-                .trim()
-                .parse()
-                .context("Could not parse element number")?,
+            element_num: parse_field(line1[64..68].trim(), "element number")?,
 
-            inclination: line2[8..16]
-                .trim()
-                .parse()
-                .context("Could not parse inclination")?,
+            inclination: parse_field(line2[8..16].trim(), "inclination")?,
 
-            raan: line2[17..25]
-                .trim()
-                .parse()
-                .context("Could not parse raan")?,
+            raan: parse_field(line2[17..25].trim(), "raan")?,
 
             eccen: {
                 let mut mstr: String = "0.".to_owned();
                 mstr.push_str(&line2[26..33]);
-                mstr.trim()
-                    .parse()
-                    .context("Could not parse eccentricity")?
+                parse_field(mstr.trim(), "eccentricity")?
             },
-            arg_of_perigee: line2[34..42]
-                .trim()
-                .parse()
-                .context("Could not parse arg of perigee")?,
+            arg_of_perigee: parse_field(line2[34..42].trim(), "arg of perigee")?,
 
-            mean_anomaly: line2[42..51]
-                .trim()
-                .parse()
-                .context("Could not parse mean anomaly")?,
+            mean_anomaly: parse_field(line2[42..51].trim(), "mean anomaly")?,
 
-            mean_motion: line2[52..63]
-                .trim()
-                .parse()
-                .context("Could not parse mean motion")?,
+            mean_motion: parse_field(line2[52..63].trim(), "mean motion")?,
 
-            rev_num: line2[63..68]
-                .trim()
-                .parse()
-                .context("Could not parse rev num")?,
+            rev_num: parse_field(line2[63..68].trim(), "rev num")?,
             satrec: None,
         })
     }
@@ -617,7 +600,7 @@ impl TLE {
         let (year, _, _, _, _, _) = self.epoch.as_datetime();
 
         if !(1957..=2056).contains(&year) {
-            bail!("Year out of range for TLE: {}", year);
+            return Err(Error::YearOutOfRange(year));
         }
 
         // Day-of-year.
@@ -666,7 +649,7 @@ impl TLE {
             // digit or a whitespace the standard `.parse()` can be used.
             Some(c) if c.is_ascii_digit() || c.is_whitespace() => match alpha5.trim().parse() {
                 Ok(i) => Ok(i),
-                Err(e) => bail!("Invalid sat num: {}", e),
+                Err(e) => Err(Error::InvalidSatNum(format!("{e}"))),
             },
             Some(c) if c.is_alphabetic() => {
                 match ALPHA5_MATCHING
@@ -675,13 +658,13 @@ impl TLE {
                 {
                     Some(p) => match alpha5[1..].parse::<i32>() {
                         Ok(i) => Ok((p as i32 + 10) * 10000 + i),
-                        Err(e) => bail!("Invalid sat num: {}", e),
+                        Err(e) => Err(Error::InvalidSatNum(format!("{e}"))),
                     },
-                    None => bail!("Invalid first digit in sat num: {}", c),
+                    None => Err(Error::InvalidFirstDigit(c)),
                 }
             }
-            Some(c) => bail!("Invalid first digit in sat num: {}", c),
-            None => bail!("Parse error"),
+            Some(c) => Err(Error::InvalidFirstDigit(c)),
+            None => Err(Error::EmptySatNum),
         }
     }
 
@@ -719,8 +702,8 @@ impl TLE {
                     .unwrap();
                 Ok(format!("{c}{:0>4}", i % 10000))
             }
-            _i @ 340000.. => bail!("Sat num >= 340000 cannot be represented in alpha5 format"),
-            _ => bail!("Invalid sat num value"),
+            _i @ 340000.. => Err(Error::SatNumTooLargeForAlpha5),
+            _ => Err(Error::InvalidSatNumValue),
         }
     }
 
@@ -862,6 +845,7 @@ mod tle_formatter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{bail, Result};
 
     #[test]
     fn testload() -> Result<()> {

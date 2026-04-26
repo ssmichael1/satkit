@@ -1,7 +1,6 @@
-use super::TLE;
+use super::{Error, Result, TLE};
 
 use crate::Instant;
-use anyhow::{bail, Context, Result};
 
 use numeris::{Matrix, Vector};
 
@@ -88,7 +87,7 @@ fn residuals(
 ) -> Result<Vec<f64>> {
     let mut tle = tle_from_params(params, epoch);
     let out = crate::sgp4::sgp4(&mut tle, times)
-        .map_err(|e| anyhow::anyhow!("SGP4 evaluation failed: {:?}", e))?;
+        .map_err(|e| Error::Sgp4(format!("{e:?}")))?;
     let mut r = vec![0.0; states_teme.len() * 3];
     for (i, state) in states_teme.iter().enumerate() {
         for j in 0..3 {
@@ -202,20 +201,19 @@ impl TLE {
     ) -> Result<(Self, TleFitResult)> {
         // Make sure lengths are identical
         if states_gcrf.len() != times.len() {
-            bail!("States and times must have the same length");
+            return Err(Error::StatesTimesLengthMismatch);
         } else if states_gcrf.is_empty() {
-            bail!("States and times must not be empty");
+            return Err(Error::EmptyStates);
         }
 
         // Get the minimum time
         let min_time = times.iter().min().unwrap();
         let max_time = times.iter().max().unwrap();
         if epoch < *min_time || epoch > *max_time {
-            bail!(
-                "Epoch is out of range. Must be between {} and {}",
-                min_time,
-                max_time
-            );
+            return Err(Error::EpochOutOfRange {
+                min: min_time.to_string(),
+                max: max_time.to_string(),
+            });
         }
 
         // Find the point that is closest to the epoch
@@ -260,7 +258,7 @@ impl TLE {
             numeris::vector![closest_state[0], closest_state[1], closest_state[2]],
             numeris::vector![closest_state[3], closest_state[4], closest_state[5]],
         )
-        .context("Could not convert state to Keplerian elements")?;
+        .map_err(|e| Error::KeplerConversion(e.to_string()))?;
 
         // Move Kepler state to epoch
         if (epoch - closest_time).as_microseconds().abs() > 10 {
@@ -367,7 +365,7 @@ impl TLE {
                 }
                 let lu = damped
                     .lu()
-                    .map_err(|e| anyhow::anyhow!("Normal equations are singular: {:?}", e))?;
+                    .map_err(|e| Error::SingularNormalEquations(format!("{e:?}")))?;
                 let neg_g: Vector<f64, NPARAM> = -jtr;
                 let delta = lu.solve(&neg_g);
 
@@ -452,6 +450,7 @@ impl TLE {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn test_fit_from_states() -> Result<()> {
