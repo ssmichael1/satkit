@@ -92,7 +92,7 @@ fn datadir() -> PyResult<Py<PyAny>> {
 #[pyfunction]
 fn set_datadir(datadir: String) -> Result<()> {
     let d = PathBuf::from(datadir);
-    satkit::utils::set_datadir(&d)
+    Ok(satkit::utils::set_datadir(&d)?)
 }
 
 /// Check if data files are found

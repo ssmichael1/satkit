@@ -1,4 +1,4 @@
-mod datadir;
+pub mod datadir;
 pub use datadir::data_found;
 pub use datadir::datadir;
 pub use datadir::set_datadir;

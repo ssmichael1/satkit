@@ -5,7 +5,28 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use anyhow::{bail, Result};
+use thiserror::Error;
+
+/// Errors that can occur while resolving or setting the satkit data directory.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// The path passed to [`set_datadir`] is not an existing directory.
+    #[error("Data directory does not exist")]
+    DirectoryDoesNotExist,
+
+    /// The data-directory singleton has already been initialized and cannot
+    /// be overwritten.
+    #[error("Could not set data directory")]
+    SetFailed,
+
+    /// None of the candidate locations contained valid data and no writable
+    /// candidate could be created.
+    #[error("Could not find valid writeable data directory")]
+    NoWriteableDirectory,
+}
+
+/// Convenient type alias used throughout the `datadir` module.
+pub type Result<T> = std::result::Result<T, Error>;
 
 // Pointer to the one and only data directory
 static DATADIR_SINGLETON: Mutex<OnceCell<Option<PathBuf>>> = Mutex::new(OnceCell::new());
@@ -58,14 +79,14 @@ pub fn testdirs() -> Vec<PathBuf> {
 /// Generally this should not be needed
 pub fn set_datadir(d: &Path) -> Result<()> {
     if !d.is_dir() {
-        bail!("Data directory does not exist");
+        return Err(Error::DirectoryDoesNotExist);
     }
 
     let mut dd = DATADIR_SINGLETON.lock().unwrap();
     dd.take();
     match dd.set(Some(d.to_path_buf())) {
         Ok(_) => Ok(()),
-        Err(_) => bail!("Could not set data directory"),
+        Err(_) => Err(Error::SetFailed),
     }
 }
 
@@ -84,7 +105,7 @@ pub fn set_datadir(d: &Path) -> Result<()> {
 ///
 /// Returns:
 ///
-///  * anyhow::Result<<std::path::PathBuf>> representing directory
+///  * Result<<std::path::PathBuf>> representing directory
 ///    where files are stored
 pub fn datadir() -> Result<PathBuf> {
     let dd = DATADIR_SINGLETON.lock().unwrap();
@@ -118,7 +139,7 @@ pub fn datadir() -> Result<PathBuf> {
 
     match res.as_ref() {
         Some(v) => Ok(v.clone()),
-        None => bail!("Could not find valid writeable data directory"),
+        None => Err(Error::NoWriteableDirectory),
     }
 }
 
