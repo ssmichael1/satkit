@@ -9,7 +9,7 @@ use lpephem::sun::shadowfunc;
 
 use numeris::ode::{self, RKAdaptive, Rosenbrock};
 
-use anyhow::{Context, Result};
+use super::error::{Error, Result};
 
 use crate::mathtypes::*;
 
@@ -17,7 +17,6 @@ use crate::consts;
 use crate::orbitprop::SatProperties;
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PropagationResult<const T: usize> {
@@ -71,20 +70,6 @@ pub type SimpleState = StateType<1>;
 
 // Covariance State in includes
 pub type CovState = StateType<7>;
-
-#[derive(Debug, Error)]
-pub enum PropagationError {
-    #[error("Invalid number of columns: {c}")]
-    InvalidStateColumns { c: usize },
-    #[error("No Dense Output in Solution")]
-    NoDenseOutputInSolution,
-    #[error("ODE Error: {0}")]
-    ODEError(ode::OdeError),
-    #[error("RODAS4 does not support state transition matrix propagation")]
-    RODAS4NoSTM,
-    #[error("Gauss-Jackson 8 does not support state transition matrix propagation")]
-    GaussJackson8NoSTM,
-}
 
 //
 // This actually implements the force model that is used to
@@ -251,11 +236,11 @@ pub fn propagate<const C: usize, T: TimeLike>(
 
     // RODAS4 does not support state transition matrix (C==7)
     if C == 7 && settings.integrator == crate::orbitprop::Integrator::RODAS4 {
-        return Err(PropagationError::RODAS4NoSTM.into());
+        return Err(Error::RODAS4NoSTM);
     }
     // Gauss-Jackson 8 is 2nd-order only and does not propagate STM
     if C == 7 && settings.integrator == crate::orbitprop::Integrator::GaussJackson8 {
-        return Err(PropagationError::GaussJackson8NoSTM.into());
+        return Err(Error::GaussJackson8NoSTM);
     }
 
     // Duration to end of integration, in seconds
@@ -285,8 +270,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
     let required_max = tmax + padding;
     let interp: &Precomputed = match &settings.precomputed {
         Some(p) if required_min >= p.begin && required_max <= p.end => p,
-        _ => &Precomputed::new_padded(&begin, &end, 60.0, padding_secs)
-            .context("Cannot compute precomputed interpolation data")?,
+        _ => &Precomputed::new_padded(&begin, &end, 60.0, padding_secs)?,
     };
 
     let gravity = settings.gravity_model.get();
@@ -522,7 +506,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
 
             let rosenbrock_res = ode::RODAS4::integrate(
                 0.0, x_end, &y0_vec, ydot_vec, jac_fn, &odesettings,
-            ).map_err(PropagationError::ODEError)?;
+            )?;
 
             // Convert RosenbrockSolution<f64, 6> to Solution<f64, 6, C>
             // Since C==1, this is essentially the same data
@@ -609,7 +593,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
             let mut gj_sol = GaussJackson8::integrate(
                 0.0, x_end, &r0, &v0, accel_fn, &gj_settings,
             )
-            .map_err(PropagationError::ODEError)?;
+            ?;
 
             // Assemble final 6x1 state
             let mut final_state = Matrix::<6, C>::zeros();
@@ -633,7 +617,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
             });
         }
     }
-    .map_err(PropagationError::ODEError)?;
+    ?;
 
     Ok(PropagationResult {
         time_begin: begin,
@@ -668,7 +652,7 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         let dense = res
             .gj_dense
             .as_ref()
-            .ok_or(PropagationError::NoDenseOutputInSolution)?;
+            .ok_or(Error::NoDenseOutputInSolution)?;
         // Rehydrate a minimal GJSolution just enough for the interpolator
         let gj_sol = crate::orbitprop::ode::GJSolution::<f64, 3> {
             t: 0.0, // unused by interpolate
@@ -680,7 +664,7 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
             dense: Some(dense.clone()),
         };
         let (r, v) = crate::orbitprop::ode::GaussJackson8::interpolate(x, &gj_sol)
-            .map_err(PropagationError::ODEError)?;
+            ?;
         let mut out: StateType<C> = Matrix::<6, C>::zeros();
         let mut rv: numeris::Vector<f64, 6> = numeris::Vector::<f64, 6>::zeros();
         rv.set_block(0, 0, &r);
@@ -693,7 +677,7 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         .odesol
         .as_ref()
         .filter(|s| s.dense.is_some())
-        .ok_or(PropagationError::NoDenseOutputInSolution)?;
+        .ok_or(Error::NoDenseOutputInSolution)?;
     let result = match res.integrator {
         Integrator::RKV98 => ode::RKV98::interpolate(x, sol),
         Integrator::RKV98NoInterp => ode::RKV98NoInterp::interpolate(x, sol),
@@ -701,11 +685,11 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
         Integrator::RKV65 => ode::RKV65::interpolate(x, sol),
         Integrator::RKTS54 => ode::RKTS54::interpolate(x, sol),
         Integrator::RODAS4 => {
-            return Err(PropagationError::NoDenseOutputInSolution.into());
+            return Err(Error::NoDenseOutputInSolution);
         }
         Integrator::GaussJackson8 => unreachable!("handled above"),
     };
-    Ok(result.map_err(PropagationError::ODEError)?)
+    Ok(result?)
 }
 
 pub fn interp_propresult_batch<const C: usize>(
@@ -723,7 +707,7 @@ pub fn interp_propresult_batch<const C: usize>(
         let dense = res
             .gj_dense
             .as_ref()
-            .ok_or(PropagationError::NoDenseOutputInSolution)?;
+            .ok_or(Error::NoDenseOutputInSolution)?;
         let gj_sol = crate::orbitprop::ode::GJSolution::<f64, 3> {
             t: 0.0,
             r: Vector3::zeros(),
@@ -734,7 +718,7 @@ pub fn interp_propresult_batch<const C: usize>(
             dense: Some(dense.clone()),
         };
         let pairs = crate::orbitprop::ode::GaussJackson8::interpolate_batch(&xs, &gj_sol)
-            .map_err(PropagationError::ODEError)?;
+            ?;
         return Ok(pairs
             .into_iter()
             .map(|(r, v)| {
@@ -752,7 +736,7 @@ pub fn interp_propresult_batch<const C: usize>(
         .odesol
         .as_ref()
         .filter(|s| s.dense.is_some())
-        .ok_or(PropagationError::NoDenseOutputInSolution)?;
+        .ok_or(Error::NoDenseOutputInSolution)?;
 
     let results = match res.integrator {
         Integrator::RKV98 => ode::RKV98::interpolate_batch(&xs, sol),
@@ -761,11 +745,11 @@ pub fn interp_propresult_batch<const C: usize>(
         Integrator::RKV65 => ode::RKV65::interpolate_batch(&xs, sol),
         Integrator::RKTS54 => ode::RKTS54::interpolate_batch(&xs, sol),
         Integrator::RODAS4 => {
-            return Err(PropagationError::NoDenseOutputInSolution.into());
+            return Err(Error::NoDenseOutputInSolution);
         }
         Integrator::GaussJackson8 => unreachable!("handled above"),
     };
-    Ok(results.map_err(PropagationError::ODEError)?)
+    Ok(results?)
 }
 
 #[cfg(test)]
@@ -778,6 +762,11 @@ mod tests {
 
     use crate::Duration;
     use std::io::{self, BufRead};
+
+    // Tests use anyhow::Result so we can `?`-convert errors from various
+    // crates (parse, Instant::from_datetime, etc.) that aren't part of
+    // orbitprop::Error.
+    use anyhow::Result;
 
     #[test]
     fn test_short_propagate() -> Result<()> {

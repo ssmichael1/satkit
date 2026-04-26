@@ -4,7 +4,7 @@ use crate::earthgravity::GravityModel;
 use crate::orbitprop::Precomputed;
 use crate::TimeLike;
 
-use anyhow::Result;
+use super::error::{Error, Result};
 
 /// Choice of ODE integrator for orbit propagation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -130,11 +130,7 @@ impl PropSettings {
     /// Returns error if order > degree
     pub fn set_gravity(&mut self, degree: u16, order: u16) -> Result<()> {
         if order > degree {
-            anyhow::bail!(
-                "Gravity order ({}) must be ≤ degree ({})",
-                order,
-                degree
-            );
+            return Err(Error::InvalidGravityOrder { order, degree });
         }
         self.gravity_degree = degree;
         self.gravity_order = order;
