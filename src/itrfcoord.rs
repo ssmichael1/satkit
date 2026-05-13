@@ -57,9 +57,8 @@ impl std::fmt::Display for Geodetic {
     }
 }
 
-///
 /// Representation of a coordinate in the
-/// International Terrestrial Reference Frame (ITRF)
+/// International Terrestrial Reference Frame (ITRF).
 ///
 /// This coordinate object can be created from and also
 /// output to Geodetic coordinates (latitude, longitude,
@@ -67,10 +66,10 @@ impl std::fmt::Display for Geodetic {
 ///
 /// Functions are also available to provide rotation
 /// quaternions to the East-North-Up frame
-/// and North-East-Down frame at this coordinate
-///
+/// and North-East-Down frame at this coordinate.
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct ITRFCoord {
+    /// The ITRF coordinate vector, in meters.
     pub itrf: Vector3,
 }
 
@@ -113,6 +112,7 @@ impl std::ops::Sub<Self> for ITRFCoord {
 }
 
 impl std::convert::From<[f64; 3]> for ITRFCoord {
+    /// Converts an array of three `f64` values (in meters) to an [`ITRFCoord`].
     fn from(v: [f64; 3]) -> Self {
         Self {
             itrf: Vector3::from_array(v),
@@ -122,6 +122,7 @@ impl std::convert::From<[f64; 3]> for ITRFCoord {
 
 impl std::convert::TryFrom<&[f64]> for ITRFCoord {
     type Error = Error;
+    /// Converts a slice of three `f64` values (in meters) to an [`ITRFCoord`].
     fn try_from(v: &[f64]) -> Result<Self> {
         if v.len() != 3 {
             return Err(Error::InvalidSliceLength { got: v.len() });
@@ -133,12 +134,14 @@ impl std::convert::TryFrom<&[f64]> for ITRFCoord {
 }
 
 impl std::convert::From<Vector3> for ITRFCoord {
+    /// Converts a [`Vector3`] (in meters) to an [`ITRFCoord`].
     fn from(v: Vector3) -> Self {
         Self { itrf: v }
     }
 }
 
 impl std::convert::From<ITRFCoord> for Vector3 {
+    /// Converts an [`ITRFCoord`] to a [`Vector3`] (in meters).
     fn from(itrf: ITRFCoord) -> Self {
         itrf.itrf
     }
@@ -146,7 +149,7 @@ impl std::convert::From<ITRFCoord> for Vector3 {
 
 impl ITRFCoord {
     /// Returns an ITRF Coordinate given the geodetic inputs
-    ///   with degree units for latitude & longitude
+    ///   with degree units for latitude & longitude.
     ///
     /// # Arguments:
     ///
@@ -165,8 +168,7 @@ impl ITRFCoord {
         Self::from_geodetic_rad(lat.to_radians(), lon.to_radians(), hae)
     }
 
-    ///
-    /// Returns an ITRF Coordinate given Cartesian ITRF coordinates
+    /// Returns an ITRF Coordinate given Cartesian ITRF coordinates.
     ///
     /// # Arguments:
     ///
@@ -210,7 +212,7 @@ impl ITRFCoord {
     }
 
     /// Returns an ITRF Coordinate given the geodetic inputs
-    ///   with radian units for latitude & longitude
+    ///   with radian units for latitude & longitude.
     ///
     /// # Arguments:
     ///
@@ -246,7 +248,7 @@ impl ITRFCoord {
         }
     }
 
-    /// Returns geodetic coordinates as a named struct
+    /// Returns geodetic coordinates as a named struct.
     ///
     /// # Returns
     /// A [`Geodetic`] struct with latitude (radians), longitude (radians),
@@ -260,7 +262,7 @@ impl ITRFCoord {
         }
     }
 
-    /// Returns 3-element tuple representing geodetic coordinates
+    /// Returns 3-element tuple representing geodetic coordinates.
     ///
     /// # Tuple contents:
     ///
@@ -300,7 +302,7 @@ impl ITRFCoord {
         (lat, lon, h)
     }
 
-    /// Returns 3-element tuple representing geodetic coordinates
+    /// Returns 3-element tuple representing geodetic coordinates.
     ///
     /// # Tuple contents:
     ///
@@ -539,8 +541,7 @@ impl ITRFCoord {
     #[inline]
     pub fn q_ned2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quaternion::rotz(lon)
-            * Quaternion::roty(-lat - PI / 2.0)
+        Quaternion::rotz(lon) * Quaternion::roty(-lat - PI / 2.0)
     }
 
     /// Convert coordinate to a North-East-Down (NED)
@@ -582,8 +583,7 @@ impl ITRFCoord {
     /// ITRF coordinate frame
     pub fn q_enu2itrf(&self) -> Quaternion {
         let (lat, lon, _) = self.to_geodetic_rad();
-        Quaternion::rotz(lon + PI / 2.0)
-            * Quaternion::rotx(PI / 2.0 - lat)
+        Quaternion::rotz(lon + PI / 2.0) * Quaternion::rotx(PI / 2.0 - lat)
     }
 
     /// Convert coordinate to a East-North-Up (ENU)
@@ -771,6 +771,5 @@ mod tests {
         assert!(((lat5 - lat_deg) / lat_deg).abs() < 1.0e-6);
         assert!(((lon5 - lon_deg) / lon_deg).abs() < 1.0e-6);
         assert!(((h5 - (hae + 10.0)) / hae).abs() < 1.0e-6);
-
     }
 }
