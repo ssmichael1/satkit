@@ -12,6 +12,24 @@ SatKit is a high-performance orbital mechanics library written in Rust with comp
 
 Pre-built wheels are available for **Linux**, **macOS**, and **Windows** on Python 3.10--3.14.
 
+## Units & Conventions
+
+satkit uses **SI / MKS units throughout** its public API:
+
+| Quantity     | Unit             |
+|--------------|------------------|
+| Position     | meters           |
+| Velocity     | meters / second  |
+| Acceleration | meters / second² |
+| Duration     | seconds          |
+| Angles       | radians          |
+| Mass         | kilograms        |
+
+Any deviation from MKS is suffixed in the identifier (`latitude_deg`, `pos_km`, `Duration.from_hours`, etc.). Names without a unit suffix are MKS.
+
+!!! note "SGP4 output"
+    The SGP4 algorithm natively works in kilometers, but satkit converts at the API boundary — `sk.sgp4(...)` returns position in **meters** and velocity in **m/s**, consistent with the rest of the library.
+
 ## Quick Start
 
 ```bash

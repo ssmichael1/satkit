@@ -6,6 +6,28 @@
 //! and memory safety, it offers complete Python bindings for all functionality, making advanced orbital
 //! mechanics accessible to both systems programmers and data scientists.
 //!
+//! ## Units & Conventions
+//!
+//! satkit uses **SI / MKS units everywhere** in its public API:
+//!
+//! | Quantity            | Unit            |
+//! |---------------------|-----------------|
+//! | Position            | meters          |
+//! | Velocity            | meters / second |
+//! | Acceleration        | meters / second² |
+//! | Duration            | seconds         |
+//! | Angles              | radians         |
+//! | Mass                | kilograms       |
+//!
+//! Any deviation from this convention is suffixed in the identifier
+//! (`latitude_deg`, `pos_km`, `Duration::from_hours`, etc.). Names without
+//! a unit suffix are MKS by default.
+//!
+//! **SGP4 note:** the SGP4 algorithm natively works in kilometers, but
+//! satkit converts at the API boundary — [`sgp4::sgp4`] returns position
+//! in **meters** and velocity in **meters/second**, consistent with the
+//! rest of the library.
+//!
 //! ## Core Features
 //!
 //! ### Time Systems

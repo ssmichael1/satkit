@@ -21,6 +21,24 @@ Satkit is a high-performance orbital mechanics library written in Rust with comp
 > [!NOTE]
 > **Version 0.16.0** introduces several breaking changes: `Frame::RIC` is renamed to the canonical `Frame::RTN` (with `RIC` / `RSW` remaining as aliases, so existing code still compiles); a new `Frame::NTW` (velocity-aligned) is added; `LVLH` is now accepted as a maneuver/thrust frame; the uncertainty API is unified into `set_pos_uncertainty(sigma, frame)` / `set_vel_uncertainty(sigma, frame)` (the four old per-frame methods are removed, not deprecated); `PropSettings::default()` now uses `GravityModel::EGM96` instead of `JGM3`; the **Gauss-Jackson 8** fixed-step multistep integrator is available for long-duration propagation; and `PropSettings::max_steps` is now configurable. See `CHANGELOG.md` for the full list.
 
+## Units & Conventions
+
+satkit uses **SI / MKS units throughout** its public API:
+
+| Quantity     | Unit             |
+|--------------|------------------|
+| Position     | meters           |
+| Velocity     | meters / second  |
+| Acceleration | meters / second² |
+| Duration     | seconds          |
+| Angles       | radians          |
+| Mass         | kilograms        |
+
+Any deviation from MKS is suffixed in the identifier (`latitude_deg`, `pos_km`, `Duration::from_hours`, etc.). Names without a unit suffix are MKS.
+
+> [!NOTE]
+> **SGP4 output is converted at the API boundary.** The SGP4 algorithm natively works in kilometers; satkit converts internally so `sk.sgp4(...)` returns position in **meters** and velocity in **m/s**, consistent with the rest of the library.
+
 ## Installation
 
 **Rust:**
