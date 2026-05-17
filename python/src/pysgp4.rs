@@ -223,28 +223,32 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<satkit::omm::OMM> {
     Ok(omm)
 }
 
-/// """SGP-4 propagator for TLE
+/// SGP-4 propagator for TLE.
 ///
-/// Note:
-///     Run Simplified General Perturbations (SGP)-4 propagator on Two-Line Element Set to
-///     output satellite position and velocity at given time
-///     in the "TEME" coordinate system
+/// Run Simplified General Perturbations (SGP)-4 propagator on a Two-Line
+/// Element Set to output satellite position and velocity at given times in
+/// the **TEME** coordinate system.
+///
+/// **Units**: position is returned in **meters** and velocity in
+/// **meters / second**. The SGP4 algorithm itself works natively in
+/// kilometers; satkit converts at the API boundary so callers see MKS
+/// units consistently with the rest of the library.
 ///
 /// Note:
 ///     A detailed description is at:
 ///     https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
 ///
 /// Args:
-///     tle (TLE | list[TLE]): TLE (or list of TLES) on which to operate
+///     tle (TLE | list[TLE]): TLE (or list of TLEs) on which to operate
 ///     tm (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
 ///
 /// Keyword Args:
-///     gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
-///     opsmode (satkit.sgp4_opsmode): opsmode.afspc (Air Force Space Command) or opsmode.improved.  Default is opsmode.afspc
-///     errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
+///     gravconst (satkit.sgp4_gravconst): gravity constant to use. Default is ``gravconst.wgs72``
+///     opsmode (satkit.sgp4_opsmode): ``opsmode.afspc`` (Air Force Space Command) or ``opsmode.improved``. Default is ``opsmode.afspc``
+///     errflag (bool): whether to output error conditions for each TLE and time. Default is False
 ///
 /// Returns:
-///     tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: position and velocity in meters and meters/second, respectively, in the TEME frame at each of the "Ntime" input times and each of the "Ntle" tles
+///     tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: ``(pos, vel)`` in the TEME frame, where ``pos`` is in **meters** and ``vel`` is in **meters / second**, shaped to cover the ``Ntime`` input times and ``Ntle`` TLEs.
 ///
 ///
 /// Example:

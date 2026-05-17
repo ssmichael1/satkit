@@ -51,9 +51,19 @@ impl From<SGP4Error> for i32 {
     }
 }
 
+/// Output of an SGP4 propagation run.
+///
+/// All positions and velocities are in the TEME frame, in **MKS units**:
+/// `pos` is in **meters**, `vel` is in **meters per second**. (The SGP4
+/// algorithm natively works in kilometers; satkit converts at the API
+/// boundary to keep units consistent with the rest of the library.)
 pub struct SGP4State {
+    /// Position in TEME, in **meters**. Shape `3 × N` (columns are the
+    /// input times).
     pub pos: DMatrix<f64>,
+    /// Velocity in TEME, in **meters per second**. Shape `3 × N`.
     pub vel: DMatrix<f64>,
+    /// Per-time-step SGP4 status code.
     pub errcode: Vec<SGP4Error>,
 }
 
@@ -61,37 +71,39 @@ use super::{GravConst, OpsMode, SGP4Source};
 
 ///
 /// Run Simplified General Perturbations (SGP)-4 propagator on
-/// Two-Line Element Set to
-/// output satellite position and velocity at given time
-/// in the "TEME" coordinate system
+/// Two-Line Element Set to output satellite position and velocity at given
+/// times in the "TEME" coordinate system.
 ///
-/// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
+/// This is a shortcut to run [`sgp4_full`] with the WGS84 gravity model and
+/// IMPROVED ops mode.
 ///
 /// A detailed description is
-/// [here](https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf)
+/// [here](https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf).
 ///
+/// # Units
+///
+/// Returns position in **meters** and velocity in **meters / second**, in
+/// the TEME frame. The SGP4 algorithm itself works in kilometers — satkit
+/// converts at the API boundary so callers see MKS units consistently with
+/// the rest of the library.
 ///
 /// # Arguments
 ///
-/// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
-///   orbital mean-elements message (OMM) or other source implementing the
-///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
-///   in the source object after first call to avoid re-initialization on subsequent calls
-/// * `tm` -  The time at which to compute position and velocity
-///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
-///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`
-///
+/// * `sgp4source` - The source of SGP4 data, typically a TLE but could be
+///   an orbital mean-elements message (OMM) or other source implementing
+///   the `SGP4Source` trait. Note: this is a mutable reference because
+///   SGP4 state is cached in the source object after the first call to
+///   avoid re-initialization on subsequent calls.
+/// * `tm` - The times at which to compute position and velocity, as a
+///   slice. The [`crate::TimeLike`] trait is used for time input; this can be
+///   [`crate::Instant`] or, if the `chrono` feature is enabled,
+///   `chrono::DateTime<Utc>`.
 ///
 /// # Return
 ///
-/// Result object containing either an OK value containing a SGP4State struct with
-/// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
-/// times in the slice) and err codes at each time, or an Err value containing
-/// a description of the error
-///
-/// # Note:
-///
-/// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
+/// `Result` containing an [`SGP4State`] with `pos` (meters) and `vel`
+/// (m/s) as `3 × N` matrices (where `N` is the number of input times) and
+/// per-time error codes, or an error describing the failure.
 ///
 /// # Example
 ///
@@ -134,35 +146,42 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> super::R
 
 ///
 /// Run Simplified General Perturbations (SGP)-4 propagator on
-/// Two-Line Element Set to
-/// output satellite position and velocity at given time
-/// in the "TEME" coordinate system
+/// Two-Line Element Set to output satellite position and velocity at given
+/// times in the "TEME" coordinate system, with explicit gravity-constant
+/// and ops-mode selection.
 ///
 /// A detailed description is
-/// [here](https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf)
+/// [here](https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf).
 ///
+/// # Units
+///
+/// Returns position in **meters** and velocity in **meters / second**, in
+/// the TEME frame. The SGP4 algorithm itself works in kilometers — satkit
+/// converts at the API boundary so callers see MKS units consistently with
+/// the rest of the library.
 ///
 /// # Arguments
 ///
-/// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
-///   orbital mean-elements message (OMM) or other source implementing the
-///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
-///   in the source object after first call to avoid re-initialization on subsequent calls.
-/// * `tm` -  The time at which to compute position and velocity
-///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
-///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`
-///
-/// * `gravconst` - The gravitational constant to use.
-///
-/// * `opsmode` - The operational mode to use.
-///
+/// * `sgp4source` - The source of SGP4 data, typically a TLE but could be
+///   an orbital mean-elements message (OMM) or other source implementing
+///   the `SGP4Source` trait. Note: this is a mutable reference because
+///   SGP4 state is cached in the source object after the first call to
+///   avoid re-initialization on subsequent calls.
+/// * `tm` - The times at which to compute position and velocity, as a
+///   slice. The [`crate::TimeLike`] trait is used for time input; this can be
+///   [`crate::Instant`] or, if the `chrono` feature is enabled,
+///   `chrono::DateTime<Utc>`.
+/// * `gravconst` - The gravitational constant set to use (WGS72 / WGS72OLD
+///   / WGS84).
+/// * `opsmode` - The operational mode (`IMPROVED` matches the modern
+///   reference implementation; `AFSPC` reproduces the legacy AFSPC
+///   behaviour).
 ///
 /// # Return
 ///
-/// Result object containing either an OK value containing a tuple with
-/// position (m) and velocity (m/s) Nx3 matrices (where N is the number of input
-/// times in the slice) or an Err value containing
-/// a tuple with error code and error string
+/// `Result` containing an [`SGP4State`] with `pos` (meters) and `vel`
+/// (m/s) as `3 × N` matrices (where `N` is the number of input times) and
+/// per-time error codes, or an error describing the failure.
 ///
 /// # Example
 ///
