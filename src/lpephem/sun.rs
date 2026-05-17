@@ -4,8 +4,8 @@ use crate::Instant;
 use crate::TimeLike;
 use crate::TimeScale;
 
-use crate::mathtypes::*;
 use super::{Error, Result};
+use crate::mathtypes::*;
 
 ///
 /// Sun position in the Geocentric Celestial Reference Frame (GCRF)

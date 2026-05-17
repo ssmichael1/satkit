@@ -53,4 +53,3 @@ impl TimeLike for Instant {
         *self
     }
 }
-

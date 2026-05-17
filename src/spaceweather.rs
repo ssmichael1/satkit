@@ -77,7 +77,12 @@ pub struct SpaceWeatherRecord {
     pub f10p7_adj_l81: f64,
 }
 
-fn str2num<T: core::str::FromStr>(s: &str, sidx: usize, eidx: usize, field: &'static str) -> Result<T> {
+fn str2num<T: core::str::FromStr>(
+    s: &str,
+    sidx: usize,
+    eidx: usize,
+    field: &'static str,
+) -> Result<T> {
     s.chars()
         .skip(sidx)
         .take(eidx - sidx)

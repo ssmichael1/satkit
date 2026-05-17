@@ -50,8 +50,8 @@ where
 }
 
 mod chrono_impls {
-    use crate::{Instant, TimeLike, TimeScale};
     use super::datetime_to_unixtime;
+    use crate::{Instant, TimeLike, TimeScale};
 
     impl<Tz> TimeLike for chrono::DateTime<Tz>
     where
@@ -76,8 +76,6 @@ mod chrono_impls {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use crate::{TimeLike, TimeScale};
@@ -92,7 +90,6 @@ mod tests {
         assert!((inst.as_unixtime() - inst_converted.as_unixtime()).abs() < 1.0e-9);
         let inst2 = dt.as_instant();
         assert!((inst.as_unixtime() - inst2.as_unixtime()).abs() < 1.0e-9);
-
     }
 
     #[test]
@@ -104,20 +101,32 @@ mod tests {
         // Test UTC scale
         let mjd_instant = inst.as_mjd_with_scale(TimeScale::UTC);
         let mjd_chrono = dt.as_mjd_with_scale(TimeScale::UTC);
-        assert!((mjd_instant - mjd_chrono).abs() < 1.0e-9,
-                "MJD UTC mismatch: {} vs {}", mjd_instant, mjd_chrono);
+        assert!(
+            (mjd_instant - mjd_chrono).abs() < 1.0e-9,
+            "MJD UTC mismatch: {} vs {}",
+            mjd_instant,
+            mjd_chrono
+        );
 
         // Test TAI scale
         let mjd_instant_tai = inst.as_mjd_with_scale(TimeScale::TAI);
         let mjd_chrono_tai = dt.as_mjd_with_scale(TimeScale::TAI);
-        assert!((mjd_instant_tai - mjd_chrono_tai).abs() < 1.0e-9,
-                "MJD TAI mismatch: {} vs {}", mjd_instant_tai, mjd_chrono_tai);
+        assert!(
+            (mjd_instant_tai - mjd_chrono_tai).abs() < 1.0e-9,
+            "MJD TAI mismatch: {} vs {}",
+            mjd_instant_tai,
+            mjd_chrono_tai
+        );
 
         // Test TT scale
         let mjd_instant_tt = inst.as_mjd_with_scale(TimeScale::TT);
         let mjd_chrono_tt = dt.as_mjd_with_scale(TimeScale::TT);
-        assert!((mjd_instant_tt - mjd_chrono_tt).abs() < 1.0e-9,
-                "MJD TT mismatch: {} vs {}", mjd_instant_tt, mjd_chrono_tt);
+        assert!(
+            (mjd_instant_tt - mjd_chrono_tt).abs() < 1.0e-9,
+            "MJD TT mismatch: {} vs {}",
+            mjd_instant_tt,
+            mjd_chrono_tt
+        );
     }
 
     #[test]
@@ -129,13 +138,19 @@ mod tests {
         // Test UTC scale
         let jd_instant = inst.as_jd_with_scale(TimeScale::UTC);
         let jd_chrono = dt.as_jd_with_scale(TimeScale::UTC);
-        assert!((jd_instant - jd_chrono).abs() < 1.0e-9,
-                "JD UTC mismatch: {} vs {}", jd_instant, jd_chrono);
+        assert!(
+            (jd_instant - jd_chrono).abs() < 1.0e-9,
+            "JD UTC mismatch: {} vs {}",
+            jd_instant,
+            jd_chrono
+        );
 
         // Test that JD = MJD + 2400000.5
         let mjd_instant = inst.as_mjd_with_scale(TimeScale::UTC);
-        assert!((jd_instant - (mjd_instant + 2400000.5)).abs() < 1.0e-12,
-                "JD-MJD relationship incorrect");
+        assert!(
+            (jd_instant - (mjd_instant + 2400000.5)).abs() < 1.0e-12,
+            "JD-MJD relationship incorrect"
+        );
     }
 
     #[test]
@@ -145,8 +160,10 @@ mod tests {
         let dt: chrono::DateTime<chrono::Utc> = chrono::DateTime::from(inst1);
         let inst2 = dt.as_instant();
 
-        assert!((inst1.as_unixtime() - inst2.as_unixtime()).abs() < 1.0e-9,
-                "as_instant() conversion failed");
+        assert!(
+            (inst1.as_unixtime() - inst2.as_unixtime()).abs() < 1.0e-9,
+            "as_instant() conversion failed"
+        );
     }
 
     #[test]
@@ -158,8 +175,11 @@ mod tests {
         let mjd_utc = dt_utc.as_mjd_with_scale(TimeScale::UTC);
         let mjd_fixed = dt_fixed.as_mjd_with_scale(TimeScale::UTC);
 
-        assert!((mjd_utc - mjd_fixed).abs() < 1.0e-9,
-                "MJD mismatch between timezones: {} vs {}", mjd_utc, mjd_fixed);
+        assert!(
+            (mjd_utc - mjd_fixed).abs() < 1.0e-9,
+            "MJD mismatch between timezones: {} vs {}",
+            mjd_utc,
+            mjd_fixed
+        );
     }
-
 }

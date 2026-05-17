@@ -3,10 +3,10 @@ use pyo3::prelude::*;
 use satkit::earthgravity::{accel, accel_and_partials, GravityModel};
 
 use crate::pyitrfcoord::PyITRFCoord;
-use satkit::itrfcoord::ITRFCoord;
-use satkit::mathtypes::*;
 use numpy as np;
 use numpy::PyArrayMethods;
+use satkit::itrfcoord::ITRFCoord;
+use satkit::mathtypes::*;
 
 use pyo3::types::PyDict;
 use pyo3::IntoPyObjectExt;
@@ -85,9 +85,10 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
                 .map_err(|e| anyhow::anyhow!("Failed to extract degree: {}", e))?;
         }
         if let Some(v) = kw.get_item("order")? {
-            order = Some(v
-                .extract::<usize>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?);
+            order = Some(
+                v.extract::<usize>()
+                    .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?,
+            );
         }
     }
     let order = order.unwrap_or(degree);
@@ -156,9 +157,10 @@ pub fn gravity_and_partials(
                 .map_err(|e| anyhow::anyhow!("Failed to extract degree: {}", e))?;
         }
         if let Some(v) = kw.get_item("order")? {
-            order = Some(v
-                .extract::<usize>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?);
+            order = Some(
+                v.extract::<usize>()
+                    .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?,
+            );
         }
     }
     let order = order.unwrap_or(degree);
@@ -173,7 +175,11 @@ pub fn gravity_and_partials(
             let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
             let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {
-                std::ptr::copy_nonoverlapping(p.as_slice().as_ptr(), ppy.as_raw_array_mut().as_mut_ptr(), 9);
+                std::ptr::copy_nonoverlapping(
+                    p.as_slice().as_ptr(),
+                    ppy.as_raw_array_mut().as_mut_ptr(),
+                    9,
+                );
             }
             Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
         })
@@ -188,7 +194,11 @@ pub fn gravity_and_partials(
             let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
             let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
             unsafe {
-                std::ptr::copy_nonoverlapping(p.as_slice().as_ptr(), ppy.as_raw_array_mut().as_mut_ptr(), 9);
+                std::ptr::copy_nonoverlapping(
+                    p.as_slice().as_ptr(),
+                    ppy.as_raw_array_mut().as_mut_ptr(),
+                    9,
+                );
             }
             Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
         })

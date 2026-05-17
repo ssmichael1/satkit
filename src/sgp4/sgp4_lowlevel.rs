@@ -91,82 +91,50 @@ use super::satrec::SatRec;
 use std::f64::consts::PI;
 
 pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64; 3]), i32> {
-    
-    
-    
-    
-    
-    
-    
     let mut coseo1: f64 = 0.0;
-    
+
     let mut cosip: f64;
     let cosisq: f64;
-    
-    
+
     let delm: f64;
     let delomg: f64;
     let mut em: f64;
-    
-    
-    
+
     let mut eo1: f64;
     let mut ep: f64;
-    
+
     let mut argpm: f64;
     let mut argpp: f64;
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     let mut sineo1: f64 = 0.0;
-    
+
     let mut sinip: f64;
-    
-    
-    
+
     let mut su: f64;
-    
+
     let t3: f64;
     let t4: f64;
     let mut tem5: f64;
     let mut temp: f64;
-    
-    
+
     let mut tempa: f64;
     let mut tempe: f64;
     let mut templ: f64;
-    
-    
-    
-    
-    
-    
-    
+
     let mut inclm: f64;
     let mut mm: f64;
     let mut nm: f64;
     let mut nodem: f64;
-    
+
     let mut xincp: f64;
-    
+
     let mut xlm: f64;
     let mut mp: f64;
-    
-    
-    
-    
-    
+
     let mut nodep: f64;
     let tc: f64;
     let mut dndt: f64 = 0.0;
-    
+
     let delmtemp: f64;
 
     let mut ktr: i32;
@@ -224,9 +192,14 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
         argpm = argpdf - temp;
         t3 = t2 * satrec.t;
         t4 = t3 * satrec.t;
-        tempa = satrec.d4.mul_add(-t4, satrec.d3.mul_add(-t3, satrec.d2.mul_add(-t2, tempa)));
+        tempa = satrec
+            .d4
+            .mul_add(-t4, satrec.d3.mul_add(-t3, satrec.d2.mul_add(-t2, tempa)));
         tempe += satrec.bstar * satrec.cc5 * (f64::sin(mm) - satrec.sinmao);
-        templ = t4.mul_add(satrec.t.mul_add(satrec.t5cof, satrec.t4cof), satrec.t3cof.mul_add(t3, templ));
+        templ = t4.mul_add(
+            satrec.t.mul_add(satrec.t5cof, satrec.t4cof),
+            satrec.t3cof.mul_add(t3, templ),
+        );
     }
 
     nm = satrec.no_unkozai;
@@ -391,7 +364,8 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
         satrec.aycof = -0.5 * satrec.j3oj2 * sinip;
         // sgp4fix for divide by zero for xincp = 180 deg
         if f64::abs(cosip + 1.0) > 1.5e-12 {
-            satrec.xlcof = -0.25 * satrec.j3oj2 * sinip * 5.0f64.mul_add(cosip, 3.0) / (1.0 + cosip);
+            satrec.xlcof =
+                -0.25 * satrec.j3oj2 * sinip * 5.0f64.mul_add(cosip, 3.0) / (1.0 + cosip);
         } else {
             satrec.xlcof = -0.25 * satrec.j3oj2 * sinip * 5.0f64.mul_add(cosip, 3.0) / TEMP4;
         }
@@ -459,12 +433,16 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
         satrec.x1mth2 = 1.0 - cosisq;
         satrec.x7thm1 = 7.0f64.mul_add(cosisq, -1.0);
     }
-    let mrt: f64 = rl.mul_add((1.5 * temp2 * betal).mul_add(-satrec.con41, 1.0), 0.5 * temp1 * satrec.x1mth2 * cos2u);
+    let mrt: f64 = rl.mul_add(
+        (1.5 * temp2 * betal).mul_add(-satrec.con41, 1.0),
+        0.5 * temp1 * satrec.x1mth2 * cos2u,
+    );
     su -= 0.25 * temp2 * satrec.x7thm1 * sin2u;
     let xnode: f64 = (1.5 * temp2 * cosip).mul_add(sin2u, nodep);
     let xinc: f64 = (1.5 * temp2 * cosip * sinip).mul_add(cos2u, xincp);
     let mvt: f64 = rdotl - nm * temp1 * satrec.x1mth2 * sin2u / satrec.xke;
-    let rvdot: f64 = rvdotl + nm * temp1 * satrec.x1mth2.mul_add(cos2u, 1.5 * satrec.con41) / satrec.xke;
+    let rvdot: f64 =
+        rvdotl + nm * temp1 * satrec.x1mth2.mul_add(cos2u, 1.5 * satrec.con41) / satrec.xke;
 
     /* --------------------- orientation vectors ------------------- */
     let sinsu: f64 = f64::sin(su);

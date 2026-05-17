@@ -1,5 +1,5 @@
-use satkit::Frame;
 use pyo3::prelude::*;
+use satkit::Frame;
 
 #[derive(Clone, PartialEq, Eq)]
 #[pyclass(name = "frame", module = "satkit", eq, eq_int, from_py_object)]

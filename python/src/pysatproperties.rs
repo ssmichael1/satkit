@@ -57,15 +57,12 @@ impl PySatProperties {
                 kw.del_item("thrusts")?;
             }
             if !kw.is_empty() {
-                let keystring: String =
-                    kw
-                        .iter()
-                        .fold(String::from(""), |acc, (k, _v)| {
-                            let mut a2 = acc;
-                            a2.push_str(k.cast::<PyString>().unwrap().to_str().unwrap());
-                            a2.push_str(", ");
-                            a2
-                        });
+                let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
+                    let mut a2 = acc;
+                    a2.push_str(k.cast::<PyString>().unwrap().to_str().unwrap());
+                    a2.push_str(", ");
+                    a2
+                });
                 bail!("Invalid keyword args: {}", keystring);
             }
         }
@@ -165,9 +162,12 @@ impl PySatProperties {
                 satkit::TimeScale::TAI,
             );
             offset += 8;
-            self.0.thrust.thrusts.push(
-                satkit::orbitprop::ContinuousThrust::new(accel, frame, start, end),
-            );
+            self.0
+                .thrust
+                .thrusts
+                .push(satkit::orbitprop::ContinuousThrust::new(
+                    accel, frame, start, end,
+                ));
         }
         Ok(())
     }
@@ -193,11 +193,15 @@ impl PySatProperties {
             };
             offset += 1;
             raw[offset..offset + 8].clone_from_slice(
-                &t.start.as_mjd_with_scale(satkit::TimeScale::TAI).to_le_bytes(),
+                &t.start
+                    .as_mjd_with_scale(satkit::TimeScale::TAI)
+                    .to_le_bytes(),
             );
             offset += 8;
             raw[offset..offset + 8].clone_from_slice(
-                &t.end.as_mjd_with_scale(satkit::TimeScale::TAI).to_le_bytes(),
+                &t.end
+                    .as_mjd_with_scale(satkit::TimeScale::TAI)
+                    .to_le_bytes(),
             );
             offset += 8;
         }

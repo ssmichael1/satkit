@@ -701,7 +701,6 @@ mod tests {
                     svel -= mvel / (1.0 + jplephem_singleton().as_ref().unwrap().emrat);
                 }
 
-
                 // Comparing positions
                 if coord <= 3 {
                     let calc = (tpos - spos)[coord - 1] / jpl._au / 1.0e3;

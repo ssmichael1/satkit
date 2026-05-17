@@ -1,7 +1,7 @@
 use crate::pyutils;
+use pyo3::prelude::*;
 use satkit::lpephem::moon;
 use satkit::Instant;
-use pyo3::prelude::*;
 
 #[derive(PartialEq, Eq)]
 #[pyclass(name = "moonphase", eq, eq_int)]

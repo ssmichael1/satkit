@@ -22,7 +22,12 @@ pub trait SatProperties {
     /// Thrust acceleration in GCRF [m/s^2], or None if no thrust is active
     ///
     /// Default implementation returns None (no thrust)
-    fn thrust_accel(&self, _tm: &Instant, _pos_gcrf: &Vector3, _vel_gcrf: &Vector3) -> Option<Vector3> {
+    fn thrust_accel(
+        &self,
+        _tm: &Instant,
+        _pos_gcrf: &Vector3,
+        _vel_gcrf: &Vector3,
+    ) -> Option<Vector3> {
         None
     }
 }
@@ -90,7 +95,12 @@ impl SatProperties for SatPropertiesSimple {
         self.craoverm
     }
 
-    fn thrust_accel(&self, tm: &Instant, pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Option<Vector3> {
+    fn thrust_accel(
+        &self,
+        tm: &Instant,
+        pos_gcrf: &Vector3,
+        vel_gcrf: &Vector3,
+    ) -> Option<Vector3> {
         if self.thrust.is_empty() {
             None
         } else {

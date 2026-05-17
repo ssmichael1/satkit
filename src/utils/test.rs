@@ -6,8 +6,7 @@ pub fn get_project_root() -> std::io::Result<PathBuf> {
     let path_ancestors = path.as_path().ancestors();
 
     for p in path_ancestors {
-        let has_cargo = std::fs::read_dir(p)?
-            .any(|p| p.unwrap().file_name() == *"Cargo.lock");
+        let has_cargo = std::fs::read_dir(p)?.any(|p| p.unwrap().file_name() == *"Cargo.lock");
         if has_cargo {
             return Ok(PathBuf::from(p));
         }

@@ -173,55 +173,62 @@ impl Instant {
         }
 
         // Helper: extract date from a separator pattern like ??/??/???? or ??-??-????
-        let extract_date = |thelist: &[ParseVal], sep: &str| -> Option<(i32, i32, i32, Vec<usize>)> {
-            let p = thelist
-                .iter()
-                .position(|x| *x == ParseVal::Str(String::from(sep)))?;
-            if p == 0 || p >= thelist.len() - 4 {
-                return None;
-            }
-            if thelist[p + 2] != ParseVal::Str(String::from(sep)) {
-                return None;
-            }
-            let mut y = -1i32;
-            let mut m = -1i32;
-            let mut d = -1i32;
-            let mut remove = Vec::new();
-            if let ParseVal::Num(n) = thelist[p + 3] {
-                y = n;
-                remove.push(p + 3);
-            }
-            if let ParseVal::Num(n) = thelist[p + 1] {
-                d = n;
-                remove.push(p + 1);
-            }
-            if let ParseVal::Num(n) = thelist[p - 1] {
-                if n > 1900 {
-                    // First field is a year (YYYY-MM-DD)
-                    let tmp = y;
-                    y = n;
-                    // What was in position 3 is actually day
-                    if d != -1 {
-                        m = d;
-                        d = tmp;
-                    }
-                } else {
-                    m = n;
+        let extract_date =
+            |thelist: &[ParseVal], sep: &str| -> Option<(i32, i32, i32, Vec<usize>)> {
+                let p = thelist
+                    .iter()
+                    .position(|x| *x == ParseVal::Str(String::from(sep)))?;
+                if p == 0 || p >= thelist.len() - 4 {
+                    return None;
                 }
-                remove.push(p - 1);
-            }
-            // Also remove the separators
-            remove.push(p + 2);
-            remove.push(p);
-            Some((y, m, d, remove))
-        };
+                if thelist[p + 2] != ParseVal::Str(String::from(sep)) {
+                    return None;
+                }
+                let mut y = -1i32;
+                let mut m = -1i32;
+                let mut d = -1i32;
+                let mut remove = Vec::new();
+                if let ParseVal::Num(n) = thelist[p + 3] {
+                    y = n;
+                    remove.push(p + 3);
+                }
+                if let ParseVal::Num(n) = thelist[p + 1] {
+                    d = n;
+                    remove.push(p + 1);
+                }
+                if let ParseVal::Num(n) = thelist[p - 1] {
+                    if n > 1900 {
+                        // First field is a year (YYYY-MM-DD)
+                        let tmp = y;
+                        y = n;
+                        // What was in position 3 is actually day
+                        if d != -1 {
+                            m = d;
+                            d = tmp;
+                        }
+                    } else {
+                        m = n;
+                    }
+                    remove.push(p - 1);
+                }
+                // Also remove the separators
+                remove.push(p + 2);
+                remove.push(p);
+                Some((y, m, d, remove))
+            };
 
         // Look for ??/??/???? for date
         if year == -1 || month == -1 || day == -1 {
             if let Some((y, m, d, remove)) = extract_date(&thelist, "/") {
-                if year == -1 && y != -1 { year = y; }
-                if month == -1 && m != -1 { month = m; }
-                if day == -1 && d != -1 { day = d; }
+                if year == -1 && y != -1 {
+                    year = y;
+                }
+                if month == -1 && m != -1 {
+                    month = m;
+                }
+                if day == -1 && d != -1 {
+                    day = d;
+                }
                 let mut remove = remove;
                 remove.sort_unstable_by(|a, b| b.cmp(a));
                 for idx in remove {
@@ -235,9 +242,15 @@ impl Instant {
         // Look for ??-??-???? for date
         if year == -1 || month == -1 || day == -1 {
             if let Some((y, m, d, remove)) = extract_date(&thelist, "-") {
-                if year == -1 && y != -1 { year = y; }
-                if month == -1 && m != -1 { month = m; }
-                if day == -1 && d != -1 { day = d; }
+                if year == -1 && y != -1 {
+                    year = y;
+                }
+                if month == -1 && m != -1 {
+                    month = m;
+                }
+                if day == -1 && d != -1 {
+                    day = d;
+                }
                 let mut remove = remove;
                 remove.sort_unstable_by(|a, b| b.cmp(a));
                 for idx in remove {
@@ -332,8 +345,7 @@ impl Instant {
                     Some('Y') => year = s_chars.by_ref().take(4).collect::<String>().parse()?,
                     Some('m') => month = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('B') => {
-                        let month_name =
-                            take_while_peek(&mut s_chars, |c| c.is_alphabetic());
+                        let month_name = take_while_peek(&mut s_chars, |c| c.is_alphabetic());
                         month = MONTH_NAMES
                             .iter()
                             .position(|&m| m == month_name)
@@ -341,8 +353,7 @@ impl Instant {
                             .ok_or(InstantError::InvalidMonthString(month_name))?;
                     }
                     Some('b') => {
-                        let month_abbr =
-                            take_while_peek(&mut s_chars, |c| c.is_alphabetic());
+                        let month_abbr = take_while_peek(&mut s_chars, |c| c.is_alphabetic());
                         month = MONTH_ABBRS
                             .iter()
                             .position(|&m| m == month_abbr)
@@ -354,8 +365,7 @@ impl Instant {
                     Some('M') => minute = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('S') => second = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('f') => {
-                        let smicro =
-                            take_while_peek(&mut s_chars, |c| c.is_ascii_digit());
+                        let smicro = take_while_peek(&mut s_chars, |c| c.is_ascii_digit());
                         // This is a little strange ... formating convention allows
                         // for trailing zeros to be omitted.  So we need to determine
                         // the number of digits and multiply by the appropriate factor

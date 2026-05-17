@@ -99,13 +99,7 @@ fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
         )
         .as_str(),
     );
-    s.push_str(
-        format!(
-            "   Vel: [{:.3}, {:.3}, {:.3}] m/s\n",
-            se[3], se[4], se[5]
-        )
-        .as_str(),
-    );
+    s.push_str(format!("   Vel: [{:.3}, {:.3}, {:.3}] m/s\n", se[3], se[4], se[5]).as_str());
     s.push_str("  Stats:\n");
     s.push_str(format!("       Function Evaluations: {}\n", r.num_eval).as_str());
     s.push_str(format!("             Accepted Steps: {}\n", r.accepted_steps).as_str());
@@ -318,28 +312,38 @@ impl PyPropResult {
             // Batch interpolation — returns Nx6 numpy array
             match &self.0 {
                 PyPropResultType::R1(r) => {
-                    let results = r.interp_batch(&times)
+                    let results = r
+                        .interp_batch(&times)
                         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
                     pyo3::Python::attach(|py| {
                         let n = results.len();
-                        let flat: Vec<f64> = results.iter().flat_map(|r| r.as_slice().iter().copied().take(6)).collect();
+                        let flat: Vec<f64> = results
+                            .iter()
+                            .flat_map(|r| r.as_slice().iter().copied().take(6))
+                            .collect();
                         slice2py2d(py, &flat, n, 6)
                     })
                 }
                 PyPropResultType::R7(r) => {
-                    let results = r.interp_batch(&times)
+                    let results = r
+                        .interp_batch(&times)
                         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
                     pyo3::Python::attach(|py| {
                         let n = results.len();
-                        let flat: Vec<f64> = results.iter().flat_map(|r| r.as_slice().iter().copied().take(6)).collect();
+                        let flat: Vec<f64> = results
+                            .iter()
+                            .flat_map(|r| r.as_slice().iter().copied().take(6))
+                            .collect();
                         slice2py2d(py, &flat, n, 6)
                     })
                 }
             }
         } else if is_list {
             // Fallback for output_phi=true — need per-element processing
-            let results: PyResult<Vec<Py<PyAny>>> =
-                times.iter().map(|t| self.interp_at(t, output_phi)).collect();
+            let results: PyResult<Vec<Py<PyAny>>> = times
+                .iter()
+                .map(|t| self.interp_at(t, output_phi))
+                .collect();
             pyo3::Python::attach(|py| results?.into_py_any(py))
         } else {
             self.interp_at(&times[0], output_phi)
