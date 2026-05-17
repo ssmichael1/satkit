@@ -1,0 +1,9 @@
+# Commits listed here are skipped by `git blame`.
+#
+# To enable locally:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub's web blame view honors this file automatically.
+
+# Mass cargo fmt across the workspace
+447b2427f2b52629986bef5b819601b9cedaf49e
