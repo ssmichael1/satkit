@@ -39,9 +39,7 @@ pub enum Error {
     // -- precomputed.rs --------------------------------------------------
     /// Returned by [`Precomputed::interp`](crate::orbitprop::Precomputed::interp)
     /// when the requested time falls outside the precomputed range.
-    #[error(
-        "Precomputed::interp: time {time} is outside of precomputed range : {begin} to {end}"
-    )]
+    #[error("Precomputed::interp: time {time} is outside of precomputed range : {begin} to {end}")]
     PrecomputedOutOfRange {
         time: String,
         begin: String,

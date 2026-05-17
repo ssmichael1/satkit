@@ -18,7 +18,10 @@ fn main() {
         .args(["describe", "--tags"])
         .output()
         .unwrap();
-    println!("cargo:rustc-env=GIT_TAG={}", String::from_utf8(output.stdout).unwrap());
+    println!(
+        "cargo:rustc-env=GIT_TAG={}",
+        String::from_utf8(output.stdout).unwrap()
+    );
 }
 
 fn build_date_iso8601() -> String {

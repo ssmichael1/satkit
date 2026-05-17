@@ -144,8 +144,7 @@ pub fn lambert(
 
     // --- Zero-revolution solution ---
     let x0 = initial_guess_0rev(lambda, t_norm);
-    let x = householder(lambda, t_norm, x0, 0)
-        .ok_or(LambertError::ConvergenceFailed(0))?;
+    let x = householder(lambda, t_norm, x0, 0).ok_or(LambertError::ConvergenceFailed(0))?;
     solutions.push(build_velocity(
         &ir1, &ir2, &it1, &it2, r1_norm, r2_norm, lambda, gamma, rho, sigma, x,
     ));
@@ -294,8 +293,7 @@ fn tof_derivatives(x: f64, lambda: f64, t: f64) -> (f64, f64, f64) {
 
     let dt = (3.0 * t * x - 2.0 + 2.0 * lambda3 * x / y) / omx2;
     let d2t = (3.0 * t + 5.0 * x * dt + 2.0 * (1.0 - lambda2) * lambda3 / y.powi(3)) / omx2;
-    let d3t = (7.0 * x * d2t + 8.0 * dt - 6.0 * (1.0 - lambda2) * lambda5 * x / y.powi(5))
-        / omx2;
+    let d3t = (7.0 * x * d2t + 8.0 * dt - 6.0 * (1.0 - lambda2) * lambda5 * x / y.powi(5)) / omx2;
 
     (dt, d2t, d3t)
 }
@@ -426,11 +424,7 @@ mod tests {
         let h1 = r1.cross(v1);
         let h2 = r2.cross(v2);
         let h_err = (h1 - h2).norm() / h1.norm();
-        assert!(
-            h_err < 1.0e-8,
-            "Angular momentum mismatch: {:.2e}",
-            h_err
-        );
+        assert!(h_err < 1.0e-8, "Angular momentum mismatch: {:.2e}", h_err);
 
         // Propagation check for non-equatorial orbits
         let h = r1.cross(v1);
@@ -441,11 +435,7 @@ mod tests {
                 let k2 = k.propagate(&dt);
                 let (r2_prop, _) = k2.to_pv();
                 let pos_err = (r2_prop - r2).norm();
-                assert!(
-                    pos_err < 100.0,
-                    "Propagation error: {:.1} m",
-                    pos_err
-                );
+                assert!(pos_err < 100.0, "Propagation error: {:.1} m", pos_err);
             }
         }
     }

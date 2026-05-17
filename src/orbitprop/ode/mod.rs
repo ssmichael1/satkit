@@ -11,4 +11,4 @@
 
 mod gauss_jackson;
 
-pub use gauss_jackson::{GaussJackson8, GJDenseOutput, GJSettings, GJSolution};
+pub use gauss_jackson::{GJDenseOutput, GJSettings, GJSolution, GaussJackson8};

@@ -1,7 +1,7 @@
-use crate::pyutils;
-use satkit::lpephem;
 use crate::pysolarsystem::SolarSystem;
+use crate::pyutils;
 use pyo3::prelude::*;
+use satkit::lpephem;
 
 use anyhow::Result;
 

@@ -157,7 +157,10 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 ///   O. Montenbruck and B. Gill, Springer, 2012.
 ///
 pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityModel) -> Vector3 {
-    gravhash().get(&model).unwrap().accel(pos_itrf, degree, order)
+    gravhash()
+        .get(&model)
+        .unwrap()
+        .accel(pos_itrf, degree, order)
 }
 
 ///
@@ -249,21 +252,102 @@ macro_rules! dispatch_degree {
 impl Gravity {
     pub fn accel(&self, pos: &Vector3, degree: usize, order: usize) -> Vector3 {
         let max_order = order.min(degree);
-        dispatch_degree!(self, accel_t(pos, max_order), degree,
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-            11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-            21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-            31, 32, 33, 34, 35, 36, 37, 38, 39,
+        dispatch_degree!(
+            self,
+            accel_t(pos, max_order),
+            degree,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
         )
     }
 
-    pub fn accel_and_partials(&self, pos: &Vector3, degree: usize, order: usize) -> (Vector3, Matrix3) {
+    pub fn accel_and_partials(
+        &self,
+        pos: &Vector3,
+        degree: usize,
+        order: usize,
+    ) -> (Vector3, Matrix3) {
         let max_order = order.min(degree);
-        dispatch_degree!(self, accel_and_partials_t(pos, max_order), degree,
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-            11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-            21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-            31, 32, 33, 34, 35, 36, 37, 38, 39,
+        dispatch_degree!(
+            self,
+            accel_and_partials_t(pos, max_order),
+            degree,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
         )
     }
 
@@ -278,7 +362,11 @@ impl Gravity {
         (accel, partials)
     }
 
-    fn accel_t<const N: usize, const NP4: usize>(&self, pos: &Vector3, max_order: usize) -> Vector3 {
+    fn accel_t<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> Vector3 {
         let (v, w) = self.compute_legendre::<NP4>(pos);
 
         self.accel_from_legendre_t::<N, NP4>(&v, &w, max_order)

@@ -67,7 +67,10 @@ impl IERSTable {
                                 fname: fname.to_string(),
                             });
                         }
-                        let vals: Vec<f64> = tline.split_whitespace().map(|x| x.parse().unwrap()).collect();
+                        let vals: Vec<f64> = tline
+                            .split_whitespace()
+                            .map(|x| x.parse().unwrap())
+                            .collect();
                         for (c, &val) in vals.iter().enumerate() {
                             table.data[tnum as usize][(rowcnt, c)] = val;
                         }

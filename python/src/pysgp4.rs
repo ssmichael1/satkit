@@ -4,9 +4,9 @@ use pyo3::IntoPyObjectExt;
 
 use crate::pyinstant::ToTimeVec;
 use crate::pytle::PyTLE;
-use satkit::sgp4 as psgp4;
 use numpy::PyArray1;
 use numpy::PyArrayMethods;
+use satkit::sgp4 as psgp4;
 
 use anyhow::{bail, Result};
 
@@ -81,7 +81,8 @@ fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> {
         Ok(instant.0)
     } else if val.is_instance_of::<PyString>() {
         let s: String = val.extract()?;
-        satkit::Instant::from_rfc3339(&s).map_err(|e| anyhow::anyhow!("Invalid epoch string: {}", e))
+        satkit::Instant::from_rfc3339(&s)
+            .map_err(|e| anyhow::anyhow!("Invalid epoch string: {}", e))
     } else if val.is_instance_of::<PyDateTime>() {
         let tm: Py<PyDateTime> = val.extract().unwrap();
         pyo3::Python::attach(|py| {

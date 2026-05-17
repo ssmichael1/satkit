@@ -196,25 +196,20 @@ impl PyDuration {
         Self(Duration::from_seconds(self.0.as_seconds() * other))
     }
 
-    fn __truediv__(&self, other: &Bound<'_, PyAny>) ->PyResult<Py<PyAny>> {
+    fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         if other.is_instance_of::<Self>() {
             let dur = other
                 .extract::<Self>()
                 .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
             pyo3::Python::attach(|py| (self.0.as_seconds() / dur.0.as_seconds()).into_py_any(py))
-        }
-        else if other.is_instance_of::<pyo3::types::PyFloat>() {
+        } else if other.is_instance_of::<pyo3::types::PyFloat>() {
             let scalar = other
                 .extract::<f64>()
                 .map_err(|e| anyhow::anyhow!("Invalid scalar: {}", e))?;
-            pyo3::Python::attach(|py|
-                PyDuration(
-                    Duration::from_seconds(self.0.as_seconds() / scalar)
-                ).into_py_any(py)
-            )
-
-        }
-        else {
+            pyo3::Python::attach(|py| {
+                PyDuration(Duration::from_seconds(self.0.as_seconds() / scalar)).into_py_any(py)
+            })
+        } else {
             Err(anyhow::anyhow!("Invalid right-hand side").into())
         }
     }

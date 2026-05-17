@@ -1,12 +1,12 @@
 use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
-use crate::TimeLike;
 use crate::mathtypes::DMatrix;
+use crate::TimeLike;
 
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, PartialEq, Eq, Copy )]
+#[derive(Debug, Clone, Error, PartialEq, Eq, Copy)]
 pub enum SGP4Error {
     #[error("Success")]
     SGP4Success = 0,
@@ -56,7 +56,6 @@ pub struct SGP4State {
     pub vel: DMatrix<f64>,
     pub errcode: Vec<SGP4Error>,
 }
-
 
 use super::{GravConst, OpsMode, SGP4Source};
 
@@ -129,10 +128,7 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// ```
 ///
 #[inline]
-pub fn sgp4<T: TimeLike>(
-    sgp4source: &mut impl SGP4Source,
-    tm: &[T],
-) -> super::Result<SGP4State> {
+pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> super::Result<SGP4State> {
     sgp4_full(sgp4source, tm, GravConst::WGS84, OpsMode::IMPROVED)
 }
 
@@ -234,7 +230,10 @@ pub fn sgp4_full<T: TimeLike>(
     }
 
     let epoch = sgp4source.epoch();
-    let s = sgp4source.satrec_mut().as_mut().expect("satrec initialized");
+    let s = sgp4source
+        .satrec_mut()
+        .as_mut()
+        .expect("satrec initialized");
 
     let n = tm.len();
     let mut rarr = DMatrix::<f64>::zeros(3, n);
@@ -365,10 +364,12 @@ mod tests {
                     if testvec[idx + 4].abs() < 1.0e-6 {
                         maxvelerr = 1.0e-2;
                     }
-                    let poserr =
-                        (states.pos[(idx, 0)].mul_add(1.0e-3, -testvec[idx + 1]) / testvec[idx + 1]).abs();
-                    let velerr =
-                        (states.vel[(idx, 0)].mul_add(1.0e-3, -testvec[idx + 4]) / testvec[idx + 4]).abs();
+                    let poserr = (states.pos[(idx, 0)].mul_add(1.0e-3, -testvec[idx + 1])
+                        / testvec[idx + 1])
+                        .abs();
+                    let velerr = (states.vel[(idx, 0)].mul_add(1.0e-3, -testvec[idx + 4])
+                        / testvec[idx + 4])
+                        .abs();
                     assert!(poserr < maxposerr);
                     assert!(velerr < maxvelerr);
                 }

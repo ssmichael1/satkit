@@ -32,8 +32,7 @@ pub fn point_gravity_and_partials(
     let rsnorm3 = rsnorm2 * rsnorm;
     (
         -mu * (rs / rsnorm3 + s / (snorm * snorm2)),
-        -mu * (Matrix3::eye() / rsnorm3
-            - 3.0 * rs * rs.transpose() / (rsnorm2 * rsnorm3)),
+        -mu * (Matrix3::eye() / rsnorm3 - 3.0 * rs * rs.transpose() / (rsnorm2 * rsnorm3)),
     )
 }
 

@@ -376,7 +376,9 @@ impl PyQuaternion {
             let qmat = rot.transpose();
 
             Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let nd = unsafe { np::ndarray::ArrayView2::from_shape_ptr((3, 3), qmat.as_slice().as_ptr()) };
+                let nd = unsafe {
+                    np::ndarray::ArrayView2::from_shape_ptr((3, 3), qmat.as_slice().as_ptr())
+                };
                 let res = v.readonly().as_array().dot(&nd).to_pyarray(py);
 
                 res.into_py_any(py)
