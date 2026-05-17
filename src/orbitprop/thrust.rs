@@ -40,7 +40,12 @@ impl ContinuousThrust {
     /// the crewed-spaceflight / body-pointing convention.
     ///
     /// Returns `None` if thrust is not active at this time.
-    pub fn accel_gcrf(&self, time: &Instant, pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Option<Vector3> {
+    pub fn accel_gcrf(
+        &self,
+        time: &Instant,
+        pos_gcrf: &Vector3,
+        vel_gcrf: &Vector3,
+    ) -> Option<Vector3> {
         if !self.is_active(time) {
             return None;
         }

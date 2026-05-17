@@ -1,13 +1,13 @@
 use crate::pyinstant::ToTimeVec;
 use crate::pyutils::*;
 use crate::PyInstant;
+use numpy as np;
+use numpy::{PyArrayMethods, PyUntypedArrayMethods};
+use pyo3::prelude::*;
+use pyo3::IntoPyObjectExt;
 use satkit::frametransform as ft;
 use satkit::mathtypes::*;
 use satkit::Instant;
-use pyo3::prelude::*;
-use pyo3::IntoPyObjectExt;
-use numpy as np;
-use numpy::{PyArrayMethods, PyUntypedArrayMethods};
 
 use anyhow::{bail, Result};
 
@@ -465,19 +465,26 @@ fn state_transform_batch(
         let vshape = varr.shape();
         let n = pshape[0];
         if pshape[1] != 3 {
-            bail!("pos must have shape (N, 3), got ({}, {})", pshape[0], pshape[1]);
+            bail!(
+                "pos must have shape (N, 3), got ({}, {})",
+                pshape[0],
+                pshape[1]
+            );
         }
         if vshape[0] != n || vshape[1] != 3 {
             bail!(
                 "vel must have same shape as pos ({}, 3), got ({}, {})",
-                n, vshape[0], vshape[1]
+                n,
+                vshape[0],
+                vshape[1]
             );
         }
         let tm = time.to_time_vec()?;
         if tm.len() != n {
             bail!(
                 "time array length ({}) must match number of states ({})",
-                tm.len(), n
+                tm.len(),
+                n
             );
         }
         let pa = parr.as_array();

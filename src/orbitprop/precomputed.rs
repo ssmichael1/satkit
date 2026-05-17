@@ -3,8 +3,8 @@ use crate::jplephem;
 use crate::mathtypes::{Quaternion, Vector3};
 use crate::Duration;
 use crate::Instant;
-use crate::TimeLike;
 use crate::SolarSystem;
+use crate::TimeLike;
 
 pub type InterpType = (Quaternion, Vector3, Vector3);
 
@@ -77,8 +77,7 @@ impl Precomputed {
             end: pend,
             step,
             data: {
-                let nsteps: usize =
-                    2 + ((pend - pbegin).as_seconds() / step.abs()).ceil() as usize;
+                let nsteps: usize = 2 + ((pend - pbegin).as_seconds() / step.abs()).ceil() as usize;
                 let mut data = Vec::with_capacity(nsteps);
                 for idx in 0..nsteps {
                     let t = pbegin + Duration::from_seconds((idx as f64) * step);

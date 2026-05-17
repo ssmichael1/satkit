@@ -86,8 +86,7 @@ fn residuals(
     epoch: Instant,
 ) -> Result<Vec<f64>> {
     let mut tle = tle_from_params(params, epoch);
-    let out = crate::sgp4::sgp4(&mut tle, times)
-        .map_err(|e| Error::Sgp4(format!("{e:?}")))?;
+    let out = crate::sgp4::sgp4(&mut tle, times).map_err(|e| Error::Sgp4(format!("{e:?}")))?;
     let mut r = vec![0.0; states_teme.len() * 3];
     for (i, state) in states_teme.iter().enumerate() {
         for j in 0..3 {
@@ -237,16 +236,10 @@ impl TLE {
             .enumerate()
             .map(|(i, time)| {
                 let q = crate::frametransform::qteme2gcrf(time).conjugate();
-                let p = q * numeris::vector![
-                    states_gcrf[i][0],
-                    states_gcrf[i][1],
-                    states_gcrf[i][2],
-                ];
-                let v = q * numeris::vector![
-                    states_gcrf[i][3],
-                    states_gcrf[i][4],
-                    states_gcrf[i][5],
-                ];
+                let p =
+                    q * numeris::vector![states_gcrf[i][0], states_gcrf[i][1], states_gcrf[i][2],];
+                let v =
+                    q * numeris::vector![states_gcrf[i][3], states_gcrf[i][4], states_gcrf[i][5],];
                 [p[0], p[1], p[2], v[0], v[1], v[2]]
             })
             .collect::<Vec<_>>();
@@ -319,8 +312,7 @@ impl TLE {
                             // Try a backward difference instead.
                             let mut pert = params;
                             pert[k] -= h;
-                            let rp =
-                                residuals(&pert, times, &states_teme, epoch)?;
+                            let rp = residuals(&pert, times, &states_teme, epoch)?;
                             n_res_evals += 1;
                             rp.iter()
                                 .zip(r.iter())
@@ -338,11 +330,7 @@ impl TLE {
             for k in 0..NPARAM {
                 jtr[k] = cols[k].iter().zip(r.iter()).map(|(a, b)| a * b).sum();
                 for l in k..NPARAM {
-                    let s: f64 = cols[k]
-                        .iter()
-                        .zip(cols[l].iter())
-                        .map(|(a, b)| a * b)
-                        .sum();
+                    let s: f64 = cols[k].iter().zip(cols[l].iter()).map(|(a, b)| a * b).sum();
                     jtj[(k, l)] = s;
                     jtj[(l, k)] = s;
                 }
@@ -392,10 +380,8 @@ impl TLE {
 
                 // Predicted reduction: delta^T (mu * delta - g)
                 //                   = mu * |delta|^2 - delta . g
-                let delta_norm_sq: f64 =
-                    (0..NPARAM).map(|i| delta[i] * delta[i]).sum();
-                let delta_dot_g: f64 =
-                    (0..NPARAM).map(|i| delta[i] * jtr[i]).sum();
+                let delta_norm_sq: f64 = (0..NPARAM).map(|i| delta[i] * delta[i]).sum();
+                let delta_dot_g: f64 = (0..NPARAM).map(|i| delta[i] * jtr[i]).sum();
                 let predicted = mu * delta_norm_sq - delta_dot_g;
                 let actual = cost - cost_new;
 
@@ -407,8 +393,7 @@ impl TLE {
                     mu = (mu * 0.1).max(mu_min);
 
                     let delta_norm = delta_norm_sq.sqrt();
-                    let params_norm =
-                        params.iter().map(|x| x * x).sum::<f64>().sqrt();
+                    let params_norm = params.iter().map(|x| x * x).sum::<f64>().sqrt();
 
                     if delta_norm < x_tol * (1.0 + params_norm) {
                         status = TleFitStatus::StepConverged;
@@ -501,10 +486,8 @@ mod tests {
             ..Default::default()
         };
 
-        let satprops = crate::orbitprop::SatPropertiesSimple::new(
-            2.0 * 10.0 / 3500.0,
-            10.0 / 3500.0,
-        );
+        let satprops =
+            crate::orbitprop::SatPropertiesSimple::new(2.0 * 10.0 / 3500.0, 10.0 / 3500.0);
 
         let res = crate::orbitprop::propagate(
             &state0,

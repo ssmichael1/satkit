@@ -7,8 +7,7 @@ use crate::TimeLike;
 use super::error::{Error, Result};
 
 /// Choice of ODE integrator for orbit propagation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub enum Integrator {
     /// Verner 9(8) with 9th-order dense output, 26 stages (default)
     #[default]
@@ -36,7 +35,6 @@ pub enum Integrator {
     /// integration across discontinuities (eclipse boundaries, maneuvers).
     GaussJackson8,
 }
-
 
 impl std::fmt::Display for Integrator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {

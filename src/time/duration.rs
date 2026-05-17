@@ -165,11 +165,7 @@ impl std::fmt::Display for Duration {
                 write!(f, "{} minutes ", minutes)?;
                 rem -= minutes * 60_000_000;
             }
-            write!(
-                f,
-                "{:.6} seconds",
-                rem as f64 / 1_000_000.0
-            )?;
+            write!(f, "{:.6} seconds", rem as f64 / 1_000_000.0)?;
         }
         Ok(())
     }

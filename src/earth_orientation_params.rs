@@ -95,10 +95,10 @@ struct EOPEntry {
 
 fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
     let path: PathBuf = filename.unwrap_or_else(|| {
-            datadir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join("EOP-All.csv")
-        });
+        datadir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("EOP-All.csv")
+    });
     // Download EOP data from celetrak.org
     download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
 
@@ -129,10 +129,10 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
 #[allow(dead_code)]
 fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
     let path: PathBuf = filename.unwrap_or_else(|| {
-            datadir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join("finals2000A.all")
-        });
+        datadir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("finals2000A.all")
+    });
 
     if !path.is_file() {
         return Err(Error::LegacyFileMissing(
@@ -170,30 +170,34 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
                 let dy_str: String = v.chars().skip(116).take(9).collect();
 
                 eopvec.push(EOPEntry {
-                    mjd_utc: mjd_str.trim().parse().map_err(|source| {
-                        Error::LegacyFieldParse {
+                    mjd_utc: mjd_str
+                        .trim()
+                        .parse()
+                        .map_err(|source| Error::LegacyFieldParse {
                             field: "MJD",
                             source,
-                        }
-                    })?,
-                    xp: xp_str.trim().parse().map_err(|source| {
-                        Error::LegacyFieldParse {
+                        })?,
+                    xp: xp_str
+                        .trim()
+                        .parse()
+                        .map_err(|source| Error::LegacyFieldParse {
                             field: "X polar motion",
                             source,
-                        }
-                    })?,
-                    yp: yp_str.trim().parse().map_err(|source| {
-                        Error::LegacyFieldParse {
+                        })?,
+                    yp: yp_str
+                        .trim()
+                        .parse()
+                        .map_err(|source| Error::LegacyFieldParse {
                             field: "Y polar motion",
                             source,
-                        }
-                    })?,
-                    dut1: dut1_str.trim().parse().map_err(|source| {
-                        Error::LegacyFieldParse {
+                        })?,
+                    dut1: dut1_str
+                        .trim()
+                        .parse()
+                        .map_err(|source| Error::LegacyFieldParse {
                             field: "delta UT1",
                             source,
-                        }
-                    })?,
+                        })?,
                     lod: lod_str.trim().parse().unwrap_or(0.0),
                     dX: dx_str.trim().parse().unwrap_or(0.0),
                     dY: dy_str.trim().parse().unwrap_or(0.0),

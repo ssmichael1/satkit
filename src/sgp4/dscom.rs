@@ -287,10 +287,16 @@ pub fn dscom(
         *z2 = 6.0f64.mul_add(a1.mul_add(a3, a2 * a4), *z32 * *emsq);
         *z3 = 3.0f64.mul_add(a3.mul_add(a3, a4 * a4), *z33 * *emsq);
         *z11 = (-6.0 * a1).mul_add(a5, *emsq * (-24.0 * x1).mul_add(x7, -(6.0 * x3 * x5)));
-        *z12 = (-6.0f64).mul_add(a1.mul_add(a6, a3 * a5), *emsq * (-24.0f64).mul_add(x2.mul_add(x7, x1 * x8), -(6.0 * x3.mul_add(x6, x4 * x5))));
+        *z12 = (-6.0f64).mul_add(
+            a1.mul_add(a6, a3 * a5),
+            *emsq * (-24.0f64).mul_add(x2.mul_add(x7, x1 * x8), -(6.0 * x3.mul_add(x6, x4 * x5))),
+        );
         *z13 = (-6.0 * a3).mul_add(a6, *emsq * (-24.0 * x2).mul_add(x8, -(6.0 * x4 * x6)));
         *z21 = (6.0 * a2).mul_add(a5, *emsq * (24.0 * x1).mul_add(x5, -(6.0 * x3 * x7)));
-        *z22 = 6.0f64.mul_add(a4.mul_add(a5, a2 * a6), *emsq * 24.0f64.mul_add(x2.mul_add(x5, x1 * x6), -(6.0 * x4.mul_add(x7, x3 * x8))));
+        *z22 = 6.0f64.mul_add(
+            a4.mul_add(a5, a2 * a6),
+            *emsq * 24.0f64.mul_add(x2.mul_add(x5, x1 * x6), -(6.0 * x4.mul_add(x7, x3 * x8))),
+        );
         *z23 = (6.0 * a4).mul_add(a6, *emsq * (24.0 * x2).mul_add(x6, -(6.0 * x4 * x8)));
         *z1 = betasq.mul_add(*z31, *z1 + *z1);
         *z2 = betasq.mul_add(*z32, *z2 + *z2);

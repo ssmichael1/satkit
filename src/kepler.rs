@@ -154,14 +154,7 @@ impl Kepler {
     /// * `raan` - Right Ascension of the Ascending Node, radians
     /// * `argp` - Argument of Perigee, radians
     /// * `ma` - Mean anomaly, radians
-    pub fn with_mean_anomaly(
-        a: f64,
-        eccen: f64,
-        incl: f64,
-        raan: f64,
-        argp: f64,
-        ma: f64,
-    ) -> Self {
+    pub fn with_mean_anomaly(a: f64, eccen: f64, incl: f64, raan: f64, argp: f64, ma: f64) -> Self {
         Self::new(a, eccen, incl, raan, argp, Anomaly::Mean(ma))
     }
 
@@ -306,9 +299,8 @@ impl Kepler {
         let r_pqw = numeris::vector![r * self.nu.cos(), r * self.nu.sin(), 0.0];
         let v_pqw = numeris::vector![-self.nu.sin(), self.eccen + self.nu.cos(), 0.0]
             * (crate::consts::MU_EARTH / p).sqrt();
-        let q = Quaternion::rotz(self.raan)
-            * Quaternion::rotx(self.incl)
-            * Quaternion::rotz(self.w);
+        let q =
+            Quaternion::rotz(self.raan) * Quaternion::rotx(self.incl) * Quaternion::rotz(self.w);
         (q * r_pqw, q * v_pqw)
     }
 }
@@ -408,10 +400,7 @@ mod tests {
                 let nu = eccentric2true(ea, e);
 
                 // Reconstruct eccentric anomaly from true anomaly
-                let ea2 = f64::atan2(
-                    nu.sin() * e.mul_add(-e, 1.0).sqrt(),
-                    e + nu.cos(),
-                );
+                let ea2 = f64::atan2(nu.sin() * e.mul_add(-e, 1.0).sqrt(), e + nu.cos());
                 // Reconstruct mean anomaly from eccentric anomaly
                 let m_back = e.mul_add(-ea2.sin(), ea2);
 

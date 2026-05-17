@@ -52,10 +52,7 @@ impl PyThrust {
         }
 
         Ok(Self(ContinuousThrust::new(
-            accel_vec,
-            rust_frame,
-            start.0,
-            end.0,
+            accel_vec, rust_frame, start.0, end.0,
         )))
     }
 

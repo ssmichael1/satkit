@@ -255,7 +255,11 @@ pub fn slice2py2d(py: Python, s: &[f64], rows: usize, cols: usize) -> PyResult<P
 pub fn mat2py<const M: usize, const N: usize>(py: Python, m: &Matrix<M, N>) -> Py<PyAny> {
     let p = unsafe { PyArray2::<f64>::new(py, [M, N], true) };
     unsafe {
-        std::ptr::copy_nonoverlapping(m.as_slice().as_ptr(), p.as_raw_array_mut().as_mut_ptr(), M * N);
+        std::ptr::copy_nonoverlapping(
+            m.as_slice().as_ptr(),
+            p.as_raw_array_mut().as_mut_ptr(),
+            M * N,
+        );
     }
     p.into_py_any(py).unwrap()
 }

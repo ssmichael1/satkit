@@ -37,12 +37,12 @@
 //!
 
 use crate::Instant;
-use crate::TimeLike;
 use crate::SolarSystem;
+use crate::TimeLike;
 use crate::TimeScale;
 
-use crate::mathtypes::*;
 use super::{Error, Result};
+use crate::mathtypes::*;
 
 /// Returns the heliocentric position of a planet
 ///

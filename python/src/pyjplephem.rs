@@ -4,8 +4,8 @@ use crate::pysolarsystem;
 use crate::pyutils::*;
 use satkit::jplephem;
 use satkit::mathtypes::*;
-use satkit::SolarSystem;
 use satkit::Instant;
+use satkit::SolarSystem;
 
 use anyhow::Result;
 
@@ -23,9 +23,8 @@ pub fn geocentric_state(
     tm: &Bound<'_, PyAny>,
 ) -> PyResult<Py<PyAny>> {
     let rbody: SolarSystem = body.into();
-    let f = |tm: &Instant| -> Result<(Vector3, Vector3)> {
-        Ok(jplephem::geocentric_state(rbody, tm)?)
-    };
+    let f =
+        |tm: &Instant| -> Result<(Vector3, Vector3)> { Ok(jplephem::geocentric_state(rbody, tm)?) };
     tuple_func_of_time_arr(f, tm)
 }
 

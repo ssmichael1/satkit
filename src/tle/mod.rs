@@ -1194,7 +1194,6 @@ mod tests {
         Ok(())
     }
 
-
     #[test]
     fn test_2line_encoding_with_invalid_past_date() -> Result<()> {
         let line1 = "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927";
@@ -1206,7 +1205,11 @@ mod tests {
         let result = tle.to_2line();
 
         // Check that it errors.
-        assert!(result.is_err(), "Expected error due to epoch before 1957, got {:?}", result);
+        assert!(
+            result.is_err(),
+            "Expected error due to epoch before 1957, got {:?}",
+            result
+        );
 
         Ok(())
     }
@@ -1222,7 +1225,11 @@ mod tests {
         let result = tle.to_2line();
 
         // Check that it errors.
-        assert!(result.is_err(), "Expected error due to epoch after 2056, got {:?}", result);
+        assert!(
+            result.is_err(),
+            "Expected error due to epoch after 2056, got {:?}",
+            result
+        );
 
         Ok(())
     }

@@ -67,7 +67,13 @@ fn compute_rho_drhodr(
     let lat = itrf.latitude_rad();
     let lon = itrf.longitude_rad();
 
-    let (rho0, _) = nrlmsise(hae / 1.0e3, Some(lat), Some(lon), Some(time), use_spaceweather);
+    let (rho0, _) = nrlmsise(
+        hae / 1.0e3,
+        Some(lat),
+        Some(lon),
+        Some(time),
+        use_spaceweather,
+    );
 
     // Forward difference in altitude only (same lat/lon)
     let dh = 100.0; // meters
@@ -159,8 +165,12 @@ mod tests {
 
         // Drag should scale with cd_a_over_m
         let drag2 = drag_force(
-            &pos_gcrf, &pos_itrf, &vel_gcrf, &time,
-            cd_a_over_m * 2.0, false,
+            &pos_gcrf,
+            &pos_itrf,
+            &vel_gcrf,
+            &time,
+            cd_a_over_m * 2.0,
+            false,
         );
         assert!((drag2.norm() - drag.norm() * 2.0).abs() < 1.0e-10 * drag.norm());
     }
