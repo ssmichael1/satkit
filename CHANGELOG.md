@@ -12,6 +12,12 @@
 
 - **Dual-licensed under MIT OR Apache-2.0.** Previously MIT-only. Apache-2.0 adds an explicit patent grant — important now that the project is taking external contributions, since it binds contributors to a patent peace clause that bare MIT does not. Matches the Rust ecosystem convention. `LICENSE` was renamed to `LICENSE-MIT` and a new `LICENSE-APACHE` was added; `Cargo.toml` and `pyproject.toml` `license` fields updated to `"MIT OR Apache-2.0"`. Downstream users may continue to use the project under either license at their option — no action required.
 
+### Workspace-wide `cargo fmt`
+
+- **CI now enforces `cargo fmt`.** A new `lint` job runs `cargo fmt --all -- --check` on ubuntu before the build matrix kicks off, so formatting failures surface on a single runner instead of three. Contributors should run `cargo fmt` locally or enable format-on-save in their editor before pushing.
+- **Workspace reformatted in one mechanical commit.** No functional changes; 52 files touched (+5741 / −1336). Kicked off by [@parker-research](https://github.com/parker-research) in #89.
+- **`.git-blame-ignore-revs` added** to mask the bulk-format commit from `git blame`. GitHub's web blame honors it automatically. Locally, opt in with `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+
 
 ## 0.16.2 - 2026-04-13
 
