@@ -5,5 +5,5 @@
 #
 # GitHub's web blame view honors this file automatically.
 
-# Mass cargo fmt across the workspace
-447b2427f2b52629986bef5b819601b9cedaf49e
+# Mass cargo fmt across the workspace (PR #89, squash-merged)
+8182dade99105943e260fb3d028c6360ceecf099
