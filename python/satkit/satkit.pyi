@@ -10,7 +10,8 @@ import numpy as np
 
 import datetime
 
-from typing import Any, ClassVar, Optional, Union
+from collections.abc import Sequence
+from typing import Any, ClassVar, Optional, Union, overload
 
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
@@ -56,15 +57,30 @@ class TLE:
         """
         ...
 
+    @overload
     @staticmethod
-    def from_lines(lines: list[str]) -> list[TLE] | TLE:
+    def from_lines(lines: tuple[str, str]) -> TLE: ...
+    @overload
+    @staticmethod
+    def from_lines(lines: tuple[str, str, str]) -> TLE: ...
+    @overload
+    @staticmethod
+    def from_lines(lines: Sequence[str]) -> list[TLE] | TLE: ...
+    @staticmethod
+    def from_lines(lines: Sequence[str]) -> list[TLE] | TLE:
         """Return a list of TLES loaded from input list of lines
 
             If the file contains lines only represent a single TLE, the TLE will
-            be output, rather than a list with a single TLE element
+            be output, rather than a list with a single TLE element.
+
+            A fixed-length tuple of 2 or 3 strings (the 2-line or name+2-line
+            form) is statically known to return a single ``TLE``; any other
+            sequence may return either ``TLE`` or ``list[TLE]`` depending on
+            how many TLEs the input contains.
 
         Args:
-            lines (list[str]): list of strings with lines for TLE(s) to load
+            lines (Sequence[str]): sequence of strings with lines for TLE(s) to load
+                (any sequence type is accepted, e.g. list or tuple)
 
         Returns:
             a list of TLE objects or a single TLE if lines for
@@ -72,12 +88,12 @@ class TLE:
 
         Example:
             ```python
-            lines = [
+            lines = (
                 "0 ISS (ZARYA)",
                 "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
-                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878"
-            ]
-            tle = satkit.TLE.from_lines(lines)
+                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+            )
+            tle = satkit.TLE.from_lines(lines)  # statically typed as TLE
             print(tle.name)
             # ISS (ZARYA)
             ```
