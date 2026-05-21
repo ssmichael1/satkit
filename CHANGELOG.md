@@ -3,6 +3,11 @@
 
 ## Unreleased
 
+### Python type stubs: `TLE.from_lines` accepts any `Sequence[str]`
+
+- **`TLE.from_lines` stub widened from `list[str]` to `Sequence[str]`** (`python/satkit/satkit.pyi`). The Rust binding already accepted any Python sequence at runtime — only the stub was narrow, so callers passing a `tuple[str, str]` (the natural shape for a 2-line TLE) got spurious type-checker complaints. Resolves [#93](https://github.com/ssmichael1/satkit/issues/93).
+- **`@overload` for fixed-length tuples.** `tuple[str, str]` and `tuple[str, str, str]` (the 2-line and name+2-line forms) are now statically typed as returning a single `TLE`; other sequences still return `TLE | list[TLE]`. Callers writing `tle = TLE.from_lines((line1, line2))` no longer need to narrow the result.
+
 ### `ureq` is now an optional dep behind the `download` feature
 
 - **New `download` Cargo feature** (default-on) gates `ureq`. `TLE::from_url`, `OMM::from_url`, `solar_cycle_forecast::update`, and the `satkit::utils::{download_file, download_file_async, download_to_string, download_if_not_exist, update_datafiles}` helpers all live behind it. Default builds are unchanged. Users who want a slim dependency tree can opt out via `cargo build --no-default-features --features omm-xml`, which drops ~25 transitive crates (`ureq`, `rustls`, `ring`, `rustls-webpki`, `webpki-roots`, `flate2`, etc.). Without the feature, `download_if_not_exist` will succeed if the file already exists and otherwise return an error; the other download helpers always return an error.
