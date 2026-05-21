@@ -3,6 +3,12 @@
 
 ## Unreleased
 
+### `ITRFCoord::to_enu` / `to_ned`: parameter renamed `ref_coord` → `origin`, docstrings overhauled
+
+- **Parameter rename.** `ITRFCoord::to_enu(&self, ref_coord)` and `to_ned(&self, ref_coord)` now take `origin` instead. The ENU/NED triad is *anchored* at this argument — calling it "origin" matches the standard local-tangent-frame terminology and makes call sites read like prose: `satellite.to_enu(&station)` ("ENU of the satellite, with the station as the origin"). Rust callers are unaffected (positional args); Python callers using `origin=` as a kwarg will need to update from `refcoord=` / `other=`. Resolves [#91](https://github.com/ssmichael1/satkit/issues/91).
+- **Docstrings rewritten.** Lead with a one-line "FROM `origin` TO `self`" statement and an explicit sign convention for the Up/Down component. Example renamed from `itrf1`/`itrf2` to `station`/`satellite` so the canonical sat/ground-station case (the source of the issue) is the worked example. Mirrored across the Rust source, the PyO3 binding, and the `.pyi` stub.
+- **Latent Python binding inconsistency fixed.** `to_ned`'s parameter was `other` in code but documented as `refcoord` — both now consistently `origin`.
+
 ### Python type stubs: `TLE.from_lines` accepts any `Sequence[str]`
 
 - **`TLE.from_lines` stub widened from `list[str]` to `Sequence[str]`** (`python/satkit/satkit.pyi`). The Rust binding already accepted any Python sequence at runtime — only the stub was narrow, so callers passing a `tuple[str, str]` (the natural shape for a 2-line TLE) got spurious type-checker complaints. Resolves [#93](https://github.com/ssmichael1/satkit/issues/93).
