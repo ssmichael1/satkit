@@ -288,15 +288,28 @@ impl PyITRFCoord {
         self.0.q_enu2itrf().into()
     }
 
-    /// Return East-North-Up location of self relative to input reference coordinate
+    /// East-North-Up (ENU) vector from ``origin`` to ``self``, in ``origin``'s local-tangent frame.
+    ///
+    /// The ENU triad has its origin at ``origin``; ``self`` is the point being
+    /// located. The ``Up`` component is positive when ``self`` is above
+    /// ``origin`` along ``origin``'s local normal (further from Earth's center) —
+    /// i.e. "what direction is ``self`` from where I'm standing at ``origin``?"
     ///
     /// Args:
-    ///     refcoord (itrfcoord): ITRF reference coordinate against which to compute ENU location
+    ///     origin (itrfcoord): ITRF coordinate at which the ENU frame is anchored
+    ///         (the observer / station / base of the local tangent plane).
     ///
     /// Returns:
-    ///     numpy.ndarray: 3-element numpy array of floats representing ENU location in meters of self relative to refcoord
-    fn to_enu(&self, refcoord: &Self) -> Py<PyAny> {
-        let v = refcoord.0.q_enu2itrf().conjugate() * (self.0.itrf - refcoord.0.itrf);
+    ///     numpy.ndarray: 3-element ``[E, N, U]`` vector from ``origin`` to
+    ///     ``self``, in meters.
+    ///
+    /// Example:
+    ///     >>> station = satkit.itrfcoord(latitude_deg=42.466, longitude_deg=-71.1516, altitude=0)
+    ///     >>> satellite = satkit.itrfcoord(latitude_deg=42.466, longitude_deg=-71.1516, altitude=400_000)
+    ///     >>> satellite.to_enu(station)  # satellite is overhead → Up ≈ +400_000
+    ///     array([0., 0., 400000.])
+    fn to_enu(&self, origin: &Self) -> Py<PyAny> {
+        let v = origin.0.q_enu2itrf().conjugate() * (self.0.itrf - origin.0.itrf);
         pyo3::Python::attach(|py| -> Py<PyAny> {
             numpy::PyArray::from_slice(py, v.as_slice())
                 .into_py_any(py)
@@ -304,15 +317,21 @@ impl PyITRFCoord {
         })
     }
 
-    /// Return North-East-Down location of self relative to input reference coordinate
+    /// North-East-Down (NED) vector from ``origin`` to ``self``, in ``origin``'s local-tangent frame.
+    ///
+    /// The NED triad has its origin at ``origin``; ``self`` is the point being
+    /// located. The ``Down`` component is positive when ``self`` is below
+    /// ``origin`` along ``origin``'s local normal (closer to Earth's center).
     ///
     /// Args:
-    ///     refcoord (itrfcoord): ITRF reference coordinate against which to compute NED location
+    ///     origin (itrfcoord): ITRF coordinate at which the NED frame is anchored
+    ///         (the observer / station / base of the local tangent plane).
     ///
     /// Returns:
-    ///     numpy.ndarray: 3-element numpy array of floats representing NED location in meters of self relative to refcoord
-    fn to_ned(&self, other: &Self) -> Py<PyAny> {
-        let v = other.0.q_ned2itrf().conjugate() * (self.0.itrf - other.0.itrf);
+    ///     numpy.ndarray: 3-element ``[N, E, D]`` vector from ``origin`` to
+    ///     ``self``, in meters.
+    fn to_ned(&self, origin: &Self) -> Py<PyAny> {
+        let v = origin.0.q_ned2itrf().conjugate() * (self.0.itrf - origin.0.itrf);
         pyo3::Python::attach(|py| -> Py<PyAny> {
             numpy::PyArray::from_slice(py, v.as_slice())
                 .into_py_any(py)
