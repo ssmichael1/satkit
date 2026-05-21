@@ -544,38 +544,41 @@ impl ITRFCoord {
         Quaternion::rotz(lon) * Quaternion::roty(-lat - PI / 2.0)
     }
 
-    /// Convert coordinate to a North-East-Down (NED)
-    /// position relative to a reference coordinate
-    /// (in the NED frame of the reference coordinate)
+    /// North-East-Down (NED) vector from `origin` to `self`, expressed in
+    /// `origin`'s local-tangent frame.
+    ///
+    /// The NED triad has its origin at `origin`; `self` is the point being
+    /// located. The `Down` component is positive when `self` is below `origin`
+    /// along `origin`'s local normal (closer to the Earth's center).
     ///
     /// # Arguments
     ///
-    /// * `ref_coord` - `&ITRFCoord` representing reference
+    /// * `origin` - `&ITRFCoord` at which the NED frame is anchored
+    ///   (the observer / station / base of the local tangent plane).
     ///
     /// # Return
     ///
-    /// * `Vector3` representing NED position
-    ///   relative to reference.  Units are meters
+    /// * `Vector3` `[N, E, D]` from `origin` to `self`, in meters.
     ///
     /// # Note:
     ///   Equivalent to:
-    ///         `ref_coord.q_ned2itrf().conjugate() * (self.itrf - ref_coord.itrf)`
+    ///         `origin.q_ned2itrf().conjugate() * (self.itrf - origin.itrf)`
     ///
     /// # Examples:
     /// ```
     /// use satkit::itrfcoord::ITRFCoord;
-    /// // Create coord
-    /// let itrf1 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 150.0);
-    /// // Create 2nd coord 100 meters above
-    /// let itrf2 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 250.0);
+    /// // Ground station at sea level
+    /// let station   = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 0.0);
+    /// // Aircraft 1 km directly above the station
+    /// let aircraft  = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 1_000.0);
     ///
-    /// // Get NED of itrf1 relative to itrf2
-    /// let ned = itrf1.to_ned(&itrf2);
-    /// // Should return [0.0, 0.0, 100.0]
+    /// // NED of the aircraft as seen from the station
+    /// let ned = aircraft.to_ned(&station);
+    /// // ned ≈ [0.0, 0.0, -1_000.0]  (aircraft is *above*, so Down is negative)
     /// ```
     ///
-    pub fn to_ned(&self, ref_coord: &Self) -> Vector3 {
-        ref_coord.q_ned2itrf().conjugate() * (self.itrf - ref_coord.itrf)
+    pub fn to_ned(&self, origin: &Self) -> Vector3 {
+        origin.q_ned2itrf().conjugate() * (self.itrf - origin.itrf)
     }
 
     /// Return quaternion representing rotation from the
@@ -586,39 +589,44 @@ impl ITRFCoord {
         Quaternion::rotz(lon + PI / 2.0) * Quaternion::rotx(PI / 2.0 - lat)
     }
 
-    /// Convert coordinate to a East-North-Up (ENU)
-    /// position relative to a reference coordinate
-    /// (in the ENU frame of the reference coordinate)
+    /// East-North-Up (ENU) vector from `origin` to `self`, expressed in
+    /// `origin`'s local-tangent frame.
+    ///
+    /// The ENU triad has its origin at `origin`; `self` is the point being
+    /// located. The `Up` component is positive when `self` is above `origin`
+    /// along `origin`'s local normal (further from the Earth's center) —
+    /// the natural mental model is "what direction is `self` from where I'm
+    /// standing at `origin`?"
     ///
     /// # Arguments
     ///
-    /// * ref_coord - &ITRFCoord representing reference
+    /// * `origin` - `&ITRFCoord` at which the ENU frame is anchored
+    ///   (the observer / station / base of the local tangent plane).
     ///
     /// # Return
     ///
-    /// * `Vector3` representing ENU position
-    ///   relative to reference.  Units are meters
+    /// * `Vector3` `[E, N, U]` from `origin` to `self`, in meters.
     ///
     ///
     /// # Note:
     ///   Equivalent to:
-    ///       `ref_coord.q_enu2itrf().conjugate() * (self.itrf - ref_coord.itrf)`
+    ///       `origin.q_enu2itrf().conjugate() * (self.itrf - origin.itrf)`
     ///
     /// # Examples:
     /// ```
     /// use satkit::itrfcoord::ITRFCoord;
-    /// // Create coord
-    /// let itrf1 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 150.0);
-    /// // Create 2nd coord 100 meters above
-    /// let itrf2 = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 250.0);
+    /// // Ground station at sea level
+    /// let station   = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 0.0);
+    /// // Satellite 400 km directly above the station
+    /// let satellite = ITRFCoord::from_geodetic_deg(42.466, -71.1516, 400_000.0);
     ///
-    /// // Get ENU of itrf1 relative to itrf2
-    /// let enu = itrf1.to_enu(&itrf2);
-    /// // Should return [0.0, 0.0, -100.0]
+    /// // ENU of the satellite as seen from the station
+    /// let enu = satellite.to_enu(&station);
+    /// // enu ≈ [0.0, 0.0, 400_000.0]  (satellite is overhead — Up is positive)
     /// ```
     ///
-    pub fn to_enu(&self, ref_coord: &Self) -> Vector3 {
-        ref_coord.q_enu2itrf().conjugate() * (self.itrf - ref_coord.itrf)
+    pub fn to_enu(&self, origin: &Self) -> Vector3 {
+        origin.q_enu2itrf().conjugate() * (self.itrf - origin.itrf)
     }
 }
 
