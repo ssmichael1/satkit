@@ -82,6 +82,41 @@ fn qeme2000_to_gcrf() -> Quaternion {
     Quaternion::rotz(dalpha0) * Quaternion::roty(xi0) * Quaternion::rotx(-eta0)
 }
 
+// ───── Frame classification ──────────────────────────────────────────────
+
+/// True for frames that rotate with Earth (state transforms to/from these
+/// pick up an `ω⊕ × r` sweep term). Polar motion between ITRF and TIRS is
+/// slow (~1.7e-9 rad/s) and treated as a static rotation.
+fn is_earth_rotating(f: Frame) -> bool {
+    match f {
+        Frame::ITRF | Frame::TIRS => true,
+        Frame::CIRS
+        | Frame::GCRF
+        | Frame::TEME
+        | Frame::EME2000
+        | Frame::ICRF
+        | Frame::LVLH
+        | Frame::RTN
+        | Frame::NTW => false,
+    }
+}
+
+/// True for frames whose axes are defined by an orbit's instantaneous
+/// position and velocity — not handled by the time-only dispatch in this
+/// module. Use [`to_gcrf`](super::to_gcrf) / [`from_gcrf`](super::from_gcrf).
+fn is_orbit_dependent(f: Frame) -> bool {
+    match f {
+        Frame::LVLH | Frame::RTN | Frame::NTW => true,
+        Frame::ITRF
+        | Frame::TIRS
+        | Frame::CIRS
+        | Frame::GCRF
+        | Frame::TEME
+        | Frame::EME2000
+        | Frame::ICRF => false,
+    }
+}
+
 // ───── canonical ordering ────────────────────────────────────────────────
 
 /// Position of each [`Frame`] in the canonical ordering used to normalise
@@ -162,16 +197,16 @@ pub fn rotation_approx<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Qua
 /// State (position + velocity) transform from `from` to `to` at time `t`.
 ///
 /// Uses the full IERS 2010 reduction. Properly handles the Earth-rotation
-/// sweep term `ω⊕ × r` when transitioning between rotating (ITRF) and
-/// inertial frames.
+/// sweep term `ω⊕ × r` when transitioning between rotating ([`Frame::ITRF`],
+/// [`Frame::TIRS`]) and inertial ([`Frame::GCRF`], [`Frame::EME2000`],
+/// [`Frame::ICRF`], [`Frame::CIRS`], [`Frame::TEME`]) frames. ITRF↔TIRS is
+/// treated as a static rotation — polar motion contributes ~1 mm/s at LEO
+/// altitudes and is neglected here, matching the existing
+/// [`itrf_to_gcrf_state`](super::itrf_to_gcrf_state) convention.
 ///
-/// **Currently supported pairs**: identity, ITRF↔{GCRF, EME2000, ICRF, TEME},
-/// and within-inertial pairs (no rotating frame involved). Other pairs
-/// (involving TIRS, CIRS as endpoints, or LVLH/RTN/NTW) return
-/// [`Error::StateTransformNotSupported`]; for those, compose
-/// [`itrf_to_gcrf_state`](super::itrf_to_gcrf_state) with the appropriate
-/// constant rotation, or use the orbit-frame [`to_gcrf`](super::to_gcrf)
-/// helper for satellite-local frames.
+/// Orbit-dependent frames ([`Frame::LVLH`], [`Frame::RTN`], [`Frame::NTW`])
+/// require orbit state to define their axes and are not handled here — use
+/// [`to_gcrf`](super::to_gcrf) / [`from_gcrf`](super::from_gcrf) for those.
 pub fn transform_state<T: TimeLike>(
     from: Frame,
     to: Frame,
@@ -186,8 +221,11 @@ pub fn transform_state<T: TimeLike>(
 }
 
 /// State (position + velocity) transform using the IAU-76/FK5 approximate
-/// reduction. Same supported-pair set as [`transform_state`]; same error
-/// behaviour for unsupported pairs.
+/// reduction (~1 arcsec). Same domain restrictions as
+/// [`rotation_approx`]: [`Frame::TIRS`] and [`Frame::CIRS`] are rejected
+/// (no FK5 analogue); valid pairs are between [`Frame::ITRF`] and the
+/// inertial cluster ([`Frame::GCRF`], [`Frame::EME2000`], [`Frame::ICRF`],
+/// [`Frame::TEME`]), or within the inertial cluster.
 pub fn transform_state_approx<T: TimeLike>(
     from: Frame,
     to: Frame,
@@ -295,8 +333,24 @@ fn canonical_rotation_approx<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Resu
 }
 
 /// Common implementation for [`transform_state`] / [`transform_state_approx`].
-/// Only handles pairs where at least one side is ITRF (the rotating frame)
-/// or both sides are inertial.
+///
+/// Frame classification for state transforms:
+///   - **Rotating** (relative to inertial space at Earth rotation rate):
+///     [`Frame::ITRF`], [`Frame::TIRS`]. Polar motion between ITRF and TIRS
+///     is treated as a static rotation (rate ~ 1.7e-9 rad/s × r is
+///     sub-mm/s at LEO and is neglected, matching the existing
+///     [`itrf_to_gcrf_state`] convention).
+///   - **Inertial** (for state-transform purposes): [`Frame::GCRF`],
+///     [`Frame::EME2000`], [`Frame::ICRF`], [`Frame::CIRS`],
+///     [`Frame::TEME`]. CIRS's precession rate (~50"/year ≈ 7.7e-12 rad/s)
+///     is negligible.
+///
+/// Dispatch:
+///   - inertial ↔ inertial: just rotate pos and vel.
+///   - rotating ↔ rotating (ITRF ↔ TIRS): just rotate (no sweep).
+///   - rotating ↔ inertial: route via ITRF↔GCRF using the existing state
+///     functions (which evaluate the `ω⊕ × r` sweep in TIRS where ω⊕ is
+///     exactly along +ẑ), then chain a rotation on each side as needed.
 fn state_dispatch<T: TimeLike>(
     from: Frame,
     to: Frame,
@@ -307,48 +361,16 @@ fn state_dispatch<T: TimeLike>(
 ) -> Result<(Vector3, Vector3)> {
     use Frame::*;
 
-    // Reject orbit-dependent frames.
-    if matches!(from, LVLH | RTN | NTW) || matches!(to, LVLH | RTN | NTW) {
+    // Orbit-dependent frames need orbit state to define their axes — not
+    // handled by this state dispatch.
+    if is_orbit_dependent(from) || is_orbit_dependent(to) {
         return Err(Error::OrbitFrameRequiresState { from, to });
     }
 
-    let is_inertial = |f: Frame| matches!(f, GCRF | EME2000 | ICRF | TEME);
+    let is_rotating = is_earth_rotating;
 
-    // Case 1: ITRF ↔ inertial. Use the existing state-transform functions
-    // (which handle the sweep term in TIRS) then rotate to/from the target.
-    if from == ITRF && is_inertial(to) {
-        let (p_gcrf, v_gcrf) = if approx {
-            itrf_to_gcrf_state_approx(pos, vel, t)
-        } else {
-            itrf_to_gcrf_state(pos, vel, t)
-        };
-        // Rotate from GCRF to the requested inertial target.
-        let q = if approx {
-            rotation_approx(GCRF, to, t)?
-        } else {
-            rotation(GCRF, to, t)?
-        };
-        return Ok((q * p_gcrf, q * v_gcrf));
-    }
-    if to == ITRF && is_inertial(from) {
-        // Source-inertial → GCRF first, then GCRF → ITRF state.
-        let q = if approx {
-            rotation_approx(from, GCRF, t)?
-        } else {
-            rotation(from, GCRF, t)?
-        };
-        let p_gcrf = q * *pos;
-        let v_gcrf = q * *vel;
-        let (p_itrf, v_itrf) = if approx {
-            gcrf_to_itrf_state_approx(&p_gcrf, &v_gcrf, t)
-        } else {
-            gcrf_to_itrf_state(&p_gcrf, &v_gcrf, t)
-        };
-        return Ok((p_itrf, v_itrf));
-    }
-
-    // Case 2: both inertial. Just rotate — no sweep term.
-    if is_inertial(from) && is_inertial(to) {
+    // Case A: both inertial — straight rotation, no sweep term.
+    if !is_rotating(from) && !is_rotating(to) {
         let q = if approx {
             rotation_approx(from, to, t)?
         } else {
@@ -357,9 +379,64 @@ fn state_dispatch<T: TimeLike>(
         return Ok((q * *pos, q * *vel));
     }
 
-    // Anything else (involving TIRS, CIRS, or non-ITRF rotating-frame
-    // bookkeeping) is out of scope for the first cut.
-    Err(Error::StateTransformNotSupported { from, to })
+    // Case B: both rotating (ITRF ↔ TIRS) — polar motion only, treated as
+    // static, no sweep term.
+    if is_rotating(from) && is_rotating(to) {
+        // No approx variant: ITRF/TIRS aren't part of the FK5 chain. If
+        // approx was requested for one of these, reject_for_approx() would
+        // already have caught TIRS upstream.
+        let q = rotation(from, to, t)?;
+        return Ok((q * *pos, q * *vel));
+    }
+
+    // Case C: rotating ↔ inertial — route via ITRF↔GCRF.
+    if is_rotating(from) {
+        // Step 1: move pos/vel into ITRF basis (no sweep change; ITRF and
+        // TIRS share angular velocity to the precision we model).
+        let (p_itrf, v_itrf) = if from == ITRF {
+            (*pos, *vel)
+        } else {
+            // from == TIRS
+            let q = rotation(TIRS, ITRF, t)?;
+            (q * *pos, q * *vel)
+        };
+        // Step 2: ITRF → GCRF, with the sweep term added in TIRS.
+        let (p_gcrf, v_gcrf) = if approx {
+            itrf_to_gcrf_state_approx(&p_itrf, &v_itrf, t)
+        } else {
+            itrf_to_gcrf_state(&p_itrf, &v_itrf, t)
+        };
+        // Step 3: rotate GCRF → target inertial frame.
+        let q = if approx {
+            rotation_approx(GCRF, to, t)?
+        } else {
+            rotation(GCRF, to, t)?
+        };
+        return Ok((q * p_gcrf, q * v_gcrf));
+    }
+    // Symmetric: inertial source, rotating target.
+    // Step 1: rotate from source inertial frame to GCRF.
+    let q = if approx {
+        rotation_approx(from, GCRF, t)?
+    } else {
+        rotation(from, GCRF, t)?
+    };
+    let p_gcrf = q * *pos;
+    let v_gcrf = q * *vel;
+    // Step 2: GCRF → ITRF, with the sweep term subtracted in TIRS.
+    let (p_itrf, v_itrf) = if approx {
+        gcrf_to_itrf_state_approx(&p_gcrf, &v_gcrf, t)
+    } else {
+        gcrf_to_itrf_state(&p_gcrf, &v_gcrf, t)
+    };
+    // Step 3: move into target rotating basis.
+    if to == ITRF {
+        Ok((p_itrf, v_itrf))
+    } else {
+        // to == TIRS
+        let q_itrf_to_tirs = rotation(ITRF, TIRS, t)?;
+        Ok((q_itrf_to_tirs * p_itrf, q_itrf_to_tirs * v_itrf))
+    }
 }
 
 // ───── tests ─────────────────────────────────────────────────────────────
@@ -556,5 +633,103 @@ mod tests {
         let (p3, v3) = transform_state(Frame::GCRF, Frame::ITRF, &tm, &p2, &v2).unwrap();
         assert!((p3 - p).norm() / p.norm() < 1e-10);
         assert!((v3 - v).norm() / v.norm() < 1e-10);
+    }
+
+    #[test]
+    fn transform_state_all_non_orbit_pairs_roundtrip() {
+        // Every pair of {ITRF, TIRS, CIRS, GCRF, EME2000, ICRF, TEME}
+        // should roundtrip via transform_state in both directions.
+        let tm = t();
+        let p = numeris::vector![7000000.0, 0.0, 0.0];
+        let v = numeris::vector![0.0, 7600.0, 0.0];
+        let frames = [
+            Frame::ITRF,
+            Frame::TIRS,
+            Frame::CIRS,
+            Frame::GCRF,
+            Frame::TEME,
+            Frame::EME2000,
+            Frame::ICRF,
+        ];
+        for &a in &frames {
+            for &b in &frames {
+                let (pa, va) = transform_state(a, b, &tm, &p, &v).unwrap();
+                let (pr, vr) = transform_state(b, a, &tm, &pa, &va).unwrap();
+                let pos_err = (pr - p).norm() / p.norm();
+                let vel_err = (vr - v).norm() / v.norm();
+                assert!(pos_err < 1e-10, "({a}↔{b}) pos roundtrip err {pos_err}");
+                assert!(vel_err < 1e-10, "({a}↔{b}) vel roundtrip err {vel_err}");
+            }
+        }
+    }
+
+    #[test]
+    fn transform_state_inertial_pair_no_sweep() {
+        // GCRF ↔ TEME: both inertial. Should be a pure rotation — v
+        // magnitude preserved exactly (no sweep added or removed).
+        let tm = t();
+        let p = numeris::vector![7000000.0, 0.0, 0.0];
+        let v = numeris::vector![0.0, 7600.0, 0.0];
+        let (_, v_teme) = transform_state(Frame::GCRF, Frame::TEME, &tm, &p, &v).unwrap();
+        assert!(
+            (v_teme.norm() - v.norm()).abs() < 1e-9,
+            "inertial pair preserved |v|: |v|={}, |v_teme|={}",
+            v.norm(),
+            v_teme.norm()
+        );
+    }
+
+    #[test]
+    fn transform_state_tirs_via_itrf_chain() {
+        // TIRS → GCRF should equal (ITRF → GCRF after rotating pos/vel
+        // from TIRS into ITRF first). The dispatch routes via that path.
+        let tm = t();
+        let p_tirs = numeris::vector![7000000.0, 0.0, 0.0];
+        let v_tirs = numeris::vector![0.0, 0.0, 0.0];
+        let (p_a, v_a) = transform_state(Frame::TIRS, Frame::GCRF, &tm, &p_tirs, &v_tirs).unwrap();
+        // Reference: do it by hand.
+        let q_tirs_to_itrf = rotation(Frame::TIRS, Frame::ITRF, &tm).unwrap();
+        let p_itrf = q_tirs_to_itrf * p_tirs;
+        let v_itrf = q_tirs_to_itrf * v_tirs;
+        let (p_b, v_b) = itrf_to_gcrf_state(&p_itrf, &v_itrf, &tm);
+        assert!((p_a - p_b).norm() < 1e-9);
+        assert!((v_a - v_b).norm() < 1e-12);
+    }
+
+    #[test]
+    fn transform_state_itrf_tirs_no_sweep() {
+        // ITRF ↔ TIRS is treated as static (polar motion only; no sweep).
+        // |v| is preserved by the rotation.
+        let tm = t();
+        let p = numeris::vector![7000000.0, 0.0, 0.0];
+        let v = numeris::vector![0.0, 7600.0, 0.0];
+        let (_, v_tirs) = transform_state(Frame::ITRF, Frame::TIRS, &tm, &p, &v).unwrap();
+        assert!((v_tirs.norm() - v.norm()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn transform_state_approx_rejects_intermediates() {
+        let tm = t();
+        let p = numeris::vector![7000000.0, 0.0, 0.0];
+        let v = numeris::vector![0.0, 7600.0, 0.0];
+        for f in [Frame::TIRS, Frame::CIRS] {
+            assert!(matches!(
+                transform_state_approx(f, Frame::GCRF, &tm, &p, &v),
+                Err(Error::ApproxNotSupportedForFrame { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn transform_state_orbit_frames_rejected() {
+        let tm = t();
+        let p = numeris::vector![7000000.0, 0.0, 0.0];
+        let v = numeris::vector![0.0, 7600.0, 0.0];
+        for of in [Frame::LVLH, Frame::RTN, Frame::NTW] {
+            assert!(matches!(
+                transform_state(of, Frame::GCRF, &tm, &p, &v),
+                Err(Error::OrbitFrameRequiresState { .. })
+            ));
+        }
     }
 }

@@ -43,18 +43,6 @@ pub enum Error {
     )]
     ApproxNotSupportedForFrame { frame: Frame },
 
-    /// [`transform_state`](super::transform_state) currently supports only
-    /// identity, ITRF↔{GCRF, EME2000, ICRF, TEME}, and within-inertial
-    /// pairs. Other pairs (involving TIRS / CIRS as endpoints) are not
-    /// implemented in this first cut — compose
-    /// [`itrf_to_gcrf_state`](super::itrf_to_gcrf_state) with the
-    /// appropriate rotation manually.
-    #[error(
-        "transform_state: frame pair ({from}, {to}) not supported in this \
-         version; compose itrf_to_gcrf_state with a constant rotation manually"
-    )]
-    StateTransformNotSupported { from: Frame, to: Frame },
-
     /// A `j = N` table-definition line in an IERS table file is
     /// malformed.
     #[error("Error parsing file {fname}, invalid table definition line")]
