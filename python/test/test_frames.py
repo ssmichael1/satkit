@@ -201,6 +201,91 @@ class TestFrameTransform:
         truth = -207.4212121875 * m.pi / 180
         assert gmst == pytest.approx(truth)
 
+    # ── Frame-enum dispatch (new in 0.17.0) ────────────────────────────
+
+    def test_rotation_matches_qitrf2gcrf(self):
+        """Dispatch ITRF→GCRF should match the direct quaternion helper."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        v = np.array([1000.0, 2000.0, 3000.0])
+        q_dispatch = sk.frametransform.rotation(sk.frame.ITRF, sk.frame.GCRF, tm)
+        q_direct = sk.frametransform.qitrf2gcrf(tm)
+        assert np.allclose(q_dispatch * v, q_direct * v, atol=1e-9)
+
+    def test_rotation_identity_pairs(self):
+        """rotation(X, X, t) must be the identity for all time-frames."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        v = np.array([1.0, 2.0, 3.0])
+        for f in [
+            sk.frame.ITRF,
+            sk.frame.TIRS,
+            sk.frame.CIRS,
+            sk.frame.GCRF,
+            sk.frame.TEME,
+            sk.frame.EME2000,
+            sk.frame.ICRF,
+        ]:
+            q = sk.frametransform.rotation(f, f, tm)
+            assert np.allclose(q * v, v)
+
+    def test_rotation_shortest_path_itrf_tirs(self):
+        """ITRF→TIRS is a single edge (polar motion only); compare to direct."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        v = np.array([1000.0, 2000.0, 3000.0])
+        q_dispatch = sk.frametransform.rotation(sk.frame.ITRF, sk.frame.TIRS, tm)
+        q_direct = sk.frametransform.qitrf2tirs(tm)
+        assert np.allclose(q_dispatch * v, q_direct * v, atol=1e-12)
+
+    def test_rotation_roundtrip(self):
+        """rotation(a, b, t) composed with rotation(b, a, t) must be identity."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        v = np.array([6378.0, 2000.0, 3000.0])
+        for a in [
+            sk.frame.ITRF,
+            sk.frame.GCRF,
+            sk.frame.TEME,
+            sk.frame.EME2000,
+            sk.frame.ICRF,
+        ]:
+            for b in [
+                sk.frame.ITRF,
+                sk.frame.GCRF,
+                sk.frame.TEME,
+                sk.frame.EME2000,
+                sk.frame.ICRF,
+            ]:
+                q_ab = sk.frametransform.rotation(a, b, tm)
+                q_ba = sk.frametransform.rotation(b, a, tm)
+                v_round = q_ba * (q_ab * v)
+                assert np.allclose(v_round, v, rtol=1e-12)
+
+    def test_rotation_orbit_frames_rejected(self):
+        """LVLH / RTN / NTW need state, not just time — must raise."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        for of in [sk.frame.LVLH, sk.frame.RTN, sk.frame.NTW]:
+            with pytest.raises(RuntimeError):
+                sk.frametransform.rotation(of, sk.frame.GCRF, tm)
+            with pytest.raises(RuntimeError):
+                sk.frametransform.rotation(sk.frame.GCRF, of, tm)
+
+    def test_rotation_approx_rejects_intermediates(self):
+        """TIRS / CIRS have no FK5 analogue — approx must raise for them."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        for f in [sk.frame.TIRS, sk.frame.CIRS]:
+            with pytest.raises(RuntimeError):
+                sk.frametransform.rotation_approx(f, sk.frame.GCRF, tm)
+
+    def test_transform_state_matches_itrf_to_gcrf_state(self):
+        """transform_state ITRF→GCRF must match the direct state function."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        pITRF = np.array([6378137.0, 0.0, 0.0])
+        vITRF = np.array([0.0, 0.0, 0.0])
+        p_dispatch, v_dispatch = sk.frametransform.transform_state(
+            sk.frame.ITRF, sk.frame.GCRF, tm, pITRF, vITRF
+        )
+        p_direct, v_direct = sk.frametransform.itrf_to_gcrf_state(pITRF, vITRF, tm)
+        assert np.allclose(p_dispatch, p_direct, atol=1e-6)
+        assert np.allclose(v_dispatch, v_direct, atol=1e-9)
+
 
 class TestGravity:
     def test_gravity(self):

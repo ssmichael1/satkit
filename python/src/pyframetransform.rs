@@ -525,6 +525,156 @@ fn state_transform_batch(
     })
 }
 
+// ───── Frame-enum dispatch (new in 0.17.0) ─────────────────────────────
+
+/// Quaternion rotating a vector from ``from_frame`` to ``to_frame`` at time
+/// ``tm``. Full IERS 2010 reduction.
+///
+/// Uses the shortest path through the frame graph for each pair (does not
+/// always pivot through GCRF). Pairs involving orbit-dependent frames
+/// (LVLH, RTN, NTW) require state and are not supported here — use
+/// :func:`to_gcrf` / :func:`from_gcrf` for those.
+///
+/// Args:
+///     from_frame (satkit.frame): Source frame
+///     to_frame (satkit.frame): Destination frame
+///     tm (satkit.time|datetime.datetime): Epoch
+///
+/// Returns:
+///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+///
+/// Raises:
+///     RuntimeError: if the pair involves LVLH / RTN / NTW.
+#[pyfunction]
+pub fn rotation(
+    from_frame: crate::pyframes::PyFrame,
+    to_frame: crate::pyframes::PyFrame,
+    tm: &Bound<'_, PyAny>,
+) -> Result<Py<PyAny>> {
+    rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ false)
+}
+
+/// Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
+/// the IAU-76/FK5 approximate reduction (~1 arcsec).
+///
+/// Only valid between ITRF and the inertial cluster (GCRF, EME2000, ICRF,
+/// TEME). TIRS and CIRS are defined by the IERS 2010 reduction and have
+/// no FK5 analogue.
+///
+/// Args:
+///     from_frame (satkit.frame): Source frame
+///     to_frame (satkit.frame): Destination frame
+///     tm (satkit.time|datetime.datetime): Epoch
+///
+/// Returns:
+///     satkit.quaternion: Approximate rotation from ``from_frame`` to ``to_frame``.
+///
+/// Raises:
+///     RuntimeError: if either frame is TIRS / CIRS, or if the pair involves
+///         LVLH / RTN / NTW.
+#[pyfunction]
+pub fn rotation_approx(
+    from_frame: crate::pyframes::PyFrame,
+    to_frame: crate::pyframes::PyFrame,
+    tm: &Bound<'_, PyAny>,
+) -> Result<Py<PyAny>> {
+    rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ true)
+}
+
+/// Shared scalar/batch dispatch for [`rotation`] / [`rotation_approx`].
+/// Returns a single quaternion for a scalar time, or a list of
+/// quaternions for an array time — mirroring the existing
+/// `py_quat_from_time_arr` shape used by the per-pair helpers.
+fn rotation_dispatch_batch(
+    from_frame: crate::pyframes::PyFrame,
+    to_frame: crate::pyframes::PyFrame,
+    tm: &Bound<'_, PyAny>,
+    approx: bool,
+) -> Result<Py<PyAny>> {
+    let from: satkit::Frame = from_frame.into();
+    let to: satkit::Frame = to_frame.into();
+    let tvec = tm.to_time_vec()?;
+    let py = tm.py();
+    let cfunc = move |t: &Instant| -> Result<Quaternion> {
+        if approx {
+            Ok(ft::rotation_approx(from, to, t)?)
+        } else {
+            Ok(ft::rotation(from, to, t)?)
+        }
+    };
+    match tvec.len() {
+        1 => {
+            let q = cfunc(&tvec[0])?;
+            Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
+        }
+        _ => {
+            let qs: Result<Vec<crate::pyquaternion::PyQuaternion>> = tvec
+                .iter()
+                .map(|t| cfunc(t).map(crate::pyquaternion::PyQuaternion))
+                .collect();
+            Ok(qs?.into_py_any(py)?)
+        }
+    }
+}
+
+/// State (position + velocity) transform from ``from_frame`` to ``to_frame``
+/// at time ``tm``. Properly handles the Earth-rotation sweep term when
+/// transitioning between rotating (ITRF) and inertial frames.
+///
+/// Currently supported pairs: identity, ITRF↔{GCRF, EME2000, ICRF, TEME},
+/// and within-inertial pairs. Other pairs raise RuntimeError.
+///
+/// Args:
+///     from_frame (satkit.frame): Source frame
+///     to_frame (satkit.frame): Destination frame
+///     tm (satkit.time|datetime.datetime): Epoch
+///     pos (numpy.ndarray): 3-element position vector [m]
+///     vel (numpy.ndarray): 3-element velocity vector [m/s]
+///
+/// Returns:
+///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``.
+#[pyfunction]
+pub fn transform_state(
+    from_frame: crate::pyframes::PyFrame,
+    to_frame: crate::pyframes::PyFrame,
+    tm: &Bound<'_, PyAny>,
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    let t = instant_from_pyany(tm)?;
+    let p: Vector3 = py_to_smatrix(pos)?;
+    let v: Vector3 = py_to_smatrix(vel)?;
+    let (po, vo) = ft::transform_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
+    pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
+        Ok((
+            np::PyArray1::from_slice(py, po.as_slice()).into_py_any(py)?,
+            np::PyArray1::from_slice(py, vo.as_slice()).into_py_any(py)?,
+        ))
+    })
+}
+
+/// State transform using the IAU-76/FK5 approximate reduction. Same
+/// supported-pair set as :func:`transform_state`.
+#[pyfunction]
+pub fn transform_state_approx(
+    from_frame: crate::pyframes::PyFrame,
+    to_frame: crate::pyframes::PyFrame,
+    tm: &Bound<'_, PyAny>,
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    let t = instant_from_pyany(tm)?;
+    let p: Vector3 = py_to_smatrix(pos)?;
+    let v: Vector3 = py_to_smatrix(vel)?;
+    let (po, vo) = ft::transform_state_approx(from_frame.into(), to_frame.into(), &t, &p, &v)?;
+    pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
+        Ok((
+            np::PyArray1::from_slice(py, po.as_slice()).into_py_any(py)?,
+            np::PyArray1::from_slice(py, vo.as_slice()).into_py_any(py)?,
+        ))
+    })
+}
+
 #[pyfunction(name = "disable_eop_time_warning")]
 pub fn disable_eop_time_warning() {
     satkit::earth_orientation_params::disable_eop_time_warning();

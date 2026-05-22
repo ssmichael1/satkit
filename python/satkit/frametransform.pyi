@@ -1029,3 +1029,88 @@ def disable_eop_time_warning() -> None:
         - If not disabled, warning will be shown only once per library load,
     """
     ...
+
+# ── Frame-enum dispatch (new in 0.17.0) ─────────────────────────────────
+
+def rotation(
+    from_frame: frame,
+    to_frame: frame,
+    tm: time | datetime.datetime,
+) -> quaternion:
+    """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` at
+    ``tm``. Full IERS 2010 reduction.
+
+    Uses the shortest path through the frame graph for each pair (does not
+    always pivot through GCRF). Pairs involving orbit-dependent frames
+    (``LVLH``, ``RTN``, ``NTW``) require state and are not supported here —
+    use :func:`to_gcrf` / :func:`from_gcrf` for those.
+
+    Args:
+        from_frame: Source frame
+        to_frame: Destination frame
+        tm: Epoch
+
+    Returns:
+        Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+
+    Raises:
+        RuntimeError: if the pair involves LVLH / RTN / NTW.
+    """
+    ...
+
+def rotation_approx(
+    from_frame: frame,
+    to_frame: frame,
+    tm: time | datetime.datetime,
+) -> quaternion:
+    """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
+    the IAU-76/FK5 approximate reduction (~1 arcsec).
+
+    Only valid between ``ITRF`` and the inertial cluster (``GCRF``,
+    ``EME2000``, ``ICRF``, ``TEME``). ``TIRS`` and ``CIRS`` are defined by
+    the IERS 2010 reduction and have no FK5 analogue.
+
+    Raises:
+        RuntimeError: if either frame is ``TIRS`` / ``CIRS``, or if the pair
+            involves orbit-dependent frames.
+    """
+    ...
+
+def transform_state(
+    from_frame: frame,
+    to_frame: frame,
+    tm: time | datetime.datetime,
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """State (position + velocity) transform from ``from_frame`` to
+    ``to_frame`` at ``tm``. Properly handles the Earth-rotation sweep term
+    when transitioning between rotating (ITRF) and inertial frames.
+
+    Currently supported pairs: identity, ``ITRF``↔{``GCRF``, ``EME2000``,
+    ``ICRF``, ``TEME``}, and within-inertial pairs. Other pairs raise
+    ``RuntimeError`` in this version.
+
+    Args:
+        from_frame: Source frame
+        to_frame: Destination frame
+        tm: Epoch
+        pos: 3-element position vector [m]
+        vel: 3-element velocity vector [m/s]
+
+    Returns:
+        ``(pos, vel)`` in ``to_frame``.
+    """
+    ...
+
+def transform_state_approx(
+    from_frame: frame,
+    to_frame: frame,
+    tm: time | datetime.datetime,
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """State transform using the IAU-76/FK5 approximate reduction. Same
+    supported-pair set as :func:`transform_state`.
+    """
+    ...

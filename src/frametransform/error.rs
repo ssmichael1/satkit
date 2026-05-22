@@ -22,6 +22,27 @@ pub enum Error {
     )]
     UnsupportedFrame { frame: Frame },
 
+    /// [`rotation`](super::rotation) and friends do not handle the
+    /// orbit-dependent frames ([`Frame::LVLH`], [`Frame::RTN`],
+    /// [`Frame::NTW`]) — they require the satellite's position and velocity
+    /// to define their axes. Use [`to_gcrf`](super::to_gcrf) /
+    /// [`from_gcrf`](super::from_gcrf) for those.
+    #[error(
+        "rotation: frame pair ({from}, {to}) involves an orbit-dependent frame; \
+         use to_gcrf / from_gcrf with pos and vel"
+    )]
+    OrbitFrameRequiresState { from: Frame, to: Frame },
+
+    /// [`rotation_approx`](super::rotation_approx) is only valid between
+    /// ITRF and the inertial cluster (GCRF, EME2000, ICRF, TEME). The
+    /// intermediate frames [`Frame::TIRS`] and [`Frame::CIRS`] are defined
+    /// by the IERS 2010 reduction and have no FK5 analogue.
+    #[error(
+        "rotation_approx: frame {frame} has no FK5 approximate-reduction \
+         analogue; use rotation() for full IERS 2010"
+    )]
+    ApproxNotSupportedForFrame { frame: Frame },
+
     /// A `j = N` table-definition line in an IERS table file is
     /// malformed.
     #[error("Error parsing file {fname}, invalid table definition line")]
