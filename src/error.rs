@@ -1,11 +1,14 @@
 //! Top-level error type for the satkit crate.
 //!
-//! Most functions return module-scoped error types
+//! **Deprecated as of 0.17.0.** Prefer the module-scoped error types
 //! (e.g. [`tle::Error`](crate::tle::Error),
-//! [`orbitprop::Error`](crate::orbitprop::Error)). For downstream apps
-//! that consume multiple modules and don't want to define their own
-//! outer error, this façade has `From` impls for every public module
-//! error and can be used as a single result type.
+//! [`orbitprop::Error`](crate::orbitprop::Error)) directly, and either
+//! define a downstream `enum AppError` with the variants you actually
+//! use, or use `anyhow` / `color_eyre` for application-level error
+//! aggregation. This façade will be removed in a future release.
+//!
+//! The original use case was a single result type that lets `?` work
+//! across modules without an outer enum:
 //!
 //! ```rust,ignore
 //! fn do_thing() -> Result<(), satkit::Error> {
@@ -18,6 +21,10 @@
 use thiserror::Error;
 
 /// Top-level satkit error covering every public module-scoped error.
+#[deprecated(
+    since = "0.17.0",
+    note = "use the module-scoped error types (e.g. `tle::Error`) and define a downstream error enum, or use `anyhow`/`color_eyre`"
+)]
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
@@ -77,4 +84,9 @@ pub enum Error {
 }
 
 /// Convenient type alias used throughout satkit.
+#[deprecated(
+    since = "0.17.0",
+    note = "use the module-scoped error types (e.g. `tle::Error`) and define a downstream error enum, or use `anyhow`/`color_eyre`"
+)]
+#[allow(deprecated)]
 pub type Result<T> = std::result::Result<T, Error>;
