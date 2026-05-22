@@ -551,11 +551,7 @@ pub fn rotation(
     to_frame: crate::pyframes::PyFrame,
     tm: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let t = instant_from_pyany(tm)?;
-    let q = ft::rotation(from_frame.into(), to_frame.into(), &t)?;
-    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
-    })
+    rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ false)
 }
 
 /// Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
@@ -582,11 +578,43 @@ pub fn rotation_approx(
     to_frame: crate::pyframes::PyFrame,
     tm: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let t = instant_from_pyany(tm)?;
-    let q = ft::rotation_approx(from_frame.into(), to_frame.into(), &t)?;
-    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
-    })
+    rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ true)
+}
+
+/// Shared scalar/batch dispatch for [`rotation`] / [`rotation_approx`].
+/// Returns a single quaternion for a scalar time, or a list of
+/// quaternions for an array time — mirroring the existing
+/// `py_quat_from_time_arr` shape used by the per-pair helpers.
+fn rotation_dispatch_batch(
+    from_frame: crate::pyframes::PyFrame,
+    to_frame: crate::pyframes::PyFrame,
+    tm: &Bound<'_, PyAny>,
+    approx: bool,
+) -> Result<Py<PyAny>> {
+    let from: satkit::Frame = from_frame.into();
+    let to: satkit::Frame = to_frame.into();
+    let tvec = tm.to_time_vec()?;
+    let py = tm.py();
+    let cfunc = move |t: &Instant| -> Result<Quaternion> {
+        if approx {
+            Ok(ft::rotation_approx(from, to, t)?)
+        } else {
+            Ok(ft::rotation(from, to, t)?)
+        }
+    };
+    match tvec.len() {
+        1 => {
+            let q = cfunc(&tvec[0])?;
+            Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
+        }
+        _ => {
+            let qs: Result<Vec<crate::pyquaternion::PyQuaternion>> = tvec
+                .iter()
+                .map(|t| cfunc(t).map(crate::pyquaternion::PyQuaternion))
+                .collect();
+            Ok(qs?.into_py_any(py)?)
+        }
+    }
 }
 
 /// State (position + velocity) transform from ``from_frame`` to ``to_frame``
