@@ -47,6 +47,9 @@ const MONTH_ABBRS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+/// Abbreviated weekday names, indexed by `Weekday as i32` (0 = Sunday).
+const WEEKDAY_ABBRS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 #[derive(PartialEq, Debug)]
 enum ParseVal {
     Str(String),
@@ -538,6 +541,7 @@ impl Instant {
     /// * %S - Second as a zero-padded decimal number
     /// * %f - Microsecond as a decimal number
     /// * %A - Full weekday name (Sunday, Monday, etc.)
+    /// * %a - Abbreviated weekday name (Sun, Mon, etc.)
     /// * %w - Weekday as a decimal number [0(Sunday), 6(Saturday)]
     ///
     /// # Returns:
@@ -584,6 +588,14 @@ impl Instant {
                     Some('A') => {
                         let weekday = self.day_of_week();
                         result.push_str(&weekday.to_string());
+                    }
+                    Some('a') => {
+                        let idx = self.day_of_week() as i32;
+                        if (0..7).contains(&idx) {
+                            result.push_str(WEEKDAY_ABBRS[idx as usize]);
+                        } else {
+                            result.push_str("Invalid");
+                        }
                     }
                     Some('w') => {
                         let weekday = self.day_of_week();
