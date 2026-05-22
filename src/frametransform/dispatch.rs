@@ -50,26 +50,36 @@ const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
 
 // ───── EME2000 frame bias ────────────────────────────────────────────────
 //
-// Constant rotation from EME2000 (J2000 mean dynamical equator + equinox)
-// to GCRF. See IERS Technical Note 36, §5.4.4 and Vallado §3.7.2.
+// Constant rotation between EME2000 (J2000 mean dynamical equator + equinox)
+// and GCRF (= GCRS). The three IERS 2010 canonical small Euler angles
+// (Conventions 2010 §5.32):
 //
-// Three small offsets (arcseconds at J2000):
-//   dα0  = -0.0146     RA offset of the mean dynamical equator
-//   ξ0   = -0.041775   obliquity-direction frame bias
-//   η0   = -0.0068192  azimuth-direction frame bias
+//   dα0 = -0.014600 ± 0.000100 arcsec   RA offset of J2000 mean equinox
+//   ξ0  = -0.016617 ± 0.000010 arcsec   obliquity-direction bias
+//   η0  = -0.006819 ± 0.000010 arcsec   azimuth-direction bias
 //
-// The bias matrix is the product B = Rx(-η0) · Ry(ξ0) · Rz(dα0) (linearised
-// for these milliarcsecond angles).
-const FRAME_BIAS_DALPHA0_AS: f64 = -0.0146;
-const FRAME_BIAS_XI0_AS: f64 = -0.041775;
-const FRAME_BIAS_ETA0_AS: f64 = -0.0068192;
+// The IERS bias matrix (eq. 5.36) is B = R1(-η0) · R2(ξ0) · R3(dα0), where
+// R1/R2/R3 are *passive* (component-transformation) rotations. B transforms
+// GCRS components to EME2000 components: v_EME2000 = B · v_GCRS.
+//
+// `numeris::Quaternion::rot{x,y,z}(θ)` is the *active* right-hand-rule
+// rotation by +θ, which equals the passive R_i(−θ). So expressing IERS B
+// in numeris terms requires negating each angle, and we further want the
+// inverse B^T = R3(-dα0) · R2(-ξ0) · R1(η0) for EME2000 → GCRF:
+const FRAME_BIAS_DALPHA0_AS: f64 = -0.014600;
+const FRAME_BIAS_XI0_AS: f64 = -0.016617;
+const FRAME_BIAS_ETA0_AS: f64 = -0.006819;
 
 /// Constant quaternion: EME2000 → GCRF (≈ 17 milliarcsec frame bias).
+///
+/// Implements `B^T = R3(-dα0) · R2(-ξ0) · R1(η0)` in IERS notation. In
+/// numeris' active-rotation convention this is `rotz(dα0) · roty(ξ0) ·
+/// rotx(-η0)` (each axis-angle negated relative to the passive form).
 fn qeme2000_to_gcrf() -> Quaternion {
     let dalpha0 = FRAME_BIAS_DALPHA0_AS * ASEC2RAD;
     let xi0 = FRAME_BIAS_XI0_AS * ASEC2RAD;
     let eta0 = FRAME_BIAS_ETA0_AS * ASEC2RAD;
-    Quaternion::rotx(-eta0) * Quaternion::roty(xi0) * Quaternion::rotz(dalpha0)
+    Quaternion::rotz(dalpha0) * Quaternion::roty(xi0) * Quaternion::rotx(-eta0)
 }
 
 // ───── canonical ordering ────────────────────────────────────────────────
@@ -492,6 +502,37 @@ mod tests {
         let q1 = rotation(Frame::ICRF, Frame::EME2000, &t1).unwrap();
         let q2 = rotation(Frame::ICRF, Frame::EME2000, &t2).unwrap();
         assert!((q1.w - q2.w).abs() < 1e-15);
+    }
+
+    #[test]
+    fn eme2000_bias_matches_iers_2010() {
+        // Pin the EME2000 → GCRF bias matrix to the IERS Conventions 2010
+        // §5.32 small-Euler-angle reference (ξ0, η0, dα0). The matrix is
+        // time-independent so a single epoch suffices.
+        let t = Instant::from_datetime(2000, 1, 1, 12, 0, 0.0).unwrap();
+        let q = rotation(Frame::EME2000, Frame::GCRF, &t).unwrap();
+        let e1 = numeris::vector![1.0_f64, 0.0, 0.0];
+        let e2 = numeris::vector![0.0_f64, 1.0, 0.0];
+        let e3 = numeris::vector![0.0_f64, 0.0, 1.0];
+        // Reference values from the IERS 2010 reference matrix (computed
+        // off-line in numpy from the small-angle formula B^T = R3(-dα0) ·
+        // R2(-ξ0) · R1(η0) with ξ0 = -0.016617", η0 = -0.006819",
+        // dα0 = -0.014600"). See module-level doc comment.
+        let c0 = q * e1;
+        let c1 = q * e2;
+        let c2 = q * e3;
+        // First column: (1, dα0_rad, -ξ0_rad) to first order.
+        assert!((c0[0] - 1.0).abs() < 1e-14);
+        assert!((c0[1] - (-7.07827974e-8)).abs() < 1e-15);
+        assert!((c0[2] - 8.05614894e-8).abs() < 1e-15);
+        // Second column: (-dα0_rad, 1, η0_rad).
+        assert!((c1[0] - 7.07827948e-8).abs() < 1e-15);
+        assert!((c1[1] - 1.0).abs() < 1e-14);
+        assert!((c1[2] - 3.30594449e-8).abs() < 1e-15);
+        // Third column: (ξ0_rad, -η0_rad, 1).
+        assert!((c2[0] - (-8.05614917e-8)).abs() < 1e-15);
+        assert!((c2[1] - (-3.30594392e-8)).abs() < 1e-15);
+        assert!((c2[2] - 1.0).abs() < 1e-14);
     }
 
     #[test]
