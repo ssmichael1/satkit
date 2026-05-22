@@ -271,21 +271,28 @@ fn canonical_rotation<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quat
         // ── 2-step compositions (shortest path) ────────────────────────
         (ITRF, CIRS) => qtirs2cirs(t) * qitrf2tirs(t),
         (TIRS, GCRF) => qcirs2gcrs(t) * qtirs2cirs(t),
-        (TIRS, TEME) => qitrf2tirs(t) * qteme2itrf(t),
+        // (TIRS, TEME): canonical pair wants q_{TIRS→TEME}. The expression
+        // `qitrf2tirs * qteme2itrf` composes (applied to v) as TEME → ITRF →
+        // TIRS, which is q_{TEME→TIRS}; conjugate to flip direction.
+        (TIRS, TEME) => (qitrf2tirs(t) * qteme2itrf(t)).conjugate(),
         (TIRS, ICRF) => qcirs2gcrs(t) * qtirs2cirs(t),
         (CIRS, ICRF) => qcirs2gcrs(t),
         (EME2000, ICRF) => qeme2000_to_gcrf(),
 
         // ── 3-step compositions ────────────────────────────────────────
-        (CIRS, TEME) => qtirs2cirs(t) * qitrf2tirs(t) * qteme2itrf(t),
+        // (CIRS, TEME): canonical pair wants q_{CIRS→TEME}. Same direction
+        // flip as (TIRS, TEME) above.
+        (CIRS, TEME) => (qtirs2cirs(t) * qitrf2tirs(t) * qteme2itrf(t)).conjugate(),
         (ITRF, EME2000) => qeme2000_to_gcrf().conjugate() * qitrf2gcrf(t),
         (ITRF, ICRF) => qitrf2gcrf(t),
         (TIRS, EME2000) => qeme2000_to_gcrf().conjugate() * qcirs2gcrs(t) * qtirs2cirs(t),
         (CIRS, EME2000) => qeme2000_to_gcrf().conjugate() * qcirs2gcrs(t),
-        // GCRF↔TEME: compose via ITRF so we get full reduction (the existing
-        // qteme2gcrf uses qitrf2gcrf_approx internally — keep that to
-        // rotation_approx).
-        (GCRF, TEME) => qitrf2gcrf(t) * qteme2itrf(t),
+        // (GCRF, TEME): canonical pair wants q_{GCRF→TEME}. We compose
+        // through ITRF for full IERS 2010 (the existing `qteme2gcrf` uses
+        // `qitrf2gcrf_approx` internally — that flavour belongs in
+        // `rotation_approx`). The natural expression `qitrf2gcrf *
+        // qteme2itrf` is q_{TEME→GCRF}; conjugate to flip direction.
+        (GCRF, TEME) => (qitrf2gcrf(t) * qteme2itrf(t)).conjugate(),
 
         // ── 4+-step compositions ───────────────────────────────────────
         (TEME, EME2000) => qeme2000_to_gcrf().conjugate() * qitrf2gcrf(t) * qteme2itrf(t),
@@ -315,7 +322,8 @@ fn canonical_rotation_approx<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Resu
 
         (GCRF, EME2000) => qeme2000_to_gcrf().conjugate(),
         (GCRF, ICRF) => Quaternion::identity(),
-        (GCRF, TEME) => qitrf2gcrf_approx(t) * qteme2itrf(t),
+        // (GCRF, TEME): same direction flip as in `canonical_rotation`.
+        (GCRF, TEME) => (qitrf2gcrf_approx(t) * qteme2itrf(t)).conjugate(),
 
         (EME2000, ICRF) => qeme2000_to_gcrf(),
         (TEME, EME2000) => qeme2000_to_gcrf().conjugate() * qitrf2gcrf_approx(t) * qteme2itrf(t),
@@ -510,6 +518,89 @@ mod tests {
         let q_direct = qteme2itrf(&tm);
         let v = numeris::vector![1000.0, 2000.0, 3000.0];
         assert!((q_dispatch * v - q_direct * v).norm() < 1e-12);
+    }
+
+    /// Direction pin for every TEME-involving pair. The roundtrip test
+    /// passes regardless of direction (because `rotation(b, a)` is just
+    /// the conjugate of `rotation(a, b)`), so this test pins the absolute
+    /// direction by composing dispatch with a known-good reference. If a
+    /// future change flips a sign, this fails.
+    #[test]
+    fn dispatch_teme_pairs_have_correct_direction() {
+        use super::super::qteme2gcrf;
+        let tm = t();
+        let v = numeris::vector![7000e3_f64, 1000e3, 2000e3];
+
+        // `qteme2gcrf` is the approximate TEME → GCRF rotation. Use it as
+        // the reference for `rotation_approx` (which composes with the
+        // same approximate ITRF↔GCRF). For full `rotation`, allow ~10 m
+        // tolerance because dispatch uses the full IERS 2010 reduction
+        // and qteme2gcrf is FK5-approx.
+        let q_teme_to_gcrf_ref = qteme2gcrf(&tm);
+
+        // rotation_approx(TEME, GCRF) should match qteme2gcrf to float
+        // precision (both are the approximate reduction).
+        let q_dispatch = rotation_approx(Frame::TEME, Frame::GCRF, &tm).unwrap();
+        let lhs = q_dispatch * v;
+        let rhs = q_teme_to_gcrf_ref * v;
+        assert!(
+            (lhs - rhs).norm() / v.norm() < 1e-12,
+            "rotation_approx(TEME,GCRF) direction mismatch: dispatch={lhs:?} ref={rhs:?}"
+        );
+
+        // rotation_approx(GCRF, TEME) is the inverse.
+        let q_dispatch = rotation_approx(Frame::GCRF, Frame::TEME, &tm).unwrap();
+        let lhs = q_dispatch * v;
+        let rhs = q_teme_to_gcrf_ref.conjugate() * v;
+        assert!(
+            (lhs - rhs).norm() / v.norm() < 1e-12,
+            "rotation_approx(GCRF,TEME) direction mismatch: dispatch={lhs:?} ref={rhs:?}"
+        );
+
+        // Full rotation(TEME, GCRF): differs from qteme2gcrf by the
+        // approx-vs-full reduction error (~1 arcsec). At |v|≈7300 km
+        // that's ~35 m of position; check direction is right with a
+        // loose tolerance.
+        let q_dispatch = rotation(Frame::TEME, Frame::GCRF, &tm).unwrap();
+        let lhs = q_dispatch * v;
+        let rhs = q_teme_to_gcrf_ref * v;
+        assert!(
+            (lhs - rhs).norm() < 100.0,
+            "rotation(TEME,GCRF) direction mismatch (>100 m): \
+             dispatch={lhs:?} approx_ref={rhs:?}"
+        );
+
+        // Full rotation(GCRF, TEME): inverse direction, same tolerance.
+        let q_dispatch = rotation(Frame::GCRF, Frame::TEME, &tm).unwrap();
+        let lhs = q_dispatch * v;
+        let rhs = q_teme_to_gcrf_ref.conjugate() * v;
+        assert!(
+            (lhs - rhs).norm() < 100.0,
+            "rotation(GCRF,TEME) direction mismatch (>100 m): \
+             dispatch={lhs:?} approx_ref={rhs:?}"
+        );
+
+        // (TIRS, TEME) and (CIRS, TEME): compose dispatch with the
+        // direct functions to recover v_TEME from v_TEME and check
+        // identity. Concretely: rotation(TIRS, TEME) ∘ rotation(TEME, TIRS)
+        // = identity is the roundtrip (already tested) — but it doesn't
+        // pin direction. Instead, take v_TEME, apply rotation(TEME, TIRS),
+        // then qitrf2tirs(t) * qteme2itrf(t) * v_TEME should give the same
+        // TIRS vector if both go TEME → ITRF → TIRS.
+        let v_teme = v;
+        let lhs = rotation(Frame::TEME, Frame::TIRS, &tm).unwrap() * v_teme;
+        let rhs = qitrf2tirs(&tm) * (qteme2itrf(&tm) * v_teme);
+        assert!(
+            (lhs - rhs).norm() / v.norm() < 1e-12,
+            "rotation(TEME,TIRS) direction mismatch: dispatch={lhs:?} ref={rhs:?}"
+        );
+
+        let lhs = rotation(Frame::TEME, Frame::CIRS, &tm).unwrap() * v_teme;
+        let rhs = qtirs2cirs(&tm) * (qitrf2tirs(&tm) * (qteme2itrf(&tm) * v_teme));
+        assert!(
+            (lhs - rhs).norm() / v.norm() < 1e-12,
+            "rotation(TEME,CIRS) direction mismatch: dispatch={lhs:?} ref={rhs:?}"
+        );
     }
 
     #[test]
