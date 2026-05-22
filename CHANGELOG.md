@@ -13,6 +13,7 @@
 - **Python bindings + type stubs.** `satkit.frametransform.rotation`, `rotation_approx`, `transform_state`, `transform_state_approx`. Both `rotation` and `rotation_approx` accept either a scalar time or an array of times — returning a single quaternion or a list of quaternions respectively, matching the per-pair functions' batch shape. The original per-pair functions remain; this layer is purely additive.
 - **Docs.** All major tutorials updated to use the dispatch API in examples. The *first* call in each introductory page uses keyword arguments (`rotation(from_frame=ITRF, to_frame=GCRF, tm=t)`) so the source / destination direction is unambiguous at first sight; subsequent calls in the same tutorial fall back to positional form for brevity. A new "Dispatch API" section in `docs/api/frametransform.md` introduces all four entry points.
 - **No `_ =>` catch-alls on `Frame`.** Both the dispatch match arms and the internal `is_earth_rotating` / `is_orbit_dependent` classifiers enumerate every variant explicitly so the compiler will flag any future `Frame` additions.
+- **Direction pins.** Each TEME-involving dispatch arm is compared against the canonical `qteme2gcrf` / `qitrf2tirs` / `qteme2itrf` composition so a future change that flips a sign fails immediately — the roundtrip test alone can't catch direction errors because `rotation(b, a)` is always the conjugate of `rotation(a, b)` regardless of which is "right".
 
 ### `ITRFCoord::to_enu` / `to_ned`: parameter renamed `ref_coord` → `origin`, docstrings overhauled
 
