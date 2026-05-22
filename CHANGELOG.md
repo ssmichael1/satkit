@@ -3,6 +3,12 @@
 
 ## Unreleased
 
+### `update_datafiles` uses conditional GETs to skip unchanged files
+
+- **`If-Modified-Since` on every refresh download.** `download_file` now formats the local file's mtime as an HTTP-date and sends it as `If-Modified-Since`. On a `304 Not Modified` response, the existing file is left untouched and the function returns `Ok(false)`. The two regularly-refreshed files (`EOP-All.csv` and `SW-All.csv`, both served by celestrak.org) had been re-downloaded on every `update_datafiles()` call regardless of whether they had changed — now they only transfer when the server reports a newer `Last-Modified`. Bandwidth-constrained users (e.g. on cellular) see ~3 MB/run drop to a pair of HEAD-sized 304s. Resolves [#97](https://github.com/ssmichael1/satkit/issues/97).
+- **New `%a` format code in `Instant::strftime`** (`src/time/instantparse.rs`). Abbreviated weekday name — `Sun`, `Mon`, ..., `Sat` — parallel to the existing full-name `%A`. Added to support the RFC 7231 IMF-fixdate format (`%a, %d %b %Y %H:%M:%S GMT`) used by `If-Modified-Since`. No new dependencies.
+- **Behavior of `overwrite_if_exists=false` is unchanged**: the local-existence fast path still short-circuits before any network call. The flag now effectively means "ask the server whether to re-fetch" when true, rather than "always re-fetch".
+
 ### `ITRFCoord::to_enu` / `to_ned`: parameter renamed `ref_coord` → `origin`, docstrings overhauled
 
 - **Parameter rename.** `ITRFCoord::to_enu(&self, ref_coord)` and `to_ned(&self, ref_coord)` now take `origin` instead. The ENU/NED triad is *anchored* at this argument — calling it "origin" matches the standard local-tangent-frame terminology and makes call sites read like prose: `satellite.to_enu(&station)` ("ENU of the satellite, with the station as the origin"). Rust callers are unaffected (positional args); Python callers using `origin=` as a kwarg will need to update from `refcoord=` / `other=`. Resolves [#91](https://github.com/ssmichael1/satkit/issues/91).
