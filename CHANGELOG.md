@@ -1,7 +1,7 @@
 # Changelog
 
 
-## Unreleased
+## 0.17.0 - 2026-05-22
 
 ### Frame-enum dispatch: `rotation` / `rotation_approx` / `transform_state`
 
@@ -14,6 +14,12 @@
 - **Docs.** All major tutorials updated to use the dispatch API in examples. The *first* call in each introductory page uses keyword arguments (`rotation(from_frame=ITRF, to_frame=GCRF, tm=t)`) so the source / destination direction is unambiguous at first sight; subsequent calls in the same tutorial fall back to positional form for brevity. A new "Dispatch API" section in `docs/api/frametransform.md` introduces all four entry points.
 - **No `_ =>` catch-alls on `Frame`.** Both the dispatch match arms and the internal `is_earth_rotating` / `is_orbit_dependent` classifiers enumerate every variant explicitly so the compiler will flag any future `Frame` additions.
 
+### `ITRFCoord::to_enu` / `to_ned`: parameter renamed `ref_coord` → `origin`, docstrings overhauled
+
+- **Parameter rename.** `ITRFCoord::to_enu(&self, ref_coord)` and `to_ned(&self, ref_coord)` now take `origin` instead. The ENU/NED triad is *anchored* at this argument — calling it "origin" matches the standard local-tangent-frame terminology and makes call sites read like prose: `satellite.to_enu(&station)` ("ENU of the satellite, with the station as the origin"). Rust callers are unaffected (positional args); Python callers using `origin=` as a kwarg will need to update from `refcoord=` / `other=`. Resolves [#91](https://github.com/ssmichael1/satkit/issues/91).
+- **Docstrings rewritten.** Lead with a one-line "FROM `origin` TO `self`" statement and an explicit sign convention for the Up/Down component. Example renamed from `itrf1`/`itrf2` to `station`/`satellite` so the canonical sat/ground-station case (the source of the issue) is the worked example. Mirrored across the Rust source, the PyO3 binding, and the `.pyi` stub.
+- **Latent Python binding inconsistency fixed.** `to_ned`'s parameter was `other` in code but documented as `refcoord` — both now consistently `origin`.
+
 ### `satkit::Error` façade is deprecated
 
 - **`satkit::Error` and `satkit::Result` marked `#[deprecated(since = "0.17.0")]`.** The top-level error enum was added in 0.16.x (PR #86) as a convenience for downstream apps that wanted a single result type to unify the per-module typed errors. In practice the module-scoped errors (`tle::Error`, `orbitprop::Error`, …) plus a downstream-defined `enum AppError` or `anyhow::Result` cover the use case more cleanly and don't lock satkit into a public surface that has to grow in lockstep with every new module-level error variant. Both `Error` and `Result` are still exported and functional; the deprecation just nudges callers toward the more durable pattern. Removal is planned for a future release.
@@ -23,12 +29,6 @@
 - **`If-Modified-Since` on every refresh download.** `download_file` now formats the local file's mtime as an HTTP-date and sends it as `If-Modified-Since`. On a `304 Not Modified` response, the existing file is left untouched and the function returns `Ok(false)`. The two regularly-refreshed files (`EOP-All.csv` and `SW-All.csv`, both served by celestrak.org) had been re-downloaded on every `update_datafiles()` call regardless of whether they had changed — now they only transfer when the server reports a newer `Last-Modified`. Bandwidth-constrained users (e.g. on cellular) see ~3 MB/run drop to a pair of HEAD-sized 304s. Resolves [#97](https://github.com/ssmichael1/satkit/issues/97).
 - **New `%a` format code in `Instant::strftime`** (`src/time/instantparse.rs`). Abbreviated weekday name — `Sun`, `Mon`, ..., `Sat` — parallel to the existing full-name `%A`. Added to support the RFC 7231 IMF-fixdate format (`%a, %d %b %Y %H:%M:%S GMT`) used by `If-Modified-Since`. No new dependencies.
 - **Behavior of `overwrite_if_exists=false` is unchanged**: the local-existence fast path still short-circuits before any network call. The flag now effectively means "ask the server whether to re-fetch" when true, rather than "always re-fetch".
-
-### `ITRFCoord::to_enu` / `to_ned`: parameter renamed `ref_coord` → `origin`, docstrings overhauled
-
-- **Parameter rename.** `ITRFCoord::to_enu(&self, ref_coord)` and `to_ned(&self, ref_coord)` now take `origin` instead. The ENU/NED triad is *anchored* at this argument — calling it "origin" matches the standard local-tangent-frame terminology and makes call sites read like prose: `satellite.to_enu(&station)` ("ENU of the satellite, with the station as the origin"). Rust callers are unaffected (positional args); Python callers using `origin=` as a kwarg will need to update from `refcoord=` / `other=`. Resolves [#91](https://github.com/ssmichael1/satkit/issues/91).
-- **Docstrings rewritten.** Lead with a one-line "FROM `origin` TO `self`" statement and an explicit sign convention for the Up/Down component. Example renamed from `itrf1`/`itrf2` to `station`/`satellite` so the canonical sat/ground-station case (the source of the issue) is the worked example. Mirrored across the Rust source, the PyO3 binding, and the `.pyi` stub.
-- **Latent Python binding inconsistency fixed.** `to_ned`'s parameter was `other` in code but documented as `refcoord` — both now consistently `origin`.
 
 ### Python type stubs: `TLE.from_lines` accepts any `Sequence[str]`
 
