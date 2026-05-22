@@ -21,15 +21,22 @@ import satkit as sk
 
 t = sk.time(2024, 1, 1, 12, 0, 0)
 
-# Full IERS 2010 reduction
-q = sk.frametransform.rotation(sk.frame.ITRF, sk.frame.GCRF, t)
+# Full IERS 2010 reduction. Keyword arguments are recommended at the call
+# site so the source / destination direction is unambiguous; positional
+# args work too once you know the order (from, to, tm).
+q = sk.frametransform.rotation(
+    from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, tm=t,
+)
 
 # IAU-76/FK5 approximation (~1 arcsec), inertial cluster + ITRF only
-q_approx = sk.frametransform.rotation_approx(sk.frame.ITRF, sk.frame.GCRF, t)
+q_approx = sk.frametransform.rotation_approx(
+    from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, tm=t,
+)
 
 # Position + velocity (handles the Earth-rotation sweep term)
 pos_gcrf, vel_gcrf = sk.frametransform.transform_state(
-    sk.frame.ITRF, sk.frame.GCRF, t, pos_itrf, vel_itrf
+    from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF,
+    tm=t, pos=pos_itrf, vel=vel_itrf,
 )
 ```
 

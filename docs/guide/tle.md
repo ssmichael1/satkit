@@ -81,9 +81,13 @@ starlink30477 = sk.TLE.from_lines(tle_lines)
 # The state is output in the "TEME" frame
 pTEME, _vTEME = sk.sgp4(starlink30477, sk.time(2024, 4, 9, 12, 0, 0))
 
-# Rotate to Earth-fixed (ITRF) and get geodetic coordinates
+# Rotate to Earth-fixed (ITRF) and get geodetic coordinates. Keyword
+# arguments make the direction explicit at first sight; the same call with
+# positional args is `rotation(sk.frame.TEME, sk.frame.ITRF, thetime)`.
 thetime = sk.time(2024, 4, 9, 12, 0, 0)
-pITRF = sk.frametransform.rotation(sk.frame.TEME, sk.frame.ITRF, thetime) * pTEME
+pITRF = sk.frametransform.rotation(
+    from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, tm=thetime,
+) * pTEME
 coord = sk.itrfcoord(pITRF)
 print(coord)
 # ITRFCoord(lat:  29.3890 deg, lon: 170.8051 deg, hae: 560.11 km)
