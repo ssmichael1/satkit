@@ -218,8 +218,9 @@ pub mod omm;
 mod time;
 pub use time::{Duration, Instant, InstantError, TimeLike, TimeScale, Weekday};
 
-// Top-level façade error type
+// Top-level façade error type (deprecated 0.17.0; re-exported for source compat).
 mod error;
+#[allow(deprecated)]
 pub use error::{Error, Result};
 
 // Core types available at crate level

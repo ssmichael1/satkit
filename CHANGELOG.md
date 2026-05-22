@@ -3,6 +3,10 @@
 
 ## Unreleased
 
+### `satkit::Error` façade is deprecated
+
+- **`satkit::Error` and `satkit::Result` marked `#[deprecated(since = "0.17.0")]`.** The top-level error enum was added in 0.16.x (PR #86) as a convenience for downstream apps that wanted a single result type to unify the per-module typed errors. In practice the module-scoped errors (`tle::Error`, `orbitprop::Error`, …) plus a downstream-defined `enum AppError` or `anyhow::Result` cover the use case more cleanly and don't lock satkit into a public surface that has to grow in lockstep with every new module-level error variant. Both `Error` and `Result` are still exported and functional; the deprecation just nudges callers toward the more durable pattern. Removal is planned for a future release.
+
 ### `update_datafiles` uses conditional GETs to skip unchanged files
 
 - **`If-Modified-Since` on every refresh download.** `download_file` now formats the local file's mtime as an HTTP-date and sends it as `If-Modified-Since`. On a `304 Not Modified` response, the existing file is left untouched and the function returns `Ok(false)`. The two regularly-refreshed files (`EOP-All.csv` and `SW-All.csv`, both served by celestrak.org) had been re-downloaded on every `update_datafiles()` call regardless of whether they had changed — now they only transfer when the server reports a newer `Last-Modified`. Bandwidth-constrained users (e.g. on cellular) see ~3 MB/run drop to a pair of HEAD-sized 304s. Resolves [#97](https://github.com/ssmichael1/satkit/issues/97).
