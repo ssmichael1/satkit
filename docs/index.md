@@ -73,7 +73,7 @@ import satkit as sk
 time = sk.time(2024, 1, 1, 12, 0, 0)
 coord = sk.itrfcoord(latitude_deg=42.0, longitude_deg=-71.0, altitude=100.0)
 
-q = sk.frametransform.qitrf2gcrf(time)
+q = sk.frametransform.rotation(sk.frame.ITRF, sk.frame.GCRF, time)
 gcrf_pos = q * coord.vector
 ```
 

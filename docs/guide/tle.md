@@ -83,7 +83,7 @@ pTEME, _vTEME = sk.sgp4(starlink30477, sk.time(2024, 4, 9, 12, 0, 0))
 
 # Rotate to Earth-fixed (ITRF) and get geodetic coordinates
 thetime = sk.time(2024, 4, 9, 12, 0, 0)
-pITRF = sk.frametransform.qteme2itrf(thetime) * pTEME
+pITRF = sk.frametransform.rotation(sk.frame.TEME, sk.frame.ITRF, thetime) * pTEME
 coord = sk.itrfcoord(pITRF)
 print(coord)
 # ITRFCoord(lat:  29.3890 deg, lon: 170.8051 deg, hae: 560.11 km)
@@ -116,7 +116,10 @@ time_array = [epoch + sk.duration(minutes=i*10) for i in range(6)]
 pTEME, _vTEME = sk.sgp4(omms[0], time_array)
 
 # Rotate to Earth-fixed and get geodetic coordinates
-pITRF = [sk.frametransform.qteme2itrf(t) * p for t, p in zip(time_array, pTEME)]
+pITRF = [
+    sk.frametransform.rotation(sk.frame.TEME, sk.frame.ITRF, t) * p
+    for t, p in zip(time_array, pTEME)
+]
 coord = [sk.itrfcoord(x) for x in pITRF]
 ```
 
