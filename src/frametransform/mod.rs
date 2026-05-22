@@ -25,9 +25,12 @@
 //! - **CIRS** (Celestial Intermediate Reference System): IERS 2010 intermediate frame
 //! - **MOD** (Mean of Date): Precession-only frame
 
+mod dispatch;
 mod error;
 mod ierstable;
 mod qcirs2gcrs;
+
+pub use dispatch::{rotation, rotation_approx, transform_state, transform_state_approx};
 
 pub use error::{Error, Result};
 

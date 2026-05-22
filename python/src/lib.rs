@@ -141,6 +141,14 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::qtod2mod_approx, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::rotation, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::rotation_approx, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::transform_state, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::transform_state_approx, m)?)
+        .unwrap();
 
     Ok(())
 }

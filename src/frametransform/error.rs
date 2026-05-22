@@ -22,6 +22,39 @@ pub enum Error {
     )]
     UnsupportedFrame { frame: Frame },
 
+    /// [`rotation`](super::rotation) and friends do not handle the
+    /// orbit-dependent frames ([`Frame::LVLH`], [`Frame::RTN`],
+    /// [`Frame::NTW`]) — they require the satellite's position and velocity
+    /// to define their axes. Use [`to_gcrf`](super::to_gcrf) /
+    /// [`from_gcrf`](super::from_gcrf) for those.
+    #[error(
+        "rotation: frame pair ({from}, {to}) involves an orbit-dependent frame; \
+         use to_gcrf / from_gcrf with pos and vel"
+    )]
+    OrbitFrameRequiresState { from: Frame, to: Frame },
+
+    /// [`rotation_approx`](super::rotation_approx) is only valid between
+    /// ITRF and the inertial cluster (GCRF, EME2000, ICRF, TEME). The
+    /// intermediate frames [`Frame::TIRS`] and [`Frame::CIRS`] are defined
+    /// by the IERS 2010 reduction and have no FK5 analogue.
+    #[error(
+        "rotation_approx: frame {frame} has no FK5 approximate-reduction \
+         analogue; use rotation() for full IERS 2010"
+    )]
+    ApproxNotSupportedForFrame { frame: Frame },
+
+    /// [`transform_state`](super::transform_state) currently supports only
+    /// identity, ITRF↔{GCRF, EME2000, ICRF, TEME}, and within-inertial
+    /// pairs. Other pairs (involving TIRS / CIRS as endpoints) are not
+    /// implemented in this first cut — compose
+    /// [`itrf_to_gcrf_state`](super::itrf_to_gcrf_state) with the
+    /// appropriate rotation manually.
+    #[error(
+        "transform_state: frame pair ({from}, {to}) not supported in this \
+         version; compose itrf_to_gcrf_state with a constant rotation manually"
+    )]
+    StateTransformNotSupported { from: Frame, to: Frame },
+
     /// A `j = N` table-definition line in an IERS table file is
     /// malformed.
     #[error("Error parsing file {fname}, invalid table definition line")]
