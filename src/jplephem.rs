@@ -53,6 +53,14 @@ pub enum Error {
     #[error("Invalid record size for cheby data")]
     InvalidRecordSize,
 
+    /// Returned by [`init_from_bytes`] / [`init_from_path`] when the
+    /// JPL ephemeris singleton has already been initialized (either by an
+    /// earlier `init_*` call or by a lazy load triggered by a position
+    /// query). Initialization must happen before any other call into this
+    /// module.
+    #[error("JPL ephemeris singleton is already initialized")]
+    AlreadyInitialized,
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -155,9 +163,107 @@ macro_rules! dispatch_ncoeff {
     };
 }
 
+/// Filename to fall back to when neither `SATKIT_JPLEPHEM_FILE` is set nor
+/// any other `linux_p*.4XX` file is present in [`datadir`]. This is the only
+/// JPL ephemeris file that we know lives on the GCS bundle and is therefore
+/// the only one we'll attempt to auto-download.
+const LEGACY_DEFAULT_FILENAME: &str = "linux_p1550p2650.440";
+
+/// Resolve the path to the JPL ephemeris file the singleton should load.
+///
+/// Resolution order:
+/// 1. `SATKIT_JPLEPHEM_FILE` env var. If the value contains a path separator
+///    or is absolute it's used directly; otherwise it's resolved against
+///    [`datadir`].
+/// 2. Autodetect: scan [`datadir`] for files matching `linux_p*.4XX` and pick
+///    the highest DE-version suffix (e.g. `.440` > `.430` > `.421`). This is
+///    what lets a bundled `de440s` (`linux_p1850p2150.440`) be picked up
+///    automatically once placed in the data dir.
+/// 3. Fall back to [`LEGACY_DEFAULT_FILENAME`] under [`datadir`], which will
+///    be auto-downloaded on first use.
+fn resolve_default_path() -> std::path::PathBuf {
+    use std::path::PathBuf;
+
+    if let Ok(v) = std::env::var("SATKIT_JPLEPHEM_FILE") {
+        let p = PathBuf::from(&v);
+        if p.is_absolute() || v.contains(std::path::MAIN_SEPARATOR) {
+            return p;
+        }
+        if let Ok(dd) = datadir() {
+            return dd.join(&v);
+        }
+        return p;
+    }
+
+    let dd = datadir().unwrap_or_else(|_| PathBuf::from("."));
+    let mut best: Option<(u32, PathBuf)> = None;
+    if let Ok(rd) = std::fs::read_dir(&dd) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !name.starts_with("linux_p") {
+                continue;
+            }
+            let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                continue;
+            };
+            // DE-version suffix: 3 digits starting with '4' (covers DE4XX family).
+            if ext.len() != 3 || !ext.starts_with('4') || !ext.chars().all(|c| c.is_ascii_digit())
+            {
+                continue;
+            }
+            let Ok(de_version) = ext.parse::<u32>() else {
+                continue;
+            };
+            if best.as_ref().is_none_or(|(cur, _)| de_version > *cur) {
+                best = Some((de_version, path));
+            }
+        }
+    }
+    if let Some((_, path)) = best {
+        return path;
+    }
+    dd.join(LEGACY_DEFAULT_FILENAME)
+}
+
+/// Module-scope singleton so [`init_from_bytes`] and [`init_from_path`] can
+/// populate it before any lazy load triggered by a position query.
+static JPL_INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
+
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
-    static INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
-    INSTANCE.get_or_init(|| JPLEphem::from_file("linux_p1550p2650.440"))
+    JPL_INSTANCE.get_or_init(|| JPLEphem::from_path(&resolve_default_path()))
+}
+
+/// Initialize the JPL ephemeris singleton from an in-memory byte buffer.
+///
+/// This is the entry point for embedded or sandboxed contexts where the
+/// ephemeris file lives in a database, application bundle, or other
+/// non-filesystem source rather than on disk. The `bytes` slice must be a
+/// JPL native binary DE file (little-endian "linux_p*.4XX" layout).
+///
+/// Must be called *before* any position / state query, otherwise the lazy
+/// default-resolver init has already won and this returns
+/// [`Error::AlreadyInitialized`].
+pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
+    JPL_INSTANCE
+        .set(JPLEphem::parse(bytes))
+        .map_err(|_| Error::AlreadyInitialized)
+}
+
+/// Initialize the JPL ephemeris singleton from a file at `path`.
+///
+/// Same semantics as [`init_from_bytes`] but reads the file from disk. Use
+/// this when you want to point satkit at a specific ephemeris file at
+/// runtime without going through the env-var or autodetect resolution.
+///
+/// Must be called *before* any position / state query, otherwise returns
+/// [`Error::AlreadyInitialized`].
+pub fn init_from_path(path: &std::path::Path) -> Result<()> {
+    JPL_INSTANCE
+        .set(JPLEphem::from_path(path))
+        .map_err(|_| Error::AlreadyInitialized)
 }
 
 impl JPLEphem {
@@ -194,14 +300,18 @@ impl JPLEphem {
         })
     }
 
-    /// Construct a JPL Ephemerides object from the provided binary data file
+    /// Construct a JPL Ephemerides object from the provided binary data file.
     ///
+    /// The parser is fully header-driven: `de_version`, `n_con`, the
+    /// interpolation pointer table `ipt[15][3]`, kernel size, and the JD
+    /// span are all read from the file header, so DE405 / DE421 / DE430 /
+    /// DE440 / DE441 (including the short-span `de440s` variant) all load
+    /// through the same code path.
     ///
-    /// # Return
-    ///
-    /// * Object holding all of the JPL ephemerides in memory that can be
-    ///   queried to find solar system body position in heliocentric or
-    ///   geocentric coordinate system as function of time
+    /// Auto-download is attempted only when `path` resolves to the legacy
+    /// default name [`LEGACY_DEFAULT_FILENAME`] under [`datadir`]; that's
+    /// the only file the GCS bundle is known to host. For any other path
+    /// the file is expected to already exist.
     ///
     /// # Example
     ///
@@ -219,9 +329,30 @@ impl JPLEphem {
     /// println!("p = {}", p);
     /// ```
     ///
-    fn from_file(fname: &str) -> Result<Self> {
+    fn from_path(path: &std::path::Path) -> Result<Self> {
+        // Open the file. Only auto-download for the legacy default filename
+        // since that's the only one we know is hosted on the GCS bundle.
+        if !path.is_file() {
+            let is_legacy_default = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n == LEGACY_DEFAULT_FILENAME);
+            if is_legacy_default {
+                println!("Downloading JPL Ephemeris file.  File size is approx. 100MB");
+                download_if_not_exist(path, None)?;
+            }
+        }
+        Self::parse(&std::fs::read(path)?)
+    }
+
+    /// Parse a JPL ephemeris from an in-memory byte buffer.
+    ///
+    /// The parser is fully header-driven: `de_version`, `n_con`, the
+    /// interpolation pointer table `ipt[15][3]`, the kernel size, and the JD
+    /// span are all read from the file header, so DE405 / DE421 / DE430 /
+    /// DE440 / DE441 all load through the same code path.
+    fn parse(raw: &[u8]) -> Result<Self> {
         use std::collections::HashMap;
-        use std::path::PathBuf;
 
         // Dimensions of ephemeris for given index
         const fn dimension(idx: usize) -> usize {
@@ -234,15 +365,6 @@ impl JPLEphem {
             }
         }
 
-        // Open the file
-        let path = datadir().unwrap_or_else(|_| PathBuf::from(".")).join(fname);
-        if !path.is_file() {
-            println!("Downloading JPL Ephemeris file.  File size is approx. 100MB");
-        }
-        download_if_not_exist(&path, None)?;
-
-        // Read in bytes
-        let raw = std::fs::read(path)?;
         let title: &str = std::str::from_utf8(&raw[0..84])?;
 
         // Get version
