@@ -1,6 +1,5 @@
 use crate::utils::{datadir, download_if_not_exist};
 use std::collections::HashMap;
-use std::io::{self, BufRead};
 use std::num::{ParseFloatError, ParseIntError};
 use std::path::PathBuf;
 use thiserror::Error;
@@ -20,6 +19,17 @@ pub enum Error {
     /// Failed to open the gravity model file.
     #[error("Failed to open gravity model file: {0}")]
     OpenFailed(#[source] std::io::Error),
+
+    /// Bytes passed to [`Gravity::from_bytes`] were not valid UTF-8 — the
+    /// ICGEM `.gfc` gravity-model file is a text format.
+    #[error("gravity-model byte buffer is not valid UTF-8: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
+
+    /// Returned by [`init_from_bytes`] / [`init_from_path`] when the gravity
+    /// singleton for the requested [`GravityModel`] has already been
+    /// initialized.
+    #[error("gravity singleton for {0} is already initialized")]
+    AlreadyInitialized(GravityModel),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -84,36 +94,87 @@ impl GravityModel {
     }
 }
 
+// Module-scope singletons. Moved out of their respective accessor
+// functions so [`init_from_bytes`] / [`init_from_path`] can populate them
+// before any caller triggers the lazy default load.
+static JGM3_INSTANCE: OnceLock<Gravity> = OnceLock::new();
+static JGM2_INSTANCE: OnceLock<Gravity> = OnceLock::new();
+static EGM96_INSTANCE: OnceLock<Gravity> = OnceLock::new();
+static ITU_GRACE16_INSTANCE: OnceLock<Gravity> = OnceLock::new();
+
+fn instance_for(model: GravityModel) -> &'static OnceLock<Gravity> {
+    match model {
+        GravityModel::JGM3 => &JGM3_INSTANCE,
+        GravityModel::JGM2 => &JGM2_INSTANCE,
+        GravityModel::EGM96 => &EGM96_INSTANCE,
+        GravityModel::ITUGrace16 => &ITU_GRACE16_INSTANCE,
+    }
+}
+
+/// Default `.gfc` filename for the given model (used by the lazy
+/// default-resolver to find the file under [`datadir`]).
+const fn default_filename(model: GravityModel) -> &'static str {
+    match model {
+        GravityModel::JGM3 => "JGM3.gfc",
+        GravityModel::JGM2 => "JGM2.gfc",
+        GravityModel::EGM96 => "EGM96.gfc",
+        GravityModel::ITUGrace16 => "ITU_GRACE16.gfc",
+    }
+}
+
 ///
 /// Singleton for JGM3 gravity model
 ///
 pub fn jgm3() -> &'static Gravity {
-    static INSTANCE: OnceLock<Gravity> = OnceLock::new();
-    INSTANCE.get_or_init(|| Gravity::from_file("JGM3.gfc").unwrap())
+    JGM3_INSTANCE.get_or_init(|| Gravity::from_file(default_filename(GravityModel::JGM3)).unwrap())
 }
 
 ///
 /// Singleton for JGM2 gravity model
 ///
 pub fn jgm2() -> &'static Gravity {
-    static INSTANCE: OnceLock<Gravity> = OnceLock::new();
-    INSTANCE.get_or_init(|| Gravity::from_file("JGM2.gfc").unwrap())
+    JGM2_INSTANCE.get_or_init(|| Gravity::from_file(default_filename(GravityModel::JGM2)).unwrap())
 }
 
 ///
 /// Singleton for EGM96 gravity model
 ///
 pub fn egm96() -> &'static Gravity {
-    static INSTANCE: OnceLock<Gravity> = OnceLock::new();
-    INSTANCE.get_or_init(|| Gravity::from_file("EGM96.gfc").unwrap())
+    EGM96_INSTANCE
+        .get_or_init(|| Gravity::from_file(default_filename(GravityModel::EGM96)).unwrap())
 }
 
 ///
 /// Singleton for ITU GRACE16 gravity model
 ///
 pub fn itu_grace16() -> &'static Gravity {
-    static INSTANCE: OnceLock<Gravity> = OnceLock::new();
-    INSTANCE.get_or_init(|| Gravity::from_file("ITU_GRACE16.gfc").unwrap())
+    ITU_GRACE16_INSTANCE
+        .get_or_init(|| Gravity::from_file(default_filename(GravityModel::ITUGrace16)).unwrap())
+}
+
+/// Initialize the gravity-model singleton for `model` from an in-memory
+/// byte buffer.
+///
+/// The bytes must be a valid ICGEM `.gfc` text file (UTF-8).
+///
+/// Must be called *before* any acceleration / coefficient query for this
+/// model, otherwise the lazy default-resolver init has already won and
+/// this returns [`Error::AlreadyInitialized`].
+pub fn init_from_bytes(model: GravityModel, bytes: &[u8]) -> Result<()> {
+    let gravity = Gravity::from_bytes(bytes)?;
+    instance_for(model)
+        .set(gravity)
+        .map_err(|_| Error::AlreadyInitialized(model))
+}
+
+/// Initialize the gravity-model singleton for `model` from a file at `path`.
+///
+/// Same semantics as [`init_from_bytes`]; see that function for details.
+pub fn init_from_path(model: GravityModel, path: &std::path::Path) -> Result<()> {
+    let gravity = Gravity::from_path(path)?;
+    instance_for(model)
+        .set(gravity)
+        .map_err(|_| Error::AlreadyInitialized(model))
 }
 
 ///
@@ -576,31 +637,37 @@ impl Gravity {
         (v, w)
     }
 
-    /// Load Gravity model coefficients from file
-    /// Files are at:
-    /// <http://icgem.gfz-potsdam.de/tom_longtime>
+    /// Load gravity-model coefficients from a file under [`datadir`] by
+    /// basename. Auto-downloads via [`download_if_not_exist`] if missing.
+    /// Files are at <http://icgem.gfz-potsdam.de/tom_longtime>.
     pub fn from_file(filename: &str) -> Result<Self> {
         let path = datadir().unwrap_or(PathBuf::from(".")).join(filename);
         download_if_not_exist(&path, None)?;
+        Self::from_path(&path)
+    }
 
-        /*
-        if !path.is_file() {
-            return skerror!("File does not exist");
-        }
-        */
+    /// Load gravity-model coefficients from a file at `path`. No download
+    /// is attempted — the file is expected to already exist.
+    pub fn from_path(path: &std::path::Path) -> Result<Self> {
+        let text = std::fs::read_to_string(path).map_err(Error::OpenFailed)?;
+        Self::parse(&text)
+    }
 
-        let file = std::fs::File::open(&path).map_err(Error::OpenFailed)?;
+    /// Load gravity-model coefficients from an in-memory byte buffer.
+    /// The buffer must be a valid ICGEM `.gfc` text file (UTF-8).
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::parse(std::str::from_utf8(bytes)?)
+    }
 
+    /// Parse gravity-model coefficients from an ICGEM `.gfc` text string.
+    pub fn parse(text: &str) -> Result<Self> {
         let mut name = String::new();
         let mut gravity_constant: f64 = 0.0;
         let mut radius: f64 = 0.0;
         let mut max_degree: usize = 0;
         let mut header_cnt = 0;
 
-        let lines: Vec<String> = io::BufReader::new(file)
-            .lines()
-            .map(|x| x.unwrap_or(String::from("")))
-            .collect();
+        let lines: Vec<&str> = text.lines().collect();
 
         // Read header lines
         for line in &lines {
@@ -618,10 +685,6 @@ impl Gravity {
                 radius = s[1].parse::<f64>()?;
             } else if s[0] == "max_degree" {
                 max_degree = s[1].parse::<usize>()?;
-                //cs = Some(na::DMatrix::<f64>::zeros(
-                //    (max_degree + 1) as usize,
-                //    (max_degree + 1) as usize,
-                //));
             } else if s[0] == "end_of_head" {
                 break;
             }
@@ -636,7 +699,7 @@ impl Gravity {
         for line in &lines[header_cnt..] {
             let s: Vec<&str> = line.split_whitespace().collect();
             if s.len() < 3 {
-                return Err(Error::InvalidLine(line.clone()));
+                return Err(Error::InvalidLine((*line).to_string()));
             }
 
             let n: usize = s[1].parse()?;
