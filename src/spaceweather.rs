@@ -1,6 +1,4 @@
 use std::cmp::Ordering;
-use std::fs::File;
-use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use crate::utils::{datadir, download_file, download_if_not_exist};
@@ -9,8 +7,6 @@ use crate::TimeLike;
 use thiserror::Error;
 
 use std::sync::RwLock;
-
-use std::sync::OnceLock;
 
 /// Errors produced by the [`spaceweather`](crate::spaceweather) module.
 #[derive(Debug, Error)]
@@ -32,6 +28,11 @@ pub enum Error {
          a writeable directory"
     )]
     DataDirReadOnly,
+
+    /// Bytes passed to [`init_from_bytes`] were not valid UTF-8 — the
+    /// space-weather file is a CSV text format.
+    #[error("space-weather byte buffer is not valid UTF-8: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -116,18 +117,11 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
     }
 }
 
-fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
-    let path = datadir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("SW-All.csv");
-    download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
-
-    let file = File::open(&path)?;
-    io::BufReader::new(file)
-        .lines()
+/// Parse a `SW-All.csv` text buffer into space-weather records.
+fn parse_csv(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
+    text.lines()
         .skip(1)
-        .map(|rline| -> Result<SpaceWeatherRecord> {
-            let line = rline.unwrap();
+        .map(|line| -> Result<SpaceWeatherRecord> {
             let lvals: Vec<&str> = line.split(",").collect();
 
             let year: u32 = str2num(lvals[0], 0, 4, "year")?;
@@ -168,9 +162,58 @@ fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
         .collect()
 }
 
-fn space_weather_singleton() -> &'static RwLock<Result<Vec<SpaceWeatherRecord>>> {
-    static INSTANCE: OnceLock<RwLock<Result<Vec<SpaceWeatherRecord>>>> = OnceLock::new();
-    INSTANCE.get_or_init(|| RwLock::new(load_space_weather_csv()))
+fn load_default_path() -> PathBuf {
+    datadir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("SW-All.csv")
+}
+
+/// Lazy default load from `SW-All.csv` under [`datadir`], with auto-download.
+fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
+    let path = load_default_path();
+    download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
+    parse_csv(&std::fs::read_to_string(&path)?)
+}
+
+/// Module-scope refreshable singleton. Const-initialized as `None` so the
+/// type stays simple; lazy-filled on first read, replaceable any time via
+/// [`init_from_bytes`] / [`init_from_path`] / [`update`].
+static SPACE_WEATHER: RwLock<Option<Vec<SpaceWeatherRecord>>> = RwLock::new(None);
+
+/// Initialize the space-weather singleton from an in-memory byte buffer.
+///
+/// The bytes must be a valid `SW-All.csv` text file (UTF-8). Unlike the
+/// static-data subsystems, this *always* succeeds and replaces any
+/// previously loaded data — space-weather records update daily and the
+/// refresh-in-place semantics are intentional.
+pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
+    let records = parse_csv(std::str::from_utf8(bytes)?)?;
+    *SPACE_WEATHER.write().unwrap() = Some(records);
+    Ok(())
+}
+
+/// Initialize the space-weather singleton from a file at `path`.
+///
+/// Same semantics as [`init_from_bytes`] but reads the file from disk.
+/// Always replaces any previously loaded data.
+pub fn init_from_path(path: &std::path::Path) -> Result<()> {
+    let records = parse_csv(&std::fs::read_to_string(path)?)?;
+    *SPACE_WEATHER.write().unwrap() = Some(records);
+    Ok(())
+}
+
+/// Ensure the singleton has been populated, lazy-loading from the default
+/// CSV path on first access.
+fn ensure_loaded() -> Result<()> {
+    if SPACE_WEATHER.read().unwrap().is_some() {
+        return Ok(());
+    }
+    let records = load_space_weather_csv()?;
+    let mut guard = SPACE_WEATHER.write().unwrap();
+    if guard.is_none() {
+        *guard = Some(records);
+    }
+    Ok(())
 }
 
 ///
@@ -191,8 +234,9 @@ fn space_weather_singleton() -> &'static RwLock<Result<Vec<SpaceWeatherRecord>>>
 /// * Space weather is updated daily in a file: sw19571001.txt
 pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     let tm = tm.as_instant();
-    let sw_lock = space_weather_singleton().read().unwrap();
-    let sw = sw_lock.as_ref().unwrap();
+    ensure_loaded()?;
+    let guard = SPACE_WEATHER.read().unwrap();
+    let sw = guard.as_ref().expect("ensure_loaded just populated it");
 
     // First, try simple indexing
     let idx = (tm - sw[0].date).as_days().floor() as usize;
@@ -215,11 +259,12 @@ pub fn update() -> Result<()> {
         return Err(Error::DataDirReadOnly);
     }
 
-    // Download most-recent EOP
+    // Download most-recent SW file
     let url = "https://celestrak.org/SpaceData/sw19571001.txt";
     download_file(url, &d, true)?;
 
-    *space_weather_singleton().write().unwrap() = load_space_weather_csv();
+    let records = load_space_weather_csv()?;
+    *SPACE_WEATHER.write().unwrap() = Some(records);
     Ok(())
 }
 

@@ -27,12 +27,16 @@
 
 mod dispatch;
 mod error;
-mod ierstable;
+pub mod ierstable;
 mod qcirs2gcrs;
 
 pub use dispatch::{rotation, rotation_approx, transform_state, transform_state_approx};
 
 pub use error::{Error, Result};
+
+/// Convenience re-exports for the IERS-table init API. See
+/// [`ierstable`] for details.
+pub use ierstable::{init_from_bytes as init_iers_table_from_bytes, init_from_path as init_iers_table_from_path, IersTableId};
 
 use crate::{TimeLike, TimeScale};
 use std::f64::consts::PI;

@@ -20,8 +20,8 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::num::ParseFloatError;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-use std::sync::Once;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Once, RwLock};
 
 use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
@@ -64,6 +64,11 @@ pub enum Error {
     )]
     DataDirReadOnly,
 
+    /// Bytes passed to [`init_from_bytes`] were not valid UTF-8 — the
+    /// EOP file is a CSV text format.
+    #[error("EOP byte buffer is not valid UTF-8: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -93,22 +98,11 @@ struct EOPEntry {
     dY: f64,
 }
 
-fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
-    let path: PathBuf = filename.unwrap_or_else(|| {
-        datadir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("EOP-All.csv")
-    });
-    // Download EOP data from celetrak.org
-    download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
-
-    let file: File = File::open(&path)?;
-
-    io::BufReader::new(file)
-        .lines()
+/// Parse an `EOP-All.csv` text buffer into EOP entries.
+fn parse_csv(text: &str) -> Result<Vec<EOPEntry>> {
+    text.lines()
         .skip(1)
-        .map(|rline| -> Result<EOPEntry> {
-            let line = rline.unwrap();
+        .map(|line| -> Result<EOPEntry> {
             let lvals: Vec<&str> = line.split(",").collect();
             if lvals.len() < 12 {
                 return Err(Error::InvalidEntry);
@@ -124,6 +118,15 @@ fn load_eop_file_csv(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
             })
         })
         .collect()
+}
+
+/// Lazy default load from `EOP-All.csv` under [`datadir`], with auto-download.
+fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
+    let path = datadir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("EOP-All.csv");
+    download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
+    parse_csv(&std::fs::read_to_string(&path)?)
 }
 
 #[allow(dead_code)]
@@ -209,25 +212,45 @@ fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
 }
 
 static WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
-static EOP_INIT: Once = Once::new();
-static EOP_PTR: AtomicPtr<Vec<EOPEntry>> = AtomicPtr::new(std::ptr::null_mut());
 
-/// Ensure EOP data is loaded (runs at most once).
-fn ensure_eop_loaded() {
-    EOP_INIT.call_once(|| {
-        let data = Box::new(load_eop_file_csv(None).unwrap_or_default());
-        EOP_PTR.store(Box::into_raw(data), Ordering::Release);
+/// Module-scope refreshable singleton. Const-initialized as `None`;
+/// the lazy default load (best-effort, silent on failure) runs at most
+/// once via [`DEFAULT_LOAD_ONCE`]. [`init_from_bytes`] /
+/// [`init_from_path`] / [`update`] replace any current contents.
+static EOP: RwLock<Option<Vec<EOPEntry>>> = RwLock::new(None);
+static DEFAULT_LOAD_ONCE: Once = Once::new();
+
+/// Best-effort default load on first read. Failures are silent — if EOP
+/// can't be loaded, the singleton stays `None` and queries fall through
+/// to the "no data" branch.
+fn ensure_default_loaded() {
+    DEFAULT_LOAD_ONCE.call_once(|| {
+        if let Ok(records) = load_eop_file_csv() {
+            *EOP.write().unwrap() = Some(records);
+        }
     });
 }
 
-/// Get a lock-free reference to the EOP data.
+/// Initialize the EOP singleton from an in-memory byte buffer.
 ///
-/// SAFETY: After `ensure_eop_loaded()`, `EOP_PTR` is non-null and points to
-/// a valid `Vec<EOPEntry>`. The data is never freed — old allocations are
-/// intentionally leaked on `update()` since other threads may reference them.
-fn eop_data() -> &'static Vec<EOPEntry> {
-    ensure_eop_loaded();
-    unsafe { &*EOP_PTR.load(Ordering::Acquire) }
+/// The bytes must be a valid CelesTrak `EOP-All.csv` text file (UTF-8).
+/// Always succeeds and replaces any previously loaded data — IERS
+/// publishes new EOP daily and refresh-in-place is the intended model.
+pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
+    let records = parse_csv(std::str::from_utf8(bytes)?)?;
+    DEFAULT_LOAD_ONCE.call_once(|| {});
+    *EOP.write().unwrap() = Some(records);
+    Ok(())
+}
+
+/// Initialize the EOP singleton from a file at `path`.
+///
+/// Same semantics as [`init_from_bytes`]; always replaces.
+pub fn init_from_path(path: &std::path::Path) -> Result<()> {
+    let records = parse_csv(&std::fs::read_to_string(path)?)?;
+    DEFAULT_LOAD_ONCE.call_once(|| {});
+    *EOP.write().unwrap() = Some(records);
+    Ok(())
 }
 
 ///
@@ -256,11 +279,9 @@ pub fn update() -> Result<()> {
     let url = "http://celestrak.org/SpaceData/EOP-All.csv";
     download_file(url, &d, true)?;
 
-    // Ensure initial pointer is valid, then swap in new data.
-    // Old allocation is intentionally leaked (other threads may reference it).
-    ensure_eop_loaded();
-    let new_data = Box::into_raw(Box::new(load_eop_file_csv(None)?));
-    EOP_PTR.store(new_data, Ordering::Release);
+    let records = load_eop_file_csv()?;
+    DEFAULT_LOAD_ONCE.call_once(|| {});
+    *EOP.write().unwrap() = Some(records);
 
     Ok(())
 }
@@ -288,7 +309,9 @@ pub fn update() -> Result<()> {
 /// * If time is after range of file, returns the last entry's values (constant extrapolation)
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
-    let eop = eop_data();
+    ensure_default_loaded();
+    let guard = EOP.read().unwrap();
+    let eop = guard.as_ref()?;
 
     // Binary search: find first entry with mjd_utc > query (O(log n) vs O(n) linear scan)
     let idx = eop.partition_point(|x| x.mjd_utc <= mjd_utc);
@@ -363,7 +386,10 @@ mod tests {
     /// Check that data is loaded
     #[test]
     fn loaded() {
-        assert!(eop_data()[0].mjd_utc >= 0.0);
+        ensure_default_loaded();
+        let guard = EOP.read().unwrap();
+        let eop = guard.as_ref().expect("default EOP load should succeed in tests");
+        assert!(eop[0].mjd_utc >= 0.0);
     }
 
     #[test]
