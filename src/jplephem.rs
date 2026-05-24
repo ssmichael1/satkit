@@ -175,10 +175,11 @@ const LEGACY_DEFAULT_FILENAME: &str = "linux_p1550p2650.440";
 /// 1. `SATKIT_JPLEPHEM_FILE` env var. If the value contains a path separator
 ///    or is absolute it's used directly; otherwise it's resolved against
 ///    [`datadir`].
-/// 2. Autodetect: scan [`datadir`] for files matching `linux_p*.4XX` and pick
-///    the highest DE-version suffix (e.g. `.440` > `.430` > `.421`). This is
-///    what lets a bundled `de440s` (`linux_p1850p2150.440`) be picked up
-///    automatically once placed in the data dir.
+/// 2. Autodetect: scan [`datadir`] for files matching `linux_p*.4XX` or
+///    `lnxp*.4XX` and pick the highest DE-version suffix (e.g. `.440` >
+///    `.430` > `.421`). The two prefixes cover the entire JPL DE4XX
+///    family — `lnxp*` for DE421 and earlier, `linux_p*` for DE430 and
+///    later.
 /// 3. Fall back to [`LEGACY_DEFAULT_FILENAME`] under [`datadir`], which will
 ///    be auto-downloaded on first use.
 fn resolve_default_path() -> std::path::PathBuf {
@@ -203,7 +204,10 @@ fn resolve_default_path() -> std::path::PathBuf {
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if !name.starts_with("linux_p") {
+            // JPL's Linux little-endian binaries use two prefix conventions:
+            //   `linux_p<start>p<stop>.4XX` — DE430 and later (DE430/440/441)
+            //   `lnxp<start>p<stop>.4XX`    — DE421 and earlier
+            if !(name.starts_with("linux_p") || name.starts_with("lnxp")) {
                 continue;
             }
             let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
