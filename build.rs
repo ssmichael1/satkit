@@ -4,24 +4,29 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn main() {
     // NRLMSISE-00 is now pure Rust (src/nrlmsise.rs), no C compilation needed
 
-    // Record git hash to compile-time environment variable
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .unwrap();
-    let git_hash = String::from_utf8(output.stdout).unwrap();
-    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+    // Record git hash to compile-time environment variable. Sdist /
+    // tarball builds (PyPI source distributions, conda-forge builds from
+    // a github archive, etc.) have no .git directory — fall back to
+    // "unknown" rather than blowing up the build.
+    println!("cargo:rustc-env=GIT_HASH={}", git_output(&["rev-parse", "HEAD"]));
+    println!("cargo:rustc-env=GIT_TAG={}", git_output(&["describe", "--tags"]));
     println!("cargo:rustc-env=BUILD_DATE={}", build_date_iso8601());
+}
 
-    // Record git tag
-    let output = Command::new("git")
-        .args(["describe", "--tags"])
+fn git_output(args: &[&str]) -> String {
+    Command::new("git")
+        .args(args)
         .output()
-        .unwrap();
-    println!(
-        "cargo:rustc-env=GIT_TAG={}",
-        String::from_utf8(output.stdout).unwrap()
-    );
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 fn build_date_iso8601() -> String {
