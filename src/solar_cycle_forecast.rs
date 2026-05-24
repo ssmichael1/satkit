@@ -15,9 +15,7 @@ use std::num::ParseIntError;
 use thiserror::Error;
 
 use std::path::PathBuf;
-use std::sync::RwLock;
-
-use std::sync::OnceLock;
+use std::sync::{Once, RwLock};
 
 /// Errors produced by the [`solar_cycle_forecast`](crate::solar_cycle_forecast)
 /// module.
@@ -42,6 +40,11 @@ pub enum Error {
     /// The downloaded forecast contains zero records.
     #[error("Downloaded forecast contains no records")]
     EmptyForecast,
+
+    /// Bytes passed to [`init_from_bytes`] were not valid UTF-8 — the
+    /// solar-cycle forecast file is a JSON text format.
+    #[error("solar-cycle forecast byte buffer is not valid UTF-8: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -120,9 +123,48 @@ fn parse_forecast_json(contents: &str) -> Result<Vec<ForecastRecord>> {
     Ok(records)
 }
 
-fn forecast_singleton() -> &'static RwLock<Option<Vec<ForecastRecord>>> {
-    static INSTANCE: OnceLock<RwLock<Option<Vec<ForecastRecord>>>> = OnceLock::new();
-    INSTANCE.get_or_init(|| RwLock::new(load_forecast().ok()))
+/// Module-scope refreshable singleton. Const-initialized as `None`;
+/// the lazy default load (best-effort, silent on missing file) runs at
+/// most once via [`DEFAULT_LOAD_ONCE`]. [`init_from_bytes`] /
+/// [`init_from_path`] / [`update`] replace any current contents.
+static SOLAR_FORECAST: RwLock<Option<Vec<ForecastRecord>>> = RwLock::new(None);
+static DEFAULT_LOAD_ONCE: Once = Once::new();
+
+/// Best-effort default load on first read. Failures are silent — the
+/// forecast is a fallback for future propagation dates; if it's missing,
+/// callers get `None` from [`get_predicted_f107`].
+fn ensure_default_loaded() {
+    DEFAULT_LOAD_ONCE.call_once(|| {
+        if let Ok(records) = load_forecast() {
+            *SOLAR_FORECAST.write().unwrap() = Some(records);
+        }
+    });
+}
+
+/// Initialize the solar-cycle-forecast singleton from an in-memory byte
+/// buffer.
+///
+/// The bytes must be a valid NOAA/SWPC `predicted-solar-cycle.json` text
+/// document (UTF-8). Always succeeds and replaces any previously loaded
+/// data — like spaceweather, this subsystem is intentionally
+/// refresh-in-place.
+pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
+    let records = parse_forecast_json(std::str::from_utf8(bytes)?)?;
+    // Mark the default-load slot as consumed so it doesn't later overwrite.
+    DEFAULT_LOAD_ONCE.call_once(|| {});
+    *SOLAR_FORECAST.write().unwrap() = Some(records);
+    Ok(())
+}
+
+/// Initialize the solar-cycle-forecast singleton from a JSON file at
+/// `path`.
+///
+/// Same semantics as [`init_from_bytes`]; always replaces.
+pub fn init_from_path(path: &std::path::Path) -> Result<()> {
+    let records = parse_forecast_json(&std::fs::read_to_string(path)?)?;
+    DEFAULT_LOAD_ONCE.call_once(|| {});
+    *SOLAR_FORECAST.write().unwrap() = Some(records);
+    Ok(())
 }
 
 /// Get predicted F10.7 solar flux for a given time.
@@ -133,7 +175,8 @@ fn forecast_singleton() -> &'static RwLock<Option<Vec<ForecastRecord>>> {
 /// is outside the forecast range.
 pub fn get_predicted_f107<T: TimeLike>(tm: &T) -> Option<f64> {
     let tm = tm.as_instant();
-    let lock = forecast_singleton().read().unwrap();
+    ensure_default_loaded();
+    let lock = SOLAR_FORECAST.read().unwrap();
     let records = lock.as_ref()?;
 
     if records.is_empty() {
@@ -180,7 +223,8 @@ pub fn update() -> Result<()> {
     std::fs::write(&path, &contents)?;
 
     // Reload singleton
-    *forecast_singleton().write().unwrap() = Some(records);
+    DEFAULT_LOAD_ONCE.call_once(|| {});
+    *SOLAR_FORECAST.write().unwrap() = Some(records);
 
     Ok(())
 }
@@ -214,7 +258,8 @@ mod tests {
             {"time-tag": "2026-07", "predicted_ssn": 90.0, "predicted_f10.7": 120.0}
         ]"#;
         let records = parse_forecast_json(json).unwrap();
-        *forecast_singleton().write().unwrap() = Some(records);
+        DEFAULT_LOAD_ONCE.call_once(|| {});
+        *SOLAR_FORECAST.write().unwrap() = Some(records);
 
         // Midpoint should be ~130
         let mid = Instant::from_date(2026, 4, 15).unwrap();

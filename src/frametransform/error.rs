@@ -5,6 +5,7 @@ use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 
 use crate::Frame;
+use super::ierstable::IersTableId;
 
 /// Errors produced by the
 /// [`frametransform`](crate::frametransform) module.
@@ -52,6 +53,18 @@ pub enum Error {
     /// table dimension was declared.
     #[error("Error parsing file {fname}, table not initialized")]
     IersTableNotInitialized { fname: String },
+
+    /// Bytes passed to [`IERSTable::from_bytes`](super::ierstable::IERSTable::from_bytes)
+    /// or [`init_from_bytes`](super::ierstable::init_from_bytes) were not
+    /// valid UTF-8 — the IERS table file is a text format.
+    #[error("IERS table byte buffer is not valid UTF-8: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
+
+    /// Returned by [`init_from_bytes`](super::ierstable::init_from_bytes) /
+    /// [`init_from_path`](super::ierstable::init_from_path) when the IERS
+    /// table singleton identified by `id` has already been initialized.
+    #[error("IERS table singleton {id:?} is already initialized")]
+    IersTableAlreadyInitialized { id: IersTableId },
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

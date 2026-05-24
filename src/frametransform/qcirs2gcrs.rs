@@ -1,4 +1,4 @@
-use super::ierstable::IERSTable;
+use super::ierstable::{table, IersTableId};
 use crate::{TimeLike, TimeScale};
 
 use crate::mathtypes::*;
@@ -6,23 +6,6 @@ use crate::mathtypes::*;
 type Delaunay = numeris::Vector<f64, 14>;
 
 use std::f64::consts::PI;
-
-use std::sync::OnceLock;
-
-fn table5a_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
-    INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2a.txt").unwrap())
-}
-
-fn table5b_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
-    INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2b.txt").unwrap())
-}
-
-fn table5d_singleton() -> &'static IERSTable {
-    static INSTANCE: OnceLock<IERSTable> = OnceLock::new();
-    INSTANCE.get_or_init(|| IERSTable::from_file("tab5.2d.txt").unwrap())
-}
 
 pub fn qcirs2gcrs_dxdy<T: TimeLike>(tm: &T, dxdy: Option<(f64, f64)>) -> Quaternion {
     let t_tt = (tm.as_mjd_with_scale(TimeScale::TT) - 51544.5) / 36525.0;
@@ -128,9 +111,9 @@ pub fn qcirs2gcrs_dxdy<T: TimeLike>(tm: &T, dxdy: Option<(f64, f64)>) -> Quatern
         94.0,
     );
 
-    let xsums = table5a_singleton().compute(t_tt, &delaunay);
-    let ysums = table5b_singleton().compute(t_tt, &delaunay);
-    let ssums = table5d_singleton().compute(t_tt, &delaunay);
+    let xsums = table(IersTableId::Tab5A).compute(t_tt, &delaunay);
+    let ysums = table(IersTableId::Tab5B).compute(t_tt, &delaunay);
+    let ssums = table(IersTableId::Tab5D).compute(t_tt, &delaunay);
     let mut x = xsums.mul_add(1.0e-6, x0) * ASEC2RAD;
     let mut y = ysums.mul_add(1.0e-6, y0) * ASEC2RAD;
     // If dX and dY are passed in, they are in milli-arcsecs

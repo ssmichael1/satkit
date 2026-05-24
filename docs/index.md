@@ -6,7 +6,10 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/satkit)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/satkit)
 [![Crates.io](https://img.shields.io/crates/v/satkit)](https://crates.io/crates/satkit)
-![License: MIT](https://img.shields.io/github/license/ssmichael1/satkit)
+[![docs.rs](https://img.shields.io/docsrs/satkit)](https://docs.rs/satkit)
+![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)
+
+📚 **API documentation:** [**Python**](api/index.md) on this site · [**Rust**](https://docs.rs/satkit) on docs.rs.
 
 SatKit is a high-performance orbital mechanics library written in Rust with complete Python bindings via PyO3. It handles coordinate transforms, orbit propagation, time systems, gravity models, atmospheric density, and JPL ephemerides -- everything needed for satellite astrodynamics work.
 
