@@ -1,6 +1,7 @@
 //! Orbit Propagation Settings
 
 use crate::earthgravity::GravityModel;
+use crate::orbitprop::tides::TideModel;
 use crate::orbitprop::Precomputed;
 use crate::TimeLike;
 
@@ -63,6 +64,8 @@ impl std::fmt::Display for Integrator {
 /// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
 /// * `use_sun_gravity` - Do we include sun third-body gravitational perturbation.  Default is true
 /// * `use_moon_gravity` - Do we include moon third-body gravitational perturbation.  Default is true
+/// * `tide_model` - Solid Earth tide model. Default is `TideModel::SolidStep1`
+///   (IERS 2010 §6.2.1 frequency-independent Love-number response).
 /// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true
 ///   slight computation savings if set to false
 /// * `integrator` - which Runge-Kutta integrator to use.  Default is RKV98
@@ -83,6 +86,7 @@ pub struct PropSettings {
     pub use_spaceweather: bool,
     pub use_sun_gravity: bool,
     pub use_moon_gravity: bool,
+    pub tide_model: TideModel,
     pub enable_interp: bool,
     pub integrator: Integrator,
     /// Fixed step size (seconds) used by [`Integrator::GaussJackson8`].
@@ -108,6 +112,7 @@ impl Default for PropSettings {
             use_spaceweather: true,
             use_sun_gravity: true,
             use_moon_gravity: true,
+            tide_model: TideModel::default(),
             enable_interp: true,
             integrator: Integrator::default(),
             gj_step_seconds: 60.0,
@@ -227,6 +232,7 @@ impl std::fmt::Display for PropSettings {
             Space Weather: {},
             Sun Gravity: {},
             Moon Gravity: {},
+            Tide Model: {:?},
             Interpolation: {},
             Integrator: {},
             Max Steps: {},
@@ -239,6 +245,7 @@ impl std::fmt::Display for PropSettings {
             self.use_spaceweather,
             self.use_sun_gravity,
             self.use_moon_gravity,
+            self.tide_model,
             self.enable_interp,
             self.integrator,
             self.max_steps,
