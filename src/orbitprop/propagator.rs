@@ -1,6 +1,7 @@
 use super::drag::{drag_and_partials, drag_force};
 use super::point_gravity::{point_gravity, point_gravity_and_partials};
 use super::settings::PropSettings;
+use super::tides::{self, TideModel};
 
 use crate::lpephem;
 use crate::orbitprop::Precomputed;
@@ -338,6 +339,17 @@ pub fn propagate<const C: usize, T: TimeLike>(
             }
         }
 
+        // Solid Earth tides. Partials w.r.t. position are negligible
+        // (≲1e-12 of J2 partials) and are omitted from the STM update.
+        if settings.tide_model != TideModel::None {
+            let sun_itrf = qgcrf2itrf * sun_gcrf;
+            let moon_itrf = qgcrf2itrf * moon_gcrf;
+            let deltas =
+                tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
+            accel += qitrf2gcrf
+                * tides::tide_accel(&pos_itrf, &deltas, gravity.gravity_constant, gravity.radius);
+        }
+
         if let Some(props) = satprops {
             let ss: SimpleState = y.block::<6, 1>(0, 0);
             accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
@@ -489,6 +501,20 @@ pub fn propagate<const C: usize, T: TimeLike>(
                     accel += point_gravity(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
                 }
 
+                if settings.tide_model != TideModel::None {
+                    let sun_itrf = qgcrf2itrf * sun_gcrf;
+                    let moon_itrf = qgcrf2itrf * moon_gcrf;
+                    let deltas =
+                        tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
+                    accel += qitrf2gcrf
+                        * tides::tide_accel(
+                            &pos_itrf,
+                            &deltas,
+                            gravity.gravity_constant,
+                            gravity.radius,
+                        );
+                }
+
                 if let Some(props) = satprops {
                     let ss: SimpleState = y.block::<6, 1>(0, 0);
                     accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
@@ -566,6 +592,20 @@ pub fn propagate<const C: usize, T: TimeLike>(
                 }
                 if settings.use_moon_gravity {
                     accel += point_gravity(r, &moon_gcrf, consts::MU_MOON);
+                }
+
+                if settings.tide_model != TideModel::None {
+                    let sun_itrf = qgcrf2itrf * sun_gcrf;
+                    let moon_itrf = qgcrf2itrf * moon_gcrf;
+                    let deltas =
+                        tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
+                    accel += qitrf2gcrf
+                        * tides::tide_accel(
+                            &pos_itrf,
+                            &deltas,
+                            gravity.gravity_constant,
+                            gravity.radius,
+                        );
                 }
 
                 if let Some(props) = satprops {
@@ -1148,6 +1188,51 @@ mod tests {
         assert!(
             diff_both > diff_sun,
             "Disabling both should differ more than just sun"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_solid_tides_perturb_orbit() -> Result<()> {
+        // Verify that enabling solid Earth tides actually changes the
+        // propagated state. Expected magnitude: ~tens of cm to a few m
+        // over half a day at GEO (M&G Table 3.1).
+        use crate::orbitprop::TideModel;
+
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_days(0.5);
+
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = consts::GEO_R;
+        state[4] = (consts::MU_EARTH / consts::GEO_R).sqrt();
+
+        let settings_with = PropSettings {
+            abs_error: 1.0e-10,
+            rel_error: 1.0e-13,
+            gravity_degree: 8,
+            gravity_order: 8,
+            tide_model: TideModel::SolidStep1,
+            ..Default::default()
+        };
+        let settings_without = PropSettings {
+            tide_model: TideModel::None,
+            ..settings_with.clone()
+        };
+
+        let res_with = propagate(&state, &starttime, &stoptime, &settings_with, None)?;
+        let res_without = propagate(&state, &starttime, &stoptime, &settings_without, None)?;
+
+        let diff = (res_with.state_end.block::<3, 1>(0, 0)
+            - res_without.state_end.block::<3, 1>(0, 0))
+        .norm();
+        println!("Tide-induced GEO position diff over 0.5d = {:.4} m", diff);
+        // GEO half-day: tide-driven position drift should be roughly
+        // 0.1 m to 10 m. Bounds are wide to absorb model & geometry effects.
+        assert!(
+            (0.05..50.0).contains(&diff),
+            "Tide-induced GEO position diff over 0.5d = {} m (expected ~0.1-10)",
+            diff
         );
 
         Ok(())
