@@ -281,12 +281,58 @@ class TestHighPrecisionPropagation:
             satproperties=satprops,
         )
 
-        # See if propagator is accurate to < 8 meters over 1 day on
-        # each Cartesian axis
+        # Per-axis position residual after 1 day. Tightened from 8 m to
+        # 6.5 m when solid Earth tides (TideModel.SolidStep1) became the
+        # default in propsettings.
         for iv in range(pgcrf.shape[0] - 5):
             state = res.interp(timearr[iv])
             for ix in range(0, 3):
-                assert m.fabs(state[ix] - pgcrf[iv, ix]) < 8
+                assert m.fabs(state[ix] - pgcrf[iv, ix]) < 6.5
+
+
+class TestSolidTides:
+    """Python bindings for the solid Earth tide model."""
+
+    def test_enum_members(self):
+        assert hasattr(sk, "tidemodel")
+        assert sk.tidemodel.none != sk.tidemodel.solid_step1
+        assert sk.tidemodel.solid_step1 != sk.tidemodel.solid_full
+
+    def test_default_is_solid_step1(self):
+        ps = sk.propsettings()
+        assert ps.tide_model == sk.tidemodel.solid_step1
+
+    def test_setter_and_kwarg(self):
+        ps = sk.propsettings(tide_model=sk.tidemodel.none)
+        assert ps.tide_model == sk.tidemodel.none
+        ps.tide_model = sk.tidemodel.solid_step1
+        assert ps.tide_model == sk.tidemodel.solid_step1
+
+    def test_propagation_with_vs_without_tides_differs(self):
+        """Toggling tides must produce a measurable position difference
+        at GEO over half a day (~0.3 m expected, well above numerical noise)."""
+        starttime = sk.time(2015, 3, 20, 0, 0, 0)
+        stoptime = starttime + sk.duration.from_days(0.5)
+        pos = np.array([sk.consts.geo_r, 0, 0])
+        vel = np.array([0, m.sqrt(sk.consts.mu_earth / sk.consts.geo_r), 0])
+        state0 = np.concatenate((pos, vel))
+
+        settings_on = sk.propsettings(
+            tide_model=sk.tidemodel.solid_step1,
+            gravity_degree=8,
+            abs_error=1e-10,
+            rel_error=1e-13,
+        )
+        settings_off = sk.propsettings(
+            tide_model=sk.tidemodel.none,
+            gravity_degree=8,
+            abs_error=1e-10,
+            rel_error=1e-13,
+        )
+        res_on = sk.propagate(state0, starttime, end=stoptime, propsettings=settings_on)
+        res_off = sk.propagate(state0, starttime, end=stoptime, propsettings=settings_off)
+        diff = np.linalg.norm(res_on.state[0:3] - res_off.state[0:3])
+        assert 0.05 < diff < 50.0, f"tide-induced GEO diff over 0.5d = {diff} m"
 
 
 class TestSatState:

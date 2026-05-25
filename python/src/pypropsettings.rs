@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 
 use crate::pygravity::GravModel;
 use crate::{PyDuration, PyInstant};
-use satkit::orbitprop::{Integrator, PropSettings};
+use satkit::orbitprop::{Integrator, PropSettings, TideModel};
 
 use pyo3::types::{PyDelta, PyDeltaAccess, PyDict, PyString};
 
@@ -53,6 +53,41 @@ impl From<Integrator> for PyIntegrator {
             Integrator::RKTS54 => PyIntegrator::rkts54,
             Integrator::RODAS4 => PyIntegrator::rodas4,
             Integrator::GaussJackson8 => PyIntegrator::gauss_jackson8,
+        }
+    }
+}
+
+/// Solid Earth tide model selector.
+#[allow(non_camel_case_types)]
+#[pyclass(name = "tidemodel", eq, eq_int, from_py_object)]
+#[derive(Clone, PartialEq, Eq)]
+pub enum PyTideModel {
+    /// No solid Earth tide correction.
+    none = 0,
+    /// IERS 2010 §6.2.1 Step 1 — frequency-independent Love-number
+    /// response. Accounts for ≈99% of the solid-tide signal. Default.
+    solid_step1 = 1,
+    /// IERS 2010 §6.2.1 Step 1 + §6.2.2 Step 2. Step 2 is not yet
+    /// implemented; currently falls back to Step 1.
+    solid_full = 2,
+}
+
+impl From<PyTideModel> for TideModel {
+    fn from(t: PyTideModel) -> Self {
+        match t {
+            PyTideModel::none => TideModel::None,
+            PyTideModel::solid_step1 => TideModel::SolidStep1,
+            PyTideModel::solid_full => TideModel::SolidFull,
+        }
+    }
+}
+
+impl From<TideModel> for PyTideModel {
+    fn from(t: TideModel) -> Self {
+        match t {
+            TideModel::None => PyTideModel::none,
+            TideModel::SolidStep1 => PyTideModel::solid_step1,
+            TideModel::SolidFull => PyTideModel::solid_full,
         }
     }
 }
@@ -125,6 +160,15 @@ impl PyPropSettings {
             if let Some(maxsteps) = kw.get_item("max_steps")? {
                 ps.max_steps = maxsteps.extract::<usize>()?;
                 kw.del_item("max_steps")?;
+            }
+            if let Some(tm) = kw.get_item("tide_model")? {
+                let tide: PyTideModel = tm.extract::<PyTideModel>().map_err(|_| {
+                    pyo3::exceptions::PyValueError::new_err(
+                        "tide_model must be a satkit.tidemodel enum value (e.g. satkit.tidemodel.solid_step1)",
+                    )
+                })?;
+                ps.tide_model = tide.into();
+                kw.del_item("tide_model")?;
             }
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
@@ -287,6 +331,17 @@ impl PyPropSettings {
     #[setter(max_steps)]
     fn set_max_steps(&mut self, val: usize) -> PyResult<()> {
         self.0.max_steps = val;
+        Ok(())
+    }
+
+    #[getter]
+    fn get_tide_model(&self) -> PyTideModel {
+        self.0.tide_model.into()
+    }
+
+    #[setter(tide_model)]
+    fn set_tide_model(&mut self, val: PyTideModel) -> PyResult<()> {
+        self.0.tide_model = val.into();
         Ok(())
     }
 
