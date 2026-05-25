@@ -4,6 +4,7 @@ include LICENSE-MIT
 include LICENSE-APACHE
 include README.md
 include pyproject.toml
+include build.rs
 recursive-include src *.rs
 recursive-include python/src *.rs
 include python/Cargo.toml
