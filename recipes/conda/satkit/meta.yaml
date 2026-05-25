@@ -1,20 +1,13 @@
 {% set name = "satkit" %}
-{% set version = "0.17.0" %}
+{% set version = "0.18.0" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  # LOCAL VALIDATION ONLY — sourced from a freshly-built sdist that
-  # includes the root build.rs (fix applied in this branch's MANIFEST.in
-  # and slated for the 0.17.1 release). Before submitting to
-  # conda-forge, swap to:
-  #
-  #   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  #   sha256: <hash of 0.17.1 PyPI tarball>
-  url: file:///tmp/satkit-sdist/satkit-0.17.0.tar.gz
-  sha256: 65def9207847a5816255cc528ff7c590b23039f0dd25d46d5ef54b57eb43fd74
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: 9af912f75d1f6387c988670811c6ca1dfbc31efc1f14153d61546e74f76b7033
 
 build:
   number: 0

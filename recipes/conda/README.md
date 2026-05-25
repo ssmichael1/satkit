@@ -74,9 +74,9 @@ rattler-build build --recipe recipes/conda/satkit-data/meta.yaml
 rattler-build build --recipe recipes/conda/satkit/meta.yaml
 ```
 
-The `satkit` recipe's source-tarball `sha256:` is a TODO — fill in
-with the `pip hash satkit-0.17.0.tar.gz` output against the actual
-PyPI release tarball before submission.
+The `satkit` recipe pulls the 0.18.0 sdist from PyPI directly. When
+bumping for a future release, refresh the `sha256:` via
+`pip hash satkit-<version>.tar.gz` against the new tarball.
 
 ## Submission
 
