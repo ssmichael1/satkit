@@ -14,19 +14,29 @@ Core concepts that underpin the rest of the library.
 | [Geodetic Coordinates](Geodetic%20Coordinates.ipynb) | The `itrfcoord` data type: geodetic, Cartesian, and local tangent planes |
 | [Keplerian Elements](Keplerian%20Elements.ipynb) | Orbital elements, Cartesian conversion, and two-body vs numerical propagation |
 
-## Orbit Propagation
+## SGP4 Propagation
 
-Propagating satellite orbits using analytical and numerical methods.
+Analytic mean-element propagation from TLEs and OMMs.
 
 | | Description |
 |----------|-------------|
-| [Theory: Force Models & Propagation](../guide/satprop.md) | Mathematical basis, gravity models, drag, SRP, thrust, integrator selection |
 | [Theory: TLEs, SGP4 & OMMs](../guide/tle.md) | TLE/OMM formats, SGP4 history, and mean-element ephemeris concepts |
 | [Two-Line Element Set](Two-Line%20Element%20Set.ipynb) | Loading and using TLEs with SGP4 |
-| [High Precision Propagation](High%20Precision%20Propagation.ipynb) | Numerical orbit propagation with force models |
-| [SGP4 vs Numerical Propagation](SGP4%20vs%20Numerical%20Propagation.ipynb) | Comparing analytical and numerical orbit propagation |
-| [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Hohmann transfer, Lambert targeting, and low-thrust orbit raising |
 | [TLE Fitting](TLE%20Fitting.ipynb) | Fitting TLEs from state vectors |
+| [SGP4 vs Numerical Propagation](SGP4%20vs%20Numerical%20Propagation.ipynb) | Comparing analytical and numerical orbit propagation |
+
+## Numerical Propagation
+
+High-fidelity force-model propagation with Runge-Kutta and Gauss-Jackson integrators.
+
+| | Description |
+|----------|-------------|
+| [Theory: Force Model](../guide/forces.md) | Modeled forces: gravity, third-body, drag, SRP, solid Earth tides, GR |
+| [Theory: ODE Integrators](../guide/integrators.md) | RKV / GJ8 integrators, step-size selection, tolerances |
+| [Theory: State Vectors, STM & Covariance](../guide/satstate.md) | satstate class, state transition matrix, covariance, maneuvers |
+| [Theory: Maneuver Coordinate Frames](../guide/maneuver_frames.md) | RTN / NTW / LVLH definitions and when to use each |
+| [GPS Example](GPS%20Example.ipynb) | GPS orbit fit against ESA SP3 truth, integrator comparison |
+| [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Impulsive maneuvers, frame choice, low-thrust orbit raising |
 
 ## Applications
 

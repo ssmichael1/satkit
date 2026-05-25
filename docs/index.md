@@ -110,6 +110,8 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
 - **Atmospheric drag**: NRLMSISE-00 (pure Rust) with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function
+- **Solid Earth tides**: IERS 2010 §6.2.1 Step 1 (frequency-independent Love-number response)
+- **General relativity**: Schwarzschild post-Newtonian correction (IERS 2010 §10.3)
 
 ### Time Systems
 
