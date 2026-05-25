@@ -8,6 +8,8 @@ mod settings;
 
 mod drag;
 mod point_gravity;
+/// General-relativistic corrections (Schwarzschild post-Newtonian term)
+pub mod relativity;
 /// Thrust models for continuous maneuvers
 pub mod thrust;
 /// IERS 2010 solid Earth tide perturbations
