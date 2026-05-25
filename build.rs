@@ -8,8 +8,14 @@ fn main() {
     // tarball builds (PyPI source distributions, conda-forge builds from
     // a github archive, etc.) have no .git directory — fall back to
     // "unknown" rather than blowing up the build.
-    println!("cargo:rustc-env=GIT_HASH={}", git_output(&["rev-parse", "HEAD"]));
-    println!("cargo:rustc-env=GIT_TAG={}", git_output(&["describe", "--tags"]));
+    println!(
+        "cargo:rustc-env=GIT_HASH={}",
+        git_output(&["rev-parse", "HEAD"])
+    );
+    println!(
+        "cargo:rustc-env=GIT_TAG={}",
+        git_output(&["describe", "--tags"])
+    );
     println!("cargo:rustc-env=BUILD_DATE={}", build_date_iso8601());
 }
 
@@ -20,7 +26,9 @@ fn git_output(args: &[&str]) -> String {
         .ok()
         .and_then(|o| {
             if o.status.success() {
-                String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
             } else {
                 None
             }

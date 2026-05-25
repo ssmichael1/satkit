@@ -37,9 +37,8 @@ fn init_from_bytes_then_query_and_double_init_errors() {
     );
 
     // 3. Second init for the same model is rejected.
-    let err = earthgravity::init_from_bytes(GravityModel::EGM96, &bytes).expect_err(
-        "second init_from_bytes(EGM96) should return AlreadyInitialized",
-    );
+    let err = earthgravity::init_from_bytes(GravityModel::EGM96, &bytes)
+        .expect_err("second init_from_bytes(EGM96) should return AlreadyInitialized");
     assert!(matches!(
         err,
         earthgravity::Error::AlreadyInitialized(GravityModel::EGM96)

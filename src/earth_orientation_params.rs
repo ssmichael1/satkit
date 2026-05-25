@@ -388,7 +388,9 @@ mod tests {
     fn loaded() {
         ensure_default_loaded();
         let guard = EOP.read().unwrap();
-        let eop = guard.as_ref().expect("default EOP load should succeed in tests");
+        let eop = guard
+            .as_ref()
+            .expect("default EOP load should succeed in tests");
         assert!(eop[0].mjd_utc >= 0.0);
     }
 
