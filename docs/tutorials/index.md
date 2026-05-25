@@ -35,7 +35,7 @@ High-fidelity force-model propagation with Runge-Kutta and Gauss-Jackson integra
 | [Theory: ODE Integrators](../guide/integrators.md) | RKV / GJ8 integrators, step-size selection, tolerances |
 | [Theory: State Vectors, STM & Covariance](../guide/satstate.md) | satstate class, state transition matrix, covariance, maneuvers |
 | [Theory: Maneuver Coordinate Frames](../guide/maneuver_frames.md) | RTN / NTW / LVLH definitions and when to use each |
-| [High Precision Propagation](High%20Precision%20Propagation.ipynb) | GPS orbit fit against ESA SP3 truth, integrator comparison |
+| [GPS Example](GPS%20Example.ipynb) | GPS orbit fit against ESA SP3 truth, integrator comparison |
 | [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Impulsive maneuvers, frame choice, low-thrust orbit raising |
 
 ## Applications

@@ -91,6 +91,6 @@ For sub-meter precision over a day, tighten both to `1e-10` to `1e-13`. For coar
 
 ## See Also
 
-- **Tutorial**: [High Precision Propagation](../tutorials/High Precision Propagation.ipynb) — runs all integrators against the same GPS arc and compares accuracy / cost.
+- **Tutorial**: [GPS Example](../tutorials/GPS Example.ipynb) — runs all integrators against the same GPS arc and compares accuracy / cost.
 - **Theory**: [Force Model](forces.md) for the right-hand side of the ODE; [State Vectors, STM & Covariance](satstate.md) for what's being integrated.
 - **API**: [`satkit.integrator`](../api/satprop.md), [`satkit.propsettings`](../api/satprop.md).

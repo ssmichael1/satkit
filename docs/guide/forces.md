@@ -114,7 +114,7 @@ Toggle with `use_relativistic_correction` (default `True`).
 
 ## Continuous Thrust
 
-Constant acceleration in a chosen frame (used to model low-thrust maneuvers or — in orbit-determination contexts — *empirical accelerations*: a fitted catch-all that absorbs un-modeled physics). See [`satkit.thrust`](../api/satprop.md) and the [High Precision Propagation tutorial](../tutorials/High Precision Propagation.ipynb) for usage.
+Constant acceleration in a chosen frame (used to model low-thrust maneuvers or — in orbit-determination contexts — *empirical accelerations*: a fitted catch-all that absorbs un-modeled physics). See [`satkit.thrust`](../api/satprop.md) and the [GPS Example tutorial](../tutorials/GPS Example.ipynb) for usage.
 
 ## Future Propagation
 
@@ -131,6 +131,6 @@ The plot below, modeled on a similar figure in Montenbruck and Gill, shows each 
 
 ## See Also
 
-- **Tutorial**: [High Precision Propagation](../tutorials/High Precision Propagation.ipynb) — fits a GPS orbit against ESA SP3 truth and walks through the empirical-acceleration concept.
+- **Tutorial**: [GPS Example](../tutorials/GPS Example.ipynb) — fits a GPS orbit against ESA SP3 truth and walks through the empirical-acceleration concept.
 - **Theory**: [ODE Integrators](integrators.md) for the integration mechanics; [State Vectors, STM & Covariance](satstate.md) for state representation and covariance propagation.
 - **API**: [`satkit.propagate`](../api/satprop.md), [`satkit.propsettings`](../api/satprop.md), [`satkit.satproperties`](../api/satprop.md).

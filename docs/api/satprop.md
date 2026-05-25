@@ -5,7 +5,7 @@ API reference for the numerical (force-model) propagator. For background, see:
 - [Force Model](../guide/forces.md) — modeled forces and physical motivation
 - [ODE Integrators](../guide/integrators.md) — solver families, step-size selection, tolerances
 - [State Vectors, STM & Covariance](../guide/satstate.md) — state representation, STM, covariance propagation, maneuvers
-- Tutorial: [High Precision Propagation](../tutorials/High Precision Propagation.ipynb)
+- Tutorial: [GPS Example](../tutorials/GPS Example.ipynb)
 
 ::: satkit.propagate
 
