@@ -28,8 +28,7 @@ fn init_from_bytes_replaces_and_query_works() {
     };
 
     // 1. First init populates the singleton.
-    spaceweather::init_from_bytes(&bytes)
-        .expect("init_from_bytes should succeed on first call");
+    spaceweather::init_from_bytes(&bytes).expect("init_from_bytes should succeed on first call");
 
     // 2. Query against the just-installed records.
     let tm = Instant::from_datetime(2023, 11, 14, 0, 0, 0.0).unwrap();

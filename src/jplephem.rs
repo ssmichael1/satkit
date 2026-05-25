@@ -214,8 +214,7 @@ fn resolve_default_path() -> std::path::PathBuf {
                 continue;
             };
             // DE-version suffix: 3 digits starting with '4' (covers DE4XX family).
-            if ext.len() != 3 || !ext.starts_with('4') || !ext.chars().all(|c| c.is_ascii_digit())
-            {
+            if ext.len() != 3 || !ext.starts_with('4') || !ext.chars().all(|c| c.is_ascii_digit()) {
                 continue;
             }
             let Ok(de_version) = ext.parse::<u32>() else {
