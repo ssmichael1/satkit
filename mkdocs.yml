@@ -93,15 +93,18 @@ nav:
           - Coordinate Frames: tutorials/Coordinate Frames.ipynb
           - Geodetic Coordinates: tutorials/Geodetic Coordinates.ipynb
           - Keplerian Elements: tutorials/Keplerian Elements.ipynb
-      - Orbit Propagation:
-          - "Theory: Force Models & Propagation": guide/satprop.md
+      - SGP4 Propagation:
           - "Theory: TLEs, SGP4 & OMMs": guide/tle.md
-          - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
           - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
-          - High Precision Propagation: tutorials/High Precision Propagation.ipynb
-          - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
-          - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
           - TLE Fitting: tutorials/TLE Fitting.ipynb
+          - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
+      - Numerical Propagation:
+          - "Theory: Force Model": guide/forces.md
+          - "Theory: ODE Integrators": guide/integrators.md
+          - "Theory: State Vectors, STM & Covariance": guide/satstate.md
+          - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
+          - High Precision Propagation: tutorials/High Precision Propagation.ipynb
+          - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
       - Applications:
           - Plots: tutorials/Plots.ipynb
           - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
