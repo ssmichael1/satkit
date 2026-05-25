@@ -170,6 +170,10 @@ impl PyPropSettings {
                 ps.tide_model = tide.into();
                 kw.del_item("tide_model")?;
             }
+            if let Some(gr) = kw.get_item("use_relativistic_correction")? {
+                ps.use_relativistic_correction = gr.extract::<bool>()?;
+                kw.del_item("use_relativistic_correction")?;
+            }
             if !kw.is_empty() {
                 let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
                     let mut a2 = acc.clone();
@@ -342,6 +346,17 @@ impl PyPropSettings {
     #[setter(tide_model)]
     fn set_tide_model(&mut self, val: PyTideModel) -> PyResult<()> {
         self.0.tide_model = val.into();
+        Ok(())
+    }
+
+    #[getter]
+    fn get_use_relativistic_correction(&self) -> bool {
+        self.0.use_relativistic_correction
+    }
+
+    #[setter(use_relativistic_correction)]
+    fn set_use_relativistic_correction(&mut self, val: bool) -> PyResult<()> {
+        self.0.use_relativistic_correction = val;
         Ok(())
     }
 

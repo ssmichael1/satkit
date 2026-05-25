@@ -3415,6 +3415,7 @@ class propsettings:
             - use_sun_gravity: True
             - use_moon_gravity: True
             - tide_model: tidemodel.solid_step1
+            - use_relativistic_correction: True
             - enable_interp: True
             - integrator: integrator.rkv98
             - gj_step_seconds: 60.0
@@ -3436,6 +3437,7 @@ class propsettings:
         use_sun_gravity: bool = True,
         use_moon_gravity: bool = True,
         tide_model: tidemodel = ...,
+        use_relativistic_correction: bool = True,
         enable_interp: bool = True,
         integrator: integrator = ...,
         gj_step_seconds: float = 60.0,
@@ -3456,6 +3458,9 @@ class propsettings:
                 (IERS 2010 §6.2.1 frequency-independent Love-number response).
                 Use ``tidemodel.none`` to disable (e.g., for reproducibility with
                 pre-tide releases).
+            use_relativistic_correction: Include the Schwarzschild post-Newtonian
+                acceleration (IERS 2010 §10.3 Eq. 10.12, β=γ=1). Default is True.
+                ~1 m/day at GPS altitude if omitted; trivial computational cost.
             enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
             integrator: ODE integrator to use. Default is integrator.rkv98
             gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
@@ -3584,6 +3589,18 @@ class propsettings:
 
     @tide_model.setter
     def tide_model(self, value: tidemodel) -> None: ...
+    @property
+    def use_relativistic_correction(self) -> bool:
+        """Include the Schwarzschild post-Newtonian acceleration.
+
+        IERS 2010 §10.3 Eq. 10.12 with PPN β = γ = 1. Default is True.
+        Contributes ~1 m/day at GPS altitude if omitted; computational
+        cost is negligible.
+        """
+        ...
+
+    @use_relativistic_correction.setter
+    def use_relativistic_correction(self, value: bool) -> None: ...
     @property
     def enable_interp(self) -> bool:
         """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times
