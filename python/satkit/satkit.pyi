@@ -1102,39 +1102,6 @@ class time:
         """
         ...
 
-    @typing.overload
-    @staticmethod
-    def from_datetime(
-        year: int,
-        month: int,
-        day: int,
-        hour: int,
-        min: int,
-        sec: float,
-        scale: timescale = timescale.UTC,
-    ) -> time:
-        """Create time object from 6 input arguments representing UTC Gregorian time.
-
-        Args:
-            year (int): Gregorian year
-            month (int): Gregorian month (1 = January, 2 = February, ...)
-            day (int): Day of month, beginning with 1
-            hour (int): Hour of day, in range [0,23]
-            min (int): Minute of hour, in range [0,59]
-            sec (float): floating point second of minute, in range [0,60)
-            scale (timescale, optional): Time scale.  Default is satkit.timescale.UTC
-
-        Returns:
-            Time object representing input UTC Gregorian time
-
-        Example:
-            ```python
-            print(satkit.time.from_datetime(2023, 3, 5, 11, 3,45.453))
-            # 2023-03-05 11:03:45.453Z
-            ```
-        """
-        ...
-
     def as_gregorian(
         self, scale=timescale.UTC
     ) -> tuple[int, int, int, int, int, float]:
@@ -1180,7 +1147,6 @@ class time:
         """
         ...
 
-    @typing.overload
     @staticmethod
     def from_datetime(dt: datetime.datetime) -> time:
         """Convert input "datetime.datetime" object to an "satkit.time" object representing the same instant in time
