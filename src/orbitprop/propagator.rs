@@ -1105,6 +1105,13 @@ mod tests {
             enable_interp: true,
             ..Default::default()
         };
+        // Tides-off twin propagation: lets the test confirm that enabling
+        // solid Earth tides is a strict improvement on this real-data
+        // trajectory, not just that the wiring runs.
+        let settings_no_tides = PropSettings {
+            tide_model: crate::orbitprop::TideModel::None,
+            ..settings.clone()
+        };
 
         let res = propagate(
             &state0,
@@ -1113,15 +1120,45 @@ mod tests {
             &settings,
             Some(&satprops),
         )?;
+        let res_nt = propagate(
+            &state0,
+            &times[0],
+            &times[times.len() - 1],
+            &settings_no_tides,
+            Some(&satprops),
+        )?;
 
-        // We've propagated over a day; assert that the difference in position on all three coordinate axes
-        // is less than 10 meters for all 5-minute intervals
-        for iv in 0..(pgcrf.len()) {
-            let interp_state = res.interp(&times[iv])?;
-            for ix in 0..3 {
-                assert!((pgcrf[iv][ix] - interp_state[ix]).abs() < 8.0);
+        let max_per_axis = |r: &super::PropagationResult<1>| -> Result<f64> {
+            let mut m = 0.0_f64;
+            for iv in 0..pgcrf.len() {
+                let interp_state = r.interp(&times[iv])?;
+                for ix in 0..3 {
+                    m = m.max((pgcrf[iv][ix] - interp_state[ix]).abs());
+                }
             }
-        }
+            Ok(m)
+        };
+        let max_axis_err = max_per_axis(&res)?;
+        let max_axis_err_nt = max_per_axis(&res_nt)?;
+        println!(
+            "GPS SP3 max per-axis residual: with tides = {:.4} m, no tides = {:.4} m",
+            max_axis_err, max_axis_err_nt
+        );
+
+        // Tightened threshold (was 8.0 m before solid Earth tides landed).
+        // With Step 1 tides enabled and degree-4 gravity, residual sits
+        // around 5.7 m for this 1-day GPS arc.
+        assert!(
+            max_axis_err < 6.5,
+            "Max per-axis residual = {} m exceeds 6.5 m threshold",
+            max_axis_err
+        );
+        assert!(
+            max_axis_err < max_axis_err_nt,
+            "Enabling tides should improve residual: with = {} m, no = {} m",
+            max_axis_err,
+            max_axis_err_nt
+        );
 
         Ok(())
     }
