@@ -3,6 +3,16 @@
 
 ## Unreleased
 
+### General-relativistic Schwarzschild correction in the high-precision propagator
+
+- **New `orbitprop::relativity` module** implementing the IERS Conventions 2010 §10.3 Eq. 10.12 Schwarzschild (post-Newtonian, β = γ = 1) acceleration. Single `gr_schwarzschild_accel(pos_gcrf, vel_gcrf, mu_e) -> Vector3` function — ~10 flops, trivial computational cost. Resolves [#109](https://github.com/ssmichael1/satkit/issues/109).
+- **Enabled by default.** `PropSettings::default()` now ships `use_relativistic_correction: true`. Schwarzschild is universal physics, not a model choice — the flag exists for reproducibility against pre-0.18 numerics, not because the term is optional in practice.
+- **~1 m/day position drift at GPS altitude** if omitted; ~3 m/day at GEO. The empirical NTW acceleration fit in the high-precision propagation tutorial (`docs/tutorials/High Precision Propagation.ipynb`) was previously absorbing this signal — explicit GR modeling shifts the empirical from "catch-all for ~0.17 m of un-modeled physics" to "smaller catch-all for the rest (higher-order SRP, ocean tides, …)."
+- **Lense-Thirring and de Sitter currently omitted** (sub-cm-class effects at LEO/MEO). Reserved for future expansion behind the same `use_relativistic_correction` flag.
+- **Wired into every integrator force closure** (RKV, RODAS4, GJ8). GR partials are ~1e-15/m vs J2's ~1e-7/m and are skipped in the STM update — same precision tradeoff as the tide block.
+- **GPS regression test threshold tightened to 2.5 m** (was 6.5 m with tides only, 8 m before tides). Hardcoded `v0` + `Cr*A/m` refitted against ESA SP3 truth using the updated force model. The previous "with-tides residual < without-tides residual" strict assertion has been dropped from this test — once the IC is fit to the full force model, the initial state absorbs enough of the constant-shift part of the tide signal that toggling tides off can produce a *smaller* residual on this particular arc. The independent `test_solid_tides_perturb_orbit` test still guards that tides change the propagation.
+- **Python bindings.** New `propsettings.use_relativistic_correction: bool` field exposed via kwarg constructor and getter/setter. `.pyi` stub updated with docstrings. Three new tests in `TestRelativisticCorrection` cover the default, setter/kwarg round-trip, and a with-vs-without propagation diff at GPS altitude.
+
 ### Solid Earth tides (IERS 2010 §6.2 Step 1) in the high-precision propagator
 
 - **New `orbitprop::tides` module** implementing the IERS Conventions 2010 §6.2.1 Step 1 frequency-independent solid Earth tide model — Love-number response of the Earth's gravity field to lunar and solar attraction. Exposes `TideModel` (`None` / `SolidStep1` / `SolidFull`), `TideDeltas` (ΔC̄ₙₘ, ΔS̄ₙₘ for n=2,3,4), `solid_tide_deltas()` and `tide_accel()`. Resolves [#16](https://github.com/ssmichael1/satkit/issues/16).
