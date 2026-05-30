@@ -101,6 +101,180 @@ fn solar_pressure_accel(
             / sun_gcrf.norm())
 }
 
+/// GCRF radius (meters) above which atmospheric density is negligible and
+/// drag is skipped. Comparing `pos.norm_squared()` against the square of this
+/// value lets the force model avoid a square root on every evaluation.
+const DRAG_RADIUS_LIMIT_M: f64 = 700.0e3 + consts::EARTH_RADIUS;
+
+/// Selects what [`force_model`] computes, so the single physics
+/// implementation can serve every integrator.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ForceEval {
+    /// Acceleration only — explicit integrators' state derivative
+    /// (RK with `C == 1`, RODAS4 `ydot`, Gauss-Jackson).
+    Accel,
+    /// Acceleration plus ∂a/∂r and ∂a/∂v — RK state-transition matrix
+    /// (`C == 7`).
+    AccelAndPartials,
+    /// Partials only — RODAS4 Jacobian. The acceleration-only terms (tides,
+    /// GR, SRP, thrust) are skipped because the caller discards the
+    /// acceleration, and those terms contribute no partials anyway.
+    PartialsOnly,
+}
+
+/// The complete force model, shared by every integrator.
+///
+/// The integrators differ only in state layout and in whether they need
+/// partials; they all funnel the physics through here so a force term lives
+/// in exactly one place. Returns `(accel, dadr, dadv)` in GCRF.
+///
+/// * `dadr`/`dadv` are zero unless `eval` requests partials. They include
+///   the dominant terms only — Earth gravity, Sun/Moon third-body, and drag.
+///   Solid-tide, relativistic, and SRP partials are negligible against J2's
+///   (≲1e-12, ~1e-15/m, and SRP respectively) and are intentionally omitted
+///   from the Jacobian, matching the prior per-integrator implementations.
+///
+/// Marked `#[inline]` so that, since every call site passes a compile-time
+/// constant `eval`, the compiler constant-folds the `need_partials` /
+/// `need_accel` branches away and reproduces the previously hand-specialized
+/// per-integrator code (no extra call, no runtime dispatch).
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn force_model(
+    x: f64,
+    pos_gcrf: &Vector3,
+    vel_gcrf: &Vector3,
+    begin: &Instant,
+    interp: &Precomputed,
+    gravity: &crate::earthgravity::Gravity,
+    settings: &PropSettings,
+    satprops: Option<&dyn SatProperties>,
+    eval: ForceEval,
+) -> (Vector3, Matrix3, Matrix3) {
+    let time: Instant = *begin + Duration::from_seconds(x);
+    let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
+    let qitrf2gcrf = qgcrf2itrf.conjugate();
+    let pos_itrf = qgcrf2itrf * *pos_gcrf;
+
+    let need_partials = eval != ForceEval::Accel;
+    // Acceleration-only terms (tides, GR, SRP, thrust) carry no partials, so
+    // the Jacobian-only pass skips them entirely.
+    let need_accel = eval != ForceEval::PartialsOnly;
+
+    // Earth gravity (spherical harmonics), evaluated in ITRF and rotated to
+    // GCRF. When partials are needed, a single Legendre pass yields both the
+    // acceleration and its gradient.
+    let (mut accel, mut dadr, mut dadv) = if need_partials {
+        let (ga, gp) = gravity.accel_and_partials(
+            &pos_itrf,
+            settings.gravity_degree as usize,
+            settings.gravity_order as usize,
+        );
+        let ritrf2gcrf = qitrf2gcrf.to_rotation_matrix();
+        (
+            qitrf2gcrf * ga,
+            ritrf2gcrf * gp * ritrf2gcrf.transpose(),
+            Matrix3::zeros(),
+        )
+    } else {
+        (
+            qitrf2gcrf
+                * gravity.accel(
+                    &pos_itrf,
+                    settings.gravity_degree as usize,
+                    settings.gravity_order as usize,
+                ),
+            Matrix3::zeros(),
+            Matrix3::zeros(),
+        )
+    };
+
+    // Sun / Moon third-body perturbations.
+    if settings.use_sun_gravity {
+        if need_partials {
+            let (a, p) = point_gravity_and_partials(pos_gcrf, &sun_gcrf, consts::MU_SUN);
+            accel += a;
+            dadr += p;
+        } else {
+            accel += point_gravity(pos_gcrf, &sun_gcrf, consts::MU_SUN);
+        }
+    }
+    if settings.use_moon_gravity {
+        if need_partials {
+            let (a, p) = point_gravity_and_partials(pos_gcrf, &moon_gcrf, consts::MU_MOON);
+            accel += a;
+            dadr += p;
+        } else {
+            accel += point_gravity(pos_gcrf, &moon_gcrf, consts::MU_MOON);
+        }
+    }
+
+    // Solid Earth tides. Partials are negligible and omitted from the STM.
+    if need_accel && settings.tide_model != TideModel::None {
+        let sun_itrf = qgcrf2itrf * sun_gcrf;
+        let moon_itrf = qgcrf2itrf * moon_gcrf;
+        let deltas = tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
+        accel += qitrf2gcrf
+            * tides::tide_accel(&pos_itrf, &deltas, gravity.gravity_constant, gravity.radius);
+    }
+
+    // General-relativistic Schwarzschild correction. Partials skipped.
+    if need_accel && settings.use_relativistic_correction {
+        accel += gr_schwarzschild_accel(pos_gcrf, vel_gcrf, gravity.gravity_constant);
+    }
+
+    if let Some(props) = satprops {
+        // Reconstruct a SimpleState from (r, v) for the state-aware property
+        // queries (area/mass, drag coefficient, radiation susceptibility).
+        let mut ss: SimpleState = SimpleState::zeros();
+        ss.set_block(0, 0, pos_gcrf);
+        ss.set_block(3, 0, vel_gcrf);
+
+        if need_accel {
+            accel += solar_pressure_accel(&sun_gcrf, pos_gcrf, &time, props, &ss);
+        }
+
+        // Atmospheric drag below ~700 km altitude. The squared-radius gate
+        // avoids a square root on every evaluation.
+        if pos_gcrf.norm_squared() < DRAG_RADIUS_LIMIT_M * DRAG_RADIUS_LIMIT_M {
+            let cd_a_over_m = props.cd_a_over_m(&time, &ss);
+            if cd_a_over_m > 1e-6 {
+                if need_partials {
+                    let (drag_a, drag_dr, drag_dv) = drag_and_partials(
+                        pos_gcrf,
+                        &qgcrf2itrf,
+                        vel_gcrf,
+                        &time,
+                        cd_a_over_m,
+                        settings.use_spaceweather,
+                    );
+                    accel += drag_a;
+                    dadr += drag_dr;
+                    dadv += drag_dv;
+                } else {
+                    accel += drag_force(
+                        pos_gcrf,
+                        &pos_itrf,
+                        vel_gcrf,
+                        &time,
+                        cd_a_over_m,
+                        settings.use_spaceweather,
+                    );
+                }
+            }
+        }
+
+        // Continuous thrust acceleration.
+        if need_accel {
+            if let Some(a_thrust) = props.thrust_accel(&time, pos_gcrf, vel_gcrf) {
+                accel += a_thrust;
+            }
+        }
+    }
+
+    (accel, dadr, dadv)
+}
+
 ///
 /// High-precision propagation of a satellite state from a given begin time
 /// to a given end time, with input settings and
@@ -283,122 +457,38 @@ pub fn propagate<const C: usize, T: TimeLike>(
     let gravity = settings.gravity_model.get();
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> Matrix<6, C> {
-        let time: Instant = begin + Duration::from_seconds(x);
         let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
         let vel_gcrf: Vector3 = y.block::<3, 1>(3, 0);
 
-        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
-        let qitrf2gcrf = qgcrf2itrf.conjugate();
-        let pos_itrf = qgcrf2itrf * pos_gcrf;
-
-        // Decide whether to compute partials:
-        // - C == 7: always (state transition matrix)
-        // - C == 1: never (explicit integrators don't need partials in ydot)
-        let need_partials = C == 7;
-
-        let (mut accel, mut dadr, mut dadv) = if need_partials {
-            let (ga, gp) = gravity.accel_and_partials(
-                &pos_itrf,
-                settings.gravity_degree as usize,
-                settings.gravity_order as usize,
-            );
-            let ritrf2gcrf = qitrf2gcrf.to_rotation_matrix();
-            (
-                qitrf2gcrf * ga,
-                ritrf2gcrf * gp * ritrf2gcrf.transpose(),
-                Matrix3::zeros(),
-            )
-        } else {
-            (
-                qitrf2gcrf
-                    * gravity.accel(
-                        &pos_itrf,
-                        settings.gravity_degree as usize,
-                        settings.gravity_order as usize,
-                    ),
-                Matrix3::zeros(),
-                Matrix3::zeros(),
-            )
-        };
-
-        if settings.use_sun_gravity {
-            if need_partials {
-                let (a, p) = point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
-                accel += a;
-                dadr += p;
-            } else {
-                accel += point_gravity(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
-            }
-        }
-        if settings.use_moon_gravity {
-            if need_partials {
-                let (a, p) = point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
-                accel += a;
-                dadr += p;
-            } else {
-                accel += point_gravity(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
-            }
-        }
-
-        // Solid Earth tides. Partials w.r.t. position are negligible
-        // (≲1e-12 of J2 partials) and are omitted from the STM update.
-        if settings.tide_model != TideModel::None {
-            let sun_itrf = qgcrf2itrf * sun_gcrf;
-            let moon_itrf = qgcrf2itrf * moon_gcrf;
-            let deltas =
-                tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
-            accel += qitrf2gcrf
-                * tides::tide_accel(&pos_itrf, &deltas, gravity.gravity_constant, gravity.radius);
-        }
-
-        // General-relativistic Schwarzschild correction. Partials are
-        // ~1e-15/m vs J2's ~1e-7/m; skipped in the STM update.
-        if settings.use_relativistic_correction {
-            accel += gr_schwarzschild_accel(&pos_gcrf, &vel_gcrf, gravity.gravity_constant);
-        }
-
-        if let Some(props) = satprops {
-            let ss: SimpleState = y.block::<6, 1>(0, 0);
-            accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
-            if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
-                let cd_a_over_m = props.cd_a_over_m(&time, &ss);
-                if cd_a_over_m > 1e-6 {
-                    if need_partials {
-                        let (drag_a, drag_dr, drag_dv) = drag_and_partials(
-                            &pos_gcrf,
-                            &qgcrf2itrf,
-                            &vel_gcrf,
-                            &time,
-                            cd_a_over_m,
-                            settings.use_spaceweather,
-                        );
-                        accel += drag_a;
-                        dadr += drag_dr;
-                        dadv = drag_dv;
-                    } else {
-                        accel += drag_force(
-                            &pos_gcrf,
-                            &pos_itrf,
-                            &vel_gcrf,
-                            &time,
-                            cd_a_over_m,
-                            settings.use_spaceweather,
-                        );
-                    }
-                }
-            }
-            // Continuous thrust acceleration
-            if let Some(a_thrust) = props.thrust_accel(&time, &pos_gcrf, &vel_gcrf) {
-                accel += a_thrust;
-            }
-        }
-
         if C == 1 {
+            // Explicit integrators don't need partials in ydot.
+            let (accel, _, _) = force_model(
+                x,
+                &pos_gcrf,
+                &vel_gcrf,
+                &begin,
+                interp,
+                gravity,
+                settings,
+                satprops,
+                ForceEval::Accel,
+            );
             let mut dy = Matrix::<6, C>::zeros();
             dy.set_block(0, 0, &vel_gcrf);
             dy.set_block(3, 0, &accel);
             dy
         } else if C == 7 {
+            let (accel, dadr, dadv) = force_model(
+                x,
+                &pos_gcrf,
+                &vel_gcrf,
+                &begin,
+                interp,
+                gravity,
+                settings,
+                satprops,
+                ForceEval::AccelAndPartials,
+            );
             // Equation 7.42: dfdy * state_transition_matrix
             let mut dfdy = Matrix::<6, 6>::zeros();
             dfdy.set_block(0, 3, &Matrix3::eye());
@@ -418,50 +508,20 @@ pub fn propagate<const C: usize, T: TimeLike>(
 
     // Jacobian closure for RODAS4: computes the 6x6 df/dy matrix
     let jac_fn = |x: f64, y: &numeris::Vector<f64, 6>| -> Matrix<6, 6> {
-        let time: Instant = begin + Duration::from_seconds(x);
         let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
         let vel_gcrf: Vector3 = y.block::<3, 1>(3, 0);
 
-        let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
-        let qitrf2gcrf = qgcrf2itrf.conjugate();
-        let pos_itrf = qgcrf2itrf * pos_gcrf;
-
-        let (_, gp) = gravity.accel_and_partials(
-            &pos_itrf,
-            settings.gravity_degree as usize,
-            settings.gravity_order as usize,
+        let (_, dadr, dadv) = force_model(
+            x,
+            &pos_gcrf,
+            &vel_gcrf,
+            &begin,
+            interp,
+            gravity,
+            settings,
+            satprops,
+            ForceEval::PartialsOnly,
         );
-        let ritrf2gcrf = qitrf2gcrf.to_rotation_matrix();
-        let mut dadr = ritrf2gcrf * gp * ritrf2gcrf.transpose();
-        let mut dadv = Matrix3::zeros();
-
-        if settings.use_sun_gravity {
-            let (_, p) = point_gravity_and_partials(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
-            dadr += p;
-        }
-        if settings.use_moon_gravity {
-            let (_, p) = point_gravity_and_partials(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
-            dadr += p;
-        }
-
-        if let Some(props) = satprops {
-            let ss: SimpleState = y.block::<6, 1>(0, 0);
-            if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
-                let cd_a_over_m = props.cd_a_over_m(&time, &ss);
-                if cd_a_over_m > 1e-6 {
-                    let (_, drag_dr, drag_dv) = drag_and_partials(
-                        &pos_gcrf,
-                        &qgcrf2itrf,
-                        &vel_gcrf,
-                        &time,
-                        cd_a_over_m,
-                        settings.use_spaceweather,
-                    );
-                    dadr += drag_dr;
-                    dadv = drag_dv;
-                }
-            }
-        }
 
         // Build the 6x6 Jacobian: df/dy where f = [vel; accel]
         let mut dfdy = Matrix::<6, 6>::zeros();
@@ -486,67 +546,20 @@ pub fn propagate<const C: usize, T: TimeLike>(
             // At this point C==1 is guaranteed (C==7 was rejected above)
             let y0_vec: numeris::Vector<f64, 6> = state.block::<6, 1>(0, 0);
             let ydot_vec = |x: f64, y: &numeris::Vector<f64, 6>| -> numeris::Vector<f64, 6> {
-                let time: Instant = begin + Duration::from_seconds(x);
                 let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
                 let vel_gcrf: Vector3 = y.block::<3, 1>(3, 0);
 
-                let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
-                let qitrf2gcrf = qgcrf2itrf.conjugate();
-                let pos_itrf = qgcrf2itrf * pos_gcrf;
-
-                let mut accel = qitrf2gcrf
-                    * gravity.accel(
-                        &pos_itrf,
-                        settings.gravity_degree as usize,
-                        settings.gravity_order as usize,
-                    );
-
-                if settings.use_sun_gravity {
-                    accel += point_gravity(&pos_gcrf, &sun_gcrf, consts::MU_SUN);
-                }
-                if settings.use_moon_gravity {
-                    accel += point_gravity(&pos_gcrf, &moon_gcrf, consts::MU_MOON);
-                }
-
-                if settings.tide_model != TideModel::None {
-                    let sun_itrf = qgcrf2itrf * sun_gcrf;
-                    let moon_itrf = qgcrf2itrf * moon_gcrf;
-                    let deltas =
-                        tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
-                    accel += qitrf2gcrf
-                        * tides::tide_accel(
-                            &pos_itrf,
-                            &deltas,
-                            gravity.gravity_constant,
-                            gravity.radius,
-                        );
-                }
-
-                if settings.use_relativistic_correction {
-                    accel += gr_schwarzschild_accel(&pos_gcrf, &vel_gcrf, gravity.gravity_constant);
-                }
-
-                if let Some(props) = satprops {
-                    let ss: SimpleState = y.block::<6, 1>(0, 0);
-                    accel += solar_pressure_accel(&sun_gcrf, &pos_gcrf, &time, props, &ss);
-                    if pos_gcrf.norm() < 700.0e3 + consts::EARTH_RADIUS {
-                        let cd_a_over_m = props.cd_a_over_m(&time, &ss);
-                        if cd_a_over_m > 1e-6 {
-                            accel += drag_force(
-                                &pos_gcrf,
-                                &pos_itrf,
-                                &vel_gcrf,
-                                &time,
-                                cd_a_over_m,
-                                settings.use_spaceweather,
-                            );
-                        }
-                    }
-                    // Continuous thrust acceleration
-                    if let Some(a_thrust) = props.thrust_accel(&time, &pos_gcrf, &vel_gcrf) {
-                        accel += a_thrust;
-                    }
-                }
+                let (accel, _, _) = force_model(
+                    x,
+                    &pos_gcrf,
+                    &vel_gcrf,
+                    &begin,
+                    interp,
+                    gravity,
+                    settings,
+                    satprops,
+                    ForceEval::Accel,
+                );
 
                 let mut dy = numeris::Vector::<f64, 6>::zeros();
                 dy.set_block(0, 0, &vel_gcrf);
@@ -586,71 +599,17 @@ pub fn propagate<const C: usize, T: TimeLike>(
             let v0: Vector3 = state.block::<3, 1>(3, 0);
 
             let accel_fn = |x: f64, r: &Vector3, v: &Vector3| -> Vector3 {
-                let time: Instant = begin + Duration::from_seconds(x);
-                let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
-                let qitrf2gcrf = qgcrf2itrf.conjugate();
-                let pos_itrf = qgcrf2itrf * *r;
-
-                let mut accel = qitrf2gcrf
-                    * gravity.accel(
-                        &pos_itrf,
-                        settings.gravity_degree as usize,
-                        settings.gravity_order as usize,
-                    );
-
-                if settings.use_sun_gravity {
-                    accel += point_gravity(r, &sun_gcrf, consts::MU_SUN);
-                }
-                if settings.use_moon_gravity {
-                    accel += point_gravity(r, &moon_gcrf, consts::MU_MOON);
-                }
-
-                if settings.tide_model != TideModel::None {
-                    let sun_itrf = qgcrf2itrf * sun_gcrf;
-                    let moon_itrf = qgcrf2itrf * moon_gcrf;
-                    let deltas =
-                        tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
-                    accel += qitrf2gcrf
-                        * tides::tide_accel(
-                            &pos_itrf,
-                            &deltas,
-                            gravity.gravity_constant,
-                            gravity.radius,
-                        );
-                }
-
-                if settings.use_relativistic_correction {
-                    accel += gr_schwarzschild_accel(r, v, gravity.gravity_constant);
-                }
-
-                if let Some(props) = satprops {
-                    // Reconstruct SimpleState from (r, v) for the force model's
-                    // state-aware methods (area/mass, drag coefficient, etc.)
-                    let mut ss: SimpleState = SimpleState::zeros();
-                    ss.set_block(0, 0, r);
-                    ss.set_block(3, 0, v);
-
-                    accel += solar_pressure_accel(&sun_gcrf, r, &time, props, &ss);
-
-                    if r.norm() < 700.0e3 + consts::EARTH_RADIUS {
-                        let cd_a_over_m = props.cd_a_over_m(&time, &ss);
-                        if cd_a_over_m > 1e-6 {
-                            accel += drag_force(
-                                r,
-                                &pos_itrf,
-                                v,
-                                &time,
-                                cd_a_over_m,
-                                settings.use_spaceweather,
-                            );
-                        }
-                    }
-
-                    if let Some(a_thrust) = props.thrust_accel(&time, r, v) {
-                        accel += a_thrust;
-                    }
-                }
-
+                let (accel, _, _) = force_model(
+                    x,
+                    r,
+                    v,
+                    &begin,
+                    interp,
+                    gravity,
+                    settings,
+                    satprops,
+                    ForceEval::Accel,
+                );
                 accel
             };
 
