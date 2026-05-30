@@ -1,6 +1,19 @@
 # Changelog
 
 
+## Unreleased
+
+### High-precision propagator: force model unified across all integrators
+
+- **A single `force_model()` replaces four duplicated force closures.** The RKV `ydot`, the RODAS4 `ydot_vec` and `jac_fn`, and the Gauss-Jackson 8 `accel_fn` each carried a near-identical copy of the acceleration physics (Earth gravity, Sun/Moon third-body, solid Earth tides, GR Schwarzschild, SRP, drag, thrust) — ~200 lines duplicated four ways. Adding a force term (as 0.18.0's tides and GR did) meant editing every copy in lockstep and risked them drifting apart. The physics now lives in one `force_model()` function in `orbitprop::propagator`; each integrator closure is a thin adapter that unpacks its own state layout (`Matrix<6, C>` / `Vector<f64, 6>` / separate `(r, v)`), calls `force_model()`, and packs the result. **No behavior change** — end states are bit-identical and the full Rust suite (including the ESA SP3 GPS regression) passes unchanged.
+- **`ForceEval` mode selector** (`Accel` / `AccelAndPartials` / `PartialsOnly`) keeps each integrator's cost identical to the prior hand-specialized code. Every call site passes a compile-time-constant mode and `force_model` is `#[inline]`, so the compiler constant-folds the partials/accel branches away and regenerates the original specialization — no extra call, no runtime dispatch on the enum. The RODAS4 Jacobian path (`PartialsOnly`) still skips the tide/GR/SRP/thrust terms — they contribute no partials — so it does not regress.
+- **Drag altitude gate uses `norm_squared()`** against a precomputed squared limit (`DRAG_RADIUS_LIMIT_M`) instead of `norm()`, removing a square root from every force evaluation regardless of whether drag is active.
+
+### Earth gravity: stored coefficient table capped at the evaluation degree
+
+- **`Gravity::parse` caps the coefficient table at degree 44** (`MAX_COEFF_DIM`) rather than storing the file's full resolution. The evaluator dispatches at degree ≤ 40 and the Cunningham recursion / divisor tables are 44×44, so higher-degree coefficients were never used — yet the default EGM96 model (file degree 360) was holding a 361×361 `DMatrix` (~1 MB). Capping it drops that to ~15 KB and, more importantly, shrinks the column-major stride from 361 to 44 so the strided S-coefficient reads `coeffs[(m-1, n)]` stay resident in L1 instead of scattering across ~3 KB jumps. **Results are bit-identical** (coefficients for n,m ≤ 43 are untouched, and computation never exceeds degree 40); a microbenchmark on EGM96 shows ~5–15% faster `accel` / `accel_and_partials` and, notably, eliminates the cache-miss timing variance in the hot loop. The cap is coupled to the pre-existing degree-40 dispatch and 44×44 divisor-table limits, and is documented as such so a future degree bump touches all three together.
+
+
 ## 0.18.0 - 2026-05-25
 
 ### Solid Earth tides (IERS 2010 §6.2 Step 1) in the high-precision propagator
