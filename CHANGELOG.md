@@ -1,6 +1,13 @@
 # Changelog
 
 
+## Unreleased
+
+### Fixed
+
+- **`update_datafiles(overwrite=true)` now actually re-downloads EOP/SW files.** The `If-Modified-Since` conditional-GET added in #99 was only ever reached on the `overwrite_if_exists=true` path (the `overwrite=false` path short-circuits on file existence). Because the request used the local file's mtime — set to *download* time, not the server's `Last-Modified` — the server returned `304 Not Modified` and the daily-updated `EOP-All.csv` / `SW-All.csv` were never refreshed. Removed the conditional-GET block so `download_file` unconditionally fetches when called; `overwrite=true` again forces a fresh copy. Resolves [#115](https://github.com/ssmichael1/satkit/issues/115). (The `%a` `strftime` specifier added alongside #99 is retained.)
+
+
 ## 0.18.0 - 2026-05-25
 
 ### Solid Earth tides (IERS 2010 §6.2 Step 1) in the high-precision propagator

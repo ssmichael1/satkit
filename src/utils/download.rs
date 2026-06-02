@@ -68,36 +68,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
     }
 
     let agent = ureq::Agent::new_with_defaults();
-    let mut req = agent.get(url);
-
-    // If we already have a local copy, ask the server to only send
-    // the body if it has changed since we wrote it.
-    let if_modified_since = fullpath
-        .metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|mtime| {
-            let unix = mtime
-                .duration_since(std::time::UNIX_EPOCH)
-                .ok()?
-                .as_secs_f64();
-            crate::time::Instant::from_unixtime(unix)
-                .strftime("%a, %d %b %Y %H:%M:%S GMT")
-                .ok()
-        });
-    if let Some(ref date) = if_modified_since {
-        req = req.header("If-Modified-Since", date.as_str());
-    }
-
-    let mut resp = req.call()?;
-
-    if resp.status().as_u16() == 304 {
-        println!(
-            "File {} unchanged on server; skipping download",
-            fname.to_str().unwrap()
-        );
-        return Ok(false);
-    }
+    let mut resp = agent.get(url).call()?;
 
     println!("Downloading {}", fname.to_str().unwrap());
     let mut dest = std::fs::File::create(fullpath)?;
