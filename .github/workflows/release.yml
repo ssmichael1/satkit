@@ -117,16 +117,25 @@ jobs:
         run: cargo publish
 
   build_wheels:
-    name: build wheels (${{ matrix.os }})
+    name: build wheels (${{ matrix.os }} ${{ matrix.python }})
     needs: test
     strategy:
       fail-fast: false
       matrix:
+        # Each CPython version is its own job (no abi3 → 5 distinct wheels),
+        # so the five versions build in parallel per architecture instead of
+        # one serial cibuildwheel loop per runner.
         os:
           - macos-latest
           - ubuntu-latest
           - windows-latest
           - ubuntu-24.04-arm
+        python:
+          - cp310
+          - cp311
+          - cp312
+          - cp313
+          - cp314
         include:
           - os: ubuntu-latest
             platform: linux
@@ -134,6 +143,40 @@ jobs:
             platform: linux
 
     runs-on: ${{ matrix.os }}
+
+    env:
+      # Compiler-level cache (sccache) backed by the GitHub Actions cache.
+      # Keyed on compiler inputs, so dependency crates (nalgebra, pyo3, …)
+      # are reused across runs AND across the parallel per-version jobs —
+      # this is what pays back the redundant dep compilation the matrix
+      # split would otherwise introduce.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      # Incremental artifacts are not cacheable; disabling lets sccache hit.
+      CARGO_INCREMENTAL: "0"
+      # Build only this job's single Python version (overrides the full
+      # build list in pyproject.toml's [tool.cibuildwheel]).
+      CIBW_BUILD: ${{ matrix.python }}-*
+      # Linux wheels build inside the manylinux container, which shares
+      # neither the host filesystem nor host env. Forward the sccache
+      # config + GHA cache credentials into the container…
+      CIBW_ENVIRONMENT_PASS_LINUX: >-
+        RUSTC_WRAPPER
+        SCCACHE_GHA_ENABLED
+        CARGO_INCREMENTAL
+        ACTIONS_CACHE_URL
+        ACTIONS_RESULTS_URL
+        ACTIONS_RUNTIME_TOKEN
+      # …and install the sccache binary inside that container (the host
+      # install from sccache-action isn't visible in there). Pin to a
+      # version that speaks the GHA cache service v2 (ACTIONS_RESULTS_URL);
+      # older sccache only knows the retired v1 (ACTIONS_CACHE_URL) and
+      # aborts with "environment variable not found" on current runners.
+      CIBW_BEFORE_ALL_LINUX: >-
+        curl -fsSL
+        https://github.com/mozilla/sccache/releases/download/v0.15.0/sccache-v0.15.0-$(uname -m)-unknown-linux-musl.tar.gz
+        | tar -xz -C /tmp &&
+        install -m 755 /tmp/sccache-v0.15.0-$(uname -m)-unknown-linux-musl/sccache /usr/local/bin/sccache
 
     steps:
       - uses: actions/checkout@v5
@@ -145,6 +188,12 @@ jobs:
         if: matrix.platform != 'linux'
         uses: dtolnay/rust-toolchain@stable
 
+      # Installs sccache on the host and, importantly, exports ACTIONS_CACHE_URL /
+      # ACTIONS_RESULTS_URL / ACTIONS_RUNTIME_TOKEN into the step env so the
+      # CIBW_ENVIRONMENT_PASS_LINUX forwarding above has values to pass through.
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.0
         with:
@@ -152,8 +201,12 @@ jobs:
           output-dir: wheelhouse
           config-file: "{package}/pyproject.toml"
 
+      - name: sccache stats
+        if: always() && matrix.platform != 'linux'
+        run: sccache --show-stats
+
       - name: Create sdist
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.python == 'cp313'
         run: |
           pip install build
           python -m build --sdist . -o wheelhouse
@@ -161,7 +214,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: cibw-wheels-${{ matrix.os }}-${{ matrix.python }}
           path: ./wheelhouse/*
 
   publish_pypi:
