@@ -55,6 +55,16 @@ type CoeffTable = DMatrix<f64>;
 
 type DivisorTable = Matrix<44, 44>;
 
+/// Largest table dimension the evaluator can ever index. Acceleration and
+/// partials are dispatched at degree ≤ 40 (see `dispatch_degree!`) and the
+/// Cunningham recursion uses NP4 = degree + 4 ≤ 44, matching the 44×44
+/// divisor tables. Storing coefficients beyond this is not just wasted
+/// memory — for high-resolution models (EGM96 is degree 360) it inflates the
+/// column-major stride of `coeffs`, scattering the S-coefficient reads
+/// `coeffs[(m-1, n)]` across ~3 KB strides and thrashing the cache in the
+/// hot loops. Capping the stored table keeps the working set in L1.
+const MAX_COEFF_DIM: usize = 44;
+
 use std::sync::OnceLock;
 
 ///
@@ -693,8 +703,12 @@ impl Gravity {
             return Err(Error::MissingMaxDegree);
         }
 
-        // Create matrix with lookup values
-        let mut cs: CoeffTable = CoeffTable::zeros(max_degree + 1, max_degree + 1);
+        // Create matrix with lookup values. Cap the stored table at the
+        // largest degree the evaluator can use (see `MAX_COEFF_DIM`); higher
+        // coefficients in the file are unused and would only hurt cache
+        // locality.
+        let table_dim = (max_degree + 1).min(MAX_COEFF_DIM);
+        let mut cs: CoeffTable = CoeffTable::zeros(table_dim, table_dim);
 
         for line in &lines[header_cnt..] {
             let s: Vec<&str> = line.split_whitespace().collect();
@@ -704,6 +718,10 @@ impl Gravity {
 
             let n: usize = s[1].parse()?;
             let m: usize = s[2].parse()?;
+            // Skip coefficients beyond the stored/evaluated degree.
+            if n >= table_dim {
+                continue;
+            }
             let v1: f64 = s[3].parse()?;
             cs[(n, m)] = v1;
             if m > 0 {
@@ -713,7 +731,7 @@ impl Gravity {
         }
 
         // Convert from normalized coefficients to actual coefficients
-        for n in 0..(max_degree + 1) {
+        for n in 0..table_dim {
             for m in 0..(n + 1) {
                 let mut scale: f64 = 1.0;
                 for k in (n - m + 1)..(n + m + 1) {
