@@ -12,6 +12,9 @@
 ### Earth gravity: stored coefficient table capped at the evaluation degree
 
 - **`Gravity::parse` caps the coefficient table at degree 44** (`MAX_COEFF_DIM`) rather than storing the file's full resolution. The evaluator dispatches at degree ≤ 40 and the Cunningham recursion / divisor tables are 44×44, so higher-degree coefficients were never used — yet the default EGM96 model (file degree 360) was holding a 361×361 `DMatrix` (~1 MB). Capping it drops that to ~15 KB and, more importantly, shrinks the column-major stride from 361 to 44 so the strided S-coefficient reads `coeffs[(m-1, n)]` stay resident in L1 instead of scattering across ~3 KB jumps. **Results are bit-identical** (coefficients for n,m ≤ 43 are untouched, and computation never exceeds degree 40); a microbenchmark on EGM96 shows ~5–15% faster `accel` / `accel_and_partials` and, notably, eliminates the cache-miss timing variance in the hot loop. The cap is coupled to the pre-existing degree-40 dispatch and 44×44 divisor-table limits, and is documented as such so a future degree bump touches all three together.
+### Fixed
+
+- **`update_datafiles(overwrite=true)` now actually re-downloads EOP/SW files.** The `If-Modified-Since` conditional-GET added in #99 was only ever reached on the `overwrite_if_exists=true` path (the `overwrite=false` path short-circuits on file existence). Because the request used the local file's mtime — set to *download* time, not the server's `Last-Modified` — the server returned `304 Not Modified` and the daily-updated `EOP-All.csv` / `SW-All.csv` were never refreshed. Removed the conditional-GET block so `download_file` unconditionally fetches when called; `overwrite=true` again forces a fresh copy. Resolves [#115](https://github.com/ssmichael1/satkit/issues/115). (The `%a` `strftime` specifier added alongside #99 is retained.)
 
 
 ## 0.18.0 - 2026-05-25
