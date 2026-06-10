@@ -14,6 +14,10 @@
 - **Unknown keyword arguments now raise `ValueError` consistently.** New shared `reject_unused_kwargs` helper replaces three hand-rolled "extraneous kwargs" folds (`propagate`, `satproperties`, `propsettings` — the latter previously raised `RuntimeError`). **`duration(...)` now validates its kwargs too**: previously a typo like `duration(day=1)` was silently ignored and returned a zero duration.
 - **Pickle implementations for `quaternion`, `itrfcoord`, and `kepler` share `pack_f64s`/`unpack_f64s` helpers.** Wire format is byte-identical to prior releases — existing pickles load unchanged.
 
+### Criterion benchmark suite
+
+- **New `benches/hotpaths.rs`** (`cargo bench`) covering the per-call costs that dominate real workloads: high-precision propagation (LEO+drag RKV98, GEO RKV98, GEO Gauss-Jackson 8, LEO with STM), SGP4 (cold init + cached, 1 day at 1-minute cadence), frame transforms (`qgcrf2itrf` exact/approx, `qteme2itrf`, `gmst`), spherical-harmonic gravity (degree 4/16, with partials), JPL ephemeris lookups, and NRLMSISE-00 density. Establishes the baseline for future optimization work — micro-optimizations in the force model and EOP path should be measured against this suite.
+
 ### Rust cleanups
 
 - New `earth_orientation_params::get_or_zero` / `eop_from_mjd_utc_or_zero` helpers replace the `.unwrap_or([0.0; 6])` pattern repeated across the frame transforms and time module.
