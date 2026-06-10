@@ -1,9 +1,9 @@
 use satkit::orbitprop::SatPropertiesSimple;
 
 use crate::pythrust::{py_thrusts_to_profile, PyThrust};
-use crate::pyutils::kwargs_or_default;
+use crate::pyutils::{kwargs_or_default, reject_unused_kwargs};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
@@ -56,15 +56,7 @@ impl PySatProperties {
                 props = props.with_thrust(py_thrusts_to_profile(thrusts));
                 kw.del_item("thrusts")?;
             }
-            if !kw.is_empty() {
-                let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
-                    let mut a2 = acc;
-                    a2.push_str(k.cast::<PyString>().unwrap().to_str().unwrap());
-                    a2.push_str(", ");
-                    a2
-                });
-                bail!("Invalid keyword args: {}", keystring);
-            }
+            reject_unused_kwargs(kw)?;
         }
 
         Ok(Self(props))

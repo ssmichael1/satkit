@@ -36,6 +36,11 @@ anyhow = "1"
 rand = "0.9.2"
 approx = "0.5"
 rand_distr = "0.5.1"
+criterion = "0.8.2"
+
+[[bench]]
+name = "hotpaths"
+harness = false
 
 [features]
 default = ["omm-xml", "download"]

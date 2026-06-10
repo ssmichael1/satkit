@@ -60,7 +60,7 @@ pub fn ecliptic_longitude<T: TimeLike>(time: &T) -> f64 {
         1.914666471f64.mul_add(f64::sin(M), lambda_m.to_degrees()),
     );
 
-    lon.to_radians() % (2.0 * std::f64::consts::PI)
+    lon.to_radians() % std::f64::consts::TAU
 }
 
 ///

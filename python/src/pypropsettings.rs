@@ -4,7 +4,7 @@ use crate::pygravity::GravModel;
 use crate::{PyDuration, PyInstant};
 use satkit::orbitprop::{Integrator, PropSettings, TideModel};
 
-use pyo3::types::{PyDelta, PyDeltaAccess, PyDict, PyString};
+use pyo3::types::{PyDelta, PyDeltaAccess, PyDict};
 
 /// Choice of ODE integrator for orbit propagation
 #[allow(non_camel_case_types)]
@@ -174,16 +174,7 @@ impl PyPropSettings {
                 ps.use_relativistic_correction = gr.extract::<bool>()?;
                 kw.del_item("use_relativistic_correction")?;
             }
-            if !kw.is_empty() {
-                let keystring: String = kw.iter().fold(String::from(""), |acc, (k, _v)| {
-                    let mut a2 = acc.clone();
-                    a2.push_str(k.cast::<PyString>().unwrap().to_str().unwrap());
-                    a2.push_str(", ");
-                    a2
-                });
-                let s = format!("Invalid kwargs: {}", keystring);
-                return Err(pyo3::exceptions::PyRuntimeError::new_err(s));
-            }
+            crate::pyutils::reject_unused_kwargs(kw)?;
             if order_explicitly_set {
                 // Clamp order to degree
                 if ps.gravity_order > ps.gravity_degree {

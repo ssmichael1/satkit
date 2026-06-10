@@ -255,24 +255,27 @@ impl PyKepler {
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        let mut state = [0; 48];
-        state[0..8].clone_from_slice(&self.0.a.to_le_bytes());
-        state[8..16].clone_from_slice(&self.0.eccen.to_le_bytes());
-        state[16..24].clone_from_slice(&self.0.incl.to_le_bytes());
-        state[24..32].clone_from_slice(&self.0.raan.to_le_bytes());
-        state[32..40].clone_from_slice(&self.0.w.to_le_bytes());
-        state[40..48].clone_from_slice(&self.0.nu.to_le_bytes());
-        PyBytes::new(py, &state).into_py_any(py)
+        crate::pyutils::pack_f64s(
+            py,
+            &[
+                self.0.a,
+                self.0.eccen,
+                self.0.incl,
+                self.0.raan,
+                self.0.w,
+                self.0.nu,
+            ],
+        )
     }
 
-    fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> PyResult<()> {
-        let state = state.extract::<&[u8]>(py)?;
-        self.0.a = f64::from_le_bytes(state[0..8].try_into().unwrap());
-        self.0.eccen = f64::from_le_bytes(state[8..16].try_into().unwrap());
-        self.0.incl = f64::from_le_bytes(state[16..24].try_into().unwrap());
-        self.0.raan = f64::from_le_bytes(state[24..32].try_into().unwrap());
-        self.0.w = f64::from_le_bytes(state[32..40].try_into().unwrap());
-        self.0.nu = f64::from_le_bytes(state[40..48].try_into().unwrap());
+    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
+        let [a, eccen, incl, raan, w, nu] = crate::pyutils::unpack_f64s(py, &state)?;
+        self.0.a = a;
+        self.0.eccen = eccen;
+        self.0.incl = incl;
+        self.0.raan = raan;
+        self.0.w = w;
+        self.0.nu = nu;
         Ok(())
     }
 
