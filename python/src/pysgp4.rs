@@ -305,12 +305,16 @@ pub fn sgp4(
         let mut stle: PyRefMut<PyTLE> = tle
             .extract()
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e)))?;
-        let states = psgp4::sgp4_full(
-            &mut stle.0,
-            time.to_time_vec()?.as_slice(),
-            gravconst.into(),
-            opsmode.into(),
-        )?;
+        // Clone the TLE and run SGP4 with the GIL released, then write the
+        // TLE back so the cached SGP4 init state is preserved
+        let mut rtle = stle.0.clone();
+        let tmvec = time.to_time_vec()?;
+        let gravconst: psgp4::GravConst = gravconst.into();
+        let opsmode: psgp4::OpsMode = opsmode.into();
+        let states = tle
+            .py()
+            .detach(|| psgp4::sgp4_full(&mut rtle, tmvec.as_slice(), gravconst, opsmode))?;
+        stle.0 = rtle;
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
                 vec![states.pos.ncols(), states.pos.nrows()]
@@ -349,12 +353,13 @@ pub fn sgp4(
         })?;
         let mut omm = omm_from_pydict(dict)?;
 
-        let states = psgp4::sgp4_full(
-            &mut omm,
-            time.to_time_vec()?.as_slice(),
-            gravconst.into(),
-            opsmode.into(),
-        )?;
+        // Run SGP4 with the GIL released
+        let tmvec = time.to_time_vec()?;
+        let gravconst: psgp4::GravConst = gravconst.into();
+        let opsmode: psgp4::OpsMode = opsmode.into();
+        let states = tle
+            .py()
+            .detach(|| psgp4::sgp4_full(&mut omm, tmvec.as_slice(), gravconst, opsmode))?;
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
                 vec![states.pos.ncols(), states.pos.nrows()]
@@ -388,14 +393,25 @@ pub fn sgp4(
     } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
         let tmarray = time.to_time_vec()?;
-        let results: Vec<psgp4::SGP4State> = plist
+
+        // Sources for the SGP4 computation, extracted with the GIL held;
+        // the computation itself runs below with the GIL released.
+        // TLE sources keep a handle to the originating Python object so the
+        // cached SGP4 init state can be written back afterward.
+        enum Sgp4Source {
+            Tle(Py<PyTLE>, satkit::TLE),
+            Omm(Box<satkit::omm::OMM>),
+        }
+
+        let mut sources: Vec<Sgp4Source> = plist
             .iter()
-            .map(|item| -> Result<psgp4::SGP4State> {
+            .map(|item| -> Result<Sgp4Source> {
                 if item.is_instance_of::<PyTLE>() {
-                    let mut stle: PyRefMut<PyTLE> = item.extract().map_err(|e| {
+                    let pytle: Py<PyTLE> = item.extract().map_err(|e| {
                         pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e))
                     })?;
-                    Ok(psgp4::sgp4(&mut stle.0, tmarray.as_slice())?)
+                    let rtle = pytle.borrow(item.py()).0.clone();
+                    Ok(Sgp4Source::Tle(pytle, rtle))
                 } else if item.is_instance_of::<PyDict>() {
                     let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
                         pyo3::exceptions::PyValueError::new_err(format!(
@@ -403,13 +419,31 @@ pub fn sgp4(
                             e
                         ))
                     })?;
-                    let mut omm = omm_from_pydict(dict)?;
-                    Ok(psgp4::sgp4(&mut omm, tmarray.as_slice())?)
+                    Ok(Sgp4Source::Omm(Box::new(omm_from_pydict(dict)?)))
                 } else {
                     bail!("Invalid TLE in list");
                 }
             })
             .collect::<Result<Vec<_>>>()?;
+
+        let results: Vec<psgp4::SGP4State> = tle.py().detach(|| {
+            sources
+                .iter_mut()
+                .map(|src| -> Result<psgp4::SGP4State> {
+                    match src {
+                        Sgp4Source::Tle(_, rtle) => Ok(psgp4::sgp4(rtle, tmarray.as_slice())?),
+                        Sgp4Source::Omm(omm) => Ok(psgp4::sgp4(omm.as_mut(), tmarray.as_slice())?),
+                    }
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+
+        // Write the TLEs back to preserve their cached SGP4 init state
+        for src in &sources {
+            if let Sgp4Source::Tle(pytle, rtle) = src {
+                pytle.borrow_mut(tle.py()).0 = rtle.clone();
+            }
+        }
 
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let n = plist.len() * tmarray.len() * 3;

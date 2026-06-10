@@ -148,7 +148,7 @@ pub fn earth_rotation_angle<T: TimeLike>(tm: &T) -> f64 {
 pub fn qitrf2tirs<T: TimeLike>(tm: &T) -> Quaternion {
     // Get earth orientation parameters or set them all to zero if not available
     // (function will print warning to stderr if not available)
-    let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
+    let eop = earth_orientation_params::get_or_zero(tm);
     qitrf2tirs_with_eop(&eop, tm)
 }
 
@@ -431,7 +431,7 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 pub fn qitrf2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
     // w is rotation from international terrestrial reference frame
     // to terrestrial intermediate reference frame
-    let eop = earth_orientation_params::get(tm).unwrap_or([0.0; 6]);
+    let eop = earth_orientation_params::get_or_zero(tm);
 
     let w = qitrf2tirs_with_eop(&eop, tm);
     let r = qtirs2cirs(tm);
@@ -693,7 +693,7 @@ pub fn itrf_to_gcrf_state<T: TimeLike>(
 ) -> (Vector3, Vector3) {
     // Pull EOP once so both polar motion and the CIRS→GCRF dX/dY
     // correction stay consistent.
-    let eop = crate::earth_orientation_params::get(time).unwrap_or([0.0; 6]);
+    let eop = crate::earth_orientation_params::get_or_zero(time);
 
     let q_itrf_to_tirs = qitrf2tirs_with_eop(&eop, time);
 
@@ -760,7 +760,7 @@ pub fn gcrf_to_itrf_state<T: TimeLike>(
     vel_gcrf: &Vector3,
     time: &T,
 ) -> (Vector3, Vector3) {
-    let eop = crate::earth_orientation_params::get(time).unwrap_or([0.0; 6]);
+    let eop = crate::earth_orientation_params::get_or_zero(time);
 
     // GCRF → CIRS → TIRS (inverse of the forward chain above).
     let q_gcrf_to_tirs =

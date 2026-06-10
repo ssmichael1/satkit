@@ -753,12 +753,6 @@ mod tests {
             assert!(((nedvec[x] - dvec[x]) / nedvec[x]).abs() < 1.0e-3);
             assert!(((enuvec[x] - dvec[x]) / nedvec[x]).abs() < 1.0e-3);
         }
-        /*
-        let q = Quat::from_axis_angle(&Vector3::z_axis(), -0.003);
-        println!("{}", q);
-        println!("{}", q.to_rotation_matrix());
-        */
-
         let itrf1 = ITRFCoord::from_geodetic_deg(lat_deg, lon_deg, hae);
 
         // Go east 10 meters

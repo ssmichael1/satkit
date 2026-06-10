@@ -47,7 +47,7 @@ pub fn ecliptic_longitude<T: TimeLike>(time: &T) -> f64 {
             ),
         );
 
-    lon % (2.0 * std::f64::consts::PI)
+    lon % std::f64::consts::TAU
 }
 
 /// Compute approximate phase of the moon
@@ -68,14 +68,7 @@ pub fn phase<T: TimeLike>(time: &T) -> f64 {
     let lambda_moon = ecliptic_longitude(&time);
     let lambda_sun = crate::lpephem::sun::ecliptic_longitude(&time);
 
-    let phase = (lambda_moon - lambda_sun) % (2.0 * std::f64::consts::PI);
-    if phase < 0.0 {
-        phase + 2.0 * std::f64::consts::PI
-    } else if phase > 2.0 * std::f64::consts::PI {
-        phase - 2.0 * std::f64::consts::PI
-    } else {
-        phase
-    }
+    (lambda_moon - lambda_sun).rem_euclid(std::f64::consts::TAU)
 }
 
 /// Compute fraction of moon illuminated at given time

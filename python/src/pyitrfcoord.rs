@@ -388,25 +388,13 @@ impl PyITRFCoord {
     }
 
     fn __setstate__(&mut self, py: Python, s: Py<PyBytes>) -> PyResult<()> {
-        let s = s.as_bytes(py);
-        if s.len() != 24 {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid serialization length",
-            ));
-        }
-        let x = f64::from_le_bytes(s[0..8].try_into()?);
-        let y = f64::from_le_bytes(s[8..16].try_into()?);
-        let z = f64::from_le_bytes(s[16..24].try_into()?);
+        let [x, y, z] = crate::pyutils::unpack_f64s(py, &s)?;
         self.0.itrf = numeris::vector![x, y, z];
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let mut raw = [0; 24];
-        raw[0..8].clone_from_slice(f64::to_le_bytes(self.0.itrf[0]).as_slice());
-        raw[8..16].clone_from_slice(f64::to_le_bytes(self.0.itrf[1]).as_slice());
-        raw[16..24].clone_from_slice(f64::to_le_bytes(self.0.itrf[2]).as_slice());
-        pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
+        crate::pyutils::pack_f64s(py, &[self.0.itrf[0], self.0.itrf[1], self.0.itrf[2]])
     }
 
     /// 3-vector representing cartesian distance between this
