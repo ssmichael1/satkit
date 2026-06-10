@@ -256,6 +256,7 @@ impl PyTLE {
     // Fit a TLE from GCRF states and times
     #[staticmethod]
     fn fit_from_states(
+        py: Python,
         states: Vec<[f64; 6]>,
         times: &Bound<'_, PyAny>,
         epoch: &Bound<'_, PyAny>,
@@ -265,26 +266,24 @@ impl PyTLE {
         if epoch.len() != 1 {
             bail!("epoch must be a single time value");
         }
-        let (tle, result) = TLE::fit_from_states(&states, &times, epoch[0])?;
+        // Release the GIL during the (potentially long-running) fit
+        let (tle, result) = py.detach(|| TLE::fit_from_states(&states, &times, epoch[0]))?;
 
-        Ok((
-            Self(tle),
-            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let dict = pyo3::types::PyDict::new(py);
-                dict.set_item("status", PyTleFitStatus::from(result.status))?;
-                dict.set_item("converged", {
-                    let s: PyTleFitStatus = result.status.into();
-                    s.converged()
-                })?;
-                dict.set_item("orig_norm", result.orig_norm)?;
-                dict.set_item("best_norm", result.best_norm)?;
-                dict.set_item("grad_norm", result.grad_norm)?;
-                dict.set_item("n_iter", result.n_iter)?;
-                dict.set_item("n_res_evals", result.n_res_evals)?;
-
-                Ok(dict.into())
-            })?,
-        ))
+        let stats = {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("status", PyTleFitStatus::from(result.status))?;
+            dict.set_item("converged", {
+                let s: PyTleFitStatus = result.status.into();
+                s.converged()
+            })?;
+            dict.set_item("orig_norm", result.orig_norm)?;
+            dict.set_item("best_norm", result.best_norm)?;
+            dict.set_item("grad_norm", result.grad_norm)?;
+            dict.set_item("n_iter", result.n_iter)?;
+            dict.set_item("n_res_evals", result.n_res_evals)?;
+            dict.into()
+        };
+        Ok((Self(tle), stats))
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {

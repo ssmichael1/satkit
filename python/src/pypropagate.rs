@@ -13,9 +13,9 @@ use satkit::Duration;
 use satkit::Instant;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::types::{PyDict, PyTuple};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 /// High-precision orbit propagator
 ///
@@ -85,6 +85,7 @@ use anyhow::{bail, Result};
 ///
 #[pyfunction(signature=(*args, **kwargs))]
 pub fn propagate(
+    py: Python,
     args: &Bound<PyTuple>,
     mut kwargs: Option<&Bound<'_, PyDict>>,
 ) -> Result<Py<PyAny>> {
@@ -98,8 +99,7 @@ pub fn propagate(
     let mut begintime: Instant = Instant::INVALID;
     let mut endtime: Instant = Instant::INVALID;
     let mut output_phi: bool = false;
-    let mut satproperties: Option<&dyn SatProperties> = None;
-    let satproperties_simple: SatPropertiesSimple;
+    let mut satproperties: Option<SatPropertiesSimple> = None;
 
     if args.len() > 0 {
         state0 = py_to_smatrix(&args.get_item(0)?)?;
@@ -181,41 +181,39 @@ pub fn propagate(
             kw.del_item("duration_secs")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {
-            satproperties_simple = kws
-                .extract::<PySatProperties>()
-                .map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {}", e))
-                })?
-                .0;
-            satproperties = Some(&satproperties_simple);
+            satproperties = Some(
+                kws.extract::<PySatProperties>()
+                    .map_err(|e| {
+                        pyo3::exceptions::PyValueError::new_err(format!(
+                            "Invalid satproperties: {}",
+                            e
+                        ))
+                    })?
+                    .0,
+            );
             kw.del_item("satproperties")?;
         }
 
         output_phi = kwargs_or_default(&mut kwargs, "output_phi", false)?;
 
-        if !kw.is_empty() {
-            let keystring: String = kw.iter().try_fold(String::from(""), |acc, (k, _v)| {
-                let mut a2 = acc;
-                a2.push_str(k.cast::<PyString>()?.to_str()?);
-                a2.push_str(", ");
-                Ok::<_, PyErr>(a2)
-            })?;
-            bail!("Extraneous keyword arguments: {}", keystring);
-        }
+        reject_unused_kwargs(kw)?;
     }
+
+    // Release the GIL during the (potentially long-running) propagation
+    // so other Python threads can make progress
 
     // Simple sate propagation
     if !output_phi {
-        let res = satkit::orbitprop::propagate(
-            &state0,
-            &begintime,
-            &endtime,
-            &propsettings,
-            satproperties,
-        )?;
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            Ok(PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)?)
-        })
+        let res = py.detach(|| {
+            satkit::orbitprop::propagate(
+                &state0,
+                &begintime,
+                &endtime,
+                &propsettings,
+                satproperties.as_ref().map(|p| p as &dyn SatProperties),
+            )
+        })?;
+        Ok(PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)?)
     }
     // Propagate with state transition matrix
     else {
@@ -224,10 +222,15 @@ pub fn propagate(
         pv.set_block(0, 0, &state0);
         pv.set_block(0, 1, &Matrix6::eye());
 
-        let res =
-            satkit::orbitprop::propagate(&pv, &begintime, &endtime, &propsettings, satproperties)?;
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
-        })
+        let res = py.detach(|| {
+            satkit::orbitprop::propagate(
+                &pv,
+                &begintime,
+                &endtime,
+                &propsettings,
+                satproperties.as_ref().map(|p| p as &dyn SatProperties),
+            )
+        })?;
+        Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
     }
 }

@@ -1,6 +1,26 @@
 # Changelog
 
 
+## Unreleased
+
+### Python bindings release the GIL during long computations
+
+- **`propagate`, `TLE.fit_from_states`, `sgp4` (all three input forms), and every array-valued frame-transform / ephemeris helper now release the GIL** (`Python::detach`) while the Rust computation runs, so other Python threads make progress during multi-second propagations and large batch transforms. Verified by a concurrency smoke test: a spin thread ran freely during a 100k-time `qgcrf2itrf` call.
+- **`sgp4` batch (list) path restructured** to extract TLE/OMM sources with the GIL held, run the SGP4 computation detached, then write the TLEs back so their cached SGP4 init state is preserved. Single-TLE and OMM-dict paths use the same clone-and-write-back approach. Results are unchanged.
+- The shared multi-time helpers in `pyutils` (`py_vec3_of_time_arr`, `py_vec3_of_time_result_arr`, `py_func_of_time_arr`, `py_quat_from_time_arr`, `tuple_func_of_time_arr`) all compute detached; the two vec3 helpers also lost their per-element `unsafe` pointer copies in favor of a plain `Vec` + reshape.
+
+### Python bindings cleanups
+
+- **Unknown keyword arguments now raise `ValueError` consistently.** New shared `reject_unused_kwargs` helper replaces three hand-rolled "extraneous kwargs" folds (`propagate`, `satproperties`, `propsettings` — the latter previously raised `RuntimeError`). **`duration(...)` now validates its kwargs too**: previously a typo like `duration(day=1)` was silently ignored and returned a zero duration.
+- **Pickle implementations for `quaternion`, `itrfcoord`, and `kepler` share `pack_f64s`/`unpack_f64s` helpers.** Wire format is byte-identical to prior releases — existing pickles load unchanged.
+
+### Rust cleanups
+
+- New `earth_orientation_params::get_or_zero` / `eop_from_mjd_utc_or_zero` helpers replace the `.unwrap_or([0.0; 6])` pattern repeated across the frame transforms and time module.
+- Removed the dead legacy `finals2000A.all` EOP loader and its three unused error variants (`LegacyFileMissing`, `LegacyOpenFailed`, `LegacyFieldParse`) — EOP data has loaded from `EOP-All.csv` since the Celestrak migration.
+- `lpephem::moon::phase` angle wrap simplified to `rem_euclid` (the `> 2π` branch was unreachable); `2.0 * PI` literals replaced with `std::f64::consts::TAU`.
+
+
 ## 0.18.1 - 2026-06-02
 
 ### High-precision propagator: force model unified across all integrators
