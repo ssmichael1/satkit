@@ -11,3 +11,9 @@ file = "python/Cargo.toml"
 search = '^version = "[0-9]+\.[0-9]+\.[0-9]+"'
 replace = 'version = "{{version}}"'
 exactly = 1
+
+[[pre-release-replacements]]
+file = "CHANGELOG.md"
+search = '## Unreleased'
+replace = '## {{version}} - {{date}}'
+exactly = 1
