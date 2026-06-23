@@ -252,27 +252,13 @@ impl PyQuaternion {
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        let state = state.as_bytes(py);
-        if state.len() != 32 {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid serialization length",
-            ));
-        }
-        let w = f64::from_le_bytes(state[0..8].try_into()?);
-        let x = f64::from_le_bytes(state[8..16].try_into()?);
-        let y = f64::from_le_bytes(state[16..24].try_into()?);
-        let z = f64::from_le_bytes(state[24..32].try_into()?);
+        let [w, x, y, z] = crate::pyutils::unpack_f64s(py, &state)?;
         self.0 = Quaternion::new(w, x, y, z);
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let mut raw = [0; 32];
-        raw[0..8].clone_from_slice(f64::to_le_bytes(self.0.w).as_slice());
-        raw[8..16].clone_from_slice(f64::to_le_bytes(self.0.x).as_slice());
-        raw[16..24].clone_from_slice(f64::to_le_bytes(self.0.y).as_slice());
-        raw[24..32].clone_from_slice(f64::to_le_bytes(self.0.z).as_slice());
-        PyBytes::new(py, &raw).into_py_any(py)
+        crate::pyutils::pack_f64s(py, &[self.0.w, self.0.x, self.0.y, self.0.z])
     }
 
     /// Angle of rotation in radians

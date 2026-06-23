@@ -1,6 +1,7 @@
 use satkit::Duration;
 
 use crate::pyinstant::PyInstant;
+use crate::pyutils::{kwargs_or_default, reject_unused_kwargs};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDict;
@@ -66,28 +67,14 @@ impl PyDuration {
     #[new]
     #[pyo3(signature=(**kwargs))]
     fn py_new(kwargs: Option<Bound<'_, PyDict>>) -> Result<Self> {
-        let mut days = 0.0;
-        let mut seconds = 0.0;
-        let mut minutes = 0.0;
-        let mut hours = 0.0;
-        let mut microseconds: i64 = 0;
-
-        if let Some(kwargs) = kwargs {
-            if let Some(d) = kwargs.get_item("days")? {
-                days = d.extract::<f64>()?;
-            }
-            if let Some(s) = kwargs.get_item("seconds")? {
-                seconds = s.extract::<f64>()?;
-            }
-            if let Some(m) = kwargs.get_item("minutes")? {
-                minutes = m.extract::<f64>()?;
-            }
-            if let Some(h) = kwargs.get_item("hours")? {
-                hours = h.extract::<f64>()?;
-            }
-            if let Some(m) = kwargs.get_item("microseconds")? {
-                microseconds = m.extract::<i64>()?;
-            }
+        let mut kw = kwargs.as_ref();
+        let days: f64 = kwargs_or_default(&mut kw, "days", 0.0)?;
+        let seconds: f64 = kwargs_or_default(&mut kw, "seconds", 0.0)?;
+        let minutes: f64 = kwargs_or_default(&mut kw, "minutes", 0.0)?;
+        let hours: f64 = kwargs_or_default(&mut kw, "hours", 0.0)?;
+        let microseconds: i64 = kwargs_or_default(&mut kw, "microseconds", 0)?;
+        if let Some(kw) = kw {
+            reject_unused_kwargs(kw)?;
         }
 
         Ok(Self(

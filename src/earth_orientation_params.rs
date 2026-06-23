@@ -16,8 +16,6 @@
 //! See: https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html for details on EOP data
 //!
 
-use std::fs::File;
-use std::io::{self, BufRead};
 use std::num::ParseFloatError;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,26 +33,6 @@ pub enum Error {
     /// A line in the EOP CSV file has fewer than the expected 12 fields.
     #[error("Invalid entry in EOP file")]
     InvalidEntry,
-
-    /// The legacy `finals2000A.all` file could not be located.
-    #[error("Cannot open earth orientation parameters file: {0}")]
-    LegacyFileMissing(String),
-
-    /// Failed to open the legacy `finals2000A.all` file.
-    #[error("Couldn't open {path}: {source}")]
-    LegacyOpenFailed {
-        path: String,
-        #[source]
-        source: std::io::Error,
-    },
-
-    /// Failed to parse a numeric field from the legacy bulletin file.
-    #[error("Could not extract {field} from file")]
-    LegacyFieldParse {
-        field: &'static str,
-        #[source]
-        source: ParseFloatError,
-    },
 
     /// The configured data directory is read-only and cannot receive an
     /// updated EOP file.
@@ -127,88 +105,6 @@ fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
         .join("EOP-All.csv");
     download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
     parse_csv(&std::fs::read_to_string(&path)?)
-}
-
-#[allow(dead_code)]
-fn load_eop_file_legacy(filename: Option<PathBuf>) -> Result<Vec<EOPEntry>> {
-    let path: PathBuf = filename.unwrap_or_else(|| {
-        datadir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("finals2000A.all")
-    });
-
-    if !path.is_file() {
-        return Err(Error::LegacyFileMissing(
-            path.to_str().unwrap_or_default().to_string(),
-        ));
-    }
-
-    let file = match File::open(&path) {
-        Err(why) => {
-            return Err(Error::LegacyOpenFailed {
-                path: path.display().to_string(),
-                source: why,
-            });
-        }
-        Ok(file) => file,
-    };
-
-    let mut eopvec = Vec::<EOPEntry>::new();
-    for line in io::BufReader::new(file).lines() {
-        match &line.unwrap() {
-            v if v.len() < 100 => (),
-            v if !v.is_ascii() => (),
-            v if {
-                let c: String = v.chars().skip(16).take(1).collect();
-                c != "I" && c != "P"
-            } => {}
-            v => {
-                // Pull from "Bulliten A"
-                let mjd_str: String = v.chars().skip(7).take(8).collect();
-                let xp_str: String = v.chars().skip(18).take(9).collect();
-                let yp_str: String = v.chars().skip(37).take(9).collect();
-                let dut1_str: String = v.chars().skip(58).take(10).collect();
-                let lod_str: String = v.chars().skip(49).take(7).collect();
-                let dx_str: String = v.chars().skip(97).take(9).collect();
-                let dy_str: String = v.chars().skip(116).take(9).collect();
-
-                eopvec.push(EOPEntry {
-                    mjd_utc: mjd_str
-                        .trim()
-                        .parse()
-                        .map_err(|source| Error::LegacyFieldParse {
-                            field: "MJD",
-                            source,
-                        })?,
-                    xp: xp_str
-                        .trim()
-                        .parse()
-                        .map_err(|source| Error::LegacyFieldParse {
-                            field: "X polar motion",
-                            source,
-                        })?,
-                    yp: yp_str
-                        .trim()
-                        .parse()
-                        .map_err(|source| Error::LegacyFieldParse {
-                            field: "Y polar motion",
-                            source,
-                        })?,
-                    dut1: dut1_str
-                        .trim()
-                        .parse()
-                        .map_err(|source| Error::LegacyFieldParse {
-                            field: "delta UT1",
-                            source,
-                        })?,
-                    lod: lod_str.trim().parse().unwrap_or(0.0),
-                    dX: dx_str.trim().parse().unwrap_or(0.0),
-                    dY: dy_str.trim().parse().unwrap_or(0.0),
-                })
-            }
-        }
-    }
-    Ok(eopvec)
 }
 
 static WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
@@ -376,6 +272,20 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 #[inline]
 pub fn get<T: crate::TimeLike>(tm: &T) -> Option<[f64; 6]> {
     eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC))
+}
+
+/// Same as [`get`], but returns all-zero parameters when EOP data is
+/// unavailable — the standard fallback used by the frame transforms.
+#[inline]
+pub fn get_or_zero<T: crate::TimeLike>(tm: &T) -> [f64; 6] {
+    get(tm).unwrap_or([0.0; 6])
+}
+
+/// Same as [`eop_from_mjd_utc`], but returns all-zero parameters when EOP
+/// data is unavailable — the standard fallback used by the frame transforms.
+#[inline]
+pub fn eop_from_mjd_utc_or_zero(mjd_utc: f64) -> [f64; 6] {
+    eop_from_mjd_utc(mjd_utc).unwrap_or([0.0; 6])
 }
 
 #[cfg(test)]
