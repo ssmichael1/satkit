@@ -1278,7 +1278,7 @@ class time:
 
         Example:
             ```python
-            print(satkit.time(2023, 6, 3, 6, 19, 34).strptime("%Y-%m-%d %H:%M:%S"))
+            print(satkit.time(2023, 6, 3, 6, 19, 34).strftime("%Y-%m-%d %H:%M:%S"))
             # 2023-06-03 06:19:34
             ```
         """

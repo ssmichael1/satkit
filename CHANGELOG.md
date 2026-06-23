@@ -3,6 +3,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`time.strftime` docstring example corrected.** The example mistakenly called `.strptime(...)` on a `time` instance, which raised `TypeError: missing 1 required positional argument: 'fmt'` when copied verbatim — `strptime` is a static parse method (`satkit.time.strptime(str, fmt)`), while `strftime` formats an instance. Docs-only; no code change. Resolves [#120](https://github.com/ssmichael1/satkit/issues/120).
+
 ### Python bindings release the GIL during long computations
 
 - **`propagate`, `TLE.fit_from_states`, `sgp4` (all three input forms), and every array-valued frame-transform / ephemeris helper now release the GIL** (`Python::detach`) while the Rust computation runs, so other Python threads make progress during multi-second propagations and large batch transforms. Verified by a concurrency smoke test: a spin thread ran freely during a 100k-time `qgcrf2itrf` call.
