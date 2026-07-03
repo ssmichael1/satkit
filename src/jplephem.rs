@@ -53,6 +53,17 @@ pub enum Error {
     #[error("Invalid record size for cheby data")]
     InvalidRecordSize,
 
+    /// The opened ephemerides file is too short (or too corrupt) to contain
+    /// the fixed DE header and pointer table.
+    #[error("Ephemeris file is truncated or malformed (header too short)")]
+    InvalidHeader,
+
+    /// The lazily-loaded JPL ephemeris singleton failed to load (e.g. the data
+    /// file is missing). Carries the original error's message (the underlying
+    /// error is not `Clone`, so it cannot be re-surfaced directly).
+    #[error("Failed to load JPL ephemeris: {0}")]
+    LoadFailed(String),
+
     /// Returned by [`init_from_bytes`] / [`init_from_path`] when the
     /// JPL ephemeris singleton has already been initialized (either by an
     /// earlier `init_*` call or by a lazy load triggered by a position
@@ -239,6 +250,15 @@ fn jplephem_singleton() -> &'static Result<JPLEphem> {
     JPL_INSTANCE.get_or_init(|| JPLEphem::from_path(&resolve_default_path()))
 }
 
+/// Borrow the loaded ephemeris, mapping a cached load failure to a returned
+/// error instead of panicking. Used by the public query functions so a missing
+/// ephemeris file surfaces as an `Err` rather than aborting the process.
+fn jpl() -> Result<&'static JPLEphem> {
+    jplephem_singleton()
+        .as_ref()
+        .map_err(|e| Error::LoadFailed(e.to_string()))
+}
+
 /// Initialize the JPL ephemeris singleton from an in-memory byte buffer.
 ///
 /// This is the entry point for embedded or sandboxed contexts where the
@@ -368,10 +388,17 @@ impl JPLEphem {
             }
         }
 
+        // The fixed header runs from byte 0 through the 15x3 pointer table that
+        // ends at 2696 + 15*3*4 = 2876. Guard once here so the many fixed-offset
+        // slices below can't panic on a truncated/corrupt file.
+        if raw.len() < 2876 {
+            return Err(Error::InvalidHeader);
+        }
+
         let title: &str = std::str::from_utf8(&raw[0..84])?;
 
         // Get version
-        let de_version: i32 = title[26..29].parse()?;
+        let de_version: i32 = title.get(26..29).ok_or(Error::InvalidHeader)?.parse()?;
 
         let jd_start = f64::from_le_bytes(raw[2652..2660].try_into()?);
         let jd_stop: f64 = f64::from_le_bytes(raw[2660..2668].try_into()?);
@@ -443,13 +470,17 @@ impl JPLEphem {
                 for ix in 0..n_con {
                     let sidx: usize = kernel_size * 4 + ix as usize * 8;
                     let eidx: usize = sidx + 8;
-                    let val: f64 = f64::from_le_bytes(raw[sidx..eidx].try_into()?);
-
                     let stridx: usize = if ix >= 400 {
                         (84 * 3 + 400 * 6 + 5 * 8 + 41 * 4 + ix * 6) as usize
                     } else {
                         (84 * 3 + ix * 6) as usize
                     };
+                    // Both offsets are derived from file-declared sizes; bounds
+                    // check before slicing so a corrupt file errors cleanly.
+                    if eidx > raw.len() || stridx + 6 > raw.len() {
+                        return Err(Error::InvalidRecordSize);
+                    }
+                    let val: f64 = f64::from_le_bytes(raw[sidx..eidx].try_into()?);
                     let s = String::from_utf8(raw[stridx..(stridx + 6)].to_vec())?;
 
                     hm.insert(String::from(s.trim()), val);
@@ -457,8 +488,6 @@ impl JPLEphem {
                 hm
             },
             cheby: {
-                // we are going to do this unsafe since I can't find a
-                // fast way to do it otherwise
                 let ncoeff: usize = (kernel_size / 2) as usize;
                 let nrecords = ((jd_stop - jd_start) / jd_step) as usize;
                 let record_size = (kernel_size * 4) as usize;
@@ -468,11 +497,16 @@ impl JPLEphem {
                     return Err(Error::InvalidRecordSize);
                 }
 
+                // Bulk-copy the coefficient block (native-endian f64s). `raw` is
+                // a `Vec<u8>` (alignment 1), so we must NOT reinterpret its
+                // pointer as `*const f64` — that is undefined behavior. Copy
+                // byte-wise into the (8-aligned) matrix storage instead; f64 has
+                // no invalid bit patterns, so this is sound and just as fast.
                 unsafe {
                     std::ptr::copy_nonoverlapping(
-                        raw.as_ptr().add(record_size * 2) as *const f64,
-                        v.as_mut_slice().as_mut_ptr(),
-                        ncoeff * nrecords,
+                        raw.as_ptr().add(record_size * 2),
+                        v.as_mut_slice().as_mut_ptr() as *mut u8,
+                        ncoeff * nrecords * 8,
                     );
                 }
                 v
@@ -641,7 +675,7 @@ impl JPLEphem {
 }
 
 pub fn consts(s: &str) -> Option<&f64> {
-    jplephem_singleton().as_ref().unwrap().consts(s)
+    jplephem_singleton().as_ref().ok()?.consts(s)
 }
 
 /// Return the position of the given body in the Barycentric
@@ -663,10 +697,7 @@ pub fn consts(s: &str) -> Option<&f64> {
 ///    (it will be close to origin)
 pub fn barycentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3> {
     let tm = tm.as_instant();
-    jplephem_singleton()
-        .as_ref()
-        .unwrap()
-        .barycentric_pos(body, &tm)
+    jpl()?.barycentric_pos(body, &tm)
 }
 
 /// Return the position and velocity of the given body in
@@ -684,10 +715,7 @@ pub fn barycentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3
 ///
 pub fn geocentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vector3, Vector3)> {
     let tm = tm.as_instant();
-    jplephem_singleton()
-        .as_ref()
-        .unwrap()
-        .geocentric_state(body, &tm)
+    jpl()?.geocentric_state(body, &tm)
 }
 
 /// Return the position of the given body in
@@ -702,10 +730,7 @@ pub fn geocentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vecto
 ///
 pub fn geocentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3> {
     let tm = tm.as_instant();
-    jplephem_singleton()
-        .as_ref()
-        .unwrap()
-        .geocentric_pos(body, &tm)
+    jpl()?.geocentric_pos(body, &tm)
 }
 
 /// Return the position & velocity the given body in the barycentric coordinate system
@@ -729,10 +754,7 @@ pub fn geocentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3>
 ///    (it will be close to origin)
 pub fn barycentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vector3, Vector3)> {
     let tm = tm.as_instant();
-    jplephem_singleton()
-        .as_ref()
-        .unwrap()
-        .barycentric_state(body, &tm)
+    jpl()?.barycentric_state(body, &tm)
 }
 
 #[cfg(test)]

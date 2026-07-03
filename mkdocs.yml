@@ -27,8 +27,10 @@ theme:
   features:
     - content.code.copy
     - navigation.instant
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
-    - navigation.expand
+    - navigation.indexes
     - navigation.top
     - search.highlight
     - search.suggest
@@ -121,10 +123,10 @@ nav:
       - References: guide/references.md
   - API Reference:
       - api/index.md
-      - time: api/time.md
-      - quaternion: api/quaternion.md
+      - Time: api/time.md
+      - Quaternion: api/quaternion.md
       - TLE & SGP4: api/tle.md
-      - itrfcoord: api/itrfcoord.md
+      - ITRF Coordinates: api/itrfcoord.md
       - Frame: api/frame.md
       - Frame Transforms: api/frametransform.md
       - Propagation: api/satprop.md

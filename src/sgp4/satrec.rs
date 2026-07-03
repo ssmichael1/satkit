@@ -129,7 +129,12 @@ pub struct SatRec {
     pub am: f64,
     pub em: f64,
     pub im: f64,
+    /// Recovered singly-averaged argument of perigee (Vallado `satrec.om`).
     pub om: f64,
+    /// Recovered singly-averaged right ascension of the ascending node
+    /// (Vallado `satrec.Om`). Kept distinct from `om` so the RAAN mean element
+    /// is not overwritten by the argument of perigee.
+    pub om_node: f64,
     pub mm: f64,
     pub nm: f64,
 }
@@ -249,6 +254,7 @@ impl SatRec {
             em: 0.0,
             im: 0.0,
             om: 0.0,
+            om_node: 0.0,
             mm: 0.0,
             nm: 0.0,
 

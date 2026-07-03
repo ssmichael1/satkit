@@ -36,10 +36,6 @@ use anyhow::{bail, Result};
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct PyQuaternion(pub Quaternion);
 
-#[pyclass(name = "quaternion_array", module = "satkit", from_py_object)]
-#[derive(PartialEq, Clone, Debug)]
-pub struct PyQuaternionVec(Vec<Quaternion>);
-
 impl From<Quaternion> for PyQuaternion {
     fn from(q: Quaternion) -> Self {
         Self(q)

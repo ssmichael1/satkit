@@ -63,6 +63,14 @@ impl Instant {
     /// Use sparingly and with caution.  This is
     /// probably not what you want.
     ///
+    /// RFC 3339 is tried first. Otherwise the string is tokenized into numbers
+    /// and month names, and numeric fields are consumed positionally in
+    /// year, month, day, hour, minute, second, microsecond order. Separators
+    /// are ignored, so ISO-ordered strings (e.g. `"2024-01-04 13:14:12.123"`)
+    /// and month-name strings (e.g. `"March 4 2024"`) work, but locale-ordered
+    /// numeric dates such as `MM/DD/YYYY` are ambiguous and are not supported;
+    /// use [`strptime`](Self::strptime) with an explicit format for those.
+    ///
     /// # Arguments:
     ///   s (str): The string to parse
     ///
@@ -102,9 +110,11 @@ impl Instant {
                         4 => cstr.parse::<i32>()? * 100,
                         5 => cstr.parse::<i32>()? * 10,
                         6 => cstr.parse::<i32>()?,
-                        _ => {
-                            return Err(InstantError::InvalidMicrosecond(cstr.parse::<i32>()?));
-                        }
+                        // More than 6 fractional digits carry sub-microsecond
+                        // precision we don't store; truncate rather than
+                        // overflowing i32 (the digits are all ASCII, so the
+                        // byte slice is safe).
+                        _ => cstr[..6].parse::<i32>()?,
                     },
                     false => cstr.parse::<i32>()?,
                 };
@@ -147,123 +157,12 @@ impl Instant {
             thelist.remove(idx);
         }
 
-        // Look for HH:MM:SS[.ffffff] time pattern
-        if let Some(p) = thelist
-            .iter()
-            .position(|x| *x == ParseVal::Str(String::from(":")))
-        {
-            if (p > 0)
-                && (p < thelist.len() - 4)
-                && (thelist[p + 2] == ParseVal::Str(String::from(":")))
-            {
-                if let ParseVal::Num(h) = thelist[p - 1] {
-                    hour = h;
-                }
-                if let ParseVal::Num(m) = thelist[p + 1] {
-                    minute = m;
-                }
-                if let ParseVal::Num(s) = thelist[p + 3] {
-                    second = s;
-                }
-                // Microseconds follow seconds (period is not tokenized)
-                if p + 4 < thelist.len() {
-                    if let ParseVal::Num(m) = thelist[p + 4] {
-                        microsecond = m;
-                        microsecond_set = true;
-                    }
-                }
-            }
-        }
-
-        // Helper: extract date from a separator pattern like ??/??/???? or ??-??-????
-        let extract_date =
-            |thelist: &[ParseVal], sep: &str| -> Option<(i32, i32, i32, Vec<usize>)> {
-                let p = thelist
-                    .iter()
-                    .position(|x| *x == ParseVal::Str(String::from(sep)))?;
-                if p == 0 || p >= thelist.len() - 4 {
-                    return None;
-                }
-                if thelist[p + 2] != ParseVal::Str(String::from(sep)) {
-                    return None;
-                }
-                let mut y = -1i32;
-                let mut m = -1i32;
-                let mut d = -1i32;
-                let mut remove = Vec::new();
-                if let ParseVal::Num(n) = thelist[p + 3] {
-                    y = n;
-                    remove.push(p + 3);
-                }
-                if let ParseVal::Num(n) = thelist[p + 1] {
-                    d = n;
-                    remove.push(p + 1);
-                }
-                if let ParseVal::Num(n) = thelist[p - 1] {
-                    if n > 1900 {
-                        // First field is a year (YYYY-MM-DD)
-                        let tmp = y;
-                        y = n;
-                        // What was in position 3 is actually day
-                        if d != -1 {
-                            m = d;
-                            d = tmp;
-                        }
-                    } else {
-                        m = n;
-                    }
-                    remove.push(p - 1);
-                }
-                // Also remove the separators
-                remove.push(p + 2);
-                remove.push(p);
-                Some((y, m, d, remove))
-            };
-
-        // Look for ??/??/???? for date
-        if year == -1 || month == -1 || day == -1 {
-            if let Some((y, m, d, remove)) = extract_date(&thelist, "/") {
-                if year == -1 && y != -1 {
-                    year = y;
-                }
-                if month == -1 && m != -1 {
-                    month = m;
-                }
-                if day == -1 && d != -1 {
-                    day = d;
-                }
-                let mut remove = remove;
-                remove.sort_unstable_by(|a, b| b.cmp(a));
-                for idx in remove {
-                    if idx < thelist.len() {
-                        thelist.remove(idx);
-                    }
-                }
-            }
-        }
-
-        // Look for ??-??-???? for date
-        if year == -1 || month == -1 || day == -1 {
-            if let Some((y, m, d, remove)) = extract_date(&thelist, "-") {
-                if year == -1 && y != -1 {
-                    year = y;
-                }
-                if month == -1 && m != -1 {
-                    month = m;
-                }
-                if day == -1 && d != -1 {
-                    day = d;
-                }
-                let mut remove = remove;
-                remove.sort_unstable_by(|a, b| b.cmp(a));
-                for idx in remove {
-                    if idx < thelist.len() {
-                        thelist.remove(idx);
-                    }
-                }
-            }
-        }
-
+        // Fill the remaining fields positionally from the leftover numbers, in
+        // year, month, day, hour, minute, second, microsecond order. Separators
+        // (`:` `/` `-`) are not tokenized, so numeric fields must already appear
+        // in that order — ISO-8601-ordered strings and month-name strings parse
+        // correctly; ambiguous locale-ordered numeric dates (e.g. MM/DD/YYYY) do
+        // not and should be parsed with `strptime` and an explicit format.
         // Fill remaining fields from leftover numbers
         thelist.iter().for_each(|x| match x {
             ParseVal::Num(x) => {
@@ -373,17 +272,17 @@ impl Instant {
                         // for trailing zeros to be omitted.  So we need to determine
                         // the number of digits and multiply by the appropriate factor
                         microsecond = match smicro.len() {
+                            0 => 0,
                             1 => smicro.parse::<i32>()? * 100_000,
                             2 => smicro.parse::<i32>()? * 10_000,
                             3 => smicro.parse::<i32>()? * 1_000,
                             4 => smicro.parse::<i32>()? * 100,
                             5 => smicro.parse::<i32>()? * 10,
                             6 => smicro.parse::<i32>()?,
-                            _ => {
-                                return Err(InstantError::InvalidMicrosecond(
-                                    smicro.parse::<i32>().unwrap(),
-                                ));
-                            }
+                            // More than 6 fractional digits carry sub-microsecond
+                            // precision we don't store; truncate rather than
+                            // overflowing i32 (digits are ASCII, slice is safe).
+                            _ => smicro[..6].parse::<i32>()?,
                         }
                     }
                     Some('z') => {

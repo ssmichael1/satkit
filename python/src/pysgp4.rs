@@ -223,6 +223,41 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<satkit::omm::OMM> {
     Ok(omm)
 }
 
+/// Pack a single SGP4 propagation result (position/velocity, and optionally the
+/// error codes) into the Python return tuple. Shared by the TLE-object and
+/// OMM-dict branches of [`sgp4`].
+fn pack_sgp4_result(states: &psgp4::SGP4State, output_err: bool) -> Result<Py<PyAny>> {
+    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
+        let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
+            vec![states.pos.ncols(), states.pos.nrows()]
+        } else {
+            vec![states.pos.as_slice().len()]
+        };
+
+        // ndarray is row-major while numeris/numpy are column-major, hence the
+        // dimension switch above.
+        if !output_err {
+            Ok((
+                PyArray1::from_slice(py, states.pos.as_slice())
+                    .reshape(dims.clone())?
+                    .into_py_any(py)?,
+                PyArray1::from_slice(py, states.vel.as_slice())
+                    .reshape(dims)?
+                    .into_py_any(py)?,
+            )
+                .into_py_any(py)?)
+        } else {
+            let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
+            Ok((
+                PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?,
+                PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims.clone())?,
+                PyArray1::from_slice(py, eint.as_slice()),
+            )
+                .into_py_any(py)?)
+        }
+    })
+}
+
 /// """SGP-4 propagator for TLE
 ///
 /// Note:
@@ -315,36 +350,7 @@ pub fn sgp4(
             .py()
             .detach(|| psgp4::sgp4_full(&mut rtle, tmvec.as_slice(), gravconst, opsmode))?;
         stle.0 = rtle;
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
-                vec![states.pos.ncols(), states.pos.nrows()]
-            } else {
-                vec![states.pos.as_slice().len()]
-            };
-
-            // Note: this is a little confusing: ndarray uses
-            // row major, numeris and numpy use column major,
-            // hence the switch
-            if !output_err {
-                Ok((
-                    PyArray1::from_slice(py, states.pos.as_slice())
-                        .reshape(dims.clone())?
-                        .into_py_any(py)?,
-                    PyArray1::from_slice(py, states.vel.as_slice())
-                        .reshape(dims)?
-                        .into_py_any(py)?,
-                )
-                    .into_py_any(py)?)
-            } else {
-                let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
-                Ok((
-                    PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice(py, eint.as_slice()),
-                )
-                    .into_py_any(py)?)
-            }
-        })
+        pack_sgp4_result(&states, output_err)
     }
     // Handle input as dict
     else if tle.is_instance_of::<PyDict>() {
@@ -360,36 +366,7 @@ pub fn sgp4(
         let states = tle
             .py()
             .detach(|| psgp4::sgp4_full(&mut omm, tmvec.as_slice(), gravconst, opsmode))?;
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
-                vec![states.pos.ncols(), states.pos.nrows()]
-            } else {
-                vec![states.pos.as_slice().len()]
-            };
-
-            // Note: this is a little confusing: ndarray uses
-            // row major, numeris and numpy use column major,
-            // hence the switch
-            if !output_err {
-                Ok((
-                    PyArray1::from_slice(py, states.pos.as_slice())
-                        .reshape(dims.clone())?
-                        .into_py_any(py)?,
-                    PyArray1::from_slice(py, states.vel.as_slice())
-                        .reshape(dims)?
-                        .into_py_any(py)?,
-                )
-                    .into_py_any(py)?)
-            } else {
-                let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
-                Ok((
-                    PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims.clone())?,
-                    PyArray1::from_slice(py, eint.as_slice()),
-                )
-                    .into_py_any(py)?)
-            }
-        })
+        pack_sgp4_result(&states, output_err)
     } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
         let tmarray = time.to_time_vec()?;

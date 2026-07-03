@@ -63,6 +63,41 @@ where
     }
 }
 
+/// Encode a maneuver / continuous-thrust coordinate frame as a single byte for
+/// pickling. Only the frames that are valid for a maneuver or thrust are
+/// representable; any other frame is a hard error rather than being silently
+/// coerced to GCRF (the previous `_ => 0` behavior corrupted NTW/LVLH burns).
+pub fn maneuver_frame_to_u8(frame: satkit::Frame) -> PyResult<u8> {
+    use satkit::Frame;
+    match frame {
+        Frame::GCRF => Ok(0),
+        Frame::RTN => Ok(1),
+        Frame::NTW => Ok(2),
+        Frame::LVLH => Ok(3),
+        Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME | Frame::EME2000 | Frame::ICRF => {
+            Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "cannot serialize a maneuver/thrust in frame {frame}; \
+             must be GCRF, RTN, NTW, or LVLH"
+            )))
+        }
+    }
+}
+
+/// Decode a maneuver / continuous-thrust frame byte written by
+/// [`maneuver_frame_to_u8`].
+pub fn maneuver_frame_from_u8(tag: u8) -> PyResult<satkit::Frame> {
+    use satkit::Frame;
+    match tag {
+        0 => Ok(Frame::GCRF),
+        1 => Ok(Frame::RTN),
+        2 => Ok(Frame::NTW),
+        3 => Ok(Frame::LVLH),
+        other => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "invalid frame tag {other} in pickled state"
+        ))),
+    }
+}
+
 /// Pack f64 values into little-endian bytes for `__getstate__` pickle support
 pub fn pack_f64s(py: Python, vals: &[f64]) -> PyResult<Py<PyAny>> {
     let mut raw = Vec::with_capacity(vals.len() * 8);

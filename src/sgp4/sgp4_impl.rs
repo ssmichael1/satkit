@@ -85,7 +85,7 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// # Return
 ///
 /// Result object containing either an OK value containing a SGP4State struct with
-/// position (m) and velocity (m/s) Nx3 matrices (where N is the nuber of input
+/// position (m) and velocity (m/s) 3xN matrices (where N is the number of input
 /// times in the slice) and err codes at each time, or an Err value containing
 /// a description of the error
 ///
@@ -160,7 +160,7 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> super::R
 /// # Return
 ///
 /// Result object containing either an OK value containing a tuple with
-/// position (m) and velocity (m/s) Nx3 matrices (where N is the number of input
+/// position (m) and velocity (m/s) 3xN matrices (where N is the number of input
 /// times in the slice) or an Err value containing
 /// a tuple with error code and error string
 ///
@@ -213,7 +213,6 @@ pub fn sgp4_full<T: TimeLike>(
             sgp4init(
                 gravconst,
                 opsmode,
-                "satno",
                 args.jdsatepoch - 2433281.5,
                 args.bstar,
                 args.ndot,
@@ -251,7 +250,16 @@ pub fn sgp4_full<T: TimeLike>(
                 }
                 earr.push(SGP4Error::SGP4Success)
             }
-            Err(e) => earr.push(e.into()),
+            Err(e) => {
+                // Leave the failed columns as NaN rather than zero: a zeroed
+                // column reads as a valid position at Earth's center to any
+                // caller that forgets to inspect `errcode`.
+                for i in 0..3 {
+                    rarr[(i, pos)] = f64::NAN;
+                    varr[(i, pos)] = f64::NAN;
+                }
+                earr.push(e.into())
+            }
         }
     }
     Ok(SGP4State {

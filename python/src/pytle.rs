@@ -287,89 +287,99 @@ impl PyTLE {
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        let nbytes: usize =
-            102 + self.0.name.len() + self.0.intl_desig.len() + self.0.desig_piece.len();
-        let mut raw = vec![0u8; nbytes];
-        raw[0..4].clone_from_slice(&self.0.sat_num.to_le_bytes());
-        raw[4..8].clone_from_slice(&self.0.desig_year.to_le_bytes());
-        raw[8..12].clone_from_slice(&self.0.desig_launch.to_le_bytes());
-        raw[12..20].clone_from_slice(&self.0.mean_motion_dot.to_le_bytes());
-        raw[20..28].clone_from_slice(&self.0.mean_motion_dot_dot.to_le_bytes());
-        raw[28..36].clone_from_slice(&self.0.bstar.to_le_bytes());
-        raw[36..44].clone_from_slice(&self.0.inclination.to_le_bytes());
-        raw[44..52].clone_from_slice(&self.0.raan.to_le_bytes());
-        raw[52..60].clone_from_slice(&self.0.eccen.to_le_bytes());
-        raw[60..68].clone_from_slice(&self.0.arg_of_perigee.to_le_bytes());
-        raw[68..76].clone_from_slice(&self.0.mean_anomaly.to_le_bytes());
-        raw[76..84].clone_from_slice(&self.0.mean_motion.to_le_bytes());
-        raw[84..92].clone_from_slice(
+        // Self-describing format v1 (see `__setstate__` for the layout):
+        // a leading version byte, a 101-byte fixed field block, then three
+        // length-prefixed UTF-8 strings (name, intl_desig, desig_piece).
+        let mut raw: Vec<u8> = Vec::with_capacity(
+            108 + self.0.name.len() + self.0.intl_desig.len() + self.0.desig_piece.len(),
+        );
+        raw.push(1u8); // version
+        raw.extend_from_slice(&self.0.sat_num.to_le_bytes());
+        raw.extend_from_slice(&self.0.desig_year.to_le_bytes());
+        raw.extend_from_slice(&self.0.desig_launch.to_le_bytes());
+        raw.extend_from_slice(&self.0.mean_motion_dot.to_le_bytes());
+        raw.extend_from_slice(&self.0.mean_motion_dot_dot.to_le_bytes());
+        raw.extend_from_slice(&self.0.bstar.to_le_bytes());
+        raw.extend_from_slice(&self.0.inclination.to_le_bytes());
+        raw.extend_from_slice(&self.0.raan.to_le_bytes());
+        raw.extend_from_slice(&self.0.eccen.to_le_bytes());
+        raw.extend_from_slice(&self.0.arg_of_perigee.to_le_bytes());
+        raw.extend_from_slice(&self.0.mean_anomaly.to_le_bytes());
+        raw.extend_from_slice(&self.0.mean_motion.to_le_bytes());
+        raw.extend_from_slice(
             &self
                 .0
                 .epoch
                 .as_mjd_with_scale(satkit::TimeScale::TAI)
                 .to_le_bytes(),
         );
-        raw[92..96].clone_from_slice(&self.0.rev_num.to_le_bytes());
+        raw.extend_from_slice(&self.0.rev_num.to_le_bytes());
+        raw.extend_from_slice(&self.0.element_num.to_le_bytes());
+        raw.push(self.0.ephem_type);
 
-        let mut cnt = 96;
-
-        let namelen = self.0.name.len() as u16;
-        raw[cnt..cnt + 2].clone_from_slice(&namelen.to_le_bytes());
-        cnt += 2;
-        raw[cnt..cnt + self.0.name.len()].clone_from_slice(self.0.name.as_bytes());
-        cnt += self.0.name.len();
-
-        let intl_len = self.0.intl_desig.len() as u16;
-        raw[cnt..cnt + 2].clone_from_slice(&intl_len.to_le_bytes());
-        cnt += 2;
-        raw[cnt..cnt + self.0.intl_desig.len()].clone_from_slice(self.0.intl_desig.as_bytes());
-        cnt += self.0.intl_desig.len();
-
-        let piece_len = self.0.desig_piece.len() as u16;
-        raw[cnt..cnt + 2].clone_from_slice(&piece_len.to_le_bytes());
-        cnt += 2;
-        raw[cnt..cnt + self.0.desig_piece.len()].clone_from_slice(self.0.desig_piece.as_bytes());
+        for s in [&self.0.name, &self.0.intl_desig, &self.0.desig_piece] {
+            raw.extend_from_slice(&(s.len() as u16).to_le_bytes());
+            raw.extend_from_slice(s.as_bytes());
+        }
 
         pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> PyResult<()> {
         let raw = state.extract::<Vec<u8>>(py)?;
+        let bail = || {
+            pyo3::exceptions::PyValueError::new_err("invalid TLE pickle: truncated or malformed")
+        };
 
-        self.0.sat_num = i32::from_le_bytes(raw[0..4].try_into().unwrap());
-        self.0.desig_year = i32::from_le_bytes(raw[4..8].try_into().unwrap());
-        self.0.desig_launch = i32::from_le_bytes(raw[8..12].try_into().unwrap());
-        self.0.mean_motion_dot = f64::from_le_bytes(raw[12..20].try_into().unwrap());
-        self.0.mean_motion_dot_dot = f64::from_le_bytes(raw[20..28].try_into().unwrap());
-        self.0.bstar = f64::from_le_bytes(raw[28..36].try_into().unwrap());
-        self.0.inclination = f64::from_le_bytes(raw[36..44].try_into().unwrap());
-        self.0.raan = f64::from_le_bytes(raw[44..52].try_into().unwrap());
-        self.0.eccen = f64::from_le_bytes(raw[52..60].try_into().unwrap());
-        self.0.arg_of_perigee = f64::from_le_bytes(raw[60..68].try_into().unwrap());
-        self.0.mean_anomaly = f64::from_le_bytes(raw[68..76].try_into().unwrap());
-        self.0.mean_motion = f64::from_le_bytes(raw[76..84].try_into().unwrap());
-        self.0.epoch = satkit::Instant::from_mjd_with_scale(
-            f64::from_le_bytes(raw[84..92].try_into().unwrap()),
-            satkit::TimeScale::TAI,
-        );
-        self.0.rev_num = i32::from_le_bytes(raw[92..96].try_into().unwrap());
+        // Version byte + 101-byte fixed field block (see __getstate__).
+        if raw.len() < 102 {
+            return Err(bail());
+        }
+        if raw[0] != 1 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unsupported TLE pickle version {} (expected 1); pickles from \
+                 satkit <= 0.19 must be regenerated",
+                raw[0]
+            )));
+        }
+        let rd_i32 = |at: usize| i32::from_le_bytes(raw[at..at + 4].try_into().unwrap());
+        let rd_f64 = |at: usize| f64::from_le_bytes(raw[at..at + 8].try_into().unwrap());
 
-        let mut cnt = 96;
+        self.0.sat_num = rd_i32(1);
+        self.0.desig_year = rd_i32(5);
+        self.0.desig_launch = rd_i32(9);
+        self.0.mean_motion_dot = rd_f64(13);
+        self.0.mean_motion_dot_dot = rd_f64(21);
+        self.0.bstar = rd_f64(29);
+        self.0.inclination = rd_f64(37);
+        self.0.raan = rd_f64(45);
+        self.0.eccen = rd_f64(53);
+        self.0.arg_of_perigee = rd_f64(61);
+        self.0.mean_anomaly = rd_f64(69);
+        self.0.mean_motion = rd_f64(77);
+        self.0.epoch = satkit::Instant::from_mjd_with_scale(rd_f64(85), satkit::TimeScale::TAI);
+        self.0.rev_num = rd_i32(93);
+        self.0.element_num = rd_i32(97);
+        self.0.ephem_type = raw[101];
 
-        let namelen = u16::from_le_bytes(raw[cnt..cnt + 2].try_into().unwrap());
-        cnt += 2;
-        self.0.name = String::from_utf8(raw[cnt..cnt + namelen as usize].to_vec()).unwrap();
-        cnt += namelen as usize;
-
-        let intl_len = u16::from_le_bytes(raw[cnt..cnt + 2].try_into().unwrap());
-        cnt += 2;
-        self.0.intl_desig = String::from_utf8(raw[cnt..cnt + intl_len as usize].to_vec()).unwrap();
-        cnt += intl_len as usize;
-
-        let piece_len = u16::from_le_bytes(raw[cnt..cnt + 2].try_into().unwrap());
-        cnt += 2;
-        self.0.desig_piece =
-            String::from_utf8(raw[cnt..cnt + piece_len as usize].to_vec()).unwrap();
+        // Three length-prefixed UTF-8 strings: name, intl_desig, desig_piece.
+        let mut cnt = 102;
+        let read_str = |cnt: &mut usize| -> PyResult<String> {
+            if *cnt + 2 > raw.len() {
+                return Err(bail());
+            }
+            let len = u16::from_le_bytes(raw[*cnt..*cnt + 2].try_into().unwrap()) as usize;
+            *cnt += 2;
+            if *cnt + len > raw.len() {
+                return Err(bail());
+            }
+            let s = String::from_utf8(raw[*cnt..*cnt + len].to_vec()).map_err(|_| bail())?;
+            *cnt += len;
+            Ok(s)
+        };
+        self.0.name = read_str(&mut cnt)?;
+        self.0.intl_desig = read_str(&mut cnt)?;
+        self.0.desig_piece = read_str(&mut cnt)?;
 
         Ok(())
     }

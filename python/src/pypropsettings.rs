@@ -4,11 +4,12 @@ use crate::pygravity::GravModel;
 use crate::{PyDuration, PyInstant};
 use satkit::orbitprop::{Integrator, PropSettings, TideModel};
 
-use pyo3::types::{PyDelta, PyDeltaAccess, PyDict};
+use pyo3::types::{PyBytes, PyDelta, PyDeltaAccess, PyDict, PyTuple};
+use pyo3::IntoPyObjectExt;
 
 /// Choice of ODE integrator for orbit propagation
 #[allow(non_camel_case_types)]
-#[pyclass(name = "integrator", eq, eq_int, from_py_object)]
+#[pyclass(name = "integrator", module = "satkit", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum PyIntegrator {
     /// Verner 9(8) with 9th-order dense output, 26 stages (default)
@@ -59,7 +60,7 @@ impl From<Integrator> for PyIntegrator {
 
 /// Solid Earth tide model selector.
 #[allow(non_camel_case_types)]
-#[pyclass(name = "tidemodel", eq, eq_int, from_py_object)]
+#[pyclass(name = "tidemodel", module = "satkit", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum PyTideModel {
     /// No solid Earth tide correction.
@@ -92,7 +93,7 @@ impl From<TideModel> for PyTideModel {
     }
 }
 
-#[pyclass(name = "propsettings", from_py_object)]
+#[pyclass(name = "propsettings", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PyPropSettings(pub PropSettings);
 
@@ -121,7 +122,7 @@ impl PyPropSettings {
                 order_explicitly_set = true;
                 kw.del_item("gravity_order")?;
             }
-            if let Some(interp) = kw.get_item("enable_iterp")? {
+            if let Some(interp) = kw.get_item("enable_interp")? {
                 ps.enable_interp = interp.extract::<bool>()?;
                 kw.del_item("enable_interp")?;
             }
@@ -353,6 +354,30 @@ impl PyPropSettings {
 
     fn __str__(&self) -> String {
         self.0.to_string()
+    }
+
+    fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
+        (PyTuple::empty(py), PyDict::new(py))
+    }
+
+    fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
+        // The `precomputed` cache is intentionally skipped (see PropSettings);
+        // a restored settings object recomputes it lazily.
+        let bytes =
+            serde_pickle::to_vec(&self.0, serde_pickle::SerOptions::default()).map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "failed to serialize propsettings: {e}"
+                ))
+            })?;
+        PyBytes::new(py, &bytes).into_py_any(py)
+    }
+
+    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
+        let s = state.as_bytes(py);
+        self.0 = serde_pickle::from_slice(s, serde_pickle::DeOptions::default()).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("invalid propsettings pickle: {e}"))
+        })?;
+        Ok(())
     }
 
     #[pyo3(signature=(begin, end, step=None))]

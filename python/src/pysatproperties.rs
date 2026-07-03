@@ -123,79 +123,83 @@ impl PySatProperties {
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {
         let state = state.as_bytes(py);
-        if state.len() < 16 {
-            bail!("Invalid serialization length");
+        // Self-describing format v1:
+        //   [0]       version byte (== 1)
+        //   [1..9]    craoverm (f64)
+        //   [9..17]   cdaoverm (f64)
+        //   [17..21]  thrust-arc count (u32 little-endian)
+        //   [..]      count * 41-byte arcs: 24 accel, 1 frame tag, 8 start, 8 end
+        const HEADER: usize = 1 + 8 + 8 + 4;
+        if state.len() < HEADER {
+            bail!("invalid satproperties pickle: truncated header");
         }
-        let craoverm = f64::from_le_bytes(state[0..8].try_into()?);
-        let cdaoverm = f64::from_le_bytes(state[8..16].try_into()?);
-        self.0.cdaoverm = cdaoverm;
-        self.0.craoverm = craoverm;
+        if state[0] != 1 {
+            bail!(
+                "unsupported satproperties pickle version {} (expected 1)",
+                state[0]
+            );
+        }
+        let read_f64 = |at: usize| f64::from_le_bytes(state[at..at + 8].try_into().unwrap());
+
+        self.0.craoverm = read_f64(1);
+        self.0.cdaoverm = read_f64(9);
         self.0.thrust = satkit::orbitprop::ThrustProfile::default();
 
-        // Each thrust arc: 24 (accel) + 1 (frame tag) + 8 (start) + 8 (end) = 41 bytes
-        let mut offset = 16;
-        while offset + 41 <= state.len() {
-            let accel = satkit::mathtypes::Vector3::from_slice(unsafe {
-                std::slice::from_raw_parts(state[offset..].as_ptr() as *const f64, 3)
-            });
+        let count = u32::from_le_bytes(state[17..21].try_into()?) as usize;
+        if state.len() != HEADER + count * 41 {
+            bail!("invalid satproperties pickle: thrust block length mismatch");
+        }
+        let mut offset = HEADER;
+        for _ in 0..count {
+            let mut accel = [0.0f64; 3];
+            for (i, v) in accel.iter_mut().enumerate() {
+                *v = read_f64(offset + i * 8);
+            }
             offset += 24;
-            let frame = match state[offset] {
-                1 => satkit::Frame::RTN,
-                _ => satkit::Frame::GCRF,
-            };
+            let frame = crate::pyutils::maneuver_frame_from_u8(state[offset])?;
             offset += 1;
-            let start = satkit::Instant::from_mjd_with_scale(
-                f64::from_le_bytes(state[offset..offset + 8].try_into()?),
-                satkit::TimeScale::TAI,
-            );
+            let start =
+                satkit::Instant::from_mjd_with_scale(read_f64(offset), satkit::TimeScale::TAI);
             offset += 8;
-            let end = satkit::Instant::from_mjd_with_scale(
-                f64::from_le_bytes(state[offset..offset + 8].try_into()?),
-                satkit::TimeScale::TAI,
-            );
+            let end =
+                satkit::Instant::from_mjd_with_scale(read_f64(offset), satkit::TimeScale::TAI);
             offset += 8;
-            self.0
-                .thrust
-                .thrusts
-                .push(satkit::orbitprop::ContinuousThrust::new(
-                    accel, frame, start, end,
-                ));
+            self.0.thrust.thrusts.push(
+                satkit::orbitprop::ContinuousThrust::new(
+                    satkit::mathtypes::Vector3::from_slice(&accel),
+                    frame,
+                    start,
+                    end,
+                )
+                .map_err(|e| anyhow::anyhow!("invalid thrust in pickle: {e}"))?,
+            );
         }
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        // Each thrust arc: 24 (accel) + 1 (frame tag) + 8 (start) + 8 (end) = 41 bytes
-        let thrust_len = self.0.thrust.thrusts.len() * 41;
-        let mut raw = vec![0u8; 16 + thrust_len];
-        raw[0..8].clone_from_slice(&self.0.craoverm.to_le_bytes());
-        raw[8..16].clone_from_slice(&self.0.cdaoverm.to_le_bytes());
-        let mut offset = 16;
+        // See `__setstate__` for the format. Values are written little-endian via
+        // `to_le_bytes`, so there is no alignment assumption on the buffer.
+        let mut raw: Vec<u8> = Vec::with_capacity(21 + self.0.thrust.thrusts.len() * 41);
+        raw.push(1u8); // version
+        raw.extend_from_slice(&self.0.craoverm.to_le_bytes());
+        raw.extend_from_slice(&self.0.cdaoverm.to_le_bytes());
+        raw.extend_from_slice(&(self.0.thrust.thrusts.len() as u32).to_le_bytes());
         for t in &self.0.thrust.thrusts {
-            unsafe {
-                raw[offset..offset + 24].clone_from_slice(std::slice::from_raw_parts(
-                    t.accel.as_slice().as_ptr() as *const u8,
-                    24,
-                ));
+            for v in t.accel.as_slice() {
+                raw.extend_from_slice(&v.to_le_bytes());
             }
-            offset += 24;
-            raw[offset] = match t.frame {
-                satkit::Frame::RTN => 1,
-                _ => 0,
-            };
-            offset += 1;
-            raw[offset..offset + 8].clone_from_slice(
+            raw.push(crate::pyutils::maneuver_frame_to_u8(t.frame)?);
+            raw.extend_from_slice(
                 &t.start
                     .as_mjd_with_scale(satkit::TimeScale::TAI)
                     .to_le_bytes(),
             );
-            offset += 8;
-            raw[offset..offset + 8].clone_from_slice(
+            raw.extend_from_slice(
                 &t.end
                     .as_mjd_with_scale(satkit::TimeScale::TAI)
                     .to_le_bytes(),
             );
-            offset += 8;
         }
         pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }

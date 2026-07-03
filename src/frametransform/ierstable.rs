@@ -53,7 +53,21 @@ fn instance_for(id: IersTableId) -> &'static OnceLock<IERSTable> {
 /// Return the IERS table singleton for `id`, loading from
 /// [`datadir`](crate::utils::datadir) on first access.
 pub fn table(id: IersTableId) -> &'static IERSTable {
-    instance_for(id).get_or_init(|| IERSTable::from_file(id.default_filename()).unwrap())
+    // This backs the per-transform IERS reduction and cannot return a `Result`
+    // without threading it through every `q*2*` frame-transform signature, so a
+    // missing/corrupt table file — a setup error — panics with an actionable
+    // message rather than an opaque `unwrap`.
+    instance_for(id).get_or_init(|| {
+        let fname = id.default_filename();
+        IERSTable::from_file(fname).unwrap_or_else(|e| {
+            panic!(
+                "Failed to load IERS table \"{fname}\": {e}. Ensure the data \
+                 files are present (set the SATKIT_DATA environment variable to \
+                 your data directory, or run satkit::utils::update_datafiles to \
+                 download them)."
+            )
+        })
+    })
 }
 
 /// Initialize the IERS table singleton for `id` from an in-memory byte
@@ -132,9 +146,16 @@ impl IERSTable {
             if tline.len() < 10 {
                 continue;
             }
-            if tline[..3].eq("j =") {
-                tnum = tline[4..5].parse()?;
+            if tline.starts_with("j =") {
+                // Expected form: "j = <tnum> ... <tsize>"; read tokens rather
+                // than byte-slicing so a non-ASCII/corrupt line can't panic.
                 let s: Vec<&str> = tline.split_whitespace().collect();
+                if s.len() < 3 {
+                    return Err(Error::InvalidIersTableDef {
+                        fname: String::from("<buffer>"),
+                    });
+                }
+                tnum = s[2].parse()?;
                 let tsize: usize = s[s.len() - 1].parse().unwrap_or(0);
                 if !(0..=5).contains(&tnum) || tsize == 0 {
                     return Err(Error::InvalidIersTableDef {
@@ -150,11 +171,19 @@ impl IERSTable {
                         fname: String::from("<buffer>"),
                     });
                 }
+                // Propagate a bad numeric token instead of panicking.
                 let vals: Vec<f64> = tline
                     .split_whitespace()
-                    .map(|x| x.parse().unwrap())
-                    .collect();
-                for (c, &val) in vals.iter().enumerate() {
+                    .map(|x| x.parse())
+                    .collect::<std::result::Result<Vec<f64>, _>>()?;
+                // Guard against a file with more rows or columns than the
+                // declared table dimensions.
+                if rowcnt >= table.data[tnum as usize].nrows() {
+                    return Err(Error::InvalidIersTableDef {
+                        fname: String::from("<buffer>"),
+                    });
+                }
+                for (c, &val) in vals.iter().enumerate().take(17) {
                     table.data[tnum as usize][(rowcnt, c)] = val;
                 }
                 rowcnt += 1;
@@ -195,6 +224,15 @@ impl IERSTable {
 mod tests {
     use super::IERSTable;
     use anyhow::Result;
+
+    #[test]
+    fn test_parse_bad_token_errors_not_panics() {
+        // A non-numeric token in a data row must return an error rather than
+        // panicking (the row parse previously used `.unwrap()`).
+        let text = "j = 0  amp  1\n\
+                    1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0 16.0 NOTNUM\n";
+        assert!(IERSTable::parse(text).is_err());
+    }
 
     #[test]
     fn load_table() -> Result<()> {

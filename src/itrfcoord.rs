@@ -459,6 +459,13 @@ impl ITRFCoord {
     /// * `1` - Starting heading (at self) in radians
     /// * `2` - Final heading (at other) in radians
     ///
+    /// # Accuracy
+    /// Coincident points return `(0, 0, 0)`. Vincenty's inverse is
+    /// ill-conditioned for near-antipodal point pairs: in that regime the
+    /// iteration does not converge to full precision and the returned distance
+    /// may be off by kilometers. The result is always finite (never NaN), but
+    /// callers needing antipodal accuracy should use a Karney-style solver.
+    ///
     /// # References
     /// * Vincenty's formula inverse
     ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
@@ -486,11 +493,22 @@ impl ITRFCoord {
                 u1.cos()
                     .mul_add(u2.sin(), -(u1.sin() * u2.cos() * lam.cos())),
             );
+            if sinsigma == 0.0 {
+                // Coincident points: distance and both headings are zero.
+                // Avoids the 0/0 in sin(alpha) below that would yield NaN.
+                return (0.0, 0.0, 0.0);
+            }
             cossigma = u1.sin().mul_add(u2.sin(), u1.cos() * u2.cos() * lam.cos());
             sigma = f64::atan2(sinsigma, cossigma);
             let sinalpha = (u1.cos() * u2.cos() * lam.sin()) / sigma.sin();
             cossqalpha = sinalpha.mul_add(-sinalpha, 1.0);
-            cos2sm = sigma.cos() - (2.0 * u1.sin() * u2.sin()) / cossqalpha;
+            // On the equatorial line cossqalpha == 0 and cos(2σₘ) is undefined;
+            // it is conventionally taken as zero (avoids a divide-by-zero NaN).
+            cos2sm = if cossqalpha == 0.0 {
+                0.0
+            } else {
+                sigma.cos() - (2.0 * u1.sin() * u2.sin()) / cossqalpha
+            };
             let c = WGS84_F / 16.0
                 * cossqalpha
                 * WGS84_F.mul_add(3.0f64.mul_add(-cossqalpha, 4.0), 4.0);
@@ -713,6 +731,34 @@ mod tests {
         // Check differences
         let delta = dubai - testpoint;
         assert_abs_diff_eq!(delta.norm(), 0.0, epsilon = 1.0e-6);
+    }
+
+    #[test]
+    fn test_geodesic_coincident() {
+        // Identical points must give (near-)zero distance and finite headings,
+        // not NaN (the sin(alpha) denominator vanishes for coincident points).
+        let p = ITRFCoord::from_geodetic_deg(0.0, 0.0, 0.0);
+        let (dist, h0, h1) = p.geodesic_distance(&p);
+        assert!(dist.is_finite() && dist.abs() < 1.0e-6);
+        assert!(h0.is_finite() && h1.is_finite());
+
+        // Also at a non-equatorial location.
+        let q = ITRFCoord::from_geodetic_deg(42.0, -71.0, 0.0);
+        let d = q.distance_to(&q);
+        assert!(d.is_finite() && d.abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_geodesic_near_antipodal_is_finite() {
+        // Near-antipodal pairs are the ill-conditioned regime for Vincenty's
+        // inverse. We do not claim GeographicLib accuracy here, but the result
+        // must remain finite (never NaN/inf) and physically plausible — roughly
+        // half the Earth's circumference.
+        let a = ITRFCoord::from_geodetic_deg(0.0, 0.0, 0.0);
+        let b = ITRFCoord::from_geodetic_deg(0.5, 179.7, 0.0);
+        let dist = a.distance_to(&b);
+        assert!(dist.is_finite());
+        assert!((19.0e6..20.1e6).contains(&dist));
     }
 
     #[test]

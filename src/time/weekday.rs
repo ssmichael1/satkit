@@ -11,17 +11,27 @@ pub enum Weekday {
     Invalid = 7,
 }
 
-impl From<i32> for Weekday {
-    fn from(value: i32) -> Self {
+/// Error returned when converting an out-of-range integer to a [`Weekday`].
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error("invalid Weekday value: {0} (expected 0..=6, Sunday..=Saturday)")]
+pub struct InvalidWeekday(pub i32);
+
+impl TryFrom<i32> for Weekday {
+    type Error = InvalidWeekday;
+
+    /// Convert an integer to a [`Weekday`], validating the value. Unlike the
+    /// previous infallible `From<i32>`, an out-of-range integer is a hard error
+    /// rather than being silently mapped to `Invalid`.
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
-            0 => Self::Sunday,
-            1 => Self::Monday,
-            2 => Self::Tuesday,
-            3 => Self::Wednesday,
-            4 => Self::Thursday,
-            5 => Self::Friday,
-            6 => Self::Saturday,
-            _ => Self::Invalid,
+            0 => Ok(Self::Sunday),
+            1 => Ok(Self::Monday),
+            2 => Ok(Self::Tuesday),
+            3 => Ok(Self::Wednesday),
+            4 => Ok(Self::Thursday),
+            5 => Ok(Self::Friday),
+            6 => Ok(Self::Saturday),
+            _ => Err(InvalidWeekday(value)),
         }
     }
 }

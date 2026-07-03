@@ -325,7 +325,17 @@ fn householder(lambda: f64, t_target: f64, x0: f64, m: u32) -> Option<f64> {
             / (dt * (dt2 - delta * d2t) + d3t * delta * delta / 6.0);
 
         x -= step;
-        x = x.clamp(-0.999, 0.999);
+        // x < -1 is unphysical (elliptic energy limit) for all cases. The
+        // upper bound depends on revolutions: multi-rev (m > 0) solutions are
+        // strictly elliptic (x < 1), but the zero-rev case admits hyperbolic
+        // transfers (x > 1) for short times of flight, so only the lower bound
+        // is clamped there. Clamping the upper bound unconditionally made every
+        // hyperbolic solution fail to converge.
+        if m == 0 {
+            x = x.max(-1.0 + 1.0e-9);
+        } else {
+            x = x.clamp(-1.0 + 1.0e-9, 1.0 - 1.0e-9);
+        }
     }
 
     let t_final = tof_equation(x, lambda, m);

@@ -23,7 +23,6 @@ mod pysgp4;
 mod pysolarsystem;
 mod pytle;
 mod pytlefitstatus;
-//mod pyukf;
 
 mod pylambert;
 mod pypropagate;
@@ -142,6 +141,8 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyft::qtod2mod_approx, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::rotation, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::rotation_with_state, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::rotation_approx, m)?)
         .unwrap();

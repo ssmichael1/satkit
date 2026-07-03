@@ -99,11 +99,6 @@ impl From<Weekday> for PyWeekday {
     }
 }
 /// Convert a satkit::Weekday into a Python PyWeekday object
-#[allow(dead_code)]
-pub fn weekday_into_py(w: Weekday, py: Python<'_>) -> Py<PyAny> {
-    PyWeekday::from(w).into_py_any(py).unwrap()
-}
-
 impl From<&PyTimeScale> for TimeScale {
     fn from(s: &PyTimeScale) -> Self {
         match s {
@@ -162,12 +157,6 @@ pub fn instant_into_py(instant: Instant, py: Python<'_>) -> Py<PyAny> {
 }
 
 /// Extract a satkit::Instant from a Python object (expects PyInstant)
-#[allow(dead_code)]
-pub fn instant_from_py(ob: &Bound<'_, PyAny>) -> PyResult<Instant> {
-    let obj = ob.extract::<PyInstant>()?;
-    Ok(obj.0)
-}
-
 #[pymethods]
 impl PyInstant {
     /// Representation of an instant in time
@@ -483,12 +472,7 @@ impl PyInstant {
     /// SatKit Time object representing input datetime
     #[staticmethod]
     fn from_datetime(tm: &Bound<'_, PyDateTime>) -> PyResult<Self> {
-        let ts: f64 = tm
-            .call_method("timestamp", (), None)
-            .unwrap()
-            .extract::<f64>()
-            .unwrap();
-        Ok(Self(Instant::from_unixtime(ts)))
+        Ok(Self(datetime_to_instant(tm)?))
     }
 
     /// Convert to Python datetime object

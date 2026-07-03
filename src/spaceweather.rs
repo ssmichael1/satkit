@@ -1,12 +1,10 @@
 use std::cmp::Ordering;
 use std::path::PathBuf;
 
-use crate::utils::{datadir, download_file, download_if_not_exist};
+use crate::utils::{datadir, download_file, download_if_not_exist, RefreshableSingleton};
 use crate::Instant;
 use crate::TimeLike;
 use thiserror::Error;
-
-use std::sync::RwLock;
 
 /// Errors produced by the [`spaceweather`](crate::spaceweather) module.
 #[derive(Debug, Error)]
@@ -15,6 +13,11 @@ pub enum Error {
     /// expected numeric type.
     #[error("Invalid number in file: {0}")]
     InvalidNumber(&'static str),
+
+    /// A line in the space-weather CSV has fewer than the expected number of
+    /// comma-separated fields (a truncated or corrupt file).
+    #[error("Invalid entry in space weather file: too few fields")]
+    InvalidEntry,
 
     /// No space-weather record exists for the requested time.
     #[error("No space weather record found for date")]
@@ -121,8 +124,14 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
 fn parse_csv(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
     text.lines()
         .skip(1)
+        .filter(|line| !line.trim().is_empty())
         .map(|line| -> Result<SpaceWeatherRecord> {
             let lvals: Vec<&str> = line.split(",").collect();
+            // The record reads fixed column indices up to 30; bail on a
+            // truncated line rather than panicking on out-of-bounds indexing.
+            if lvals.len() < 31 {
+                return Err(Error::InvalidEntry);
+            }
 
             let year: u32 = str2num(lvals[0], 0, 4, "year")?;
             let mon: u32 = str2num(lvals[0], 5, 7, "month")?;
@@ -175,10 +184,10 @@ fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
     parse_csv(&std::fs::read_to_string(&path)?)
 }
 
-/// Module-scope refreshable singleton. Const-initialized as `None` so the
-/// type stays simple; lazy-filled on first read, replaceable any time via
-/// [`init_from_bytes`] / [`init_from_path`] / [`update`].
-static SPACE_WEATHER: RwLock<Option<Vec<SpaceWeatherRecord>>> = RwLock::new(None);
+/// Module-scope refreshable singleton. The lazy default load (best-effort,
+/// silent on failure) runs at most once; [`init_from_bytes`] /
+/// [`init_from_path`] / [`update`] replace any current contents.
+static SPACE_WEATHER: RefreshableSingleton<Vec<SpaceWeatherRecord>> = RefreshableSingleton::new();
 
 /// Initialize the space-weather singleton from an in-memory byte buffer.
 ///
@@ -187,8 +196,7 @@ static SPACE_WEATHER: RwLock<Option<Vec<SpaceWeatherRecord>>> = RwLock::new(None
 /// previously loaded data — space-weather records update daily and the
 /// refresh-in-place semantics are intentional.
 pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
-    let records = parse_csv(std::str::from_utf8(bytes)?)?;
-    *SPACE_WEATHER.write().unwrap() = Some(records);
+    SPACE_WEATHER.set(parse_csv(std::str::from_utf8(bytes)?)?);
     Ok(())
 }
 
@@ -197,29 +205,41 @@ pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
 /// Same semantics as [`init_from_bytes`] but reads the file from disk.
 /// Always replaces any previously loaded data.
 pub fn init_from_path(path: &std::path::Path) -> Result<()> {
-    let records = parse_csv(&std::fs::read_to_string(path)?)?;
-    *SPACE_WEATHER.write().unwrap() = Some(records);
+    SPACE_WEATHER.set(parse_csv(&std::fs::read_to_string(path)?)?);
     Ok(())
 }
 
-/// Ensure the singleton has been populated, lazy-loading from the default
-/// CSV path on first access.
-fn ensure_loaded() -> Result<()> {
-    if SPACE_WEATHER.read().unwrap().is_some() {
-        return Ok(());
+/// Best-effort default load on first read. The full load (which may attempt a
+/// download) runs at most once — previously it re-attempted a blocking load on
+/// *every* `get`, which for a drag propagation with no cached file meant an
+/// HTTP attempt per ODE step. If that first attempt failed, later calls retry
+/// **from disk only** when the file has since appeared (a cheap stat, no
+/// network), so a process that started before the data directory was populated
+/// recovers once `update_datafiles` (or anything else) writes the file.
+fn ensure_default_loaded() {
+    SPACE_WEATHER.ensure_default_loaded(|| load_space_weather_csv().ok());
+    if SPACE_WEATHER.read().is_none() {
+        let path = load_default_path();
+        if path.is_file() {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                if let Ok(records) = parse_csv(&text) {
+                    if !records.is_empty() {
+                        SPACE_WEATHER.set(records);
+                    }
+                }
+            }
+        }
     }
-    let records = load_space_weather_csv()?;
-    let mut guard = SPACE_WEATHER.write().unwrap();
-    if guard.is_none() {
-        *guard = Some(records);
-    }
-    Ok(())
 }
 
 ///
 /// Return full Space Weather record from Space Weather file,
-/// as a function of requested instant in time,
-/// linearly interpolated between time records in the file
+/// as a function of requested instant in time.
+///
+/// Returns the record for the same day when present, otherwise the most
+/// recent prior record (no interpolation). For dates beyond the last record
+/// the final record is returned; note that predicted rows may carry `-1`
+/// sentinel values in fields celestrak has not filled in.
 ///
 /// # Arguments
 ///
@@ -231,15 +251,18 @@ fn ensure_loaded() -> Result<()> {
 ///
 /// # Notes:
 ///
-/// * Space weather is updated daily in a file: sw19571001.txt
+/// * Space weather is updated daily in a file: SW-All.csv
 pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     let tm = tm.as_instant();
-    ensure_loaded()?;
-    let guard = SPACE_WEATHER.read().unwrap();
-    let sw = guard.as_ref().expect("ensure_loaded just populated it");
+    ensure_default_loaded();
+    let guard = SPACE_WEATHER.read();
+    let sw = guard.as_ref().ok_or(Error::NoRecordForDate)?;
+    // Guard empty data (e.g. a header-only CSV) so the indexing below can't
+    // panic; treat it the same as "not loaded".
+    let first = sw.first().ok_or(Error::NoRecordForDate)?;
 
     // First, try simple indexing
-    let idx = (tm - sw[0].date).as_days().floor() as usize;
+    let idx = (tm - first.date).as_days().floor() as usize;
     if idx < sw.len() && (tm - sw[idx].date).as_days().abs() < 1.0 {
         return Ok(sw[idx].clone());
     }
@@ -259,12 +282,13 @@ pub fn update() -> Result<()> {
         return Err(Error::DataDirReadOnly);
     }
 
-    // Download most-recent SW file
-    let url = "https://celestrak.org/SpaceData/sw19571001.txt";
+    // Download most-recent SW file. This must be the same file the loader
+    // parses (`SW-All.csv`); downloading `sw19571001.txt` here left the loader
+    // reading stale data and made this a silent no-op.
+    let url = "https://celestrak.org/SpaceData/SW-All.csv";
     download_file(url, &d, true)?;
 
-    let records = load_space_weather_csv()?;
-    *SPACE_WEATHER.write().unwrap() = Some(records);
+    SPACE_WEATHER.set(load_space_weather_csv()?);
     Ok(())
 }
 
@@ -278,5 +302,26 @@ mod tests {
         let r = get(&tm);
         println!("r = {:?}", r);
         println!("rdate = {}", r.unwrap().date);
+    }
+
+    #[test]
+    fn test_parse_truncated_line_errors_not_panics() {
+        // A truncated data line (fewer than the required fields) must return a
+        // clean error rather than panicking on out-of-bounds indexing.
+        let csv = "HEADER\n2023-11-14,1,2,3\n";
+        assert!(matches!(parse_csv(csv), Err(Error::InvalidEntry)));
+    }
+
+    #[test]
+    fn test_parse_skips_blank_trailing_line() {
+        // A trailing blank line should be skipped, not treated as a truncated
+        // record. (Build one full 31-field row.)
+        let mut row = String::from("2023-11-14");
+        for _ in 0..30 {
+            row.push_str(",0");
+        }
+        let csv = format!("HEADER\n{row}\n\n");
+        let recs = parse_csv(&csv).unwrap();
+        assert_eq!(recs.len(), 1);
     }
 }

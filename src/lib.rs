@@ -216,7 +216,9 @@ pub mod omm;
 
 // Time and duration
 mod time;
-pub use time::{Duration, Instant, InstantError, TimeLike, TimeScale, Weekday};
+pub use time::{
+    Duration, Instant, InstantError, InvalidTimeScale, InvalidWeekday, TimeLike, TimeScale, Weekday,
+};
 
 // Top-level façade error type (deprecated 0.17.0; re-exported for source compat).
 mod error;

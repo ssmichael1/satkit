@@ -1,5 +1,4 @@
 use crate::utils::{datadir, download_if_not_exist};
-use std::collections::HashMap;
 use std::num::{ParseFloatError, ParseIntError};
 use std::path::PathBuf;
 use thiserror::Error;
@@ -73,7 +72,7 @@ use std::sync::OnceLock;
 /// For details of models, see:
 /// <http://icgem.gfz-potsdam.de/tom_longtime>
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum GravityModel {
     JGM3,
     JGM2,
@@ -132,34 +131,49 @@ const fn default_filename(model: GravityModel) -> &'static str {
     }
 }
 
+/// Load a gravity model's coefficient file, or panic with an actionable
+/// message. These singletons back the `accel` hot path (and cannot return a
+/// `Result` without rippling through the propagator and Python bindings), so a
+/// missing data file — a setup error — fails loudly and clearly here rather
+/// than as an opaque `unwrap` panic.
+fn load_or_panic(model: GravityModel) -> Gravity {
+    let fname = default_filename(model);
+    Gravity::from_file(fname).unwrap_or_else(|e| {
+        panic!(
+            "Failed to load Earth gravity model {model:?} from \"{fname}\": {e}. \
+             Ensure the data files are present (set the SATKIT_DATA environment \
+             variable to your data directory, or run \
+             satkit::utils::update_datafiles to download them)."
+        )
+    })
+}
+
 ///
 /// Singleton for JGM3 gravity model
 ///
 pub fn jgm3() -> &'static Gravity {
-    JGM3_INSTANCE.get_or_init(|| Gravity::from_file(default_filename(GravityModel::JGM3)).unwrap())
+    JGM3_INSTANCE.get_or_init(|| load_or_panic(GravityModel::JGM3))
 }
 
 ///
 /// Singleton for JGM2 gravity model
 ///
 pub fn jgm2() -> &'static Gravity {
-    JGM2_INSTANCE.get_or_init(|| Gravity::from_file(default_filename(GravityModel::JGM2)).unwrap())
+    JGM2_INSTANCE.get_or_init(|| load_or_panic(GravityModel::JGM2))
 }
 
 ///
 /// Singleton for EGM96 gravity model
 ///
 pub fn egm96() -> &'static Gravity {
-    EGM96_INSTANCE
-        .get_or_init(|| Gravity::from_file(default_filename(GravityModel::EGM96)).unwrap())
+    EGM96_INSTANCE.get_or_init(|| load_or_panic(GravityModel::EGM96))
 }
 
 ///
 /// Singleton for ITU GRACE16 gravity model
 ///
 pub fn itu_grace16() -> &'static Gravity {
-    ITU_GRACE16_INSTANCE
-        .get_or_init(|| Gravity::from_file(default_filename(GravityModel::ITUGrace16)).unwrap())
+    ITU_GRACE16_INSTANCE.get_or_init(|| load_or_panic(GravityModel::ITUGrace16))
 }
 
 /// Initialize the gravity-model singleton for `model` from an in-memory
@@ -188,21 +202,6 @@ pub fn init_from_path(model: GravityModel, path: &std::path::Path) -> Result<()>
 }
 
 ///
-/// Gravity model hash
-///
-pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
-    static INSTANCE: OnceLock<HashMap<GravityModel, &'static Gravity>> = OnceLock::new();
-    INSTANCE.get_or_init(|| {
-        let mut m = HashMap::new();
-        m.insert(GravityModel::JGM3, jgm3());
-        m.insert(GravityModel::JGM2, jgm2());
-        m.insert(GravityModel::EGM96, egm96());
-        m.insert(GravityModel::ITUGrace16, itu_grace16());
-        m
-    })
-}
-
-///
 /// Return acceleration due to Earth gravity at the input position. The
 /// acceleration does not include the centrifugal force, and is output
 /// in m/s^2 in the International Terrestrial Reference Frame (ITRF)
@@ -228,10 +227,7 @@ pub fn gravhash() -> &'static HashMap<GravityModel, &'static Gravity> {
 ///   O. Montenbruck and B. Gill, Springer, 2012.
 ///
 pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityModel) -> Vector3 {
-    gravhash()
-        .get(&model)
-        .unwrap()
-        .accel(pos_itrf, degree, order)
+    model.get().accel(pos_itrf, degree, order)
 }
 
 ///
@@ -268,14 +264,7 @@ pub fn accel_and_partials(
     order: usize,
     model: GravityModel,
 ) -> (Vector3, Matrix3) {
-    gravhash()
-        .get(&model)
-        .unwrap()
-        .accel_and_partials(pos_itrf, degree, order)
-}
-
-pub fn accel_jgm3(pos_itrf: &Vector3, degree: usize, order: usize) -> Vector3 {
-    jgm3().accel(pos_itrf, degree, order)
+    model.get().accel_and_partials(pos_itrf, degree, order)
 }
 
 #[derive(Debug, Clone)]
@@ -712,7 +701,9 @@ impl Gravity {
 
         for line in &lines[header_cnt..] {
             let s: Vec<&str> = line.split_whitespace().collect();
-            if s.len() < 3 {
+            // Need at least keyword, degree, order, and the C coefficient
+            // (index 3); the S coefficient (index 4) is required only when m > 0.
+            if s.len() < 4 {
                 return Err(Error::InvalidLine((*line).to_string()));
             }
 
@@ -725,6 +716,9 @@ impl Gravity {
             let v1: f64 = s[3].parse()?;
             cs[(n, m)] = v1;
             if m > 0 {
+                if s.len() < 5 {
+                    return Err(Error::InvalidLine((*line).to_string()));
+                }
                 let v2: f64 = s[4].parse()?;
                 cs[(m - 1, n)] = v2;
             }
