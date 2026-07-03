@@ -99,3 +99,19 @@ pub fn barycentric_pos(
     let f = |tm: &Instant| -> Result<Vector3> { Ok(jplephem::barycentric_pos(rbody, tm)?) };
     py_vec3_of_time_result_arr(&f, tm)
 }
+
+/// Return a named constant from the loaded JPL ephemeris file
+///
+/// The DE ephemeris files carry a table of constants used in their
+/// construction — e.g. "AU" (astronomical unit, km), "EMRAT" (Earth/Moon
+/// mass ratio), "GM1".."GM9" and "GMS"/"GMB" (GM values in au^3/day^2).
+///
+/// Args:
+///     name (str): Constant name (case-sensitive, as in the DE file header)
+///
+/// Returns:
+///     float | None: The constant's value, or None if the name is not present
+#[pyfunction]
+pub fn consts(name: &str) -> Option<f64> {
+    jplephem::consts(name).copied()
+}

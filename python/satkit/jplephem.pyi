@@ -101,3 +101,18 @@ def barycentric_state(
 
     """
     ...
+
+def consts(name: str) -> float | None:
+    """Return a named constant from the loaded JPL ephemeris file
+
+    The DE ephemeris files carry a table of constants used in their
+    construction — e.g. "AU" (astronomical unit, km), "EMRAT" (Earth/Moon
+    mass ratio), and "GM1".."GM9" / "GMS" / "GMB" (GM values in au^3/day^2).
+
+    Args:
+        name (str): Constant name (case-sensitive, as in the DE file header)
+
+    Returns:
+        float | None: The constant's value, or None if the name is not present
+    """
+    ...

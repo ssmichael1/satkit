@@ -177,6 +177,34 @@ impl PyInstant {
     ///
     /// Note: If no arguments are passed in, the created object represents the current time
     ///
+    /// The J2000 epoch: 2000-01-01 12:00:00 TT
+    #[classattr]
+    #[allow(non_snake_case)]
+    const fn J2000() -> Self {
+        Self(Instant::J2000)
+    }
+
+    /// The GPS epoch: 1980-01-06 00:00:00 UTC
+    #[classattr]
+    #[allow(non_snake_case)]
+    const fn GPS_EPOCH() -> Self {
+        Self(Instant::GPS_EPOCH)
+    }
+
+    /// The Modified Julian Date epoch: 1858-11-17 00:00:00 UTC
+    #[classattr]
+    #[allow(non_snake_case)]
+    const fn MJD_EPOCH() -> Self {
+        Self(Instant::MJD_EPOCH)
+    }
+
+    /// The Unix epoch: 1970-01-01 00:00:00 UTC
+    #[classattr]
+    #[allow(non_snake_case)]
+    const fn UNIX_EPOCH() -> Self {
+        Self(Instant::UNIX_EPOCH)
+    }
+
     /// Returns:
     ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
     #[new]

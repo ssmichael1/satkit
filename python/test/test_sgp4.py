@@ -252,3 +252,47 @@ class TestSGP4:
                         assert eflag == sk.sgp4_error.perturb_eccen
                 except RuntimeError:
                     print("Caught runtime error; this is expected in test vectors")
+
+
+class TestTLEMetadata:
+    def test_tle_metadata_getters(self):
+        """The catalog-identity fields must be readable (and settable)."""
+        line0 = "0 ISS (ZARYA)"
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        tle = sk.TLE.from_lines([line0, line1, line2])
+        if isinstance(tle, list):
+            tle = tle[0]
+        assert tle.intl_desig == "98067A"
+        assert tle.desig_year == 98
+        assert tle.desig_launch == 67
+        assert tle.desig_piece == "A"
+        assert tle.element_num == 900
+        assert tle.rev_num == 29935
+        assert tle.ephem_type == 0
+        tle.element_num = 901
+        assert tle.element_num == 901
+
+
+class TestSGP4ListKwargs:
+    def test_list_honors_gravconst(self):
+        """The list path must honor gravconst/opsmode kwargs (previously
+        silently ignored): list results must match per-TLE results computed
+        with the same non-default settings."""
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        def one(tles):
+            return tles[0] if isinstance(tles, list) else tles
+
+        tle_a = one(sk.TLE.from_lines([line1, line2]))
+        tle_b = one(sk.TLE.from_lines([line1, line2]))
+        t = tle_a.epoch + sk.duration.from_hours(6)
+
+        p_single, v_single = sk.sgp4(tle_a, t, gravconst=sk.sgp4_gravconst.wgs84)
+        p_list, v_list = sk.sgp4([tle_b], [t], gravconst=sk.sgp4_gravconst.wgs84)
+        assert np.allclose(np.asarray(p_list).squeeze(), p_single)
+        assert np.allclose(np.asarray(v_list).squeeze(), v_single)
+
+        # And wgs84 must actually differ from the default wgs72
+        p_72, _ = sk.sgp4(one(sk.TLE.from_lines([line1, line2])), t)
+        assert not np.allclose(p_72, p_single, rtol=0, atol=1e-3)

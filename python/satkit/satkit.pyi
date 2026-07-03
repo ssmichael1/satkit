@@ -143,6 +143,56 @@ class TLE:
         ...
 
     @property
+    def intl_desig(self) -> str:
+        """International designator (e.g. "98067A": launch year, launch number, piece)"""
+        ...
+
+    @intl_desig.setter
+    def intl_desig(self, value: str) -> None: ...
+    @property
+    def desig_year(self) -> int:
+        """Launch year from the international designator (2-digit, as in the TLE)"""
+        ...
+
+    @desig_year.setter
+    def desig_year(self, value: int) -> None: ...
+    @property
+    def desig_launch(self) -> int:
+        """Launch number of the year from the international designator"""
+        ...
+
+    @desig_launch.setter
+    def desig_launch(self, value: int) -> None: ...
+    @property
+    def desig_piece(self) -> str:
+        """Piece of the launch from the international designator (e.g. "A")"""
+        ...
+
+    @desig_piece.setter
+    def desig_piece(self, value: str) -> None: ...
+    @property
+    def ephem_type(self) -> int:
+        """Ephemeris type (usually 0)"""
+        ...
+
+    @ephem_type.setter
+    def ephem_type(self, value: int) -> None: ...
+    @property
+    def element_num(self) -> int:
+        """Element set number"""
+        ...
+
+    @element_num.setter
+    def element_num(self, value: int) -> None: ...
+    @property
+    def rev_num(self) -> int:
+        """Revolution number at epoch"""
+        ...
+
+    @rev_num.setter
+    def rev_num(self, value: int) -> None: ...
+
+    @property
     def raan(self) -> float:
         """Right Ascension of Ascending Node, in degrees"""
         ...
@@ -397,7 +447,7 @@ def sgp4(
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981"
         ]
 
-        tle = satkit.TLE.single_from_lines(lines)
+        tle = satkit.TLE.from_lines(lines)[0]
 
         # Compute TEME position & velocity at epoch
         pteme, vteme = satkit.sgp4(tle, tle.epoch)
@@ -484,6 +534,33 @@ class gravmodel:
     """
     the ITU Grace 16 gravity model
     """
+
+def nrlmsise00(
+    alt_km: float,
+    *,
+    latitude_deg: float = 0.0,
+    longitude_deg: float = 0.0,
+    time: TimeScalar | None = None,
+    use_spaceweather: bool = True,
+) -> tuple[float, float]:
+    """NRL-MSISE00 atmospheric density model
+
+    Args:
+        alt_km (float): Altitude in kilometers
+
+    Keyword Args:
+        latitude_deg (float): Latitude in degrees
+        longitude_deg (float): Longitude in degrees
+        time (satkit.time | datetime.datetime, optional): Time at which to
+            evaluate the model; space-weather data at this time is used when
+            ``use_spaceweather`` is True
+        use_spaceweather (bool): Use the space-weather database in the
+            calculation. Default is True
+
+    Returns:
+        tuple[float, float]: Density (kg/m^3) and temperature (K)
+    """
+    ...
 
 def gravity(
     pos: list[float] | itrfcoord | npt.ArrayLike, **kwargs
@@ -859,6 +936,18 @@ class time:
         ```
 
     """
+
+    J2000: ClassVar[time]
+    """The J2000 epoch: 2000-01-01 12:00:00 TT"""
+
+    GPS_EPOCH: ClassVar[time]
+    """The GPS epoch: 1980-01-06 00:00:00 UTC"""
+
+    MJD_EPOCH: ClassVar[time]
+    """The Modified Julian Date epoch: 1858-11-17 00:00:00 UTC"""
+
+    UNIX_EPOCH: ClassVar[time]
+    """The Unix epoch: 1970-01-01 00:00:00 UTC"""
 
     def __init__(
         self,
@@ -1602,6 +1691,18 @@ class duration:
         """
         ...
 
+    @staticmethod
+    def from_milliseconds(d: float) -> duration:
+        """Create duration object representing input number of milliseconds
+
+        Args:
+            d (float): Number of milliseconds
+
+        Returns:
+            Duration object representing input number of milliseconds
+        """
+        ...
+
     @typing.overload
     def __add__(self, other: duration) -> duration:
         """Add a duration to another duration
@@ -1811,6 +1912,15 @@ class duration:
         ...
 
     @property
+    def microseconds(self) -> int:
+        """Number of whole microseconds represented by duration
+
+        Returns:
+            Integer number of microseconds represented by duration
+        """
+        ...
+
+    @property
     def minutes(self) -> float:
         """Floating point number of minutes represented by duration
 
@@ -2003,6 +2113,44 @@ class quaternion:
         """
         ...
 
+    @staticmethod
+    def from_euler(roll: float, pitch: float, yaw: float) -> quaternion:
+        """Create quaternion from roll, pitch, yaw Euler angles in radians
+        (inverse of ``as_euler``)
+
+        Args:
+            roll (float): Roll angle in radians
+            pitch (float): Pitch angle in radians
+            yaw (float): Yaw angle in radians
+
+        Returns:
+            quaternion: Quaternion representing the input euler-angle rotation
+        """
+        ...
+
+    @staticmethod
+    def identity() -> quaternion:
+        """The identity (no-rotation) quaternion (w=1, x=y=z=0)"""
+        ...
+
+    def norm(self) -> float:
+        """Quaternion norm (Euclidean length of the 4 components; 1 for a
+        unit rotation quaternion)"""
+        ...
+
+    def normalize(self) -> quaternion:
+        """Return this quaternion normalized to unit length"""
+        ...
+
+    def inverse(self) -> quaternion:
+        """Quaternion inverse. Equals the conjugate for a unit (rotation)
+        quaternion."""
+        ...
+
+    def dot(self, other: quaternion) -> float:
+        """Dot product of the 4 quaternion components with another quaternion"""
+        ...
+
     @property
     def angle(self) -> float:
         """Return the angle in radians of the rotation
@@ -2110,15 +2258,12 @@ class quaternion:
         """
         ...
 
-    def slerp(
-        self, other: quaternion, frac: float, epsilon: float = 1.0e-6
-    ) -> quaternion:
+    def slerp(self, other: quaternion, frac: float) -> quaternion:
         """Spherical linear interpolation between self and other
 
         Args:
             other (quaternion): Quaternion to perform interpolation to
             frac (float): fractional amount of interpolation, in range [0,1]
-            epsilon (float, optional): Value below which the sin of the angle separating both quaternions must be to return an error. Default is 1.0e-6
 
         Returns:
             Quaternion representing interpolation between self and other
@@ -2257,6 +2402,11 @@ class kepler:
     @property
     def period(self) -> float:
         """Orbital period, seconds"""
+        ...
+
+    @property
+    def semiparameter(self) -> float:
+        """Semiparameter (semi-latus rectum) p = a (1 - e^2), meters"""
         ...
 
     @property
@@ -2531,6 +2681,20 @@ class itrfcoord:
             dist, heading_start, heading_end = boston.geodesic_distance(nyc)
             print(f"Distance: {dist/1000:.1f} km")
             ```
+        """
+        ...
+
+    def distance_to(self, other: itrfcoord) -> float:
+        """Geodesic distance in meters between this coordinate and another
+
+        Convenience wrapper around ``geodesic_distance`` returning only the
+        distance (shortest distance along the Earth's surface).
+
+        Args:
+            other (itrfcoord): ITRF coordinate to measure distance to
+
+        Returns:
+            float: Distance in meters
         """
         ...
 
@@ -2894,6 +3058,17 @@ class satstate:
     @property
     def num_maneuvers(self) -> int:
         """Number of impulsive maneuvers scheduled on this state"""
+        ...
+
+    @property
+    def maneuvers(self) -> list[dict]:
+        """The scheduled impulsive maneuvers.
+
+        Returns:
+            list[dict]: One dict per maneuver with keys ``"time"``
+            (satkit.time), ``"delta_v"`` (3-element numpy array, m/s, in
+            ``"frame"``), and ``"frame"`` (satkit.frame)
+        """
         ...
 
     def propagate(
