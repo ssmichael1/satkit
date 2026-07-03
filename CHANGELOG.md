@@ -12,6 +12,23 @@
   `new_closure` Sync bound), plus compatible `cargo update` bumps covering
   the `rustls-webpki`, `anyhow`, and `rand` advisories.
 
+### Testing
+
+- **New property-based test suite** (`tests/properties.rs`, proptest): 12
+  properties over randomly generated domains with automatic shrinking —
+  Kepler `from_pv ∘ to_pv` round-trip (including the exactly-circular /
+  equatorial degeneracies), anomaly-conversion round-trip and termination,
+  one-period orbit closure, Vincenty finiteness/non-negativity over all
+  coordinate pairs, geodetic round-trip, MJD/unixtime round-trips in all
+  data-independent time scales, Instant±Duration arithmetic, TLE
+  format ∘ parse round-trip at field precision, TLE parser never-panics,
+  and quaternion rigidity + Euler round-trip. Runs in ordinary `cargo test`
+  (no data files needed); failures persist in `proptest-regressions/`.
+- **`TimeScale` now derives `Clone`, `Copy`, and `Hash`** — previously each
+  use of a scale value moved it, so loops/reuse required re-naming the
+  variant (a long-standing ergonomic wart the new property tests
+  immediately hit).
+
 ### CI
 
 - **New gates:** `cargo clippy --workspace --all-targets -D warnings` (the
@@ -19,6 +36,9 @@
   advisory scan), and an **sdist-install guard** that builds the sdist and
   `pip install`s from it — the check that would have caught the 0.20.0
   source-unbuildable sdist before it shipped.
+- **Weekly scheduled `cargo audit`** (`audit.yml`) — RustSec advisories are
+  published on their own schedule; the cron run surfaces new ones even when
+  nothing is being pushed.
 
 ### Fixed
 
