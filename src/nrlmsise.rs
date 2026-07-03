@@ -4904,10 +4904,23 @@ pub fn nrlmsise(
         sec_of_day = (dhour as f64).mul_add(3600.0, dmin as f64 * 60.0) + dsec;
         if use_spaceweather {
             let sw_time = time - Duration::from_days(1.0);
-            if let Ok(r) = spaceweather::get(&sw_time) {
-                f107a = r.f10p7_adj_c81;
+            // Predicted (future) rows in SW-All.csv carry -1 sentinels for
+            // fields celestrak has not filled in. Treat a record with an
+            // invalid F10.7 as unusable and fall back to the solar-cycle
+            // forecast, and never let a -1 index reach the density model.
+            let record = spaceweather::get(&sw_time)
+                .ok()
+                .filter(|r| r.f10p7_adj >= 0.0);
+            if let Some(r) = record {
                 f107 = r.f10p7_adj;
-                ap = r.ap_avg as f64;
+                f107a = if r.f10p7_adj_c81 >= 0.0 {
+                    r.f10p7_adj_c81
+                } else {
+                    r.f10p7_adj
+                };
+                if r.ap_avg >= 0 {
+                    ap = r.ap_avg as f64;
+                }
             } else if let Some(predicted) = solar_cycle_forecast::get_predicted_f107(&time) {
                 f107 = predicted;
                 f107a = predicted;

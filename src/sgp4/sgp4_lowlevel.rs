@@ -272,8 +272,6 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
     }
     mm += satrec.no_unkozai * templ;
     xlm = mm + argpm + nodem;
-    let _emsq: f64 = em * em;
-    //temp = 1.0 - emsq;
 
     nodem %= TWOPI; //fmod(nodem, twopi);
     argpm %= TWOPI; //fmod(argpm, twopi);
@@ -284,7 +282,7 @@ pub fn sgp4_lowlevel(satrec: &mut SatRec, tsince: f64) -> Result<([f64; 3], [f64
     satrec.am = am;
     satrec.em = em;
     satrec.im = inclm;
-    satrec.om = nodem;
+    satrec.om_node = nodem;
     satrec.om = argpm;
     satrec.mm = mm;
     satrec.nm = nm;

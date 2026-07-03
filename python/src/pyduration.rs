@@ -134,6 +134,18 @@ impl PyDuration {
         Self(Duration::from_hours(d))
     }
 
+    /// Create new duration object from the number of milliseconds
+    ///
+    /// Args:
+    ///     d (float): The number of milliseconds
+    ///
+    /// Returns:
+    ///     duration: New duration object
+    #[staticmethod]
+    fn from_milliseconds(d: f64) -> Self {
+        Self(Duration::from_milliseconds(d))
+    }
+
     /// Add durations or add duration to satkit.time
     ///
     /// Args:
@@ -265,6 +277,15 @@ impl PyDuration {
     #[getter]
     fn hours(&self) -> f64 {
         self.0.as_hours()
+    }
+
+    /// Duration in units of whole microseconds
+    ///
+    /// Returns:
+    ///     int: Duration in microseconds
+    #[getter]
+    fn microseconds(&self) -> i64 {
+        self.0.as_microseconds()
     }
 
     fn __str__(&self) -> String {

@@ -24,9 +24,12 @@
 //!   covariance (`RTN` is the CCSDS OEM canonical name; `RIC` and `RSW` are aliases)
 //! - **Geodetic Coordinates**: Latitude, longitude, altitude conversions
 //!
-//! Unified API: [`frametransform::to_gcrf`] / [`frametransform::from_gcrf`] and
-//! [`frametransform::state_to_gcrf`] / [`frametransform::gcrf_to_state`] replace
-//! the per-frame helper explosion.
+//! Unified API: [`frametransform::rotation`] / [`frametransform::transform_state`]
+//! dispatch any Earth-chain frame pair, [`frametransform::rotation_with_state`]
+//! additionally covers the orbit-local frames (RTN / NTW / LVLH), and
+//! [`frametransform::to_gcrf`] / [`frametransform::from_gcrf`] give the
+//! orbit-local direction-cosine matrices directly — together they replace the
+//! per-frame helper explosion.
 //!
 //! ### Orbit Propagation
 //! Multiple propagation methods for various accuracy requirements:
@@ -63,7 +66,6 @@
 //! - Keplerian orbital elements and conversions
 //! - Geodesic distance calculations
 //! - TLE parsing, generation, and orbit fitting
-//! - Unscented Kalman Filter (UKF) implementation
 //!
 //! ## Language Bindings
 //!
@@ -216,7 +218,9 @@ pub mod omm;
 
 // Time and duration
 mod time;
-pub use time::{Duration, Instant, InstantError, TimeLike, TimeScale, Weekday};
+pub use time::{
+    Duration, Instant, InstantError, InvalidTimeScale, InvalidWeekday, TimeLike, TimeScale, Weekday,
+};
 
 // Top-level façade error type (deprecated 0.17.0; re-exported for source compat).
 mod error;

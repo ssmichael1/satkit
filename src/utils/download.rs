@@ -26,6 +26,35 @@ pub enum Error {
 /// Convenient type alias used throughout the `download` module.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Stream `reader` to `final_path` atomically: write to a sibling `.part` file
+/// and rename it into place on success. An interrupted transfer (network drop,
+/// Ctrl-C) then leaves only the discardable `.part` file rather than a truncated
+/// final file that later runs would trust as complete.
+#[cfg(feature = "download")]
+fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()> {
+    let part_path = {
+        let mut p = final_path.as_os_str().to_owned();
+        p.push(".part");
+        std::path::PathBuf::from(p)
+    };
+    let mut write = || -> Result<()> {
+        let mut dest = std::fs::File::create(&part_path)?;
+        std::io::copy(reader, &mut dest)?;
+        dest.sync_all()?;
+        Ok(())
+    };
+    match write() {
+        Ok(()) => {
+            std::fs::rename(&part_path, final_path)?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&part_path);
+            Err(e)
+        }
+    }
+}
+
 #[cfg(feature = "download")]
 pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
     if fname.is_file() {
@@ -42,8 +71,7 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
 
     let mut resp = agent.get(url.as_str()).call()?;
 
-    let mut dest = std::fs::File::create(fname)?;
-    std::io::copy(&mut resp.body_mut().as_reader(), &mut dest)?;
+    write_atomic(&mut resp.body_mut().as_reader(), fname)?;
     Ok(())
 }
 
@@ -71,8 +99,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
     let mut resp = agent.get(url).call()?;
 
     println!("Downloading {}", fname.to_str().unwrap());
-    let mut dest = std::fs::File::create(fullpath)?;
-    std::io::copy(&mut resp.body_mut().as_reader(), &mut dest)?;
+    write_atomic(&mut resp.body_mut().as_reader(), &fullpath)?;
     Ok(true)
 }
 
@@ -113,4 +140,30 @@ pub fn download_to_string(url: &str) -> Result<String> {
 #[cfg(not(feature = "download"))]
 pub fn download_to_string(_url: &str) -> Result<String> {
     Err(Error::FeatureDisabled)
+}
+
+#[cfg(all(test, feature = "download"))]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn write_atomic_renames_and_leaves_no_part_file() {
+        let dir = std::env::temp_dir();
+        let final_path = dir.join("satkit_write_atomic_test.bin");
+        let part_path = dir.join("satkit_write_atomic_test.bin.part");
+        let _ = std::fs::remove_file(&final_path);
+        let _ = std::fs::remove_file(&part_path);
+
+        let data = b"hello satkit";
+        write_atomic(&mut Cursor::new(&data[..]), &final_path).unwrap();
+
+        assert!(
+            final_path.is_file(),
+            "final file should exist after success"
+        );
+        assert!(!part_path.exists(), "the .part file must be renamed away");
+        assert_eq!(std::fs::read(&final_path).unwrap(), data);
+        let _ = std::fs::remove_file(&final_path);
+    }
 }

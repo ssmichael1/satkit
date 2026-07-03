@@ -94,7 +94,6 @@ use std::f64::consts::PI;
 pub fn sgp4init(
     gravconst: GravConst,
     opsmode: OpsMode,
-    _satn: &str,
     epoch: f64,
     xbstar: f64,
     xndot: f64,

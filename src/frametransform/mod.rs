@@ -30,7 +30,9 @@ mod error;
 pub mod ierstable;
 mod qcirs2gcrs;
 
-pub use dispatch::{rotation, rotation_approx, transform_state, transform_state_approx};
+pub use dispatch::{
+    rotation, rotation_approx, rotation_with_state, transform_state, transform_state_approx,
+};
 
 pub use error::{Error, Result};
 

@@ -36,10 +36,6 @@ use anyhow::{bail, Result};
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct PyQuaternion(pub Quaternion);
 
-#[pyclass(name = "quaternion_array", module = "satkit", from_py_object)]
-#[derive(PartialEq, Clone, Debug)]
-pub struct PyQuaternionVec(Vec<Quaternion>);
-
 impl From<Quaternion> for PyQuaternion {
     fn from(q: Quaternion) -> Self {
         Self(q)
@@ -233,6 +229,68 @@ impl PyQuaternion {
         self.0.to_euler()
     }
 
+    /// Create quaternion from "roll", "pitch", "yaw" euler angles in radians
+    /// (inverse of `as_euler`)
+    ///
+    /// Args:
+    ///     roll (float): Roll angle in radians
+    ///     pitch (float): Pitch angle in radians
+    ///     yaw (float): Yaw angle in radians
+    ///
+    /// Returns:
+    ///     quaternion: Quaternion representing the input euler-angle rotation
+    #[staticmethod]
+    fn from_euler(roll: f64, pitch: f64, yaw: f64) -> Self {
+        Quaternion::from_euler(roll, pitch, yaw).into()
+    }
+
+    /// The identity (no-rotation) quaternion
+    ///
+    /// Returns:
+    ///     quaternion: Identity quaternion (w=1, x=y=z=0)
+    #[staticmethod]
+    fn identity() -> Self {
+        Quaternion::identity().into()
+    }
+
+    /// Quaternion norm (Euclidean length of the 4 components; 1 for a unit
+    /// rotation quaternion)
+    ///
+    /// Returns:
+    ///     float: Norm of the quaternion
+    fn norm(&self) -> f64 {
+        self.0.norm()
+    }
+
+    /// Return this quaternion normalized to unit length
+    ///
+    /// Returns:
+    ///     quaternion: Normalized (unit) quaternion
+    fn normalize(&self) -> Self {
+        self.0.normalize().into()
+    }
+
+    /// Quaternion inverse. For a unit (rotation) quaternion this equals the
+    /// conjugate; for a non-unit quaternion the conjugate is scaled by the
+    /// squared norm.
+    ///
+    /// Returns:
+    ///     quaternion: Inverse quaternion
+    fn inverse(&self) -> Self {
+        self.0.inverse().into()
+    }
+
+    /// Dot product of the 4 quaternion components with another quaternion
+    ///
+    /// Args:
+    ///     other (quaternion): Quaternion to dot with
+    ///
+    /// Returns:
+    ///     float: Dot product
+    fn dot(&self, other: &Self) -> f64 {
+        self.0.dot(&other.0)
+    }
+
     fn __str__(&self) -> Result<String> {
         let (ax, angle) = self.0.to_axis_angle();
         let n = ax.norm();
@@ -333,13 +391,10 @@ impl PyQuaternion {
     /// Args:
     ///     other (quaternion): Quaternion to perform interpolation to
     ///     frac (float): Number in range [0,1] representing fractional distance from self to other of result quaternion
-    ///     epsilon (float): Value below which the sin of the angle separating both quaternion must be to return an error.  Default is 1.0e-6
     ///
     /// Returns:
     ///     quaternion: Quaterion represention fracional spherical interpolation between self and other
-    #[pyo3(signature=(other, frac, epsilon=1.0e-6))]
-    #[allow(unused_variables)]
-    fn slerp(&self, other: &Self, frac: f64, epsilon: f64) -> Result<Self> {
+    fn slerp(&self, other: &Self, frac: f64) -> Result<Self> {
         Ok(self.0.slerp(&other.0, frac).into())
     }
 

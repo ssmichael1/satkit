@@ -9,9 +9,10 @@ import numpy.typing as npt
 import numpy as np
 
 import satkit
+from .satkit import TimeScalar, TimeArrayLike, TimeInput
 
 def geocentric_pos(
-    body: satkit.solarsystem, tm: satkit.time | list[satkit.time] | npt.ArrayLike
+    body: satkit.solarsystem, tm: TimeInput
 ) -> npt.NDArray[np.float64]:
     """Return the position of the given body in the GCRF coordinate system (origin is Earth center)
 
@@ -34,7 +35,7 @@ def geocentric_pos(
 
 def barycentric_pos(
     body: satkit.solarsystem,
-    tm: satkit.time | list[satkit.time] | npt.ArrayLike,
+    tm: TimeInput,
 ) -> npt.NDArray[np.float64]:
     """Return the position of the given body in the Barycentric coordinate system (origin is solarsystem barycenter)
 
@@ -56,7 +57,7 @@ def barycentric_pos(
 
 def geocentric_state(
     body: satkit.solarsystem,
-    tm: satkit.time | list[satkit.time] | npt.ArrayLike,
+    tm: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Return the position and velocity of the given body in Geocentric coordinate system (GCRF)
 
@@ -79,7 +80,7 @@ def geocentric_state(
 
 def barycentric_state(
     body: satkit.solarsystem,
-    tm: satkit.time | list[satkit.time] | npt.ArrayLike,
+    tm: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Return the position & velocity the given body in the barycentric coordinate system (origin is solar system barycenter)
 
@@ -98,5 +99,20 @@ def barycentric_state(
      - The sun position is relative to the solar system barycenter
        (it will be close to origin)
 
+    """
+    ...
+
+def consts(name: str) -> float | None:
+    """Return a named constant from the loaded JPL ephemeris file
+
+    The DE ephemeris files carry a table of constants used in their
+    construction — e.g. "AU" (astronomical unit, km), "EMRAT" (Earth/Moon
+    mass ratio), and "GM1".."GM9" / "GMS" / "GMB" (GM values in au^3/day^2).
+
+    Args:
+        name (str): Constant name (case-sensitive, as in the DE file header)
+
+    Returns:
+        float | None: The constant's value, or None if the name is not present
     """
     ...

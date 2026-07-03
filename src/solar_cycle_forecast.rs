@@ -14,8 +14,8 @@ use crate::{Instant, TimeLike};
 use std::num::ParseIntError;
 use thiserror::Error;
 
+use crate::utils::RefreshableSingleton;
 use std::path::PathBuf;
-use std::sync::{Once, RwLock};
 
 /// Errors produced by the [`solar_cycle_forecast`](crate::solar_cycle_forecast)
 /// module.
@@ -123,22 +123,16 @@ fn parse_forecast_json(contents: &str) -> Result<Vec<ForecastRecord>> {
     Ok(records)
 }
 
-/// Module-scope refreshable singleton. Const-initialized as `None`;
-/// the lazy default load (best-effort, silent on missing file) runs at
-/// most once via [`DEFAULT_LOAD_ONCE`]. [`init_from_bytes`] /
+/// Module-scope refreshable singleton. The lazy default load (best-effort,
+/// silent on missing file) runs at most once; [`init_from_bytes`] /
 /// [`init_from_path`] / [`update`] replace any current contents.
-static SOLAR_FORECAST: RwLock<Option<Vec<ForecastRecord>>> = RwLock::new(None);
-static DEFAULT_LOAD_ONCE: Once = Once::new();
+static SOLAR_FORECAST: RefreshableSingleton<Vec<ForecastRecord>> = RefreshableSingleton::new();
 
 /// Best-effort default load on first read. Failures are silent — the
 /// forecast is a fallback for future propagation dates; if it's missing,
 /// callers get `None` from [`get_predicted_f107`].
 fn ensure_default_loaded() {
-    DEFAULT_LOAD_ONCE.call_once(|| {
-        if let Ok(records) = load_forecast() {
-            *SOLAR_FORECAST.write().unwrap() = Some(records);
-        }
-    });
+    SOLAR_FORECAST.ensure_default_loaded(|| load_forecast().ok());
 }
 
 /// Initialize the solar-cycle-forecast singleton from an in-memory byte
@@ -149,10 +143,7 @@ fn ensure_default_loaded() {
 /// data — like spaceweather, this subsystem is intentionally
 /// refresh-in-place.
 pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
-    let records = parse_forecast_json(std::str::from_utf8(bytes)?)?;
-    // Mark the default-load slot as consumed so it doesn't later overwrite.
-    DEFAULT_LOAD_ONCE.call_once(|| {});
-    *SOLAR_FORECAST.write().unwrap() = Some(records);
+    SOLAR_FORECAST.set(parse_forecast_json(std::str::from_utf8(bytes)?)?);
     Ok(())
 }
 
@@ -161,9 +152,7 @@ pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
 ///
 /// Same semantics as [`init_from_bytes`]; always replaces.
 pub fn init_from_path(path: &std::path::Path) -> Result<()> {
-    let records = parse_forecast_json(&std::fs::read_to_string(path)?)?;
-    DEFAULT_LOAD_ONCE.call_once(|| {});
-    *SOLAR_FORECAST.write().unwrap() = Some(records);
+    SOLAR_FORECAST.set(parse_forecast_json(&std::fs::read_to_string(path)?)?);
     Ok(())
 }
 
@@ -176,7 +165,7 @@ pub fn init_from_path(path: &std::path::Path) -> Result<()> {
 pub fn get_predicted_f107<T: TimeLike>(tm: &T) -> Option<f64> {
     let tm = tm.as_instant();
     ensure_default_loaded();
-    let lock = SOLAR_FORECAST.read().unwrap();
+    let lock = SOLAR_FORECAST.read();
     let records = lock.as_ref()?;
 
     if records.is_empty() {
@@ -223,8 +212,7 @@ pub fn update() -> Result<()> {
     std::fs::write(&path, &contents)?;
 
     // Reload singleton
-    DEFAULT_LOAD_ONCE.call_once(|| {});
-    *SOLAR_FORECAST.write().unwrap() = Some(records);
+    SOLAR_FORECAST.set(records);
 
     Ok(())
 }
@@ -258,8 +246,7 @@ mod tests {
             {"time-tag": "2026-07", "predicted_ssn": 90.0, "predicted_f10.7": 120.0}
         ]"#;
         let records = parse_forecast_json(json).unwrap();
-        DEFAULT_LOAD_ONCE.call_once(|| {});
-        *SOLAR_FORECAST.write().unwrap() = Some(records);
+        SOLAR_FORECAST.set(records);
 
         // Midpoint should be ~130
         let mid = Instant::from_date(2026, 4, 15).unwrap();

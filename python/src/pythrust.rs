@@ -41,19 +41,10 @@ impl PyThrust {
     ) -> Result<Self> {
         let accel_vec: Vector3 = py_to_smatrix(accel)?;
         let rust_frame: Frame = frame.into();
-
-        match rust_frame {
-            Frame::GCRF | Frame::RTN | Frame::NTW | Frame::LVLH => {}
-            Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME
-            | Frame::EME2000 | Frame::ICRF => anyhow::bail!(
-                "Invalid frame for thrust: {}. Must be frame.GCRF, frame.RTN, frame.NTW, or frame.LVLH",
-                rust_frame
-            ),
-        }
-
+        // Frame validation happens in ContinuousThrust::new.
         Ok(Self(ContinuousThrust::new(
             accel_vec, rust_frame, start.0, end.0,
-        )))
+        )?))
     }
 
     /// Get the acceleration vector
@@ -90,6 +81,36 @@ impl PyThrust {
             self.0.start,
             self.0.end,
         )
+    }
+
+    /// Reconstruct a thrust arc from its pickled byte state. Used internally by
+    /// `__reduce__`; not part of the public API.
+    #[staticmethod]
+    fn _from_pickle(state: &[u8]) -> PyResult<Self> {
+        let ct: ContinuousThrust =
+            serde_pickle::from_slice(state, Default::default()).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("invalid thrust pickle: {e}"))
+            })?;
+        // serde deserializes the Frame field without the construction-time
+        // validation in ContinuousThrust::new; reject unsupported frames here
+        // so a doctored pickle can't smuggle in an Earth frame that would
+        // panic during propagation.
+        crate::pyutils::maneuver_frame_to_u8(ct.frame)?;
+        Ok(Self(ct))
+    }
+
+    /// Pickle support. `thrust` has no `__new__`, so we reconstruct via the
+    /// private `_from_pickle` staticmethod with a self-describing byte payload
+    /// (serde), avoiding any dependence on the picklability of the frame/time
+    /// wrapper types.
+    fn __reduce__(&self, py: Python) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+        use pyo3::IntoPyObjectExt;
+        let bytes = serde_pickle::to_vec(&self.0, Default::default()).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("failed to serialize thrust: {e}"))
+        })?;
+        let ctor = py.get_type::<Self>().getattr("_from_pickle")?;
+        let args = (pyo3::types::PyBytes::new(py, &bytes),).into_py_any(py)?;
+        Ok((ctor.into_py_any(py)?, args))
     }
 }
 

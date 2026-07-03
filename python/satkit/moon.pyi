@@ -9,6 +9,7 @@ import numpy as np
 from typing import ClassVar
 
 import satkit
+from .satkit import TimeScalar, TimeArrayLike, TimeInput
 
 class moonphase:
     """
@@ -40,7 +41,7 @@ class moonphase:
     """Waning Crescent (292.5 - 337.5)"""
 
 @typing.overload
-def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
+def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
     """
     Approximate Moon position in the GCRF Frame
 
@@ -69,7 +70,7 @@ def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
 
 @typing.overload
 def pos_gcrf(
-    time: npt.ArrayLike | list[satkit.time],
+    time: TimeArrayLike,
 ) -> npt.NDArray[np.float64]:
     """
     Approximate Moon position in the GCRF Frame
@@ -117,18 +118,16 @@ def pos_gcrf(*args, **kwargs):
     """
     ...
 
-def illumination(
-    time: satkit.time | npt.ArrayLike | list[satkit.time],
-) -> npt.NDArray[np.float64] | float:
+@typing.overload
+def illumination(time: TimeScalar) -> float:
     """
     Fractional illumination of moon
 
     Args:
-        time (satkit.time | npt.ArrayLike | list[satkit.time]): time object, list, or numpy array
-            for which to compute illumination
+        time (satkit.time | datetime.datetime): scalar time at which to compute illumination
 
     Returns:
-        float | npt.NDArray[np.float64]: float or numpy array of floats representing fractional illumination of moon at given time(s).
+        float: fractional illumination of moon at the given time
 
     Example:
         ```python
@@ -139,33 +138,82 @@ def illumination(
     """
     ...
 
-def phase(
-    time: satkit.time | npt.ArrayLike | list[satkit.time],
-) -> npt.NDArray[np.float64] | float:
+@typing.overload
+def illumination(time: TimeArrayLike) -> list[float]:
+    """
+    Fractional illumination of moon
+
+    Args:
+        time (TimeArrayLike): list or numpy array of times at which to compute illumination
+
+    Returns:
+        list[float]: fractional illumination of moon at each given time
+    """
+    ...
+
+def illumination(*args, **kwargs):
+    """Fractional illumination of moon (scalar or array of times)."""
+    ...
+
+@typing.overload
+def phase(time: TimeScalar) -> float:
     """
     Phase of moon in radians
 
     Args:
-        time (satkit.time | npt.ArrayLike | list[satkit.time]): time object, list, or numpy array
-            for which to compute phase
+        time (satkit.time | datetime.datetime): scalar time at which to compute phase
 
     Returns:
-        float | npt.NDArray[np.float64]: float or numpy array of floats representing moon phase in radians at given time(s).
+        float: moon phase in radians at the given time
     """
     ...
 
-def phase_name(
-    time: satkit.time | npt.ArrayLike | list[satkit.time],
-) -> moonphase | list[moonphase]:
+@typing.overload
+def phase(time: TimeArrayLike) -> list[float]:
+    """
+    Phase of moon in radians
+
+    Args:
+        time (TimeArrayLike): list or numpy array of times at which to compute phase
+
+    Returns:
+        list[float]: moon phase in radians at each given time
+    """
+    ...
+
+def phase(*args, **kwargs):
+    """Phase of moon in radians (scalar or array of times)."""
+    ...
+
+@typing.overload
+def phase_name(time: TimeScalar) -> moonphase:
     """
     Phase name of moon
 
     Args:
-        time (satkit.time | npt.ArrayLike | list[satkit.time]): time object, list, or numpy array
-            for which to compute phase name
+        time (satkit.time | datetime.datetime): scalar time at which to compute phase name
 
     Returns:
-        moonphase | list[moonphase]: moonphase or list of moonphase representing moon phase name at given time(s).
+        moonphase: moon phase name at the given time
+    """
+    ...
+
+@typing.overload
+def phase_name(time: TimeArrayLike) -> list[moonphase]:
+    """
+    Phase name of moon
+
+    Args:
+        time (TimeArrayLike): list or numpy array of times at which to compute phase name
+
+    Returns:
+        list[moonphase]: moon phase name at each given time
+    """
+    ...
+
+def phase_name(*args, **kwargs):
+    """
+    Phase name of moon (scalar or array of times).
 
     Example:
         ```python

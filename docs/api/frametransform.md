@@ -47,6 +47,37 @@ not always pivot through GCRF). Pairs involving the orbit-dependent frames
 [`to_gcrf`](#satkit.frametransform.to_gcrf) /
 [`from_gcrf`](#satkit.frametransform.from_gcrf) instead.
 
+### Which function do I call?
+
+There are three related quaternion entry points; pick by what your frames need:
+
+| Function | Frames it handles | Extra arguments | Returns |
+|---|---|---|---|
+| [`rotation`](#satkit.frametransform.rotation) | Earth chain only (`ITRF`, `TIRS`, `CIRS`, `GCRF`, `TEME`, `EME2000`, `ICRF`) | — | `quaternion` |
+| [`to_gcrf`](#satkit.frametransform.to_gcrf) / [`from_gcrf`](#satkit.frametransform.from_gcrf) | Orbit frames only (`LVLH`, `RTN`, `NTW`) | `pos`, `vel` (GCRF) | 3×3 matrix |
+| [`rotation_with_state`](#satkit.frametransform.rotation_with_state) | **All** frames (Earth *and* orbit) | `pos`, `vel` (GCRF) | `quaternion` |
+
+Use [`rotation_with_state`](#satkit.frametransform.rotation_with_state) when a
+pair mixes an Earth frame and an orbit frame — e.g. going straight from `TEME`
+to `RTN` — without manually composing two transforms through GCRF. Note that
+the solution does **not** always go through GCRF: a purely Earth-frame pair
+delegates to [`rotation`](#satkit.frametransform.rotation), which picks the
+shortest path through the frame graph (e.g. `ITRF`↔`TIRS` is a single
+polar-motion rotation, with no IERS reduction paid at all); only pairs that
+involve an orbit-dependent frame compose through GCRF. The orbit state is only
+consulted when an orbit frame is involved:
+
+```python
+# TEME (Earth-fixed SGP4 frame) directly to RTN (orbit-local) in one call.
+q = sk.frametransform.rotation_with_state(
+    from_frame=sk.frame.TEME, to_frame=sk.frame.RTN,
+    tm=t, pos=pos_gcrf, vel=vel_gcrf,
+)
+```
+
+Any of these functions accept either a `satkit.time` or a `datetime.datetime`
+for the `tm` argument.
+
 The per-pair functions below (`qitrf2gcrf`, `qteme2itrf`, `qcirs2gcrf`, …)
 remain available for direct use when the source / destination pair is
 hard-coded in the surrounding code.

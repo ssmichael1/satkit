@@ -21,9 +21,9 @@ mod pyquaternion;
 mod pysatstate;
 mod pysgp4;
 mod pysolarsystem;
+mod pyspaceweather;
 mod pytle;
 mod pytlefitstatus;
-//mod pyukf;
 
 mod pylambert;
 mod pypropagate;
@@ -45,6 +45,18 @@ use pysolarsystem::SolarSystem;
 use pypropsettings::PyPropSettings;
 use pysatstate::PySatState;
 
+/// Space Weather Sub-Module
+#[pymodule]
+fn spaceweather(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(pyspaceweather::get, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyspaceweather::predicted_f107, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyspaceweather::update, m)?)
+        .unwrap();
+    Ok(())
+}
+
 /// JPL Ephemeris Sub-Module
 #[pymodule]
 fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -55,6 +67,8 @@ fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyjplephem::barycentric_pos, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pyjplephem::barycentric_state, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyjplephem::consts, m)?)
         .unwrap();
 
     Ok(())
@@ -143,6 +157,8 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::rotation, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::rotation_with_state, m)?)
+        .unwrap();
     m.add_function(wrap_pyfunction!(pyft::rotation_approx, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(pyft::transform_state, m)?)
@@ -206,6 +222,7 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pymodule!(sun))?;
     m.add_wrapped(wrap_pymodule!(moon))?;
     m.add_wrapped(wrap_pymodule!(planets))?;
+    m.add_wrapped(wrap_pymodule!(spaceweather))?;
 
     m.add_wrapped(wrap_pymodule!(mod_utils::utils))?;
     m.add_wrapped(wrap_pymodule!(pydensity::density))?;

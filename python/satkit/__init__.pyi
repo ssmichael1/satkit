@@ -7,6 +7,7 @@ from . import sun
 from . import density
 from . import utils
 from . import planets
+from . import spaceweather
 
 __version__: str
 
@@ -38,6 +39,7 @@ __all__ = [
     "moon",
     "sun",
     "planets",
+    "spaceweather",
     "satstate",
     "propagate",
     "lambert",

@@ -60,11 +60,35 @@ pub enum Error {
     #[error("Unsupported frame for uncertainty: {frame}. Must be GCRF, LVLH, RIC, or NTW")]
     UnsupportedUncertaintyFrame { frame: Frame },
 
+    /// Returned by [`SatState::propagate`](crate::orbitprop::SatState::propagate)
+    /// when a scheduled maneuver uses a frame in which a delta-v cannot be
+    /// resolved. Validated up front so it surfaces as an error rather than a
+    /// panic inside the force evaluation.
+    #[error("Unsupported frame for maneuver: {frame}. Must be GCRF, RTN (RIC), NTW, or LVLH")]
+    UnsupportedManeuverFrame { frame: Frame },
+
+    /// Returned by [`ContinuousThrust::new`](crate::orbitprop::ContinuousThrust::new)
+    /// when the thrust frame is not one in which a thrust acceleration can be
+    /// resolved. Validated at construction so it surfaces as an error rather
+    /// than a panic inside the force evaluation.
+    #[error("Unsupported frame for thrust: {frame}. Must be GCRF, RTN (RIC), NTW, or LVLH")]
+    UnsupportedThrustFrame { frame: Frame },
+
     // -- settings.rs -----------------------------------------------------
     /// Returned by [`PropSettings::set_gravity`](crate::orbitprop::PropSettings::set_gravity)
     /// when `order > degree`.
     #[error("Gravity order ({order}) must be ≤ degree ({degree})")]
     InvalidGravityOrder { order: u16, degree: u16 },
+
+    /// Returned when a Gauss-Jackson 8 propagation is requested over a span
+    /// shorter than its 8-step startup requires. Reduce `gj_step_seconds` or
+    /// use an adaptive integrator (e.g. RKV98) for short arcs.
+    #[error(
+        "Propagation span ({span} s) is too short for Gauss-Jackson 8, which \
+         needs at least 8 steps ({min} s at the configured step). Reduce \
+         gj_step_seconds or use an adaptive integrator."
+    )]
+    GJIntervalTooShort { span: f64, min: f64 },
 }
 
 impl From<ode::OdeError> for Error {

@@ -193,5 +193,21 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
         eprintln!("Warning: could not download solar cycle forecast: {e}");
     }
 
+    // Refresh the in-memory space-weather / EOP singletons from the files just
+    // downloaded, so a process whose lazy first load failed (e.g. it started
+    // before the data directory was populated) recovers without a restart.
+    let sw_path = downloaddir.join("SW-All.csv");
+    if sw_path.is_file() {
+        if let Err(e) = crate::spaceweather::init_from_path(&sw_path) {
+            eprintln!("Warning: could not load downloaded space-weather file: {e}");
+        }
+    }
+    let eop_path = downloaddir.join("EOP-All.csv");
+    if eop_path.is_file() {
+        if let Err(e) = crate::earth_orientation_params::init_from_path(&eop_path) {
+            eprintln!("Warning: could not load downloaded EOP file: {e}");
+        }
+    }
+
     Ok(())
 }

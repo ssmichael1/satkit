@@ -183,33 +183,27 @@ impl TLE {
     /// ```
     pub fn from_lines(lines: &[String]) -> Result<Vec<Self>> {
         let mut tles: Vec<Self> = Vec::<Self>::new();
-        let empty: &String = &String::new();
-        let mut line0: &String = empty;
-        let mut line1: &String = empty;
-        let mut line2: &String;
+        let mut line0: &str = "";
+        let mut line1: &str = "";
 
         for line in lines {
-            if line.len() < 2 {
-                continue;
-            }
-            if line.chars().nth(0).unwrap() == '1'
-                && line.chars().nth(1).unwrap() == ' '
-                && line.len() == 69
-            {
+            // Trim trailing whitespace so CRLF-terminated files (trailing `\r`)
+            // don't push line lengths off 69. A TLE data line is >= 69 chars
+            // (extra trailing content is ignored by `load_2line`) with a
+            // `"1 "` / `"2 "` prefix; `starts_with` is byte-safe on non-ASCII.
+            let line = line.trim_end();
+            if line.len() >= 69 && line.starts_with("1 ") {
                 line1 = line;
-            } else if line.chars().nth(0).unwrap() == '2'
-                && line.chars().nth(1).unwrap() == ' '
-                && line.len() == 69
-            {
-                line2 = line;
+            } else if line.len() >= 69 && line.starts_with("2 ") {
+                let line2 = line;
                 if line0.is_empty() {
                     tles.push(Self::load_2line(line1, line2)?);
                 } else {
                     tles.push(Self::load_3line(line0, line1, line2)?);
                 }
-                line0 = empty;
-                line1 = empty;
-            } else {
+                line0 = "";
+                line1 = "";
+            } else if !line.is_empty() {
                 line0 = line;
             }
         }
@@ -321,13 +315,10 @@ impl TLE {
 
         match Self::load_2line(line1, line2) {
             Ok(mut tle) => {
-                tle.name = {
-                    if line0.len() > 2 && line0.chars().nth(0).unwrap() == '0' {
-                        line0[2..].to_string()
-                    } else {
-                        String::from(line0)
-                    }
-                };
+                // Strip the "0 " name-line prefix if present. Use `strip_prefix`
+                // rather than byte slicing so a non-ASCII satellite name cannot
+                // panic on a char boundary.
+                tle.name = line0.strip_prefix("0 ").unwrap_or(line0).to_string();
                 Ok(tle)
             }
             Err(e) => Err(e),
@@ -366,6 +357,15 @@ impl TLE {
     /// ```
     ///
     pub fn load_2line(line1: &str, line2: &str) -> Result<Self> {
+        // The field extraction below slices by byte range and indexes by
+        // character position, both of which are only valid (and panic-free)
+        // when the lines are pure ASCII. Reject non-ASCII up front.
+        if !line1.is_ascii() {
+            return Err(Error::NonAscii { line: 1 });
+        }
+        if !line2.is_ascii() {
+            return Err(Error::NonAscii { line: 2 });
+        }
         if line1.len() < 69 {
             return Err(Error::LineTooShort {
                 line: 1,
@@ -864,6 +864,41 @@ mod tests {
                 bail!("load_2line: Err = \"{}\"", s);
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_non_ascii_line_errors_not_panics() {
+        // A non-ASCII line long enough to pass the length check must return a
+        // clean error rather than panicking on a non-char-boundary byte slice.
+        let line1 =
+            "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  829é".to_string();
+        let line2 = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
+            .to_string();
+        assert!(matches!(
+            TLE::load_2line(&line1, &line2),
+            Err(Error::NonAscii { line: 1 })
+        ));
+        // A single multibyte-character line must not panic in from_lines
+        // (regression: the old first-char indexing unwrapped past a 1-char
+        // line). With no TLE data lines present, the result is empty.
+        let lines = vec!["é".to_string()];
+        assert!(TLE::from_lines(&lines).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_from_lines_crlf() -> Result<()> {
+        // Lines with a trailing carriage return (CRLF files) must still parse
+        // rather than being silently dropped by an exact length == 69 check.
+        let line0 = "0 INTELSAT 902\r".to_string();
+        let line1 =
+            "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290\r".to_string();
+        let line2 =
+            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.\r"
+                .to_string();
+        let tles = TLE::from_lines(&[line0, line1, line2])?;
+        assert_eq!(tles.len(), 1);
+        assert_eq!(tles[0].name, "INTELSAT 902");
         Ok(())
     }
 

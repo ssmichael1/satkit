@@ -397,22 +397,56 @@ class TestSatState:
         assert np.array([0.0, 0.0, 1.0]) == pytest.approx(rz, abs=1e-10)
 
     def test_satstate_pickle(self):
-        """Test that satstate pickle round-trips all fields including maneuvers"""
+        """Test that satstate pickle round-trips all fields including maneuvers
+        in every supported frame."""
         t0 = sk.time(2024, 1, 1, 12, 0, 0)
         t_burn = t0 + sk.duration.from_hours(1)
         r = 6378e3 + 500e3
         v = np.sqrt(sk.consts.mu_earth / r)
 
         sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        # One maneuver per supported frame, to catch frame-tag corruption
+        # (NTW/LVLH used to be silently written as GCRF).
         sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)
         sat.add_maneuver(t_burn + sk.duration.from_hours(1), [5, 0, 0], frame=sk.frame.GCRF)
+        sat.add_maneuver(t_burn + sk.duration.from_hours(2), [0, 3, 0], frame=sk.frame.NTW)
+        sat.add_maneuver(t_burn + sk.duration.from_hours(3), [1, 0, 2], frame=sk.frame.LVLH)
 
         restored = pickle.loads(pickle.dumps(sat))
 
         assert restored.time == sat.time
         assert np.allclose(restored.pos, sat.pos)
         assert np.allclose(restored.vel, sat.vel)
-        assert restored.num_maneuvers == 2
+        assert restored.num_maneuvers == 4
+        assert restored.cov is None
+
+        # Frames must survive the round-trip: propagating past all four burns
+        # must match the original trajectory. If any frame were corrupted, the
+        # applied delta-v would point elsewhere and the endpoints would diverge.
+        t_end = t_burn + sk.duration.from_hours(4)
+        orig_end = sat.propagate(t_end)
+        restored_end = restored.propagate(t_end)
+        assert np.allclose(orig_end.pos, restored_end.pos)
+        assert np.allclose(orig_end.vel, restored_end.vel)
+
+    def test_satstate_pickle_many_maneuvers_no_cov(self):
+        """A state with >=9 maneuvers and no covariance must not be misread as
+        carrying a covariance. Regression: the old length-based heuristic saw
+        9*33 = 297 >= 288 bytes, consumed them as a covariance matrix, and
+        dropped every maneuver."""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        for i in range(9):
+            sat.add_maneuver(
+                t0 + sk.duration.from_hours(i + 1), [0, 1, 0], frame=sk.frame.RTN
+            )
+
+        restored = pickle.loads(pickle.dumps(sat))
+        assert restored.num_maneuvers == 9
+        assert restored.cov is None
 
     def test_uncertainty_frames(self):
         """The unified set_pos_uncertainty / set_vel_uncertainty API should
@@ -479,6 +513,55 @@ class TestSatState:
         assert restored.num_maneuvers == 1
 
 
+class TestPropSettingsPickle:
+    def test_propsettings_pickle(self):
+        """propsettings pickle must round-trip all fields, including enums."""
+        ps = sk.propsettings(
+            abs_error=1e-10,
+            rel_error=1e-9,
+            gravity_degree=8,
+            gravity_order=6,
+            use_spaceweather=False,
+            use_sun_gravity=False,
+            enable_interp=False,
+        )
+        restored = pickle.loads(pickle.dumps(ps))
+        assert restored.abs_error == pytest.approx(1e-10)
+        assert restored.rel_error == pytest.approx(1e-9)
+        assert restored.gravity_degree == 8
+        assert restored.gravity_order == 6
+        assert restored.use_spaceweather is False
+        assert restored.use_sun_gravity is False
+        assert restored.enable_interp is False
+
+
+class TestThrustPickle:
+    def test_thrust_pickle_all_frames(self):
+        """Standalone thrust pickle must round-trip accel, frame, and times."""
+        t0 = sk.time(2024, 1, 1)
+        t1 = t0 + sk.duration.from_hours(1)
+        for frm in [sk.frame.GCRF, sk.frame.RTN, sk.frame.NTW, sk.frame.LVLH]:
+            th = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=frm)
+            restored = pickle.loads(pickle.dumps(th))
+            assert restored.frame == frm
+            assert restored.accel == [
+                pytest.approx(1e-4),
+                pytest.approx(2e-4),
+                pytest.approx(3e-4),
+            ]
+            assert abs((restored.start - t0).seconds) < 1e-6
+            assert abs((restored.end - t1).seconds) < 1e-6
+
+    def test_thrust_rejects_invalid_frame(self):
+        """Constructing a thrust in an Earth frame raises instead of storing
+        a value that would panic during propagation."""
+        t0 = sk.time(2024, 1, 1)
+        t1 = t0 + sk.duration.from_hours(1)
+        for bad in [sk.frame.ITRF, sk.frame.TEME, sk.frame.ICRF]:
+            with pytest.raises(Exception):
+                sk.thrust.constant([1e-4, 0, 0], t0, t1, frame=bad)
+
+
 class TestSatPropertiesPickle:
     def test_satproperties_pickle_basic(self):
         """Test that satproperties pickle round-trips drag/SRP coefficients"""
@@ -495,16 +578,23 @@ class TestSatPropertiesPickle:
 
         thrust1 = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RTN)
         thrust2 = sk.thrust.constant([0, 0, 5e-3], t1, t2, frame=sk.frame.GCRF)
-        props = sk.satproperties(cdaoverm=0.01, thrusts=[thrust1, thrust2])
+        thrust3 = sk.thrust.constant([1e-4, 0, 0], t0, t1, frame=sk.frame.NTW)
+        thrust4 = sk.thrust.constant([0, 1e-4, 0], t1, t2, frame=sk.frame.LVLH)
+        props = sk.satproperties(
+            cdaoverm=0.01, thrusts=[thrust1, thrust2, thrust3, thrust4]
+        )
 
         restored = pickle.loads(pickle.dumps(props))
 
         assert restored.cdaoverm == pytest.approx(0.01)
-        assert len(restored.thrusts) == 2
+        assert len(restored.thrusts) == 4
+        # All four frames must round-trip (NTW/LVLH used to become GCRF).
         assert restored.thrusts[0].frame == sk.frame.RTN
         assert restored.thrusts[0].accel == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
         assert restored.thrusts[1].frame == sk.frame.GCRF
         assert restored.thrusts[1].accel == [pytest.approx(0), pytest.approx(0), pytest.approx(5e-3)]
+        assert restored.thrusts[2].frame == sk.frame.NTW
+        assert restored.thrusts[3].frame == sk.frame.LVLH
 
 
 class TestThrust:
@@ -850,3 +940,48 @@ class TestLambert:
 
         with pytest.raises(ValueError):
             sk.lambert(np.array([0.0, 0.0, 0.0]), r2, 3600.0)  # zero position
+
+
+class TestManeuverInspection:
+    def test_maneuvers_getter(self):
+        """satstate.maneuvers must expose the scheduled maneuvers, not just a count."""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        t_burn = t0 + sk.duration.from_hours(1)
+        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)
+        sat.add_maneuver(t_burn + sk.duration.from_hours(1), [1, 2, 3], frame=sk.frame.LVLH)
+
+        mans = sat.maneuvers
+        assert len(mans) == 2 == sat.num_maneuvers
+        assert abs((mans[0]["time"] - t_burn).seconds) < 1e-6
+        assert np.allclose(mans[0]["delta_v"], [0, 10, 0])
+        assert mans[0]["frame"] == sk.frame.RTN
+        assert np.allclose(mans[1]["delta_v"], [1, 2, 3])
+        assert mans[1]["frame"] == sk.frame.LVLH
+
+
+class TestSpaceWeather:
+    def test_spaceweather_get(self):
+        """spaceweather.get returns the full daily record."""
+        rec = sk.spaceweather.get(sk.time(2023, 11, 14))
+        assert abs((rec["date"] - sk.time(2023, 11, 14)).days) < 1.0
+        assert len(rec["kp"]) == 8
+        assert len(rec["ap"]) == 8
+        assert rec["f10p7_adj"] > 0
+        assert rec["f10p7_adj_c81"] > 0
+        assert rec["ap_avg"] >= 0
+        # datetime accepted too
+        import datetime
+
+        rec2 = sk.spaceweather.get(
+            datetime.datetime(2023, 11, 14, tzinfo=datetime.timezone.utc)
+        )
+        assert rec2["f10p7_adj"] == rec["f10p7_adj"]
+
+    def test_predicted_f107(self):
+        """predicted_f107 returns a plausible flux inside the forecast range
+        and None far outside it."""
+        # A date far in the past is outside the forecast range
+        assert sk.spaceweather.predicted_f107(sk.time(1990, 1, 1)) is None

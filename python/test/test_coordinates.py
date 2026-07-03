@@ -277,3 +277,43 @@ class TestQuaternion:
         assert euler[0] == pytest.approx(0.0)
         assert euler[1] == pytest.approx(m.pi / 3)
         assert euler[2] == pytest.approx(0.0)
+
+
+class TestNewBindings:
+    def test_kepler_semiparameter(self):
+        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.5, 0.0)
+        assert k.semiparameter == pytest.approx(7000e3 * (1 - 0.1**2), rel=1e-12)
+
+    def test_itrfcoord_distance_to(self):
+        boston = sk.itrfcoord(latitude_deg=42.36, longitude_deg=-71.06, altitude=0)
+        nyc = sk.itrfcoord(latitude_deg=40.71, longitude_deg=-74.01, altitude=0)
+        d = boston.distance_to(nyc)
+        dist, _, _ = boston.geodesic_distance(nyc)
+        assert d == pytest.approx(dist, rel=1e-12)
+        assert boston.distance_to(boston) == pytest.approx(0.0, abs=1e-6)
+
+    def test_quaternion_new_methods(self):
+        import math
+
+        # from_euler is the inverse of as_euler
+        q = sk.quaternion.from_euler(0.1, -0.2, 0.3)
+        roll, pitch, yaw = q.as_euler()
+        assert roll == pytest.approx(0.1, abs=1e-12)
+        assert pitch == pytest.approx(-0.2, abs=1e-12)
+        assert yaw == pytest.approx(0.3, abs=1e-12)
+
+        # identity rotates nothing
+        qi = sk.quaternion.identity()
+        v = np.array([1.0, 2.0, 3.0])
+        assert np.allclose(qi * v, v)
+
+        # norm / normalize / inverse / dot
+        qr = sk.quaternion.rotz(math.radians(30))
+        assert qr.norm() == pytest.approx(1.0, abs=1e-12)
+        assert qr.normalize().norm() == pytest.approx(1.0, abs=1e-12)
+        # inverse of a unit quaternion undoes the rotation
+        assert np.allclose(qr.inverse() * (qr * v), v)
+        assert qr.dot(qr) == pytest.approx(1.0, abs=1e-12)
+        # slerp no longer takes epsilon
+        q_mid = sk.quaternion.rotz(0.0).slerp(sk.quaternion.rotz(1.0), 0.5)
+        assert q_mid.angle == pytest.approx(0.5, abs=1e-9)

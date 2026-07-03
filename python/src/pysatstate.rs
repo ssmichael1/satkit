@@ -315,6 +315,27 @@ impl PySatState {
         self.0.maneuvers.len()
     }
 
+    /// The scheduled impulsive maneuvers
+    ///
+    /// Returns:
+    ///     list[dict]: One dict per maneuver with keys "time" (satkit.time),
+    ///     "delta_v" (3-element numpy array, m/s, in "frame"), and
+    ///     "frame" (satkit.frame)
+    #[getter]
+    fn get_maneuvers(&self, py: Python) -> PyResult<Vec<Py<PyAny>>> {
+        self.0
+            .maneuvers
+            .iter()
+            .map(|m| -> PyResult<Py<PyAny>> {
+                let d = PyDict::new(py);
+                d.set_item("time", PyInstant(m.time))?;
+                d.set_item("delta_v", crate::pyutils::vec2py(py, &m.delta_v)?)?;
+                d.set_item("frame", crate::pyframes::PyFrame::from(m.frame))?;
+                d.into_py_any(py)
+            })
+            .collect()
+    }
+
     /// Propagate state to a new time
     ///
     /// Automatically segments propagation at impulsive maneuver times.
@@ -398,115 +419,130 @@ impl PySatState {
 
     fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> PyResult<()> {
         let state = state.extract::<&[u8]>(py)?;
-        if state.len() < 56 {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "State must be at least 56 bytes",
+        // Self-describing format v1:
+        //   [0]      version byte (== 1)
+        //   [1..9]   time (f64 MJD, TAI)
+        //   [9..57]  position + velocity (6 f64)
+        //   [57]     covariance flag (0 = none, 1 = 6x6 PVCov follows)
+        //   [..]     if flag == 1: 36 f64 covariance (288 bytes)
+        //   [..]     maneuver count (u32 little-endian)
+        //   [..]     count * 33-byte maneuvers: 8 time, 24 delta-v, 1 frame tag
+        const HEADER: usize = 1 + 8 + 48 + 1; // version + time + pv + cov flag
+        if state.len() < HEADER {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "invalid satstate pickle: truncated header",
             ));
         }
-        let time = Instant::from_mjd_with_scale(
-            f64::from_le_bytes(state[0..8].try_into().unwrap()),
-            satkit::TimeScale::TAI,
-        );
+        if state[0] != 1 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unsupported satstate pickle version {} (expected 1)",
+                state[0]
+            )));
+        }
+        let read_f64 = |at: usize| f64::from_le_bytes(state[at..at + 8].try_into().unwrap());
 
-        let pv = Vector6::from_slice(unsafe {
-            std::slice::from_raw_parts(state[8..56].as_ptr() as *const f64, 6)
-        });
-        self.0.time = time;
-        self.0.pv = pv;
-        self.0.cov = StateCov::None;
+        self.0.time = Instant::from_mjd_with_scale(read_f64(1), satkit::TimeScale::TAI);
+        let mut pv = [0.0f64; 6];
+        for (i, v) in pv.iter_mut().enumerate() {
+            *v = read_f64(9 + i * 8);
+        }
+        self.0.pv = Vector6::from_slice(&pv);
         self.0.maneuvers.clear();
 
-        let mut offset = 56;
+        let mut offset = HEADER;
+        self.0.cov = match state[57] {
+            0 => StateCov::None,
+            1 => {
+                if state.len() < offset + 288 {
+                    return Err(pyo3::exceptions::PyValueError::new_err(
+                        "invalid satstate pickle: truncated covariance",
+                    ));
+                }
+                let mut cov = [0.0f64; 36];
+                for (i, v) in cov.iter_mut().enumerate() {
+                    *v = read_f64(offset + i * 8);
+                }
+                offset += 288;
+                StateCov::PVCov(Matrix6::from_slice(&cov))
+            }
+            other => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "invalid satstate pickle: unknown covariance flag {other}"
+                )));
+            }
+        };
 
-        // Covariance (optional: 288 bytes = 36 f64s)
-        if offset + 288 <= state.len() {
-            // Check tag byte at end to distinguish cov from maneuvers
-            // Format: if we have enough bytes for a full cov matrix, read it
-            let cov = Matrix6::from_slice(unsafe {
-                std::slice::from_raw_parts(state[offset..].as_ptr() as *const f64, 36)
-            });
-            // Check if this looks like a covariance (non-zero diagonal)
-            // We use a version tag: bytes 56..57 == 0x01 means cov follows
-            // For backwards compat: old format had cov immediately at offset 56
-            // and total length was exactly 56 + 288 = 344 with no maneuvers
-            self.0.cov = StateCov::PVCov(cov);
-            offset += 288;
+        if state.len() < offset + 4 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "invalid satstate pickle: missing maneuver count",
+            ));
         }
-
-        // Maneuvers: each is 8 (time) + 24 (delta_v) + 1 (frame tag) = 33 bytes
-        while offset + 33 <= state.len() {
-            let t = Instant::from_mjd_with_scale(
-                f64::from_le_bytes(state[offset..offset + 8].try_into().unwrap()),
-                satkit::TimeScale::TAI,
-            );
+        let count = u32::from_le_bytes(state[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        if state.len() != offset + count * 33 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "invalid satstate pickle: maneuver block length mismatch",
+            ));
+        }
+        for _ in 0..count {
+            let t = Instant::from_mjd_with_scale(read_f64(offset), satkit::TimeScale::TAI);
             offset += 8;
-            let dv = Vector3::from_slice(unsafe {
-                std::slice::from_raw_parts(state[offset..].as_ptr() as *const f64, 3)
-            });
+            let mut dv = [0.0f64; 3];
+            for (i, v) in dv.iter_mut().enumerate() {
+                *v = read_f64(offset + i * 8);
+            }
             offset += 24;
-            let frame = match state[offset] {
-                0 => Frame::GCRF,
-                1 => Frame::RTN,
-                _ => Frame::GCRF,
-            };
+            let frame = crate::pyutils::maneuver_frame_from_u8(state[offset])?;
             offset += 1;
-            self.0.add_maneuver(ImpulsiveManeuver::new(t, dv, frame));
+            self.0
+                .add_maneuver(ImpulsiveManeuver::new(t, Vector3::from_slice(&dv), frame));
         }
 
         Ok(())
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
+        // See `__setstate__` for the format. Values are written little-endian via
+        // `to_le_bytes`, so there is no alignment assumption on the buffer.
         let cov_len: usize = match self.0.cov {
             StateCov::None => 0,
             StateCov::PVCov(_) => 288,
         };
-        // Each maneuver: 8 (time) + 24 (delta_v) + 1 (frame tag) = 33 bytes
-        let maneuver_len = self.0.maneuvers.len() * 33;
-        let len = 56 + cov_len + maneuver_len;
-        let mut buffer: Vec<u8> = vec![0; len];
-        buffer[0..8].clone_from_slice(
+        let len = (1 + 8 + 48 + 1) + cov_len + 4 + self.0.maneuvers.len() * 33;
+        let mut buffer: Vec<u8> = Vec::with_capacity(len);
+
+        buffer.push(1u8); // version
+        buffer.extend_from_slice(
             &self
                 .0
                 .time
                 .as_mjd_with_scale(satkit::TimeScale::TAI)
                 .to_le_bytes(),
         );
-        unsafe {
-            buffer[8..56].clone_from_slice(std::slice::from_raw_parts(
-                self.0.pv.as_slice().as_ptr() as *const u8,
-                48,
-            ));
+        for v in self.0.pv.as_slice() {
+            buffer.extend_from_slice(&v.to_le_bytes());
         }
-        let mut offset = 56;
-        if let StateCov::PVCov(cov) = self.0.cov {
-            unsafe {
-                buffer[offset..offset + 288].clone_from_slice(std::slice::from_raw_parts(
-                    cov.as_slice().as_ptr() as *const u8,
-                    288,
-                ));
+        match self.0.cov {
+            StateCov::None => buffer.push(0),
+            StateCov::PVCov(cov) => {
+                buffer.push(1);
+                for v in cov.as_slice() {
+                    buffer.extend_from_slice(&v.to_le_bytes());
+                }
             }
-            offset += 288;
         }
+
+        buffer.extend_from_slice(&(self.0.maneuvers.len() as u32).to_le_bytes());
         for m in &self.0.maneuvers {
-            buffer[offset..offset + 8].clone_from_slice(
+            buffer.extend_from_slice(
                 &m.time
                     .as_mjd_with_scale(satkit::TimeScale::TAI)
                     .to_le_bytes(),
             );
-            offset += 8;
-            unsafe {
-                buffer[offset..offset + 24].clone_from_slice(std::slice::from_raw_parts(
-                    m.delta_v.as_slice().as_ptr() as *const u8,
-                    24,
-                ));
+            for v in m.delta_v.as_slice() {
+                buffer.extend_from_slice(&v.to_le_bytes());
             }
-            offset += 24;
-            buffer[offset] = match m.frame {
-                Frame::RTN => 1,
-                _ => 0,
-            };
-            offset += 1;
+            buffer.push(crate::pyutils::maneuver_frame_to_u8(m.frame)?);
         }
         pyo3::types::PyBytes::new(py, &buffer).into_py_any(py)
     }

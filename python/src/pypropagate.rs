@@ -56,9 +56,6 @@ use anyhow::Result;
 ///    satproperties (satkit.satproperties): object with drag,
 ///                   radiation pressure, and thrust properties of satellite.
 ///                   If left out, drag, radiation pressure, and thrust are neglected
-///     output_dense (bool): boolean indicacting output dense ODE solution that can
-///                   be used for interpolation of state between
-///                  "begintime" and "endtime".  Default is False
 ///
 ///
 /// Returns:
@@ -76,12 +73,15 @@ use anyhow::Result;
 ///
 ///    Notes:
 ///        * Propagator uses advanced Runge-Kutta integrators and includes the following forces:
-///            * Earth gravity with higher-order zonal terms
+///            * Earth gravity with higher-order spherical-harmonic terms
 ///            * Sun, Moon gravity
+///            * Solid Earth tides (IERS 2010 Step 1; configurable via propsettings.tide_model)
+///            * General-relativistic Schwarzschild correction
 ///            * Radiation pressure
 ///            * Atmospheric drag: NRLMSISE-00 density model, with option to include space weather effects (can be large)
 ///        * End time must be set by keyword argument, either explicitly or by duration
-///        * Solid Earth tides are not (yet) included in the model
+///        * Dense-output interpolation is controlled by propsettings.enable_interp
+///          (default True); use propresult.interp to query interpolated states
 ///
 #[pyfunction(signature=(*args, **kwargs))]
 pub fn propagate(
