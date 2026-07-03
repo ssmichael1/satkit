@@ -24,9 +24,12 @@
 //!   covariance (`RTN` is the CCSDS OEM canonical name; `RIC` and `RSW` are aliases)
 //! - **Geodetic Coordinates**: Latitude, longitude, altitude conversions
 //!
-//! Unified API: [`frametransform::to_gcrf`] / [`frametransform::from_gcrf`] and
-//! [`frametransform::state_to_gcrf`] / [`frametransform::gcrf_to_state`] replace
-//! the per-frame helper explosion.
+//! Unified API: [`frametransform::rotation`] / [`frametransform::transform_state`]
+//! dispatch any Earth-chain frame pair, [`frametransform::rotation_with_state`]
+//! additionally covers the orbit-local frames (RTN / NTW / LVLH), and
+//! [`frametransform::to_gcrf`] / [`frametransform::from_gcrf`] give the
+//! orbit-local direction-cosine matrices directly — together they replace the
+//! per-frame helper explosion.
 //!
 //! ### Orbit Propagation
 //! Multiple propagation methods for various accuracy requirements:
