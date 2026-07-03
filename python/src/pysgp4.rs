@@ -391,7 +391,7 @@ pub fn sgp4(
         // TLE sources keep a handle to the originating Python object so the
         // cached SGP4 init state can be written back afterward.
         enum Sgp4Source {
-            Tle(Py<PyTLE>, satkit::TLE),
+            Tle(Py<PyTLE>, Box<satkit::TLE>),
             Omm(Box<satkit::omm::OMM>),
         }
 
@@ -402,7 +402,7 @@ pub fn sgp4(
                     let pytle: Py<PyTLE> = item.extract().map_err(|e| {
                         pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e))
                     })?;
-                    let rtle = pytle.borrow(item.py()).0.clone();
+                    let rtle = Box::new(pytle.borrow(item.py()).0.clone());
                     Ok(Sgp4Source::Tle(pytle, rtle))
                 } else if item.is_instance_of::<PyDict>() {
                     let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
@@ -428,7 +428,7 @@ pub fn sgp4(
                 .map(|src| -> Result<psgp4::SGP4State> {
                     match src {
                         Sgp4Source::Tle(_, rtle) => {
-                            Ok(psgp4::sgp4_full(rtle, tmarray.as_slice(), gc, om)?)
+                            Ok(psgp4::sgp4_full(rtle.as_mut(), tmarray.as_slice(), gc, om)?)
                         }
                         Sgp4Source::Omm(omm) => {
                             Ok(psgp4::sgp4_full(omm.as_mut(), tmarray.as_slice(), gc, om)?)
@@ -441,7 +441,7 @@ pub fn sgp4(
         // Write the TLEs back to preserve their cached SGP4 init state
         for src in &sources {
             if let Sgp4Source::Tle(pytle, rtle) = src {
-                pytle.borrow_mut(tle.py()).0 = rtle.clone();
+                pytle.borrow_mut(tle.py()).0 = rtle.as_ref().clone();
             }
         }
 

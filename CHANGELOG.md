@@ -3,6 +3,23 @@
 
 ## Unreleased
 
+### Security / dependencies
+
+- **Resolved all 7 outstanding RustSec advisories** (surfaced by the new
+  `cargo audit` CI gate): `quick-xml` 0.38 → 0.41 (two high-severity DoS
+  advisories in XML parsing — relevant since OMM XML is untrusted input),
+  `pyo3`/`numpy` 0.28 → 0.29 (PyList/PyTuple iterator out-of-bounds read,
+  `new_closure` Sync bound), plus compatible `cargo update` bumps covering
+  the `rustls-webpki`, `anyhow`, and `rand` advisories.
+
+### CI
+
+- **New gates:** `cargo clippy --workspace --all-targets -D warnings` (the
+  outstanding warnings were fixed or annotated), `cargo audit` (RustSec
+  advisory scan), and an **sdist-install guard** that builds the sdist and
+  `pip install`s from it — the check that would have caught the 0.20.0
+  source-unbuildable sdist before it shipped.
+
 ### Fixed
 
 - **PyPI sdist was unbuildable from source.** `MANIFEST.in` omitted the
