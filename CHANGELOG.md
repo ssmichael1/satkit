@@ -1,7 +1,7 @@
 # Changelog
 
 
-## Unreleased
+## 0.20.0 - 2026-07-03
 
 A large correctness, robustness, and cleanup pass. This is a pre-1.0 release, so
 the breaking changes below ride in a minor bump.
