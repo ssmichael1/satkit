@@ -104,6 +104,17 @@ fn microleapseconds(raw: i64) -> i64 {
     0
 }
 
+/// Fold leap seconds into a raw count that was built on a UTC basis (i.e. as if
+/// leap seconds did not exist), producing the internal continuous-time raw
+/// count. Applied when constructing an [`Instant`] from unixtime, a UTC MJD, or
+/// a Gregorian date. The second lookup handles the rare case where adding the
+/// offset pushes the time across another leap-second boundary.
+fn add_leapseconds(raw: i64) -> i64 {
+    let ls = microleapseconds(raw);
+    let raw = raw + ls;
+    raw + microleapseconds(raw) - ls
+}
+
 impl Instant {
     /// Construct a new Instant from raw microseconds
     ///
@@ -150,15 +161,11 @@ impl Instant {
     /// Unixtime is the number of non-leap seconds since Jan 1 1970 00:00:00 UTC
     /// (Leap seconds are ignored!!)
     pub fn from_unixtime(unixtime: f64) -> Self {
-        let mut raw = (unixtime * 1.0e6) as i64 + Self::UNIX_EPOCH.raw;
-
-        // Add leapseconds since unixtime ignores them
-        let ls = microleapseconds(raw);
-        raw += ls;
-        // Make sure adding the leapseconds didn't cross another
-        // leapsecond boundary
-        raw += microleapseconds(raw) - ls;
-        Self { raw }
+        let raw = (unixtime * 1.0e6) as i64 + Self::UNIX_EPOCH.raw;
+        // unixtime ignores leap seconds; fold them in.
+        Self {
+            raw: add_leapseconds(raw),
+        }
     }
 
     /// Convert Instant to Unix time
@@ -202,7 +209,10 @@ impl Instant {
     /// See: <https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week>
     pub fn day_of_week(&self) -> super::Weekday {
         let jd = self.as_jd_utc();
-        super::Weekday::from(((jd + 1.5) % 7.0).floor() as i32)
+        // `(jd + 1.5) mod 7` is always in [0, 7), so the floor is 0..=6 and the
+        // conversion never fails; fall back to `Invalid` defensively.
+        super::Weekday::try_from(((jd + 1.5) % 7.0).floor() as i32)
+            .unwrap_or(super::Weekday::Invalid)
     }
 
     /// As Modified Julian Date (UTC)
@@ -295,12 +305,9 @@ impl Instant {
         match scale {
             TimeScale::UTC => {
                 let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
-                let ls = microleapseconds(raw);
-                let raw = raw + ls;
-                // Make sure adding the leapseconds didn't cross another
-                // leapsecond boundary
-                let raw = raw + microleapseconds(raw) - ls;
-                Self { raw }
+                Self {
+                    raw: add_leapseconds(raw),
+                }
             }
             TimeScale::TAI => {
                 let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
@@ -424,7 +431,10 @@ impl Instant {
                     tt,
                 )
             }
-            TimeScale::Invalid => 0.0,
+            // Return NaN rather than 0.0 (a perfectly valid MJD, 1858-11-17) so
+            // that using an Invalid time scale visibly poisons downstream math
+            // instead of silently producing a plausible date.
+            TimeScale::Invalid => f64::NAN,
         }
     }
 
@@ -628,11 +638,7 @@ impl Instant {
             + (second * 1_000_000.0) as i64
             + Self::MJD_EPOCH.raw;
         // Account for additional leap seconds if needed
-        let ls = microleapseconds(raw);
-        raw += ls;
-        // Make sure adding the leapseconds didn't cross another
-        // leapsecond boundary
-        raw = raw + microleapseconds(raw) - ls;
+        raw = add_leapseconds(raw);
 
         // Very rare -- check if second is in range [60, 61).  If so, make sure
         // this is in the middle of a leap second
@@ -672,13 +678,10 @@ impl Instant {
     pub fn now() -> Self {
         let now = std::time::SystemTime::now();
         let since_epoch = now.duration_since(std::time::UNIX_EPOCH).unwrap();
-        let mut raw = since_epoch.as_micros() as i64;
-        let ls = microleapseconds(raw);
-        raw += ls;
-        // Make sure adding the leapseconds didn't cross another
-        // leapsecond boundary
-        raw += microleapseconds(raw) - ls;
-        Self { raw }
+        let raw = since_epoch.as_micros() as i64;
+        Self {
+            raw: add_leapseconds(raw),
+        }
     }
 }
 

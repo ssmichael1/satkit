@@ -1,5 +1,25 @@
 use super::Duration;
 use super::Instant;
+use super::{TimeScale, Weekday};
+
+#[test]
+fn test_timescale_try_from() {
+    assert_eq!(TimeScale::try_from(1), Ok(TimeScale::UTC));
+    assert_eq!(TimeScale::try_from(4), Ok(TimeScale::TAI));
+    assert_eq!(TimeScale::try_from(6), Ok(TimeScale::TDB));
+    // Out-of-range values are rejected rather than silently mapped to Invalid.
+    assert!(TimeScale::try_from(0).is_err());
+    assert!(TimeScale::try_from(-1).is_err());
+    assert!(TimeScale::try_from(7).is_err());
+}
+
+#[test]
+fn test_weekday_try_from() {
+    assert_eq!(Weekday::try_from(0), Ok(Weekday::Sunday));
+    assert_eq!(Weekday::try_from(6), Ok(Weekday::Saturday));
+    assert!(Weekday::try_from(7).is_err());
+    assert!(Weekday::try_from(-1).is_err());
+}
 
 #[test]
 fn test_j2000() {
@@ -267,6 +287,15 @@ fn test_strptime() {
     assert!(g.3 == 12);
     assert!(g.4 == 3);
     assert!(g.5 == 45.123456);
+
+    // More than 6 fractional digits must truncate to microseconds, not panic
+    // (regression: the error path parsed the whole fraction into i32 and
+    // overflowed).
+    let time =
+        Instant::strptime("2023-01-01T00:00:00.12345678901", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
+    let g = time.as_datetime();
+    assert!(g.0 == 2023 && g.1 == 1 && g.2 == 1);
+    assert!((g.5 - 0.123456).abs() < 1.0e-9);
 
     let time = Instant::strptime("09-Jun-2023 22:27:19", "%d-%b-%Y %H:%M:%S").unwrap();
     let g = time.as_datetime();

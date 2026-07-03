@@ -16,10 +16,10 @@
 //! See: https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html for details on EOP data
 //!
 
+use crate::utils::RefreshableSingleton;
 use std::num::ParseFloatError;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Once, RwLock};
 
 use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
@@ -109,22 +109,16 @@ fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
 
 static WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 
-/// Module-scope refreshable singleton. Const-initialized as `None`;
-/// the lazy default load (best-effort, silent on failure) runs at most
-/// once via [`DEFAULT_LOAD_ONCE`]. [`init_from_bytes`] /
+/// Module-scope refreshable singleton. The lazy default load (best-effort,
+/// silent on failure) runs at most once; [`init_from_bytes`] /
 /// [`init_from_path`] / [`update`] replace any current contents.
-static EOP: RwLock<Option<Vec<EOPEntry>>> = RwLock::new(None);
-static DEFAULT_LOAD_ONCE: Once = Once::new();
+static EOP: RefreshableSingleton<Vec<EOPEntry>> = RefreshableSingleton::new();
 
 /// Best-effort default load on first read. Failures are silent — if EOP
-/// can't be loaded, the singleton stays `None` and queries fall through
+/// can't be loaded, the singleton stays empty and queries fall through
 /// to the "no data" branch.
 fn ensure_default_loaded() {
-    DEFAULT_LOAD_ONCE.call_once(|| {
-        if let Ok(records) = load_eop_file_csv() {
-            *EOP.write().unwrap() = Some(records);
-        }
-    });
+    EOP.ensure_default_loaded(|| load_eop_file_csv().ok());
 }
 
 /// Initialize the EOP singleton from an in-memory byte buffer.
@@ -133,9 +127,7 @@ fn ensure_default_loaded() {
 /// Always succeeds and replaces any previously loaded data — IERS
 /// publishes new EOP daily and refresh-in-place is the intended model.
 pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
-    let records = parse_csv(std::str::from_utf8(bytes)?)?;
-    DEFAULT_LOAD_ONCE.call_once(|| {});
-    *EOP.write().unwrap() = Some(records);
+    EOP.set(parse_csv(std::str::from_utf8(bytes)?)?);
     Ok(())
 }
 
@@ -143,9 +135,7 @@ pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
 ///
 /// Same semantics as [`init_from_bytes`]; always replaces.
 pub fn init_from_path(path: &std::path::Path) -> Result<()> {
-    let records = parse_csv(&std::fs::read_to_string(path)?)?;
-    DEFAULT_LOAD_ONCE.call_once(|| {});
-    *EOP.write().unwrap() = Some(records);
+    EOP.set(parse_csv(&std::fs::read_to_string(path)?)?);
     Ok(())
 }
 
@@ -175,10 +165,7 @@ pub fn update() -> Result<()> {
     let url = "http://celestrak.org/SpaceData/EOP-All.csv";
     download_file(url, &d, true)?;
 
-    let records = load_eop_file_csv()?;
-    DEFAULT_LOAD_ONCE.call_once(|| {});
-    *EOP.write().unwrap() = Some(records);
-
+    EOP.set(load_eop_file_csv()?);
     Ok(())
 }
 
@@ -206,7 +193,7 @@ pub fn update() -> Result<()> {
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     ensure_default_loaded();
-    let guard = EOP.read().unwrap();
+    let guard = EOP.read();
     let eop = guard.as_ref()?;
 
     // Binary search: find first entry with mjd_utc > query (O(log n) vs O(n) linear scan)
@@ -297,7 +284,7 @@ mod tests {
     #[test]
     fn loaded() {
         ensure_default_loaded();
-        let guard = EOP.read().unwrap();
+        let guard = EOP.read();
         let eop = guard
             .as_ref()
             .expect("default EOP load should succeed in tests");

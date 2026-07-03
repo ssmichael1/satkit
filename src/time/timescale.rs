@@ -29,16 +29,26 @@ pub enum TimeScale {
     TDB = 6,
 }
 
-impl From<i32> for TimeScale {
-    fn from(value: i32) -> Self {
+/// Error returned when converting an out-of-range integer to a [`TimeScale`].
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error("invalid TimeScale value: {0} (expected 1..=6 for UTC, TT, UT1, TAI, GPS, TDB)")]
+pub struct InvalidTimeScale(pub i32);
+
+impl TryFrom<i32> for TimeScale {
+    type Error = InvalidTimeScale;
+
+    /// Convert an integer to a [`TimeScale`], validating the value. Unlike the
+    /// previous infallible `From<i32>`, an out-of-range integer is a hard error
+    /// rather than being silently mapped to `Invalid`.
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
-            1 => Self::UTC,
-            2 => Self::TT,
-            3 => Self::UT1,
-            4 => Self::TAI,
-            5 => Self::GPS,
-            6 => Self::TDB,
-            _ => Self::Invalid,
+            1 => Ok(Self::UTC),
+            2 => Ok(Self::TT),
+            3 => Ok(Self::UT1),
+            4 => Ok(Self::TAI),
+            5 => Ok(Self::GPS),
+            6 => Ok(Self::TDB),
+            _ => Err(InvalidTimeScale(value)),
         }
     }
 }

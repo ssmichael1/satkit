@@ -174,6 +174,76 @@ pub fn rotation<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quaternion
     Ok(if reversed { q.conjugate() } else { q })
 }
 
+/// Quaternion rotating a vector from `from` to `to`, supporting **all** frames
+/// — the time-parameterised Earth chain *and* the orbit-dependent frames
+/// ([`Frame::LVLH`], [`Frame::RTN`], [`Frame::NTW`]) in a single call.
+///
+/// This is the unified front door: unlike [`rotation`] (which rejects orbit
+/// frames) and [`to_gcrf`](super::to_gcrf) (which rejects Earth frames), it
+/// accepts any pair. It does **not** always pivot through GCRF: a purely
+/// Earth-frame pair delegates to [`rotation`], which takes the shortest path
+/// through the frame graph (e.g. ITRF↔TIRS is a single polar-motion rotation);
+/// only pairs involving an orbit-dependent frame compose through GCRF. The
+/// orbit state (`pos_gcrf`, `vel_gcrf`) is only consulted when an
+/// orbit-dependent frame is involved.
+///
+/// # Examples
+///
+/// ```ignore
+/// use satkit::{Frame, Instant};
+/// use satkit::frametransform::rotation_with_state;
+///
+/// let t = Instant::from_datetime(2026, 5, 22, 12, 0, 0.0).unwrap();
+/// // TEME (Earth) directly to RTN (orbit) in one call:
+/// let q = rotation_with_state(Frame::TEME, Frame::RTN, &t, &pos_gcrf, &vel_gcrf)?;
+/// ```
+pub fn rotation_with_state<T: TimeLike>(
+    from: Frame,
+    to: Frame,
+    t: &T,
+    pos_gcrf: &Vector3,
+    vel_gcrf: &Vector3,
+) -> Result<Quaternion> {
+    if from == to {
+        return Ok(Quaternion::identity());
+    }
+    // Exhaustive per-variant classification (no `_` catch-all on Frame, per
+    // project convention) so the compiler flags any future Frame addition.
+    let is_orbit_frame = |f: Frame| -> bool {
+        match f {
+            Frame::LVLH | Frame::RTN | Frame::NTW => true,
+            Frame::ITRF
+            | Frame::TIRS
+            | Frame::CIRS
+            | Frame::GCRF
+            | Frame::TEME
+            | Frame::EME2000
+            | Frame::ICRF => false,
+        }
+    };
+    // Pure Earth-frame pairs delegate to `rotation`, which takes the shortest
+    // path through the frame graph — composing through GCRF here would pay two
+    // full IERS reductions for pairs (e.g. ITRF↔TIRS) that need only one cheap
+    // rotation.
+    if !is_orbit_frame(from) && !is_orbit_frame(to) {
+        return rotation(from, to, t);
+    }
+    // Quaternion taking a vector from `f` to GCRF, for any frame.
+    let to_gcrf_q = |f: Frame| -> Result<Quaternion> {
+        if is_orbit_frame(f) {
+            Ok(Quaternion::from_rotation_matrix(&super::to_gcrf(
+                f, pos_gcrf, vel_gcrf,
+            )?))
+        } else {
+            rotation(f, Frame::GCRF, t)
+        }
+    };
+    // from → to = (GCRF → to) ∘ (from → GCRF) = q_to⁻¹ · q_from.
+    let q_from = to_gcrf_q(from)?;
+    let q_to = to_gcrf_q(to)?;
+    Ok(q_to.conjugate() * q_from)
+}
+
 /// Quaternion rotating a vector from `from` to `to` using the
 /// IAU-76/FK5 approximate reduction (~1 arcsec, much cheaper than full
 /// IERS 2010).
@@ -660,6 +730,38 @@ mod tests {
                 Err(Error::OrbitFrameRequiresState { .. })
             ));
         }
+    }
+
+    #[test]
+    fn rotation_with_state_unifies_both_front_doors() {
+        let tm = t();
+        let pos = numeris::vector![7000.0e3, 0.0, 0.0];
+        let vel = numeris::vector![0.0, 7.5e3, 1.0e3];
+        let v = numeris::vector![1000.0, -2000.0, 3000.0];
+
+        // (a) A purely Earth-frame pair matches plain `rotation`.
+        let q_earth = rotation_with_state(Frame::ITRF, Frame::TEME, &tm, &pos, &vel).unwrap();
+        let q_ref = rotation(Frame::ITRF, Frame::TEME, &tm).unwrap();
+        assert!((q_earth * v - q_ref * v).norm() < 1e-6);
+
+        // (b) An orbit frame vs GCRF matches the `to_gcrf` DCM.
+        let q_rtn = rotation_with_state(Frame::RTN, Frame::GCRF, &tm, &pos, &vel).unwrap();
+        let dcm = crate::frametransform::to_gcrf(Frame::RTN, &pos, &vel).unwrap();
+        assert!((q_rtn * v - dcm * v).norm() < 1e-9);
+
+        // (c) A mixed Earth→orbit pair composes consistently: going TEME→RTN
+        // directly equals TEME→GCRF then GCRF→RTN.
+        let direct = rotation_with_state(Frame::TEME, Frame::RTN, &tm, &pos, &vel).unwrap();
+        let via_gcrf = {
+            let q_teme_gcrf = rotation(Frame::TEME, Frame::GCRF, &tm).unwrap();
+            let q_gcrf_rtn = rotation_with_state(Frame::GCRF, Frame::RTN, &tm, &pos, &vel).unwrap();
+            q_gcrf_rtn * q_teme_gcrf
+        };
+        assert!((direct * v - via_gcrf * v).norm() < 1e-6);
+
+        // (d) Round-trip: from→to then to→from is identity.
+        let back = rotation_with_state(Frame::RTN, Frame::TEME, &tm, &pos, &vel).unwrap();
+        assert!((back * (direct * v) - v).norm() < 1e-6);
     }
 
     #[test]

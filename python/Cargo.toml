@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 satkit = { path = "..", features = ["download"] }
 pyo3 = { version = "0.28.2", features = ["extension-module", "anyhow"] }
 numpy = "0.28"
-numeris = { version = "0.5.6", features = ["serde", "estimate"] }
+numeris = { version = "0.5.14", features = ["serde", "estimate", "ode"] }
 anyhow = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.2.0"

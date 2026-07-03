@@ -11,8 +11,8 @@ pub use duration::Duration;
 pub use instant::Instant;
 pub use instant_err::InstantError;
 pub use timelike::TimeLike;
-pub use timescale::TimeScale;
-pub use weekday::Weekday;
+pub use timescale::{InvalidTimeScale, TimeScale};
+pub use weekday::{InvalidWeekday, Weekday};
 
 #[cfg(feature = "chrono")]
 mod chrono;

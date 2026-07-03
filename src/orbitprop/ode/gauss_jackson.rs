@@ -499,39 +499,15 @@ impl GaussJackson8 {
 
         let mut nevals: usize = 0;
 
-        // ---- Startup: compute 9 points r[0..9] at times t0..t0+8h ----
+        // ---- Startup: build 9 seed points r[0..9] straddling the epoch ----
         //
-        // The paper describes a symmetric ±4h startup around epoch, but since
-        // we're starting at t0 and integrating forward, we instead use a
-        // one-sided startup: r[0] = initial state at t0, r[1..8] computed by
-        // RK4, then refined via mid-correctors. This uses the same coefficient
-        // tables indexed by j shifted: startup point i (i = 0..8) uses
-        // mid-corrector row j = i - 4 (so i=0 uses j=-4, ..., i=4 uses j=0
-        // = skipped, ..., i=8 uses j=4 = corrector).
-        //
-        // j = 0 corresponds to "epoch in the paper's symmetric convention".
-        // In our one-sided scheme we never correct r[4] either (it's the
-        // "epoch" of the symmetric stencil).
-        //
-        // WAIT. That's wrong — in a one-sided startup, there is no "epoch in
-        // the middle". We need a different approach.
-        //
-        // Actually, the paper's symmetric startup is an implementation detail
-        // of f&g series initialization — f&g gives symmetric accuracy. For an
-        // RK-based startup, the one-sided approach works IF we never "skip"
-        // any point. So we use all 9 rows j = -4..4 to correct all 9 startup
-        // points, including r[0] (which we DO correct, since our initial RK4
-        // guesses are only 4th-order accurate).
-        //
-        // But we can't correct r[0] using its own row and not shift anything,
-        // because the initial conditions at r[0] are exact. The refinement
-        // should leave r[0] unchanged.
-        //
-        // Resolution: we shift the indexing so r[4] is epoch (exact initial
-        // conditions). We use RK4 to integrate BACKWARD 4 steps from r[4] to
-        // get r[0..4], and FORWARD 4 steps to get r[5..9]. Then we iterate
-        // mid-correctors on all 8 non-epoch points. After convergence, we
-        // discard r[0..4] (before-epoch) and proceed forward from r[4] = t0.
+        // Gauss-Jackson needs 9 seed states before the predictor-corrector can
+        // run. We use the paper's symmetric ±4h stencil with the epoch at
+        // index 4: r[4] holds the exact initial conditions, RK4 integrates 4
+        // steps backward to fill r[0..4] and 4 steps forward to fill r[5..9].
+        // Mid-correctors then iterate on the 8 non-epoch points (r[4] stays
+        // pinned to the exact state). After convergence we proceed forward from
+        // r[4] = t0, discarding the pre-epoch points r[0..4].
         let mut r: [Vector<T, D>; 9] = [Vector::<T, D>::zeros(); 9];
         let mut v: [Vector<T, D>; 9] = [Vector::<T, D>::zeros(); 9];
         let mut a: [Vector<T, D>; 9] = [Vector::<T, D>::zeros(); 9];
@@ -701,26 +677,11 @@ impl GaussJackson8 {
 
         // ---- Main PECE loop ----
         //
-        // After startup convergence, the stencil r[0..9]/v[0..9]/a[0..9]
-        // corresponds to times t0 + (i-4)*h for i = 0..9. The "current"
-        // accepted point is r[8] at time t0 + 4h.
-        //
-        // Wait — that's wrong. The user asked for integration from t0 to tf
-        // starting at r0 = r[4]. The startup gives us valid state at indices
-        // 0..9, covering times t0 - 4h to t0 + 4h. We want to continue
-        // forward from r[4] (= t0), using r[0..8] as the "past" for the
-        // multistep formula... no, we already HAVE points beyond t0 (up to
-        // t0 + 4h). So we should shift indexing: r[4] is our current time,
-        // and r[5..9] are "future" points already computed by startup, each
-        // accurate to 8th order.
-        //
-        // The cleanest way to proceed: treat r[8] (t0 + 4h) as the "current"
-        // position after startup. We've already computed steps 1..4 (at
-        // t0+h..t0+4h) as part of startup. Then we predict step 5 (t0+5h)
-        // using the window r[0..9], slide, predict step 6, etc.
-        //
-        // Current window after startup: indices 0..9 correspond to times
-        // t0 - 4h to t0 + 4h. "Latest" point = index 8 = time t0 + 4h.
+        // After startup, the stencil r[0..9]/v[0..9]/a[0..9] covers times
+        // t0 + (i-4)*h for i = 0..9, i.e. t0-4h to t0+4h. The latest accepted
+        // point is index 8 at time t0 + 4h; the predictor-corrector proceeds
+        // forward from there — predicting t0+5h from the window r[0..9],
+        // sliding the window, and repeating.
         let mut t_current = t0 + T::from(4.0).unwrap() * h;
 
         // Running sums s and big_s at the epoch (index 4), derived from the
@@ -952,9 +913,8 @@ impl GaussJackson8 {
     /// step sizes this is well below the integration error budget.
     pub fn interpolate<T: FloatScalar, const D: usize>(
         t_interp: T,
-        sol: &GJSolution<T, D>,
+        dense: &GJDenseOutput<T, D>,
     ) -> Result<(Vector<T, D>, Vector<T, D>), OdeError> {
-        let dense = sol.dense.as_ref().ok_or(OdeError::NoDenseOutput)?;
         if dense.t.len() < 2 {
             return Err(OdeError::NoDenseOutput);
         }
@@ -1000,9 +960,8 @@ impl GaussJackson8 {
     #[allow(clippy::type_complexity)] // `Vec<(r, v)>` return is self-explanatory
     pub fn interpolate_batch<T: FloatScalar, const D: usize>(
         t_interps: &[T],
-        sol: &GJSolution<T, D>,
+        dense: &GJDenseOutput<T, D>,
     ) -> Result<Vec<(Vector<T, D>, Vector<T, D>)>, OdeError> {
-        let dense = sol.dense.as_ref().ok_or(OdeError::NoDenseOutput)?;
         if dense.t.len() < 2 {
             return Err(OdeError::NoDenseOutput);
         }
@@ -1299,7 +1258,7 @@ mod tests {
         // With h ≈ 0.063, errors should be O(h⁵) ≈ 1e-6.
         let test_points = [0.1, 1.0, 2.5, 4.0, 5.5];
         for &t in &test_points {
-            let (r, v) = GaussJackson8::interpolate(t, &sol).unwrap();
+            let (r, v) = GaussJackson8::interpolate(t, dense).unwrap();
             let expected_r = t.cos();
             let expected_v = -t.sin();
             assert!(
@@ -1322,7 +1281,7 @@ mod tests {
 
         // Step boundaries should be exact (within fp round-off).
         for (i, &ti) in dense.t.iter().enumerate() {
-            let (r, _) = GaussJackson8::interpolate(ti, &sol).unwrap();
+            let (r, _) = GaussJackson8::interpolate(ti, dense).unwrap();
             assert!(
                 (r[0] - dense.r[i][0]).abs() < 1e-12,
                 "at stored sample index {}, interp disagreed with sample",
@@ -1342,11 +1301,12 @@ mod tests {
             ..GJSettings::default()
         };
         let sol = GaussJackson8::integrate(0.0, TAU, &r0, &v0, |_t, r, _v| -*r, &settings).unwrap();
+        let dense = sol.dense.as_ref().unwrap();
 
         let times = [0.5, 1.3, 2.7, 4.2, 5.9];
-        let batch = GaussJackson8::interpolate_batch(&times, &sol).unwrap();
+        let batch = GaussJackson8::interpolate_batch(&times, dense).unwrap();
         for (i, &t) in times.iter().enumerate() {
-            let single = GaussJackson8::interpolate(t, &sol).unwrap();
+            let single = GaussJackson8::interpolate(t, dense).unwrap();
             assert!((batch[i].0[0] - single.0[0]).abs() < 1e-15);
             assert!((batch[i].1[0] - single.1[0]).abs() < 1e-15);
         }

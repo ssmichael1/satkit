@@ -286,6 +286,46 @@ class TestFrameTransform:
         assert np.allclose(p_dispatch, p_direct, atol=1e-6)
         assert np.allclose(v_dispatch, v_direct, atol=1e-9)
 
+    def test_rotation_with_state(self):
+        """rotation_with_state handles Earth, orbit, and mixed frame pairs."""
+        tm = sk.time(2026, 5, 22, 12, 0, 0)
+        pos = np.array([7000.0e3, 0.0, 0.0])
+        vel = np.array([0.0, 7.5e3, 1.0e3])
+        v = np.array([1000.0, -2000.0, 3000.0])
+
+        # Earth-only pair delegates to rotation() (shortest path, not a GCRF
+        # pivot) — results must match exactly.
+        q_ws = sk.frametransform.rotation_with_state(
+            sk.frame.ITRF, sk.frame.TEME, tm, pos, vel
+        )
+        q_rot = sk.frametransform.rotation(sk.frame.ITRF, sk.frame.TEME, tm)
+        assert np.allclose(q_ws * v, q_rot * v)
+
+        # Orbit frame vs GCRF matches the to_gcrf DCM
+        q_rtn = sk.frametransform.rotation_with_state(
+            sk.frame.RTN, sk.frame.GCRF, tm, pos, vel
+        )
+        dcm = sk.frametransform.to_gcrf(sk.frame.RTN, pos, vel)
+        assert np.allclose(q_rtn * v, dcm @ v)
+
+        # Mixed pair round-trips
+        q_fwd = sk.frametransform.rotation_with_state(
+            sk.frame.TEME, sk.frame.RTN, tm, pos, vel
+        )
+        q_back = sk.frametransform.rotation_with_state(
+            sk.frame.RTN, sk.frame.TEME, tm, pos, vel
+        )
+        assert np.allclose(q_back * (q_fwd * v), v, atol=1e-6)
+
+        # datetime accepted for the time argument
+        import datetime
+
+        dt = datetime.datetime(2026, 5, 22, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        q_dt = sk.frametransform.rotation_with_state(
+            sk.frame.GCRF, sk.frame.LVLH, dt, pos, vel
+        )
+        assert np.isfinite(q_dt.angle)
+
 
 class TestGravity:
     def test_gravity(self):

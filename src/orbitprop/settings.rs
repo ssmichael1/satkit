@@ -79,7 +79,7 @@ impl std::fmt::Display for Integrator {
 ///   60 s step) with plenty of headroom. Lower if you want a tighter
 ///   runaway-propagation safeguard.
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PropSettings {
     pub gravity_degree: u16,
     pub gravity_order: u16,
@@ -102,6 +102,9 @@ pub struct PropSettings {
     /// Runge-Kutta / Rosenbrock via [`numeris::ode::AdaptiveSettings`] and
     /// Gauss-Jackson 8 via its own settings). Default: 1_000_000.
     pub max_steps: usize,
+    /// Regenerable ephemeris/EOP cache; excluded from serialization (a
+    /// deserialized `PropSettings` recomputes it lazily as needed).
+    #[serde(skip)]
     pub precomputed: Option<Precomputed>,
 }
 

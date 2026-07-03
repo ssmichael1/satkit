@@ -276,7 +276,12 @@ pub fn to_gcrf(
     let rust_frame: satkit::Frame = frame.into();
     let dcm = ft::to_gcrf(rust_frame, &pos_vec, &vel_vec)?;
     pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        let arr = np::PyArray1::from_slice(py, dcm.as_slice());
+        // numeris matrices are column-major while numpy's reshape is
+        // row-major; flatten the transpose so the numpy array has the same
+        // element layout as the Rust matrix (previously this returned the
+        // transposed, i.e. inverse, rotation).
+        let dcmt = dcm.transpose();
+        let arr = np::PyArray1::from_slice(py, dcmt.as_slice());
         Ok(arr.reshape(vec![3, 3])?.into_py_any(py)?)
     })
 }
@@ -308,7 +313,9 @@ pub fn from_gcrf(
     let rust_frame: satkit::Frame = frame.into();
     let dcm = ft::from_gcrf(rust_frame, &pos_vec, &vel_vec)?;
     pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        let arr = np::PyArray1::from_slice(py, dcm.as_slice());
+        // Column-major -> row-major via transpose; see `to_gcrf`.
+        let dcmt = dcm.transpose();
+        let arr = np::PyArray1::from_slice(py, dcmt.as_slice());
         Ok(arr.reshape(vec![3, 3])?.into_py_any(py)?)
     })
 }
@@ -672,6 +679,45 @@ pub fn transform_state_approx(
             np::PyArray1::from_slice(py, po.as_slice()).into_py_any(py)?,
             np::PyArray1::from_slice(py, vo.as_slice()).into_py_any(py)?,
         ))
+    })
+}
+
+/// Quaternion rotating a vector from ``from_frame`` to ``to_frame`` — the
+/// unified front door that supports **all** frames, both the time-parameterised
+/// Earth chain (ITRF, TIRS, CIRS, GCRF, TEME, EME2000, ICRF) and the
+/// orbit-dependent frames (LVLH, RTN, NTW), in a single call.
+///
+/// Unlike :func:`rotation` (which rejects the orbit frames) and :func:`to_gcrf`
+/// (which rejects the Earth frames), this accepts any pair. It does **not**
+/// always pivot through GCRF: a purely Earth-frame pair delegates to
+/// :func:`rotation`, which takes the shortest path through the frame graph;
+/// only pairs involving an orbit-dependent frame compose through GCRF. The
+/// orbit state (``pos``, ``vel``, both in GCRF) is only consulted when an
+/// orbit-dependent frame is involved.
+///
+/// Args:
+///     from_frame (satkit.frame): Source frame
+///     to_frame (satkit.frame): Destination frame
+///     tm (satkit.time|datetime.datetime): Epoch
+///     pos (numpy.ndarray): 3-element GCRF position vector [m]
+///     vel (numpy.ndarray): 3-element GCRF velocity vector [m/s]
+///
+/// Returns:
+///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+#[pyfunction]
+pub fn rotation_with_state(
+    from_frame: crate::pyframes::PyFrame,
+    to_frame: crate::pyframes::PyFrame,
+    tm: &Bound<'_, PyAny>,
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+) -> Result<Py<PyAny>> {
+    let t = instant_from_pyany(tm)?;
+    let p: Vector3 = py_to_smatrix(pos)?;
+    let v: Vector3 = py_to_smatrix(vel)?;
+    let q = ft::rotation_with_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
+    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
+        Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
     })
 }
 

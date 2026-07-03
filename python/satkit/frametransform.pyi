@@ -15,10 +15,10 @@ import numpy.typing as npt
 import numpy as np
 import datetime
 
-from .satkit import time, quaternion, frame
+from .satkit import time, quaternion, frame, TimeScalar, TimeArrayLike, TimeInput
 
 @typing.overload
-def gmst(tm: time | datetime.datetime) -> float:
+def gmst(tm: TimeScalar) -> float:
     """Greenwich Mean Sidereal Time
 
     Notes:
@@ -44,8 +44,8 @@ def gmst(tm: time | datetime.datetime) -> float:
 
 @typing.overload
 def gmst(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.NDArray[np.float64]:
+    tm: TimeArrayLike,
+) -> list[float]:
     """Greenwich Mean Sidereal Time
 
     Notes:
@@ -86,8 +86,51 @@ def gmst(*args, **kwargs):
     ...
 
 @typing.overload
+def eqeq(tm: TimeScalar) -> float:
+    """Equation of the Equinoxes
+
+    The equation of the equinoxes is the difference between apparent and mean
+    sidereal time (GAST - GMST), arising from nutation of the Earth's axis.
+
+    Args:
+        tm (satkit.time | datetime.datetime): scalar time at which to calculate output
+
+    Returns:
+        float: Equation of the equinoxes, radians, at input time
+    """
+    ...
+
+@typing.overload
+def eqeq(
+    tm: TimeArrayLike,
+) -> list[float]:
+    """Equation of the Equinoxes
+
+    Args:
+        tm (TimeArrayLike): list or numpy array of times at which to calculate output
+
+    Returns:
+        npt.NDArray[np.float64]: Equation of the equinoxes, radians, at input times
+    """
+    ...
+
+def eqeq(*args, **kwargs):
+    """Equation of the Equinoxes
+
+    The equation of the equinoxes is the difference between apparent and mean
+    sidereal time (GAST - GMST), arising from nutation of the Earth's axis.
+
+    Args:
+        tm (satkit.time | datetime.datetime): scalar or array of times
+
+    Returns:
+        Equation of the equinoxes, radians, at input time(s)
+    """
+    ...
+
+@typing.overload
 def gast(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> float:
     """Greenwich Apparent Sidereal Time
 
@@ -107,8 +150,8 @@ def gast(
 
 @typing.overload
 def gast(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.NDArray[np.float64]:
+    tm: TimeArrayLike,
+) -> list[float]:
     """Greenwich Apparent Sidereal Time
 
     Args:
@@ -138,7 +181,7 @@ def gast(*args, **kwargs):
 
 @typing.overload
 def earth_rotation_angle(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> float:
     """Earth Rotation Angle
 
@@ -165,8 +208,8 @@ def earth_rotation_angle(
 
 @typing.overload
 def earth_rotation_angle(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.NDArray[np.float64]:
+    tm: TimeArrayLike,
+) -> list[float]:
     """Earth Rotation Angle
 
     Notes:
@@ -210,7 +253,7 @@ def earth_rotation_angle(*args, **kwargs):
 
 @typing.overload
 def qitrf2tirs(
-    tm: time,
+    tm: TimeScalar,
 ) -> quaternion:
     """Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
 
@@ -224,8 +267,8 @@ def qitrf2tirs(
 
 @typing.overload
 def qitrf2tirs(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
 
     Args:
@@ -249,7 +292,7 @@ def qitrf2tirs(*args, **kwargs):
 
 @typing.overload
 def qteme2gcrf(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
 
@@ -269,8 +312,8 @@ def qteme2gcrf(
 
 @typing.overload
 def qteme2gcrf(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
 
     Args:
@@ -300,7 +343,7 @@ def qteme2gcrf(*args, **kwargs):
 
 @typing.overload
 def qcirs2gcrf(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
 
@@ -314,8 +357,8 @@ def qcirs2gcrf(
 
 @typing.overload
 def qcirs2gcrf(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
 
     Args:
@@ -339,7 +382,7 @@ def qcirs2gcrf(*args, **kwargs):
 
 @typing.overload
 def qtirs2cirs(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Rotation from Terrestrial Intermediate Reference System (TIRS) to the Celestial Intermediate Reference System (CIRS)
 
@@ -353,8 +396,8 @@ def qtirs2cirs(
 
 @typing.overload
 def qtirs2cirs(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Rotation from Terrestrial Intermediate Reference System (TIRS) to the Celestial Intermediate Reference System (CIRS)
 
     Args:
@@ -378,7 +421,7 @@ def qtirs2cirs(*args, **kwargs):
 
 @typing.overload
 def qgcrf2itrf_approx(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -401,8 +444,8 @@ def qgcrf2itrf_approx(
 
 @typing.overload
 def qgcrf2itrf_approx(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
@@ -432,7 +475,7 @@ def qgcrf2itrf_approx(*args, **kwargs):
 
 @typing.overload
 def qitrf2gcrf_approx(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
@@ -455,8 +498,8 @@ def qitrf2gcrf_approx(
 
 @typing.overload
 def qitrf2gcrf_approx(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
     Notes:
@@ -486,7 +529,7 @@ def qitrf2gcrf_approx(*args, **kwargs):
 
 @typing.overload
 def qgcrf2itrf(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -524,8 +567,8 @@ def qgcrf2itrf(
 
 @typing.overload
 def qgcrf2itrf(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
@@ -585,7 +628,7 @@ def qgcrf2itrf(*args, **kwargs):
 
 @typing.overload
 def qitrf2gcrf(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
@@ -616,8 +659,8 @@ def qitrf2gcrf(
 
 @typing.overload
 def qitrf2gcrf(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
     Notes:
@@ -670,7 +713,7 @@ def qitrf2gcrf(*args, **kwargs):
 
 @typing.overload
 def qteme2itrf(
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
 
@@ -700,8 +743,8 @@ def qteme2itrf(
 
 @typing.overload
 def qteme2itrf(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
@@ -778,7 +821,7 @@ def earth_orientation_params(
     ...
 
 @typing.overload
-def qmod2gcrf(tm: time | datetime.datetime) -> quaternion:
+def qmod2gcrf(tm: TimeScalar) -> quaternion:
     """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given time.
 
     Mean-of-Date accounts for precession but not nutation. For the
@@ -788,8 +831,8 @@ def qmod2gcrf(tm: time | datetime.datetime) -> quaternion:
 
 @typing.overload
 def qmod2gcrf(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given times."""
     ...
 
@@ -801,7 +844,7 @@ def qmod2gcrf(*args, **kwargs):
     ...
 
 @typing.overload
-def qtod2mod_approx(tm: time | datetime.datetime) -> quaternion:
+def qtod2mod_approx(tm: TimeScalar) -> quaternion:
     """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at the
     given time. Accounts for nutation only.
     """
@@ -809,8 +852,8 @@ def qtod2mod_approx(tm: time | datetime.datetime) -> quaternion:
 
 @typing.overload
 def qtod2mod_approx(
-    tm: npt.ArrayLike | list[time] | list[datetime.datetime],
-) -> npt.ArrayLike:
+    tm: TimeArrayLike,
+) -> list[quaternion]:
     """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at
     the given times. Accounts for nutation only.
     """
@@ -873,7 +916,7 @@ def to_gcrf(
 def itrf_to_gcrf_state(
     pos_itrf: npt.ArrayLike,
     vel_itrf: npt.ArrayLike,
-    time: time | list[time] | npt.NDArray,
+    time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Transform a satellite state (position + velocity) from ITRF to GCRF.
 
@@ -937,7 +980,7 @@ def itrf_to_gcrf_state(
 def gcrf_to_itrf_state(
     pos_gcrf: npt.ArrayLike,
     vel_gcrf: npt.ArrayLike,
-    time: time | list[time] | npt.NDArray,
+    time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Transform a satellite state (position + velocity) from GCRF to ITRF.
 
@@ -967,7 +1010,7 @@ def gcrf_to_itrf_state(
 def itrf_to_gcrf_state_approx(
     pos_itrf: npt.ArrayLike,
     vel_itrf: npt.ArrayLike,
-    time: time | list[time] | npt.NDArray,
+    time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Approximate ITRF → GCRF state transform using the IAU-76/FK5
     reduction (accurate to ~1 arcsec on position).
@@ -982,7 +1025,7 @@ def itrf_to_gcrf_state_approx(
 def gcrf_to_itrf_state_approx(
     pos_gcrf: npt.ArrayLike,
     vel_gcrf: npt.ArrayLike,
-    time: time | list[time] | npt.NDArray,
+    time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Approximate GCRF → ITRF state transform using the IAU-76/FK5
     reduction. Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to
@@ -1035,7 +1078,7 @@ def disable_eop_time_warning() -> None:
 def rotation(
     from_frame: frame,
     to_frame: frame,
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` at
     ``tm``. Full IERS 2010 reduction.
@@ -1058,10 +1101,43 @@ def rotation(
     """
     ...
 
+def rotation_with_state(
+    from_frame: frame,
+    to_frame: frame,
+    tm: TimeScalar,
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> quaternion:
+    """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` — the
+    unified front door supporting **all** frames, both the time-parameterised
+    Earth chain (``ITRF``, ``TIRS``, ``CIRS``, ``GCRF``, ``TEME``, ``EME2000``,
+    ``ICRF``) and the orbit-dependent frames (``LVLH``, ``RTN``, ``NTW``), in a
+    single call.
+
+    Unlike :func:`rotation` (which rejects the orbit frames) and :func:`to_gcrf`
+    (which rejects the Earth frames), this accepts any pair. It does **not**
+    always pivot through GCRF: a purely Earth-frame pair delegates to
+    :func:`rotation`, which takes the shortest path through the frame graph;
+    only pairs involving an orbit-dependent frame compose through GCRF. The
+    orbit state (``pos``, ``vel``, both in GCRF) is only consulted when an
+    orbit-dependent frame is involved.
+
+    Args:
+        from_frame: Source frame
+        to_frame: Destination frame
+        tm: Epoch
+        pos: 3-element GCRF position vector [m]
+        vel: 3-element GCRF velocity vector [m/s]
+
+    Returns:
+        Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+    """
+    ...
+
 def rotation_approx(
     from_frame: frame,
     to_frame: frame,
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
 ) -> quaternion:
     """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
     the IAU-76/FK5 approximate reduction (~1 arcsec).
@@ -1079,7 +1155,7 @@ def rotation_approx(
 def transform_state(
     from_frame: frame,
     to_frame: frame,
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
     pos: npt.ArrayLike,
     vel: npt.ArrayLike,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -1106,7 +1182,7 @@ def transform_state(
 def transform_state_approx(
     from_frame: frame,
     to_frame: frame,
-    tm: time | datetime.datetime,
+    tm: TimeScalar,
     pos: npt.ArrayLike,
     vel: npt.ArrayLike,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:

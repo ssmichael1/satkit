@@ -11,7 +11,19 @@ import numpy as np
 import datetime
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Optional, Union, overload
+from typing import Any, ClassVar, Optional, TypeAlias, Union, overload
+
+# Time inputs are polymorphic: anywhere a ``satkit.time`` is accepted, a
+# ``datetime.datetime`` is accepted interchangeably (and, for the vectorized
+# functions, a list or numpy array of either). These aliases capture that so
+# the individual signatures stay readable.
+#
+# * ``TimeScalar``    — a single time value.
+# * ``TimeArrayLike`` — a list or numpy array of time values.
+# * ``TimeInput``     — either a scalar or an array of times.
+TimeScalar: TypeAlias = "time | datetime.datetime"
+TimeArrayLike: TypeAlias = "list[time] | list[datetime.datetime] | npt.ArrayLike"
+TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
@@ -186,7 +198,7 @@ class TLE:
         ...
 
     @epoch.setter
-    def epoch(self, value: time) -> None:
+    def epoch(self, value: TimeScalar) -> None:
         """Set the TLE epoch"""
         ...
 
@@ -292,8 +304,8 @@ class TLE:
     @staticmethod
     def fit_from_states(
         states: list[np.ndarray],
-        times: list[time] | list[datetime.datetime],
-        epoch: time | datetime.datetime,
+        times: TimeArrayLike,
+        epoch: TimeScalar,
     ) -> tuple[TLE, dict]:
         """
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
@@ -339,7 +351,7 @@ class TLE:
 
 def sgp4(
     tle: TLE | list[TLE] | dict,
-    tm: time | list[time] | list[datetime.datetime] | npt.ArrayLike,
+    tm: TimeInput,
     **kwargs,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """SGP-4 propagator for TLE
@@ -3054,7 +3066,7 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: time | datetime.datetime,
+        time: TimeScalar,
         output_phi: typing.Literal[False] = False,
     ) -> npt.NDArray[np.float64]:
         """Interpolate state at a single time
@@ -3071,7 +3083,7 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: time | datetime.datetime,
+        time: TimeScalar,
         output_phi: typing.Literal[True] = ...,
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """Interpolate state and state transition matrix at a single time

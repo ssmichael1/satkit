@@ -11,6 +11,9 @@ pub enum Error {
     #[error("Line {line} too short: expected 69 characters, got {got}")]
     LineTooShort { line: u8, got: usize },
 
+    #[error("Line {line} contains non-ASCII characters; TLE lines must be ASCII")]
+    NonAscii { line: u8 },
+
     /// Failed to parse a numeric/string field from a TLE line.
     #[error("Could not parse {field}: {message}")]
     ParseField {
