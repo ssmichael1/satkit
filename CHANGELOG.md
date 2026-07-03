@@ -1,7 +1,7 @@
 # Changelog
 
 
-## Unreleased
+## 0.20.1 - 2026-07-03
 
 ### Security / dependencies
 
