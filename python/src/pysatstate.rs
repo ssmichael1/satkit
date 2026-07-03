@@ -315,6 +315,27 @@ impl PySatState {
         self.0.maneuvers.len()
     }
 
+    /// The scheduled impulsive maneuvers
+    ///
+    /// Returns:
+    ///     list[dict]: One dict per maneuver with keys "time" (satkit.time),
+    ///     "delta_v" (3-element numpy array, m/s, in "frame"), and
+    ///     "frame" (satkit.frame)
+    #[getter]
+    fn get_maneuvers(&self, py: Python) -> PyResult<Vec<Py<PyAny>>> {
+        self.0
+            .maneuvers
+            .iter()
+            .map(|m| -> PyResult<Py<PyAny>> {
+                let d = PyDict::new(py);
+                d.set_item("time", PyInstant(m.time))?;
+                d.set_item("delta_v", crate::pyutils::vec2py(py, &m.delta_v)?)?;
+                d.set_item("frame", crate::pyframes::PyFrame::from(m.frame))?;
+                d.into_py_any(py)
+            })
+            .collect()
+    }
+
     /// Propagate state to a new time
     ///
     /// Automatically segments propagation at impulsive maneuver times.

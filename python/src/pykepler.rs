@@ -208,6 +208,15 @@ impl PyKepler {
         self.0.period()
     }
 
+    /// Return the semiparameter (semi-latus rectum) of the orbit in meters
+    ///
+    /// Returns:
+    ///     float: Semiparameter p = a (1 - e^2), meters
+    #[getter]
+    fn semiparameter(&self) -> f64 {
+        self.0.semiparameter()
+    }
+
     /// Return the mean anomaly of the satellite in radians
     ///
     /// Returns:

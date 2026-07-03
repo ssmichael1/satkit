@@ -66,7 +66,6 @@
 //! - Keplerian orbital elements and conversions
 //! - Geodesic distance calculations
 //! - TLE parsing, generation, and orbit fitting
-//! - Unscented Kalman Filter (UKF) implementation
 //!
 //! ## Language Bindings
 //!

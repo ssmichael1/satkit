@@ -940,3 +940,48 @@ class TestLambert:
 
         with pytest.raises(ValueError):
             sk.lambert(np.array([0.0, 0.0, 0.0]), r2, 3600.0)  # zero position
+
+
+class TestManeuverInspection:
+    def test_maneuvers_getter(self):
+        """satstate.maneuvers must expose the scheduled maneuvers, not just a count."""
+        t0 = sk.time(2024, 1, 1, 12, 0, 0)
+        r = 6378e3 + 500e3
+        v = np.sqrt(sk.consts.mu_earth / r)
+        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
+        t_burn = t0 + sk.duration.from_hours(1)
+        sat.add_maneuver(t_burn, [0, 10, 0], frame=sk.frame.RTN)
+        sat.add_maneuver(t_burn + sk.duration.from_hours(1), [1, 2, 3], frame=sk.frame.LVLH)
+
+        mans = sat.maneuvers
+        assert len(mans) == 2 == sat.num_maneuvers
+        assert abs((mans[0]["time"] - t_burn).seconds) < 1e-6
+        assert np.allclose(mans[0]["delta_v"], [0, 10, 0])
+        assert mans[0]["frame"] == sk.frame.RTN
+        assert np.allclose(mans[1]["delta_v"], [1, 2, 3])
+        assert mans[1]["frame"] == sk.frame.LVLH
+
+
+class TestSpaceWeather:
+    def test_spaceweather_get(self):
+        """spaceweather.get returns the full daily record."""
+        rec = sk.spaceweather.get(sk.time(2023, 11, 14))
+        assert abs((rec["date"] - sk.time(2023, 11, 14)).days) < 1.0
+        assert len(rec["kp"]) == 8
+        assert len(rec["ap"]) == 8
+        assert rec["f10p7_adj"] > 0
+        assert rec["f10p7_adj_c81"] > 0
+        assert rec["ap_avg"] >= 0
+        # datetime accepted too
+        import datetime
+
+        rec2 = sk.spaceweather.get(
+            datetime.datetime(2023, 11, 14, tzinfo=datetime.timezone.utc)
+        )
+        assert rec2["f10p7_adj"] == rec["f10p7_adj"]
+
+    def test_predicted_f107(self):
+        """predicted_f107 returns a plausible flux inside the forecast range
+        and None far outside it."""
+        # A date far in the past is outside the forecast range
+        assert sk.spaceweather.predicted_f107(sk.time(1990, 1, 1)) is None

@@ -239,3 +239,24 @@ class TestTime:
         t = sk.time.from_gps_week_and_second(2, 43200)
         expected_sec = 2 * 604800 + 43200
         assert (t - gps_epoch).seconds == pytest.approx(expected_sec, abs=1e-3)
+
+
+class TestEpochConstants:
+    def test_epoch_constants(self):
+        # J2000: 2000-01-01 12:00:00 TT
+        assert sk.time.J2000.as_mjd(sk.timescale.TT) == pytest.approx(51544.5, abs=1e-9)
+        # GPS epoch: 1980-01-06 00:00:00 UTC
+        g = sk.time.GPS_EPOCH.as_datetime()
+        assert (g.year, g.month, g.day) == (1980, 1, 6)
+        # Unix epoch: 1970-01-01 00:00:00 UTC
+        assert sk.time.UNIX_EPOCH.as_unixtime() == pytest.approx(0.0, abs=1e-6)
+        # MJD epoch: MJD 0
+        assert sk.time.MJD_EPOCH.as_mjd(sk.timescale.UTC) == pytest.approx(0.0, abs=1e-9)
+
+
+class TestDurationUnits:
+    def test_from_milliseconds_and_microseconds(self):
+        d = sk.duration.from_milliseconds(1500.0)
+        assert d.seconds == pytest.approx(1.5, rel=1e-12)
+        assert d.microseconds == 1_500_000
+        assert sk.duration(seconds=2).microseconds == 2_000_000

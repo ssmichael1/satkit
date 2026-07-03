@@ -24,6 +24,14 @@ the breaking changes below ride in a minor bump.
   `Error::UnsupportedThrustFrame` at construction (mirroring the maneuver-frame
   validation in `SatState::propagate`) instead of panicking deep inside the
   force evaluation during propagation.
+- **Unused UKF advertisement removed.** The numeris `estimate` feature was
+  enabled but nothing was re-exported — no filter was reachable from Rust or
+  Python despite the crate docs advertising a "UKF implementation". The feature
+  flag and the doc claim are removed; estimation may return as a designed
+  feature in a future release.
+- **`quaternion.slerp` no longer takes an `epsilon` argument** (Python). The
+  parameter was documented but silently ignored (numeris uses a fixed internal
+  threshold); passing it now raises `TypeError`.
 - **`From<i32>` for `TimeScale` and `Weekday` replaced by `TryFrom<i32>`.** The
   infallible conversion silently mapped any out-of-range integer to `Invalid`;
   the new `TryFrom` returns a typed error (`InvalidTimeScale` / `InvalidWeekday`,
@@ -160,6 +168,47 @@ the breaking changes below ride in a minor bump.
   `PyQuaternionVec`, two dead `pyinstant` helpers, and unused SGP4-port locals;
   the duplicated SGP4 result-packing block and `time.from_datetime` now share a
   single implementation.
+
+### New Python bindings
+
+- **New `satkit.spaceweather` submodule** — `get(time)` returns the full daily
+  space-weather record (Kp/Ap arrays, F10.7 observed/adjusted and 81-day
+  averages, sunspot number, …) that the NRLMSISE-00 density model consumes;
+  `predicted_f107(time)` exposes the NOAA/SWPC solar-cycle forecast used for
+  future-epoch densities; `update()` refreshes the data. Previously none of
+  this data was reachable from Python.
+- **TLE catalog metadata** — `intl_desig`, `desig_year`, `desig_launch`,
+  `desig_piece`, `ephem_type`, `element_num`, and `rev_num` now have Python
+  getters/setters (they were pickled but unreadable).
+- **`time` epoch constants** — `time.J2000`, `time.GPS_EPOCH`,
+  `time.MJD_EPOCH`, `time.UNIX_EPOCH`.
+- **Quaternion completion** — `from_euler` (inverse of `as_euler`),
+  `identity`, `norm`, `normalize`, `inverse`, and `dot`.
+- **`satstate.maneuvers`** — returns the scheduled impulsive maneuvers (time,
+  delta-v, frame), not just a count.
+- **`itrfcoord.distance_to(other)`** — scalar geodesic distance companion to
+  `geodesic_distance`.
+- **`kepler.semiparameter`**, **`duration.from_milliseconds`**,
+  **`duration.microseconds`**, and **`jplephem.consts(name)`** (DE-file
+  constants: AU, EMRAT, GM values).
+
+### Python binding fixes
+
+- **`sgp4` with a list of TLEs silently ignored the `gravconst` / `opsmode`
+  kwargs** — the list path used the default configuration regardless. Now
+  honored on all input paths.
+- **The `sgp4` docstring example called `TLE.single_from_lines`**, a method
+  that does not exist; corrected to `TLE.from_lines(lines)[0]`.
+- **`nrlmsise00`** — docstring said the time kwarg was `tm` (it is `time`); the
+  function now also accepts `datetime.datetime`, rejects misspelled kwargs, and
+  has a type stub (it was in `__all__` with no stub).
+- **`propagate` docstring** no longer documents the removed `output_dense`
+  kwarg (interpolation is controlled by `propsettings.enable_interp`) and the
+  force-model list now correctly includes solid Earth tides and the
+  general-relativistic correction.
+- **OMM-dict input validates `MEAN_ELEMENT_THEORY` / `TIME_SYSTEM`** when
+  present, matching the Rust-side OMM parser (dicts from `json.load` /
+  `xmltodict` are the supported route for local OMM files).
 
 ### Python type stubs
 

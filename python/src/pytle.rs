@@ -123,6 +123,83 @@ impl PyTLE {
         self.0.sat_num = value;
     }
 
+    /// International designator (e.g. "98067A": launch year, launch number, piece)
+    #[getter(intl_desig)]
+    fn get_intl_desig(&self) -> String {
+        self.0.intl_desig.clone()
+    }
+
+    #[setter(intl_desig)]
+    fn set_intl_desig(&mut self, value: String) {
+        self.0.intl_desig = value;
+    }
+
+    /// Launch year from the international designator (2-digit, as in the TLE)
+    #[getter(desig_year)]
+    const fn get_desig_year(&self) -> i32 {
+        self.0.desig_year
+    }
+
+    #[setter(desig_year)]
+    fn set_desig_year(&mut self, value: i32) {
+        self.0.desig_year = value;
+    }
+
+    /// Launch number of the year from the international designator
+    #[getter(desig_launch)]
+    const fn get_desig_launch(&self) -> i32 {
+        self.0.desig_launch
+    }
+
+    #[setter(desig_launch)]
+    fn set_desig_launch(&mut self, value: i32) {
+        self.0.desig_launch = value;
+    }
+
+    /// Piece of the launch from the international designator (e.g. "A")
+    #[getter(desig_piece)]
+    fn get_desig_piece(&self) -> String {
+        self.0.desig_piece.clone()
+    }
+
+    #[setter(desig_piece)]
+    fn set_desig_piece(&mut self, value: String) {
+        self.0.desig_piece = value;
+    }
+
+    /// Ephemeris type (usually 0)
+    #[getter(ephem_type)]
+    const fn get_ephem_type(&self) -> u8 {
+        self.0.ephem_type
+    }
+
+    #[setter(ephem_type)]
+    fn set_ephem_type(&mut self, value: u8) {
+        self.0.ephem_type = value;
+    }
+
+    /// Element set number
+    #[getter(element_num)]
+    const fn get_element_num(&self) -> i32 {
+        self.0.element_num
+    }
+
+    #[setter(element_num)]
+    fn set_element_num(&mut self, value: i32) {
+        self.0.element_num = value;
+    }
+
+    /// Revolution number at epoch
+    #[getter(rev_num)]
+    const fn get_rev_num(&self) -> i32 {
+        self.0.rev_num
+    }
+
+    #[setter(rev_num)]
+    fn set_rev_num(&mut self, value: i32) {
+        self.0.rev_num = value;
+    }
+
     /// Orbit eccentricity
     #[getter(eccen)]
     const fn get_eccen(&self) -> f64 {

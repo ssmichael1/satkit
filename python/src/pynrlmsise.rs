@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use crate::PyInstant;
 use satkit::nrlmsise;
 use satkit::Instant;
 
@@ -14,7 +13,7 @@ use satkit::Instant;
 /// Keyword args:
 ///       latitude_deg (float):   Latitude in degrees
 ///      longitude_deg (float):   Longitude in degrees
-///                 tm (satkit.time):   The time (Instant object)
+///               time (satkit.time|datetime.datetime):  Time at which to evaluate the model
 ///   use_spaceweather (bool):   Use space weather database in calculation
 ///
 /// Returns:
@@ -33,20 +32,21 @@ pub fn nrlmsise00(
     if let Some(kwds) = option_kwds {
         if let Some(kw) = kwds.get_item("latitude_deg")? {
             lat = Some(kw.extract::<f64>()?);
+            kwds.del_item("latitude_deg")?;
         }
         if let Some(v) = kwds.get_item("longitude_deg")? {
             lon = Some(v.extract::<f64>()?);
+            kwds.del_item("longitude_deg")?;
         }
         if let Some(v) = kwds.get_item("time")? {
-            tm = Some(
-                v.extract::<PyInstant>()
-                    .map_err(|_e| anyhow::anyhow!("Failed to extract time"))?
-                    .0,
-            );
+            tm = Some(crate::pyutils::instant_from_pyany(&v)?);
+            kwds.del_item("time")?;
         }
         if let Some(v) = kwds.get_item("use_spaceweather")? {
             use_spaceweather = v.extract::<bool>()?;
+            kwds.del_item("use_spaceweather")?;
         }
+        crate::pyutils::reject_unused_kwargs(kwds)?;
     }
 
     Ok(nrlmsise::nrlmsise(
