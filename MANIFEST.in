@@ -6,6 +6,7 @@ include README.md
 include pyproject.toml
 include build.rs
 recursive-include src *.rs
+recursive-include benches *.rs
 recursive-include python/src *.rs
 include python/Cargo.toml
 include python/build.rs
