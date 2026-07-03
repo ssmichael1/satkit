@@ -320,7 +320,7 @@ impl Instant {
             TimeScale::UT1 => {
                 // This will be approximately correct for computing ut1
                 let eop = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd);
-                let dut1 = eop[0] as f64;
+                let dut1 = eop[0];
                 Self::from_mjd_with_scale(mjd - dut1 / 86_400.0, TimeScale::UTC)
             }
             TimeScale::GPS => {
@@ -415,7 +415,7 @@ impl Instant {
             TimeScale::UT1 => {
                 let mjd_utc = self.as_mjd_utc();
                 let eop = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd_utc);
-                let dut1 = eop[0] as f64;
+                let dut1 = eop[0];
                 mjd_utc + dut1 / 86_400.0
             }
             TimeScale::TAI => (self.raw - Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0,

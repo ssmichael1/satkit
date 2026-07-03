@@ -38,6 +38,73 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Cargo Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-clippy-
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+      - name: Audit dependencies (RustSec advisories)
+        run: cargo audit
+
+  sdist:
+    # Guard against source-unbuildable sdists: a broken 0.20.0 sdist (missing
+    # benches/ while Cargo.toml declared a bench target) shipped to PyPI
+    # undetected because wheels and `cargo publish --dry-run` exercise
+    # different artifacts. Build the sdist, then pip-install *from it* and
+    # import the result.
+    name: sdist installs from source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Cargo Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-sdist-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-sdist-
+      - name: Build sdist
+        run: |
+          pip install build
+          python -m build --sdist -o dist
+      - name: Install from sdist and import
+        run: |
+          pip install numpy
+          pip install --no-deps dist/satkit-*.tar.gz
+          cd /tmp
+          python -c "import satkit as sk; t = sk.time(2024, 1, 1, 12, 0, 0); q = sk.quaternion.rotz(0.5); assert abs(q.angle - 0.5) < 1e-12; print('sdist install OK:', sk.__version__, t)"
+
   rust:
     name: rust build and test (${{ matrix.os }})
     strategy:

@@ -394,10 +394,7 @@ impl PyPropSettings {
                     Some(d.0.as_seconds())
                 } else if let Ok(secs) = obj.extract::<f64>() {
                     Some(secs)
-                } else if let Ok(delta) = {
-                    #[allow(deprecated)]
-                    obj.downcast::<PyDelta>()
-                } {
+                } else if let Ok(delta) = obj.cast::<PyDelta>() {
                     Some(
                         delta.get_days() as f64 * 86400.0
                             + delta.get_seconds() as f64

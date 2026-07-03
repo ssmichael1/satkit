@@ -51,6 +51,9 @@ pub struct TideDeltas {
 // Index convention: K_RE[n][m], K_IM[n][m].
 // Entries outside the (n,m) range listed in Table 6.3 are zero.
 // ---------------------------------------------------------------------------
+// The k_22 Love number (0.30102) coincidentally resembles log10(2); it is a
+// physical constant from Table 6.3, not a math constant.
+#[allow(clippy::approx_constant)]
 const K_RE: [[f64; 4]; 4] = [
     [0.0, 0.0, 0.0, 0.0],
     [0.0, 0.0, 0.0, 0.0],
@@ -71,7 +74,10 @@ const K_PLUS: [f64; 3] = [-0.00089, -0.00080, -0.00057];
 // Fully-normalized associated-Legendre normalization factors
 // N_nm = sqrt((2 - δ_0m)(2n+1)(n-m)!/(n+m)!). Constants chosen to allow
 // the recursion-free closed-form evaluation of P̄_nm used here.
+// Written to full precision deliberately (clippy flags a digit beyond f64's
+// round-trip length on N21; keeping the mathematical value verbatim).
 // ---------------------------------------------------------------------------
+#[allow(clippy::excessive_precision)]
 const N20: f64 = 2.2360679774997896; // sqrt(5)
 const N21: f64 = 1.2909944487358056; // sqrt(5/3)
 const N22: f64 = 0.6454972243679028; // sqrt(5/12)
