@@ -64,7 +64,7 @@ proptest! {
     #[test]
     fn kepler_period_closure(
         a in 6.6e6..5.0e7f64,
-        e in 0.0..0.9f64,
+        e in 0.0..0.95f64,
         nu in 0.0..TAU,
     ) {
         let k = Kepler::new(a, e, 0.6, 1.0, 2.0, Anomaly::True(nu));
@@ -264,4 +264,28 @@ proptest! {
         prop_assert!((p2 - pitch).abs() < 1e-9, "pitch error {:e}", (p2 - pitch).abs());
         prop_assert!((y2 - yaw).abs() < 1e-9, "yaw error {:e}", (y2 - yaw).abs());
     }
+}
+
+// ───────────────────── Pinned regressions ─────────────────────
+
+/// CI-found counterexample (2026-07-03, ubuntu runner): high-eccentricity
+/// one-period closure failed because `mean2eccentric` received an unwrapped
+/// mean anomaly (M + 2π); the naive `E₀ = M ± e` Newton guess turned chaotic
+/// at e ≈ 0.88 and exhausted the iteration cap. Fixed via range reduction +
+/// Danby's initial guess. Pinned here so it can never regress.
+#[test]
+fn regression_high_eccen_period_closure() {
+    let k = Kepler::new(
+        11568493.745532092,
+        0.8828701159267661,
+        0.6,
+        1.0,
+        2.0,
+        Anomaly::True(2.879249859070718),
+    );
+    let k2 = k.propagate(&Duration::from_seconds(k.period()));
+    let (r, _) = k.to_pv();
+    let (r2, _) = k2.to_pv();
+    let rel = (r - r2).norm() / r.norm();
+    assert!(rel < 1e-6, "one-period closure error {rel:e}");
 }

@@ -76,23 +76,32 @@ pub struct Kepler {
 // Convert mean to eccentric anomaly
 // iterative solution required
 fn mean2eccentric(m: f64, eccen: f64) -> f64 {
-    use std::f64::consts::PI;
+    use std::f64::consts::TAU;
+    // Range-reduce the mean anomaly to [0, 2π). Kepler's equation shifts by
+    // 2πk in E and M together, so the solution for the reduced M is shifted
+    // back at the end. Without this, an unwrapped M (e.g. after propagating
+    // multiple revolutions) puts the naive initial guess in a near-flat region
+    // of the equation at high eccentricity, where Newton's trajectory turns
+    // chaotic and can exhaust the iteration cap with a wildly wrong root.
+    let k = (m / TAU).floor();
+    let mr = m - k * TAU;
+
+    // Danby (1987) initial guess: E₀ = M + 0.85·e·sign(sin M). Together with
+    // the range reduction this keeps plain Newton convergent in < ~10
+    // iterations for all eccentricities below 1, including e > 0.9.
     #[allow(non_snake_case)]
-    let mut E = match (m > PI) || ((m < 0.0) && (m > -PI)) {
-        true => m - eccen,
-        false => m + eccen,
-    };
-    // Newton's method converges quadratically for bound orbits (< ~10 steps
-    // for e < 0.99). Cap the iteration count so a pathological eccentricity
-    // (e >= 1, where the step can go non-finite) cannot spin forever.
-    for _ in 0..30 {
-        let de = eccen.mul_add(E.sin(), m - E) / eccen.mul_add(-E.cos(), 1.0);
+    let mut E = mr + 0.85 * eccen * if mr.sin() >= 0.0 { 1.0 } else { -1.0 };
+
+    // Cap the iteration count so a pathological eccentricity (e >= 1, where
+    // the step can go non-finite) cannot spin forever.
+    for _ in 0..50 {
+        let de = eccen.mul_add(E.sin(), mr - E) / eccen.mul_add(-E.cos(), 1.0);
         E += de;
-        if de.abs() < 1.0e-12 {
+        if de.abs() < 1.0e-13 {
             break;
         }
     }
-    E
+    E + k * TAU
 }
 
 fn eccentric2true(ea: f64, eccen: f64) -> f64 {
