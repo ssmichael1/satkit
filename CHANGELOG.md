@@ -1,6 +1,18 @@
 # Changelog
 
 
+## Unreleased
+
+### Fixed
+
+- **PyPI sdist was unbuildable from source.** `MANIFEST.in` omitted the
+  `benches/` directory while `Cargo.toml` declares the `hotpaths` bench
+  target, so `cargo` failed to parse the manifest when installing from the
+  sdist ("can't find `hotpaths` bench"). Wheels were unaffected; this broke
+  source builds only (present since the benches landed in 0.19.0). The
+  sdist now includes `benches/`.
+
+
 ## 0.20.0 - 2026-07-03
 
 A large correctness, robustness, and cleanup pass. This is a pre-1.0 release, so
