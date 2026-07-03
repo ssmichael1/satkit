@@ -8,9 +8,10 @@ import numpy.typing as npt
 import numpy as np
 
 import satkit
+from .satkit import TimeScalar, TimeArrayLike, TimeInput
 
 @typing.overload
-def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
+def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
@@ -39,7 +40,7 @@ def pos_gcrf(time: satkit.time) -> npt.NDArray[np.float64]:
 
 @typing.overload
 def pos_gcrf(
-    time: npt.ArrayLike | list[satkit.time],
+    time: TimeArrayLike,
 ) -> npt.NDArray[np.float64]:
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
@@ -88,7 +89,7 @@ def pos_gcrf(*args, **kwargs):
     ...
 
 @typing.overload
-def pos_mod(time: satkit.time) -> npt.NDArray[np.float64]:
+def pos_mod(time: TimeScalar) -> npt.NDArray[np.float64]:
     """
     Sun position in the Mean-of-Date Frame
 
@@ -108,7 +109,7 @@ def pos_mod(time: satkit.time) -> npt.NDArray[np.float64]:
 
 @typing.overload
 def pos_mod(
-    time: npt.ArrayLike | list[satkit.time],
+    time: TimeArrayLike,
 ) -> npt.NDArray[np.float64]:
     """
     Sun position in the Mean-of-Date Frame

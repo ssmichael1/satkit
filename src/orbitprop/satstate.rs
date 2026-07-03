@@ -240,16 +240,12 @@ impl SatState {
     ///       y axis = -h (h = p cross v)
     ///       x axis such that x cross y = z
     pub fn qgcrf2lvlh(&self) -> Quaternion {
-        let p = self.pos_gcrf();
-        let v = self.vel_gcrf();
-        let h = p.cross(&v);
-        let neg_p = p * -1.0;
-        let z_target = numeris::vector![0.0, 0.0, 1.0];
-        let q1 = Quaternion::rotation_between(neg_p, z_target);
-        let rotated_h = q1 * (h * -1.0);
-        let y_axis = numeris::vector![0.0, 1.0, 0.0];
-        let q2 = Quaternion::rotation_between(rotated_h, y_axis);
-        q2 * q1
+        // Derive from the canonical GCRF→LVLH DCM so the axis convention lives
+        // in a single place ([`frametransform::gcrf_to_lvlh`]).
+        Quaternion::from_rotation_matrix(&frametransform::gcrf_to_lvlh(
+            &self.pos_gcrf(),
+            &self.vel_gcrf(),
+        ))
     }
 
     /// Return a clone of the state covariance
@@ -470,6 +466,22 @@ impl SatState {
             .iter()
             .filter(|m| m.time >= t_min && m.time < t_max)
             .collect();
+
+        // Validate maneuver frames up front so an unsupported frame surfaces as
+        // a clean error instead of panicking deep inside the force evaluation.
+        for m in &active_maneuvers {
+            match m.frame {
+                Frame::GCRF | Frame::RTN | Frame::NTW | Frame::LVLH => {}
+                Frame::ITRF
+                | Frame::TIRS
+                | Frame::CIRS
+                | Frame::TEME
+                | Frame::EME2000
+                | Frame::ICRF => {
+                    return Err(Error::UnsupportedManeuverFrame { frame: m.frame });
+                }
+            }
+        }
 
         if forward {
             active_maneuvers.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
@@ -713,6 +725,34 @@ mod test {
         // Maneuvers should persist on the result
         assert_eq!(state_burn.maneuvers.len(), 1);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_impulsive_maneuver_unsupported_frame_errors() -> Result<()> {
+        // A maneuver in a frame where delta-v can't be resolved must return a
+        // clean error, not panic mid-propagation.
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let t_burn = t0 + Duration::from_hours(1.0);
+        let t_end = t0 + Duration::from_hours(2.0);
+
+        let r = consts::EARTH_RADIUS + 500.0e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+        let mut sat = SatState::from_pv(
+            &t0,
+            &numeris::vector![r, 0.0, 0.0],
+            &numeris::vector![0.0, v, 0.0],
+        );
+        sat.add_maneuver(ImpulsiveManeuver::new(
+            t_burn,
+            numeris::vector![0.0, 0.0, 10.0],
+            Frame::ITRF,
+        ));
+
+        assert!(matches!(
+            sat.propagate(&t_end, None, None),
+            Err(Error::UnsupportedManeuverFrame { frame: Frame::ITRF })
+        ));
         Ok(())
     }
 

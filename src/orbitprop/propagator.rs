@@ -613,6 +613,17 @@ pub fn propagate<const C: usize, T: TimeLike>(
                 accel
             };
 
+            // GJ8 needs at least 8 steps to start up. Detect a too-short span
+            // here and report it clearly rather than letting the integrator
+            // surface its generic "step not finite" error.
+            let min_span = 8.0 * settings.gj_step_seconds.abs();
+            if x_end.abs() < min_span {
+                return Err(Error::GJIntervalTooShort {
+                    span: x_end.abs(),
+                    min: min_span,
+                });
+            }
+
             let gj_settings = GJSettings {
                 h: settings.gj_step_seconds,
                 dense_output: settings.enable_interp,
@@ -680,17 +691,7 @@ pub fn interp_propresult<const C: usize, T: TimeLike>(
             .gj_dense
             .as_ref()
             .ok_or(Error::NoDenseOutputInSolution)?;
-        // Rehydrate a minimal GJSolution just enough for the interpolator
-        let gj_sol = crate::orbitprop::ode::GJSolution::<f64, 3> {
-            t: 0.0, // unused by interpolate
-            r: Vector3::zeros(),
-            v: Vector3::zeros(),
-            evals: 0,
-            steps: 0,
-            startup_iters: 0,
-            dense: Some(dense.clone()),
-        };
-        let (r, v) = crate::orbitprop::ode::GaussJackson8::interpolate(x, &gj_sol)?;
+        let (r, v) = crate::orbitprop::ode::GaussJackson8::interpolate(x, dense)?;
         let mut out: StateType<C> = Matrix::<6, C>::zeros();
         let mut rv: numeris::Vector<f64, 6> = numeris::Vector::<f64, 6>::zeros();
         rv.set_block(0, 0, &r);
@@ -734,16 +735,7 @@ pub fn interp_propresult_batch<const C: usize>(
             .gj_dense
             .as_ref()
             .ok_or(Error::NoDenseOutputInSolution)?;
-        let gj_sol = crate::orbitprop::ode::GJSolution::<f64, 3> {
-            t: 0.0,
-            r: Vector3::zeros(),
-            v: Vector3::zeros(),
-            evals: 0,
-            steps: 0,
-            startup_iters: 0,
-            dense: Some(dense.clone()),
-        };
-        let pairs = crate::orbitprop::ode::GaussJackson8::interpolate_batch(&xs, &gj_sol)?;
+        let pairs = crate::orbitprop::ode::GaussJackson8::interpolate_batch(&xs, dense)?;
         return Ok(pairs
             .into_iter()
             .map(|(r, v)| {
@@ -1648,7 +1640,7 @@ mod tests {
             Frame::RTN,
             starttime,
             stoptime,
-        )]);
+        )?]);
         let satprops = SatPropertiesSimple::default().with_thrust(thrust);
 
         let res_thrust = propagate(&state, &starttime, &stoptime, &settings, Some(&satprops))?;
@@ -1702,7 +1694,7 @@ mod tests {
             Frame::GCRF,
             starttime,
             stoptime,
-        )]);
+        )?]);
         let satprops = SatPropertiesSimple::default().with_thrust(thrust);
 
         let res_no_thrust = propagate(&state, &starttime, &stoptime, &settings, None)?;

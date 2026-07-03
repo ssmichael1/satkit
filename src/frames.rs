@@ -18,7 +18,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// they are expressed. For Earth-centred inertial and Earth-fixed frames the
 /// definitions follow the IERS conventions; for spacecraft-local orbital
 /// frames see the individual variant docs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Frame {
     /// International Terrestrial Reference Frame
     ITRF,

@@ -7,10 +7,11 @@ import numpy.typing as npt
 import numpy as np
 
 import satkit
+from .satkit import TimeScalar, TimeArrayLike, TimeInput
 
 def heliocentric_pos(
     body: satkit.solarsystem,
-    tm: satkit.time | list[satkit.time] | npt.ArrayLike,
+    tm: TimeInput,
 ) -> npt.NDArray[np.float64]:
     """Return the position of the given body in the Heliocentric coordinate system (origin is the Sun)
 

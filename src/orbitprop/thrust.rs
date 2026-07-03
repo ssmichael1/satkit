@@ -4,7 +4,7 @@ use crate::Frame;
 use crate::Instant;
 
 /// A constant thrust acceleration over a time window
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContinuousThrust {
     /// Acceleration vector in the specified frame [m/s^2]
     pub accel: Vector3,
@@ -17,12 +17,31 @@ pub struct ContinuousThrust {
 }
 
 impl ContinuousThrust {
-    pub fn new(accel: Vector3, frame: Frame, start: Instant, end: Instant) -> Self {
-        Self {
-            accel,
-            frame,
-            start,
-            end,
+    /// Create a constant thrust acceleration over a time window.
+    ///
+    /// The frame is validated here — mirroring the up-front maneuver-frame
+    /// validation in `SatState::propagate` — so an unsupported (Earth-fixed /
+    /// inertial-chain) frame surfaces as a clean error at construction rather
+    /// than a panic deep inside the force evaluation during propagation.
+    pub fn new(
+        accel: Vector3,
+        frame: Frame,
+        start: Instant,
+        end: Instant,
+    ) -> Result<Self, crate::orbitprop::Error> {
+        match frame {
+            Frame::GCRF | Frame::RTN | Frame::NTW | Frame::LVLH => Ok(Self {
+                accel,
+                frame,
+                start,
+                end,
+            }),
+            Frame::ITRF
+            | Frame::TIRS
+            | Frame::CIRS
+            | Frame::TEME
+            | Frame::EME2000
+            | Frame::ICRF => Err(crate::orbitprop::Error::UnsupportedThrustFrame { frame }),
         }
     }
 
@@ -113,5 +132,33 @@ impl ThrustProfile {
 
     pub fn is_empty(&self) -> bool {
         self.thrusts.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_rejects_unsupported_frames() {
+        let t0 = Instant::from_date(2024, 1, 1).unwrap();
+        let t1 = Instant::from_date(2024, 1, 2).unwrap();
+        let a = crate::mathtypes::Vector3::from_slice(&[1.0e-4, 0.0, 0.0]);
+        for f in [Frame::GCRF, Frame::RTN, Frame::NTW, Frame::LVLH] {
+            assert!(ContinuousThrust::new(a, f, t0, t1).is_ok());
+        }
+        for f in [
+            Frame::ITRF,
+            Frame::TIRS,
+            Frame::CIRS,
+            Frame::TEME,
+            Frame::EME2000,
+            Frame::ICRF,
+        ] {
+            assert!(matches!(
+                ContinuousThrust::new(a, f, t0, t1),
+                Err(crate::orbitprop::Error::UnsupportedThrustFrame { .. })
+            ));
+        }
     }
 }

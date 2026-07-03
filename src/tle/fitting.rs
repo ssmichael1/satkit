@@ -87,6 +87,16 @@ fn residuals(
 ) -> Result<Vec<f64>> {
     let mut tle = tle_from_params(params, epoch);
     let out = crate::sgp4::sgp4(&mut tle, times).map_err(|e| Error::Sgp4(format!("{e:?}")))?;
+    // Reject any trial step whose propagation failed at one or more times (e.g.
+    // a decayed orbit): those columns are NaN, and folding them into the
+    // residuals would silently corrupt the least-squares step.
+    if let Some(err) = out
+        .errcode
+        .iter()
+        .find(|e| **e != crate::sgp4::SGP4Error::SGP4Success)
+    {
+        return Err(Error::Sgp4(format!("{err:?}")));
+    }
     let mut r = vec![0.0; states_teme.len() * 3];
     for (i, state) in states_teme.iter().enumerate() {
         for j in 0..3 {

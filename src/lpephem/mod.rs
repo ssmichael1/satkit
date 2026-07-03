@@ -5,7 +5,7 @@ pub mod moon;
 /// Solar calculations
 pub mod sun;
 
-// This part isn't working yet...
+/// Planetary calculations (low-precision heliocentric positions)
 mod planets;
 pub use planets::heliocentric_pos;
 

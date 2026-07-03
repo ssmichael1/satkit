@@ -10,6 +10,12 @@ pub enum Error {
     /// outside the valid range for an elliptical orbit.
     #[error("Eccentricity Out of Bounds {0}")]
     EccenOutOfBound(f64),
+
+    /// Returned by [`Kepler::from_pv`] when the state has (near-)zero angular
+    /// momentum (a rectilinear trajectory), for which the orbital plane — and
+    /// therefore inclination and RAAN — are undefined.
+    #[error("Degenerate state: angular momentum is zero (rectilinear trajectory)")]
+    Degenerate,
 }
 
 /// Convenient type alias used throughout the `kepler` module.
@@ -76,10 +82,13 @@ fn mean2eccentric(m: f64, eccen: f64) -> f64 {
         true => m - eccen,
         false => m + eccen,
     };
-    loop {
+    // Newton's method converges quadratically for bound orbits (< ~10 steps
+    // for e < 0.99). Cap the iteration count so a pathological eccentricity
+    // (e >= 1, where the step can go non-finite) cannot spin forever.
+    for _ in 0..30 {
         let de = eccen.mul_add(E.sin(), m - E) / eccen.mul_add(-E.cos(), 1.0);
         E += de;
-        if de.abs() < 1.0e-6 {
+        if de.abs() < 1.0e-12 {
             break;
         }
     }
@@ -261,29 +270,84 @@ impl Kepler {
     /// * `Kepler` - A new Keplerian orbital element object
     ///
     pub fn from_pv(r: Vector3, v: Vector3) -> Result<Self> {
+        use std::f64::consts::PI;
+        let mu = crate::consts::MU_EARTH;
+        let rmag = r.norm();
+
         let h = r.cross(&v);
+        let hmag = h.norm();
+        // Zero angular momentum ⇒ no orbital plane; inclination/RAAN undefined.
+        if hmag < 1.0e-9 {
+            return Err(Error::Degenerate);
+        }
         let n = numeris::vector![0.0, 0.0, 1.0].cross(&h);
-        let e = ((v.norm_squared() - crate::consts::MU_EARTH / r.norm()) * r - r.dot(&v) * v)
-            / crate::consts::MU_EARTH;
+        let nmag = n.norm();
+        let e = ((v.norm_squared() - mu / rmag) * r - r.dot(&v) * v) / mu;
         let eccen = e.norm();
         if eccen >= 1.0 {
             return Err(Error::EccenOutOfBound(eccen));
         }
-        let xi = v.norm().powi(2) / 2.0 - crate::consts::MU_EARTH / r.norm();
-        let a = -crate::consts::MU_EARTH / (2.0 * xi);
-        let incl = (h.z() / h.norm()).acos();
-        let mut raan = (n.x() / n.norm()).acos();
-        if n.y() < 0.0 {
-            raan = 2.0f64.mul_add(std::f64::consts::PI, -raan);
-        }
-        let mut w = (n.dot(&e) / n.norm() / e.norm()).acos();
-        if e.z() < 0.0 {
-            w = 2.0f64.mul_add(std::f64::consts::PI, -w);
-        }
-        let mut nu = (r.dot(&e) / r.norm() / e.norm()).acos();
-        if r.dot(&v) < 0.0 {
-            nu = 2.0f64.mul_add(std::f64::consts::PI, -nu);
-        }
+        let xi = v.norm_squared() / 2.0 - mu / rmag;
+        let a = -mu / (2.0 * xi);
+        let incl = (h.z() / hmag).clamp(-1.0, 1.0).acos();
+
+        // `acos` with the argument clamped to [-1, 1] to absorb rounding error.
+        let safe_acos = |x: f64| x.clamp(-1.0, 1.0).acos();
+        // Below these tolerances the eccentricity / node vectors are
+        // numerically zero, and the usual acos expressions would divide by
+        // zero and yield NaN. Fall back to the standard Vallado special cases.
+        const TOL: f64 = 1.0e-11;
+        let circular = eccen < TOL;
+        let equatorial = nmag < TOL;
+
+        let (raan, w, nu) = if circular && equatorial {
+            // Circular equatorial: RAAN and argument of perigee undefined;
+            // report the true longitude in `nu`.
+            let mut lambda = safe_acos(r.x() / rmag);
+            if r.y() < 0.0 {
+                lambda = 2.0 * PI - lambda;
+            }
+            (0.0, 0.0, lambda)
+        } else if circular {
+            // Circular inclined: argument of perigee undefined; report the
+            // argument of latitude in `nu`.
+            let mut raan = safe_acos(n.x() / nmag);
+            if n.y() < 0.0 {
+                raan = 2.0 * PI - raan;
+            }
+            let mut u = safe_acos(n.dot(&r) / (nmag * rmag));
+            if r.z() < 0.0 {
+                u = 2.0 * PI - u;
+            }
+            (raan, 0.0, u)
+        } else if equatorial {
+            // Elliptical equatorial: RAAN undefined; report the true longitude
+            // of periapsis in `w`.
+            let mut w_true = safe_acos(e.x() / eccen);
+            if e.y() < 0.0 {
+                w_true = 2.0 * PI - w_true;
+            }
+            let mut nu = safe_acos(r.dot(&e) / (rmag * eccen));
+            if r.dot(&v) < 0.0 {
+                nu = 2.0 * PI - nu;
+            }
+            (0.0, w_true, nu)
+        } else {
+            let mut raan = safe_acos(n.x() / nmag);
+            if n.y() < 0.0 {
+                raan = 2.0 * PI - raan;
+            }
+            let mut w = safe_acos(n.dot(&e) / (nmag * eccen));
+            if e.z() < 0.0 {
+                w = 2.0 * PI - w;
+            }
+            let mut nu = safe_acos(r.dot(&e) / (rmag * eccen));
+            if r.dot(&v) < 0.0 {
+                nu = 2.0 * PI - nu;
+            }
+            (raan, w, nu)
+        };
+
         Ok(Self::new(a, eccen, incl, raan, w, Anomaly::True(nu)))
     }
 
@@ -354,6 +418,42 @@ mod tests {
         let (r2, v2) = k2.to_pv();
         assert!((r - r2).norm() / r.norm() < 1.0e-6);
         assert!((v - v2).norm() / v.norm() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_circular_equatorial_orbit() {
+        // e = 0 and i = 0 exactly: both RAAN and argp are singular. Must not
+        // produce NaN, and must round-trip through the true-longitude fallback.
+        let a = 7200.0e3;
+        let k = Kepler::new(a, 0.0, 0.0, 0.0, 0.0, Anomaly::True(0.7));
+        let (r, v) = k.to_pv();
+        let k2 = Kepler::from_pv(r, v).unwrap();
+        assert!(k2.raan.is_finite() && k2.w.is_finite() && k2.nu.is_finite());
+        let (r2, v2) = k2.to_pv();
+        assert!((r - r2).norm() / r.norm() < 1.0e-9);
+        assert!((v - v2).norm() / v.norm() < 1.0e-9);
+    }
+
+    #[test]
+    fn test_elliptical_equatorial_orbit() {
+        // e != 0 but i = 0 exactly: RAAN is singular. Must not produce NaN and
+        // must round-trip through the longitude-of-periapsis fallback.
+        let a = 9000.0e3;
+        let k = Kepler::new(a, 0.1, 0.0, 0.0, 0.5, Anomaly::True(1.0));
+        let (r, v) = k.to_pv();
+        let k2 = Kepler::from_pv(r, v).unwrap();
+        assert!(k2.raan.is_finite() && k2.w.is_finite() && k2.nu.is_finite());
+        let (r2, v2) = k2.to_pv();
+        assert!((r - r2).norm() / r.norm() < 1.0e-9);
+        assert!((v - v2).norm() / v.norm() < 1.0e-9);
+    }
+
+    #[test]
+    fn test_from_pv_rejects_rectilinear() {
+        // Radial (parallel r and v) has zero angular momentum: no orbital plane.
+        let r = numeris::vector![7000.0e3, 0.0, 0.0];
+        let v = numeris::vector![1000.0, 0.0, 0.0];
+        assert!(matches!(Kepler::from_pv(r, v), Err(Error::Degenerate)));
     }
 
     #[test]

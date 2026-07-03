@@ -364,6 +364,20 @@ impl PyITRFCoord {
         self.0.geodesic_distance(&other.0)
     }
 
+    /// Geodesic distance in meters between this coordinate and another
+    ///
+    /// Convenience wrapper around `geodesic_distance` that returns only the
+    /// distance (shortest distance along the Earth's surface).
+    ///
+    /// Args:
+    ///     other (itrfcoord): ITRF coordinate to measure distance to
+    ///
+    /// Returns:
+    ///     float: Distance in meters
+    fn distance_to(&self, other: &Self) -> f64 {
+        self.0.distance_to(&other.0)
+    }
+
     /// Move this coordinate along a given heading by a given distance
     ///
     /// Notes:

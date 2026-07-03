@@ -11,6 +11,9 @@ pub mod update_data;
 #[cfg(feature = "download")]
 pub use update_data::update_datafiles;
 
+pub mod singleton;
+pub use singleton::RefreshableSingleton;
+
 pub mod download;
 pub use download::download_file;
 pub use download::download_file_async;

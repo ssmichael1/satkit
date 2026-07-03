@@ -3,6 +3,7 @@ import numpy as np
 import math as m
 import os
 import json
+import pickle
 import xmltodict
 
 import satkit as sk
@@ -39,6 +40,43 @@ class TestTLE:
         assert tle.mean_motion == pytest.approx(14.0, rel=1e-7)
         tle.bstar = 0.0002
         assert tle.bstar == pytest.approx(0.0002, rel=1e-4)
+
+
+    def test_tle_pickle(self):
+        """TLE pickle must round-trip every serialized field."""
+        line0 = "0 ISS (ZARYA)"
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        tle = sk.TLE.from_lines([line0, line1, line2])
+        if isinstance(tle, list):
+            tle = tle[0]
+
+        restored = pickle.loads(pickle.dumps(tle))
+
+        assert restored.name == tle.name
+        assert restored.satnum == tle.satnum
+        assert restored.inclination == pytest.approx(tle.inclination, rel=1e-12)
+        assert restored.raan == pytest.approx(tle.raan, rel=1e-12)
+        assert restored.eccen == pytest.approx(tle.eccen, rel=1e-12)
+        assert restored.arg_of_perigee == pytest.approx(tle.arg_of_perigee, rel=1e-12)
+        assert restored.mean_anomaly == pytest.approx(tle.mean_anomaly, rel=1e-12)
+        assert restored.mean_motion == pytest.approx(tle.mean_motion, rel=1e-12)
+        assert restored.bstar == pytest.approx(tle.bstar, rel=1e-12)
+        assert abs((restored.epoch - tle.epoch).seconds) < 1e-6
+        # The restored TLE must propagate identically
+        t = tle.epoch + sk.duration.from_hours(1.0)
+        p1, v1 = sk.sgp4(tle, t)
+        p2, v2 = sk.sgp4(restored, t)
+        assert np.allclose(p1, p2) and np.allclose(v1, v2)
+
+    def test_tle_pickle_rejects_garbage(self):
+        """Malformed / pre-versioned pickle bytes raise ValueError, not a panic."""
+        tle = sk.TLE.__new__(sk.TLE)
+        with pytest.raises(ValueError):
+            tle.__setstate__(b"aaaa")
+        # A wrong version byte gets the explicit unsupported-version message
+        with pytest.raises(ValueError, match="version"):
+            tle.__setstate__(bytes([7] * 200))
 
 
 class TestTLEFitting:
@@ -214,3 +252,47 @@ class TestSGP4:
                         assert eflag == sk.sgp4_error.perturb_eccen
                 except RuntimeError:
                     print("Caught runtime error; this is expected in test vectors")
+
+
+class TestTLEMetadata:
+    def test_tle_metadata_getters(self):
+        """The catalog-identity fields must be readable (and settable)."""
+        line0 = "0 ISS (ZARYA)"
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        tle = sk.TLE.from_lines([line0, line1, line2])
+        if isinstance(tle, list):
+            tle = tle[0]
+        assert tle.intl_desig == "98067A"
+        assert tle.desig_year == 98
+        assert tle.desig_launch == 67
+        assert tle.desig_piece == "A"
+        assert tle.element_num == 900
+        assert tle.rev_num == 29935
+        assert tle.ephem_type == 0
+        tle.element_num = 901
+        assert tle.element_num == 901
+
+
+class TestSGP4ListKwargs:
+    def test_list_honors_gravconst(self):
+        """The list path must honor gravconst/opsmode kwargs (previously
+        silently ignored): list results must match per-TLE results computed
+        with the same non-default settings."""
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        def one(tles):
+            return tles[0] if isinstance(tles, list) else tles
+
+        tle_a = one(sk.TLE.from_lines([line1, line2]))
+        tle_b = one(sk.TLE.from_lines([line1, line2]))
+        t = tle_a.epoch + sk.duration.from_hours(6)
+
+        p_single, v_single = sk.sgp4(tle_a, t, gravconst=sk.sgp4_gravconst.wgs84)
+        p_list, v_list = sk.sgp4([tle_b], [t], gravconst=sk.sgp4_gravconst.wgs84)
+        assert np.allclose(np.asarray(p_list).squeeze(), p_single)
+        assert np.allclose(np.asarray(v_list).squeeze(), v_single)
+
+        # And wgs84 must actually differ from the default wgs72
+        p_72, _ = sk.sgp4(one(sk.TLE.from_lines([line1, line2])), t)
+        assert not np.allclose(p_72, p_single, rtol=0, atol=1e-3)

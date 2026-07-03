@@ -1,4 +1,9 @@
-mkdocs>=1.6
+# MkDocs 2.0 is incompatible with Material for MkDocs (the theme currently
+# requires MkDocs 1.x). Cap below 2.0 so a fresh install can't silently pull
+# an incompatible MkDocs and break the docs build. Revisit if/when migrating
+# to Zensical (Material's successor), which would first need mkdocstrings +
+# mkdocs-jupyter equivalents.
+mkdocs>=1.6,<2.0
 mkdocs-material>=9.5
 mkdocstrings[python]>=0.27
 mkdocs-jupyter>=0.25
