@@ -247,6 +247,13 @@ the breaking changes below ride in a minor bump.
 - **Pinned `mkdocs<2.0`** in `docs/requirements.txt` — MkDocs 2.0 is
   incompatible with Material for MkDocs, so an unpinned fresh install could
   break the docs build.
+- **Equations render with KaTeX instead of MathJax** (matching numeris) —
+  faster page loads, same delimiters (`\(..\)`/`\[..\]` from arithmatex and
+  `$..$`/`$$..$$` in tutorial notebooks).
+- **New "Loading local OMM files" tutorial section** — the supported offline
+  route is stdlib `json` (or `xmltodict` for CCSDS XML) → dictionary →
+  `sk.sgp4`; satkit validates `MEAN_ELEMENT_THEORY`/`TIME_SYSTEM` and consumes
+  the SGP4-relevant fields.
 
 ### Dependencies
 
