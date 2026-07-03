@@ -10,7 +10,7 @@
 /// * `TDB` - Barycentric Dynamical Time
 /// * `Invalid` - Invalid
 ///    
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum TimeScale {
     /// Invalid
