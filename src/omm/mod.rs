@@ -424,10 +424,6 @@ impl SGP4Source for OMM {
     }
 
     fn sgp4_init_args(&self) -> crate::sgp4::Result<SGP4InitArgs> {
-        use std::f64::consts::PI;
-
-        const TWOPI: f64 = PI * 2.0;
-
         if let Some(theory) = &self.mean_element_theory {
             if !theory.trim().eq_ignore_ascii_case("SGP4") {
                 return Err(crate::sgp4::Error::source(
@@ -446,19 +442,18 @@ impl SGP4Source for OMM {
 
         let epoch = self.epoch_instant().map_err(crate::sgp4::Error::source)?;
 
-        Ok(SGP4InitArgs {
-            jdsatepoch: epoch.as_jd_with_scale(TimeScale::UTC),
-            bstar: self.bstar.unwrap_or(0.0),
-            // Convert rev/day(+derivatives) to rad/min(+derivatives), matching TLE.
-            no: self.mean_motion / (1440.0 / TWOPI),
-            ndot: self.mean_motion_dot.unwrap_or(0.0) / (1440.0 * 1440.0 / TWOPI),
-            nddot: self.mean_motion_ddot.unwrap_or(0.0) / (1440.0 * 1440.0 * 1440.0 / TWOPI),
-            ecco: self.eccentricity,
-            inclo: self.inclination.to_radians(),
-            nodeo: self.raan.to_radians(),
-            argpo: self.arg_of_pericenter.to_radians(),
-            mo: self.mean_anomaly.to_radians(),
-        })
+        Ok(SGP4InitArgs::from_mean_elements(
+            epoch.as_jd_with_scale(TimeScale::UTC),
+            self.bstar.unwrap_or(0.0),
+            self.mean_motion,
+            self.mean_motion_dot.unwrap_or(0.0),
+            self.mean_motion_ddot.unwrap_or(0.0),
+            self.eccentricity,
+            self.inclination,
+            self.raan,
+            self.arg_of_pericenter,
+            self.mean_anomaly,
+        ))
     }
 }
 
