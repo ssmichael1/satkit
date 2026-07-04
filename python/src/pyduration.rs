@@ -213,11 +213,6 @@ impl PyDuration {
         }
     }
 
-    // Python 2 name kept as an alias for compatibility.
-    fn __div__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        self.__truediv__(other)
-    }
-
     // Comparison methods for duration objects
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
