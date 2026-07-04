@@ -1,0 +1,71 @@
+# stubtest allowlist for satkit.
+#
+# Entries are regexes, fullmatched against each error's OBJECT PATH. This file
+# is used together with two CLI flags that switch off whole PyO3-idiom check
+# categories globally (cleaner than listing every object path):
+#
+#   python -m mypy.stubtest satkit \
+#       --allowlist python/stubtest_allowlist.txt \
+#       --ignore-positional-only \      # operator dunders are positional-only at runtime
+#       --ignore-disjoint-bases         # every pyclass is a PEP 800 disjoint base
+#
+# What remains here suppresses systematic PyO3 idioms that have no CLI flag.
+# It deliberately contains NO real stub/runtime drift — those are fixed in the
+# .pyi and Rust bindings. stubtest errors on unused entries, so if you fix an
+# idiom (e.g. mark a class @final) its entry must be deleted here.
+
+# --- PyO3 constructors -------------------------------------------------------
+# #[new] parses (*args, **kwargs) manually, so runtime __init__/__new__ carry no
+# named params. We keep keyword-rich __init__ stubs for IDE autocomplete.
+.*\.__(init|new)__
+
+# --- PyO3 pickle support -----------------------------------------------------
+# Emitted for pickling; not user-facing API.
+.*\.__getnewargs_ex__
+
+# --- Native submodules -------------------------------------------------------
+# Importable only as attributes of the compiled extension; each is documented in
+# its own top-level .pyi, so it appears both as an un-importable module and as an
+# attribute of satkit.satkit that satkit.pyi doesn't redeclare.
+satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)
+satkit\.satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)
+
+# --- Final classes -----------------------------------------------------------
+# Every pyclass is final at runtime; we never subclass in stubs. (Alternative:
+# mark each class @final in the stub and drop this block.)
+satkit\.satkit\.TLE
+satkit\.satkit\.consts
+satkit\.satkit\.duration
+satkit\.satkit\.frame
+satkit\.satkit\.geodetic
+satkit\.satkit\.gravmodel
+satkit\.satkit\.integrator
+satkit\.satkit\.itrfcoord
+satkit\.satkit\.kepler
+satkit\.satkit\.propresult
+satkit\.satkit\.propsettings
+satkit\.satkit\.propstats
+satkit\.satkit\.quaternion
+satkit\.satkit\.satproperties
+satkit\.satkit\.satstate
+satkit\.satkit\.sgp4_error
+satkit\.satkit\.sgp4_gravconst
+satkit\.satkit\.sgp4_opsmode
+satkit\.satkit\.solarsystem
+satkit\.satkit\.thrust
+satkit\.satkit\.tidemodel
+satkit\.satkit\.time
+satkit\.satkit\.timescale
+satkit\.satkit\.tlefitstatus
+satkit\.satkit\.weekday
+
+# --- Stub-only type aliases --------------------------------------------------
+# TypeAliases used across the stubs; intentionally have no runtime object.
+satkit\.satkit\.TimeScalar
+satkit\.satkit\.TimeInput
+satkit\.satkit\.TimeArrayLike
+
+# --- __all__ -----------------------------------------------------------------
+satkit\.__all__
+satkit\.satkit\.__all__
+

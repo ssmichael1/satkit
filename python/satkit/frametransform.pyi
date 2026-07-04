@@ -61,30 +61,6 @@ def gmst(
     """
     ...
 
-def gmst(*args, **kwargs):
-    """Greenwich Mean Sidereal Time
-
-    Notes:
-        - GMST is the angle between the vernal equinox and the Greenwich meridian
-        - Vallado algorithm 15
-        - GMST = 67310.5481 + (876600h + 8640184.812866) * tᵤₜ₁ * (0.983104 + tᵤₜ₁ * −6.2e−6)
-
-    Args:
-        tm (satkit.time | datetime.datetime): scalar time at which to calculate output
-
-    Returns:
-        Greenwich Mean Sidereal Time, radians, at input time
-
-    Example:
-        ```python
-        import math
-        t = satkit.time(2024, 1, 1)
-        theta = satkit.frametransform.gmst(t)
-        print(f"GMST: {math.degrees(theta):.4f} deg")
-        ```
-    """
-    ...
-
 @typing.overload
 def eqeq(tm: TimeScalar) -> float:
     """Equation of the Equinoxes
@@ -111,20 +87,6 @@ def eqeq(
 
     Returns:
         npt.NDArray[np.float64]: Equation of the equinoxes, radians, at input times
-    """
-    ...
-
-def eqeq(*args, **kwargs):
-    """Equation of the Equinoxes
-
-    The equation of the equinoxes is the difference between apparent and mean
-    sidereal time (GAST - GMST), arising from nutation of the Earth's axis.
-
-    Args:
-        tm (satkit.time | datetime.datetime): scalar or array of times
-
-    Returns:
-        Equation of the equinoxes, radians, at input time(s)
     """
     ...
 
@@ -159,23 +121,6 @@ def gast(
 
     Returns:
         npt.ArrayLike[np.float]: Greenwich apparent sidereal time, radians, at input time(s)
-    """
-    ...
-
-def gast(*args, **kwargs):
-    """Greenwich Apparent Sidereal Time
-
-    Args:
-        tm (satkit.time): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
-
-    Returns:
-        Greenwich apparent sidereal time, radians, at input time(s)
-
-    Example:
-        ```python
-        t = satkit.time(2024, 1, 1)
-        theta = satkit.frametransform.gast(t)
-        ```
     """
     ...
 
@@ -227,30 +172,6 @@ def earth_rotation_angle(
     """
     ...
 
-def earth_rotation_angle(*args, **kwargs):
-    """Earth Rotation Angle
-
-    Notes:
-        - See: IERS Technical Note 36, Chapter 5, Equation 5.15
-        - Calculation Details:
-            - Let t be UT1 Julian date
-            - let f be fractional component of t (fraction of day)
-            - ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0))
-
-    Args:
-        tm (satkit.time|datetime.datetime: Time[s] at which to calculate Earth Rotation Angle
-
-    Returns:
-        Earth Rotation Angle at input time[s] in radians
-
-    Example:
-        ```python
-        t = satkit.time(2024, 1, 1)
-        era = satkit.frametransform.earth_rotation_angle(t)
-        ```
-    """
-    ...
-
 @typing.overload
 def qitrf2tirs(
     tm: TimeScalar,
@@ -276,17 +197,6 @@ def qitrf2tirs(
 
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to TIRS at input time(s)
-    """
-    ...
-
-def qitrf2tirs(*args, **kwargs):
-    """Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
-
-    Args:
-        tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from ITRF to TIRS at input time(s)
     """
     ...
 
@@ -324,23 +234,6 @@ def qteme2gcrf(
     """
     ...
 
-def qteme2gcrf(*args, **kwargs):
-    """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
-
-    Args:
-        tm (satkit.time| datetime.datetime ): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from TEME to GCRF at input time(s)
-
-    Example:
-        ```python
-        t = satkit.time(2024, 1, 1)
-        q = satkit.frametransform.qteme2gcrf(t)
-        ```
-    """
-    ...
-
 @typing.overload
 def qcirs2gcrf(
     tm: TimeScalar,
@@ -369,17 +262,6 @@ def qcirs2gcrf(
     """
     ...
 
-def qcirs2gcrf(*args, **kwargs):
-    """Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
-
-    Args:
-        tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from CIRS to GCRF at input time(s)
-    """
-    ...
-
 @typing.overload
 def qtirs2cirs(
     tm: TimeScalar,
@@ -405,17 +287,6 @@ def qtirs2cirs(
 
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from TIRS to CIRS at input time(s)
-    """
-    ...
-
-def qtirs2cirs(*args, **kwargs):
-    """Rotation from Terrestrial Intermediate Reference System (TIRS) to the Celestial Intermediate Reference System (CIRS)
-
-    Args:
-        tm (satkit.time | datetime.datetime): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from TIRS to CIRS at input time(s)
     """
     ...
 
@@ -459,20 +330,6 @@ def qgcrf2itrf_approx(
     """
     ...
 
-def qgcrf2itrf_approx(*args, **kwargs):
-    """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
-
-    Notes:
-        - Accurate to approx. 1 arcsec
-
-    Args:
-        tm (satkit.time | datetime.datetime): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from GCRF to ITRF at input time(s)
-    """
-    ...
-
 @typing.overload
 def qitrf2gcrf_approx(
     tm: TimeScalar,
@@ -510,20 +367,6 @@ def qitrf2gcrf_approx(
 
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from ITRF to GCRF at input time(s)
-    """
-    ...
-
-def qitrf2gcrf_approx(*args, **kwargs):
-    """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
-
-    Notes:
-        - Accurate to approx. 1 arcsec
-
-    Args:
-        tm (satkit.time  | datetime.datetime): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from ITRF to GCRF at input time(s)
     """
     ...
 
@@ -588,41 +431,6 @@ def qgcrf2itrf(
 
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from GCRF to ITRF at input time(s)
-    """
-    ...
-
-def qgcrf2itrf(*args, **kwargs):
-    """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
-
-    Notes:
-        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
-        - See IERS Technical Note 36, Chapter 5
-        - Does not include solid tides, ocean tides
-        - Very computationally expensive
-        - **Velocity transforms**: this quaternion rotates *position* vectors
-          between ITRF and GCRF but **is not sufficient for velocity** on
-          its own. ITRF is a rotating frame, so the velocity transform
-          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
-          full state (position + velocity) transforms.
-
-    Args:
-        tm (satkit.time | datetime.datetime): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from GCRF to ITRF at input time(s)
-
-    Example:
-        ```python
-        import numpy as np
-
-        t = satkit.time(2024, 1, 1)
-        q = satkit.frametransform.qgcrf2itrf(t)
-
-        # Rotate a GCRF position vector to ITRF
-        pos_gcrf = np.array([6.781e6, 0, 0])
-        pos_itrf = q * pos_gcrf
-        ```
     """
     ...
 
@@ -683,34 +491,6 @@ def qitrf2gcrf(
     """
     ...
 
-def qitrf2gcrf(*args, **kwargs):
-    """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
-
-    Notes:
-        - Uses full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation)
-        - See IERS Technical Note 36, Chapter 5
-        - Does not include solid tides, ocean tides
-        - Very computationally expensive
-        - **Velocity transforms**: this quaternion rotates *position* vectors
-          between ITRF and GCRF but **is not sufficient for velocity** on
-          its own. ITRF is a rotating frame, so the velocity transform
-          picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
-          full state (position + velocity) transforms.
-
-    Args:
-        tm (satkit.time  datetime.datetime): Time[s] at which to calculate the quaternion
-    Returns:
-        Quaternion representing rotation from ITRF to GCRF at input time(s)
-
-    Example:
-        ```python
-        t = satkit.time(2024, 1, 1)
-        q = satkit.frametransform.qitrf2gcrf(t)
-        ```
-    """
-    ...
-
 @typing.overload
 def qteme2itrf(
     tm: TimeScalar,
@@ -756,33 +536,6 @@ def qteme2itrf(
 
     Returns:
         npt.ArrayLike[quaternion]: Quaternion representing rotation from TEME to ITRF at input time(s)
-    """
-    ...
-
-def qteme2itrf(*args, **kwargs):
-    """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
-
-    Notes:
-        - This is equation 3-90 in Vallado
-        - TEME is the output frame of the SGP4 propagator used to compute position from two-line element sets.
-
-    Args:
-        tm (satkit.time | datetime.datetime): Time[s] at which to calculate the quaternion
-
-    Returns:
-        Quaternion representing rotation from TEME to ITRF at input time(s)
-
-    Example:
-        ```python
-        import numpy as np
-
-        t = satkit.time(2024, 1, 1)
-        q = satkit.frametransform.qteme2itrf(t)
-
-        # Convert SGP4 TEME output to ITRF
-        pos_teme = np.array([6.781e6, 0, 0])
-        pos_itrf = q * pos_teme
-        ```
     """
     ...
 
@@ -836,13 +589,6 @@ def qmod2gcrf(
     """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given times."""
     ...
 
-def qmod2gcrf(*args, **kwargs):
-    """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given time(s).
-
-    Mean-of-Date accounts for precession but not nutation.
-    """
-    ...
-
 @typing.overload
 def qtod2mod_approx(tm: TimeScalar) -> quaternion:
     """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at the
@@ -856,13 +602,6 @@ def qtod2mod_approx(
 ) -> list[quaternion]:
     """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at
     the given times. Accounts for nutation only.
-    """
-    ...
-
-def qtod2mod_approx(*args, **kwargs):
-    """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation.
-
-    Accounts for nutation only.
     """
     ...
 
