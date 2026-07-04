@@ -263,6 +263,25 @@ impl PyKepler {
         format!("{}", self.0)
     }
 
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        let a = &self.0;
+        let b = &other.0;
+        a.a == b.a
+            && a.eccen == b.eccen
+            && a.incl == b.incl
+            && a.raan == b.raan
+            && a.w == b.w
+            && a.nu == b.nu
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        !self.__eq__(other)
+    }
+
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         crate::pyutils::pack_f64s(
             py,

@@ -5,6 +5,15 @@
 
 ### Added
 
+- **`time` and `duration` are now hashable.** Both define `__eq__` but
+  previously lacked `__hash__`, which made them unhashable (unusable as `dict`
+  keys or `set` members). The hash is derived from the underlying microsecond
+  count, so it is consistent with equality.
+- **Equality and `repr` on more value types.** `TLE`, `kepler`, and `itrfcoord`
+  now implement `__eq__`; `TLE`, `kepler`, `satstate`, and `propsettings` now
+  implement `__repr__` (delegating to their `str` form). The three float-backed
+  types that gained `__eq__` are intentionally left unhashable — a failed
+  `hash()` is clearer than silently-wrong float-keyed lookups.
 - **`mypy.stubtest` in CI.** The `python bindings test` job now verifies that
   the hand-written `.pyi` type stubs match the compiled PyO3 bindings. Two CLI
   flags (`--ignore-positional-only`, `--ignore-disjoint-bases`) plus

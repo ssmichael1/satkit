@@ -213,6 +213,12 @@ impl PyDuration {
         }
     }
 
+    // Backed by an exact microsecond count, so hashing the raw integer is
+    // consistent with __eq__ (defining __eq__ alone would make duration unhashable).
+    fn __hash__(&self) -> isize {
+        self.0.usec as isize
+    }
+
     // Comparison methods for duration objects
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0

@@ -550,4 +550,8 @@ impl PySatState {
     fn __str__(&self) -> String {
         self.0.to_string()
     }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
 }
