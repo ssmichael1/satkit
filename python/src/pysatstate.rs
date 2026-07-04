@@ -385,12 +385,16 @@ impl PySatState {
                         })?
                         .0,
                 );
+                kw.del_item("propsettings")?;
             }
             if let Some(v) = kw.get_item("satproperties")? {
                 satprops_obj = Some(v.extract::<PySatProperties>().map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {}", e))
                 })?);
+                kw.del_item("satproperties")?;
             }
+            // Reject typo'd keywords rather than silently ignoring them.
+            crate::pyutils::reject_unused_kwargs(kw)?;
         }
 
         let satprops_ref = satprops_obj

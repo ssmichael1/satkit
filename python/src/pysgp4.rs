@@ -337,17 +337,23 @@ pub fn sgp4(
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("errflag")? {
             output_err = v.extract::<bool>()?;
+            kw.del_item("errflag")?;
         }
         if let Some(v) = kw.get_item("opsmode")? {
             opsmode = v.extract::<OpsMode>().map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("Invalid opsmode: {}", e))
             })?;
+            kw.del_item("opsmode")?;
         }
         if let Some(v) = kw.get_item("gravconst")? {
             gravconst = v.extract::<GravConst>().map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("Invalid gravconst: {}", e))
             })?;
+            kw.del_item("gravconst")?;
         }
+        // Any keyword left over is a typo (e.g. `gravconstt=`) — reject it
+        // rather than silently ignore it.
+        crate::pyutils::reject_unused_kwargs(kw)?;
     }
 
     // Handle input as TLE
