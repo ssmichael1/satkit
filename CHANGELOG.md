@@ -31,6 +31,11 @@
 
 ### Changed
 
+- **`itrfcoord(...)`, `sgp4(...)`, and `satstate.propagate(...)` now reject
+  unknown keyword arguments** instead of silently ignoring them. Previously a
+  typo such as `itrfcoord(..., alttiude=100)` was dropped, leaving the ground
+  station at 0 m altitude; it now raises `ValueError`. Callers passing only
+  documented keywords are unaffected.
 - **Renamed keyword arguments on several bindings** so the accepted Python
   keyword matches its documentation (the stubs previously advertised names the
   runtime rejected). Positional calls are unaffected; only callers passing these
