@@ -5,6 +5,10 @@
 
 ### Added
 
+- **`SGP4InitArgs::from_mean_elements`** — a constructor that performs the
+  rev/day → rad/min and degree → radian conversions from catalog units. Both
+  the `TLE` and CCSDS `OMM` SGP4 sources now build their init args through it,
+  so the conversion factors are defined in one place.
 - **`time` and `duration` are now hashable.** Both define `__eq__` but
   previously lacked `__hash__`, which made them unhashable (unusable as `dict`
   keys or `set` members). The hash is derived from the underlying microsecond
