@@ -101,37 +101,37 @@ impl PyDuration {
     /// Create new duration object from the number of seconds
     ///
     /// Args:
-    ///     d (float): The number of seconds
+    ///     seconds (float): The number of seconds
     ///
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_seconds(d: f64) -> Self {
-        Self(Duration::from_seconds(d))
+    fn from_seconds(seconds: f64) -> Self {
+        Self(Duration::from_seconds(seconds))
     }
 
     /// Create new duration object from the number of minutes
     ///
     /// Args:
-    ///     d (float): The number of minutes
+    ///     minutes (float): The number of minutes
     ///
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_minutes(d: f64) -> Self {
-        Self(Duration::from_minutes(d))
+    fn from_minutes(minutes: f64) -> Self {
+        Self(Duration::from_minutes(minutes))
     }
 
     /// Create new duration object from number of hours
     ///
     /// Args:
-    ///     d (float): The number of hours
+    ///     hours (float): The number of hours
     ///
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_hours(d: f64) -> Self {
-        Self(Duration::from_hours(d))
+    fn from_hours(hours: f64) -> Self {
+        Self(Duration::from_hours(hours))
     }
 
     /// Create new duration object from the number of milliseconds

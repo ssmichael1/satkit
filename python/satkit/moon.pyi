@@ -91,33 +91,6 @@ def pos_gcrf(
     """
     ...
 
-def pos_gcrf(*args, **kwargs):
-    """
-    Approximate Moon position in the GCRF Frame
-
-    From Vallado Algorithm 31
-
-    Args:
-        time (satkit.time): time at which to compute position
-
-    Returns:
-        3-element numpy array representing moon position in GCRF frame
-        at given time.  Units are meters
-
-    Notes:
-        Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
-        and 1275 km in range
-
-    Example:
-        ```python
-        import numpy as np
-        t = satkit.time(2024, 1, 1)
-        moon = satkit.moon.pos_gcrf(t)
-        print(f"Moon distance: {np.linalg.norm(moon)/1e3:.0f} km")
-        ```
-    """
-    ...
-
 @typing.overload
 def illumination(time: TimeScalar) -> float:
     """
@@ -151,10 +124,6 @@ def illumination(time: TimeArrayLike) -> list[float]:
     """
     ...
 
-def illumination(*args, **kwargs):
-    """Fractional illumination of moon (scalar or array of times)."""
-    ...
-
 @typing.overload
 def phase(time: TimeScalar) -> float:
     """
@@ -179,10 +148,6 @@ def phase(time: TimeArrayLike) -> list[float]:
     Returns:
         list[float]: moon phase in radians at each given time
     """
-    ...
-
-def phase(*args, **kwargs):
-    """Phase of moon in radians (scalar or array of times)."""
     ...
 
 @typing.overload
@@ -211,16 +176,3 @@ def phase_name(time: TimeArrayLike) -> list[moonphase]:
     """
     ...
 
-def phase_name(*args, **kwargs):
-    """
-    Phase name of moon (scalar or array of times).
-
-    Example:
-        ```python
-        t = satkit.time(2024, 1, 1)
-        p = satkit.moon.phase_name(t)
-        print(p)
-        # e.g., moonphase.WaningGibbous
-        ```
-    """
-    ...

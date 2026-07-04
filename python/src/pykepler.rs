@@ -152,10 +152,10 @@ impl PyKepler {
 
     /// Convert Cartesian elements to kepler
     #[staticmethod]
-    fn from_pv(r: &Bound<PyAny>, v: &Bound<PyAny>) -> PyResult<Self> {
-        let r = py_to_smatrix(r)?;
-        let v = py_to_smatrix(v)?;
-        match Kepler::from_pv(r, v) {
+    fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>) -> PyResult<Self> {
+        let pos = py_to_smatrix(pos)?;
+        let vel = py_to_smatrix(vel)?;
+        match Kepler::from_pv(pos, vel) {
             Ok(k) => Ok(Self(k)),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
         }

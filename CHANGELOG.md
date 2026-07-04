@@ -1,6 +1,38 @@
 # Changelog
 
 
+## Unreleased
+
+### Added
+
+- **`mypy.stubtest` in CI.** The `python bindings test` job now verifies that
+  the hand-written `.pyi` type stubs match the compiled PyO3 bindings. Two CLI
+  flags (`--ignore-positional-only`, `--ignore-disjoint-bases`) plus
+  `python/stubtest_allowlist.txt` suppress systematic PyO3 idioms (constructors,
+  final classes, native submodules); everything else must agree.
+
+### Fixed
+
+- **Type stubs now type-check and match the runtime.** The `.pyi` files had
+  never been checked and contained illegal overload-implementation blocks, a
+  `time.__add__` overload group split by other methods, and `time`-as-annotation
+  shadowing. Filled in stub gaps (`itrfcoord.height`, `time.add_utc_days`,
+  `weekday.Invalid`) and removed/fixed a phantom `time.as_gregorian(scale=)`
+  parameter and a mis-declared `sgp4_opsmode.improved` property.
+
+### Changed
+
+- **Renamed keyword arguments on several bindings** so the accepted Python
+  keyword matches its documentation (the stubs previously advertised names the
+  runtime rejected). Positional calls are unaffected; only callers passing these
+  by the *old* keyword must update:
+  - `duration.from_hours` / `from_minutes` / `from_seconds`: `d` → `hours` / `minutes` / `seconds`
+  - `time.from_string`: `s` → `string`;  `time.from_unixtime`: `t` → `unixtime`
+  - `time.from_rfc3339`: `s` → `rfc3339`;  `time.from_datetime`: `tm` → `dt`
+  - `time.strftime`: `fmt` → `format`;  `time.strptime`: `(s, fmt)` → `(date_string, format)`
+  - `kepler.from_pv`: `(r, v)` → `(pos, vel)`
+
+
 ## 0.20.2 - 2026-07-03
 
 ### Fixed
