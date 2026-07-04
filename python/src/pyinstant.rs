@@ -760,6 +760,12 @@ impl PyInstant {
         self.0 != other.0
     }
 
+    // Backed by an exact microsecond count, so hashing the raw integer is
+    // consistent with __eq__ (defining __eq__ alone would make time unhashable).
+    fn __hash__(&self) -> isize {
+        self.0.raw as isize
+    }
+
     ///
     /// Add given number of UTC days to a time object, and return the result
     ///

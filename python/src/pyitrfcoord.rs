@@ -268,6 +268,14 @@ impl PyITRFCoord {
         self.__str__()
     }
 
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.0 != other.0
+    }
+
     /// Quaternion representing rotation from North-East-Down (NED) coordinate frame to International Terrestrial Reference Frame
     /// (ITRF) at this coordinate
     ///

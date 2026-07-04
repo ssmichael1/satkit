@@ -320,6 +320,18 @@ impl PyTLE {
         self.0.to_pretty_string()
     }
 
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.0 != other.0
+    }
+
     /// Output as 2 canonical TLE Lines
     fn to_2line(&self) -> Result<[String; 2]> {
         Ok(self.0.to_2line()?)
