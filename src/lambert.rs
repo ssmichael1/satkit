@@ -33,7 +33,7 @@ use std::f64::consts::PI;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum LambertError {
+pub enum Error {
     #[error("Time of flight must be positive, got {0}")]
     InvalidTof(f64),
     #[error("Position vectors must be non-zero")]
@@ -43,6 +43,12 @@ pub enum LambertError {
     #[error("Convergence failure for revolution {0}")]
     ConvergenceFailed(u32),
 }
+
+/// Result type for Lambert's problem.
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[deprecated(note = "use lambert::Error instead")]
+pub type LambertError = Error;
 
 /// Result of Lambert's problem: departure and arrival velocity vectors.
 pub type LambertSolution = (Vector3, Vector3);
@@ -74,18 +80,18 @@ pub fn lambert(
     tof: f64,
     mu: f64,
     prograde: bool,
-) -> Result<Vec<LambertSolution>, LambertError> {
+) -> Result<Vec<LambertSolution>> {
     if tof <= 0.0 {
-        return Err(LambertError::InvalidTof(tof));
+        return Err(Error::InvalidTof(tof));
     }
     if mu <= 0.0 {
-        return Err(LambertError::InvalidMu(mu));
+        return Err(Error::InvalidMu(mu));
     }
 
     let r1_norm = r1.norm();
     let r2_norm = r2.norm();
     if r1_norm < 1.0e-10 || r2_norm < 1.0e-10 {
-        return Err(LambertError::ZeroPosition);
+        return Err(Error::ZeroPosition);
     }
 
     // Chord and semiperimeter
@@ -144,7 +150,7 @@ pub fn lambert(
 
     // --- Zero-revolution solution ---
     let x0 = initial_guess_0rev(lambda, t_norm);
-    let x = householder(lambda, t_norm, x0, 0).ok_or(LambertError::ConvergenceFailed(0))?;
+    let x = householder(lambda, t_norm, x0, 0).ok_or(Error::ConvergenceFailed(0))?;
     solutions.push(build_velocity(
         &ir1, &ir2, &it1, &it2, r1_norm, r2_norm, lambda, gamma, rho, sigma, x,
     ));

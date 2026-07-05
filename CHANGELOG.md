@@ -51,6 +51,11 @@
   Additionally, the `SGP4Error` enum has moved from `sgp4::sgp4_impl` to
   `sgp4::error`; it remains re-exported at `satkit::sgp4::SGP4Error`, so the
   public path is unchanged.
+- **`LambertError` renamed to `lambert::Error`** to match the per-module
+  `module::Error` convention used everywhere else in the crate. The old name
+  remains as a `#[deprecated]` type alias, so existing code compiles with a
+  deprecation warning; update `satkit::lambert::LambertError` →
+  `satkit::lambert::Error`. A `lambert::Result<T>` alias was also added.
 - **`itrfcoord(...)`, `sgp4(...)`, and `satstate.propagate(...)` now reject
   unknown keyword arguments** instead of silently ignoring them. Previously a
   typo such as `itrfcoord(..., alttiude=100)` was dropped, leaving the ground
