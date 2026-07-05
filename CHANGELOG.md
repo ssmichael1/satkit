@@ -5,6 +5,14 @@
 
 ### Added
 
+- **`scale=` keyword on the `time(...)` constructor** (Python): Gregorian
+  date/time components passed to `satkit.time(year, month, day[, hour, minute,
+  second])` can now be interpreted in an explicit time scale, e.g.
+  `satkit.time(2020, 1, 1, scale=satkit.timescale.TAI)`, mirroring the existing
+  `time.from_mjd(..., scale=...)` / `time.from_jd(..., scale=...)` API. The
+  keyword defaults to `satkit.timescale.UTC`, so all existing calls are
+  unchanged. Backed by a new scale-aware core constructor
+  `Instant::from_datetime_with_scale`.
 - **`SGP4InitArgs::from_mean_elements`** — a constructor that performs the
   rev/day → rad/min and degree → radian conversions from catalog units. Both
   the `TLE` and CCSDS `OMM` SGP4 sources now build their init args through it,
@@ -57,18 +65,6 @@
   - `time.from_rfc3339`: `s` → `rfc3339`;  `time.from_datetime`: `tm` → `dt`
   - `time.strftime`: `fmt` → `format`;  `time.strptime`: `(s, fmt)` → `(date_string, format)`
   - `kepler.from_pv`: `(r, v)` → `(pos, vel)`
-=======
-### Changed
-
-- **BREAKING: `sgp4::Error::SatRecInit` now carries a typed `SGP4Error`
-  instead of a raw `i32`.** The raw Vallado init error code is mapped to the
-  corresponding `SGP4Error` variant (eccentricity, mean motion, perturbed
-  eccentricity, semi-latus rectum, orbit decay) at construction, so the
-  `Display` output is now a description rather than a bare number.
-  Additionally, the `SGP4Error` enum has moved from `sgp4::sgp4_impl` to
-  `sgp4::error`; it remains re-exported at `satkit::sgp4::SGP4Error`, so the
-  public path is unchanged.
->>>>>>> c87373c (feat(sgp4)!: make Error::SatRecInit carry typed SGP4Error)
 
 
 ## 0.20.2 - 2026-07-03

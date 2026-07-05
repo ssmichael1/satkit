@@ -663,6 +663,81 @@ impl Instant {
         Ok(Self { raw })
     }
 
+    /// Construct an instant from a given Gregorian date and time interpreted
+    /// in the specified time scale
+    ///
+    /// For `TimeScale::UTC` this is identical to [`Self::from_datetime`],
+    /// including leap-second handling.  For the uniform (non-leap-second) time
+    /// scales the Gregorian components are interpreted directly in that scale.
+    ///
+    /// # Arguments
+    /// * `year` - The year
+    /// * `month` - The month
+    /// * `day` - The day
+    /// * `hour` - The hour
+    /// * `minute` - The minute
+    /// * `second` - The second
+    /// * `scale` - The time scale in which the components are expressed
+    ///
+    /// # Returns
+    /// A new Instant object representing the given date and time, or error if invalid
+    pub fn from_datetime_with_scale(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second: f64,
+        scale: TimeScale,
+    ) -> Result<Self> {
+        // UTC preserves the exact existing behavior, including leap-second handling
+        if scale == TimeScale::UTC {
+            return Self::from_datetime(year, month, day, hour, minute, second);
+        }
+
+        // Bounds checking on input.  Uniform time scales have no leap seconds,
+        // so the second must be in [0, 60).
+        if !(1..=12).contains(&month) {
+            return Err(InstantError::InvalidMonth(month));
+        }
+        let max_day = if month == 2 {
+            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+                29
+            } else {
+                28
+            }
+        } else {
+            MDAYS[(month - 1) as usize]
+        };
+        if day < 1 || day > max_day as i32 {
+            return Err(InstantError::InvalidDay(day));
+        }
+        if !(0..=23).contains(&hour) {
+            return Err(InstantError::InvalidHour(hour));
+        }
+        if !(0..=59).contains(&minute) {
+            return Err(InstantError::InvalidMinute(minute));
+        }
+        if !(0.0..60.0).contains(&second) {
+            return Err(InstantError::InvalidSecondF(second));
+        }
+
+        use gregorian_coefficients as gc;
+        let h = month as i64 - gc::m;
+        let g = year as i64 + gc::y - (gc::n - h) / gc::n;
+        let f = (h - 1 + gc::n) % gc::n;
+        let e = (gc::p * g) / gc::r + day as i64 - 1 - gc::j;
+        let mut jd = e + (gc::s * f + gc::t) / gc::u;
+        jd = jd - (3 * ((g + gc::A) / 100)) / 4 - gc::C;
+
+        // Note, JD is the given julian day at noon on given date,
+        // so we subtract an additional 0.5 to get midnight
+        let jd = jd as f64 - 0.5;
+        let mjd = jd - 2400000.5 + (hour as f64 * 3600.0 + minute as f64 * 60.0 + second) / 86400.0;
+
+        Ok(Self::from_mjd_with_scale(mjd, scale))
+    }
+
     /// Current time
     ///
     /// # Returns
