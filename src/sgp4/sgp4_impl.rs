@@ -1,55 +1,9 @@
 use super::sgp4_lowlevel::sgp4_lowlevel; // propagator
 use super::sgp4init::sgp4init;
 
+use super::SGP4Error;
 use crate::mathtypes::DMatrix;
 use crate::TimeLike;
-
-use thiserror::Error;
-
-#[derive(Debug, Clone, Error, PartialEq, Eq, Copy)]
-pub enum SGP4Error {
-    #[error("Success")]
-    SGP4Success = 0,
-    #[error("Eccentricity > 1 or < 0")]
-    SGP4ErrorEccen = 1,
-    #[error("Mean motion < 0")]
-    SGP4ErrorMeanMotion = 2,
-    #[error("Perturbed Eccentricity > 1 or < 0")]
-    SGP4ErrorPerturbEccen = 3,
-    #[error("Semi-Latus Rectum < 0")]
-    SGP4ErrorSemiLatusRectum = 4,
-    #[error("Unused")]
-    SGP4ErrorUnused = 5,
-    #[error("Orbit Decayed")]
-    SGP4ErrorOrbitDecay = 6,
-}
-impl From<i32> for SGP4Error {
-    fn from(val: i32) -> Self {
-        match val {
-            0 => Self::SGP4Success,
-            1 => Self::SGP4ErrorEccen,
-            2 => Self::SGP4ErrorMeanMotion,
-            3 => Self::SGP4ErrorPerturbEccen,
-            4 => Self::SGP4ErrorSemiLatusRectum,
-            6 => Self::SGP4ErrorOrbitDecay,
-            _ => Self::SGP4ErrorUnused,
-        }
-    }
-}
-
-impl From<SGP4Error> for i32 {
-    fn from(val: SGP4Error) -> Self {
-        match val {
-            SGP4Error::SGP4ErrorEccen => 1,
-            SGP4Error::SGP4ErrorMeanMotion => 2,
-            SGP4Error::SGP4ErrorOrbitDecay => 6,
-            SGP4Error::SGP4ErrorPerturbEccen => 3,
-            SGP4Error::SGP4ErrorSemiLatusRectum => 4,
-            SGP4Error::SGP4ErrorUnused => -1,
-            SGP4Error::SGP4Success => 0,
-        }
-    }
-}
 
 pub struct SGP4State {
     pub pos: DMatrix<f64>,
@@ -224,7 +178,7 @@ pub fn sgp4_full<T: TimeLike>(
                 args.no,
                 args.nodeo,
             )
-            .map_err(super::Error::SatRecInit)?,
+            .map_err(|code| super::Error::SatRecInit(code.into()))?,
         );
     }
 
