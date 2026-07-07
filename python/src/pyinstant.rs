@@ -205,18 +205,36 @@ impl PyInstant {
         Self(Instant::UNIX_EPOCH)
     }
 
+    /// Create a satkit.time object
+    ///
+    /// Args:
+    ///     *args: Either no arguments (current time), a single string, or
+    ///         Gregorian components (year, month, day) or
+    ///         (year, month, day, hour, minute, second)
+    ///     scale (satkit.timescale, optional): Time scale in which the Gregorian
+    ///         components are interpreted. Default is satkit.timescale.UTC.
+    ///         Ignored when constructing from a string or with no arguments.
+    ///
     /// Returns:
     ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
     #[new]
-    #[pyo3(signature=(*py_args))]
-    fn py_new(py_args: &Bound<'_, PyTuple>) -> Result<Self> {
+    #[pyo3(signature=(*py_args, scale=&PyTimeScale::UTC))]
+    fn py_new(py_args: &Bound<'_, PyTuple>, scale: &PyTimeScale) -> Result<Self> {
         if py_args.is_empty() {
             Ok(Self(Instant::now()))
         } else if py_args.len() == 3 {
             let year = py_args.get_item(0)?.extract::<i32>()?;
             let month = py_args.get_item(1)?.extract::<i32>()?;
             let day = py_args.get_item(2)?.extract::<i32>()?;
-            Self::from_date(year, month, day)
+            Ok(Self(Instant::from_datetime_with_scale(
+                year,
+                month,
+                day,
+                0,
+                0,
+                0.0,
+                scale.into(),
+            )?))
         } else if py_args.len() == 6 {
             let year = py_args.get_item(0)?.extract::<i32>()?;
             let month = py_args.get_item(1)?.extract::<i32>()?;
@@ -225,8 +243,14 @@ impl PyInstant {
             let min = py_args.get_item(4)?.extract::<i32>()?;
             let sec = py_args.get_item(5)?.extract::<f64>()?;
 
-            Ok(Self(Instant::from_datetime(
-                year, month, day, hour, min, sec,
+            Ok(Self(Instant::from_datetime_with_scale(
+                year,
+                month,
+                day,
+                hour,
+                min,
+                sec,
+                scale.into(),
             )?))
         } else if py_args.len() == 1 {
             let item = py_args.get_item(0)?;
