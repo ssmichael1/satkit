@@ -68,6 +68,46 @@ pub struct SGP4InitArgs {
     pub nodeo: f64,
 }
 
+impl SGP4InitArgs {
+    /// Build init args from mean elements in their natural catalog units:
+    /// mean motion and its derivatives in rev/day (+ per day, per day²), and
+    /// the four angles in degrees.
+    ///
+    /// This performs the rev/day → rad/min and degree → radian conversions
+    /// shared by every SGP4 source (TLE, CCSDS OMM), so the conversion factors
+    /// live in exactly one place.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_mean_elements(
+        jdsatepoch: f64,
+        bstar: f64,
+        mean_motion: f64,
+        mean_motion_dot: f64,
+        mean_motion_ddot: f64,
+        eccen: f64,
+        inclination_deg: f64,
+        raan_deg: f64,
+        arg_of_perigee_deg: f64,
+        mean_anomaly_deg: f64,
+    ) -> Self {
+        use std::f64::consts::PI;
+
+        const TWOPI: f64 = PI * 2.0;
+
+        Self {
+            jdsatepoch,
+            bstar,
+            no: mean_motion / (1440.0 / TWOPI),
+            ndot: mean_motion_dot / (1440.0 * 1440.0 / TWOPI),
+            nddot: mean_motion_ddot / (1440.0 * 1440.0 * 1440.0 / TWOPI),
+            ecco: eccen,
+            inclo: inclination_deg.to_radians(),
+            nodeo: raan_deg.to_radians(),
+            argpo: arg_of_perigee_deg.to_radians(),
+            mo: mean_anomaly_deg.to_radians(),
+        }
+    }
+}
+
 /// Source of SGP4 mean elements (e.g., TLE, CCSDS OMM) that can be propagated.
 ///
 /// Implementations are responsible for any unit/time-system conversions needed

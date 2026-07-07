@@ -224,18 +224,6 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
     satkit::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
 }
 
-///
-/// Disable warning about out-of-range Earth Orientation Parameters (EOP)
-///
-/// Warning is shown only once, but to prevent it from being shown,
-/// run this function.
-///
-/// # Example
-/// ```python
-/// import satkit
-/// satkit.frametransform.disable_eop_warning()
-/// ```
-///
 /// Return the DCM that transforms a 3-vector from the given satellite-
 /// local frame into GCRF at the current state.
 ///
@@ -721,6 +709,14 @@ pub fn rotation_with_state(
     })
 }
 
+/// Disable the warning about out-of-range Earth Orientation Parameters (EOP).
+///
+/// The warning is shown only once by default; call this function to suppress
+/// it entirely.
+///
+/// Example:
+///     >>> import satkit
+///     >>> satkit.frametransform.disable_eop_time_warning()
 #[pyfunction(name = "disable_eop_time_warning")]
 pub fn disable_eop_time_warning() {
     satkit::earth_orientation_params::disable_eop_time_warning();

@@ -77,8 +77,6 @@ class TLE:
     def from_lines(lines: tuple[str, str, str]) -> TLE: ...
     @overload
     @staticmethod
-    def from_lines(lines: Sequence[str]) -> list[TLE] | TLE: ...
-    @staticmethod
     def from_lines(lines: Sequence[str]) -> list[TLE] | TLE:
         """Return a list of TLES loaded from input list of lines
 
@@ -401,7 +399,7 @@ class TLE:
 
 def sgp4(
     tle: TLE | list[TLE] | dict,
-    tm: TimeInput,
+    time: TimeInput,
     **kwargs,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """SGP-4 propagator for TLE
@@ -501,10 +499,8 @@ class sgp4_opsmode:
     afspc: ClassVar[int]
     """afspc (Air Force Space Command), the default"""
 
-    @property
-    def improved(self) -> int:
-        """Improved"""
-        ...
+    improved: ClassVar[int]
+    """improved"""
 
 class gravmodel:
     """
@@ -710,6 +706,9 @@ class weekday:
 
     Saturday: ClassVar[weekday]
     """Saturday"""
+
+    Invalid: ClassVar[weekday]
+    """Invalid weekday"""
 
 class tlefitstatus:
     """
@@ -1005,7 +1004,7 @@ class time:
         ...
 
     @staticmethod
-    def from_string(str: str) -> time:
+    def from_string(string: str) -> time:
         """
         Create a "time" object from input string
 
@@ -1027,7 +1026,7 @@ class time:
         ...
 
     @staticmethod
-    def from_rfc3339(rfc: str) -> time:
+    def from_rfc3339(rfc3339: str) -> time:
         """Create a "time" object from input RFC 3339 string
 
         Args:
@@ -1049,7 +1048,7 @@ class time:
         ...
 
     @staticmethod
-    def strptime(str: str, format: str) -> time:
+    def strptime(date_string: str, format: str) -> time:
         """
         Create a "time" object from input string with given formatting
 
@@ -1123,7 +1122,7 @@ class time:
         ...
 
     @staticmethod
-    def from_unixtime(ut: float) -> time:
+    def from_unixtime(unixtime: float) -> time:
         """Return a time object representing input unixtime
 
         Args:
@@ -1143,7 +1142,7 @@ class time:
         ...
 
     @staticmethod
-    def from_gps_week_and_second(week: int, sec: float) -> time:
+    def from_gps_week_and_second(week: int, seconds: float) -> time:
         """Return a time object representing input GPS week and second
 
         Args:
@@ -1204,12 +1203,9 @@ class time:
         ...
 
     def as_gregorian(
-        self, scale=timescale.UTC
+        self,
     ) -> tuple[int, int, int, int, int, float]:
         """Return tuple representing as UTC Gegorian date and time of the time object.
-
-        Args:
-            scale (timescale, optional): Time scale.  Default is satkit.timescale.UTC
 
         Returns:
             Tuple with 6 elements representing the Gregorian year, month, day, hour, minute, and second of the time object.
@@ -1303,6 +1299,20 @@ class time:
             print(dt)
             # 2023-06-03 02:19:34
             ```
+        """
+        ...
+
+    def add_utc_days(self, days: float) -> time:
+        """Return a new time offset by a whole number of UTC days.
+
+        A UTC day is defined as exactly 86400 seconds, avoiding the ambiguity of
+        adding a "day" across a leap second.
+
+        Args:
+            days (float): Number of UTC days to add
+
+        Returns:
+            satkit.time: Time object offset by the given number of UTC days
         """
         ...
 
@@ -1426,6 +1436,20 @@ class time:
         """
         ...
 
+    @typing.overload
+    def __add__(self, other: npt.NDArray[Any]) -> npt.NDArray[Any]:
+        """
+        Return a numpy array of time objects, with each object representing an element-wise addition of duration to the "self" time object
+
+        Args:
+            other (npt.ArrayLike[Any]): array-like structure containing durations to add to the current time
+
+        Returns:
+            Array of time objects representing the element-wise addition of durations to the current time
+
+        """
+        ...
+
     def __le__(self, other: time) -> bool:
         """
         Compare two time objects for less than or equal to
@@ -1495,20 +1519,6 @@ class time:
 
         Returns:
             True if "self" time is not equal to "value", False otherwise
-        """
-        ...
-
-    @typing.overload
-    def __add__(self, other: npt.NDArray[Any]) -> npt.NDArray[Any]:
-        """
-        Return a numpy array of time objects, with each object representing an element-wise addition of duration to the "self" time object
-
-        Args:
-            other (npt.ArrayLike[Any]): array-like structure containing durations to add to the current time
-
-        Returns:
-            Array of time objects representing the element-wise addition of durations to the current time
-
         """
         ...
 
@@ -1649,7 +1659,7 @@ class duration:
         ...
 
     @staticmethod
-    def from_seconds(s: float) -> duration:
+    def from_seconds(seconds: float) -> duration:
         """Create duration object representing input number of seconds
 
         Args:
@@ -1668,7 +1678,7 @@ class duration:
         ...
 
     @staticmethod
-    def from_minutes(m: float) -> duration:
+    def from_minutes(minutes: float) -> duration:
         """Create duration object representing input number of minutes
 
         Args:
@@ -1680,7 +1690,7 @@ class duration:
         ...
 
     @staticmethod
-    def from_hours(h: float) -> duration:
+    def from_hours(hours: float) -> duration:
         """Create duration object representing input number of hours
 
         Args:
@@ -1995,7 +2005,7 @@ class quaternion:
 
     @staticmethod
     def from_rotation_matrix(
-        mat: npt.NDArray[np.float64],
+        dcm: npt.NDArray[np.float64],
     ) -> quaternion:
         """Return quaternion representing identical rotation to input 3x3 rotation matrix
 
@@ -2008,7 +2018,7 @@ class quaternion:
         ...
 
     @staticmethod
-    def rotx(theta) -> quaternion:
+    def rotx(theta_rad: float) -> quaternion:
         """Quaternion representing right-handed rotation of vector by "theta" radians about the xhat unit vector
 
         Args:
@@ -2026,7 +2036,7 @@ class quaternion:
         ...
 
     @staticmethod
-    def roty(theta) -> quaternion:
+    def roty(theta_rad: float) -> quaternion:
         """Quaternion representing right-handed rotation of vector by "theta" radians about the yhat unit vector
 
         Args:
@@ -2045,7 +2055,7 @@ class quaternion:
         ...
 
     @staticmethod
-    def rotz(theta) -> quaternion:
+    def rotz(theta_rad: float) -> quaternion:
         """Quaternion representing right-handed rotation of vector by "theta" radians about the zhat unit vector
 
         Args:
@@ -2572,6 +2582,11 @@ class itrfcoord:
         ...
 
     @property
+    def height(self) -> float:
+        """Height above ellipsoid, in meters (alias of altitude)"""
+        ...
+
+    @property
     def geodetic(self) -> geodetic:
         """Geodetic coordinates as a named struct
 
@@ -2779,6 +2794,9 @@ class consts:
     jgm3_j2: ClassVar[float]
     """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
+# Alias so `time` resolves to the class inside bodies that define a `time` member
+_Time = time
+
 class satstate:
     """Satellite state: position, velocity, optional covariance, and maneuvers
 
@@ -2820,7 +2838,7 @@ class satstate:
 
     def __init__(
         self,
-        time: time,
+        time: _Time,
         pos: npt.NDArray[np.float64],
         vel: npt.NDArray[np.float64],
         cov: npt.NDArray[np.float64] | None = None,
@@ -2893,7 +2911,7 @@ class satstate:
         ...
 
     @property
-    def time(self) -> time:
+    def time(self) -> _Time:
         """Epoch of this satellite state"""
         ...
 
@@ -2959,7 +2977,7 @@ class satstate:
 
     def add_maneuver(
         self,
-        time: time,
+        time: _Time,
         delta_v: npt.ArrayLike,
         frame: frame,
     ) -> None:
@@ -3001,7 +3019,7 @@ class satstate:
         """
         ...
 
-    def add_prograde(self, time: time, dv_mps: float) -> None:
+    def add_prograde(self, time: _Time, dv_mps: float) -> None:
         """Add a prograde impulsive burn (NTW +T, along velocity).
 
         A positive ``dv_mps`` adds energy (raises semi-major axis). The burn
@@ -3018,7 +3036,7 @@ class satstate:
         """
         ...
 
-    def add_retrograde(self, time: time, dv_mps: float) -> None:
+    def add_retrograde(self, time: _Time, dv_mps: float) -> None:
         """Add a retrograde impulsive burn (NTW -T, opposite velocity).
 
         Equivalent to ``add_prograde`` with a negated magnitude. ``dv_mps``
@@ -3030,7 +3048,7 @@ class satstate:
         """
         ...
 
-    def add_radial(self, time: time, dv_mps: float) -> None:
+    def add_radial(self, time: _Time, dv_mps: float) -> None:
         """Add a radial-outward impulsive burn (NTW +N axis).
 
         For circular orbits this is the outward radial direction. For
@@ -3043,7 +3061,7 @@ class satstate:
         """
         ...
 
-    def add_normal(self, time: time, dv_mps: float) -> None:
+    def add_normal(self, time: _Time, dv_mps: float) -> None:
         """Add a cross-track ("normal") impulsive burn (NTW +W axis).
 
         Positive values push in the +angular-momentum direction. Changes
@@ -3073,7 +3091,7 @@ class satstate:
 
     def propagate(
         self,
-        time: time | duration,
+        timedur: _Time | duration,
         *,
         propsettings: propsettings | None = None,
         satproperties: satproperties | None = None,
@@ -3086,7 +3104,7 @@ class satstate:
         Maneuvers are preserved on the returned state.
 
         Args:
-            time (satkit.time|satkit.duration): Target time, or duration from current time
+            timedur (satkit.time|satkit.duration): Target time, or duration from current time
             propsettings (satkit.propsettings, optional): Propagation settings
             satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
 
@@ -3181,7 +3199,7 @@ class propresult:
         ...
 
     @property
-    def time(self) -> time:
+    def time(self) -> _Time:
         """Time at which state is valid
 
         Returns:
@@ -3190,7 +3208,7 @@ class propresult:
         ...
 
     @property
-    def time_end(self) -> time:
+    def time_end(self) -> _Time:
         """Time at which state is valid
 
         Notes:
@@ -3202,7 +3220,7 @@ class propresult:
         ...
 
     @property
-    def time_begin(self) -> time:
+    def time_begin(self) -> _Time:
         """Time at which state_begin is valid
 
 
@@ -3276,7 +3294,7 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: list[time | datetime.datetime],
+        time: list[_Time | datetime.datetime],
         output_phi: typing.Literal[False] = False,
     ) -> list[npt.NDArray[np.float64]]:
         """Interpolate state at multiple times
@@ -3293,7 +3311,7 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: list[time | datetime.datetime],
+        time: list[_Time | datetime.datetime],
         output_phi: typing.Literal[True] = ...,
     ) -> list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         """Interpolate state and state transition matrix at multiple times
@@ -3304,38 +3322,6 @@ class propresult:
 
         Returns:
             list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]: List of (state, phi) tuples
-        """
-        ...
-
-    def interp(
-        self,
-        time: time | datetime.datetime | list[time | datetime.datetime],
-        output_phi: bool = False,
-    ):
-        """Interpolate state at given time(s)
-
-        Requires ``enable_interp=True`` in propagation settings.
-
-        Args:
-            time (time | datetime.datetime | list): Time or list of times at which to interpolate state.
-                datetime.datetime objects are interpreted as UTC.
-            output_phi (bool): If True, also return the 6x6 state transition matrix. Default is False.
-
-        Returns:
-            For a single time: a 6-element state vector, or a ``(state, phi)`` tuple if ``output_phi=True``. For a list of times: a list of state vectors, or a list of ``(state, phi)`` tuples.
-
-        Example:
-            ```python
-            # After propagation with enable_interp=True
-            result = satkit.propagate(state, t0, duration_days=1.0)
-            t_mid = t0 + satkit.duration(hours=12)
-            mid_state = result.interp(t_mid)
-            print(f"Position at 12h: {mid_state[0:3]} m")
-
-            # Interpolate at multiple times
-            times = [t0 + satkit.duration(hours=h) for h in range(25)]
-            states = result.interp(times)
-            ```
         """
         ...
 

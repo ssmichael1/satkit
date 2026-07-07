@@ -126,24 +126,19 @@ impl SGP4Source for TLE {
     }
 
     fn sgp4_init_args(&self) -> crate::sgp4::Result<SGP4InitArgs> {
-        use std::f64::consts::PI;
-
-        const TWOPI: f64 = PI * 2.0;
-
-        Ok(SGP4InitArgs {
+        Ok(SGP4InitArgs::from_mean_elements(
             // Vallado expects JD UTC and then subtracts 2433281.5 inside the legacy interface.
-            jdsatepoch: self.epoch.as_jd_with_scale(TimeScale::UTC),
-            bstar: self.bstar,
-            // Convert rev/day(+derivatives) to rad/min(+derivatives), matching sgp4_impl.
-            no: self.mean_motion / (1440.0 / TWOPI),
-            ndot: self.mean_motion_dot / (1440.0 * 1440.0 / TWOPI),
-            nddot: self.mean_motion_dot_dot / (1440.0 * 1440.0 * 1440.0 / TWOPI),
-            ecco: self.eccen,
-            inclo: self.inclination.to_radians(),
-            nodeo: self.raan.to_radians(),
-            argpo: self.arg_of_perigee.to_radians(),
-            mo: self.mean_anomaly.to_radians(),
-        })
+            self.epoch.as_jd_with_scale(TimeScale::UTC),
+            self.bstar,
+            self.mean_motion,
+            self.mean_motion_dot,
+            self.mean_motion_dot_dot,
+            self.eccen,
+            self.inclination,
+            self.raan,
+            self.arg_of_perigee,
+            self.mean_anomaly,
+        ))
     }
 }
 

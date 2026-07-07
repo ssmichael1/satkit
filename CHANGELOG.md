@@ -1,6 +1,56 @@
 # Changelog
 
 
+## Unreleased
+
+### Added
+
+- **`SGP4InitArgs::from_mean_elements`** — a constructor that performs the
+  rev/day → rad/min and degree → radian conversions from catalog units. Both
+  the `TLE` and CCSDS `OMM` SGP4 sources now build their init args through it,
+  so the conversion factors are defined in one place.
+- **`time` and `duration` are now hashable.** Both define `__eq__` but
+  previously lacked `__hash__`, which made them unhashable (unusable as `dict`
+  keys or `set` members). The hash is derived from the underlying microsecond
+  count, so it is consistent with equality.
+- **Equality and `repr` on more value types.** `TLE`, `kepler`, and `itrfcoord`
+  now implement `__eq__`; `TLE`, `kepler`, `satstate`, and `propsettings` now
+  implement `__repr__` (delegating to their `str` form). The three float-backed
+  types that gained `__eq__` are intentionally left unhashable — a failed
+  `hash()` is clearer than silently-wrong float-keyed lookups.
+- **`mypy.stubtest` in CI.** The `python bindings test` job now verifies that
+  the hand-written `.pyi` type stubs match the compiled PyO3 bindings. Two CLI
+  flags (`--ignore-positional-only`, `--ignore-disjoint-bases`) plus
+  `python/stubtest_allowlist.txt` suppress systematic PyO3 idioms (constructors,
+  final classes, native submodules); everything else must agree.
+
+### Fixed
+
+- **Type stubs now type-check and match the runtime.** The `.pyi` files had
+  never been checked and contained illegal overload-implementation blocks, a
+  `time.__add__` overload group split by other methods, and `time`-as-annotation
+  shadowing. Filled in stub gaps (`itrfcoord.height`, `time.add_utc_days`,
+  `weekday.Invalid`) and removed/fixed a phantom `time.as_gregorian(scale=)`
+  parameter and a mis-declared `sgp4_opsmode.improved` property.
+
+### Changed
+
+- **`itrfcoord(...)`, `sgp4(...)`, and `satstate.propagate(...)` now reject
+  unknown keyword arguments** instead of silently ignoring them. Previously a
+  typo such as `itrfcoord(..., alttiude=100)` was dropped, leaving the ground
+  station at 0 m altitude; it now raises `ValueError`. Callers passing only
+  documented keywords are unaffected.
+- **Renamed keyword arguments on several bindings** so the accepted Python
+  keyword matches its documentation (the stubs previously advertised names the
+  runtime rejected). Positional calls are unaffected; only callers passing these
+  by the *old* keyword must update:
+  - `duration.from_hours` / `from_minutes` / `from_seconds`: `d` → `hours` / `minutes` / `seconds`
+  - `time.from_string`: `s` → `string`;  `time.from_unixtime`: `t` → `unixtime`
+  - `time.from_rfc3339`: `s` → `rfc3339`;  `time.from_datetime`: `tm` → `dt`
+  - `time.strftime`: `fmt` → `format`;  `time.strptime`: `(s, fmt)` → `(date_string, format)`
+  - `kepler.from_pv`: `(r, v)` → `(pos, vel)`
+
+
 ## 0.20.2 - 2026-07-03
 
 ### Fixed

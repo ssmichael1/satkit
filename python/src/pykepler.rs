@@ -152,10 +152,10 @@ impl PyKepler {
 
     /// Convert Cartesian elements to kepler
     #[staticmethod]
-    fn from_pv(r: &Bound<PyAny>, v: &Bound<PyAny>) -> PyResult<Self> {
-        let r = py_to_smatrix(r)?;
-        let v = py_to_smatrix(v)?;
-        match Kepler::from_pv(r, v) {
+    fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>) -> PyResult<Self> {
+        let pos = py_to_smatrix(pos)?;
+        let vel = py_to_smatrix(vel)?;
+        match Kepler::from_pv(pos, vel) {
             Ok(k) => Ok(Self(k)),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
         }
@@ -261,6 +261,25 @@ impl PyKepler {
 
     fn __str__(&self) -> String {
         format!("{}", self.0)
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        let a = &self.0;
+        let b = &other.0;
+        a.a == b.a
+            && a.eccen == b.eccen
+            && a.incl == b.incl
+            && a.raan == b.raan
+            && a.w == b.w
+            && a.nu == b.nu
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        !self.__eq__(other)
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
