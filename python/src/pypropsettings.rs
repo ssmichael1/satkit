@@ -356,6 +356,10 @@ impl PyPropSettings {
         self.0.to_string()
     }
 
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
         (PyTuple::empty(py), PyDict::new(py))
     }

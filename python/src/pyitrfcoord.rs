@@ -129,6 +129,12 @@ impl PyITRFCoord {
             let mut altitude: f64 = kwargs_or_default(&mut kwargs, "altitude", 0.0)?;
             altitude = (kwargs_or_none(&mut kwargs, "height")?).map_or(altitude, |v| v);
 
+            // Reject typos like `alttiude=` that would otherwise be silently
+            // ignored and leave the ground-station altitude at its 0.0 default.
+            if let Some(kw) = kwargs {
+                crate::pyutils::reject_unused_kwargs(kw)?;
+            }
+
             if latitude_deg.is_none() || longitude_deg.is_none() {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "Must set latitude, longitude",
@@ -266,6 +272,14 @@ impl PyITRFCoord {
 
     fn __repr__(&self) -> String {
         self.__str__()
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.0 != other.0
     }
 
     /// Quaternion representing rotation from North-East-Down (NED) coordinate frame to International Terrestrial Reference Frame

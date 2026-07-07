@@ -342,7 +342,7 @@ impl ITRFCoord {
         hae
     }
 
-    /// Return geodetic latitude in degrees, [-180, 180]
+    /// Return geodetic latitude in degrees, [-90, 90]
     #[inline]
     pub fn latitude_deg(&self) -> f64 {
         self.latitude_rad().to_degrees()

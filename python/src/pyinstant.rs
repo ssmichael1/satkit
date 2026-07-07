@@ -248,7 +248,7 @@ impl PyInstant {
     /// Create satkit.time object from string
     ///
     /// Args:
-    ///    s (str): String representing time
+    ///    string (str): String representing time
     ///
     /// Returns:
     ///   satkit.time: Time object representing input time
@@ -257,15 +257,15 @@ impl PyInstant {
     ///   ValueError: If input string cannot be parsed
     ///
     #[staticmethod]
-    fn from_string(s: &str) -> Result<Self> {
-        Ok(Instant::from_string(s).map(Self)?)
+    fn from_string(string: &str) -> Result<Self> {
+        Ok(Instant::from_string(string).map(Self)?)
     }
 
     /// Create satkit.time object from string with given format
     ///
     /// Args:
-    ///   s (str): String representing time
-    ///  fmt (str): Format string
+    ///   date_string (str): String representing time
+    ///  format (str): Format string
     ///
     /// Returns:
     ///  satkit.time: Time object representing input time
@@ -285,14 +285,14 @@ impl PyInstant {
     /// %b: Month as locale’s abbreviated name
     /// %B: Month as locale’s full name
     #[staticmethod]
-    fn strptime(s: &str, fmt: &str) -> Result<Self> {
-        Ok(Instant::strptime(s, fmt).map(Self)?)
+    fn strptime(date_string: &str, format: &str) -> Result<Self> {
+        Ok(Instant::strptime(date_string, format).map(Self)?)
     }
 
     /// Format time object as string
     ///
     /// Args:
-    ///  fmt (str): Format string
+    ///  format (str): Format string
     ///
     /// Returns:
     /// str: String representing time in given format
@@ -314,9 +314,9 @@ impl PyInstant {
     /// %B: Month as locale’s full name
     /// %w: Weekday as a decimal number, where 0 is Sunday and 6 is Saturday
     ///
-    fn strftime(&self, fmt: &str) -> Result<String> {
+    fn strftime(&self, format: &str) -> Result<String> {
         self.0
-            .strftime(fmt)
+            .strftime(format)
             .map_err(|e| anyhow::anyhow!("Could not format time string: {}", e))
     }
 
@@ -328,7 +328,7 @@ impl PyInstant {
     ///   This overlaps with ISO 8601
     ///
     /// Args:
-    ///   s (str): String representing time
+    ///   rfc3339 (str): String representing time
     ///
     /// Returns:
     ///   satkit.time: Time object representing input time
@@ -337,8 +337,8 @@ impl PyInstant {
     ///   ValueError: If input string cannot be parsed
     ///
     #[staticmethod]
-    fn from_rfc3339(s: &str) -> PyResult<Self> {
-        Instant::from_rfc3339(s).map_or_else(
+    fn from_rfc3339(rfc3339: &str) -> PyResult<Self> {
+        Instant::from_rfc3339(rfc3339).map_or_else(
             |_| {
                 Err(pyo3::exceptions::PyValueError::new_err(
                     "Could not parse time string",
@@ -418,8 +418,8 @@ impl PyInstant {
     /// Returns:
     ///     satkit.time: Time object representing instant of input unixtime
     #[staticmethod]
-    fn from_unixtime(t: f64) -> Self {
-        Self(Instant::from_unixtime(t))
+    fn from_unixtime(unixtime: f64) -> Self {
+        Self(Instant::from_unixtime(unixtime))
     }
 
     /// Return time object representing input Julian date and time scale
@@ -499,8 +499,8 @@ impl PyInstant {
     ///     satkit.time: satkit.time object that matches input datetime
     /// SatKit Time object representing input datetime
     #[staticmethod]
-    fn from_datetime(tm: &Bound<'_, PyDateTime>) -> PyResult<Self> {
-        Ok(Self(datetime_to_instant(tm)?))
+    fn from_datetime(dt: &Bound<'_, PyDateTime>) -> PyResult<Self> {
+        Ok(Self(datetime_to_instant(dt)?))
     }
 
     /// Convert to Python datetime object
@@ -758,6 +758,12 @@ impl PyInstant {
 
     fn __ne__(&self, other: &Self) -> bool {
         self.0 != other.0
+    }
+
+    // Backed by an exact microsecond count, so hashing the raw integer is
+    // consistent with __eq__ (defining __eq__ alone would make time unhashable).
+    fn __hash__(&self) -> isize {
+        self.0.raw as isize
     }
 
     ///
