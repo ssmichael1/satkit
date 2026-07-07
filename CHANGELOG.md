@@ -5,6 +5,14 @@
 
 ### Added
 
+- **`scale=` keyword on the `time(...)` constructor** (Python): Gregorian
+  date/time components passed to `satkit.time(year, month, day[, hour, minute,
+  second])` can now be interpreted in an explicit time scale, e.g.
+  `satkit.time(2020, 1, 1, scale=satkit.timescale.TAI)`, mirroring the existing
+  `time.from_mjd(..., scale=...)` / `time.from_jd(..., scale=...)` API. The
+  keyword defaults to `satkit.timescale.UTC`, so all existing calls are
+  unchanged. Backed by a new scale-aware core constructor
+  `Instant::from_datetime_with_scale`.
 - **`SGP4InitArgs::from_mean_elements`** — a constructor that performs the
   rev/day → rad/min and degree → radian conversions from catalog units. Both
   the `TLE` and CCSDS `OMM` SGP4 sources now build their init args through it,
@@ -35,6 +43,19 @@
 
 ### Changed
 
+- **BREAKING: `sgp4::Error::SatRecInit` now carries a typed `SGP4Error`
+  instead of a raw `i32`.** The raw Vallado init error code is mapped to the
+  corresponding `SGP4Error` variant (eccentricity, mean motion, perturbed
+  eccentricity, semi-latus rectum, orbit decay) at construction, so the
+  `Display` output is now a description rather than a bare number.
+  Additionally, the `SGP4Error` enum has moved from `sgp4::sgp4_impl` to
+  `sgp4::error`; it remains re-exported at `satkit::sgp4::SGP4Error`, so the
+  public path is unchanged.
+- **`LambertError` renamed to `lambert::Error`** to match the per-module
+  `module::Error` convention used everywhere else in the crate. The old name
+  remains as a `#[deprecated]` type alias, so existing code compiles with a
+  deprecation warning; update `satkit::lambert::LambertError` →
+  `satkit::lambert::Error`. A `lambert::Result<T>` alias was also added.
 - **`itrfcoord(...)`, `sgp4(...)`, and `satstate.propagate(...)` now reject
   unknown keyword arguments** instead of silently ignoring them. Previously a
   typo such as `itrfcoord(..., alttiude=100)` was dropped, leaving the ground
