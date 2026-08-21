@@ -40,6 +40,55 @@
   shadowing. Filled in stub gaps (`itrfcoord.height`, `time.add_utc_days`,
   `weekday.Invalid`) and removed/fixed a phantom `time.as_gregorian(scale=)`
   parameter and a mis-declared `sgp4_opsmode.improved` property.
+- **Panic hardening: malformed and edge-case input now returns errors instead
+  of panicking** (PR #124), following a codebase-wide audit:
+  - *TLE parsing*: day-of-year is range-checked, negative satellite numbers
+    are rejected, and non-finite implied-exponent fields (bstar, nddot) error
+    at parse time instead of overflowing later in epoch math, `Display`, or
+    `to_2line`. `Display` also falls back to the raw satellite number rather
+    than unwrapping a failed alpha5 conversion.
+  - *Time*: `from_rfc3339` no longer panics on non-ASCII input while scanning
+    for a timezone offset; `from_datetime` errors on extreme years (new
+    `InstantError::InvalidYear`); MJD conversions, `from_gps_week_and_second`,
+    and leap-second folding saturate at the i64 boundaries; chrono `DateTime`
+    conversion saturates to `MIN_UTC`/`MAX_UTC`; `strftime` `%B`/`%b` handle
+    out-of-range months.
+  - *JPL ephemerides*: querying exactly at the file's end epoch (`jd_stop`)
+    now clamps to the last Chebyshev record instead of indexing past it, and
+    the parser validates header fields and declared sizes (with checked
+    arithmetic, before allocating) so a corrupt or crafted file errors
+    cleanly. Unpopulated bodies error instead of underflowing.
+  - *Gravity models*: `Gravity::parse` rejects `.gfc` lines with order >
+    degree (previously a panic for large orders and **silent coefficient
+    aliasing** for moderate ones), and the evaluators clamp the requested
+    degree to the loaded model's table so a custom low-degree model cannot be
+    indexed out of bounds. A spec-conformant bare `end_of_head` line now
+    terminates the header instead of silently yielding an all-zero model.
+  - *Orbit propagation*: the force model falls back to direct computation
+    when an adaptive integrator probes outside the precomputed interp table
+    (previously an unwrap panic for high-altitude states);
+    `propagate::<C>` with unsupported column counts, zero/negative/non-finite
+    `Precomputed` steps, and invalid thrust frames constructed via pub
+    fields/`Deserialize` all surface as errors instead of panics.
+  - *Utilities*: `datadir()` no longer panics (and permanently poisons its
+    singleton mutex) if a candidate directory cannot be stat-ed; download
+    helpers return an error for paths/URLs with no valid file name.
+- **Python bindings: invalid input raises clean exceptions instead of
+  `PanicException`**, and non-contiguous numpy input now works:
+  - Wrong-size/shape arrays to `propagate`, frame transforms,
+    `kepler.from_pv`, `satstate.add_maneuver`, and `thrust.constant` raise
+    `ValueError`/`RuntimeError` (via shape validation in `py_to_smatrix`).
+  - Strided views and Fortran-order arrays are now accepted by `itrfcoord`,
+    `gravity`, `gravity_and_partials`, and the `satstate`
+    covariance/uncertainty setters (previously `as_slice().unwrap()` panics).
+  - `TLE.from_lines`/`from_url` raise on input containing no valid TLEs;
+    `TLE.from_file` handles non-UTF-8 files; `sgp4` rejects empty TLE
+    lists/time arrays; `kepler(...)` rejects non-numeric positional args;
+    `quaternion.from_axis_angle` validates axis length;
+    `planets.heliocentric_pos` raises for Sun/Moon and out-of-range times
+    (previously a panic with the GIL released); `time` arithmetic with ints
+    too large for f64 raises `OverflowError`; `datetime.timestamp()` failures
+    propagate; `utils.datadir()` handles non-UTF-8 paths.
 
 ### Changed
 
