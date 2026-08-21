@@ -363,10 +363,14 @@ impl Instant {
         // Try formats with timezone offset (+HH:MM or -HH:MM)
         // RFC 3339 allows offsets like +00:00, -05:00, etc.
         let s = rfc3339.trim();
-        if s.len() >= 6 {
+        // `s.len()` counts bytes, so the fixed-width slices below are only
+        // panic-free when the 6-byte tail is ASCII and starts on a char
+        // boundary; non-ASCII input must fall through to the error return.
+        if s.len() >= 6 && s.is_char_boundary(s.len() - 6) {
             let offset_start = s.len() - 6;
             let maybe_offset = &s[offset_start..];
-            if (maybe_offset.starts_with('+') || maybe_offset.starts_with('-'))
+            if maybe_offset.is_ascii()
+                && (maybe_offset.starts_with('+') || maybe_offset.starts_with('-'))
                 && maybe_offset.chars().nth(3) == Some(':')
             {
                 let sign: f64 = if maybe_offset.starts_with('+') {

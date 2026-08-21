@@ -385,6 +385,20 @@ impl TLE {
             })
         }
 
+        // The implied-exponent fields (nddot, bstar) can parse to infinity for
+        // out-of-range exponents ("parse" returns Ok(inf), not Err), which
+        // would overflow later when re-encoding the TLE. Reject them here.
+        fn finite_field(v: f64, field: &'static str) -> Result<f64> {
+            if v.is_finite() {
+                Ok(v)
+            } else {
+                Err(Error::ParseField {
+                    field,
+                    message: format!("value {v} is not finite"),
+                })
+            }
+        }
+
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
             mstr.push_str(&line1[18..20]);
@@ -398,6 +412,13 @@ impl TLE {
         let century = if year >= 57 { 1900 } else { 2000 };
         year += century;
         let day_of_year: f64 = parse_field(&line1[20..32], "day of year")?;
+        // An unbounded value would overflow the epoch arithmetic below.
+        if !(1.0..367.0).contains(&day_of_year) {
+            return Err(Error::ParseField {
+                field: "day of year",
+                message: format!("value {day_of_year} out of range [1, 367)"),
+            });
+        }
 
         // Note: day_of_year starts from 1, not zero,
         // also, go from Jan 2 to avoid leap-second
@@ -431,7 +452,10 @@ impl TLE {
                 mstr.push_str(&line1[45..50]);
                 mstr.push('E');
                 mstr.push_str(&line1[50..53]);
-                let mut m: f64 = parse_field(mstr.trim(), "mean motion dot dot")?;
+                let mut m: f64 = finite_field(
+                    parse_field(mstr.trim(), "mean motion dot dot")?,
+                    "mean motion dot dot",
+                )?;
                 if line1.chars().nth(44).unwrap() == '-' {
                     m *= -1.0;
                 }
@@ -442,7 +466,8 @@ impl TLE {
                 mstr.push_str(&line1[54..59]);
                 mstr.push('E');
                 mstr.push_str(&line1[59..62]);
-                let mut m: f64 = parse_field(mstr.trim(), "bstar (drag)")?;
+                let mut m: f64 =
+                    finite_field(parse_field(mstr.trim(), "bstar (drag)")?, "bstar (drag)")?;
                 if line1.chars().nth(53).unwrap() == '-' {
                     m *= -1.0;
                 }
@@ -641,7 +666,8 @@ impl TLE {
             // Alpha char is only possible at the first position, so if the first char is a
             // digit or a whitespace the standard `.parse()` can be used.
             Some(c) if c.is_ascii_digit() || c.is_whitespace() => match alpha5.trim().parse() {
-                Ok(i) => Ok(i),
+                Ok(i) if i >= 0 => Ok(i),
+                Ok(_) => Err(Error::InvalidSatNumValue),
                 Err(e) => Err(Error::InvalidSatNum(format!("{e}"))),
             },
             Some(c) if c.is_alphabetic() => {
@@ -736,7 +762,9 @@ impl TLE {
                             Rev #: {}
         "#,
             self.name,
-            Self::int_to_alpha5(self.sat_num).unwrap(),
+            // Fall back to the raw number so Display never panics, even for a
+            // sat_num that has no alpha5 representation.
+            Self::int_to_alpha5(self.sat_num).unwrap_or_else(|_| self.sat_num.to_string()),
             match self.desig_year > 50 {
                 true => self.desig_year + 1900,
                 false => self.desig_year + 2000,
@@ -879,6 +907,37 @@ mod tests {
         // line). With no TLE data lines present, the result is empty.
         let lines = vec!["é".to_string()];
         assert!(TLE::from_lines(&lines).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_malformed_numeric_fields_error_not_panic() {
+        let line1 = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
+        let line2 = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";
+
+        // Unbounded day-of-year must error rather than overflow the epoch math
+        let mut l1 = line1.to_string();
+        l1.replace_range(20..32, "-99999999999");
+        assert!(TLE::load_2line(&l1, line2).is_err());
+
+        // Negative satellite number must be rejected at parse time; it has no
+        // alpha5 representation and used to panic later in Display
+        let mut l1 = line1.to_string();
+        l1.replace_range(2..7, "  -99");
+        assert!(TLE::load_2line(&l1, line2).is_err());
+
+        // An out-of-range implied exponent parses to inf ("parse" returns
+        // Ok(inf)); it must error here rather than overflow in to_2line
+        let mut l1 = line1.to_string();
+        l1.replace_range(54..62, "99999999");
+        assert!(TLE::load_2line(&l1, line2).is_err());
+    }
+
+    #[test]
+    fn test_display_never_panics_on_bad_satnum() {
+        let mut tle = TLE::new();
+        tle.sat_num = -99;
+        // Display / to_pretty_string must fall back rather than panic
+        assert!(tle.to_pretty_string().contains("-99"));
     }
 
     #[test]

@@ -410,3 +410,16 @@ fn test_rfc3339_with_timezone_offset() {
     assert_eq!(g.3, 15);
     assert_eq!(g.4, 30);
 }
+
+#[test]
+fn test_rfc3339_non_ascii_errors_not_panics() {
+    // Regression: the timezone-offset scan byte-slices the last 6 bytes of
+    // the input, which used to panic on non-char-boundary indices for
+    // non-ASCII input. These must all return a clean error.
+    assert!(Instant::from_rfc3339("ααα:00").is_err());
+    assert!(Instant::from_rfc3339("X+aé:0").is_err());
+    assert!(Instant::from_string("ααα:00").is_err());
+    // from_string is lenient and may parse a valid prefix of this one; the
+    // regression being tested is only that it must not panic
+    let _ = Instant::from_string("2024-01-01T12:00:00+05:0é");
+}
