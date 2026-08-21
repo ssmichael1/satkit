@@ -152,7 +152,10 @@ fn force_model(
     eval: ForceEval,
 ) -> (Vector3, Matrix3, Matrix3) {
     let time: Instant = *begin + Duration::from_seconds(x);
-    let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
+    // interp_or_compute rather than interp: adaptive integrators can probe
+    // outside the padded interval (initial step-size heuristic), and the
+    // ODE closure signature leaves no way to surface an Err from here.
+    let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp_or_compute(&time);
     let qitrf2gcrf = qgcrf2itrf.conjugate();
     let pos_itrf = qgcrf2itrf * *pos_gcrf;
 

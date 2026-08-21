@@ -56,7 +56,16 @@ impl PySatState {
             if dims[0] != 6 || dims[1] != 6 {
                 bail!("Covariance must be 6x6 numpy array");
             }
-            let nacov = Matrix6::from_slice(unsafe { cov.as_slice().unwrap() }).transpose();
+            // Element-by-element: handles non-contiguous input (Fortran-order,
+            // views), which as_slice() would fail on
+            let rcov = cov.readonly();
+            let rcov = rcov.as_array();
+            let mut nacov = Matrix6::zeros();
+            for r in 0..6 {
+                for c in 0..6 {
+                    nacov[(r, c)] = rcov[(r, c)];
+                }
+            }
             state.set_cov(StateCov::PVCov(nacov));
         }
 
@@ -89,7 +98,9 @@ impl PySatState {
         if sigma.len() != 3 {
             bail!("Position uncertainty must be 1-d numpy array with length 3");
         }
-        let na_sigma = Vector3::from_slice(unsafe { sigma.as_slice().unwrap() });
+        let s = sigma.readonly();
+        let s = s.as_array();
+        let na_sigma = Vector3::from_slice(&[s[0], s[1], s[2]]);
         let rust_frame: Frame = frame.into();
         self.0.set_pos_uncertainty(&na_sigma, rust_frame)?;
         Ok(())
@@ -119,7 +130,9 @@ impl PySatState {
         if sigma.len() != 3 {
             bail!("Velocity uncertainty must be 1-d numpy array with length 3");
         }
-        let na_sigma = Vector3::from_slice(unsafe { sigma.as_slice().unwrap() });
+        let s = sigma.readonly();
+        let s = s.as_array();
+        let na_sigma = Vector3::from_slice(&[s[0], s[1], s[2]]);
         let rust_frame: Frame = frame.into();
         self.0.set_vel_uncertainty(&na_sigma, rust_frame)?;
         Ok(())
@@ -139,7 +152,16 @@ impl PySatState {
                 "Covariance must be 6x6 numpy array",
             ));
         }
-        let na_cov = Matrix6::from_slice(unsafe { cov.as_slice().unwrap() }).transpose();
+        // Element-by-element: handles non-contiguous input (Fortran-order,
+        // views), which as_slice() would fail on
+        let rcov = cov.readonly();
+        let rcov = rcov.as_array();
+        let mut na_cov = Matrix6::zeros();
+        for r in 0..6 {
+            for c in 0..6 {
+                na_cov[(r, c)] = rcov[(r, c)];
+            }
+        }
         self.0.cov = StateCov::PVCov(na_cov);
         Ok(())
     }

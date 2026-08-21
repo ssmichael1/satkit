@@ -302,14 +302,17 @@ impl JPLEphem {
         }
 
         let t_int = (tt - self.jd_start) / self.jd_step;
-        let int_num = t_int.floor() as usize;
+        // tt == jd_stop passes the range check above but floors to an index
+        // one past the last record (and likewise for the sub-interval), so
+        // clamp both; the endpoint then evaluates at t_seg == 1.0 exactly.
+        let int_num = (t_int.floor() as usize).min(self.cheby.ncols() - 1);
         let bidx = body as usize;
 
         let ncoeff = self.ipt[bidx][1];
         let nsubint = self.ipt[bidx][2];
 
         let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
-        let sub_int_num = t_int_2.floor() as usize;
+        let sub_int_num = (t_int_2.floor() as usize).min(nsubint.saturating_sub(1));
         let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
 
         let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
@@ -762,6 +765,25 @@ mod tests {
     use super::*;
     use crate::utils::test;
     use std::io::{self, BufRead};
+
+    #[test]
+    fn test_query_at_exact_end_epoch() {
+        // Regression: a query exactly at jd_stop passed the range check but
+        // floored to a record index one past the last Chebyshev record,
+        // panicking on the matrix index instead of returning a result.
+        let jpl = jplephem_singleton().as_ref().unwrap();
+        let tm = Instant::from_jd_with_scale(jpl.jd_stop, TimeScale::TT);
+        // The Instant roundtrip may land a hair above or below jd_stop;
+        // either way the call must not panic, and in-range must be Ok.
+        if tm.as_jd_with_scale(TimeScale::TT) <= jpl.jd_stop {
+            assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_ok());
+        } else {
+            assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_err());
+        }
+        // Just inside the boundary must always succeed
+        let tm_in = tm - crate::Duration::from_seconds(1.0);
+        assert!(jpl.geocentric_state(SolarSystem::Moon, &tm_in).is_ok());
+    }
 
     #[test]
     fn load_test() {
