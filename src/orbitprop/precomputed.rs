@@ -64,6 +64,9 @@ impl Precomputed {
     ) -> Result<Self> {
         let begin = begin.as_instant();
         let end = end.as_instant();
+        if !step_secs.is_finite() || step_secs <= 0.0 {
+            return Err(Error::InvalidPrecomputeStep { step: step_secs });
+        }
         let step: f64 = step_secs;
         let pad = Duration::from_seconds(padding_secs.max(0.0));
 
@@ -77,8 +80,11 @@ impl Precomputed {
             end: pend,
             step,
             data: {
-                let nsteps: usize = 2 + ((pend - pbegin).as_seconds() / step.abs()).ceil() as usize;
-                let mut data = Vec::with_capacity(nsteps);
+                let nsteps: usize = 2 + ((pend - pbegin).as_seconds() / step).ceil() as usize;
+                // Cap the up-front reservation: an absurd span would otherwise
+                // attempt one giant allocation here; growing instead lets the
+                // ephemeris range check in the loop below error out first.
+                let mut data = Vec::with_capacity(nsteps.min(1 << 22));
                 for idx in 0..nsteps {
                     let t = pbegin + Duration::from_seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
@@ -150,6 +156,20 @@ impl Precomputed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_invalid_step_errors() {
+        let t0 = Instant::from_date(2015, 3, 20).unwrap();
+        let t1 = t0 + Duration::from_seconds(3600.0);
+        // Zero step would compute usize::MAX steps and abort on allocation
+        assert!(matches!(
+            Precomputed::new_with_step(&t0, &t1, 0.0),
+            Err(Error::InvalidPrecomputeStep { .. })
+        ));
+        // Negative step silently built a table covering the wrong range
+        assert!(Precomputed::new_with_step(&t0, &t1, -60.0).is_err());
+        assert!(Precomputed::new_with_step(&t0, &t1, f64::NAN).is_err());
+    }
 
     #[test]
     fn test_interp_or_compute_out_of_range() {

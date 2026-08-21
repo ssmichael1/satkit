@@ -311,6 +311,13 @@ macro_rules! dispatch_degree {
 /// calculation details.
 impl Gravity {
     pub fn accel(&self, pos: &Vector3, degree: usize, order: usize) -> Vector3 {
+        // Clamp to the stored coefficient table: a custom low-degree model
+        // combined with a larger requested degree would index past the table.
+        // (A no-op for the built-in models, whose tables hold MAX_COEFF_DIM.)
+        // The lower bound of 1 keeps degree 0 out of the `_ => 40` dispatch
+        // arm; degree 1 is the point-mass field (the n=1 terms vanish for a
+        // center-of-mass-origin model).
+        let degree = degree.clamp(1, self.coeffs.nrows().saturating_sub(1));
         let max_order = order.min(degree);
         dispatch_degree!(
             self,
@@ -364,6 +371,8 @@ impl Gravity {
         degree: usize,
         order: usize,
     ) -> (Vector3, Matrix3) {
+        // See the identical clamp in `accel` for rationale.
+        let degree = degree.clamp(1, self.coeffs.nrows().saturating_sub(1));
         let max_order = order.min(degree);
         dispatch_degree!(
             self,
@@ -673,6 +682,13 @@ impl Gravity {
             header_cnt += 1;
 
             let s: Vec<&str> = line.split_whitespace().collect();
+            // Check for the header terminator before the two-token guard: the
+            // ICGEM spec allows a bare "end_of_head" line (no ==== filler),
+            // which would otherwise be skipped — silently treating the whole
+            // file as header and yielding an all-zero model.
+            if s.first() == Some(&"end_of_head") {
+                break;
+            }
             if s.len() < 2 {
                 continue;
             }
@@ -709,6 +725,12 @@ impl Gravity {
 
             let n: usize = s[1].parse()?;
             let m: usize = s[2].parse()?;
+            // The gfc format requires order <= degree; a violating line would
+            // index outside the triangular layout below (panicking for large m,
+            // silently aliasing another coefficient for moderate m).
+            if m > n {
+                return Err(Error::InvalidLine((*line).to_string()));
+            }
             // Skip coefficients beyond the stored/evaluated degree.
             if n >= table_dim {
                 continue;
@@ -778,6 +800,46 @@ mod tests {
     use crate::itrfcoord::ITRFCoord;
     use crate::mathtypes::Vector3;
     use approx::assert_relative_eq;
+
+    const TINY_MODEL: &str = "\
+modelname test
+earth_gravity_constant 3.986004415e14
+radius 6378136.3
+max_degree 4
+end_of_head
+gfc 0 0 1.0 0.0
+gfc 2 0 -4.841653e-4 0.0
+gfc 2 2 2.439383e-6 -1.400273e-6
+";
+
+    #[test]
+    fn test_parse_rejects_order_above_degree() {
+        // m > n would index outside the triangular coefficient layout
+        // (panic for large m, silent aliasing for moderate m)
+        let bad = format!("{}gfc 2 3 1.0 1.0\n", TINY_MODEL);
+        assert!(matches!(Gravity::parse(&bad), Err(Error::InvalidLine(_))));
+        // A large m used to panic on the flat matrix index
+        let bad = format!("{}gfc 2 100 1.0 1.0\n", TINY_MODEL);
+        assert!(Gravity::parse(&bad).is_err());
+    }
+
+    #[test]
+    fn test_custom_model_degree_clamped() {
+        // Requesting a degree beyond a custom low-degree model's table used
+        // to index past the table (panic) or silently read S as C. It must
+        // clamp to the stored degree instead.
+        let g = Gravity::parse(TINY_MODEL).unwrap();
+        let pos = numeris::vector![7000.0e3, 1000.0e3, 3000.0e3];
+        let a_clamped = g.accel(&pos, 16, 16);
+        let a_max = g.accel(&pos, 4, 4);
+        assert_relative_eq!(a_clamped.norm(), a_max.norm(), max_relative = 1.0e-12);
+        let (a2, p2) = g.accel_and_partials(&pos, 16, 16);
+        assert!(a2.norm().is_finite());
+        assert!(p2.as_slice().iter().all(|v| v.is_finite()));
+        // Degree 0 no longer falls into the degree-40 dispatch arm
+        let a0 = g.accel(&pos, 0, 0);
+        assert!(a0.norm().is_finite());
+    }
 
     #[test]
     fn test_gravity_order_1() {

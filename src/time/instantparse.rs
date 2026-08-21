@@ -483,10 +483,20 @@ impl Instant {
                         result.push_str(&format!("{:06}", microsecond));
                     }
                     Some('B') => {
-                        result.push_str(MONTH_NAMES[(month - 1) as usize]);
+                        // as_datetime can return an out-of-range month for
+                        // extreme (e.g. pre-4713 BC or INVALID) instants
+                        if (1..=12).contains(&month) {
+                            result.push_str(MONTH_NAMES[(month - 1) as usize]);
+                        } else {
+                            result.push_str("Invalid");
+                        }
                     }
                     Some('b') => {
-                        result.push_str(MONTH_ABBRS[(month - 1) as usize]);
+                        if (1..=12).contains(&month) {
+                            result.push_str(MONTH_ABBRS[(month - 1) as usize]);
+                        } else {
+                            result.push_str("Invalid");
+                        }
                     }
                     Some('A') => {
                         let weekday = self.day_of_week();

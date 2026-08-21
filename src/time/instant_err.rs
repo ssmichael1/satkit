@@ -9,6 +9,10 @@ pub enum InstantError {
     InvalidMonthString(String),
     #[error("Invalid Month: {0}")]
     InvalidMonth(i32),
+    /// Raised when a date is so far in the past or future that the
+    /// microsecond count overflows the underlying 64-bit representation.
+    #[error("Year out of representable range: {0}")]
+    InvalidYear(i32),
     #[error("Invalid Day: {0}")]
     InvalidDay(i32),
     #[error("Invalid Hour: {0}")]
