@@ -110,9 +110,12 @@ fn microleapseconds(raw: i64) -> i64 {
 /// a Gregorian date. The second lookup handles the rare case where adding the
 /// offset pushes the time across another leap-second boundary.
 fn add_leapseconds(raw: i64) -> i64 {
+    // Saturating: `raw` may already be pegged at the i64 boundaries (the
+    // MJD/unixtime constructors saturate out-of-range inputs), where the
+    // plain additions would overflow
     let ls = microleapseconds(raw);
-    let raw = raw + ls;
-    raw + microleapseconds(raw) - ls
+    let raw = raw.saturating_add(ls);
+    raw.saturating_add(microleapseconds(raw)).saturating_sub(ls)
 }
 
 impl Instant {
@@ -144,8 +147,12 @@ impl Instant {
     /// A new Instant object
     ///
     pub fn from_gps_week_and_second(week: i32, sow: f64) -> Self {
-        let week = week as i64;
-        let raw = week * 604_800_000_000 + (sow * 1.0e6) as i64 + Self::GPS_EPOCH.raw;
+        // Saturating: an absurd week count clamps instead of overflowing
+        // (which would panic in debug builds and wrap in release)
+        let raw = (week as i64)
+            .saturating_mul(604_800_000_000)
+            .saturating_add((sow * 1.0e6) as i64)
+            .saturating_add(Self::GPS_EPOCH.raw);
         Self { raw }
     }
 
@@ -302,19 +309,24 @@ impl Instant {
     /// # Returns
     /// A new Instant object representing the given MJD at given time scale
     pub fn from_mjd_with_scale(mjd: f64, scale: TimeScale) -> Self {
+        // The float-to-i64 cast saturates for out-of-range MJD values; the
+        // subsequent epoch-offset additions must saturate as well or they
+        // overflow (debug panic / release wrap) at the i64 boundaries.
         match scale {
             TimeScale::UTC => {
-                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
+                let raw = ((mjd * 86_400_000_000.0) as i64).saturating_add(Self::MJD_EPOCH.raw);
                 Self {
                     raw: add_leapseconds(raw),
                 }
             }
             TimeScale::TAI => {
-                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw;
+                let raw = ((mjd * 86_400_000_000.0) as i64).saturating_add(Self::MJD_EPOCH.raw);
                 Self { raw }
             }
             TimeScale::TT => {
-                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw - 32_184_000;
+                let raw = ((mjd * 86_400_000_000.0) as i64)
+                    .saturating_add(Self::MJD_EPOCH.raw)
+                    .saturating_sub(32_184_000);
                 Self { raw }
             }
             TimeScale::UT1 => {
@@ -325,7 +337,9 @@ impl Instant {
             }
             TimeScale::GPS => {
                 // GPS = TAI - 19 seconds
-                let raw = (mjd * 86_400_000_000.0) as i64 + Self::MJD_EPOCH.raw + 19_000_000;
+                let raw = ((mjd * 86_400_000_000.0) as i64)
+                    .saturating_add(Self::MJD_EPOCH.raw)
+                    .saturating_add(19_000_000);
                 Self { raw }
             }
             TimeScale::Invalid => Self::INVALID,
@@ -404,13 +418,23 @@ impl Instant {
     /// The Modified Julian Date in the given time scale
     ///
     pub fn as_mjd_with_scale(&self, scale: TimeScale) -> f64 {
+        // Saturating: raw values near the i64 boundaries (e.g. saturated
+        // extreme constructions, Instant::INVALID) would overflow the plain
+        // epoch-offset subtraction, which panics in debug builds
         match scale {
             TimeScale::UTC => {
-                (self.raw - Self::MJD_EPOCH.raw - microleapseconds(self.raw)) as f64
+                (self
+                    .raw
+                    .saturating_sub(Self::MJD_EPOCH.raw)
+                    .saturating_sub(microleapseconds(self.raw))) as f64
                     / 86_400_000_000.0
             }
             TimeScale::TT => {
-                (self.raw - Self::MJD_EPOCH.raw + 32_184_000) as f64 / 86_400_000_000.0
+                (self
+                    .raw
+                    .saturating_sub(Self::MJD_EPOCH.raw)
+                    .saturating_add(32_184_000)) as f64
+                    / 86_400_000_000.0
             }
             TimeScale::UT1 => {
                 let mjd_utc = self.as_mjd_utc();
@@ -418,10 +442,16 @@ impl Instant {
                 let dut1 = eop[0];
                 mjd_utc + dut1 / 86_400.0
             }
-            TimeScale::TAI => (self.raw - Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0,
+            TimeScale::TAI => {
+                self.raw.saturating_sub(Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0
+            }
             TimeScale::GPS => {
                 // GPS = TAI - 19 seconds
-                (self.raw - Self::MJD_EPOCH.raw - 19_000_000) as f64 / 86_400_000_000.0
+                (self
+                    .raw
+                    .saturating_sub(Self::MJD_EPOCH.raw)
+                    .saturating_sub(19_000_000)) as f64
+                    / 86_400_000_000.0
             }
             TimeScale::TDB => {
                 let tt: f64 = self.as_mjd_with_scale(TimeScale::TT);
@@ -632,11 +662,15 @@ impl Instant {
         let jd = jd as f64 - 0.5;
         let mjd = jd - 2400000.5;
 
-        let mut raw = mjd as i64 * 86_400_000_000
-            + (hour as i64 * 3_600_000_000)
-            + (minute as i64 * 60_000_000)
-            + (second * 1_000_000.0) as i64
-            + Self::MJD_EPOCH.raw;
+        // Checked: an extreme year overflows the i64 microsecond count
+        // (panicking in debug builds, silently wrapping in release)
+        let mut raw = (mjd as i64)
+            .checked_mul(86_400_000_000)
+            .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000))
+            .and_then(|v| v.checked_add(minute as i64 * 60_000_000))
+            .and_then(|v| v.checked_add((second * 1_000_000.0) as i64))
+            .and_then(|v| v.checked_add(Self::MJD_EPOCH.raw))
+            .ok_or(InstantError::InvalidYear(year))?;
         // Account for additional leap seconds if needed
         raw = add_leapseconds(raw);
 

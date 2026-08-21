@@ -87,10 +87,17 @@ impl ContinuousThrust {
             | Frame::CIRS
             | Frame::TEME
             | Frame::EME2000
-            | Frame::ICRF => panic!(
-                "Unsupported frame for thrust: {}. Must be GCRF, RTN, NTW, or LVLH",
-                self.frame
-            ),
+            | Frame::ICRF => {
+                // Unreachable through `new`, but the fields are pub (and the
+                // type is Deserialize), so an invalid frame is constructible.
+                // Ignore the arc rather than panic mid-propagation.
+                debug_assert!(
+                    false,
+                    "Unsupported frame for thrust: {}. Must be GCRF, RTN, NTW, or LVLH",
+                    self.frame
+                );
+                return None;
+            }
         })
     }
 }

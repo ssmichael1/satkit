@@ -676,7 +676,8 @@ impl PyInstant {
         else if other.is_instance_of::<pyo3::types::PyFloat>()
             || other.is_instance_of::<pyo3::types::PyInt>()
         {
-            let dt: f64 = other.extract::<f64>().unwrap();
+            // A Python int too large for f64 raises OverflowError in extract
+            let dt: f64 = other.extract::<f64>()?;
             Self(self.0 + satkit::Duration::from_days(dt)).into_py_any(other.py())
         } else if other.is_instance_of::<PyDuration>() {
             let dur: PyDuration = other.extract::<PyDuration>().unwrap();
@@ -741,7 +742,8 @@ impl PyInstant {
         else if other.is_instance_of::<pyo3::types::PyFloat>()
             || other.is_instance_of::<pyo3::types::PyInt>()
         {
-            let dt: f64 = other.extract::<f64>().unwrap();
+            // A Python int too large for f64 raises OverflowError in extract
+            let dt: f64 = other.extract::<f64>()?;
             pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Self(self.0 - satkit::Duration::from_days(dt)).into_py_any(py)
             })
@@ -839,11 +841,9 @@ impl PyInstant {
 }
 
 fn datetime_to_instant(tm: &Bound<PyDateTime>) -> PyResult<Instant> {
-    let ts: f64 = tm
-        .call_method("timestamp", (), None)
-        .unwrap()
-        .extract::<f64>()
-        .unwrap();
+    // datetime.timestamp() can itself raise (e.g. pre-1970 naive datetimes
+    // on Windows, extreme years via mktime); propagate rather than panic
+    let ts: f64 = tm.call_method("timestamp", (), None)?.extract::<f64>()?;
     Ok(Instant::from_unixtime(ts))
 }
 
@@ -859,7 +859,7 @@ impl ToTimeVec for &Bound<'_, PyAny> {
             Ok(vec![tm.0])
         } else if self.is_instance_of::<PyDateTime>() {
             let dt: Py<PyDateTime> = self.extract().unwrap();
-            pyo3::Python::attach(|py| Ok(vec![datetime_to_instant(dt.bind(py)).unwrap()]))
+            pyo3::Python::attach(|py| Ok(vec![datetime_to_instant(dt.bind(py))?]))
         }
         // List case
         else if self.is_instance_of::<pyo3::types::PyList>() {
@@ -867,9 +867,9 @@ impl ToTimeVec for &Bound<'_, PyAny> {
                 Ok(v) => Ok(v.iter().map(|x| x.0).collect::<Vec<_>>()),
                 Err(_e) => match self.extract::<Vec<Py<PyDateTime>>>() {
                     Ok(v) => pyo3::Python::attach(|py| {
-                        Ok(v.iter()
-                            .map(|x| datetime_to_instant(x.bind(py)).unwrap())
-                            .collect::<Vec<_>>())
+                        v.iter()
+                            .map(|x| datetime_to_instant(x.bind(py)))
+                            .collect::<PyResult<Vec<_>>>()
                     }),
                     Err(e) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
                         "Not a list of satkit.time or datetime.datetime: {e}"
@@ -889,7 +889,7 @@ impl ToTimeVec for &Bound<'_, PyAny> {
                             p.extract::<PyInstant>(py).map_or_else(|_| p.extract::<Py<PyDateTime>>(py).map_or_else(|_| Err(pyo3::exceptions::PyTypeError::new_err(
                                         "Input numpy array must contain satkit.time elements or datetime.datetime elements".to_string()
                                     )), |v3| pyo3::Python::attach(|py| {
-                                        Ok(datetime_to_instant(v3.bind(py)).unwrap())
+                                        datetime_to_instant(v3.bind(py))
                                     })), |v2| Ok(v2.0))
                         })
                         .collect();

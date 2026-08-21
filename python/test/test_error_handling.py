@@ -65,6 +65,21 @@ class TestInvalidInputRaises:
         with pytest.raises(ValueError):
             sk.time.from_rfc3339("ααα:00")
 
+    def test_time_arithmetic_huge_int(self):
+        # A Python int too large for f64 must raise OverflowError, not panic
+        with pytest.raises(OverflowError):
+            sk.time.now() + 10**400
+        with pytest.raises(OverflowError):
+            sk.time.now() - 10**400
+
+    def test_sgp4_wrong_size_state(self):
+        # propagate with an empty time list must raise cleanly
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        tle = sk.TLE.from_lines([line1, line2])
+        with pytest.raises(RuntimeError):
+            sk.sgp4([tle], [])
+
 
 class TestNonContiguousInput:
     def test_itrfcoord_strided(self):
