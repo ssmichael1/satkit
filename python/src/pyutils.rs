@@ -118,8 +118,8 @@ pub fn unpack_f64s<const N: usize>(
         ));
     }
     let mut out = [0.0; N];
-    for (i, chunk) in s.chunks_exact(8).enumerate() {
-        out[i] = f64::from_le_bytes(chunk.try_into().unwrap());
+    for (i, chunk) in s.as_chunks::<8>().0.iter().enumerate() {
+        out[i] = f64::from_le_bytes(*chunk);
     }
     Ok(out)
 }
