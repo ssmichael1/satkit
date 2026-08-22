@@ -120,9 +120,17 @@ pub fn datadir() -> Result<PathBuf> {
             }
         }
 
-        // Check for writeable directory that already exists
+        // Check for writeable directory that already exists. metadata() can
+        // fail (e.g. the directory vanished since is_dir); treat that as
+        // not-writable rather than panicking — a panic here would poison the
+        // singleton mutex and break every subsequent datadir() call.
         for ref dir in td.clone() {
-            if dir.is_dir() && !dir.metadata().unwrap().permissions().readonly() {
+            let writable = dir.is_dir()
+                && dir
+                    .metadata()
+                    .map(|m| !m.permissions().readonly())
+                    .unwrap_or(false);
+            if writable {
                 return Some(dir.to_path_buf());
             }
         }

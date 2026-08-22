@@ -171,7 +171,7 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
 
     println!(
         "Downloading data files to {}",
-        downloaddir.to_str().unwrap()
+        downloaddir.to_string_lossy()
     );
     // Download old files
     download_datadir(

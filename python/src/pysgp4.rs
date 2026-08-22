@@ -391,6 +391,13 @@ pub fn sgp4(
     } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
         let tmarray = time.to_time_vec()?;
+        // The output reshape below cannot represent zero-length inputs
+        if plist.is_empty() {
+            bail!("TLE list must not be empty");
+        }
+        if tmarray.is_empty() {
+            bail!("Time array must not be empty");
+        }
 
         // Sources for the SGP4 computation, extracted with the GIL held;
         // the computation itself runs below with the GIL released.
@@ -517,15 +524,11 @@ pub fn sgp4(
             };
 
             if !output_err {
-                Ok((
-                    parr.reshape(dims.clone()).unwrap(),
-                    varr.reshape(dims).unwrap(),
-                )
-                    .into_py_any(py)?)
+                Ok((parr.reshape(dims.clone())?, varr.reshape(dims)?).into_py_any(py)?)
             } else {
                 Ok((
-                    parr.reshape(dims.clone()).unwrap(),
-                    varr.reshape(dims).unwrap(),
+                    parr.reshape(dims.clone())?,
+                    varr.reshape(dims)?,
                     PyArray1::from_slice(py, eint.as_slice()).reshape(edims)?,
                 )
                     .into_py_any(py)?)

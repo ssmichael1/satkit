@@ -8,14 +8,13 @@ use numpy as np;
 use numpy::ndarray;
 
 use numpy::PyArrayMethods;
-use numpy::PyUntypedArrayMethods;
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::IntoPyObject;
 use pyo3::IntoPyObjectExt;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 pub fn kwargs_or_default<'py, T>(
     kwargs: &mut Option<&Bound<'py, PyDict>>,
@@ -119,8 +118,8 @@ pub fn unpack_f64s<const N: usize>(
         ));
     }
     let mut out = [0.0; N];
-    for (i, chunk) in s.chunks_exact(8).enumerate() {
-        out[i] = f64::from_le_bytes(chunk.try_into().unwrap());
+    for (i, chunk) in s.as_chunks::<8>().0.iter().enumerate() {
+        out[i] = f64::from_le_bytes(*chunk);
     }
     Ok(out)
 }
@@ -172,19 +171,16 @@ pub fn py_vec3_of_time_result_arr(
     let tm = tmarr.to_time_vec()?;
     let py = tmarr.py();
     match tm.len() {
-        1 => match cfunc(&tm[0]) {
-            Ok(v) => Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?),
-            Err(_) => bail!("Invalid time"),
-        },
+        1 => {
+            let v = cfunc(&tm[0])?;
+            Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?)
+        }
         n => {
             // Release the GIL for the computation over the full time array
             let vals: Result<Vec<f64>> = py.detach(|| {
                 let mut vals = Vec::with_capacity(n * 3);
                 for time in tm.iter() {
-                    match cfunc(time) {
-                        Ok(v) => vals.extend_from_slice(v.as_slice()),
-                        Err(_) => bail!("Invalid time"),
-                    }
+                    vals.extend_from_slice(cfunc(time)?.as_slice());
                 }
                 Ok(vals)
             });
@@ -217,20 +213,31 @@ pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> Resu
         let arr = obj.extract::<np::PyReadonlyArray1<f64>>().map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("Invalid array shape: {}", e))
         })?;
-        if arr.is_contiguous() {
-            m.as_mut_slice().copy_from_slice(arr.as_slice()?);
-        } else {
-            let arr = arr.as_array();
-            for row in 0..M {
-                m[(row, 0)] = arr[row];
-            }
+        let arr = arr.as_array();
+        if arr.len() != M * N {
+            anyhow::bail!(
+                "Expected {} elements for {M}x{N} matrix, got {}",
+                M * N,
+                arr.len()
+            );
+        }
+        // Flat copy handles both contiguous and strided input
+        for (dst, src) in m.as_mut_slice().iter_mut().zip(arr.iter()) {
+            *dst = *src;
         }
     } else if obj.is_instance_of::<np::PyArray2<f64>>() {
         let arr = obj.extract::<np::PyReadonlyArray2<f64>>().map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("Invalid array shape: {}", e))
         })?;
-        // Element-by-element to handle numpy row-major to numeris column-major
         let arr = arr.as_array();
+        if arr.shape() != [M, N] {
+            anyhow::bail!(
+                "Expected {M}x{N} matrix, got {}x{}",
+                arr.shape()[0],
+                arr.shape()[1]
+            );
+        }
+        // Element-by-element to handle numpy row-major to numeris column-major
         for row in 0..M {
             for col in 0..N {
                 m[(row, col)] = arr[(row, col)];

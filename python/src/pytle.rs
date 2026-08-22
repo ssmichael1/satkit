@@ -41,8 +41,7 @@ impl PyTLE {
 
         let lines: Vec<String> = io::BufReader::new(file)
             .lines()
-            .map(|v| -> String { v.unwrap() })
-            .collect();
+            .collect::<std::result::Result<_, _>>()?;
 
         Self::from_lines(lines)
     }
@@ -75,7 +74,12 @@ impl PyTLE {
                     .collect::<Vec<_>>()
                     .into_py_any(py)
             } else {
-                Ok(tle_into_py(v.into_iter().next().unwrap(), py))
+                match v.into_iter().next() {
+                    Some(t) => Ok(tle_into_py(t, py)),
+                    None => Err(pyo3::exceptions::PyValueError::new_err(
+                        "No valid TLEs found in input",
+                    )),
+                }
             }
         })
         .map_err(|e| e.into())
@@ -106,7 +110,12 @@ impl PyTLE {
                     .collect::<Vec<_>>()
                     .into_py_any(py)
             } else {
-                Ok(tle_into_py(tles.into_iter().next().unwrap(), py))
+                match tles.into_iter().next() {
+                    Some(t) => Ok(tle_into_py(t, py)),
+                    None => Err(pyo3::exceptions::PyValueError::new_err(
+                        "No valid TLEs found in response",
+                    )),
+                }
             }
         })
         .map_err(|e| e.into())

@@ -152,7 +152,10 @@ fn force_model(
     eval: ForceEval,
 ) -> (Vector3, Matrix3, Matrix3) {
     let time: Instant = *begin + Duration::from_seconds(x);
-    let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp(&time).unwrap();
+    // interp_or_compute rather than interp: adaptive integrators can probe
+    // outside the padded interval (initial step-size heuristic), and the
+    // ODE closure signature leaves no way to surface an Err from here.
+    let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp_or_compute(&time);
     let qitrf2gcrf = qgcrf2itrf.conjugate();
     let pos_itrf = qgcrf2itrf * *pos_gcrf;
 
@@ -392,6 +395,13 @@ pub fn propagate<const C: usize, T: TimeLike>(
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
 ) -> Result<PropagationResult<C>> {
+    // Only plain state (C==1) and state + state-transition-matrix (C==7)
+    // propagation are supported; reject other instantiations up front so
+    // the force closure (which cannot error) never sees them.
+    if C != 1 && C != 7 {
+        return Err(Error::InvalidStateColumns { c: C });
+    }
+
     let begin = begin.as_instant();
     let end = end.as_instant();
 
@@ -784,6 +794,20 @@ mod tests {
     // crates (parse, Instant::from_datetime, etc.) that aren't part of
     // orbitprop::Error.
     use anyhow::Result;
+
+    #[test]
+    fn test_invalid_state_columns_errors() -> Result<()> {
+        // A propagate instantiation with C not in {1, 7} used to compile and
+        // then panic on the first force evaluation; it must error up front
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let t1 = t0 + Duration::from_seconds(60.0);
+        let state = Matrix::<6, 3>::zeros();
+        assert!(matches!(
+            propagate::<3, _>(&state, &t0, &t1, &PropSettings::default(), None),
+            Err(Error::InvalidStateColumns { c: 3 })
+        ));
+        Ok(())
+    }
 
     #[test]
     fn test_short_propagate() -> Result<()> {

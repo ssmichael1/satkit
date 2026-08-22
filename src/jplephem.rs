@@ -302,14 +302,23 @@ impl JPLEphem {
         }
 
         let t_int = (tt - self.jd_start) / self.jd_step;
-        let int_num = t_int.floor() as usize;
+        // tt == jd_stop passes the range check above but floors to an index
+        // one past the last record (and likewise for the sub-interval), so
+        // clamp both; the endpoint then evaluates at t_seg == 1.0 exactly.
+        let int_num = (t_int.floor() as usize).min(self.cheby.ncols() - 1);
         let bidx = body as usize;
 
         let ncoeff = self.ipt[bidx][1];
         let nsubint = self.ipt[bidx][2];
 
+        // An unpopulated body (older/corrupt files zero its ipt entries)
+        // would underflow the 1-based offset below.
+        if self.ipt[bidx][0] == 0 || ncoeff == 0 || nsubint == 0 {
+            return Err(Error::InvalidBody);
+        }
+
         let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
-        let sub_int_num = t_int_2.floor() as usize;
+        let sub_int_num = (t_int_2.floor() as usize).min(nsubint - 1);
         let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
 
         let offset0 = self.ipt[bidx][0] - 1 + sub_int_num * ncoeff * 3;
@@ -407,6 +416,20 @@ impl JPLEphem {
         let au: f64 = f64::from_le_bytes(raw[2680..2688].try_into()?);
         let emrat: f64 = f64::from_le_bytes(raw[2688..2696].try_into()?);
 
+        // A corrupt/crafted header would otherwise detonate downstream: a
+        // non-positive or non-finite step makes the record count meaningless
+        // (0.0 yields usize::MAX records), and a negative constant count is
+        // nonsense.
+        if !jd_start.is_finite()
+            || !jd_stop.is_finite()
+            || !jd_step.is_finite()
+            || jd_step <= 0.0
+            || jd_stop < jd_start
+            || n_con < 0
+        {
+            return Err(Error::InvalidHeader);
+        }
+
         // Get table
         let ipt: [[usize; 3]; 15] = {
             let mut ipt: [[usize; 3]; 15] = [[0, 0, 0]; 15];
@@ -425,7 +448,10 @@ impl JPLEphem {
 
             if de_version > 430 && n_con != 400 {
                 if n_con > 400 {
-                    let idx = ((n_con - 400) * 6) as usize;
+                    let idx = (n_con as usize - 400) * 6;
+                    if idx + 4 > raw.len() {
+                        return Err(Error::InvalidHeader);
+                    }
                     ipt[13][0] = u32::from_le_bytes(raw[idx..(idx + 4)].try_into()?) as usize;
                 } else {
                     ipt[13][0] = 1_usize;
@@ -445,13 +471,19 @@ impl JPLEphem {
             ipt
         };
 
-        // Kernel size
+        // Kernel size. The counts come straight from the file, so use checked
+        // arithmetic: a crafted file with huge ipt entries must error rather
+        // than overflow.
         let kernel_size: usize = {
             let mut ks: usize = 4;
-            ipt.iter().enumerate().for_each(|(ix, _)| {
-                ks += 2 * ipt[ix][1] * ipt[ix][2] * dimension(ix);
-            });
-
+            for (ix, entry) in ipt.iter().enumerate() {
+                let term = 2usize
+                    .checked_mul(entry[1])
+                    .and_then(|v| v.checked_mul(entry[2]))
+                    .and_then(|v| v.checked_mul(dimension(ix)))
+                    .ok_or(Error::InvalidRecordSize)?;
+                ks = ks.checked_add(term).ok_or(Error::InvalidRecordSize)?;
+            }
             ks
         };
 
@@ -468,12 +500,13 @@ impl JPLEphem {
 
                 // Read in constants defined in file
                 for ix in 0..n_con {
-                    let sidx: usize = kernel_size * 4 + ix as usize * 8;
+                    let ix = ix as usize;
+                    let sidx: usize = kernel_size * 4 + ix * 8;
                     let eidx: usize = sidx + 8;
                     let stridx: usize = if ix >= 400 {
-                        (84 * 3 + 400 * 6 + 5 * 8 + 41 * 4 + ix * 6) as usize
+                        84 * 3 + 400 * 6 + 5 * 8 + 41 * 4 + ix * 6
                     } else {
-                        (84 * 3 + ix * 6) as usize
+                        84 * 3 + ix * 6
                     };
                     // Both offsets are derived from file-declared sizes; bounds
                     // check before slicing so a corrupt file errors cleanly.
@@ -488,14 +521,25 @@ impl JPLEphem {
                 hm
             },
             cheby: {
-                let ncoeff: usize = (kernel_size / 2) as usize;
+                let ncoeff: usize = kernel_size / 2;
                 let nrecords = ((jd_stop - jd_start) / jd_step) as usize;
-                let record_size = (kernel_size * 4) as usize;
-                let mut v: DMatrix<f64> = DMatrix::zeros(ncoeff, nrecords);
+                let record_size = kernel_size.checked_mul(4).ok_or(Error::InvalidRecordSize)?;
 
-                if raw.len() < record_size * 2 + ncoeff * nrecords * 8 {
+                // Validate the declared sizes against the actual buffer with
+                // checked arithmetic BEFORE allocating: a crafted header must
+                // not trigger an overflow or a multi-GB allocation.
+                let data_bytes = ncoeff
+                    .checked_mul(nrecords)
+                    .and_then(|v| v.checked_mul(8))
+                    .ok_or(Error::InvalidRecordSize)?;
+                let required = record_size
+                    .checked_mul(2)
+                    .and_then(|v| v.checked_add(data_bytes))
+                    .ok_or(Error::InvalidRecordSize)?;
+                if raw.len() < required {
                     return Err(Error::InvalidRecordSize);
                 }
+                let mut v: DMatrix<f64> = DMatrix::zeros(ncoeff, nrecords);
 
                 // Bulk-copy the coefficient block (native-endian f64s). `raw` is
                 // a `Vec<u8>` (alignment 1), so we must NOT reinterpret its
@@ -762,6 +806,37 @@ mod tests {
     use super::*;
     use crate::utils::test;
     use std::io::{self, BufRead};
+
+    #[test]
+    fn test_parse_rejects_corrupt_files() {
+        // Truncated
+        assert!(JPLEphem::parse(&[0u8; 100]).is_err());
+        // Valid version digits but zeroed jd_start/jd_stop/jd_step: a zero
+        // step used to yield usize::MAX records downstream
+        let mut raw = vec![0u8; 4096];
+        raw[0..84].fill(b' ');
+        raw[26..29].copy_from_slice(b"440");
+        assert!(matches!(JPLEphem::parse(&raw), Err(Error::InvalidHeader)));
+    }
+
+    #[test]
+    fn test_query_at_exact_end_epoch() {
+        // Regression: a query exactly at jd_stop passed the range check but
+        // floored to a record index one past the last Chebyshev record,
+        // panicking on the matrix index instead of returning a result.
+        let jpl = jplephem_singleton().as_ref().unwrap();
+        let tm = Instant::from_jd_with_scale(jpl.jd_stop, TimeScale::TT);
+        // The Instant roundtrip may land a hair above or below jd_stop;
+        // either way the call must not panic, and in-range must be Ok.
+        if tm.as_jd_with_scale(TimeScale::TT) <= jpl.jd_stop {
+            assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_ok());
+        } else {
+            assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_err());
+        }
+        // Just inside the boundary must always succeed
+        let tm_in = tm - crate::Duration::from_seconds(1.0);
+        assert!(jpl.geocentric_state(SolarSystem::Moon, &tm_in).is_ok());
+    }
 
     #[test]
     fn load_test() {

@@ -43,17 +43,17 @@ impl PyKepler {
     #[new]
     #[pyo3(signature=(*args, **kwargs))]
     fn new(args: &Bound<PyTuple>, mut kwargs: Option<&Bound<PyDict>>) -> PyResult<Self> {
-        let a = args.get_item(0)?.extract::<f64>().unwrap();
-        let e = args.get_item(1)?.extract::<f64>().unwrap();
-        let i = args.get_item(2)?.extract::<f64>().unwrap();
-        let raan = args.get_item(3)?.extract::<f64>().unwrap();
-        let w = args.get_item(4)?.extract::<f64>().unwrap();
+        let a = args.get_item(0)?.extract::<f64>()?;
+        let e = args.get_item(1)?.extract::<f64>()?;
+        let i = args.get_item(2)?.extract::<f64>()?;
+        let raan = args.get_item(3)?.extract::<f64>()?;
+        let w = args.get_item(4)?.extract::<f64>()?;
 
         let nu: Option<f64>;
         let mut ea: Option<f64> = None;
         let mut ma: Option<f64> = None;
         if args.len() > 5 {
-            nu = Some(args.get_item(5)?.extract::<f64>().unwrap());
+            nu = Some(args.get_item(5)?.extract::<f64>()?);
         } else {
             nu = kwargs_or_none(&mut kwargs, "true_anomaly")?;
             ea = kwargs_or_none(&mut kwargs, "eccentric_anomaly")?;
