@@ -112,7 +112,13 @@ impl PyQuaternion {
     ///
     #[staticmethod]
     fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> Result<Self> {
-        let s = axis.as_slice()?;
+        let s = axis.as_array();
+        if s.len() != 3 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Axis must be a 3-element numpy array",
+            )
+            .into());
+        }
         let v = numeris::vector![s[0], s[1], s[2]];
         let n = v.norm();
         if n < 1.0e-9 {

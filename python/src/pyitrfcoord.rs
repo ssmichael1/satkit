@@ -127,7 +127,7 @@ impl PyITRFCoord {
             longitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "longitude_rad")?)
                 .map_or(longitude_deg, |v| Some(v.to_degrees()));
             let mut altitude: f64 = kwargs_or_default(&mut kwargs, "altitude", 0.0)?;
-            altitude = (kwargs_or_none(&mut kwargs, "height")?).map_or(altitude, |v| v);
+            altitude = (kwargs_or_none(&mut kwargs, "height")?).unwrap_or(altitude);
 
             // Reject typos like `alttiude=` that would otherwise be silently
             // ignored and leave the ground-station altitude at its 0.0 default.
@@ -164,16 +164,16 @@ impl PyITRFCoord {
                     Err(e) => Err(e),
                 }
             } else if args.get_item(0)?.is_instance_of::<PyArray1<f64>>() {
-                let xv = args
-                    .get_item(0)?
-                    .extract::<PyReadonlyArray1<f64>>()
-                    .unwrap();
-                if xv.len().unwrap() != 3 {
+                let xv = args.get_item(0)?.extract::<PyReadonlyArray1<f64>>()?;
+                let xa = xv.as_array();
+                if xa.len() != 3 {
                     return Err(pyo3::exceptions::PyTypeError::new_err(
                         "Invalid number of elements",
                     ));
                 }
-                Ok(Self(ITRFCoord::from_slice(xv.as_slice().unwrap()).unwrap()))
+                ITRFCoord::from_slice(&[xa[0], xa[1], xa[2]])
+                    .map(Self)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{e}")))
             } else {
                 Err(pyo3::exceptions::PyTypeError::new_err(
                 "First input must be float, 3-element list of floats, or 3-element numpy array of float"

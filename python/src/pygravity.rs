@@ -104,11 +104,14 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
             Ok(vpy.into_py_any(py)?)
         })
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
-        let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
-        if vpy.len().unwrap() != 3 {
+        let vpy = pos
+            .extract::<np::PyReadonlyArray1<f64>>()
+            .map_err(|e| anyhow::anyhow!("Failed to extract position array: {}", e))?;
+        let varr = vpy.as_array();
+        if varr.len() != 3 {
             bail!("Input must have 3 elements");
         }
-        let v: Vector3 = Vector3::from_slice(vpy.as_slice().unwrap());
+        let v: Vector3 = Vector3::from_slice(&[varr[0], varr[1], varr[2]]);
         let a = accel(&v, degree, order, model.into());
         pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
             let vpy = np::PyArray1::<f64>::from_slice(py, a.as_slice());
@@ -184,11 +187,14 @@ pub fn gravity_and_partials(
             Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
         })
     } else if pos.is_instance_of::<np::PyArray1<f64>>() {
-        let vpy = pos.extract::<np::PyReadonlyArray1<f64>>().unwrap();
-        if vpy.len().unwrap() != 3 {
+        let vpy = pos
+            .extract::<np::PyReadonlyArray1<f64>>()
+            .map_err(|e| anyhow::anyhow!("Failed to extract position array: {}", e))?;
+        let varr = vpy.as_array();
+        if varr.len() != 3 {
             bail!("Input must have 3 elements");
         }
-        let v: Vector3 = Vector3::from_slice(vpy.as_slice().unwrap());
+        let v: Vector3 = Vector3::from_slice(&[varr[0], varr[1], varr[2]]);
         let (g, p) = accel_and_partials(&v, degree, order, model.into());
         pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
             let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());

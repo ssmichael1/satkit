@@ -13,21 +13,33 @@ where
     dt.timestamp() as f64 + dt.timestamp_subsec_nanos() as f64 * 1.0e-9
 }
 
+#[inline]
+fn instant_to_datetime(inst: &Instant) -> chrono::DateTime<chrono::Utc> {
+    let unixtime = inst.as_unixtime();
+    let secs = unixtime.trunc() as i64;
+    let nsecs = ((unixtime.fract()) * 1.0e9) as u32;
+    // chrono can only represent years within about +/- 262,000; `From`
+    // cannot fail, so saturate instants outside that range rather than
+    // panicking on the unwrap.
+    chrono::Utc
+        .timestamp_opt(secs, nsecs)
+        .single()
+        .unwrap_or(if secs < 0 {
+            chrono::DateTime::<chrono::Utc>::MIN_UTC
+        } else {
+            chrono::DateTime::<chrono::Utc>::MAX_UTC
+        })
+}
+
 impl From<Instant> for chrono::DateTime<chrono::Utc> {
     fn from(inst: Instant) -> Self {
-        let unixtime = inst.as_unixtime();
-        let secs = unixtime.trunc() as i64;
-        let nsecs = ((unixtime.fract()) * 1.0e9) as u32;
-        chrono::Utc.timestamp_opt(secs, nsecs).unwrap()
+        instant_to_datetime(&inst)
     }
 }
 
 impl From<&Instant> for chrono::DateTime<chrono::Utc> {
     fn from(inst: &Instant) -> Self {
-        let unixtime = inst.as_unixtime();
-        let secs = unixtime.trunc() as i64;
-        let nsecs = ((unixtime.fract()) * 1.0e9) as u32;
-        chrono::Utc.timestamp_opt(secs, nsecs).unwrap()
+        instant_to_datetime(inst)
     }
 }
 
@@ -36,7 +48,7 @@ where
     TZ: chrono::TimeZone,
 {
     fn from(dt: chrono::DateTime<TZ>) -> Self {
-        Instant::from_unixtime(datetime_to_unixtime(&dt))
+        Self::from_unixtime(datetime_to_unixtime(&dt))
     }
 }
 
@@ -45,7 +57,7 @@ where
     TZ: chrono::TimeZone,
 {
     fn from(dt: &chrono::DateTime<TZ>) -> Self {
-        Instant::from_unixtime(datetime_to_unixtime(&dt))
+        Self::from_unixtime(datetime_to_unixtime(dt))
     }
 }
 
@@ -59,19 +71,19 @@ mod chrono_impls {
     {
         #[inline]
         fn as_mjd_with_scale(&self, scale: TimeScale) -> f64 {
-            let unixtime = datetime_to_unixtime(&self);
+            let unixtime = datetime_to_unixtime(self);
             Instant::from_unixtime(unixtime).as_mjd_with_scale(scale)
         }
 
         #[inline]
         fn as_jd_with_scale(&self, scale: TimeScale) -> f64 {
-            let unixtime = datetime_to_unixtime(&self);
+            let unixtime = datetime_to_unixtime(self);
             Instant::from_unixtime(unixtime).as_jd_with_scale(scale)
         }
 
         #[inline]
         fn as_instant(&self) -> Instant {
-            Instant::from_unixtime(datetime_to_unixtime(&self))
+            Instant::from_unixtime(datetime_to_unixtime(self))
         }
     }
 }
@@ -81,6 +93,16 @@ mod tests {
     use crate::{TimeLike, TimeScale};
 
     use super::*;
+
+    #[test]
+    fn test_extreme_instant_saturates() {
+        // Instants beyond chrono's representable range (about +/- 262,000
+        // years) must saturate rather than panic in the From impl
+        let dt: chrono::DateTime<chrono::Utc> = Instant::new(i64::MAX).into();
+        assert_eq!(dt, chrono::DateTime::<chrono::Utc>::MAX_UTC);
+        let dt: chrono::DateTime<chrono::Utc> = Instant::new(i64::MIN + 1).into();
+        assert_eq!(dt, chrono::DateTime::<chrono::Utc>::MIN_UTC);
+    }
 
     #[test]
     fn test_instant_chrono_conversion() {

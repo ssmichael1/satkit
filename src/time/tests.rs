@@ -410,3 +410,44 @@ fn test_rfc3339_with_timezone_offset() {
     assert_eq!(g.3, 15);
     assert_eq!(g.4, 30);
 }
+
+#[test]
+fn test_extreme_dates_error_not_panic() {
+    // Extreme years overflow the i64 microsecond count; must be an error,
+    // not a debug-build overflow panic (or silent wrap in release)
+    assert!(Instant::from_datetime(600_000_000, 1, 1, 0, 0, 0.0).is_err());
+    assert!(Instant::from_datetime(-600_000_000, 1, 1, 0, 0, 0.0).is_err());
+    // Saturates rather than overflowing
+    let _ = Instant::from_gps_week_and_second(i32::MAX, 0.0);
+    let _ = Instant::from_gps_week_and_second(i32::MIN, 0.0);
+    // strftime must not panic for extreme instants, whose datetime
+    // breakdown can yield out-of-range month/weekday values
+    for inst in [
+        Instant::INVALID,
+        Instant::new(i64::MIN + 1),
+        Instant::new(i64::MAX),
+        Instant::from_mjd_with_scale(-1.0e9, TimeScale::UTC),
+        Instant::from_mjd_with_scale(1.0e9, TimeScale::UTC),
+    ] {
+        assert!(inst.strftime("%Y-%m-%d %B %b %a %A").is_ok());
+    }
+    // ... while valid dates still format correctly
+    let s = Instant::from_datetime(2024, 1, 15, 0, 0, 0.0)
+        .unwrap()
+        .strftime("%B")
+        .unwrap();
+    assert_eq!(s, "January");
+}
+
+#[test]
+fn test_rfc3339_non_ascii_errors_not_panics() {
+    // Regression: the timezone-offset scan byte-slices the last 6 bytes of
+    // the input, which used to panic on non-char-boundary indices for
+    // non-ASCII input. These must all return a clean error.
+    assert!(Instant::from_rfc3339("ααα:00").is_err());
+    assert!(Instant::from_rfc3339("X+aé:0").is_err());
+    assert!(Instant::from_string("ααα:00").is_err());
+    // from_string is lenient and may parse a valid prefix of this one; the
+    // regression being tested is only that it must not panic
+    let _ = Instant::from_string("2024-01-01T12:00:00+05:0é");
+}

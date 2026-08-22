@@ -37,6 +37,13 @@ pub enum Error {
     GaussJackson8NoSTM,
 
     // -- precomputed.rs --------------------------------------------------
+    /// Returned by the [`Precomputed`](crate::orbitprop::Precomputed)
+    /// constructors when the interpolation step is zero, negative, or
+    /// non-finite (a zero step would otherwise attempt a `usize::MAX`
+    /// allocation; a negative one builds a table covering the wrong range).
+    #[error("Precomputed interpolation step must be finite and > 0, got {step}")]
+    InvalidPrecomputeStep { step: f64 },
+
     /// Returned by [`Precomputed::interp`](crate::orbitprop::Precomputed::interp)
     /// when the requested time falls outside the precomputed range.
     #[error("Precomputed::interp: time {time} is outside of precomputed range : {begin} to {end}")]

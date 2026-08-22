@@ -73,7 +73,9 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
 fn datadir() -> PyResult<Py<PyAny>> {
     pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
         match satkit::utils::datadir() {
-            Ok(v) => v.to_str().unwrap().into_py_any(py),
+            // to_string_lossy: a non-UTF-8 path (settable via SATKIT_DATA)
+            // must not panic
+            Ok(v) => v.to_string_lossy().into_py_any(py),
             Err(_) => pyo3::types::PyNone::get(py).into_py_any(py),
         }
     })

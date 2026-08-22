@@ -15,6 +15,11 @@ pub enum Error {
     #[error("File {path} not found and satkit was built without the `download` feature")]
     FileNotFoundNoDownload { path: String },
 
+    /// Returned when a download path or URL has no valid UTF-8 file-name
+    /// component (e.g. ends in `/` or `..`).
+    #[error("Path or URL has no valid file name: {path}")]
+    InvalidFileName { path: String },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -61,11 +66,14 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
         return Ok(());
     }
     let baseurl = seturl.unwrap_or("https://storage.googleapis.com/astrokit-astro-data/");
-    let url = format!(
-        "{}{}",
-        baseurl,
-        fname.file_name().unwrap().to_str().unwrap()
-    );
+    let basename =
+        fname
+            .file_name()
+            .and_then(|f| f.to_str())
+            .ok_or_else(|| Error::InvalidFileName {
+                path: fname.display().to_string(),
+            })?;
+    let url = format!("{}{}", baseurl, basename);
     // Try to set proxy, if any, from environment variables
     let agent = ureq::Agent::new_with_defaults();
 
@@ -88,17 +96,22 @@ pub fn download_if_not_exist(fname: &Path, _seturl: Option<&str>) -> Result<()> 
 
 #[cfg(feature = "download")]
 pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -> Result<bool> {
-    let fname = std::path::Path::new(url).file_name().unwrap();
+    let fname = std::path::Path::new(url)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .ok_or_else(|| Error::InvalidFileName {
+            path: url.to_string(),
+        })?;
     let fullpath = downloaddir.join(fname);
     if fullpath.exists() && !overwrite_if_exists {
-        println!("File {} exists; skipping download", fname.to_str().unwrap());
+        println!("File {} exists; skipping download", fname);
         return Ok(false);
     }
 
     let agent = ureq::Agent::new_with_defaults();
     let mut resp = agent.get(url).call()?;
 
-    println!("Downloading {}", fname.to_str().unwrap());
+    println!("Downloading {}", fname);
     write_atomic(&mut resp.body_mut().as_reader(), &fullpath)?;
     Ok(true)
 }

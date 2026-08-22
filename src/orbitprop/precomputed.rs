@@ -64,6 +64,9 @@ impl Precomputed {
     ) -> Result<Self> {
         let begin = begin.as_instant();
         let end = end.as_instant();
+        if !step_secs.is_finite() || step_secs <= 0.0 {
+            return Err(Error::InvalidPrecomputeStep { step: step_secs });
+        }
         let step: f64 = step_secs;
         let pad = Duration::from_seconds(padding_secs.max(0.0));
 
@@ -77,8 +80,11 @@ impl Precomputed {
             end: pend,
             step,
             data: {
-                let nsteps: usize = 2 + ((pend - pbegin).as_seconds() / step.abs()).ceil() as usize;
-                let mut data = Vec::with_capacity(nsteps);
+                let nsteps: usize = 2 + ((pend - pbegin).as_seconds() / step).ceil() as usize;
+                // Cap the up-front reservation: an absurd span would otherwise
+                // attempt one giant allocation here; growing instead lets the
+                // ephemeris range check in the loop below error out first.
+                let mut data = Vec::with_capacity(nsteps.min(1 << 22));
                 for idx in 0..nsteps {
                     let t = pbegin + Duration::from_seconds((idx as f64) * step);
                     let q = qgcrf2itrf_approx(&t);
@@ -89,6 +95,41 @@ impl Precomputed {
                 data
             },
         })
+    }
+
+    /// Interpolate if `t` falls within the table range; otherwise fall back
+    /// to computing the values directly (exact, just slower than the table).
+    ///
+    /// This method cannot fail, which makes it safe to call from force-model
+    /// evaluations where the integrator may probe slightly outside the
+    /// padded propagation interval (e.g. an adaptive integrator's initial
+    /// step-size heuristic). In the pathological case where the direct
+    /// ephemeris lookup also fails (a time outside the JPL ephemeris span),
+    /// the nearest table-edge sample is returned.
+    pub fn interp_or_compute<T: TimeLike>(&self, t: &T) -> InterpType {
+        let t = t.as_instant();
+        if let Ok(v) = self.interp(&t) {
+            return v;
+        }
+        let q = qgcrf2itrf_approx(&t);
+        match (
+            jplephem::geocentric_pos(SolarSystem::Sun, &t),
+            jplephem::geocentric_pos(SolarSystem::Moon, &t),
+        ) {
+            (Ok(psun), Ok(pmoon)) => (q, psun, pmoon),
+            _ => {
+                let edge = if t < self.begin {
+                    self.data.first()
+                } else {
+                    self.data.last()
+                };
+                edge.copied().unwrap_or((
+                    Quaternion::identity(),
+                    Vector3::zeros(),
+                    Vector3::zeros(),
+                ))
+            }
+        }
     }
 
     pub fn interp<T: TimeLike>(&self, t: &T) -> Result<InterpType> {
@@ -109,5 +150,46 @@ impl Precomputed {
         let psun = self.data[idx].1 + (self.data[idx + 1].1 - self.data[idx].1) * delta;
         let pmoon = self.data[idx].2 + (self.data[idx + 1].2 - self.data[idx].2) * delta;
         Ok((q, psun, pmoon))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_invalid_step_errors() {
+        let t0 = Instant::from_date(2015, 3, 20).unwrap();
+        let t1 = t0 + Duration::from_seconds(3600.0);
+        // Zero step would compute usize::MAX steps and abort on allocation
+        assert!(matches!(
+            Precomputed::new_with_step(&t0, &t1, 0.0),
+            Err(Error::InvalidPrecomputeStep { .. })
+        ));
+        // Negative step silently built a table covering the wrong range
+        assert!(Precomputed::new_with_step(&t0, &t1, -60.0).is_err());
+        assert!(Precomputed::new_with_step(&t0, &t1, f64::NAN).is_err());
+    }
+
+    #[test]
+    fn test_interp_or_compute_out_of_range() {
+        let t0 = Instant::from_date(2015, 3, 20).unwrap();
+        let t1 = t0 + Duration::from_seconds(3600.0);
+        let pc = Precomputed::new(&t0, &t1).unwrap();
+
+        // In range: matches the table interpolation
+        let tin = t0 + Duration::from_seconds(100.0);
+        let a = pc.interp(&tin).unwrap();
+        let b = pc.interp_or_compute(&tin);
+        assert_eq!(a.1.as_slice(), b.1.as_slice());
+
+        // Out of range: interp errors, but interp_or_compute must return
+        // finite values (regression: the force model unwrapped interp and
+        // panicked when an adaptive integrator probed past the padding)
+        let tout = t1 + Duration::from_seconds(86400.0);
+        assert!(pc.interp(&tout).is_err());
+        let (_q, psun, pmoon) = pc.interp_or_compute(&tout);
+        assert!(psun.as_slice().iter().all(|v| v.is_finite()));
+        assert!(pmoon.as_slice().iter().all(|v| v.is_finite()));
     }
 }
