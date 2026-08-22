@@ -127,7 +127,7 @@ impl PyITRFCoord {
             longitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "longitude_rad")?)
                 .map_or(longitude_deg, |v| Some(v.to_degrees()));
             let mut altitude: f64 = kwargs_or_default(&mut kwargs, "altitude", 0.0)?;
-            altitude = (kwargs_or_none(&mut kwargs, "height")?).map_or(altitude, |v| v);
+            altitude = (kwargs_or_none(&mut kwargs, "height")?).unwrap_or(altitude);
 
             // Reject typos like `alttiude=` that would otherwise be silently
             // ignored and leave the ground-station altitude at its 0.0 default.
