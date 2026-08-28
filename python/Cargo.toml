@@ -7,6 +7,10 @@ publish = false
 [lib]
 name = "satkit"
 crate-type = ["cdylib"]
+# The extension module must be named `satkit`, which collides with the core
+# crate's docs under `cargo doc --workspace`; the bindings are documented via
+# the .pyi stubs instead.
+doc = false
 
 [dependencies]
 satkit = { path = "..", features = ["download"] }

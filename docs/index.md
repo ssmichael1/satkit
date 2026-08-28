@@ -106,7 +106,7 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 
 ### Force Models
 
-- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 360)
+- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40)
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
 - **Atmospheric drag**: NRLMSISE-00 (pure Rust) with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function

@@ -168,6 +168,11 @@ jobs:
       - name: Test
         run: cargo test --features chrono
 
+      # Network-dependent test, #[ignore]d so an offline `cargo test` passes;
+      # still exercised here where the runner has internet access.
+      - name: Test (network, solar cycle forecast download)
+        run: cargo test --features chrono --lib solar_cycle_forecast -- --ignored
+
       # Already covered by `cargo test` above; re-run with --nocapture so the
       # per-case max residual vs GMAT (tests/gmat/README.md) is visible in the log.
       - name: GMAT regression residuals

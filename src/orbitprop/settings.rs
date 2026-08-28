@@ -31,8 +31,9 @@ pub enum Integrator {
     /// of comparable accuracy on smooth orbit propagation problems.
     ///
     /// Uses a fixed step size set via [`PropSettings::gj_step_seconds`].
-    /// Does not support state transition matrix propagation (C=7) or dense
-    /// output interpolation. Not recommended for highly eccentric orbits or
+    /// Supports dense output (quintic Hermite interpolation between steps
+    /// when `enable_interp` is set) but not state transition matrix
+    /// propagation (C=7). Not recommended for highly eccentric orbits or
     /// integration across discontinuities (eclipse boundaries, maneuvers).
     GaussJackson8,
 }
@@ -139,13 +140,38 @@ impl PropSettings {
     /// * `order` - Maximum order (must be ≤ degree)
     ///
     /// # Errors
-    /// Returns error if order > degree
+    /// Returns error if order > degree, or if degree exceeds
+    /// [`MAX_GRAVITY_DEGREE`](crate::earthgravity::MAX_GRAVITY_DEGREE) (40).
     pub fn set_gravity(&mut self, degree: u16, order: u16) -> Result<()> {
+        Self::check_gravity(degree, order)?;
+        self.gravity_degree = degree;
+        self.gravity_order = order;
+        Ok(())
+    }
+
+    /// Validate the gravity degree / order currently held by these settings.
+    ///
+    /// [`propagate`](super::propagate) calls this on entry so that settings
+    /// built by struct literal (bypassing [`set_gravity`](Self::set_gravity))
+    /// are checked too: a degree above
+    /// [`MAX_GRAVITY_DEGREE`](crate::earthgravity::MAX_GRAVITY_DEGREE) used to
+    /// be silently evaluated at 40, and an order above the degree silently
+    /// clamped.
+    pub fn validate_gravity(&self) -> Result<()> {
+        Self::check_gravity(self.gravity_degree, self.gravity_order)
+    }
+
+    fn check_gravity(degree: u16, order: u16) -> Result<()> {
+        use crate::earthgravity::MAX_GRAVITY_DEGREE;
+        if degree > MAX_GRAVITY_DEGREE {
+            return Err(Error::InvalidGravityDegree {
+                degree,
+                max: MAX_GRAVITY_DEGREE,
+            });
+        }
         if order > degree {
             return Err(Error::InvalidGravityOrder { order, degree });
         }
-        self.gravity_degree = degree;
-        self.gravity_order = order;
         Ok(())
     }
 
@@ -276,5 +302,55 @@ mod test {
     fn testdisplay() {
         let props = PropSettings::default();
         println!("props = {}", props);
+    }
+
+    #[test]
+    fn set_gravity_rejects_degree_above_max() {
+        let mut s = PropSettings::default();
+        assert!(s.set_gravity(40, 40).is_ok());
+        assert_eq!((s.gravity_degree, s.gravity_order), (40, 40));
+        assert!(matches!(
+            s.set_gravity(41, 41),
+            Err(Error::InvalidGravityDegree {
+                degree: 41,
+                max: 40
+            })
+        ));
+        assert!(matches!(
+            s.set_gravity(360, 360),
+            Err(Error::InvalidGravityDegree { degree: 360, .. })
+        ));
+        assert!(matches!(
+            s.set_gravity(20, 21),
+            Err(Error::InvalidGravityOrder {
+                order: 21,
+                degree: 20
+            })
+        ));
+        // A rejected call leaves the settings untouched.
+        assert_eq!((s.gravity_degree, s.gravity_order), (40, 40));
+    }
+
+    #[test]
+    fn validate_gravity_catches_struct_literal() {
+        let s = PropSettings {
+            gravity_degree: 41,
+            gravity_order: 41,
+            ..Default::default()
+        };
+        assert!(matches!(
+            s.validate_gravity(),
+            Err(Error::InvalidGravityDegree { .. })
+        ));
+        let s = PropSettings {
+            gravity_degree: 8,
+            gravity_order: 9,
+            ..Default::default()
+        };
+        assert!(matches!(
+            s.validate_gravity(),
+            Err(Error::InvalidGravityOrder { .. })
+        ));
+        assert!(PropSettings::default().validate_gravity().is_ok());
     }
 }

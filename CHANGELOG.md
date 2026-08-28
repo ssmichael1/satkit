@@ -5,12 +5,52 @@
 
 ### Changed
 
+- **Gravity degree/order above 40 is now rejected.** The built-in
+  coefficient tables and evaluator are capped at degree 40
+  (`earthgravity::MAX_GRAVITY_DEGREE`); higher requests were accepted and
+  silently evaluated at 40 (degree 60 or 360 gave results bit-identical to
+  40). `PropSettings::set_gravity` returns `Error::InvalidGravityDegree`,
+  `propagate()` validates struct-literal settings on entry, and the Python
+  `gravity_degree`/`gravity_order` setters and constructor raise
+  `ValueError`. Anyone passing a degree above 40 must lower it; results
+  are unchanged for everyone else.
+- **Precomputed table size is capped.** `Precomputed::new_padded` (and
+  `propsettings.precompute_terms`) return `Error::PrecomputeTooLarge`
+  instead of allocating when the span/step would need more than
+  `MAX_PRECOMPUTE_ENTRIES` (16.8 M entries ≈ 1.3 GB, about 30 years at the
+  default 60 s step); non-finite padding returns
+  `Error::InvalidPrecomputePadding`. A 1 µs step previously consumed more
+  than 6 GB before being killed, and a denormal step wrapped to a silent
+  one-entry table.
+- **Data downloads:** the EOP and space-weather lazy-load fallbacks now use
+  `https://celestrak.org`; static-manifest directory keys must be a single
+  plain path component (`Error::InvalidManifestPath`) and refresh-manifest
+  URLs must be `https://` (`Error::InsecureManifestUrl`).
 - **numeris 0.5.14 → 0.5.17.** Picks up the ODE fix that clamps the
   initial step to the propagation span; no measurable change to any test
   baseline or GMAT residual.
 
+### CI
+
+- **Published wheels are smoke-tested.** cibuildwheel's `test-skip = "*"`
+  is replaced by an import + native-call check on every wheel that can run
+  on the build host (macOS x86_64 cross-builds are still skipped).
+- **Network-dependent test isolated.** `solar_cycle_forecast::
+  test_download_and_parse` is `#[ignore]`d so an offline `cargo test`
+  passes; CI runs it explicitly with `-- --ignored`.
+- `python/Cargo.toml` sets `doc = false` on the extension crate so
+  `cargo doc --workspace` no longer fails on the `satkit` name collision.
+
 ### Fixed
 
+- **Documentation:** the Gauss-Jackson 8 integrator docs said it had no
+  dense output (it supports quintic Hermite interpolation); the crate docs
+  described the license as MIT-only (it is MIT OR Apache-2.0);
+  CONTRIBUTING referenced Python 3.8, a nonexistent `python/test/test.py`,
+  and the retired ReadTheDocs site; `docs/index.md` advertised gravity
+  degree 360; the data-file docs described `leap-seconds.list` as a runtime
+  input (the leap-second table is compiled in, current through
+  2017-01-01).
 - **Orbit propagator frame accuracy.** The propagator's precomputed
   GCRF→ITRF table was built from the ~1 arcsec IAU-76/FK5 approximation
   (`qgcrf2itrf_approx`, no polar motion). That tilt of the gravity field
@@ -170,6 +210,13 @@
   - `time.strftime`: `fmt` → `format`;  `time.strptime`: `(s, fmt)` → `(date_string, format)`
   - `kepler.from_pv`: `(r, v)` → `(pos, vel)`
 
+
+## 0.20.3 - 2026-08-21
+
+Released with the panic-hardening audit (PR #124), the `lambert::Error` /
+typed `sgp4::Error::SatRecInit` API cleanups (PR #123) and the stubtest CI
+check (PR #122). Those entries were recorded under 0.20.4 above when 0.20.4
+followed a week later; see that section for details.
 
 ## 0.20.2 - 2026-07-03
 

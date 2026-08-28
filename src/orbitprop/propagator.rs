@@ -395,6 +395,9 @@ pub fn propagate<const C: usize, T: TimeLike>(
     settings: &PropSettings,
     satprops: Option<&dyn SatProperties>,
 ) -> Result<PropagationResult<C>> {
+    // Settings built by struct literal bypass `set_gravity`; check here so an
+    // unsupported degree errors instead of silently evaluating at the cap.
+    settings.validate_gravity()?;
     // Only plain state (C==1) and state + state-transition-matrix (C==7)
     // propagation are supported; reject other instantiations up front so
     // the force closure (which cannot error) never sees them.
@@ -805,6 +808,30 @@ mod tests {
         assert!(matches!(
             propagate::<3, _>(&state, &t0, &t1, &PropSettings::default(), None),
             Err(Error::InvalidStateColumns { c: 3 })
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_gravity_degree_above_max_errors() -> Result<()> {
+        // Struct-literal settings bypass `set_gravity`; propagate must still
+        // refuse a degree the evaluator would otherwise silently clamp to 40.
+        let t0 = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let t1 = t0 + Duration::from_seconds(60.0);
+        let mut state = SimpleState::zeros();
+        state[0] = 7000.0e3;
+        state[4] = 7.5e3;
+        let settings = PropSettings {
+            gravity_degree: 41,
+            gravity_order: 41,
+            ..Default::default()
+        };
+        assert!(matches!(
+            propagate(&state, &t0, &t1, &settings, None),
+            Err(Error::InvalidGravityDegree {
+                degree: 41,
+                max: 40
+            })
         ));
         Ok(())
     }

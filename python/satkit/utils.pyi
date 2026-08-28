@@ -24,7 +24,7 @@ def update_datafiles(**kwargs) -> None:
             - ``tab5.2d.txt`` : Coefficients for GCRS to GCRF conversion
             - ``SW-ALL.csv`` : Space weather data, updated daily
             - ``predicted-solar-cycle.json`` : NOAA/SWPC solar cycle forecast (~5 years of predicted F10.7)
-            - ``leap-seconds.txt`` : Leap seconds (UTC vs TAI)
+            - ``leap-seconds.list`` : Leap seconds (UTC vs TAI); reference only — the runtime table is compiled in
             - ``EOP-All.csv`` : Earth orientation parameters, updated daily
             - ``linux_p1550p2650.440`` : JPL Ephemeris version 440 (~ 100 MB)
 

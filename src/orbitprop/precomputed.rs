@@ -30,6 +30,42 @@ pub const DEFAULT_PADDING_SECS: f64 = 240.0;
 /// and polar-motion factors of the frame rotation stored in the table.
 const SLOW_STEP_SECS: f64 = 3600.0;
 
+/// Upper bound on the number of entries a [`Precomputed`] table may hold.
+///
+/// Each entry is ~80 bytes, so this is ≈1.3 GB — about 30 years at the
+/// default 60 s step. A span/step combination needing more returns
+/// [`Error::PrecomputeTooLarge`] *before* anything is allocated. (An
+/// unbounded table could previously consume all memory for a tiny step or
+/// a very long span, or silently wrap to a one-entry table for a
+/// denormal step.)
+pub const MAX_PRECOMPUTE_ENTRIES: usize = 16_777_216;
+
+/// Number of table entries for a span at a given step, or an error if the
+/// count is not representable or exceeds [`MAX_PRECOMPUTE_ENTRIES`].
+fn table_len(span_secs: f64, step_secs: f64) -> Result<usize> {
+    let n = (span_secs / step_secs).ceil();
+    // `as` would saturate a non-finite or huge value and the `+ 2` below
+    // could then wrap; check in f64 first.
+    if !n.is_finite() || n < 0.0 || n > MAX_PRECOMPUTE_ENTRIES as f64 {
+        return Err(Error::PrecomputeTooLarge {
+            entries: if n.is_finite() {
+                (n as u64).saturating_add(2)
+            } else {
+                u64::MAX
+            },
+            max: MAX_PRECOMPUTE_ENTRIES,
+        });
+    }
+    let entries = n as usize + 2;
+    if entries > MAX_PRECOMPUTE_ENTRIES {
+        return Err(Error::PrecomputeTooLarge {
+            entries: entries as u64,
+            max: MAX_PRECOMPUTE_ENTRIES,
+        });
+    }
+    Ok(entries)
+}
+
 impl Precomputed {
     /// Create a precomputed interp table with default step (60 s) and
     /// default padding ([`DEFAULT_PADDING_SECS`]). Suitable for any
@@ -71,6 +107,11 @@ impl Precomputed {
         if !step_secs.is_finite() || step_secs <= 0.0 {
             return Err(Error::InvalidPrecomputeStep { step: step_secs });
         }
+        if !padding_secs.is_finite() {
+            return Err(Error::InvalidPrecomputePadding {
+                padding: padding_secs,
+            });
+        }
         let step: f64 = step_secs;
         let pad = Duration::from_seconds(padding_secs.max(0.0));
 
@@ -78,6 +119,12 @@ impl Precomputed {
             true => (begin - pad, end + pad),
             false => (end - pad, begin + pad),
         };
+
+        // Size the tables before touching the ephemeris or allocating.
+        let nsteps: usize = table_len((pend - pbegin).as_seconds(), step)?;
+        // The last fine point may lie up to `step` beyond `pend`; size the
+        // slow table from it so the slerp fraction stays within [0, 1].
+        let nslow: usize = table_len(((nsteps - 1) as f64) * step, SLOW_STEP_SECS)?;
 
         Ok(Self {
             begin: pbegin,
@@ -89,7 +136,6 @@ impl Precomputed {
                 jplephem::geocentric_pos(SolarSystem::Sun, &pbegin)?;
                 jplephem::geocentric_pos(SolarSystem::Sun, &pend)?;
 
-                let nsteps: usize = 2 + ((pend - pbegin).as_seconds() / step).ceil() as usize;
                 // The GCRF→ITRF rotation is the full IAU 2006/2000A chain
                 // (precession-nutation with EOP dX/dY, Earth rotation angle,
                 // polar motion) — the same as `frametransform::qgcrf2itrf`.
@@ -99,20 +145,13 @@ impl Precomputed {
                 // while the fast Earth-rotation factor is computed exactly
                 // at each point. Interpolation error is far below a
                 // microarcsecond; see `test_table_matches_full_transform`.
-                // Sized from the last fine point (which may lie up to `step`
-                // beyond `pend`) so `frac` stays within [0, 1].
-                let fine_span = ((nsteps - 1) as f64) * step;
-                let nslow: usize = 2 + (fine_span / SLOW_STEP_SECS).ceil() as usize;
                 let slow: Vec<(Quaternion, Quaternion)> = (0..nslow)
                     .map(|i| {
                         let t = pbegin + Duration::from_seconds((i as f64) * SLOW_STEP_SECS);
                         qitrf2gcrf_slow_parts(&t)
                     })
                     .collect();
-                // Cap the up-front reservation so an absurd (but
-                // ephemeris-covered) span grows the Vec instead of attempting
-                // one giant allocation.
-                let mut data = Vec::with_capacity(nsteps.min(1 << 22));
+                let mut data = Vec::with_capacity(nsteps);
                 for idx in 0..nsteps {
                     let dt = (idx as f64) * step;
                     let t = pbegin + Duration::from_seconds(dt);
@@ -248,6 +287,43 @@ mod tests {
                 "{label}: table vs full transform: {worst:.3e} rad"
             );
         }
+    }
+
+    #[test]
+    fn test_size_cap_and_bad_inputs() {
+        let t0 = Instant::from_datetime(2023, 5, 16, 20, 0, 0.0).unwrap();
+        let t1 = t0 + Duration::from_seconds(3600.0);
+
+        // A tiny step would need ~3.8e9 entries: must error, and must do so
+        // before allocating (previously this consumed >6 GB and was killed).
+        let start = std::time::Instant::now();
+        assert!(matches!(
+            Precomputed::new_with_step(&t0, &t1, 1e-6),
+            Err(Error::PrecomputeTooLarge { .. })
+        ));
+        assert!(start.elapsed().as_secs() < 2, "size check must be cheap");
+
+        // A denormal step used to overflow the entry count and wrap to a
+        // silent one-entry table.
+        assert!(matches!(
+            Precomputed::new_with_step(&t0, &t1, 1e-300),
+            Err(Error::PrecomputeTooLarge { .. })
+        ));
+
+        // Non-finite padding is rejected rather than treated as zero / huge.
+        assert!(matches!(
+            Precomputed::new_padded(&t0, &t1, 60.0, f64::NAN),
+            Err(Error::InvalidPrecomputePadding { .. })
+        ));
+        assert!(matches!(
+            Precomputed::new_padded(&t0, &t1, 60.0, f64::INFINITY),
+            Err(Error::InvalidPrecomputePadding { .. })
+        ));
+
+        // Ordinary tables are unaffected.
+        let week = Precomputed::new(&t0, &(t0 + Duration::from_days(7.0))).unwrap();
+        assert!(week.interp(&(t0 + Duration::from_days(3.5))).is_ok());
+        assert_eq!(table_len(7.0 * 86400.0, 60.0).unwrap(), 2 + 7 * 1440);
     }
 
     #[test]
