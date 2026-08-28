@@ -36,6 +36,7 @@ High-fidelity force-model propagation with Runge-Kutta and Gauss-Jackson integra
 | [Theory: State Vectors, STM & Covariance](../guide/satstate.md) | satstate class, state transition matrix, covariance, maneuvers |
 | [Theory: Maneuver Coordinate Frames](../guide/maneuver_frames.md) | RTN / NTW / LVLH definitions and when to use each |
 | [GPS Example](GPS%20Example.ipynb) | GPS orbit fit against ESA SP3 truth, integrator comparison |
+| [ECOM Solar Radiation Pressure](ECOM%20Solar%20Radiation%20Pressure.ipynb) | Fit ECOM SRP coefficients to a month of IGS GPS orbits and measure prediction error vs the cannonball model |
 | [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Impulsive maneuvers, frame choice, low-thrust orbit raising |
 
 ## Applications

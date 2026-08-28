@@ -8,6 +8,16 @@
 //! satkit does not estimate them; it propagates with coefficients you
 //! supply (from CODE products, your own fit, or a box-wing residual).
 //!
+//! Attach coefficients with [`SatPropertiesSimple::with_ecom`](crate::orbitprop::SatPropertiesSimple::with_ecom)
+//! (constant over a propagation) or by implementing
+//! [`SatProperties::srp_ecom`](crate::orbitprop::SatProperties::srp_ecom)
+//! (time-varying). [`propagate`](crate::orbitprop::propagate) adds the ECOM
+//! acceleration to the cannonball term `−ν·P☉·C_R A/m·ê_D`, so set
+//! `craoverm = 0` for a pure ECOM model. The model contributes no partials
+//! to the state transition matrix (like the cannonball). For a worked fit
+//! against IGS GPS orbits see the *ECOM Solar Radiation Pressure* tutorial
+//! in the documentation.
+//!
 //! # Frame (DYB)
 //!
 //! With `r` the satellite position, `s` the Sun position (both GCRF):
@@ -109,7 +119,26 @@ pub struct EcomParams {
 }
 
 impl EcomParams {
-    /// Reduced ECOM1: `D0, Y0, B0, Bc, Bs`, harmonics in argument of latitude.
+    /// Reduced ECOM1: `D0, Y0, B0, Bc, Bs` (m/s²), harmonics in the argument
+    /// of latitude (`sun_relative = false`). All other coefficients are zero.
+    /// This is CODE's long-standing operational GPS parameter set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use satkit::orbitprop::{EcomParams, SatPropertiesSimple};
+    ///
+    /// // Coefficients from a fit to IGS orbits (nm/s² -> m/s²); D0 is
+    /// // negative because ê_D points at the Sun.
+    /// let ecom = EcomParams::reduced(-105.8e-9, 1.03e-9, -3.18e-9, 1.18e-9, 0.34e-9);
+    /// assert!(!ecom.sun_relative);
+    /// assert_eq!(ecom.dc, 0.0);
+    ///
+    /// // Pure ECOM: no cannonball term (craoverm = 0), then pass `&props`
+    /// // as `satprops` to `satkit::orbitprop::propagate`.
+    /// let props = SatPropertiesSimple::new(0.0, 0.0).with_ecom(ecom);
+    /// assert_eq!(props.ecom, Some(ecom));
+    /// ```
     pub const fn reduced(d0: f64, y0: f64, b0: f64, bc: f64, bs: f64) -> Self {
         Self {
             d0,
@@ -129,7 +158,9 @@ impl EcomParams {
         }
     }
 
-    /// Full 9-parameter ECOM1, harmonics in argument of latitude.
+    /// Full 9-parameter ECOM1: `D0, Y0, B0, Dc, Ds, Yc, Ys, Bc, Bs` (m/s²),
+    /// once-per-revolution harmonics in the argument of latitude
+    /// (`sun_relative = false`).
     #[allow(clippy::too_many_arguments)]
     pub const fn ecom1(
         d0: f64,
@@ -160,8 +191,10 @@ impl EcomParams {
         }
     }
 
-    /// ECOM2 (Arnold et al. 2015): `D0, Y0, B0, B1c, B1s, D2c, D2s, D4c, D4s`,
-    /// harmonics in `Δu` from orbit noon.
+    /// ECOM2 (Arnold et al. 2015): `D0, Y0, B0, B1c, B1s, D2c, D2s, D4c, D4s`
+    /// (m/s²), harmonics in `Δu` from orbit noon (`sun_relative = true`).
+    /// Even harmonics on D, odd on B; `B1c, B1s` map to the `bc, bs` fields.
+    /// For the 7-parameter variant (nD = 1) pass `d4c = d4s = 0`.
     #[allow(clippy::too_many_arguments)]
     pub const fn ecom2(
         d0: f64,
@@ -284,8 +317,16 @@ pub fn orbit_angle(
 
 /// ECOM acceleration in GCRF (m/s²).
 ///
-/// `shadow` is the Earth-shadow factor `ν ∈ [0, 1]` (1 = full sunlight); it
-/// scales the D and B axes but not Y. Pass `1.0` to ignore eclipses.
+/// * `pos_gcrf`, `vel_gcrf` — satellite state in GCRF (m, m/s).
+/// * `sun_gcrf` — geocentric Sun position in GCRF (m).
+/// * `shadow` — the Earth-shadow factor `ν ∈ [0, 1]` (1 = full sunlight,
+///   0 = umbra; see [`crate::lpephem::sun`]). It scales the D and B axes
+///   but not Y. Pass `1.0` to ignore eclipses.
+///
+/// [`crate::orbitprop::propagate`] calls this from its force model with the
+/// same shadow factor as the cannonball term whenever
+/// [`SatProperties::srp_ecom`](crate::orbitprop::SatProperties::srp_ecom)
+/// returns `Some`; you only need it directly for custom force evaluations.
 pub fn ecom_accel(
     p: &EcomParams,
     pos_gcrf: &Vector3,

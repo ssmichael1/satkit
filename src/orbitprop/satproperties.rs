@@ -78,8 +78,21 @@ impl SatPropertiesSimple {
         self
     }
 
-    /// Attach ECOM solar-radiation-pressure coefficients (constant over the
-    /// propagation). Combine with `craoverm = 0` for a pure ECOM model.
+    /// Attach ECOM solar-radiation-pressure coefficients, constant over the
+    /// propagation (see [`crate::orbitprop::srp`] for the model and
+    /// conventions). The ECOM acceleration is added to the cannonball term,
+    /// so combine with `craoverm = 0` for a pure ECOM model.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use satkit::orbitprop::{EcomParams, SatPropertiesSimple};
+    ///
+    /// let props = SatPropertiesSimple::new(0.0, 0.0)
+    ///     .with_ecom(EcomParams::reduced(-1.0e-7, 1.0e-9, -3.0e-9, 1.0e-9, 0.0));
+    /// assert_eq!(props.craoverm, 0.0);
+    /// assert!(props.ecom.is_some());
+    /// ```
     pub fn with_ecom(mut self, ecom: EcomParams) -> Self {
         self.ecom = Some(ecom);
         self
