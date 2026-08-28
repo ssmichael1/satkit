@@ -6,7 +6,10 @@ use crate::Instant;
 use crate::SolarSystem;
 use crate::TimeLike;
 
-pub type InterpType = (Quaternion, Vector3, Vector3);
+/// `(q_gcrf2itrf, sun_pos_gcrf, moon_pos_gcrf, sun_vel_gcrf)` — SI units.
+/// The Sun velocity feeds the geodesic-precession term of the relativistic
+/// correction (see [`super::relativity`]).
+pub type InterpType = (Quaternion, Vector3, Vector3, Vector3);
 
 use super::error::{Error, Result};
 #[derive(Debug, Clone)]
@@ -161,9 +164,9 @@ impl Precomputed {
                     let q_cirs2gcrs = slow[si].0.slerp(&slow[si + 1].0, frac);
                     let q_itrf2tirs = slow[si].1.slerp(&slow[si + 1].1, frac);
                     let q = (q_cirs2gcrs * qtirs2cirs(&t) * q_itrf2tirs).conjugate();
-                    let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
+                    let (psun, vsun) = jplephem::geocentric_state(SolarSystem::Sun, &t)?;
                     let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
-                    data.push((q, psun, pmoon));
+                    data.push((q, psun, pmoon, vsun));
                 }
                 data
             },
@@ -186,10 +189,10 @@ impl Precomputed {
         }
         let q = qgcrf2itrf(&t);
         match (
-            jplephem::geocentric_pos(SolarSystem::Sun, &t),
+            jplephem::geocentric_state(SolarSystem::Sun, &t),
             jplephem::geocentric_pos(SolarSystem::Moon, &t),
         ) {
-            (Ok(psun), Ok(pmoon)) => (q, psun, pmoon),
+            (Ok((psun, vsun)), Ok(pmoon)) => (q, psun, pmoon, vsun),
             _ => {
                 let edge = if t < self.begin {
                     self.data.first()
@@ -198,6 +201,7 @@ impl Precomputed {
                 };
                 edge.copied().unwrap_or((
                     Quaternion::identity(),
+                    Vector3::zeros(),
                     Vector3::zeros(),
                     Vector3::zeros(),
                 ))
@@ -222,7 +226,8 @@ impl Precomputed {
         let q = self.data[idx].0.slerp(&self.data[idx + 1].0, delta);
         let psun = self.data[idx].1 + (self.data[idx + 1].1 - self.data[idx].1) * delta;
         let pmoon = self.data[idx].2 + (self.data[idx + 1].2 - self.data[idx].2) * delta;
-        Ok((q, psun, pmoon))
+        let vsun = self.data[idx].3 + (self.data[idx + 1].3 - self.data[idx].3) * delta;
+        Ok((q, psun, pmoon, vsun))
     }
 }
 
@@ -271,7 +276,7 @@ mod tests {
                 // Irrational stride so samples fall between table points.
                 let dt = (k as f64 * 302.17 + 7.3) % span;
                 let t = t0 + Duration::from_seconds(dt);
-                let (q_tab, _, _) = pc.interp(&t).unwrap();
+                let (q_tab, _, _, _) = pc.interp(&t).unwrap();
                 let q_full = qgcrf2itrf(&t);
                 let dq = q_tab.conjugate() * q_full;
                 let a = dq.to_axis_angle().1.abs();
@@ -357,7 +362,7 @@ mod tests {
         // panicked when an adaptive integrator probed past the padding)
         let tout = t1 + Duration::from_seconds(86400.0);
         assert!(pc.interp(&tout).is_err());
-        let (_q, psun, pmoon) = pc.interp_or_compute(&tout);
+        let (_q, psun, pmoon, _vsun) = pc.interp_or_compute(&tout);
         assert!(psun.as_slice().iter().all(|v| v.is_finite()));
         assert!(pmoon.as_slice().iter().all(|v| v.is_finite()));
     }

@@ -140,7 +140,7 @@ Plus satellite-local RTN, NTW, and LVLH frames (maneuvers, covariance), and ENU,
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
 - **Atmospheric drag**: NRLMSISE-00 with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function
-- **Relativity**: Schwarzschild post-Newtonian correction
+- **Relativity**: IERS 2010 Eq. 10.12 — Schwarzschild, geodesic (de Sitter) precession, and Lense–Thirring
 
 ### Time Systems
 
@@ -192,7 +192,7 @@ Around 300 Rust tests and 150 Python tests run on every commit across Linux, mac
 
 The numerical propagator is regression-tested against NASA's General Mission Analysis Tool (GMAT R2026A). The corpus in `tests/gmat/` holds 17 seven-day reference trajectories -- ISS-like LEO, sun-synchronous, GPS MEO, Molniya, GEO, the lunar-resonant TESS orbit, and a 300,000 km cislunar orbit -- each with a low-degree gravity model, a 36×36 EGM96 + solid tides model, and (for three orbits) relativity. GMAT cannot run in CI, so the trajectories are generated offline (`tests/gmat/generate.py`, SPICE DE440, `EarthICRF`) and committed; `tests/gmat_regression.rs` and `python/test/test_gmat.py` replay them hour by hour and gate on the worst residual.
 
-With matched force models the two agree to 3 cm (ISS), 2 cm (SSO), 8 cm (GPS), and 13 cm (GEO, Molniya) over 7 days. At 200,000 km and beyond the residual is ~1 m, which is GMAT's own integration floor (its point-mass runs differ from the analytic Kepler solution by the same amount). The remaining differences with tides and relativity enabled are documented with the tolerances in `tests/gmat/README.md`: GMAT omits the anelastic phase lag in its solid-tide Love numbers that satkit includes, and GMAT includes the geodesic and Lense-Thirring relativistic terms that satkit does not.
+With matched force models the two agree to 3 cm (ISS), 2 cm (SSO), 8 cm (GPS), and 13 cm (GEO, Molniya) over 7 days. At 200,000 km and beyond the residual is ~1 m, which is GMAT's own integration floor (its point-mass runs differ from the analytic Kepler solution by the same amount). The remaining differences with tides and relativity enabled are documented with the tolerances in `tests/gmat/README.md`: GMAT omits the anelastic phase lag in its solid-tide Love numbers that satkit includes, while the relativity cases sit at the same floors (both tools apply the full IERS 2010 Eq. 10.12 correction).
 
 ### Running Tests Locally
 

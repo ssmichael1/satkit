@@ -34,8 +34,8 @@
   "relativity": true
  },
  "tolerance": {
-  "pos_m": 6.0,
-  "vel_mps": 2e-05
+  "pos_m": 3.0,
+  "vel_mps": 1e-05
  },
  "units": "samples: [elapsed_s, x_km, y_km, z_km, vx_kms, vy_kms, vz_kms] in EarthICRF",
  "samples": [
@@ -1561,5 +1561,5 @@
    0.3325062972299121
   ]
  ],
- "tolerance_measured_against": "v0.20.4-2-gb682ef4-dirty"
+ "tolerance_measured_against": "v0.20.4-3-g7c95b4a-dirty"
 }
