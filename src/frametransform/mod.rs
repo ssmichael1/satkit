@@ -477,6 +477,23 @@ pub fn qgcrf2itrf<T: TimeLike>(tm: &T) -> Quaternion {
     qitrf2gcrf(tm).conjugate()
 }
 
+/// Slowly varying factors of the full GCRF→ITRF chain, for callers that
+/// tabulate the rotation densely (see `orbitprop::Precomputed`).
+///
+/// Returns `(q_cirs2gcrs, q_itrf2tirs)`: the IAU 2006/2000A
+/// precession-nutation (with EOP dX/dY corrections) and the polar-motion
+/// rotation. Both change by well under a milliarcsecond per hour, so they
+/// can be sampled coarsely and interpolated; the fast Earth-rotation
+/// factor [`qtirs2cirs`] is cheap and should be evaluated exactly. The
+/// composition `q_cirs2gcrs * qtirs2cirs(tm) * q_itrf2tirs` reproduces
+/// [`qitrf2gcrf`].
+pub(crate) fn qitrf2gcrf_slow_parts<T: TimeLike>(tm: &T) -> (Quaternion, Quaternion) {
+    let eop = earth_orientation_params::get_or_zero(tm);
+    let w = qitrf2tirs_with_eop(&eop, tm);
+    let q = qcirs2gcrs_dxdy(tm, Some((eop[4], eop[5])));
+    (q, w)
+}
+
 ///
 /// Quaternion representing rotation from the
 /// Terrestrial Intermediate Reference System

@@ -36,3 +36,5 @@ site
 
 # Generated doc plots (built by docs/examples/gen_plots.py)
 docs/images/*.svg
+# GMAT scripts kept by tests/gmat/generate.py --keep-scripts
+tests/gmat/scripts/

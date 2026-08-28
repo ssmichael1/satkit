@@ -7,7 +7,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "README.md"
-      - "CHANGES.md"
+      - "CHANGELOG.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
   pull_request:
@@ -22,7 +22,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "README.md"
-      - "CHANGES.md"
+      - "CHANGELOG.md"
       - "CONTRIBUTING.md"
       - "LICENSE"
 
@@ -168,6 +168,11 @@ jobs:
       - name: Test
         run: cargo test --features chrono
 
+      # Already covered by `cargo test` above; re-run with --nocapture so the
+      # per-case max residual vs GMAT (tests/gmat/README.md) is visible in the log.
+      - name: GMAT regression residuals
+        run: cargo test --test gmat_regression -- --nocapture
+
       - name: Doc
         run: cargo doc --no-deps
 
@@ -231,6 +236,10 @@ jobs:
 
       - name: Run Python tests
         run: pytest python/test/
+
+      # Already covered above; listed per case for visibility (see tests/gmat/README.md).
+      - name: GMAT regression (Python)
+        run: pytest python/test/test_gmat.py -v
 
       # Verify the hand-written .pyi stubs still match the compiled bindings.
       # --ignore-positional-only / --ignore-disjoint-bases switch off two whole

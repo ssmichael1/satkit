@@ -1,4 +1,4 @@
-use crate::frametransform::qgcrf2itrf_approx;
+use crate::frametransform::{qgcrf2itrf, qitrf2gcrf_slow_parts, qtirs2cirs};
 use crate::jplephem;
 use crate::mathtypes::{Quaternion, Vector3};
 use crate::Duration;
@@ -25,6 +25,10 @@ pub struct Precomputed {
 /// exactly covers the startup span. For larger step sizes (or for safety
 /// margin) use [`Precomputed::new_padded`] with a custom value.
 pub const DEFAULT_PADDING_SECS: f64 = 240.0;
+
+/// Sampling interval (seconds) for the slowly varying precession-nutation
+/// and polar-motion factors of the frame rotation stored in the table.
+const SLOW_STEP_SECS: f64 = 3600.0;
 
 impl Precomputed {
     /// Create a precomputed interp table with default step (60 s) and
@@ -80,14 +84,44 @@ impl Precomputed {
             end: pend,
             step,
             data: {
+                // Fail fast on a span the JPL ephemeris cannot cover before
+                // doing any of the (comparatively expensive) frame work below.
+                jplephem::geocentric_pos(SolarSystem::Sun, &pbegin)?;
+                jplephem::geocentric_pos(SolarSystem::Sun, &pend)?;
+
                 let nsteps: usize = 2 + ((pend - pbegin).as_seconds() / step).ceil() as usize;
-                // Cap the up-front reservation: an absurd span would otherwise
-                // attempt one giant allocation here; growing instead lets the
-                // ephemeris range check in the loop below error out first.
+                // The GCRF→ITRF rotation is the full IAU 2006/2000A chain
+                // (precession-nutation with EOP dX/dY, Earth rotation angle,
+                // polar motion) — the same as `frametransform::qgcrf2itrf`.
+                // Evaluating that directly at every table point costs
+                // ~20 µs each (the nutation series), so the slowly varying
+                // factors are sampled every `SLOW_STEP_SECS` and slerped,
+                // while the fast Earth-rotation factor is computed exactly
+                // at each point. Interpolation error is far below a
+                // microarcsecond; see `test_table_matches_full_transform`.
+                // Sized from the last fine point (which may lie up to `step`
+                // beyond `pend`) so `frac` stays within [0, 1].
+                let fine_span = ((nsteps - 1) as f64) * step;
+                let nslow: usize = 2 + (fine_span / SLOW_STEP_SECS).ceil() as usize;
+                let slow: Vec<(Quaternion, Quaternion)> = (0..nslow)
+                    .map(|i| {
+                        let t = pbegin + Duration::from_seconds((i as f64) * SLOW_STEP_SECS);
+                        qitrf2gcrf_slow_parts(&t)
+                    })
+                    .collect();
+                // Cap the up-front reservation so an absurd (but
+                // ephemeris-covered) span grows the Vec instead of attempting
+                // one giant allocation.
                 let mut data = Vec::with_capacity(nsteps.min(1 << 22));
                 for idx in 0..nsteps {
-                    let t = pbegin + Duration::from_seconds((idx as f64) * step);
-                    let q = qgcrf2itrf_approx(&t);
+                    let dt = (idx as f64) * step;
+                    let t = pbegin + Duration::from_seconds(dt);
+                    let s = dt / SLOW_STEP_SECS;
+                    let si = (s.floor() as usize).min(nslow - 2);
+                    let frac = s - si as f64;
+                    let q_cirs2gcrs = slow[si].0.slerp(&slow[si + 1].0, frac);
+                    let q_itrf2tirs = slow[si].1.slerp(&slow[si + 1].1, frac);
+                    let q = (q_cirs2gcrs * qtirs2cirs(&t) * q_itrf2tirs).conjugate();
                     let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
                     let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
                     data.push((q, psun, pmoon));
@@ -111,7 +145,7 @@ impl Precomputed {
         if let Ok(v) = self.interp(&t) {
             return v;
         }
-        let q = qgcrf2itrf_approx(&t);
+        let q = qgcrf2itrf(&t);
         match (
             jplephem::geocentric_pos(SolarSystem::Sun, &t),
             jplephem::geocentric_pos(SolarSystem::Moon, &t),
@@ -156,6 +190,65 @@ impl Precomputed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The tabulated GCRF→ITRF rotation must match the full
+    /// `frametransform::qgcrf2itrf` chain to well under a milliarcsecond.
+    /// (Regression: the table was once built from the ~1 arcsec IAU-76/FK5
+    /// approximation, which tilted the gravity field enough to drift a LEO
+    /// orbit by ~50 m over 7 days relative to GMAT.)
+    #[test]
+    fn test_table_matches_full_transform() {
+        let t0 = Instant::from_datetime(2023, 5, 16, 20, 0, 0.0).unwrap();
+        // (table, span in seconds, label): forward 7 days at the default
+        // step; reversed span; a sub-hour span (single slow interval); a
+        // coarse 600 s step.
+        let week = 7.0 * 86400.0;
+        let tables = [
+            (
+                Precomputed::new(&t0, &(t0 + Duration::from_seconds(week))).unwrap(),
+                week,
+                "forward",
+            ),
+            (
+                Precomputed::new(&(t0 + Duration::from_seconds(week)), &t0).unwrap(),
+                week,
+                "reversed",
+            ),
+            (
+                Precomputed::new(&t0, &(t0 + Duration::from_seconds(1800.0))).unwrap(),
+                1800.0,
+                "sub-hour",
+            ),
+            (
+                Precomputed::new_with_step(&t0, &(t0 + Duration::from_seconds(week)), 600.0)
+                    .unwrap(),
+                week,
+                "600 s step",
+            ),
+        ];
+        for (pc, span, label) in &tables {
+            let mut worst = 0.0f64;
+            for k in 0..2000 {
+                // Irrational stride so samples fall between table points.
+                let dt = (k as f64 * 302.17 + 7.3) % span;
+                let t = t0 + Duration::from_seconds(dt);
+                let (q_tab, _, _) = pc.interp(&t).unwrap();
+                let q_full = qgcrf2itrf(&t);
+                let dq = q_tab.conjugate() * q_full;
+                let a = dq.to_axis_angle().1.abs();
+                worst = worst.max(a.min(std::f64::consts::TAU - a));
+            }
+            // Measured ~3e-9 rad at 60 s (the table slerp falls back to
+            // normalized lerp for such small rotations, error ~θ³/48) and
+            // ~3e-6·(600/60)³ ≈ 3e-6 rad would be nlerp at 600 s, but slerp
+            // proper is used there. 1e-8 rad = 2 mas; the approximation this
+            // replaced was ~4e-6 rad.
+            assert!(
+                worst < 1e-8,
+                "{label}: table vs full transform: {worst:.3e} rad"
+            );
+        }
+    }
 
     #[test]
     fn test_invalid_step_errors() {
