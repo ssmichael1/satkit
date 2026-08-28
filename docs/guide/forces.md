@@ -133,4 +133,5 @@ The plot below, modeled on a similar figure in Montenbruck and Gill, shows each 
 
 - **Tutorial**: [GPS Example](../tutorials/GPS Example.ipynb) — fits a GPS orbit against ESA SP3 truth and walks through the empirical-acceleration concept.
 - **Theory**: [ODE Integrators](integrators.md) for the integration mechanics; [State Vectors, STM & Covariance](satstate.md) for state representation and covariance propagation.
+- **Validation**: [GMAT Comparison](gmat_validation.md) — how this force model agrees with NASA GMAT across seven orbital regimes, and which terms account for the remaining differences.
 - **API**: [`satkit.propagate`](../api/satprop.md), [`satkit.propsettings`](../api/satprop.md), [`satkit.satproperties`](../api/satprop.md).

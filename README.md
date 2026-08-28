@@ -18,8 +18,6 @@ Satkit is a high-performance orbital mechanics library written in Rust with comp
 
 **[Documentation and tutorials](https://satkit.dev/)** (Python examples, but the concepts and API apply equally to Rust) | **[Rust API reference](https://docs.rs/satkit/)**
 
-> [!NOTE]
-> **Version 0.16.0** introduces several breaking changes: `Frame::RIC` is renamed to the canonical `Frame::RTN` (with `RIC` / `RSW` remaining as aliases, so existing code still compiles); a new `Frame::NTW` (velocity-aligned) is added; `LVLH` is now accepted as a maneuver/thrust frame; the uncertainty API is unified into `set_pos_uncertainty(sigma, frame)` / `set_vel_uncertainty(sigma, frame)` (the four old per-frame methods are removed, not deprecated); `PropSettings::default()` now uses `GravityModel::EGM96` instead of `JGM3`; the **Gauss-Jackson 8** fixed-step multistep integrator is available for long-duration propagation; and `PropSettings::max_steps` is now configurable. See `CHANGELOG.md` for the full list.
 
 ## Installation
 
@@ -118,13 +116,14 @@ Full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation) with E
 | TEME | True Equator Mean Equinox (SGP4 output frame) |
 | CIRS | Celestial Intermediate Reference System |
 | TIRS | Terrestrial Intermediate Reference System |
+| EME2000 / ICRF | J2000 mean equator and the International Celestial Reference Frame |
 | Geodetic | Latitude / longitude / altitude (WGS-84) |
 
-Plus ENU, NED, and geodesic distance (Vincenty) utilities.
+Plus satellite-local RTN, NTW, and LVLH frames (maneuvers, covariance), and ENU, NED, and geodesic distance (Vincenty) utilities.
 
 ### Orbit Propagation
 
-- **Numerical** -- Selectable adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4)) plus RODAS4 (stiff) and Gauss-Jackson 8 (fixed-step multistep for high-precision long-duration propagation), with dense output, state transition matrix, and configurable force models
+- **Numerical** -- Selectable adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4)) plus RODAS4 (stiff) and Gauss-Jackson 8 (fixed-step multistep for high-precision long-duration propagation), with dense output, state transition matrix, and configurable force models. With matched force models it agrees with NASA GMAT to a few centimetres over 7 days in LEO, MEO, and GEO (see [Testing and Validation](#testing-and-validation))
 - **SGP4** -- Standard TLE/OMM propagator with TLE fitting from precision states
 - **Keplerian** -- Analytical two-body propagation
 
@@ -136,10 +135,12 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 
 ### Force Models
 
-- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 360)
+- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40)
+- **Solid Earth tides**: IERS 2010 Step-1 corrections to the gravity field
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
 - **Atmospheric drag**: NRLMSISE-00 with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function
+- **Relativity**: Schwarzschild post-Newtonian correction
 
 ### Time Systems
 
@@ -156,7 +157,7 @@ Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with ful
 SatKit uses [numeris](https://crates.io/crates/numeris) for all linear algebra (vectors, matrices, quaternions, ODE integration). If you also use nalgebra in your project, enable the `nalgebra` feature on numeris for zero-cost `From`/`Into` conversions between types:
 
 ```toml
-numeris = { version = "0.5.7", features = ["nalgebra"] }
+numeris = { version = "0.5.14", features = ["nalgebra"] }
 ```
 
 ### Cargo Features
@@ -164,6 +165,7 @@ numeris = { version = "0.5.7", features = ["nalgebra"] }
 | Feature | Default | Description |
 |---------|---------|-------------|
 | `omm-xml` | yes | XML OMM deserialization via `quick-xml` |
+| `download` | yes | Data-file downloader (`update_datafiles`) via `ureq` |
 | `chrono` | no | `TimeLike` impl for `chrono::DateTime` |
 
 ## Data Files
@@ -180,10 +182,17 @@ The library is validated against:
 
 - **Vallado** test cases for SGP4, coordinate transforms, and Keplerian elements
 - **JPL** test vectors for DE440/441 ephemeris interpolation (10,000+ cases)
+- **NASA GMAT** reference trajectories for the high-precision propagator (see below)
 - **ICGEM** reference values for gravity field calculations
 - **GPS SP3** precise ephemerides for multi-day numerical propagation
 
-157 Rust tests and 81 Python tests run on every commit across Linux, macOS, and Windows.
+Around 300 Rust tests and 150 Python tests run on every commit across Linux, macOS, and Windows.
+
+### GMAT comparison
+
+The numerical propagator is regression-tested against NASA's General Mission Analysis Tool (GMAT R2026A). The corpus in `tests/gmat/` holds 17 seven-day reference trajectories -- ISS-like LEO, sun-synchronous, GPS MEO, Molniya, GEO, the lunar-resonant TESS orbit, and a 300,000 km cislunar orbit -- each with a low-degree gravity model, a 36×36 EGM96 + solid tides model, and (for three orbits) relativity. GMAT cannot run in CI, so the trajectories are generated offline (`tests/gmat/generate.py`, SPICE DE440, `EarthICRF`) and committed; `tests/gmat_regression.rs` and `python/test/test_gmat.py` replay them hour by hour and gate on the worst residual.
+
+With matched force models the two agree to 3 cm (ISS), 2 cm (SSO), 8 cm (GPS), and 13 cm (GEO, Molniya) over 7 days. At 200,000 km and beyond the residual is ~1 m, which is GMAT's own integration floor (its point-mass runs differ from the analytic Kepler solution by the same amount). The remaining differences with tides and relativity enabled are documented with the tolerances in `tests/gmat/README.md`: GMAT omits the anelastic phase lag in its solid-tide Love numbers that satkit includes, and GMAT includes the geodesic and Lense-Thirring relativistic terms that satkit does not.
 
 ### Running Tests Locally
 
@@ -193,8 +202,9 @@ Tests require two sets of external data: the **astro-data** files (gravity model
 # Install the download helper
 pip install requests
 
-# Download test vectors
-python python/test/download_testvecs.py
+# Download data files and test vectors into the current directory
+python python/test/download_data.py astro-data
+python python/test/download_testvecs.py satkit-testvecs
 ```
 
 Then run tests with the environment variables pointing to the downloaded directories:
@@ -203,9 +213,11 @@ Then run tests with the environment variables pointing to the downloaded directo
 # Rust tests
 SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs cargo test
 
-# Python tests
+# Python tests (after `pip install -e ".[test]"`)
 SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs pytest python/test/
 ```
+
+The GMAT regression tests need only the data files; their reference trajectories are checked in.
 
 ## Documentation
 
