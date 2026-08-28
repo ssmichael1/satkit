@@ -87,6 +87,28 @@ pub enum Error {
     #[error("Gravity order ({order}) must be ≤ degree ({degree})")]
     InvalidGravityOrder { order: u16, degree: u16 },
 
+    /// Returned when the requested gravity degree exceeds what the built-in
+    /// coefficient tables and evaluator support
+    /// ([`MAX_GRAVITY_DEGREE`](crate::earthgravity::MAX_GRAVITY_DEGREE)).
+    /// Previously such requests were silently evaluated at the maximum.
+    #[error("Gravity degree ({degree}) exceeds the maximum supported degree ({max})")]
+    InvalidGravityDegree { degree: u16, max: u16 },
+
+    /// Returned by [`Precomputed::new_padded`](crate::orbitprop::Precomputed::new_padded)
+    /// when the padding is not a finite number.
+    #[error("Precomputed table padding must be finite, got {padding}")]
+    InvalidPrecomputePadding { padding: f64 },
+
+    /// Returned by [`Precomputed::new_padded`](crate::orbitprop::Precomputed::new_padded)
+    /// when the span / step combination would need more table entries than
+    /// [`MAX_PRECOMPUTE_ENTRIES`](crate::orbitprop::MAX_PRECOMPUTE_ENTRIES)
+    /// (≈1.3 GB). Use a larger step or a shorter span.
+    #[error(
+        "Precomputed table would need {entries} entries (max {max}); \
+         use a larger interpolation step or a shorter propagation span"
+    )]
+    PrecomputeTooLarge { entries: u64, max: usize },
+
     /// Returned when a Gauss-Jackson 8 propagation is requested over a span
     /// shorter than its 8-step startup requires. Reduce `gj_step_seconds` or
     /// use an adaptive integrator (e.g. RKV98) for short arcs.

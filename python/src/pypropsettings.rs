@@ -97,6 +97,18 @@ impl From<TideModel> for PyTideModel {
 #[derive(Clone, Debug)]
 pub struct PyPropSettings(pub PropSettings);
 
+/// Reject degrees the evaluator cannot honour (it would otherwise silently
+/// evaluate at the maximum). Mirrors `PropSettings::set_gravity`.
+fn check_gravity_degree(val: u16) -> PyResult<u16> {
+    use satkit::earthgravity::MAX_GRAVITY_DEGREE;
+    if val > MAX_GRAVITY_DEGREE {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "gravity degree/order {val} exceeds the maximum supported value ({MAX_GRAVITY_DEGREE})"
+        )));
+    }
+    Ok(val)
+}
+
 #[pymethods]
 impl PyPropSettings {
     #[new]
@@ -114,7 +126,7 @@ impl PyPropSettings {
                 kw.del_item("rel_error")?;
             }
             if let Some(gravdegree) = kw.get_item("gravity_degree")? {
-                ps.gravity_degree = gravdegree.extract::<u16>()?;
+                ps.gravity_degree = check_gravity_degree(gravdegree.extract::<u16>()?)?;
                 kw.del_item("gravity_degree")?;
             }
             if let Some(gravorder) = kw.get_item("gravity_order")? {
@@ -219,7 +231,7 @@ impl PyPropSettings {
 
     #[setter(gravity_degree)]
     fn set_gravity_degree(&mut self, val: u16) -> PyResult<()> {
-        self.0.gravity_degree = val;
+        self.0.gravity_degree = check_gravity_degree(val)?;
         if self.0.gravity_order > val {
             self.0.gravity_order = val;
         }
@@ -233,6 +245,7 @@ impl PyPropSettings {
 
     #[setter(gravity_order)]
     fn set_gravity_order(&mut self, val: u16) -> PyResult<()> {
+        check_gravity_degree(val)?;
         if val > self.0.gravity_degree {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "gravity_order must be <= gravity_degree",
