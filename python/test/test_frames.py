@@ -333,8 +333,10 @@ class TestGravity:
         Reference gravity computations, using
         JGM3 model, with 16 terms, found at:
         http://icgem.gfz-potsdam.de/calcstat/
-        Outputs from above web page listed
-        in function below as reference values
+
+        The gravitation reference is from ICGEM. The total-gravity and
+        deflection baselines include centrifugal acceleration computed with
+        satkit's canonical WGS 84 Earth rotation rate.
         """
 
         reference_gravitation = 9.822206169031
@@ -342,7 +344,7 @@ class TestGravity:
         # Gravity deflection from normal along east-west and
         # north-south direction, in arcseconds
         reference_ew_deflection_asec = -1.283542043355
-        reference_ns_deflection_asec = -1.311709802440
+        reference_ns_deflection_asec = -1.311717134792
 
         latitude_deg = 42.4473
         longitude_deg = -71.2272
