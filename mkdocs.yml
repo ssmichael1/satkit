@@ -107,6 +107,7 @@ nav:
           - "Theory: ODE Integrators": guide/integrators.md
           - "Theory: State Vectors, STM & Covariance": guide/satstate.md
           - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
+          - "Validation: GMAT Comparison": guide/gmat_validation.md
           - "GPS Example": tutorials/GPS Example.ipynb
           - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
       - Applications:
