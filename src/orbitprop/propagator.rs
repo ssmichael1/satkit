@@ -1,6 +1,6 @@
 use super::drag::{drag_and_partials, drag_force};
 use super::point_gravity::{point_gravity, point_gravity_and_partials};
-use super::relativity::gr_schwarzschild_accel;
+use super::relativity::gr_accel;
 use super::settings::PropSettings;
 use super::tides::{self, TideModel};
 
@@ -155,7 +155,7 @@ fn force_model(
     // interp_or_compute rather than interp: adaptive integrators can probe
     // outside the padded interval (initial step-size heuristic), and the
     // ODE closure signature leaves no way to surface an Err from here.
-    let (qgcrf2itrf, sun_gcrf, moon_gcrf) = interp.interp_or_compute(&time);
+    let (qgcrf2itrf, sun_gcrf, moon_gcrf, sun_vel_gcrf) = interp.interp_or_compute(&time);
     let qitrf2gcrf = qgcrf2itrf.conjugate();
     let pos_itrf = qgcrf2itrf * *pos_gcrf;
 
@@ -221,9 +221,17 @@ fn force_model(
             * tides::tide_accel(&pos_itrf, &deltas, gravity.gravity_constant, gravity.radius);
     }
 
-    // General-relativistic Schwarzschild correction. Partials skipped.
+    // General-relativistic correction (IERS 2010 Eq. 10.12: Schwarzschild +
+    // geodesic precession + Lense–Thirring). Partials skipped.
     if need_accel && settings.use_relativistic_correction {
-        accel += gr_schwarzschild_accel(pos_gcrf, vel_gcrf, gravity.gravity_constant);
+        accel += gr_accel(
+            pos_gcrf,
+            vel_gcrf,
+            gravity.gravity_constant,
+            &sun_gcrf,
+            &sun_vel_gcrf,
+            &qitrf2gcrf,
+        );
     }
 
     if let Some(props) = satprops {
@@ -1109,8 +1117,10 @@ mod tests {
             .collect();
 
         // [vx, vy, vz, Cr*A/m]. Refitted against ESA SP3 truth using the
-        // current default force model (solid Earth tides + GR Schwarzschild
-        // + degree-4 gravity). Velocity-only LSQ + Nelder-Mead over
+        // default force model at the time (solid Earth tides + GR
+        // Schwarzschild + degree-4 gravity). Adding the geodesic and
+        // Lense-Thirring GR terms later moved the with-tides residual from
+        // 1.7997 m to 1.8137 m without a refit. Velocity-only LSQ + Nelder-Mead over
         // Cr*A/m; initial position held at pgcrf[0] (SP3 truth at t=0).
         // When the force model changes, refit using the same procedure.
         let v0 = numeris::vector![

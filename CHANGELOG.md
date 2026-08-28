@@ -29,6 +29,22 @@
 - **numeris 0.5.14 → 0.5.17.** Picks up the ODE fix that clamps the
   initial step to the propagation span; no measurable change to any test
   baseline or GMAT residual.
+- **Relativistic correction now includes geodesic precession and
+  Lense–Thirring.** `PropSettings::use_relativistic_correction` (default on)
+  previously applied only the Schwarzschild term of IERS 2010 Eq. 10.12; it
+  now applies all three terms — Schwarzschild, geodesic (de Sitter)
+  precession `2(Ω×v)` from the Earth's heliocentric motion, and
+  Lense–Thirring frame dragging with `J = ⅖R²ω` — matching GMAT's
+  `RelativisticCorrection`. The geodesic term is the dominant relativistic
+  acceleration beyond ~100,000 km: results there shift by up to ~1 m over
+  7 days (200,000 km), by millimetres at GPS altitude, and by ~1 cm over
+  7 days at LEO. New `orbitprop::relativity::{gr_accel,
+  gr_geodesic_accel, gr_lense_thirring_accel, geodesic_precession_rate,
+  EARTH_ANGULAR_MOMENTUM_PER_MASS}`; `Precomputed` tables now carry the Sun's
+  geocentric velocity (`InterpType` gained a fourth element). The GMAT `gr`
+  gates tightened accordingly: `tess_gr` 6 → 3 m, `cislunar_gr` 6 → 2 m,
+  `leo_iss_gr` 2 → 1.5 m (residuals 2.08 → 1.01 m, 1.85 → 0.63 m,
+  0.66 → 0.50 m, i.e. down to the non-relativistic floors).
 
 ### CI
 

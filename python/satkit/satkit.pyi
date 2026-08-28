@@ -3631,10 +3631,12 @@ class propsettings:
                 (IERS 2010 §6.2.1 frequency-independent Love-number response).
                 Use ``tidemodel.none`` to disable (e.g., for reproducibility with
                 pre-tide releases).
-            use_relativistic_correction: Include the Schwarzschild post-Newtonian
-                acceleration (IERS 2010 §10.3 Eq. 10.12, β=γ=1). Default is True.
+            use_relativistic_correction: Include the general-relativistic
+                acceleration of IERS 2010 §10.3 Eq. 10.12 (β=γ=1): Schwarzschild
+                + geodesic (de Sitter) precession + Lense-Thirring. Default is True.
                 Its position effect depends on the orbit, propagation arc, and
-                fitted parameters; computational cost is negligible.
+                fitted parameters (~1 m/day at GPS altitude if omitted; the
+                geodesic term dominates beyond ~100,000 km); cost is negligible.
             enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
             integrator: ODE integrator to use. Default is integrator.rkv98
             gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.

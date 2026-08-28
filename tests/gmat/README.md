@@ -57,7 +57,7 @@ Cartesian state.
 |---|---|---|---|---|---|
 | `j2` | EGM96 2×2 | on | off | off | isolates μ, ephemeris, frame orientation, time |
 | `full` | EGM96 36×36 | on | on (`Solid` / `SolidStep1`) | off | everything both tools model the same way |
-| `gr` | EGM96 36×36 | on | on | on | known model gap, see below |
+| `gr` | EGM96 36×36 | on | on | on | full IERS 2010 eq. 10.12 relativity on both sides |
 
 Cases: every orbit × `j2` and `full`, plus `gr` for `leo_iss`, `tess` and
 `cislunar` — 17 in total.
@@ -86,7 +86,7 @@ recorded per case in `cases.py` (and copied into each JSON). The floors:
 |---|---|---|
 | GMAT integration error | 3 cm LEO, 13 cm GEO, 0.6–1.0 m at 200,000–300,000 km | GMAT's own point-mass runs deviate from the analytic Kepler solution by exactly these amounts (satkit matches Kepler to <1 cm); independent of GMAT's `Accuracy`, `MaxStep`, or integrator |
 | solid tides (`full`, `gr`) | +0.4–0.7 m LEO, ~2 m Molniya | satkit's `SolidStep1` uses the IERS 2010 Table 6.3 anelastic Love numbers with their imaginary (phase-lag) parts; GMAT's `Solid` uses real Love numbers only. Zeroing satkit's imaginary parts reproduces GMAT to the `j2` floor — GMAT omits the lag, satkit does not |
-| relativity (`gr`) | +0.2 m LEO, +1 m at 200,000 km | GMAT adds geodesic precession and Lense–Thirring; satkit implements Schwarzschild only |
+| relativity (`gr`) | none | both tools apply Schwarzschild + geodesic precession + Lense–Thirring (IERS 2010 eq. 10.12); `gr` residuals equal the `full` (LEO) or `j2` (high-orbit) floors |
 
 Everything else — μ's, DE440, the GCRF↔ITRF frame, 36×36 gravity, third-body
 — agrees at the centimetre level. (Building this corpus found that the
