@@ -114,7 +114,7 @@ $$
 ($\hat{e}_D$ points from the satellite **to** the Sun; $\hat{e}_Y$ is the solar-panel rotation axis.) The acceleration is
 
 $$
-\vec{a}_\text{ECOM} = \nu\, D(\varphi)\,\hat{e}_D + Y(\varphi)\,\hat{e}_Y + \nu\, B(\varphi)\,\hat{e}_B
+\vec{a}_\text{ECOM} = \nu \left[ D(\varphi)\,\hat{e}_D + Y(\varphi)\,\hat{e}_Y + B(\varphi)\,\hat{e}_B \right]
 $$
 
 $$
@@ -125,7 +125,7 @@ B(\varphi) &= B_0 + B_c\cos\varphi + B_s\sin\varphi
 \end{aligned}
 $$
 
-where $\nu$ is the same shadow function as the cannonball term. The D and B axes are scaled by $\nu$; the Y axis is deliberately **not** — the Y-bias is dominated by thermal and attitude effects that persist through eclipse. The argument $\varphi$ is selected by `sun_relative`:
+where $\nu$ is the same shadow function as the cannonball term, applied to all three axes — the CODE/Bernese convention ("the acceleration due to the solar radiation pressure is switched off when the satellite is in the Earth's shadow", Bernese GNSS Software v5.2 §2.2.2.3), so coefficients taken from CODE products keep their meaning. The argument $\varphi$ is selected by `sun_relative`:
 
 | `sun_relative` | $\varphi$ | Model family |
 |---|---|---|
