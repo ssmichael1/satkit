@@ -25,7 +25,7 @@ use anyhow::Result;
 /// * tab5.2b.txt :: Coefficients for GCRS to GCRF conversion
 /// * tab5.2d.txt :: Coefficients for GCRS to GCRF conversion
 /// * SW-All.csv :: Space weather data, updated daily
-/// * leap-seconds.txt :: Leap seconds (UTC vs TAI)
+/// * leap-seconds.list :: Leap seconds (UTC vs TAI); reference only, the runtime table is compiled in
 /// * EOP_All.csv :: Earth orientation parameters,  updated daily
 /// * linux_p1550p2650.440 :: JPL Ephemeris version 440 (~ 100 MB)
 ///
