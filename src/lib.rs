@@ -83,7 +83,7 @@
 //! feature on `numeris` for zero-cost `From`/`Into` conversions:
 //!
 //! ```toml
-//! numeris = { version = "0.5.7", features = ["nalgebra"] }
+//! numeris = { version = "0.5.17", features = ["nalgebra"] }
 //! ```
 //!
 //! ## Optional Features
