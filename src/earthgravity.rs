@@ -64,6 +64,17 @@ type DivisorTable = Matrix<44, 44>;
 /// hot loops. Capping the stored table keeps the working set in L1.
 const MAX_COEFF_DIM: usize = 44;
 
+/// Highest spherical-harmonic degree (and order) the evaluator supports.
+///
+/// The built-in coefficient tables are capped at [`MAX_COEFF_DIM`] rows and
+/// the accelerator dispatches on degree ≤ 40; requests above this are
+/// rejected by [`PropSettings::set_gravity`](crate::orbitprop::PropSettings::set_gravity)
+/// and at [`propagate`](crate::orbitprop::propagate) entry rather than
+/// silently clamped. (EGM96 itself is defined to degree 360; supporting
+/// that would need heap-allocated Legendre tables — see the note on
+/// `MAX_COEFF_DIM`.)
+pub const MAX_GRAVITY_DEGREE: u16 = 40;
+
 use std::sync::OnceLock;
 
 ///

@@ -260,6 +260,7 @@ mod tests {
 
     #[cfg(feature = "download")]
     #[test]
+    #[ignore = "requires network access to services.swpc.noaa.gov; run with `cargo test -- --ignored`"]
     fn test_download_and_parse() {
         let url = "https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json";
         let contents = crate::utils::download_to_string(url).unwrap();

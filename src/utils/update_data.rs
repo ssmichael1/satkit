@@ -23,6 +23,16 @@ pub enum Error {
     #[error("Invalid JSON manifest entry")]
     InvalidManifestEntry,
 
+    /// A manifest directory key was not a single plain path component
+    /// (absolute, contained `..`, or contained a path separator). Such a key
+    /// would be joined onto the data directory and could escape it.
+    #[error("Manifest directory name {name:?} is not a plain path component")]
+    InvalidManifestPath { name: String },
+
+    /// A refresh-manifest URL did not use `https://`.
+    #[error("Manifest URL {url:?} must use https://")]
+    InsecureManifestUrl { url: String },
+
     /// One or more entries in the JSON manifest could not be parsed.
     #[error("Could not parse manifest entries")]
     ManifestParseFailed,
@@ -63,6 +73,11 @@ fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> Result
         .iter()
         .map(|url| -> Result<JoinHandle<download::Result<bool>>> {
             let url_str = url.as_str().ok_or(Error::NotJsonString)?;
+            if !url_str.starts_with("https://") {
+                return Err(Error::InsecureManifestUrl {
+                    url: url_str.to_string(),
+                });
+            }
             Ok(download_file_async(url_str.to_string(), basedir, true))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -71,6 +86,26 @@ fn download_from_url_json(json_url: String, basedir: &std::path::Path) -> Result
         jh.join().map_err(|_| Error::ThreadPanic)??;
     }
 
+    Ok(())
+}
+
+/// A manifest object key names a subdirectory of the data directory and is
+/// joined onto it. Only a single, plain path component is acceptable: an
+/// absolute key would *replace* the base directory in `Path::join`, and
+/// `..` or embedded separators would escape it.
+fn validate_manifest_component(name: &str) -> Result<()> {
+    let bad = name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
+        || std::path::Path::new(name).is_absolute();
+    if bad {
+        return Err(Error::InvalidManifestPath {
+            name: name.to_string(),
+        });
+    }
     Ok(())
 }
 
@@ -86,6 +121,7 @@ fn download_from_json(
         let r1: Vec<Result<()>> = obj
             .iter()
             .map(|(key, val)| -> Result<()> {
+                validate_manifest_component(key)?;
                 let pbnew = basedir.join(key);
                 if !pbnew.is_dir() {
                     std::fs::create_dir_all(pbnew.clone())?;
@@ -210,4 +246,36 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_component_validation() {
+        for ok in ["EGM96.gfc", "jplephem", "sw-data_v2", "a.b.c"] {
+            assert!(validate_manifest_component(ok).is_ok(), "{ok:?}");
+        }
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../x",
+            "/etc/passwd",
+            "a/b",
+            "a\\b",
+            "x/../y",
+            "C:\\x",
+            "a\0b",
+        ] {
+            assert!(
+                matches!(
+                    validate_manifest_component(bad),
+                    Err(Error::InvalidManifestPath { .. })
+                ),
+                "{bad:?} should be rejected"
+            );
+        }
+    }
 }
