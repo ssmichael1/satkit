@@ -248,7 +248,7 @@ def main():
 
         fig, ax = plt.subplots(figsize=(9, 5))
         for variant, (days, err, _) in results.items():
-            tdays = [(t - times[0]).days + (t - times[0]).seconds / 86400.0 for t in times]
+            tdays = [(t - times[0]).days for t in times]  # duration.days is fractional
             ax.plot(tdays, err, label=variant, lw=0.8)
         ax.axvline(args.fit_days, color="k", ls="--", lw=0.8, label="end of fit window")
         ax.axhline(10, color="r", ls=":", lw=0.8, label="10 m")
