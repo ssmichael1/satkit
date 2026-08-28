@@ -68,7 +68,8 @@ impl std::fmt::Display for Integrator {
 ///   (IERS 2010 §6.2.1 frequency-independent Love-number response).
 /// * `use_relativistic_correction` - Include the Schwarzschild
 ///   post-Newtonian acceleration (IERS 2010 §10.3 Eq. 10.12). Default is true.
-///   ~1 m/day at GPS altitude if omitted; trivial computational cost.
+///   Its position effect depends on the orbit, propagation arc, and fitted
+///   parameters; computational cost is negligible.
 /// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true
 ///   slight computation savings if set to false
 /// * `integrator` - which Runge-Kutta integrator to use.  Default is RKV98
