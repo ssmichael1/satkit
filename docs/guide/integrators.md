@@ -93,4 +93,5 @@ For sub-meter precision over a day, tighten both to `1e-10` to `1e-13`. For coar
 
 - **Tutorial**: [GPS Example](../tutorials/GPS Example.ipynb) — runs all integrators against the same GPS arc and compares accuracy / cost.
 - **Theory**: [Force Model](forces.md) for the right-hand side of the ODE; [State Vectors, STM & Covariance](satstate.md) for what's being integrated.
+- **Validation**: [GMAT Comparison](gmat_validation.md) — 7-day agreement with NASA GMAT's RK89 propagator across LEO to cislunar orbits.
 - **API**: [`satkit.integrator`](../api/satprop.md), [`satkit.propsettings`](../api/satprop.md).

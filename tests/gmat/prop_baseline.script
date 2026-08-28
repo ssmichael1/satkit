@@ -1,0 +1,124 @@
+%General Mission Analysis Tool(GMAT) Script
+%Created: 2024-03-27 09:34:03
+
+%----------------------------------------
+%---------- Spacecraft
+%----------------------------------------
+
+Create Spacecraft TESS;
+TESS.DateFormat = UTCGregorian;
+TESS.Epoch = '16 May 2023 20:00:00.00';
+TESS.CoordinateSystem = EarthMJ2000Eq;
+TESS.DisplayStateType = Cartesian;
+TESS.X = -130142.3736645361
+TESS.Y = 120626.1878655891
+TESS.Z = 126520.4971633258
+TESS.VX = -0.308744045658656
+TESS.VY = -1.40299418814228
+TESS.VZ = -0.0616245044905574416
+% SRP parameters
+% TESS.DryMass = 450;
+% TESS.Cr = 1.8;
+% TESS.SRPArea = 1;
+
+% 
+%----------------------------------------
+%---------- ForceModels
+%----------------------------------------
+
+Create ForceModel DefaultProp_ForceModel;
+DefaultProp_ForceModel.CentralBody = Earth;
+DefaultProp_ForceModel.PrimaryBodies = {Earth};
+DefaultProp_ForceModel.PointMasses = {Luna, Sun};
+DefaultProp_ForceModel.Drag = None;
+DefaultProp_ForceModel.SRP = Off;
+%DefaultProp_ForceModel.SRP = Off
+DefaultProp_ForceModel.RelativisticCorrection = On;
+DefaultProp_ForceModel.ErrorControl = RSSStep;
+DefaultProp_ForceModel.GravityField.Earth.Degree = 36;
+DefaultProp_ForceModel.GravityField.Earth.Order = 36;
+DefaultProp_ForceModel.GravityField.Earth.StmLimit = 100;
+DefaultProp_ForceModel.GravityField.Earth.PotentialFile = 'EGM96.cof';
+DefaultProp_ForceModel.GravityField.Earth.TideModel = 'Solid';
+% DefaultProp_ForceModel.SRP.Flux = 1367;
+% DefaultProp_ForceModel.SRP.SRPModel = Spherical;
+% DefaultProp_ForceModel.SRP.Nominal_Sun = 149597870.691;
+
+%----------------------------------------
+%---------- Propagators
+%----------------------------------------
+
+Create Propagator DefaultProp;
+DefaultProp.FM = DefaultProp_ForceModel;
+DefaultProp.Type = RungeKutta89;
+DefaultProp.InitialStepSize = 60;
+DefaultProp.Accuracy = 1e-14;
+DefaultProp.MinStep = 0.001;
+DefaultProp.MaxStep = 2700
+DefaultProp.MaxStepAttempts = 50;
+DefaultProp.StopIfAccuracyIsViolated = true;
+
+%----------------------------------------
+%---------- Coordinate Systems
+%----------------------------------------
+
+Create CoordinateSystem EarthMoonBBR;
+EarthMoonBBR.Origin = Earth;
+EarthMoonBBR.Axes = ObjectReferenced;
+EarthMoonBBR.XAxis = R;
+EarthMoonBBR.ZAxis = N;
+EarthMoonBBR.Primary = Earth;
+EarthMoonBBR.Secondary = Luna;
+
+%----------------------------------------
+%---------- Solvers
+%----------------------------------------
+
+%----------------------------------------
+%---------- Subscribers
+%----------------------------------------
+
+Create OrbitView EMBBR;
+EMBBR.SolverIterations = Current;
+EMBBR.UpperLeft = [ 0.04411764705882353 0.2179656538969617 ];
+EMBBR.Size = [ 1.142352941176471 0.809775429326288 ];
+EMBBR.RelativeZOrder = 12106;
+EMBBR.Maximized = false;
+EMBBR.Add = {TESS, Earth, Luna};
+EMBBR.CoordinateSystem = EarthMoonBBR;
+EMBBR.DrawObject = [ true true true ];
+EMBBR.DataCollectFrequency = 1;
+EMBBR.UpdatePlotFrequency = 50;
+EMBBR.NumPointsToRedraw = 0;
+EMBBR.ShowPlot = true;
+EMBBR.MaxPlotPoints = 1000000;
+EMBBR.ShowLabels = true;
+EMBBR.ViewPointReference = Earth;
+EMBBR.ViewPointVector = [ 0 0 1500000 ];
+EMBBR.ViewDirection = Earth;
+EMBBR.ViewScaleFactor = 1;
+EMBBR.ViewUpCoordinateSystem = EarthMoonBBR;
+EMBBR.ViewUpAxis = Z;
+EMBBR.EclipticPlane = Off;
+EMBBR.XYPlane = Off;
+EMBBR.WireFrame = Off;
+EMBBR.Axes = Off;
+EMBBR.Grid = Off;
+EMBBR.SunLine = Off;
+EMBBR.UseInitialView = On;
+EMBBR.StarCount = 7000;
+EMBBR.EnableStars = Off;
+EMBBR.EnableConstellations = On;
+
+%----------------------------------------
+%---------- Arrays, Variables, Strings
+%----------------------------------------
+
+%----------------------------------------
+%---------- Mission Sequence
+%----------------------------------------
+
+% Just propagate
+BeginMissionSequence
+Propagate DefaultProp(TESS) {TESS.ElapsedDays=7}
+Write TESS.UTCGregorian TESS.X TESS.Y TESS.Z TESS.VX TESS.VY TESS.VZ

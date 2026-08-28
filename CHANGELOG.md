@@ -3,6 +3,33 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Orbit propagator frame accuracy.** The propagator's precomputed
+  GCRF→ITRF table was built from the ~1 arcsec IAU-76/FK5 approximation
+  (`qgcrf2itrf_approx`, no polar motion). That tilt of the gravity field
+  produced an inclination-dependent secular drift versus GMAT of ~50 m over
+  7 days for an ISS-like orbit and ~115 m for Molniya. The table is now the
+  full IAU 2006/2000A chain (precession-nutation with EOP dX/dY, Earth
+  rotation angle, polar motion) — the slowly varying factors are sampled
+  hourly and slerped, the Earth rotation angle is evaluated exactly — so it
+  matches `frametransform::qgcrf2itrf` to < 0.2 mas at the cost of the old
+  approximation. Those cases now agree with GMAT to 3 cm and 13 cm.
+
+### Added
+
+- **GMAT regression corpus** (`tests/gmat/cases/*.json`,
+  `tests/gmat_regression.rs`, `python/test/test_gmat.py`). Seventeen
+  7-day reference trajectories generated with NASA GMAT R2026A (RK89 at
+  1e-14, SPICE DE440, `EarthICRF`) across LEO, SSO, GPS MEO, Molniya, GEO,
+  the lunar-resonant TESS orbit and a 300,000 km cislunar orbit, each with a
+  low-degree (`j2`), 36×36 + solid tides (`full`) and relativity (`gr`) force
+  model. Hourly states are replayed segment-by-segment under `cargo test`
+  and `pytest` and gated per case; a failure prints the residual history so
+  the log shows *when* the divergence begins. Cases and gates live in
+  `tests/gmat/cases.py`; `tests/gmat/generate.py` regenerates the
+  corpus with a local GMAT install.
+
 
 ## 0.20.4 - 2026-08-28
 
