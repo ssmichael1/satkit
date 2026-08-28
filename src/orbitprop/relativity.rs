@@ -51,7 +51,11 @@ pub fn gr_schwarzschild_accel(pos_gcrf: &Vector3, vel_gcrf: &Vector3, mu_e: f64)
 }
 
 /// Earth's spin angular momentum per unit mass, |J| = (2/5) R² ω, for a
-/// homogeneous rigid sphere of radius [`consts::EARTH_RADIUS`] rotating at
+/// homogeneous rigid sphere. The real Earth's moment-of-inertia factor is
+/// ≈0.33 (not 0.4), so this overstates |J| by ~20%; the Lense–Thirring
+/// acceleration it feeds is ≤1e-10 m/s² and mostly periodic, far below
+/// any current validation floor, and the same approximation is used by
+/// GMAT (MathSpec §4.2.6). Radius [`consts::EARTH_RADIUS`] rotating at
 /// [`consts::OMEGA_EARTH`] (≈ 1.19e9 m²/s). This is the approximation used
 /// by IERS 2010 Eq. 10.12 and by GMAT.
 pub const EARTH_ANGULAR_MOMENTUM_PER_MASS: f64 =

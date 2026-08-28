@@ -40,8 +40,12 @@
   7 days (200,000 km), by millimetres at GPS altitude, and by ~1 cm over
   7 days at LEO. New `orbitprop::relativity::{gr_accel,
   gr_geodesic_accel, gr_lense_thirring_accel, geodesic_precession_rate,
-  EARTH_ANGULAR_MOMENTUM_PER_MASS}`; `Precomputed` tables now carry the Sun's
-  geocentric velocity (`InterpType` gained a fourth element). The GMAT `gr`
+  EARTH_ANGULAR_MOMENTUM_PER_MASS}`. **Breaking (Rust):** `Precomputed`
+  tables now also carry the Sun's geocentric velocity, and the sample type
+  returned by `Precomputed::interp` / `interp_or_compute` is the new named
+  struct `InterpSample { qgcrf2itrf, sun_pos_gcrf, moon_pos_gcrf, sun_vel_gcrf }`
+  instead of a tuple (`InterpType` remains as an alias); code that
+  destructured the tuple must use the fields. The GMAT `gr`
   gates tightened accordingly: `tess_gr` 6 → 3 m, `cislunar_gr` 6 → 2 m,
   `leo_iss_gr` 2 → 1.5 m (residuals 2.08 → 1.01 m, 1.85 → 0.63 m,
   0.66 → 0.50 m, i.e. down to the non-relativistic floors).

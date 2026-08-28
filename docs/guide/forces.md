@@ -110,7 +110,7 @@ $$
 ~+~\underbrace{\frac{2GM_\oplus}{c^2 r^3}\left[\frac{3}{r^2}(\vec{r}\times\vec{v})(\vec{r}\cdot\vec{J}) + \vec{v}\times\vec{J}\right]}_\text{Lense–Thirring}
 $$
 
-where $\vec{\Omega} = \tfrac{3}{2}\,\frac{GM_\odot}{c^2 R_\oplus^3}\,(\vec{R}_\oplus\times\dot{\vec{R}}_\oplus)$ is the geodesic (de Sitter) precession of the geocentric frame from the Earth's heliocentric state $\vec{R}_\oplus, \dot{\vec{R}}_\oplus$ ($|\Omega| \approx 1.92''$/century), and $\vec{J} = \tfrac{2}{5}R^2\omega\,\hat{z}_\text{ITRF}$ is the Earth's spin angular momentum per unit mass (rigid-sphere approximation, $\approx 1.19\times10^9$ m²/s).
+where $\vec{\Omega} = \tfrac{3}{2}\,\frac{GM_\odot}{c^2 R_\oplus^3}\,(\vec{R}_\oplus\times\dot{\vec{R}}_\oplus)$ is the geodesic (de Sitter) precession of the geocentric frame from the Earth's heliocentric state $\vec{R}_\oplus, \dot{\vec{R}}_\oplus$ ($|\Omega| \approx 1.92''$/century), and $\vec{J} = \tfrac{2}{5}R^2\omega\,\hat{z}_\text{ITRF}$ is the Earth's spin angular momentum per unit mass (homogeneous rigid-sphere approximation, $\approx 1.19\times10^9$ m²/s; the real moment-of-inertia factor is ≈0.33 rather than 0.4, a ~20% overstatement of a term that is ≤$10^{-10}$ m/s² and mostly periodic — GMAT uses the same approximation).
 
 The Schwarzschild term dominates below GEO (~$10^{-9}$ m/s² at LEO; omitting it costs ~1 m/day at GPS altitude, ~3 m/day at GEO). The geodesic term is a near-constant $4\times10^{-11}$ m/s² Coriolis-like acceleration at LEO and becomes the largest relativistic term beyond ~100,000 km (~1 m over 7 days at 200,000 km). Lense–Thirring is ~$10^{-10}$ m/s² at LEO, mostly periodic, and falls as $1/r^3$. This is the same formulation as GMAT's `RelativisticCorrection`.
 

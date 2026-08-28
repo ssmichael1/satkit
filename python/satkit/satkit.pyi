@@ -3767,11 +3767,15 @@ class propsettings:
     def tide_model(self, value: tidemodel) -> None: ...
     @property
     def use_relativistic_correction(self) -> bool:
-        """Include the Schwarzschild post-Newtonian acceleration.
+        """Include the general-relativistic acceleration of IERS 2010 §10.3
+        Eq. 10.12 (PPN β = γ = 1): the Schwarzschild term, geodesic (de Sitter)
+        precession ``2 (Ω × v)`` from the Earth's heliocentric motion, and
+        Lense–Thirring frame dragging from the Earth's spin. Default is True.
 
-        IERS 2010 §10.3 Eq. 10.12 with PPN β = γ = 1. Default is True.
-        Its position effect depends on the orbit, propagation arc, and fitted
-        parameters; computational cost is negligible.
+        The Schwarzschild term dominates below GEO (omitting it costs ~1 m/day
+        at GPS altitude); the geodesic term dominates beyond ~100,000 km
+        (~1 m over 7 days at 200,000 km). Computational cost is negligible.
+        Matches GMAT's ``RelativisticCorrection``.
         """
         ...
 
