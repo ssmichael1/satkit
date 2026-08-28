@@ -3,6 +3,12 @@
 
 ## Unreleased
 
+### Changed
+
+- **numeris 0.5.14 → 0.5.17.** Picks up the ODE fix that clamps the
+  initial step to the propagation span; no measurable change to any test
+  baseline or GMAT residual.
+
 ### Fixed
 
 - **Orbit propagator frame accuracy.** The propagator's precomputed
