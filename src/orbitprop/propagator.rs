@@ -2,6 +2,7 @@ use super::drag::{drag_and_partials, drag_force};
 use super::point_gravity::{point_gravity, point_gravity_and_partials};
 use super::relativity::gr_accel;
 use super::settings::PropSettings;
+use super::srp;
 use super::tides::{self, TideModel};
 
 use crate::lpephem;
@@ -88,17 +89,21 @@ pub type CovState = StateType<7>;
 // See Montenbruk & Gill for details (Chapter 7)
 //
 
-/// Solar radiation pressure acceleration in GCRF
+/// Cannonball solar radiation pressure acceleration in GCRF.
+///
+/// `shadow` is the Earth-shadow factor ν ∈ [0, 1] (see
+/// [`shadowfunc`](crate::lpephem::sun::shadowfunc)), computed once by the
+/// caller and shared with the ECOM term. The force is directed along the
+/// satellite→Sun line (not the geocentric Sun direction; the ~1e-4 rad
+/// difference at LEO is small but free to get right).
 fn solar_pressure_accel(
     sun_gcrf: &Vector3,
     pos_gcrf: &Vector3,
-    time: &Instant,
-    props: &dyn SatProperties,
-    state: &SimpleState,
+    shadow: f64,
+    cr_a_over_m: f64,
 ) -> Vector3 {
-    sun_gcrf
-        * (-shadowfunc(sun_gcrf, pos_gcrf) * props.cr_a_over_m(time, state) * 4.56e-6
-            / sun_gcrf.norm())
+    let sat_to_sun = sun_gcrf - pos_gcrf;
+    sat_to_sun * (-shadow * cr_a_over_m * 4.56e-6 / sat_to_sun.norm())
 }
 
 /// GCRF radius (meters) above which atmospheric density is negligible and
@@ -247,8 +252,21 @@ fn force_model(
         ss.set_block(0, 0, pos_gcrf);
         ss.set_block(3, 0, vel_gcrf);
 
+        // Solar radiation pressure: cannonball term plus optional ECOM
+        // empirical model, sharing one shadow-function evaluation. Neither
+        // contributes partials (see the `force_model` docs).
         if need_accel {
-            accel += solar_pressure_accel(&sun_gcrf, pos_gcrf, &time, props, &ss);
+            let cr_a_over_m = props.cr_a_over_m(&time, &ss);
+            let ecom = props.srp_ecom(&time, &ss);
+            if cr_a_over_m != 0.0 || ecom.is_some() {
+                let shadow = shadowfunc(&sun_gcrf, pos_gcrf);
+                if cr_a_over_m != 0.0 {
+                    accel += solar_pressure_accel(&sun_gcrf, pos_gcrf, shadow, cr_a_over_m);
+                }
+                if let Some(p) = ecom {
+                    accel += srp::ecom_accel(&p, pos_gcrf, vel_gcrf, &sun_gcrf, shadow);
+                }
+            }
         }
 
         // Atmospheric drag below ~700 km altitude. The squared-radius gate

@@ -3403,6 +3403,129 @@ class thrust:
         """End time of thrust arc"""
         ...
 
+class ecomparams:
+    """Empirical CODE Orbit Model (ECOM) solar-radiation-pressure coefficients
+
+    ECOM expresses the non-gravitational acceleration of a (nominally
+    yaw-steering) satellite in a Sun-oriented frame with constant and
+    harmonic terms. The coefficients are normally *estimated* in orbit
+    determination; satkit propagates with the values you supply.
+
+    Frame (GCRF), with r the satellite position and s the Sun position:
+
+    - ``e_D = unit(s - r)`` — satellite → Sun
+    - ``e_Y = unit(e_D × r̂)`` — solar-panel rotation axis
+    - ``e_B = e_D × e_Y``
+
+    Model::
+
+        a = ν·D(φ)·e_D + Y(φ)·e_Y + ν·B(φ)·e_B
+        D(φ) = d0 + dc cos φ + ds sin φ + d2c cos 2φ + d2s sin 2φ + d4c cos 4φ + d4s sin 4φ
+        Y(φ) = y0 + yc cos φ + ys sin φ
+        B(φ) = b0 + bc cos φ + bs sin φ
+
+    where ``ν`` is the Earth-shadow factor (D and B vanish in umbra; the Y
+    axis is deliberately *not* shadow-scaled) and ``φ`` is the argument of
+    latitude ``u`` when ``sun_relative`` is False (ECOM1) or ``Δu``, measured
+    from orbit noon, when True (ECOM2).
+
+    Because ``e_D`` points *at* the Sun, the physical ``d0`` is negative:
+    about -1e-7 m/s² for a GPS satellite; ``y0`` and the B terms are ~1e-9.
+    All coefficients are in m/s².
+
+    Attach to a propagation via ``satproperties(ecom=...)``. The ECOM
+    acceleration is added to the cannonball term, so use ``craoverm=0`` for
+    a pure ECOM model.
+
+    Example:
+
+    ```python
+    import satkit as sk
+
+    ecom = sk.ecomparams.reduced(d0=-1.0e-7, y0=1e-9, b0=0, bc=2e-9, bs=-1e-9)
+    props = sk.satproperties(craoverm=0.0, ecom=ecom)
+    res = sk.propagate(state, t0, t1, propsettings=settings, satproperties=props)
+    ```
+    """
+
+    def __init__(
+        self,
+        *,
+        d0: float = 0.0,
+        y0: float = 0.0,
+        b0: float = 0.0,
+        dc: float = 0.0,
+        ds: float = 0.0,
+        yc: float = 0.0,
+        ys: float = 0.0,
+        bc: float = 0.0,
+        bs: float = 0.0,
+        d2c: float = 0.0,
+        d2s: float = 0.0,
+        d4c: float = 0.0,
+        d4s: float = 0.0,
+        sun_relative: bool = False,
+    ) -> None:
+        """Create ECOM coefficients (m/s²); all default to zero.
+
+        Args:
+            d0, y0, b0 (float): constant D, Y, B terms
+            dc, ds (float): D cos φ, D sin φ
+            yc, ys (float): Y cos φ, Y sin φ
+            bc, bs (float): B cos φ, B sin φ
+            d2c, d2s, d4c, d4s (float): even D harmonics (ECOM2)
+            sun_relative (bool): False → φ = argument of latitude (ECOM1);
+                True → φ = Δu from orbit noon (ECOM2)
+        """
+        ...
+
+    @staticmethod
+    def reduced(d0: float, y0: float, b0: float, bc: float, bs: float) -> ecomparams:
+        """Reduced ECOM1: D0, Y0, B0, Bc, Bs in argument of latitude (CODE's classic GPS set)"""
+        ...
+
+    @staticmethod
+    def ecom1(
+        d0: float, y0: float, b0: float, dc: float, ds: float, yc: float, ys: float, bc: float, bs: float
+    ) -> ecomparams:
+        """Full 9-parameter ECOM1 (once-per-revolution terms on D, Y, B in argument of latitude)"""
+        ...
+
+    @staticmethod
+    def ecom2(
+        d0: float, y0: float, b0: float, b1c: float, b1s: float, d2c: float, d2s: float, d4c: float, d4s: float
+    ) -> ecomparams:
+        """ECOM2 (Arnold et al. 2015): D0, Y0, B0, B1c, B1s, D2c, D2s, D4c, D4s in Δu from orbit noon"""
+        ...
+
+    d0: float
+    y0: float
+    b0: float
+    dc: float
+    ds: float
+    yc: float
+    ys: float
+    bc: float
+    bs: float
+    d2c: float
+    d2s: float
+    d4c: float
+    d4s: float
+    sun_relative: bool
+
+    def to_dict(self) -> dict[str, float | bool]:
+        """Coefficients as a dict (13 floats plus ``sun_relative``)"""
+        ...
+
+    @staticmethod
+    def from_dict(d: dict[str, float | bool]) -> ecomparams:
+        """Build from a dict as produced by :meth:`to_dict`; missing keys default to zero / False"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __repr__(self) -> str: ...
+    def __str__(self) -> str: ...
+
 class satproperties:
     """Satellite properties relevant for drag, radiation pressure, and thrust
 
@@ -3413,6 +3536,9 @@ class satproperties:
         cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
         craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
         thrusts (list[thrust]): List of continuous thrust arcs
+        ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
+            coefficients, added to the cannonball term (use ``craoverm=0``
+            for a pure ECOM model)
 
     """
 
@@ -3422,6 +3548,7 @@ class satproperties:
         craoverm: float = 0,
         *,
         thrusts: list[thrust] | None = None,
+        ecom: ecomparams | None = None,
     ) -> None:
         """Create a satproperties object
 
@@ -3429,6 +3556,7 @@ class satproperties:
             cdaoverm (float, optional): Coefficient of drag times area over mass in m^2/kg
             craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
             thrusts (list[thrust], optional): List of continuous thrust arcs
+            ecom (ecomparams, optional): ECOM solar-radiation-pressure coefficients
 
         Example:
 
@@ -3442,6 +3570,9 @@ class satproperties:
             cdaoverm=0.01,
             thrusts=[sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)]
         )
+
+        # GNSS-style empirical SRP instead of the cannonball
+        props = sk.satproperties(craoverm=0.0, ecom=sk.ecomparams.reduced(-1e-7, 0, 0, 0, 0))
         ```
 
         """
@@ -3469,6 +3600,14 @@ class satproperties:
 
     @thrusts.setter
     def thrusts(self, value: list[thrust]) -> None: ...
+
+    @property
+    def ecom(self) -> ecomparams | None:
+        """ECOM solar-radiation-pressure coefficients, or None"""
+        ...
+
+    @ecom.setter
+    def ecom(self, value: ecomparams | None) -> None: ...
 
 class integrator:
     """Choice of ODE integrator for orbit propagation

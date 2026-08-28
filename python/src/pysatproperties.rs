@@ -1,5 +1,6 @@
 use satkit::orbitprop::SatPropertiesSimple;
 
+use crate::pyecom::{ecom_from_block, encode_ecom_block, PyEcomParams, ECOM_BLOCK_LEN};
 use crate::pythrust::{py_thrusts_to_profile, PyThrust};
 use crate::pyutils::{kwargs_or_default, reject_unused_kwargs};
 use pyo3::prelude::*;
@@ -25,7 +26,10 @@ impl PySatProperties {
     /// via the "craoverm" and "cdaoverm" keyword arguments
     ///
     /// Optionally, set continuous thrust arcs via the "thrusts"
-    /// keyword argument, which takes a list of satkit.thrust objects
+    /// keyword argument, which takes a list of satkit.thrust objects,
+    /// and ECOM empirical solar-radiation-pressure coefficients via the
+    /// "ecom" keyword argument (a satkit.ecomparams, added to the
+    /// cannonball term; use craoverm=0 for a pure ECOM model)
     ///
     /// If these are not set, default is 0
     ///
@@ -55,6 +59,17 @@ impl PySatProperties {
                 let thrusts: Vec<PyThrust> = thrusts_obj.extract()?;
                 props = props.with_thrust(py_thrusts_to_profile(thrusts));
                 kw.del_item("thrusts")?;
+            }
+            if let Some(ecom_obj) = kw.get_item("ecom")? {
+                if !ecom_obj.is_none() {
+                    let ecom = ecom_obj
+                        .cast::<PyEcomParams>()
+                        .map_err(|e| anyhow::anyhow!("ecom must be a satkit.ecomparams: {e}"))?
+                        .borrow()
+                        .0;
+                    props = props.with_ecom(ecom);
+                }
+                kw.del_item("ecom")?;
             }
             reject_unused_kwargs(kw)?;
         }
@@ -121,22 +136,43 @@ impl PySatProperties {
         self.0.thrust = py_thrusts_to_profile(thrusts);
     }
 
+    /// Get the ECOM solar-radiation-pressure coefficients, or None
+    ///
+    /// Returns:
+    ///     satkit.ecomparams | None
+    #[getter]
+    fn get_ecom(&self) -> Option<PyEcomParams> {
+        self.0.ecom.map(PyEcomParams)
+    }
+
+    /// Set (or clear, with None) the ECOM solar-radiation-pressure coefficients
+    ///
+    /// Args:
+    ///     ecom (satkit.ecomparams | None)
+    #[setter]
+    fn set_ecom(&mut self, ecom: Option<PyEcomParams>) {
+        self.0.ecom = ecom.map(|e| e.0);
+    }
+
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {
         let state = state.as_bytes(py);
-        // Self-describing format v1:
-        //   [0]       version byte (== 1)
+        // Self-describing format:
+        //   [0]       version byte (1 or 2)
         //   [1..9]    craoverm (f64)
         //   [9..17]   cdaoverm (f64)
         //   [17..21]  thrust-arc count (u32 little-endian)
         //   [..]      count * 41-byte arcs: 24 accel, 1 frame tag, 8 start, 8 end
+        // v2 appends:
+        //   [..]      has_ecom (u8); if 1, an ECOM block (see pyecom.rs)
         const HEADER: usize = 1 + 8 + 8 + 4;
         if state.len() < HEADER {
             bail!("invalid satproperties pickle: truncated header");
         }
-        if state[0] != 1 {
+        let version = state[0];
+        if version != 1 && version != 2 {
             bail!(
-                "unsupported satproperties pickle version {} (expected 1)",
-                state[0]
+                "unsupported satproperties pickle version {} (expected 1 or 2)",
+                version
             );
         }
         let read_f64 = |at: usize| f64::from_le_bytes(state[at..at + 8].try_into().unwrap());
@@ -146,7 +182,8 @@ impl PySatProperties {
         self.0.thrust = satkit::orbitprop::ThrustProfile::default();
 
         let count = u32::from_le_bytes(state[17..21].try_into()?) as usize;
-        if state.len() != HEADER + count * 41 {
+        let thrust_end = HEADER + count * 41;
+        if state.len() < thrust_end {
             bail!("invalid satproperties pickle: thrust block length mismatch");
         }
         let mut offset = HEADER;
@@ -174,14 +211,44 @@ impl PySatProperties {
                 .map_err(|e| anyhow::anyhow!("invalid thrust in pickle: {e}"))?,
             );
         }
+
+        self.0.ecom = None;
+        let tail = &state[thrust_end..];
+        match version {
+            1 => {
+                if !tail.is_empty() {
+                    bail!("invalid satproperties pickle: trailing bytes in v1 format");
+                }
+            }
+            _ => {
+                if tail.is_empty() {
+                    bail!("invalid satproperties pickle: missing ECOM flag");
+                }
+                match tail[0] {
+                    0 => {
+                        if tail.len() != 1 {
+                            bail!("invalid satproperties pickle: trailing bytes after ECOM flag");
+                        }
+                    }
+                    1 => {
+                        if tail.len() != 1 + ECOM_BLOCK_LEN {
+                            bail!("invalid satproperties pickle: ECOM block length mismatch");
+                        }
+                        self.0.ecom = Some(ecom_from_block(&tail[1..])?);
+                    }
+                    other => bail!("invalid satproperties pickle: bad ECOM flag {other}"),
+                }
+            }
+        }
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         // See `__setstate__` for the format. Values are written little-endian via
         // `to_le_bytes`, so there is no alignment assumption on the buffer.
-        let mut raw: Vec<u8> = Vec::with_capacity(21 + self.0.thrust.thrusts.len() * 41);
-        raw.push(1u8); // version
+        let mut raw: Vec<u8> =
+            Vec::with_capacity(21 + self.0.thrust.thrusts.len() * 41 + 1 + ECOM_BLOCK_LEN);
+        raw.push(2u8); // version
         raw.extend_from_slice(&self.0.craoverm.to_le_bytes());
         raw.extend_from_slice(&self.0.cdaoverm.to_le_bytes());
         raw.extend_from_slice(&(self.0.thrust.thrusts.len() as u32).to_le_bytes());
@@ -200,6 +267,13 @@ impl PySatProperties {
                     .as_mjd_with_scale(satkit::TimeScale::TAI)
                     .to_le_bytes(),
             );
+        }
+        match &self.0.ecom {
+            Some(e) => {
+                raw.push(1u8);
+                raw.extend_from_slice(&encode_ecom_block(e));
+            }
+            None => raw.push(0u8),
         }
         pyo3::types::PyBytes::new(py, &raw).into_py_any(py)
     }

@@ -36,6 +36,7 @@ satkit\.satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|u
 satkit\.satkit\.TLE
 satkit\.satkit\.consts
 satkit\.satkit\.duration
+satkit\.satkit\.ecomparams
 satkit\.satkit\.frame
 satkit\.satkit\.geodetic
 satkit\.satkit\.gravmodel
