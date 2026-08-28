@@ -7,6 +7,7 @@ API reference for the numerical (force-model) propagator. For background, see:
 - [State Vectors, STM & Covariance](../guide/satstate.md) — state representation, STM, covariance propagation, maneuvers
 - Tutorial: [GPS Example](../tutorials/GPS Example.ipynb)
 - [References](../guide/references.md) — primary sources for each force model and integrator
+- Tutorial: [ECOM Solar Radiation Pressure](../tutorials/ECOM Solar Radiation Pressure.ipynb)
 
 ::: satkit.propagate
 
@@ -21,5 +22,7 @@ API reference for the numerical (force-model) propagator. For background, see:
 ::: satkit.propstats
 
 ::: satkit.satproperties
+
+::: satkit.ecomparams
 
 ::: satkit.thrust

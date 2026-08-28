@@ -6,7 +6,49 @@ use satkit::orbitprop::EcomParams;
 
 use anyhow::{bail, Result};
 
-/// Python wrapper for ECOM solar-radiation-pressure coefficients
+/// Empirical CODE Orbit Model (ECOM) solar-radiation-pressure coefficients
+///
+/// ECOM expresses the non-gravitational acceleration of a (nominally
+/// yaw-steering) satellite in a Sun-oriented frame with constant and
+/// harmonic terms. The coefficients are normally *estimated* in orbit
+/// determination; satkit propagates with the values you supply.
+///
+/// Frame (GCRF), with r the satellite position and s the Sun position:
+///
+/// - ``e_D = unit(s - r)`` — satellite → Sun
+/// - ``e_Y = unit(e_D × r̂)`` — solar-panel rotation axis
+/// - ``e_B = e_D × e_Y``
+///
+/// Model::
+///
+///     a = ν·D(φ)·e_D + Y(φ)·e_Y + ν·B(φ)·e_B
+///     D(φ) = d0 + dc cos φ + ds sin φ + d2c cos 2φ + d2s sin 2φ + d4c cos 4φ + d4s sin 4φ
+///     Y(φ) = y0 + yc cos φ + ys sin φ
+///     B(φ) = b0 + bc cos φ + bs sin φ
+///
+/// where ``ν`` is the Earth-shadow factor (D and B vanish in umbra; the Y
+/// axis is deliberately *not* shadow-scaled) and ``φ`` is the argument of
+/// latitude ``u`` when ``sun_relative`` is False (ECOM1) or ``Δu``, measured
+/// from orbit noon, when True (ECOM2).
+///
+/// Because ``e_D`` points *at* the Sun, the physical ``d0`` is negative:
+/// about -1e-7 m/s² for a GPS satellite; ``y0`` and the B terms are ~1e-9.
+/// All coefficients are in m/s².
+///
+/// Attach to a propagation via ``satproperties(ecom=...)``. The ECOM
+/// acceleration is added to the cannonball term, so use ``craoverm=0`` for
+/// a pure ECOM model. See the "ECOM Solar Radiation Pressure" tutorial for a
+/// fit against IGS GPS orbits.
+///
+/// Example:
+///
+/// ```python
+/// import satkit as sk
+///
+/// ecom = sk.ecomparams.reduced(d0=-1.0e-7, y0=1e-9, b0=0, bc=2e-9, bs=-1e-9)
+/// props = sk.satproperties(craoverm=0.0, ecom=ecom)
+/// res = sk.propagate(state, t0, t1, propsettings=settings, satproperties=props)
+/// ```
 #[pyclass(name = "ecomparams", module = "satkit", from_py_object)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct PyEcomParams(pub EcomParams);
@@ -81,15 +123,17 @@ impl PyEcomParams {
         )
     }
 
-    /// Reduced ECOM1: D0, Y0, B0, Bc, Bs with harmonics in the argument of
-    /// latitude (CODE's classic operational GPS set).
+    /// Reduced ECOM1: D0, Y0, B0, Bc, Bs (m/s²) with harmonics in the
+    /// argument of latitude (``sun_relative=False``); all other coefficients
+    /// zero. CODE's classic operational GPS set.
     #[staticmethod]
     fn reduced(d0: f64, y0: f64, b0: f64, bc: f64, bs: f64) -> Self {
         Self(EcomParams::reduced(d0, y0, b0, bc, bs))
     }
 
-    /// Full 9-parameter ECOM1 (once-per-revolution terms on D, Y and B in
-    /// the argument of latitude).
+    /// Full 9-parameter ECOM1: D0, Y0, B0, Dc, Ds, Yc, Ys, Bc, Bs (m/s²),
+    /// once-per-revolution terms in the argument of latitude
+    /// (``sun_relative=False``).
     #[staticmethod]
     #[allow(clippy::too_many_arguments)]
     fn ecom1(
@@ -107,7 +151,9 @@ impl PyEcomParams {
     }
 
     /// ECOM2 (Arnold et al. 2015): D0, Y0, B0, B1c, B1s, D2c, D2s, D4c, D4s
-    /// with harmonics in Δu from orbit noon.
+    /// (m/s²) with harmonics in Δu from orbit noon (``sun_relative=True``).
+    /// B1c/B1s are stored as ``bc``/``bs``; pass d4c=d4s=0 for the
+    /// 7-parameter variant.
     #[staticmethod]
     #[allow(clippy::too_many_arguments)]
     fn ecom2(
@@ -124,6 +170,7 @@ impl PyEcomParams {
         Self(EcomParams::ecom2(d0, y0, b0, b1c, b1s, d2c, d2s, d4c, d4s))
     }
 
+    /// Constant D (Sun-direction) term, m/s². Physically negative.
     #[getter]
     fn d0(&self) -> f64 {
         self.0.d0
@@ -132,6 +179,7 @@ impl PyEcomParams {
     fn set_d0(&mut self, v: f64) {
         self.0.d0 = v;
     }
+    /// Constant Y term, m/s² (not scaled by the shadow factor).
     #[getter]
     fn y0(&self) -> f64 {
         self.0.y0
@@ -140,6 +188,7 @@ impl PyEcomParams {
     fn set_y0(&mut self, v: f64) {
         self.0.y0 = v;
     }
+    /// Constant B term, m/s².
     #[getter]
     fn b0(&self) -> f64 {
         self.0.b0
@@ -148,6 +197,7 @@ impl PyEcomParams {
     fn set_b0(&mut self, v: f64) {
         self.0.b0 = v;
     }
+    /// D cos φ coefficient, m/s².
     #[getter]
     fn dc(&self) -> f64 {
         self.0.dc
@@ -156,6 +206,7 @@ impl PyEcomParams {
     fn set_dc(&mut self, v: f64) {
         self.0.dc = v;
     }
+    /// D sin φ coefficient, m/s².
     #[getter]
     fn ds(&self) -> f64 {
         self.0.ds
@@ -164,6 +215,7 @@ impl PyEcomParams {
     fn set_ds(&mut self, v: f64) {
         self.0.ds = v;
     }
+    /// Y cos φ coefficient, m/s².
     #[getter]
     fn yc(&self) -> f64 {
         self.0.yc
@@ -172,6 +224,7 @@ impl PyEcomParams {
     fn set_yc(&mut self, v: f64) {
         self.0.yc = v;
     }
+    /// Y sin φ coefficient, m/s².
     #[getter]
     fn ys(&self) -> f64 {
         self.0.ys
@@ -180,6 +233,7 @@ impl PyEcomParams {
     fn set_ys(&mut self, v: f64) {
         self.0.ys = v;
     }
+    /// B cos φ coefficient, m/s² (B1c in ECOM2).
     #[getter]
     fn bc(&self) -> f64 {
         self.0.bc
@@ -188,6 +242,7 @@ impl PyEcomParams {
     fn set_bc(&mut self, v: f64) {
         self.0.bc = v;
     }
+    /// B sin φ coefficient, m/s² (B1s in ECOM2).
     #[getter]
     fn bs(&self) -> f64 {
         self.0.bs
@@ -196,6 +251,7 @@ impl PyEcomParams {
     fn set_bs(&mut self, v: f64) {
         self.0.bs = v;
     }
+    /// D cos 2φ coefficient, m/s² (ECOM2).
     #[getter]
     fn d2c(&self) -> f64 {
         self.0.d2c
@@ -204,6 +260,7 @@ impl PyEcomParams {
     fn set_d2c(&mut self, v: f64) {
         self.0.d2c = v;
     }
+    /// D sin 2φ coefficient, m/s² (ECOM2).
     #[getter]
     fn d2s(&self) -> f64 {
         self.0.d2s
@@ -212,6 +269,7 @@ impl PyEcomParams {
     fn set_d2s(&mut self, v: f64) {
         self.0.d2s = v;
     }
+    /// D cos 4φ coefficient, m/s² (ECOM2).
     #[getter]
     fn d4c(&self) -> f64 {
         self.0.d4c
@@ -220,6 +278,7 @@ impl PyEcomParams {
     fn set_d4c(&mut self, v: f64) {
         self.0.d4c = v;
     }
+    /// D sin 4φ coefficient, m/s² (ECOM2).
     #[getter]
     fn d4s(&self) -> f64 {
         self.0.d4s
@@ -228,6 +287,7 @@ impl PyEcomParams {
     fn set_d4s(&mut self, v: f64) {
         self.0.d4s = v;
     }
+    /// True: harmonics in Δu from orbit noon (ECOM2); False: in the argument of latitude u (ECOM1).
     #[getter]
     fn sun_relative(&self) -> bool {
         self.0.sun_relative

@@ -138,6 +138,12 @@ impl PySatProperties {
 
     /// Get the ECOM solar-radiation-pressure coefficients, or None
     ///
+    /// When set, the ECOM acceleration (see satkit.ecomparams for the DYB
+    /// frame, sign and eclipse conventions) is added to the cannonball term
+    /// craoverm; use craoverm=0 for a pure ECOM model. The "ECOM Solar
+    /// Radiation Pressure" tutorial shows how to fit the coefficients to
+    /// IGS GPS orbits.
+    ///
     /// Returns:
     ///     satkit.ecomparams | None
     #[getter]

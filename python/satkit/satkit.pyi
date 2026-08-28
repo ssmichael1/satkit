@@ -3499,19 +3499,33 @@ class ecomparams:
         ...
 
     d0: float
+    """Constant D (Sun-direction) term, m/s². Physically negative."""
     y0: float
+    """Constant Y term, m/s² (not scaled by the shadow factor)."""
     b0: float
+    """Constant B term, m/s²."""
     dc: float
+    """D cos φ coefficient, m/s²."""
     ds: float
+    """D sin φ coefficient, m/s²."""
     yc: float
+    """Y cos φ coefficient, m/s²."""
     ys: float
+    """Y sin φ coefficient, m/s²."""
     bc: float
+    """B cos φ coefficient, m/s² (B1c in ECOM2)."""
     bs: float
+    """B sin φ coefficient, m/s² (B1s in ECOM2)."""
     d2c: float
+    """D cos 2φ coefficient, m/s² (ECOM2)."""
     d2s: float
+    """D sin 2φ coefficient, m/s² (ECOM2)."""
     d4c: float
+    """D cos 4φ coefficient, m/s² (ECOM2)."""
     d4s: float
+    """D sin 4φ coefficient, m/s² (ECOM2)."""
     sun_relative: bool
+    """True: harmonics in Δu from orbit noon (ECOM2); False: in the argument of latitude u (ECOM1)."""
 
     def to_dict(self) -> dict[str, float | bool]:
         """Coefficients as a dict (13 floats plus ``sun_relative``)"""
@@ -3538,7 +3552,9 @@ class satproperties:
         thrusts (list[thrust]): List of continuous thrust arcs
         ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
             coefficients, added to the cannonball term (use ``craoverm=0``
-            for a pure ECOM model)
+            for a pure ECOM model). See :class:`ecomparams` for the
+            conventions and the "ECOM Solar Radiation Pressure" tutorial
+            for a fit against IGS GPS orbits.
 
     """
 
@@ -3603,7 +3619,14 @@ class satproperties:
 
     @property
     def ecom(self) -> ecomparams | None:
-        """ECOM solar-radiation-pressure coefficients, or None"""
+        """ECOM solar-radiation-pressure coefficients, or None
+
+        When set, the ECOM acceleration (see :class:`ecomparams` for the
+        DYB frame, sign and eclipse conventions) is added to the cannonball
+        term ``craoverm``; use ``craoverm=0`` for a pure ECOM model. The
+        "ECOM Solar Radiation Pressure" tutorial shows how to fit the
+        coefficients to IGS GPS orbits.
+        """
         ...
 
     @ecom.setter

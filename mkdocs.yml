@@ -83,6 +83,9 @@ plugins:
       include_requirejs: false
       execute_ignore:
         - "tutorials/.ipynb_checkpoints/*"
+        # Downloads a month of IGS SP3 files and runs several fits; committed
+        # with stored outputs instead of executing at build time.
+        - "tutorials/ECOM Solar Radiation Pressure.ipynb"
 
 nav:
   - Home: index.md
@@ -109,6 +112,7 @@ nav:
           - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
           - "Validation: GMAT Comparison": guide/gmat_validation.md
           - "GPS Example": tutorials/GPS Example.ipynb
+          - "ECOM Solar Radiation Pressure": tutorials/ECOM Solar Radiation Pressure.ipynb
           - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
       - Applications:
           - Plots: tutorials/Plots.ipynb
