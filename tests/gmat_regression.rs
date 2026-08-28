@@ -40,9 +40,18 @@ struct Tolerance {
     vel_mps: f64,
 }
 
+/// GMAT-side metadata; only the body GMs are checked here.
+#[derive(Deserialize)]
+struct GmatMeta {
+    mu_earth_km3s2: f64,
+    mu_moon_km3s2: f64,
+    mu_sun_km3s2: f64,
+}
+
 #[derive(Deserialize)]
 struct Case {
     name: String,
+    gmat: GmatMeta,
     epoch_utc: String,
     force_model: ForceModel,
     tolerance: Tolerance,
@@ -75,23 +84,38 @@ fn load_case_from(path: &Path, name: &str) -> Case {
         .unwrap_or_else(|e| panic!("bad JSON in {}: {e}", path.display()));
     assert_eq!(case.name, name, "case name mismatch in {}", path.display());
     assert!(case.samples.len() >= 2, "{name}: need at least two samples");
+    assert_eq!(
+        case.samples[0][0], 0.0,
+        "{name}: first sample must be at elapsed 0"
+    );
+    assert!(
+        case.samples.windows(2).all(|w| w[1][0] > w[0][0]),
+        "{name}: elapsed times must be strictly increasing"
+    );
+    assert!(
+        case.tolerance.pos_m > 0.0 && case.tolerance.vel_mps > 0.0,
+        "{name}: tolerances must be positive"
+    );
+    // The reference was generated with these GMs; they must be the ones
+    // satkit uses, or every residual would be dominated by the constant
+    // mismatch. This catches a wrong constant directly (the original
+    // MU_MOON bug showed up as a 1.27 km residual on the TESS case).
+    for (body, gmat_km3, satkit_m3) in [
+        ("Earth", case.gmat.mu_earth_km3s2, satkit::consts::MU_EARTH),
+        ("Moon", case.gmat.mu_moon_km3s2, satkit::consts::MU_MOON),
+        ("Sun", case.gmat.mu_sun_km3s2, satkit::consts::MU_SUN),
+    ] {
+        let rel = (gmat_km3 * 1e9 - satkit_m3).abs() / satkit_m3;
+        assert!(
+            rel < 1e-9,
+            "{name}: {body} GM differs from satkit::consts by {rel:.2e} (GMAT {gmat_km3} km^3/s^2, satkit {satkit_m3} m^3/s^2)"
+        );
+    }
     case
 }
 
 fn parse_epoch(iso: &str) -> Instant {
-    // "YYYY-MM-DDTHH:MM:SS[.fff]" (UTC)
-    let (date, time) = iso.split_once('T').expect("epoch_utc must be ISO-8601");
-    let d: Vec<i32> = date.split('-').map(|s| s.parse().unwrap()).collect();
-    let t: Vec<&str> = time.split(':').collect();
-    Instant::from_datetime(
-        d[0],
-        d[1],
-        d[2],
-        t[0].parse().unwrap(),
-        t[1].parse().unwrap(),
-        t[2].parse().unwrap(),
-    )
-    .expect("valid epoch")
+    Instant::from_string(iso).unwrap_or_else(|e| panic!("bad epoch_utc {iso:?}: {e}"))
 }
 
 fn settings_for(fm: &ForceModel) -> PropSettings {
@@ -109,10 +133,21 @@ fn settings_for(fm: &ForceModel) -> PropSettings {
         "SolidFull" => TideModel::SolidFull,
         other => panic!("unknown tides {other:?}"),
     };
-    PropSettings {
+    assert!(
+        fm.gravity_degree <= 40,
+        "gravity_degree {} exceeds the built-in coefficient tables (40)",
+        fm.gravity_degree
+    );
+    // Replay settings, chosen so the comparison measures the force model:
+    // - error tolerances 10x tighter than the tightest gate, so integrator
+    //   noise (< 4 cm over 7 days on a point-mass LEO case) is not what is
+    //   being measured;
+    // - RKV98NoInterp / enable_interp = false: the test samples only at
+    //   segment ends, so dense output would be wasted work;
+    // - use_spaceweather = false: no case has drag or SRP, and this avoids
+    //   a dependency on the space-weather data file.
+    let mut settings = PropSettings {
         gravity_model,
-        gravity_degree: fm.gravity_degree,
-        gravity_order: fm.gravity_order,
         use_sun_gravity: fm.sun,
         use_moon_gravity: fm.moon,
         tide_model,
@@ -123,7 +158,11 @@ fn settings_for(fm: &ForceModel) -> PropSettings {
         rel_error: 1e-13,
         enable_interp: false,
         ..PropSettings::default()
-    }
+    };
+    settings
+        .set_gravity(fm.gravity_degree, fm.gravity_order)
+        .unwrap_or_else(|e| panic!("invalid gravity degree/order in case: {e}"));
+    settings
 }
 
 /// GMAT sample (km, km/s) -> satkit state (m, m/s).

@@ -125,20 +125,29 @@ def build_script(case: dict, spk: Path, report_path: Path) -> str:
     return "\n".join(lines)
 
 
+GMAT_TIMEOUT_S = 600  # GMAT hangs (does not error) on e.g. Accuracy = 1e-16
+
+
 def run_gmat(gmat_root: Path, script: Path) -> None:
     bindir = gmat_root / "bin"
     exe = bindir / ("GmatConsole.exe" if os.name == "nt" else "GmatConsole")
     if not exe.exists():
         sys.exit(f"GmatConsole not found at {exe}")
-    proc = subprocess.run([str(exe), "--run", str(script)], cwd=bindir,
-                          capture_output=True, text=True)
+    try:
+        proc = subprocess.run([str(exe), "--run", str(script)], cwd=bindir,
+                              capture_output=True, text=True, timeout=GMAT_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        sys.exit(f"GMAT did not finish {script.name} within {GMAT_TIMEOUT_S} s (hung?)")
+    # GMAT reports script/propagation problems as **** ERROR **** / **** WARNING ****
+    # on stdout (and in <gmat>/output/GmatLog.txt); the dlopen lines about
+    # missing proprietary plugins are benign noise.
     bad = [l for l in proc.stdout.splitlines() + proc.stderr.splitlines()
-           if "ERROR" in l and "dlopen" not in l]
+           if ("ERROR" in l or "WARNING" in l) and "dlopen" not in l and "plugin" not in l.lower()]
     if proc.returncode != 0 or bad:
-        sys.exit("GMAT failed for %s:\n%s" % (script, "\n".join(bad) or proc.stdout[-2000:]))
+        sys.exit("GMAT failed for %s:\n%s" % (script.name, "\n".join(bad) or proc.stdout[-2000:]))
 
 
-def parse_report(path: Path) -> list:
+def parse_report(path: Path, expected_rows: int) -> list:
     samples = []
     for line in path.read_text().splitlines():
         if not line.strip():
@@ -147,7 +156,31 @@ def parse_report(path: Path) -> list:
         if len(vals) != 7:
             sys.exit(f"bad report line in {path}: {line!r}")
         samples.append(vals)
+    if len(samples) != expected_rows:
+        sys.exit(f"{path.name}: expected {expected_rows} samples, got {len(samples)} (GMAT stopped early?)")
     return samples
+
+
+def expected_rows(case: dict) -> int:
+    return int(round(cases.ORBITS[case["orbit"]]["days"] * 86400.0 / cases.SAMPLE_SECONDS)) + 1
+
+
+def satkit_ref() -> str:
+    """Git revision of the satkit checkout the tolerances were measured against (best effort)."""
+    try:
+        out = subprocess.run(["git", "-C", str(REPO), "describe", "--always", "--dirty", "--tags"],
+                             capture_output=True, text=True, timeout=10)
+        return out.stdout.strip() or "unknown"
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+
+
+def check_tolerance(case: dict) -> None:
+    tol = case["tolerance"]
+    for k in ("pos_m", "vel_mps"):
+        v = tol.get(k)
+        if not isinstance(v, (int, float)) or not (0 < v < float("inf")):
+            sys.exit(f"{case['name']}: tolerance {k} must be a positive finite number, got {v!r}")
 
 
 def gmat_version(gmat_root: Path) -> str:
@@ -161,6 +194,7 @@ def gmat_version(gmat_root: Path) -> str:
 def write_case(case: dict, samples: list, version: str, spk: Path) -> Path:
     orbit = cases.ORBITS[case["orbit"]]
     fm = cases.FORCE_MODELS[case["force_model"]]
+    check_tolerance(case)
     doc = {
         "name": case["name"],
         "description": "GMAT reference trajectory; orbit '%s', force model '%s'" % (case["orbit"], case["force_model"]),
@@ -179,6 +213,7 @@ def write_case(case: dict, samples: list, version: str, spk: Path) -> Path:
         "orbit": {k: list(v) if isinstance(v, tuple) else v for k, v in orbit.items()},
         "force_model": fm,
         "tolerance": case["tolerance"],
+        "tolerance_measured_against": satkit_ref(),
         "units": "samples: [elapsed_s, x_km, y_km, z_km, vx_kms, vy_kms, vz_kms] in EarthICRF",
         "samples": samples,
     }
@@ -195,8 +230,10 @@ def update_tolerances() -> None:
         if not path.exists():
             print(f"skip {path.name}: not generated yet")
             continue
+        check_tolerance(case)
         doc = json.loads(path.read_text())
         doc["tolerance"] = case["tolerance"]
+        doc["tolerance_measured_against"] = satkit_ref()
         with path.open("w") as f:
             json.dump(doc, f, indent=1)
             f.write("\n")
@@ -227,6 +264,10 @@ def main() -> None:
     version = gmat_version(gmat_root)
     print("GMAT:", version)
 
+    known = {c["name"] for c in cases.CASES}
+    unknown = sorted(set(args.only or []) - known)
+    if unknown:
+        ap.error("unknown case name(s): %s (known: %s)" % (", ".join(unknown), ", ".join(sorted(known))))
     selected = [c for c in cases.CASES if not args.only or c["name"] in args.only]
     with tempfile.TemporaryDirectory(prefix="satkit-gmat-") as tmp:
         for case in selected:
@@ -240,7 +281,7 @@ def main() -> None:
                 (keep / script.name).write_text(script.read_text())
             print(f"running {case['name']} ...", end=" ", flush=True)
             run_gmat(gmat_root, script)
-            samples = parse_report(report)
+            samples = parse_report(report, expected_rows(case))
             out = write_case(case, samples, version, spk)
             print(f"{len(samples)} samples -> {out.relative_to(REPO)}")
 
