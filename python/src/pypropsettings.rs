@@ -26,7 +26,8 @@ pub enum PyIntegrator {
     rodas4 = 5,
     /// Gauss-Jackson 8 — 8th-order fixed-step multistep predictor-corrector
     /// for high-precision orbit propagation. Requires setting
-    /// `gj_step_seconds` on the propsettings. No STM or dense output support.
+    /// `gj_step_seconds` on the propsettings. Supports dense output
+    /// (quintic Hermite interpolation); no STM support.
     gauss_jackson8 = 6,
 }
 

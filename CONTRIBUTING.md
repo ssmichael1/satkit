@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 ### Prerequisites
 
 - **Rust**: Install the latest stable Rust toolchain from [rustup.rs](https://rustup.rs/)
-- **Python**: Python 3.8 or later for Python bindings testing
+- **Python**: Python 3.10 or later for Python bindings testing
 - **Git**: For version control
 
 ### Setting Up Your Development Environment
@@ -85,7 +85,7 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 - Follow [PEP 8](https://pep8.org/) style guidelines
 - Provide type hints in `.pyi` stub files for IDE support
 - Include docstrings for all public functions and classes
-- Test Python bindings separately when making changes ; see `python/test/test.py`
+- Test Python bindings separately when making changes; see `python/test/` (`test_*.py`)
 
 ### Testing
 
@@ -156,7 +156,7 @@ pip install setuptools setuptools-rust setuptools-scm pytest
 pip install -e .
 
 # Run Python tests
-python -m pytest python/test/test.py
+python -m pytest python/test/
 ```
 
 When you're done developing, deactivate the virtual environment:
@@ -193,7 +193,7 @@ All pull requests are automatically tested via GitHub Actions:
 - **Test**: Runs full test suite on all platforms
 - **Lint**: Checks code style with clippy
 - **Format**: Verifies formatting with rustfmt
-- **Python**: Tests Python bindings on all supported versions (3.8-3.14)
+- **Python**: Tests Python bindings (editable install, Python 3.13) and checks the `.pyi` stubs with stubtest; release builds smoke-test each published wheel (3.10–3.14)
 
 Ensure all CI checks pass before requesting review.
 
@@ -213,7 +213,7 @@ Satkit is dual-licensed under the MIT license ([LICENSE-MIT](LICENSE-MIT)) and t
 - **Open a GitHub Issue** at [github.com/ssmichael1/satkit/issues](https://github.com/ssmichael1/satkit/issues) for questions about contributing
 - Email the maintainer: ssmichael@gmail.com
 - Review existing issues and pull requests for examples
-- Check the documentation at [satellite-toolkit.readthedocs.io](https://satellite-toolkit.readthedocs.io/)
+- Check the documentation at [satkit.dev](https://satkit.dev/)
 
 ## Resources
 

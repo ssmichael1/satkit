@@ -31,8 +31,9 @@ pub enum Integrator {
     /// of comparable accuracy on smooth orbit propagation problems.
     ///
     /// Uses a fixed step size set via [`PropSettings::gj_step_seconds`].
-    /// Does not support state transition matrix propagation (C=7) or dense
-    /// output interpolation. Not recommended for highly eccentric orbits or
+    /// Supports dense output (quintic Hermite interpolation between steps
+    /// when `enable_interp` is set) but not state transition matrix
+    /// propagation (C=7). Not recommended for highly eccentric orbits or
     /// integration across discontinuities (eclipse boundaries, maneuvers).
     GaussJackson8,
 }
