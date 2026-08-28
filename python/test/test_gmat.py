@@ -8,7 +8,6 @@ case isolates.
 """
 
 import json
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +32,9 @@ TIDES = {
 
 
 def _settings(fm: dict) -> "sk.propsettings":
+    # Mirrors tests/gmat_regression.rs: tolerances 10x tighter than the
+    # tightest gate, no dense output, no space-weather dependency.
+    assert fm["gravity_degree"] <= 40 and fm["gravity_order"] <= fm["gravity_degree"]
     s = sk.propsettings()
     s.gravity_model = GRAVITY[fm["gravity_model"]]
     s.gravity_degree = fm["gravity_degree"]
@@ -49,9 +51,15 @@ def _settings(fm: dict) -> "sk.propsettings":
     return s
 
 
-def _epoch(iso: str) -> "sk.time":
-    d = datetime.fromisoformat(iso)
-    return sk.time(d.year, d.month, d.day, d.hour, d.minute, d.second + d.microsecond * 1e-6)
+def _check_gms(case: dict) -> None:
+    """The reference was generated with these GMs; they must be satkit's."""
+    for body, gmat_km3, satkit_m3 in (
+        ("Earth", case["gmat"]["mu_earth_km3s2"], sk.consts.mu_earth),
+        ("Moon", case["gmat"]["mu_moon_km3s2"], sk.consts.mu_moon),
+        ("Sun", case["gmat"]["mu_sun_km3s2"], sk.consts.mu_sun),
+    ):
+        rel = abs(gmat_km3 * 1e9 - satkit_m3) / satkit_m3
+        assert rel < 1e-9, f"{case['name']}: {body} GM differs from satkit.consts by {rel:.2e}"
 
 
 @pytest.mark.parametrize("path", CASES, ids=[p.stem for p in CASES])
@@ -60,10 +68,14 @@ def test_gmat_case(path: Path):
     assert case["name"] == path.stem
     samples = np.asarray(case["samples"], dtype=float)
     assert samples.shape[0] >= 2 and samples.shape[1] == 7
+    assert samples[0, 0] == 0.0
+    assert np.all(np.diff(samples[:, 0]) > 0), "elapsed times must be strictly increasing"
+    _check_gms(case)
 
-    epoch = _epoch(case["epoch_utc"])
+    epoch = sk.time.from_string(case["epoch_utc"])
     settings = _settings(case["force_model"])
     tol = case["tolerance"]
+    assert tol["pos_m"] > 0 and tol["vel_mps"] > 0
 
     # km, km/s -> m, m/s; re-propagate segment by segment from our own state
     state = samples[0, 1:] * 1e3
