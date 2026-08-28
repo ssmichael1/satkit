@@ -1,11 +1,11 @@
 //! General-relativistic corrections to satellite motion.
 //!
 //! Currently implements only the Schwarzschild (post-Newtonian, β = γ = 1)
-//! term — the dominant relativistic effect on Earth-orbiting satellites
-//! (~1 m/day at GPS altitude, ~3 m/day at GEO). Lense-Thirring (frame
-//! dragging, ~1 mm/day) and de Sitter (geodetic precession, ~10 mm/day
-//! on the coordinate system) are sub-cm-class effects and not yet
-//! implemented.
+//! term, the dominant relativistic acceleration for Earth-orbiting satellites.
+//! Its effect on a propagated position depends on the orbit, arc length, and
+//! which initial conditions or other parameters are fitted, so it is not a
+//! fixed position drift per day. The smaller Lense-Thirring (frame-dragging)
+//! and de Sitter (geodetic-precession) terms are not yet implemented.
 //!
 //! Reference: IERS Conventions 2010 (IERS Technical Note 36), §10.3
 //! Eq. 10.12.
@@ -21,6 +21,10 @@ use crate::mathtypes::*;
 /// ```text
 /// a_GR = (GM / c² r³) · { (4 GM/r − v²) r  +  4 (r·v) v }
 /// ```
+///
+/// For a state satisfying the Newtonian circular-orbit relation
+/// `v² = GM / r` and `r·v = 0`, this correction points radially outward;
+/// it is added to the much larger inward Newtonian acceleration.
 ///
 /// Inputs and output are in SI units (m, m/s, m/s²) in the GCRF frame.
 pub fn gr_schwarzschild_accel(pos_gcrf: &Vector3, vel_gcrf: &Vector3, mu_e: f64) -> Vector3 {
@@ -75,16 +79,11 @@ mod tests {
     }
 
     #[test]
-    fn schwarzschild_points_inward_on_circular_orbit() {
+    fn schwarzschild_points_outward_on_circular_orbit() {
         // On a circular orbit r·v = 0, so only the radial term survives.
-        // 4GM/r − v² > 0 (since v² = GM/r on a circular orbit), so the
-        // acceleration is along +r̂ in the formula above — but the formula
-        // sign convention is that the static Newtonian term is + GM r̂ / r³,
-        // i.e. attractive uses a *negative* coefficient on r̂ elsewhere.
-        // Here the +r̂ result is the *correction* to that attractive force,
-        // and corresponds to a *stronger* attraction (perihelion precession
-        // is in the prograde direction). Check that the dot product with
-        // -r̂ is positive (i.e. the correction adds to the inward pull).
+        // With v² = GM/r, the radial coefficient is 3GM/r > 0, so the
+        // post-Newtonian correction points along +r̂ (outward). It is added
+        // to the much larger Newtonian acceleration, which points along -r̂.
         let r = consts::EARTH_RADIUS + 1000.0e3;
         let v = (consts::MU_EARTH / r).sqrt();
         let pos = numeris::vector![r, 0.0, 0.0];

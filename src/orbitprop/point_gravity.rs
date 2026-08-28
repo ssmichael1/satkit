@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_point_gravity_known() {
         // Moon at ~384,400 km from Earth center, satellite at GEO (~42,164 km)
-        let mu_moon = 4.9048695e12; // m³/s²
+        let mu_moon = crate::consts::MU_MOON;
         let s_moon = numeris::vector![384_400.0e3, 0.0, 0.0]; // Moon position
         let r_sat = numeris::vector![42_164.0e3, 0.0, 0.0]; // GEO satellite
 
@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn test_point_gravity_partials() {
-        let mu = 4.9048695e12;
+        let mu = crate::consts::MU_MOON;
         let s = numeris::vector![384_400.0e3, 50_000.0e3, 20_000.0e3];
         let r = numeris::vector![42_164.0e3, 1000.0e3, 500.0e3];
         let dr = numeris::vector![10.0, 20.0, -15.0];
