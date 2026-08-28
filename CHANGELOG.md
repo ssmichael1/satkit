@@ -3,6 +3,9 @@
 
 ## Unreleased
 
+
+## 0.20.4 - 2026-08-28
+
 ### Added
 
 - **`scale=` keyword on the `time(...)` constructor** (Python): Gregorian
@@ -34,6 +37,20 @@
 
 ### Fixed
 
+- **Canonical physical constants corrected and documented.** The lunar
+  gravitational parameter now uses the JPL DE440 value
+  (`4.902800118e12 m³/s²`) instead of the erroneous `4.9048695e12`; duplicate
+  lunar-GM literals in point-gravity tests now reference the shared constant.
+  The solar GM, WGS 84 flattening and rotation rate, nominal solar radius,
+  DE440 Earth–Moon mass ratio, and derived geosynchronous radius were updated
+  to their canonical values. `JGM3_J2` now uses the conventional positive `J2`
+  sign. Every constant in `consts.rs` now identifies its authoritative source.
+- **Relativity documentation now describes the Schwarzschild correction
+  accurately.** Removed misleading fixed position-drift-per-day estimates and
+  clarified that, for a state satisfying the Newtonian circular-orbit
+  relation, the post-Newtonian correction points radially outward while the
+  much larger Newtonian acceleration points inward. The corresponding test
+  name and Python type-stub documentation were corrected as well.
 - **Type stubs now type-check and match the runtime.** The `.pyi` files had
   never been checked and contained illegal overload-implementation blocks, a
   `time.__add__` overload group split by other methods, and `time`-as-annotation
