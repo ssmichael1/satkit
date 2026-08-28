@@ -166,7 +166,8 @@
 //!
 //! ## License
 //!
-//! MIT License - See LICENSE file for details
+//! Dual-licensed under MIT OR Apache-2.0, at your option — see the
+//! `LICENSE-MIT` and `LICENSE-APACHE` files for details.
 
 #![warn(clippy::all, clippy::use_self, clippy::cargo)]
 #![allow(clippy::multiple_crate_versions)]

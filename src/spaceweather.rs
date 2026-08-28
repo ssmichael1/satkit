@@ -180,7 +180,7 @@ fn load_default_path() -> PathBuf {
 /// Lazy default load from `SW-All.csv` under [`datadir`], with auto-download.
 fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
     let path = load_default_path();
-    download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
+    download_if_not_exist(&path, Some("https://celestrak.org/SpaceData/"))?;
     parse_csv(&std::fs::read_to_string(&path)?)
 }
 

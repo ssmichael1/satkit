@@ -103,7 +103,7 @@ fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
     let path = datadir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("EOP-All.csv");
-    download_if_not_exist(&path, Some("http://celestrak.org/SpaceData/"))?;
+    download_if_not_exist(&path, Some("https://celestrak.org/SpaceData/"))?;
     parse_csv(&std::fs::read_to_string(&path)?)
 }
 
@@ -162,7 +162,7 @@ pub fn update() -> Result<()> {
         return Err(Error::DataDirReadOnly);
     }
 
-    let url = "http://celestrak.org/SpaceData/EOP-All.csv";
+    let url = "https://celestrak.org/SpaceData/EOP-All.csv";
     download_file(url, &d, true)?;
 
     EOP.set(load_eop_file_csv()?);

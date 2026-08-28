@@ -2,7 +2,7 @@
 
 The `satkit` package relies upon a number of data files for certain calculations:
 
-- **leap-seconds.list** — A list of the UTC leap seconds since 1972. This is a common file on \*nix platforms and is used to keep track of the number of seconds (currently 37) that UTC lags TAI.
+- **leap-seconds.list** — Downloaded for reference only. The UTC↔TAI leap-second table that `satkit` actually uses is compiled into the library (current through the most recent leap second, 2017-01-01, when UTC began lagging TAI by 37 s); this file is not read at runtime, and a future leap second will require a new `satkit` release.
 
 - **linux_p1550p2650.440** — File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL). Note: this file is large (~100 MB) and may take a long time to download. Smaller alternatives (e.g. `lnxp1900p2053.421` from JPL's DE421 release at ~13 MB, 1900–2053) work as well — see [Selecting a JPL ephemeris file](#selecting-a-jpl-ephemeris-file) below.
 

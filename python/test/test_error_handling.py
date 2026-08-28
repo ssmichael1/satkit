@@ -107,3 +107,24 @@ class TestNonContiguousInput:
         s = sk.satstate(t0, np.array([7.0e6, 0, 0]), np.array([0, 7.5e3, 0]))
         s.set_pos_uncertainty(np.ones(9)[::3], sk.frame.RTN)
         assert s.cov is not None
+
+    def test_gravity_degree_above_max_rejected(self):
+        # Degrees above 40 used to be accepted and silently evaluated at 40.
+        s = sk.propsettings()
+        s.gravity_degree = 40
+        s.gravity_order = 40
+        with pytest.raises(ValueError):
+            s.gravity_degree = 41
+        with pytest.raises(ValueError):
+            s.gravity_order = 41
+        with pytest.raises(ValueError):
+            sk.propsettings(gravity_degree=360, gravity_order=360)
+        assert (s.gravity_degree, s.gravity_order) == (40, 40)
+
+    def test_precompute_table_size_cap(self):
+        # A tiny step would need billions of entries; must raise, not OOM.
+        s = sk.propsettings()
+        t0 = sk.time(2023, 5, 16, 20, 0, 0)
+        with pytest.raises(RuntimeError, match="entries"):
+            s.precompute_terms(t0, t0 + sk.duration.from_hours(1), 1e-6)
+

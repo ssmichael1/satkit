@@ -3621,8 +3621,8 @@ class propsettings:
         Args:
             abs_error: Maximum absolute value of error for any element in propagated state following ODE integration. Default is 1e-8
             rel_error: Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
-            gravity_degree: Maximum degree of spherical harmonic gravity model. Default is 4
-            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree. Default is same as gravity_degree
+            gravity_degree: Maximum degree of spherical harmonic gravity model, at most 40 (``ValueError`` above that). Default is 4
+            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 40). Default is same as gravity_degree
             gravity_model: Gravity model to use. Default is gravmodel.egm96
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
