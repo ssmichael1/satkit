@@ -145,7 +145,7 @@ def test_reduced_ecom_fits_gps_better_than_cannonball(testvec_dir):
     Mirrors the Rust ``test_gps``: the reduced 5-parameter ECOM must fit
     the observed orbit better than a single cannonball coefficient.
     """
-    from scipy.optimize import least_squares
+    least_squares = pytest.importorskip("scipy.optimize").least_squares
 
     fname = os.path.join(testvec_dir, "orbitprop", "ESA0OPSFIN_20233640000_01D_05M_ORB.SP3")
     if not os.path.isfile(fname):
