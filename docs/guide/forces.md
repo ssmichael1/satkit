@@ -22,7 +22,8 @@ The force model follows the treatment in [Montenbruck & Gill (2000)](references.
 | Sun third-body | on | `use_sun_gravity` | $10^{-6}$ m/s² |
 | Moon third-body | on | `use_moon_gravity` | $10^{-6}$ m/s² |
 | Atmospheric drag (NRLMSISE-00) | when alt < 700 km | `use_spaceweather`, [`satproperties.cd_a_over_m`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
-| Solar radiation pressure | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
+| Solar radiation pressure (cannonball) | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
+| Solar radiation pressure (ECOM, empirical) | when `ecom` is set | [`satproperties.ecom`](../api/satprop.md) | $10^{-7}$ m/s² (D0), $10^{-9}$ (Y, B) |
 | Solid Earth tides (IERS 2010 §6.2.1 Step 1) | on | `tide_model` | $10^{-7}$ m/s² |
 | General relativity (IERS 2010 §10.3: Schwarzschild + geodesic + Lense–Thirring) | on | `use_relativistic_correction` | $10^{-9}$ m/s² (LEO) |
 | Continuous thrust | when configured | [`satproperties.thrusts`](../api/satprop.md) | user-specified |
@@ -98,7 +99,56 @@ $$
 
 where $P_\text{sun} \approx 4.56 \times 10^{-6}$ N/m² is the radiation pressure at 1 AU, $C_R A/m$ is the satellite's radiation susceptibility (the user-supplied `satproperties.craoverm`), and $\nu(\vec{p}, \vec{p}_\text{sun}) \in [0, 1]$ is a shadow function that vanishes when the satellite is in Earth's umbra — the conical umbra/penumbra model of [Montenbruck & Gill (2000)](references.md#montenbruck2000), §3.4.2; the cannonball force itself is their §3.4, Eq. 3.75.
 
-satkit uses a **cannonball model** — the satellite's surface is treated as if its normal points toward the Sun. For high-fidelity work (precise SRP modeling for GNSS or active satellite operations), a box-wing model ([Rodriguez-Solano et al. 2012](references.md#rodriguez2012)) is needed; that is not currently provided.
+satkit's default is a **cannonball model** — the satellite's surface is treated as if its normal points toward the Sun, and the force acts along the satellite→Sun line. For GNSS-class work the empirical ECOM model below is available; a physical box-wing model ([Rodriguez-Solano et al. 2012](references.md#rodriguez2012)) is not provided.
+
+### Empirical CODE Orbit Model (ECOM)
+
+ECOM is the empirical SRP parameterization used by CODE and most IGS analysis centres for GNSS precise orbit determination ([Beutler et al. 1994](https://doi.org/10.1007/BF03655430); [Springer et al. 1999](https://doi.org/10.1007/PL00012757); [Arnold et al. 2015](https://doi.org/10.1007/s00190-015-0814-4)). It expresses the non-gravitational acceleration of a nominally yaw-steering satellite in a Sun-oriented **DYB** frame:
+
+$$
+\hat{e}_D = \frac{\vec{r}_\odot - \vec{r}}{|\vec{r}_\odot - \vec{r}|}, \qquad
+\hat{e}_Y = \frac{\hat{e}_D \times \hat{r}}{|\hat{e}_D \times \hat{r}|}, \qquad
+\hat{e}_B = \hat{e}_D \times \hat{e}_Y
+$$
+
+($\hat{e}_D$ points from the satellite **to** the Sun; $\hat{e}_Y$ is the solar-panel rotation axis.) The acceleration is
+
+$$
+\vec{a}_\text{ECOM} = \nu\, D(\varphi)\,\hat{e}_D + Y(\varphi)\,\hat{e}_Y + \nu\, B(\varphi)\,\hat{e}_B
+$$
+
+$$
+\begin{aligned}
+D(\varphi) &= D_0 + D_c\cos\varphi + D_s\sin\varphi + D_{2c}\cos 2\varphi + D_{2s}\sin 2\varphi + D_{4c}\cos 4\varphi + D_{4s}\sin 4\varphi \\
+Y(\varphi) &= Y_0 + Y_c\cos\varphi + Y_s\sin\varphi \\
+B(\varphi) &= B_0 + B_c\cos\varphi + B_s\sin\varphi
+\end{aligned}
+$$
+
+where $\nu$ is the same shadow function as the cannonball term. The D and B axes are scaled by $\nu$; the Y axis is deliberately **not** — the Y-bias is dominated by thermal and attitude effects that persist through eclipse. The argument $\varphi$ is selected by `sun_relative`:
+
+| `sun_relative` | $\varphi$ | Model family |
+|---|---|---|
+| `False` | argument of latitude $u$ from the ascending node (x-axis projection for an equatorial orbit) | ECOM1 (Beutler 1994), reduced ECOM (Springer 1999) |
+| `True` | $\Delta u = u - u_\odot$ measured from *orbit noon* — zero at the point closest to the Sun's projection into the orbit plane, $\pi$ at midnight; computed node-free and regular at all inclinations | ECOM2 (Arnold 2015) |
+
+Because $\hat{e}_D$ points at the Sun, the physical $D_0$ is **negative** — about $-1\times10^{-7}$ m/s² for a GPS satellite ($C_R A/m \approx 0.02$ m²/kg), and 10–30 nm/s² when ECOM is applied as a residual on top of an a-priori model. $Y_0$ and the B terms are typically $\sim10^{-9}$ m/s². The coefficients are *estimated* in orbit determination; satkit propagates with the values you supply and adds the ECOM term to the cannonball, so use `craoverm=0` for a pure ECOM model:
+
+```python
+import satkit as sk
+
+# Reduced ECOM (D0, Y0, B0, Bc, Bs) in m/s^2 — e.g. from your own fit or a CODE product
+ecom = sk.ecomparams.reduced(-1.06e-7, 1.0e-9, -3.2e-9, 1.2e-9, 0.3e-9)
+props = sk.satproperties(craoverm=0.0, ecom=ecom)
+res = sk.propagate(state, t0, t1, propsettings=settings, satproperties=props)
+
+# ECOM2: D0, Y0, B0, B1c, B1s, D2c, D2s, D4c, D4s (argument Δu from orbit noon)
+ecom2 = sk.ecomparams.ecom2(-1.06e-7, 1e-9, -3e-9, 0, 0, -2e-9, -3.6e-9, 1.9e-9, -0.7e-9)
+```
+
+Rust users can also implement `SatProperties::srp_ecom(&self, tm, state) -> Option<EcomParams>` to supply coefficients that change over the propagation (per-arc CODE values, an attitude-mode switch). Like the cannonball term, ECOM contributes no partials to the state transition matrix.
+
+**What to expect.** Fitting an initial state plus the reduced 5-parameter ECOM to 3 days of IGS final GPS orbits (`python/examples/ecom_gps_validation.py`) gives a 0.13 m RMS fit versus 2.3 m for the cannonball, and 7-day predictions at the ~10 m level (cannonball: ~150 m). Beyond that the error grows quickly — ~90 m at 14 days and ~500 m at 30 days from a 3-day fit, ~50–150 m at 30 days from a 7-day fit — because the true coefficients drift with the Sun elevation angle β over weeks, which is exactly why analysis centres re-estimate them every day. Constant ECOM coefficients are a short-arc (days) model, not a month-long one.
 
 ## General-Relativistic Correction
 
