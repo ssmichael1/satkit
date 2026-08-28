@@ -68,8 +68,11 @@ ORBITS = {
 #     these amounts (satkit matches Kepler to < 1 cm), independent of GMAT's
 #     Accuracy, MaxStep, or integrator choice.
 #   * "full" (tides on): +0.4-0.7 m at LEO, ~2 m at Molniya perigee over 7
-#     days.  GMAT's 'Solid' model includes the IERS Step-2 frequency-dependent
-#     terms that satkit's SolidStep1 omits (36x36 without tides agrees to 2 cm).
+#     days.  satkit's SolidStep1 uses the IERS 2010 Table 6.3 *anelastic*
+#     Love numbers, including their imaginary (phase-lag) parts; GMAT's
+#     'Solid' uses real Love numbers only.  The lag is a secular along-track
+#     effect.  Zeroing satkit's imaginary parts reproduces GMAT to the j2
+#     floor (verified), so this is GMAT omitting a term, not satkit.
 #   * "gr": +0.2 m LEO, +1 m at 200,000 km: GMAT's geodesic + Lense-Thirring
 #     terms, which satkit does not model.
 def _c(orbit, fm, pos_m, vel_mps):

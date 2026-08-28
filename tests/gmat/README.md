@@ -85,7 +85,7 @@ recorded per case in `cases.py` (and copied into each JSON). The floors:
 | source | size over 7 days | cause |
 |---|---|---|
 | GMAT integration error | 3 cm LEO, 13 cm GEO, 0.6–1.0 m at 200,000–300,000 km | GMAT's own point-mass runs deviate from the analytic Kepler solution by exactly these amounts (satkit matches Kepler to <1 cm); independent of GMAT's `Accuracy`, `MaxStep`, or integrator |
-| solid tides (`full`, `gr`) | +0.4–0.7 m LEO, ~2 m Molniya | GMAT's `Solid` includes the IERS 2010 Step-2 frequency-dependent terms; satkit's `SolidStep1` omits them |
+| solid tides (`full`, `gr`) | +0.4–0.7 m LEO, ~2 m Molniya | satkit's `SolidStep1` uses the IERS 2010 Table 6.3 anelastic Love numbers with their imaginary (phase-lag) parts; GMAT's `Solid` uses real Love numbers only. Zeroing satkit's imaginary parts reproduces GMAT to the `j2` floor — GMAT omits the lag, satkit does not |
 | relativity (`gr`) | +0.2 m LEO, +1 m at 200,000 km | GMAT adds geodesic precession and Lense–Thirring; satkit implements Schwarzschild only |
 
 Everything else — μ's, DE440, the GCRF↔ITRF frame, 36×36 gravity, third-body
