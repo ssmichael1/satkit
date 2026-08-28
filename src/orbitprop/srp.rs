@@ -37,18 +37,21 @@
 //! # Model
 //!
 //! ```text
-//! a = ν·D(φ)·ê_D + Y(φ)·ê_Y + ν·B(φ)·ê_B
+//! a = ν · [ D(φ)·ê_D + Y(φ)·ê_Y + B(φ)·ê_B ]
 //!
 //! D(φ) = D0 + Dc cos φ + Ds sin φ + D2c cos 2φ + D2s sin 2φ + D4c cos 4φ + D4s sin 4φ
 //! Y(φ) = Y0 + Yc cos φ + Ys sin φ
 //! B(φ) = B0 + Bc cos φ + Bs sin φ
 //! ```
 //!
-//! where `ν ∈ [0, 1]` is the Earth-shadow factor. The D and B axes are
-//! scaled by `ν` (they vanish in umbra); the Y axis is **not**, since the
-//! Y-bias is dominated by thermal and attitude effects that persist through
-//! eclipse. This is satkit's convention; some implementations scale all
-//! three.
+//! where `ν ∈ [0, 1]` is the Earth-shadow factor (the same conical
+//! umbra/penumbra function as the cannonball term). All three axes are
+//! scaled by `ν`, matching CODE/Bernese, where "the acceleration due to the
+//! solar radiation pressure is switched off when the satellite is in the
+//! Earth's shadow" (Bernese GNSS Software v5.2 §2.2.2.3) — so coefficients
+//! taken from CODE products keep their meaning. (Orekit's `ECOM2` applies
+//! no shadow factor at all; a Y-bias persisting through eclipse, as proposed
+//! by Sidorov et al. 2020, is not modelled.)
 //!
 //! The angular argument `φ` depends on [`EcomParams::sun_relative`]:
 //!
@@ -89,7 +92,7 @@ use serde::{Deserialize, Serialize};
 pub struct EcomParams {
     /// Constant D (Sun-direction) term. Physically negative.
     pub d0: f64,
-    /// Constant Y term (not scaled by the shadow factor).
+    /// Constant Y term (along the solar-panel axis).
     pub y0: f64,
     /// Constant B term.
     pub b0: f64,
@@ -264,16 +267,27 @@ impl EcomParams {
 /// * `ê_Y = unit(ê_D × r̂)`
 /// * `ê_B = ê_D × ê_Y`
 ///
-/// `vel_gcrf` is unused by the basis itself but kept in the signature so the
-/// DYB frame and the orbit angle share one call shape.
+/// The frame is undefined when the Sun is exactly radial (Sun in the orbit
+/// plane and the satellite exactly at orbit noon or midnight); there
+/// `ê_D × r̂` vanishes and this function falls back to the limiting
+/// direction, `ê_Y = ±along-track` (`ĥ × r̂`, with `ĥ` from `vel_gcrf`),
+/// instead of producing NaN.
 pub fn dyb_basis(
     pos_gcrf: &Vector3,
-    _vel_gcrf: &Vector3,
+    vel_gcrf: &Vector3,
     sun_gcrf: &Vector3,
 ) -> (Vector3, Vector3, Vector3) {
     let e_d = (*sun_gcrf - *pos_gcrf).normalize();
     let r_hat = pos_gcrf.normalize();
-    let e_y = e_d.cross(&r_hat).normalize();
+    let c = e_d.cross(&r_hat);
+    // |ê_D × r̂| = sin(angle between Sun and radial); below ~1e-6 rad the
+    // direction is numerically meaningless, so use the along-track limit.
+    let e_y = if c.norm_squared() < 1e-12 {
+        let h_hat = pos_gcrf.cross(vel_gcrf).normalize();
+        h_hat.cross(&r_hat).normalize()
+    } else {
+        c.normalize()
+    };
     let e_b = e_d.cross(&e_y);
     (e_d, e_y, e_b)
 }
@@ -321,7 +335,7 @@ pub fn orbit_angle(
 /// * `sun_gcrf` — geocentric Sun position in GCRF (m).
 /// * `shadow` — the Earth-shadow factor `ν ∈ [0, 1]` (1 = full sunlight,
 ///   0 = umbra; see [`crate::lpephem::sun`]). It scales the D and B axes
-///   but not Y. Pass `1.0` to ignore eclipses.
+///   and Y alike (CODE/Bernese convention). Pass `1.0` to ignore eclipses.
 ///
 /// [`crate::orbitprop::propagate`] calls this from its force model with the
 /// same shadow factor as the cannonball term whenever
@@ -348,7 +362,7 @@ pub fn ecom_accel(
         y += p.yc * c1 + p.ys * s1;
         b += p.bc * c1 + p.bs * s1;
     }
-    e_d * (shadow * d) + e_y * y + e_b * (shadow * b)
+    (e_d * d + e_y * y + e_b * b) * shadow
 }
 
 #[cfg(test)]
@@ -397,15 +411,31 @@ mod tests {
         assert!(a.dot(&(sun - pos)) < 0.0);
     }
 
+    /// CODE/Bernese convention: the whole ECOM acceleration is switched off
+    /// in shadow, Y included; penumbra scales all three axes alike.
     #[test]
-    fn y_term_unaffected_by_shadow_d_and_b_scaled() {
+    fn all_axes_scaled_by_shadow() {
         let (pos, vel, sun) = sample_geometry();
         let p = EcomParams::reduced(-1e-7, 2e-9, 3e-9, 0.0, 0.0);
         let lit = ecom_accel(&p, &pos, &vel, &sun, 1.0);
+        let half = ecom_accel(&p, &pos, &vel, &sun, 0.5);
         let dark = ecom_accel(&p, &pos, &vel, &sun, 0.0);
-        let (_, e_y, _) = dyb_basis(&pos, &vel, &sun);
-        assert!((dark - e_y * 2e-9).norm() < 1e-22);
-        assert!(((lit - dark).dot(&e_y)).abs() < 1e-22);
+        assert!(dark.norm() < 1e-30);
+        assert!((half - lit * 0.5).norm() < 1e-22);
+    }
+
+    /// Sun exactly radial (in the orbit plane, satellite at noon): ê_Y must be
+    /// finite and along-track, not NaN.
+    #[test]
+    fn dyb_basis_sun_exactly_radial() {
+        let sun: Vector3 = numeris::vector![AU, 0.0, 0.0];
+        let pos: Vector3 = numeris::vector![2.66e7, 0.0, 0.0];
+        let vel: Vector3 = numeris::vector![0.0, 3.9e3, 0.0];
+        let (e_d, e_y, e_b) = dyb_basis(&pos, &vel, &sun);
+        assert!(e_y.as_slice().iter().all(|v| v.is_finite()));
+        // along-track limit: ĥ × r̂ = ẑ × x̂ = ŷ
+        assert!((e_y - numeris::vector![0.0, 1.0, 0.0]).norm() < 1e-12);
+        assert!((e_d.dot(&e_y)).abs() < 1e-12 && (e_b.dot(&e_y)).abs() < 1e-12);
     }
 
     /// Δu = 0 when r̂ lies along the Sun's in-plane projection, π opposite.

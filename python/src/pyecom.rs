@@ -21,13 +21,14 @@ use anyhow::{bail, Result};
 ///
 /// Model::
 ///
-///     a = ν·D(φ)·e_D + Y(φ)·e_Y + ν·B(φ)·e_B
+///     a = ν · [ D(φ)·e_D + Y(φ)·e_Y + B(φ)·e_B ]
 ///     D(φ) = d0 + dc cos φ + ds sin φ + d2c cos 2φ + d2s sin 2φ + d4c cos 4φ + d4s sin 4φ
 ///     Y(φ) = y0 + yc cos φ + ys sin φ
 ///     B(φ) = b0 + bc cos φ + bs sin φ
 ///
-/// where ``ν`` is the Earth-shadow factor (D and B vanish in umbra; the Y
-/// axis is deliberately *not* shadow-scaled) and ``φ`` is the argument of
+/// where ``ν`` is the Earth-shadow factor applied to all three axes (the
+/// CODE/Bernese convention: the whole ECOM acceleration is switched off in
+/// umbra) and ``φ`` is the argument of
 /// latitude ``u`` when ``sun_relative`` is False (ECOM1) or ``Δu``, measured
 /// from orbit noon, when True (ECOM2).
 ///
@@ -179,7 +180,7 @@ impl PyEcomParams {
     fn set_d0(&mut self, v: f64) {
         self.0.d0 = v;
     }
-    /// Constant Y term, m/s² (not scaled by the shadow factor).
+    /// Constant Y term, m/s² (along the solar-panel axis).
     #[getter]
     fn y0(&self) -> f64 {
         self.0.y0
