@@ -155,7 +155,13 @@ fn force_model(
     // interp_or_compute rather than interp: adaptive integrators can probe
     // outside the padded interval (initial step-size heuristic), and the
     // ODE closure signature leaves no way to surface an Err from here.
-    let (qgcrf2itrf, sun_gcrf, moon_gcrf, sun_vel_gcrf) = interp.interp_or_compute(&time);
+    let sample = interp.interp_or_compute(&time);
+    let (qgcrf2itrf, sun_gcrf, moon_gcrf, sun_vel_gcrf) = (
+        sample.qgcrf2itrf,
+        sample.sun_pos_gcrf,
+        sample.moon_pos_gcrf,
+        sample.sun_vel_gcrf,
+    );
     let qitrf2gcrf = qgcrf2itrf.conjugate();
     let pos_itrf = qgcrf2itrf * *pos_gcrf;
 
