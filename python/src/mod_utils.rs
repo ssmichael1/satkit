@@ -29,8 +29,14 @@ use anyhow::Result;
 /// * EOP_All.csv :: Earth orientation parameters,  updated daily
 /// * linux_p1550p2650.440 :: JPL Ephemeris version 440 (~ 100 MB)
 ///
-/// Note: Files update daily will always be downloaded independet of
-/// overwrite flag
+/// Static files are fetched per the compiled-in data manifest
+/// (`data/manifest.json`): `SATKIT_DATA_URL` mirror first if set, then the
+/// GitHub release asset, the origin server, and the legacy bucket, and are
+/// only kept when size and SHA-256 match. Files already present and verified
+/// are skipped unless `overwrite=True`.
+///
+/// Note: Files updated daily (EOP, space weather) are always downloaded
+/// regardless of the overwrite flag.
 ///
 #[pyfunction]
 #[pyo3(signature=(**kwds))]

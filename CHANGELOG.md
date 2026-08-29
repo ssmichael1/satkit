@@ -6,6 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Added
 
+- Static data files are downloaded from a manifest pinned to the release (`data/manifest.json`, SHA-256 verified), trying GitHub release assets, then the origin servers (JPL, IERS), then the GCS bucket; `SATKIT_DATA_URL` overrides the source for mirrors ([#137](https://github.com/ssmichael1/satkit/pull/137))
 - GMAT regression corpus: 17 seven-day reference trajectories (LEO to cislunar; `j2`/`full`/`gr` force models) replayed and gated under `cargo test` and `pytest`; regenerate with `tests/gmat/generate.py` ([#127](https://github.com/ssmichael1/satkit/pull/127))
 - EOP coverage is visible and enforceable: `earth_orientation_params::{coverage, status}` (Python `frametransform.eop_coverage()` / `eop_status()`), one-time warnings past the table end or with no table, and `PropSettings::require_eop_coverage` ([#133](https://github.com/ssmichael1/satkit/pull/133))
 - `frametransform::ierstable::preload()`; a missing `tab5.2*.txt` now raises `RuntimeError` in Python instead of `PanicException` ([#133](https://github.com/ssmichael1/satkit/pull/133))
