@@ -16,9 +16,9 @@ $$
 \Phi(t; t_0)~=~\frac{\partial(\vec{p}(t),\vec{v}(t))}{\partial(\vec{p}_0,\vec{v}_0)}
 $$
 
-This 6×6 matrix is computed by augmenting the ODE integration with the partial derivatives of each force term (Montenbruck & Gill Ch. 7). It is the central object for:
+This 6×6 matrix is computed by augmenting the ODE integration with the variational equations — the partial derivatives of each force term ([Montenbruck & Gill 2000](references.md#montenbruck2000), §7.1–7.2, Eq. 7.42). It is the central object for:
 
-- **Covariance propagation** — $\sigma^2_{p,v} = \Phi\,\sigma^2_{p_0,v_0}\,\Phi^T$
+- **Covariance propagation** — $P(t) = \Phi\,P(t_0)\,\Phi^T$ ([Montenbruck & Gill 2000](references.md#montenbruck2000), §8.1; [Tapley, Schutz & Born 2004](references.md#tapley2004), §4.2)
 - **State estimation** — linearization for least-squares fits and Kalman filters
 - **Sensitivity analysis** — "how does the orbit at time $t$ change if I nudge the initial state?"
 
@@ -58,8 +58,8 @@ Attach position and/or velocity uncertainty and it will be propagated automatica
 # 1-sigma position uncertainty in LVLH (frame is required — no default)
 sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
 
-# Or in RTN — the convention used in CCSDS OEM messages (RSW and RIC
-# are Python-level aliases for the same frame)
+# Or in RTN — the convention used in CCSDS OEM messages, CCSDS 502.0-B-3
+# (RSW and RIC are Python-level aliases for the same frame)
 sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RTN)
 
 # Or directly in GCRF
@@ -115,3 +115,4 @@ comparison and recommendations on which frame to use.
 - **Tutorial**: [Orbit Maneuvers](../tutorials/Orbit Maneuvers.ipynb) — impulsive maneuver examples; [Covariance Propagation](../tutorials/Covariance Propagation.ipynb) — STM-based covariance evolution.
 - **Theory**: [Force Model](forces.md) for what's being integrated; [ODE Integrators](integrators.md) for the integration mechanics; [Maneuver Coordinate Frames](maneuver_frames.md) for RTN/NTW/LVLH definitions.
 - **API**: [`satkit.satstate`](../api/satstate.md), [`satkit.propagate`](../api/satprop.md).
+- **References**: [Montenbruck & Gill 2000](references.md#montenbruck2000) Ch. 7–8; [Tapley, Schutz & Born 2004](references.md#tapley2004); [CCSDS 502.0-B-3](references.md#ccsds502).

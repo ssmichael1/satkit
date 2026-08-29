@@ -58,6 +58,33 @@
 
 ### Fixed
 
+- **Documentation sources and citations.** The References page is rebuilt as
+  a full bibliography (author–year entries with DOIs, grouped into books,
+  standards, papers and data sources, each with a stable anchor), and every
+  guide, API page and tutorial now cites the primary source for the model or
+  algorithm it describes — IERS Conventions (2010) sections and equations for
+  the frame chain, tides, time scales and relativity; Vallado (2013) algorithm
+  numbers; Montenbruck & Gill (2000) sections; Hoots & Roehrich (1980) and
+  Vallado et al. (2006) for SGP4; Picone et al. (2002) for NRLMSISE-00; Park
+  et al. (2021) for DE440; the gravity-model reports; Verner (2010),
+  Tsitouras (2011), Hairer & Wanner (1996) and Berry & Healy (2004) for the
+  integrators; Izzo (2015) for Lambert; Vincenty (1975) and Bowring (1976)
+  for geodesy; CCSDS 502.0-B-3 for OMMs and RTN; the GMAT Mathematical
+  Specifications for the validation corpus. Three citation errors are
+  corrected: the SGP4 docs linked AIAA 2008-6770 (the TLE-fitting paper)
+  instead of AIAA 2006-6753; Montenbruck & Gill was cited as "B. Gill, 2012";
+  and the JGM-3 DOI in `consts.rs` did not resolve (now 10.1029/96JB01645).
+  The force-model guide's box-wing link pointed at an unrelated paper (now
+  Rodriguez-Solano et al. 2012). Text-vs-code mismatches fixed: the drag
+  altitude gate is 700 km (guide said ~600 km); the Lambert solver returns
+  multi-revolution solutions (guide said zero-revolution only); leap seconds
+  come from a compiled-in table, not the downloaded file (Time Systems
+  tutorial); the GPS tutorial still described a Schwarzschild-only GR term.
+  The adaptive-RK stage counts and interpolant degrees now match the
+  `numeris` tableaux satkit actually uses (RKV98: 21 stages, 8th-degree
+  dense output; RKV87: 17 stages, 7th-degree; RKV65 and RKTS54 also provide
+  dense output) — the docs had described the 26-stage `RKV98Efficient`
+  variant. Unsourced performance figures are labelled as satkit measurements.
 - **Frame-bias documentation.** `EME2000` docs said "≈ 17 mas"; the IERS 2010
   constant bias is 23.1 mas total (≈ 18 mas pole, ≈ 15 mas equinox). The GMAT
   corpus docs claimed GMAT's `EarthMJ2000Eq` differs from `EarthICRF` by that

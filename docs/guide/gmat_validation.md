@@ -1,6 +1,6 @@
 # Validation: GMAT Comparison
 
-The numerical propagator is checked on every commit against reference trajectories from NASA's [General Mission Analysis Tool (GMAT)](https://gmat.atlassian.net/), an independent, operationally used high-fidelity propagator. This page describes what is compared, how well the two agree, and where the remaining differences come from.
+The numerical propagator is checked on every commit against reference trajectories from NASA's [General Mission Analysis Tool (GMAT)](https://gmat.atlassian.net/), an independent, operationally used high-fidelity propagator whose own verification against STK and FreeFlyer is described by [Hughes et al. (2014)](references.md#hughes2014) and whose models are documented in the [GMAT Mathematical Specifications](references.md#gmatspec). This page describes what is compared, how well the two agree, and where the remaining differences come from.
 
 ## Why a committed corpus
 
@@ -10,10 +10,10 @@ GMAT is a large GUI-oriented application that cannot run inside a CI job. The co
 
 | setting | value | why |
 |---|---|---|
-| GMAT | R2026A, `GmatConsole` headless | |
+| GMAT | R2026A, `GmatConsole` headless | models per the [GMAT Mathematical Specifications](references.md#gmatspec) |
 | integrator | `RungeKutta89`, `Accuracy = 1e-14`, `ErrorControl = RSSStep` | tight enough that GMAT's own error is well below the gates for most cases (see [floors](#known-differences-and-the-gates)) |
-| frame | `EarthICRF` | matches satkit's GCRF exactly; GMAT's `EarthMJ2000Eq` is an IAU-76/FK5 realization whose offset from ICRF is time-varying (≈ 44 mas ≈ 1.5 m at 7000 km in 2023), not the IERS constant 23 mas bias of satkit's `EME2000` |
-| ephemeris | SPICE `de440.bsp` | GMAT bundles only DE405/421/424; satkit uses DE440 |
+| frame | `EarthICRF` | matches satkit's GCRF exactly; GMAT's `EarthMJ2000Eq` is an IAU-76/FK5 realization whose offset from ICRF is time-varying (≈ 44 mas ≈ 1.5 m at 7000 km in 2023), not the IERS constant 23 mas bias ([Petit & Luzum 2010](references.md#petit2010), §5.5.4) of satkit's `EME2000` |
+| ephemeris | SPICE `de440.bsp` | GMAT bundles only DE405/421/424; satkit uses DE440 ([Park et al. 2021](references.md#park2021)) |
 | body GMs | pinned to the DE440 values satkit uses and recorded in the JSON | a wrong constant in satkit shows up as a residual against a reviewable reference value |
 | gravity file | `EGM96.cof` | coefficients identical to satkit's `EGM96.gfc`; the field's $GM$ comes from the file on both sides |
 
@@ -75,12 +75,12 @@ Gates are set at roughly three times the residual measured when the corpus was g
 
 **GMAT's own integration error.** The 0.6–1.0 m residuals on `tess` and `cislunar` are not satkit's: GMAT's point-mass-only runs on those orbits deviate from the analytic Kepler solution by exactly those amounts (13 cm at GEO, 3 cm at LEO), independent of GMAT's `Accuracy`, `MaxStep`, or choice of integrator, while satkit matches the analytic solution to under a centimetre. This sets the floor for the high-altitude cases.
 
-**Solid Earth tides.** satkit's `SolidStep1` uses the IERS 2010 Table 6.3 *anelastic* Love numbers, including their imaginary (phase-lag) parts (see [Force Model](forces.md#solid-earth-tides)); GMAT's `Solid` model uses real-valued Love numbers only, so it omits the lag. The lag is a small secular along-track effect: under `full` it accounts for 0.4–0.7 m at LEO over 7 days and about 2 m on Molniya, whose perigee passes sample the tidal field most strongly. Zeroing satkit's imaginary parts reproduces GMAT to the `j2` floor, so this is a term GMAT drops rather than one satkit is missing.
+**Solid Earth tides.** satkit's `SolidStep1` uses the IERS 2010 Table 6.3 *anelastic* Love numbers ([Petit & Luzum 2010](references.md#petit2010)), including their imaginary (phase-lag) parts (see [Force Model](forces.md#solid-earth-tides)); GMAT's `Solid` model uses real-valued Love numbers only, so it omits the lag. The lag is a small secular along-track effect: under `full` it accounts for 0.4–0.7 m at LEO over 7 days and about 2 m on Molniya, whose perigee passes sample the tidal field most strongly. Zeroing satkit's imaginary parts reproduces GMAT to the `j2` floor, so this is a term GMAT drops rather than one satkit is missing.
 
-**Relativity.** Both tools apply the full IERS 2010 Eq. 10.12 correction — Schwarzschild, geodesic (de Sitter) precession and Lense–Thirring (see [Force Model](forces.md#general-relativistic-correction)). The `gr` cases therefore add no residual of their own: they sit at the `full` floor at LEO and at GMAT's integration floor at 200,000 km and beyond. (Before the geodesic and Lense–Thirring terms were added, satkit's Schwarzschild-only model left ~1 m over 7 days at 200,000 km, where the geodesic term is the dominant relativistic acceleration.)
+**Relativity.** Both tools apply the full IERS 2010 Eq. 10.12 correction ([Petit & Luzum 2010](references.md#petit2010); [GMAT Mathematical Specifications](references.md#gmatspec), §4.2.6) — Schwarzschild, geodesic (de Sitter) precession and Lense–Thirring (see [Force Model](forces.md#general-relativistic-correction)). The `gr` cases therefore add no residual of their own: they sit at the `full` floor at LEO and at GMAT's integration floor at 200,000 km and beyond. (Before the geodesic and Lense–Thirring terms were added, satkit's Schwarzschild-only model left ~1 m over 7 days at 200,000 km, where the geodesic term is the dominant relativistic acceleration.)
 
 !!! note "What the corpus found"
-    Building this comparison uncovered a defect in the propagator itself. The precomputed table of GCRF→ITRF rotations used by the force model was built from the IAU-76/FK5 approximation (`qgcrf2itrf_approx`), which neglects polar motion and is accurate to about 1 arcsecond. A 1″ tilt of the axis about which J2 makes the orbit precess is not small when integrated over a hundred revolutions: the ISS case drifted 50 m over 7 days relative to GMAT, and Molniya 117 m. The table is now the full IAU 2006/2000A chain — precession-nutation with EOP corrections and polar motion sampled hourly, the Earth rotation angle evaluated exactly — at the same cost as the old approximation. Those cases now agree to 3 cm and 13 cm.
+    Building this comparison uncovered a defect in the propagator itself. The precomputed table of GCRF→ITRF rotations used by the force model was built from the IAU-76/FK5 approximation (`qgcrf2itrf_approx`; [Vallado 2013](references.md#vallado2013), §3.7), which neglects polar motion and is accurate to about 1 arcsecond. A 1″ tilt of the axis about which J2 makes the orbit precess is not small when integrated over a hundred revolutions: the ISS case drifted 50 m over 7 days relative to GMAT, and Molniya 117 m. The table is now the full IAU 2006/2000A chain ([Petit & Luzum 2010](references.md#petit2010), Ch. 5) — precession-nutation with EOP corrections and polar motion sampled hourly, the Earth rotation angle evaluated exactly — at the same cost as the old approximation. Those cases now agree to 3 cm and 13 cm.
 
 ## Regenerating the corpus
 
@@ -98,3 +98,4 @@ All 17 cases regenerate in under a minute. The case matrix, gates and the measur
 - **Theory**: [Force Model](forces.md) for each term being compared; [ODE Integrators](integrators.md) for the replay settings.
 - **Tutorial**: [GPS Example](../tutorials/GPS Example.ipynb) — validation of a different kind, fitting a GPS orbit against ESA SP3 truth.
 - **Tutorial**: [SGP4 vs Numerical Propagation](../tutorials/SGP4 vs Numerical Propagation.ipynb).
+- **References**: [GMAT Mathematical Specifications](references.md#gmatspec); [Hughes et al. 2014](references.md#hughes2014); [Petit & Luzum 2010](references.md#petit2010); [Park et al. 2021](references.md#park2021).

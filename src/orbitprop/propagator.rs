@@ -301,7 +301,7 @@ fn force_model(
 ///
 /// The default propagator uses a Runge-Kutta 9(8) integrator
 /// with coefficients computed by Verner:
-/// <https://www.sfu.a/~jverner//>
+/// <https://www.sfu.ca/~jverner/>
 ///
 /// This works much better than lower-order Runge-Kutta solvers such as
 /// Dormand-Prince, and I don't know why it isn't more popular in

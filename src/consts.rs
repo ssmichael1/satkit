@@ -86,18 +86,18 @@ pub const GEO_R: f64 = 42_164_172.931_157_24;
 /// JGM-3 gravitational parameter of Earth, in m^3/s^2.
 ///
 /// Source: JGM-3 model, Tapley et al. (1996), *The Joint Gravity Model 3*:
-/// <https://doi.org/10.1029/94JB03002>
+/// <https://doi.org/10.1029/96JB01645>
 pub const JGM3_MU: f64 = 3.986_004_415e14;
 
 /// JGM-3 reference semi-major axis of Earth, in meters.
 ///
 /// Source: JGM-3 model, Tapley et al. (1996), *The Joint Gravity Model 3*:
-/// <https://doi.org/10.1029/94JB03002>
+/// <https://doi.org/10.1029/96JB01645>
 pub const JGM3_A: f64 = 6_378_136.3;
 
 /// JGM-3 positive, unnormalized degree-two zonal coefficient `J2`, dimensionless.
 ///
 /// The corresponding normalized Stokes coefficient is negative:
 /// `J2 = -sqrt(5) * Cbar20`. Source: JGM-3 model, Tapley et al. (1996),
-/// *The Joint Gravity Model 3*: <https://doi.org/10.1029/94JB03002>
+/// *The Joint Gravity Model 3*: <https://doi.org/10.1029/96JB01645>
 pub const JGM3_J2: f64 = 0.001_082_636_022_982_994_5;

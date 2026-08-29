@@ -13,7 +13,7 @@ There are multiple places to access the catalog, including:
 
 **SGP4 (Simplified General Perturbations No. 4)** is an analytical orbital propagation model created in the **1960s-1970s by NORAD** to efficiently predict the motion of **Earth-orbiting satellites** from **Two-Line Element (TLE)** data.
 
-It was developed to support U.S. space surveillance as a fast, closed-form alternative to numerical integration, modeling Earth's oblateness (J2-J4), atmospheric drag via the TLE *B\** term, and key secular and periodic perturbations.
+It was developed to support U.S. space surveillance as a fast, closed-form alternative to numerical integration, modeling Earth's oblateness (J2-J4), atmospheric drag via the TLE *B\** term, and key secular and periodic perturbations. The model is documented in Spacetrack Report No. 3 ([Hoots & Roehrich 1980](references.md#hoots1980)) and, in its modern reference form with test cases, in [Vallado et al. (2006)](references.md#vallado2006); satkit's implementation is a line-by-line Rust port of the C++ code accompanying the latter and is verified against its test vectors.
 
 Today, SGP4 is the standard propagator for TLEs published by organizations like NORAD and CelesTrak, and is widely used for satellite tracking, visualization, conjunction screening, and mission planning — though its accuracy is fundamentally limited by TLE quality and simplifying assumptions.
 
@@ -27,11 +27,11 @@ In addition to the familiar (mean) Keplerian elements, TLEs include parameters r
 
 TLEs are designed to be used with **SGP4**, an analytic model that produces orbital state vectors (position and velocity) from the augmented mean elements in the TLE. The perturbations modeled include Earth oblateness (which produces precession) and drag.
 
-TLEs are often preceded by an additional "line 0" containing the satellite name. For an overview, see <https://en.wikipedia.org/wiki/Two-line_element_set>.
+TLEs are often preceded by an additional "line 0" containing the satellite name. The field-by-field format is documented in [Vallado et al. (2006)](references.md#vallado2006), Appendix A, and in CelesTrak's [TLE format description](https://celestrak.org/NORAD/documentation/tle-fmt.php).
 
 ### Orbital Mean-Element Messages
 
-**Orbital Mean-Element Messages (OMMs)** are a more modern way of representing mean-element ephemerides. They are described by a CCSDS standard (<https://ccsds.org/Pubs/502x0b3e1.pdf>), although real-world sources may not adhere to the standard perfectly.
+**Orbital Mean-Element Messages (OMMs)** are a more modern way of representing mean-element ephemerides. They are described by the CCSDS *Orbit Data Messages* standard ([CCSDS 502.0-B-3](references.md#ccsds502)), although real-world sources may not adhere to the standard perfectly.
 
 OMMs are commonly published as:
 

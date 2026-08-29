@@ -65,13 +65,15 @@ Cases: every orbit × `j2` and `full`, plus `gr` for `leo_iss`, `tess` and
 ## GMAT configuration
 
 * GMAT R2026A, `GmatConsole` headless, `RungeKutta89`, `Accuracy = 1e-14`,
-  `ErrorControl = RSSStep`, `MaxStep = 2700`.
+  `ErrorControl = RSSStep`, `MaxStep = 2700`. GMAT's models are documented in
+  the GMAT Mathematical Specifications (see [References](https://satkit.dev/guide/references/#gmatspec)).
 * **Frame**: `EarthICRF`, not `EarthMJ2000Eq` — matches satkit's GCRF
   exactly. GMAT's `EarthMJ2000Eq` is *not* the IERS constant-bias EME2000
   (satkit's `Frame::EME2000`, 23 mas from GCRF): GMAT realizes it through the
   IAU-76/FK5 precession model via `data/icrf/ICRF_Table.txt`, and its offset
   from ICRF is time-varying — ≈ 44 mas (1.5 m at 7000 km) at the corpus epoch,
-  growing ≈ 2.5 mas/yr.
+  growing ≈ 2.5 mas/yr (satkit's own measurement from GMAT's table, consistent
+  with the IAU-76 precession-rate error).
 * **Ephemeris**: SPICE `de440.bsp` (GMAT bundles only DE405/421/424; satkit uses
   DE440).
 * **Body GMs** pinned to the DE440 values satkit uses (`Luna.Mu = 4902.800118`,

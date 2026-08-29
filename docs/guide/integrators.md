@@ -2,8 +2,8 @@
 
 The numerical propagator integrates the equations of motion forward (or backward) in time using one of two families of solvers:
 
-1. **Adaptive Runge-Kutta** (default) — embedded error estimation, PID step-size controller, accept/reject logic. Butcher tableaux courtesy of the *delightful* web page of [Jim Verner](https://www.sfu.ca/~jverner/).
-2. **Gauss-Jackson 8** — 8th-order fixed-step multistep predictor-corrector specialised for 2nd-order ODEs (Berry & Healy 2004). The dominant integrator in operational astrodynamics codes (GMAT, STK, ODTK, U.S. Space Surveillance Network). For smooth long-duration propagation it typically uses 3-10× fewer force evaluations than `rkv98` at comparable accuracy.
+1. **Adaptive Runge-Kutta** (default) — embedded error estimation, PID step-size controller, accept/reject logic. Butcher tableaux from [Verner (2010)](references.md#verner2010) — the `RKV98.IIa.Efficient`, `RKV87.IIa.Robust` and `RKV65.IIIXb.Efficient` sets published on his *delightful* [web page](https://www.sfu.ca/~jverner/) — plus [Tsitouras (2011)](references.md#tsitouras2011) for `rkts54` and the RODAS4 Rosenbrock method of [Hairer & Wanner (1996)](references.md#hairer1996), §IV.7, for `rodas4`.
+2. **Gauss-Jackson 8** — 8th-order fixed-step multistep predictor-corrector specialised for 2nd-order ODEs ([Berry & Healy 2004](references.md#berry2004)), the integrator used for the U.S. Space Surveillance Network catalog. For smooth long-duration propagation it needs several times fewer force evaluations than `rkv98` at comparable accuracy (satkit benchmarks show 3–10× on GEO and MEO arcs).
 
 ## Integrator Choices
 
@@ -11,11 +11,11 @@ Select via the `integrator` parameter of `propsettings`:
 
 | Integrator | Order | Type | Dense Output | Notes |
 |---|---|---|---|---|
-| `rkv98` | 9(8) | adaptive RK, 26 stages | 9th-order | Default. Best accuracy for precision work. |
+| `rkv98` | 9(8) | adaptive RK, 21 stages (16 + 5 for dense output) | 8th-degree | Default. Best accuracy for precision work. |
 | `rkv98_nointerp` | 9(8) | adaptive RK, 16 stages | None | Same stepping accuracy, faster when interpolation is not needed. |
-| `rkv87` | 8(7) | adaptive RK, 21 stages | 8th-order | Good balance of speed and accuracy. |
-| `rkv65` | 6(5) | adaptive RK, 10 stages | None | Faster, moderate accuracy. |
-| `rkts54` | 5(4) | adaptive RK, 7 stages | None | Fastest. Good for quick propagations. |
+| `rkv87` | 8(7) | adaptive RK, 17 stages (13 + 4 for dense output) | 7th-degree | Good balance of speed and accuracy. |
+| `rkv65` | 6(5) | adaptive RK, 10 stages | 6th-degree | Faster, moderate accuracy. |
+| `rkts54` | 5(4) | adaptive RK, 7 stages (FSAL) | 4th-degree | Fastest. Good for quick propagations. |
 | `rodas4` | 4(3) | Rosenbrock, 6 stages | None | L-stable (implicit). For stiff problems. No STM support. |
 | `gauss_jackson8` | 8 | fixed-step multistep | 5th-order Hermite | High-efficiency for smooth long-duration propagation. No STM support. |
 
@@ -64,7 +64,8 @@ settings = sk.propsettings(
 
 !!! note "Gauss-Jackson step-size selection"
     `gauss_jackson8` uses a fixed step size (`gj_step_seconds`) which the
-    user must choose based on the orbit regime. Typical values:
+    user must choose based on the orbit regime. Typical values (satkit's
+    guidance; [Berry & Healy 2004](references.md#berry2004) discuss the accuracy-vs-step trade-off):
 
     * **LEO** (400-800 km): 30-60 s
     * **MEO**: 60-300 s
@@ -95,3 +96,4 @@ For sub-meter precision over a day, tighten both to `1e-10` to `1e-13`. For coar
 - **Theory**: [Force Model](forces.md) for the right-hand side of the ODE; [State Vectors, STM & Covariance](satstate.md) for what's being integrated.
 - **Validation**: [GMAT Comparison](gmat_validation.md) — 7-day agreement with NASA GMAT's RK89 propagator across LEO to cislunar orbits.
 - **API**: [`satkit.integrator`](../api/satprop.md), [`satkit.propsettings`](../api/satprop.md).
+- **References**: [Verner 2010](references.md#verner2010), [Tsitouras 2011](references.md#tsitouras2011), [Hairer & Wanner 1996](references.md#hairer1996), [Berry & Healy 2004](references.md#berry2004).

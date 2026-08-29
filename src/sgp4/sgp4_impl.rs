@@ -21,8 +21,10 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 /// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
 ///
-/// A detailed description is
-/// [here](https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf)
+/// A detailed description is in Vallado, Crawford, Hujsak & Kelso,
+/// "Revisiting Spacetrack Report #3", AIAA 2006-6753
+/// (<https://doi.org/10.2514/6.2006-6753>, PDF at
+/// <https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev3.pdf>).
 ///
 ///
 /// # Arguments
@@ -92,8 +94,10 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> super::R
 /// output satellite position and velocity at given time
 /// in the "TEME" coordinate system
 ///
-/// A detailed description is
-/// [here](https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf)
+/// A detailed description is in Vallado, Crawford, Hujsak & Kelso,
+/// "Revisiting Spacetrack Report #3", AIAA 2006-6753
+/// (<https://doi.org/10.2514/6.2006-6753>, PDF at
+/// <https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev3.pdf>).
 ///
 ///
 /// # Arguments

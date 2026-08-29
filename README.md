@@ -135,10 +135,10 @@ Plus satellite-local RTN, NTW, and LVLH frames (maneuvers, covariance), and ENU,
 
 ### Force Models
 
-- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40)
-- **Solid Earth tides**: IERS 2010 Step-1 corrections to the gravity field
+- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40; Montenbruck & Gill 2000, §3.2)
+- **Solid Earth tides**: IERS Conventions 2010 §6.2.1 Step-1 corrections to the gravity field
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
-- **Atmospheric drag**: NRLMSISE-00 with automatic space weather data
+- **Atmospheric drag**: NRLMSISE-00 (Picone et al. 2002) with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function
 - **Relativity**: IERS 2010 Eq. 10.12 — Schwarzschild, geodesic (de Sitter) precession, and Lense–Thirring
 
@@ -226,9 +226,7 @@ The GMAT regression tests need only the data files; their reference trajectories
 
 ## References
 
-- D. Vallado, *Fundamentals of Astrodynamics and Applications*, 4th ed., 2013
-- O. Montenbruck & E. Gill, *Satellite Orbits: Models, Methods, Applications*, 2000
-- J. Verner, [Runge-Kutta integration coefficients](https://www.sfu.ca/~jverner/)
+The primary sources for every model and algorithm — IERS Conventions (2010), Vallado (2013), Montenbruck & Gill (2000), Vallado et al. (2006) for SGP4, Picone et al. (2002) for NRLMSISE-00, Park et al. (2021) for DE440, Verner (2010) and Berry & Healy (2004) for the integrators, Izzo (2015) for Lambert, and the gravity-model reports — are collected with DOIs on the documentation site's [References](https://satkit.dev/guide/references/) page.
 
 ## License
 
