@@ -5,6 +5,7 @@ include LICENSE-APACHE
 include README.md
 include pyproject.toml
 include build.rs
+include data/manifest.json
 recursive-include src *.rs
 recursive-include benches *.rs
 recursive-include python/src *.rs
