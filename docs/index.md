@@ -111,7 +111,7 @@ Plus ENU, NED, and geodesic distance (Vincenty) utilities.
 - **Atmospheric drag**: NRLMSISE-00 (pure Rust) with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function
 - **Solid Earth tides**: IERS 2010 §6.2.1 Step 1 (frequency-independent Love-number response)
-- **General relativity**: Schwarzschild post-Newtonian correction (IERS 2010 §10.3)
+- **General relativity**: IERS 2010 §10.3 Eq. 10.12 — Schwarzschild, geodesic (de Sitter) precession, and Lense–Thirring
 
 ### Time Systems
 

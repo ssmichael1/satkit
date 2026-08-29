@@ -6,7 +6,30 @@ use crate::Instant;
 use crate::SolarSystem;
 use crate::TimeLike;
 
-pub type InterpType = (Quaternion, Vector3, Vector3);
+/// `(q_gcrf2itrf, sun_pos_gcrf, moon_pos_gcrf, sun_vel_gcrf)` — SI units.
+/// The Sun velocity feeds the geodesic-precession term of the relativistic
+/// correction (see [`super::relativity`]).
+/// One sample of the quantities the force model needs at a given time,
+/// as stored in (and interpolated from) a [`Precomputed`] table.
+///
+/// Introduced as a named struct (replacing a tuple) so that adding a field
+/// — as the Sun velocity was for the geodesic-precession term — is not a
+/// breaking change for callers that destructure it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InterpSample {
+    /// Rotation from GCRF to ITRF (full IAU 2006/2000A chain).
+    pub qgcrf2itrf: Quaternion,
+    /// Geocentric Sun position in GCRF, meters.
+    pub sun_pos_gcrf: Vector3,
+    /// Geocentric Moon position in GCRF, meters.
+    pub moon_pos_gcrf: Vector3,
+    /// Geocentric Sun velocity in GCRF, m/s (used by the geodesic term of
+    /// the relativistic correction).
+    pub sun_vel_gcrf: Vector3,
+}
+
+/// Alias kept for source compatibility with code that named the old tuple.
+pub type InterpType = InterpSample;
 
 use super::error::{Error, Result};
 #[derive(Debug, Clone)]
@@ -32,7 +55,7 @@ const SLOW_STEP_SECS: f64 = 3600.0;
 
 /// Upper bound on the number of entries a [`Precomputed`] table may hold.
 ///
-/// Each entry is ~80 bytes, so this is ≈1.3 GB — about 30 years at the
+/// Each entry is ~104 bytes, so this is ≈1.7 GB — about 30 years at the
 /// default 60 s step. A span/step combination needing more returns
 /// [`Error::PrecomputeTooLarge`] *before* anything is allocated. (An
 /// unbounded table could previously consume all memory for a tiny step or
@@ -161,9 +184,14 @@ impl Precomputed {
                     let q_cirs2gcrs = slow[si].0.slerp(&slow[si + 1].0, frac);
                     let q_itrf2tirs = slow[si].1.slerp(&slow[si + 1].1, frac);
                     let q = (q_cirs2gcrs * qtirs2cirs(&t) * q_itrf2tirs).conjugate();
-                    let psun = jplephem::geocentric_pos(SolarSystem::Sun, &t)?;
+                    let (psun, vsun) = jplephem::geocentric_state(SolarSystem::Sun, &t)?;
                     let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
-                    data.push((q, psun, pmoon));
+                    data.push(InterpSample {
+                        qgcrf2itrf: q,
+                        sun_pos_gcrf: psun,
+                        moon_pos_gcrf: pmoon,
+                        sun_vel_gcrf: vsun,
+                    });
                 }
                 data
             },
@@ -186,21 +214,27 @@ impl Precomputed {
         }
         let q = qgcrf2itrf(&t);
         match (
-            jplephem::geocentric_pos(SolarSystem::Sun, &t),
+            jplephem::geocentric_state(SolarSystem::Sun, &t),
             jplephem::geocentric_pos(SolarSystem::Moon, &t),
         ) {
-            (Ok(psun), Ok(pmoon)) => (q, psun, pmoon),
+            (Ok((psun, vsun)), Ok(pmoon)) => InterpSample {
+                qgcrf2itrf: q,
+                sun_pos_gcrf: psun,
+                moon_pos_gcrf: pmoon,
+                sun_vel_gcrf: vsun,
+            },
             _ => {
                 let edge = if t < self.begin {
                     self.data.first()
                 } else {
                     self.data.last()
                 };
-                edge.copied().unwrap_or((
-                    Quaternion::identity(),
-                    Vector3::zeros(),
-                    Vector3::zeros(),
-                ))
+                edge.copied().unwrap_or(InterpSample {
+                    qgcrf2itrf: Quaternion::identity(),
+                    sun_pos_gcrf: Vector3::zeros(),
+                    moon_pos_gcrf: Vector3::zeros(),
+                    sun_vel_gcrf: Vector3::zeros(),
+                })
             }
         }
     }
@@ -219,10 +253,13 @@ impl Precomputed {
         let delta = idx - idx.floor();
         let idx = idx.floor() as usize;
 
-        let q = self.data[idx].0.slerp(&self.data[idx + 1].0, delta);
-        let psun = self.data[idx].1 + (self.data[idx + 1].1 - self.data[idx].1) * delta;
-        let pmoon = self.data[idx].2 + (self.data[idx + 1].2 - self.data[idx].2) * delta;
-        Ok((q, psun, pmoon))
+        let (a, b) = (&self.data[idx], &self.data[idx + 1]);
+        Ok(InterpSample {
+            qgcrf2itrf: a.qgcrf2itrf.slerp(&b.qgcrf2itrf, delta),
+            sun_pos_gcrf: a.sun_pos_gcrf + (b.sun_pos_gcrf - a.sun_pos_gcrf) * delta,
+            moon_pos_gcrf: a.moon_pos_gcrf + (b.moon_pos_gcrf - a.moon_pos_gcrf) * delta,
+            sun_vel_gcrf: a.sun_vel_gcrf + (b.sun_vel_gcrf - a.sun_vel_gcrf) * delta,
+        })
     }
 }
 
@@ -271,7 +308,7 @@ mod tests {
                 // Irrational stride so samples fall between table points.
                 let dt = (k as f64 * 302.17 + 7.3) % span;
                 let t = t0 + Duration::from_seconds(dt);
-                let (q_tab, _, _) = pc.interp(&t).unwrap();
+                let q_tab = pc.interp(&t).unwrap().qgcrf2itrf;
                 let q_full = qgcrf2itrf(&t);
                 let dq = q_tab.conjugate() * q_full;
                 let a = dq.to_axis_angle().1.abs();
@@ -350,15 +387,16 @@ mod tests {
         let tin = t0 + Duration::from_seconds(100.0);
         let a = pc.interp(&tin).unwrap();
         let b = pc.interp_or_compute(&tin);
-        assert_eq!(a.1.as_slice(), b.1.as_slice());
+        assert_eq!(a.sun_pos_gcrf.as_slice(), b.sun_pos_gcrf.as_slice());
 
         // Out of range: interp errors, but interp_or_compute must return
         // finite values (regression: the force model unwrapped interp and
         // panicked when an adaptive integrator probed past the padding)
         let tout = t1 + Duration::from_seconds(86400.0);
         assert!(pc.interp(&tout).is_err());
-        let (_q, psun, pmoon) = pc.interp_or_compute(&tout);
-        assert!(psun.as_slice().iter().all(|v| v.is_finite()));
-        assert!(pmoon.as_slice().iter().all(|v| v.is_finite()));
+        let s = pc.interp_or_compute(&tout);
+        assert!(s.sun_pos_gcrf.as_slice().iter().all(|v| v.is_finite()));
+        assert!(s.moon_pos_gcrf.as_slice().iter().all(|v| v.is_finite()));
+        assert!(s.sun_vel_gcrf.as_slice().iter().all(|v| v.is_finite()));
     }
 }

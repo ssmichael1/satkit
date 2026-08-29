@@ -35,9 +35,9 @@ FORCE_MODELS = {
     # Everything satkit and GMAT model identically (GR off).
     "full": dict(gravity_model="EGM96", gravity_degree=36, gravity_order=36,
                  sun=True, moon=True, tides="SolidStep1", relativity=False),
-    # As "full" with GR on.  satkit implements Schwarzschild only; GMAT adds
-    # geodesic precession + Lense-Thirring (MathSpec eq. 4.109).  The residual
-    # is a known floor (~1 m at 200,000 km) -- tighten when satkit adds those.
+    # As "full" with GR on.  Both tools apply IERS 2010 eq. 10.12 in full
+    # (Schwarzschild + geodesic precession + Lense-Thirring; GMAT MathSpec
+    # Table 4.1), so the gr residual sits at the full/j2 floor.
     "gr": dict(gravity_model="EGM96", gravity_degree=36, gravity_order=36,
                sun=True, moon=True, tides="SolidStep1", relativity=True),
 }
@@ -73,8 +73,9 @@ ORBITS = {
 #     'Solid' uses real Love numbers only.  The lag is a secular along-track
 #     effect.  Zeroing satkit's imaginary parts reproduces GMAT to the j2
 #     floor (verified), so this is GMAT omitting a term, not satkit.
-#   * "gr": +0.2 m LEO, +1 m at 200,000 km: GMAT's geodesic + Lense-Thirring
-#     terms, which satkit does not model.
+#   * "gr": no additional floor.  Both sides model Schwarzschild + geodesic
+#     precession + Lense-Thirring (IERS 2010 eq. 10.12); the gr residuals
+#     equal the corresponding full (LEO) or j2 (high orbit) residuals.
 def _c(orbit, fm, pos_m, vel_mps):
     return dict(name=f"{orbit}_{fm}", orbit=orbit, force_model=fm,
                 tolerance=dict(pos_m=pos_m, vel_mps=vel_mps))
@@ -82,7 +83,7 @@ def _c(orbit, fm, pos_m, vel_mps):
 CASES = [
     _c("leo_iss",  "j2",   0.10, 1e-4),   # measured 0.028 m / 3.2e-5
     _c("leo_iss",  "full", 1.50, 2e-3),   # measured 0.50 m / 5.7e-4 (tides)
-    _c("leo_iss",  "gr",   2.00, 2.5e-3), # measured 0.66 m / 7.4e-4 (tides + GR)
+    _c("leo_iss",  "gr",   1.50, 2e-3),   # measured 0.50 m / 5.8e-4 (tides)
     _c("sso_800",  "j2",   0.10, 1e-4),   # measured 0.021 m / 2.2e-5
     _c("sso_800",  "full", 1.50, 1.5e-3), # measured 0.43 m / 4.4e-4 (tides)
     _c("meo_gps",  "j2",   0.30, 5e-5),   # measured 0.081 m / 1.2e-5
@@ -93,8 +94,8 @@ CASES = [
     _c("geo",      "full", 0.50, 4e-5),   # measured 0.13 m / 9.6e-6
     _c("tess",     "j2",   3.00, 1e-5),   # measured 1.01 m / 2.9e-6 (GMAT floor)
     _c("tess",     "full", 3.00, 1e-5),   # measured 1.01 m / 2.9e-6
-    _c("tess",     "gr",   6.00, 2e-5),   # measured 2.08 m / 6.2e-6 (GR model)
+    _c("tess",     "gr",   3.00, 1e-5),   # measured 1.01 m / 2.9e-6 (GMAT floor)
     _c("cislunar", "j2",   2.00, 1e-5),   # measured 0.63 m / 3.3e-6 (GMAT floor)
     _c("cislunar", "full", 2.00, 1e-5),   # measured 0.63 m / 3.3e-6
-    _c("cislunar", "gr",   6.00, 3e-5),   # measured 1.85 m / 8.0e-6 (GR model)
+    _c("cislunar", "gr",   2.00, 1e-5),   # measured 0.63 m / 3.3e-6 (GMAT floor)
 ]
