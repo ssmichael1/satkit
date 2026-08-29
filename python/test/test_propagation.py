@@ -264,11 +264,13 @@ class TestHighPrecisionPropagation:
         )  # type: ignore
         settings = sk.propsettings()
 
-        # [vx, vy, vz, Cr*A/m]. Refitted against ESA SP3 truth using the
-        # current default force model (solid Earth tides + GR Schwarzschild
-        # + degree-4 gravity). Refit when the default force model changes.
+        # [vx, vy, vz, Cr*A/m]. Same values as the Rust ``test_gps``:
+        # refitted against ESA SP3 truth (epochs in GPS time) with the
+        # current default force model (degree-4 gravity, solid tides Step 1,
+        # full IERS 10.12 relativity). Refit when the default force model
+        # changes.
         fitparam = np.array(
-            [2.47130589e03, 2.94682727e03, -5.34172166e02, 2.31413838e-02]
+            [2.47517168e03, 2.94357938e03, -5.34181014e02, 2.31985404e-02]
         )
 
         # Values for craoverm and velocity come from orbitprop_gps_fit.py
