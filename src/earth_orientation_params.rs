@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::utils::datadir;
 use crate::utils::{download_file, download_if_not_exist};
+use crate::{Instant, TimeLike, TimeScale};
 
 use thiserror::Error;
 
@@ -74,6 +75,46 @@ struct EOPEntry {
     lod: f64,
     dX: f64,
     dY: f64,
+    /// `true` for an observed (`O`) row, `false` for a predicted (`P`) row
+    /// (CelesTrak `DATA_TYPE` column).
+    observed: bool,
+}
+
+/// Where a given epoch falls relative to the loaded EOP table.
+///
+/// Returned by [`status`]; see [`coverage`] for the table bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EopStatus {
+    /// Inside the table, on or before the last observed (`O`) row.
+    Observed,
+    /// Inside the table, after the last observed row: IERS predictions.
+    Predicted,
+    /// After the last row of the table: the last row's values are held
+    /// constant. Accuracy degrades with distance from the table end
+    /// (polar motion drifts ~0.1″ and UT1−UTC by ~10 ms over a few
+    /// months) — refresh the data with
+    /// [`update`] / `satkit::utils::update_datafiles()`.
+    Extrapolated,
+    /// Before the first row of the table (before 1962): no EOP available,
+    /// [`get`] returns `None` and the frame transforms use zeros.
+    BeforeTable,
+    /// No EOP table is loaded at all (file missing and download failed,
+    /// or an empty table was installed): [`get`] returns `None` and the
+    /// frame transforms use zeros.
+    NotLoaded,
+}
+
+/// Time bounds of the loaded EOP table (UTC).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EopCoverage {
+    /// Epoch of the first row.
+    pub first: Instant,
+    /// Epoch of the last observed (`O`) row; rows after it are IERS
+    /// predictions.
+    pub last_observed: Instant,
+    /// Epoch of the last row (observed or predicted). Queries after it
+    /// return this row's values unchanged.
+    pub last: Instant,
 }
 
 /// Parse an `EOP-All.csv` text buffer into EOP entries.
@@ -93,6 +134,7 @@ fn parse_csv(text: &str) -> Result<Vec<EOPEntry>> {
                 lod: lvals[5].parse()?,
                 dX: lvals[8].parse()?,
                 dY: lvals[9].parse()?,
+                observed: lvals[11].trim() != "P",
             })
         })
         .collect()
@@ -108,6 +150,8 @@ fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
 }
 
 static WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+static EXTRAP_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+static NOT_LOADED_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 
 /// Module-scope refreshable singleton. The lazy default load (best-effort,
 /// silent on failure) runs at most once; [`init_from_bytes`] /
@@ -140,10 +184,12 @@ pub fn init_from_path(path: &std::path::Path) -> Result<()> {
 }
 
 ///
-/// Disable warning about out-of-range EOP data.
+/// Disable the warnings about out-of-range or missing EOP data.
 ///
-/// Warning is shown only once, but to prevent it from being shown,
-/// run this function.
+/// Three one-time warnings exist: epoch before the table, epoch after the
+/// table (values held constant), and no table loaded at all (zeros used).
+/// Each is shown at most once per process; call this to suppress all of
+/// them.
 ///
 /// # Example
 ///
@@ -153,6 +199,63 @@ pub fn init_from_path(path: &std::path::Path) -> Result<()> {
 ///
 pub fn disable_eop_time_warning() {
     WARNING_SHOWN.store(true, Ordering::Relaxed);
+    EXTRAP_WARNING_SHOWN.store(true, Ordering::Relaxed);
+    NOT_LOADED_WARNING_SHOWN.store(true, Ordering::Relaxed);
+}
+
+/// Time bounds of the loaded EOP table, or `None` if no table is loaded
+/// (file missing and download failed, or an empty table was installed).
+///
+/// # Example
+///
+/// ```rust
+/// if let Some(c) = satkit::earth_orientation_params::coverage() {
+///     println!("EOP observed through {}, predicted through {}", c.last_observed, c.last);
+/// }
+/// ```
+pub fn coverage() -> Option<EopCoverage> {
+    ensure_default_loaded();
+    let guard = EOP.read();
+    let eop = guard.as_ref()?;
+    let first = eop.first()?;
+    let last = eop.last()?;
+    let last_observed = eop.iter().rev().find(|e| e.observed).unwrap_or(first);
+    Some(EopCoverage {
+        first: Instant::from_mjd_utc(first.mjd_utc),
+        last_observed: Instant::from_mjd_utc(last_observed.mjd_utc),
+        last: Instant::from_mjd_utc(last.mjd_utc),
+    })
+}
+
+/// Classify an epoch against the loaded EOP table — see [`EopStatus`].
+///
+/// Useful before a long propagation or a precision frame transform: a
+/// result of [`EopStatus::Extrapolated`] means the data file should be
+/// refreshed, and [`EopStatus::NotLoaded`] means every EOP-dependent
+/// transform is using zeros.
+pub fn status<T: TimeLike>(tm: &T) -> EopStatus {
+    let mjd_utc = tm.as_mjd_with_scale(TimeScale::UTC);
+    ensure_default_loaded();
+    let guard = EOP.read();
+    let Some(eop) = guard.as_ref().filter(|e| !e.is_empty()) else {
+        return EopStatus::NotLoaded;
+    };
+    if mjd_utc < eop[0].mjd_utc {
+        return EopStatus::BeforeTable;
+    }
+    if mjd_utc > eop[eop.len() - 1].mjd_utc {
+        return EopStatus::Extrapolated;
+    }
+    let last_observed = eop
+        .iter()
+        .rev()
+        .find(|e| e.observed)
+        .map_or(-1.0, |e| e.mjd_utc);
+    if mjd_utc <= last_observed {
+        EopStatus::Observed
+    } else {
+        EopStatus::Predicted
+    }
 }
 
 /// Download new Earth Orientation Parameters file, and load it.
@@ -189,12 +292,30 @@ pub fn update() -> Result<()> {
 ///
 /// * If time is before range of file, returns None and prints warning to stderr
 ///   (but only once per library load)
-/// * If time is after range of file, returns the last entry's values (constant extrapolation)
+/// * If time is after range of file, returns the last entry's values (constant
+///   extrapolation) and prints a warning to stderr the first time this happens
+/// * If no table is loaded at all, returns None and prints a warning to stderr
+///   the first time this happens
+///
+/// Use [`status`] / [`coverage`] to check which regime an epoch is in without
+/// relying on the warnings; [`disable_eop_time_warning`] suppresses them.
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     ensure_default_loaded();
     let guard = EOP.read();
-    let eop = guard.as_ref()?;
+    let Some(eop) = guard.as_ref().filter(|e| !e.is_empty()) else {
+        if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "Warning: no Earth Orientation Parameters (EOP) table is loaded; polar motion, \
+                 UT1-UTC and nutation corrections are being treated as zero, which biases \
+                 Earth-fixed frame transforms and orbit propagation by metres.\n\
+                 Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+                 to download EOP-All.csv, or set SATKIT_DATA to a directory containing it.\n\
+                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()`"
+            );
+        }
+        return None;
+    };
 
     // Binary search: find first entry with mjd_utc > query (O(log n) vs O(n) linear scan)
     let idx = eop.partition_point(|x| x.mjd_utc <= mjd_utc);
@@ -213,6 +334,18 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     // For dates beyond the file, use the last entry's values
     if idx >= eop.len() {
         let last = &eop[eop.len() - 1];
+        if !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "Warning: EOP data ends at {} (MJD {}); the request for MJD UTC = {mjd_utc} and \
+                 all later epochs use the last entry's values held constant. Polar motion and \
+                 UT1-UTC drift by ~0.1 arcsec / ~10 ms over a few months, i.e. metres at LEO.\n\
+                 Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+                 to download the most recent EOP-All.csv.\n\
+                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()`",
+                Instant::from_mjd_utc(last.mjd_utc),
+                last.mjd_utc
+            );
+        }
         return Some([last.dut1, last.xp, last.yp, last.lod, last.dX, last.dY]);
     }
 
@@ -302,6 +435,41 @@ mod tests {
         let tm = crate::Instant::from_rfc3339("1950-04-16T17:52:50.805408Z").unwrap();
         let eop = eop_from_mjd_utc(tm.as_mjd_with_scale(crate::TimeScale::UTC));
         assert!(eop.is_none());
+    }
+
+    #[test]
+    fn coverage_and_status() {
+        let c = coverage().expect("EOP table loaded in tests");
+        assert!(c.first < c.last_observed);
+        assert!(c.last_observed <= c.last);
+
+        // A well-observed historical epoch.
+        let t = crate::Instant::from_rfc3339("2006-04-16T17:52:50.805408Z").unwrap();
+        assert_eq!(status(&t), EopStatus::Observed);
+        assert_eq!(status(&c.first), EopStatus::Observed);
+        assert_eq!(status(&c.last_observed), EopStatus::Observed);
+        // Past the end of the table: held constant.
+        let late = c.last + crate::Duration::from_days(10.0);
+        assert_eq!(status(&late), EopStatus::Extrapolated);
+        assert!(eop_from_mjd_utc(late.as_mjd_utc()).is_some());
+        // Predictions, when the file carries any.
+        if c.last_observed < c.last {
+            let mid = c.last_observed + crate::Duration::from_days(1.0);
+            assert_eq!(status(&mid), EopStatus::Predicted);
+        }
+        // Before 1962.
+        let early = crate::Instant::from_rfc3339("1950-04-16T00:00:00Z").unwrap();
+        assert_eq!(status(&early), EopStatus::BeforeTable);
+    }
+
+    #[test]
+    fn parse_retains_data_type() {
+        let text = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE\n\
+                    2024-01-10,60319,0.119289,0.206294,0.0074355,-0.0004170,-0.112002,-0.006175,0.000248,-0.000168,37,O\n\
+                    2024-01-11,60320,0.118000,0.207000,0.0075000,-0.0004000,-0.112000,-0.006100,0.000240,-0.000160,37,P\n";
+        let rows = parse_csv(text).unwrap();
+        assert!(rows[0].observed);
+        assert!(!rows[1].observed);
     }
 
     /// Check value against manual value from file

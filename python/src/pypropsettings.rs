@@ -188,6 +188,10 @@ impl PyPropSettings {
                 ps.use_relativistic_correction = gr.extract::<bool>()?;
                 kw.del_item("use_relativistic_correction")?;
             }
+            if let Some(req) = kw.get_item("require_eop_coverage")? {
+                ps.require_eop_coverage = req.extract::<bool>()?;
+                kw.del_item("require_eop_coverage")?;
+            }
             crate::pyutils::reject_unused_kwargs(kw)?;
             if order_explicitly_set {
                 // Clamp order to degree
@@ -363,6 +367,21 @@ impl PyPropSettings {
     #[setter(use_relativistic_correction)]
     fn set_use_relativistic_correction(&mut self, val: bool) -> PyResult<()> {
         self.0.use_relativistic_correction = val;
+        Ok(())
+    }
+
+    /// Fail a propagation whose span extends past the end of the loaded
+    /// Earth-orientation-parameter (EOP) table instead of holding the last
+    /// EOP row constant with a one-time warning. Default False. See
+    /// ``satkit.frametransform.eop_coverage``.
+    #[getter]
+    fn get_require_eop_coverage(&self) -> bool {
+        self.0.require_eop_coverage
+    }
+
+    #[setter(require_eop_coverage)]
+    fn set_require_eop_coverage(&mut self, val: bool) -> PyResult<()> {
+        self.0.require_eop_coverage = val;
         Ok(())
     }
 
