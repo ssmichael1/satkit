@@ -53,7 +53,7 @@
 ### Fixed
 
 - **Frame-bias documentation.** `EME2000` docs said "≈ 17 mas"; the IERS 2010
-  constant bias is 23.0 mas total (≈ 18 mas pole, ≈ 15 mas equinox). The GMAT
+  constant bias is 23.1 mas total (≈ 18 mas pole, ≈ 15 mas equinox). The GMAT
   corpus docs claimed GMAT's `EarthMJ2000Eq` differs from `EarthICRF` by that
   bias; it does not — GMAT realizes `MJ2000Eq` through the IAU-76/FK5
   precession model, so its offset from ICRF is time-varying (≈ 44 mas in
