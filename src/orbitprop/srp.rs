@@ -53,6 +53,29 @@
 //! no shadow factor at all; a Y-bias persisting through eclipse, as proposed
 //! by Sidorov et al. 2020, is not modelled.)
 //!
+//! # Coefficients
+//!
+//! | field | axis | term | model | typical (GPS, nm/s²) |
+//! |---|---|---|---|---|
+//! | `d0` | ê_D (toward Sun) | constant | all | −80 … −110 (≈ −P☉·C_R·A/m; negative) |
+//! | `y0` | ê_Y (solar-panel axis) | constant | all | ~1 (attitude/thermal Y-bias) |
+//! | `b0` | ê_B | constant | all | ~1–5, varies with β |
+//! | `dc`, `ds` | ê_D | cos φ, sin φ | ECOM1 (φ = u) | ≲ 1 |
+//! | `yc`, `ys` | ê_Y | cos φ, sin φ | ECOM1 | ≲ 1 |
+//! | `bc`, `bs` | ê_B | cos φ, sin φ | reduced/ECOM1 (φ = u); ECOM2's B1c/B1s (φ = Δu) | ≲ 2 |
+//! | `d2c`, `d2s` | ê_D | cos 2Δu, sin 2Δu | ECOM2 | few (eclipse seasons) |
+//! | `d4c`, `d4s` | ê_D | cos 4Δu, sin 4Δu | ECOM2 | few (eclipse seasons) |
+//!
+//! All values are accelerations in m/s². Zero coefficients cost nothing, so
+//! a 7-parameter ECOM2 is `ecom2(.., d4c: 0, d4s: 0)`.
+//!
+//! # Stability
+//!
+//! **Experimental.** This interface ([`EcomParams`], [`ecom_accel`],
+//! `SatProperties::srp_ecom`) is new and may be reshaped in a minor release
+//! (e.g. into a general empirical-acceleration hook); the physics and
+//! conventions are stable.
+//!
 //! The angular argument `φ` depends on [`EcomParams::sun_relative`]:
 //!
 //! * `false` (ECOM1, Beutler et al. 1994; Springer et al. 1999): `φ = u`,

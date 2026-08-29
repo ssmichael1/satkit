@@ -3414,6 +3414,20 @@ class ecomparams:
     harmonic terms. The coefficients are normally *estimated* in orbit
     determination; satkit propagates with the values you supply.
 
+    Coefficients (all accelerations in m/s²; typical GPS sizes in nm/s²):
+
+        d0        e_D (toward Sun), constant, all models      -80 to -110 (negative)
+        y0        e_Y (solar-panel axis), constant, all       ~1  (attitude/thermal Y-bias)
+        b0        e_B, constant, all                          ~1-5, varies with beta
+        dc, ds    e_D, cos/sin phi, ECOM1 (phi = u)           <~1
+        yc, ys    e_Y, cos/sin phi, ECOM1                     <~1
+        bc, bs    e_B, cos/sin phi; reduced/ECOM1 (phi = u), ECOM2's B1c/B1s (phi = du)  <~2
+        d2c, d2s  e_D, cos/sin 2*du, ECOM2                    few (eclipse seasons)
+        d4c, d4s  e_D, cos/sin 4*du, ECOM2                    few (eclipse seasons)
+
+    Experimental: this interface is new and may be reshaped in a minor release;
+    the physics and conventions are stable.
+
     Frame (GCRF), with r the satellite position and s the Sun position:
 
     - ``e_D = unit(s - r)`` — satellite → Sun
