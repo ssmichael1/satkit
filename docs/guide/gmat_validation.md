@@ -12,7 +12,7 @@ GMAT is a large GUI-oriented application that cannot run inside a CI job. The co
 |---|---|---|
 | GMAT | R2026A, `GmatConsole` headless | |
 | integrator | `RungeKutta89`, `Accuracy = 1e-14`, `ErrorControl = RSSStep` | tight enough that GMAT's own error is well below the gates for most cases (see [floors](#known-differences-and-the-gates)) |
-| frame | `EarthICRF` | matches satkit's GCRF; `EarthMJ2000Eq` differs by the ~23 mas frame bias |
+| frame | `EarthICRF` | matches satkit's GCRF exactly; GMAT's `EarthMJ2000Eq` is an IAU-76/FK5 realization whose offset from ICRF is time-varying (≈ 44 mas ≈ 1.5 m at 7000 km in 2023), not the IERS constant 23 mas bias of satkit's `EME2000` |
 | ephemeris | SPICE `de440.bsp` | GMAT bundles only DE405/421/424; satkit uses DE440 |
 | body GMs | pinned to the DE440 values satkit uses and recorded in the JSON | a wrong constant in satkit shows up as a residual against a reviewable reference value |
 | gravity file | `EGM96.cof` | coefficients identical to satkit's `EGM96.gfc`; the field's $GM$ comes from the file on both sides |
