@@ -157,7 +157,7 @@ Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with ful
 SatKit uses [numeris](https://crates.io/crates/numeris) for all linear algebra (vectors, matrices, quaternions, ODE integration). If you also use nalgebra in your project, enable the `nalgebra` feature on numeris for zero-cost `From`/`Into` conversions between types:
 
 ```toml
-numeris = { version = "0.5.17", features = ["nalgebra"] }
+numeris = { version = "0.5.18", features = ["nalgebra"] }
 ```
 
 ### Cargo Features
