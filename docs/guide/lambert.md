@@ -26,11 +26,11 @@ The `prograde` flag resolves the short-way / long-way ambiguity:
 
 ## Algorithm
 
-The `satkit` Lambert solver implements **Izzo's algorithm** (2015), the contemporary standard used by ESA's pykep, poliastro, and most modern astrodynamics libraries.
+The `satkit` Lambert solver implements **Izzo's algorithm** ([Izzo 2015](references.md#izzo2015)), the contemporary standard used by ESA's pykep, poliastro, and most modern astrodynamics libraries.
 
 ### Lancaster-Blanchard Formulation
 
-The problem is parameterized by a single variable $x \in (-1, 1)$ for elliptic orbits, with $x > 1$ for hyperbolic transfers. The geometry is captured by the parameter $\lambda$:
+Following [Lancaster & Blanchard (1969)](references.md#lancaster1969), the problem is parameterized by a single variable $x \in (-1, 1)$ for elliptic orbits, with $x > 1$ for hyperbolic transfers. The geometry is captured by the parameter $\lambda$:
 
 $$
 \lambda^2 = 1 - \frac{c}{s}, \quad s = \frac{|\vec{r}_1| + |\vec{r}_2| + c}{2}
@@ -50,11 +50,11 @@ $$
 T(x) = \frac{\psi + M\pi}{\sqrt{|1-x^2|}} \cdot \frac{1}{1-x^2} + \frac{\lambda y - x}{1-x^2}
 $$
 
-where $\psi = \cos^{-1}(xy + \lambda(1-x^2))$ for elliptic orbits and $M$ is the number of complete revolutions. Near the parabolic boundary ($x \approx 1$), a Battin hypergeometric series avoids the numerical singularity.
+where $\psi = \cos^{-1}(xy + \lambda(1-x^2))$ for elliptic orbits and $M$ is the number of complete revolutions. Near the parabolic boundary ($x \approx 1$), a hypergeometric series due to [Battin (1999)](references.md#battin1999) avoids the numerical singularity.
 
 ### Householder Iteration
 
-The equation $T(x) = T_\text{target}$ is solved using **Householder's 4th-order method**, which typically converges in 2-3 iterations. The first three derivatives of $T(x)$ are computed via Izzo's recurrence relations:
+The equation $T(x) = T_\text{target}$ is solved using **Householder's 4th-order method**, which typically converges in 2-3 iterations. The first three derivatives of $T(x)$ are computed via Izzo's recurrence relations (Izzo 2015, Eqs. 20–22):
 
 $$
 T' = \frac{3Tx - 2 + 2\lambda^3 x / y}{1 - x^2}
@@ -141,7 +141,7 @@ print(f"Total delta-v:        {dv1 + dv2:.1f} m/s")
 
 ### Return Value
 
-A list of `(v1, v2)` tuples, where `v1` and `v2` are 3-element numpy arrays representing the departure and arrival velocity vectors in m/s. Currently returns the zero-revolution solution.
+A list of `(v1, v2)` tuples, where `v1` and `v2` are 3-element numpy arrays representing the departure and arrival velocity vectors in m/s. The zero-revolution solution comes first, followed by every valid multi-revolution solution (up to two for each $M \geq 1$, as described above).
 
 ## Applications
 
@@ -153,6 +153,7 @@ A list of `(v1, v2)` tuples, where `v1` and `v2` are 3-element numpy arrays repr
 
 ## References
 
-- D. Izzo, "Revisiting Lambert's problem," *Celestial Mechanics and Dynamical Astronomy*, vol. 121, pp. 1-15, 2015.
-- R.H. Battin, *An Introduction to the Mathematics and Methods of Astrodynamics*, AIAA, 1999.
-- D. Vallado, *Fundamentals of Astrodynamics and Applications*, 4th ed., Microcosm Press, 2013, Chapter 7.
+- [Izzo, D. (2015)](references.md#izzo2015), "Revisiting Lambert's problem," *Celestial Mechanics and Dynamical Astronomy*, 121(1), 1–15. <https://doi.org/10.1007/s10569-014-9587-y>
+- [Lancaster, E. R., & Blanchard, R. C. (1969)](references.md#lancaster1969), *A Unified Form of Lambert's Theorem*, NASA TN D-5368.
+- [Battin, R. H. (1999)](references.md#battin1999), *An Introduction to the Mathematics and Methods of Astrodynamics*, revised ed., AIAA Education Series. <https://doi.org/10.2514/4.861543>
+- [Vallado, D. A. (2013)](references.md#vallado2013), *Fundamentals of Astrodynamics and Applications*, 4th ed., Microcosm Press, Chapter 7.

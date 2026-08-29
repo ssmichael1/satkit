@@ -6,9 +6,9 @@ coordinate frames, and multiple versions of "Earth-fixed" coordinate frames.
 
 Some notes:
 
-- Most of the algorithms in this module are from the book "Fundamentals of Astrodynamics and Applications" by David Vallado.
+- The IAU-76/FK5 (`_approx`) reduction, GMST (Algorithm 15, Eq. 3-45), the MOD and TEME rotations (Eqs. 3-88 to 3-90) follow [Vallado (2013)](../guide/references.md#vallado2013).
 - The frame transforms are defined as arbitrary rotations in a 3-dimensional space. The rotations are a function of time, and are represented as quaternions.
-- The rotation from the Geocentric Celestial Reference Frame (GCRF) to the Earth-Centered Inertial (ECI) frame is defined by the International Astronomical Union (IAU), available at <https://www.iers.org/>. See IERS Technical Note 36 for the latest values.
+- The full ITRF↔GCRF reduction is the CIO-based procedure of the IERS Conventions (2010), Chapter 5 ([Petit & Luzum 2010](../guide/references.md#petit2010)): polar motion (Eq. 5.3), the Earth rotation angle (Eq. 5.15), the IAU 2006/2000A CIP coordinates $X$, $Y$ and CIO locator $s$ (Tables 5.2a/5.2b/5.2d), and the frame bias to EME2000 (§5.5.4, Eq. 5.36), with Earth orientation parameters from the IERS.
 
 ## Dispatch API
 

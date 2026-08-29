@@ -13,6 +13,6 @@ They have several advantages over rotation matrices, including:
 !!! warning
     Quaternions in this module perform a *right-handed* rotation of the vector. You will occasionally see (especially in attitude control texts) a quaternion convention that does a right-handed rotation of the coordinate system, which is a left-handed rotation of the vector.
 
-For an excellent description of quaternions, see [here](https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation).
+For an excellent description of quaternions, see [here](https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation); the conventions follow [Markley & Crassidis (2014)](../guide/references.md#markley2014), and spherical linear interpolation (`slerp`) is the construction of [Shoemake (1985)](../guide/references.md#shoemake1985).
 
 ::: satkit.quaternion
