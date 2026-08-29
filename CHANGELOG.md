@@ -50,6 +50,18 @@
   `leo_iss_gr` 2 → 1.5 m (residuals 2.08 → 1.01 m, 1.85 → 0.63 m,
   0.66 → 0.50 m, i.e. down to the non-relativistic floors).
 
+### Fixed
+
+- **Frame-bias documentation.** `EME2000` docs said "≈ 17 mas"; the IERS 2010
+  constant bias is 23.1 mas total (≈ 18 mas pole, ≈ 15 mas equinox). The GMAT
+  corpus docs claimed GMAT's `EarthMJ2000Eq` differs from `EarthICRF` by that
+  bias; it does not — GMAT realizes `MJ2000Eq` through the IAU-76/FK5
+  precession model, so its offset from ICRF is time-varying (≈ 44 mas in
+  2023). The corpus already used `EarthICRF`. A Python test now pins the
+  EME2000 bias magnitude and components against the IERS values, and the
+  approx-mode frame dispatcher lists every `Frame` variant explicitly instead
+  of a catch-all.
+
 ### CI
 
 - **Published wheels are smoke-tested.** cibuildwheel's `test-skip = "*"`

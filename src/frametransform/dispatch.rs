@@ -70,7 +70,17 @@ const FRAME_BIAS_DALPHA0_AS: f64 = -0.014600;
 const FRAME_BIAS_XI0_AS: f64 = -0.016617;
 const FRAME_BIAS_ETA0_AS: f64 = -0.006819;
 
-/// Constant quaternion: EME2000 → GCRF (≈ 17 milliarcsec frame bias).
+/// Constant quaternion: EME2000 → GCRF (≈ 23 milliarcsec total frame bias:
+/// ≈ 18 mas pole offset plus ≈ 15 mas equinox offset).
+///
+/// This is the IERS 2010 *constant* bias between the ICRS/GCRS axes and the
+/// J2000.0 mean dynamical equator and equinox — the same definition used by
+/// SOFA (`iauBp00`/`iauBp06`) and Orekit's `EME2000`. It is **not** the
+/// frame that GMAT calls `EarthMJ2000Eq` (or STK's FK5 "J2000"): GMAT
+/// realizes that frame through the IAU-76/FK5 precession model and its
+/// offset from ICRF is time-varying (≈ 20 mas at J2000, ≈ 44 mas in 2023,
+/// growing ≈ 2.5 mas/yr from the IAU-76 precession-rate error). Use
+/// [`Frame::GCRF`] to compare against GMAT's `EarthICRF`.
 ///
 /// Implements `B^T = R3(-dα0) · R2(-ξ0) · R1(η0)` in IERS notation. In
 /// numeris' active-rotation convention this is `rotz(dα0) · roty(ξ0) ·
@@ -318,7 +328,14 @@ pub fn transform_state_approx<T: TimeLike>(
 fn reject_for_approx(frame: Frame) -> Result<()> {
     match frame {
         Frame::TIRS | Frame::CIRS => Err(Error::ApproxNotSupportedForFrame { frame }),
-        _ => Ok(()),
+        Frame::ITRF
+        | Frame::GCRF
+        | Frame::TEME
+        | Frame::EME2000
+        | Frame::ICRF
+        | Frame::LVLH
+        | Frame::RTN
+        | Frame::NTW => Ok(()),
     }
 }
 
@@ -382,6 +399,12 @@ fn canonical_rotation<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quat
 
 /// Canonical-direction rotation for the FK5 approximate reduction.
 /// Only inertial-cluster + ITRF + TEME pairs are valid.
+///
+/// Note on `EME2000` in approx mode: the IAU-76/FK5 chain behind
+/// [`qitrf2gcrf_approx`] has no frame bias, so its "GCRF" is already an
+/// FK5-flavoured J2000; applying the constant 23 mas bias on top is
+/// formally inconsistent, but the difference is far inside the ~1 arcsec
+/// accuracy of the approximate reduction.
 fn canonical_rotation_approx<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quaternion> {
     use Frame::*;
     let q = match (from, to) {
@@ -795,7 +818,7 @@ mod tests {
         assert!((c0[0] - 1.0).abs() < 1e-14);
         assert!((c0[1] - (-7.07827974e-8)).abs() < 1e-15);
         assert!((c0[2] - 8.05614894e-8).abs() < 1e-15);
-        // Second column: (-dα0_rad, 1, η0_rad).
+        // Second column: (-dα0_rad, 1, -η0_rad).
         assert!((c1[0] - 7.07827948e-8).abs() < 1e-15);
         assert!((c1[1] - 1.0).abs() < 1e-14);
         assert!((c1[2] - 3.30594449e-8).abs() < 1e-15);

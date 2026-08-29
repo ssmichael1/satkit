@@ -439,3 +439,27 @@ class TestGravity:
         diff_moon = np.linalg.norm(res_all.state[0:3] - res_no_moon.state[0:3])
         assert diff_sun > 1.0, f"Disabling sun gravity should matter, diff = {diff_sun} m"
         assert diff_moon > 1.0, f"Disabling moon gravity should matter, diff = {diff_moon} m"
+
+
+def test_eme2000_frame_bias_matches_iers_2010():
+    """GCRF→EME2000 is the constant IERS 2010 frame bias: 23.15 mas total,
+    rotation vector (−η0, −ξ0, −dα0) = (−6.819, +16.617, +14.600) mas,
+    identical at any epoch; GCRF↔ICRF is the identity.
+
+    The rotation vector is taken from the antisymmetric part of the rotation
+    matrix (exact to O(θ³)); ``quaternion.angle`` goes through ``acos`` near
+    1 and loses ~1% at 1e-7 rad.
+    """
+    mas = np.pi / 180.0 / 3600.0 / 1000.0
+    expected = np.array([-6.819, 16.617, 14.600]) * mas
+
+    def rotvec(q):
+        R = np.asarray(q.as_rotation_matrix())
+        return 0.5 * np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+
+    for t in (sk.time(2000, 1, 1, 12, 0, 0), sk.time(2026, 8, 28, 0, 0, 0)):
+        v = rotvec(sk.frametransform.rotation(sk.frame.GCRF, sk.frame.EME2000, t))
+        assert np.linalg.norm(v) == pytest.approx(23.147 * mas, abs=0.001 * mas)
+        assert v == pytest.approx(expected, abs=0.001 * mas)
+        vi = rotvec(sk.frametransform.rotation(sk.frame.GCRF, sk.frame.ICRF, t))
+        assert np.linalg.norm(vi) == pytest.approx(0.0, abs=1e-15)
