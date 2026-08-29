@@ -4,6 +4,7 @@ use numeris::ode;
 use thiserror::Error;
 
 use crate::Frame;
+use crate::Instant;
 
 /// Errors that can occur while configuring or executing orbit propagation.
 #[derive(Debug, Error)]
@@ -118,6 +119,42 @@ pub enum Error {
          gj_step_seconds or use an adaptive integrator."
     )]
     GJIntervalTooShort { span: f64, min: f64 },
+
+    // -- EOP coverage (precomputed.rs / propagator.rs) ---------------------
+    /// No Earth Orientation Parameters table is loaded (file missing and
+    /// download failed, or an empty table installed). A propagation would
+    /// then run with zero polar motion / UT1−UTC / nutation corrections and
+    /// be silently wrong by metres, so it is refused. Run
+    /// `satkit::utils::update_datafiles()` or point `SATKIT_DATA` at a
+    /// directory containing `EOP-All.csv`.
+    #[error(
+        "no Earth Orientation Parameters (EOP) table is loaded; run \
+         satkit::utils::update_datafiles() or set SATKIT_DATA to a directory \
+         containing EOP-All.csv"
+    )]
+    EopUnavailable,
+
+    /// Returned by [`propagate`](crate::orbitprop::propagate) when
+    /// [`PropSettings::require_eop_coverage`](crate::orbitprop::PropSettings::require_eop_coverage)
+    /// is set and the propagation span (plus integrator padding) extends
+    /// past the end of the loaded EOP table. Without the flag the last EOP
+    /// row is held constant and a one-time warning is printed instead.
+    #[error(
+        "propagation span extends to {span_end} but EOP data ends at {table_end} \
+         (PropSettings::require_eop_coverage is set); refresh the data files with \
+         satkit::utils::update_datafiles() or clear the flag to extrapolate"
+    )]
+    EopCoverage {
+        span_end: Instant,
+        table_end: Instant,
+    },
+
+    /// Wraps a frame-transform error — in practice a missing or unreadable
+    /// IERS precession-nutation table detected by
+    /// [`ierstable::preload`](crate::frametransform::ierstable::preload)
+    /// while building a [`Precomputed`](crate::orbitprop::Precomputed) table.
+    #[error(transparent)]
+    FrameTransform(#[from] crate::frametransform::Error),
 }
 
 impl From<ode::OdeError> for Error {

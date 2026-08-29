@@ -103,6 +103,7 @@ pub fn qtirs2cirs(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 
 #[pyfunction]
 pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+    satkit::frametransform::ierstable::preload()?;
     py_quat_from_time_arr(ft::qcirs2gcrs, tm)
 }
 
@@ -120,6 +121,7 @@ pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 
 #[pyfunction]
 pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+    satkit::frametransform::ierstable::preload()?;
     py_quat_from_time_arr(ft::qitrf2gcrf, tm)
 }
 
@@ -136,6 +138,7 @@ pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from GCRF to ITRF at input time[s]
 #[pyfunction]
 pub fn qgcrf2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+    satkit::frametransform::ierstable::preload()?;
     py_quat_from_time_arr(ft::qgcrf2itrf, tm)
 }
 
@@ -379,6 +382,7 @@ pub fn itrf_to_gcrf_state(
     vel_itrf: &Bound<'_, PyAny>,
     time: &Bound<'_, PyAny>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    satkit::frametransform::ierstable::preload()?;
     state_transform_batch(pos_itrf, vel_itrf, time, ft::itrf_to_gcrf_state)
 }
 
@@ -405,6 +409,7 @@ pub fn gcrf_to_itrf_state(
     vel_gcrf: &Bound<'_, PyAny>,
     time: &Bound<'_, PyAny>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    satkit::frametransform::ierstable::preload()?;
     state_transform_batch(pos_gcrf, vel_gcrf, time, ft::gcrf_to_itrf_state)
 }
 
@@ -546,6 +551,7 @@ pub fn rotation(
     to_frame: crate::pyframes::PyFrame,
     tm: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
+    satkit::frametransform::ierstable::preload()?;
     rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ false)
 }
 
@@ -636,6 +642,7 @@ pub fn transform_state(
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    satkit::frametransform::ierstable::preload()?;
     let t = instant_from_pyany(tm)?;
     let p: Vector3 = py_to_smatrix(pos)?;
     let v: Vector3 = py_to_smatrix(vel)?;
@@ -700,6 +707,7 @@ pub fn rotation_with_state(
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
+    satkit::frametransform::ierstable::preload()?;
     let t = instant_from_pyany(tm)?;
     let p: Vector3 = py_to_smatrix(pos)?;
     let v: Vector3 = py_to_smatrix(vel)?;
@@ -720,4 +728,53 @@ pub fn rotation_with_state(
 #[pyfunction(name = "disable_eop_time_warning")]
 pub fn disable_eop_time_warning() {
     satkit::earth_orientation_params::disable_eop_time_warning();
+}
+
+/// Time bounds of the loaded Earth Orientation Parameters (EOP) table.
+///
+/// Returns:
+///     (satkit.time, satkit.time, satkit.time) | None: ``(first, last_observed, last)`` —
+///     the first row, the last *observed* row (rows after it are IERS
+///     predictions) and the last row of the table; ``None`` if no table is
+///     loaded. Epochs after ``last`` use that row's values held constant
+///     (see :func:`eop_status`); refresh with ``satkit.utils.update_datafiles()``.
+///
+/// Example:
+///     >>> first, last_obs, last = satkit.frametransform.eop_coverage()
+#[pyfunction(name = "eop_coverage")]
+pub fn eop_coverage() -> Option<(PyInstant, PyInstant, PyInstant)> {
+    satkit::earth_orientation_params::coverage().map(|c| {
+        (
+            PyInstant(c.first),
+            PyInstant(c.last_observed),
+            PyInstant(c.last),
+        )
+    })
+}
+
+/// Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.
+///
+/// Args:
+///     tm (satkit.time): Epoch to classify
+///
+/// Returns:
+///     str: one of
+///
+///     * ``"observed"`` — inside the table, on or before the last observed row
+///     * ``"predicted"`` — inside the table, IERS prediction
+///     * ``"extrapolated"`` — after the table end: the last row is held constant
+///       (accuracy degrades by ~0.1 arcsec / ~10 ms per few months — refresh the
+///       data files)
+///     * ``"before_table"`` — before 1962: no EOP, zeros are used
+///     * ``"not_loaded"`` — no EOP table loaded at all: zeros are used
+#[pyfunction(name = "eop_status")]
+pub fn eop_status(tm: &PyInstant) -> &'static str {
+    use satkit::earth_orientation_params::EopStatus::*;
+    match satkit::earth_orientation_params::status(&tm.0) {
+        Observed => "observed",
+        Predicted => "predicted",
+        Extrapolated => "extrapolated",
+        BeforeTable => "before_table",
+        NotLoaded => "not_loaded",
+    }
 }

@@ -3615,6 +3615,7 @@ class propsettings:
         integrator: integrator = ...,
         gj_step_seconds: float = 60.0,
         max_steps: int = 1_000_000,
+        require_eop_coverage: bool = False,
     ) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
 
@@ -3646,6 +3647,10 @@ class propsettings:
                 a max-steps error. Applies to all integrators (adaptive Runge-Kutta, Rosenbrock,
                 and Gauss-Jackson 8). Default is 1_000_000, which covers very long propagation
                 arcs with plenty of headroom. Lower for a tighter runaway-propagation safeguard.
+            require_eop_coverage: Raise ``RuntimeError`` if the propagation span extends past
+                the end of the loaded Earth-orientation-parameter (EOP) table, instead of
+                holding the last EOP row constant with a one-time warning. Default is False.
+                See ``satkit.frametransform.eop_coverage`` / ``eop_status``.
 
         Returns:
             propsettings: New propsettings object with default settings
@@ -3781,6 +3786,21 @@ class propsettings:
 
     @use_relativistic_correction.setter
     def use_relativistic_correction(self, value: bool) -> None: ...
+    @property
+    def require_eop_coverage(self) -> bool:
+        """Raise ``RuntimeError`` from ``propagate`` if the span extends past the end
+        of the loaded Earth-orientation-parameter (EOP) table, instead of holding the
+        last EOP row constant with a one-time warning. Default False.
+
+        Polar motion and UT1−UTC drift by ~0.1 arcsec / ~10 ms over a few months —
+        metres at LEO — so set this for precision work and refresh the data files
+        with ``satkit.utils.update_datafiles()`` when it trips. See
+        ``satkit.frametransform.eop_coverage`` and ``eop_status``.
+        """
+        ...
+
+    @require_eop_coverage.setter
+    def require_eop_coverage(self, value: bool) -> None: ...
     @property
     def enable_interp(self) -> bool:
         """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times

@@ -140,6 +140,10 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyft::pyeop, m)?).unwrap();
     m.add_function(wrap_pyfunction!(pyft::disable_eop_time_warning, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::eop_coverage, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::eop_status, m)?)
+        .unwrap();
     m.add_function(wrap_pyfunction!(pyft::to_gcrf, m)?).unwrap();
     m.add_function(wrap_pyfunction!(pyft::from_gcrf, m)?)
         .unwrap();
