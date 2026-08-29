@@ -146,6 +146,7 @@ def test_reduced_ecom_fits_gps_better_than_cannonball(testvec_dir):
     the observed orbit better than a single cannonball coefficient.
     """
     least_squares = pytest.importorskip("scipy.optimize").least_squares
+    approx_derivative = pytest.importorskip("scipy.optimize._numdiff").approx_derivative
 
     fname = os.path.join(testvec_dir, "orbitprop", "ESA0OPSFIN_20233640000_01D_05M_ORB.SP3")
     if not os.path.isfile(fname):
@@ -157,9 +158,11 @@ def test_reduced_ecom_fits_gps_better_than_cannonball(testvec_dir):
     settings = _gps_settings()
     t0, t1 = times[0], times[-1]
 
-    # Initial guess: first position, finite-difference velocity.
+    # Initial guess: first position, O(dt^4) one-sided stencil velocity
+    # (a two-point chord is ~250 m/s off over a 5-min step at GPS altitude).
     dt = (times[1] - times[0]).seconds
-    v0 = (truth[1] - truth[0]) / dt
+    p = truth
+    v0 = (-25 * p[0] + 48 * p[1] - 36 * p[2] + 16 * p[3] - 3 * p[4]) / (12 * dt)
     x0_state = np.concatenate((truth[0] / 1e3, v0))  # km, m/s
 
     def run(state_km_ms, props):
@@ -174,19 +177,19 @@ def test_reduced_ecom_fits_gps_better_than_cannonball(testvec_dir):
         e = sk.ecomparams.reduced(*(x[6:11] * 1e-9))
         return (run(x[:6], sk.satproperties(craoverm=0.0, ecom=e)) - truth).ravel()
 
-    # Finite-difference steps: scipy's default relative step on a
-    # zero-valued coefficient is ~1e-8 in the parameter's own units, i.e.
-    # 1e-17 m/s^2 here — far below integrator noise. Use explicit steps:
-    # 20 m / 3 mm/s on the state, 0.1 nm/s^2 (or 10%) on the coefficients.
-    step_state = [1e-6] * 6
-    fit_c = least_squares(
-        resid_cannon, np.concatenate((x0_state, [0.02])), x_scale="jac",
-        diff_step=step_state + [1e-2],
-    )
-    fit_e = least_squares(
-        resid_ecom, np.concatenate((x0_state, [-100.0, 0, 0, 0, 0])), x_scale="jac",
-        diff_step=step_state + [0.1] * 5,
-    )
+    # Absolute finite-difference steps (1 m, 1e-4 m/s, 0.1 nm/s^2 or
+    # 1e-3 m^2/kg): scipy's `diff_step` is *relative* and silently falls
+    # back to sqrt(eps) for zero-valued parameters, which is below
+    # integrator noise for the harmonic ECOM coefficients.
+    def jac_for(resid, coef_steps):
+        steps = np.array([1e-3] * 3 + [1e-4] * 3 + coef_steps)
+        return lambda x: approx_derivative(resid, x, abs_step=steps)
+
+    kw = dict(x_scale="jac", ftol=1e-12, xtol=1e-12, gtol=1e-12, max_nfev=200)
+    fit_c = least_squares(resid_cannon, np.concatenate((x0_state, [0.02])),
+                          jac=jac_for(resid_cannon, [1e-3]), **kw)
+    fit_e = least_squares(resid_ecom, np.concatenate((x0_state, [-100.0, 0, 0, 0, 0])),
+                          jac=jac_for(resid_ecom, [0.1] * 5), **kw)
     rms_c = np.sqrt(np.mean(fit_c.fun**2))
     rms_e = np.sqrt(np.mean(fit_e.fun**2))
     print(f"cannonball fit RMS {rms_c:.3f} m (Cr A/m {fit_c.x[6]:.4f}); reduced-ECOM fit RMS {rms_e:.3f} m, "

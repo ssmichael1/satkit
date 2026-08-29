@@ -513,9 +513,11 @@ class gravmodel:
 
     jgm3: ClassVar[gravmodel]
     """
-    The "JGM3" gravity model
+    The "JGM3" gravity model (zero-tide C20).
 
-    This model is used by default in the orbit propagators
+    Combining a zero-tide model with ``tidemodel.solid_step1`` (which
+    includes the permanent tide) double-counts the permanent tide; use
+    ``egm96`` with tides on, or ``tidemodel.none`` with this model.
     """
 
     jgm2: ClassVar[gravmodel]
@@ -525,12 +527,13 @@ class gravmodel:
 
     egm96: ClassVar[gravmodel]
     """
-    The "EGM96" gravity model
+    The "EGM96" gravity model (tide-free C20). Default for the orbit
+    propagator, and the model to use with ``tidemodel.solid_step1``.
     """
 
     itugrace16: ClassVar[gravmodel]
     """
-    the ITU Grace 16 gravity model
+    The ITU GRACE16 gravity model (zero-tide C20; see ``jgm3``).
     """
 
 def nrlmsise00(

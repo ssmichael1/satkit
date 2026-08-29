@@ -75,6 +75,9 @@ Set with `tide_model`:
 | `tidemodel.solid_full` | Step 1 + Step 2 (Step 2 not yet implemented; behaves as Step 1) |
 | `tidemodel.none` | Disable solid tides (use for reproducibility with pre-tide versions) |
 
+!!! note "Tide system of the gravity model"
+    Step 1 includes the *permanent* tide, so it belongs on a **tide-free** gravity model. `gravmodel.egm96` (the default) is tide-free ($\bar{C}_{20} = -4.84165371736\times10^{-4}$); `gravmodel.jgm3` and `gravmodel.itugrace16` are **zero-tide** ($\bar{C}_{20} \approx -4.841695\times10^{-4}$), so combining them with `solid_step1` double-counts the permanent tide — about 5–7 cm cross-track over 3 days at GPS altitude. Use `egm96` with tides on, or `tidemodel.none` with a zero-tide model.
+
 ## Atmospheric Drag
 
 At altitudes below 700 km the residual atmosphere imposes a drag force:
@@ -148,7 +151,9 @@ ecom2 = sk.ecomparams.ecom2(-1.06e-7, 1e-9, -3e-9, 0, 0, -2e-9, -3.6e-9, 1.9e-9,
 
 Rust users can also implement `SatProperties::srp_ecom(&self, tm, state) -> Option<EcomParams>` to supply coefficients that change over the propagation (per-arc CODE values, an attitude-mode switch). Like the cannonball term, ECOM contributes no partials to the state transition matrix.
 
-**What to expect.** Fitting an initial state plus the reduced 5-parameter ECOM to 3 days of IGS final GPS orbits (`python/examples/ecom_gps_validation.py`) gives a 0.13 m RMS fit versus 2.3 m for the cannonball, and 7-day predictions at the ~10 m level (cannonball: ~150 m). Beyond that the error grows quickly — ~90 m at 14 days and ~500 m at 30 days from a 3-day fit, ~50–150 m at 30 days from a 7-day fit — because the true coefficients drift with the Sun elevation angle β over weeks, which is exactly why analysis centres re-estimate them every day. Constant ECOM coefficients are a short-arc (days) model, not a month-long one. The [ECOM Solar Radiation Pressure](../tutorials/ECOM Solar Radiation Pressure.ipynb) tutorial walks through the fit and the prediction with plots.
+**What to expect.** Fitting an initial state plus the reduced 5-parameter ECOM to 3 days of IGS final GPS orbits (`python/examples/ecom_gps_validation.py`, 12×12 gravity, no a-priori box-wing) reproduces the orbit at the accuracy of the IGS product itself — 5 cm 3D RMS versus 3.8 m for the cannonball — and predicts the next 24 h to a median 6–7 cm 3D across the constellation (2-day fits, ten satellites), against ~5 cm for the IGS ultra-rapid predicted product and 8–10 cm reported by [Duan & Hugentobler (2021)](https://doi.org/10.1007/s10291-020-01073-z) from 3-day arcs with a full analysis-centre force model. Beyond a few days the error grows along-track roughly as $t^2$: ~0.8 m at 7 days, 10 m after ~12 days and ~100 m at 30 days from a 3-day fit (~15 days and ~60 m from a 7-day fit), because the true coefficients drift with the Sun elevation angle β over weeks — which is exactly why analysis centres re-estimate them every day. Constant ECOM coefficients are a short-arc (days) model, not a month-long one. The [ECOM Solar Radiation Pressure](../tutorials/ECOM Solar Radiation Pressure.ipynb) tutorial walks through the fit, the prediction and the constellation benchmark with plots.
+
+Two practical notes. SP3 epochs are in GPS time (`scale=timescale.GPS`), not UTC — reading them as UTC rotates the truth by 18 s of Earth rotation relative to the Sun/Moon geometry and quadruples the fit residual. And for arcs that cross Earth's shadow, use `integrator = gauss_jackson8`: the adaptive Runge–Kutta steppers can abort at a shadow boundary with *too many consecutive step rejections*, whereas the fixed-step multistep integrator is immune and fits an eclipsing satellite just as well (G08, 8% umbra: 4.7 cm fit, 5.6 cm at 24 h).
 
 ## General-Relativistic Correction
 

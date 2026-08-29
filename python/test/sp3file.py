@@ -5,7 +5,10 @@ def read_sp3file(fname, satnum=20):
     """
     Read SP3 file
     (file containing "true" GPS ephemerides)
-    and output UTC time and position in ITRF frame
+    and output time and position in ITRF frame
+
+    SP3 epochs are in GPS time (header line ``%c ... GPS``), so the
+    returned ``satkit.time`` values are built with ``scale=timescale.GPS``.
     """
 
     # Read in the test vectors
@@ -20,7 +23,7 @@ def read_sp3file(fname, satnum=20):
             hour = int(line[14:16])
             minute = int(line[17:19])
             sec = float(line[20:32])
-            yield sk.time(year, month, day, hour, minute, sec)
+            yield sk.time(year, month, day, hour, minute, sec, scale=sk.timescale.GPS)
 
     def line2pos(lines):
         for line in lines:
