@@ -1,0 +1,152 @@
+{
+  "manifest_version": 2,
+  "data_version": "data-v1",
+  "release_base": "https://github.com/ssmichael1/satkit-data/releases/download/data-v1",
+  "notes": [
+    "Static data files used by satkit, pinned by size and SHA-256.",
+    "URL order per file: GitHub release asset, then the origin server when it serves byte-identical bytes, then the legacy GCS bucket (transitional).",
+    "SATKIT_DATA_URL, if set, is a base URL tried before all of these.",
+    "Regenerate with tools/make_manifest.py; see data/README.md.",
+    "Deliberately excluded: msis21.parm (NRLMSIS 2.1 licence is academic/non-commercial), EOP-All.csv / SW-All.csv (CelesTrak asks that its compiled files not be mirrored; fetched at runtime via `refresh`), sw19571001.txt (orphan). See data/README.md."
+  ],
+  "files": [
+    {
+      "name": "linux_p1550p2650.440",
+      "size": 102272352,
+      "sha256": "29915576d0a6555766b99485ac3056ee415e86df4fce282611c31afb329ad062",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/linux_p1550p2650.440",
+        "https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de440/linux_p1550p2650.440",
+        "https://storage.googleapis.com/astrokit-astro-data/linux_p1550p2650.440"
+      ],
+      "source": "JPL",
+      "license": "JPL Planetary and Lunar Ephemerides DE440 (Park et al. 2021); US Government work, freely redistributable",
+      "tier": "ephemeris",
+      "default": true
+    },
+    {
+      "name": "lnxp1900p2053.421",
+      "size": 13966960,
+      "sha256": "5b3f81dd0c505925055a389431fd2bc5e0ae2fd02d85db37fa4d4fe54dfb4096",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/lnxp1900p2053.421",
+        "https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de421/lnxp1900p2053.421"
+      ],
+      "source": "JPL",
+      "license": "JPL Planetary and Lunar Ephemerides DE421 (Folkner et al. 2009); US Government work, freely redistributable",
+      "tier": "ephemeris",
+      "default": false
+    },
+    {
+      "name": "tab5.2a.txt",
+      "size": 171237,
+      "sha256": "19549252df9eb77c8237dbf5b749de82b7fd7713a8b60b35371538cd36b6aa1d",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/tab5.2a.txt",
+        "https://iers-conventions.obspm.fr/content/chapter5/additional_info/tab5.2a.txt",
+        "https://storage.googleapis.com/astrokit-astro-data/tab5.2a.txt"
+      ],
+      "source": "IERS",
+      "license": "IERS Conventions (2010), Technical Note 36, Table 5.2a (X series); freely redistributable",
+      "tier": "core",
+      "default": true
+    },
+    {
+      "name": "tab5.2b.txt",
+      "size": 136770,
+      "sha256": "1f17a3a6ad0b468705b3323bfe72d0320ce996798ec7cba0cdde4405d88f14d9",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/tab5.2b.txt",
+        "https://iers-conventions.obspm.fr/content/chapter5/additional_info/tab5.2b.txt",
+        "https://storage.googleapis.com/astrokit-astro-data/tab5.2b.txt"
+      ],
+      "source": "IERS",
+      "license": "IERS Conventions (2010), Technical Note 36, Table 5.2b (Y series); freely redistributable",
+      "tier": "core",
+      "default": true
+    },
+    {
+      "name": "tab5.2d.txt",
+      "size": 8656,
+      "sha256": "fe94c83e1ef6f92b15b3f007779ae70c0984c06ee45d5511b4c821ee9a0ecded",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/tab5.2d.txt",
+        "https://iers-conventions.obspm.fr/content/chapter5/additional_info/tab5.2d.txt",
+        "https://storage.googleapis.com/astrokit-astro-data/tab5.2d.txt"
+      ],
+      "source": "IERS",
+      "license": "IERS Conventions (2010), Technical Note 36, Table 5.2d (s + XY/2 series); freely redistributable",
+      "tier": "core",
+      "default": true
+    },
+    {
+      "name": "EGM96.gfc",
+      "size": 5620000,
+      "sha256": "5247a9e9c316dd2c8f8fd491d53be0e163cb5cb3676b021754240cc9e44cb43b",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/EGM96.gfc",
+        "https://storage.googleapis.com/astrokit-astro-data/EGM96.gfc"
+      ],
+      "source": "ICGEM-GFZ",
+      "license": "EGM96 (Lemoine et al. 1998, NASA GSFC/NIMA) as distributed by ICGEM; US Government work",
+      "tier": "core",
+      "default": true
+    },
+    {
+      "name": "ITU_GRACE16.gfc",
+      "size": 1782369,
+      "sha256": "b6bea9c78ad168f1e206fc7211f90b64fba54325c832f4473f6c05a07adbc718",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/ITU_GRACE16.gfc",
+        "https://storage.googleapis.com/astrokit-astro-data/ITU_GRACE16.gfc"
+      ],
+      "source": "ICGEM-GFZ",
+      "license": "ITU_GRACE16 (Akyilmaz et al. 2016, GFZ Data Services doi:10.5880/icgem.2016.006), CC BY 4.0",
+      "tier": "core",
+      "default": true
+    },
+    {
+      "name": "JGM2.gfc",
+      "size": 118296,
+      "sha256": "0779cf74f216d5b38c7a4c4a1a25d596b659605deb7731f00874c17e9ed3f5af",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/JGM2.gfc",
+        "https://storage.googleapis.com/astrokit-astro-data/JGM2.gfc"
+      ],
+      "source": "ICGEM-GFZ",
+      "license": "JGM-2 (Nerem et al. 1994, NASA GSFC / UT CSR) as distributed by ICGEM; US Government work",
+      "tier": "core",
+      "default": true
+    },
+    {
+      "name": "JGM3.gfc",
+      "size": 215405,
+      "sha256": "2ec791eec795689291974dd3602b304029da93d3fea30096daa3b368fb231d03",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/JGM3.gfc",
+        "https://storage.googleapis.com/astrokit-astro-data/JGM3.gfc"
+      ],
+      "source": "ICGEM-GFZ",
+      "license": "JGM-3 (Tapley et al. 1996, NASA GSFC / UT CSR) as distributed by ICGEM; US Government work",
+      "tier": "core",
+      "default": true
+    },
+    {
+      "name": "leap-seconds.list",
+      "size": 10665,
+      "sha256": "14b4faab51b1885680a704744863bda8b5728a0f0a5e07a15c8469532318b305",
+      "urls": [
+        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/leap-seconds.list",
+        "https://storage.googleapis.com/astrokit-astro-data/leap-seconds.list"
+      ],
+      "source": "IERS",
+      "license": "IERS/USNO leap-second list; public data. Reference only: satkit's runtime leap-second table is compiled in",
+      "tier": "reference",
+      "default": true
+    }
+  ],
+  "refresh": [
+    "https://celestrak.org/SpaceData/EOP-All.csv",
+    "https://celestrak.org/SpaceData/SW-All.csv"
+  ]
+}
