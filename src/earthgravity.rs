@@ -235,7 +235,8 @@ pub fn init_from_path(model: GravityModel, path: &std::path::Path) -> Result<()>
 ///
 /// * For details of calculation, see Chapter 3.2 of:
 ///   "Satellite Orbits: Models, Methods, Applications",
-///   O. Montenbruck and B. Gill, Springer, 2012.
+///   O. Montenbruck and E. Gill, Springer, 2000
+///   (<https://doi.org/10.1007/978-3-642-58351-3>).
 ///
 pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityModel) -> Vector3 {
     model.get().accel(pos_itrf, degree, order)
@@ -267,7 +268,8 @@ pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityMode
 ///
 /// * For details of calculation, see Chapter 3.2 of:
 ///   "Satellite Orbits: Models, Methods, Applications",
-///   O. Montenbruck and B. Gill, Springer, 2012.
+///   O. Montenbruck and E. Gill, Springer, 2000
+///   (<https://doi.org/10.1007/978-3-642-58351-3>).
 ///
 pub fn accel_and_partials(
     pos_itrf: &Vector3,
