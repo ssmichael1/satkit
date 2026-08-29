@@ -29,6 +29,8 @@ dcm = sk.frametransform.to_gcrf(sk.frame.NTW, pos, vel)
 | `RIC` | Alias | Alias for `RTN` — older NASA / Clohessy-Wiltshire name |
 | `NTW` | Satellite-local | Normal / Tangent / Cross-track (velocity-aligned) |
 
+RTN follows the CCSDS Orbit Data Messages convention ([CCSDS 502.0-B-3](../guide/references.md#ccsds502)), RSW and NTW are defined in [Vallado (2013)](../guide/references.md#vallado2013), §3.3, and RIC descends from [Clohessy & Wiltshire (1960)](../guide/references.md#clohessy1960).
+
 `frame.RSW` and `frame.RIC` are class-level aliases that resolve to the
 same enum value as `frame.RTN`, so `sk.frame.RSW == sk.frame.RTN` is
 `True` and all three can be used interchangeably.

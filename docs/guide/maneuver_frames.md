@@ -55,7 +55,7 @@ $$
 \tan\gamma = \frac{e \sin\nu}{1 + e \cos\nu}
 $$
 
-where $e$ is eccentricity and $\nu$ is true anomaly. For a low-eccentricity
+where $e$ is eccentricity and $\nu$ is true anomaly ([Vallado 2013](references.md#vallado2013), §2.4). For a low-eccentricity
 LEO ($e \sim 0.001$) the flight-path angle is tiny (~0.06°) and the
 distinction below doesn't matter in practice. For a GTO ($e = 0.73$) at
 mid-anomaly the flight-path angle can reach ~45° and the distinction
@@ -82,13 +82,13 @@ the velocity vector. For a circular orbit these are the same thing, but for
 an eccentric orbit at non-apsidal anomaly they differ by $\gamma$. Two other
 common names for this same frame:
 
-- **RSW** — Vallado's convention (R, S=Ŵ×R̂, W=ĥ). The prevailing name in
+- **RSW** — Vallado's convention (R, S=Ŵ×R̂, W=ĥ; [Vallado 2013](references.md#vallado2013), §3.3). The prevailing name in
   astrodynamics textbooks.
 - **RIC** — older NASA usage (Radial / In-track / Cross-track), common in
-  Clohessy-Wiltshire relative-motion literature.
+  the relative-motion literature descending from [Clohessy & Wiltshire (1960)](references.md#clohessy1960).
 
-satkit's canonical name is **RTN** (matching the CCSDS OEM/OMM/ODM
-convention); `Frame::RSW` and `Frame::RIC` are provided as compile-time
+satkit's canonical name is **RTN** (matching the CCSDS Orbit Data Messages
+convention, [CCSDS 502.0-B-3](references.md#ccsds502)); `Frame::RSW` and `Frame::RIC` are provided as compile-time
 aliases so code can spell the frame whichever way matches the source
 it's transcribing from. In Python, `sk.frame.RSW` and `sk.frame.RIC` are
 class-level aliases that compare equal to `sk.frame.RTN`, so
@@ -148,7 +148,7 @@ eccentric orbit N leans off-radial by the flight-path angle.
 - Eccentric transfer orbits (GTO, lunar transfer) where the flight-path
   angle matters.
 
-This is the frame described in Vallado §3.3 (eq 3-31).
+This is the frame described in [Vallado (2013)](references.md#vallado2013), §3.3, Eq. 3-31.
 
 ## LVLH — body-pointing
 
@@ -244,11 +244,9 @@ farther from the origin, meaning it added more speed.
 | Natural for prograde burns | No | Only on circular | **Yes** | Only on circular |
 | Natural for crewed-flight GN&C | No | No | No | **Yes** |
 
-## Reference
+## References
 
-- Vallado, D., *Fundamentals of Astrodynamics and Applications*, 4th ed.,
-  §3.3 — definitions of RSW and NTW frames.
-- CCSDS 502.0-B-3, *Orbit Data Messages*, Annex C — RTN frame in CCSDS
-  OEM/OMM messages.
-- Montenbruck, O. and Gill, E., *Satellite Orbits*, §2.4 — LVLH frame
-  definitions and relative motion.
+- [Vallado (2013)](references.md#vallado2013), *Fundamentals of Astrodynamics and Applications*, 4th ed., §3.3 — definitions of the RSW and NTW frames.
+- [CCSDS 502.0-B-3 (2023)](references.md#ccsds502), *Orbit Data Messages* — the RTN frame used for covariance and maneuver components in OPM/OMM/OEM messages (keyword values in Annex B; conventions in Annex F).
+- [Clohessy & Wiltshire (1960)](references.md#clohessy1960) — origin of the radial / in-track / cross-track relative-motion frame.
+- [Markley & Crassidis (2014)](references.md#markley2014), *Fundamentals of Spacecraft Attitude Determination and Control* — LVLH and other body-pointing frame conventions.
