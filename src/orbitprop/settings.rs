@@ -281,7 +281,7 @@ impl std::fmt::Display for PropSettings {
             Sun Gravity: {},
             Moon Gravity: {},
             Tide Model: {:?},
-            GR Schwarzschild: {},
+            GR (IERS 10.12): {},
             Interpolation: {},
             Integrator: {},
             Max Steps: {},
