@@ -84,6 +84,30 @@
 
 ### Added
 
+- **EOP coverage is visible and enforceable.** Earth-orientation
+  parameters silently held the last table row constant for epochs past the
+  end of `EOP-All.csv`, and silently used zeros when no table was loaded at
+  all (only pre-1962 epochs warned) — and since the propagator now uses the
+  full EOP chain, a stale file shifted a 7-day LEO propagation by ~10 m with
+  no indication. New `earth_orientation_params::{coverage, status,
+  EopCoverage, EopStatus}` (Python: `satkit.frametransform.eop_coverage()`
+  and `eop_status(t)` → `"observed" | "predicted" | "extrapolated" |
+  "before_table" | "not_loaded"`); one-time stderr warnings the first time an
+  epoch past the table end or a missing table is used;
+  `PropSettings::require_eop_coverage` (Python
+  `propsettings(require_eop_coverage=...)`, default off) makes `propagate`
+  fail with `Error::EopCoverage` instead of extrapolating; and a propagation
+  with **no** EOP table loaded now fails with `Error::EopUnavailable`
+  instead of running with zero polar motion / UT1−UTC. `disable_eop_time_warning()`
+  suppresses all three warnings. Frame-transform doc comments that claimed
+  "set to zero and a warning is printed" are corrected.
+- **`frametransform::ierstable::preload()`** loads the three IERS
+  precession-nutation tables and returns an error if a file is missing or
+  unreadable. The Python frame-transform entry points and
+  `Precomputed`/`propagate` call it, so a missing `tab5.2*.txt` now raises a
+  normal `RuntimeError` in Python rather than a `PanicException`. The Rust
+  `q*2*` functions still panic on a missing table until the `Result`
+  threading planned for 0.21 ([#125](https://github.com/ssmichael1/satkit/issues/125)).
 - **GMAT regression corpus** (`tests/gmat/cases/*.json`,
   `tests/gmat_regression.rs`, `python/test/test_gmat.py`). Seventeen
   7-day reference trajectories generated with NASA GMAT R2026A (RK89 at

@@ -70,6 +70,25 @@ pub fn table(id: IersTableId) -> &'static IERSTable {
     })
 }
 
+/// Load all three IERS precession-nutation tables now, returning an error
+/// (instead of the panic the lazy [`table`] accessor raises) if a file is
+/// missing or unreadable. Idempotent: tables that are already initialized
+/// are left untouched. The Python bindings and
+/// [`Precomputed`](crate::orbitprop::Precomputed) call this so a missing
+/// data file surfaces as a normal error before any transform runs.
+pub fn preload() -> Result<()> {
+    for id in [IersTableId::Tab5A, IersTableId::Tab5B, IersTableId::Tab5D] {
+        let cell = instance_for(id);
+        if cell.get().is_none() {
+            let parsed = IERSTable::from_file(id.default_filename())?;
+            // A concurrent lazy init may have won the race; either way the
+            // table is now loaded, so an `Err` from `set` is not a failure.
+            let _ = cell.set(parsed);
+        }
+    }
+    Ok(())
+}
+
 /// Initialize the IERS table singleton for `id` from an in-memory byte
 /// buffer.
 ///

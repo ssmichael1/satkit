@@ -14,7 +14,31 @@ The `satkit` package relies upon a number of data files for certain calculations
 
 - **predicted-solar-cycle.json** — NOAA/SWPC solar cycle forecast. Monthly predicted F10.7 solar flux values extending ~5 years into the future. Used as a fallback for atmospheric density calculations when propagating beyond the range of historical space weather data.
 
-- **EOP-All.csv** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis. This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org). For dates beyond the file, the last entry's values are used (constant extrapolation).
+- **EOP-All.csv** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis. This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org) and carries IERS predictions roughly six months ahead. For dates beyond the file, the last entry's values are used (constant extrapolation) — see [EOP coverage](#eop-coverage) below.
+
+## EOP coverage
+
+Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Earth rotation angle), and the high-precision propagator depend on the EOP table, so it matters where an epoch falls relative to it:
+
+| `satkit.frametransform.eop_status(t)` | meaning | what satkit does |
+|---|---|---|
+| `"observed"` | on or before the last observed (`O`) row | interpolates measured values |
+| `"predicted"` | after the last observed row, inside the table | interpolates IERS predictions (~6 months ahead) |
+| `"extrapolated"` | after the last row | holds the last row constant and prints a **one-time warning**. Polar motion drifts ~0.1″ and $\Delta UT1$ ~10 ms over a few months — metres of position error at LEO |
+| `"before_table"` | before 1962 | zeros, one-time warning |
+| `"not_loaded"` | no table at all | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
+
+`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
+
+```python
+import satkit as sk
+
+first, last_observed, last = sk.frametransform.eop_coverage()
+if sk.frametransform.eop_status(t_end) == "extrapolated":
+    sk.utils.update_datafiles()   # re-downloads EOP-All.csv (and SW-All.csv)
+```
+
+The warnings can be silenced with `satkit.frametransform.disable_eop_time_warning()`.
 
 ## Acquiring the Data Files
 
