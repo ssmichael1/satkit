@@ -76,7 +76,7 @@ use anyhow::Result;
 ///            * Earth gravity with higher-order spherical-harmonic terms
 ///            * Sun, Moon gravity
 ///            * Solid Earth tides (IERS 2010 Step 1; configurable via propsettings.tide_model)
-///            * General-relativistic Schwarzschild correction
+///            * General relativity (IERS 2010 Eq. 10.12: Schwarzschild, geodesic precession, Lense-Thirring)
 ///            * Radiation pressure
 ///            * Atmospheric drag: NRLMSISE-00 density model, with option to include space weather effects (can be large)
 ///        * End time must be set by keyword argument, either explicitly or by duration

@@ -24,7 +24,7 @@ The force model follows the treatment in O. Montenbruck and E. Gill, [**"Satelli
 | Atmospheric drag (NRLMSISE-00) | when alt < 700 km | `use_spaceweather`, [`satproperties.cd_a_over_m`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
 | Solar radiation pressure | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
 | Solid Earth tides (IERS 2010 §6.2.1 Step 1) | on | `tide_model` | $10^{-7}$ m/s² |
-| GR Schwarzschild (IERS 2010 §10.3) | on | `use_relativistic_correction` | $10^{-9}$ m/s² (LEO) |
+| General relativity (IERS 2010 §10.3: Schwarzschild + geodesic + Lense–Thirring) | on | `use_relativistic_correction` | $10^{-9}$ m/s² (LEO) |
 | Continuous thrust | when configured | [`satproperties.thrusts`](../api/satprop.md) | user-specified |
 
 The [Forces-vs-altitude plot](#forces-vs-altitude) at the bottom of this page shows how each contribution scales with orbital altitude.
@@ -100,15 +100,19 @@ where $P_\text{sun} \approx 4.56 \times 10^{-6}$ N/m² is the radiation pressure
 
 satkit uses a **cannonball model** — the satellite's surface is treated as if its normal points toward the Sun. For high-fidelity work (precise SRP modeling for GNSS or active satellite operations), a [box-wing model](https://link.springer.com/article/10.1007/s10569-014-9583-2) is needed; that is not currently provided.
 
-## General-Relativistic Correction (Schwarzschild)
+## General-Relativistic Correction
 
-In strong gravitational fields, the static post-Newtonian Schwarzschild correction perturbs the orbit:
+The full IERS 2010 §10.3 Eq. 10.12 correction with PPN parameters $\beta = \gamma = 1$, three terms:
 
 $$
-\vec{a}_\text{GR}~=~\frac{GM_\oplus}{c^2 r^3}\left[\left(\frac{4GM_\oplus}{r} - v^2\right)\vec{r} + 4(\vec{r}\cdot\vec{v})\vec{v}\right]
+\vec{a}_\text{GR}~=~\underbrace{\frac{GM_\oplus}{c^2 r^3}\left[\left(\frac{4GM_\oplus}{r} - v^2\right)\vec{r} + 4(\vec{r}\cdot\vec{v})\vec{v}\right]}_\text{Schwarzschild}
+~+~\underbrace{2\,\vec{\Omega}\times\vec{v}}_\text{geodesic}
+~+~\underbrace{\frac{2GM_\oplus}{c^2 r^3}\left[\frac{3}{r^2}(\vec{r}\times\vec{v})(\vec{r}\cdot\vec{J}) + \vec{v}\times\vec{J}\right]}_\text{Lense–Thirring}
 $$
 
-(IERS 2010 §10.3 Eq. 10.12 with PPN parameters $\beta = \gamma = 1$.) At GPS altitude this contributes ~1 m/day of position drift if omitted; ~3 m/day at GEO. Lense-Thirring and de Sitter terms are not yet implemented (sub-cm-class at MEO/GEO).
+where $\vec{\Omega} = \tfrac{3}{2}\,\frac{GM_\odot}{c^2 R_\oplus^3}\,(\vec{R}_\oplus\times\dot{\vec{R}}_\oplus)$ is the geodesic (de Sitter) precession of the geocentric frame from the Earth's heliocentric state $\vec{R}_\oplus, \dot{\vec{R}}_\oplus$ ($|\Omega| \approx 1.92''$/century), and $\vec{J} = \tfrac{2}{5}R^2\omega\,\hat{z}_\text{ITRF}$ is the Earth's spin angular momentum per unit mass (homogeneous rigid-sphere approximation, $\approx 1.19\times10^9$ m²/s; the real moment-of-inertia factor is ≈0.33 rather than 0.4, a ~20% overstatement of a term that is ≤$10^{-10}$ m/s² and mostly periodic — GMAT uses the same approximation).
+
+The Schwarzschild term dominates below GEO (~$10^{-9}$ m/s² at LEO; omitting it costs ~1 m/day at GPS altitude, ~3 m/day at GEO). The geodesic term is a near-constant $4\times10^{-11}$ m/s² Coriolis-like acceleration at LEO and becomes the largest relativistic term beyond ~100,000 km (~1 m over 7 days at 200,000 km). Lense–Thirring is ~$10^{-10}$ m/s² at LEO, mostly periodic, and falls as $1/r^3$. This is the same formulation as GMAT's `RelativisticCorrection`.
 
 Toggle with `use_relativistic_correction` (default `True`).
 
