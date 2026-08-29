@@ -442,7 +442,7 @@ class TestGravity:
 
 
 def test_eme2000_frame_bias_matches_iers_2010():
-    """GCRF→EME2000 is the constant IERS 2010 frame bias: 23.0 mas total,
+    """GCRF→EME2000 is the constant IERS 2010 frame bias: 23.15 mas total,
     rotation vector (−η0, −ξ0, −dα0) = (−6.819, +16.617, +14.600) mas,
     identical at any epoch; GCRF↔ICRF is the identity.
 
@@ -459,7 +459,7 @@ def test_eme2000_frame_bias_matches_iers_2010():
 
     for t in (sk.time(2000, 1, 1, 12, 0, 0), sk.time(2026, 8, 28, 0, 0, 0)):
         v = rotvec(sk.frametransform.rotation(sk.frame.GCRF, sk.frame.EME2000, t))
-        assert np.linalg.norm(v) == pytest.approx(23.0006 * mas, abs=0.001 * mas)
+        assert np.linalg.norm(v) == pytest.approx(23.147 * mas, abs=0.001 * mas)
         assert v == pytest.approx(expected, abs=0.001 * mas)
         vi = rotvec(sk.frametransform.rotation(sk.frame.GCRF, sk.frame.ICRF, t))
         assert np.linalg.norm(vi) == pytest.approx(0.0, abs=1e-15)
