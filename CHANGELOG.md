@@ -29,6 +29,12 @@
 - **numeris 0.5.14 → 0.5.17.** Picks up the ODE fix that clamps the
   initial step to the propagation span; no measurable change to any test
   baseline or GMAT residual.
+- **numeris 0.5.17 → 0.5.18.** Adaptive Runge–Kutta integrators no longer
+  abort with "too many consecutive step rejections" when the force model has
+  a kink inside a step — e.g. an Earth-shadow boundary switching solar
+  radiation pressure on a GNSS satellite (previously failed for eclipsing
+  arcs longer than ~2 days at tight tolerances). No change to any test
+  baseline or GMAT residual.
 - **Relativistic correction now includes geodesic precession and
   Lense–Thirring.** `PropSettings::use_relativistic_correction` (default on)
   previously applied only the Schwarzschild term of IERS 2010 Eq. 10.12; it
