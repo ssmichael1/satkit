@@ -71,7 +71,7 @@ jobs:
         with:
           path: astro-data
           enableCrossOsArchive: true
-          key: satkit-data-cache
+          key: satkit-data-${{ hashFiles('data/manifest.json') }}
 
       - name: Download Satkit Data
         if: steps.cache-satkit-data.outputs.cache-hit != 'true'

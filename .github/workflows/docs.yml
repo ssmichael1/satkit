@@ -44,7 +44,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: astro-data
-          key: astro-data-v1
+          key: satkit-data-${{ hashFiles('data/manifest.json') }}
+
+      - name: Download satkit data (manifest-verified)
+        if: steps.cache-astro-data.outputs.cache-hit != 'true'
+        run: |
+          pip install requests
+          python python/test/download_data.py astro-data
 
       - name: Install system dependencies for cartopy
         run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data
