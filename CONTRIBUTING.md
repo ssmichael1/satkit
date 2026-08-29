@@ -101,6 +101,20 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 - Keep README.md up to date with new capabilities
 - Document any breaking changes clearly
 
+### Changelog
+
+- Add **one user-facing line** per pull request under `## Unreleased` in
+  `CHANGELOG.md`, in the matching `Added` / `Changed` / `Fixed` / `CI`
+  section, ending with the PR link, e.g. `([#127](https://github.com/ssmichael1/satkit/pull/127))`.
+- Keep it to two lines at most: what changed and, if useful, the one number
+  that says why it matters. Implementation detail, measurements and rationale
+  belong in the pull-request description — PRs are squash-merged, so that
+  description becomes the commit message on `main` and is the permanent record.
+- Mark breaking changes in bold (`**Breaking:**`).
+- At release time, rename `Unreleased` to the version and date and prune the
+  file so it keeps the last five releases. Older entries stay in git history
+  (`git show vX.Y.Z:CHANGELOG.md`); there is no archive file.
+
 ## Types of Contributions
 
 ### Bug Reports
@@ -201,7 +215,7 @@ Ensure all CI checks pass before requesting review.
 
 1. Maintainers will review your pull request
 2. Address any feedback or requested changes
-3. Once approved, maintainers will merge your contribution
+3. Once approved, maintainers will squash-merge your contribution (one commit per PR; the PR description becomes the commit message)
 4. Your changes will be included in the next release
 
 ## Licensing
