@@ -12,13 +12,13 @@ use pyo3::IntoPyObjectExt;
 #[pyclass(name = "integrator", module = "satkit", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum PyIntegrator {
-    /// Verner 9(8) with 9th-order dense output, 26 stages (default)
+    /// Verner 9(8) with 8th-degree dense output, 21 stages (16 + 5 for the interpolant; default)
     rkv98 = 0,
     /// Verner 9(8) without interpolation, 16 stages
     rkv98_nointerp = 1,
-    /// Verner 8(7) with 8th-order dense output, 21 stages
+    /// Verner 8(7) with 7th-degree dense output, 17 stages (13 + 4 for the interpolant)
     rkv87 = 2,
-    /// Verner 6(5), 10 stages
+    /// Verner 6(5) with 6th-degree dense output, 10 stages
     rkv65 = 3,
     /// Tsitouras 5(4) with FSAL, 7 stages
     rkts54 = 4,

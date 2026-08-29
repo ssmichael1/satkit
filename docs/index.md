@@ -84,7 +84,7 @@ gcrf_pos = q * coord.vector
 
 ### Coordinate Frames
 
-Full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation) with Earth orientation parameters:
+Full IERS 2010 Conventions reduction ([Petit & Luzum 2010](guide/references.md#petit2010), Ch. 5: IAU 2006/2000A precession-nutation) with Earth orientation parameters:
 
 | Frame | Description |
 |-------|-------------|
@@ -95,22 +95,22 @@ Full IERS 2010 Conventions reduction (IAU 2006/2000A precession-nutation) with E
 | TIRS | Terrestrial Intermediate Reference System |
 | Geodetic | Latitude / longitude / altitude (WGS-84) |
 
-Plus ENU, NED, and geodesic distance (Vincenty) utilities.
+Plus ENU, NED, and geodesic distance ([Vincenty 1975](guide/references.md#vincenty1975)) utilities.
 
 ### Orbit Propagation
 
-- **Numerical** -- Adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4)) with dense output, state transition matrix, and configurable force models
-- **SGP4** -- Standard TLE/OMM propagator with TLE fitting from precision states
+- **Numerical** -- Adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4); [Verner 2010](guide/references.md#verner2010), [Tsitouras 2011](guide/references.md#tsitouras2011)), RODAS4 and Gauss-Jackson 8 ([Berry & Healy 2004](guide/references.md#berry2004)), with dense output, state transition matrix, and configurable force models
+- **SGP4** -- Standard TLE/OMM propagator ([Vallado et al. 2006](guide/references.md#vallado2006)) with TLE fitting from precision states
 - **Keplerian** -- Analytical two-body propagation
-- **Lambert** -- Multi-revolution Lambert targeting for orbit transfer design
+- **Lambert** -- Multi-revolution Lambert targeting for orbit transfer design ([Izzo 2015](guide/references.md#izzo2015))
 
 ### Force Models
 
-- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40)
-- **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
-- **Atmospheric drag**: NRLMSISE-00 (pure Rust) with automatic space weather data
+- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40; [Montenbruck & Gill 2000](guide/references.md#montenbruck2000), §3.2)
+- **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides ([Park et al. 2021](guide/references.md#park2021))
+- **Atmospheric drag**: NRLMSISE-00 ([Picone et al. 2002](guide/references.md#picone2002); pure Rust) with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function
-- **Solid Earth tides**: IERS 2010 §6.2.1 Step 1 (frequency-independent Love-number response)
+- **Solid Earth tides**: IERS 2010 §6.2.1 Step 1 (frequency-independent Love-number response; [Petit & Luzum 2010](guide/references.md#petit2010))
 - **General relativity**: IERS 2010 §10.3 Eq. 10.12 — Schwarzschild, geodesic (de Sitter) precession, and Lense–Thirring
 
 ### Time Systems
@@ -131,6 +131,7 @@ Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with ful
 | **[Data Files](getting-started/datafiles.md)** | Required data files for calculations |
 | **[Learn](tutorials/index.md)** | Tutorials and theory — from basics to advanced topics |
 | **[API Reference](api/index.md)** | Full Python API documentation |
+| **[References](guide/references.md)** | Sources for every model and algorithm |
 | **[Rust API (docs.rs)](https://docs.rs/satkit/)** | Rust API reference |
 | **[GitHub](https://github.com/ssmichael1/satkit)** | Source code and issue tracker |
 

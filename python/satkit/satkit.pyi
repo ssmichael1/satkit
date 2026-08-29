@@ -408,8 +408,10 @@ def sgp4(
     output satellite position and velocity at given time
     in the "TEME" coordinate system.
 
-    A detailed description is at:
-    <https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf>
+    A detailed description is in Vallado, Crawford, Hujsak & Kelso,
+    "Revisiting Spacetrack Report #3", AIAA 2006-6753:
+    <https://doi.org/10.2514/6.2006-6753>
+    <https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev3.pdf>
 
     Args:
         tle (TLE | list[TLE] | dict): TLE or OMM (or list of TLES) on which to operate
@@ -576,7 +578,7 @@ def gravity(
 
 
     Notes:
-        - For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
+        - For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000 (https://doi.org/10.1007/978-3-642-58351-3).
 
     Example:
         ```python
@@ -606,7 +608,7 @@ def gravity_and_partials(
         acceleration in m/s^2 and partial derivative of acceleration with respect to ITRF Cartesian coordinate in m/s^2 / m
 
 
-    For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
+    For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000 (https://doi.org/10.1007/978-3-642-58351-3).
 
     """
     ...
@@ -752,7 +754,9 @@ class timescale:
     are needed to compute precise rotations between various inertial and
     Earth-fixed coordinate frames
 
-    For an excellent overview, see:
+    The scales follow Chapter 10 of the IERS Conventions (2010), IERS Technical
+    Note 36 (<https://iers-conventions.obspm.fr/content/tn36.pdf>); UTC and leap
+    seconds are defined by ITU-R TF.460-6. For an excellent overview, see:
     <https://spsweb.fltops.jpl.nasa.gov/portaldataops/mpg/MPG_Docs/MPG%20Book/Release/Chapter2-TimeScales.pdf>
 
     Values:
@@ -2683,8 +2687,8 @@ class itrfcoord:
         ...
 
     def geodesic_distance(self, other: itrfcoord) -> tuple[float, float, float]:
-        """Use Vincenty formula to compute geodesic distance:
-        <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
+        """Use Vincenty's inverse formula to compute geodesic distance
+        (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>):
 
         Returns:
             (distance in meters, initial heading in radians, heading at destination in radians)
@@ -2723,8 +2727,8 @@ class itrfcoord:
         Notes:
             Altitude is assumed to be zero
 
-            Use Vincenty formula to compute position:
-            <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
+            Use Vincenty's direct formula to compute position
+            (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>)
 
         Returns:
             (distance in meters, initial heading in radians, heading at destination in radians)
@@ -3471,10 +3475,10 @@ class integrator:
 
     Available integrators, from highest to lowest order:
 
-    - ``rkv98`` - Verner 9(8) with 9th-order dense output, 26 stages (default)
+    - ``rkv98`` - Verner 9(8) with 8th-degree dense output, 21 stages (default)
     - ``rkv98_nointerp`` - Verner 9(8) without interpolation, 16 stages
-    - ``rkv87`` - Verner 8(7) with 8th-order dense output, 21 stages
-    - ``rkv65`` - Verner 6(5), 10 stages
+    - ``rkv87`` - Verner 8(7) with 7th-degree dense output, 17 stages
+    - ``rkv65`` - Verner 6(5) with 6th-degree dense output, 10 stages
     - ``rkts54`` - Tsitouras 5(4) with FSAL, 7 stages
     - ``rodas4`` - RODAS4 L-stable Rosenbrock 4(3), 6 stages. For stiff problems.
     - ``gauss_jackson8`` - Gauss-Jackson 8, fixed-step multistep predictor-corrector.
@@ -3494,7 +3498,7 @@ class integrator:
     """
 
     rkv98: ClassVar[integrator]
-    """Verner 9(8) with 9th-order dense output, 26 stages (default)
+    """Verner 9(8) with 8th-degree dense output, 21 stages (default)
 
     Highest accuracy integrator. Recommended for precision orbit propagation.
     """
@@ -3507,10 +3511,10 @@ class integrator:
     """
 
     rkv87: ClassVar[integrator]
-    """Verner 8(7) with 8th-order dense output, 21 stages"""
+    """Verner 8(7) with 7th-degree dense output, 17 stages"""
 
     rkv65: ClassVar[integrator]
-    """Verner 6(5), 10 stages"""
+    """Verner 6(5) with 6th-degree dense output, 10 stages"""
 
     rkts54: ClassVar[integrator]
     """Tsitouras 5(4) with FSAL, 7 stages
