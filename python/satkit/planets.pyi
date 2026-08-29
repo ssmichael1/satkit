@@ -1,5 +1,8 @@
 """
-Low-precision planetary ephemerides from https://ssd.jpl.nasa.gov/?planet_pos
+Low-precision planetary ephemerides from the Keplerian-element approximations of
+E. M. Standish and J. G. Williams, "Keplerian Elements for Approximate Positions
+of the Major Planets", JPL Solar System Dynamics:
+https://ssd.jpl.nasa.gov/planets/approx_pos.html
 """
 
 from __future__ import annotations

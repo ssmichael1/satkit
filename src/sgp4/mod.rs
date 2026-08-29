@@ -7,8 +7,12 @@
 /// Note: generates correct results that match test vectors
 /// provided by C++ implementation
 ///
-/// Original C++ code by David Vallado, et al.
-/// <https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf/>
+/// Original C++ code by David Vallado, et al. The algorithm, the TEME frame
+/// and the test vectors this port is verified against are described in
+/// Vallado, Crawford, Hujsak & Kelso, "Revisiting Spacetrack Report #3",
+/// AIAA 2006-6753, <https://doi.org/10.2514/6.2006-6753>
+/// (<https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev3.pdf>);
+/// the original model is Hoots & Roehrich, Spacetrack Report No. 3 (1980).
 ///
 ///
 pub use self::satrec::SatRec;

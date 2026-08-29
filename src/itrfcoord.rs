@@ -271,6 +271,9 @@ impl ITRFCoord {
     /// * `.2` - height above ellipsoid, in meters
     ///
     pub fn to_geodetic_rad(&self) -> (f64, f64, f64) {
+        // Bowring's reduced-latitude iteration: B. R. Bowring, "Transformation
+        // from Spatial to Geographical Coordinates", Survey Review 23(181),
+        // 323–327, 1976, <https://doi.org/10.1179/sre.1976.23.181.323>.
         const B: f64 = WGS84_A * (1.0 - WGS84_F);
         const E2: f64 = 1.0 - (1.0 - WGS84_F) * (1.0 - WGS84_F);
         const EP2: f64 = E2 / (1.0 - E2);
@@ -359,8 +362,10 @@ impl ITRFCoord {
     /// * ITRFCoord representing final position
     ///
     /// # References:
-    /// * Uses Vincenty's formula
-    ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
+    /// * Uses Vincenty's inverse formula: T. Vincenty, "Direct and Inverse
+    ///   Solutions of Geodesics on the Ellipsoid with Application of Nested
+    ///   Equations", Survey Review 23(176), 88–93, 1975,
+    ///   <https://doi.org/10.1179/sre.1975.23.176.88>
     ///
     pub fn move_with_heading(&self, distance_m: f64, heading_rad: f64) -> Self {
         let (phi1, lon1, _) = self.to_geodetic_rad();
