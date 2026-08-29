@@ -104,6 +104,18 @@ pub struct PropSettings {
     /// Runge-Kutta / Rosenbrock via [`numeris::ode::AdaptiveSettings`] and
     /// Gauss-Jackson 8 via its own settings). Default: 1_000_000.
     pub max_steps: usize,
+    /// Fail a propagation whose span (plus integrator padding) extends past
+    /// the end of the loaded Earth-orientation-parameter (EOP) table with
+    /// [`Error::EopCoverage`](super::Error::EopCoverage), instead of holding
+    /// the last EOP row constant with a one-time warning. Off by default —
+    /// propagating into next year is a legitimate use and constant
+    /// extrapolation is a reasonable best effort (polar motion and UT1−UTC
+    /// drift by ~0.1″ / ~10 ms over a few months, i.e. metres at LEO) —
+    /// but set it for precision work and refresh the data files
+    /// (`satkit::utils::update_datafiles()`) when it trips. See
+    /// [`crate::earth_orientation_params::coverage`]. Default: `false`.
+    #[serde(default)]
+    pub require_eop_coverage: bool,
     /// Regenerable ephemeris/EOP cache; excluded from serialization (a
     /// deserialized `PropSettings` recomputes it lazily as needed).
     #[serde(skip)]
@@ -127,6 +139,7 @@ impl Default for PropSettings {
             integrator: Integrator::default(),
             gj_step_seconds: 60.0,
             max_steps: 1_000_000,
+            require_eop_coverage: false,
             precomputed: None,
         }
     }
@@ -272,6 +285,7 @@ impl std::fmt::Display for PropSettings {
             Interpolation: {},
             Integrator: {},
             Max Steps: {},
+            Require EOP Coverage: {},
             {}"#,
             self.gravity_degree,
             self.gravity_order,
@@ -286,6 +300,7 @@ impl std::fmt::Display for PropSettings {
             self.enable_interp,
             self.integrator,
             self.max_steps,
+            self.require_eop_coverage,
             self.precomputed.as_ref().map_or_else(
                 || "No Precomputed".to_string(),
                 |p| format!("Precomputed: {} to {}", p.begin, p.end)

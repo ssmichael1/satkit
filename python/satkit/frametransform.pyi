@@ -557,9 +557,11 @@ def earth_orientation_params(
             5 : dY wrt IAU-2000A nutation, milli-arcsecs
 
     Notes:
-        - Returns None if the time is before the range of available EOP data
-        - For times after the last available EOP data, the last entry's values are returned (constant extrapolation)
-        - EOP data is available from 1962 to current, with predictions ~4 months ahead
+        - Returns None if the time is before the range of available EOP data, or if no EOP table is loaded
+        - For times after the last available EOP data, the last entry's values are returned (constant
+          extrapolation) and a one-time warning is printed; use :func:`eop_status` / :func:`eop_coverage` to check
+        - EOP data is available from 1962 to current, with predictions ~6 months ahead; refresh with
+          ``satkit.utils.update_datafiles()``
         - See: <https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html>
 
     Example:
@@ -804,11 +806,41 @@ def from_gcrf(
     ...
 
 def disable_eop_time_warning() -> None:
-    """Disable the warning printed to stderr when Earth Orientation Parameters (EOP) are not available for a given time.
+    """Disable the warnings printed to stderr about Earth Orientation Parameters (EOP) availability.
 
     Notes:
-        - This function is used to disable the warning printed when EOP are not available for a given time.
-        - If not disabled, warning will be shown only once per library load,
+        - Three one-time warnings exist: epoch before the EOP table, epoch after the table end
+          (last values held constant), and no EOP table loaded at all (zeros used).
+        - Each is shown at most once per process; this call suppresses all of them.
+    """
+    ...
+
+def eop_coverage() -> tuple[time, time, time] | None:
+    """Time bounds of the loaded Earth Orientation Parameters (EOP) table.
+
+    Returns:
+        (satkit.time, satkit.time, satkit.time) | None: ``(first, last_observed, last)`` — the first
+        row, the last *observed* row (rows after it are IERS predictions), and the last row of the
+        table; ``None`` if no EOP table is loaded. Epochs after ``last`` use that row's values held
+        constant (see :func:`eop_status`); refresh with ``satkit.utils.update_datafiles()``.
+
+    Example:
+        >>> first, last_observed, last = satkit.frametransform.eop_coverage()
+    """
+    ...
+
+def eop_status(tm: time) -> str:
+    """Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.
+
+    Args:
+        tm (satkit.time): Epoch to classify
+
+    Returns:
+        str: one of ``"observed"`` (inside the table, on or before the last observed row),
+        ``"predicted"`` (inside the table, IERS prediction), ``"extrapolated"`` (after the table
+        end — the last row is held constant; accuracy degrades by ~0.1 arcsec / ~10 ms per few
+        months, refresh the data files), ``"before_table"`` (before 1962; zeros used), or
+        ``"not_loaded"`` (no EOP table loaded; zeros used).
     """
     ...
 

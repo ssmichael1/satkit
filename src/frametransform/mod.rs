@@ -142,10 +142,12 @@ pub fn earth_rotation_angle<T: TimeLike>(tm: &T) -> f64 {
 ///
 /// # Notes:
 ///
-/// This function requires use of the Earth orentation parameters
-/// (EOP) to compute the rotation. If the EOP are not outside of the
-/// valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
-/// they will be set to zero, and a warning will be printed to stderr.
+/// This function uses the Earth orientation parameters (EOP). For epochs
+/// after the end of the loaded EOP table the last row's values are held
+/// constant; before 1962, or when no table is loaded at all, zeros are
+/// used. Each case prints a one-time warning to stderr; use
+/// [`earth_orientation_params::status`] / [`earth_orientation_params::coverage`]
+/// to check explicitly.
 ///
 pub fn qitrf2tirs<T: TimeLike>(tm: &T) -> Quaternion {
     // Get earth orientation parameters or set them all to zero if not available
@@ -416,10 +418,12 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///   Earth solid tides, but it does include polar motion,
 ///   precession, and nutation
 ///
-/// * This function requires use of the Earth orientation parameters
-///   (EOP) to compute the rotation. If the EOP are not outside of the
-///   valid range of EOP data (1962 to current, predicts to current + ~ 4 months)
-///   they will be set to zero, and a warning will be printed to stderr.
+/// * This function uses the Earth orientation parameters (EOP). For epochs
+///   after the end of the loaded EOP table the last row's values are held
+///   constant; before 1962, or when no table is loaded at all, zeros are
+///   used. Each case prints a one-time warning to stderr; use
+///   [`earth_orientation_params::status`] /
+///   [`earth_orientation_params::coverage`] to check explicitly.
 ///
 /// # Note — velocity transforms
 ///

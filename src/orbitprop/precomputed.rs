@@ -159,6 +159,20 @@ impl Precomputed {
                 jplephem::geocentric_pos(SolarSystem::Sun, &pbegin)?;
                 jplephem::geocentric_pos(SolarSystem::Sun, &pend)?;
 
+                // The frame chain below needs the IERS nutation tables and an
+                // EOP table. Load the former now so a missing data file is an
+                // error here rather than a panic inside the force model, and
+                // refuse to build a table with no EOP at all — zero polar
+                // motion / UT1-UTC would silently bias the propagation by
+                // metres. A span past the *end* of the EOP table is allowed
+                // (the last row is held constant; `earth_orientation_params`
+                // warns once), and `PropSettings::require_eop_coverage`
+                // turns that into an error at `propagate()`.
+                crate::frametransform::ierstable::preload()?;
+                if crate::earth_orientation_params::coverage().is_none() {
+                    return Err(Error::EopUnavailable);
+                }
+
                 // The GCRF→ITRF rotation is the full IAU 2006/2000A chain
                 // (precession-nutation with EOP dX/dY, Earth rotation angle,
                 // polar motion) — the same as `frametransform::qgcrf2itrf`.
@@ -361,6 +375,19 @@ mod tests {
         let week = Precomputed::new(&t0, &(t0 + Duration::from_days(7.0))).unwrap();
         assert!(week.interp(&(t0 + Duration::from_days(3.5))).is_ok());
         assert_eq!(table_len(7.0 * 86400.0, 60.0).unwrap(), 2 + 7 * 1440);
+    }
+
+    /// A span past the end of the EOP table still builds (the last EOP row
+    /// is held constant, with a one-time warning); the IERS tables preload.
+    #[test]
+    fn test_past_eop_coverage_builds() {
+        crate::frametransform::ierstable::preload().expect("IERS tables present in tests");
+        let cov = crate::earth_orientation_params::coverage().expect("EOP loaded in tests");
+        let t0 = cov.last + Duration::from_days(30.0);
+        let t1 = t0 + Duration::from_days(1.0);
+        let pc = Precomputed::new(&t0, &t1).unwrap();
+        let s = pc.interp(&(t0 + Duration::from_seconds(3600.0))).unwrap();
+        assert!(s.qgcrf2itrf.to_axis_angle().1.is_finite());
     }
 
     #[test]

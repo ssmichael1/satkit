@@ -476,6 +476,16 @@ pub fn propagate<const C: usize, T: TimeLike>(
     let padding = Duration::from_seconds(padding_secs);
     let required_min = tmin - padding;
     let required_max = tmax + padding;
+    if settings.require_eop_coverage {
+        let cov = crate::earth_orientation_params::coverage()
+            .ok_or(crate::orbitprop::Error::EopUnavailable)?;
+        if required_max > cov.last {
+            return Err(crate::orbitprop::Error::EopCoverage {
+                span_end: required_max,
+                table_end: cov.last,
+            });
+        }
+    }
     let interp: &Precomputed = match &settings.precomputed {
         Some(p) if required_min >= p.begin && required_max <= p.end => p,
         _ => &Precomputed::new_padded(&begin, &end, 60.0, padding_secs)?,
@@ -823,6 +833,44 @@ mod tests {
             propagate::<3, _>(&state, &t0, &t1, &PropSettings::default(), None),
             Err(Error::InvalidStateColumns { c: 3 })
         ));
+        Ok(())
+    }
+
+    /// `require_eop_coverage` turns a span past the EOP table end into an
+    /// error; the default keeps the (warned) constant extrapolation.
+    #[test]
+    fn test_require_eop_coverage() -> Result<()> {
+        let cov = crate::earth_orientation_params::coverage().expect("EOP loaded in tests");
+        let begin = cov.last + Duration::from_days(30.0);
+        let end = begin + Duration::from_seconds(600.0);
+        let mut state = SimpleState::zeros();
+        state[0] = 6_878e3;
+        state[4] = 7_612.0;
+        let strict = PropSettings {
+            require_eop_coverage: true,
+            ..Default::default()
+        };
+        match propagate(&state, &begin, &end, &strict, None) {
+            Err(Error::EopCoverage {
+                span_end,
+                table_end,
+            }) => {
+                assert_eq!(table_end, cov.last);
+                assert!(span_end >= end);
+            }
+            other => panic!("expected EopCoverage, got {other:?}"),
+        }
+        // Inside coverage the flag is inert.
+        let inside = cov.last - Duration::from_days(30.0);
+        propagate(
+            &state,
+            &inside,
+            &(inside + Duration::from_seconds(600.0)),
+            &strict,
+            None,
+        )?;
+        // Default: extrapolates.
+        propagate(&state, &begin, &end, &PropSettings::default(), None)?;
         Ok(())
     }
 
