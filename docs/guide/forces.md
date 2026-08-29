@@ -106,6 +106,9 @@ satkit's default is a **cannonball model** — the satellite's surface is treate
 
 ### Empirical CODE Orbit Model (ECOM)
 
+!!! warning "Experimental"
+    The ECOM interface (`EcomParams` / `ecomparams`, `satproperties(ecom=...)`, `SatProperties::srp_ecom`) is new and marked **experimental**: it may be reshaped in a minor release (for example into a general empirical-acceleration hook) as it finds users. The physics and conventions below are stable; the API surface is not yet covered by the usual compatibility promise.
+
 ECOM is the empirical SRP parameterization used by CODE and most IGS analysis centres for GNSS precise orbit determination ([Beutler et al. 1994](https://doi.org/10.1007/BF03655430); [Springer et al. 1999](https://doi.org/10.1007/PL00012757); [Arnold et al. 2015](https://doi.org/10.1007/s00190-015-0814-4)). It expresses the non-gravitational acceleration of a nominally yaw-steering satellite in a Sun-oriented **DYB** frame:
 
 $$
@@ -127,6 +130,21 @@ Y(\varphi) &= Y_0 + Y_c\cos\varphi + Y_s\sin\varphi \\
 B(\varphi) &= B_0 + B_c\cos\varphi + B_s\sin\varphi
 \end{aligned}
 $$
+
+#### Coefficients
+
+| Coefficient | Axis | Term | In which model | Typical size (GPS, nm/s²) | Field name |
+|---|---|---|---|---|---|
+| $D_0$ | $\hat{e}_D$ (toward the Sun) | constant | all | $-80$ to $-110$ (≈ $-P_\odot C_R A/m$; negative because $\hat{e}_D$ points at the Sun) | `d0` |
+| $Y_0$ | $\hat{e}_Y$ (solar-panel axis) | constant | all | $\sim 1$ (attitude/thermal "Y-bias") | `y0` |
+| $B_0$ | $\hat{e}_B$ | constant | all | $\sim 1$–$5$, varies with $\beta$ | `b0` |
+| $D_c, D_s$ | $\hat{e}_D$ | $\cos\varphi, \sin\varphi$ | ECOM1 only ($\varphi = u$) | $\lesssim 1$ | `dc`, `ds` |
+| $Y_c, Y_s$ | $\hat{e}_Y$ | $\cos\varphi, \sin\varphi$ | ECOM1 only | $\lesssim 1$ | `yc`, `ys` |
+| $B_c, B_s$ | $\hat{e}_B$ | $\cos\varphi, \sin\varphi$ | reduced ECOM and ECOM1 ($\varphi = u$); ECOM2 as $B_{1c}, B_{1s}$ ($\varphi = \Delta u$) | $\lesssim 2$ | `bc`, `bs` |
+| $D_{2c}, D_{2s}$ | $\hat{e}_D$ | $\cos 2\Delta u, \sin 2\Delta u$ | ECOM2 | few, mostly in eclipse seasons | `d2c`, `d2s` |
+| $D_{4c}, D_{4s}$ | $\hat{e}_D$ | $\cos 4\Delta u, \sin 4\Delta u$ | ECOM2 | few, mostly in eclipse seasons | `d4c`, `d4s` |
+
+The constructors set the fields for you: `reduced(d0, y0, b0, bc, bs)`, `ecom1(d0, y0, b0, dc, ds, yc, ys, bc, bs)` and `ecom2(d0, y0, b0, b1c, b1s, d2c, d2s, d4c, d4s)` (ECOM2's $B_{1c}, B_{1s}$ are stored in `bc`, `bs`; `ecom2` sets `sun_relative=True`). Any coefficient left at zero costs nothing, so a 7-parameter ECOM2 is `ecom2(..., d4c=0, d4s=0)`. All values are accelerations in m/s².
 
 where $\nu$ is the same shadow function as the cannonball term, applied to all three axes — the CODE/Bernese convention ("the acceleration due to the solar radiation pressure is switched off when the satellite is in the Earth's shadow", Bernese GNSS Software v5.2 §2.2.2.3), so coefficients taken from CODE products keep their meaning. The argument $\varphi$ is selected by `sun_relative`:
 
