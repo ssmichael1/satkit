@@ -522,7 +522,7 @@ class gravmodel:
 
     jgm2: ClassVar[gravmodel]
     """
-    The "JGM2" gravity model
+    The "JGM2" gravity model (tide-free C20, like ``egm96``).
     """
 
     egm96: ClassVar[gravmodel]
