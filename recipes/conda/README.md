@@ -1,87 +1,30 @@
 # conda-forge recipes
 
-Draft conda-forge recipes for the satkit ecosystem. These are the
-files that will be submitted to
-[`conda-forge/staged-recipes`](https://github.com/conda-forge/staged-recipes)
-to bootstrap the two feedstocks; iteration happens here in-tree so the
-history travels with the source.
+Two recipes, submitted together in
+[conda-forge/staged-recipes#33466](https://github.com/conda-forge/staged-recipes/pull/33466)
+(fork branch `ssmichael1/staged-recipes@add-satkit`). **This directory is the
+source of truth**; the fork is a copy pushed from here.
 
-## Layout
+| recipe | what it builds |
+|---|---|
+| `satkit/` | the library (Rust extension via `setuptools-rust`; PyPI sdist as source; bundles Rust crate licences with `cargo-bundle-licenses`). Since 0.21 it needs **no** data package: core tables are compiled in, the JPL ephemeris downloads on first use. The recipe test runs offline with an empty data directory. |
+| `satkit-data/` | the optional offline bundle (`noarch: python`): DE421 + gravity models + IERS tables + leap seconds, laid out as `satkit_data/data/` so satkit finds it. Sources are the `data-v1` GitHub release assets, **generated** from `data/manifest.json` by `tools/conda_sources_from_manifest.py`. Ships DE421 (14 MB) not DE440 (102 MB) because of conda-forge's 100 MB cap. |
 
-| Path | Package | What it ships |
-|---|---|---|
-| [`satkit/meta.yaml`](satkit/meta.yaml) | `satkit` | The Python package — Rust extension built via PyO3 / setuptools-rust |
-| [`satkit-data/meta.yaml`](satkit-data/meta.yaml) | `satkit-data` | Noarch Python data-only package: JPL DE421, gravity models, IERS tables, leap seconds, NRLMSIS parameters |
+## Release-time checklist
 
-`satkit` depends on `satkit-data ≥ 0.10` at runtime, so installing
-`satkit` from conda-forge will pull in `satkit-data` automatically.
+1. Release satkit `X.Y.Z` to PyPI; then in `satkit/recipe.yaml` set `context.version`
+   and the sdist `sha256` (`pip download satkit==X.Y.Z --no-binary :all: --no-deps -d /tmp/s && shasum -a 256 /tmp/s/*.tar.gz`).
+2. If `data/manifest.json` changed (new `data-vN` release): `python tools/conda_sources_from_manifest.py --write`,
+   bump `satkit-data` `context.version` (publish the PyPI `satkit-data` of that version first — the
+   version must exist upstream), update `satkit-data/LICENSE` if files were added or removed.
+   `python tools/conda_sources_from_manifest.py --check` must pass.
+3. Lint locally: `conda-smithy recipe-lint --conda-forge recipes/satkit recipes/satkit-data`
+   (in a staged-recipes layout) and `rattler-build build --recipe … --render-only`.
+4. Copy both recipe directories to the fork (`recipes/satkit`, `recipes/satkit-data`), commit, push to
+   `ssmichael1/staged-recipes@add-satkit`, confirm CI green, and reply on the PR (the reviewer is
+   `eunos-1128`; the PR description's checklist should tick the v1-format box).
+5. After the feedstocks exist, version bumps happen there (the bot opens PRs); keep this copy in sync.
 
-## DE421 vs DE440 — different payloads, same name, same version
-
-The two channel builds of `satkit-data` ship intentionally different
-JPL ephemeris files:
-
-| Channel | JPL file | Size | Span |
-|---|---|---|---|
-| PyPI | `linux_p1550p2650.440` (DE440 full) | ~98 MB | 1550–2650 |
-| conda-forge | `lnxp1900p2053.421` (DE421) | ~13 MB | 1900–2053 |
-
-The `satkit-data` *version* tracks the upstream PyPI version (currently
-0.9.0); the JPL-file substitution is a **channel-specific build
-choice, not a version bump**. Conda's run-dep solver works with this
-because users on conda-forge get the conda-forge artifact and never
-mix; users on PyPI get the PyPI wheel.
-
-Why DE421 on conda-forge:
-
-* conda-forge has a 100 MB soft cap per package; DE440 squeaks under
-  it but reviewers grumble.
-* For satellite-orbit work (Earth third-body, Sun/Moon ephemerides),
-  the accuracy difference between DE421 and DE440 is unmeasurable —
-  Sun/Moon positions agree at the sub-meter level at modern epochs.
-* The 1900–2053 span covers virtually every active satellite use case.
-
-Callers who need longer span or higher outer-planet precision can
-install DE440 via `satkit.utils.update_datafiles()` post-install (it
-lands in `datadir()` alongside DE421; the autodetect in
-`jplephem::resolve_default_path` picks the highest DE-version
-available).
-
-## EOP / space-weather
-
-`EOP-All.csv` and `SW-All.csv` are **not** bundled in the conda data
-package. CelesTrak republishes them daily and shipping a stale
-snapshot would mislead users. After install, run:
-
-```python
-import satkit
-satkit.utils.update_datafiles()
-```
-
-…to download the current copies into `datadir()`.
-
-## Local validation
-
-Before submitting to staged-recipes, validate each recipe builds:
-
-```bash
-# conda-build (legacy meta.yaml format these recipes use)
-conda build recipes/conda/satkit-data
-conda build recipes/conda/satkit
-
-# rattler-build (newer alternative)
-rattler-build build --recipe recipes/conda/satkit-data/meta.yaml
-rattler-build build --recipe recipes/conda/satkit/meta.yaml
-```
-
-The `satkit` recipe pulls the 0.18.0 sdist from PyPI directly. When
-bumping for a future release, refresh the `sha256:` via
-`pip hash satkit-<version>.tar.gz` against the new tarball.
-
-## Submission
-
-When ready, fork
-[conda-forge/staged-recipes](https://github.com/conda-forge/staged-recipes),
-copy each recipe into the fork's `recipes/<name>/` directory, and open
-a single PR with both. Reviewers will then split out the two
-feedstocks (`satkit-feedstock`, `satkit-data-feedstock`) on merge.
+Notes: `pip_check` is on for `satkit` (its only runtime dependency is numpy); off for `satkit-data`
+because `build_data.py` lays files out directly with no dist-info. `msis21.parm` is deliberately not
+shipped (NRL non-commercial licence; satkit does not include NRLMSIS 2).
