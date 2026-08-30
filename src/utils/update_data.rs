@@ -603,7 +603,16 @@ mod tests {
         ));
 
         // Restored bytes with yet another mtime -> hashed again, then cached.
+        // The mtime is set explicitly: Windows file times advance in ~1-15 ms
+        // ticks, so a plain rewrite can land on the marker's original mtime
+        // and be reported as `Cached`.
         std::fs::write(&path, &bytes).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(later + std::time::Duration::from_secs(5))
+            .unwrap();
         assert_eq!(e.ensure_verified(&path).unwrap(), Verified::Hashed);
         assert_eq!(e.ensure_verified(&path).unwrap(), Verified::Cached);
         let _ = std::fs::remove_dir_all(&dir);
