@@ -9,6 +9,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - GitHub Actions updated to current major versions (checkout v7, setup-python v7, cache v6, upload-artifact v7, download-artifact v8, upload-pages-artifact v5, deploy-pages v5, sccache-action v0.0.11, cibuildwheel v4.2.0; Windows wheel repair explicitly kept off) ([#145](https://github.com/ssmichael1/satkit/pull/145))
 
+### Fixed
+
+- Python `kepler.mean_anomaly` setter no longer hangs on NaN or `eccen >= 1` (delegates to the core capped solver); `from_pv` extracts inclination and the anomalies with `atan2` (exact down to i = 1e-9 rad, e ≤ 0.999); constructor accepts keyword arguments matching the stub (`a, eccen, incl, raan, w, nu`), `propagate` accepts `int` seconds, and a new [Keplerian Elements guide](https://satkit.dev/guide/kepler/) ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+
 ## 0.21.0 - 2026-08-30
 
 ### Added
