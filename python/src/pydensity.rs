@@ -44,8 +44,8 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
         let itrf = args.get_item(0)?.extract::<PyITRFCoord>().unwrap().0;
         Ok(nrlmsise::nrlmsise(
             itrf.hae() / 1.0e3,
-            Some(itrf.latitude_rad()),
-            Some(itrf.longitude_rad()),
+            Some(itrf.latitude_deg()),
+            Some(itrf.longitude_deg()),
             time.as_ref(),
             true,
         ))

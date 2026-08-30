@@ -131,7 +131,7 @@ recorded per case in `cases.py` (and copied into each JSON). The floors:
 | relativity (`gr`) | none | both tools apply Schwarzschild + geodesic precession + Lense–Thirring (IERS 2010 eq. 10.12); `gr` residuals equal the `full` (LEO) or `j2` (high-orbit) floors |
 | NRLMSISE-00 implementation (`drag_*_const`) | 26 m ISS, 293 m at 300 km, 10 m GTO over 3 days = 0.5–2 × 10⁻⁴ of the drag-only displacement | fixed-index density along the ISS orbit agrees to +0.01 % mean / 0.06 % rms (GMAT `AtmosDensity` vs satkit at the same lat/lon/alt/time); the residual is the integrated effect of that plus integration noise |
 | anomalous oxygen (`drag_sso550_const`) | 34 m over 3 days = 1.8 × 10⁻³ of the drag-only displacement | GMAT evaluates NRLMSISE-00 through `gtd7`, whose total density omits the anomalous-oxygen component; satkit uses `gtd7d`, the entry point the model's authors specify for drag. The difference is +0.3 % mean at 550–600 km and +1 % over the high-latitude (southern, in March) polar passes; reproducing `gtd7` in satkit brings the density difference to +0.005 % mean / 0.09 % rms. The ISS orbit at 420 km sees < 0.05 % |
-| space-weather feed (`drag_*_sw`) | 6.8 km ISS, 57 km at 300 km, 1.1 km SSO, 12 km GTO over 3 days = 3.5–4.8 % of the drag-only displacement | GMAT feeds NRLMSISE-00 the 3-hourly ap history (7-element array, switch 9 = −1), interpolates the daily F10.7 linearly between 20:00 UT nodes and switches F10.7A at 08:00 UT; satkit feeds the daily Ap (switch 9 = +1) and steps F10.7 at 00:00 UT. Along the ISS orbit two days after the G2 storm this is −1.5 % mean / 5.3 % rms / 24 % max in density; replicating GMAT's feed inside satkit's model brings it to +0.04 % / 0.5 % / 9.7 %, so the residual is the daily-Ap vs 3-hourly-ap formulation (the largest part) and the F10.7 timing, not the model or the drag force. Adopting the ap-array formulation in `src/nrlmsise.rs` would earn tighter gates |
+| space-weather feed (`drag_*_sw`) | 325 m ISS, 2.3 km at 300 km, 37 m SSO, 307 m GTO peak over 3 days = 1.3–2.3 × 10⁻³ of the drag-only displacement (198 m, 2.1 km, 18 m, 113 m at the end of the arc) | Both tools feed NRLMSISE-00 the 3-hourly ap history (7-element array, switch 9 = −1; satkit since the 3-hourly feed was adopted, current-day daily Ap in element 0 on both sides). What remains is the F10.7 timing: GMAT interpolates the daily F10.7 linearly between 20:00 UT nodes and switches F10.7A at 08:00 UT, satkit steps both at 00:00 UT. The residual oscillates rather than accumulating (it peaks mid-arc and shrinks towards the end), as a timing offset in a daily-stepped index would. Before the 3-hourly feed the same cases sat at 6.8 km / 57 km / 1.1 km / 12 km (3.5–4.8 %): along the ISS orbit two days after the G2 storm the daily-Ap formulation was −1.5 % mean / 5.3 % rms / 24 % max in density against GMAT, and replicating GMAT's whole feed (ap array + F10.7 timing) inside satkit's model brought it to +0.04 % / 0.5 % / 9.7 % |
 
 Everything else — μ's, DE440, the GCRF↔ITRF frame, 36×36 gravity, third-body
 — agrees at the centimetre level. (Building this corpus found that the
@@ -140,7 +140,9 @@ which drifted the ISS case by 50 m; fixed alongside this corpus. The drag cases
 found that `drag.rs` passed geodetic latitude/longitude to NRLMSISE-00 in
 radians instead of degrees — density wrong by up to +200 % pointwise, 8 km over
 3 days at ISS altitude — and that the space-weather feed used the 1 AU-adjusted
-instead of the observed F10.7 and the previous day's Ap; both fixed alongside.)
+instead of the observed F10.7 and the previous day's Ap; both fixed alongside.
+The `drag_*_sw` gates were re-measured when satkit adopted the 3-hourly ap
+history; the GMAT trajectories themselves were not regenerated.)
 
 The drag gates are large in metres because the drag effect itself is large; read
 them against the drag-only displacement listed per case in `cases.py`. The
