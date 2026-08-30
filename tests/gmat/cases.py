@@ -14,8 +14,22 @@ generated, so that a real regression trips them but integrator noise and
 known model differences do not.  Tightening a tolerance is a reviewed change.
 """
 
-EPOCH_UTC = "2023-05-16T20:00:00"  # all cases share an epoch (EOP + SW data exist)
+EPOCH_UTC = "2023-05-16T20:00:00"  # default epoch (EOP + SW data exist)
+# Drag cases: well inside the *observed* block of the CelesTrak space-weather
+# file on both sides (GMAT's SW-All.txt, satkit's SW-All.csv), so neither tool
+# uses predicted indices.  2023-02-27 was a G2 storm (Ap 91); the arc starts
+# two days after it, so the 3-hourly ap history still matters on day 1.
+EPOCH_UTC_DRAG = "2023-03-01T00:00:00"
 SAMPLE_SECONDS = 3600.0
+GMAT_ACCURACY = 1e-14  # RK89 relative accuracy; a case may override with gmat_accuracy=
+
+# Spacecraft ballistic properties for the drag cases (GMAT Cd / DragArea /
+# DryMass; satkit uses the product Cd*A/m = 0.022 m^2/kg).
+SPACECRAFT = dict(cd=2.2, drag_area_m2=10.0, dry_mass_kg=1000.0)
+
+# CelesTrak space-weather source used by the file-driven drag cases.  GMAT
+# reads the fixed-width .txt, satkit the .csv; both are the same data set.
+SW_TXT_URL = "https://celestrak.org/SpaceData/SW-All.txt"
 
 # --- Body GMs (km^3/s^2).  DE440 values, identical to satkit's src/consts.rs.
 # GMAT's own defaults are the DE405 set (Luna 4902.8005821478, Earth
@@ -28,18 +42,44 @@ MU_SUN_KM3 = 132712440041.27942
 
 # --- Force models -------------------------------------------------------------
 # tides: "None" | "SolidStep1"    (GMAT: 'None' | 'Solid')
+# drag:  None | dict(atmosphere="NRLMSISE00", weather="constant", f107=, f107a=, ap=, gmat_kp=)
+#             | dict(atmosphere="NRLMSISE00", weather="CSSISpaceWeatherFile")
+#
+# Constant weather uses F10.7 = F10.7A = 150, Ap = 4: exactly what satkit's
+# NRLMSISE-00 assumes with `use_spaceweather = False`, so no new API is
+# needed to isolate the density model from the space-weather feed.  GMAT's
+# Drag.MagneticIndex is *Kp*, converted with its Kp->Ap table lookup
+# (AtmosphereModel::ConvertKpToAp: index = int((kp + 0.01) * 3)); Kp = 1 maps
+# to Ap = 4 exactly.  Ap = 4 also makes NRLMSISE-00's daily-Ap and 3-hourly
+# ap-array formulations coincide (both geomagnetic terms vanish at Ap = 4),
+# so the choice of formulation cannot leak into the constant cases.
+DRAG_CONST = dict(atmosphere="NRLMSISE00", weather="constant",
+                  f107=150.0, f107a=150.0, ap=4.0, gmat_kp=1.0)
+DRAG_FILE = dict(atmosphere="NRLMSISE00", weather="CSSISpaceWeatherFile")
+
 FORCE_MODELS = {
     # Low-degree field + Sun/Moon: isolates mu, ephemeris, frame, time.
     "j2": dict(gravity_model="EGM96", gravity_degree=2, gravity_order=2,
-               sun=True, moon=True, tides="None", relativity=False),
+               sun=True, moon=True, tides="None", relativity=False, drag=None),
     # Everything satkit and GMAT model identically (GR off).
     "full": dict(gravity_model="EGM96", gravity_degree=36, gravity_order=36,
-                 sun=True, moon=True, tides="SolidStep1", relativity=False),
+                 sun=True, moon=True, tides="SolidStep1", relativity=False, drag=None),
     # As "full" with GR on.  Both tools apply IERS 2010 eq. 10.12 in full
     # (Schwarzschild + geodesic precession + Lense-Thirring; GMAT MathSpec
     # Table 4.1), so the gr residual sits at the full/j2 floor.
     "gr": dict(gravity_model="EGM96", gravity_degree=36, gravity_order=36,
-               sun=True, moon=True, tides="SolidStep1", relativity=True),
+               sun=True, moon=True, tides="SolidStep1", relativity=True, drag=None),
+    # "full" + NRLMSISE-00 drag with constant space weather: tests the
+    # density model implementation and the drag force alone.
+    "drag_const": dict(gravity_model="EGM96", gravity_degree=36, gravity_order=36,
+                       sun=True, moon=True, tides="SolidStep1", relativity=False,
+                       drag=DRAG_CONST),
+    # "full" + NRLMSISE-00 drag driven by the CelesTrak space-weather file on
+    # both sides: tests the whole chain, including each tool's F10.7 / Ap
+    # feed conventions (see the README floors).
+    "drag_sw": dict(gravity_model="EGM96", gravity_degree=36, gravity_order=36,
+                    sun=True, moon=True, tides="SolidStep1", relativity=False,
+                    drag=DRAG_FILE),
 }
 
 # --- Orbits -------------------------------------------------------------------
@@ -54,6 +94,17 @@ ORBITS = {
                             -0.308744045658656, -1.40299418814228, -0.0616245044905574416),
                       days=7),
     "cislunar":  dict(kep=(300000.0, 0.0, 20.0, 60.0, 0.0, 180.0), days=7),
+    # Drag orbits: 3-day arcs (drag error grows ~t^2; 7 days at 300 km would
+    # be dominated by it), own epoch, and a spacecraft block.
+    "iss_420":   dict(kep=(6798.0, 0.0005, 51.6, 30.0, 40.0, 50.0), days=3,
+                      epoch=EPOCH_UTC_DRAG, spacecraft=SPACECRAFT),
+    "leo_300":   dict(kep=(6678.0, 0.0005, 45.0, 120.0, 90.0, 0.0), days=3,
+                      epoch=EPOCH_UTC_DRAG, spacecraft=SPACECRAFT),
+    "sso_550":   dict(kep=(6928.0, 0.001, 97.6, 200.0, 90.0, 0.0), days=3,
+                      epoch=EPOCH_UTC_DRAG, spacecraft=SPACECRAFT),
+    # GTO: 250 km perigee x 35,786 km apogee -- drag is a perigee impulse.
+    "gto_250":   dict(kep=(24396.0, 0.72832, 27.0, 60.0, 180.0, 0.0), days=3,
+                      epoch=EPOCH_UTC_DRAG, spacecraft=SPACECRAFT),
 }
 
 # --- Cases: (orbit, force model, tolerance) -----------------------------------
@@ -76,9 +127,15 @@ ORBITS = {
 #   * "gr": no additional floor.  Both sides model Schwarzschild + geodesic
 #     precession + Lense-Thirring (IERS 2010 eq. 10.12); the gr residuals
 #     equal the corresponding full (LEO) or j2 (high orbit) residuals.
-def _c(orbit, fm, pos_m, vel_mps):
-    return dict(name=f"{orbit}_{fm}", orbit=orbit, force_model=fm,
+def _c(orbit, fm, pos_m, vel_mps, name=None):
+    return dict(name=name or f"{orbit}_{fm}", orbit=orbit, force_model=fm,
                 tolerance=dict(pos_m=pos_m, vel_mps=vel_mps))
+
+
+def _d(orbit, weather, pos_m, vel_mps, **extra):
+    """Drag case: ``drag_<orbit>_<const|sw>`` on the ``drag_<weather>`` model."""
+    short = {"iss_420": "iss", "leo_300": "leo300", "sso_550": "sso550", "gto_250": "gto"}[orbit]
+    return dict(_c(orbit, f"drag_{weather}", pos_m, vel_mps, name=f"drag_{short}_{weather}"), **extra)
 
 CASES = [
     _c("leo_iss",  "j2",   0.10, 1e-4),   # measured 0.028 m / 3.2e-5
@@ -98,4 +155,18 @@ CASES = [
     _c("cislunar", "j2",   2.00, 1e-5),   # measured 0.63 m / 3.3e-6 (GMAT floor)
     _c("cislunar", "full", 2.00, 1e-5),   # measured 0.63 m / 3.3e-6
     _c("cislunar", "gr",   2.00, 1e-5),   # measured 0.63 m / 3.3e-6 (GMAT floor)
+    # Drag (3 days).  Gates ~3x the measured residual.  The drag-only
+    # displacement (satkit with drag minus satkit without, 3 days) is what each
+    # residual should be read against; see the README floors.
+    #                                      measured max |dr| / |dv|   drag-only   ratio
+    _d("iss_420", "const",  80.0, 0.10),   # 25.8 m   / 2.9e-2       152 km      1.7e-4
+    _d("iss_420", "sw",    20e3,  25.0),   # 6.84 km  / 7.7          194 km      3.5e-2 (Ap feed)
+    _d("leo_300", "const", 900.0, 1.0),    # 293 m    / 0.34         1374 km     2.1e-4
+    # GMAT's RK89 cannot hold 1e-14 through the file-driven weather steps at
+    # 300 km ("Accuracy settings will be violated"), so this case runs at 1e-13.
+    _d("leo_300", "sw",    170e3, 200.0, gmat_accuracy=1e-13),  # 56.6 km / 66  1643 km  3.4e-2 (Ap feed)
+    _d("sso_550", "const", 100.0, 0.12),   # 34.2 m   / 3.7e-2       19.2 km     1.8e-3 (LST, see README)
+    _d("sso_550", "sw",    3.3e3, 4.0),    # 1.09 km  / 1.19         26.8 km     4.1e-2 (Ap feed)
+    _d("gto_250", "const",  30.0, 2.5e-2), # 9.9 m    / 7.5e-3       106 km      5.5e-5 (final 5.9 m)
+    _d("gto_250", "sw",    36e3,  30.0),   # 12.0 km  / 9.1          126 km      4.8e-2 (Ap feed; final 6.1 km)
 ]

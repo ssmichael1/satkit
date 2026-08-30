@@ -31,9 +31,32 @@ TIDES = {
 }
 
 
+def _use_spaceweather(drag) -> bool:
+    """satkit's fixed indices (``use_spaceweather=False``) are F10.7 = F10.7A =
+    150, Ap = 4 -- what the ``constant`` cases were generated with; the
+    file-driven cases read SW-All.csv."""
+    if drag is None:
+        return False
+    assert drag["atmosphere"] == "NRLMSISE00"
+    if drag["weather"] == "constant":
+        assert (drag["f107"], drag["f107a"], drag["ap"]) == (150.0, 150.0, 4.0)
+        return False
+    assert drag["weather"] == "CSSISpaceWeatherFile", drag["weather"]
+    return True
+
+
+def _satproperties(case: dict):
+    """``Cd * A / m`` from the GMAT spacecraft block, for drag cases only."""
+    if case["force_model"].get("drag") is None:
+        return None
+    sc = case["orbit"]["spacecraft"]
+    return sk.satproperties(cdaoverm=sc["cd"] * sc["drag_area_m2"] / sc["dry_mass_kg"])
+
+
 def _settings(fm: dict) -> "sk.propsettings":
     # Mirrors tests/gmat_regression.rs: tolerances 10x tighter than the
-    # tightest gate, no dense output, no space-weather dependency.
+    # tightest gate, no dense output, space weather only for the
+    # file-driven drag cases.
     assert fm["gravity_degree"] <= 40 and fm["gravity_order"] <= fm["gravity_degree"]
     s = sk.propsettings()
     s.gravity_model = GRAVITY[fm["gravity_model"]]
@@ -43,7 +66,7 @@ def _settings(fm: dict) -> "sk.propsettings":
     s.use_moon_gravity = fm["moon"]
     s.tide_model = TIDES[fm["tides"]]
     s.use_relativistic_correction = fm["relativity"]
-    s.use_spaceweather = False
+    s.use_spaceweather = _use_spaceweather(fm.get("drag"))
     s.integrator = sk.integrator.rkv98_nointerp
     s.abs_error = 1e-13
     s.rel_error = 1e-13
@@ -74,6 +97,7 @@ def test_gmat_case(path: Path):
 
     epoch = sk.time.from_string(case["epoch_utc"])
     settings = _settings(case["force_model"])
+    satprops = _satproperties(case)
     tol = case["tolerance"]
     assert tol["pos_m"] > 0 and tol["vel_mps"] > 0
 
@@ -83,7 +107,7 @@ def test_gmat_case(path: Path):
     rows = []
     for sample in samples[1:]:
         t = epoch + sk.duration.from_seconds(sample[0])
-        state = sk.propagate(state, t_prev, end=t, propsettings=settings).state
+        state = sk.propagate(state, t_prev, end=t, propsettings=settings, satproperties=satprops).state
         t_prev = t
         truth = sample[1:] * 1e3
         rows.append((sample[0], np.linalg.norm(state[:3] - truth[:3]), np.linalg.norm(state[3:] - truth[3:])))
@@ -101,4 +125,4 @@ def test_gmat_case(path: Path):
 
 def test_corpus_present():
     """The corpus must be checked in; an empty glob would silently skip everything."""
-    assert len(CASES) >= 17, f"expected the GMAT corpus in {CASE_DIR}"
+    assert len(CASES) >= 25, f"expected the GMAT corpus in {CASE_DIR}"
