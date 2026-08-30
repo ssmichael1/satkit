@@ -174,6 +174,58 @@ pub(crate) fn offline_error(name: &str, reason: &'static str) -> Error {
 
 /// Return [`Error::Offline`] if [`OFFLINE_ENV`] is set (checked before any
 /// network I/O by every download helper).
+/// User-Agent sent with every HTTP request satkit makes.
+///
+/// CelesTrak's usage policy asks clients to identify themselves and not to
+/// re-request the same GP data more than about once every two hours; an
+/// anonymous default agent string (`ureq/3.x`) is both unidentifiable and
+/// shared with every other ureq user, which makes throttling decisions land
+/// on satkit's requests. A descriptive, versioned agent also lets data
+/// providers reach the project if a client misbehaves.
+pub(crate) const USER_AGENT: &str = concat!(
+    "satkit/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/ssmichael1/satkit)"
+);
+
+/// Build the HTTP agent used for all satkit downloads: ureq's defaults
+/// (proxy settings from `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY`, redirects,
+/// timeouts) plus the [`USER_AGENT`] string.
+#[cfg(feature = "download")]
+pub(crate) fn http_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .user_agent(USER_AGENT)
+        .build()
+        .into()
+}
+
+/// For an HTTP error from a `celestrak.org` request, an actionable message
+/// explaining CelesTrak's throttling of repeated identical GP queries
+/// (HTTP 503, sometimes 403). `None` for any other host or error.
+#[cfg(feature = "download")]
+pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<String> {
+    let status = match err {
+        ureq::Error::StatusCode(code @ (403 | 503)) => *code,
+        _ => return None,
+    };
+    let host_ok = url
+        .split("//")
+        .nth(1)
+        .and_then(|rest| rest.split('/').next())
+        .map(|h| h.ends_with("celestrak.org") || h.ends_with("celestrak.com"))
+        .unwrap_or(false);
+    if !host_ok {
+        return None;
+    }
+    Some(format!(
+        "CelesTrak returned HTTP {status} for {url}. CelesTrak throttles repeated identical \
+         GP queries: it asks for at most one request per object every ~2 hours (satkit already \
+         sends a descriptive User-Agent). Do not retry in a loop — cache the response (save the \
+         TLE/OMM text and parse it with `TLE::from_lines` / the OMM parsers) and re-fetch only \
+         when a newer element set is needed."
+    ))
+}
+
 #[cfg(feature = "download")]
 pub(crate) fn check_online(name: &str) -> Result<()> {
     if offline_requested() {
@@ -376,7 +428,7 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
     let baseurl = seturl.unwrap_or("https://storage.googleapis.com/astrokit-astro-data/");
     let url = format!("{}{}", baseurl, basename);
     // Try to set proxy, if any, from environment variables
-    let agent = ureq::Agent::new_with_defaults();
+    let agent = http_agent();
 
     let mut resp = agent.get(url.as_str()).call()?;
 
@@ -417,7 +469,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
     }
     check_online(fname)?;
 
-    let agent = ureq::Agent::new_with_defaults();
+    let agent = http_agent();
     let mut resp = agent.get(url).call()?;
 
     println!("Downloading {}", fname);
@@ -454,7 +506,7 @@ pub fn download_file_async(
 #[cfg(feature = "download")]
 pub fn download_to_string(url: &str) -> Result<String> {
     check_online(url)?;
-    let agent = ureq::Agent::new_with_defaults();
+    let agent = http_agent();
     let mut resp = agent.get(url).call()?;
     let thestring = std::io::read_to_string(resp.body_mut().as_reader())?;
     Ok(thestring)
@@ -619,5 +671,36 @@ mod tests {
         assert_eq!(std::fs::read(&final_path).unwrap(), b"hello");
         assert!(!part_path(&final_path).exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(all(test, feature = "download"))]
+mod agent_tests {
+    use super::*;
+
+    #[test]
+    fn agent_sends_descriptive_user_agent() {
+        let agent = http_agent();
+        match agent.config().user_agent() {
+            ureq::config::AutoHeaderValue::Provided(v) => assert_eq!(v.as_str(), USER_AGENT),
+            other => panic!("expected a provided User-Agent, got {other:?}"),
+        }
+        assert!(USER_AGENT.starts_with("satkit/"));
+        assert!(USER_AGENT.contains("github.com/ssmichael1/satkit"));
+    }
+
+    #[test]
+    fn celestrak_throttle_hint_only_for_celestrak_503_403() {
+        let url = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE";
+        let hint = celestrak_throttle_hint(url, &ureq::Error::StatusCode(503)).unwrap();
+        assert!(
+            hint.contains("HTTP 503") && hint.contains("2 hours") && hint.contains("from_lines")
+        );
+        assert!(celestrak_throttle_hint(url, &ureq::Error::StatusCode(403)).is_some());
+        assert!(celestrak_throttle_hint(url, &ureq::Error::StatusCode(404)).is_none());
+        assert!(
+            celestrak_throttle_hint("https://example.org/x", &ureq::Error::StatusCode(503))
+                .is_none()
+        );
     }
 }

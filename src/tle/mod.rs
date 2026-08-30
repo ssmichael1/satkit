@@ -231,8 +231,14 @@ impl TLE {
     /// ```
     #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
-        let agent = ureq::Agent::new_with_defaults();
-        let mut resp = agent.get(url).call()?;
+        let agent = crate::utils::download::http_agent();
+        let mut resp =
+            agent.get(url).call().map_err(
+                |e| match crate::utils::download::celestrak_throttle_hint(url, &e) {
+                    Some(msg) => Error::HttpThrottled(msg),
+                    None => Error::Http(e),
+                },
+            )?;
         let body = resp.body_mut().read_to_string()?;
         let lines: Vec<String> = body.lines().map(|l| l.trim_end().to_string()).collect();
         Self::from_lines(&lines)

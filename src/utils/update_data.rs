@@ -618,7 +618,7 @@ mod tests {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("HTTPS_PROXY", "http://proxy.invalid:3128");
-        let agent = ureq::Agent::new_with_defaults();
+        let agent = crate::utils::download::http_agent();
         let has_proxy = agent.config().proxy().is_some();
         std::env::remove_var("HTTPS_PROXY");
         assert!(
