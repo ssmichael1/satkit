@@ -44,9 +44,9 @@ requirements:
     - numpy >=1.0
     # Since 0.21 the core data (IERS nutation tables, gravity models) is
     # compiled into the extension and the JPL ephemeris is downloaded on first
-    # use, SHA-256 verified. The `satkit-data` package is therefore no longer
-    # a dependency; install it alongside satkit for fully offline use
-    # (`conda install satkit-data`) — satkit finds it automatically.
+    # use, SHA-256 verified, so no data package is required. For offline
+    # environments populate a directory once with `satkit.utils.update_datafiles()`
+    # and point `SATKIT_DATA` at it, or host a mirror and set `SATKIT_DATA_URL`.
 
 tests:
   # PyO3-`wrap_pymodule!` submodules (jplephem, frametransform, ...) are
@@ -81,9 +81,9 @@ about:
     The IERS nutation tables and gravity models are compiled in, so the
     package works with no data files and no network. The JPL DE440
     ephemeris (~102 MB) is downloaded on first use, SHA-256 verified;
-    for offline installs add the companion package `satkit-data`
-    (ships JPL DE421 plus the static files), which satkit finds
-    automatically.
+    offline environments can pre-populate a data directory
+    (`satkit.utils.update_datafiles()`, then `SATKIT_DATA`) or point
+    `SATKIT_DATA_URL` at a mirror.
   license: MIT OR Apache-2.0
   license_file:
     - LICENSE-MIT
