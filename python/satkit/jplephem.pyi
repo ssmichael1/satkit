@@ -2,6 +2,22 @@
 High-precision JPL ephemerides for solar-system bodies
 
 For details, see: <https://ssd.jpl.nasa.gov/>
+
+Which file is loaded
+--------------------
+The ephemeris is loaded lazily on the first query and cached for the process.
+satkit looks in every data search directory (see ``satkit.utils.datadir``)
+for a JPL Linux-format binary ephemeris (``linux_p*.4XX`` / ``lnxp*.4XX``) and
+picks the highest DE version; if none is found it downloads DE440
+(``linux_p1550p2650.440``, ~102 MB, SHA-256 verified) into the data write
+directory. Set ``SATKIT_JPLEPHEM_FILE`` to an absolute path or a basename to
+choose a different file — e.g. ``lnxp1900p2053.421`` selects DE421 (14 MB,
+1900–2053), which is downloaded on demand like DE440. A wrong value (a path
+that does not exist, an unknown bare name, or a file that is not a JPL binary
+ephemeris) raises ``RuntimeError`` from the first query, naming the resolved
+path; there is no silent fallback to another ephemeris. ``SATKIT_OFFLINE=1``
+or ``satkit.utils.set_offline(True)`` turns a needed download into that same
+error without touching the network.
 """
 
 from __future__ import annotations
