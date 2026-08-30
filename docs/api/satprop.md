@@ -3,6 +3,7 @@
 API reference for the numerical (force-model) propagator. For background, see:
 
 - [Force Model](../guide/forces.md) — modeled forces and physical motivation
+- [Empirical SRP: ECOM](../guide/ecom.md) — the experimental ECOM solar-radiation-pressure model behind `satproperties.ecom`
 - [ODE Integrators](../guide/integrators.md) — solver families, step-size selection, tolerances
 - [State Vectors, STM & Covariance](../guide/satstate.md) — state representation, STM, covariance propagation, maneuvers
 - Tutorial: [GPS Example](../tutorials/GPS Example.ipynb)

@@ -285,6 +285,30 @@ code follows where that is useful.
   (IGS): theory and initial results." *Manuscripta Geodaetica*, 19, 367–386.
   The CODE empirical solar-radiation-pressure parameterization.
 
+<a id="springer1999"></a>
+- **Springer, T. A., Beutler, G., & Rothacher, M. (1999).** "A new solar
+  radiation pressure model for GPS satellites." *GPS Solutions*, 2(3), 50–62.
+  <https://doi.org/10.1007/PL00012757>. The reduced 5-parameter ECOM.
+
+<a id="arnold2015"></a>
+- **Arnold, D., Meindl, M., Beutler, G., Dach, R., Schaer, S., Lutz, S.,
+  Prange, L., Sośnica, K., Mervart, L., & Jäggi, A. (2015).** "CODE's new
+  solar radiation pressure model for GNSS orbit determination." *Journal of
+  Geodesy*, 89(8), 775–791. <https://doi.org/10.1007/s00190-015-0814-4>.
+  ECOM2 (even harmonics in Δu from orbit noon).
+
+<a id="dach2015"></a>
+- **Dach, R., Lutz, S., Walser, P., & Fridez, P. (eds.) (2015).** *Bernese
+  GNSS Software Version 5.2*. Astronomical Institute, University of Bern.
+  <https://www.bernese.unibe.ch/docs/DOCU52.pdf>. §2.2.2.3 restates the ECOM
+  equations and the shadow convention used by CODE.
+
+<a id="duan2021"></a>
+- **Duan, B., & Hugentobler, U. (2021).** "Enhanced solar radiation pressure
+  model for GPS satellites considering various physical effects." *GPS
+  Solutions*, 25, 42. <https://doi.org/10.1007/s10291-020-01073-z>. 24-hour
+  GPS prediction accuracy quoted on the ECOM page.
+
 <a id="hilla2016"></a>
 - **Hilla, S. (2016).** *The Extended Standard Product 3 Orbit Format (SP3-d)*.
   International GNSS Service. <https://files.igs.org/pub/data/format/sp3d.pdf>.
