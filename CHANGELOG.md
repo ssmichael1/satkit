@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### CI
+
+- GitHub Actions updated to current major versions (checkout v7, setup-python v7, cache v6, upload-artifact v7, download-artifact v8, upload-pages-artifact v5, deploy-pages v5, sccache-action v0.0.11, cibuildwheel v4.2.0; Windows wheel repair explicitly kept off) ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+
 ## 0.21.0 - 2026-08-30
 
 ### Added
