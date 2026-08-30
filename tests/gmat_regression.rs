@@ -19,7 +19,9 @@
 use std::path::{Path, PathBuf};
 
 use satkit::earthgravity::GravityModel;
-use satkit::orbitprop::{propagate, Integrator, PropSettings, SimpleState, TideModel};
+use satkit::orbitprop::{
+    propagate, Integrator, PropSettings, SatProperties, SatPropertiesSimple, SimpleState, TideModel,
+};
 use satkit::{Duration, Instant};
 use serde::Deserialize;
 
@@ -32,6 +34,37 @@ struct ForceModel {
     moon: bool,
     tides: String,
     relativity: bool,
+    #[serde(default)]
+    drag: Option<Drag>,
+}
+
+/// Atmospheric drag block: `weather` is `"constant"` (with `f107`, `f107a`,
+/// `ap`) or `"CSSISpaceWeatherFile"` (both tools read the CelesTrak file).
+#[derive(Deserialize)]
+struct Drag {
+    atmosphere: String,
+    weather: String,
+    #[serde(default)]
+    f107: Option<f64>,
+    #[serde(default)]
+    f107a: Option<f64>,
+    #[serde(default)]
+    ap: Option<f64>,
+}
+
+/// GMAT spacecraft ballistic properties (`Cd`, `DragArea`, `DryMass`);
+/// satkit uses the product `Cd * A / m`.
+#[derive(Deserialize)]
+struct Spacecraft {
+    cd: f64,
+    drag_area_m2: f64,
+    dry_mass_kg: f64,
+}
+
+#[derive(Deserialize)]
+struct Orbit {
+    #[serde(default)]
+    spacecraft: Option<Spacecraft>,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +86,7 @@ struct Case {
     name: String,
     gmat: GmatMeta,
     epoch_utc: String,
+    orbit: Orbit,
     force_model: ForceModel,
     tolerance: Tolerance,
     /// `[elapsed_s, x_km, y_km, z_km, vx_kms, vy_kms, vz_kms]` in EarthICRF.
@@ -138,21 +172,43 @@ fn settings_for(fm: &ForceModel) -> PropSettings {
         "gravity_degree {} exceeds the built-in coefficient tables (40)",
         fm.gravity_degree
     );
+    // Drag: satkit has one atmosphere model (NRLMSISE-00) and, with
+    // `use_spaceweather = false`, fixed F10.7 = F10.7A = 150, Ap = 4 -- the
+    // constants the `constant` cases were generated with. The file-driven
+    // cases read the space-weather data file (SW-All.csv).
+    let use_spaceweather = match &fm.drag {
+        None => false,
+        Some(d) => {
+            assert_eq!(d.atmosphere, "NRLMSISE00", "unsupported atmosphere model");
+            match d.weather.as_str() {
+                "constant" => {
+                    assert_eq!(
+                        (d.f107, d.f107a, d.ap),
+                        (Some(150.0), Some(150.0), Some(4.0)),
+                        "constant-weather cases must use satkit's built-in F10.7 = 150, Ap = 4"
+                    );
+                    false
+                }
+                "CSSISpaceWeatherFile" => true,
+                other => panic!("unknown drag weather source {other:?}"),
+            }
+        }
+    };
     // Replay settings, chosen so the comparison measures the force model:
     // - error tolerances 10x tighter than the tightest gate, so integrator
     //   noise (< 4 cm over 7 days on a point-mass LEO case) is not what is
     //   being measured;
     // - RKV98NoInterp / enable_interp = false: the test samples only at
     //   segment ends, so dense output would be wasted work;
-    // - use_spaceweather = false: no case has drag or SRP, and this avoids
-    //   a dependency on the space-weather data file.
+    // - use_spaceweather only for the file-driven drag cases (no SRP
+    //   anywhere), so the other cases do not depend on the data file.
     let mut settings = PropSettings {
         gravity_model,
         use_sun_gravity: fm.sun,
         use_moon_gravity: fm.moon,
         tide_model,
         use_relativistic_correction: fm.relativity,
-        use_spaceweather: false,
+        use_spaceweather,
         integrator: Integrator::RKV98NoInterp,
         abs_error: 1e-13,
         rel_error: 1e-13,
@@ -163,6 +219,18 @@ fn settings_for(fm: &ForceModel) -> PropSettings {
         .set_gravity(fm.gravity_degree, fm.gravity_order)
         .unwrap_or_else(|e| panic!("invalid gravity degree/order in case: {e}"));
     settings
+}
+
+/// Spacecraft ballistic properties for the drag cases, `None` otherwise.
+fn satprops_for(case: &Case) -> Option<SatPropertiesSimple> {
+    case.force_model.drag.as_ref().map(|_| {
+        let sc = case
+            .orbit
+            .spacecraft
+            .as_ref()
+            .unwrap_or_else(|| panic!("{}: drag case without a spacecraft block", case.name));
+        SatPropertiesSimple::new(sc.cd * sc.drag_area_m2 / sc.dry_mass_kg, 0.0)
+    })
 }
 
 /// GMAT sample (km, km/s) -> satkit state (m, m/s).
@@ -185,6 +253,8 @@ fn evaluate(case: &Case) -> Vec<Residual> {
     let name = &case.name;
     let epoch = parse_epoch(&case.epoch_utc);
     let settings = settings_for(&case.force_model);
+    let satprops = satprops_for(case);
+    let satprops = satprops.as_ref().map(|p| p as &dyn SatProperties);
 
     let mut state = to_state(&case.samples[0]);
     let mut t_prev = epoch + Duration::from_seconds(case.samples[0][0]);
@@ -192,7 +262,7 @@ fn evaluate(case: &Case) -> Vec<Residual> {
 
     for sample in &case.samples[1..] {
         let t = epoch + Duration::from_seconds(sample[0]);
-        let res = propagate(&state, &t_prev, &t, &settings, None)
+        let res = propagate(&state, &t_prev, &t, &settings, satprops)
             .unwrap_or_else(|e| panic!("{name}: propagate failed at {} s: {e}", sample[0]));
         state = res.state_end;
         t_prev = t;
@@ -207,6 +277,26 @@ fn evaluate(case: &Case) -> Vec<Residual> {
         });
     }
     residuals
+}
+
+/// For a drag case: end-of-arc displacement caused by drag alone (satkit
+/// with drag minus satkit without drag, both from the GMAT initial state), so
+/// a residual can be read as a fraction of the drag effect being tested.
+fn drag_only_displacement_m(case: &Case) -> Option<f64> {
+    let satprops = satprops_for(case)?;
+    let epoch = parse_epoch(&case.epoch_utc);
+    let settings = settings_for(&case.force_model);
+    let t0 = epoch + Duration::from_seconds(case.samples[0][0]);
+    let t1 = epoch + Duration::from_seconds(case.samples.last().unwrap()[0]);
+    let state = to_state(&case.samples[0]);
+    let with = propagate(&state, &t0, &t1, &settings, Some(&satprops)).unwrap();
+    let without = propagate(&state, &t0, &t1, &settings, None).unwrap();
+    Some(
+        ((0..3)
+            .map(|i| (with.state_end[i] - without.state_end[i]).powi(2))
+            .sum::<f64>())
+        .sqrt(),
+    )
 }
 
 fn print_table(name: &str, residuals: &[Residual]) {
@@ -268,6 +358,15 @@ fn report() {
         let case = load_case_from(&path, &name);
         let residuals = evaluate(&case);
         print_table(&name, &residuals);
+        if let Some(drag_m) = drag_only_displacement_m(&case) {
+            let last = residuals.last().unwrap();
+            eprintln!(
+                "{name}: end-of-arc |dr| vs GMAT {:.3} m; drag-only displacement {:.1} m; ratio {:.2e}",
+                last.pos_m,
+                drag_m,
+                last.pos_m / drag_m
+            );
+        }
     }
 }
 
@@ -300,6 +399,14 @@ gmat_cases!(
     cislunar_j2,
     cislunar_full,
     cislunar_gr,
+    drag_iss_const,
+    drag_iss_sw,
+    drag_leo300_const,
+    drag_leo300_sw,
+    drag_sso550_const,
+    drag_sso550_sw,
+    drag_gto_const,
+    drag_gto_sw,
 );
 
 /// Every JSON file in the corpus must be wired to a test above, and vice

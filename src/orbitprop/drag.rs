@@ -26,7 +26,8 @@ pub fn drag_force(
     use_spaceweather: bool,
 ) -> Vector3 {
     let itrf = ITRFCoord::from_vector(pos_itrf);
-    let (lat, lon, hae) = itrf.to_geodetic_rad();
+    // NRLMSISE-00 takes geodetic latitude and longitude in *degrees*.
+    let (lat, lon, hae) = itrf.to_geodetic_deg();
     let (density, _temperature) = nrlmsise(
         hae / 1.0e3,
         Some(lat),
@@ -64,8 +65,9 @@ fn compute_rho_drhodr(
     let pitrf = qgcrf2itrf * pgcrf;
     let itrf = ITRFCoord::from(pitrf);
     let hae = itrf.hae();
-    let lat = itrf.latitude_rad();
-    let lon = itrf.longitude_rad();
+    // NRLMSISE-00 takes geodetic latitude and longitude in *degrees*.
+    let lat = itrf.latitude_deg();
+    let lon = itrf.longitude_deg();
 
     let (rho0, _) = nrlmsise(
         hae / 1.0e3,
@@ -173,6 +175,61 @@ mod tests {
             false,
         );
         assert!((drag2.norm() - drag.norm() * 2.0).abs() < 1.0e-10 * drag.norm());
+    }
+
+    /// The density fed to the drag force must be NRLMSISE-00 evaluated at the
+    /// geodetic latitude/longitude in *degrees*. A high-latitude, far-east
+    /// point makes a radians-for-degrees mix-up (lat 60° read as 1.05°,
+    /// local solar time off by ~6 h) visible as a large density error.
+    #[test]
+    fn test_drag_density_uses_degrees() {
+        let time = Instant::from_datetime(2023, 3, 1, 6, 0, 0.0).unwrap();
+        let (lat_deg, lon_deg, hae) = (60.0, 100.0, 400.0e3);
+        let itrf = ITRFCoord::from_geodetic_deg(lat_deg, lon_deg, hae);
+        let pos_itrf: Vector3 = itrf.into();
+        let cd_a_over_m = 0.02;
+        // Frame rotation is irrelevant to the density lookup, which is done
+        // from `pos_itrf`; use the identity so `vrel` is well defined.
+        let pos_gcrf = pos_itrf;
+        let vel_gcrf = numeris::vector![0.0, 0.0, 7.6e3];
+        let vrel = vel_gcrf - omega_earth().cross(&pos_gcrf);
+        let (rho, _) = nrlmsise(
+            hae / 1.0e3,
+            Some(lat_deg),
+            Some(lon_deg),
+            Some(&time),
+            false,
+        );
+        let expected = -0.5 * cd_a_over_m * rho * vrel * vrel.norm();
+
+        let drag = drag_force(&pos_gcrf, &pos_itrf, &vel_gcrf, &time, cd_a_over_m, false);
+        assert!(
+            (drag - expected).norm() < 1.0e-12 * expected.norm(),
+            "drag_force density mismatch: got |a| = {:.6e}, expected {:.6e}",
+            drag.norm(),
+            expected.norm()
+        );
+
+        // Same check through the partials path (identity GCRF->ITRF rotation).
+        let q = Quaternion::identity();
+        let (drag2, _, _) = drag_and_partials(&pos_gcrf, &q, &vel_gcrf, &time, cd_a_over_m, false);
+        assert!(
+            (drag2 - expected).norm() < 1.0e-12 * expected.norm(),
+            "drag_and_partials density mismatch: got |a| = {:.6e}, expected {:.6e}",
+            drag2.norm(),
+            expected.norm()
+        );
+
+        // And the radians-for-degrees value really is different, so the
+        // assertions above are not vacuous.
+        let (rho_rad, _) = nrlmsise(
+            hae / 1.0e3,
+            Some(lat_deg.to_radians()),
+            Some(lon_deg.to_radians()),
+            Some(&time),
+            false,
+        );
+        assert!((rho_rad / rho - 1.0).abs() > 0.05);
     }
 
     #[test]

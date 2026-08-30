@@ -181,16 +181,19 @@ pub fn propagate(
             kw.del_item("duration_secs")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {
-            satproperties = Some(
-                kws.extract::<PySatProperties>()
-                    .map_err(|e| {
-                        pyo3::exceptions::PyValueError::new_err(format!(
-                            "Invalid satproperties: {}",
-                            e
-                        ))
-                    })?
-                    .0,
-            );
+            // `satproperties=None` is the documented default (no drag/SRP).
+            if !kws.is_none() {
+                satproperties = Some(
+                    kws.extract::<PySatProperties>()
+                        .map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid satproperties: {}",
+                                e
+                            ))
+                        })?
+                        .0,
+                );
+            }
             kw.del_item("satproperties")?;
         }
 
