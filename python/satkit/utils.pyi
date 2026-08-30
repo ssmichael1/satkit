@@ -10,8 +10,14 @@ def update_datafiles(**kwargs) -> None:
 
     Keyword Args:
 
-      overwrite (bool):  Download and overwrite files if they already exist
+      overwrite (bool):  Re-download static files even when a verified copy is already present
       dir(string): Target directory for files.  Uses existing data directory if not specified. (see "datadir" function)
+
+    Static files are fetched according to the data manifest compiled into
+    satkit (``data/manifest.json``): each is tried from ``SATKIT_DATA_URL``
+    (if set), then the GitHub release asset, the origin server, and the
+    legacy bucket, and is only kept when its size and SHA-256 match the
+    manifest. Files already present with the right hash are skipped.
 
     Notes:
         - Files include:

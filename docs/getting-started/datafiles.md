@@ -40,6 +40,35 @@ if sk.frametransform.eop_status(t_end) == "extrapolated":
 
 The warnings can be silenced with `satkit.frametransform.disable_eop_time_warning()`.
 
+## Where the files come from, and how downloads are verified
+
+The static files above are described by a manifest compiled into the library
+(`data/manifest.json` in the repository) that pins each file's exact size and
+SHA-256 and lists where it may be downloaded from, in order of preference:
+
+1. `SATKIT_DATA_URL` — if this environment variable is set, `"$SATKIT_DATA_URL/<name>"`
+   is tried first for every file. Use it for an internal mirror or an air-gapped
+   file share (plain `http://` is accepted here; downloads are still verified).
+2. The GitHub release asset (`github.com/ssmichael1/satkit-data/releases/download/data-v1/…`).
+3. The originating server where it serves identical bytes: JPL for the DE
+   ephemerides, IERS for the `tab5.2*` tables.
+4. The legacy `storage.googleapis.com/astrokit-astro-data` bucket (transitional).
+
+A download is streamed to `<name>.part`, hashed as it goes, and only renamed
+into place when both size and SHA-256 match the manifest; otherwise it is
+discarded and the next source is tried. A file already present with the right
+hash is never re-downloaded. The manifest is therefore what makes a given
+satkit release reproducible: the same version always resolves to the same
+data bytes.
+
+Sources and attribution: DE440 / DE421 — JPL (Park et al. 2021; Folkner et al.
+2009), US Government work; `tab5.2a/b/d.txt` — IERS Conventions (2010), TN 36;
+EGM96, JGM-2, JGM-3 — NASA GSFC (public), via ICGEM; ITU_GRACE16 — Akyilmaz et
+al. 2016, GFZ Data Services, CC BY 4.0; `leap-seconds.list` — IERS/IETF. The
+Earth-orientation and space-weather files are fetched from CelesTrak on every
+update and are not pinned (they change daily). The full table, with licences,
+is in `data/README.md`.
+
 ## Acquiring the Data Files
 
 The data files are included with the `satkit-data` package, a dependency of `satkit`.

@@ -15,10 +15,12 @@ pub mod singleton;
 pub use singleton::RefreshableSingleton;
 
 pub mod download;
+pub mod manifest;
 pub use download::download_file;
 pub use download::download_file_async;
 pub use download::download_if_not_exist;
 pub use download::download_to_string;
+pub use manifest::{fetch_static_file, Manifest, ManifestEntry};
 
 ///
 /// Return git hash of compiled library
