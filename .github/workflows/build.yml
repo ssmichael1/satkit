@@ -1,9 +1,12 @@
 name: Build
 
+# One run per change: pull requests build on the PR event only (no
+# duplicate run for the branch push), main builds on the squash commit,
+# and a new push to a PR cancels the superseded run.
 on:
   push:
     branches:
-      - "**"
+      - main
     paths-ignore:
       - "docs/**"
       - "mkdocs.yml"
@@ -19,7 +22,6 @@ on:
       - opened
       - synchronize
       - reopened
-      - closed
     paths-ignore:
       - "docs/**"
       - "mkdocs.yml"
@@ -27,6 +29,10 @@ on:
       - "LICENSE*"
       - "recipes/**"
       - ".github/workflows/docs.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
