@@ -389,8 +389,14 @@ impl OMM {
     /// ```
     #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
-        let agent = ureq::Agent::new_with_defaults();
-        let mut resp = agent.get(url).call()?;
+        let agent = crate::utils::download::http_agent();
+        let mut resp =
+            agent.get(url).call().map_err(
+                |e| match crate::utils::download::celestrak_throttle_hint(url, &e) {
+                    Some(msg) => Error::HttpThrottled(msg),
+                    None => Error::Http(e),
+                },
+            )?;
         let body = resp.body_mut().read_to_string()?;
         let trimmed = body.trim_start();
         if trimmed.starts_with('[') || trimmed.starts_with('{') {
