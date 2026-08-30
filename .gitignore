@@ -38,3 +38,18 @@ site
 docs/images/*.svg
 # GMAT scripts kept by tests/gmat/generate.py --keep-scripts
 tests/gmat/scripts/
+
+# Python tooling caches
+.mypy_cache/
+.ruff_cache/
+dist/
+
+# Jupyter checkpoints (docs/tutorials notebooks)
+.ipynb_checkpoints/
+
+# proptest failure artifacts (counterexamples get pinned as named tests instead)
+proptest-regressions/
+**/*.proptest-regressions
+
+# scratch scripts stay out of commits
+/scratch/
