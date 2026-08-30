@@ -141,10 +141,75 @@ python tools/make_manifest.py --data-dir "$D" --data-version data-v2   # new rel
   `fetch_static_file(entry, dir, force)` is the verified fetch;
   `ManifestEntry::verify(path)` checks a file on disk.
 
-## Phase 2 (not in this branch)
+## Phase 2: embedded core data, lazy ephemeris, optional bundle
 
-Embed the `core` tier (~2.6 MB gzipped) in the library with `include_bytes!`
-so frames, gravity and time work offline out of the box; download only the
-ephemeris on first use (already lazy), with DE440 default and DE421
-selectable; then slim or retire the `satkit-data` PyPI package, which is
-currently a 105 MB hard dependency 133 KB under PyPI's file-size cap.
+The manifest made downloads *safe*; Phase 2 makes them *rare*. Data is
+handled in three tiers:
+
+| tier | files | how |
+|---|---|---|
+| **embedded** | `tab5.2a/b/d.txt`; `EGM96/ITU_GRACE16/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (309 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
+| **ephemeris** | `linux_p1550p2650.440` (DE440, 102 MB) or `lnxp1900p2053.421` (DE421, 14 MB) | downloaded on first use through the verified manifest fetch, into the write location |
+| **refreshed** | `EOP-All.csv`, `SW-All.csv` | fetched from CelesTrak on first use; `update_datafiles()` refreshes them |
+
+`tools/embed_data.py` regenerates the blobs from a data directory whose files
+match `manifest.json` (it checks the source hashes) and records provenance in
+`data/embedded/SOURCES.json`: full-file SHA-256, truncation degree, and the
+SHA-256 of the inflated bytes. `tools/embed_data.py --check` verifies the
+committed blobs; `MANIFEST.in` ships them in the sdist (`include_bytes!`
+inputs must be in the sdist — the same lesson as `manifest.json`).
+
+### Precedence
+
+A file found in a *search directory* always wins over the embedded copy, so a
+full-degree gravity file or an updated IERS table can be dropped in without a
+rebuild; the embedded copy is the fallback, and a one-time note says when it
+is used (silence with `SATKIT_QUIET=1`). Because the evaluator uses at most
+degree 40, the truncated files give bit-identical results to the full ones.
+
+### Search vs. write
+
+Previously one directory was both searched and written, chosen as "the first
+candidate containing `tab5.2a.txt`", with a third pass that *created* a
+directory wherever it could — including `site-packages/satkit/satkit-data`
+in a venv (wiped on reinstall) — and no Windows location at all (`HOME` is
+unset there). Phase 2 separates the two questions
+(`src/utils/datadir.rs`; `resolve()` is a pure function of the environment
+with per-platform unit tests):
+
+- **Search** (`utils::data_search_dirs()`, in order): `SATKIT_DATA`;
+  `set_datadir()`; directories added with `add_search_dir()`; `<dylib dir>/satkit-data`;
+  `<site-packages>/satkit_data/data` (the optional bundle); the platform user
+  data dir; `~/.satkit-data` (legacy); `/usr/share/satkit-data`; macOS
+  `/Library/Application Support/satkit-data`. Any of these may be read-only.
+- **Write** (`utils::datadir()`, exactly one): `SATKIT_DATA` if set, else the
+  `set_datadir()` directory, else the platform user data dir — macOS
+  `~/Library/Application Support/satkit-data`, Linux `$XDG_DATA_HOME/satkit-data`
+  (default `~/.local/share/satkit-data`), Windows `%LOCALAPPDATA%\satkit-data`.
+  Never next to the shared library, never inside `site-packages`.
+
+The sentinel file changed with the tiers: the marker of a provisioned
+directory is now an ephemeris (`linux_p*.4XX` / `lnxp*.4XX`) — the one file
+that is neither compiled in nor refreshed — and `data_found()` /
+`utils.datafiles_exist()` report that.
+
+### Offline mode
+
+`SATKIT_OFFLINE=1`, or `utils::set_offline(true)` (Python
+`satkit.utils.set_offline(True)`; the setter wins once called), forbids
+**downloads only**: `update_datafiles()`, the lazy ephemeris fetch, the
+EOP/SW refresh, and any non-embedded file. Search locations and the
+embedded data are unaffected. The error is the typed
+`download::Error::Offline { name, reason, urls }` — the same one a build
+without the `download` feature returns — and no connection is opened.
+CI runs the `offline_*` tests and `python/test/test_offline.py` with an
+empty `SATKIT_DATA` and `SATKIT_OFFLINE=1` to keep this true.
+
+### Python packaging
+
+`satkit` no longer depends on `satkit-data`; `pip install satkit[data]`
+installs it as an optional offline bundle, which the search order picks up
+automatically (read-only, wherever it is installed — `satkit/__init__.py`
+registers it with `add_search_dir`). This removes the 105 MB hard dependency
+that sat 133 KB under PyPI's file-size cap and made every release re-upload
+the ephemeris to refresh 5 MB of stale EOP/SW.

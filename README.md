@@ -33,12 +33,14 @@ pip install satkit
 
 Pre-built wheels are available for Linux, macOS, and Windows on Python 3.10--3.14.
 
-After installing, download the required data files (gravity models, ephemerides, Earth orientation parameters):
+The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris (~100 MB) downloads on first use (SHA-256 verified) into the user data directory; Earth orientation and space weather are fetched on first use and should be refreshed periodically:
 
 ```python
 import satkit as sk
-sk.utils.update_datafiles()  # one-time download; re-run periodically for fresh EOP/space weather
+sk.utils.update_datafiles()  # provisions everything up front; re-run periodically for fresh EOP/space weather
 ```
+
+Set `SATKIT_OFFLINE=1` to forbid downloads, or `pip install satkit[data]` for the optional offline data bundle.
 
 ## Quick Examples
 
@@ -170,11 +172,15 @@ numeris = { version = "0.5.18", features = ["nalgebra"] }
 
 ## Data Files
 
-Satkit needs external data for gravity models, ephemerides, and Earth orientation. Call `update_datafiles()` to download them automatically.
+Three tiers, handled differently by size and how often they change:
 
-**Downloaded once:** JPL DE440/441 (~100 MB), gravity model coefficients, IERS nutation tables
+**Compiled in (no files needed):** IERS 2010 nutation tables and the EGM96 / JGM2 / JGM3 / ITU_GRACE16 gravity models to degree 70 (~300 KB gzip'd). Frames, gravity, SGP4, time scales, Kepler and Lambert work offline out of the box.
 
-**Update periodically:** Space weather indices (F10.7, Ap) and Earth orientation parameters (polar motion, UT1-UTC) -- both sourced from [Celestrak](https://celestrak.org/SpaceData/).
+**Downloaded once, on first use:** the JPL DE440 ephemeris (~100 MB; DE421 at 14 MB via `SATKIT_JPLEPHEM_FILE`), SHA-256 verified against the manifest compiled into satkit (`data/manifest.json`), fetched from the GitHub release asset, the origin server (JPL), or a `SATKIT_DATA_URL` mirror.
+
+**Refreshed periodically:** space weather (F10.7, Ap) and Earth orientation parameters (polar motion, UT1−UTC), sourced from [CelesTrak](https://celestrak.org/SpaceData/) by `update_datafiles()`.
+
+Downloads go to the platform user-data directory (`satkit.utils.datadir()`: `~/Library/Application Support/satkit-data`, `$XDG_DATA_HOME/satkit-data`, or `%LOCALAPPDATA%\satkit-data`) unless `SATKIT_DATA` is set; files are also looked up in an installed `satkit-data` package and `/usr/share/satkit-data`. `SATKIT_OFFLINE=1` turns any needed download into an error. Details: [Data Files](https://satkit.dev/getting-started/datafiles/).
 
 ## Testing and Validation
 

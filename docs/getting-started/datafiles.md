@@ -1,14 +1,22 @@
 # Data Files
 
-The `satkit` package relies upon a number of data files for certain calculations:
+`satkit` needs three kinds of data, and handles them differently by size and by how often they change:
 
-- **leap-seconds.list** — Downloaded for reference only. The UTC↔TAI leap-second table that `satkit` actually uses is compiled into the library (current through the most recent leap second, 2017-01-01, when UTC began lagging TAI by 37 s); this file is not read at runtime, and a future leap second will require a new `satkit` release. The table is transcribed from [IERS Bulletin C](../guide/references.md#bulletinc); UTC and leap seconds are defined by [ITU-R TF.460-6](../guide/references.md#itu460).
+| tier | files | how it is provided |
+|---|---|---|
+| **Compiled in** | IERS Conventions (2010) Tables 5.2a/b/d (nutation and CIO series); EGM96, JGM-2, JGM-3 and ITU_GRACE16 gravity coefficients to degree 70 | gzip'd into the library (~300 KB) and inflated on first use. Frame transforms and gravity work with **no data directory and no network** |
+| **Downloaded once, on first use** | JPL DE440 ephemeris `linux_p1550p2650.440` (102 MB), or DE421 `lnxp1900p2053.421` (14 MB) | fetched the first time a planet, Sun or Moon position is needed, SHA-256 verified against a manifest compiled into satkit, written to the [data directory](#where-satkit-looks-for-data-and-where-it-writes) |
+| **Refreshed** | `EOP-All.csv` (Earth orientation), `SW-All.csv` (space weather) | change daily; fetched from CelesTrak on first use and refreshed by `satkit.utils.update_datafiles()` |
 
-- **linux_p1550p2650.440** — File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL) — the DE440 ephemeris of [Park et al. (2021)](../guide/references.md#park2021). Note: this file is large (~100 MB) and may take a long time to download. Smaller alternatives (e.g. `lnxp1900p2053.421` from JPL's DE421 release, [Folkner et al. 2009](../guide/references.md#folkner2009), at ~13 MB, 1900–2053) work as well — see [Selecting a JPL ephemeris file](#selecting-a-jpl-ephemeris-file) below.
+Everything that does not need the ephemeris or Earth orientation — gravity accelerations, the precession-nutation part of the frame chain, SGP4, time scales, Keplerian propagation, Lambert targeting — therefore works immediately after `pip install satkit`, offline. The numerical propagator needs the ephemeris (Sun and Moon) and the Earth-fixed frame chain needs the EOP file.
 
-- **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt** — Tables 5.2a, 5.2b and 5.2d of the IERS Conventions (2010), Technical Note 36 ([Petit & Luzum 2010](../guide/references.md#petit2010)): the CIP $X$, $Y$ and CIO-locator $s$ series used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame.
+## The files
 
-- **EGM96.gfc**, **JGM2.gfc**, **JGM3.gfc**, **ITU-GRACE16.gfc** — Files containing gravity coefficients for various gravity models — EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)), JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)) and ITU_GRACE16 ([Akyilmaz et al. 2016](../guide/references.md#akyilmaz2016)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). These are used to compute the precise acceleration due to Earth gravity as a function of position in the Earth-fixed ITRF frame.
+- **linux_p1550p2650.440** — File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL) — the DE440 ephemeris of [Park et al. (2021)](../guide/references.md#park2021). Large (~100 MB); downloaded on first use. The smaller `lnxp1900p2053.421` (DE421, [Folkner et al. 2009](../guide/references.md#folkner2009), ~14 MB, 1900–2053) is an alternative — see [Selecting a JPL ephemeris file](#selecting-a-jpl-ephemeris-file).
+
+- **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt** — Tables 5.2a, 5.2b and 5.2d of the IERS Conventions (2010), Technical Note 36 ([Petit & Luzum 2010](../guide/references.md#petit2010)): the CIP $X$, $Y$ and CIO-locator $s$ series used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame. Compiled in.
+
+- **EGM96.gfc**, **JGM2.gfc**, **JGM3.gfc**, **ITU_GRACE16.gfc** — Gravity coefficients for EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)), JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)) and ITU_GRACE16 ([Akyilmaz et al. 2016](../guide/references.md#akyilmaz2016)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). Compiled in, truncated to degree 70 (the evaluator uses at most degree 40, so results are identical to the full files). A full-degree copy placed in a data directory is used in preference.
 
 - **SW-All.csv** — Space Weather. The solar flux at $\lambda = 10.7\text{cm}$ (2800 MHz) is an indication of solar activity, which in turn is an important predictor of air density at altitudes relevant for low-Earth orbits. This file is updated at [celestrak.org](https://www.celestrak.org) ([CelesTrak Space Data](../guide/references.md#celestrak-spacedata)) every 3 hours with the most-recent space weather information.
 
@@ -16,39 +24,47 @@ The `satkit` package relies upon a number of data files for certain calculations
 
 - **EOP-All.csv** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis. This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org) (which repackages the IERS Bulletin A / finals series) and carries IERS predictions roughly six months ahead. For dates beyond the file, the last entry's values are used (constant extrapolation) — see [EOP coverage](#eop-coverage) below.
 
-## EOP coverage
+- **leap-seconds.list** — Downloaded by `update_datafiles()` for reference only. The UTC↔TAI leap-second table that `satkit` actually uses is compiled into the library (current through the most recent leap second, 2017-01-01, when UTC began lagging TAI by 37 s); this file is not read at runtime, and a future leap second will require a new `satkit` release. The table is transcribed from [IERS Bulletin C](../guide/references.md#bulletinc); UTC and leap seconds are defined by [ITU-R TF.460-6](../guide/references.md#itu460).
 
-Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Earth rotation angle), and the high-precision propagator depend on the EOP table, so it matters where an epoch falls relative to it:
+## Where satkit looks for data, and where it writes
 
-| `satkit.frametransform.eop_status(t)` | meaning | what satkit does |
-|---|---|---|
-| `"observed"` | on or before the last observed (`O`) row | interpolates measured values |
-| `"predicted"` | after the last observed row, inside the table | interpolates IERS predictions (~6 months ahead) |
-| `"extrapolated"` | after the last row | holds the last row constant and prints a **one-time warning**. Polar motion drifts ~0.1″ and $\Delta UT1$ ~10 ms over a few months — metres of position error at LEO |
-| `"before_table"` | before 1962 | zeros, one-time warning |
-| `"not_loaded"` | no table at all | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
+Two separate questions. Files are **looked up** across an ordered list of directories, any of which may be read-only; downloads are **written** to exactly one directory. `satkit.utils.data_search_dirs()` returns the first list, `satkit.utils.datadir()` the write location.
 
-`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
+| order | searched | macOS | Linux / other Unix | Windows |
+|---|---|---|---|---|
+| 1 | `SATKIT_DATA` environment variable — **also the write location when set** | ✓ | ✓ | ✓ |
+| 2 | directory passed to `set_datadir()` — also the write location | ✓ | ✓ | ✓ |
+| 3 | directories registered with `add_search_dir()` (the `satkit` Python package registers an installed `satkit_data` bundle this way) | ✓ | ✓ | ✓ |
+| 4 | `<directory of the satkit shared library>/satkit-data` | ✓ | ✓ | ✓ |
+| 5 | `<site-packages>/satkit_data/data` — the optional [`satkit-data` bundle](#the-optional-satkit-data-bundle) | ✓ | ✓ | ✓ |
+| 6 | **platform user-data directory — the default write location** | `~/Library/Application Support/satkit-data` | `$XDG_DATA_HOME/satkit-data`, default `~/.local/share/satkit-data` | `%LOCALAPPDATA%\satkit-data` |
+| 7 | `~/.satkit-data` (legacy location, read only) | ✓ | ✓ | ✓ (`%USERPROFILE%`) |
+| 8 | `/usr/share/satkit-data` (system-wide, read only) | ✓ | ✓ | — |
+| 9 | `/Library/Application Support/satkit-data` (system-wide, read only) | ✓ | — | — |
 
-```python
-import satkit as sk
+A file is used from the first directory that contains it. The ephemeris is also auto-detected across all of them (highest DE version wins). satkit never creates a directory next to its own shared library or inside `site-packages` — such a directory is often not writable and is wiped on reinstall.
 
-first, last_observed, last = sk.frametransform.eop_coverage()
-if sk.frametransform.eop_status(t_end) == "extrapolated":
-    sk.utils.update_datafiles()   # re-downloads EOP-All.csv (and SW-All.csv)
-```
+### Environment variables and API
 
-The warnings can be silenced with `satkit.frametransform.disable_eop_time_warning()`.
+| control | effect |
+|---|---|
+| `SATKIT_DATA=/path` | search first and write here (created if needed) |
+| `SATKIT_DATA_URL=https://mirror/base` | try `"$SATKIT_DATA_URL/<name>"` before the manifest's sources for every download (plain `http://` accepted; still hash-verified) |
+| `SATKIT_OFFLINE=1` / `satkit.utils.set_offline(True)` | forbid **downloads** — `update_datafiles()`, the lazy ephemeris fetch, the EOP/SW refresh, any non-embedded file — with a `RuntimeError` naming the file and its sources; no connection is opened. Search locations and the compiled-in data are unaffected. The setter wins once called; otherwise the variable is read. `satkit.utils.is_offline()` reports the effective state |
+| `SATKIT_JPLEPHEM_FILE=name-or-path` | which ephemeris to load — see [below](#selecting-a-jpl-ephemeris-file) |
+| `SATKIT_QUIET=1` | suppress the one-time note printed when a compiled-in file is used |
+| `satkit.utils.datadir()` | the write location (`None` if none can be determined — no `SATKIT_DATA`, no home / `%LOCALAPPDATA%`) |
+| `satkit.utils.data_search_dirs()` | the search list, in order |
+| `satkit.utils.set_datadir(path)` / `add_search_dir(path)` | add an override / a read-only search location |
+| `satkit.utils.datafiles_exist()` | whether an ephemeris file is present in any search directory (the marker of a provisioned data location) |
 
-## Where the files come from, and how downloads are verified
+### Where the files come from, and how downloads are verified
 
-The static files above are described by a manifest compiled into the library
+The downloadable files are described by a manifest compiled into the library
 (`data/manifest.json` in the repository) that pins each file's exact size and
 SHA-256 and lists where it may be downloaded from, in order of preference:
 
-1. `SATKIT_DATA_URL` — if this environment variable is set, `"$SATKIT_DATA_URL/<name>"`
-   is tried first for every file. Use it for an internal mirror or an air-gapped
-   file share (plain `http://` is accepted here; downloads are still verified).
+1. `SATKIT_DATA_URL` — if set, tried first for every file.
 2. The GitHub release asset (`github.com/ssmichael1/satkit-data/releases/download/data-v1/…`).
 3. The originating server where it serves identical bytes: JPL for the DE
    ephemerides, IERS for the `tab5.2*` tables.
@@ -69,94 +85,70 @@ Earth-orientation and space-weather files are fetched from CelesTrak on every
 update and are not pinned (they change daily). The full table, with licences,
 is in `data/README.md`.
 
-## Acquiring the Data Files
+## Provisioning up front
 
-The data files are included with the `satkit-data` package, a dependency of `satkit`.
-
-The data files can also be manually downloaded with the following command:
-
-```python
-satkit.utils.update_datafiles()
-```
-
-If the files already exist, they will *not* be downloaded, with the exception of the space weather and earth orientation parameters files, as these are regularly updated.
-
-## Download Location
-
-The data files are all downloaded into a common directory. This directory can be queried via Python:
+Nothing needs to be downloaded before first use, but for a container image,
+a CI job, or a machine that will later be offline:
 
 ```python
-satkit.utils.datadir()
+import satkit as sk
+sk.utils.update_datafiles()   # ephemeris + full-degree gravity files + IERS tables + EOP/SW, verified
 ```
 
-The `satkit` package will search for the data files in the following locations, in order, stopping when the files are found:
+Files already present with the right hash are skipped; the space-weather and
+Earth-orientation files are always refreshed. `update_datafiles(dir="...")`
+writes somewhere else; `overwrite=True` re-downloads even verified files.
 
-- Directory pointed to by the `SATKIT_DATA` environment variable
-- `$DYLIB/satkit-data` where `$DYLIB` is the directory containing the compiled satkit library
-- `$SITE_PACKAGES/satkit_data/data` where `$SITE_PACKAGES` is the parent of `$DYLIB` (for the `satkit_data` pip package)
-- *macOS only*: `$HOME/Library/Application Support/satkit-data`
-- `$HOME/.satkit-data`
-- `/usr/share/satkit-data`
-- *macOS only*: `/Library/Application Support/satkit-data`
+### The optional `satkit-data` bundle
 
-If no files are found, the `satkit` package will go through the above list of directories in order, stopping when a directory either exists and is writable, or can be created and is writable. The files will then be downloaded to that location.
+`pip install satkit[data]` installs the `satkit-data` package (~110 MB: the
+ephemeris, full-degree gravity files, IERS tables) into `site-packages`. It is
+picked up automatically as a read-only search location (rows 3 and 5 above),
+so no first-use download happens. It is not required — earlier releases made
+it a hard dependency of `satkit`; it is now optional.
+
+## EOP coverage
+
+Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Earth rotation angle), and the high-precision propagator depend on the EOP table, so it matters where an epoch falls relative to it:
+
+| `satkit.frametransform.eop_status(t)` | meaning | what satkit does |
+|---|---|---|
+| `"observed"` | on or before the last observed (`O`) row | interpolates measured values |
+| `"predicted"` | after the last observed row, inside the table | interpolates IERS predictions (~6 months ahead) |
+| `"extrapolated"` | after the last row | holds the last row constant and prints a **one-time warning**. Polar motion drifts ~0.1″ and $\Delta UT1$ ~10 ms over a few months — metres of position error at LEO |
+| `"before_table"` | before 1962 | zeros, one-time warning |
+| `"not_loaded"` | no table at all (first use offline, or the fetch failed) | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
+
+`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
+
+```python
+import satkit as sk
+
+first, last_observed, last = sk.frametransform.eop_coverage()
+if sk.frametransform.eop_status(t_end) == "extrapolated":
+    sk.utils.update_datafiles()   # re-downloads EOP-All.csv (and SW-All.csv)
+```
+
+The warnings can be silenced with `satkit.frametransform.disable_eop_time_warning()`.
 
 ## Selecting a JPL ephemeris file
 
-By default `satkit` loads `linux_p1550p2650.440` from `datadir()`. For larger time spans, smaller binaries, or older DE releases there are two ways to override that choice.
+By default `satkit` uses `linux_p1550p2650.440` (DE440), downloading it on first use if no ephemeris is found in any search directory. There are two ways to override that choice.
 
 ### Environment variable
 
 Set `SATKIT_JPLEPHEM_FILE` to either an absolute path or a basename:
 
 ```bash
-# Absolute path — file used directly
+# Absolute path — file used directly (no download)
 SATKIT_JPLEPHEM_FILE=/opt/jpl/lnxp1900p2053.421 python script.py
 
-# Basename — resolved under datadir()
+# Basename — found in any search directory, or downloaded to datadir() if it is a manifest file
 SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421 python script.py
 ```
 
+Both DE440 and DE421 are in the manifest and can be downloaded by name; any other file must already exist.
+
 ### Autodetect
 
-When `SATKIT_JPLEPHEM_FILE` is unset, `satkit` scans `datadir()` for any JPL ephemeris binary matching either of JPL's Linux naming conventions:
-
-- `linux_p<start>p<stop>.4XX` — used for DE430 and later (DE430 / DE440 / DE441)
-- `lnxp<start>p<stop>.4XX` — used for DE421 and earlier
-
-If multiple files are present, the one with the highest DE-version suffix wins. So dropping `lnxp1900p2053.421` into `datadir()` is enough to make satkit prefer it — no env var needed unless you also have a DE440 file alongside.
-
-The header-driven parser handles DE405, DE421, DE430, DE440, and DE441 through the same code path; choose whichever balances size and span you need. Queries outside the loaded file's coverage window return `Error::InvalidJulianDate(jd)` rather than silently extrapolating.
-
-## Embedded / non-filesystem use
-
-When the data files don't live on disk — for example, they're bundled as a Python package resource accessed via `importlib.resources`, stored as blobs in a SQLite database, or fetched at startup from a configuration service — every subsystem accepts an in-memory byte buffer or a specific file path through a uniform Rust API:
-
-| Subsystem | Init function (bytes) | Init function (path) | Re-init? |
-|---|---|---|---|
-| `jplephem` | `init_from_bytes(&[u8])` | `init_from_path(&Path)` | once only |
-| `earthgravity` | `init_from_bytes(GravityModel, &[u8])` | `init_from_path(GravityModel, &Path)` | once only |
-| `frametransform::ierstable` | `init_from_bytes(IersTableId, &[u8])` | `init_from_path(IersTableId, &Path)` | once only |
-| `spaceweather` | `init_from_bytes(&[u8])` | `init_from_path(&Path)` | always replaces |
-| `solar_cycle_forecast` | `init_from_bytes(&[u8])` | `init_from_path(&Path)` | always replaces |
-| `earth_orientation_params` | `init_from_bytes(&[u8])` | `init_from_path(&Path)` | always replaces |
-
-The static subsystems (top three) hold mathematical-constant data — once initialized they cannot be replaced, and a second `init_from_*` call returns `Err(AlreadyInitialized)`. Initialization must happen before any position query, gravity acceleration, or frame transform that depends on the subsystem, otherwise the lazy default-load path wins and the init call is too late.
-
-The refreshable subsystems (bottom three) hold operational data that updates daily (EOP, space weather) or monthly (solar-cycle forecast). `init_from_*` always succeeds and replaces the current contents — appropriate for long-running services that pull fresh records periodically.
-
-```rust
-// Static subsystem: init from bytes before any caller queries positions
-let bytes: Vec<u8> = db.fetch_blob("de440")?;
-satkit::jplephem::init_from_bytes(&bytes)?;
-let pos = satkit::jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
-
-// Refreshable subsystem: replace on every poll cycle
-loop {
-    let csv = db.fetch_latest("eop")?;
-    satkit::earth_orientation_params::init_from_bytes(&csv)?;
-    // ... do work ...
-}
-```
-
-These APIs are Rust-only. Python callers should use `satkit.utils.update_datafiles()` and the filesystem-based default; the embedded scenario above doesn't generalise cleanly to a notebook workflow.
+With no environment variable set, every search directory is scanned for JPL Linux-binary ephemeris files (`linux_p*.4XX`, `lnxp*.4XX`) and the highest DE version found is used, so dropping a file into the data directory is enough to switch to it.
