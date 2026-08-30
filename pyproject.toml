@@ -91,6 +91,10 @@ before-build = [
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
 environment = { PATH = '$UserProfile\.cargo\bin;$PATH' }
+# cibuildwheel 4.0 made delvewheel the default Windows repair step. The
+# extension is pure Rust and links only the Python DLL and the VC runtime
+# (which delvewheel skips anyway), so keep the pre-4.0 behaviour: no repair.
+repair-wheel-command = ""
 before-build = [
     "pip install -U setuptools-rust",
     "rustup toolchain install stable-x86_64-pc-windows-msvc",

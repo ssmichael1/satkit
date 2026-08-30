@@ -31,7 +31,7 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -42,12 +42,12 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - name: Cargo Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -63,7 +63,7 @@ jobs:
     name: cargo audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-audit
         uses: taiki-e/install-action@cargo-audit
@@ -79,14 +79,14 @@ jobs:
     name: sdist installs from source
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Cargo Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -119,12 +119,12 @@ jobs:
       SATKIT_TESTVEC_ROOT: satkit-testvecs
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Satkit Data
         id: cache-satkit-data
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: astro-data
           enableCrossOsArchive: true
@@ -138,7 +138,7 @@ jobs:
 
       - name: Cache Satkit Test Vectors
         id: cache-satkit-testvecs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: satkit-testvecs
           enableCrossOsArchive: true
@@ -151,7 +151,7 @@ jobs:
           python python/test/download_testvecs.py satkit-testvecs
 
       - name: Cargo Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/
@@ -204,17 +204,17 @@ jobs:
       SATKIT_TESTVEC_ROOT: satkit-testvecs
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
       - name: Cache Satkit Data
         id: cache-satkit-data
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: astro-data
           enableCrossOsArchive: true
@@ -228,7 +228,7 @@ jobs:
 
       - name: Cache Satkit Test Vectors
         id: cache-satkit-testvecs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: satkit-testvecs
           enableCrossOsArchive: true
@@ -241,7 +241,7 @@ jobs:
           python python/test/download_testvecs.py satkit-testvecs
 
       - name: Cargo Cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
