@@ -84,6 +84,12 @@ Either the private CA is not installed system-wide — install it, or point
 really is untrusted and the download should not be forced through. satkit has no
 "skip verification" switch.
 
+A proxy that answers with a notice page instead of blocking outright cannot
+corrupt the data either: `EOP-All.csv` and `SW-All.csv` are parsed before they
+replace the copy on disk, and any download that opens with an HTML document is
+rejected. The partial file is discarded and the existing one left in place, so a
+blocked refresh degrades to a stale table rather than a broken one.
+
 Note that `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are deliberately ignored:
 Python tooling routinely points them at a stock public bundle, which is the one
 trust store guaranteed to fail on an intercepting network.

@@ -8,6 +8,8 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - Downloads verify servers against the operating system's trust store (macOS keychain, Windows certificate store, `/etc/ssl` on Unix) instead of the Mozilla root list compiled into the HTTP client: on a network whose TLS is inspected by a corporate proxy every download failed with `io: invalid peer certificate: UnknownIssuer`, because such a proxy re-signs traffic with a private CA that can only ever live in the system store. `SATKIT_CA_BUNDLE` overrides the choice with a PEM file, `platform`, or `webpki` (the compiled-in roots, for a container with no system store); `SSL_CERT_FILE` is deliberately not consulted. Download errors also name the URL that failed and, for a certificate failure, say what to do about it once (`download::Error` gains a `Request` variant, and `AllSourcesFailed` a `hint` field) ([#160](https://github.com/ssmichael1/satkit/pull/160))
 
+- The daily CelesTrak files are checked before they replace the copy on disk: `EOP-All.csv` and `SW-All.csv` are run through the parser that will later read them, and any unverified download is rejected if it opens with an HTML document. A filtering proxy or captive portal that answers `200 OK` with a notice page can no longer overwrite a good EOP table with a web page — the partial download is discarded and the existing file left in place (`download::Error::ContentRejected`) ([#160](https://github.com/ssmichael1/satkit/pull/160))
+
 ### Docs
 
 - GMAT validation page: removed the "What the corpus found" note ([#159](https://github.com/ssmichael1/satkit/pull/159))
