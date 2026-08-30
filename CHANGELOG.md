@@ -4,6 +4,8 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+## 0.21.1 - 2026-08-30
+
 ### CI
 
 - Build/test workflow skips pure documentation changes: `mkdocs.yml`, any `*.md`, `LICENSE*`, `recipes/**` and the docs workflow file, in addition to `docs/**` ([#153](https://github.com/ssmichael1/satkit/pull/153))
@@ -218,52 +220,3 @@ followed a week later; see that section for details.
   all e < 1. Found by the new property-based test suite in CI
   (`kepler_period_closure`, fresh random seed); the counterexample is pinned
   as a permanent regression test.
-
-
-## 0.20.1 - 2026-07-03
-
-### Security / dependencies
-
-- **Resolved all 7 outstanding RustSec advisories** (surfaced by the new
-  `cargo audit` CI gate): `quick-xml` 0.38 → 0.41 (two high-severity DoS
-  advisories in XML parsing — relevant since OMM XML is untrusted input),
-  `pyo3`/`numpy` 0.28 → 0.29 (PyList/PyTuple iterator out-of-bounds read,
-  `new_closure` Sync bound), plus compatible `cargo update` bumps covering
-  the `rustls-webpki`, `anyhow`, and `rand` advisories.
-
-### Testing
-
-- **New property-based test suite** (`tests/properties.rs`, proptest): 12
-  properties over randomly generated domains with automatic shrinking —
-  Kepler `from_pv ∘ to_pv` round-trip (including the exactly-circular /
-  equatorial degeneracies), anomaly-conversion round-trip and termination,
-  one-period orbit closure, Vincenty finiteness/non-negativity over all
-  coordinate pairs, geodetic round-trip, MJD/unixtime round-trips in all
-  data-independent time scales, Instant±Duration arithmetic, TLE
-  format ∘ parse round-trip at field precision, TLE parser never-panics,
-  and quaternion rigidity + Euler round-trip. Runs in ordinary `cargo test`
-  (no data files needed); failures persist in `proptest-regressions/`.
-- **`TimeScale` now derives `Clone`, `Copy`, and `Hash`** — previously each
-  use of a scale value moved it, so loops/reuse required re-naming the
-  variant (a long-standing ergonomic wart the new property tests
-  immediately hit).
-
-### CI
-
-- **New gates:** `cargo clippy --workspace --all-targets -D warnings` (the
-  outstanding warnings were fixed or annotated), `cargo audit` (RustSec
-  advisory scan), and an **sdist-install guard** that builds the sdist and
-  `pip install`s from it — the check that would have caught the 0.20.0
-  source-unbuildable sdist before it shipped.
-- **Weekly scheduled `cargo audit`** (`audit.yml`) — RustSec advisories are
-  published on their own schedule; the cron run surfaces new ones even when
-  nothing is being pushed.
-
-### Fixed
-
-- **PyPI sdist was unbuildable from source.** `MANIFEST.in` omitted the
-  `benches/` directory while `Cargo.toml` declares the `hotpaths` bench
-  target, so `cargo` failed to parse the manifest when installing from the
-  sdist ("can't find `hotpaths` bench"). Wheels were unaffected; this broke
-  source builds only (present since the benches landed in 0.19.0). The
-  sdist now includes `benches/`.
