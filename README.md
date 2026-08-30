@@ -140,7 +140,7 @@ Plus satellite-local RTN, NTW, and LVLH frames (maneuvers, covariance), and ENU,
 - **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40; Montenbruck & Gill 2000, §3.2)
 - **Solid Earth tides**: IERS Conventions 2010 §6.2.1 Step-1 corrections to the gravity field
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
-- **Atmospheric drag**: NRLMSISE-00 (Picone et al. 2002) with automatic space weather data
+- **Atmospheric drag**: NRLMSISE-00 (Picone et al. 2002) fed automatically from CelesTrak space-weather data — observed F10.7 / centred F10.7A and the 7-element 3-hourly geomagnetic ap history, so density responds to storms within hours; validated against GMAT (below)
 - **Solar radiation pressure**: Cannonball model with shadow function
 - **Relativity**: IERS 2010 Eq. 10.12 — Schwarzschild, geodesic (de Sitter) precession, and Lense–Thirring
 
@@ -196,9 +196,11 @@ Around 300 Rust tests and 150 Python tests run on every commit across Linux, mac
 
 ### GMAT comparison
 
-The numerical propagator is regression-tested against NASA's General Mission Analysis Tool (GMAT R2026A). The corpus in `tests/gmat/` holds 17 seven-day reference trajectories -- ISS-like LEO, sun-synchronous, GPS MEO, Molniya, GEO, the lunar-resonant TESS orbit, and a 300,000 km cislunar orbit -- each with a low-degree gravity model, a 36×36 EGM96 + solid tides model, and (for three orbits) relativity. GMAT cannot run in CI, so the trajectories are generated offline (`tests/gmat/generate.py`, SPICE DE440, `EarthICRF`) and committed; `tests/gmat_regression.rs` and `python/test/test_gmat.py` replay them hour by hour and gate on the worst residual.
+The numerical propagator is regression-tested against NASA's General Mission Analysis Tool (GMAT R2026A). The corpus in `tests/gmat/` holds 25 reference trajectories: 17 seven-day gravity/third-body cases -- ISS-like LEO, sun-synchronous, GPS MEO, Molniya, GEO, the lunar-resonant TESS orbit, and a 300,000 km cislunar orbit -- each with a low-degree gravity model, a 36×36 EGM96 + solid tides model, and (for three orbits) relativity; plus 8 three-day atmospheric-drag cases (ISS altitude, 300 km, 550 km sun-synchronous, GTO with a 250 km perigee), each run with fixed space-weather indices and with the CelesTrak space-weather file driving NRLMSISE-00 on both sides. GMAT cannot run in CI, so the trajectories are generated offline (`tests/gmat/generate.py`, SPICE DE440, `EarthICRF`) and committed; `tests/gmat_regression.rs` and `python/test/test_gmat.py` replay them hour by hour and gate on the worst residual.
 
 With matched force models the two agree to 3 cm (ISS), 2 cm (SSO), 8 cm (GPS), and 13 cm (GEO, Molniya) over 7 days. At 200,000 km and beyond the residual is ~1 m, which is GMAT's own integration floor (its point-mass runs differ from the analytic Kepler solution by the same amount). The remaining differences with tides and relativity enabled are documented with the tolerances in `tests/gmat/README.md`: GMAT omits the anelastic phase lag in its solid-tide Love numbers that satkit includes, while the relativity cases sit at the same floors (both tools apply the full IERS 2010 Eq. 10.12 correction).
+
+With drag the two agree to 1–2 × 10⁻⁴ of the drag-induced displacement when the space-weather indices are fixed (26 m against 152 km of drag decay over 3 days at ISS altitude; the two NRLMSISE-00 implementations agree to 0.06 % rms in density) and to 1–2 × 10⁻³ when both read the CelesTrak file (198 m at ISS altitude), the residual being the F10.7 timing convention -- GMAT interpolates between 20:00 UT nodes, satkit steps at 00:00 UT. Building the drag corpus found and fixed a radians-for-degrees error in satkit's NRLMSISE-00 inputs (8 km over 3 days at ISS altitude) and moved the space-weather feed to the observed F10.7 and the 3-hourly ap history (0.21.1); details on the [GMAT validation page](https://satkit.dev/guide/gmat_validation/).
 
 ### Running Tests Locally
 
