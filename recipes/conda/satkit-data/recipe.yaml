@@ -1,7 +1,3 @@
-{% set name = "satkit-data" %}
-{% set version = "0.9.0" %}
-{% set python_min = "3.10" %}
-
 # satkit-data is a noarch Python package that ships the static data files
 # satkit needs at runtime: gravity coefficients, IERS precession-nutation
 # tables, leap-seconds, NRLMSIS-2.1 parameters, and a JPL planetary
@@ -23,48 +19,59 @@
 # bundling a stale snapshot would mislead users. They're fetched on
 # demand via `satkit.utils.update_datafiles()` or
 # `satkit.earth_orientation_params::update()`.
+#
+# `python_min` is not defined in `context:` on purpose — it comes from
+# conda-forge's global pinning (3.10 at the time of writing, which matches
+# satkit's own floor), and redefining it would override the platform-specific
+# exceptions in that pinning.
+
+schema_version: 1
+
+context:
+  name: satkit-data
+  version: "0.9.0"
 
 package:
-  name: {{ name|lower }}
-  version: {{ version }}
+  name: ${{ name|lower }}
+  version: ${{ version }}
 
 source:
   # JPL DE421 — short-span planetary ephemeris (1900–2053, ~13 MB).
   # JPL's Linux subdirectory ships the little-endian native binary.
   - url: https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de421/lnxp1900p2053.421
     sha256: 5b3f81dd0c505925055a389431fd2bc5e0ae2fd02d85db37fa4d4fe54dfb4096
-    folder: data
+    target_directory: data
   # Earth gravity-model coefficients (ICGEM-format text).
   - url: https://storage.googleapis.com/astrokit-astro-data/EGM96.gfc
     sha256: 5247a9e9c316dd2c8f8fd491d53be0e163cb5cb3676b021754240cc9e44cb43b
-    folder: data
+    target_directory: data
   - url: https://storage.googleapis.com/astrokit-astro-data/JGM2.gfc
     sha256: 0779cf74f216d5b38c7a4c4a1a25d596b659605deb7731f00874c17e9ed3f5af
-    folder: data
+    target_directory: data
   - url: https://storage.googleapis.com/astrokit-astro-data/JGM3.gfc
     sha256: 2ec791eec795689291974dd3602b304029da93d3fea30096daa3b368fb231d03
-    folder: data
+    target_directory: data
   - url: https://storage.googleapis.com/astrokit-astro-data/ITU_GRACE16.gfc
     sha256: b6bea9c78ad168f1e206fc7211f90b64fba54325c832f4473f6c05a07adbc718
-    folder: data
+    target_directory: data
   # IERS 2010 IAU precession-nutation tables (Tech Note 36 §5).
   - url: https://storage.googleapis.com/astrokit-astro-data/tab5.2a.txt
     sha256: 19549252df9eb77c8237dbf5b749de82b7fd7713a8b60b35371538cd36b6aa1d
-    folder: data
+    target_directory: data
   - url: https://storage.googleapis.com/astrokit-astro-data/tab5.2b.txt
     sha256: 1f17a3a6ad0b468705b3323bfe72d0320ce996798ec7cba0cdde4405d88f14d9
-    folder: data
+    target_directory: data
   - url: https://storage.googleapis.com/astrokit-astro-data/tab5.2d.txt
     sha256: fe94c83e1ef6f92b15b3f007779ae70c0984c06ee45d5511b4c821ee9a0ecded
-    folder: data
+    target_directory: data
   # Leap-second history (IETF / IERS).
   - url: https://storage.googleapis.com/astrokit-astro-data/leap-seconds.list
     sha256: 14b4faab51b1885680a704744863bda8b5728a0f0a5e07a15c8469532318b305
-    folder: data
+    target_directory: data
   # NRLMSIS 2.1 atmospheric model parameters.
   - url: https://storage.googleapis.com/astrokit-astro-data/msis21.parm
     sha256: a322a749f368e73117dd20f3fdcf7389dabc5509f4c27073cc5580999381b508
-    folder: data
+    target_directory: data
 
 build:
   number: 0
@@ -73,33 +80,37 @@ build:
   # the on-PyPI sibling so satkit's existing `$SITE_PACKAGES/satkit_data/data`
   # data-directory resolver finds them without configuration. The copy logic
   # lives in build_data.py so it runs identically on Linux/macOS/Windows (a
-  # bash `cp`/`mkdir -p` script fails on the Windows agent); build.sh / bld.bat
-  # invoke it via $RECIPE_DIR since recipe files are not copied into $SRC_DIR.
+  # bash `cp`/`mkdir -p` script fails on the Windows agent). rattler-build
+  # auto-discovers build.sh (unix) / build.bat (windows) next to this file;
+  # they invoke build_data.py via $RECIPE_DIR since recipe files are not
+  # copied into $SRC_DIR.
 
 requirements:
   host:
-    - python {{ python_min }}
+    - python ${{ python_min }}.*
   run:
-    - python >={{ python_min }}
+    - python >=${{ python_min }}
 
-test:
-  requires:
-    - python {{ python_min }}
-  imports:
-    - satkit_data
-  commands:
-    - python -c "from importlib.resources import files; d = files('satkit_data').joinpath('data'); names = sorted(p.name for p in d.iterdir()); assert 'lnxp1900p2053.421' in names, names; assert 'EGM96.gfc' in names, names; print('\n'.join(names))"
+tests:
+  - python:
+      imports:
+        - satkit_data
+      # The package is laid out by build_data.py rather than pip-installed,
+      # so there is no dist-info metadata for `pip check` to inspect.
+      pip_check: false
+      # noarch: python installs on every Python >= python_min; exercise both
+      # ends of that range.
+      python_version:
+        - ${{ python_min }}.*
+        - "*"
+  - requirements:
+      run:
+        - python ${{ python_min }}.*
+    script:
+      - python -c "from importlib.resources import files; d = files('satkit_data').joinpath('data'); names = sorted(p.name for p in d.iterdir()); assert 'lnxp1900p2053.421' in names, names; assert 'EGM96.gfc' in names, names; print('\n'.join(names))"
 
 about:
-  home: https://github.com/ssmichael1/satkit
-  # The packaging (the satkit_data Python wrapper + this recipe) is the only
-  # copyrightable contribution here and is MIT OR Apache-2.0. The bundled data
-  # files are third-party public-domain / freely-redistributable scientific
-  # reference data; their provenance and individual terms are enumerated in
-  # LICENSE (the attribution/NOTICE file).
-  license: MIT OR Apache-2.0
-  license_family: MIT
-  license_file: LICENSE
+  homepage: https://github.com/ssmichael1/satkit
   summary: Static data files for satkit (DE421 ephemeris, gravity, IERS tables, leap seconds)
   description: |
     Ships the static data files satkit needs at runtime:
@@ -118,8 +129,15 @@ about:
     (SW-All.csv) are NOT bundled because they're regenerated daily by
     CelesTrak. Run `satkit.utils.update_datafiles()` after install to
     fetch them.
-  doc_url: https://satkit.dev/getting-started/datafiles/
-  dev_url: https://github.com/ssmichael1/satkit
+  # The packaging (the satkit_data Python wrapper + this recipe) is the only
+  # copyrightable contribution here and is MIT OR Apache-2.0. The bundled data
+  # files are third-party public-domain / freely-redistributable scientific
+  # reference data; their provenance and individual terms are enumerated in
+  # LICENSE (the attribution/NOTICE file).
+  license: MIT OR Apache-2.0
+  license_file: LICENSE
+  documentation: https://satkit.dev/getting-started/datafiles/
+  repository: https://github.com/ssmichael1/satkit
 
 extra:
   recipe-maintainers:
