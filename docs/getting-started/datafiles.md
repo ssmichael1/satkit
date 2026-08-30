@@ -10,6 +10,8 @@
 
 Everything that does not need the ephemeris or Earth orientation — gravity accelerations, the precession-nutation part of the frame chain, SGP4, time scales, Keplerian propagation, Lambert targeting — therefore works immediately after `pip install satkit`, offline. The numerical propagator needs the ephemeris (Sun and Moon) and the Earth-fixed frame chain needs the EOP file.
 
+Two caveats on "offline". Frame transforms need Earth-orientation parameters as well as the compiled-in nutation tables: with an `EOP-All.csv` present in a search directory they are exact; with none at all (a first run with no network) they fall back to zero polar motion and $\Delta UT1$, warn once, and are off by up to ~0.5″ (metres at LEO), while `propagate()` refuses to run (`EopUnavailable`) rather than integrate with a tilted gravity field. And the ephemeris is only "offline" once it has been downloaded (or provisioned by hand): `SATKIT_OFFLINE=1` turns a missing ephemeris into an error, not a degraded answer.
+
 ## The files
 
 - **linux_p1550p2650.440** — File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL) — the DE440 ephemeris of [Park et al. (2021)](../guide/references.md#park2021). Large (~100 MB); downloaded on first use. The smaller `lnxp1900p2053.421` (DE421, [Folkner et al. 2009](../guide/references.md#folkner2009), ~14 MB, 1900–2053) is an alternative — see [Selecting a JPL ephemeris file](#selecting-a-jpl-ephemeris-file).
@@ -50,6 +52,7 @@ A file is used from the first directory that contains it. The ephemeris is also 
 |---|---|
 | `SATKIT_DATA=/path` | search first and write here (created if needed) |
 | `SATKIT_DATA_URL=https://mirror/base` | try `"$SATKIT_DATA_URL/<name>"` before the manifest's sources for every download (plain `http://` accepted; still hash-verified) |
+| `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` | honoured for every download (standard proxy environment variables; read by the HTTP client) |
 | `SATKIT_OFFLINE=1` / `satkit.utils.set_offline(True)` | forbid **downloads** — `update_datafiles()`, the lazy ephemeris fetch, the EOP/SW refresh, any non-embedded file — with a `RuntimeError` naming the file and its sources; no connection is opened. Search locations and the compiled-in data are unaffected. The setter wins once called; otherwise the variable is read. `satkit.utils.is_offline()` reports the effective state |
 | `SATKIT_JPLEPHEM_FILE=name-or-path` | which ephemeris to load — see [below](#selecting-a-jpl-ephemeris-file) |
 | `SATKIT_QUIET=1` | suppress the one-time note printed when a compiled-in file is used |
@@ -84,6 +87,17 @@ al. 2016, GFZ Data Services, CC BY 4.0; `leap-seconds.list` — IERS/IETF. The
 Earth-orientation and space-weather files are fetched from CelesTrak on every
 update and are not pinned (they change daily). The full table, with licences,
 is in `data/README.md`.
+
+### Failure behaviour
+
+| situation | what satkit does |
+|---|---|
+| download interrupted, or bytes don't match the manifest | the temporary `*.part.<pid>.<seq>` file is deleted and the next source is tried; a final file is only ever renamed into place after its size and SHA-256 matched |
+| two processes fetch the same file at once (parallel test workers, several notebooks) | each writes its own temporary file; whichever finishes first is renamed into place, the others verify it and discard their copy — one verified file, no lock files, no partial reads |
+| an ephemeris already on disk under a pinned name is corrupt or truncated | detected on first load (the file is hashed once, ~0.2 s for DE440, and a `<name>.sha256-verified` marker records the result so later loads only compare size and mtime); re-downloaded if downloads are allowed, otherwise `RuntimeError` naming the expected hash. Files not in the manifest (a user-supplied ephemeris) are trusted as-is |
+| no writable location (`SATKIT_DATA` unset and no home / `%LOCALAPPDATA%`; a read-only directory) | `RuntimeError` listing the directories consulted and asking for `SATKIT_DATA`; never the current directory or a temp dir |
+| an existing file cannot be replaced (Windows: another process has it open) | the rename is retried a few times, then `RuntimeError` naming the file |
+| every source fails (no network, all mirrors down) | `RuntimeError` listing each URL and why it failed |
 
 ## Provisioning up front
 

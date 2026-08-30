@@ -111,6 +111,17 @@ fn default_true() -> bool {
     true
 }
 
+/// How [`ManifestEntry::ensure_verified`] established that a file on disk
+/// matches the manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verified {
+    /// The sidecar marker matched the file's size and modification time, so
+    /// the (expensive) hash was skipped.
+    Cached,
+    /// The file was hashed and matched; the marker was (re)written.
+    Hashed,
+}
+
 /// Outcome of [`fetch_static_file`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FetchOutcome {
@@ -238,6 +249,16 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     Ok(hex(&h.finalize()))
 }
 
+/// Modification time of a file as `(secs, nanos)` since the Unix epoch
+/// (`(0, 0)` if the platform does not report one).
+fn mtime_parts(md: &std::fs::Metadata) -> (u64, u32) {
+    md.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| (d.as_secs(), d.subsec_nanos()))
+        .unwrap_or((0, 0))
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -261,6 +282,70 @@ impl ManifestEntry {
         }
         v.extend(self.urls.iter().cloned());
         v
+    }
+
+    /// Path of the sidecar marker recording that `path` was verified:
+    /// `<path>.sha256-verified`, containing `<sha256> <size> <mtime-secs> <mtime-nanos>`.
+    pub fn verified_marker_path(path: &Path) -> std::path::PathBuf {
+        let mut p = path.as_os_str().to_owned();
+        p.push(".sha256-verified");
+        std::path::PathBuf::from(p)
+    }
+
+    /// Write the sidecar marker for `path` (best effort; a read-only
+    /// directory simply means the next load hashes the file again).
+    pub fn write_verified_marker(&self, path: &Path) -> std::io::Result<()> {
+        let md = std::fs::metadata(path)?;
+        let (secs, nanos) = mtime_parts(&md);
+        std::fs::write(
+            Self::verified_marker_path(path),
+            format!("{} {} {secs} {nanos}\n", self.sha256, md.len()),
+        )
+    }
+
+    /// Verify that an existing on-disk copy of this file matches the
+    /// manifest, hashing it at most once per change.
+    ///
+    /// The first load of a manifest-pinned file hashes it (≈0.3 s for the
+    /// 102 MB DE440) and records a sidecar marker with the hash, size and
+    /// modification time; later loads compare size and mtime against the
+    /// marker and skip the hash ([`Verified::Cached`]). A file whose size or
+    /// hash does not match is reported as [`Error::CorruptFile`] — it is never
+    /// silently trusted. Files that are not in the manifest are not checked
+    /// (a user-supplied ephemeris is trusted as before).
+    pub fn ensure_verified(&self, path: &Path) -> Result<Verified> {
+        let md = std::fs::metadata(path)?;
+        let corrupt = |what: &'static str, expected: String, actual: String| Error::CorruptFile {
+            name: self.name.clone(),
+            path: path.display().to_string(),
+            what,
+            values: Box::new((expected, actual)),
+        };
+        if !md.is_file() || md.len() != self.size {
+            return Err(corrupt(
+                "size",
+                format!("{} bytes", self.size),
+                format!("{} bytes", md.len()),
+            ));
+        }
+        let (secs, nanos) = mtime_parts(&md);
+        if let Ok(marker) = std::fs::read_to_string(Self::verified_marker_path(path)) {
+            let f: Vec<&str> = marker.split_whitespace().collect();
+            if f.len() == 4
+                && f[0] == self.sha256
+                && f[1] == md.len().to_string()
+                && f[2] == secs.to_string()
+                && f[3] == nanos.to_string()
+            {
+                return Ok(Verified::Cached);
+            }
+        }
+        let actual = sha256_file(path)?;
+        if actual != self.sha256 {
+            return Err(corrupt("sha256", self.sha256.clone(), actual));
+        }
+        let _ = self.write_verified_marker(path);
+        Ok(Verified::Hashed)
     }
 
     /// `true` if `path` exists with exactly the pinned size and SHA-256.
@@ -297,13 +382,14 @@ pub fn fetch_static_file(
     validate_file_name(&entry.name)?;
     let dest = dest_dir.join(&entry.name);
     if !force && dest.is_file() {
-        if entry.verify(&dest)? {
-            return Ok(FetchOutcome::AlreadyPresent);
+        match entry.ensure_verified(&dest) {
+            Ok(_) => return Ok(FetchOutcome::AlreadyPresent),
+            Err(Error::CorruptFile { .. }) => eprintln!(
+                "Warning: {} exists but does not match the manifest (size/sha256); re-downloading",
+                dest.display()
+            ),
+            Err(e) => return Err(e),
         }
-        eprintln!(
-            "Warning: {} exists but does not match the manifest (size/sha256); re-downloading",
-            dest.display()
-        );
     }
     if download::is_offline() {
         return Err(Error::Offline {
@@ -340,8 +426,12 @@ pub fn fetch_static_file(
 ) -> Result<FetchOutcome> {
     validate_file_name(&entry.name)?;
     let dest = dest_dir.join(&entry.name);
-    if !force && dest.is_file() && entry.verify(&dest)? {
-        return Ok(FetchOutcome::AlreadyPresent);
+    if !force && dest.is_file() {
+        match entry.ensure_verified(&dest) {
+            Ok(_) => return Ok(FetchOutcome::AlreadyPresent),
+            Err(e @ Error::CorruptFile { .. }) => return Err(e),
+            Err(e) => return Err(e),
+        }
     }
     Err(download::offline_error(
         &entry.name,
@@ -472,6 +562,28 @@ mod tests {
         assert!(!entry.verify(&p).unwrap(), "different size");
         assert!(!entry.verify(&dir.join("missing")).unwrap());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Cost of the one-time hash of the real DE440 file (the largest pinned
+    /// file), for the docs: `cargo test --lib time_de440_hash -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the real DE440 file in a search directory"]
+    fn time_de440_hash() {
+        let Some(path) = crate::utils::find_data_file("linux_p1550p2650.440") else {
+            eprintln!("DE440 not present; skipping");
+            return;
+        };
+        let entry = embedded().entry("linux_p1550p2650.440").unwrap();
+        let marker = ManifestEntry::verified_marker_path(&path);
+        let _ = std::fs::remove_file(&marker);
+        let t = std::time::Instant::now();
+        let first = entry.ensure_verified(&path).unwrap();
+        let hashed = t.elapsed();
+        let t = std::time::Instant::now();
+        let second = entry.ensure_verified(&path).unwrap();
+        let cached = t.elapsed();
+        println!("DE440 verify: first {first:?} in {hashed:?}; second {second:?} in {cached:?}");
+        assert_eq!(second, Verified::Cached);
     }
 
     #[test]

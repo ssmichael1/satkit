@@ -15,7 +15,10 @@ choose a different file — e.g. ``lnxp1900p2053.421`` selects DE421 (14 MB,
 1900–2053), which is downloaded on demand like DE440. A wrong value (a path
 that does not exist, an unknown bare name, or a file that is not a JPL binary
 ephemeris) raises ``RuntimeError`` from the first query, naming the resolved
-path; there is no silent fallback to another ephemeris. ``SATKIT_OFFLINE=1``
+path; there is no silent fallback to another ephemeris. A pinned file already
+on disk is hashed once on first load (≈0.2 s for DE440; a ``.sha256-verified``
+sidecar makes later loads skip the hash) and re-downloaded if corrupt — or, under
+offline mode, refused with the expected hash. ``SATKIT_OFFLINE=1``
 or ``satkit.utils.set_offline(True)`` turns a needed download into that same
 error without touching the network.
 """

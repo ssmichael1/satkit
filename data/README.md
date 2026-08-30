@@ -101,6 +101,15 @@ its sha256 is in the manifest.) Then verify end-to-end:
 SATKIT_DATA=/tmp/satkit-data-check cargo test --lib real_network -- --ignored --nocapture
 ```
 
+### Release-tag policy
+
+A satkit release pins one data tag by hash. Once published, **a data tag is
+immutable**: its assets are never replaced and the tag is never deleted, so
+every satkit version that pins `data-v1` keeps working indefinitely. A data
+update (a new DE, a corrected table) is a *new* tag — `data-v2` — plus a
+manifest change in a satkit release; nothing about the old tag changes.
+`--latest=false` keeps data tags off the repository's "latest release".
+
 ## Regenerating / changing the manifest
 
 ```bash
@@ -140,6 +149,23 @@ python tools/make_manifest.py --data-dir "$D" --data-version data-v2   # new rel
 - `utils::manifest::embedded()` exposes the parsed manifest;
   `fetch_static_file(entry, dir, force)` is the verified fetch;
   `ManifestEntry::verify(path)` checks a file on disk.
+- `ManifestEntry::ensure_verified(path)` hashes an on-disk pinned file once
+  (≈0.2 s for DE440) and records `<path>.sha256-verified` (hash, size, mtime)
+  so later loads skip the hash; a mismatch is `download::Error::CorruptFile`.
+  The lazy ephemeris load uses it: a corrupt copy is re-fetched, or — under
+  offline mode — reported with the expected hash.
+
+### Failure behaviour
+
+| situation | behaviour |
+|---|---|
+| concurrent fetches of one file | per-process/per-call temporary name `<name>.part.<pid>.<seq>`, atomic rename; a process that finishes second verifies the winner's file and discards its own; no lock files (nothing to go stale). Leftover `*.part.*` from a killed process is harmless. |
+| corrupt / truncated download | hash mismatch → temporary file deleted, next URL tried, `AllSourcesFailed` lists every attempt |
+| corrupt file already on disk (pinned name) | `ensure_verified` → re-fetch (or `CorruptFile` when offline / without the `download` feature) |
+| no writable directory | `datadir::Error::NoWriteableDirectory { detail }` — lists the search dirs consulted, says to set `SATKIT_DATA`; never falls back to the CWD |
+| rename over an open file (Windows) | `download::retry_io` retries 6× at 50 ms, then `download::Error::ReplaceFailed { path }` |
+| proxies | ureq's default agent reads `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` and `NO_PROXY` |
+
 
 ## Phase 2: embedded core data, lazy ephemeris, optional bundle
 

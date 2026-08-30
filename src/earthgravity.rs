@@ -1,6 +1,5 @@
 use crate::utils::{datadir, download_if_not_exist};
 use std::num::{ParseFloatError, ParseIntError};
-use std::path::PathBuf;
 use thiserror::Error;
 
 /// Errors produced by the [`earthgravity`](crate::earthgravity) module.
@@ -672,7 +671,7 @@ impl Gravity {
         if let Some(bytes) = crate::utils::embedded::get(filename) {
             return Self::from_bytes(&bytes);
         }
-        let path = datadir().unwrap_or(PathBuf::from(".")).join(filename);
+        let path = datadir()?.join(filename);
         download_if_not_exist(&path, None)?;
         Self::from_path(&path)
     }
