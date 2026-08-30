@@ -18,13 +18,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -35,13 +35,13 @@ jobs:
             ${{ runner.os }}-cargo-docs-
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Cache astro-data
         id: cache-astro-data
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: astro-data
           key: satkit-data-${{ hashFiles('data/manifest.json') }}
@@ -72,7 +72,7 @@ jobs:
         run: mkdocs build
 
       - name: Upload pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -85,4 +85,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
