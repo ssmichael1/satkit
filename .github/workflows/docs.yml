@@ -68,12 +68,12 @@ jobs:
 
       - name: Generate static plots
         env:
-          SATKIT_DATA: astro-data
+          SATKIT_DATA: ${{ github.workspace }}/astro-data
         run: python docs/examples/gen_plots.py
 
       - name: Build docs
         env:
-          SATKIT_DATA: astro-data
+          SATKIT_DATA: ${{ github.workspace }}/astro-data
         run: mkdocs build
 
       - name: Upload pages artifact
