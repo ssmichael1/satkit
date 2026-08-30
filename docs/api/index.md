@@ -27,6 +27,8 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`sgp4`](tle.md#satkit.sgp4) | SGP4 orbit propagation from TLE/OMM |
 | [`propagate`](satprop.md) | High-precision numerical orbit propagation |
 | [`propsettings`](satprop.md#satkit.propsettings) | Propagator configuration |
+| [`satproperties`](satprop.md#satkit.satproperties) | Drag, radiation-pressure (cannonball / ECOM) and thrust properties |
+| [`ecomparams`](satprop.md#satkit.ecomparams) | ECOM empirical solar-radiation-pressure coefficients |
 | [`satstate`](satstate.md) | Satellite state with built-in propagation |
 | [`kepler`](kepler.md) | Keplerian orbital elements |
 | [`lambert`](lambert.md) | Lambert two-point boundary value problem solver |
