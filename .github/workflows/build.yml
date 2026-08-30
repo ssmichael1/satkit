@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     branches:
-      - "*"
+      - "**"
     paths-ignore:
       - "docs/**"
       - "README.md"
@@ -12,8 +12,8 @@ on:
       - "LICENSE"
   pull_request:
     branches:
-      - "*"
-      - "!wheel*"
+      - "**"
+      - "!wheel**"
     types:
       - opened
       - synchronize
