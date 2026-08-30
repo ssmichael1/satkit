@@ -2,19 +2,24 @@ schema_version: 1
 
 context:
   name: satkit
-  version: "0.20.2"
+  # TODO(release): set to the version published on PyPI and fill in sha256
+  # (`pip download satkit==<version> --no-binary :all: --no-deps -d /tmp/s && shasum -a 256 /tmp/s/*.tar.gz`).
+  version: "0.21.0"
 
 package:
   name: ${{ name|lower }}
   version: ${{ version }}
 
 source:
+  # The PyPI sdist ships everything the build needs, including the data
+  # compiled into the extension (data/manifest.json and data/embedded/*.gz —
+  # see MANIFEST.in upstream). No network access is needed at build time.
   url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/${{ name }}-${{ version }}.tar.gz
-  sha256: c1b28a159f9b83a2b037874ad5f6466c3375f7fed5e0ee51d4063e00830f155c
+  sha256: TODO-after-release
 
 build:
   number: 0
-  # satkit currently requires Python ≥3.10 (set in pyproject.toml).
+  # satkit requires Python ≥3.10 (pyproject.toml).
   skip: match(python, "<3.10")
   script:
     # conda-forge policy for Rust packages: bundle the licenses of every crate
@@ -37,24 +42,29 @@ requirements:
   run:
     - python
     - numpy >=1.0
-    - satkit-data >=0.9
+    # Since 0.21 the core data (IERS nutation tables, gravity models) is
+    # compiled into the extension and the JPL ephemeris is downloaded on first
+    # use, SHA-256 verified. The `satkit-data` package is therefore no longer
+    # a dependency; install it alongside satkit for fully offline use
+    # (`conda install satkit-data`) — satkit finds it automatically.
 
 tests:
   # PyO3-`wrap_pymodule!` submodules (jplephem, frametransform, ...) are
   # exposed as attributes on `satkit`, not separately-importable
   # top-level modules — so only `satkit` itself goes in `imports:`.
-  # The attribute-access exercise lives in run_test.py.
   - python:
       imports:
         - satkit
-      # `pip check` would report satkit's `satkit-data` requirement as
-      # missing: the conda satkit-data package lays its files out directly
-      # (no pip dist-info metadata), so pip cannot see it even though it is
-      # installed. The run_test.py script below proves the data is found.
-      pip_check: false
+  # Offline smoke test: an empty data directory, downloads forbidden
+  # (SATKIT_OFFLINE=1), no network — exercises time scales, gravity, the
+  # IERS precession-nutation tables, SGP4, and checks the ephemeris is NOT
+  # fetched. See run_test.py.
   - files:
       recipe:
         - run_test.py
+    requirements:
+      run:
+        - numpy
     script:
       - python run_test.py
 
@@ -68,8 +78,12 @@ about:
     atmospheric density, and JPL ephemerides — everything needed for
     satellite astrodynamics work.
 
-    Companion data package: satkit-data (ships JPL DE421 plus the
-    static gravity / IERS / leap-second / NRLMSIS files).
+    The IERS nutation tables and gravity models are compiled in, so the
+    package works with no data files and no network. The JPL DE440
+    ephemeris (~102 MB) is downloaded on first use, SHA-256 verified;
+    for offline installs add the companion package `satkit-data`
+    (ships JPL DE421 plus the static files), which satkit finds
+    automatically.
   license: MIT OR Apache-2.0
   license_file:
     - LICENSE-MIT
