@@ -22,7 +22,8 @@ The force model follows the treatment in [Montenbruck & Gill (2000)](references.
 | Sun third-body | on | `use_sun_gravity` | $10^{-6}$ m/s² |
 | Moon third-body | on | `use_moon_gravity` | $10^{-6}$ m/s² |
 | Atmospheric drag (NRLMSISE-00) | when alt < 700 km | `use_spaceweather`, [`satproperties.cd_a_over_m`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
-| Solar radiation pressure | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
+| Solar radiation pressure (cannonball) | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
+| Solar radiation pressure (ECOM, experimental — see [Empirical SRP: ECOM](ecom.md)) | when `ecom` is set | [`satproperties.ecom`](../api/satprop.md) | $10^{-7}$ m/s² (D0), $10^{-9}$ (Y, B) |
 | Solid Earth tides (IERS 2010 §6.2.1 Step 1) | on | `tide_model` | $10^{-7}$ m/s² |
 | General relativity (IERS 2010 §10.3: Schwarzschild + geodesic + Lense–Thirring) | on | `use_relativistic_correction` | $10^{-9}$ m/s² (LEO) |
 | Continuous thrust | when configured | [`satproperties.thrusts`](../api/satprop.md) | user-specified |
@@ -74,6 +75,9 @@ Set with `tide_model`:
 | `tidemodel.solid_full` | Step 1 + Step 2 (Step 2 not yet implemented; behaves as Step 1) |
 | `tidemodel.none` | Disable solid tides (use for reproducibility with pre-tide versions) |
 
+!!! note "Tide system of the gravity model"
+    Step 1 includes the *permanent* tide, so it belongs on a **tide-free** gravity model. `gravmodel.egm96` (the default) is tide-free ($\bar{C}_{20} = -4.84165371736\times10^{-4}$); `gravmodel.jgm3` and `gravmodel.itugrace16` are **zero-tide** ($\bar{C}_{20} \approx -4.841695\times10^{-4}$), so combining them with `solid_step1` double-counts the permanent tide — about 5–7 cm cross-track over 3 days at GPS altitude. Use `egm96` with tides on, or `tidemodel.none` with a zero-tide model.
+
 ## Atmospheric Drag
 
 At altitudes below 700 km the residual atmosphere imposes a drag force:
@@ -98,7 +102,11 @@ $$
 
 where $P_\text{sun} \approx 4.56 \times 10^{-6}$ N/m² is the radiation pressure at 1 AU, $C_R A/m$ is the satellite's radiation susceptibility (the user-supplied `satproperties.craoverm`), and $\nu(\vec{p}, \vec{p}_\text{sun}) \in [0, 1]$ is a shadow function that vanishes when the satellite is in Earth's umbra — the conical umbra/penumbra model of [Montenbruck & Gill (2000)](references.md#montenbruck2000), §3.4.2; the cannonball force itself is their §3.4, Eq. 3.75.
 
-satkit uses a **cannonball model** — the satellite's surface is treated as if its normal points toward the Sun. For high-fidelity work (precise SRP modeling for GNSS or active satellite operations), a box-wing model ([Rodriguez-Solano et al. 2012](references.md#rodriguez2012)) is needed; that is not currently provided.
+satkit's default is a **cannonball model** — the satellite's surface is treated as if its normal points toward the Sun, and the force acts along the satellite→Sun line. A physical box-wing model ([Rodriguez-Solano et al. 2012](references.md#rodriguez2012)) is not provided.
+
+For GNSS-class work satkit also offers the **Empirical CODE Orbit Model (ECOM)** — the empirical, Sun-oriented D/Y/B parameterization used by CODE and most IGS analysis centres — as an **experimental** addition to the cannonball term, enabled by supplying coefficients through `satproperties(ecom=...)`. Its equations, coefficient table, sign and eclipse conventions, and measured performance are on the [Empirical SRP: ECOM](ecom.md) page.
+
+Moon geometry and quadruples the fit residual. And for arcs that cross Earth's shadow, use `integrator = gauss_jackson8`: the adaptive Runge–Kutta steppers can abort at a shadow boundary with *too many consecutive step rejections*, whereas the fixed-step multistep integrator is immune and fits an eclipsing satellite just as well (G08, 8% umbra: 4.7 cm fit, 5.6 cm at 24 h).
 
 ## General-Relativistic Correction
 

@@ -10,6 +10,8 @@ mod drag;
 mod point_gravity;
 /// General-relativistic corrections (Schwarzschild post-Newtonian term)
 pub mod relativity;
+/// Empirical CODE Orbit Model (ECOM) solar radiation pressure
+pub mod srp;
 /// Thrust models for continuous maneuvers
 pub mod thrust;
 /// IERS 2010 solid Earth tide perturbations
@@ -25,5 +27,6 @@ pub use satproperties::SatProperties;
 pub use satproperties::SatPropertiesSimple;
 pub use satstate::{ImpulsiveManeuver, SatState, StateCov};
 pub use settings::{Integrator, PropSettings};
+pub use srp::EcomParams;
 pub use thrust::{ContinuousThrust, ThrustProfile};
 pub use tides::{TideDeltas, TideModel};

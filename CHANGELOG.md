@@ -6,6 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Added
 
+- **Experimental:** ECOM (Empirical CODE Orbit Model) solar-radiation-pressure model — reduced/ECOM1/ECOM2 coefficients in the DYB frame, Rust (`EcomParams`, `SatProperties::srp_ecom`) and Python (`ecomparams`, `satproperties(ecom=...)`), with a GPS SP3 fit/prediction tutorial; the interface may change in a minor release ([#131](https://github.com/ssmichael1/satkit/pull/131))
 - Static data files are downloaded from a manifest pinned to the release (`data/manifest.json`, SHA-256 verified), trying GitHub release assets, then the origin servers (JPL, IERS), then the GCS bucket; `SATKIT_DATA_URL` overrides the source for mirrors ([#137](https://github.com/ssmichael1/satkit/pull/137))
 - GMAT regression corpus: 17 seven-day reference trajectories (LEO to cislunar; `j2`/`full`/`gr` force models) replayed and gated under `cargo test` and `pytest`; regenerate with `tests/gmat/generate.py` ([#127](https://github.com/ssmichael1/satkit/pull/127))
 - EOP coverage is visible and enforceable: `earth_orientation_params::{coverage, status}` (Python `frametransform.eop_coverage()` / `eop_status()`), one-time warnings past the table end or with no table, and `PropSettings::require_eop_coverage` ([#133](https://github.com/ssmichael1/satkit/pull/133))
@@ -23,8 +24,13 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - Data downloads use `https://celestrak.org` and validate manifest paths and URLs ([#130](https://github.com/ssmichael1/satkit/pull/130))
 - numeris 0.5.14 → 0.5.18: the adaptive Runge–Kutta integrators no longer abort at shadow-boundary kinks on eclipsing arcs ([#128](https://github.com/ssmichael1/satkit/pull/128)) ([#135](https://github.com/ssmichael1/satkit/pull/135))
 
+- **Cannonball SRP acts along the satellite→Sun line** rather than the
+  geocentric Sun direction (a ~1e-4 rad difference at LEO). `test_gps`
+  residual 1.7997 → 1.7868 m.
+
 ### Fixed
 
+- SP3 epochs are read as GPS time, not UTC (18 s error) in `test_gps`, `sp3file.py` and the validation script — `test_gps` residual 1.80 → 1.21 m; cannonball SRP now acts along the satellite→Sun line; `jgm3`/`itugrace16` documented as zero-tide models ([#131](https://github.com/ssmichael1/satkit/pull/131))
 - `import satkit` no longer fails when the optional `satkit_data` bundle is installed as a namespace package (the conda layout, no `__init__.py`): its `data/` directory is discovered via `__path__` ([#140](https://github.com/ssmichael1/satkit/pull/140))
 - References page rebuilt as a full bibliography and every guide, API page and tutorial now cites its primary source; wrong SGP4 (AIAA 2006-6753), JGM-3 DOI and box-wing citations corrected; drag gate, Lambert multi-revolution, leap-second and GR descriptions brought in line with the code; RK stage counts corrected (RKV98 is 21 stages) ([#136](https://github.com/ssmichael1/satkit/pull/136))
 - Frame-bias docs: `EME2000` is 23.1 mas from GCRF (docs said 17); GMAT's `EarthMJ2000Eq` is an IAU-76 realization ~44 mas from ICRF, not the constant bias ([#132](https://github.com/ssmichael1/satkit/pull/132))

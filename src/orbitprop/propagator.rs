@@ -2,6 +2,7 @@ use super::drag::{drag_and_partials, drag_force};
 use super::point_gravity::{point_gravity, point_gravity_and_partials};
 use super::relativity::gr_accel;
 use super::settings::PropSettings;
+use super::srp;
 use super::tides::{self, TideModel};
 
 use crate::lpephem;
@@ -88,17 +89,21 @@ pub type CovState = StateType<7>;
 // See Montenbruk & Gill for details (Chapter 7)
 //
 
-/// Solar radiation pressure acceleration in GCRF
+/// Cannonball solar radiation pressure acceleration in GCRF.
+///
+/// `shadow` is the Earth-shadow factor ν ∈ [0, 1] (see
+/// [`shadowfunc`](crate::lpephem::sun::shadowfunc)), computed once by the
+/// caller and shared with the ECOM term. The force is directed along the
+/// satellite→Sun line (not the geocentric Sun direction; the ~1e-4 rad
+/// difference at LEO is small but free to get right).
 fn solar_pressure_accel(
     sun_gcrf: &Vector3,
     pos_gcrf: &Vector3,
-    time: &Instant,
-    props: &dyn SatProperties,
-    state: &SimpleState,
+    shadow: f64,
+    cr_a_over_m: f64,
 ) -> Vector3 {
-    sun_gcrf
-        * (-shadowfunc(sun_gcrf, pos_gcrf) * props.cr_a_over_m(time, state) * 4.56e-6
-            / sun_gcrf.norm())
+    let sat_to_sun = sun_gcrf - pos_gcrf;
+    sat_to_sun * (-shadow * cr_a_over_m * 4.56e-6 / sat_to_sun.norm())
 }
 
 /// GCRF radius (meters) above which atmospheric density is negligible and
@@ -247,8 +252,21 @@ fn force_model(
         ss.set_block(0, 0, pos_gcrf);
         ss.set_block(3, 0, vel_gcrf);
 
+        // Solar radiation pressure: cannonball term plus optional ECOM
+        // empirical model, sharing one shadow-function evaluation. Neither
+        // contributes partials (see the `force_model` docs).
         if need_accel {
-            accel += solar_pressure_accel(&sun_gcrf, pos_gcrf, &time, props, &ss);
+            let cr_a_over_m = props.cr_a_over_m(&time, &ss);
+            let ecom = props.srp_ecom(&time, &ss);
+            if cr_a_over_m != 0.0 || ecom.is_some() {
+                let shadow = shadowfunc(&sun_gcrf, pos_gcrf);
+                if cr_a_over_m != 0.0 {
+                    accel += solar_pressure_accel(&sun_gcrf, pos_gcrf, shadow, cr_a_over_m);
+                }
+                if let Some(p) = ecom {
+                    accel += srp::ecom_accel(&p, pos_gcrf, vel_gcrf, &sun_gcrf, shadow);
+                }
+            }
         }
 
         // Atmospheric drag below ~700 km altitude. The squared-radius gate
@@ -1136,7 +1154,19 @@ mod tests {
                 let hour: i32 = lvals[4].parse()?;
                 let min: i32 = lvals[5].parse()?;
                 let sec: f64 = lvals[6].parse()?;
-                Ok(Instant::from_datetime(year, mon, day, hour, min, sec)?)
+                // SP3 epochs are in GPS time (header `%c ... GPS`): GPST = UTC + 18 s
+                // in 2023. Reading them as UTC rotates the ITRF→GCRF truth by
+                // 18 s of Earth rotation (1.3e-3 rad) relative to the Sun/Moon
+                // geometry and was the dominant error in this test until 0.21.
+                Ok(Instant::from_datetime_with_scale(
+                    year,
+                    mon,
+                    day,
+                    hour,
+                    min,
+                    sec,
+                    crate::TimeScale::GPS,
+                )?)
             })
             .collect::<Result<Vec<crate::Instant>, _>>()?;
 
@@ -1170,18 +1200,20 @@ mod tests {
             })
             .collect();
 
-        // [vx, vy, vz, Cr*A/m]. Refitted against ESA SP3 truth using the
-        // default force model at the time (solid Earth tides + GR
-        // Schwarzschild + degree-4 gravity). Adding the geodesic and
-        // Lense-Thirring GR terms later moved the with-tides residual from
-        // 1.7997 m to 1.8137 m without a refit. Velocity-only LSQ + Nelder-Mead over
-        // Cr*A/m; initial position held at pgcrf[0] (SP3 truth at t=0).
-        // When the force model changes, refit using the same procedure.
+        // [vx, vy, vz, Cr*A/m]. Refitted against ESA SP3 truth (epochs in
+        // GPS time) with the current default force model (degree-4 gravity,
+        // solid Earth tides Step 1, full IERS 10.12 relativity, cannonball
+        // SRP along the satellite→Sun line): least squares over the three
+        // velocity components and Cr*A/m with absolute finite-difference
+        // steps, initial position held at pgcrf[0] (SP3 truth at t=0).
+        // Result: max per-axis residual 1.214 m with tides, 1.429 m without
+        // (was 1.80 m with the epochs mis-read as UTC). When the force model
+        // changes, refit using the same procedure.
         let v0 = numeris::vector![
-            2.47130589e+03,
-            2.94682727e+03,
-            -5.34172166e+02,
-            2.31413838e-02,
+            2.47517168e+03,
+            2.94357938e+03,
+            -5.34181014e+02,
+            2.31985404e-02,
         ];
 
         let state0 = numeris::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
