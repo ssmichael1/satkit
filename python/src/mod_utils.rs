@@ -10,9 +10,15 @@ use anyhow::Result;
 ///
 /// Download data files needed for computation
 ///
+/// Not required for normal use: the IERS nutation tables and gravity models
+/// are compiled into satkit, the JPL ephemeris is downloaded on first use,
+/// and the Earth-orientation / space-weather files are fetched on first use.
+/// Call this to provision everything up front (a container image, a machine
+/// that will later be offline) or to refresh the daily files.
+///
 /// Args:
 ///     overwrite (bool): Download and overwrite files if they already exist
-///     dir (str): Target directory for files.  Uses existing data directory if not specified
+///     dir (str): Target directory for files.  Uses ``datadir()`` if not specified
 ///
 ///
 /// Files include:
@@ -60,21 +66,27 @@ fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
     Ok(())
 }
 
-/// Get directory where astronomy data is stored
+/// Directory where downloaded data files are written
 ///
-/// Tries the following paths in order, and stops when the
-/// files are found
+/// The core data (IERS nutation tables, gravity models to degree 70) is
+/// compiled into satkit, so a data directory is only needed for the JPL
+/// ephemeris (downloaded on first use, SHA-256 verified) and the regularly
+/// refreshed Earth-orientation / space-weather files.
 ///
-/// *  "SATKIT_DATA" environment variable
-/// *  ${DYLIB}/satkit-data where ${DYLIB} is directory containing the compiled python library
-/// *  ${SITE_PACKAGES}/satkit_data/data where ${SITE_PACKAGES} is the parent of ${DYLIB} (for the satkit_data pip package)
-/// *  ${HOME}/Library/Application Support/satkit-data (on MacOS Only)
-/// *  ${HOME}/.satkit-data
-/// *  /usr/share/satkit-data
-/// * /Library/Application Support/satkit-data (on MacOS Only)
+/// Files are *looked up* across several locations (see ``data_search_dirs``),
+/// but downloads go to exactly one place: ``SATKIT_DATA`` if set, else the
+/// directory given to ``set_datadir``, else the platform user-data directory:
+///
+/// * macOS: ``~/Library/Application Support/satkit-data``
+/// * Linux: ``$XDG_DATA_HOME/satkit-data`` (default ``~/.local/share/satkit-data``)
+/// * Windows: ``%LOCALAPPDATA%\satkit-data``
+///
+/// satkit never writes next to its own shared library or inside
+/// ``site-packages``. Set ``SATKIT_OFFLINE=1`` to forbid downloads entirely.
 ///
 /// Returns:
-///     str: Directory where files are stored
+///     str: Directory downloads are written to (created on first use), or
+///     None if none could be determined
 #[pyfunction]
 fn datadir() -> PyResult<Py<PyAny>> {
     pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
@@ -87,7 +99,81 @@ fn datadir() -> PyResult<Py<PyAny>> {
     })
 }
 
+/// Directories searched for data files, in order
+///
+/// A file is used from the first directory that contains it; any of these
+/// may be read-only (a system-wide directory, the optional ``satkit-data``
+/// package inside ``site-packages``). Downloads go only to ``datadir()``.
+///
+/// 1. ``SATKIT_DATA`` (environment; also the write location)
+/// 2. the directory given to ``set_datadir`` (also the write location)
+/// 3. directories added with ``add_search_dir``
+/// 4. ``<dir of the satkit extension>/satkit-data``
+/// 5. ``<site-packages>/satkit_data/data`` (the ``satkit-data`` pip package)
+/// 6. the platform user-data directory (the default write location)
+/// 7. ``~/.satkit-data`` (legacy)
+/// 8. ``/usr/share/satkit-data`` (not on Windows)
+/// 9. macOS: ``/Library/Application Support/satkit-data``
+///
+/// Returns:
+///     list[str]: search directories in order
+#[pyfunction]
+fn data_search_dirs() -> Vec<String> {
+    satkit::utils::data_search_dirs()
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// Add a read-only directory to the data-file search list
+///
+/// Tried after ``SATKIT_DATA`` / ``set_datadir`` and before the platform
+/// locations. Downloads are never written here. Used by the ``satkit``
+/// package itself to register the optional ``satkit_data`` bundle.
+///
+/// Args:
+///    path (str): Directory to search
+#[pyfunction]
+fn add_search_dir(path: String) {
+    satkit::utils::add_search_dir(&PathBuf::from(path));
+}
+
+/// Forbid (or re-allow) downloads for this process
+///
+/// Offline mode blocks *downloads only*: the explicit ``update_datafiles()``
+/// and every lazy first-use fetch (the JPL ephemeris, the Earth-orientation
+/// and space-weather refresh, any non-embedded file). It does not change
+/// where files are searched, and the compiled-in core data (IERS nutation
+/// tables, gravity models) is unaffected. A blocked download raises
+/// ``RuntimeError`` naming the file and its sources — the same error a
+/// build without the ``download`` feature gives.
+///
+/// Precedence: the last call to ``set_offline`` wins; if it was never
+/// called, the ``SATKIT_OFFLINE`` environment variable is consulted.
+///
+/// Args:
+///    enabled (bool): True to forbid downloads, False to allow them
+#[pyfunction]
+fn set_offline(enabled: bool) {
+    satkit::utils::set_offline(enabled);
+}
+
+/// Whether downloads are currently forbidden
+///
+/// Reflects ``set_offline`` if it was ever called, else the
+/// ``SATKIT_OFFLINE`` environment variable.
+///
+/// Returns:
+///    bool: True if downloads are forbidden
+#[pyfunction]
+fn is_offline() -> bool {
+    satkit::utils::is_offline()
+}
+
 /// Set the data directory
+///
+/// The directory becomes the first search location (after ``SATKIT_DATA``)
+/// and the location downloads are written to.
 ///
 /// Args:
 ///    datadir (str): Path to the data directory
@@ -158,6 +244,12 @@ fn build_date() -> PyResult<String> {
 pub fn utils(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(datadir, m)?).unwrap();
     m.add_function(wrap_pyfunction!(set_datadir, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(data_search_dirs, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(add_search_dir, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(set_offline, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(is_offline, m)?).unwrap();
     m.add_function(wrap_pyfunction!(datafiles_exist, m)?)
         .unwrap();
     m.add_function(wrap_pyfunction!(dylib_path, m)?).unwrap();
