@@ -16,6 +16,22 @@ pub enum Error {
     #[error("File {path} not found and satkit was built without the `download` feature")]
     FileNotFoundNoDownload { path: String },
 
+    /// A download was needed but is forbidden: either `SATKIT_OFFLINE=1` is
+    /// set or satkit was built without the `download` feature. No network I/O
+    /// is attempted. `urls` lists where the file could be obtained manually
+    /// (from the data manifest, when the file is a pinned one).
+    #[error(
+        "{name} is not present and cannot be downloaded ({reason}). \
+         Provide it in the data directory (SATKIT_DATA) or install the `satkit-data` bundle; \
+         sources: {}",
+        if urls.is_empty() { "(none listed)".to_string() } else { urls.join(", ") }
+    )]
+    Offline {
+        name: String,
+        reason: &'static str,
+        urls: Vec<String>,
+    },
+
     /// Returned when a download path, URL or manifest name has no valid
     /// single-component file name (e.g. ends in `/`, is absolute, or contains
     /// `..`).
@@ -44,6 +60,33 @@ pub enum Error {
     #[error("Could not download {name} from any source:\n  {}", attempts.join("\n  "))]
     AllSourcesFailed { name: String, attempts: Vec<String> },
 
+    /// Replacing an existing data file failed even after retries. On
+    /// Windows a file another process has open cannot be renamed over; on
+    /// any platform this also covers a directory that became read-only.
+    #[error("could not replace {path} (is another process using it?): {source}")]
+    ReplaceFailed {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// A manifest-pinned file present on disk does not match its pinned size
+    /// or SHA-256 — corrupt, truncated, or a different file under the same
+    /// name. When downloads are allowed the file is re-fetched; under offline
+    /// mode (or without the `download` feature) this error is returned.
+    #[error(
+        "{name} at {path} is corrupt: {what} {} does not match the manifest ({}). \
+         Delete or replace the file, or allow downloads so it can be re-fetched",
+        .values.1, .values.0
+    )]
+    CorruptFile {
+        name: String,
+        path: String,
+        what: &'static str,
+        /// `(expected, actual)`; boxed to keep the error type small.
+        values: Box<(String, String)>,
+    },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -58,11 +101,150 @@ pub enum Error {
 /// Convenient type alias used throughout the `download` module.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Path of the sibling `.part` file used for atomic writes.
+/// Environment variable that forbids all downloads: when set to any value
+/// other than `0`/`false`/empty, every download helper returns
+/// [`Error::Offline`] immediately instead of opening a connection. Use it in
+/// sandboxes, CI, and air-gapped deployments to make a missing file a loud,
+/// typed error rather than a hang or a surprise download. [`set_offline`]
+/// overrides it programmatically.
+pub const OFFLINE_ENV: &str = "SATKIT_OFFLINE";
+
+/// Offline-mode state: 0 = not set programmatically (use the environment),
+/// 1 = downloads allowed, 2 = downloads forbidden.
+static OFFLINE_OVERRIDE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Force offline mode on or off for this process, overriding
+/// [`OFFLINE_ENV`]. Precedence: the last call to `set_offline` wins; if it
+/// was never called, the environment variable is consulted.
+///
+/// Offline mode blocks **downloads only** — the explicit
+/// [`update_datafiles`](crate::utils::update_datafiles) and every lazy
+/// first-use fetch (ephemeris, EOP / space-weather refresh, non-embedded
+/// files). It does not change where files are searched, and the compiled-in
+/// core data is unaffected. The error returned is the same typed
+/// [`Error::Offline`] a build without the `download` feature returns.
+pub fn set_offline(offline: bool) {
+    OFFLINE_OVERRIDE.store(
+        if offline { 2 } else { 1 },
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
+
+/// `true` if downloads are currently forbidden (see [`set_offline`] for the
+/// precedence between the setter and [`OFFLINE_ENV`]). One atomic load when
+/// the setter has been used; an environment lookup otherwise.
+pub fn is_offline() -> bool {
+    match OFFLINE_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => false,
+        2 => true,
+        _ => std::env::var(OFFLINE_ENV)
+            .map(|v| !(v.is_empty() || v == "0" || v.eq_ignore_ascii_case("false")))
+            .unwrap_or(false),
+    }
+}
+
+/// Alias of [`is_offline`].
+pub fn offline_requested() -> bool {
+    is_offline()
+}
+
+/// Forget any [`set_offline`] call so the environment decides again
+/// (test helper: keeps one test's override from leaking into the next).
+#[cfg(test)]
+pub(crate) fn clear_offline_override() {
+    OFFLINE_OVERRIDE.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The manifest URLs for `name`, for error messages (empty if not pinned).
+fn manifest_urls(name: &str) -> Vec<String> {
+    crate::utils::manifest::embedded()
+        .entry(name)
+        .map(|e| e.urls.clone())
+        .unwrap_or_default()
+}
+
+/// Build the [`Error::Offline`] for `name`, naming why no download is possible.
+pub(crate) fn offline_error(name: &str, reason: &'static str) -> Error {
+    Error::Offline {
+        name: name.to_string(),
+        reason,
+        urls: manifest_urls(name),
+    }
+}
+
+/// Return [`Error::Offline`] if [`OFFLINE_ENV`] is set (checked before any
+/// network I/O by every download helper).
+#[cfg(feature = "download")]
+pub(crate) fn check_online(name: &str) -> Result<()> {
+    if offline_requested() {
+        return Err(offline_error(name, "SATKIT_OFFLINE is set"));
+    }
+    Ok(())
+}
+
+/// Sequence number so every in-flight download in this process gets its own
+/// temporary file (see [`part_path`]).
+static PART_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Path of the temporary file a download is streamed into before the atomic
+/// rename: `<final>.part.<pid>.<seq>`. The process id and a per-process
+/// counter make the name unique, so two processes (or two threads) fetching
+/// the same file at the same time never write into each other's partial
+/// file — each completes independently and the rename is what serialises
+/// them. A leftover `*.part.*` file from a killed process is harmless and
+/// can simply be deleted.
+#[cfg(feature = "download")]
 fn part_path(final_path: &Path) -> std::path::PathBuf {
+    let seq = PART_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut p = final_path.as_os_str().to_owned();
-    p.push(".part");
+    p.push(format!(".part.{}.{seq}", std::process::id()));
     std::path::PathBuf::from(p)
+}
+
+/// Run `op` up to `attempts` times, sleeping `delay` between failures.
+/// `NotFound` is returned immediately (the source of a rename is gone; no
+/// retry can help). Everything else — notably the Windows sharing-violation
+/// (`PermissionDenied`) raised when renaming over a file another process has
+/// open, or a transient EBUSY — is retried.
+pub(crate) fn retry_io<F: FnMut() -> std::io::Result<()>>(
+    attempts: u32,
+    delay: std::time::Duration,
+    mut op: F,
+) -> std::io::Result<()> {
+    let mut last = None;
+    for i in 0..attempts.max(1) {
+        match op() {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(e),
+            Err(e) => {
+                last = Some(e);
+                if i + 1 < attempts {
+                    std::thread::sleep(delay);
+                }
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| std::io::Error::other("retry_io: no attempts")))
+}
+
+/// Atomically move the completed temporary file onto `final_path`, replacing
+/// any existing file. Retries a few times so that, on Windows, a reader that
+/// briefly holds the old file open does not make the download fail; if it
+/// still cannot be replaced the temporary file is removed and
+/// [`Error::ReplaceFailed`] names the path.
+#[cfg(feature = "download")]
+fn rename_into_place(part: &Path, final_path: &Path) -> Result<()> {
+    let r = retry_io(6, std::time::Duration::from_millis(50), || {
+        std::fs::rename(part, final_path)
+    });
+    if let Err(source) = r {
+        let _ = std::fs::remove_file(part);
+        return Err(Error::ReplaceFailed {
+            path: final_path.display().to_string(),
+            source,
+        });
+    }
+    Ok(())
 }
 
 /// Stream `reader` to `final_path` atomically: write to a sibling `.part` file
@@ -79,10 +261,7 @@ fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()
         Ok(())
     };
     match write() {
-        Ok(()) => {
-            std::fs::rename(&part, final_path)?;
-            Ok(())
-        }
+        Ok(()) => rename_into_place(&part, final_path),
         Err(e) => {
             let _ = std::fs::remove_file(&part);
             Err(e)
@@ -96,6 +275,7 @@ fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()
 /// [`Error::HashMismatch`] is returned, so a corrupt or substituted download
 /// never becomes a trusted data file. Used by
 /// [`manifest::fetch_static_file`](crate::utils::manifest::fetch_static_file).
+#[cfg(feature = "download")]
 pub(crate) fn write_atomic_verified(
     reader: &mut impl std::io::Read,
     final_path: &Path,
@@ -146,7 +326,17 @@ pub(crate) fn write_atomic_verified(
     if sha != entry.sha256 {
         return Err(mismatch("sha256", entry.sha256.clone(), sha));
     }
-    std::fs::rename(&part, final_path)?;
+    // Another process may have completed the same download while this one
+    // was in flight (each writes its own `.part.<pid>.<seq>`). If a verified
+    // final file is already there, ours is redundant: discard it rather than
+    // replacing a file a third process may just have started reading.
+    if final_path.is_file() && entry.verify(final_path).unwrap_or(false) {
+        let _ = std::fs::remove_file(&part);
+        let _ = entry.write_verified_marker(final_path);
+        return Ok(());
+    }
+    rename_into_place(&part, final_path)?;
+    let _ = entry.write_verified_marker(final_path);
     Ok(())
 }
 
@@ -172,6 +362,7 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
             .ok_or_else(|| Error::InvalidFileName {
                 path: fname.display().to_string(),
             })?;
+    check_online(basename)?;
     if seturl.is_none() {
         if let Some(entry) = crate::utils::manifest::embedded().entry(basename) {
             let dir = fname.parent().unwrap_or_else(|| Path::new("."));
@@ -196,12 +387,16 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
 #[cfg(not(feature = "download"))]
 pub fn download_if_not_exist(fname: &Path, _seturl: Option<&str>) -> Result<()> {
     if fname.is_file() {
-        Ok(())
-    } else {
-        Err(Error::FileNotFoundNoDownload {
-            path: fname.display().to_string(),
-        })
+        return Ok(());
     }
+    let name = fname
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("<unnamed>");
+    Err(offline_error(
+        name,
+        "satkit was built without the `download` feature",
+    ))
 }
 
 /// Download `url` into `downloaddir` (unverified; used for the regularly
@@ -220,6 +415,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
         println!("File {} exists; skipping download", fname);
         return Ok(false);
     }
+    check_online(fname)?;
 
     let agent = ureq::Agent::new_with_defaults();
     let mut resp = agent.get(url).call()?;
@@ -257,6 +453,7 @@ pub fn download_file_async(
 
 #[cfg(feature = "download")]
 pub fn download_to_string(url: &str) -> Result<String> {
+    check_online(url)?;
     let agent = ureq::Agent::new_with_defaults();
     let mut resp = agent.get(url).call()?;
     let thestring = std::io::read_to_string(resp.body_mut().as_reader())?;
@@ -289,8 +486,94 @@ mod tests {
             "final file should exist after success"
         );
         assert!(!part_path.exists(), "the .part file must be renamed away");
+        assert!(
+            !leftover_parts(&final_path),
+            "no .part.<pid>.<seq> file may remain"
+        );
         assert_eq!(std::fs::read(&final_path).unwrap(), data);
         let _ = std::fs::remove_file(&final_path);
+    }
+
+    /// Any `<final>.part.*` sibling still on disk.
+    fn leftover_parts(final_path: &Path) -> bool {
+        let dir = final_path.parent().unwrap();
+        let prefix = format!(
+            "{}.part.",
+            final_path.file_name().unwrap().to_string_lossy()
+        );
+        std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+    }
+
+    #[test]
+    fn part_paths_are_unique_per_call() {
+        let f = Path::new("/tmp/x.bin");
+        let a = part_path(f);
+        let b = part_path(f);
+        assert_ne!(a, b);
+        assert!(a
+            .to_string_lossy()
+            .contains(&format!(".part.{}.", std::process::id())));
+    }
+
+    /// The rename helper retries transient failures (the Windows
+    /// sharing-violation case) but gives up after the configured attempts,
+    /// and never retries a missing source.
+    #[test]
+    fn retry_io_retries_transient_failures_then_gives_up() {
+        let mut calls = 0;
+        let r = retry_io(5, std::time::Duration::from_millis(1), || {
+            calls += 1;
+            if calls < 3 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "busy",
+                ))
+            } else {
+                Ok(())
+            }
+        });
+        assert!(r.is_ok());
+        assert_eq!(calls, 3, "succeeds on the third attempt");
+
+        let mut calls = 0;
+        let r = retry_io(4, std::time::Duration::from_millis(1), || {
+            calls += 1;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "busy",
+            ))
+        });
+        assert_eq!(r.unwrap_err().kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(calls, 4, "exhausts every attempt");
+
+        let mut calls = 0;
+        let r = retry_io(4, std::time::Duration::from_millis(1), || {
+            calls += 1;
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "gone"))
+        });
+        assert_eq!(r.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        assert_eq!(calls, 1, "a missing source is not retried");
+    }
+
+    /// `rename_into_place` surfaces a persistent failure as a typed error
+    /// naming the destination and removes the temporary file.
+    #[test]
+    fn rename_into_place_reports_typed_error() {
+        let dir = std::env::temp_dir().join(format!("satkit_rename_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("f.bin.part.1.1");
+        std::fs::write(&part, b"x").unwrap();
+        // Renaming onto a path whose parent does not exist cannot succeed.
+        let dest = dir.join("missing-subdir").join("f.bin");
+        let err = rename_into_place(&part, &dest).unwrap_err();
+        assert!(matches!(err, Error::ReplaceFailed { .. }), "{err}");
+        assert!(err.to_string().contains("f.bin"));
+        assert!(!part.exists(), "temporary file is cleaned up");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -1,0 +1,58 @@
+{
+ "embed_max_degree": 70,
+ "files": {
+  "tab5.2a.txt": {
+   "source": "tab5.2a.txt",
+   "source_sha256": "19549252df9eb77c8237dbf5b749de82b7fd7713a8b60b35371538cd36b6aa1d",
+   "source_size": 171237,
+   "embedded_sha256": "19549252df9eb77c8237dbf5b749de82b7fd7713a8b60b35371538cd36b6aa1d",
+   "embedded_size": 171237
+  },
+  "tab5.2b.txt": {
+   "source": "tab5.2b.txt",
+   "source_sha256": "1f17a3a6ad0b468705b3323bfe72d0320ce996798ec7cba0cdde4405d88f14d9",
+   "source_size": 136770,
+   "embedded_sha256": "1f17a3a6ad0b468705b3323bfe72d0320ce996798ec7cba0cdde4405d88f14d9",
+   "embedded_size": 136770
+  },
+  "tab5.2d.txt": {
+   "source": "tab5.2d.txt",
+   "source_sha256": "fe94c83e1ef6f92b15b3f007779ae70c0984c06ee45d5511b4c821ee9a0ecded",
+   "source_size": 8656,
+   "embedded_sha256": "fe94c83e1ef6f92b15b3f007779ae70c0984c06ee45d5511b4c821ee9a0ecded",
+   "embedded_size": 8656
+  },
+  "EGM96.gfc": {
+   "source": "EGM96.gfc",
+   "source_sha256": "5247a9e9c316dd2c8f8fd491d53be0e163cb5cb3676b021754240cc9e44cb43b",
+   "source_size": 5620000,
+   "truncated_to_degree": 70,
+   "embedded_sha256": "ecf991dbf97b839ea02aaae7ed5ba73ef53002cb58adb9f47e4e9ba13713bfa6",
+   "embedded_size": 220490
+  },
+  "ITU_GRACE16.gfc": {
+   "source": "ITU_GRACE16.gfc",
+   "source_sha256": "b6bea9c78ad168f1e206fc7211f90b64fba54325c832f4473f6c05a07adbc718",
+   "source_size": 1782369,
+   "truncated_to_degree": 70,
+   "embedded_sha256": "a9a2b237109d51fce0e02703472b62a9bd8f8d5371ff448f237db32d69e8952c",
+   "embedded_size": 279549
+  },
+  "JGM2.gfc": {
+   "source": "JGM2.gfc",
+   "source_sha256": "0779cf74f216d5b38c7a4c4a1a25d596b659605deb7731f00874c17e9ed3f5af",
+   "source_size": 118296,
+   "truncated_to_degree": 70,
+   "embedded_sha256": "0779cf74f216d5b38c7a4c4a1a25d596b659605deb7731f00874c17e9ed3f5af",
+   "embedded_size": 118296
+  },
+  "JGM3.gfc": {
+   "source": "JGM3.gfc",
+   "source_sha256": "2ec791eec795689291974dd3602b304029da93d3fea30096daa3b368fb231d03",
+   "source_size": 215405,
+   "truncated_to_degree": 70,
+   "embedded_sha256": "2ec791eec795689291974dd3602b304029da93d3fea30096daa3b368fb231d03",
+   "embedded_size": 215405
+  }
+ }
+}

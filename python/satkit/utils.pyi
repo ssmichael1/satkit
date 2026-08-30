@@ -8,10 +8,17 @@ from __future__ import annotations
 def update_datafiles(**kwargs) -> None:
     """Download & store data files needed for "satkit" computations
 
+    Not required for normal use: the IERS nutation tables and gravity models
+    are compiled into satkit, the JPL ephemeris is downloaded on first use,
+    and the Earth-orientation / space-weather files are fetched on first use.
+    Call this to provision everything up front (a container image, a machine
+    that will later be offline) or to refresh the daily files. Raises
+    ``RuntimeError`` if ``SATKIT_OFFLINE=1`` is set.
+
     Keyword Args:
 
       overwrite (bool):  Re-download static files even when a verified copy is already present
-      dir(string): Target directory for files.  Uses existing data directory if not specified. (see "datadir" function)
+      dir(string): Target directory for files.  Uses ``datadir()`` if not specified
 
     Static files are fetched according to the data manifest compiled into
     satkit (``data/manifest.json``): each is tried from ``SATKIT_DATA_URL``
@@ -48,45 +55,109 @@ def update_datafiles(**kwargs) -> None:
     """
     ...
 
-def datadir() -> str:
-    """Return directory currently used to hold necessary data files for the directory
+def datadir() -> str | None:
+    """Directory where downloaded data files are written
 
+    The core data (IERS nutation tables, gravity models to degree 70) is
+    compiled into satkit, so a data directory is only needed for the JPL
+    ephemeris (downloaded on first use, SHA-256 verified) and the regularly
+    refreshed Earth-orientation / space-weather files.
 
-    Data directory is 1st of following directories search that contains
-    the data files listed in "update_datafiles"
+    Files are *looked up* across several locations (see ``data_search_dirs``),
+    but downloads go to exactly one place — ``SATKIT_DATA`` if set, else the
+    directory given to ``set_datadir``, else the platform user-data directory:
 
-    - MacOS:
-        1. Directory pointed to by ``SATKIT_DATA`` environment variable
-        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
-        3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
-        4. ``$HOME/Library/Application Support/satkit-data``
-        5. ``$HOME/.satkit-data``
-        6. ``/usr/share/satkit-data``
-        7. ``/Library/Application Support/satkit-data``
+    - macOS: ``~/Library/Application Support/satkit-data``
+    - Linux: ``$XDG_DATA_HOME/satkit-data`` (default ``~/.local/share/satkit-data``)
+    - Windows: ``%LOCALAPPDATA%\\satkit-data``
 
-    - Linux:
-        1. Directory pointed to by ``SATKIT_DATA`` environment variable
-        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
-        3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
-        4. ``$HOME/.satkit-data``
-        5. ``/usr/share/satkit-data``
+    satkit never writes next to its own extension module or inside
+    ``site-packages``. Set ``SATKIT_OFFLINE=1`` to forbid downloads entirely
+    (a missing file then raises ``RuntimeError`` naming its sources), and
+    ``SATKIT_DATA_URL`` to fetch from a mirror.
 
-    - Windows:
-        1. Directory pointed to by ``SATKIT_DATA`` environment variable
-        2. ``$DYLIB/satkit-data`` where ``$DYLIB`` is directory containing the compiled python satkit library
-        3. ``$SITE_PACKAGES/satkit_data/data`` where ``$SITE_PACKAGES`` is the parent of ``$DYLIB`` (for the ``satkit_data`` pip package)
-        4. ``$HOME/.satkit-data``
+    Returns:
+        str | None: directory downloads are written to (created on first use),
+        or ``None`` if none could be determined
 
     Example:
         ```python
         print(satkit.utils.datadir())
-        # /Users/user/.astro-data
+        # /Users/user/Library/Application Support/satkit-data
         ```
+    """
+    ...
+
+def data_search_dirs() -> list[str]:
+    """Directories searched for data files, in order
+
+    A file is used from the first directory that contains it; any of these
+    may be read-only (a system-wide directory, the optional ``satkit-data``
+    package inside ``site-packages``). Downloads go only to ``datadir()``.
+
+    1. ``SATKIT_DATA`` (environment; also the write location)
+    2. the directory given to ``set_datadir`` (also the write location)
+    3. directories added with ``add_search_dir``
+    4. ``<dir of the satkit extension>/satkit-data``
+    5. ``<site-packages>/satkit_data/data`` (the ``satkit-data`` pip package)
+    6. the platform user-data directory (the default write location)
+    7. ``~/.satkit-data`` (legacy)
+    8. ``/usr/share/satkit-data`` (not on Windows)
+    9. macOS: ``/Library/Application Support/satkit-data``
+
+    Returns:
+        list[str]: search directories in order
+    """
+    ...
+
+def add_search_dir(path: str) -> None:
+    """Add a read-only directory to the data-file search list
+
+    Tried after ``SATKIT_DATA`` / ``set_datadir`` and before the platform
+    locations. Downloads are never written here. The ``satkit`` package uses
+    this itself to register the optional ``satkit_data`` bundle.
+
+    Args:
+        path (str): Directory to search
+    """
+    ...
+
+def set_offline(enabled: bool) -> None:
+    """Forbid (or re-allow) downloads for this process
+
+    Offline mode blocks *downloads only*: the explicit ``update_datafiles()``
+    and every lazy first-use fetch (the JPL ephemeris, the Earth-orientation
+    and space-weather refresh, any non-embedded file). It does not change
+    where files are searched, and the compiled-in core data (IERS nutation
+    tables, gravity models) is unaffected. A blocked download raises
+    ``RuntimeError`` naming the file and its sources — the same error a
+    build without the ``download`` feature gives.
+
+    Precedence: the last call to ``set_offline`` wins; if it was never
+    called, the ``SATKIT_OFFLINE`` environment variable is consulted
+    (``1``/anything except ``0``, ``false`` or empty means offline).
+
+    Args:
+        enabled (bool): True to forbid downloads, False to allow them
+    """
+    ...
+
+def is_offline() -> bool:
+    """Whether downloads are currently forbidden
+
+    Reflects ``set_offline`` if it was ever called, else the
+    ``SATKIT_OFFLINE`` environment variable.
+
+    Returns:
+        bool: True if downloads are forbidden
     """
     ...
 
 def set_datadir(datadir: str) -> None:
     """Set the data directory
+
+    The directory becomes the first search location (after ``SATKIT_DATA``)
+    and the location downloads are written to.
 
     Args:
         datadir (str): Path to the data directory
@@ -97,10 +168,15 @@ def set_datadir(datadir: str) -> None:
     ...
 
 def datafiles_exist() -> bool:
-    """Check if data files are found
+    """Check whether a JPL ephemeris file is present in any search directory
+
+    The ephemeris is the only data satkit needs that is neither compiled in
+    nor refreshed daily, so its presence marks a provisioned data location.
+    Everything else (frames, gravity, SGP4, time, Kepler, Lambert) works
+    without any data files.
 
     Returns:
-        bool: True if data files are found, False otherwise
+        bool: True if an ephemeris file is found, False otherwise
     """
     ...
 
