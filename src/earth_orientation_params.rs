@@ -147,6 +147,12 @@ fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
     parse_csv(&std::fs::read_to_string(&path)?)
 }
 
+/// `true` when `mjd_utc` lies strictly after the last table row; a query at
+/// exactly the last epoch is inside the table.
+fn beyond_table(mjd_utc: f64, last: &EOPEntry) -> bool {
+    mjd_utc > last.mjd_utc
+}
+
 static WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 static EXTRAP_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 static NOT_LOADED_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
@@ -329,10 +335,11 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
         return None;
     }
 
-    // For dates beyond the file, use the last entry's values
+    // At or beyond the last row, use the last entry's values. A query at
+    // exactly the last epoch is still inside the table: no warning.
     if idx >= eop.len() {
         let last = &eop[eop.len() - 1];
-        if !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+        if beyond_table(mjd_utc, last) && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
             eprintln!(
                 "Warning: EOP data ends at {} (MJD {}); the request for MJD UTC = {mjd_utc} and \
                  all later epochs use the last entry's values held constant. Polar motion and \
@@ -458,6 +465,21 @@ mod tests {
         // Before 1962.
         let early = crate::Instant::from_rfc3339("1950-04-16T00:00:00Z").unwrap();
         assert_eq!(status(&early), EopStatus::BeforeTable);
+    }
+
+    /// The last row of the table is inside the table: a query at exactly its
+    /// epoch is not extrapolation (and must not print the out-of-range
+    /// warning); anything later is.
+    #[test]
+    fn last_row_epoch_is_inside_table() {
+        let csv = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE\n\
+                   2024-01-01,60310,0.1,0.2,0.01,0.001,0,0,0.3,0.4,37,O\n\
+                   2024-01-02,60311,0.5,0.6,0.02,0.002,0,0,0.7,0.8,37,P\n";
+        let table = parse_csv(csv).unwrap();
+        let last = &table[1];
+        assert!(!beyond_table(last.mjd_utc, last));
+        assert!(!beyond_table(last.mjd_utc - 0.5, last));
+        assert!(beyond_table(last.mjd_utc + 1e-9, last));
     }
 
     #[test]
