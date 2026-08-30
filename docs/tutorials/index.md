@@ -32,6 +32,7 @@ High-fidelity force-model propagation with Runge-Kutta and Gauss-Jackson integra
 | | Description |
 |----------|-------------|
 | [Theory: Force Model](../guide/forces.md) | Modeled forces: gravity, third-body, drag, SRP, solid Earth tides, GR |
+| [Empirical SRP: ECOM](../guide/ecom.md) | The experimental ECOM solar-radiation-pressure model: DYB frame, coefficients, conventions, measured accuracy |
 | [Theory: ODE Integrators](../guide/integrators.md) | RKV / GJ8 integrators, step-size selection, tolerances |
 | [Theory: State Vectors, STM & Covariance](../guide/satstate.md) | satstate class, state transition matrix, covariance, maneuvers |
 | [Theory: Maneuver Coordinate Frames](../guide/maneuver_frames.md) | RTN / NTW / LVLH definitions and when to use each |

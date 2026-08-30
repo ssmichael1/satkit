@@ -107,6 +107,7 @@ nav:
           - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
       - Numerical Propagation:
           - "Theory: Force Model": guide/forces.md
+          - "Empirical SRP: ECOM": guide/ecom.md
           - "Theory: ODE Integrators": guide/integrators.md
           - "Theory: State Vectors, STM & Covariance": guide/satstate.md
           - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
