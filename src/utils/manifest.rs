@@ -443,7 +443,7 @@ pub fn fetch_static_file(
 /// final rename.
 #[cfg(feature = "download")]
 fn download_verified(url: &str, entry: &ManifestEntry, dest: &Path) -> Result<()> {
-    let agent = ureq::Agent::new_with_defaults();
+    let agent = crate::utils::download::http_agent();
     let mut resp = agent.get(url).call()?;
     let mut reader = resp.body_mut().as_reader();
     download::write_atomic_verified(&mut reader, dest, entry, url)

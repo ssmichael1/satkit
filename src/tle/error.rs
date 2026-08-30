@@ -68,6 +68,12 @@ pub enum Error {
     #[cfg(feature = "download")]
     #[error(transparent)]
     Http(#[from] ureq::Error),
+    /// An HTTP status the server used to say "stop asking" — currently
+    /// CelesTrak's 503/403 throttling of repeated identical GP queries. The
+    /// message says how to avoid it.
+    #[cfg(feature = "download")]
+    #[error("{0}")]
+    HttpThrottled(String),
 }
 
 /// Convenient type alias used throughout the `tle` module.

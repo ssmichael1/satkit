@@ -44,6 +44,13 @@ pub enum Error {
     #[error(transparent)]
     Http(#[from] ureq::Error),
 
+    /// An HTTP status the server used to say "stop asking" — currently
+    /// CelesTrak's 503/403 throttling of repeated identical GP queries. The
+    /// message says how to avoid it.
+    #[cfg(feature = "download")]
+    #[error("{0}")]
+    HttpThrottled(String),
+
     /// Returned by [`OMM::from_url`](crate::omm::OMM::from_url) when the
     /// response looks like XML but the `omm-xml` cargo feature is disabled.
     #[error("Response appears to be XML but the `omm-xml` feature is not enabled")]
