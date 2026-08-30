@@ -56,9 +56,36 @@ pub enum Error {
     },
 
     /// Every candidate URL for a manifest file failed; `attempts` holds one
-    /// `"<url>: <error>"` line per URL tried.
-    #[error("Could not download {name} from any source:\n  {}", attempts.join("\n  "))]
-    AllSourcesFailed { name: String, attempts: Vec<String> },
+    /// `"<url>: <error>"` line per URL tried and `hint`, when the failures
+    /// have a common actionable cause (a TLS trust failure behind an
+    /// intercepting proxy), says what to do about it — once, rather than
+    /// repeated under every URL.
+    #[error(
+        "Could not download {name} from any source:\n  {}{}",
+        attempts.join("\n  "),
+        hint.as_deref().unwrap_or("")
+    )]
+    AllSourcesFailed {
+        name: String,
+        attempts: Vec<String>,
+        hint: Option<String>,
+    },
+
+    /// A download completed, but its content is not what the file is meant
+    /// to hold — a captive portal or proxy interstitial answering `200 OK`
+    /// with an HTML page, or a truncated feed. The partial download is
+    /// discarded and any existing copy left in place, so a good data file is
+    /// never replaced by a bad one.
+    #[error(
+        "{name} downloaded from {url} was rejected: {reason}. \
+         The partial download was discarded and any existing {name} left in place \
+         (a proxy that answers with an HTML notice instead of the file looks like this)"
+    )]
+    ContentRejected {
+        name: String,
+        url: String,
+        reason: String,
+    },
 
     /// Replacing an existing data file failed even after retries. On
     /// Windows a file another process has open cannot be renamed over; on
@@ -96,6 +123,24 @@ pub enum Error {
     #[cfg(feature = "download")]
     #[error(transparent)]
     Http(#[from] ureq::Error),
+
+    /// An HTTP request failed. Unlike [`Error::Http`] this names the URL that
+    /// was being fetched and, when the failure is one whose underlying message
+    /// is too terse to act on (a TLS trust failure behind an intercepting
+    /// proxy), appends guidance on how to fix it.
+    #[cfg(feature = "download")]
+    #[error("could not fetch {url}: {source}{}", hint.as_deref().unwrap_or(""))]
+    Request {
+        url: String,
+        /// Boxed to keep this enum — and every error type that carries it,
+        /// up to `orbitprop::Error` — small; `ureq::Error` is 64 bytes on its
+        /// own, which is most of the budget `clippy::result_large_err` allows.
+        #[source]
+        source: Box<ureq::Error>,
+        /// Guidance appended to the message, already formatted with a leading
+        /// newline; `None` when the underlying error speaks for itself.
+        hint: Option<String>,
+    },
 }
 
 /// Convenient type alias used throughout the `download` module.
@@ -188,15 +233,148 @@ pub(crate) const USER_AGENT: &str = concat!(
     " (+https://github.com/ssmichael1/satkit)"
 );
 
+/// Environment variable that chooses the root certificates satkit verifies
+/// download servers against. Three accepted values:
+///
+/// * a path to a PEM file — trust exactly the certificates in it. It may
+///   hold any number of concatenated certificates and it *replaces* the
+///   trust store, so it must also cover satkit's other download hosts
+///   (GitHub, JPL, CelesTrak): the usual recipe is a public bundle
+///   (`python -m certifi`) with the private CA appended.
+/// * `platform` — the operating system's own trust store: the macOS keychain,
+///   the Windows certificate store, `/etc/ssl` and friends on Unix. This is
+///   the default, and it is where a TLS-inspecting proxy's private CA is
+///   installed.
+/// * `webpki` — the Mozilla root list compiled into the binary, ignoring the
+///   machine entirely. For a minimal container with no system trust store,
+///   and for anyone who would rather not trust whatever an administrator has
+///   added to that store.
+///
+/// Set it to a PEM path where TLS is intercepted by a proxy whose CA is not
+/// installed system-wide.
+///
+/// Deliberately not `SSL_CERT_FILE`: Python tooling routinely points that at
+/// a stock public bundle, which is exactly the trust store that fails on an
+/// intercepting network — honouring it would break the case this variable
+/// exists to fix.
+pub const CA_BUNDLE_ENV: &str = "SATKIT_CA_BUNDLE";
+
+/// The root certificates satkit verifies servers against: those in
+/// [`CA_BUNDLE_ENV`] when it names a readable PEM file, otherwise the
+/// platform's own trust store (macOS keychain, Windows certificate store,
+/// `/etc/ssl` and friends on Unix).
+///
+/// The platform store rather than ureq's default of the Mozilla root list
+/// compiled into the binary: an organisation whose gateway inspects TLS
+/// re-signs every certificate with a private CA, which is installed in the
+/// platform store and can never be in the Mozilla list. Against the
+/// compiled-in list every download on such a network fails with
+/// `invalid peer certificate: UnknownIssuer`. The trade-off is deliberate —
+/// trusting the platform store means trusting whatever an administrator has
+/// added to it.
+#[cfg(feature = "download")]
+fn root_certs() -> ureq::tls::RootCerts {
+    let setting = match std::env::var_os(CA_BUNDLE_ENV) {
+        Some(v) if !v.is_empty() => v,
+        _ => return ureq::tls::RootCerts::PlatformVerifier,
+    };
+    if setting.eq_ignore_ascii_case("platform") {
+        return ureq::tls::RootCerts::PlatformVerifier;
+    }
+    if setting.eq_ignore_ascii_case("webpki") {
+        return ureq::tls::RootCerts::WebPki;
+    }
+    let path = std::path::PathBuf::from(setting);
+    match load_ca_bundle(&path) {
+        Ok(roots) => roots,
+        Err(reason) => {
+            eprintln!(
+                "Warning: ignoring {CA_BUNDLE_ENV}={}: {reason}; \
+                 verifying against the platform trust store instead",
+                path.display()
+            );
+            ureq::tls::RootCerts::PlatformVerifier
+        }
+    }
+}
+
+/// Every certificate in the PEM file at `path`, as a root-certificate set.
+/// `Err` carries the reason for the warning [`root_certs`] prints: the file
+/// is unreadable, is not valid PEM, or holds no certificate.
+#[cfg(feature = "download")]
+fn load_ca_bundle(path: &Path) -> std::result::Result<ureq::tls::RootCerts, String> {
+    let pem = std::fs::read(path).map_err(|e| e.to_string())?;
+    let mut certs = Vec::new();
+    for item in ureq::tls::parse_pem(&pem) {
+        match item {
+            Ok(ureq::tls::PemItem::Certificate(cert)) => certs.push(cert),
+            // A bundle that also carries a private key is odd but harmless.
+            Ok(_) => {}
+            Err(e) => return Err(format!("not a valid PEM file ({e})")),
+        }
+    }
+    if certs.is_empty() {
+        return Err("no certificate found in the file".to_string());
+    }
+    Ok(ureq::tls::RootCerts::from(certs))
+}
+
 /// Build the HTTP agent used for all satkit downloads: ureq's defaults
 /// (proxy settings from `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY`, redirects,
-/// timeouts) plus the [`USER_AGENT`] string.
+/// timeouts) plus the [`USER_AGENT`] string and the [`root_certs`] trust
+/// store.
 #[cfg(feature = "download")]
 pub(crate) fn http_agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .user_agent(USER_AGENT)
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .root_certs(root_certs())
+                .build(),
+        )
         .build()
         .into()
+}
+
+/// For a TLS trust failure — what an intercepting proxy produces when its CA
+/// is not in the trust store satkit is using — an actionable message.
+/// `None` for any other error.
+#[cfg(feature = "download")]
+pub(crate) fn tls_trust_hint(err: &ureq::Error) -> Option<String> {
+    let trust_failure = match err {
+        ureq::Error::Io(e) => {
+            let msg = e.to_string();
+            msg.contains("invalid peer certificate") || msg.contains("UnknownIssuer")
+        }
+        ureq::Error::Tls(_) => true,
+        _ => false,
+    };
+    if !trust_failure {
+        return None;
+    }
+    Some(format!(
+        "The server's certificate is not trusted by this machine's certificate store. \
+         This is what a TLS-inspecting proxy looks like: it re-signs traffic with a private \
+         CA that must be installed in the system trust store. Install that CA system-wide, \
+         or set {CA_BUNDLE_ENV} to a PEM file holding it together with the public roots. \
+         If no such proxy is expected on this network, the certificate really is untrusted \
+         and the download should not be forced through."
+    ))
+}
+
+/// Wrap a failed request as [`Error::Request`]: the URL that was being
+/// fetched, plus a hint for the failures whose own message does not say what
+/// to do about them.
+#[cfg(feature = "download")]
+pub(crate) fn request_error(url: &str, source: ureq::Error) -> Error {
+    let hint = celestrak_throttle_hint(url, &source)
+        .or_else(|| tls_trust_hint(&source))
+        .map(|h| format!("\n{h}"));
+    Error::Request {
+        url: url.to_string(),
+        source: Box::new(source),
+        hint,
+    }
 }
 
 /// For an HTTP error from a `celestrak.org` request, an actionable message
@@ -217,12 +395,18 @@ pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<St
     if !host_ok {
         return None;
     }
+    let proxy_note = if status == 403 {
+        " A 403 can also come from a filtering proxy between you and CelesTrak rather than from \
+         CelesTrak itself — check whether the body is an HTML block page."
+    } else {
+        ""
+    };
     Some(format!(
         "CelesTrak returned HTTP {status} for {url}. CelesTrak throttles repeated identical \
          GP queries: it asks for at most one request per object every ~2 hours (satkit already \
          sends a descriptive User-Agent). Do not retry in a loop — cache the response (save the \
          TLE/OMM text and parse it with `TLE::from_lines` / the OMM parsers) and re-fetch only \
-         when a newer element set is needed."
+         when a newer element set is needed.{proxy_note}"
     ))
 }
 
@@ -299,12 +483,60 @@ fn rename_into_place(part: &Path, final_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// `Err` if the file at `path` opens with an HTML document rather than the
+/// data that was asked for. A filtering proxy or captive portal that answers
+/// `200 OK` with a notice page is otherwise indistinguishable from a
+/// successful download for the files satkit fetches unverified.
+#[cfg(feature = "download")]
+fn reject_html(path: &Path) -> std::result::Result<(), String> {
+    use std::io::Read;
+    let mut head = [0u8; 256];
+    let n = std::fs::File::open(path)
+        .and_then(|mut f| f.read(&mut head))
+        .map_err(|e| e.to_string())?;
+    let start = String::from_utf8_lossy(&head[..n])
+        .trim_start_matches(['\u{feff}', ' ', '\n', '\r', '\t'])
+        .to_ascii_lowercase();
+    if start.starts_with("<!doctype html") || start.starts_with("<html") {
+        return Err("the response is an HTML page, not the data file".to_string());
+    }
+    Ok(())
+}
+
+/// Check a freshly downloaded, *unverified* file before it replaces the copy
+/// on disk. The manifest-pinned files are covered by their SHA-256; these are
+/// the ones with nothing to compare against — so the daily CelesTrak feeds
+/// are parsed with the same parser that will later read them, and anything
+/// else is at least checked for not being an HTML notice page.
+///
+/// `name` is the file's base name; `path` is the completed `.part` file.
+#[cfg(feature = "download")]
+fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
+    let is_html_file = std::path::Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("html") || e.eq_ignore_ascii_case("htm"));
+    if !is_html_file {
+        reject_html(path)?;
+    }
+    match name {
+        "EOP-All.csv" => crate::earth_orientation_params::validate_file(path),
+        "SW-All.csv" => crate::spaceweather::validate_file(path),
+        _ => Ok(()),
+    }
+}
+
 /// Stream `reader` to `final_path` atomically: write to a sibling `.part` file
 /// and rename it into place on success. An interrupted transfer (network drop,
 /// Ctrl-C) then leaves only the discardable `.part` file rather than a truncated
 /// final file that later runs would trust as complete.
+///
+/// The completed `.part` file is passed through [`check_content`] before the
+/// rename: these downloads carry no hash to verify, and replacing a good
+/// `EOP-All.csv` with a proxy's notice page would turn a failed download into
+/// a silently wrong table days later. `url` only names the source in
+/// [`Error::ContentRejected`].
 #[cfg(feature = "download")]
-fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()> {
+fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path, url: &str) -> Result<()> {
     let part = part_path(final_path);
     let mut write = || -> Result<()> {
         let mut dest = std::fs::File::create(&part)?;
@@ -312,13 +544,23 @@ fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()
         dest.sync_all()?;
         Ok(())
     };
-    match write() {
-        Ok(()) => rename_into_place(&part, final_path),
-        Err(e) => {
-            let _ = std::fs::remove_file(&part);
-            Err(e)
-        }
+    if let Err(e) = write() {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
     }
+    let name = final_path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or_default();
+    if let Err(reason) = check_content(name, &part) {
+        let _ = std::fs::remove_file(&part);
+        return Err(Error::ContentRejected {
+            name: name.to_string(),
+            url: url.to_string(),
+            reason,
+        });
+    }
+    rename_into_place(&part, final_path)
 }
 
 /// Like [`write_atomic`], but the stream is hashed as it is written and the
@@ -430,9 +672,12 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
     // Try to set proxy, if any, from environment variables
     let agent = http_agent();
 
-    let mut resp = agent.get(url.as_str()).call()?;
+    let mut resp = agent
+        .get(url.as_str())
+        .call()
+        .map_err(|e| request_error(&url, e))?;
 
-    write_atomic(&mut resp.body_mut().as_reader(), fname)?;
+    write_atomic(&mut resp.body_mut().as_reader(), fname, &url)?;
     Ok(())
 }
 
@@ -470,10 +715,10 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
     check_online(fname)?;
 
     let agent = http_agent();
-    let mut resp = agent.get(url).call()?;
+    let mut resp = agent.get(url).call().map_err(|e| request_error(url, e))?;
 
     println!("Downloading {}", fname);
-    write_atomic(&mut resp.body_mut().as_reader(), &fullpath)?;
+    write_atomic(&mut resp.body_mut().as_reader(), &fullpath, url)?;
     Ok(true)
 }
 
@@ -507,7 +752,7 @@ pub fn download_file_async(
 pub fn download_to_string(url: &str) -> Result<String> {
     check_online(url)?;
     let agent = http_agent();
-    let mut resp = agent.get(url).call()?;
+    let mut resp = agent.get(url).call().map_err(|e| request_error(url, e))?;
     let thestring = std::io::read_to_string(resp.body_mut().as_reader())?;
     Ok(thestring)
 }
@@ -531,7 +776,7 @@ mod tests {
         let _ = std::fs::remove_file(&part_path);
 
         let data = b"hello satkit";
-        write_atomic(&mut Cursor::new(&data[..]), &final_path).unwrap();
+        write_atomic(&mut Cursor::new(&data[..]), &final_path, "test").unwrap();
 
         assert!(
             final_path.is_file(),
@@ -628,6 +873,52 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// One header line and one row, in the columns `parse_csv` reads.
+    const EOP_CSV: &str = "DATE,MJD,X,Y,UT1-UTC,LOD,dPSI,dEPS,DX,DY,DAT,DATA_TYPE\n\
+                           2026-08-30,61282,0.10,0.20,0.30,0.0004,0,0,0.0001,0.0002,37,O\n";
+
+    #[test]
+    fn a_proxy_notice_page_never_replaces_a_good_data_file() {
+        let dir = std::env::temp_dir().join(format!("satkit_notice_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("EOP-All.csv");
+
+        // A good table on disk, as a machine that has been online would have.
+        write_atomic(&mut Cursor::new(EOP_CSV.as_bytes()), &path, "test").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+
+        // The daily refresh comes back as a proxy interstitial with HTTP 200.
+        let page = b"<!DOCTYPE html>\n<html><body>Review Usage Policy</body></html>";
+        let err = write_atomic(
+            &mut Cursor::new(&page[..]),
+            &path,
+            "https://celestrak.org/SpaceData/EOP-All.csv",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, Error::ContentRejected { ref name, .. } if name == "EOP-All.csv"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("HTML page"), "{err}");
+        // The table that was there is still there, and nothing is left over.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+        assert!(!part_path(&path).exists());
+
+        // A body that is not HTML but does not parse is rejected just as well.
+        let err = write_atomic(&mut Cursor::new(&b"1,2,3\n"[..]), &path, "test").unwrap_err();
+        assert!(matches!(err, Error::ContentRejected { .. }), "{err}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+
+        // A file with no content check of its own only has to not be a page.
+        let other = dir.join("notes.txt");
+        write_atomic(&mut Cursor::new(&b"1,2,3\n"[..]), &other, "test").unwrap();
+        assert!(other.is_file());
+        let err = write_atomic(&mut Cursor::new(&page[..]), &other, "test").unwrap_err();
+        assert!(matches!(err, Error::ContentRejected { .. }), "{err}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn write_atomic_verified_rejects_bad_bytes() {
         use crate::utils::manifest::{sha256_hex, ManifestEntry};
@@ -687,6 +978,131 @@ mod agent_tests {
         }
         assert!(USER_AGENT.starts_with("satkit/"));
         assert!(USER_AGENT.contains("github.com/ssmichael1/satkit"));
+    }
+
+    /// A self-signed certificate, generated for these tests only, used to
+    /// check that a PEM bundle is read and every certificate in it kept.
+    const TEST_CERT_PEM: &str = "\
+-----BEGIN CERTIFICATE-----\n\
+MIICtjCCAZ4CCQD+TdvyxtLNoDANBgkqhkiG9w0BAQsFADAdMRswGQYDVQQDDBJz\n\
+YXRraXQgdGVzdCByb290IDEwHhcNMjYwODMwMTkxNjMyWhcNMzYwODI3MTkxNjMy\n\
+WjAdMRswGQYDVQQDDBJzYXRraXQgdGVzdCByb290IDEwggEiMA0GCSqGSIb3DQEB\n\
+AQUAA4IBDwAwggEKAoIBAQC8KtMusQe6lwq6iV46RqCYg7fXePr+hiPs0oV5z4xo\n\
+Mae9oZ3Sz/C9Vu2hwk+WhACelNYMA9FKkeRJzN4DOH3PKvsqELFW2mZRzV9iwYn/\n\
+68p//+SVLgKXjjf+dFUt1QJin27OCfnSREgbclf50+V/1ZtntVSW5laCBkrrvIR0\n\
+ro1xDqjopt8vSODmkYyO/bGnmTYP2w+n/7imCSJ0SsjNHHTSG1r9SQtm7jqfF/lb\n\
+EeY+8J6j2zFEJ+XC+WSYbVrCrsthE/FEoEg3XBexX2gDbty4xABFdSQJ4vqOaoA5\n\
+Re3pAsYCEa6ZT19JXtPX77DZ+6qcaHjAKna+LhCrpfV1AgMBAAEwDQYJKoZIhvcN\n\
+AQELBQADggEBADW+76NDtE6/dyYoBaxQXtRo4pBMBLKm6hY6EVCF6n+X+0egAG2q\n\
+igGwSNYhf/4bkreX2WJSMWz2aTQwKRIcERGoHy22ftBQbtkNWmdsUazf4Wt8h2cW\n\
++G3iY4j7trhc5wf5vQxSGzKJpUArWmslQzezYsOJXcaVIBi0ib3c8bWxU51fy7TQ\n\
+EJ2v6j5DChUCY06hOu2Nc+uc1rt8JoPMspPKyWBup18RQAuJ2vHoS0Do++nhKN/0\n\
+nqylLCIo7Z6QSP2wB/zARZQB9OLch0Fp5N3QsmtQpj+MQ3z9QYhySjE/ABNz8XHG\n\
+19lkXVD84ByEe7n7YsO0klDklCd5NPsFtj4=\n\
+-----END CERTIFICATE-----";
+
+    /// Serialised access to [`CA_BUNDLE_ENV`] plus a scratch directory: the
+    /// harness runs tests in parallel threads and the variable is process-wide.
+    fn with_ca_bundle_env<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        match value {
+            Some(v) => std::env::set_var(CA_BUNDLE_ENV, v),
+            None => std::env::remove_var(CA_BUNDLE_ENV),
+        }
+        let out = f();
+        std::env::remove_var(CA_BUNDLE_ENV);
+        out
+    }
+
+    #[test]
+    fn root_certs_default_to_the_platform_trust_store() {
+        // The point of the platform store: a TLS-inspecting proxy's private CA
+        // is installed there and can never be in a compiled-in Mozilla list.
+        with_ca_bundle_env(None, || {
+            assert!(matches!(
+                root_certs(),
+                ureq::tls::RootCerts::PlatformVerifier
+            ));
+        });
+        with_ca_bundle_env(Some("PLATFORM"), || {
+            assert!(matches!(
+                root_certs(),
+                ureq::tls::RootCerts::PlatformVerifier
+            ));
+        });
+    }
+
+    #[test]
+    fn ca_bundle_env_can_select_the_compiled_in_roots() {
+        with_ca_bundle_env(Some("webpki"), || {
+            assert!(matches!(root_certs(), ureq::tls::RootCerts::WebPki));
+        });
+    }
+
+    #[test]
+    fn ca_bundle_env_loads_every_certificate_in_the_file() {
+        let dir = std::env::temp_dir().join(format!("satkit_ca_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bundle.pem");
+        std::fs::write(&path, format!("{TEST_CERT_PEM}\n{TEST_CERT_PEM}\n")).unwrap();
+
+        let roots = with_ca_bundle_env(Some(path.to_str().unwrap()), root_certs);
+        match roots {
+            ureq::tls::RootCerts::Specific(certs) => assert_eq!(certs.len(), 2),
+            other => panic!("expected the file's certificates, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unusable_ca_bundle_falls_back_to_the_platform_store() {
+        let dir = std::env::temp_dir().join(format!("satkit_ca_bad_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let empty = dir.join("empty.pem");
+        std::fs::write(&empty, b"no certificates here\n").unwrap();
+
+        assert!(load_ca_bundle(Path::new("/satkit/no/such/bundle.pem")).is_err());
+        assert!(load_ca_bundle(&empty)
+            .unwrap_err()
+            .contains("no certificate"));
+        // A misconfigured variable must not turn into a failed download: warn
+        // and verify against the platform store, which is what would have been
+        // used had the variable never been set.
+        for bad in [empty.to_str().unwrap(), "/satkit/no/such/bundle.pem"] {
+            assert!(matches!(
+                with_ca_bundle_env(Some(bad), root_certs),
+                ureq::tls::RootCerts::PlatformVerifier
+            ));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tls_trust_hint_only_for_certificate_failures() {
+        let cert_err = ureq::Error::Io(std::io::Error::other(
+            "invalid peer certificate: UnknownIssuer",
+        ));
+        let hint = tls_trust_hint(&cert_err).unwrap();
+        assert!(hint.contains(CA_BUNDLE_ENV) && hint.contains("proxy"));
+        assert!(
+            tls_trust_hint(&ureq::Error::Io(std::io::Error::other("connection reset"))).is_none()
+        );
+        assert!(tls_trust_hint(&ureq::Error::StatusCode(500)).is_none());
+
+        // The wrapper names the URL and carries the hint into the message.
+        let err = request_error("https://example.org/f.bin", cert_err);
+        let msg = err.to_string();
+        assert!(matches!(err, Error::Request { .. }), "{msg}");
+        assert!(msg.contains("https://example.org/f.bin") && msg.contains(CA_BUNDLE_ENV));
+        // An error that speaks for itself gets no hint, only the URL.
+        let plain = request_error(
+            "https://example.org/f.bin",
+            ureq::Error::Io(std::io::Error::other("connection reset")),
+        );
+        assert!(matches!(plain, Error::Request { hint: None, .. }));
+        assert!(plain.to_string().contains("connection reset"));
     }
 
     #[test]

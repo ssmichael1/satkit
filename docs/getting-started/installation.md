@@ -30,6 +30,7 @@ sk.utils.update_datafiles()   # ephemeris + IERS tables + gravity files + EOP/SW
 - `SATKIT_DATA_URL=https://mirror.example/satkit-data` makes satkit fetch from a mirror first (plain `http://` is accepted for an internal mirror; downloads are still verified).
 - `pip install satkit[data]` installs the optional **`satkit-data`** bundle (the ephemeris and full-degree gravity files, ~110 MB) into `site-packages`; satkit finds it automatically as a read-only source. Use it where a first-use download is unwelcome.
 - `SATKIT_DATA=/path` names a directory that is both searched first and written to.
+- `SATKIT_CA_BUNDLE=/path/bundle.pem` verifies downloads against that PEM file instead of the system trust store — for a network whose TLS is inspected by a proxy whose CA is not installed system-wide, or a container with no trust store at all (`SATKIT_CA_BUNDLE=webpki` uses the roots compiled into satkit). See [Data Files](datafiles.md#downloads-behind-a-tls-inspecting-proxy).
 
 See [Data Files](datafiles.md) for the full search order per platform.
 

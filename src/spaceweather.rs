@@ -179,6 +179,20 @@ fn parse_csv(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
         .collect()
 }
 
+/// Check that the file at `path` is a parsable `SW-All.csv`, without touching
+/// the loaded records. Same role as
+/// [`earth_orientation_params::validate_file`](crate::earth_orientation_params::validate_file):
+/// let the downloader reject a proxy notice page or a truncated transfer
+/// before it replaces a good file on disk.
+pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    match parse_csv(&text) {
+        Ok(rows) if rows.is_empty() => Err("the file holds no space-weather rows".to_string()),
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("not a parsable SW-All.csv ({e})")),
+    }
+}
+
 fn load_default_path() -> Result<PathBuf> {
     // Found in any search directory, else downloaded into the write location.
     Ok(crate::utils::datadir::path_for("SW-All.csv")?)

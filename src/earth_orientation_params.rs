@@ -139,6 +139,23 @@ fn parse_csv(text: &str) -> Result<Vec<EOPEntry>> {
         .collect()
 }
 
+/// Check that the file at `path` is a parsable `EOP-All.csv`, without
+/// touching the loaded table.
+///
+/// Used by the downloader to reject a response that is not the file it
+/// claims to be — a proxy notice page served with `200 OK`, or a truncated
+/// transfer — before it replaces a good table on disk. The check is the real
+/// parser, so anything that would later fail to load fails here instead,
+/// while the previous file is still in place.
+pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    match parse_csv(&text) {
+        Ok(rows) if rows.is_empty() => Err("the file holds no EOP rows".to_string()),
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("not a parsable EOP-All.csv ({e})")),
+    }
+}
+
 /// Lazy default load from `EOP-All.csv` under [`datadir`], with auto-download.
 fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
     // Found in any search directory, else downloaded into the write location.
