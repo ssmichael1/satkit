@@ -25,6 +25,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Fixed
 
+- `import satkit` no longer fails when the optional `satkit_data` bundle is installed as a namespace package (the conda layout, no `__init__.py`): its `data/` directory is discovered via `__path__` ([#140](https://github.com/ssmichael1/satkit/pull/140))
 - References page rebuilt as a full bibliography and every guide, API page and tutorial now cites its primary source; wrong SGP4 (AIAA 2006-6753), JGM-3 DOI and box-wing citations corrected; drag gate, Lambert multi-revolution, leap-second and GR descriptions brought in line with the code; RK stage counts corrected (RKV98 is 21 stages) ([#136](https://github.com/ssmichael1/satkit/pull/136))
 - Frame-bias docs: `EME2000` is 23.1 mas from GCRF (docs said 17); GMAT's `EarthMJ2000Eq` is an IAU-76 realization ~44 mas from ICRF, not the constant bias ([#132](https://github.com/ssmichael1/satkit/pull/132))
 - Doc fixes: Gauss–Jackson dense-output note, dual licence in crate docs, CONTRIBUTING versions/paths, gravity degree limit in `docs/index.md`, leap-second table described as compiled in ([#130](https://github.com/ssmichael1/satkit/pull/130))
