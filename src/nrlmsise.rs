@@ -4903,23 +4903,30 @@ pub fn nrlmsise(
         day_of_year = fday.floor() as i32;
         sec_of_day = (dhour as f64).mul_add(3600.0, dmin as f64 * 60.0) + dsec;
         if use_spaceweather {
-            let sw_time = time - Duration::from_days(1.0);
+            // NRLMSISE-00 interface (nrlmsise-00.h): F107 is the *observed*
+            // (not 1 AU-adjusted) daily flux of the *previous* day, F107A the
+            // observed 81-day average centred on the current day, and AP the
+            // daily Ap of the *current* day.
+            //
             // Predicted (future) rows in SW-All.csv carry -1 sentinels for
             // fields celestrak has not filled in. Treat a record with an
             // invalid F10.7 as unusable and fall back to the solar-cycle
             // forecast, and never let a -1 index reach the density model.
-            let record = spaceweather::get(&sw_time)
+            let prev = spaceweather::get(&(time - Duration::from_days(1.0)))
                 .ok()
-                .filter(|r| r.f10p7_adj >= 0.0);
-            if let Some(r) = record {
-                f107 = r.f10p7_adj;
-                f107a = if r.f10p7_adj_c81 >= 0.0 {
-                    r.f10p7_adj_c81
-                } else {
-                    r.f10p7_adj
+                .filter(|r| r.f10p7_obs >= 0.0);
+            if let Some(r) = prev {
+                f107 = r.f10p7_obs;
+                let today = spaceweather::get(&time).ok();
+                f107a = match today.as_ref().map(|t| t.f10p7_obs_c81) {
+                    Some(c81) if c81 >= 0.0 => c81,
+                    _ if r.f10p7_obs_c81 >= 0.0 => r.f10p7_obs_c81,
+                    _ => r.f10p7_obs,
                 };
-                if r.ap_avg >= 0 {
-                    ap = r.ap_avg as f64;
+                match today.map(|t| t.ap_avg) {
+                    Some(a) if a >= 0 => ap = a as f64,
+                    _ if r.ap_avg >= 0 => ap = r.ap_avg as f64,
+                    _ => {}
                 }
             } else if let Some(predicted) = solar_cycle_forecast::get_predicted_f107(&time) {
                 f107 = predicted;
@@ -5021,6 +5028,33 @@ mod tests {
         let (density, temperature) = nrlmsise(400.0, Some(60.0), Some(-70.0), Some(&tm), true);
         assert!(density > 0.0, "Density must be positive");
         assert!(temperature > 0.0, "Temperature must be positive");
+    }
+
+    /// The space-weather feed must follow the NRLMSISE-00 interface: F107 =
+    /// observed flux of the previous day, F107A = observed centred 81-day
+    /// average of the current day, AP = daily Ap of the current day.
+    /// 2023-03-01 (SW-All.csv): F10.7 obs 162.0 (adj 159.0), obs c81 163.4,
+    /// Ap 7; 2023-02-28: F10.7 obs 160.9 (adj 157.9), obs c81 164.4, Ap 26.
+    #[test]
+    fn test_spaceweather_feed_conventions() {
+        let tm = Instant::from_datetime(2023, 3, 1, 12, 0, 0.0).unwrap();
+        let (alt, lat, lon) = (420.0, 30.0, 40.0);
+        let (rho, _) = nrlmsise(alt, Some(lat), Some(lon), Some(&tm), true);
+        let expect = call_model(alt, lat, lon, 60, 43200.0, 160.9, 163.4, 7.0);
+        assert!(
+            (rho / (expect.d[5] * 1.0e3) - 1.0).abs() < 1.0e-12,
+            "space-weather feed does not match the NRLMSISE-00 conventions: {rho:e}"
+        );
+        // The wrong-day / adjusted-flux alternatives differ by percent, so the
+        // check above is not vacuous.
+        for (f107, f107a, ap) in [
+            (157.9, 161.5, 26.0),
+            (160.9, 163.4, 26.0),
+            (162.0, 163.4, 7.0),
+        ] {
+            let other = call_model(alt, lat, lon, 60, 43200.0, f107, f107a, ap);
+            assert!((rho / (other.d[5] * 1.0e3) - 1.0).abs() > 2.0e-3);
+        }
     }
 
     #[test]
