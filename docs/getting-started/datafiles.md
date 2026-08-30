@@ -53,6 +53,7 @@ A file is used from the first directory that contains it. The ephemeris is also 
 | `SATKIT_DATA=/path` | search first and write here (created if needed) |
 | `SATKIT_DATA_URL=https://mirror/base` | try `"$SATKIT_DATA_URL/<name>"` before the manifest's sources for every download (plain `http://` accepted; still hash-verified) |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` | honoured for every download (standard proxy environment variables; read by the HTTP client) |
+| `SATKIT_CA_BUNDLE=/path/bundle.pem` | verify servers against the certificates in this PEM file instead of the operating system's trust store. The file replaces the trust store outright, so it must also carry the public roots (`python -m certifi` with the private CA appended). Also accepts `platform` (the default) and `webpki` (the Mozilla list compiled into satkit, for a container with no system trust store). See [Downloads behind a TLS-inspecting proxy](#downloads-behind-a-tls-inspecting-proxy) |
 | `SATKIT_OFFLINE=1` / `satkit.utils.set_offline(True)` | forbid **downloads** — `update_datafiles()`, the lazy ephemeris fetch, the EOP/SW refresh, any non-embedded file — with a `RuntimeError` naming the file and its sources; no connection is opened. Search locations and the compiled-in data are unaffected. The setter wins once called; otherwise the variable is read. `satkit.utils.is_offline()` reports the effective state |
 | `SATKIT_JPLEPHEM_FILE=name-or-path` | which ephemeris to load — see [below](#selecting-a-jpl-ephemeris-file) |
 | `SATKIT_QUIET=1` | suppress the one-time note printed when a compiled-in file is used |
@@ -60,6 +61,32 @@ A file is used from the first directory that contains it. The ephemeris is also 
 | `satkit.utils.data_search_dirs()` | the search list, in order |
 | `satkit.utils.set_datadir(path)` / `add_search_dir(path)` | add an override / a read-only search location |
 | `satkit.utils.datafiles_exist()` | whether an ephemeris file is present in any search directory (the marker of a provisioned data location) |
+
+### Downloads behind a TLS-inspecting proxy
+
+Organisations that inspect outbound TLS put a gateway between satkit and the
+data servers: it terminates the connection and re-signs every certificate with
+a private CA. satkit verifies servers against the **operating system's trust
+store** — the keychain on macOS, the certificate store on Windows, `/etc/ssl`
+and friends on Unix — which is exactly where such a CA is installed, so those
+downloads work with no configuration.
+
+If they do not, the failure looks like this:
+
+```
+RuntimeError: could not fetch https://celestrak.org/SpaceData/SW-All.csv: io: invalid peer certificate: UnknownIssuer
+```
+
+The certificate presented is signed by something the machine does not trust.
+Either the private CA is not installed system-wide — install it, or point
+`SATKIT_CA_BUNDLE` at a PEM file containing it *together with* the public roots
+— or no interception is expected on that network, in which case the certificate
+really is untrusted and the download should not be forced through. satkit has no
+"skip verification" switch.
+
+Note that `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are deliberately ignored:
+Python tooling routinely points them at a stock public bundle, which is the one
+trust store guaranteed to fail on an intercepting network.
 
 ### Where the files come from, and how downloads are verified
 
