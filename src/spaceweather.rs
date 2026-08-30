@@ -62,10 +62,18 @@ pub struct SpaceWeatherRecord {
     pub bsrn: i32,
     /// Number of day within the bsrn
     pub nd: i32,
-    /// Kp
+    /// 3-hourly planetary Kp (×10 as tabulated by CelesTrak, e.g. 33 = 3+),
+    /// one per UT interval: `[0]` 00–03 UT, …, `[7]` 21–24 UT. `-1` when the
+    /// field is empty (e.g. monthly predicted rows).
     pub kp: [i32; 8],
     pub kp_sum: i32,
+    /// 3-hourly planetary ap (`AP1..AP8`), one per UT interval: `[0]` covers
+    /// 00:00–03:00 UT, `[1]` 03:00–06:00, …, `[7]` 21:00–24:00. `-1` when
+    /// the field is empty (monthly predicted rows). Daily predicted rows
+    /// carry the same value in all eight slots.
     pub ap: [i32; 8],
+    /// Daily Ap (`AP_AVG`, the mean of the eight 3-hourly values); `-1` when
+    /// empty.
     pub ap_avg: i32,
     /// Planetary daily character figure
     pub cp: f64,

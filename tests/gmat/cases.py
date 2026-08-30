@@ -111,7 +111,8 @@ ORBITS = {
 # tolerance = dict(pos_m=..., vel_mps=...), gate on max over all samples.
 #
 # Gates are ~3x the residual measured at generation (satkit 0.20.4 + exact
-# frame table, GMAT R2026A).  Measured floors and their known causes:
+# frame table, GMAT R2026A; the drag_*_sw gates were re-measured after satkit
+# adopted the 3-hourly ap history).  Measured floors and their known causes:
 #
 #   * Earth-only / j2 cases: 2-3 cm at LEO, 8 cm MEO, 13 cm GEO, 0.6-1.0 m at
 #     200,000-300,000 km.  This is *GMAT's* integration error: GMAT's own
@@ -160,13 +161,13 @@ CASES = [
     # residual should be read against; see the README floors.
     #                                      measured max |dr| / |dv|   drag-only   ratio
     _d("iss_420", "const",  80.0, 0.10),   # 25.8 m   / 2.9e-2       152 km      1.7e-4
-    _d("iss_420", "sw",    20e3,  25.0),   # 6.84 km  / 7.7          194 km      3.5e-2 (Ap feed)
+    _d("iss_420", "sw",    1.0e3, 1.1),    # 325 m    / 0.37         201 km      1.6e-3 (F10.7 timing; final 198 m)
     _d("leo_300", "const", 900.0, 1.0),    # 293 m    / 0.34         1374 km     2.1e-4
     # GMAT's RK89 cannot hold 1e-14 through the file-driven weather steps at
     # 300 km ("Accuracy settings will be violated"), so this case runs at 1e-13.
-    _d("leo_300", "sw",    170e3, 200.0, gmat_accuracy=1e-13),  # 56.6 km / 66  1643 km  3.4e-2 (Ap feed)
+    _d("leo_300", "sw",    7.0e3, 8.0, gmat_accuracy=1e-13),  # 2.28 km / 2.64  1697 km  1.3e-3 (F10.7 timing; final 2.07 km)
     _d("sso_550", "const", 100.0, 0.12),   # 34.2 m   / 3.7e-2       19.2 km     1.8e-3 (LST, see README)
-    _d("sso_550", "sw",    3.3e3, 4.0),    # 1.09 km  / 1.19         26.8 km     4.1e-2 (Ap feed)
+    _d("sso_550", "sw",    110.0, 0.12),   # 37.0 m   / 4.0e-2       28.0 km     1.3e-3 (F10.7 timing; final 18 m)
     _d("gto_250", "const",  30.0, 2.5e-2), # 9.9 m    / 7.5e-3       106 km      5.5e-5 (final 5.9 m)
-    _d("gto_250", "sw",    36e3,  30.0),   # 12.0 km  / 9.1          126 km      4.8e-2 (Ap feed; final 6.1 km)
+    _d("gto_250", "sw",    1.0e3, 0.7),    # 307 m    / 0.23         132 km      2.3e-3 (F10.7 timing; final 113 m)
 ]
