@@ -7,16 +7,14 @@ use pyo3::IntoPyObjectExt;
 use satkit::kepler::{Anomaly, Kepler};
 
 use crate::pyduration::PyDuration;
-use crate::pyutils::kwargs_or_none;
 use crate::pyutils::py_to_smatrix;
 
 ///
 /// Representation of Keplerian orbital elements
 ///
-/// Note: True anomaly can be specified as a positional argument or
-/// anomalies of different types can be specified as keyword arguments
-///
-/// If keyword argument is used, the positional argument should be left out
+/// The anomaly can be given positionally as the true anomaly (6th argument)
+/// or by exactly one of the keyword arguments ``true_anomaly``,
+/// ``eccentric_anomaly`` or ``mean_anomaly``.
 ///
 /// Args:
 ///     a: semi-major axis, meters
@@ -28,8 +26,8 @@ use crate::pyutils::py_to_smatrix;
 ///
 /// Keyword Args:
 ///     true_anomaly: True Anomaly, radians
-///      eccentric_anomaly: Eccentric Anomaly, radians
-///      mean_anomaly: Mean Anomaly, radians
+///     eccentric_anomaly: Eccentric Anomaly, radians
+///     mean_anomaly: Mean Anomaly, radians
 ///
 /// Returns:
 ///     Kepler: Keplerian orbital elements
@@ -38,38 +36,41 @@ use crate::pyutils::py_to_smatrix;
 #[derive(Clone)]
 pub struct PyKepler(pub Kepler);
 
+impl PyKepler {
+    /// The same elements with the in-plane position replaced by `an`,
+    /// converted to true anomaly by the core solver.
+    fn with_anomaly(&self, an: Anomaly) -> Kepler {
+        let k = &self.0;
+        Kepler::new(k.a, k.eccen, k.incl, k.raan, k.w, an)
+    }
+}
+
 #[pymethods]
 impl PyKepler {
     #[new]
-    #[pyo3(signature=(*args, **kwargs))]
-    fn new(args: &Bound<PyTuple>, mut kwargs: Option<&Bound<PyDict>>) -> PyResult<Self> {
-        let a = args.get_item(0)?.extract::<f64>()?;
-        let e = args.get_item(1)?.extract::<f64>()?;
-        let i = args.get_item(2)?.extract::<f64>()?;
-        let raan = args.get_item(3)?.extract::<f64>()?;
-        let w = args.get_item(4)?.extract::<f64>()?;
-
-        let nu: Option<f64>;
-        let mut ea: Option<f64> = None;
-        let mut ma: Option<f64> = None;
-        if args.len() > 5 {
-            nu = Some(args.get_item(5)?.extract::<f64>()?);
-        } else {
-            nu = kwargs_or_none(&mut kwargs, "true_anomaly")?;
-            ea = kwargs_or_none(&mut kwargs, "eccentric_anomaly")?;
-            ma = kwargs_or_none(&mut kwargs, "mean_anomaly")?;
-        }
-        let an = match (nu, ea, ma) {
-            (Some(v), None, None) => Anomaly::True(v),
-            (None, Some(v), None) => Anomaly::Eccentric(v),
-            (None, None, Some(v)) => Anomaly::Mean(v),
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "Specify only one of true_anomaly, eccentric_anomaly, or mean_anomaly",
-                ))
-            }
-        };
-        Ok(Self(Kepler::new(a, e, i, raan, w, an)))
+    #[pyo3(signature = (a, eccen, incl, raan, w, nu=None, *, true_anomaly=None, eccentric_anomaly=None, mean_anomaly=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        a: f64,
+        eccen: f64,
+        incl: f64,
+        raan: f64,
+        w: f64,
+        nu: Option<f64>,
+        true_anomaly: Option<f64>,
+        eccentric_anomaly: Option<f64>,
+        mean_anomaly: Option<f64>,
+    ) -> PyResult<Self> {
+        let an =
+            match (nu, true_anomaly, eccentric_anomaly, mean_anomaly) {
+                (Some(v), None, None, None) | (None, Some(v), None, None) => Anomaly::True(v),
+                (None, None, Some(v), None) => Anomaly::Eccentric(v),
+                (None, None, None, Some(v)) => Anomaly::Mean(v),
+                _ => return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Specify exactly one of nu, true_anomaly, eccentric_anomaly, or mean_anomaly",
+                )),
+            };
+        Ok(Self(Kepler::new(a, eccen, incl, raan, w, an)))
     }
 
     #[getter]
@@ -161,14 +162,26 @@ impl PyKepler {
         }
     }
 
+    /// Propagate the elements forward (or backward) in time
+    ///
+    /// Args:
+    ///     dt (duration | float | int): time to propagate; a number is
+    ///         interpreted as seconds
+    ///
+    /// Returns:
+    ///     kepler: new element set
     fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if dt.is_instance_of::<pyo3::types::PyFloat>() {
-            let dt = dt.extract::<f64>()?;
-            let dt = satkit::Duration::from_seconds(dt);
-            Ok(Self(self.0.propagate(&dt)))
-        } else {
-            let dt: PyDuration = dt.extract()?;
+        if let Ok(dt) = dt.extract::<PyDuration>() {
             Ok(Self(self.0.propagate(&dt.0)))
+        } else {
+            let secs = dt.extract::<f64>().map_err(|_| {
+                pyo3::exceptions::PyTypeError::new_err(
+                    "dt must be a satkit.duration or a number of seconds",
+                )
+            })?;
+            Ok(Self(
+                self.0.propagate(&satkit::Duration::from_seconds(secs)),
+            ))
         }
     }
 
@@ -183,11 +196,7 @@ impl PyKepler {
 
     #[setter(eccentric_anomaly)]
     fn set_eccentric_anomaly(&mut self, val: f64) {
-        // Convert eccentric anomaly to true anomaly
-        self.0.nu = f64::atan2(
-            val.sin() * self.0.eccen.mul_add(-self.0.eccen, 1.0).sqrt(),
-            val.cos() - self.0.eccen,
-        );
+        self.0 = self.with_anomaly(Anomaly::Eccentric(val));
     }
 
     /// Return the mean motion of the satellite in radians/second
@@ -228,26 +237,9 @@ impl PyKepler {
 
     #[setter(mean_anomaly)]
     fn set_mean_anomaly(&mut self, val: f64) {
-        // Convert mean anomaly to true anomaly via eccentric anomaly
-        // First convert mean to eccentric
-        use std::f64::consts::PI;
-        let mut ea = match (val > PI) || ((val < 0.0) && (val > -PI)) {
-            true => val - self.0.eccen,
-            false => val + self.0.eccen,
-        };
-        loop {
-            let de =
-                self.0.eccen.mul_add(ea.sin(), val - ea) / self.0.eccen.mul_add(-ea.cos(), 1.0);
-            ea += de;
-            if de.abs() < 1.0e-6 {
-                break;
-            }
-        }
-        // Then convert eccentric to true
-        self.0.nu = f64::atan2(
-            ea.sin() * self.0.eccen.mul_add(-self.0.eccen, 1.0).sqrt(),
-            ea.cos() - self.0.eccen,
-        );
+        // Kepler's equation is solved by the core crate (range-reduced,
+        // Danby start, iteration-capped), so NaN or e >= 1 cannot hang here.
+        self.0 = self.with_anomaly(Anomaly::Mean(val));
     }
 
     /// Return the true anomaly of the satellite in radians

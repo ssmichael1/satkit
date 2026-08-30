@@ -279,7 +279,7 @@ impl Kepler {
     /// * `Kepler` - A new Keplerian orbital element object
     ///
     pub fn from_pv(r: Vector3, v: Vector3) -> Result<Self> {
-        use std::f64::consts::PI;
+        use std::f64::consts::TAU;
         let mu = crate::consts::MU_EARTH;
         let rmag = r.norm();
 
@@ -298,62 +298,50 @@ impl Kepler {
         }
         let xi = v.norm_squared() / 2.0 - mu / rmag;
         let a = -mu / (2.0 * xi);
-        let incl = (h.z() / hmag).clamp(-1.0, 1.0).acos();
+        // atan2 form rather than acos(h_z / |h|): acos loses about half the
+        // available precision for inclinations below ~1e-6 rad (and the
+        // mirror case near π), where the argument sits at the edge of the
+        // domain. `nmag` is |ẑ × h| = |h| sin i, so this is atan2(sin i, cos i).
+        let incl = f64::atan2(nmag, h.z());
 
-        // `acos` with the argument clamped to [-1, 1] to absorb rounding error.
-        let safe_acos = |x: f64| x.clamp(-1.0, 1.0).acos();
+        // Every angle below is extracted with atan2(sin, cos) rather than the
+        // textbook acos-plus-quadrant-test, which loses ~half the available
+        // precision (≈1e-8 rad) whenever the angle is near 0 or π. The sine
+        // terms come from triple products with the unit angular-momentum
+        // vector: for any two vectors p, q in the orbital plane,
+        // ĥ·(p × q) = |p||q| sin∠(p,q). Quadrant conventions are the same as
+        // Vallado's Algorithm 9; results are reduced to [0, 2π).
+        let hhat = h / hmag;
+        let wrap = |x: f64| x.rem_euclid(TAU);
         // Below these tolerances the eccentricity / node vectors are
-        // numerically zero, and the usual acos expressions would divide by
-        // zero and yield NaN. Fall back to the standard Vallado special cases.
+        // numerically zero and their directions are meaningless. Fall back
+        // to the standard Vallado special cases. The node test uses
+        // |n| / |h| = sin i, which is dimensionless; |n| itself is ~1e10 m²/s
+        // for any bound Earth orbit, so an absolute tolerance never triggers.
         const TOL: f64 = 1.0e-11;
         let circular = eccen < TOL;
-        let equatorial = nmag < TOL;
+        let equatorial = nmag / hmag < TOL;
 
         let (raan, w, nu) = if circular && equatorial {
             // Circular equatorial: RAAN and argument of perigee undefined;
             // report the true longitude in `nu`.
-            let mut lambda = safe_acos(r.x() / rmag);
-            if r.y() < 0.0 {
-                lambda = 2.0 * PI - lambda;
-            }
-            (0.0, 0.0, lambda)
+            (0.0, 0.0, wrap(f64::atan2(r.y(), r.x())))
         } else if circular {
             // Circular inclined: argument of perigee undefined; report the
             // argument of latitude in `nu`.
-            let mut raan = safe_acos(n.x() / nmag);
-            if n.y() < 0.0 {
-                raan = 2.0 * PI - raan;
-            }
-            let mut u = safe_acos(n.dot(&r) / (nmag * rmag));
-            if r.z() < 0.0 {
-                u = 2.0 * PI - u;
-            }
+            let raan = wrap(f64::atan2(n.y(), n.x()));
+            let u = wrap(f64::atan2(hhat.dot(&n.cross(&r)), n.dot(&r)));
             (raan, 0.0, u)
         } else if equatorial {
             // Elliptical equatorial: RAAN undefined; report the true longitude
             // of periapsis in `w`.
-            let mut w_true = safe_acos(e.x() / eccen);
-            if e.y() < 0.0 {
-                w_true = 2.0 * PI - w_true;
-            }
-            let mut nu = safe_acos(r.dot(&e) / (rmag * eccen));
-            if r.dot(&v) < 0.0 {
-                nu = 2.0 * PI - nu;
-            }
+            let w_true = wrap(f64::atan2(e.y(), e.x()));
+            let nu = wrap(f64::atan2(hhat.dot(&e.cross(&r)), e.dot(&r)));
             (0.0, w_true, nu)
         } else {
-            let mut raan = safe_acos(n.x() / nmag);
-            if n.y() < 0.0 {
-                raan = 2.0 * PI - raan;
-            }
-            let mut w = safe_acos(n.dot(&e) / (nmag * eccen));
-            if e.z() < 0.0 {
-                w = 2.0 * PI - w;
-            }
-            let mut nu = safe_acos(r.dot(&e) / (rmag * eccen));
-            if r.dot(&v) < 0.0 {
-                nu = 2.0 * PI - nu;
-            }
+            let raan = wrap(f64::atan2(n.y(), n.x()));
+            let w = wrap(f64::atan2(hhat.dot(&n.cross(&e)), n.dot(&e)));
+            let nu = wrap(f64::atan2(hhat.dot(&e.cross(&r)), e.dot(&r)));
             (raan, w, nu)
         };
 
@@ -526,6 +514,129 @@ mod tests {
                     diff
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_mean2eccentric_nan_returns() {
+        // A NaN mean anomaly must fall out of the capped Newton loop as NaN
+        // rather than spinning forever (the Python setter used to hang here).
+        assert!(mean2eccentric(f64::NAN, 0.5).is_nan());
+        assert!(mean2eccentric(0.5, f64::NAN).is_nan());
+        // e >= 1 is outside the domain of the elliptical solver; the result is
+        // meaningless but the call must return.
+        let _ = mean2eccentric(1.0, 1.0);
+        let _ = mean2eccentric(1.0, 1.5);
+        let _ = mean2eccentric(f64::INFINITY, 0.1);
+    }
+
+    #[test]
+    fn test_mean_anomaly_setter_roundtrip_high_eccen() {
+        use std::f64::consts::TAU;
+        // Set M via the public constructor path, read it back.
+        for &e in &[0.0, 0.1, 0.5, 0.9, 0.99, 0.999] {
+            for i in 0..64 {
+                let m = (i as f64) * TAU / 64.0;
+                let k = Kepler::with_mean_anomaly(7000.0e3, e, 0.5, 1.0, 0.3, m);
+                let mut dm = (k.mean_anomaly() - m).rem_euclid(TAU);
+                if dm > TAU / 2.0 {
+                    dm -= TAU;
+                }
+                assert!(
+                    dm.abs() < 1.0e-12,
+                    "M round-trip failed for e={e}, M={m}: dM={dm:e}"
+                );
+            }
+        }
+    }
+
+    /// Round-trip r,v → elements → r,v over a grid of eccentricities up to
+    /// 0.999 and inclinations down to 1e-9 rad (and the retrograde mirror
+    /// near π), including the true-anomaly quadrants near periapsis and
+    /// apoapsis where the acos branches are least conditioned.
+    #[test]
+    fn test_from_pv_roundtrip_grid() {
+        use std::f64::consts::PI;
+        let eccens = [0.0, 1.0e-6, 0.01, 0.3, 0.7, 0.9, 0.99, 0.999];
+        let incls = [
+            0.0,
+            1.0e-9,
+            1.0e-7,
+            1.0e-5,
+            1.0e-3,
+            0.5,
+            PI / 2.0,
+            PI - 1.0e-3,
+            PI - 1.0e-9,
+        ];
+        let nus = [
+            0.0,
+            1.0e-7,
+            0.3,
+            PI / 2.0,
+            PI - 1.0e-6,
+            PI,
+            PI + 0.4,
+            2.0 * PI - 1.0e-7,
+        ];
+        let a = 12_000.0e3;
+        for &e in &eccens {
+            for &i in &incls {
+                for &nu in &nus {
+                    let k = Kepler::new(a, e, i, 1.1, 0.7, Anomaly::True(nu));
+                    let (r, v) = k.to_pv();
+                    let k2 = Kepler::from_pv(r, v)
+                        .unwrap_or_else(|err| panic!("from_pv failed e={e} i={i} nu={nu}: {err}"));
+                    assert!(
+                        k2.a.is_finite()
+                            && k2.eccen.is_finite()
+                            && k2.incl.is_finite()
+                            && k2.raan.is_finite()
+                            && k2.w.is_finite()
+                            && k2.nu.is_finite(),
+                        "non-finite element e={e} i={i} nu={nu}: {k2:?}"
+                    );
+                    assert!(
+                        (k2.a - a).abs() / a < 1.0e-9,
+                        "a mismatch e={e} i={i} nu={nu}: {}",
+                        (k2.a - a).abs() / a
+                    );
+                    assert!(
+                        (k2.eccen - e).abs() < 1.0e-9,
+                        "e mismatch e={e} i={i} nu={nu}: {}",
+                        k2.eccen - e
+                    );
+                    assert!(
+                        (k2.incl - i).abs() < 1.0e-9,
+                        "i mismatch e={e} i={i} nu={nu}: {:e}",
+                        k2.incl - i
+                    );
+                    let (r2, v2) = k2.to_pv();
+                    let dr = (r - r2).norm() / r.norm();
+                    let dv = (v - v2).norm() / v.norm();
+                    assert!(
+                        dr < 1.0e-6 && dv < 1.0e-6,
+                        "round-trip e={e} i={i} nu={nu}: dr={dr:e} dv={dv:e}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_pv_tiny_inclination_precision() {
+        // acos(h_z/|h|) would return exactly 0 (or ~1.5e-8) here; atan2 keeps
+        // the inclination to full relative precision.
+        for &i in &[1.0e-9, 1.0e-8, 1.0e-7] {
+            let k = Kepler::new(7000.0e3, 0.2, i, 0.4, 1.2, Anomaly::True(2.0));
+            let (r, v) = k.to_pv();
+            let k2 = Kepler::from_pv(r, v).unwrap();
+            assert!(
+                (k2.incl - i).abs() / i < 1.0e-6,
+                "i={i}: got {} (rel err {:e})",
+                k2.incl,
+                (k2.incl - i).abs() / i
+            );
         }
     }
 

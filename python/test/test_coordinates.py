@@ -45,6 +45,113 @@ class TestKepler:
             np.array([4.902279, 5.533140, -1.975710]) * 1.0e3, 1.0e-3
         )
 
+    def test_kepler_kwargs_construction(self):
+        """All six elements can be passed by keyword, matching the stub."""
+        k_pos = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        k_kw = sk.kepler(a=7000e3, eccen=0.1, incl=0.5, raan=1.0, w=0.3, nu=0.7)
+        assert k_kw == k_pos
+        # Mixed positional / keyword
+        k_mix = sk.kepler(7000e3, 0.1, 0.5, raan=1.0, w=0.3, nu=0.7)
+        assert k_mix == k_pos
+        # Anomaly by keyword
+        k_ta = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, true_anomaly=0.7)
+        assert k_ta == k_pos
+        k_ma = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, mean_anomaly=0.7)
+        assert k_ma.mean_anomaly == pytest.approx(0.7, abs=1e-12)
+        k_ea = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, eccentric_anomaly=0.7)
+        assert k_ea.eccentric_anomaly == pytest.approx(0.7, abs=1e-12)
+        # Exactly one anomaly must be given
+        with pytest.raises(ValueError):
+            sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3)
+        with pytest.raises(ValueError):
+            sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7, mean_anomaly=0.7)
+        with pytest.raises(TypeError):
+            sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7, bogus=1.0)
+
+    def test_mean_anomaly_setter_nan_does_not_hang(self):
+        """Regression: the setter used to spin forever on NaN with the GIL held."""
+        import threading
+
+        results = {}
+
+        def worker():
+            k = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
+            k.mean_anomaly = float("nan")
+            results["nan"] = k.nu
+            k.mean_anomaly = float("inf")
+            results["inf"] = k.nu
+            # e >= 1 is outside the supported domain but must still return
+            k.eccen = 1.5
+            k.mean_anomaly = 1.0
+            results["hyper"] = k.nu
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        t.join(timeout=10.0)
+        assert not t.is_alive(), "mean_anomaly setter hung"
+        assert m.isnan(results["nan"])
+        assert m.isnan(results["inf"])
+        assert "hyper" in results
+
+    def test_mean_anomaly_setter_roundtrip(self):
+        """Set M, read it back: |dM| < 1e-12 at e = 0.9 over a full revolution."""
+        k = sk.kepler(7000e3, 0.9, 0.5, 1.0, 0.3, 0.0)
+        for i in range(64):
+            m0 = 2 * m.pi * i / 64
+            k.mean_anomaly = m0
+            dm = (k.mean_anomaly - m0 + m.pi) % (2 * m.pi) - m.pi
+            assert abs(dm) < 1e-12, f"M={m0}: dM={dm:e}"
+            # E must be consistent with M via Kepler's equation
+            ea = k.eccentric_anomaly
+            assert (ea - 0.9 * m.sin(ea) - m0 + m.pi) % (2 * m.pi) - m.pi == pytest.approx(
+                0.0, abs=1e-12
+            )
+        # Eccentric-anomaly setter round-trip
+        for i in range(64):
+            e0 = 2 * m.pi * i / 64
+            k.eccentric_anomaly = e0
+            de = (k.eccentric_anomaly - e0 + m.pi) % (2 * m.pi) - m.pi
+            assert abs(de) < 1e-12
+
+    def test_kepler_pickle_roundtrip(self):
+        import pickle
+
+        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        k2 = pickle.loads(pickle.dumps(k))
+        assert k2 == k
+        assert (k2.a, k2.eccen, k2.inclination, k2.raan, k2.w, k2.nu) == (
+            k.a,
+            k.eccen,
+            k.inclination,
+            k.raan,
+            k.w,
+            k.nu,
+        )
+
+    def test_kepler_propagate_accepts_int_and_duration(self):
+        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        k_f = k.propagate(600.0)
+        k_i = k.propagate(600)
+        k_d = k.propagate(sk.duration.from_minutes(10))
+        assert k_i == k_f
+        assert k_d.nu == pytest.approx(k_f.nu, abs=1e-12)
+        with pytest.raises(TypeError):
+            k.propagate("600")
+
+    def test_kepler_from_pv_tiny_inclination(self):
+        """from_pv keeps precision for e up to 0.999 and i down to 1e-9 rad."""
+        for eccen in (0.0, 0.5, 0.99, 0.999):
+            for incl in (1e-9, 1e-6, 0.3):
+                for nu in (0.0, 1.0, m.pi, 4.0):
+                    k = sk.kepler(12000e3, eccen, incl, 1.1, 0.7, nu)
+                    r, v = k.to_pv()
+                    k2 = sk.kepler.from_pv(r, v)
+                    assert k2.inclination == pytest.approx(incl, rel=1e-6, abs=1e-15)
+                    assert k2.eccen == pytest.approx(eccen, abs=1e-9)
+                    r2, v2 = k2.to_pv()
+                    assert np.linalg.norm(r - r2) / np.linalg.norm(r) < 1e-6
+                    assert np.linalg.norm(v - v2) / np.linalg.norm(v) < 1e-6
+
 
 class TestITRFCoord:
     def test_geodetic(self):

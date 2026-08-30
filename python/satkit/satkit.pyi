@@ -2300,59 +2300,68 @@ class quaternion:
 class kepler:
     """Represent Keplerian element sets and convert between cartesian
 
-
     Notes:
         - This class is used to represent Keplerian elements and convert between Cartesian coordinates
         - The class uses the semi-major axis (a), not the semiparameter
+        - Elements are osculating and expressed in the frame of the input state
+          (normally GCRF); the class does no frame handling
+        - The Earth gravitational parameter (MU_EARTH) is used throughout
+        - Only closed orbits are supported (0 <= eccen < 1)
         - All angle units are radians
         - All length units are meters
         - All velocity units are meters / second
+
+    See the "Theory: Keplerian Elements" guide page for details.
     """
 
     def __init__(
         self,
         a: float,
-        e: float,
-        i: float,
+        eccen: float,
+        incl: float,
         raan: float,
-        argp: float,
-        nu: float = ...,
+        w: float,
+        nu: float | None = None,
         *,
-        true_anomaly: float = ...,
-        mean_anomaly: float = ...,
-        eccentric_anomaly: float = ...,
-    ):
+        true_anomaly: float | None = None,
+        eccentric_anomaly: float | None = None,
+        mean_anomaly: float | None = None,
+    ) -> None:
         """Create Keplerian element set object from input elements
 
         Args:
             a: Semi-major axis, meters
-            e: Eccentricity, unitless
-            i: Inclination, radians
+            eccen: Eccentricity, unitless (0 <= eccen < 1)
+            incl: Inclination, radians
             raan: Right ascension of ascending node, radians
-            argp: Argument of perigee, radians
-            nu: True anomaly, radians
+            w: Argument of perigee, radians
+            nu: True anomaly, radians (6th positional argument)
             true_anomaly: True anomaly, radians (keyword alternative to nu)
-            mean_anomaly: Mean anomaly, radians (keyword alternative to nu)
             eccentric_anomaly: Eccentric anomaly, radians (keyword alternative to nu)
+            mean_anomaly: Mean anomaly, radians (keyword alternative to nu)
 
         Notes:
-            If "nu" is provided (6th argument), it will be used as the true anomaly.
-            Anomaly may also be set via keyword arguments; if so, there should only be
-            5 positional input arguments.
+            Exactly one of ``nu``, ``true_anomaly``, ``eccentric_anomaly`` or
+            ``mean_anomaly`` must be given; anything else raises ValueError.
+            All six elements may be passed positionally or by keyword.
 
         Example:
             ```python
             import math
+            import satkit
 
             # Create a ~400 km circular LEO orbit
             k = satkit.kepler(
-                a=6.781e6,        # semi-major axis, meters
-                e=0.001,          # near-circular
-                i=math.radians(51.6),
+                a=6.781e6,  # semi-major axis, meters
+                eccen=0.001,  # near-circular
+                incl=math.radians(51.6),
                 raan=math.radians(0),
-                argp=math.radians(0),
+                w=math.radians(0),
                 nu=math.radians(0),
             )
+
+            # Same orbit, positional, located by mean anomaly instead
+            k2 = satkit.kepler(6.781e6, 0.001, math.radians(51.6), 0, 0, mean_anomaly=1.0)
             ```
         """
         ...
@@ -2374,12 +2383,14 @@ class kepler:
         """
         ...
 
-    def propagate(self, dt: duration | float) -> kepler:
+    def propagate(self, dt: duration | float | int) -> kepler:
         """Propagate Keplerian element set by input duration
 
+        Two-body (unperturbed) propagation: only the anomaly changes.
+
         Args:
-            dt (duration | float): Duration by which to propagate the Keplerian element set
-                                   If float, value is seconds
+            dt (duration | float | int): Duration by which to propagate the
+                Keplerian element set. A number is interpreted as seconds.
 
         Returns:
             Keplerian element set object after propagation
@@ -2388,6 +2399,8 @@ class kepler:
             ```python
             # Propagate orbit by one orbital period
             k2 = k.propagate(k.period)
+            # ... or by ten minutes
+            k3 = k.propagate(satkit.duration.from_minutes(10))
             ```
         """
         ...
@@ -2408,14 +2421,22 @@ class kepler:
         ...
 
     @eccentric_anomaly.setter
-    def eccentric_anomaly(self, value: float) -> None: ...
+    def eccentric_anomaly(self, value: float) -> None:
+        """Set the in-plane position by eccentric anomaly, radians"""
+        ...
     @property
     def mean_anomaly(self) -> float:
         """Mean anomaly, radians"""
         ...
 
     @mean_anomaly.setter
-    def mean_anomaly(self, value: float) -> None: ...
+    def mean_anomaly(self, value: float) -> None:
+        """Set the in-plane position by mean anomaly, radians
+
+        Kepler's equation is solved for the eccentric anomaly and the result
+        stored as true anomaly (``nu``). A non-finite value yields NaN.
+        """
+        ...
     @property
     def period(self) -> float:
         """Orbital period, seconds"""
@@ -2486,8 +2507,13 @@ class kepler:
             vel = np.array([0, 7.5e3, 0])    # m/s, GCRF
             k = satkit.kepler.from_pv(pos, vel)
             print(f"Semi-major axis: {k.a/1e3:.1f} km")
-            print(f"Eccentricity: {k.e:.6f}")
+            print(f"Eccentricity: {k.eccen:.6f}")
             ```
+
+        Raises:
+            RuntimeError: if the state is hyperbolic/parabolic (eccen >= 1) or
+                rectilinear (zero angular momentum), or if the inputs are not
+                3-element vectors.
         """
         ...
 
