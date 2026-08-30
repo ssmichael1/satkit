@@ -4866,6 +4866,76 @@ fn gtd7d(
     }
 }
 
+/// Length of one 3-hourly geomagnetic interval, in seconds.
+const AP_INTERVAL_S: f64 = 10800.0;
+
+/// Assemble the 7-element geomagnetic history NRLMSISE-00 takes when switch 9
+/// is −1 (`ap_a` in `nrlmsise-00.h`):
+///
+/// * `[0]` daily Ap of the current UTC day (also what GMAT's
+///   `CSSISpaceWeatherFile` feed puts there);
+/// * `[1]` 3-hourly ap of the current interval;
+/// * `[2]`, `[3]`, `[4]` the intervals 3, 6 and 9 h earlier;
+/// * `[5]` mean of the eight intervals 12–33 h earlier;
+/// * `[6]` mean of the eight intervals 36–57 h earlier.
+///
+/// Intervals are UT: `AP1` covers 00:00–03:00, …, `AP8` 21:00–24:00, and the
+/// interval is chosen by flooring, so a query at exactly 03:00:00 UT belongs
+/// to the 03–06 interval. `sec_of_day` is the UTC seconds since midnight of
+/// the query day; `day(n)` returns the space-weather record for the UTC day
+/// `n` days before the query day (`0` = query day) or `None` when no record
+/// exists for exactly that day. The oldest interval used (57 h back) lies on
+/// day 3 for queries before 09:00 UT and on day 2 otherwise; only the days
+/// actually needed are requested.
+///
+/// A 3-hourly value CelesTrak has not filled in (`-1`) is replaced by that
+/// day's daily Ap, which is what the daily-Ap formulation assumes anyway. When
+/// a needed day has no record, a slot has neither a 3-hourly nor a daily
+/// value, or the current day's daily Ap is missing, no history can be built
+/// and `None` is returned; the caller then falls back to the daily-Ap
+/// formulation (switch 9 = +1).
+fn ap_history(
+    sec_of_day: f64,
+    day: impl Fn(usize) -> Option<crate::spaceweather::SpaceWeatherRecord>,
+) -> Option<[f64; 7]> {
+    // Current 3-hourly interval, 0..=7 (clamped so a leap second at 23:59:60
+    // still lands in AP8).
+    let interval = ((sec_of_day / AP_INTERVAL_S).floor() as i64).clamp(0, 7);
+    // Global interval index n = interval - j for j intervals back; the record
+    // holding it is `(7 - n).div_euclid(8)` days back at slot `n.rem_euclid(8)`.
+    let oldest_day = (7 - (interval - 19)).div_euclid(8) as usize;
+    let mut recs: [Option<crate::spaceweather::SpaceWeatherRecord>; 4] = [None, None, None, None];
+    for (n, slot) in recs.iter_mut().enumerate().take(oldest_day + 1) {
+        *slot = Some(day(n)?);
+    }
+    let daily = recs[0].as_ref()?.ap_avg;
+    if daily < 0 {
+        return None;
+    }
+    let value = |j: i64| -> Option<f64> {
+        let n = interval - j;
+        let r = recs[(7 - n).div_euclid(8) as usize].as_ref()?;
+        match (r.ap[n.rem_euclid(8) as usize], r.ap_avg) {
+            (a, _) if a >= 0 => Some(a as f64),
+            (_, d) if d >= 0 => Some(d as f64),
+            _ => None,
+        }
+    };
+    let mut v = [0.0_f64; 20];
+    for (j, slot) in v.iter_mut().enumerate() {
+        *slot = value(j as i64)?;
+    }
+    Some([
+        daily as f64,
+        v[0],
+        v[1],
+        v[2],
+        v[3],
+        v[4..12].iter().sum::<f64>() / 8.0,
+        v[12..20].iter().sum::<f64>() / 8.0,
+    ])
+}
+
 /// NRL MSISE-00 model for atmosphere density
 ///
 /// # Arguments
@@ -4875,6 +4945,22 @@ fn gtd7d(
 ///   * `lon_option` - Optional longitude in degrees (default: 0)
 ///   * `time_option` -  Optional time, for when using space weather
 ///   * `use_spaceweather` -  Boolean to use space weather data
+///
+/// # Space weather feed
+///
+/// With `use_spaceweather` and a time, the indices come from the CelesTrak
+/// `SW-All.csv` table following the NRLMSISE-00 interface: F10.7 is the
+/// observed flux of the previous UTC day, F10.7A the observed 81-day average
+/// centred on the current day, and the geomagnetic forcing is the 7-element
+/// 3-hourly ap history (daily Ap of the current day, the current 3-hourly ap
+/// and the three before it, and the 12–33 h and 36–57 h means; model switch
+/// 9 = −1). When that history cannot be assembled — no record for one of the
+/// up-to-four days involved, or a row without either 3-hourly or daily values
+/// (monthly predicted rows) — the model runs on the current day's daily Ap
+/// alone (switch 9 = +1), and when not even that exists on Ap = 4. Without a
+/// usable F10.7 record the NOAA/SWPC solar-cycle forecast supplies F10.7 =
+/// F10.7A and Ap stays at 4; without space weather at all F10.7 = F10.7A = 150,
+/// Ap = 4.
 ///
 /// # Outputs
 ///
@@ -4896,17 +4982,20 @@ pub fn nrlmsise(
     let mut f107a: f64 = 150.0;
     let mut f107: f64 = 150.0;
     let mut ap: f64 = 4.0;
+    let mut ap_a: Option<[f64; 7]> = None;
     if let Some(time) = time_option {
         let time = time.as_instant();
-        let (year, _mon, _day, dhour, dmin, dsec) = time.as_datetime();
+        let (year, mon, day, dhour, dmin, dsec) = time.as_datetime();
         let fday: f64 = (time - Instant::from_date(year, 1, 1).unwrap()).as_days() + 1.0;
         day_of_year = fday.floor() as i32;
         sec_of_day = (dhour as f64).mul_add(3600.0, dmin as f64 * 60.0) + dsec;
         if use_spaceweather {
             // NRLMSISE-00 interface (nrlmsise-00.h): F107 is the *observed*
             // (not 1 AU-adjusted) daily flux of the *previous* day, F107A the
-            // observed 81-day average centred on the current day, and AP the
-            // daily Ap of the *current* day.
+            // observed 81-day average centred on the current day, AP the
+            // daily Ap of the *current* day, and AP_A the 3-hourly history
+            // assembled by `ap_history` (used in preference to AP when it can
+            // be built).
             //
             // Predicted (future) rows in SW-All.csv carry -1 sentinels for
             // fields celestrak has not filled in. Treat a record with an
@@ -4928,6 +5017,17 @@ pub fn nrlmsise(
                     _ if r.ap_avg >= 0 => ap = r.ap_avg as f64,
                     _ => {}
                 }
+                // Record for exactly the UTC day `n` days back (spaceweather::get
+                // returns the most recent *prior* record for a missing day, which
+                // must not masquerade as that day's 3-hourly values).
+                if let Ok(day0) = Instant::from_date(year, mon, day) {
+                    ap_a = ap_history(sec_of_day, |n| {
+                        let d = day0 - Duration::from_days(n as f64);
+                        spaceweather::get(&d)
+                            .ok()
+                            .filter(|rec| (rec.date - d).as_days().abs() < 0.5)
+                    });
+                }
             } else if let Some(predicted) = solar_cycle_forecast::get_predicted_f107(&time) {
                 f107 = predicted;
                 f107a = predicted;
@@ -4946,7 +5046,7 @@ pub fn nrlmsise(
         f107a,
         f107,
         ap,
-        ap_a: None,
+        ap_a,
     };
     let mut flags = NrlmsiseFlags {
         switches: [
@@ -4955,6 +5055,10 @@ pub fn nrlmsise(
         sw: [0.0; 24],
         swc: [0.0; 24],
     };
+    // Switch 9: +1 uses the daily Ap, -1 the 7-element 3-hourly history.
+    if input.ap_a.is_some() {
+        flags.switches[9] = -1;
+    }
     let mut output = NrlmsiseOutput {
         d: [0.0; 9],
         t: [0.0; 2],
@@ -4967,6 +5071,7 @@ pub fn nrlmsise(
 mod tests {
     use super::*;
 
+    #[allow(clippy::too_many_arguments)]
     fn call_model(
         alt: f64,
         lat: f64,
@@ -4976,6 +5081,22 @@ mod tests {
         f107: f64,
         f107a: f64,
         ap: f64,
+    ) -> NrlmsiseOutput {
+        call_model_ap_a(alt, lat, lon, doy, sec, f107, f107a, ap, None)
+    }
+
+    /// `call_model` with an optional 7-element ap history (switch 9 = -1).
+    #[allow(clippy::too_many_arguments)]
+    fn call_model_ap_a(
+        alt: f64,
+        lat: f64,
+        lon: f64,
+        doy: i32,
+        sec: f64,
+        f107: f64,
+        f107a: f64,
+        ap: f64,
+        ap_a: Option<[f64; 7]>,
     ) -> NrlmsiseOutput {
         let mut state = NrlmsiseState::new();
         let mut input = NrlmsiseInput {
@@ -4989,7 +5110,7 @@ mod tests {
             f107a,
             f107,
             ap,
-            ap_a: None,
+            ap_a,
         };
         let mut flags = NrlmsiseFlags {
             switches: [
@@ -4998,6 +5119,9 @@ mod tests {
             sw: [0.0; 24],
             swc: [0.0; 24],
         };
+        if input.ap_a.is_some() {
+            flags.switches[9] = -1;
+        }
         let mut output = NrlmsiseOutput {
             d: [0.0; 9],
             t: [0.0; 2],
@@ -5032,21 +5156,40 @@ mod tests {
 
     /// The space-weather feed must follow the NRLMSISE-00 interface: F107 =
     /// observed flux of the previous day, F107A = observed centred 81-day
-    /// average of the current day, AP = daily Ap of the current day.
-    /// 2023-03-01 (SW-All.csv): F10.7 obs 162.0 (adj 159.0), obs c81 163.4,
-    /// Ap 7; 2023-02-28: F10.7 obs 160.9 (adj 157.9), obs c81 164.4, Ap 26.
+    /// average of the current day, and the 7-element 3-hourly ap history with
+    /// the current day's daily Ap in element 0.
+    /// SW-All.csv rows (AP1..AP8, AP_AVG):
+    ///   2023-02-26: 18,9,15,18,15,6,48,67 / 24
+    ///   2023-02-27: 48,80,111,111,94,111,94,80 / 91
+    ///   2023-02-28: 67,39,15,15,6,5,27,32 / 26   F10.7 obs 160.9, c81 164.4
+    ///   2023-03-01: 15,4,5,12,3,5,7,7 / 7        F10.7 obs 162.0, c81 163.4
     #[test]
     fn test_spaceweather_feed_conventions() {
         let tm = Instant::from_datetime(2023, 3, 1, 12, 0, 0.0).unwrap();
         let (alt, lat, lon) = (420.0, 30.0, 40.0);
         let (rho, _) = nrlmsise(alt, Some(lat), Some(lon), Some(&tm), true);
-        let expect = call_model(alt, lat, lon, 60, 43200.0, 160.9, 163.4, 7.0);
+        // 12:00 UT is interval 4 (AP5) of 03-01; 12-33 h back = AP1 of 03-01
+        // and AP8..AP2 of 02-28; 36-57 h back = AP1 of 02-28 and AP8..AP2 of
+        // 02-27.
+        let ap_a = [
+            7.0,
+            3.0,
+            12.0,
+            5.0,
+            4.0,
+            (15.0 + 32.0 + 27.0 + 5.0 + 6.0 + 15.0 + 15.0 + 39.0) / 8.0,
+            (67.0 + 80.0 + 94.0 + 111.0 + 94.0 + 111.0 + 111.0 + 80.0) / 8.0,
+        ];
+        let expect = call_model_ap_a(alt, lat, lon, 60, 43200.0, 160.9, 163.4, 7.0, Some(ap_a));
         assert!(
             (rho / (expect.d[5] * 1.0e3) - 1.0).abs() < 1.0e-12,
             "space-weather feed does not match the NRLMSISE-00 conventions: {rho:e}"
         );
-        // The wrong-day / adjusted-flux alternatives differ by percent, so the
-        // check above is not vacuous.
+        // The daily-Ap formulation, the wrong-day / adjusted-flux alternatives
+        // and a mis-assembled history all differ by > 0.2 %, so the check
+        // above is not vacuous.
+        let daily = call_model(alt, lat, lon, 60, 43200.0, 160.9, 163.4, 7.0);
+        assert!((rho / (daily.d[5] * 1.0e3) - 1.0).abs() > 2.0e-3);
         for (f107, f107a, ap) in [
             (157.9, 161.5, 26.0),
             (160.9, 163.4, 26.0),
@@ -5055,6 +5198,165 @@ mod tests {
             let other = call_model(alt, lat, lon, 60, 43200.0, f107, f107a, ap);
             assert!((rho / (other.d[5] * 1.0e3) - 1.0).abs() > 2.0e-3);
         }
+        let mut shifted = ap_a;
+        shifted[1..5].rotate_right(1); // one interval off
+        let other = call_model_ap_a(alt, lat, lon, 60, 43200.0, 160.9, 163.4, 7.0, Some(shifted));
+        assert!((rho / (other.d[5] * 1.0e3) - 1.0).abs() > 2.0e-3);
+    }
+
+    /// At Ap = 4 (g0(4) = 0) the daily and 3-hourly formulations coincide
+    /// exactly; away from it they differ, so switch 9 really is honoured.
+    #[test]
+    fn test_ap_array_formulation_coincides_at_ap4() {
+        let (alt, lat, lon) = (400.0, 60.0, -70.0);
+        let daily = call_model(alt, lat, lon, 172, 29000.0, 150.0, 150.0, 4.0);
+        let arr = call_model_ap_a(
+            alt,
+            lat,
+            lon,
+            172,
+            29000.0,
+            150.0,
+            150.0,
+            4.0,
+            Some([4.0; 7]),
+        );
+        assert!((daily.d[5] / arr.d[5] - 1.0).abs() < 1.0e-14);
+        assert!((daily.t[1] / arr.t[1] - 1.0).abs() < 1.0e-14);
+        let daily40 = call_model(alt, lat, lon, 172, 29000.0, 150.0, 150.0, 40.0);
+        let arr40 = call_model_ap_a(
+            alt,
+            lat,
+            lon,
+            172,
+            29000.0,
+            150.0,
+            150.0,
+            40.0,
+            Some([40.0; 7]),
+        );
+        assert!(daily40.d[5] > daily.d[5] && arr40.d[5] > daily.d[5]);
+        assert!((daily40.d[5] / arr40.d[5] - 1.0).abs() > 1.0e-3);
+    }
+
+    /// Synthetic 4-day table: day `n` back has AP1..AP8 = 100n+100 .. 100n+107
+    /// and daily Ap 50 + n, so every hand-computed mean is unambiguous.
+    fn synthetic_day(n: usize) -> Option<crate::spaceweather::SpaceWeatherRecord> {
+        let base = 100 * (n as i32 + 1);
+        Some(crate::spaceweather::SpaceWeatherRecord {
+            date: Instant::from_date(2023, 3, 4).unwrap() - Duration::from_days(n as f64),
+            bsrn: 0,
+            nd: 0,
+            kp: [0; 8],
+            kp_sum: 0,
+            ap: core::array::from_fn(|i| base + i as i32),
+            ap_avg: 50 + n as i32,
+            cp: 0.0,
+            c9: 0,
+            isn: 0,
+            f10p7_obs: 150.0,
+            f10p7_adj: 150.0,
+            f10p7_obs_c81: 150.0,
+            f10p7_obs_l81: 150.0,
+            f10p7_adj_c81: 150.0,
+            f10p7_adj_l81: 150.0,
+        })
+    }
+
+    #[test]
+    fn test_ap_history_assembly() {
+        // Exactly 03:00 UT belongs to the 03-06 interval (AP2 = 101).
+        let h = ap_history(10800.0, synthetic_day).unwrap();
+        assert_eq!(h[..5], [50.0, 101.0, 100.0, 207.0, 206.0]);
+        // 12-33 h back: AP6..AP1 of day 1 and AP8, AP7 of day 2.
+        assert_eq!(
+            h[5],
+            (205.0 + 204.0 + 203.0 + 202.0 + 201.0 + 200.0 + 307.0 + 306.0) / 8.0
+        );
+        // 36-57 h back: AP6..AP1 of day 2 and AP8, AP7 of day 3.
+        assert_eq!(
+            h[6],
+            (305.0 + 304.0 + 303.0 + 302.0 + 301.0 + 300.0 + 407.0 + 406.0) / 8.0
+        );
+
+        // One second earlier is still the 00-03 interval, and everything
+        // shifts one slot into the past.
+        let h = ap_history(10799.0, synthetic_day).unwrap();
+        assert_eq!(h[..5], [50.0, 100.0, 207.0, 206.0, 205.0]);
+        assert_eq!(
+            h[5],
+            (204.0 + 203.0 + 202.0 + 201.0 + 200.0 + 307.0 + 306.0 + 305.0) / 8.0
+        );
+        assert_eq!(
+            h[6],
+            (304.0 + 303.0 + 302.0 + 301.0 + 300.0 + 407.0 + 406.0 + 405.0) / 8.0
+        );
+
+        // 23:59:59 UT: interval 7; day 3 is never touched (must not be needed).
+        let h = ap_history(86399.0, |n| if n == 3 { None } else { synthetic_day(n) }).unwrap();
+        assert_eq!(h[..5], [50.0, 107.0, 106.0, 105.0, 104.0]);
+        assert_eq!(
+            h[5],
+            (103.0 + 102.0 + 101.0 + 100.0 + 207.0 + 206.0 + 205.0 + 204.0) / 8.0
+        );
+        assert_eq!(
+            h[6],
+            (203.0 + 202.0 + 201.0 + 200.0 + 307.0 + 306.0 + 305.0 + 304.0) / 8.0
+        );
+
+        // Midnight: interval 0, 57 h back reaches AP6 of day 3.
+        let h = ap_history(0.0, synthetic_day).unwrap();
+        assert_eq!(h[1], 100.0);
+        assert_eq!(
+            h[6],
+            (304.0 + 303.0 + 302.0 + 301.0 + 300.0 + 407.0 + 406.0 + 405.0) / 8.0
+        );
+    }
+
+    #[test]
+    fn test_ap_history_fallbacks() {
+        // A missing 3-hourly value takes that day's daily Ap.
+        let h = ap_history(10800.0, |n| {
+            let mut r = synthetic_day(n)?;
+            if n == 1 {
+                r.ap[7] = -1;
+            }
+            Some(r)
+        })
+        .unwrap();
+        assert_eq!(h[3], 51.0);
+        // A day with neither 3-hourly nor daily values, a missing day, or a
+        // missing current-day daily Ap: no history (daily-Ap fallback).
+        assert!(ap_history(10800.0, |n| {
+            let mut r = synthetic_day(n)?;
+            if n == 2 {
+                r.ap = [-1; 8];
+                r.ap_avg = -1;
+            }
+            Some(r)
+        })
+        .is_none());
+        assert!(ap_history(10800.0, |n| if n == 3 { None } else { synthetic_day(n) }).is_none());
+        assert!(ap_history(10800.0, |n| {
+            let mut r = synthetic_day(n)?;
+            if n == 0 {
+                r.ap_avg = -1;
+            }
+            Some(r)
+        })
+        .is_none());
+    }
+
+    /// Epochs before the space-weather table starts (1957-10-01) have no
+    /// history and no F10.7 record: the model must still return a density.
+    #[test]
+    fn test_nrlmsise_before_table_start_does_not_panic() {
+        let tm = Instant::from_datetime(1957, 10, 1, 6, 0, 0.0).unwrap();
+        let (rho, t) = nrlmsise(400.0, Some(10.0), Some(20.0), Some(&tm), true);
+        assert!(rho > 0.0 && t > 0.0);
+        let tm = Instant::from_datetime(1950, 1, 1, 0, 0, 0.0).unwrap();
+        let (rho, t) = nrlmsise(400.0, Some(10.0), Some(20.0), Some(&tm), true);
+        assert!(rho > 0.0 && t > 0.0);
     }
 
     #[test]

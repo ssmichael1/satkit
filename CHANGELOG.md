@@ -12,6 +12,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - CI refreshes `EOP-All.csv` / `SW-All.csv` on every run (also on an `astro-data` cache hit) via `download_data.py --refresh-only`, so docs and tests no longer run on a stale EOP table; a failed refresh keeps the cached copy instead of failing the job ([#147](https://github.com/ssmichael1/satkit/pull/147))
 - GitHub Actions updated to current major versions (checkout v7, setup-python v7, cache v6, upload-artifact v7, download-artifact v8, upload-pages-artifact v5, deploy-pages v5, sccache-action v0.0.11, cibuildwheel v4.2.0; Windows wheel repair explicitly kept off) ([#145](https://github.com/ssmichael1/satkit/pull/145))
 
+### Changed
+
+- NRLMSISE-00 is fed the 7-element 3-hourly geomagnetic ap history from `SW-All.csv` (model switch 9 = −1: current-day daily Ap, the current and three preceding 3-hourly ap, the 12–33 h and 36–57 h means; falls back to the daily Ap when the history is incomplete) instead of the daily Ap alone, so file-driven densities follow storms within hours — along the ISS orbit after the 2023-02-27 storm the 3-day drag residual against GMAT drops from 6.8 km to 0.3 km (gates tightened accordingly); `satkit.density.nrlmsise(itrfcoord, ...)` passed latitude/longitude in radians to the degree-taking model ([#154](https://github.com/ssmichael1/satkit/pull/154))
+
 ### Fixed
 
 - TLE, OMM and Optical Observations tutorials: the CelesTrak-throttling note is a plain blockquote (mkdocs-jupyter renders notebook markdown with nbconvert, which does not support `!!! note` admonitions) ([#152](https://github.com/ssmichael1/satkit/pull/152))

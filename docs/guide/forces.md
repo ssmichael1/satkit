@@ -88,7 +88,7 @@ $$
 
 with $C_d$ the drag coefficient (typically 1.5–3; [Montenbruck & Gill 2000](references.md#montenbruck2000), §3.5), $A/m$ the area-to-mass ratio, $\rho$ the atmospheric density, and $\vec{v}_r$ the satellite velocity relative to the co-rotating atmosphere (assumed at rest in the Earth-fixed frame).
 
-Density comes from the [NRLMSISE-00](https://ccmc.gsfc.nasa.gov/models/NRLMSIS~00/) thermosphere model ([Picone et al. 2002](references.md#picone2002); a pure-Rust port of Dominik Brodowski's C implementation), which reads space-weather indices (F10.7, Ap) automatically. Disable space-weather lookup with `use_spaceweather=False` to fall back to fixed nominal indices.
+Density comes from the [NRLMSISE-00](https://ccmc.gsfc.nasa.gov/models/NRLMSIS~00/) thermosphere model ([Picone et al. 2002](references.md#picone2002); a pure-Rust port of Dominik Brodowski's C implementation), which reads the space-weather indices from the CelesTrak `SW-All.csv` table automatically, following the model's own interface: the observed F10.7 of the previous UTC day, the observed 81-day centred average F10.7A of the current day, and the 7-element 3-hourly geomagnetic history (the current day's daily Ap, the current 3-hourly ap and the three before it, and the 12–33 h and 36–57 h means — NRLMSISE-00 switch 9 = −1), which lets the density respond to a geomagnetic storm within hours rather than at the next UTC midnight. When that history cannot be assembled (a day missing from the table, or a monthly predicted row without 3-hourly values) the model falls back to the current day's daily Ap. Disable space-weather lookup with `use_spaceweather=False` to fall back to fixed nominal indices (F10.7 = F10.7A = 150, Ap = 4).
 
 Drag is skipped above 700 km regardless of settings.
 

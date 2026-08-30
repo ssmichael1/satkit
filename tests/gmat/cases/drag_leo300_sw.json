@@ -45,10 +45,10 @@
   }
  },
  "tolerance": {
-  "pos_m": 170000.0,
-  "vel_mps": 200.0
+  "pos_m": 7000.0,
+  "vel_mps": 8.0
  },
- "tolerance_measured_against": "v0.21.0-7-g4a12f1c-dirty",
+ "tolerance_measured_against": "v0.21.0-10-g8c1ab8f-dirty",
  "units": "samples: [elapsed_s, x_km, y_km, z_km, vx_kms, vy_kms, vz_kms] in EarthICRF",
  "samples": [
   [
