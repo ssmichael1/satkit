@@ -476,6 +476,10 @@ mod tests {
             m.entry("msis21.parm").is_none(),
             "NRLMSIS 2.1 licence forbids redistribution"
         );
+        assert!(
+            m.entry("leap-seconds.list").is_none(),
+            "nothing reads it; the runtime leap-second table is compiled in"
+        );
         // Refresh files must not be pinned.
         assert!(m.entry("EOP-All.csv").is_none());
         assert!(m.entry("SW-All.csv").is_none());
@@ -488,9 +492,12 @@ mod tests {
                 e.name
             );
         }
-        // The default set includes the DE440 ephemeris but not DE421.
-        assert!(m.entry("linux_p1550p2650.440").unwrap().default);
-        assert!(!m.entry("lnxp1900p2053.421").unwrap().default);
+        // The only default download is the DE440 ephemeris: everything else
+        // pinned here is either embedded in the binary (IERS tables,
+        // gravity to degree 70) or an alternative (DE421), kept fetchable
+        // by name but not worth downloading on every install.
+        let defaults: Vec<&str> = m.default_files().map(|e| e.name.as_str()).collect();
+        assert_eq!(defaults, ["linux_p1550p2650.440"]);
         assert_eq!(embedded().data_version, m.data_version);
     }
 

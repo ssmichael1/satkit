@@ -21,7 +21,7 @@ To provision everything up front (a Docker image, a CI job, a machine that will 
 
 ```python
 import satkit as sk
-sk.utils.update_datafiles()   # ephemeris + IERS tables + gravity files + EOP/SW, verified
+sk.utils.update_datafiles()   # ephemeris (verified) + EOP/SW + solar-cycle forecast
 ```
 
 ### Offline and air-gapped use

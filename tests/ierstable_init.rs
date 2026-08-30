@@ -5,11 +5,17 @@
 //! in-source tests / qcirs2gcrs queries that would lazy-load.
 
 use satkit::frametransform::ierstable::{self, IersTableId};
-use satkit::utils::datadir;
+use satkit::utils::{datadir, embedded};
 
-fn iers_bytes(filename: &str) -> Option<Vec<u8>> {
-    let path = datadir().ok()?.join(filename);
-    std::fs::read(path).ok()
+/// The file from the data directory when one is present, otherwise the
+/// embedded copy (byte-identical for the IERS tables), so the test never has
+/// to skip.
+fn iers_bytes(filename: &str) -> Vec<u8> {
+    datadir()
+        .ok()
+        .and_then(|d| std::fs::read(d.join(filename)).ok())
+        .or_else(|| embedded::get(filename))
+        .unwrap_or_else(|| panic!("{filename} neither on disk nor embedded"))
 }
 
 #[test]
@@ -20,14 +26,10 @@ fn init_all_three_tables_from_bytes_then_run_qcirs2gcrs() {
         (IersTableId::Tab5D, "tab5.2d.txt"),
     ];
 
-    let mut all_bytes = Vec::new();
-    for (id, fname) in &triples {
-        let Some(bytes) = iers_bytes(fname) else {
-            eprintln!("skipping: {fname} not available in datadir()");
-            return;
-        };
-        all_bytes.push((*id, bytes));
-    }
+    let all_bytes: Vec<(IersTableId, Vec<u8>)> = triples
+        .iter()
+        .map(|(id, fname)| (*id, iers_bytes(fname)))
+        .collect();
 
     // 1. First init wins for all three.
     for (id, bytes) in &all_bytes {

@@ -5,22 +5,22 @@
 //! in-source tests that lazy-load via the per-model accessors.
 
 use satkit::earthgravity::{self, GravityModel};
-use satkit::utils::datadir;
+use satkit::utils::{datadir, embedded};
 
-fn gravity_bytes(filename: &str) -> Option<Vec<u8>> {
-    let path = datadir().ok()?.join(filename);
-    std::fs::read(path).ok()
+/// The full file from the data directory when one is present (disk wins over
+/// the embedded copy at runtime too), otherwise the embedded degree-70 copy —
+/// `init_from_bytes` accepts either, so the test never has to skip.
+fn gravity_bytes(filename: &str) -> Vec<u8> {
+    datadir()
+        .ok()
+        .and_then(|d| std::fs::read(d.join(filename)).ok())
+        .or_else(|| embedded::get(filename))
+        .unwrap_or_else(|| panic!("{filename} neither on disk nor embedded"))
 }
 
 #[test]
 fn init_from_bytes_then_query_and_double_init_errors() {
-    let Some(bytes) = gravity_bytes("EGM96.gfc") else {
-        eprintln!(
-            "skipping: EGM96.gfc not available in datadir(); \
-             run `python -m satkit.utils.update_datafiles` or set SATKIT_DATA"
-        );
-        return;
-    };
+    let bytes = gravity_bytes("EGM96.gfc");
 
     // 1. First init wins.
     earthgravity::init_from_bytes(GravityModel::EGM96, &bytes)
