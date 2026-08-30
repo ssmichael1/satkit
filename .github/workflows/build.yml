@@ -173,6 +173,20 @@ jobs:
       - name: Test (network, solar cycle forecast download)
         run: cargo test --features chrono --lib solar_cycle_forecast -- --ignored
 
+      # What works with NO data directory and NO network: the compiled-in
+      # IERS tables and gravity models, SGP4, time, Kepler, Lambert — and a
+      # missing ephemeris must be a typed error, not a hang or a download.
+      - name: Test (offline, empty data directory)
+        shell: bash
+        env:
+          SATKIT_DATA: ${{ runner.temp }}/satkit-empty-data
+          SATKIT_OFFLINE: "1"
+        run: |
+          mkdir -p "$SATKIT_DATA"
+          cargo test --features chrono --lib offline_
+          cargo test --features chrono --test offline_smoke
+          cargo build --no-default-features
+
       # Already covered by `cargo test` above; re-run with --nocapture so the
       # per-case max residual vs GMAT (tests/gmat/README.md) is visible in the log.
       - name: GMAT regression residuals
@@ -241,6 +255,15 @@ jobs:
 
       - name: Run Python tests
         run: pytest python/test/
+
+      # Same offline guarantee from Python: empty data dir, downloads forbidden.
+      - name: Python offline smoke test (empty data directory)
+        env:
+          SATKIT_DATA: ${{ runner.temp }}/satkit-empty-data
+          SATKIT_OFFLINE: "1"
+        run: |
+          mkdir -p "$SATKIT_DATA"
+          pytest python/test/test_offline.py -v
 
       # Already covered above; listed per case for visibility (see tests/gmat/README.md).
       - name: GMAT regression (Python)

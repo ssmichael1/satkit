@@ -21,7 +21,7 @@ Pre-built wheels are available for **Linux**, **macOS**, and **Windows** on Pyth
 pip install satkit
 ```
 
-The `satkit_data` package is installed automatically as a dependency and includes gravity models, JPL ephemerides, and Earth orientation parameters -- no extra download step needed. To update space weather and Earth orientation parameters to the latest values, run:
+The IERS nutation tables and gravity models are compiled into the package, so frames, gravity and SGP4 work with no data files at all. The JPL ephemeris (~100 MB, SHA-256 verified) is downloaded on first use into the user data directory; Earth orientation and space weather are fetched from CelesTrak on first use. To provision everything up front, or to refresh the daily files, run:
 
 ```python
 import satkit as sk
