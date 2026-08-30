@@ -6,7 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### CI
 
-- Build/test workflow skips pure documentation changes: `mkdocs.yml`, any `*.md`, `LICENSE*`, `recipes/**` and the docs workflow file, in addition to `docs/**` ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+- Build/test workflow skips pure documentation changes: `mkdocs.yml`, any `*.md`, `LICENSE*`, `recipes/**` and the docs workflow file, in addition to `docs/**` ([#153](https://github.com/ssmichael1/satkit/pull/153))
 - Docs build uses an absolute `SATKIT_DATA` and no longer installs the `satkit-data` bundle: notebooks executed from `docs/tutorials/` could not resolve the relative path and fell back to the bundle's frozen `EOP-All.csv` (ending 2026-08-23), which produced the stale-EOP warning on satkit.dev ([#148](https://github.com/ssmichael1/satkit/pull/148))
 - `on_disk_file_is_verified_once_via_sidecar_marker` test sets the restored file's mtime explicitly; Windows file-time granularity (~1–15 ms) let a rewrite reuse the marker's mtime and fail intermittently ([#149](https://github.com/ssmichael1/satkit/pull/149))
 - CI refreshes `EOP-All.csv` / `SW-All.csv` on every run (also on an `astro-data` cache hit) via `download_data.py --refresh-only`, so docs and tests no longer run on a stale EOP table; a failed refresh keeps the cached copy instead of failing the job ([#147](https://github.com/ssmichael1/satkit/pull/147))
