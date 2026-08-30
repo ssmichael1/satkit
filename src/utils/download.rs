@@ -132,8 +132,11 @@ pub enum Error {
     #[error("could not fetch {url}: {source}{}", hint.as_deref().unwrap_or(""))]
     Request {
         url: String,
+        /// Boxed to keep this enum — and every error type that carries it,
+        /// up to `orbitprop::Error` — small; `ureq::Error` is 64 bytes on its
+        /// own, which is most of the budget `clippy::result_large_err` allows.
         #[source]
-        source: ureq::Error,
+        source: Box<ureq::Error>,
         /// Guidance appended to the message, already formatted with a leading
         /// newline; `None` when the underlying error speaks for itself.
         hint: Option<String>,
@@ -369,7 +372,7 @@ pub(crate) fn request_error(url: &str, source: ureq::Error) -> Error {
         .map(|h| format!("\n{h}"));
     Error::Request {
         url: url.to_string(),
-        source,
+        source: Box::new(source),
         hint,
     }
 }
