@@ -147,6 +147,14 @@ SATKIT_JPLEPHEM_FILE=/opt/jpl/lnxp1900p2053.421 python script.py
 SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421 python script.py
 ```
 
+**If the value is wrong.** The ephemeris is loaded on first use and the outcome is cached for the process, so a bad setting surfaces as an error from the first ephemeris query (`satkit::jplephem::Error::LoadFailed` in Rust, `RuntimeError` in Python) rather than at import. The message names the resolved path and that it was selected by `SATKIT_JPLEPHEM_FILE`:
+
+- a path that does not exist → `… No such file or directory`;
+- a bare name that is not in the data manifest → resolved against the write directory and reported as missing (only manifest-pinned names such as `linux_p1550p2650.440` and `lnxp1900p2053.421` are downloaded on demand);
+- a file that exists but is not a JPL Linux-format binary ephemeris → `not a JPL binary ephemeris (header starts with …)`.
+
+There is no silent fallback to another ephemeris: an explicit selection that fails stays failed until the setting is fixed and the process restarted.
+
 Both DE440 and DE421 are in the manifest and can be downloaded by name; any other file must already exist.
 
 ### Autodetect

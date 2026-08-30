@@ -267,9 +267,10 @@ fn jplephem_singleton() -> &'static Result<JPLEphem> {
 /// error instead of panicking. Used by the public query functions so a missing
 /// ephemeris file surfaces as an `Err` rather than aborting the process.
 fn jpl() -> Result<&'static JPLEphem> {
-    jplephem_singleton()
-        .as_ref()
-        .map_err(|e| Error::LoadFailed(e.to_string()))
+    jplephem_singleton().as_ref().map_err(|e| match e {
+        Error::LoadFailed(msg) => Error::LoadFailed(msg.clone()),
+        other => Error::LoadFailed(other.to_string()),
+    })
 }
 
 /// Initialize the JPL ephemeris singleton from an in-memory byte buffer.
