@@ -403,15 +403,27 @@ pub fn fetch_static_file(
     }
 
     let mut attempts: Vec<String> = Vec::new();
+    let mut hint: Option<String> = None;
     for url in entry.candidate_urls() {
         match download_verified(&url, entry, &dest) {
             Ok(()) => return Ok(FetchOutcome::Downloaded { url }),
-            Err(e) => attempts.push(format!("{url}: {e}")),
+            Err(e) => {
+                // Every source fails the same way behind an intercepting
+                // proxy; carry the explanation out once instead of leaving
+                // four bare `invalid peer certificate` lines.
+                if hint.is_none() {
+                    if let Error::Http(ref http) = e {
+                        hint = download::tls_trust_hint(http).map(|h| format!("\n{h}"));
+                    }
+                }
+                attempts.push(format!("{url}: {e}"));
+            }
         }
     }
     Err(Error::AllSourcesFailed {
         name: entry.name.clone(),
         attempts,
+        hint,
     })
 }
 

@@ -454,9 +454,15 @@ mod tests {
         let e = entry("f.bin", b"right", vec![a.url("f.bin"), b.url("f.bin")]);
         let err = manifest::fetch_static_file(&e, &dir, false).unwrap_err();
         match &err {
-            download::Error::AllSourcesFailed { name, attempts } => {
+            download::Error::AllSourcesFailed {
+                name,
+                attempts,
+                hint,
+            } => {
                 assert_eq!(name, "f.bin");
                 assert_eq!(attempts.len(), 2);
+                // Plain HTTP failures speak for themselves; no hint appended.
+                assert!(hint.is_none(), "{hint:?}");
                 assert!(attempts[0].starts_with(&a.url("f.bin")), "{}", attempts[0]);
                 assert!(attempts[1].starts_with(&b.url("f.bin")), "{}", attempts[1]);
                 assert!(attempts[1].contains("mismatch"), "{}", attempts[1]);
