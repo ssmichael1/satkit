@@ -2,7 +2,7 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.21.2 - 2026-08-30
 
 ### Fixed
 
@@ -220,18 +220,3 @@ typed `sgp4::Error::SatRecInit` API cleanups (PR #123) and the stubtest CI
 check (PR #122). Those entries were recorded under 0.20.4 above when 0.20.4
 followed a week later; see that section for details.
 
-## 0.20.2 - 2026-07-03
-
-### Fixed
-
-- **`Kepler` mean→eccentric anomaly conversion was inaccurate for
-  high-eccentricity orbits with unwrapped mean anomalies** (e.g.
-  `Kepler::propagate` beyond one revolution at e ≳ 0.85): the naive
-  `E₀ = M ± e` Newton starting guess lands in a near-flat region of Kepler's
-  equation, the iteration turns chaotic, and the (0.20.0-introduced)
-  iteration cap could exit with a badly wrong anomaly — up to ~0.24 rad of
-  true-anomaly error observed. `mean2eccentric` now range-reduces M to
-  [0, 2π) and uses Danby's initial guess, converging in <10 iterations for
-  all e < 1. Found by the new property-based test suite in CI
-  (`kepler_period_closure`, fresh random seed); the counterexample is pinned
-  as a permanent regression test.
