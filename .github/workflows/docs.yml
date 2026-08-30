@@ -52,6 +52,11 @@ jobs:
           pip install requests
           python python/test/download_data.py astro-data
 
+      - name: Refresh EOP and space weather (every run, cache hit or not)
+        run: |
+          pip install requests
+          python python/test/download_data.py astro-data --refresh-only
+
       - name: Install system dependencies for cartopy
         run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data
 
