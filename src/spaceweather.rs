@@ -172,9 +172,8 @@ fn parse_csv(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
 }
 
 fn load_default_path() -> PathBuf {
-    datadir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("SW-All.csv")
+    // Found in any search directory, else downloaded into the write location.
+    crate::utils::datadir::path_for("SW-All.csv")
 }
 
 /// Lazy default load from `SW-All.csv` under [`datadir`], with auto-download.

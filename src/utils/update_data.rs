@@ -300,6 +300,68 @@ mod tests {
         d
     }
 
+    /// Under offline mode a lazy fetch is a typed error and **no HTTP
+    /// request is made**: the in-process server sees zero hits.
+    #[test]
+    fn offline_mode_blocks_fetch_without_network_io() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let bytes = b"offline test bytes".to_vec();
+        let server = TestServer::start(HashMap::from([("f.txt".to_string(), bytes.clone())]));
+        let e = entry("f.txt", &bytes, vec![server.url("f.txt")]);
+        let dir = tmpdir("offline");
+        download::set_offline(true);
+        let err = manifest::fetch_static_file(&e, &dir, false).unwrap_err();
+        download::set_offline(false);
+        // Leave the process in its environment-driven state afterwards.
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                download::clear_offline_override();
+            }
+        }
+        let _restore = Restore;
+        assert!(
+            matches!(&err, download::Error::Offline { name, urls, .. } if name == "f.txt" && urls.len() == 1),
+            "{err}"
+        );
+        assert!(err.to_string().contains(&server.url("f.txt")));
+        assert_eq!(server.hits(), 0, "offline mode must not open a connection");
+        assert!(!dir.join("f.txt").exists());
+        // With offline mode lifted the same fetch succeeds.
+        manifest::fetch_static_file(&e, &dir, false).unwrap();
+        assert_eq!(server.hits(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `set_offline` overrides `SATKIT_OFFLINE` in both directions; with no
+    /// setter call the environment decides.
+    #[test]
+    fn offline_setter_overrides_environment() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prior_env = std::env::var_os(download::OFFLINE_ENV);
+        // Env says offline, setter says online -> online.
+        std::env::set_var(download::OFFLINE_ENV, "1");
+        download::set_offline(false);
+        assert!(!download::is_offline());
+        // Env says online, setter says offline -> offline.
+        std::env::remove_var(download::OFFLINE_ENV);
+        download::set_offline(true);
+        assert!(download::is_offline());
+        download::set_offline(false);
+        assert!(!download::is_offline());
+        // Back to environment-driven: with the var unset that is "online".
+        download::clear_offline_override();
+        assert!(!download::is_offline());
+        match prior_env {
+            Some(v) => std::env::set_var(download::OFFLINE_ENV, v),
+            None => std::env::remove_var(download::OFFLINE_ENV),
+        }
+    }
+
     #[test]
     fn fetch_success_is_verified_and_cached() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());

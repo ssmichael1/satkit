@@ -201,15 +201,19 @@ fn resolve_default_path() -> std::path::PathBuf {
         if p.is_absolute() || v.contains(std::path::MAIN_SEPARATOR) {
             return p;
         }
-        if let Ok(dd) = datadir() {
-            return dd.join(&v);
-        }
-        return p;
+        // A bare name: wherever it is found in the search directories, or
+        // the write location (so a manifest-pinned name can be downloaded).
+        return crate::utils::datadir::path_for(&v);
     }
 
-    let dd = datadir().unwrap_or_else(|_| PathBuf::from("."));
+    // Autodetect across every search directory (an installed `satkit-data`
+    // package, a system-wide dir, the user data dir, ...): the highest DE
+    // version wins; on a tie the earlier search directory wins.
     let mut best: Option<(u32, PathBuf)> = None;
-    if let Ok(rd) = std::fs::read_dir(&dd) {
+    for dd in crate::utils::data_search_dirs() {
+        let Ok(rd) = std::fs::read_dir(&dd) else {
+            continue;
+        };
         for entry in rd.flatten() {
             let path = entry.path();
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
@@ -218,17 +222,10 @@ fn resolve_default_path() -> std::path::PathBuf {
             // JPL's Linux little-endian binaries use two prefix conventions:
             //   `linux_p<start>p<stop>.4XX` — DE430 and later (DE430/440/441)
             //   `lnxp<start>p<stop>.4XX`    — DE421 and earlier
-            if !(name.starts_with("linux_p") || name.starts_with("lnxp")) {
+            if !crate::utils::datadir::is_ephemeris_name(name) {
                 continue;
             }
-            let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-                continue;
-            };
-            // DE-version suffix: 3 digits starting with '4' (covers DE4XX family).
-            if ext.len() != 3 || !ext.starts_with('4') || !ext.chars().all(|c| c.is_ascii_digit()) {
-                continue;
-            }
-            let Ok(de_version) = ext.parse::<u32>() else {
+            let Ok(de_version) = name.rsplit('.').next().unwrap_or("").parse::<u32>() else {
                 continue;
             };
             if best.as_ref().is_none_or(|(cur, _)| de_version > *cur) {
@@ -239,7 +236,9 @@ fn resolve_default_path() -> std::path::PathBuf {
     if let Some((_, path)) = best {
         return path;
     }
-    dd.join(LEGACY_DEFAULT_FILENAME)
+    datadir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(LEGACY_DEFAULT_FILENAME)
 }
 
 /// Module-scope singleton so [`init_from_bytes`] and [`init_from_path`] can
@@ -340,10 +339,11 @@ impl JPLEphem {
     /// DE440 / DE441 (including the short-span `de440s` variant) all load
     /// through the same code path.
     ///
-    /// Auto-download is attempted only when `path` resolves to the legacy
-    /// default name [`LEGACY_DEFAULT_FILENAME`] under [`datadir`]; that's
-    /// the only file the GCS bundle is known to host. For any other path
-    /// the file is expected to already exist.
+    /// Auto-download is attempted only when the file name is one pinned by
+    /// the data manifest (the default [`LEGACY_DEFAULT_FILENAME`], DE440, or
+    /// the smaller DE421 `lnxp1900p2053.421`), through the SHA-256-verified
+    /// fetch. For any other path the file is expected to already exist.
+    /// `SATKIT_OFFLINE=1` makes a missing pinned file a typed error instead.
     ///
     /// # Example
     ///
@@ -362,15 +362,23 @@ impl JPLEphem {
     /// ```
     ///
     fn from_path(path: &std::path::Path) -> Result<Self> {
-        // Open the file. Only auto-download for the legacy default filename
-        // since that's the only one we know is hosted on the GCS bundle.
+        // The ephemeris is the one data file that is neither compiled in nor
+        // refreshed daily, so it is fetched lazily on first use — but only
+        // for names the data manifest pins (DE440 by default, DE421 as the
+        // small alternative), through the SHA-256-verified fetch. Any other
+        // path is expected to exist already. `SATKIT_OFFLINE=1` (or a build
+        // without the `download` feature) turns the download into a typed
+        // error naming the manifest URLs instead of touching the network.
         if !path.is_file() {
-            let is_legacy_default = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n == LEGACY_DEFAULT_FILENAME);
-            if is_legacy_default {
-                println!("Downloading JPL Ephemeris file.  File size is approx. 100MB");
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if let Some(entry) = crate::utils::manifest::embedded().entry(name) {
+                eprintln!(
+                    "satkit: downloading the JPL ephemeris {name} ({:.0} MB) to {} \
+                     (SHA-256 verified). Set SATKIT_JPLEPHEM_FILE to use another file, \
+                     SATKIT_DATA_URL to fetch from a mirror, or SATKIT_OFFLINE=1 to forbid downloads.",
+                    entry.size as f64 / 1e6,
+                    path.parent().unwrap_or(std::path::Path::new(".")).display()
+                );
                 download_if_not_exist(path, None)?;
             }
         }

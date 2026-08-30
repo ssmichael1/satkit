@@ -16,6 +16,22 @@ pub enum Error {
     #[error("File {path} not found and satkit was built without the `download` feature")]
     FileNotFoundNoDownload { path: String },
 
+    /// A download was needed but is forbidden: either `SATKIT_OFFLINE=1` is
+    /// set or satkit was built without the `download` feature. No network I/O
+    /// is attempted. `urls` lists where the file could be obtained manually
+    /// (from the data manifest, when the file is a pinned one).
+    #[error(
+        "{name} is not present and cannot be downloaded ({reason}). \
+         Provide it in the data directory (SATKIT_DATA) or install the `satkit-data` bundle; \
+         sources: {}",
+        if urls.is_empty() { "(none listed)".to_string() } else { urls.join(", ") }
+    )]
+    Offline {
+        name: String,
+        reason: &'static str,
+        urls: Vec<String>,
+    },
+
     /// Returned when a download path, URL or manifest name has no valid
     /// single-component file name (e.g. ends in `/`, is absolute, or contains
     /// `..`).
@@ -58,7 +74,89 @@ pub enum Error {
 /// Convenient type alias used throughout the `download` module.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Environment variable that forbids all downloads: when set to any value
+/// other than `0`/`false`/empty, every download helper returns
+/// [`Error::Offline`] immediately instead of opening a connection. Use it in
+/// sandboxes, CI, and air-gapped deployments to make a missing file a loud,
+/// typed error rather than a hang or a surprise download. [`set_offline`]
+/// overrides it programmatically.
+pub const OFFLINE_ENV: &str = "SATKIT_OFFLINE";
+
+/// Offline-mode state: 0 = not set programmatically (use the environment),
+/// 1 = downloads allowed, 2 = downloads forbidden.
+static OFFLINE_OVERRIDE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Force offline mode on or off for this process, overriding
+/// [`OFFLINE_ENV`]. Precedence: the last call to `set_offline` wins; if it
+/// was never called, the environment variable is consulted.
+///
+/// Offline mode blocks **downloads only** — the explicit
+/// [`update_datafiles`](crate::utils::update_datafiles) and every lazy
+/// first-use fetch (ephemeris, EOP / space-weather refresh, non-embedded
+/// files). It does not change where files are searched, and the compiled-in
+/// core data is unaffected. The error returned is the same typed
+/// [`Error::Offline`] a build without the `download` feature returns.
+pub fn set_offline(offline: bool) {
+    OFFLINE_OVERRIDE.store(
+        if offline { 2 } else { 1 },
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
+
+/// `true` if downloads are currently forbidden (see [`set_offline`] for the
+/// precedence between the setter and [`OFFLINE_ENV`]). One atomic load when
+/// the setter has been used; an environment lookup otherwise.
+pub fn is_offline() -> bool {
+    match OFFLINE_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => false,
+        2 => true,
+        _ => std::env::var(OFFLINE_ENV)
+            .map(|v| !(v.is_empty() || v == "0" || v.eq_ignore_ascii_case("false")))
+            .unwrap_or(false),
+    }
+}
+
+/// Alias of [`is_offline`].
+pub fn offline_requested() -> bool {
+    is_offline()
+}
+
+/// Forget any [`set_offline`] call so the environment decides again
+/// (test helper: keeps one test's override from leaking into the next).
+#[cfg(test)]
+pub(crate) fn clear_offline_override() {
+    OFFLINE_OVERRIDE.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The manifest URLs for `name`, for error messages (empty if not pinned).
+fn manifest_urls(name: &str) -> Vec<String> {
+    crate::utils::manifest::embedded()
+        .entry(name)
+        .map(|e| e.urls.clone())
+        .unwrap_or_default()
+}
+
+/// Build the [`Error::Offline`] for `name`, naming why no download is possible.
+pub(crate) fn offline_error(name: &str, reason: &'static str) -> Error {
+    Error::Offline {
+        name: name.to_string(),
+        reason,
+        urls: manifest_urls(name),
+    }
+}
+
+/// Return [`Error::Offline`] if [`OFFLINE_ENV`] is set (checked before any
+/// network I/O by every download helper).
+#[cfg(feature = "download")]
+pub(crate) fn check_online(name: &str) -> Result<()> {
+    if offline_requested() {
+        return Err(offline_error(name, "SATKIT_OFFLINE is set"));
+    }
+    Ok(())
+}
+
 /// Path of the sibling `.part` file used for atomic writes.
+#[cfg(feature = "download")]
 fn part_path(final_path: &Path) -> std::path::PathBuf {
     let mut p = final_path.as_os_str().to_owned();
     p.push(".part");
@@ -96,6 +194,7 @@ fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()
 /// [`Error::HashMismatch`] is returned, so a corrupt or substituted download
 /// never becomes a trusted data file. Used by
 /// [`manifest::fetch_static_file`](crate::utils::manifest::fetch_static_file).
+#[cfg(feature = "download")]
 pub(crate) fn write_atomic_verified(
     reader: &mut impl std::io::Read,
     final_path: &Path,
@@ -172,6 +271,7 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
             .ok_or_else(|| Error::InvalidFileName {
                 path: fname.display().to_string(),
             })?;
+    check_online(basename)?;
     if seturl.is_none() {
         if let Some(entry) = crate::utils::manifest::embedded().entry(basename) {
             let dir = fname.parent().unwrap_or_else(|| Path::new("."));
@@ -196,12 +296,16 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
 #[cfg(not(feature = "download"))]
 pub fn download_if_not_exist(fname: &Path, _seturl: Option<&str>) -> Result<()> {
     if fname.is_file() {
-        Ok(())
-    } else {
-        Err(Error::FileNotFoundNoDownload {
-            path: fname.display().to_string(),
-        })
+        return Ok(());
     }
+    let name = fname
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("<unnamed>");
+    Err(offline_error(
+        name,
+        "satkit was built without the `download` feature",
+    ))
 }
 
 /// Download `url` into `downloaddir` (unverified; used for the regularly
@@ -220,6 +324,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
         println!("File {} exists; skipping download", fname);
         return Ok(false);
     }
+    check_online(fname)?;
 
     let agent = ureq::Agent::new_with_defaults();
     let mut resp = agent.get(url).call()?;
@@ -257,6 +362,7 @@ pub fn download_file_async(
 
 #[cfg(feature = "download")]
 pub fn download_to_string(url: &str) -> Result<String> {
+    check_online(url)?;
     let agent = ureq::Agent::new_with_defaults();
     let mut resp = agent.get(url).call()?;
     let thestring = std::io::read_to_string(resp.body_mut().as_reader())?;
