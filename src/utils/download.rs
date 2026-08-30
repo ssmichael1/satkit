@@ -3,7 +3,13 @@ use thiserror::Error;
 
 /// Errors produced by the [`utils::download`](crate::utils::download) and
 /// [`utils::manifest`](crate::utils::manifest) helpers.
+///
+/// `#[non_exhaustive]`: variants (and, over time, fields on them) are added
+/// as failure modes gain dedicated diagnoses — 0.21.2 alone added
+/// [`Error::Request`] and [`Error::ContentRejected`]. Downstream matches
+/// must carry a wildcard arm so those additions are not breaking changes.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Returned by all download helpers when satkit was built without the
     /// `download` Cargo feature.
@@ -14,6 +20,7 @@ pub enum Error {
     /// missing on disk and satkit was built without the `download` feature
     /// to fetch it.
     #[error("File {path} not found and satkit was built without the `download` feature")]
+    #[non_exhaustive]
     FileNotFoundNoDownload { path: String },
 
     /// A download was needed but is forbidden: either `SATKIT_OFFLINE=1` is
@@ -26,6 +33,7 @@ pub enum Error {
          sources: {}",
         if urls.is_empty() { "(none listed)".to_string() } else { urls.join(", ") }
     )]
+    #[non_exhaustive]
     Offline {
         name: String,
         reason: &'static str,
@@ -36,10 +44,12 @@ pub enum Error {
     /// single-component file name (e.g. ends in `/`, is absolute, or contains
     /// `..`).
     #[error("Path or URL has no valid file name: {path}")]
+    #[non_exhaustive]
     InvalidFileName { path: String },
 
     /// The embedded (or a supplied) data manifest failed validation.
     #[error("Data manifest is invalid: {reason}")]
+    #[non_exhaustive]
     ManifestInvalid { reason: String },
 
     /// A downloaded file's size or SHA-256 did not match the manifest.
@@ -47,6 +57,7 @@ pub enum Error {
         "{name} from {url}: {what} mismatch (expected {expected}, got {actual}); \
          the partial download was discarded"
     )]
+    #[non_exhaustive]
     HashMismatch {
         name: String,
         url: String,
@@ -65,6 +76,7 @@ pub enum Error {
         attempts.join("\n  "),
         hint.as_deref().unwrap_or("")
     )]
+    #[non_exhaustive]
     AllSourcesFailed {
         name: String,
         attempts: Vec<String>,
@@ -81,6 +93,7 @@ pub enum Error {
          The partial download was discarded and any existing {name} left in place \
          (a proxy that answers with an HTML notice instead of the file looks like this)"
     )]
+    #[non_exhaustive]
     ContentRejected {
         name: String,
         url: String,
@@ -91,6 +104,7 @@ pub enum Error {
     /// Windows a file another process has open cannot be renamed over; on
     /// any platform this also covers a directory that became read-only.
     #[error("could not replace {path} (is another process using it?): {source}")]
+    #[non_exhaustive]
     ReplaceFailed {
         path: String,
         #[source]
@@ -106,6 +120,7 @@ pub enum Error {
          Delete or replace the file, or allow downloads so it can be re-fetched",
         .values.1, .values.0
     )]
+    #[non_exhaustive]
     CorruptFile {
         name: String,
         path: String,
@@ -130,6 +145,7 @@ pub enum Error {
     /// proxy), appends guidance on how to fix it.
     #[cfg(feature = "download")]
     #[error("could not fetch {url}: {source}{}", hint.as_deref().unwrap_or(""))]
+    #[non_exhaustive]
     Request {
         url: String,
         /// Boxed to keep this enum — and every error type that carries it,

@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## 0.21.2 - 2026-08-30
 
+### Changed
+
+- **Breaking (Rust):** `utils::download::Error` and its field-carrying variants are `#[non_exhaustive]`: downstream matches need a wildcard arm and struct patterns a `..`, so future variants and fields (this release alone added `Request`, `ContentRejected`, and `AllSourcesFailed.hint`) land without breaking compiles ([#161](https://github.com/ssmichael1/satkit/pull/161))
+
 ### Fixed
 
 - Downloads verify servers against the operating system's trust store (macOS keychain, Windows certificate store, `/etc/ssl` on Unix) instead of the Mozilla root list compiled into the HTTP client: on a network whose TLS is inspected by a corporate proxy every download failed with `io: invalid peer certificate: UnknownIssuer`, because such a proxy re-signs traffic with a private CA that can only ever live in the system store. `SATKIT_CA_BUNDLE` overrides the choice with a PEM file, `platform`, or `webpki` (the compiled-in roots, for a container with no system store); `SSL_CERT_FILE` is deliberately not consulted. Download errors also name the URL that failed and, for a certificate failure, say what to do about it once (`download::Error` gains a `Request` variant, and `AllSourcesFailed` a `hint` field) ([#160](https://github.com/ssmichael1/satkit/pull/160))
