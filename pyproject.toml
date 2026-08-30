@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "satkit"
-dependencies = ["numpy>=1.0.0", "satkit-data>=0.7.0"]
+# satkit-data (the offline data bundle) is optional since the core tables are
+# compiled in and the ephemeris downloads on first use: `pip install satkit[data]`.
+dependencies = ["numpy>=1.0.0"]
 requires-python = ">= 3.10"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
@@ -37,6 +39,10 @@ classifiers = [
 ]
 [project.optional-dependencies]
 test = ["pytest", "xmltodict", "mypy"]
+# Offline data bundle (JPL ephemeris, full-degree gravity files, IERS tables);
+# not required — the core tables are compiled in and the ephemeris is
+# downloaded on first use.
+data = ["satkit-data>=0.9.0"]
 
 [tool.setuptools]
 license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
