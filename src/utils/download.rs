@@ -71,6 +71,22 @@ pub enum Error {
         hint: Option<String>,
     },
 
+    /// A download completed, but its content is not what the file is meant
+    /// to hold — a captive portal or proxy interstitial answering `200 OK`
+    /// with an HTML page, or a truncated feed. The partial download is
+    /// discarded and any existing copy left in place, so a good data file is
+    /// never replaced by a bad one.
+    #[error(
+        "{name} downloaded from {url} was rejected: {reason}. \
+         The partial download was discarded and any existing {name} left in place \
+         (a proxy that answers with an HTML notice instead of the file looks like this)"
+    )]
+    ContentRejected {
+        name: String,
+        url: String,
+        reason: String,
+    },
+
     /// Replacing an existing data file failed even after retries. On
     /// Windows a file another process has open cannot be renamed over; on
     /// any platform this also covers a directory that became read-only.
@@ -464,12 +480,60 @@ fn rename_into_place(part: &Path, final_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// `Err` if the file at `path` opens with an HTML document rather than the
+/// data that was asked for. A filtering proxy or captive portal that answers
+/// `200 OK` with a notice page is otherwise indistinguishable from a
+/// successful download for the files satkit fetches unverified.
+#[cfg(feature = "download")]
+fn reject_html(path: &Path) -> std::result::Result<(), String> {
+    use std::io::Read;
+    let mut head = [0u8; 256];
+    let n = std::fs::File::open(path)
+        .and_then(|mut f| f.read(&mut head))
+        .map_err(|e| e.to_string())?;
+    let start = String::from_utf8_lossy(&head[..n])
+        .trim_start_matches(['\u{feff}', ' ', '\n', '\r', '\t'])
+        .to_ascii_lowercase();
+    if start.starts_with("<!doctype html") || start.starts_with("<html") {
+        return Err("the response is an HTML page, not the data file".to_string());
+    }
+    Ok(())
+}
+
+/// Check a freshly downloaded, *unverified* file before it replaces the copy
+/// on disk. The manifest-pinned files are covered by their SHA-256; these are
+/// the ones with nothing to compare against — so the daily CelesTrak feeds
+/// are parsed with the same parser that will later read them, and anything
+/// else is at least checked for not being an HTML notice page.
+///
+/// `name` is the file's base name; `path` is the completed `.part` file.
+#[cfg(feature = "download")]
+fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
+    let is_html_file = std::path::Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("html") || e.eq_ignore_ascii_case("htm"));
+    if !is_html_file {
+        reject_html(path)?;
+    }
+    match name {
+        "EOP-All.csv" => crate::earth_orientation_params::validate_file(path),
+        "SW-All.csv" => crate::spaceweather::validate_file(path),
+        _ => Ok(()),
+    }
+}
+
 /// Stream `reader` to `final_path` atomically: write to a sibling `.part` file
 /// and rename it into place on success. An interrupted transfer (network drop,
 /// Ctrl-C) then leaves only the discardable `.part` file rather than a truncated
 /// final file that later runs would trust as complete.
+///
+/// The completed `.part` file is passed through [`check_content`] before the
+/// rename: these downloads carry no hash to verify, and replacing a good
+/// `EOP-All.csv` with a proxy's notice page would turn a failed download into
+/// a silently wrong table days later. `url` only names the source in
+/// [`Error::ContentRejected`].
 #[cfg(feature = "download")]
-fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()> {
+fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path, url: &str) -> Result<()> {
     let part = part_path(final_path);
     let mut write = || -> Result<()> {
         let mut dest = std::fs::File::create(&part)?;
@@ -477,13 +541,23 @@ fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()
         dest.sync_all()?;
         Ok(())
     };
-    match write() {
-        Ok(()) => rename_into_place(&part, final_path),
-        Err(e) => {
-            let _ = std::fs::remove_file(&part);
-            Err(e)
-        }
+    if let Err(e) = write() {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
     }
+    let name = final_path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or_default();
+    if let Err(reason) = check_content(name, &part) {
+        let _ = std::fs::remove_file(&part);
+        return Err(Error::ContentRejected {
+            name: name.to_string(),
+            url: url.to_string(),
+            reason,
+        });
+    }
+    rename_into_place(&part, final_path)
 }
 
 /// Like [`write_atomic`], but the stream is hashed as it is written and the
@@ -600,7 +674,7 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
         .call()
         .map_err(|e| request_error(&url, e))?;
 
-    write_atomic(&mut resp.body_mut().as_reader(), fname)?;
+    write_atomic(&mut resp.body_mut().as_reader(), fname, &url)?;
     Ok(())
 }
 
@@ -641,7 +715,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
     let mut resp = agent.get(url).call().map_err(|e| request_error(url, e))?;
 
     println!("Downloading {}", fname);
-    write_atomic(&mut resp.body_mut().as_reader(), &fullpath)?;
+    write_atomic(&mut resp.body_mut().as_reader(), &fullpath, url)?;
     Ok(true)
 }
 
@@ -699,7 +773,7 @@ mod tests {
         let _ = std::fs::remove_file(&part_path);
 
         let data = b"hello satkit";
-        write_atomic(&mut Cursor::new(&data[..]), &final_path).unwrap();
+        write_atomic(&mut Cursor::new(&data[..]), &final_path, "test").unwrap();
 
         assert!(
             final_path.is_file(),
@@ -793,6 +867,52 @@ mod tests {
         assert!(matches!(err, Error::ReplaceFailed { .. }), "{err}");
         assert!(err.to_string().contains("f.bin"));
         assert!(!part.exists(), "temporary file is cleaned up");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// One header line and one row, in the columns `parse_csv` reads.
+    const EOP_CSV: &str = "DATE,MJD,X,Y,UT1-UTC,LOD,dPSI,dEPS,DX,DY,DAT,DATA_TYPE\n\
+                           2026-08-30,61282,0.10,0.20,0.30,0.0004,0,0,0.0001,0.0002,37,O\n";
+
+    #[test]
+    fn a_proxy_notice_page_never_replaces_a_good_data_file() {
+        let dir = std::env::temp_dir().join(format!("satkit_notice_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("EOP-All.csv");
+
+        // A good table on disk, as a machine that has been online would have.
+        write_atomic(&mut Cursor::new(EOP_CSV.as_bytes()), &path, "test").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+
+        // The daily refresh comes back as a proxy interstitial with HTTP 200.
+        let page = b"<!DOCTYPE html>\n<html><body>Review Usage Policy</body></html>";
+        let err = write_atomic(
+            &mut Cursor::new(&page[..]),
+            &path,
+            "https://celestrak.org/SpaceData/EOP-All.csv",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, Error::ContentRejected { ref name, .. } if name == "EOP-All.csv"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("HTML page"), "{err}");
+        // The table that was there is still there, and nothing is left over.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+        assert!(!part_path(&path).exists());
+
+        // A body that is not HTML but does not parse is rejected just as well.
+        let err = write_atomic(&mut Cursor::new(&b"1,2,3\n"[..]), &path, "test").unwrap_err();
+        assert!(matches!(err, Error::ContentRejected { .. }), "{err}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+
+        // A file with no content check of its own only has to not be a page.
+        let other = dir.join("notes.txt");
+        write_atomic(&mut Cursor::new(&b"1,2,3\n"[..]), &other, "test").unwrap();
+        assert!(other.is_file());
+        let err = write_atomic(&mut Cursor::new(&page[..]), &other, "test").unwrap_err();
+        assert!(matches!(err, Error::ContentRejected { .. }), "{err}");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 
