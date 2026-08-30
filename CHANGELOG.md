@@ -4,10 +4,9 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
-
 ### Docs
 
-- GMAT validation page and README describe the drag corpus: drag orbits, constant/file-driven force models, measured agreement against the drag-only displacement, anomalous-oxygen and F10.7-timing floors ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+- GMAT validation page and README describe the drag corpus: drag orbits, constant/file-driven force models, measured agreement against the drag-only displacement, anomalous-oxygen and F10.7-timing floors ([#157](https://github.com/ssmichael1/satkit/pull/157))
 
 ## 0.21.1 - 2026-08-30
 
