@@ -125,6 +125,15 @@ impl IERSTable {
     /// [`datadir`](crate::utils::datadir) by basename. Auto-downloads via
     /// [`download_if_not_exist`] if missing.
     pub fn from_file(fname: &str) -> Result<Self> {
+        // Precedence: a copy in the data directory wins (so an updated table
+        // can be dropped in without rebuilding); otherwise the compiled-in
+        // copy; a download is only attempted for a name that is not embedded.
+        if let Some(path) = utils::find_data_file(fname) {
+            return Self::from_path(&path);
+        }
+        if let Some(bytes) = utils::embedded::get(fname) {
+            return Self::from_bytes(&bytes);
+        }
         let path = utils::datadir()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(fname);

@@ -662,6 +662,16 @@ impl Gravity {
     /// basename. Auto-downloads via [`download_if_not_exist`] if missing.
     /// Files are at <http://icgem.gfz-potsdam.de/tom_longtime>.
     pub fn from_file(filename: &str) -> Result<Self> {
+        // Precedence: a copy in the data directory wins (e.g. a full-degree
+        // file installed by `update_datafiles`); otherwise the compiled-in
+        // copy (degree ≤ 70, more than the evaluator's cap of 40); a download
+        // is only attempted for a name that is not embedded.
+        if let Some(path) = crate::utils::find_data_file(filename) {
+            return Self::from_path(&path);
+        }
+        if let Some(bytes) = crate::utils::embedded::get(filename) {
+            return Self::from_bytes(&bytes);
+        }
         let path = datadir().unwrap_or(PathBuf::from(".")).join(filename);
         download_if_not_exist(&path, None)?;
         Self::from_path(&path)

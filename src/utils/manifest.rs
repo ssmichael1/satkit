@@ -305,6 +305,13 @@ pub fn fetch_static_file(
             dest.display()
         );
     }
+    if download::is_offline() {
+        return Err(Error::Offline {
+            name: entry.name.clone(),
+            reason: "SATKIT_OFFLINE is set",
+            urls: entry.candidate_urls(),
+        });
+    }
     if !dest_dir.is_dir() {
         std::fs::create_dir_all(dest_dir)?;
     }
@@ -320,6 +327,26 @@ pub fn fetch_static_file(
         name: entry.name.clone(),
         attempts,
     })
+}
+
+/// Without the `download` feature no network I/O is possible: a file that is
+/// already present and verified is reported as such, anything else is a
+/// typed [`Error::Offline`] naming the manifest URLs.
+#[cfg(not(feature = "download"))]
+pub fn fetch_static_file(
+    entry: &ManifestEntry,
+    dest_dir: &Path,
+    force: bool,
+) -> Result<FetchOutcome> {
+    validate_file_name(&entry.name)?;
+    let dest = dest_dir.join(&entry.name);
+    if !force && dest.is_file() && entry.verify(&dest)? {
+        return Ok(FetchOutcome::AlreadyPresent);
+    }
+    Err(download::offline_error(
+        &entry.name,
+        "satkit was built without the `download` feature",
+    ))
 }
 
 /// GET `url` into `dest` atomically, verifying size and SHA-256 before the
