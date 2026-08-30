@@ -6,10 +6,11 @@ on:
       - "**"
     paths-ignore:
       - "docs/**"
-      - "README.md"
-      - "CHANGELOG.md"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
+      - "mkdocs.yml"
+      - "**/*.md"
+      - "LICENSE*"
+      - "recipes/**"
+      - ".github/workflows/docs.yml"
   pull_request:
     branches:
       - "**"
@@ -21,10 +22,11 @@ on:
       - closed
     paths-ignore:
       - "docs/**"
-      - "README.md"
-      - "CHANGELOG.md"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
+      - "mkdocs.yml"
+      - "**/*.md"
+      - "LICENSE*"
+      - "recipes/**"
+      - ".github/workflows/docs.yml"
 
 jobs:
   lint:
