@@ -58,6 +58,11 @@ pub enum Error {
     #[error("Ephemeris file is truncated or malformed (header too short)")]
     InvalidHeader,
 
+    /// The file exists but is not a JPL Linux-format binary ephemeris (its
+    /// header does not start with `JPL Planetary Ephemeris DE`).
+    #[error("not a JPL binary ephemeris (header starts with {0:?}); expected a file such as linux_p1550p2650.440 (DE440) or lnxp1900p2053.421 (DE421)")]
+    NotJplEphemeris(String),
+
     /// The lazily-loaded JPL ephemeris singleton failed to load (e.g. the data
     /// file is missing). Carries the original error's message (the underlying
     /// error is not `Clone`, so it cannot be re-surfaced directly).
@@ -246,7 +251,16 @@ fn resolve_default_path() -> std::path::PathBuf {
 static JPL_INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
 
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
-    JPL_INSTANCE.get_or_init(|| JPLEphem::from_path(&resolve_default_path()))
+    JPL_INSTANCE.get_or_init(|| {
+        let path = resolve_default_path();
+        JPLEphem::from_path(&path).map_err(|e| {
+            let via = match std::env::var("SATKIT_JPLEPHEM_FILE") {
+                Ok(v) => format!(" (selected by SATKIT_JPLEPHEM_FILE={v:?})"),
+                Err(_) => String::new(),
+            };
+            Error::LoadFailed(format!("{}{via}: {e}", path.display()))
+        })
+    })
 }
 
 /// Borrow the loaded ephemeris, mapping a cached load failure to a returned
@@ -412,10 +426,19 @@ impl JPLEphem {
             return Err(Error::InvalidHeader);
         }
 
-        let title: &str = std::str::from_utf8(&raw[0..84])?;
+        let title: &str = std::str::from_utf8(&raw[0..84]).map_err(|_| {
+            Error::NotJplEphemeris(String::from_utf8_lossy(&raw[0..24]).into_owned())
+        })?;
+        if !title.starts_with("JPL Planetary Ephemeris") {
+            return Err(Error::NotJplEphemeris(title.chars().take(24).collect()));
+        }
 
         // Get version
-        let de_version: i32 = title.get(26..29).ok_or(Error::InvalidHeader)?.parse()?;
+        let de_version: i32 = title
+            .get(26..29)
+            .ok_or(Error::InvalidHeader)?
+            .parse()
+            .map_err(|_| Error::NotJplEphemeris(title.chars().take(30).collect()))?;
 
         let jd_start = f64::from_le_bytes(raw[2652..2660].try_into()?);
         let jd_stop: f64 = f64::from_le_bytes(raw[2660..2668].try_into()?);
@@ -823,8 +846,13 @@ mod tests {
         // step used to yield usize::MAX records downstream
         let mut raw = vec![0u8; 4096];
         raw[0..84].fill(b' ');
-        raw[26..29].copy_from_slice(b"440");
+        raw[0..29].copy_from_slice(b"JPL Planetary Ephemeris DE440");
         assert!(matches!(JPLEphem::parse(&raw), Err(Error::InvalidHeader)));
+        // A header that is not a JPL ephemeris at all is reported as such.
+        assert!(matches!(
+            JPLEphem::parse(&vec![b'#'; 4096]),
+            Err(Error::NotJplEphemeris(_))
+        ));
     }
 
     #[test]
@@ -844,6 +872,21 @@ mod tests {
         // Just inside the boundary must always succeed
         let tm_in = tm - crate::Duration::from_seconds(1.0);
         assert!(jpl.geocentric_state(SolarSystem::Moon, &tm_in).is_ok());
+    }
+
+    /// A file that is not a JPL ephemeris must fail with a clear error, not
+    /// a header-parse artefact ("invalid digit found in string").
+    #[test]
+    fn rejects_non_ephemeris_bytes() {
+        let junk = vec![b'#'; 4000];
+        match JPLEphem::parse(&junk) {
+            Err(Error::NotJplEphemeris(_)) => {}
+            other => panic!("expected NotJplEphemeris, got {other:?}"),
+        }
+        assert!(matches!(
+            JPLEphem::parse(b"short"),
+            Err(Error::InvalidHeader)
+        ));
     }
 
     #[test]
