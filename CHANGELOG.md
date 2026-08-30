@@ -8,6 +8,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - GMAT validation page and README describe the drag corpus: drag orbits, constant/file-driven force models, measured agreement against the drag-only displacement, anomalous-oxygen and F10.7-timing floors ([#157](https://github.com/ssmichael1/satkit/pull/157))
 
+### CI
+
+- Build workflow runs once per change: pull requests build on the PR event only (branch pushes without a PR no longer build), `main` builds on the merge commit, the redundant run on PR close is gone, and a new push to a PR cancels its superseded run ([#158](https://github.com/ssmichael1/satkit/pull/158))
+
 ## 0.21.1 - 2026-08-30
 
 ### CI
