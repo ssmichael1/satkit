@@ -11,7 +11,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Fixed
 
-- Python `kepler.mean_anomaly` setter no longer hangs on NaN or `eccen >= 1` (delegates to the core capped solver); `from_pv` extracts inclination and the anomalies with `atan2` (exact down to i = 1e-9 rad, e ≤ 0.999); constructor accepts keyword arguments matching the stub (`a, eccen, incl, raan, w, nu`), `propagate` accepts `int` seconds, and a new [Keplerian Elements guide](https://satkit.dev/guide/kepler/) ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+- Python `kepler.mean_anomaly` setter no longer hangs on NaN or `eccen >= 1` (delegates to the core capped solver); `from_pv` extracts inclination and the anomalies with `atan2` (exact down to i = 1e-9 rad, e ≤ 0.999); constructor accepts keyword arguments matching the stub (`a, eccen, incl, raan, w, nu`), `propagate` accepts `int` seconds, and a new [Keplerian Elements guide](https://satkit.dev/guide/kepler/) ([#146](https://github.com/ssmichael1/satkit/pull/146))
 
 ## 0.21.0 - 2026-08-30
 
