@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Verify tag matches Cargo.toml, pyproject.toml, and python/Cargo.toml
         run: |
@@ -57,17 +57,17 @@ jobs:
       SATKIT_TESTVEC_ROOT: satkit-testvecs
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
       - name: Cache Satkit Data
         id: cache-satkit-data
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: astro-data
           enableCrossOsArchive: true
@@ -81,7 +81,7 @@ jobs:
 
       - name: Cache Satkit Test Vectors
         id: cache-satkit-testvecs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: satkit-testvecs
           enableCrossOsArchive: true
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Publish to crates.io
@@ -179,10 +179,10 @@ jobs:
         install -m 755 /tmp/sccache-v0.15.0-$(uname -m)-unknown-linux-musl/sccache /usr/local/bin/sccache
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
 
       - name: Set up Rust
         if: matrix.platform != 'linux'
@@ -192,10 +192,10 @@ jobs:
       # ACTIONS_RESULTS_URL / ACTIONS_RUNTIME_TOKEN into the step env so the
       # CIBW_ENVIRONMENT_PASS_LINUX forwarding above has values to pass through.
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.2.0
+        uses: pypa/cibuildwheel@v4.2.0
         with:
           package-dir: .
           output-dir: wheelhouse
@@ -212,7 +212,7 @@ jobs:
           python -m build --sdist . -o wheelhouse
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.python }}
           path: ./wheelhouse/*
@@ -229,7 +229,7 @@ jobs:
 
     steps:
       - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: cibw-wheels-*
