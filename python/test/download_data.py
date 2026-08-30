@@ -11,9 +11,13 @@ before the Rust build. Mirrors ``satkit.utils.update_datafiles()``:
   legacy bucket), and is only kept when its size and SHA-256 match;
 * a file already present with the right hash is skipped;
 * the regularly refreshed files (EOP, space weather) are fetched from the
-  manifest's ``refresh`` URLs on every run, unverified.
+  manifest's ``refresh`` URLs on every run, unverified; a failed refresh keeps
+  the existing copy and prints a warning instead of failing the run.
 
-Usage: ``python python/test/download_data.py [dest_dir]`` (default ``astro-data``).
+Usage: ``python python/test/download_data.py [dest_dir] [--refresh-only]``
+(default ``astro-data``). ``--refresh-only`` skips the manifest files and only
+re-fetches EOP / space weather — run it on every CI job, including cache hits,
+so a cached data directory never carries a stale EOP table.
 """
 
 import hashlib
@@ -72,31 +76,41 @@ def fetch_verified(entry: dict, dest_dir: Path) -> str:
     raise SystemExit(f"could not download {entry['name']} from any source:\n  " + "\n  ".join(attempts))
 
 
-def fetch_refresh(url: str, dest_dir: Path) -> None:
+def fetch_refresh(url: str, dest_dir: Path) -> str:
+    """Re-fetch a daily-refreshed file; on failure keep the existing copy."""
     name = url.rsplit("/", 1)[-1]
     dest = dest_dir / name
     part = dest.with_name(name + ".part")
-    with requests.get(url, stream=True, timeout=120) as r:
-        r.raise_for_status()
-        with part.open("wb") as f:
-            for chunk in r.iter_content(1 << 20):
-                f.write(chunk)
-    part.replace(dest)
+    try:
+        with requests.get(url, stream=True, timeout=120) as r:
+            r.raise_for_status()
+            with part.open("wb") as f:
+                for chunk in r.iter_content(1 << 20):
+                    f.write(chunk)
+        part.replace(dest)
+        return f"refreshed from {url}"
+    except Exception as exc:  # noqa: BLE001 - any failure keeps the old file
+        part.unlink(missing_ok=True)
+        if dest.exists():
+            return f"WARNING: refresh failed ({exc}); keeping existing copy"
+        return f"WARNING: refresh failed ({exc}); file absent"
 
 
 def main() -> None:
-    dest_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "astro-data")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    refresh_only = "--refresh-only" in sys.argv[1:]
+    dest_dir = Path(args[0] if args else "astro-data")
     dest_dir.mkdir(exist_ok=True, parents=True)
     manifest = json.loads(MANIFEST.read_text())
     print(f"satkit data {manifest['data_version']} -> {dest_dir}")
-    for entry in manifest["files"]:
-        if not entry.get("default", True):
-            continue
-        src = fetch_verified(entry, dest_dir)
-        print(f"  {entry['name']}: {src}")
+    if not refresh_only:
+        for entry in manifest["files"]:
+            if not entry.get("default", True):
+                continue
+            src = fetch_verified(entry, dest_dir)
+            print(f"  {entry['name']}: {src}")
     for url in manifest.get("refresh", []):
-        fetch_refresh(url, dest_dir)
-        print(f"  {url.rsplit('/', 1)[-1]}: refreshed from {url}")
+        print(f"  {url.rsplit('/', 1)[-1]}: {fetch_refresh(url, dest_dir)}")
 
 
 if __name__ == "__main__":

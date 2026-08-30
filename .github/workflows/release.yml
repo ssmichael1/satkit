@@ -79,6 +79,11 @@ jobs:
           pip install requests
           python python/test/download_data.py astro-data
 
+      - name: Refresh EOP and space weather (every run, cache hit or not)
+        run: |
+          pip install requests
+          python python/test/download_data.py astro-data --refresh-only
+
       - name: Cache Satkit Test Vectors
         id: cache-satkit-testvecs
         uses: actions/cache@v6
