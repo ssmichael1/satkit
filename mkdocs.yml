@@ -99,6 +99,7 @@ nav:
           - Quaternions: tutorials/Quaternions.ipynb
           - Coordinate Frames: tutorials/Coordinate Frames.ipynb
           - Geodetic Coordinates: tutorials/Geodetic Coordinates.ipynb
+          - "Theory: Keplerian Elements": guide/kepler.md
           - Keplerian Elements: tutorials/Keplerian Elements.ipynb
       - SGP4 Propagation:
           - "Theory: TLEs, SGP4 & OMMs": guide/tle.md

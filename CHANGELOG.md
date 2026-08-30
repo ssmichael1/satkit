@@ -5,9 +5,14 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ## Unreleased
 
 ### CI
-- CI refreshes `EOP-All.csv` / `SW-All.csv` on every run (also on an `astro-data` cache hit) via `download_data.py --refresh-only`, so docs and tests no longer run on a stale EOP table; a failed refresh keeps the cached copy instead of failing the job ([#147](https://github.com/ssmichael1/satkit/pull/147))
 
+- CI refreshes `EOP-All.csv` / `SW-All.csv` on every run (also on an `astro-data` cache hit) via `download_data.py --refresh-only`, so docs and tests no longer run on a stale EOP table; a failed refresh keeps the cached copy instead of failing the job ([#147](https://github.com/ssmichael1/satkit/pull/147))
 - GitHub Actions updated to current major versions (checkout v7, setup-python v7, cache v6, upload-artifact v7, download-artifact v8, upload-pages-artifact v5, deploy-pages v5, sccache-action v0.0.11, cibuildwheel v4.2.0; Windows wheel repair explicitly kept off) ([#145](https://github.com/ssmichael1/satkit/pull/145))
+
+### Fixed
+
+- HTTP requests send a descriptive `satkit/<version>` User-Agent; a CelesTrak 503/403 from `TLE.from_url` / `omm_from_url` now explains CelesTrak's throttling of repeated identical queries instead of a bare status code; the TLE, OMM and Optical Observations tutorials fall back to a pinned element set when the live fetch is unavailable, so the docs build no longer depends on CelesTrak ([#144](https://github.com/ssmichael1/satkit/pull/144))
+- Python `kepler.mean_anomaly` setter no longer hangs on NaN or `eccen >= 1` (delegates to the core capped solver); `from_pv` extracts inclination and the anomalies with `atan2` (exact down to i = 1e-9 rad, e ≤ 0.999); constructor accepts keyword arguments matching the stub (`a, eccen, incl, raan, w, nu`), `propagate` accepts `int` seconds, and a new [Keplerian Elements guide](https://satkit.dev/guide/kepler/) ([#146](https://github.com/ssmichael1/satkit/pull/146))
 
 ## 0.21.0 - 2026-08-30
 
@@ -37,7 +42,6 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Fixed
 
-- HTTP requests send a descriptive `satkit/<version>` User-Agent; a CelesTrak 503/403 from `TLE.from_url` / `omm_from_url` now explains CelesTrak's throttling of repeated identical queries instead of a bare status code; the TLE, OMM and Optical Observations tutorials fall back to a pinned element set when the live fetch is unavailable, so the docs build no longer depends on CelesTrak ([#144](https://github.com/ssmichael1/satkit/pull/144))
 - SP3 epochs are read as GPS time, not UTC (18 s error) in `test_gps`, `sp3file.py` and the validation script — `test_gps` residual 1.80 → 1.21 m; cannonball SRP now acts along the satellite→Sun line; `jgm3`/`itugrace16` documented as zero-tide models ([#131](https://github.com/ssmichael1/satkit/pull/131))
 - `import satkit` no longer fails when the optional `satkit_data` bundle is installed as a namespace package (the conda layout, no `__init__.py`): its `data/` directory is discovered via `__path__` ([#140](https://github.com/ssmichael1/satkit/pull/140))
 - References page rebuilt as a full bibliography and every guide, API page and tutorial now cites its primary source; wrong SGP4 (AIAA 2006-6753), JGM-3 DOI and box-wing citations corrected; drag gate, Lambert multi-revolution, leap-second and GR descriptions brought in line with the code; RK stage counts corrected (RKV98 is 21 stages) ([#136](https://github.com/ssmichael1/satkit/pull/136))
