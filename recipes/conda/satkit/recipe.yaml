@@ -1,0 +1,84 @@
+schema_version: 1
+
+context:
+  name: satkit
+  version: "0.20.2"
+
+package:
+  name: ${{ name|lower }}
+  version: ${{ version }}
+
+source:
+  url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/${{ name }}-${{ version }}.tar.gz
+  sha256: c1b28a159f9b83a2b037874ad5f6466c3375f7fed5e0ee51d4063e00830f155c
+
+build:
+  number: 0
+  # satkit currently requires Python ≥3.10 (set in pyproject.toml).
+  skip: match(python, "<3.10")
+  script:
+    # conda-forge policy for Rust packages: bundle the licenses of every crate
+    # compiled into the extension module. The sdist root is a cargo workspace
+    # (core crate + python/ bindings), so one run covers both.
+    - cargo-bundle-licenses --format yaml --output THIRDPARTY.yml
+    - python -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ stdlib('c') }}
+    - ${{ compiler('rust') }}
+    - cargo-bundle-licenses
+  host:
+    - python
+    - pip
+    - setuptools
+    - setuptools-rust
+  run:
+    - python
+    - numpy >=1.0
+    - satkit-data >=0.9
+
+tests:
+  # PyO3-`wrap_pymodule!` submodules (jplephem, frametransform, ...) are
+  # exposed as attributes on `satkit`, not separately-importable
+  # top-level modules — so only `satkit` itself goes in `imports:`.
+  # The attribute-access exercise lives in run_test.py.
+  - python:
+      imports:
+        - satkit
+      # `pip check` would report satkit's `satkit-data` requirement as
+      # missing: the conda satkit-data package lays its files out directly
+      # (no pip dist-info metadata), so pip cannot see it even though it is
+      # installed. The run_test.py script below proves the data is found.
+      pip_check: false
+  - files:
+      recipe:
+        - run_test.py
+    script:
+      - python run_test.py
+
+about:
+  homepage: https://github.com/ssmichael1/satkit
+  summary: Satellite orbital mechanics library (SGP4, JPL ephemerides, frame transforms)
+  description: |
+    SatKit is a high-performance orbital mechanics library written in
+    Rust with complete Python bindings via PyO3. It handles coordinate
+    transforms, orbit propagation, time systems, gravity models,
+    atmospheric density, and JPL ephemerides — everything needed for
+    satellite astrodynamics work.
+
+    Companion data package: satkit-data (ships JPL DE421 plus the
+    static gravity / IERS / leap-second / NRLMSIS files).
+  license: MIT OR Apache-2.0
+  license_file:
+    - LICENSE-MIT
+    - LICENSE-APACHE
+    # Generated at build time by cargo-bundle-licenses (see build.script).
+    - THIRDPARTY.yml
+  documentation: https://satkit.dev/
+  repository: https://github.com/ssmichael1/satkit
+
+extra:
+  recipe-maintainers:
+    - ssmichael1

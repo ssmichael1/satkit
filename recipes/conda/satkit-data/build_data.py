@@ -1,6 +1,6 @@
 """Lay the downloaded data files out as a ``satkit_data`` Python package.
 
-Invoked by build.sh / bld.bat (``"$PYTHON" "$RECIPE_DIR/build_data.py"``)
+Invoked by build.sh / build.bat (``"$PYTHON" "$RECIPE_DIR/build_data.py"``)
 in place of a shell script so the noarch build behaves identically on
 Linux, macOS, and Windows. Mirrors the on-PyPI ``satkit_data`` layout so
 satkit's existing ``$SITE_PACKAGES/satkit_data/data`` resolver finds the
