@@ -58,6 +58,11 @@ pub enum Error {
     #[error("Ephemeris file is truncated or malformed (header too short)")]
     InvalidHeader,
 
+    /// The file exists but is not a JPL Linux-format binary ephemeris (its
+    /// header does not start with `JPL Planetary Ephemeris DE`).
+    #[error("not a JPL binary ephemeris (header starts with {0:?}); expected a file such as linux_p1550p2650.440 (DE440) or lnxp1900p2053.421 (DE421)")]
+    NotJplEphemeris(String),
+
     /// The lazily-loaded JPL ephemeris singleton failed to load (e.g. the data
     /// file is missing). Carries the original error's message (the underlying
     /// error is not `Clone`, so it cannot be re-surfaced directly).
@@ -193,23 +198,27 @@ const LEGACY_DEFAULT_FILENAME: &str = "linux_p1550p2650.440";
 ///    later.
 /// 3. Fall back to [`LEGACY_DEFAULT_FILENAME`] under [`datadir`], which will
 ///    be auto-downloaded on first use.
-fn resolve_default_path() -> std::path::PathBuf {
+fn resolve_default_path() -> Result<std::path::PathBuf> {
     use std::path::PathBuf;
 
     if let Ok(v) = std::env::var("SATKIT_JPLEPHEM_FILE") {
         let p = PathBuf::from(&v);
         if p.is_absolute() || v.contains(std::path::MAIN_SEPARATOR) {
-            return p;
+            return Ok(p);
         }
-        if let Ok(dd) = datadir() {
-            return dd.join(&v);
-        }
-        return p;
+        // A bare name: wherever it is found in the search directories, or
+        // the write location (so a manifest-pinned name can be downloaded).
+        return Ok(crate::utils::datadir::path_for(&v)?);
     }
 
-    let dd = datadir().unwrap_or_else(|_| PathBuf::from("."));
+    // Autodetect across every search directory (an installed `satkit-data`
+    // package, a system-wide dir, the user data dir, ...): the highest DE
+    // version wins; on a tie the earlier search directory wins.
     let mut best: Option<(u32, PathBuf)> = None;
-    if let Ok(rd) = std::fs::read_dir(&dd) {
+    for dd in crate::utils::data_search_dirs() {
+        let Ok(rd) = std::fs::read_dir(&dd) else {
+            continue;
+        };
         for entry in rd.flatten() {
             let path = entry.path();
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
@@ -218,17 +227,10 @@ fn resolve_default_path() -> std::path::PathBuf {
             // JPL's Linux little-endian binaries use two prefix conventions:
             //   `linux_p<start>p<stop>.4XX` — DE430 and later (DE430/440/441)
             //   `lnxp<start>p<stop>.4XX`    — DE421 and earlier
-            if !(name.starts_with("linux_p") || name.starts_with("lnxp")) {
+            if !crate::utils::datadir::is_ephemeris_name(name) {
                 continue;
             }
-            let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-                continue;
-            };
-            // DE-version suffix: 3 digits starting with '4' (covers DE4XX family).
-            if ext.len() != 3 || !ext.starts_with('4') || !ext.chars().all(|c| c.is_ascii_digit()) {
-                continue;
-            }
-            let Ok(de_version) = ext.parse::<u32>() else {
+            let Ok(de_version) = name.rsplit('.').next().unwrap_or("").parse::<u32>() else {
                 continue;
             };
             if best.as_ref().is_none_or(|(cur, _)| de_version > *cur) {
@@ -237,9 +239,11 @@ fn resolve_default_path() -> std::path::PathBuf {
         }
     }
     if let Some((_, path)) = best {
-        return path;
+        return Ok(path);
     }
-    dd.join(LEGACY_DEFAULT_FILENAME)
+    // No ephemeris anywhere: the default will be downloaded into the write
+    // location — which must therefore exist and be writable.
+    Ok(datadir()?.join(LEGACY_DEFAULT_FILENAME))
 }
 
 /// Module-scope singleton so [`init_from_bytes`] and [`init_from_path`] can
@@ -247,16 +251,29 @@ fn resolve_default_path() -> std::path::PathBuf {
 static JPL_INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
 
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
-    JPL_INSTANCE.get_or_init(|| JPLEphem::from_path(&resolve_default_path()))
+    JPL_INSTANCE.get_or_init(|| {
+        let path = match resolve_default_path() {
+            Ok(p) => p,
+            Err(e) => return Err(Error::LoadFailed(e.to_string())),
+        };
+        JPLEphem::from_path(&path).map_err(|e| {
+            let via = match std::env::var("SATKIT_JPLEPHEM_FILE") {
+                Ok(v) => format!(" (selected by SATKIT_JPLEPHEM_FILE={v:?})"),
+                Err(_) => String::new(),
+            };
+            Error::LoadFailed(format!("{}{via}: {e}", path.display()))
+        })
+    })
 }
 
 /// Borrow the loaded ephemeris, mapping a cached load failure to a returned
 /// error instead of panicking. Used by the public query functions so a missing
 /// ephemeris file surfaces as an `Err` rather than aborting the process.
 fn jpl() -> Result<&'static JPLEphem> {
-    jplephem_singleton()
-        .as_ref()
-        .map_err(|e| Error::LoadFailed(e.to_string()))
+    jplephem_singleton().as_ref().map_err(|e| match e {
+        Error::LoadFailed(msg) => Error::LoadFailed(msg.clone()),
+        other => Error::LoadFailed(other.to_string()),
+    })
 }
 
 /// Initialize the JPL ephemeris singleton from an in-memory byte buffer.
@@ -340,10 +357,11 @@ impl JPLEphem {
     /// DE440 / DE441 (including the short-span `de440s` variant) all load
     /// through the same code path.
     ///
-    /// Auto-download is attempted only when `path` resolves to the legacy
-    /// default name [`LEGACY_DEFAULT_FILENAME`] under [`datadir`]; that's
-    /// the only file the GCS bundle is known to host. For any other path
-    /// the file is expected to already exist.
+    /// Auto-download is attempted only when the file name is one pinned by
+    /// the data manifest (the default [`LEGACY_DEFAULT_FILENAME`], DE440, or
+    /// the smaller DE421 `lnxp1900p2053.421`), through the SHA-256-verified
+    /// fetch. For any other path the file is expected to already exist.
+    /// `SATKIT_OFFLINE=1` makes a missing pinned file a typed error instead.
     ///
     /// # Example
     ///
@@ -362,16 +380,48 @@ impl JPLEphem {
     /// ```
     ///
     fn from_path(path: &std::path::Path) -> Result<Self> {
-        // Open the file. Only auto-download for the legacy default filename
-        // since that's the only one we know is hosted on the GCS bundle.
+        // The ephemeris is the one data file that is neither compiled in nor
+        // refreshed daily, so it is fetched lazily on first use — but only
+        // for names the data manifest pins (DE440 by default, DE421 as the
+        // small alternative), through the SHA-256-verified fetch. Any other
+        // path is expected to exist already. `SATKIT_OFFLINE=1` (or a build
+        // without the `download` feature) turns the download into a typed
+        // error naming the manifest URLs instead of touching the network.
         if !path.is_file() {
-            let is_legacy_default = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n == LEGACY_DEFAULT_FILENAME);
-            if is_legacy_default {
-                println!("Downloading JPL Ephemeris file.  File size is approx. 100MB");
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if let Some(entry) = crate::utils::manifest::embedded().entry(name) {
+                eprintln!(
+                    "satkit: downloading the JPL ephemeris {name} ({:.0} MB) to {} \
+                     (SHA-256 verified). Set SATKIT_JPLEPHEM_FILE to use another file, \
+                     SATKIT_DATA_URL to fetch from a mirror, or SATKIT_OFFLINE=1 to forbid downloads.",
+                    entry.size as f64 / 1e6,
+                    path.parent().unwrap_or(std::path::Path::new(".")).display()
+                );
                 download_if_not_exist(path, None)?;
+            }
+        } else if let Some(entry) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| crate::utils::manifest::embedded().entry(n))
+        {
+            // A manifest-pinned ephemeris that is already on disk is verified
+            // against its pinned SHA-256 the first time it is loaded (and
+            // whenever its size or mtime changes; a sidecar marker records
+            // the last verification). A corrupt or truncated copy is
+            // re-fetched through the verified download; under offline mode
+            // it is a typed error naming the expected hash instead.
+            use crate::utils::download::Error as DlError;
+            match entry.ensure_verified(path) {
+                Ok(_) => {}
+                Err(e @ DlError::CorruptFile { .. }) => {
+                    if crate::utils::is_offline() {
+                        return Err(e.into());
+                    }
+                    eprintln!("satkit: {e}; re-downloading");
+                    let dir = path.parent().unwrap_or(std::path::Path::new("."));
+                    crate::utils::manifest::fetch_static_file(entry, dir, true)?;
+                }
+                Err(e) => return Err(e.into()),
             }
         }
         Self::parse(&std::fs::read(path)?)
@@ -404,10 +454,19 @@ impl JPLEphem {
             return Err(Error::InvalidHeader);
         }
 
-        let title: &str = std::str::from_utf8(&raw[0..84])?;
+        let title: &str = std::str::from_utf8(&raw[0..84]).map_err(|_| {
+            Error::NotJplEphemeris(String::from_utf8_lossy(&raw[0..24]).into_owned())
+        })?;
+        if !title.starts_with("JPL Planetary Ephemeris") {
+            return Err(Error::NotJplEphemeris(title.chars().take(24).collect()));
+        }
 
         // Get version
-        let de_version: i32 = title.get(26..29).ok_or(Error::InvalidHeader)?.parse()?;
+        let de_version: i32 = title
+            .get(26..29)
+            .ok_or(Error::InvalidHeader)?
+            .parse()
+            .map_err(|_| Error::NotJplEphemeris(title.chars().take(30).collect()))?;
 
         let jd_start = f64::from_le_bytes(raw[2652..2660].try_into()?);
         let jd_stop: f64 = f64::from_le_bytes(raw[2660..2668].try_into()?);
@@ -807,6 +866,30 @@ mod tests {
     use crate::utils::test;
     use std::io::{self, BufRead};
 
+    /// A manifest-pinned ephemeris name whose on-disk bytes do not match the
+    /// pinned hash is refused (not silently loaded); under offline mode the
+    /// error is the typed `CorruptFile` naming the expected hash.
+    #[test]
+    fn corrupt_pinned_ephemeris_is_refused_offline() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("satkit_corrupt_de_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("lnxp1900p2053.421");
+        std::fs::write(&path, vec![0u8; 4096]).unwrap();
+        crate::utils::set_offline(true);
+        let err = JPLEphem::from_path(&path).unwrap_err();
+        crate::utils::download::clear_offline_override();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("corrupt") && msg.contains("size"),
+            "expected a CorruptFile error, got: {msg}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn test_parse_rejects_corrupt_files() {
         // Truncated
@@ -815,8 +898,13 @@ mod tests {
         // step used to yield usize::MAX records downstream
         let mut raw = vec![0u8; 4096];
         raw[0..84].fill(b' ');
-        raw[26..29].copy_from_slice(b"440");
+        raw[0..29].copy_from_slice(b"JPL Planetary Ephemeris DE440");
         assert!(matches!(JPLEphem::parse(&raw), Err(Error::InvalidHeader)));
+        // A header that is not a JPL ephemeris at all is reported as such.
+        assert!(matches!(
+            JPLEphem::parse(&vec![b'#'; 4096]),
+            Err(Error::NotJplEphemeris(_))
+        ));
     }
 
     #[test]
@@ -836,6 +924,21 @@ mod tests {
         // Just inside the boundary must always succeed
         let tm_in = tm - crate::Duration::from_seconds(1.0);
         assert!(jpl.geocentric_state(SolarSystem::Moon, &tm_in).is_ok());
+    }
+
+    /// A file that is not a JPL ephemeris must fail with a clear error, not
+    /// a header-parse artefact ("invalid digit found in string").
+    #[test]
+    fn rejects_non_ephemeris_bytes() {
+        let junk = vec![b'#'; 4000];
+        match JPLEphem::parse(&junk) {
+            Err(Error::NotJplEphemeris(_)) => {}
+            other => panic!("expected NotJplEphemeris, got {other:?}"),
+        }
+        assert!(matches!(
+            JPLEphem::parse(b"short"),
+            Err(Error::InvalidHeader)
+        ));
     }
 
     #[test]

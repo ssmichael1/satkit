@@ -300,6 +300,68 @@ mod tests {
         d
     }
 
+    /// Under offline mode a lazy fetch is a typed error and **no HTTP
+    /// request is made**: the in-process server sees zero hits.
+    #[test]
+    fn offline_mode_blocks_fetch_without_network_io() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let bytes = b"offline test bytes".to_vec();
+        let server = TestServer::start(HashMap::from([("f.txt".to_string(), bytes.clone())]));
+        let e = entry("f.txt", &bytes, vec![server.url("f.txt")]);
+        let dir = tmpdir("offline");
+        download::set_offline(true);
+        let err = manifest::fetch_static_file(&e, &dir, false).unwrap_err();
+        download::set_offline(false);
+        // Leave the process in its environment-driven state afterwards.
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                download::clear_offline_override();
+            }
+        }
+        let _restore = Restore;
+        assert!(
+            matches!(&err, download::Error::Offline { name, urls, .. } if name == "f.txt" && urls.len() == 1),
+            "{err}"
+        );
+        assert!(err.to_string().contains(&server.url("f.txt")));
+        assert_eq!(server.hits(), 0, "offline mode must not open a connection");
+        assert!(!dir.join("f.txt").exists());
+        // With offline mode lifted the same fetch succeeds.
+        manifest::fetch_static_file(&e, &dir, false).unwrap();
+        assert_eq!(server.hits(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `set_offline` overrides `SATKIT_OFFLINE` in both directions; with no
+    /// setter call the environment decides.
+    #[test]
+    fn offline_setter_overrides_environment() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prior_env = std::env::var_os(download::OFFLINE_ENV);
+        // Env says offline, setter says online -> online.
+        std::env::set_var(download::OFFLINE_ENV, "1");
+        download::set_offline(false);
+        assert!(!download::is_offline());
+        // Env says online, setter says offline -> offline.
+        std::env::remove_var(download::OFFLINE_ENV);
+        download::set_offline(true);
+        assert!(download::is_offline());
+        download::set_offline(false);
+        assert!(!download::is_offline());
+        // Back to environment-driven: with the var unset that is "online".
+        download::clear_offline_override();
+        assert!(!download::is_offline());
+        match prior_env {
+            Some(v) => std::env::set_var(download::OFFLINE_ENV, v),
+            None => std::env::remove_var(download::OFFLINE_ENV),
+        }
+    }
+
     #[test]
     fn fetch_success_is_verified_and_cached() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -446,6 +508,125 @@ mod tests {
     }
 
     /// Real network, full run: `update_datafiles` into a temp dir; prints the
+    /// Many concurrent fetches of the same file: each writes its own
+    /// `.part.<pid>.<seq>`, exactly one verified final file results, no
+    /// temporary file is left behind and every caller succeeds.
+    #[test]
+    fn concurrent_fetches_of_one_file_yield_one_verified_copy() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let bytes: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+        let server = TestServer::start(HashMap::from([("big.bin".to_string(), bytes.clone())]));
+        let e = std::sync::Arc::new(entry("big.bin", &bytes, vec![server.url("big.bin")]));
+        let dir = std::sync::Arc::new(tmpdir("concurrent"));
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let (e, dir) = (e.clone(), dir.clone());
+                std::thread::spawn(move || {
+                    crate::utils::manifest::fetch_static_file(&e, &dir, false)
+                })
+            })
+            .collect();
+        for h in handles {
+            let outcome = h.join().unwrap().expect("every concurrent fetch succeeds");
+            assert!(matches!(
+                outcome,
+                FetchOutcome::Downloaded { .. } | FetchOutcome::AlreadyPresent
+            ));
+        }
+        assert!(
+            e.verify(&dir.join("big.bin")).unwrap(),
+            "final file verified"
+        );
+        let leftovers: Vec<String> = std::fs::read_dir(&*dir)
+            .unwrap()
+            .flatten()
+            .map(|d| d.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains(".part"))
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp files: {leftovers:?}");
+        assert!(server.hits() >= 1 && server.hits() <= 8);
+        let _ = std::fs::remove_dir_all(&*dir);
+    }
+
+    /// An on-disk manifest-pinned file is hashed once and then trusted via
+    /// the sidecar marker until it changes; a wrong copy is `CorruptFile`.
+    #[test]
+    fn on_disk_file_is_verified_once_via_sidecar_marker() {
+        use crate::utils::download::Error;
+        use crate::utils::manifest::Verified;
+        let bytes = b"correct contents of a pinned file".to_vec();
+        let e = entry(
+            "pinned.bin",
+            &bytes,
+            vec!["https://example.invalid/p".into()],
+        );
+        let dir = tmpdir("sidecar");
+        let path = dir.join("pinned.bin");
+        let marker = ManifestEntry::verified_marker_path(&path);
+
+        // Wrong bytes, right size -> corrupt, no marker written.
+        std::fs::write(&path, b"wrong!! contents of a pinned file").unwrap();
+        let err = e.ensure_verified(&path).unwrap_err();
+        assert!(
+            matches!(err, Error::CorruptFile { what: "sha256", .. }),
+            "{err}"
+        );
+        assert!(!marker.exists());
+        // Wrong size -> corrupt without hashing.
+        std::fs::write(&path, b"short").unwrap();
+        assert!(matches!(
+            e.ensure_verified(&path).unwrap_err(),
+            Error::CorruptFile { what: "size", .. }
+        ));
+
+        // Right bytes -> hashed once, marker created, then cached.
+        std::fs::write(&path, &bytes).unwrap();
+        assert_eq!(e.ensure_verified(&path).unwrap(), Verified::Hashed);
+        assert!(marker.exists());
+        assert_eq!(e.ensure_verified(&path).unwrap(), Verified::Cached);
+
+        // Same size, different bytes, newer mtime -> the marker no longer
+        // matches, the file is re-hashed and the corruption is caught.
+        std::fs::write(&path, b"wrong!! contents of a pinned file").unwrap();
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        assert!(matches!(
+            e.ensure_verified(&path).unwrap_err(),
+            Error::CorruptFile { what: "sha256", .. }
+        ));
+
+        // Restored bytes with yet another mtime -> hashed again, then cached.
+        std::fs::write(&path, &bytes).unwrap();
+        assert_eq!(e.ensure_verified(&path).unwrap(), Verified::Hashed);
+        assert_eq!(e.ensure_verified(&path).unwrap(), Verified::Cached);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ureq's default agent reads `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`
+    /// (and honours `NO_PROXY`); constructing it with a proxy set must not
+    /// fail or touch the network.
+    #[test]
+    fn proxy_env_is_accepted_by_the_agent() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("HTTPS_PROXY", "http://proxy.invalid:3128");
+        let agent = ureq::Agent::new_with_defaults();
+        let has_proxy = agent.config().proxy().is_some();
+        std::env::remove_var("HTTPS_PROXY");
+        assert!(
+            has_proxy,
+            "ureq should pick the proxy up from the environment"
+        );
+    }
+
     /// URL each file came from. `cargo test --lib real_network_update -- --ignored --nocapture`.
     #[test]
     #[ignore = "requires network access; downloads ~110 MB"]
