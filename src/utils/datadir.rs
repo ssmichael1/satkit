@@ -55,11 +55,16 @@ pub enum Error {
     #[error("Could not set data directory")]
     SetFailed,
 
-    /// No write location could be determined or created (no `SATKIT_DATA`,
-    /// no home / `LOCALAPPDATA` directory, and the fallback could not be
-    /// created).
-    #[error("Could not find or create a writeable data directory (set SATKIT_DATA)")]
-    NoWriteableDirectory,
+    /// No write location could be determined, created, or written to.
+    /// `detail` says which: `SATKIT_DATA` unset and the platform user-data
+    /// directory unknown (no `HOME` / `XDG_DATA_HOME` / `LOCALAPPDATA`), or
+    /// the chosen directory could not be created or is read-only — and lists
+    /// the search directories that were consulted. satkit never falls back to
+    /// the current directory or a temporary directory.
+    #[error(
+        "No writeable data directory: {detail}. Set SATKIT_DATA to a directory satkit may write to"
+    )]
+    NoWriteableDirectory { detail: Box<str> },
 }
 
 /// Convenient type alias used throughout the `datadir` module.
@@ -218,10 +223,52 @@ pub fn find_file(name: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// The path to use for `name`: where it was found, or where it would be
-/// written (the write location, or `.` if none can be determined).
-pub fn path_for(name: &str) -> PathBuf {
-    find_file(name).unwrap_or_else(|| datadir().unwrap_or_else(|_| PathBuf::from(".")).join(name))
+/// The path to use for `name`: where it was found in the search
+/// directories, or else where it would be written (the write location).
+/// Errors — rather than falling back to the current directory — when the
+/// file is absent and no writable location exists.
+pub fn path_for(name: &str) -> Result<PathBuf> {
+    match find_file(name) {
+        Some(p) => Ok(p),
+        None => Ok(datadir()?.join(name)),
+    }
+}
+
+/// Make sure `dir` exists and is writable: create it if missing, then
+/// create and delete a probe file. A directory that exists but is read-only
+/// (system-wide install, read-only container filesystem) fails here rather
+/// than at the first download.
+pub fn ensure_writable(dir: &Path) -> std::io::Result<()> {
+    if !dir.is_dir() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let probe = dir.join(format!(
+        ".satkit-write-probe.{}.{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::write(&probe, b"")?;
+    let _ = std::fs::remove_file(&probe);
+    Ok(())
+}
+
+/// Why the platform user-data directory could not be determined, for the
+/// [`Error::NoWriteableDirectory`] message.
+fn no_write_dir_detail(env: &Env, search: &[PathBuf]) -> String {
+    let missing = match env.os {
+        "windows" => "LOCALAPPDATA and USERPROFILE are unset",
+        "macos" => "HOME is unset",
+        _ => "HOME and XDG_DATA_HOME are unset",
+    };
+    let tried: Vec<String> = search.iter().map(|p| p.display().to_string()).collect();
+    format!(
+        "SATKIT_DATA is unset and the platform user-data directory is unknown ({missing}); \
+         read-only search directories consulted: [{}]",
+        tried.join(", ")
+    )
 }
 
 /// Add a read-only search directory (tried after `SATKIT_DATA` and
@@ -255,12 +302,19 @@ pub fn datadir() -> Result<PathBuf> {
     if let Some(d) = cache.as_ref() {
         return Ok(d.clone());
     }
-    let Some(dir) = resolved_now().write else {
-        return Err(Error::NoWriteableDirectory);
+    let resolved = resolved_now();
+    let Some(dir) = resolved.write else {
+        return Err(Error::NoWriteableDirectory {
+            detail: no_write_dir_detail(&Env::current(), &resolved.search).into_boxed_str(),
+        });
     };
-    if !dir.is_dir() {
-        std::fs::create_dir_all(&dir).map_err(|_| Error::NoWriteableDirectory)?;
-    }
+    ensure_writable(&dir).map_err(|e| Error::NoWriteableDirectory {
+        detail: format!(
+            "{} could not be created or is not writable ({e})",
+            dir.display()
+        )
+        .into_boxed_str(),
+    })?;
     *cache = Some(dir.clone());
     Ok(dir)
 }
@@ -407,6 +461,72 @@ mod tests {
             Some(Path::new("/home/u/.local/share/satkit-data")),
             "extra search dirs never become the write dir"
         );
+    }
+
+    /// With no home directory (and no SATKIT_DATA) there is no write
+    /// location on any platform: never the CWD, never a temp dir.
+    #[test]
+    fn offline_resolve_no_home_means_no_write_dir() {
+        for os in ["linux", "macos", "windows"] {
+            let mut e = env(os);
+            e.home = None;
+            e.local_app_data = None;
+            e.xdg_data_home = None;
+            let r = resolve(&e, None, &[]);
+            assert_eq!(r.write, None, "{os}");
+            assert!(
+                !r.search.contains(&PathBuf::from(".")),
+                "{os}: CWD is never a candidate"
+            );
+            let detail = no_write_dir_detail(&e, &r.search);
+            assert!(detail.contains("SATKIT_DATA is unset"), "{detail}");
+        }
+        // XDG alone is enough on Linux.
+        let mut e = env("linux");
+        e.home = None;
+        e.xdg_data_home = Some(PathBuf::from("/xdg"));
+        assert_eq!(
+            resolve(&e, None, &[]).write.as_deref(),
+            Some(Path::new("/xdg/satkit-data"))
+        );
+    }
+
+    /// A read-only directory is rejected by the writability probe with the
+    /// path in the error, instead of being accepted and failing later.
+    #[test]
+    #[cfg(unix)]
+    fn offline_read_only_dir_is_not_writable() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("satkit_ro_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        // root ignores permission bits; the probe cannot fail there.
+        let probe_would_fail = std::fs::write(dir.join(".rootcheck"), b"").is_err();
+        if probe_would_fail {
+            assert!(ensure_writable(&dir).is_err());
+            assert!(
+                ensure_writable(&dir.join("child")).is_err(),
+                "cannot create under a read-only directory"
+            );
+        }
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let _ = std::fs::remove_file(dir.join(".rootcheck"));
+        assert!(ensure_writable(&dir).is_ok());
+        assert!(
+            !std::fs::read_dir(&dir).unwrap().flatten().any(|e| e
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".satkit-write-probe")),
+            "probe file is removed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn no_writeable_error_mentions_satkit_data() {
+        let e = Error::NoWriteableDirectory { detail: "x".into() };
+        assert!(e.to_string().contains("SATKIT_DATA"));
     }
 
     #[test]

@@ -171,14 +171,14 @@ fn parse_csv(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
         .collect()
 }
 
-fn load_default_path() -> PathBuf {
+fn load_default_path() -> Result<PathBuf> {
     // Found in any search directory, else downloaded into the write location.
-    crate::utils::datadir::path_for("SW-All.csv")
+    Ok(crate::utils::datadir::path_for("SW-All.csv")?)
 }
 
 /// Lazy default load from `SW-All.csv` under [`datadir`], with auto-download.
 fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
-    let path = load_default_path();
+    let path = load_default_path()?;
     download_if_not_exist(&path, Some("https://celestrak.org/SpaceData/"))?;
     parse_csv(&std::fs::read_to_string(&path)?)
 }
@@ -218,7 +218,9 @@ pub fn init_from_path(path: &std::path::Path) -> Result<()> {
 fn ensure_default_loaded() {
     SPACE_WEATHER.ensure_default_loaded(|| load_space_weather_csv().ok());
     if SPACE_WEATHER.read().is_none() {
-        let path = load_default_path();
+        let Ok(path) = load_default_path() else {
+            return;
+        };
         if path.is_file() {
             if let Ok(text) = std::fs::read_to_string(&path) {
                 if let Ok(records) = parse_csv(&text) {

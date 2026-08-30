@@ -4,7 +4,6 @@ use super::{Error, Result};
 
 use crate::mathtypes::*;
 
-use std::path::PathBuf;
 use std::sync::OnceLock;
 
 #[derive(Debug)]
@@ -134,9 +133,7 @@ impl IERSTable {
         if let Some(bytes) = utils::embedded::get(fname) {
             return Self::from_bytes(&bytes);
         }
-        let path = utils::datadir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(fname);
+        let path = utils::datadir()?.join(fname);
         download_if_not_exist(&path, None)?;
         Self::from_path(&path)
     }

@@ -198,17 +198,17 @@ const LEGACY_DEFAULT_FILENAME: &str = "linux_p1550p2650.440";
 ///    later.
 /// 3. Fall back to [`LEGACY_DEFAULT_FILENAME`] under [`datadir`], which will
 ///    be auto-downloaded on first use.
-fn resolve_default_path() -> std::path::PathBuf {
+fn resolve_default_path() -> Result<std::path::PathBuf> {
     use std::path::PathBuf;
 
     if let Ok(v) = std::env::var("SATKIT_JPLEPHEM_FILE") {
         let p = PathBuf::from(&v);
         if p.is_absolute() || v.contains(std::path::MAIN_SEPARATOR) {
-            return p;
+            return Ok(p);
         }
         // A bare name: wherever it is found in the search directories, or
         // the write location (so a manifest-pinned name can be downloaded).
-        return crate::utils::datadir::path_for(&v);
+        return Ok(crate::utils::datadir::path_for(&v)?);
     }
 
     // Autodetect across every search directory (an installed `satkit-data`
@@ -239,11 +239,11 @@ fn resolve_default_path() -> std::path::PathBuf {
         }
     }
     if let Some((_, path)) = best {
-        return path;
+        return Ok(path);
     }
-    datadir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(LEGACY_DEFAULT_FILENAME)
+    // No ephemeris anywhere: the default will be downloaded into the write
+    // location — which must therefore exist and be writable.
+    Ok(datadir()?.join(LEGACY_DEFAULT_FILENAME))
 }
 
 /// Module-scope singleton so [`init_from_bytes`] and [`init_from_path`] can
@@ -252,7 +252,10 @@ static JPL_INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
 
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
     JPL_INSTANCE.get_or_init(|| {
-        let path = resolve_default_path();
+        let path = match resolve_default_path() {
+            Ok(p) => p,
+            Err(e) => return Err(Error::LoadFailed(e.to_string())),
+        };
         JPLEphem::from_path(&path).map_err(|e| {
             let via = match std::env::var("SATKIT_JPLEPHEM_FILE") {
                 Ok(v) => format!(" (selected by SATKIT_JPLEPHEM_FILE={v:?})"),
@@ -395,6 +398,30 @@ impl JPLEphem {
                     path.parent().unwrap_or(std::path::Path::new(".")).display()
                 );
                 download_if_not_exist(path, None)?;
+            }
+        } else if let Some(entry) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| crate::utils::manifest::embedded().entry(n))
+        {
+            // A manifest-pinned ephemeris that is already on disk is verified
+            // against its pinned SHA-256 the first time it is loaded (and
+            // whenever its size or mtime changes; a sidecar marker records
+            // the last verification). A corrupt or truncated copy is
+            // re-fetched through the verified download; under offline mode
+            // it is a typed error naming the expected hash instead.
+            use crate::utils::download::Error as DlError;
+            match entry.ensure_verified(path) {
+                Ok(_) => {}
+                Err(e @ DlError::CorruptFile { .. }) => {
+                    if crate::utils::is_offline() {
+                        return Err(e.into());
+                    }
+                    eprintln!("satkit: {e}; re-downloading");
+                    let dir = path.parent().unwrap_or(std::path::Path::new("."));
+                    crate::utils::manifest::fetch_static_file(entry, dir, true)?;
+                }
+                Err(e) => return Err(e.into()),
             }
         }
         Self::parse(&std::fs::read(path)?)
@@ -838,6 +865,30 @@ mod tests {
     use super::*;
     use crate::utils::test;
     use std::io::{self, BufRead};
+
+    /// A manifest-pinned ephemeris name whose on-disk bytes do not match the
+    /// pinned hash is refused (not silently loaded); under offline mode the
+    /// error is the typed `CorruptFile` naming the expected hash.
+    #[test]
+    fn corrupt_pinned_ephemeris_is_refused_offline() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("satkit_corrupt_de_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("lnxp1900p2053.421");
+        std::fs::write(&path, vec![0u8; 4096]).unwrap();
+        crate::utils::set_offline(true);
+        let err = JPLEphem::from_path(&path).unwrap_err();
+        crate::utils::download::clear_offline_override();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("corrupt") && msg.contains("size"),
+            "expected a CorruptFile error, got: {msg}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn test_parse_rejects_corrupt_files() {

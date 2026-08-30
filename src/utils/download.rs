@@ -60,6 +60,33 @@ pub enum Error {
     #[error("Could not download {name} from any source:\n  {}", attempts.join("\n  "))]
     AllSourcesFailed { name: String, attempts: Vec<String> },
 
+    /// Replacing an existing data file failed even after retries. On
+    /// Windows a file another process has open cannot be renamed over; on
+    /// any platform this also covers a directory that became read-only.
+    #[error("could not replace {path} (is another process using it?): {source}")]
+    ReplaceFailed {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// A manifest-pinned file present on disk does not match its pinned size
+    /// or SHA-256 — corrupt, truncated, or a different file under the same
+    /// name. When downloads are allowed the file is re-fetched; under offline
+    /// mode (or without the `download` feature) this error is returned.
+    #[error(
+        "{name} at {path} is corrupt: {what} {} does not match the manifest ({}). \
+         Delete or replace the file, or allow downloads so it can be re-fetched",
+        .values.1, .values.0
+    )]
+    CorruptFile {
+        name: String,
+        path: String,
+        what: &'static str,
+        /// `(expected, actual)`; boxed to keep the error type small.
+        values: Box<(String, String)>,
+    },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -155,12 +182,69 @@ pub(crate) fn check_online(name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Path of the sibling `.part` file used for atomic writes.
+/// Sequence number so every in-flight download in this process gets its own
+/// temporary file (see [`part_path`]).
+static PART_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Path of the temporary file a download is streamed into before the atomic
+/// rename: `<final>.part.<pid>.<seq>`. The process id and a per-process
+/// counter make the name unique, so two processes (or two threads) fetching
+/// the same file at the same time never write into each other's partial
+/// file — each completes independently and the rename is what serialises
+/// them. A leftover `*.part.*` file from a killed process is harmless and
+/// can simply be deleted.
 #[cfg(feature = "download")]
 fn part_path(final_path: &Path) -> std::path::PathBuf {
+    let seq = PART_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut p = final_path.as_os_str().to_owned();
-    p.push(".part");
+    p.push(format!(".part.{}.{seq}", std::process::id()));
     std::path::PathBuf::from(p)
+}
+
+/// Run `op` up to `attempts` times, sleeping `delay` between failures.
+/// `NotFound` is returned immediately (the source of a rename is gone; no
+/// retry can help). Everything else — notably the Windows sharing-violation
+/// (`PermissionDenied`) raised when renaming over a file another process has
+/// open, or a transient EBUSY — is retried.
+pub(crate) fn retry_io<F: FnMut() -> std::io::Result<()>>(
+    attempts: u32,
+    delay: std::time::Duration,
+    mut op: F,
+) -> std::io::Result<()> {
+    let mut last = None;
+    for i in 0..attempts.max(1) {
+        match op() {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(e),
+            Err(e) => {
+                last = Some(e);
+                if i + 1 < attempts {
+                    std::thread::sleep(delay);
+                }
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| std::io::Error::other("retry_io: no attempts")))
+}
+
+/// Atomically move the completed temporary file onto `final_path`, replacing
+/// any existing file. Retries a few times so that, on Windows, a reader that
+/// briefly holds the old file open does not make the download fail; if it
+/// still cannot be replaced the temporary file is removed and
+/// [`Error::ReplaceFailed`] names the path.
+#[cfg(feature = "download")]
+fn rename_into_place(part: &Path, final_path: &Path) -> Result<()> {
+    let r = retry_io(6, std::time::Duration::from_millis(50), || {
+        std::fs::rename(part, final_path)
+    });
+    if let Err(source) = r {
+        let _ = std::fs::remove_file(part);
+        return Err(Error::ReplaceFailed {
+            path: final_path.display().to_string(),
+            source,
+        });
+    }
+    Ok(())
 }
 
 /// Stream `reader` to `final_path` atomically: write to a sibling `.part` file
@@ -177,10 +261,7 @@ fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path) -> Result<()
         Ok(())
     };
     match write() {
-        Ok(()) => {
-            std::fs::rename(&part, final_path)?;
-            Ok(())
-        }
+        Ok(()) => rename_into_place(&part, final_path),
         Err(e) => {
             let _ = std::fs::remove_file(&part);
             Err(e)
@@ -245,7 +326,17 @@ pub(crate) fn write_atomic_verified(
     if sha != entry.sha256 {
         return Err(mismatch("sha256", entry.sha256.clone(), sha));
     }
-    std::fs::rename(&part, final_path)?;
+    // Another process may have completed the same download while this one
+    // was in flight (each writes its own `.part.<pid>.<seq>`). If a verified
+    // final file is already there, ours is redundant: discard it rather than
+    // replacing a file a third process may just have started reading.
+    if final_path.is_file() && entry.verify(final_path).unwrap_or(false) {
+        let _ = std::fs::remove_file(&part);
+        let _ = entry.write_verified_marker(final_path);
+        return Ok(());
+    }
+    rename_into_place(&part, final_path)?;
+    let _ = entry.write_verified_marker(final_path);
     Ok(())
 }
 
@@ -395,8 +486,94 @@ mod tests {
             "final file should exist after success"
         );
         assert!(!part_path.exists(), "the .part file must be renamed away");
+        assert!(
+            !leftover_parts(&final_path),
+            "no .part.<pid>.<seq> file may remain"
+        );
         assert_eq!(std::fs::read(&final_path).unwrap(), data);
         let _ = std::fs::remove_file(&final_path);
+    }
+
+    /// Any `<final>.part.*` sibling still on disk.
+    fn leftover_parts(final_path: &Path) -> bool {
+        let dir = final_path.parent().unwrap();
+        let prefix = format!(
+            "{}.part.",
+            final_path.file_name().unwrap().to_string_lossy()
+        );
+        std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+    }
+
+    #[test]
+    fn part_paths_are_unique_per_call() {
+        let f = Path::new("/tmp/x.bin");
+        let a = part_path(f);
+        let b = part_path(f);
+        assert_ne!(a, b);
+        assert!(a
+            .to_string_lossy()
+            .contains(&format!(".part.{}.", std::process::id())));
+    }
+
+    /// The rename helper retries transient failures (the Windows
+    /// sharing-violation case) but gives up after the configured attempts,
+    /// and never retries a missing source.
+    #[test]
+    fn retry_io_retries_transient_failures_then_gives_up() {
+        let mut calls = 0;
+        let r = retry_io(5, std::time::Duration::from_millis(1), || {
+            calls += 1;
+            if calls < 3 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "busy",
+                ))
+            } else {
+                Ok(())
+            }
+        });
+        assert!(r.is_ok());
+        assert_eq!(calls, 3, "succeeds on the third attempt");
+
+        let mut calls = 0;
+        let r = retry_io(4, std::time::Duration::from_millis(1), || {
+            calls += 1;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "busy",
+            ))
+        });
+        assert_eq!(r.unwrap_err().kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(calls, 4, "exhausts every attempt");
+
+        let mut calls = 0;
+        let r = retry_io(4, std::time::Duration::from_millis(1), || {
+            calls += 1;
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "gone"))
+        });
+        assert_eq!(r.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        assert_eq!(calls, 1, "a missing source is not retried");
+    }
+
+    /// `rename_into_place` surfaces a persistent failure as a typed error
+    /// naming the destination and removes the temporary file.
+    #[test]
+    fn rename_into_place_reports_typed_error() {
+        let dir = std::env::temp_dir().join(format!("satkit_rename_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("f.bin.part.1.1");
+        std::fs::write(&part, b"x").unwrap();
+        // Renaming onto a path whose parent does not exist cannot succeed.
+        let dest = dir.join("missing-subdir").join("f.bin");
+        let err = rename_into_place(&part, &dest).unwrap_err();
+        assert!(matches!(err, Error::ReplaceFailed { .. }), "{err}");
+        assert!(err.to_string().contains("f.bin"));
+        assert!(!part.exists(), "temporary file is cleaned up");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

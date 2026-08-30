@@ -142,7 +142,7 @@ fn parse_csv(text: &str) -> Result<Vec<EOPEntry>> {
 /// Lazy default load from `EOP-All.csv` under [`datadir`], with auto-download.
 fn load_eop_file_csv() -> Result<Vec<EOPEntry>> {
     // Found in any search directory, else downloaded into the write location.
-    let path = crate::utils::datadir::path_for("EOP-All.csv");
+    let path = crate::utils::datadir::path_for("EOP-All.csv")?;
     download_if_not_exist(&path, Some("https://celestrak.org/SpaceData/"))?;
     parse_csv(&std::fs::read_to_string(&path)?)
 }
