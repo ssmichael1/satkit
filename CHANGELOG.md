@@ -10,7 +10,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Docs
 
-- Every Python docstring (`.pyi` stubs and runtime `__doc__`) states units of measure for dimensioned arguments, returns and attributes (SI: meters, m/s, m/s², radians unless the name ends in `_deg`); `sgp4` outputs explicitly noted as meters / m/s in the TEME frame, not the km / km/s of other SGP4 libraries ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+- Every Python docstring (`.pyi` stubs and runtime `__doc__`) states units of measure for dimensioned arguments, returns and attributes (SI: meters, m/s, m/s², radians unless the name ends in `_deg`); `sgp4` outputs explicitly noted as meters / m/s in the TEME frame, not the km / km/s of other SGP4 libraries ([#169](https://github.com/ssmichael1/satkit/pull/169))
 
 ## 0.21.2 - 2026-08-30
 
