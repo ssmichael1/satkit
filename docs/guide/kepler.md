@@ -8,16 +8,18 @@ the [Keplerian Elements tutorial](../tutorials/Keplerian%20Elements.ipynb).
 ## The Element Set
 
 A bound two-body orbit is described by six numbers. `satkit` stores them under
-these names, in SI units and radians:
+these names, in SI units and radians, together with the gravitational
+parameter of the body they orbit:
 
 | Field   | Symbol     | Meaning                                              |
 |---------|------------|------------------------------------------------------|
-| `a`     | $a$        | semi-major axis, **meters**                          |
+| `a`     | $a$        | semi-major axis, **meters**, $a > 0$                 |
 | `eccen` | $e$        | eccentricity, $0 \le e < 1$                          |
 | `incl`  | $i$        | inclination, radians, $0 \le i \le \pi$              |
 | `raan`  | $\Omega$   | right ascension of the ascending node, radians       |
-| `w`     | $\omega$   | argument of perigee, radians                         |
+| `argp`  | $\omega$   | argument of periapsis, radians                       |
 | `nu`    | $\nu$      | true anomaly, radians                                |
+| `mu`    | $\mu$      | gravitational parameter of the central body, m³ s⁻²; Earth's unless given |
 
 The size and shape of the ellipse are $a$ and $e$; the orientation of the
 orbital plane and of the ellipse within it are $i$, $\Omega$ and $\omega$; and
@@ -26,8 +28,42 @@ The semiparameter (semi-latus rectum) $p = a(1 - e^2)$ is available as a
 derived property, but the class is constructed from $a$, not $p$.
 
 In Python the inclination property is spelled `inclination`; the constructor
-argument and the Rust field are `incl`. Angles returned by `from_pv` are
+argument and the Rust field are `incl`. The argument of periapsis was called
+`w` before 0.22; in Python `w` still works as a constructor keyword and as a
+property, with a `DeprecationWarning`. Angles returned by `from_pv` are
 reduced to $[0, 2\pi)$; angles you set are stored as given.
+
+### Validation
+
+The Python constructor, and the `a`, `eccen`, `inclination` and `mu`
+setters, reject an element outside its domain with `ValueError`: a
+non-finite value, $a \le 0$, $e \notin [0, 1)$, $i \notin [0, \pi]$ or
+$\mu \le 0$. The bounds are strict — $e = 1$ is not a closed orbit and is
+refused rather than producing NaN anomalies. In Rust, `Kepler::try_new`
+performs the same checks (returning `kepler::Error::InvalidElement`, which
+names the offending element) and `Kepler::validate` re-checks an element set
+whose public fields were assigned directly; `Kepler::new` remains unchecked.
+
+### Derived quantities
+
+All are read-only properties in Python and methods in Rust:
+
+| Property                | Symbol / formula                                   | Units |
+|-------------------------|----------------------------------------------------|-------|
+| `semiparameter`         | $p = a(1 - e^2)$                                   | m     |
+| `periapsis`             | $r_p = a(1 - e)$                                   | m     |
+| `apoapsis`              | $r_a = a(1 + e)$                                   | m     |
+| `mean_motion`           | $n = \sqrt{\mu / a^3}$                             | rad/s |
+| `period`                | $T = 2\pi / n$                                     | s     |
+| `specific_energy`       | $\xi = -\mu / 2a$                                  | J/kg  |
+| `angular_momentum`      | $h = \sqrt{\mu p}$                                 | m²/s  |
+| `flight_path_angle`     | $\gamma = \operatorname{atan2}(e\sin\nu,\ 1 + e\cos\nu)$ — zero at periapsis and apoapsis, positive while climbing | rad |
+| `argument_of_latitude`  | $u = \omega + \nu$, reduced to $[0, 2\pi)$ — defined for circular orbits | rad |
+| `true_longitude`        | $\lambda = \Omega + \omega + \nu$, reduced to $[0, 2\pi)$ — defined for circular equatorial orbits | rad |
+
+`satstate.from_kepler(time, k)` (Rust `SatState::from_kepler`) builds a
+propagatable state from the two-body position and velocity of an element
+set, taken as GCRF at `time`.
 
 ### Anomalies
 
@@ -75,26 +111,31 @@ the rest of `satkit` assumes **GCRF**, so convert ITRF or TEME states with
 state produces elements that are numerically valid but physically
 meaningless.
 
-**Central body.** The Earth's gravitational parameter
-[`consts.MU_EARTH`](../api/consts.md) ($3.986004418 \times 10^{14}$
-m³ s⁻²) is used everywhere: in the `from_pv` energy equation, in `to_pv`, and
-in the mean motion, period and `propagate`. There is no way to use a
-different $\mu$; for heliocentric or lunar orbits compute the elements
-yourself.
+**Central body.** Each element set carries its own $\mu$. By default it is
+the Earth's, [`consts.MU_EARTH`](../api/consts.md) ($3.986004418 \times
+10^{14}$ m³ s⁻²), and it is used everywhere: in the `from_pv` energy
+equation, in `to_pv`, and in the mean motion, period and `propagate`. For a
+lunar or heliocentric orbit pass `mu=` to the constructor or to `from_pv`
+(Rust: `Kepler::with_mu`, `Kepler::from_pv_with_mu`); the six geometric
+elements are unchanged, only the dynamics re-target the other body. Note
+that `from_pv` interprets a state with whatever $\mu$ it is given — a lunar
+state read with Earth's $\mu$ yields a valid-looking but wrong ellipse.
 
 **Closed orbits only.** `from_pv` returns an error (Python: `RuntimeError`)
 for parabolic or hyperbolic states ($e \ge 1$) and for rectilinear states
-(zero angular momentum, where the orbital plane is undefined). The
-constructor itself does not validate $e$; supplying $e \ge 1$ produces
-meaningless anomaly conversions.
+(zero angular momentum, where the orbital plane is undefined). The Python
+constructor and `Kepler::try_new` reject $e \ge 1$ up front (see
+[Validation](#validation)).
 
 **Singular cases.** $\Omega$ is undefined for an equatorial orbit and $\omega$
 for a circular one. `from_pv` follows the conventions of
 [Vallado (2013)](references.md#vallado2013), Algorithm 9: for a circular
-inclined orbit `w` is 0 and `nu` holds the argument of latitude; for an
-elliptical equatorial orbit `raan` is 0 and `w` holds the true longitude of
+inclined orbit `argp` is 0 and `nu` holds the argument of latitude; for an
+elliptical equatorial orbit `raan` is 0 and `argp` holds the true longitude of
 perigee; for a circular equatorial orbit both are 0 and `nu` holds the true
-longitude. In each case `to_pv` reproduces the input state.
+longitude. In each case `to_pv` reproduces the input state. The
+`argument_of_latitude` and `true_longitude` properties give the well-defined
+combinations directly in every case.
 
 ## Conversions
 
@@ -125,7 +166,7 @@ longitude. In each case `to_pv` reproduces the input state.
         eccen=0.001,
         incl=math.radians(98.0),
         raan=math.radians(45.0),
-        w=0.0,
+        argp=0.0,
         mean_anomaly=math.radians(30.0),
     )
     print(f"period = {k.period / 60:.2f} min, nu = {math.degrees(k.nu):.3f} deg")
@@ -158,7 +199,7 @@ longitude. In each case `to_pv` reproduces the input state.
         0.001,                    // eccen
         98.0_f64.to_radians(),    // incl
         45.0_f64.to_radians(),    // raan
-        0.0,                      // w
+        0.0,                      // argp
         Anomaly::Mean(30.0_f64.to_radians()),
     );
     println!("period = {:.2} min, nu = {:.3} deg",

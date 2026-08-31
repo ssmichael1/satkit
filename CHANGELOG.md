@@ -4,12 +4,17 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Added
+
+- Kepler: checked constructor `Kepler::try_new` / `Kepler::validate` (Python: the constructor and the `a`/`eccen`/`inclination`/`mu` setters raise `ValueError` for a non-finite value, `a <= 0`, `eccen` outside [0, 1), `incl` outside [0, π] or `mu <= 0` instead of producing NaN); per-instance gravitational parameter `mu` (`Kepler::with_mu`, `from_pv_with_mu`; Python `kepler(..., mu=)`, `kepler.mu`, `from_pv(..., mu=)`) so lunar and heliocentric elements have a correct period, `propagate` and `to_pv`; derived quantities `periapsis`, `apoapsis`, `specific_energy`, `angular_momentum`, `flight_path_angle`, `argument_of_latitude`, `true_longitude`; `SatState::from_kepler` / `satstate.from_kepler(time, kepler)`; a one-line `repr` for Python `kepler`; `Kepler` derives `PartialEq` and serde (`mu` defaults to Earth's when absent), `Anomaly` derives `Copy`/`PartialEq` ([#168](https://github.com/ssmichael1/satkit/pull/168))
+
 ### Fixed
 
 - A corrupt or truncated `tab5.2*.txt` in a data directory no longer panics the first frame transform: satkit warns and uses the compiled-in copy of the same IERS table (exact, not an approximation), and the parser now rejects text with no table header or fewer rows than declared — an HTML notice page saved under the table's name previously loaded as six empty series and silently dropped the nutation terms ([#166](https://github.com/ssmichael1/satkit/pull/166))
 
 ### Changed
 
+- **Breaking (Rust):** `Kepler.w` is renamed `Kepler.argp`, the struct gains a `mu` field (struct-literal construction must supply it — prefer `Kepler::new(...).with_mu(...)`), and `kepler::Error` is `#[non_exhaustive]` (new `InvalidElement` variant). Python: `argp` is the constructor parameter and property name; `w` still works as a constructor keyword and as a property (kept indefinitely) but emits `DeprecationWarning`. **Breaking (Python):** `kepler.from_pv` raises `ValueError` instead of `RuntimeError` for a hyperbolic/parabolic or rectilinear state, and every element setter (`a`, `eccen`, `inclination`, `raan`, `argp`, `nu`, `mu`) raises `ValueError` for an out-of-domain or non-finite value instead of accepting it ([#168](https://github.com/ssmichael1/satkit/pull/168))
 - `update_datafiles()` no longer downloads files that are compiled into the library: the IERS tables and gravity models are `default: false` in the manifest (still pinned and fetchable by name), and the unused `leap-seconds.list` (nothing ever read it — the runtime leap-second table is a compiled-in constant) is removed from the manifest entirely. The only static download left is the JPL ephemeris, alongside the daily EOP / space-weather / solar-cycle refreshes ([#163](https://github.com/ssmichael1/satkit/pull/163))
 
 ### Docs

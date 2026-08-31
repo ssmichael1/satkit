@@ -205,6 +205,17 @@ impl SatState {
         }
     }
 
+    /// Create a satellite state from Keplerian elements: the two-body
+    /// position and velocity of `kepler` ([`Kepler::to_pv`](crate::kepler::Kepler::to_pv))
+    /// taken as GCRF at `time`, with no covariance and no maneuvers.
+    ///
+    /// The elements are treated as osculating GCRF elements; `kepler.mu`
+    /// should therefore be Earth's.
+    pub fn from_kepler<T: TimeLike>(time: &T, kepler: &crate::kepler::Kepler) -> Self {
+        let (pos, vel) = kepler.to_pv();
+        Self::from_pv(time, &pos, &vel)
+    }
+
     /// Position vector in GCRF [meters]
     pub fn pos_gcrf(&self) -> Vector3 {
         self.pv.block::<3, 1>(0, 0)

@@ -272,7 +272,7 @@ impl TLE {
             kepler.incl.to_degrees(),
             kepler.eccen,
             kepler.raan.to_degrees(),
-            kepler.w.to_degrees(),
+            kepler.argp.to_degrees(),
             kepler.mean_motion() * 60.0 * 60.0 * 24.0 / (2.0 * std::f64::consts::PI),
             kepler.mean_anomaly().to_degrees(),
             0.0,

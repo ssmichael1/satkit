@@ -17,17 +17,24 @@ use crate::pyutils::py_to_smatrix;
 /// ``eccentric_anomaly`` or ``mean_anomaly``.
 ///
 /// Args:
-///     a: semi-major axis, meters
-///     eccen: Eccentricity
-///     incl: Inclination, radians
+///     a: semi-major axis, meters (> 0)
+///     eccen: Eccentricity (0 <= eccen < 1)
+///     incl: Inclination, radians (0 <= incl <= pi)
 ///     raan: Right Ascension of the Ascending Node, radians
-///     w: Argument of Perigee, radians
+///     argp: Argument of Periapsis, radians (``w`` is accepted as an alias)
 ///     nu: True Anomaly, radians
 ///
 /// Keyword Args:
 ///     true_anomaly: True Anomaly, radians
 ///     eccentric_anomaly: Eccentric Anomaly, radians
 ///     mean_anomaly: Mean Anomaly, radians
+///     mu: Gravitational parameter of the central body, m^3/s^2
+///         (default: Earth, ``satkit.consts.mu_earth``)
+///
+/// Raises:
+///     ValueError: an element outside its domain (non-finite, ``a <= 0``,
+///         ``eccen`` outside [0, 1), ``incl`` outside [0, pi], ``mu <= 0``),
+///         or an ambiguous anomaly / ``argp``-``w`` specification
 ///
 /// Returns:
 ///     Kepler: Keplerian orbital elements
@@ -36,31 +43,71 @@ use crate::pyutils::py_to_smatrix;
 #[derive(Clone)]
 pub struct PyKepler(pub Kepler);
 
+/// Map a core validation failure to the Python exception the stubs promise.
+fn value_error(e: satkit::kepler::Error) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(e.to_string())
+}
+
 impl PyKepler {
     /// The same elements with the in-plane position replaced by `an`,
     /// converted to true anomaly by the core solver.
     fn with_anomaly(&self, an: Anomaly) -> Kepler {
         let k = &self.0;
-        Kepler::new(k.a, k.eccen, k.incl, k.raan, k.w, an)
+        Kepler::new(k.a, k.eccen, k.incl, k.raan, k.argp, an).with_mu(k.mu)
+    }
+
+    /// Assign `field` on a copy, validate, and commit only if the result is
+    /// a closed orbit; otherwise `ValueError` and the element set is unchanged.
+    fn set_validated(&mut self, field: impl FnOnce(&mut Kepler)) -> PyResult<()> {
+        let mut k = self.0;
+        field(&mut k);
+        k.validate().map_err(value_error)?;
+        self.0 = k;
+        Ok(())
+    }
+
+    fn warn_w_deprecated(py: Python) -> PyResult<()> {
+        let warning_type = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
+        PyErr::warn(
+            py,
+            warning_type.as_any(),
+            c"kepler.w is deprecated; use kepler.argp",
+            2,
+        )
     }
 }
 
 #[pymethods]
 impl PyKepler {
     #[new]
-    #[pyo3(signature = (a, eccen, incl, raan, w, nu=None, *, true_anomaly=None, eccentric_anomaly=None, mean_anomaly=None))]
+    #[pyo3(signature = (a, eccen, incl, raan, argp=None, nu=None, *, w=None, true_anomaly=None, eccentric_anomaly=None, mean_anomaly=None, mu=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         a: f64,
         eccen: f64,
         incl: f64,
         raan: f64,
-        w: f64,
+        argp: Option<f64>,
         nu: Option<f64>,
+        w: Option<f64>,
         true_anomaly: Option<f64>,
         eccentric_anomaly: Option<f64>,
         mean_anomaly: Option<f64>,
+        mu: Option<f64>,
     ) -> PyResult<Self> {
+        let argp = match (argp, w) {
+            (Some(v), None) | (None, Some(v)) => v,
+            (None, None) => {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "missing required argument: 'argp' (argument of periapsis, radians)",
+                ))
+            }
+            (Some(_), Some(_)) => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "specify the argument of periapsis as argp or w, not both",
+                ))
+            }
+        };
         let an =
             match (nu, true_anomaly, eccentric_anomaly, mean_anomaly) {
                 (Some(v), None, None, None) | (None, Some(v), None, None) => Anomaly::True(v),
@@ -70,7 +117,12 @@ impl PyKepler {
                     "Specify exactly one of nu, true_anomaly, eccentric_anomaly, or mean_anomaly",
                 )),
             };
-        Ok(Self(Kepler::new(a, eccen, incl, raan, w, an)))
+        let mut k = Kepler::try_new(a, eccen, incl, raan, argp, an).map_err(value_error)?;
+        if let Some(mu) = mu {
+            k = k.with_mu(mu);
+            k.validate().map_err(value_error)?;
+        }
+        Ok(Self(k))
     }
 
     #[getter]
@@ -80,19 +132,19 @@ impl PyKepler {
     }
 
     #[setter(a)]
-    fn set_a(&mut self, val: f64) {
-        self.0.a = val;
+    fn set_a(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.a = val)
     }
 
     #[getter]
-    /// Eccentricity
+    /// Eccentricity, unitless
     fn get_eccen(&self) -> f64 {
         self.0.eccen
     }
 
     #[setter(eccen)]
-    fn set_eccen(&mut self, val: f64) {
-        self.0.eccen = val;
+    fn set_eccen(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.eccen = val)
     }
 
     #[getter]
@@ -102,8 +154,8 @@ impl PyKepler {
     }
 
     #[setter(inclination)]
-    fn set_inclination(&mut self, val: f64) {
-        self.0.incl = val;
+    fn set_inclination(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.incl = val)
     }
 
     #[getter]
@@ -118,14 +170,30 @@ impl PyKepler {
     }
 
     #[getter]
-    /// Argument of Perigee, radians
-    fn get_w(&self) -> f64 {
-        self.0.w
+    /// Argument of Periapsis, radians
+    fn get_argp(&self) -> f64 {
+        self.0.argp
+    }
+
+    #[setter(argp)]
+    fn set_argp(&mut self, val: f64) {
+        self.0.argp = val;
+    }
+
+    #[getter]
+    /// Argument of Periapsis, radians
+    ///
+    /// Deprecated alias of ``argp``; emits ``DeprecationWarning``.
+    fn get_w(&self, py: Python) -> PyResult<f64> {
+        Self::warn_w_deprecated(py)?;
+        Ok(self.0.argp)
     }
 
     #[setter(w)]
-    fn set_w(&mut self, val: f64) {
-        self.0.w = val;
+    fn set_w(&mut self, py: Python, val: f64) -> PyResult<()> {
+        Self::warn_w_deprecated(py)?;
+        self.0.argp = val;
+        Ok(())
     }
 
     #[getter]
@@ -137,6 +205,17 @@ impl PyKepler {
     #[setter(nu)]
     fn set_nu(&mut self, val: f64) {
         self.0.nu = val;
+    }
+
+    #[getter]
+    /// Gravitational parameter of the central body, m^3/s^2
+    fn get_mu(&self) -> f64 {
+        self.0.mu
+    }
+
+    #[setter(mu)]
+    fn set_mu(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.mu = val)
     }
 
     /// Convert Keplerian elements to Cartesian
@@ -152,11 +231,31 @@ impl PyKepler {
     }
 
     /// Convert Cartesian elements to kepler
+    ///
+    /// Args:
+    ///     pos: 3-element position vector, meters
+    ///     vel: 3-element velocity vector, meters/second
+    ///
+    /// Keyword Args:
+    ///     mu: Gravitational parameter of the central body, m^3/s^2
+    ///         (default: Earth); the returned elements carry it
+    ///
+    /// Raises:
+    ///     RuntimeError: open (eccen >= 1) or rectilinear state, or inputs
+    ///         that are not 3-element vectors
+    ///     ValueError: ``mu`` not positive and finite
     #[staticmethod]
-    fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (pos, vel, *, mu=None))]
+    fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>, mu: Option<f64>) -> PyResult<Self> {
         let pos = py_to_smatrix(pos)?;
         let vel = py_to_smatrix(vel)?;
-        match Kepler::from_pv(pos, vel) {
+        let mu = mu.unwrap_or(satkit::consts::MU_EARTH);
+        if !(mu.is_finite() && mu > 0.0) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "invalid Keplerian element mu = {mu}: gravitational parameter must be positive"
+            )));
+        }
+        match Kepler::from_pv_with_mu(pos, vel, mu) {
             Ok(k) => Ok(Self(k)),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
         }
@@ -226,6 +325,52 @@ impl PyKepler {
         self.0.semiparameter()
     }
 
+    /// Radius of periapsis a (1 - e), meters
+    #[getter]
+    fn periapsis(&self) -> f64 {
+        self.0.periapsis()
+    }
+
+    /// Radius of apoapsis a (1 + e), meters
+    #[getter]
+    fn apoapsis(&self) -> f64 {
+        self.0.apoapsis()
+    }
+
+    /// Specific orbital energy -mu / 2a, J/kg
+    #[getter]
+    fn specific_energy(&self) -> f64 {
+        self.0.specific_energy()
+    }
+
+    /// Magnitude of the specific angular momentum sqrt(mu p), m^2/s
+    #[getter]
+    fn angular_momentum(&self) -> f64 {
+        self.0.angular_momentum()
+    }
+
+    /// Flight-path angle atan2(e sin nu, 1 + e cos nu), radians: the angle of
+    /// the velocity above the local horizontal, zero at periapsis and
+    /// apoapsis, positive while climbing
+    #[getter]
+    fn flight_path_angle(&self) -> f64 {
+        self.0.flight_path_angle()
+    }
+
+    /// Argument of latitude u = argp + nu, radians in [0, 2 pi); well defined
+    /// for circular orbits
+    #[getter]
+    fn argument_of_latitude(&self) -> f64 {
+        self.0.argument_of_latitude()
+    }
+
+    /// True longitude raan + argp + nu, radians in [0, 2 pi); well defined
+    /// for circular equatorial orbits
+    #[getter]
+    fn true_longitude(&self) -> f64 {
+        self.0.true_longitude()
+    }
+
     /// Return the mean anomaly of the satellite in radians
     ///
     /// Returns:
@@ -238,7 +383,7 @@ impl PyKepler {
     #[setter(mean_anomaly)]
     fn set_mean_anomaly(&mut self, val: f64) {
         // Kepler's equation is solved by the core crate (range-reduced,
-        // Danby start, iteration-capped), so NaN or e >= 1 cannot hang here.
+        // Danby start, iteration-capped), so NaN cannot hang here.
         self.0 = self.with_anomaly(Anomaly::Mean(val));
     }
 
@@ -256,18 +401,15 @@ impl PyKepler {
     }
 
     fn __repr__(&self) -> String {
-        self.__str__()
+        let k = &self.0;
+        format!(
+            "kepler(a={:.6e}, eccen={:.6e}, incl={:.6e}, raan={:.6e}, argp={:.6e}, nu={:.6e}, mu={:.6e})",
+            k.a, k.eccen, k.incl, k.raan, k.argp, k.nu, k.mu
+        )
     }
 
     fn __eq__(&self, other: &Self) -> bool {
-        let a = &self.0;
-        let b = &other.0;
-        a.a == b.a
-            && a.eccen == b.eccen
-            && a.incl == b.incl
-            && a.raan == b.raan
-            && a.w == b.w
-            && a.nu == b.nu
+        self.0 == other.0
     }
 
     fn __ne__(&self, other: &Self) -> bool {
@@ -282,20 +424,24 @@ impl PyKepler {
                 self.0.eccen,
                 self.0.incl,
                 self.0.raan,
-                self.0.w,
+                self.0.argp,
                 self.0.nu,
+                self.0.mu,
             ],
         )
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        let [a, eccen, incl, raan, w, nu] = crate::pyutils::unpack_f64s(py, &state)?;
-        self.0.a = a;
-        self.0.eccen = eccen;
-        self.0.incl = incl;
-        self.0.raan = raan;
-        self.0.w = w;
-        self.0.nu = nu;
+        let [a, eccen, incl, raan, argp, nu, mu] = crate::pyutils::unpack_f64s(py, &state)?;
+        self.0 = Kepler {
+            a,
+            eccen,
+            incl,
+            raan,
+            argp,
+            nu,
+            mu,
+        };
         Ok(())
     }
 
