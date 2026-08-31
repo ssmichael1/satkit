@@ -2321,8 +2321,14 @@ class kepler:
         - The class uses the semi-major axis (a), not the semiparameter
         - Elements are osculating and expressed in the frame of the input state
           (normally GCRF); the class does no frame handling
-        - The Earth gravitational parameter (MU_EARTH) is used throughout
-        - Only closed orbits are supported (0 <= eccen < 1)
+        - Each element set carries the gravitational parameter of its central
+          body, ``mu`` (m^3/s^2); Earth's (``satkit.consts.mu_earth``) unless
+          given, so lunar or heliocentric elements are supported by passing
+          ``mu=satkit.consts.mu_moon`` / ``mu_sun``
+        - Only closed orbits are supported (0 <= eccen < 1); the constructor,
+          ``from_pv`` and every element setter — the anomaly setters
+          included — raise ``ValueError`` for an element outside its domain
+          or a non-finite value, so an element set can never hold NaN
         - All angle units are radians
         - All length units are meters
         - All velocity units are meters / second
@@ -2336,25 +2342,38 @@ class kepler:
         eccen: float,
         incl: float,
         raan: float,
-        w: float,
+        argp: float | None = None,
         nu: float | None = None,
         *,
+        w: float | None = None,
         true_anomaly: float | None = None,
         eccentric_anomaly: float | None = None,
         mean_anomaly: float | None = None,
+        mu: float | None = None,
     ) -> None:
         """Create Keplerian element set object from input elements
 
         Args:
-            a: Semi-major axis, meters
+            a: Semi-major axis, meters (> 0)
             eccen: Eccentricity, unitless (0 <= eccen < 1)
-            incl: Inclination, radians
+            incl: Inclination, radians (0 <= incl <= pi)
             raan: Right ascension of ascending node, radians
-            w: Argument of perigee, radians
+            argp: Argument of periapsis, radians (5th positional argument)
             nu: True anomaly, radians (6th positional argument)
+            w: Argument of periapsis, radians — deprecated keyword alias of
+                ``argp`` (kept indefinitely); give one or the other, not both
             true_anomaly: True anomaly, radians (keyword alternative to nu)
             eccentric_anomaly: Eccentric anomaly, radians (keyword alternative to nu)
             mean_anomaly: Mean anomaly, radians (keyword alternative to nu)
+            mu: Gravitational parameter of the central body, m^3/s^2
+                (default ``satkit.consts.mu_earth``)
+
+        Raises:
+            ValueError: an element outside its domain (non-finite value,
+                ``a <= 0``, ``eccen`` outside [0, 1), ``incl`` outside
+                [0, pi], ``mu <= 0``); more or fewer than one anomaly given;
+                both ``argp`` and ``w`` given
+            TypeError: no argument of periapsis given
 
         Notes:
             Exactly one of ``nu``, ``true_anomaly``, ``eccentric_anomaly`` or
@@ -2372,12 +2391,17 @@ class kepler:
                 eccen=0.001,  # near-circular
                 incl=math.radians(51.6),
                 raan=math.radians(0),
-                w=math.radians(0),
+                argp=math.radians(0),
                 nu=math.radians(0),
             )
 
             # Same orbit, positional, located by mean anomaly instead
             k2 = satkit.kepler(6.781e6, 0.001, math.radians(51.6), 0, 0, mean_anomaly=1.0)
+
+            # A 100 km circular lunar orbit
+            k_moon = satkit.kepler(1837.4e3, 0.0, math.radians(90), 0, 0, 0,
+                                   mu=satkit.consts.mu_moon)
+            print(f"lunar period: {k_moon.period / 60:.1f} min")
             ```
         """
         ...
@@ -2438,7 +2462,11 @@ class kepler:
 
     @eccentric_anomaly.setter
     def eccentric_anomaly(self, value: float) -> None:
-        """Set the in-plane position by eccentric anomaly, radians"""
+        """Set the in-plane position by eccentric anomaly, radians
+
+        Converted to true anomaly (``nu``) on the spot. A non-finite value
+        raises ``ValueError`` and leaves the element set unchanged.
+        """
         ...
     @property
     def mean_anomaly(self) -> float:
@@ -2450,7 +2478,8 @@ class kepler:
         """Set the in-plane position by mean anomaly, radians
 
         Kepler's equation is solved for the eccentric anomaly and the result
-        stored as true anomaly (``nu``). A non-finite value yields NaN.
+        stored as true anomaly (``nu``). A non-finite value raises
+        ``ValueError`` and leaves the element set unchanged.
         """
         ...
     @property
@@ -2464,54 +2493,134 @@ class kepler:
         ...
 
     @property
+    def periapsis(self) -> float:
+        """Radius of periapsis a (1 - e), meters"""
+        ...
+
+    @property
+    def apoapsis(self) -> float:
+        """Radius of apoapsis a (1 + e), meters"""
+        ...
+
+    @property
+    def specific_energy(self) -> float:
+        """Specific orbital energy -mu / (2 a), J/kg (m^2/s^2)"""
+        ...
+
+    @property
+    def angular_momentum(self) -> float:
+        """Magnitude of the specific angular momentum sqrt(mu p), m^2/s"""
+        ...
+
+    @property
+    def flight_path_angle(self) -> float:
+        """Flight-path angle, radians
+
+        atan2(e sin nu, 1 + e cos nu): the angle of the velocity above the
+        local horizontal — zero at periapsis and apoapsis, positive while
+        climbing.
+        """
+        ...
+
+    @property
+    def argument_of_latitude(self) -> float:
+        """Argument of latitude u = argp + nu, radians in [0, 2 pi)
+
+        Well defined for circular orbits, where ``argp`` and ``nu`` separately
+        are not.
+        """
+        ...
+
+    @property
+    def true_longitude(self) -> float:
+        """True longitude raan + argp + nu, radians in [0, 2 pi)
+
+        Well defined for circular equatorial orbits, where ``raan``, ``argp``
+        and ``nu`` separately are not.
+        """
+        ...
+
+    @property
+    def mu(self) -> float:
+        """Gravitational parameter of the central body, m^3/s^2
+
+        Setting it re-targets the dynamics (period, mean motion,
+        ``propagate``, ``to_pv``) at another body while keeping the six
+        geometric elements. Must be positive and finite (``ValueError``).
+        """
+        ...
+
+    @mu.setter
+    def mu(self, value: float) -> None: ...
+    @property
     def a(self) -> float:
-        """Semi-major axis, meters"""
+        """Semi-major axis, meters (> 0; ``ValueError`` otherwise)"""
         ...
 
     @a.setter
     def a(self, value: float) -> None: ...
     @property
     def eccen(self) -> float:
-        """Eccentricity, unitless"""
+        """Eccentricity, unitless (0 <= eccen < 1; ``ValueError`` otherwise)"""
         ...
 
     @eccen.setter
     def eccen(self, value: float) -> None: ...
     @property
     def inclination(self) -> float:
-        """Inclination, radians"""
+        """Inclination, radians (0 <= incl <= pi; ``ValueError`` otherwise)"""
         ...
 
     @inclination.setter
     def inclination(self, value: float) -> None: ...
     @property
     def raan(self) -> float:
-        """Right ascension of ascending node, radians"""
+        """Right ascension of ascending node, radians (finite; ``ValueError`` otherwise)"""
         ...
 
     @raan.setter
     def raan(self, value: float) -> None: ...
     @property
     def nu(self) -> float:
-        """True anomaly, radians"""
+        """True anomaly, radians (finite; ``ValueError`` otherwise)"""
         ...
 
     @nu.setter
     def nu(self, value: float) -> None: ...
     @property
+    def argp(self) -> float:
+        """Argument of periapsis, radians (finite; ``ValueError`` otherwise)"""
+        ...
+
+    @argp.setter
+    def argp(self, value: float) -> None: ...
+    @property
     def w(self) -> float:
-        """Argument of perigee, radians"""
+        """Argument of periapsis, radians — deprecated alias of ``argp``
+
+        Kept indefinitely for compatibility; reading or assigning it emits
+        ``DeprecationWarning``. Validated like ``argp``.
+        """
         ...
 
     @w.setter
     def w(self, value: float) -> None: ...
     @staticmethod
-    def from_pv(pos: npt.NDArray[np.float64], vel: npt.NDArray[np.float64]) -> kepler:
+    def from_pv(
+        pos: npt.NDArray[np.float64],
+        vel: npt.NDArray[np.float64],
+        *,
+        mu: float | None = None,
+    ) -> kepler:
         """Create Keplerian element set from input position and velocity vectors
 
         Args:
-            pos: 3-element array representing position vector
-            vel: 3-element array representing velocity vector
+            pos: 3-element position vector, meters
+            vel: 3-element velocity vector, meters/second
+            mu: Gravitational parameter of the central body, m^3/s^2
+                (default ``satkit.consts.mu_earth``); the returned element
+                set carries it, so its period and ``to_pv`` refer to the same
+                body
 
         Returns:
             Keplerian element set object
@@ -2527,9 +2636,10 @@ class kepler:
             ```
 
         Raises:
-            RuntimeError: if the state is hyperbolic/parabolic (eccen >= 1) or
-                rectilinear (zero angular momentum), or if the inputs are not
-                3-element vectors.
+            ValueError: if the state is hyperbolic/parabolic (eccen >= 1) or
+                rectilinear (zero angular momentum), or if ``mu`` is not
+                positive and finite.
+            RuntimeError: if the inputs are not 3-element vectors.
         """
         ...
 
@@ -2907,6 +3017,30 @@ class satstate:
             pos = np.array([6.781e6, 0, 0])       # meters, GCRF
             vel = np.array([0, 7.5e3, 0])          # m/s, GCRF
             state = satkit.satstate(t, pos, vel)
+            ```
+        """
+        ...
+
+    @staticmethod
+    def from_kepler(time: _Time, kepler: kepler) -> satstate:
+        """Create a state from Keplerian elements
+
+        The two-body position (meters) and velocity (m/s) of the elements
+        (``kepler.to_pv()``) are taken as GCRF at ``time``; no covariance, no
+        maneuvers. The elements are treated as osculating GCRF elements, so
+        ``kepler.mu`` should be Earth's.
+
+        Args:
+            time (satkit.time): Epoch of the state
+            kepler (satkit.kepler): Osculating Keplerian elements
+
+        Returns:
+            satstate: state at ``time``
+
+        Example:
+            ```python
+            k = satkit.kepler(7000e3, 0.001, math.radians(98), 0, 0, 0)
+            state = satkit.satstate.from_kepler(satkit.time(2024, 1, 1), k)
             ```
         """
         ...
