@@ -2326,10 +2326,9 @@ class kepler:
           given, so lunar or heliocentric elements are supported by passing
           ``mu=satkit.consts.mu_moon`` / ``mu_sun``
         - Only closed orbits are supported (0 <= eccen < 1); the constructor,
-          ``from_pv`` and every element setter raise ``ValueError`` for an
-          element outside its domain (the angle setters require a finite
-          value; ``mean_anomaly`` / ``eccentric_anomaly`` accept any value
-          and yield NaN for a non-finite one)
+          ``from_pv`` and every element setter — the anomaly setters
+          included — raise ``ValueError`` for an element outside its domain
+          or a non-finite value, so an element set can never hold NaN
         - All angle units are radians
         - All length units are meters
         - All velocity units are meters / second
@@ -2463,7 +2462,11 @@ class kepler:
 
     @eccentric_anomaly.setter
     def eccentric_anomaly(self, value: float) -> None:
-        """Set the in-plane position by eccentric anomaly, radians"""
+        """Set the in-plane position by eccentric anomaly, radians
+
+        Converted to true anomaly (``nu``) on the spot. A non-finite value
+        raises ``ValueError`` and leaves the element set unchanged.
+        """
         ...
     @property
     def mean_anomaly(self) -> float:
@@ -2475,7 +2478,8 @@ class kepler:
         """Set the in-plane position by mean anomaly, radians
 
         Kepler's equation is solved for the eccentric anomaly and the result
-        stored as true anomaly (``nu``). A non-finite value yields NaN.
+        stored as true anomaly (``nu``). A non-finite value raises
+        ``ValueError`` and leaves the element set unchanged.
         """
         ...
     @property

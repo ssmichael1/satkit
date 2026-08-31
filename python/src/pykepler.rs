@@ -67,6 +67,18 @@ impl PyKepler {
         Ok(())
     }
 
+    /// `ValueError` for a non-finite anomaly, matching the message format of
+    /// the core validation errors.
+    fn check_anomaly(name: &str, val: f64) -> PyResult<()> {
+        if val.is_finite() {
+            Ok(())
+        } else {
+            Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "invalid Keplerian element {name} = {val}: must be finite"
+            )))
+        }
+    }
+
     fn warn_w_deprecated(py: Python) -> PyResult<()> {
         let warning_type = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
         PyErr::warn(
@@ -294,8 +306,10 @@ impl PyKepler {
     }
 
     #[setter(eccentric_anomaly)]
-    fn set_eccentric_anomaly(&mut self, val: f64) {
+    fn set_eccentric_anomaly(&mut self, val: f64) -> PyResult<()> {
+        Self::check_anomaly("eccentric_anomaly", val)?;
         self.0 = self.with_anomaly(Anomaly::Eccentric(val));
+        Ok(())
     }
 
     /// Return the mean motion of the satellite in radians/second
@@ -381,10 +395,13 @@ impl PyKepler {
     }
 
     #[setter(mean_anomaly)]
-    fn set_mean_anomaly(&mut self, val: f64) {
-        // Kepler's equation is solved by the core crate (range-reduced,
-        // Danby start, iteration-capped), so NaN cannot hang here.
+    fn set_mean_anomaly(&mut self, val: f64) -> PyResult<()> {
+        // A non-finite M is refused up front so the element set can never
+        // hold a NaN anomaly; the core solver itself is iteration-capped and
+        // cannot hang on any input regardless.
+        Self::check_anomaly("mean_anomaly", val)?;
         self.0 = self.with_anomaly(Anomaly::Mean(val));
+        Ok(())
     }
 
     /// Return the true anomaly of the satellite in radians

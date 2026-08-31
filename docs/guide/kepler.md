@@ -39,9 +39,9 @@ The Python constructor, `from_pv`, and every element setter reject an
 element outside its domain with `ValueError`: a non-finite value,
 $a \le 0$, $e \notin [0, 1)$, $i \notin [0, \pi]$ or $\mu \le 0$. The bounds
 are strict — $e = 1$ is not a closed orbit and is refused rather than
-producing NaN anomalies. (The `mean_anomaly` / `eccentric_anomaly` setters
-are the exception: they accept any value and yield NaN for a non-finite one,
-since they go through the capped Kepler's-equation solver.) In Rust, `Kepler::try_new`
+producing NaN anomalies. The `mean_anomaly` / `eccentric_anomaly` setters
+likewise refuse a non-finite value, so an element set can never hold NaN
+through any setter. In Rust, `Kepler::try_new`
 performs the same checks (returning `kepler::Error::InvalidElement`, which
 names the offending element) and `Kepler::validate` re-checks an element set
 whose public fields were assigned directly; `Kepler::new` remains unchecked.

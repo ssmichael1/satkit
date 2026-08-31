@@ -68,42 +68,39 @@ class TestKepler:
         with pytest.raises(TypeError):
             sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7, bogus=1.0)
 
-    def test_mean_anomaly_setter_nan_does_not_hang(self):
-        """Regression: the setter used to spin forever on NaN with the GIL held."""
+    def test_anomaly_setters_reject_non_finite_and_high_e_converges(self):
+        """Regression for the setter that used to spin forever on NaN.
+
+        Non-finite input is now refused before reaching the solver (the
+        solver itself is iteration-capped; see the Rust test
+        ``test_mean2eccentric_nan_returns``), so no setter can leave a NaN
+        element behind. A high-eccentricity solve still runs, capped, in a
+        watchdog thread.
+        """
         import threading
+
+        k = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
+        k0 = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
+        for attr in ("mean_anomaly", "eccentric_anomaly"):
+            for bad in (float("nan"), float("inf"), float("-inf")):
+                with pytest.raises(ValueError, match=attr):
+                    setattr(k, attr, bad)
+        assert k == k0
+        with pytest.raises(ValueError):
+            k.eccen = 1.5
+        assert k == k0
 
         results = {}
 
         def worker():
-            k = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
-            k.mean_anomaly = float("nan")
-            results["nan"] = k.nu
-            k.mean_anomaly = float("inf")
-            results["inf"] = k.nu
-            # The eccentric-anomaly setter goes through the same solver path
-            k.eccentric_anomaly = float("nan")
-            results["ea_nan"] = k.nu
-            # e >= 1 cannot reach the solver any more: the eccen setter
-            # rejects it. (Every element setter validates the whole set, so
-            # with nu already NaN from above even a valid eccen is refused —
-            # hence a fresh set for the capped high-e solve.)
-            k2 = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
-            try:
-                k2.eccen = 1.5
-            except ValueError:
-                results["hyper"] = "rejected"
-            k2.eccen = 0.999
-            k2.mean_anomaly = 6.0
-            results["high_e"] = k2.nu
+            k.eccen = 0.999
+            k.mean_anomaly = 6.0
+            results["high_e"] = k.nu
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
         t.join(timeout=10.0)
         assert not t.is_alive(), "mean_anomaly setter hung"
-        assert m.isnan(results["nan"])
-        assert m.isnan(results["inf"])
-        assert m.isnan(results["ea_nan"])
-        assert results["hyper"] == "rejected"
         assert m.isfinite(results["high_e"])
 
     def test_mean_anomaly_setter_roundtrip(self):
