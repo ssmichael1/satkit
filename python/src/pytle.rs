@@ -209,7 +209,7 @@ impl PyTLE {
         self.0.rev_num = value;
     }
 
-    /// Orbit eccentricity
+    /// Orbit eccentricity, unitless, in range [0,1]
     #[getter(eccen)]
     const fn get_eccen(&self) -> f64 {
         self.0.eccen
@@ -315,7 +315,7 @@ impl PyTLE {
         self.0.name = value;
     }
 
-    // Drag
+    /// Drag term (B*) of the satellite, in units of 1 / Earth radii
     #[getter(bstar)]
     const fn bstar(&self) -> f64 {
         self.0.bstar
@@ -346,12 +346,22 @@ impl PyTLE {
         Ok(self.0.to_2line()?)
     }
 
-    // Output as 2 canonical TLE lines preceded by a name line (3-line element set)
+    /// Output as 2 canonical TLE lines preceded by a name line (3-line element set)
     fn to_3line(&self) -> Result<[String; 3]> {
         Ok(self.0.to_3line()?)
     }
 
-    // Fit a TLE from GCRF states and times
+    /// Perform non-linear least squares fit of TLE parameters to a list of GCRF states
+    ///
+    /// Args:
+    ///     states (list[numpy.ndarray]): List of GCRF states to fit to. Each state is a
+    ///         6-element vector: the first 3 values are position in meters, the last 3
+    ///         values are velocity in meters / second
+    ///     times (list[satkit.time]): Times corresponding to the states
+    ///     epoch (satkit.time): Epoch time for the TLE. Must be within range of times
+    ///
+    /// Returns:
+    ///     tuple[TLE, dict]: Fitted TLE and fitting results in a dictionary
     #[staticmethod]
     fn fit_from_states(
         py: Python,

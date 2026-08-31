@@ -273,7 +273,7 @@ fn pack_sgp4_result(states: &psgp4::SGP4State, output_err: bool) -> Result<Py<Py
     })
 }
 
-/// """SGP-4 propagator for TLE
+/// SGP-4 propagator for TLE
 ///
 /// Note:
 ///     Run Simplified General Perturbations (SGP)-4 propagator on Two-Line Element Set to
@@ -285,8 +285,8 @@ fn pack_sgp4_result(states: &psgp4::SGP4State, output_err: bool) -> Result<Py<Py
 ///     https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
 ///
 /// Args:
-///     tle (TLE | list[TLE]): TLE (or list of TLES) on which to operate
-///     tm (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
+///     tle (TLE | list[TLE] | dict): TLE or OMM dictionary (or list of TLEs) on which to operate
+///     time (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
 ///
 /// Keyword Args:
 ///     gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
@@ -294,7 +294,19 @@ fn pack_sgp4_result(states: &psgp4::SGP4State, output_err: bool) -> Result<Py<Py
 ///     errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
 ///
 /// Returns:
-///     tuple[npt.ArrayLike[np.float64], npt.ArrayLike[np.float64]]: position and velocity in meters and meters/second, respectively, in the TEME frame at each of the "Ntime" input times and each of the "Ntle" tles
+///     tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: position and velocity in
+///     **meters** and **meters/second**, respectively, in the TEME frame at each of the
+///     "Ntime" input times and each of the "Ntle" tles. Shape is (3,) for a single TLE and
+///     single time, (Ntime, 3) for a single TLE and multiple times, (Ntle, 3) for a list of
+///     TLEs and a single time, and (Ntle, Ntime, 3) for a list of TLEs and multiple times.
+///     If errflag is True, a third element is returned: an array of sgp4_error codes for
+///     each TLE and time.
+///
+/// Note:
+///     Units: the canonical Vallado SGP4 implementation (and most other SGP4 libraries)
+///     return position in kilometers and velocity in kilometers/second. satkit converts
+///     these to meters and meters/second so that SGP4 output is consistent with every
+///     other position and velocity in the library.
 ///
 ///
 /// Example:

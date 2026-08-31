@@ -422,7 +422,7 @@ impl PyInstant {
     /// Return time object representing input modified Julian date and time scale
     ///
     /// Args:
-    ///   mjd (float): The Modified Julian Date
+    ///   mjd (float): The Modified Julian Date, days
     ///   scale (satkit.timescale, optional): The time scale. Default is satkit.timescale.UTC
     ///
     /// Returns:
@@ -437,7 +437,7 @@ impl PyInstant {
     /// since Jan 1, 1970 00:00:00 (not counting leap seconds)
     ///
     /// Args:
-    ///    unixtime (float): the unixtime
+    ///    unixtime (float): the unixtime, UTC seconds since 1970-01-01 00:00:00 (excluding leap seconds)
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of input unixtime
@@ -449,7 +449,7 @@ impl PyInstant {
     /// Return time object representing input Julian date and time scale
     ///
     /// Args:
-    ///    jd (float): The Julian Date
+    ///    jd (float): The Julian Date, days
     ///   scale (satkit.timescale, optional): The time scale. Default is satkit.timescale.UTC
     ///
     /// Returns:
@@ -576,7 +576,7 @@ impl PyInstant {
     ///     scale (satkit.timescale, optional): Time scale to use for conversion, default is satkit.timescale.UTC
     ///
     /// Returns:
-    ///     float: Modified Julian Date
+    ///     float: Modified Julian Date, days
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn as_mjd(&self, scale: &PyTimeScale) -> f64 {
         self.0.as_mjd_with_scale(scale.into())
@@ -588,7 +588,7 @@ impl PyInstant {
     ///     scale (satkit.timescale, optional: Time scale to use for conversion, default is satkit.timescale.UTC
     ///
     /// Returns:
-    ///     float: Julian Date
+    ///     float: Julian Date, days
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn as_jd(&self, scale: &PyTimeScale) -> f64 {
         self.0.as_jd_with_scale(scale.into())
@@ -603,6 +603,14 @@ impl PyInstant {
         self.0.as_unixtime()
     }
 
+    /// Return time object representing input GPS week and seconds of week
+    ///
+    /// Args:
+    ///     week (int): GPS week number
+    ///     seconds (float): GPS seconds of week, seconds
+    ///
+    /// Returns:
+    ///     satkit.time: Time object representing input GPS week and second
     #[staticmethod]
     fn from_gps_week_and_second(week: i32, seconds: f64) -> Self {
         Self(Instant::from_gps_week_and_second(week, seconds))
@@ -692,7 +700,8 @@ impl PyInstant {
     /// Subtract duration or take difference in times
     ///
     /// Args:
-    ///     other (duration|list|numpy.ndarray|float|satkit.time): Duration or list of durations to subtract, or time object to take difference
+    ///     other (duration|list|numpy.ndarray|float|satkit.time): Duration or list of durations to subtract, or time object to take difference.
+    ///         If type is float, units are days
     ///
     /// Returns:
     ///     satkit.time|numpy.ndarray|satkit.duration: New time object or numpy array of time objects representing input time minus input duration(s), or duration object representing difference between two time objects

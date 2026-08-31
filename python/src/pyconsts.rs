@@ -13,7 +13,7 @@ impl Consts {
     const wgs84_a: f64 = cconsts::WGS84_A;
 
     #[classattr]
-    ///  WGS-84 flattening
+    ///  WGS-84 flattening, unitless
     const wgs84_f: f64 = cconsts::WGS84_F;
 
     #[classattr]
@@ -56,7 +56,7 @@ impl Consts {
     #[classattr]
     const moon_radius: f64 = cconsts::MOON_RADIUS;
 
-    /// Earth-moon mass ratio
+    /// Earth-moon mass ratio (Earth mass over Moon mass), unitless
     #[classattr]
     const earth_moon_mass_ratio: f64 = cconsts::EARTH_MOON_MASS_RATIO;
 
@@ -68,11 +68,11 @@ impl Consts {
     #[classattr]
     const jgm3_mu: f64 = cconsts::JGM3_MU;
 
-    /// Earth semiparameter per JGM3 gravity model, m^3/s^2
+    /// Earth semiparameter per JGM3 gravity model, meters
     #[classattr]
     const jgm3_a: f64 = cconsts::JGM3_A;
 
-    /// Earth J2 per JGM3 gravity model
+    /// Earth J2 (oblateness) per JGM3 gravity model, unitless
     #[classattr]
     const jgm3_j2: f64 = cconsts::JGM3_J2;
 }

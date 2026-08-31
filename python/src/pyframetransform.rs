@@ -26,9 +26,16 @@ pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::gmst, tm)
 }
 
+/// Equation of the Equinoxes
 ///
-/// Equation of Equinoxes
+/// The difference between apparent and mean sidereal time (GAST - GMST),
+/// arising from nutation of the Earth's axis.
 ///
+/// Args:
+///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate output
+///
+/// Returns:
+///     float|numpy.array: Equation of the equinoxes at input time[s] in radians
 #[pyfunction]
 pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::eqeq, tm)
@@ -375,7 +382,8 @@ pub fn qtod2mod_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///
 /// Returns:
 ///     (numpy.ndarray, numpy.ndarray): Tuple ``(pos_gcrf, vel_gcrf)`` of
-///     the state expressed in GCRF.
+///     the state expressed in GCRF: position in meters, velocity in m/s
+///     (shape (3,) each, or (N, 3) for batched input).
 #[pyfunction]
 pub fn itrf_to_gcrf_state(
     pos_itrf: &Bound<'_, PyAny>,
@@ -401,8 +409,9 @@ pub fn itrf_to_gcrf_state(
 ///     time (satkit.time): Epoch of the state
 ///
 /// Returns:
-///     (numpy.ndarray, numpy.ndarray): Tuple ``(pos_itrf, vel_itrf)``.
-///     ``vel_itrf`` is the velocity as observed in ITRF.
+///     (numpy.ndarray, numpy.ndarray): Tuple ``(pos_itrf, vel_itrf)``:
+///     position in meters, velocity as observed in ITRF in m/s
+///     (shape (3,) each, or (N, 3) for batched input).
 #[pyfunction]
 pub fn gcrf_to_itrf_state(
     pos_gcrf: &Bound<'_, PyAny>,
@@ -420,6 +429,15 @@ pub fn gcrf_to_itrf_state(
 /// polar motion, so the Earth-rotation sweep ``omega_earth x r`` is
 /// evaluated in ITRF directly. Accepts scalar or batched inputs like
 /// :func:`itrf_to_gcrf_state`.
+///
+/// Args:
+///     pos_itrf (array-like): (3,) or (N, 3) position vector in ITRF, meters
+///     vel_itrf (array-like): (3,) or (N, 3) velocity vector as observed in ITRF, m/s
+///     time (satkit.time): Epoch of the state (length-N array/list for batched input)
+///
+/// Returns:
+///     (numpy.ndarray, numpy.ndarray): Tuple ``(pos_gcrf, vel_gcrf)``:
+///     position in meters, velocity in m/s
 #[pyfunction]
 pub fn itrf_to_gcrf_state_approx(
     pos_itrf: &Bound<'_, PyAny>,
@@ -434,6 +452,15 @@ pub fn itrf_to_gcrf_state_approx(
 /// Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to ~1 arcsec on
 /// position. Accepts scalar or batched inputs like
 /// :func:`gcrf_to_itrf_state`.
+///
+/// Args:
+///     pos_gcrf (array-like): (3,) or (N, 3) position vector in GCRF, meters
+///     vel_gcrf (array-like): (3,) or (N, 3) velocity vector in GCRF, m/s
+///     time (satkit.time): Epoch of the state (length-N array/list for batched input)
+///
+/// Returns:
+///     (numpy.ndarray, numpy.ndarray): Tuple ``(pos_itrf, vel_itrf)``:
+///     position in meters, velocity as observed in ITRF in m/s
 #[pyfunction]
 pub fn gcrf_to_itrf_state_approx(
     pos_gcrf: &Bound<'_, PyAny>,
@@ -633,7 +660,8 @@ fn rotation_dispatch_batch(
 ///     vel (numpy.ndarray): 3-element velocity vector [m/s]
 ///
 /// Returns:
-///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``.
+///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``:
+///     position in meters, velocity in m/s.
 #[pyfunction]
 pub fn transform_state(
     from_frame: crate::pyframes::PyFrame,
@@ -657,6 +685,17 @@ pub fn transform_state(
 
 /// State transform using the IAU-76/FK5 approximate reduction. Same
 /// supported-pair set as :func:`transform_state`.
+///
+/// Args:
+///     from_frame (satkit.frame): Source frame
+///     to_frame (satkit.frame): Destination frame
+///     tm (satkit.time|datetime.datetime): Epoch
+///     pos (numpy.ndarray): 3-element position vector, meters
+///     vel (numpy.ndarray): 3-element velocity vector, m/s
+///
+/// Returns:
+///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``:
+///     position in meters, velocity in m/s.
 #[pyfunction]
 pub fn transform_state_approx(
     from_frame: crate::pyframes::PyFrame,

@@ -12,6 +12,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - `update_datafiles()` no longer downloads files that are compiled into the library: the IERS tables and gravity models are `default: false` in the manifest (still pinned and fetchable by name), and the unused `leap-seconds.list` (nothing ever read it — the runtime leap-second table is a compiled-in constant) is removed from the manifest entirely. The only static download left is the JPL ephemeris, alongside the daily EOP / space-weather / solar-cycle refreshes ([#163](https://github.com/ssmichael1/satkit/pull/163))
 
+### Docs
+
+- Every Python docstring (`.pyi` stubs and runtime `__doc__`) states units of measure for dimensioned arguments, returns and attributes (SI: meters, m/s, m/s², radians unless the name ends in `_deg`); `sgp4` outputs explicitly noted as meters / m/s in the TEME frame, not the km / km/s of other SGP4 libraries ([#169](https://github.com/ssmichael1/satkit/pull/169))
+
 ## 0.21.2 - 2026-08-30
 
 ### Changed

@@ -700,7 +700,8 @@ def itrf_to_gcrf_state(
 
     Returns:
         A 2-tuple ``(pos_gcrf, vel_gcrf)`` of numpy arrays with the
-        state expressed in GCRF.
+        state expressed in GCRF: position in meters, velocity in m/s
+        (shape ``(3,)`` each, or ``(N, 3)`` for batched input).
 
     Example:
         ```python
@@ -744,7 +745,8 @@ def gcrf_to_itrf_state(
 
     Returns:
         A 2-tuple ``(pos_itrf, vel_itrf)`` where ``vel_itrf`` is the
-        velocity as observed in ITRF.
+        velocity as observed in ITRF: position in meters, velocity in m/s
+        (shape ``(3,)`` each, or ``(N, 3)`` for batched input).
     """
     ...
 
@@ -760,6 +762,14 @@ def itrf_to_gcrf_state_approx(
     2010 precision is not required. Neglects polar motion, so the
     Earth-rotation sweep ``omega_earth x r`` is evaluated in ITRF directly.
     Accepts scalar or batched inputs like :func:`itrf_to_gcrf_state`.
+
+    Args:
+        pos_itrf: ``(3,)`` or ``(N, 3)`` position vector in ITRF, meters
+        vel_itrf: ``(3,)`` or ``(N, 3)`` velocity vector as observed in ITRF, m/s
+        time: Epoch of the state (length-``N`` array/list for batched input)
+
+    Returns:
+        A 2-tuple ``(pos_gcrf, vel_gcrf)``: position in meters, velocity in m/s
     """
     ...
 
@@ -771,6 +781,15 @@ def gcrf_to_itrf_state_approx(
     """Approximate GCRF → ITRF state transform using the IAU-76/FK5
     reduction. Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to
     ~1 arcsec on position. Accepts scalar or batched inputs.
+
+    Args:
+        pos_gcrf: ``(3,)`` or ``(N, 3)`` position vector in GCRF, meters
+        vel_gcrf: ``(3,)`` or ``(N, 3)`` velocity vector in GCRF, m/s
+        time: Epoch of the state (length-``N`` array/list for batched input)
+
+    Returns:
+        A 2-tuple ``(pos_itrf, vel_itrf)``: position in meters, velocity
+        as observed in ITRF in m/s
     """
     ...
 
@@ -946,7 +965,7 @@ def transform_state(
         vel: 3-element velocity vector [m/s]
 
     Returns:
-        ``(pos, vel)`` in ``to_frame``.
+        ``(pos, vel)`` in ``to_frame``: position in meters, velocity in m/s.
     """
     ...
 
@@ -959,5 +978,15 @@ def transform_state_approx(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """State transform using the IAU-76/FK5 approximate reduction. Same
     supported-pair set as :func:`transform_state`.
+
+    Args:
+        from_frame: Source frame
+        to_frame: Destination frame
+        tm: Epoch
+        pos: 3-element position vector, meters
+        vel: 3-element velocity vector, m/s
+
+    Returns:
+        ``(pos, vel)`` in ``to_frame``: position in meters, velocity in m/s.
     """
     ...
