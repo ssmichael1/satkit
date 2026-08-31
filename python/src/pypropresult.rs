@@ -75,9 +75,10 @@ impl PyPropStats {
 ///           pos: 3-element numpy array representing the final position of the satellite in GCRF meters
 ///           vel: 3-element numpy array representing the final velocity of the satellite in GCRF m/s
 ///         state: 6-element numpy array representing the final state of the satellite in GCRF,
-///                a concatenation of pos and vel
+///                a concatenation of pos (meters) and vel (m/s)
 ///           phi: 6x6 numpy array representing the state transition matrix between
-///                the begin and end times, if requested
+///                the begin and end times, if requested (maps a begin-state perturbation
+///                in meters, m/s to the end state in meters, m/s)
 ///    can_interp: boolean indicating whether the result includes a dense ODE
 ///                solution that can be used for interpolation
 ///                of states between the begin and end times
@@ -131,7 +132,7 @@ impl PyPropResult {
         })))
     }
 
-    // Get begin time
+    /// Get the begin time (time at which state_begin is valid)
     #[getter]
     fn time_begin(&self) -> PyInstant {
         PyInstant(match &self.0 {
@@ -158,6 +159,10 @@ impl PyPropResult {
         })
     }
 
+    /// Statistics of the propagation
+    ///
+    /// Returns:
+    ///     satkit.propstats: function-evaluation and step counts
     #[getter]
     fn stats(&self) -> PyPropStats {
         match &self.0 {
@@ -174,6 +179,10 @@ impl PyPropResult {
         }
     }
 
+    /// GCRF position of satellite at end of propagation
+    ///
+    /// Returns:
+    ///     numpy.ndarray: 3-element GCRF position, meters
     #[getter]
     fn pos(&self) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
@@ -188,6 +197,10 @@ impl PyPropResult {
         })
     }
 
+    /// GCRF velocity of satellite at end of propagation
+    ///
+    /// Returns:
+    ///     numpy.ndarray: 3-element GCRF velocity, meters/second
     #[getter]
     fn vel(&self) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
@@ -205,6 +218,10 @@ impl PyPropResult {
         })
     }
 
+    /// 6-element GCRF state (pos + vel) at end of propagation (same as state_end)
+    ///
+    /// Returns:
+    ///     numpy.ndarray: [x, y, z, vx, vy, vz] in meters and meters/second
     #[getter]
     fn state(&self) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
@@ -219,6 +236,10 @@ impl PyPropResult {
         })
     }
 
+    /// 6-element GCRF state (pos + vel) at end of propagation
+    ///
+    /// Returns:
+    ///     numpy.ndarray: [x, y, z, vx, vy, vz] in meters and meters/second
     #[getter]
     fn state_end(&self) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
@@ -233,6 +254,10 @@ impl PyPropResult {
         })
     }
 
+    /// 6-element GCRF state (pos + vel) at begin of propagation
+    ///
+    /// Returns:
+    ///     numpy.ndarray: [x, y, z, vx, vy, vz] in meters and meters/second
     #[getter]
     fn state_begin(&self) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
@@ -247,6 +272,12 @@ impl PyPropResult {
         })
     }
 
+    /// State transition matrix between begin and end times
+    ///
+    /// Returns:
+    ///     numpy.ndarray | None: 6x6 state transition matrix, or None if not computed.
+    ///     Maps a perturbation of the begin state (meters, m/s) to the end state
+    ///     (meters, m/s), so blocks are unitless, seconds, 1/seconds, unitless.
     #[getter]
     fn phi(&self) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
@@ -275,6 +306,7 @@ impl PyPropResult {
         }
     }
 
+    /// Whether this result supports interpolation (dense output is available)
     #[getter]
     const fn can_interp(&self) -> bool {
         match &self.0 {
@@ -307,6 +339,16 @@ impl PyPropResult {
         PyBytes::new(py, p.as_slice()).into_py_any(py)
     }
 
+    /// Interpolate the GCRF state at one or more times between the begin and end times
+    ///
+    /// Args:
+    ///     time (satkit.time | datetime.datetime | list): time(s) at which to interpolate
+    ///     output_phi (bool): also return the 6x6 state transition matrix. Default False
+    ///
+    /// Returns:
+    ///     numpy.ndarray: 6-element state [x, y, z, vx, vy, vz] in meters and m/s
+    ///     (a list of them for a list of times); with output_phi=True, (state, phi)
+    ///     tuples where phi is the 6x6 state transition matrix
     #[pyo3(signature=(time, output_phi=false))]
     fn interp(&self, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
         let is_list = time.is_instance_of::<pyo3::types::PyList>()

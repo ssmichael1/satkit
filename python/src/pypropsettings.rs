@@ -94,6 +94,25 @@ impl From<TideModel> for PyTideModel {
     }
 }
 
+/// Settings for the high-precision orbit propagator
+///
+/// Keyword Args:
+///     abs_error (float): Maximum absolute error of any element in the propagated state, in the
+///         units of the state (meters for position elements, m/s for velocity elements). Default 1e-8
+///     rel_error (float): Maximum relative error of any element in the propagated state, unitless. Default 1e-8
+///     gravity_degree (int): Maximum degree of spherical harmonic gravity model (at most 40). Default 4
+///     gravity_order (int): Maximum order of spherical harmonic gravity model. Default same as gravity_degree
+///     gravity_model (satkit.gravmodel): Gravity model. Default gravmodel.egm96
+///     use_spaceweather (bool): Use space weather data for atmospheric density. Default True
+///     use_sun_gravity (bool): Include sun third-body gravity. Default True
+///     use_moon_gravity (bool): Include moon third-body gravity. Default True
+///     tide_model (satkit.tidemodel): Solid Earth tide model. Default tidemodel.solid_step1
+///     use_relativistic_correction (bool): Include general-relativistic acceleration. Default True
+///     enable_interp (bool): Store dense output for interpolation. Default True
+///     integrator (satkit.integrator): ODE integrator. Default integrator.rkv98
+///     gj_step_seconds (float): Fixed step size for integrator.gauss_jackson8, seconds. Default 60.0
+///     max_steps (int): Maximum number of integrator steps. Default 1_000_000
+///     require_eop_coverage (bool): Raise if the span extends past the EOP table. Default False
 #[pyclass(name = "propsettings", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PyPropSettings(pub PropSettings);
@@ -207,6 +226,8 @@ impl PyPropSettings {
         Ok(Self(ps))
     }
 
+    /// Maximum absolute error of any element in the propagated state, in the units
+    /// of the state (meters for position elements, m/s for velocity elements). Default 1e-8
     #[getter]
     fn get_abs_error(&self) -> f64 {
         self.0.abs_error
@@ -218,6 +239,7 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Maximum relative error of any element in the propagated state, unitless. Default 1e-8
     #[getter]
     fn get_rel_error(&self) -> f64 {
         self.0.rel_error
@@ -326,6 +348,8 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Fixed step size used by integrator.gauss_jackson8, seconds. Ignored by
+    /// adaptive integrators. Default 60.0
     #[getter]
     fn get_gj_step_seconds(&self) -> f64 {
         self.0.gj_step_seconds
@@ -417,6 +441,13 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Precompute sun/moon terms for fast propagation of many satellites over the same span
+    ///
+    /// Args:
+    ///     begin (satkit.time): Begin time of propagation
+    ///     end (satkit.time): End time of propagation
+    ///     step (satkit.duration | float | datetime.timedelta, optional): Table step;
+    ///         a float is interpreted as seconds. Default 60 seconds
     #[pyo3(signature=(begin, end, step=None))]
     fn precompute_terms(
         &mut self,

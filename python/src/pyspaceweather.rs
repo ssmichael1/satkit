@@ -24,10 +24,10 @@ use satkit::{solar_cycle_forecast, spaceweather};
 ///         * ``kp_sum`` (int) — daily Kp sum
 ///         * ``ap`` (list[int]) — eight 3-hourly Ap indices
 ///         * ``ap_avg`` (int) — daily average Ap
-///         * ``f10p7_obs`` (float) — observed F10.7 solar flux
-///         * ``f10p7_adj`` (float) — F10.7 adjusted to 1 AU
-///         * ``f10p7_obs_c81`` / ``f10p7_obs_l81`` (float) — 81-day centered / last-81-day observed averages
-///         * ``f10p7_adj_c81`` / ``f10p7_adj_l81`` (float) — 81-day centered / last-81-day adjusted averages
+///         * ``f10p7_obs`` (float) — observed F10.7 solar flux, sfu (10^-22 W m^-2 Hz^-1)
+///         * ``f10p7_adj`` (float) — F10.7 adjusted to 1 AU, sfu
+///         * ``f10p7_obs_c81`` / ``f10p7_obs_l81`` (float) — 81-day centered / last-81-day observed averages, sfu
+///         * ``f10p7_adj_c81`` / ``f10p7_adj_l81`` (float) — 81-day centered / last-81-day adjusted averages, sfu
 ///         * ``isn`` (int) — international sunspot number
 ///         * ``cp`` (float) — planetary daily character figure
 ///         * ``c9`` (int) — Cp scaled to [0, 9]
@@ -75,8 +75,8 @@ pub fn get(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
 ///     time (satkit.time|datetime.datetime): Time for which to return predicted F10.7
 ///
 /// Returns:
-///     float | None: Predicted F10.7 solar flux, or None if the time is
-///     outside the forecast range (or no forecast data is available)
+///     float | None: Predicted F10.7 solar flux in sfu (10^-22 W m^-2 Hz^-1),
+///     or None if the time is outside the forecast range (or no forecast data is available)
 #[pyfunction]
 pub fn predicted_f107(time: &Bound<'_, PyAny>) -> anyhow::Result<Option<f64>> {
     let tm = instant_from_pyany(time)?;

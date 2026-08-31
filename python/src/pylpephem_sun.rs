@@ -15,7 +15,7 @@ use satkit::lpephem::sun;
 ///     time (satkit.time, numpy array, or list): time[s] at which to compute position
 ///
 /// Returns:
-///     numpy.ndarray: 3-element array or Nx3 array representing sun position in GCRF frame at input time[s]
+///     numpy.ndarray: 3-element array or Nx3 array representing sun position in GCRF frame at input time[s].  Units are meters
 #[pyfunction]
 pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     pyutils::py_vec3_of_time_arr(&sun::pos_gcrf, time)
@@ -30,7 +30,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     time (Instant, numpy array, or list): time[s] at which to compute position
 ///
 /// Returns:
-///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s]
+///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s].  Units are meters
 #[pyfunction]
 pub fn pos_mod(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     pyutils::py_vec3_of_time_arr(&sun::pos_mod, time)
@@ -71,6 +71,17 @@ pub fn rise_set(
     }
 }
 
+/// Is satellite in Earth shadow given sun position
+///
+/// Notes:
+///     * See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
+///
+/// Args:
+///     sunpos (numpy.ndarray): 3-element geocentric Sun position, meters
+///     satpos (numpy.ndarray): 3-element geocentric satellite position, meters
+///
+/// Returns:
+///     float: unitless number in range [0,1] indicating no sun (0) or full sun (1, no occlusion) hitting satellite
 #[pyfunction(signature=(sunpos, satpos))]
 pub fn shadowfunc(sunpos: Bound<'_, PyAny>, satpos: Bound<'_, PyAny>) -> Result<f64> {
     let satpos = pyutils::py_to_smatrix::<3, 1>(&satpos)?;

@@ -202,12 +202,12 @@ class TLE:
 
     @property
     def eccen(self) -> float:
-        """Satellite eccentricity, in range [0,1]"""
+        """Satellite eccentricity, unitless, in range [0,1]"""
         ...
 
     @eccen.setter
     def eccen(self, value: float) -> None:
-        """Set the satellite eccentricity"""
+        """Set the satellite eccentricity, unitless, in range [0,1]"""
         ...
 
     @property
@@ -217,7 +217,7 @@ class TLE:
 
     @mean_anomaly.setter
     def mean_anomaly(self, value: float) -> None:
-        """Set the satellite mean anomaly"""
+        """Set the satellite mean anomaly, degrees"""
         ...
 
     @property
@@ -227,7 +227,7 @@ class TLE:
 
     @mean_motion.setter
     def mean_motion(self, value: float) -> None:
-        """Set the satellite mean motion"""
+        """Set the satellite mean motion, revs / day"""
         ...
 
     @property
@@ -301,7 +301,7 @@ class TLE:
 
     @property
     def bstar(self) -> float:
-        """Drag of the satellite
+        """Drag term (B*) of the satellite, in units of 1 / Earth radii
 
         should be rho0 * Cd * A / 2 / m
 
@@ -312,7 +312,7 @@ class TLE:
 
     @bstar.setter
     def bstar(self, value: float) -> None:
-        """Set the drag of the satellite"""
+        """Set the drag term (B*) of the satellite, in units of 1 / Earth radii"""
         ...
 
     def to_2line(self) -> list[str]:
@@ -415,7 +415,7 @@ def sgp4(
 
     Args:
         tle (TLE | list[TLE] | dict): TLE or OMM (or list of TLES) on which to operate
-        tm (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity
+        time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity
 
     Keyword Args:
         gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
@@ -425,13 +425,20 @@ def sgp4(
                         (this may also flag a typing error ... I can't figure out how to get rid of it)
 
     Returns:
-        position and velocity
-            in meters and meters/second, respectively,
+        tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: position and velocity
+            in **meters** and **meters/second**, respectively,
             in the TEME frame at each of the "Ntime" input times and each of the "Ntle" tles.
+            Shape is (3,) for a single TLE and single time, (Ntime, 3) for a single TLE
+            and multiple times, (Ntle, 3) for a list of TLEs and a single time, and
+            (Ntle, Ntime, 3) for a list of TLEs and multiple times.
             Additional return value if errflag is True:
             list[sgp4_error] with error conditions for each TLE and time output.
 
     Notes:
+        - **Units:** the canonical Vallado SGP4 implementation (and most other SGP4
+          libraries) return position in kilometers and velocity in kilometers/second.
+          satkit converts these to meters and meters/second so that SGP4 output is
+          consistent with every other position and velocity in the library.
         - Now supports propagation of OMM (Orbital Mean-Element Message) dictionaries.
           The dictionaries must follow the structure used by <https://www.celestrak.org> or
           <https://www.space-track.org.>
@@ -1114,7 +1121,7 @@ class time:
         """Return a time object representing input Julian date and time scale
 
         Args:
-            jd (float): Julian date
+            jd (float): Julian date, days
             scale (timescale, optional): Time scale.  Default is satkit.timescale.UTC
 
         Returns:
@@ -1154,7 +1161,7 @@ class time:
 
         Args:
             week: GPS week number
-            sec: GPS seconds of week
+            seconds: GPS seconds of week, seconds
 
         Returns:
             Time object representing input GPS week and second
@@ -1184,7 +1191,7 @@ class time:
         """Return a time object representing input modified Julian date and time scale
 
         Args:
-            mjd (float): Modified Julian date
+            mjd (float): Modified Julian date, days
             scale (satkit.timescale, optional): Time scale.  Default is satkit.timescale.UTC
 
         Returns:
@@ -1329,6 +1336,9 @@ class time:
         with the provided time scale
 
         If no time scale is provided, default is satkit.timescale.UTC
+
+        Returns:
+            float: Modified Julian Date, days
         """
         ...
 
@@ -1338,6 +1348,9 @@ class time:
         the provided time scale
 
         If no time scale is provided, default is satkit.timescale.UTC
+
+        Returns:
+            float: Julian Date, days
         """
         ...
 
@@ -1348,6 +1361,9 @@ class time:
         (seconds since Jan 1, 1970 UTC, excluding leap seconds)
 
         Includes fractional component of seconds
+
+        Returns:
+            float: Unix time, seconds
         """
         ...
 
@@ -1999,14 +2015,14 @@ class quaternion:
 
     @staticmethod
     def from_axis_angle(axis: npt.NDArray[np.float64], angle: float) -> quaternion:
-        """Quaternion representing right-handed rotation of vector by "angle" degrees about the given axis
+        """Quaternion representing right-handed rotation of vector by "angle" radians about the given axis
 
         Args:
-            axis (npt.ArrayLike[np.float64]): 3-element array representing axis of rotation
+            axis (npt.ArrayLike[np.float64]): 3-element array representing axis of rotation (unitless direction; need not be normalized)
             angle (float): angle of rotation in radians
 
         Returns:
-            Quaternion representing rotation by "angle" degrees about the given axis
+            Quaternion representing rotation by "angle" radians about the given axis
         """
         ...
 
@@ -2760,7 +2776,7 @@ class itrfcoord:
             (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>)
 
         Returns:
-            (distance in meters, initial heading in radians, heading at destination in radians)
+            itrfcoord: New ITRF coordinate after moving ``distance`` meters along the geodesic
 
         Example:
             ```python
@@ -2780,7 +2796,7 @@ class consts:
     """WGS-84 semiparameter, in meters"""
 
     wgs84_f: ClassVar[float]
-    """WGS-84 flattening in meters"""
+    """WGS-84 flattening, unitless"""
 
     earth_radius: ClassVar[float]
     """Earth radius along major axis, meters"""
@@ -2882,7 +2898,8 @@ class satstate:
             time (satkit.time): Epoch of the state
             pos (npt.NDArray[np.float64]): Position in meters, GCRF frame
             vel (npt.NDArray[np.float64]): Velocity in m/s, GCRF frame
-            cov (npt.NDArray[np.float64]|None, optional): 6x6 covariance matrix in GCRF. Defaults to None.
+            cov (npt.NDArray[np.float64]|None, optional): 6x6 covariance matrix in GCRF
+                (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Defaults to None.
 
         Example:
             ```python
@@ -3285,7 +3302,9 @@ class propresult:
         """State transition matrix
 
         Returns:
-            6x6 numpy array representing state transition matrix or None if not computed
+            6x6 numpy array representing state transition matrix or None if not computed.
+                Maps a perturbation of the begin state (meters, m/s) to the end state
+                (meters, m/s), so blocks are unitless, seconds, 1/seconds, unitless.
         """
         ...
 
@@ -3320,7 +3339,7 @@ class propresult:
 
         Returns:
             tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: (state, phi) where state is a 6-element
-                vector and phi is a 6x6 state transition matrix
+                vector [x, y, z, vx, vy, vz] in meters and m/s, and phi is a 6x6 state transition matrix
         """
         ...
 
@@ -3337,7 +3356,7 @@ class propresult:
             output_phi: Must be False (default)
 
         Returns:
-            list[npt.NDArray[np.float64]]: List of 6-element state vectors
+            list[npt.NDArray[np.float64]]: List of 6-element state vectors [x, y, z, vx, vy, vz] in meters and m/s
         """
         ...
 
@@ -3354,7 +3373,8 @@ class propresult:
             output_phi: Must be True
 
         Returns:
-            list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]: List of (state, phi) tuples
+            list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]: List of (state, phi) tuples;
+                each state is a 6-element vector in meters and m/s, each phi a 6x6 state transition matrix
         """
         ...
 
@@ -3830,8 +3850,9 @@ class propsettings:
         """Create propagation settings object used to configure high-precision orbit propagator
 
         Args:
-            abs_error: Maximum absolute value of error for any element in propagated state following ODE integration. Default is 1e-8
-            rel_error: Maximum relative error of any element in propagated state following ODE integration. Default is 1e-8
+            abs_error: Maximum absolute value of error for any element in propagated state following ODE integration,
+                in the units of the state (meters for position elements, m/s for velocity elements). Default is 1e-8
+            rel_error: Maximum relative error of any element in propagated state following ODE integration, unitless. Default is 1e-8
             gravity_degree: Maximum degree of spherical harmonic gravity model, at most 40 (``ValueError`` above that). Default is 4
             gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 40). Default is same as gravity_degree
             gravity_model: Gravity model to use. Default is gravmodel.egm96
@@ -3883,7 +3904,8 @@ class propsettings:
         """Maximum absolute value of error for any element in propagated state following ODE integration
 
         Returns:
-            Maximum absolute value of error for any element in propagated state following ODE integration, default is 1e-8
+            Maximum absolute value of error for any element in propagated state following ODE integration,
+                in the units of the state (meters for position elements, m/s for velocity elements); default is 1e-8
         """
         ...
 
@@ -3894,7 +3916,7 @@ class propsettings:
         """Maximum relative error of any element in propagated state following ODE integration
 
         Returns:
-            Maximum relative error of any element in propagated state following ODE integration, default is 1e-8
+            Maximum relative error of any element in propagated state following ODE integration, unitless; default is 1e-8
 
         """
         ...

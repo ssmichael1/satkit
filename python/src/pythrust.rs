@@ -48,6 +48,9 @@ impl PyThrust {
     }
 
     /// Get the acceleration vector
+    ///
+    /// Returns:
+    ///     list[float]: 3-element acceleration vector in the thrust's frame [m/s^2]
     #[getter]
     fn get_accel(&self) -> [f64; 3] {
         [self.0.accel[0], self.0.accel[1], self.0.accel[2]]

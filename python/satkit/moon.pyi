@@ -14,31 +14,34 @@ from .satkit import TimeScalar, TimeArrayLike, TimeInput
 class moonphase:
     """
     Enum representing moon phases
+
+    Each value covers a range of the moon phase angle (see :func:`phase`),
+    given here in degrees.
     """
 
     NewMoon: ClassVar[moonphase]
-    """New Moon (0 - 22.5)"""
+    """New Moon (phase angle 0 - 22.5 degrees, or 337.5 - 360 degrees)"""
 
     WaxingCrescent: ClassVar[moonphase]
-    """Waxing Crescent (22.5 - 67.5)"""
+    """Waxing Crescent (phase angle 22.5 - 67.5 degrees)"""
 
     FirstQuarter: ClassVar[moonphase]
-    """First Quarter (67.5 - 112.5)"""
+    """First Quarter (phase angle 67.5 - 112.5 degrees)"""
 
     WaxingGibbous: ClassVar[moonphase]
-    """Waxing Gibbous (112.5 - 157.5)"""
+    """Waxing Gibbous (phase angle 112.5 - 157.5 degrees)"""
 
     FullMoon: ClassVar[moonphase]
-    """Full Moon (157.5 - 202.5)"""
+    """Full Moon (phase angle 157.5 - 202.5 degrees)"""
 
     WaningGibbous: ClassVar[moonphase]
-    """Waning Gibbous (202.5 - 247.5)"""
+    """Waning Gibbous (phase angle 202.5 - 247.5 degrees)"""
 
     LastQuarter: ClassVar[moonphase]
-    """Last Quarter (247.5 - 292.5)"""
+    """Last Quarter (phase angle 247.5 - 292.5 degrees)"""
 
     WaningCrescent: ClassVar[moonphase]
-    """Waning Crescent (292.5 - 337.5)"""
+    """Waning Crescent (phase angle 292.5 - 337.5 degrees)"""
 
 @typing.overload
 def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
@@ -100,7 +103,7 @@ def illumination(time: TimeScalar) -> float:
         time (satkit.time | datetime.datetime): scalar time at which to compute illumination
 
     Returns:
-        float: fractional illumination of moon at the given time
+        float: fractional illumination of moon at the given time, unitless, range 0.0 to 1.0
 
     Example:
         ```python
@@ -120,7 +123,7 @@ def illumination(time: TimeArrayLike) -> list[float]:
         time (TimeArrayLike): list or numpy array of times at which to compute illumination
 
     Returns:
-        list[float]: fractional illumination of moon at each given time
+        list[float]: fractional illumination of moon at each given time, unitless, range 0.0 to 1.0
     """
     ...
 

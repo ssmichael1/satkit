@@ -19,6 +19,14 @@ use satkit::{Frame, Instant};
 
 use anyhow::{bail, Result};
 
+/// Satellite state: GCRF position, velocity, optional covariance, and maneuvers
+///
+/// Args:
+///     time (satkit.time): Epoch of the state
+///     pos (numpy.ndarray): 3-element GCRF position, meters
+///     vel (numpy.ndarray): 3-element GCRF velocity, m/s
+///     cov (numpy.ndarray, optional): 6x6 GCRF state covariance
+///         (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Default None.
 #[pyclass(name = "satstate", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySatState(SatState);
@@ -141,7 +149,8 @@ impl PySatState {
     /// Set full 6x6 state covariance matrix
     ///
     /// Args:
-    ///     cov (numpy.ndarray): 6x6 numpy array with state covariance matrix for position (meters) and velocity (m/s)
+    ///     cov (numpy.ndarray): 6x6 numpy array with GCRF state covariance for position (meters) and velocity (m/s):
+    ///         position block m^2, velocity block (m/s)^2, cross blocks m^2/s
     ///
     /// Returns:
     ///     None
@@ -166,11 +175,19 @@ impl PySatState {
         Ok(())
     }
 
+    /// Epoch of this satellite state
+    ///
+    /// Returns:
+    ///     satkit.time: Epoch of the state
     #[getter]
     fn get_time(&self) -> PyInstant {
         PyInstant(self.0.time)
     }
 
+    /// GCRF position of the satellite
+    ///
+    /// Returns:
+    ///     numpy.ndarray: 3-element GCRF position, meters
     #[getter]
     fn get_pos_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
@@ -180,6 +197,10 @@ impl PySatState {
         })
     }
 
+    /// GCRF velocity of the satellite
+    ///
+    /// Returns:
+    ///     numpy.ndarray: 3-element GCRF velocity, m/s
     #[getter]
     fn get_vel_gcrf(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
@@ -192,7 +213,8 @@ impl PySatState {
     /// Get full 6x6 state covariance matrix
     ///
     /// Returns:
-    ///     numpy.ndarray: 6x6 numpy array with state covariance matrix for position (meters) and velocity (m/s)
+    ///     numpy.ndarray: 6x6 numpy array with GCRF state covariance for position (meters) and velocity (m/s):
+    ///     position block m^2, velocity block (m/s)^2, cross blocks m^2/s. None if not set
     #[getter]
     fn get_cov(&self) -> Py<PyAny> {
         pyo3::Python::attach(|py| -> Py<PyAny> {
@@ -225,13 +247,13 @@ impl PySatState {
         self.0.qgcrf2lvlh().into()
     }
 
-    /// Alias for pos_gcrf
+    /// Alias for pos_gcrf: 3-element GCRF position, meters
     #[getter]
     fn get_pos(&self) -> Py<PyAny> {
         self.get_pos_gcrf()
     }
 
-    /// Alias for vel_gcrf
+    /// Alias for vel_gcrf: 3-element GCRF velocity, m/s
     #[getter]
     fn get_vel(&self) -> Py<PyAny> {
         self.get_vel_gcrf()

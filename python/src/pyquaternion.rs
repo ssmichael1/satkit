@@ -60,7 +60,7 @@ impl PyQuaternion {
         }
     }
 
-    /// Quaternion representing rotation about xhat axis by `theta-rad` degrees
+    /// Quaternion representing rotation about xhat axis by `theta_rad` radians
     ///
     /// Args:
     ///     theta_rad: Angle in radians to rotate about xhat axis
@@ -76,7 +76,7 @@ impl PyQuaternion {
         Ok(Quaternion::rotx(theta_rad).into())
     }
 
-    /// Quaternion representing rotation about yhat axis by `theta-rad` degrees
+    /// Quaternion representing rotation about yhat axis by `theta_rad` radians
     ///
     /// Args:
     ///     theta_rad: Angle in radians to rotate about yhat axis
@@ -93,8 +93,17 @@ impl PyQuaternion {
         Ok(Quaternion::roty(theta_rad).into())
     }
 
-    /// Quaternion representing rotation about
-    /// zhat axis by `theta-rad` degrees
+    /// Quaternion representing rotation about zhat axis by `theta_rad` radians
+    ///
+    /// Args:
+    ///     theta_rad: Angle in radians to rotate about zhat axis
+    ///
+    /// Returns:
+    ///     quaternion: Quaternion representing rotation about zhat axis
+    ///
+    /// Notes:
+    ///     This is a right-handed rotation of the vector
+    ///     e.g. rotation of +xhat 90 degrees by +zhat gives +yhat
     #[staticmethod]
     fn rotz(theta_rad: f64) -> Result<Self> {
         Ok(Quaternion::rotz(theta_rad).into())

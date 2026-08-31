@@ -25,7 +25,7 @@ use anyhow::Result;
 ///
 /// Inputs:
 ///
-///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite position & velocity
+///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite GCRF position & velocity, in meters and meters/second
 ///      begin (satkit.time, optional): Begin time of propagation, time of "state0"
 ///        end (satkit.time, optional): End time of propagation
 ///
@@ -60,7 +60,7 @@ use anyhow::Result;
 ///
 /// Returns:
 ///
-///    satkit.propresult: object with new position and velocity, and possibly
+///    satkit.propresult: object with new GCRF position (meters) and velocity (meters/second), and possibly
 ///                       state transition matrix between "begintime" and "endtime",
 ///                       and dense ODE solution that allow for interpolation, if requested
 ///
