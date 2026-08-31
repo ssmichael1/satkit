@@ -6,7 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Distribution
 
-- **Breaking (Python packaging):** macOS wheels are arm64 (Apple silicon) only; the `x86_64-apple-darwin` wheels are no longer built, matching SciPy/Polars and the arm64-only GitHub runners, and the macOS deployment target moves from 10.12 to 11.0. Intel-Mac users install from source (`pip install --no-binary satkit satkit`, stable Rust toolchain required) or from conda-forge, which builds `osx-64` ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+- **Breaking (Python packaging):** macOS wheels are arm64 (Apple silicon) only; the `x86_64-apple-darwin` wheels are no longer built, matching SciPy/Polars and the arm64-only GitHub runners, and the macOS deployment target moves from 10.12 to 11.0. Intel-Mac users install from source (`pip install --no-binary satkit satkit`, stable Rust toolchain required) or from conda-forge, which builds `osx-64` ([#172](https://github.com/ssmichael1/satkit/pull/172))
 
 ### Fixed
 
