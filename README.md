@@ -31,7 +31,7 @@ cargo add satkit
 pip install satkit
 ```
 
-Pre-built wheels are available for Linux, macOS, and Windows on Python 3.10--3.14.
+Pre-built wheels are available for Linux (x86_64, aarch64), macOS (Apple silicon), and Windows (x86_64) on Python 3.10--3.14; Intel Macs build from source (`pip install --no-binary satkit satkit`) or use conda-forge.
 
 The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris (~100 MB) downloads on first use (SHA-256 verified) into the user data directory; Earth orientation and space weather are fetched on first use and should be refreshed periodically:
 

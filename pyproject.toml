@@ -66,18 +66,16 @@ skip = ["pp*", "*_i686", "*_s390x", "*_ppc64le", "*-musllinux*"]
 # cross-compiled on the arm64 runner and cannot be executed there.
 test-requires = ["numpy"]
 test-command = "python -c \"import satkit as sk; t = sk.time(2024, 1, 1, 12, 0, 0); q = sk.quaternion.rotz(0.5); assert abs(q.angle - 0.5) < 1e-12; print('wheel OK:', sk.__version__, t)\""
-test-skip = "*-macosx_x86_64"
 
 [tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]
+archs = ["arm64"]
 before-build = [
     "pip install -U setuptools-rust",
     "rustup default stable",
     "rustup target add aarch64-apple-darwin",
-    "rustup target add x86_64-apple-darwin",
     "rustup show",
 ]
-environment = { PATH = "$PATH:$HOME/.cargo/bin", MACOSX_DEPLOYMENT_TARGET = "10.12" }
+environment = { PATH = "$PATH:$HOME/.cargo/bin", MACOSX_DEPLOYMENT_TARGET = "11.0" }
 
 [tool.cibuildwheel.linux]
 archs = ["native"]

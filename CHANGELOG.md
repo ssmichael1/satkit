@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Distribution
+
+- **Breaking (Python packaging):** macOS wheels are arm64 (Apple silicon) only; the `x86_64-apple-darwin` wheels are no longer built, matching SciPy/Polars and the arm64-only GitHub runners, and the macOS deployment target moves from 10.12 to 11.0. Intel-Mac users install from source (`pip install --no-binary satkit satkit`, stable Rust toolchain required) or from conda-forge, which builds `osx-64` ([#TBD](https://github.com/ssmichael1/satkit/pull/TBD))
+
 ### Fixed
 
 - `satkit.density.nrlmsise(altitude_m, latitude_rad, longitude_rad, time)` converts its radian latitude/longitude to the degrees the model takes; the values were passed through unchanged, so a caller following the stub at 60° N was evaluated at 1.05° N (the `itrfcoord` overload and `nrlmsise00(latitude_deg=...)` were already correct) ([#171](https://github.com/ssmichael1/satkit/pull/171))
