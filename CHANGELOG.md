@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Fixed
+
+- A corrupt or truncated `tab5.2*.txt` in a data directory no longer panics the first frame transform: satkit warns and uses the compiled-in copy of the same IERS table (exact, not an approximation), and the parser now rejects text with no table header or fewer rows than declared — an HTML notice page saved under the table's name previously loaded as six empty series and silently dropped the nutation terms ([#166](https://github.com/ssmichael1/satkit/pull/166))
+
 ### Changed
 
 - `update_datafiles()` no longer downloads files that are compiled into the library: the IERS tables and gravity models are `default: false` in the manifest (still pinned and fetchable by name), and the unused `leap-seconds.list` (nothing ever read it — the runtime leap-second table is a compiled-in constant) is removed from the manifest entirely. The only static download left is the JPL ephemeris, alongside the daily EOP / space-weather / solar-cycle refreshes ([#163](https://github.com/ssmichael1/satkit/pull/163))
