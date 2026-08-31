@@ -21,19 +21,18 @@ use anyhow::Result;
 ///     dir (str): Target directory for files.  Uses ``datadir()`` if not specified
 ///
 ///
-/// Files include:
+/// Files downloaded:
 ///
-/// * EGM96.gfc :: EGM-96 Gravity Model Coefficients
-/// * JGM3.gfc :: JGM-3 Gravity Model Coefficients
-/// * JGM2.gfc :: JGM-2 Gravity Model Coefficients
-/// * ITU_GRACE16.gfc :: ITU Grace 16 Gravity Model Coefficients
-/// * tab5.2a.txt :: Coefficients for GCRS to GCRF conversion
-/// * tab5.2b.txt :: Coefficients for GCRS to GCRF conversion
-/// * tab5.2d.txt :: Coefficients for GCRS to GCRF conversion
-/// * SW-All.csv :: Space weather data, updated daily
-/// * leap-seconds.list :: Leap seconds (UTC vs TAI); reference only, the runtime table is compiled in
-/// * EOP_All.csv :: Earth orientation parameters,  updated daily
 /// * linux_p1550p2650.440 :: JPL Ephemeris version 440 (~ 100 MB)
+/// * EOP-All.csv :: Earth orientation parameters, updated daily
+/// * SW-All.csv :: Space weather data, updated daily
+/// * predicted-solar-cycle.json :: NOAA/SWPC solar cycle forecast
+///
+/// The IERS nutation tables (tab5.2a/b/d.txt) and the gravity models
+/// (EGM96, JGM2, JGM3, ITU_GRACE16 — to degree 70) are compiled into
+/// satkit and are not downloaded. A full-degree gravity file or an updated
+/// IERS table placed in the data directory still takes precedence over the
+/// compiled-in copy.
 ///
 /// Static files are fetched per the compiled-in data manifest
 /// (`data/manifest.json`): `SATKIT_DATA_URL` mirror first if set, then the

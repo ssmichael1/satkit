@@ -26,7 +26,7 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 
 - **EOP-All.csv** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis. This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org) (which repackages the IERS Bulletin A / finals series) and carries IERS predictions roughly six months ahead. For dates beyond the file, the last entry's values are used (constant extrapolation) — see [EOP coverage](#eop-coverage) below.
 
-- **leap-seconds.list** — Downloaded by `update_datafiles()` for reference only. The UTC↔TAI leap-second table that `satkit` actually uses is compiled into the library (current through the most recent leap second, 2017-01-01, when UTC began lagging TAI by 37 s); this file is not read at runtime, and a future leap second will require a new `satkit` release. The table is transcribed from [IERS Bulletin C](../guide/references.md#bulletinc); UTC and leap seconds are defined by [ITU-R TF.460-6](../guide/references.md#itu460).
+- **Leap seconds** — not a file: the UTC↔TAI leap-second table is compiled into the library (current through the most recent leap second, 2017-01-01, when UTC began lagging TAI by 37 s), and a future leap second will require a new `satkit` release. The table is transcribed from [IERS Bulletin C](../guide/references.md#bulletinc); UTC and leap seconds are defined by [ITU-R TF.460-6](../guide/references.md#itu460). (Releases through 0.21.2 also downloaded a reference `leap-seconds.list`; nothing ever read it, and it is no longer fetched.)
 
 ## Where satkit looks for data, and where it writes
 
@@ -116,7 +116,7 @@ data bytes.
 Sources and attribution: DE440 / DE421 — JPL (Park et al. 2021; Folkner et al.
 2009), US Government work; `tab5.2a/b/d.txt` — IERS Conventions (2010), TN 36;
 EGM96, JGM-2, JGM-3 — NASA GSFC (public), via ICGEM; ITU_GRACE16 — Akyilmaz et
-al. 2016, GFZ Data Services, CC BY 4.0; `leap-seconds.list` — IERS/IETF. The
+al. 2016, GFZ Data Services, CC BY 4.0. The
 Earth-orientation and space-weather files are fetched from CelesTrak on every
 update and are not pinned (they change daily). The full table, with licences,
 is in `data/README.md`.
@@ -139,12 +139,18 @@ a CI job, or a machine that will later be offline:
 
 ```python
 import satkit as sk
-sk.utils.update_datafiles()   # ephemeris + full-degree gravity files + IERS tables + EOP/SW, verified
+sk.utils.update_datafiles()   # ephemeris (verified) + EOP/SW + solar-cycle forecast
 ```
 
 Files already present with the right hash are skipped; the space-weather and
 Earth-orientation files are always refreshed. `update_datafiles(dir="...")`
 writes somewhere else; `overwrite=True` re-downloads even verified files.
+
+The IERS tables and gravity models are **not** downloaded — they are compiled
+in (the tables byte-identical, gravity to degree 70, identical results at the
+degree-40 evaluation cap). The full-degree `.gfc` files remain pinned in the
+manifest and hosted on the `data-v1` release; drop one into a search
+directory and it takes precedence over the compiled-in copy.
 
 ### The optional `satkit-data` bundle
 

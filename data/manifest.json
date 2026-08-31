@@ -7,7 +7,8 @@
     "URL order per file: GitHub release asset, then the origin server when it serves byte-identical bytes, then the legacy GCS bucket (transitional).",
     "SATKIT_DATA_URL, if set, is a base URL tried before all of these.",
     "Regenerate with tools/make_manifest.py; see data/README.md.",
-    "Deliberately excluded: msis21.parm (NRLMSIS 2.1 licence is academic/non-commercial), EOP-All.csv / SW-All.csv (CelesTrak asks that its compiled files not be mirrored; fetched at runtime via `refresh`), sw19571001.txt (orphan). See data/README.md."
+    "Deliberately excluded: msis21.parm (NRLMSIS 2.1 licence is academic/non-commercial), EOP-All.csv / SW-All.csv (CelesTrak asks that its compiled files not be mirrored; fetched at runtime via `refresh`), sw19571001.txt (orphan), leap-seconds.list (nothing reads it; the runtime leap-second table is compiled into src/time/instant.rs). See data/README.md.",
+    "default: false = pinned and fetchable by name, but skipped by update_datafiles: the IERS tables are embedded byte-identical, and the full gravity files add nothing while evaluation is capped at degree 40 (the embedded copies carry degree 70)."
   ],
   "files": [
     {
@@ -49,7 +50,7 @@
       "source": "IERS",
       "license": "IERS Conventions (2010), Technical Note 36, Table 5.2a (X series); freely redistributable",
       "tier": "core",
-      "default": true
+      "default": false
     },
     {
       "name": "tab5.2b.txt",
@@ -63,7 +64,7 @@
       "source": "IERS",
       "license": "IERS Conventions (2010), Technical Note 36, Table 5.2b (Y series); freely redistributable",
       "tier": "core",
-      "default": true
+      "default": false
     },
     {
       "name": "tab5.2d.txt",
@@ -77,7 +78,7 @@
       "source": "IERS",
       "license": "IERS Conventions (2010), Technical Note 36, Table 5.2d (s + XY/2 series); freely redistributable",
       "tier": "core",
-      "default": true
+      "default": false
     },
     {
       "name": "EGM96.gfc",
@@ -90,7 +91,7 @@
       "source": "ICGEM-GFZ",
       "license": "EGM96 (Lemoine et al. 1998, NASA GSFC/NIMA) as distributed by ICGEM; US Government work",
       "tier": "core",
-      "default": true
+      "default": false
     },
     {
       "name": "ITU_GRACE16.gfc",
@@ -103,7 +104,7 @@
       "source": "ICGEM-GFZ",
       "license": "ITU_GRACE16 (Akyilmaz et al. 2016, GFZ Data Services doi:10.5880/icgem.2016.006), CC BY 4.0",
       "tier": "core",
-      "default": true
+      "default": false
     },
     {
       "name": "JGM2.gfc",
@@ -116,7 +117,7 @@
       "source": "ICGEM-GFZ",
       "license": "JGM-2 (Nerem et al. 1994, NASA GSFC / UT CSR) as distributed by ICGEM; US Government work",
       "tier": "core",
-      "default": true
+      "default": false
     },
     {
       "name": "JGM3.gfc",
@@ -129,20 +130,7 @@
       "source": "ICGEM-GFZ",
       "license": "JGM-3 (Tapley et al. 1996, NASA GSFC / UT CSR) as distributed by ICGEM; US Government work",
       "tier": "core",
-      "default": true
-    },
-    {
-      "name": "leap-seconds.list",
-      "size": 10665,
-      "sha256": "14b4faab51b1885680a704744863bda8b5728a0f0a5e07a15c8469532318b305",
-      "urls": [
-        "https://github.com/ssmichael1/satkit-data/releases/download/data-v1/leap-seconds.list",
-        "https://storage.googleapis.com/astrokit-astro-data/leap-seconds.list"
-      ],
-      "source": "IERS",
-      "license": "IERS/USNO leap-second list; public data. Reference only: satkit's runtime leap-second table is compiled in",
-      "tier": "reference",
-      "default": true
+      "default": false
     }
   ],
   "refresh": [

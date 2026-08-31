@@ -118,12 +118,14 @@ fn download_refresh_files(dir: &std::path::Path) -> Result<()> {
 ///
 /// # Notes
 ///
-/// Static files (JPL ephemeris, IERS nutation tables, gravity coefficients,
-/// leap-second list) are described by the embedded
-/// [data manifest](crate::utils::manifest): each is fetched from the first
-/// working source (`SATKIT_DATA_URL` mirror if set, then the GitHub release
-/// asset, the origin server, and the legacy bucket) and is only accepted
-/// when its size and SHA-256 match the manifest.
+/// The only static file downloaded is the JPL ephemeris, described by the
+/// embedded [data manifest](crate::utils::manifest): it is fetched from the
+/// first working source (`SATKIT_DATA_URL` mirror if set, then the GitHub
+/// release asset, the origin server, and the legacy bucket) and is only
+/// accepted when its size and SHA-256 match the manifest. The IERS nutation
+/// tables and gravity coefficients are compiled into the library and not
+/// downloaded (their manifest entries are `default: false`, still fetchable
+/// by name); a copy placed in a search directory takes precedence.
 ///
 /// The space weather and Earth orientation files are refreshed from
 /// celestrak on every call, and the NOAA solar-cycle forecast is fetched;

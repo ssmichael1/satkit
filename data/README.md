@@ -48,15 +48,18 @@ All manifest URLs must be `https://` (validated on load).
 |---|---|---|---|---|
 | `linux_p1550p2650.440` | 102.3 MB | JPL | DE440 (Park et al. 2021). US Government work, public domain. Origin URL verified byte-identical | ephemeris (default) |
 | `lnxp1900p2053.421` | 14.0 MB | JPL | DE421 (Folkner et al. 2009). US Government work, public domain. `default: false` — fetched only by name (e.g. the conda package ships this one) | ephemeris |
-| `tab5.2a.txt`, `tab5.2b.txt`, `tab5.2d.txt` | 171 / 137 / 9 KB | IERS | IERS Conventions (2010), TN 36, Tables 5.2a/b/d. Freely redistributable. Origin URLs verified byte-identical | core |
-| `EGM96.gfc` | 5.6 MB | ICGEM (GFZ) | EGM96, Lemoine et al. 1998, NASA GSFC/NIMA — US Government work | core |
-| `JGM2.gfc`, `JGM3.gfc` | 118 / 215 KB | ICGEM (GFZ) | JGM-2 (Nerem et al. 1994), JGM-3 (Tapley et al. 1996), NASA GSFC / UT CSR — US Government work | core |
-| `ITU_GRACE16.gfc` | 1.8 MB | ICGEM (GFZ) | Akyilmaz et al. 2016, GFZ Data Services, **CC BY 4.0** — keep the file's header block, it carries the attribution | core |
-| `leap-seconds.list` | 11 KB | IERS / IETF | Public data. Reference only: the runtime leap-second table is compiled in | reference |
+| `tab5.2a.txt`, `tab5.2b.txt`, `tab5.2d.txt` | 171 / 137 / 9 KB | IERS | IERS Conventions (2010), TN 36, Tables 5.2a/b/d. Freely redistributable. Origin URLs verified byte-identical. `default: false` — embedded byte-identical in the binary | core |
+| `EGM96.gfc` | 5.6 MB | ICGEM (GFZ) | EGM96, Lemoine et al. 1998, NASA GSFC/NIMA — US Government work. `default: false` — embedded to degree 70 | core |
+| `JGM2.gfc`, `JGM3.gfc` | 118 / 215 KB | ICGEM (GFZ) | JGM-2 (Nerem et al. 1994), JGM-3 (Tapley et al. 1996), NASA GSFC / UT CSR — US Government work. `default: false` — embedded to degree 70 | core |
+| `ITU_GRACE16.gfc` | 1.8 MB | ICGEM (GFZ) | Akyilmaz et al. 2016, GFZ Data Services, **CC BY 4.0** — keep the file's header block, it carries the attribution. `default: false` — embedded to degree 70 | core |
 
-`tier` is informational today: `core` = small files needed for frames and
-gravity, `ephemeris` = the large JPL files, `reference` = not read at runtime.
-Phase 2 (below) would embed the `core` tier in the binary.
+`tier` is informational: `core` = the small files frames and gravity need
+(embedded in the binary since Phase 2, below — which is why their manifest
+entries are `default: false`: pinned and fetchable by name, but pointless to
+download while evaluation is capped at degree 40), `ephemeris` = the large
+JPL files. The only `default: true` entry — the only file
+`update_datafiles()` downloads besides the daily refreshes — is the DE440
+ephemeris.
 
 ## Files deliberately excluded
 
@@ -71,6 +74,10 @@ Phase 2 (below) would embed the `core` tier in the binary.
   daily, so they are never pinned: `update_datafiles()` fetches them from
   CelesTrak every run via the manifest's `refresh` list.
 - **`sw19571001.txt`** — an orphan on the old bucket; nothing reads it.
+- **`leap-seconds.list`** — nothing reads it: the runtime leap-second table
+  is a compiled-in constant (`src/time/instant.rs`). It was pinned
+  (`tier: reference`) through 0.21.2 and remains an asset on the immutable
+  `data-v1` tag, but the manifest entry is gone.
 - **`predicted-solar-cycle.json`** — fetched directly from NOAA/SWPC by
   `solar_cycle_forecast::update()`; not a bundle file.
 
@@ -89,8 +96,7 @@ gh release create data-v1 --repo ssmichael1/satkit-data --latest=false \
   --notes "Static data files pinned by satkit's data/manifest.json (sizes and SHA-256 there). Sources and licences: see data/README.md in ssmichael1/satkit." \
   "$D/linux_p1550p2650.440" "$D/lnxp1900p2053.421" \
   "$D/tab5.2a.txt" "$D/tab5.2b.txt" "$D/tab5.2d.txt" \
-  "$D/EGM96.gfc" "$D/ITU_GRACE16.gfc" "$D/JGM2.gfc" "$D/JGM3.gfc" \
-  "$D/leap-seconds.list"
+  "$D/EGM96.gfc" "$D/ITU_GRACE16.gfc" "$D/JGM2.gfc" "$D/JGM3.gfc"
 ```
 
 (`lnxp1900p2053.421` can be fetched first with

@@ -45,6 +45,9 @@ jobs:
         with:
           path: astro-data
           key: satkit-data-${{ hashFiles('data/manifest.json') }}
+          # Seed from the newest older cache on a manifest change, so EOP/SW
+          # survive a CelesTrak outage.
+          restore-keys: satkit-data-
 
       - name: Download satkit data (manifest-verified)
         if: steps.cache-astro-data.outputs.cache-hit != 'true'
