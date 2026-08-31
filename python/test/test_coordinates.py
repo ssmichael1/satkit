@@ -80,12 +80,21 @@ class TestKepler:
             results["nan"] = k.nu
             k.mean_anomaly = float("inf")
             results["inf"] = k.nu
-            # e >= 1 can no longer be reached through the setter: it is
-            # rejected up front instead of feeding the anomaly solver.
+            # The eccentric-anomaly setter goes through the same solver path
+            k.eccentric_anomaly = float("nan")
+            results["ea_nan"] = k.nu
+            # e >= 1 cannot reach the solver any more: the eccen setter
+            # rejects it. (Every element setter validates the whole set, so
+            # with nu already NaN from above even a valid eccen is refused —
+            # hence a fresh set for the capped high-e solve.)
+            k2 = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
             try:
-                k.eccen = 1.5
+                k2.eccen = 1.5
             except ValueError:
                 results["hyper"] = "rejected"
+            k2.eccen = 0.999
+            k2.mean_anomaly = 6.0
+            results["high_e"] = k2.nu
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -93,7 +102,9 @@ class TestKepler:
         assert not t.is_alive(), "mean_anomaly setter hung"
         assert m.isnan(results["nan"])
         assert m.isnan(results["inf"])
+        assert m.isnan(results["ea_nan"])
         assert results["hyper"] == "rejected"
+        assert m.isfinite(results["high_e"])
 
     def test_mean_anomaly_setter_roundtrip(self):
         """Set M, read it back: |dM| < 1e-12 at e = 0.9 over a full revolution."""
@@ -159,10 +170,40 @@ class TestKepler:
         sk.kepler(**{**good, "incl": m.pi})
         # Setters validate too, and leave the element set unchanged on failure
         k = sk.kepler(**good)
-        for attr, val in (("a", -1.0), ("eccen", 1.0), ("inclination", 4.0), ("mu", 0.0)):
+        for attr, val in (
+            ("a", -1.0),
+            ("a", float("nan")),
+            ("eccen", 1.0),
+            ("inclination", 4.0),
+            ("mu", 0.0),
+            ("raan", float("nan")),
+            ("raan", float("inf")),
+            ("argp", float("nan")),
+            ("nu", float("-inf")),
+        ):
             with pytest.raises(ValueError):
                 setattr(k, attr, val)
+        with pytest.warns(DeprecationWarning), pytest.raises(ValueError):
+            k.w = float("nan")
         assert k == sk.kepler(**good)
+        # Finite angles of any size are accepted (stored as given)
+        k.raan = -10.0
+        k.argp = 100.0
+        k.nu = 7.0
+        assert (k.raan, k.argp, k.nu) == (-10.0, 100.0, 7.0)
+
+    def test_kepler_from_pv_open_or_rectilinear_is_value_error(self):
+        r = np.array([7000e3, 0.0, 0.0])
+        # Escape velocity and beyond: hyperbolic
+        v_esc = m.sqrt(2 * sk.consts.mu_earth / 7000e3)
+        with pytest.raises(ValueError, match="[Ee]ccentricity"):
+            sk.kepler.from_pv(r, np.array([0.0, 1.5 * v_esc, 0.0]))
+        # Parallel r and v: zero angular momentum
+        with pytest.raises(ValueError, match="angular momentum"):
+            sk.kepler.from_pv(r, np.array([1000.0, 0.0, 0.0]))
+        # Malformed input is still a RuntimeError (shape, not physics)
+        with pytest.raises(RuntimeError):
+            sk.kepler.from_pv(np.zeros(4), np.zeros(3))
 
     def test_kepler_argp_and_deprecated_w(self):
         k_argp = sk.kepler(7000e3, 0.1, 0.5, 1.0, argp=0.3, nu=0.7)

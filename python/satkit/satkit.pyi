@@ -2325,9 +2325,11 @@ class kepler:
           body, ``mu`` (m^3/s^2); Earth's (``satkit.consts.mu_earth``) unless
           given, so lunar or heliocentric elements are supported by passing
           ``mu=satkit.consts.mu_moon`` / ``mu_sun``
-        - Only closed orbits are supported (0 <= eccen < 1); the constructor
-          and the ``a`` / ``eccen`` / ``inclination`` / ``mu`` setters raise
-          ``ValueError`` for elements outside their domain
+        - Only closed orbits are supported (0 <= eccen < 1); the constructor,
+          ``from_pv`` and every element setter raise ``ValueError`` for an
+          element outside its domain (the angle setters require a finite
+          value; ``mean_anomaly`` / ``eccentric_anomaly`` accept any value
+          and yield NaN for a non-finite one)
         - All angle units are radians
         - All length units are meters
         - All velocity units are meters / second
@@ -2360,7 +2362,7 @@ class kepler:
             argp: Argument of periapsis, radians (5th positional argument)
             nu: True anomaly, radians (6th positional argument)
             w: Argument of periapsis, radians — deprecated keyword alias of
-                ``argp``; give one or the other, not both
+                ``argp`` (kept indefinitely); give one or the other, not both
             true_anomaly: True anomaly, radians (keyword alternative to nu)
             eccentric_anomaly: Eccentric anomaly, radians (keyword alternative to nu)
             mean_anomaly: Mean anomaly, radians (keyword alternative to nu)
@@ -2569,21 +2571,21 @@ class kepler:
     def inclination(self, value: float) -> None: ...
     @property
     def raan(self) -> float:
-        """Right ascension of ascending node, radians"""
+        """Right ascension of ascending node, radians (finite; ``ValueError`` otherwise)"""
         ...
 
     @raan.setter
     def raan(self, value: float) -> None: ...
     @property
     def nu(self) -> float:
-        """True anomaly, radians"""
+        """True anomaly, radians (finite; ``ValueError`` otherwise)"""
         ...
 
     @nu.setter
     def nu(self, value: float) -> None: ...
     @property
     def argp(self) -> float:
-        """Argument of periapsis, radians"""
+        """Argument of periapsis, radians (finite; ``ValueError`` otherwise)"""
         ...
 
     @argp.setter
@@ -2592,7 +2594,8 @@ class kepler:
     def w(self) -> float:
         """Argument of periapsis, radians — deprecated alias of ``argp``
 
-        Reading or assigning it emits ``DeprecationWarning``.
+        Kept indefinitely for compatibility; reading or assigning it emits
+        ``DeprecationWarning``. Validated like ``argp``.
         """
         ...
 
@@ -2629,10 +2632,10 @@ class kepler:
             ```
 
         Raises:
-            RuntimeError: if the state is hyperbolic/parabolic (eccen >= 1) or
-                rectilinear (zero angular momentum), or if the inputs are not
-                3-element vectors.
-            ValueError: if ``mu`` is not positive and finite.
+            ValueError: if the state is hyperbolic/parabolic (eccen >= 1) or
+                rectilinear (zero angular momentum), or if ``mu`` is not
+                positive and finite.
+            RuntimeError: if the inputs are not 3-element vectors.
         """
         ...
 

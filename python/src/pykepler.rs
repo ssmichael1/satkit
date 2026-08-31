@@ -34,7 +34,8 @@ use crate::pyutils::py_to_smatrix;
 /// Raises:
 ///     ValueError: an element outside its domain (non-finite, ``a <= 0``,
 ///         ``eccen`` outside [0, 1), ``incl`` outside [0, pi], ``mu <= 0``),
-///         or an ambiguous anomaly / ``argp``-``w`` specification
+///         or an ambiguous anomaly / ``argp``-``w`` specification. The
+///         element setters apply the same checks.
 ///
 /// Returns:
 ///     Kepler: Keplerian orbital elements
@@ -165,8 +166,8 @@ impl PyKepler {
     }
 
     #[setter(raan)]
-    fn set_raan(&mut self, val: f64) {
-        self.0.raan = val;
+    fn set_raan(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.raan = val)
     }
 
     #[getter]
@@ -176,14 +177,15 @@ impl PyKepler {
     }
 
     #[setter(argp)]
-    fn set_argp(&mut self, val: f64) {
-        self.0.argp = val;
+    fn set_argp(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.argp = val)
     }
 
     #[getter]
     /// Argument of Periapsis, radians
     ///
-    /// Deprecated alias of ``argp``; emits ``DeprecationWarning``.
+    /// Deprecated alias of ``argp`` (kept indefinitely); emits
+    /// ``DeprecationWarning``.
     fn get_w(&self, py: Python) -> PyResult<f64> {
         Self::warn_w_deprecated(py)?;
         Ok(self.0.argp)
@@ -192,8 +194,7 @@ impl PyKepler {
     #[setter(w)]
     fn set_w(&mut self, py: Python, val: f64) -> PyResult<()> {
         Self::warn_w_deprecated(py)?;
-        self.0.argp = val;
-        Ok(())
+        self.set_validated(|k| k.argp = val)
     }
 
     #[getter]
@@ -203,8 +204,8 @@ impl PyKepler {
     }
 
     #[setter(nu)]
-    fn set_nu(&mut self, val: f64) {
-        self.0.nu = val;
+    fn set_nu(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.nu = val)
     }
 
     #[getter]
@@ -241,9 +242,9 @@ impl PyKepler {
     ///         (default: Earth); the returned elements carry it
     ///
     /// Raises:
-    ///     RuntimeError: open (eccen >= 1) or rectilinear state, or inputs
-    ///         that are not 3-element vectors
-    ///     ValueError: ``mu`` not positive and finite
+    ///     ValueError: open (eccen >= 1) or rectilinear (zero angular
+    ///         momentum) state, or ``mu`` not positive and finite
+    ///     RuntimeError: inputs that are not 3-element vectors
     #[staticmethod]
     #[pyo3(signature = (pos, vel, *, mu=None))]
     fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>, mu: Option<f64>) -> PyResult<Self> {
@@ -255,10 +256,9 @@ impl PyKepler {
                 "invalid Keplerian element mu = {mu}: gravitational parameter must be positive"
             )));
         }
-        match Kepler::from_pv_with_mu(pos, vel, mu) {
-            Ok(k) => Ok(Self(k)),
-            Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
-        }
+        Kepler::from_pv_with_mu(pos, vel, mu)
+            .map(Self)
+            .map_err(value_error)
     }
 
     /// Propagate the elements forward (or backward) in time

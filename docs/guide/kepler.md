@@ -30,16 +30,18 @@ derived property, but the class is constructed from $a$, not $p$.
 In Python the inclination property is spelled `inclination`; the constructor
 argument and the Rust field are `incl`. The argument of periapsis was called
 `w` before 0.22; in Python `w` still works as a constructor keyword and as a
-property, with a `DeprecationWarning`. Angles returned by `from_pv` are
+property (kept indefinitely), with a `DeprecationWarning`. Angles returned by `from_pv` are
 reduced to $[0, 2\pi)$; angles you set are stored as given.
 
 ### Validation
 
-The Python constructor, and the `a`, `eccen`, `inclination` and `mu`
-setters, reject an element outside its domain with `ValueError`: a
-non-finite value, $a \le 0$, $e \notin [0, 1)$, $i \notin [0, \pi]$ or
-$\mu \le 0$. The bounds are strict — $e = 1$ is not a closed orbit and is
-refused rather than producing NaN anomalies. In Rust, `Kepler::try_new`
+The Python constructor, `from_pv`, and every element setter reject an
+element outside its domain with `ValueError`: a non-finite value,
+$a \le 0$, $e \notin [0, 1)$, $i \notin [0, \pi]$ or $\mu \le 0$. The bounds
+are strict — $e = 1$ is not a closed orbit and is refused rather than
+producing NaN anomalies. (The `mean_anomaly` / `eccentric_anomaly` setters
+are the exception: they accept any value and yield NaN for a non-finite one,
+since they go through the capped Kepler's-equation solver.) In Rust, `Kepler::try_new`
 performs the same checks (returning `kepler::Error::InvalidElement`, which
 names the offending element) and `Kepler::validate` re-checks an element set
 whose public fields were assigned directly; `Kepler::new` remains unchecked.
@@ -121,7 +123,7 @@ elements are unchanged, only the dynamics re-target the other body. Note
 that `from_pv` interprets a state with whatever $\mu$ it is given — a lunar
 state read with Earth's $\mu$ yields a valid-looking but wrong ellipse.
 
-**Closed orbits only.** `from_pv` returns an error (Python: `RuntimeError`)
+**Closed orbits only.** `from_pv` returns an error (Python: `ValueError`)
 for parabolic or hyperbolic states ($e \ge 1$) and for rectilinear states
 (zero angular momentum, where the orbital plane is undefined). The Python
 constructor and `Kepler::try_new` reject $e \ge 1$ up front (see
