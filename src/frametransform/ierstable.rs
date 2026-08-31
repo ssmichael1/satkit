@@ -53,9 +53,10 @@ fn instance_for(id: IersTableId) -> &'static OnceLock<IERSTable> {
 /// [`datadir`](crate::utils::datadir) on first access.
 pub fn table(id: IersTableId) -> &'static IERSTable {
     // This backs the per-transform IERS reduction and cannot return a `Result`
-    // without threading it through every `q*2*` frame-transform signature, so a
-    // missing/corrupt table file — a setup error — panics with an actionable
-    // message rather than an opaque `unwrap`.
+    // without threading it through every `q*2*` frame-transform signature.
+    // With the tables compiled in and a corrupt on-disk copy falling back to
+    // them (`from_path_or_embedded`), this panic is unreachable short of a
+    // build defect in the embedded blobs; the message stays actionable anyway.
     instance_for(id).get_or_init(|| {
         let fname = id.default_filename();
         IERSTable::from_file(fname).unwrap_or_else(|e| {
@@ -128,7 +129,7 @@ impl IERSTable {
         // can be dropped in without rebuilding); otherwise the compiled-in
         // copy; a download is only attempted for a name that is not embedded.
         if let Some(path) = utils::find_data_file(fname) {
-            return Self::from_path(&path);
+            return Self::from_path_or_embedded(&path, fname);
         }
         if let Some(bytes) = utils::embedded::get(fname) {
             return Self::from_bytes(&bytes);
@@ -136,6 +137,34 @@ impl IERSTable {
         let path = utils::datadir()?.join(fname);
         download_if_not_exist(&path, None)?;
         Self::from_path(&path)
+    }
+
+    /// Load the table at `path`; if it is unreadable or does not parse and a
+    /// compiled-in copy of `fname` exists, warn and use that instead.
+    ///
+    /// A corrupt, truncated or substituted file in a search directory is a
+    /// setup problem, not a reason to lose the frame chain: the compiled-in
+    /// table is the same IERS 2010 series, so falling back to it is exact,
+    /// unlike degrading to an approximate transform. The warning (suppressed
+    /// by `SATKIT_QUIET=1`) says which file to fix. With this fallback the
+    /// only way [`table`] can still panic is a compiled-in table that fails
+    /// to inflate or parse, which is a build defect, not a runtime condition.
+    fn from_path_or_embedded(path: &std::path::Path, fname: &str) -> Result<Self> {
+        let err = match Self::from_path(path) {
+            Ok(table) => return Ok(table),
+            Err(e) => e,
+        };
+        let Some(bytes) = utils::embedded::get(fname) else {
+            return Err(err);
+        };
+        if std::env::var_os("SATKIT_QUIET").is_none() {
+            eprintln!(
+                "Warning: IERS table {} could not be loaded ({err}); using the compiled-in \
+                 copy of {fname} instead. Delete or replace the file to silence this.",
+                path.display()
+            );
+        }
+        Self::from_bytes(&bytes)
     }
 
     /// Load an IERS table from a file at `path`. No download is attempted.
@@ -165,6 +194,17 @@ impl IERSTable {
 
         let mut tnum: i32 = -1;
         let mut rowcnt: usize = 0;
+        // A table whose header promised more rows than the text delivered is
+        // a truncated file; the missing rows would otherwise stay zero and
+        // silently shift every transform that uses the series.
+        let truncated = |table: &Self, tnum: i32, rowcnt: usize| -> Result<()> {
+            if tnum >= 0 && rowcnt != table.data[tnum as usize].nrows() {
+                return Err(Error::InvalidIersTableDef {
+                    fname: String::from("<buffer>"),
+                });
+            }
+            Ok(())
+        };
 
         for line in text.lines() {
             let tline = line.trim();
@@ -172,6 +212,7 @@ impl IERSTable {
                 continue;
             }
             if tline.starts_with("j =") {
+                truncated(&table, tnum, rowcnt)?;
                 // Expected form: "j = <tnum> ... <tsize>"; read tokens rather
                 // than byte-slicing so a non-ASCII/corrupt line can't panic.
                 let s: Vec<&str> = tline.split_whitespace().collect();
@@ -213,6 +254,15 @@ impl IERSTable {
                 }
                 rowcnt += 1;
             }
+        }
+        truncated(&table, tnum, rowcnt)?;
+        // No `j =` header at all means this was never an IERS table (a proxy
+        // notice page, an empty file): six empty series would otherwise load
+        // fine and make every transform silently skip the nutation terms.
+        if tnum < 0 {
+            return Err(Error::InvalidIersTableDef {
+                fname: String::from("<buffer>"),
+            });
         }
         Ok(table)
     }
@@ -257,6 +307,64 @@ mod tests {
         let text = "j = 0  amp  1\n\
                     1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0 16.0 NOTNUM\n";
         assert!(IERSTable::parse(text).is_err());
+    }
+
+    /// One well-formed series: header declaring one row, then that row.
+    const MINIMAL_TABLE: &str = "j = 0  Number of terms = 1\n\
+        1  -6844318.44  1328.67  0 0 0 0 1 0 0 0 0 0 0 0 0\n";
+
+    #[test]
+    fn parse_accepts_a_minimal_table() {
+        let t = IERSTable::parse(MINIMAL_TABLE).unwrap();
+        assert_eq!(t.data[0].nrows(), 1);
+        assert_eq!(t.data[0].ncols(), 17);
+    }
+
+    #[test]
+    fn parse_rejects_text_with_no_table_header() {
+        // Six empty series used to load "successfully" and make every
+        // transform skip the nutation terms without a word.
+        for text in [
+            "",
+            "<!DOCTYPE html>\n<html><body>Review Usage Policy</body></html>\n",
+            "some unrelated text file with long enough lines to be considered\n",
+        ] {
+            assert!(IERSTable::parse(text).is_err(), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn parse_rejects_a_truncated_table() {
+        // Header promises two rows, the file delivers one: a cut-off transfer.
+        let text = "j = 0  Number of terms = 2\n\
+            1  -6844318.44  1328.67  0 0 0 0 1 0 0 0 0 0 0 0 0\n";
+        assert!(IERSTable::parse(text).is_err());
+        // Same, with the truncation before a second series starts.
+        let text =
+            format!("{text}j = 1  Number of terms = 1\n1 1.0 1.0 0 0 0 0 1 0 0 0 0 0 0 0 0\n");
+        assert!(IERSTable::parse(&text).is_err());
+    }
+
+    #[test]
+    fn corrupt_file_in_data_dir_falls_back_to_the_embedded_table() {
+        let dir = std::env::temp_dir().join(format!("satkit_iers_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bad = dir.join("tab5.2a.txt");
+        std::fs::write(&bad, "<!DOCTYPE html>\n<html><body>blocked</body></html>\n").unwrap();
+
+        // A known table name: the compiled-in copy takes over, fully populated.
+        let t = IERSTable::from_path_or_embedded(&bad, "tab5.2a.txt").unwrap();
+        assert!(
+            t.data[0].nrows() > 1000,
+            "embedded tab5.2a series is ~1300 rows"
+        );
+        // A name with no compiled-in copy: the original error is reported.
+        assert!(IERSTable::from_path_or_embedded(&bad, "no-such-table.txt").is_err());
+        // A missing file (not just a corrupt one) also falls back.
+        let missing = dir.join("tab5.2b.txt");
+        assert!(IERSTable::from_path_or_embedded(&missing, "tab5.2b.txt").is_ok());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
