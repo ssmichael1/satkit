@@ -446,6 +446,12 @@ impl SGP4Source for OMM {
             }
         }
 
+        if let Some(4) = self.ephemeris_type {
+            return Err(crate::sgp4::Error::source(Error::UnsupportedEphemerisType(
+                4,
+            )));
+        }
+
         let epoch = self.epoch_instant().map_err(crate::sgp4::Error::source)?;
 
         Ok(SGP4InitArgs::from_mean_elements(
@@ -496,6 +502,40 @@ mod tests {
         for (i, _t) in times.iter().enumerate() {
             assert!(states.errcode[i] == crate::sgp4::SGP4Error::SGP4Success);
         }
+    }
+
+    /// `EPHEMERIS_TYPE: 4` (SGP4-XP) parses but cannot be propagated.
+    #[test]
+    fn test_sgp4xp_type4_rejected() {
+        let json = r#"{
+            "OBJECT_NAME": "VANGUARD 1",
+            "OBJECT_ID": "1958-002B",
+            "EPOCH": "2023-03-01T02:53:12.947",
+            "MEAN_MOTION": 10.84532081,
+            "ECCENTRICITY": 0.1849434,
+            "INCLINATION": 34.2437,
+            "RA_OF_ASC_NODE": 69.7250,
+            "ARG_OF_PERICENTER": 110.9844,
+            "MEAN_ANOMALY": 271.4417,
+            "EPHEMERIS_TYPE": 4,
+            "NORAD_CAT_ID": 5
+        }"#;
+        let mut omm = OMM::from_json_string(&format!("[{json}]"))
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(omm.ephemeris_type, Some(4));
+        let epoch = omm.epoch_instant().unwrap();
+        let err = match crate::sgp4::sgp4(&mut omm, &[epoch]) {
+            Ok(_) => panic!("type-4 element set must not propagate"),
+            Err(e) => e,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("SGP4-XP"), "unexpected message: {msg}");
+        assert!(
+            msg.contains("EPHEMERIS_TYPE 4"),
+            "unexpected message: {msg}"
+        );
     }
 
     #[test]
