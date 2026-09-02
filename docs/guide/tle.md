@@ -39,9 +39,11 @@ OMMs are commonly published as:
 - XML
 - KVN (key-value notation)
 
-OMMs are commonly published as JSON or XML. The `satkit.omm_from_url()` function fetches OMMs from a URL and auto-detects the format, returning a list of Python dictionaries that can be passed directly to `satkit.sgp4()`.
+satkit reads the JSON and XML forms (KVN is not supported). In Python an OMM is a plain dictionary keyed by the CCSDS field names: `satkit.omm_from_url()`, `satkit.omm_from_file()` and `satkit.omm_from_text()` return a list of them, with every field the source provided (Space-Track's catalog extras such as `OBJECT_TYPE` and `RCS_SIZE` included) and numbers converted from Space-Track's quoted strings. `satkit.sgp4()` accepts these dictionaries directly, as well as the raw output of `json.load` on a CelesTrak or Space-Track response. `satkit.TLE.from_omm()` and `satkit.TLE.to_omm()` convert between the two representations.
 
-You can also provide OMM dictionaries manually (e.g. parsed from a local JSON file).
+A message whose `MEAN_ELEMENT_THEORY` is not SGP4, whose `TIME_SYSTEM` is not UTC, or whose `EPHEMERIS_TYPE` is 4 (SGP4-XP, which Space-Track distributes alongside classic SGP4 sets) is rejected rather than propagated with the wrong theory.
+
+In Rust the same message is the `satkit::omm::OMM` struct, which implements `SGP4Source`, serializes back to JSON with `serde`, and converts with `OMM::from_tle` / `OMM::to_tle`.
 
 ## Loading from URLs
 
@@ -131,4 +133,21 @@ XML format works the same way -- just change the URL:
 
 ```python
 omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=xml")
+```
+
+### OMM from a local file, and conversion to a TLE
+
+```python
+import satkit as sk
+
+# JSON or XML, detected from the content; one dict per message
+omms = sk.omm_from_file("gp.json")
+
+# Everything the source provided is in the dict
+print(omms[0]["OBJECT_NAME"], omms[0].get("OBJECT_TYPE"), omms[0].get("RCS_SIZE"))
+
+# The same element set as a TLE object, and back again
+tle = sk.TLE.from_omm(omms[0])
+print("\n".join(tle.to_2line()))
+assert sk.TLE.from_omm(tle.to_omm()).to_2line() == tle.to_2line()
 ```

@@ -1,4 +1,5 @@
 from .satkit import *
+from ._types import OMMDict
 
 from . import jplephem
 from . import frametransform
@@ -50,6 +51,9 @@ __all__ = [
     "propresult",
     "propstats",
     "omm_from_url",
+    "omm_from_file",
+    "omm_from_text",
+    "OMMDict",
     "tlefitstatus",
     "__version__",
 ]

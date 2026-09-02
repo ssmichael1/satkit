@@ -4,7 +4,6 @@ import math as m
 import os
 import json
 import pickle
-import xmltodict
 
 import satkit as sk
 
@@ -161,43 +160,193 @@ class TestSGP4:
         """
 
         basedir = testvec_dir + os.path.sep + "omm" + os.path.sep
-        fname = basedir + "spacetrack_omm.json"
-        with open(fname, "r") as fh:
+
+        # Plain json.load output is accepted as-is
+        with open(basedir + "spacetrack_omm.json", "r") as fh:
             omm_list = json.load(fh)
         epoch = sk.time(omm_list[0]["EPOCH"])
-        # Run SGP4 on first OMM in list
         _p, _v = sk.sgp4(omm_list[0], epoch)
-        # Run SGP4 on list of OMMs
-        _p, _v = sk.sgp4(omm_list[0:3], epoch)
+        p_list, _v = sk.sgp4(omm_list[0:3], epoch)
+        assert p_list.shape == (3, 3)
 
-        fname = basedir + "celestrak_omm.json"
-        with open(fname, "r") as fh:
+        with open(basedir + "celestrak_omm.json", "r") as fh:
             omm_list = json.load(fh)
         epoch = sk.time(omm_list[0]["EPOCH"])
-        # Run SGP4 on first OMM in list
         _p, _v = sk.sgp4(omm_list[0], epoch)
-        # Run SPG4 on list of OMMs
         _p, _v = sk.sgp4(omm_list[0:3], epoch)
 
-        # Now try XML files
-        fname = basedir + "spacetrack_omm.xml"
-        with open(fname, "r") as fh:
-            omm_xml = xmltodict.parse(fh.read())
-        omm_xml = omm_xml["ndm"]["omm"]
-        omm_xml = [d["body"]['segment']['data'] for d in omm_xml]
-        epoch = sk.time(omm_xml[0]["meanElements"]["EPOCH"])
-        _p, _v = sk.sgp4(omm_xml[0], epoch)
-        _p, _v = sk.sgp4(omm_xml[0:3], epoch)
+    def test_omm_loaders(self, testvec_dir):
+        """
+        omm_from_file / omm_from_text: JSON and XML, Space-Track and CelesTrak,
+        must give the same dictionaries, with every field and extra kept
+        """
+        basedir = testvec_dir + os.path.sep + "omm" + os.path.sep
 
-        fname = basedir + "celestrak_omm.xml"
-        with open(fname, "r") as fh:
-            omm_xml = xmltodict.parse(fh.read())
-        omm_xml = omm_xml["ndm"]["omm"]
-        omm_xml = [d["body"]['segment']['data'] for d in omm_xml]
-        epoch = sk.time(omm_xml[0]["meanElements"]["EPOCH"])
-        _p, _v = sk.sgp4(omm_xml[0], epoch)
-        _p, _v = sk.sgp4(omm_xml[0:3], epoch)
+        st_json = sk.omm_from_file(basedir + "spacetrack_omm.json")
+        st_xml = sk.omm_from_file(basedir + "spacetrack_omm.xml")
+        assert len(st_json) == len(st_xml) == 2000
+        j, x = st_json[0], st_xml[0]
+        # Space-Track quotes every number; the loader returns numbers
+        assert isinstance(j["MEAN_MOTION"], float)
+        assert isinstance(j["NORAD_CAT_ID"], int)
+        assert isinstance(x["MEAN_MOTION"], float)
+        # Metadata, comments and user-defined extras all survive both formats
+        for key in ("CCSDS_OMM_VERS", "COMMENT", "ORIGINATOR", "CREATION_DATE",
+                    "TIME_SYSTEM", "MEAN_ELEMENT_THEORY", "OBJECT_TYPE",
+                    "SEMIMAJOR_AXIS", "RCS_SIZE", "GP_ID"):
+            assert j[key] == x[key], key
+        assert j["RCS_SIZE"] is None
+        # The JSON endpoint also carries the TLE lines; XML does not
+        assert set(j) - set(x) == {"TLE_LINE0", "TLE_LINE1", "TLE_LINE2"}
+        assert set(x) <= set(j)
+        for key in x:
+            assert x[key] == j[key], key
 
+        ct_json = sk.omm_from_file(basedir + "celestrak_omm.json")
+        ct_xml = sk.omm_from_file(basedir + "celestrak_omm.xml")
+        assert len(ct_json) == len(ct_xml) == 149
+        assert ct_json[0]["OBJECT_NAME"] == ct_xml[0]["OBJECT_NAME"]
+        assert ct_json[0]["MEAN_MOTION"] == ct_xml[0]["MEAN_MOTION"]
+
+        # Loaded dicts propagate; a JSON re-serialization round-trips
+        epoch = sk.time(j["EPOCH"])
+        p1, _v = sk.sgp4(j, epoch)
+        p2, _v = sk.sgp4(x, epoch)
+        p3, _v = sk.sgp4(sk.omm_from_text(json.dumps(j))[0], epoch)
+        assert np.array_equal(p1, p2)
+        assert np.array_equal(p1, p3)
+
+        # A bare JSON object (not an array) is accepted too
+        assert len(sk.omm_from_text(json.dumps(j))) == 1
+        # KVN is not
+        with pytest.raises(RuntimeError, match="KVN"):
+            sk.omm_from_text("CCSDS_OMM_VERS = 3.0")
+
+    def test_omm_matches_tle_lines(self, testvec_dir):
+        """
+        Space-Track ships the TLE lines with each OMM: both parsers must
+        give the same SGP4 state (to the TLE's 0.864 ms epoch resolution)
+        """
+        basedir = testvec_dir + os.path.sep + "omm" + os.path.sep
+        omms = sk.omm_from_file(basedir + "spacetrack_omm.json")
+        checked = 0
+        for rec in omms[:100]:
+            tle = sk.TLE.from_lines([rec["TLE_LINE1"], rec["TLE_LINE2"]])
+            tm = sk.time(rec["EPOCH"]) + sk.duration(hours=3)
+            p_tle, _v, e_tle = sk.sgp4(tle, tm, errflag=True)
+            p_omm, _v, e_omm = sk.sgp4(rec, tm, errflag=True)
+            if e_tle[0] != 0 or e_omm[0] != 0:
+                continue
+            assert np.linalg.norm(p_tle - p_omm) < 10.0, rec["OBJECT_NAME"]
+            checked += 1
+        assert checked > 50
+
+    def test_omm_dict_shapes(self):
+        """
+        sgp4 accepts flat CCSDS dicts and the nested groups of an
+        xmltodict-style tree, with numbers as strings, and rejects what
+        SGP4 cannot propagate
+        """
+        flat = {
+            "OBJECT_NAME": "ISS (ZARYA)", "OBJECT_ID": "1998-067A",
+            "EPOCH": "2021-10-02T14:10:59.999", "TIME_SYSTEM": "UTC",
+            "MEAN_ELEMENT_THEORY": "SGP4",
+            "MEAN_MOTION": "15.48915330", "ECCENTRICITY": "0.0007417",
+            "INCLINATION": "51.6432", "RA_OF_ASC_NODE": "351.4697",
+            "ARG_OF_PERICENTER": "130.5364", "MEAN_ANOMALY": "329.6482",
+            "BSTAR": "0.0001027", "MEAN_MOTION_DOT": "0.00016717",
+            "MEAN_MOTION_DDOT": "0",
+        }
+        epoch = sk.time(flat["EPOCH"])
+        tm = epoch + sk.duration(minutes=30)
+        p_ref, _v = sk.sgp4(flat, tm)
+
+        # Nested (xmltodict) form, handed in at the omm, body, or data level
+        nested = {
+            "@id": "CCSDS_OMM_VERS", "@version": "2.0",
+            "body": {"segment": {
+                "metadata": {k: flat[k] for k in ("OBJECT_NAME", "OBJECT_ID",
+                                                  "TIME_SYSTEM", "MEAN_ELEMENT_THEORY")},
+                "data": {
+                    "meanElements": {k: flat[k] for k in (
+                        "EPOCH", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION",
+                        "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY")},
+                    "tleParameters": {k: flat[k] for k in (
+                        "BSTAR", "MEAN_MOTION_DOT", "MEAN_MOTION_DDOT")},
+                    "userDefinedParameters": {"USER_DEFINED": [
+                        {"@parameter": "OBJECT_TYPE", "#text": "PAYLOAD"},
+                        {"@parameter": "RCS_SIZE"},
+                    ]},
+                },
+            }},
+        }
+        for node in (nested, nested["body"], nested["body"]["segment"]["data"]):
+            p, _v = sk.sgp4(node, tm)
+            assert np.array_equal(p, p_ref)
+
+        # A trimmed dict with only the elements, epoch as satkit.time / datetime
+        minimal = {k: float(flat[k]) for k in (
+            "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE",
+            "ARG_OF_PERICENTER", "MEAN_ANOMALY")}
+        minimal["BSTAR"] = float(flat["BSTAR"])
+        minimal["MEAN_MOTION_DOT"] = float(flat["MEAN_MOTION_DOT"])
+        for ep in (epoch, epoch.as_datetime(), flat["EPOCH"]):
+            p, _v = sk.sgp4({**minimal, "EPOCH": ep}, tm)
+            assert np.linalg.norm(p - p_ref) < 1e-6
+
+        # Optional fields may be None or empty; metadata is case-insensitive
+        p, _v = sk.sgp4({**flat, "BSTAR": None, "MEAN_MOTION_DDOT": "",
+                         "MEAN_ELEMENT_THEORY": " sgp4 "}, tm)
+        assert np.linalg.norm(p - p_ref) < 1e3  # BSTAR gone: small drag change
+
+        with pytest.raises(RuntimeError, match="EPOCH"):
+            sk.sgp4({}, tm)
+        with pytest.raises(RuntimeError, match="MEAN_MOTION"):
+            sk.sgp4({**flat, "MEAN_MOTION": "fast"}, tm)
+        with pytest.raises(RuntimeError, match="EPHEMERIS_TYPE 4"):
+            sk.sgp4({**flat, "EPHEMERIS_TYPE": 4}, tm)
+        with pytest.raises(RuntimeError, match="MEAN_ELEMENT_THEORY"):
+            sk.sgp4({**flat, "MEAN_ELEMENT_THEORY": "DSST"}, tm)
+        with pytest.raises(RuntimeError, match="TIME_SYSTEM"):
+            sk.sgp4({**flat, "TIME_SYSTEM": "TAI"}, tm)
+
+    def test_tle_omm_conversion(self):
+        """
+        TLE.to_omm / TLE.from_omm round-trip and agree with sgp4 on both
+        """
+        line0 = "0 ISS (ZARYA)"
+        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
+        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
+        tle = sk.TLE.from_lines([line0, line1, line2])
+
+        omm = tle.to_omm()
+        assert omm["OBJECT_NAME"] == "ISS (ZARYA)"
+        assert omm["OBJECT_ID"] == "1998-067A"
+        assert omm["NORAD_CAT_ID"] == 25544
+        assert omm["ELEMENT_SET_NO"] == 900
+        assert omm["REV_AT_EPOCH"] == 29935
+        assert omm["EPHEMERIS_TYPE"] == 0
+        assert omm["MEAN_ELEMENT_THEORY"] == "SGP4"
+        assert omm["MEAN_MOTION"] == tle.mean_motion
+        assert omm["BSTAR"] == tle.bstar
+        assert sk.time(omm["EPOCH"]) == tle.epoch
+        assert "CLASSIFICATION_TYPE" not in omm
+        json.dumps(omm)  # plain JSON-serializable values only
+
+        back = sk.TLE.from_omm(omm)
+        assert back.to_2line() == tle.to_2line()
+        assert back.intl_desig == "98067A"
+        assert back.name == "ISS (ZARYA)"
+
+        tm = tle.epoch + sk.duration(hours=1)
+        p_tle, v_tle = sk.sgp4(tle, tm)
+        p_omm, v_omm = sk.sgp4(omm, tm)
+        p_back, v_back = sk.sgp4(back, tm)
+        assert np.array_equal(p_tle, p_omm)
+        assert np.array_equal(p_tle, p_back)
+
+        # Pickling the converted TLE keeps the designator
+        assert pickle.loads(pickle.dumps(back)).intl_desig == "98067A"
 
     def test_sgp4_vallado(self, testvec_dir):
         """
