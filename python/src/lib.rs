@@ -222,6 +222,10 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         .unwrap();
     m.add_function(wrap_pyfunction!(pyomm::omm_from_url, m)?)
         .unwrap();
+    m.add_function(wrap_pyfunction!(pyomm::omm_from_file, m)?)
+        .unwrap();
+    m.add_function(wrap_pyfunction!(pyomm::omm_from_text, m)?)
+        .unwrap();
 
     m.add_wrapped(wrap_pymodule!(frametransform))?;
     m.add_wrapped(wrap_pymodule!(jplephem))?;

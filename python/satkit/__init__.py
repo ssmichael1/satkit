@@ -3,6 +3,7 @@ from importlib.metadata import version
 __version__ = version("satkit")
 
 from .satkit import *  # type: ignore
+from ._types import OMMDict
 
 # The core data (IERS nutation tables, gravity models to degree 70) is
 # compiled into the extension, so satkit works with no data directory at all.

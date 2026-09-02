@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Changed
+
+- OMM interface overhaul: `omm_from_url` returns every field the source provided (metadata, `COMMENT`, Space-Track extras such as `OBJECT_TYPE`/`RCS_SIZE`/`TLE_LINE1`, XML `USER_DEFINED` parameters) instead of 17 keys; new `omm_from_file` / `omm_from_text` loaders (JSON or XML, detected from content) replace the `xmltodict` workaround; `TLE.from_omm` / `TLE.to_omm` convert between the representations; `sgp4` dict inputs go through the same serde parser as Rust (quoted numbers, `null`/empty optionals, case-insensitive metadata, any level of an xmltodict tree, `EPOCH` as `time`/`datetime`); propagation rejects `EPHEMERIS_TYPE` 4 (SGP4-XP) instead of running classic SGP4 on it; stubs gain the `OMMDict` type. Rust: `OMM.epoch` is an `Instant` (was a string; `epoch_instant()` deprecated), `OMM` derives `Serialize`, gains `from_mean_elements`, `from_tle`/`to_tle`, `from_json_value`, `from_text`/`from_file`, `reset_cache`; `from_json_string` accepts a bare object; `omm::Error` is `#[non_exhaustive]` with a single `InvalidField` variant; `Default` is removed ([#173](https://github.com/ssmichael1/satkit/pull/173))
+
 ### Fixed
 
 - `satkit.density.nrlmsise(altitude_m, latitude_rad, longitude_rad, time)` converts its radian latitude/longitude to the degrees the model takes; the values were passed through unchanged, so a caller following the stub at 60° N was evaluated at 1.05° N (the `itrfcoord` overload and `nrlmsise00(latitude_deg=...)` were already correct) ([#171](https://github.com/ssmichael1/satkit/pull/171))

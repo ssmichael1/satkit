@@ -13,6 +13,8 @@ import datetime
 from collections.abc import Sequence
 from typing import Any, ClassVar, Optional, TypeAlias, Union, overload
 
+from ._types import OMMDict
+
 # Time inputs are polymorphic: anywhere a ``satkit.time`` is accepted, a
 # ``datetime.datetime`` is accepted interchangeably (and, for the vectorized
 # functions, a list or numpy array of either). These aliases capture that so
@@ -315,6 +317,51 @@ class TLE:
         """Set the drag term (B*) of the satellite, in units of 1 / Earth radii"""
         ...
 
+    @staticmethod
+    def from_omm(omm: OMMDict) -> TLE:
+        """Build a TLE from an OMM (Orbital Mean-Element Message) dictionary
+
+        The dictionary is the same shape :func:`sgp4` accepts: the flat CCSDS
+        keys of a Space-Track / CelesTrak JSON record (see :class:`OMMDict`),
+        or the nested ``meanElements`` / ``tleParameters`` groups of an
+        XML-derived dict. Numbers may be strings.
+
+        The six mean elements, epoch, ``BSTAR``, ``MEAN_MOTION_DOT``,
+        ``MEAN_MOTION_DDOT``, ``NORAD_CAT_ID``, ``ELEMENT_SET_NO``,
+        ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; absent optional
+        values become zero. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
+        international designator. Other metadata is dropped.
+
+        Args:
+            omm (OMMDict): OMM dictionary
+
+        Returns:
+            TLE: the equivalent two-line element set
+
+        Example:
+            ```python
+            omm = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json")[0]
+            tle = sk.TLE.from_omm(omm)
+            print("\\n".join(tle.to_2line()))
+            ```
+        """
+        ...
+
+    def to_omm(self) -> OMMDict:
+        """Render this TLE as an OMM (Orbital Mean-Element Message) dictionary
+
+        The result uses the flat CCSDS keys (see :class:`OMMDict`) with
+        ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
+        revolutions per day, and can be passed back to :func:`sgp4` or
+        serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
+        international designator (``98067A`` becomes ``1998-067A``). The TLE
+        carries no classification letter, so ``CLASSIFICATION_TYPE`` is absent.
+
+        Returns:
+            OMMDict: OMM dictionary
+        """
+        ...
+
     def to_2line(self) -> list[str]:
         """
         Output as 2 canonical TLE Lines
@@ -398,7 +445,7 @@ class TLE:
         ...
 
 def sgp4(
-    tle: TLE | list[TLE] | dict,
+    tle: TLE | OMMDict | list[TLE | OMMDict],
     time: TimeInput,
     **kwargs,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -414,7 +461,8 @@ def sgp4(
     <https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev3.pdf>
 
     Args:
-        tle (TLE | list[TLE] | dict): TLE or OMM (or list of TLES) on which to operate
+        tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
+            ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list mixing both
         time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity
 
     Keyword Args:
@@ -439,9 +487,16 @@ def sgp4(
           libraries) return position in kilometers and velocity in kilometers/second.
           satkit converts these to meters and meters/second so that SGP4 output is
           consistent with every other position and velocity in the library.
-        - Now supports propagation of OMM (Orbital Mean-Element Message) dictionaries.
-          The dictionaries must follow the structure used by <https://www.celestrak.org> or
-          <https://www.space-track.org.>
+        - **OMM dictionaries:** any dict with the CCSDS keys ``EPOCH``, ``MEAN_MOTION``,
+          ``ECCENTRICITY``, ``INCLINATION``, ``RA_OF_ASC_NODE``, ``ARG_OF_PERICENTER`` and
+          ``MEAN_ANOMALY`` (plus optional ``BSTAR``, ``MEAN_MOTION_DOT``, ``MEAN_MOTION_DDOT``)
+          is accepted, whether it came from :func:`omm_from_url` / :func:`omm_from_file` /
+          :func:`omm_from_text`, from ``json.load`` on a CelesTrak or Space-Track response
+          (numbers may be strings), or from ``xmltodict`` on the XML form (the nested
+          ``meanElements`` / ``tleParameters`` groups are understood). ``EPOCH`` may be an
+          RFC 3339 string, a ``satkit.time`` or a ``datetime``. Other keys are ignored,
+          except that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be
+          ``UTC`` and ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
         - The "TEME" frame of the SGP4 state vectors is not a truly inertial frame.  It is a "True Equator Mean Equinox"
           frame, which is a non-rotating frame with respect to the mean equator and mean equinox of the epoch of the TLE.
           It is close to a true inertial frame, but can be offset by small amounts due to precession and nutation.
@@ -474,17 +529,13 @@ def sgp4(
 
 
         ```python
-        import requests
-        import json
-
-        # Query ephemeris for the International Space Station (ISS)
-        url = '<https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json'>
-        with requests.get(url) as response:
-            omm = response.json()
+        # Query the OMM for the International Space Station (ISS)
+        url = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json"
+        omm = satkit.omm_from_url(url)[0]
         # Get a representative time from the output
-        epoch = sk.time(omm[0]['EPOCH'])
+        epoch = satkit.time(omm["EPOCH"])
         # Compute TEME position & velocity at epoch
-        pteme, vteme = satkit.sgp4(omm[0], epoch)
+        pteme, vteme = satkit.sgp4(omm, epoch)
         ```
 
     """
@@ -4222,7 +4273,7 @@ def propagate(
     """
     ...
 
-def omm_from_url(url: str) -> list[dict]:
+def omm_from_url(url: str) -> list[OMMDict]:
     """Load OMM(s) from a URL as a list of dictionaries
 
     Fetches the content at the given URL and auto-detects JSON vs XML format.
@@ -4232,8 +4283,8 @@ def omm_from_url(url: str) -> list[dict]:
         url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
 
     Returns:
-        list[dict]: List of OMM dictionaries with standard CCSDS keys
-            (OBJECT_NAME, EPOCH, MEAN_MOTION, ECCENTRICITY, etc.)
+        list[OMMDict]: one dictionary per message, with every CCSDS field the
+            source provided plus its extra keys (see :class:`OMMDict`)
 
     Example:
         ```python
@@ -4241,6 +4292,53 @@ def omm_from_url(url: str) -> list[dict]:
 
         omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json")
         pos, vel = sk.sgp4(omms[0], sk.time(2024, 1, 1))
+        ```
+    """
+    ...
+
+def omm_from_file(filename: str) -> list[OMMDict]:
+    """Load OMM(s) from a JSON or XML file as a list of dictionaries
+
+    The format is detected from the content, not the file extension: a file
+    starting with ``[`` or ``{`` is JSON (one message or an array of them), one
+    starting with ``<`` is a CCSDS NDM/XML document. KVN is not supported.
+
+    Args:
+        filename (str): path to the file
+
+    Returns:
+        list[OMMDict]: one dictionary per message (see :class:`OMMDict`)
+
+    Example:
+        ```python
+        import satkit as sk
+
+        omms = sk.omm_from_file("gp.xml")   # saved from Space-Track or CelesTrak
+        pos, vel = sk.sgp4(omms, sk.time(2024, 1, 1))
+        ```
+    """
+    ...
+
+def omm_from_text(text: str) -> list[OMMDict]:
+    """Parse OMM(s) from JSON or XML text as a list of dictionaries
+
+    Text starting with ``[`` or ``{`` is parsed as JSON (one message or an
+    array of them), text starting with ``<`` as a CCSDS NDM/XML document.
+    KVN is not supported.
+
+    Args:
+        text (str): the document
+
+    Returns:
+        list[OMMDict]: one dictionary per message (see :class:`OMMDict`)
+
+    Example:
+        ```python
+        import satkit as sk
+        import requests
+
+        r = requests.get("https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=xml")
+        omm = sk.omm_from_text(r.text)[0]
         ```
     """
     ...

@@ -3,6 +3,7 @@ use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
 use crate::pyinstant::ToTimeVec;
+use crate::pyomm::omm_from_pydict;
 use crate::pytle::PyTLE;
 use numpy::PyArray1;
 use numpy::PyArrayMethods;
@@ -75,7 +76,7 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
 }
 
 /// Convert a Python value to an Instant. can be string, datetime, or PyInstant
-fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> {
+pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> {
     if val.is_instance_of::<crate::pyinstant::PyInstant>() {
         let instant: crate::pyinstant::PyInstant = val.extract().unwrap();
         Ok(instant.0)
@@ -94,148 +95,6 @@ fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> {
     } else {
         bail!("Invalid epoch type");
     }
-}
-
-/// OMM files can have floats as either strings or numbers
-/// so handle both cases here
-///
-/// (very annoying!)
-fn float_from_py(val: &Bound<'_, PyAny>) -> Result<f64> {
-    if val.is_instance_of::<PyString>() {
-        let s: String = val.extract()?;
-        s.parse::<f64>()
-            .map_err(|e| anyhow::anyhow!("Invalid float string: {}", e))
-    } else {
-        val.extract::<f64>()
-            .map_err(|e| anyhow::anyhow!("Invalid float value: {}", e))
-    }
-}
-
-fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<satkit::omm::OMM> {
-    let mut omm = satkit::omm::OMM::default();
-
-    omm.inclination = f64::NAN;
-    omm.raan = f64::NAN;
-    omm.eccentricity = f64::NAN;
-    omm.arg_of_pericenter = f64::NAN;
-    omm.mean_anomaly = f64::NAN;
-    omm.mean_motion = f64::NAN;
-    omm.epoch = String::new();
-
-    if let Some(v) = dict.get_item("INCLINATION")? {
-        omm.inclination = float_from_py(&v)?;
-    }
-    if let Some(v) = dict.get_item("RA_OF_ASC_NODE")? {
-        omm.raan = float_from_py(&v)?;
-    }
-    if let Some(v) = dict.get_item("ECCENTRICITY")? {
-        omm.eccentricity = float_from_py(&v)?;
-    }
-    if let Some(v) = dict.get_item("ARG_OF_PERICENTER")? {
-        omm.arg_of_pericenter = float_from_py(&v)?;
-    }
-    if let Some(v) = dict.get_item("MEAN_ANOMALY")? {
-        omm.mean_anomaly = float_from_py(&v)?;
-    }
-    if let Some(v) = dict.get_item("MEAN_MOTION")? {
-        omm.mean_motion = float_from_py(&v)?;
-    }
-    if let Some(v) = dict.get_item("EPOCH")? {
-        omm.epoch = epoch_from_val(&v)?.as_rfc3339();
-    }
-    if let Some(v) = dict.get_item("BSTAR")? {
-        omm.bstar = Some(float_from_py(&v)?);
-    }
-    if let Some(v) = dict.get_item("MEAN_MOTION_DOT")? {
-        omm.mean_motion_dot = Some(float_from_py(&v)?);
-    }
-    if let Some(v) = dict.get_item("MEAN_MOTION_DDOT")? {
-        omm.mean_motion_ddot = Some(float_from_py(&v)?);
-    }
-    if let Some(d) = dict.get_item("meanElements")? {
-        let d = d.cast::<PyDict>().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "Invalid meanElements dictionary: {}",
-                e
-            ))
-        })?;
-        if let Some(v) = d.get_item("EPOCH")? {
-            omm.epoch = epoch_from_val(&v)?.as_rfc3339();
-        }
-        if let Some(v) = d.get_item("MEAN_MOTION")? {
-            omm.mean_motion = float_from_py(&v)?;
-        }
-        if let Some(v) = d.get_item("ECCENTRICITY")? {
-            omm.eccentricity = float_from_py(&v)?;
-        }
-        if let Some(v) = d.get_item("INCLINATION")? {
-            omm.inclination = float_from_py(&v)?;
-        }
-        if let Some(v) = d.get_item("ARG_OF_PERICENTER")? {
-            omm.arg_of_pericenter = float_from_py(&v)?;
-        }
-        if let Some(v) = d.get_item("RA_OF_ASC_NODE")? {
-            omm.raan = float_from_py(&v)?;
-        }
-        if let Some(v) = d.get_item("MEAN_ANOMALY")? {
-            omm.mean_anomaly = float_from_py(&v)?;
-        }
-    }
-    if let Some(d) = dict.get_item("tleParameters")? {
-        let d = d.cast::<PyDict>().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "Invalid tleParameters dictionary: {}",
-                e
-            ))
-        })?;
-        if let Some(v) = d.get_item("BSTAR")? {
-            omm.bstar = Some(float_from_py(&v)?);
-        }
-        if let Some(v) = d.get_item("MEAN_MOTION_DOT")? {
-            omm.mean_motion_dot = Some(float_from_py(&v)?);
-        }
-        if let Some(v) = d.get_item("MEAN_MOTION_DDOT")? {
-            omm.mean_motion_ddot = Some(float_from_py(&v)?);
-        }
-    }
-    if omm.epoch.is_empty() {
-        bail!("OMM epoch is required");
-    }
-    if omm.mean_motion.is_nan() {
-        bail!("OMM mean motion is required");
-    }
-    if omm.eccentricity.is_nan() {
-        bail!("OMM eccentricity is required");
-    }
-    if omm.inclination.is_nan() {
-        bail!("OMM inclination is required");
-    }
-    if omm.arg_of_pericenter.is_nan() {
-        bail!("OMM argument of pericenter is required");
-    }
-    if omm.raan.is_nan() {
-        bail!("OMM RA of ascending node is required");
-    }
-    if omm.mean_anomaly.is_nan() {
-        bail!("OMM mean anomaly is required");
-    }
-    // Mirror the Rust-side OMM validation: if the dict declares a mean-element
-    // theory or time system, it must be one SGP4 can actually consume. (Absent
-    // keys are tolerated — many trimmed dicts carry only the mean elements.)
-    if let Some(v) = dict.get_item("MEAN_ELEMENT_THEORY")? {
-        let theory: String = v.extract()?;
-        if theory != "SGP4" {
-            bail!("Unsupported MEAN_ELEMENT_THEORY \"{theory}\"; must be SGP4");
-        }
-    }
-    if let Some(v) = dict.get_item("TIME_SYSTEM")? {
-        let ts: String = v.extract()?;
-        if ts != "UTC" {
-            bail!("Unsupported TIME_SYSTEM \"{ts}\"; must be UTC");
-        }
-    }
-
-    Ok(omm)
 }
 
 /// Pack a single SGP4 propagation result (position/velocity, and optionally the
