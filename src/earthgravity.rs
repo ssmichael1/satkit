@@ -432,7 +432,37 @@ impl Gravity {
         )
     }
 
+    // On baseline x86-64, `f64::mul_add` is a call into the `fma` runtime
+    // function per term, so the kernels are also compiled with the `fma`
+    // feature and dispatched at runtime.
+
     fn accel_and_partials_t<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> (Vector3, Matrix3) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            if std::arch::is_x86_feature_detected!("fma") {
+                // SAFETY: the `fma` feature was detected on this CPU.
+                return unsafe { self.accel_and_partials_t_fma::<N, NP4>(pos, max_order) };
+            }
+        }
+        self.accel_and_partials_t_inner::<N, NP4>(pos, max_order)
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "fma")]
+    unsafe fn accel_and_partials_t_fma<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> (Vector3, Matrix3) {
+        self.accel_and_partials_t_inner::<N, NP4>(pos, max_order)
+    }
+
+    #[inline(always)]
+    fn accel_and_partials_t_inner<const N: usize, const NP4: usize>(
         &self,
         pos: &Vector3,
         max_order: usize,
@@ -448,12 +478,38 @@ impl Gravity {
         pos: &Vector3,
         max_order: usize,
     ) -> Vector3 {
-        let (v, w) = self.compute_legendre::<NP4>(pos);
+        #[cfg(target_arch = "x86_64")]
+        {
+            if std::arch::is_x86_feature_detected!("fma") {
+                // SAFETY: the `fma` feature was detected on this CPU.
+                return unsafe { self.accel_t_fma::<N, NP4>(pos, max_order) };
+            }
+        }
+        self.accel_t_inner::<N, NP4>(pos, max_order)
+    }
 
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "fma")]
+    unsafe fn accel_t_fma<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> Vector3 {
+        self.accel_t_inner::<N, NP4>(pos, max_order)
+    }
+
+    #[inline(always)]
+    fn accel_t_inner<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> Vector3 {
+        let (v, w) = self.compute_legendre::<NP4>(pos);
         self.accel_from_legendre_t::<N, NP4>(&v, &w, max_order)
     }
 
     // Equations 7.65 to 7.69 in Montenbruck & Gill
+    #[inline(always)]
     fn partials_from_legendre_t<const N: usize, const NP4: usize>(
         &self,
         v: &Legendre<NP4>,
@@ -556,6 +612,7 @@ impl Gravity {
     }
 
     /// See Equation 3.33 in Montenbruck & Gill
+    #[inline(always)]
     fn accel_from_legendre_t<const N: usize, const NP4: usize>(
         &self,
         v: &Legendre<NP4>,
@@ -601,6 +658,7 @@ impl Gravity {
         numeris::vector![ax, ay, az] * self.gravity_constant / self.radius / self.radius
     }
 
+    #[inline(always)]
     fn compute_legendre<const NP4: usize>(&self, pos: &Vector3) -> (Legendre<NP4>, Legendre<NP4>) {
         let rsq = pos.norm_squared();
         let scale = self.radius / rsq;
