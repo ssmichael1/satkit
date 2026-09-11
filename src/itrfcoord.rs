@@ -278,25 +278,19 @@ impl ITRFCoord {
         const E2: f64 = 1.0 - (1.0 - WGS84_F) * (1.0 - WGS84_F);
         const EP2: f64 = E2 / (1.0 - E2);
 
+        // One refinement of the reduced latitude reaches double precision
+        // from 20 km below the surface to beyond GEO.
         let rho = self.itrf[0].hypot(self.itrf[1]);
-        let mut beta: f64 = f64::atan2(self.itrf[2], (1.0 - WGS84_F) * rho);
-        let mut sinbeta: f64 = beta.sin();
-        let mut cosbeta: f64 = beta.cos();
-        let mut phi: f64 = f64::atan2(
-            (B * EP2).mul_add(sinbeta.powi(3), self.itrf[2]),
-            (WGS84_A * E2).mul_add(-cosbeta.powi(3), rho),
+        let beta: f64 = f64::atan2(self.itrf[2], (1.0 - WGS84_F) * rho);
+        let phi: f64 = f64::atan2(
+            (B * EP2).mul_add(beta.sin().powi(3), self.itrf[2]),
+            (WGS84_A * E2).mul_add(-beta.cos().powi(3), rho),
         );
-        let mut betanew: f64 = f64::atan2((1.0 - WGS84_F) * phi.sin(), phi.cos());
-        for _x in 0..5 {
-            beta = betanew;
-            sinbeta = beta.sin();
-            cosbeta = beta.cos();
-            phi = f64::atan2(
-                (B * EP2).mul_add(sinbeta.powi(3), self.itrf[2]),
-                (WGS84_A * E2).mul_add(-cosbeta.powi(3), rho),
-            );
-            betanew = f64::atan2((1.0 - WGS84_F) * phi.sin(), phi.cos());
-        }
+        let beta: f64 = f64::atan2((1.0 - WGS84_F) * phi.sin(), phi.cos());
+        let phi: f64 = f64::atan2(
+            (B * EP2).mul_add(beta.sin().powi(3), self.itrf[2]),
+            (WGS84_A * E2).mul_add(-beta.cos().powi(3), rho),
+        );
         let lat: f64 = phi;
         let lon: f64 = f64::atan2(self.itrf[1], self.itrf[0]);
         let sinphi: f64 = phi.sin();

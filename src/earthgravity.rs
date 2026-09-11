@@ -432,7 +432,37 @@ impl Gravity {
         )
     }
 
+    // On baseline x86-64, `f64::mul_add` is a call into the `fma` runtime
+    // function per term, so the kernels are also compiled with the `fma`
+    // feature and dispatched at runtime.
+
     fn accel_and_partials_t<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> (Vector3, Matrix3) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            if std::arch::is_x86_feature_detected!("fma") {
+                // SAFETY: the `fma` feature was detected on this CPU.
+                return unsafe { self.accel_and_partials_t_fma::<N, NP4>(pos, max_order) };
+            }
+        }
+        self.accel_and_partials_t_inner::<N, NP4>(pos, max_order)
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "fma")]
+    unsafe fn accel_and_partials_t_fma<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> (Vector3, Matrix3) {
+        self.accel_and_partials_t_inner::<N, NP4>(pos, max_order)
+    }
+
+    #[inline(always)]
+    fn accel_and_partials_t_inner<const N: usize, const NP4: usize>(
         &self,
         pos: &Vector3,
         max_order: usize,
@@ -448,12 +478,38 @@ impl Gravity {
         pos: &Vector3,
         max_order: usize,
     ) -> Vector3 {
-        let (v, w) = self.compute_legendre::<NP4>(pos);
+        #[cfg(target_arch = "x86_64")]
+        {
+            if std::arch::is_x86_feature_detected!("fma") {
+                // SAFETY: the `fma` feature was detected on this CPU.
+                return unsafe { self.accel_t_fma::<N, NP4>(pos, max_order) };
+            }
+        }
+        self.accel_t_inner::<N, NP4>(pos, max_order)
+    }
 
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "fma")]
+    unsafe fn accel_t_fma<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> Vector3 {
+        self.accel_t_inner::<N, NP4>(pos, max_order)
+    }
+
+    #[inline(always)]
+    fn accel_t_inner<const N: usize, const NP4: usize>(
+        &self,
+        pos: &Vector3,
+        max_order: usize,
+    ) -> Vector3 {
+        let (v, w) = self.compute_legendre::<NP4>(pos);
         self.accel_from_legendre_t::<N, NP4>(&v, &w, max_order)
     }
 
     // Equations 7.65 to 7.69 in Montenbruck & Gill
+    #[inline(always)]
     fn partials_from_legendre_t<const N: usize, const NP4: usize>(
         &self,
         v: &Legendre<NP4>,
@@ -556,6 +612,7 @@ impl Gravity {
     }
 
     /// See Equation 3.33 in Montenbruck & Gill
+    #[inline(always)]
     fn accel_from_legendre_t<const N: usize, const NP4: usize>(
         &self,
         v: &Legendre<NP4>,
@@ -601,6 +658,7 @@ impl Gravity {
         numeris::vector![ax, ay, az] * self.gravity_constant / self.radius / self.radius
     }
 
+    #[inline(always)]
     fn compute_legendre<const NP4: usize>(&self, pos: &Vector3) -> (Legendre<NP4>, Legendre<NP4>) {
         let rsq = pos.norm_squared();
         let scale = self.radius / rsq;
@@ -695,14 +753,11 @@ impl Gravity {
         let mut gravity_constant: f64 = 0.0;
         let mut radius: f64 = 0.0;
         let mut max_degree: usize = 0;
-        let mut header_cnt = 0;
 
-        let lines: Vec<&str> = text.lines().collect();
+        let mut lines = text.lines();
 
         // Read header lines
-        for line in &lines {
-            header_cnt += 1;
-
+        for line in lines.by_ref() {
             let s: Vec<&str> = line.split_whitespace().collect();
             // Check for the header terminator before the two-token guard: the
             // ICGEM spec allows a bare "end_of_head" line (no ==== filler),
@@ -737,34 +792,29 @@ impl Gravity {
         let table_dim = (max_degree + 1).min(MAX_COEFF_DIM);
         let mut cs: CoeffTable = CoeffTable::zeros(table_dim, table_dim);
 
-        for line in &lines[header_cnt..] {
-            let s: Vec<&str> = line.split_whitespace().collect();
-            // Need at least keyword, degree, order, and the C coefficient
-            // (index 3); the S coefficient (index 4) is required only when m > 0.
-            if s.len() < 4 {
-                return Err(Error::InvalidLine((*line).to_string()));
-            }
-
-            let n: usize = s[1].parse()?;
-            let m: usize = s[2].parse()?;
+        for line in lines {
+            let invalid = || Error::InvalidLine(line.to_string());
+            // Need at least keyword, degree, order, and the C coefficient;
+            // the S coefficient is required only when m > 0. The tokens are
+            // read one at a time so the lines beyond the stored degree, most
+            // of a full-resolution file, cost only two integer parses.
+            let mut s = line.split_whitespace().skip(1);
+            let n: usize = s.next().ok_or_else(invalid)?.parse()?;
+            let m: usize = s.next().ok_or_else(invalid)?.parse()?;
             // The gfc format requires order <= degree; a violating line would
             // index outside the triangular layout below (panicking for large m,
             // silently aliasing another coefficient for moderate m).
             if m > n {
-                return Err(Error::InvalidLine((*line).to_string()));
+                return Err(invalid());
             }
+            let c = s.next().ok_or_else(invalid)?;
             // Skip coefficients beyond the stored/evaluated degree.
             if n >= table_dim {
                 continue;
             }
-            let v1: f64 = s[3].parse()?;
-            cs[(n, m)] = v1;
+            cs[(n, m)] = c.parse()?;
             if m > 0 {
-                if s.len() < 5 {
-                    return Err(Error::InvalidLine((*line).to_string()));
-                }
-                let v2: f64 = s[4].parse()?;
-                cs[(m - 1, n)] = v2;
+                cs[(m - 1, n)] = s.next().ok_or_else(invalid)?.parse()?;
             }
         }
 

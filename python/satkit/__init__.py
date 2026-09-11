@@ -1,8 +1,5 @@
-from importlib.metadata import version
-
-__version__ = version("satkit")
-
 from .satkit import *  # type: ignore
+from .satkit import __version__
 
 # The core data (IERS nutation tables, gravity models to degree 70) is
 # compiled into the extension, so satkit works with no data directory at all.
