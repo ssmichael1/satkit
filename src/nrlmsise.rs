@@ -3388,6 +3388,8 @@ struct NrlmsiseState {
     s2tloc: f64,
     s3tloc: f64,
     c3tloc: f64,
+    clong: f64,
+    slong: f64,
     apdf: f64,
     apt: [f64; 4],
 }
@@ -3419,6 +3421,8 @@ impl NrlmsiseState {
             s2tloc: 0.0,
             s3tloc: 0.0,
             c3tloc: 0.0,
+            clong: 0.0,
+            slong: 0.0,
             apdf: 0.0,
             apt: [0.0; 4],
         }
@@ -3814,17 +3818,11 @@ fn sg0(ex: f64, p: &[f64], ap: &[f64]) -> f64 {
         / sumex(ex)
 }
 
-fn globe7(
-    p: &[f64],
-    input: &NrlmsiseInput,
-    flags: &NrlmsiseFlags,
-    state: &mut NrlmsiseState,
-) -> f64 {
-    let sr = 7.2722E-5_f64;
+/// Terms of `globe7` and `glob7s` that depend only on the input, computed
+/// once per density evaluation rather than in each of their calls.
+fn globe_setup(input: &NrlmsiseInput, flags: &NrlmsiseFlags, state: &mut NrlmsiseState) {
     let dgtr = 1.74533E-2_f64;
-    let dr = 1.72142E-2_f64;
     let hr = 0.2618_f64;
-    let mut t = [0.0_f64; 15];
     let tloc = input.lst;
     let c = (input.g_lat * dgtr).sin();
     let s = (input.g_lat * dgtr).cos();
@@ -3861,6 +3859,22 @@ fn globe7(
         state.s3tloc = (3.0 * hr * tloc).sin();
         state.c3tloc = (3.0 * hr * tloc).cos();
     }
+    state.clong = (dgtr * input.g_long).cos();
+    state.slong = (dgtr * input.g_long).sin();
+}
+
+fn globe7(
+    p: &[f64],
+    input: &NrlmsiseInput,
+    flags: &NrlmsiseFlags,
+    state: &mut NrlmsiseState,
+) -> f64 {
+    let sr = 7.2722E-5_f64;
+    let dgtr = 1.74533E-2_f64;
+    let dr = 1.72142E-2_f64;
+    let hr = 0.2618_f64;
+    let mut t = [0.0_f64; 15];
+    let tloc = input.lst;
     let cd32 = (dr * (input.doy as f64 - p[31])).cos();
     let cd18 = (2.0 * dr * (input.doy as f64 - p[17])).cos();
     let cd14 = (dr * (input.doy as f64 - p[13])).cos();
@@ -3975,7 +3989,7 @@ fn globe7(
                             + p[110] * state.plg[1][3]
                             + p[111] * state.plg[1][5])
                         * cd14)
-                    * (dgtr * input.g_long).cos()
+                    * state.clong
                     + (p[90] * state.plg[1][2]
                         + p[91] * state.plg[1][4]
                         + p[92] * state.plg[1][6]
@@ -3987,7 +4001,7 @@ fn globe7(
                                 + p[113] * state.plg[1][3]
                                 + p[114] * state.plg[1][5])
                             * cd14)
-                        * (dgtr * input.g_long).sin());
+                        * state.slong);
         }
         if flags.sw[12] != 0.0 {
             t[11] = (1.0 + p[95] * state.plg[0][1])
@@ -4061,7 +4075,6 @@ fn globe7(
 
 fn glob7s(p: &[f64], input: &NrlmsiseInput, flags: &NrlmsiseFlags, state: &NrlmsiseState) -> f64 {
     let dr = 1.72142E-2_f64;
-    let dgtr = 1.74533E-2_f64;
     let _hr = 0.2618_f64;
     let mut t = [0.0_f64; 14];
     let cd32 = (dr * (input.doy as f64 - p[31])).cos();
@@ -4115,14 +4128,14 @@ fn glob7s(p: &[f64], input: &NrlmsiseInput, flags: &NrlmsiseFlags, state: &Nrlms
                 + p[74] * state.plg[1][1]
                 + p[75] * state.plg[1][3]
                 + p[76] * state.plg[1][5])
-                * (dgtr * input.g_long).cos()
+                * state.clong
                 + (p[90] * state.plg[1][2]
                     + p[91] * state.plg[1][4]
                     + p[92] * state.plg[1][6]
                     + p[77] * state.plg[1][1]
                     + p[78] * state.plg[1][3]
                     + p[79] * state.plg[1][5])
-                    * (dgtr * input.g_long).sin());
+                    * state.slong);
     }
     let mut tt = 0.0_f64;
     for i in 0..14 {
@@ -4715,6 +4728,7 @@ fn gtd7(
     let zn2 = [72.5, 55.0, 45.0, 32.5_f64];
     let zmix = 62.5_f64;
     tselec(flags);
+    globe_setup(input, flags, state);
     let xlat = if flags.sw[2] == 0.0 {
         45.0
     } else {
