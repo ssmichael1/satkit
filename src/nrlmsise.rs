@@ -5026,20 +5026,24 @@ pub fn nrlmsise(
                     _ if r.f10p7_obs_c81 >= 0.0 => r.f10p7_obs_c81,
                     _ => r.f10p7_obs,
                 };
-                match today.map(|t| t.ap_avg) {
+                match today.as_ref().map(|t| t.ap_avg) {
                     Some(a) if a >= 0 => ap = a as f64,
                     _ if r.ap_avg >= 0 => ap = r.ap_avg as f64,
                     _ => {}
                 }
                 // Record for exactly the UTC day `n` days back (spaceweather::get
                 // returns the most recent *prior* record for a missing day, which
-                // must not masquerade as that day's 3-hourly values).
+                // must not masquerade as that day's 3-hourly values). The
+                // current and previous day reuse the records already fetched.
                 if let Ok(day0) = Instant::from_date(year, mon, day) {
                     ap_a = ap_history(sec_of_day, |n| {
                         let d = day0 - Duration::from_days(n as f64);
-                        spaceweather::get(&d)
-                            .ok()
-                            .filter(|rec| (rec.date - d).as_days().abs() < 0.5)
+                        let record = match n {
+                            0 => today.clone(),
+                            1 => Some(r.clone()),
+                            _ => spaceweather::get(&d).ok(),
+                        };
+                        record.filter(|rec| (rec.date - d).as_days().abs() < 0.5)
                     });
                 }
             } else if let Some(predicted) = solar_cycle_forecast::get_predicted_f107(&time) {
