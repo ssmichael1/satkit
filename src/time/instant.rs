@@ -239,6 +239,12 @@ impl Instant {
         self.as_mjd_with_scale(TimeScale::UTC)
     }
 
+    /// UTC calendar day as an integer Modified Julian Day number.
+    /// Same leap-second convention as `as_mjd_utc`, but integer arithmetic only.
+    pub(crate) fn utc_day_number(&self) -> i64 {
+        (self.raw - Self::MJD_EPOCH.raw - microleapseconds(self.raw)).div_euclid(86_400_000_000)
+    }
+
     /// Create Instant from Modified Julian Date (UTC)
     ///
     /// # Arguments
