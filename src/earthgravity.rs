@@ -753,14 +753,11 @@ impl Gravity {
         let mut gravity_constant: f64 = 0.0;
         let mut radius: f64 = 0.0;
         let mut max_degree: usize = 0;
-        let mut header_cnt = 0;
 
-        let lines: Vec<&str> = text.lines().collect();
+        let mut lines = text.lines();
 
         // Read header lines
-        for line in &lines {
-            header_cnt += 1;
-
+        for line in lines.by_ref() {
             let s: Vec<&str> = line.split_whitespace().collect();
             // Check for the header terminator before the two-token guard: the
             // ICGEM spec allows a bare "end_of_head" line (no ==== filler),
@@ -795,34 +792,29 @@ impl Gravity {
         let table_dim = (max_degree + 1).min(MAX_COEFF_DIM);
         let mut cs: CoeffTable = CoeffTable::zeros(table_dim, table_dim);
 
-        for line in &lines[header_cnt..] {
-            let s: Vec<&str> = line.split_whitespace().collect();
-            // Need at least keyword, degree, order, and the C coefficient
-            // (index 3); the S coefficient (index 4) is required only when m > 0.
-            if s.len() < 4 {
-                return Err(Error::InvalidLine((*line).to_string()));
-            }
-
-            let n: usize = s[1].parse()?;
-            let m: usize = s[2].parse()?;
+        for line in lines {
+            let invalid = || Error::InvalidLine(line.to_string());
+            // Need at least keyword, degree, order, and the C coefficient;
+            // the S coefficient is required only when m > 0. The tokens are
+            // read one at a time so the lines beyond the stored degree, most
+            // of a full-resolution file, cost only two integer parses.
+            let mut s = line.split_whitespace().skip(1);
+            let n: usize = s.next().ok_or_else(invalid)?.parse()?;
+            let m: usize = s.next().ok_or_else(invalid)?.parse()?;
             // The gfc format requires order <= degree; a violating line would
             // index outside the triangular layout below (panicking for large m,
             // silently aliasing another coefficient for moderate m).
             if m > n {
-                return Err(Error::InvalidLine((*line).to_string()));
+                return Err(invalid());
             }
+            let c = s.next().ok_or_else(invalid)?;
             // Skip coefficients beyond the stored/evaluated degree.
             if n >= table_dim {
                 continue;
             }
-            let v1: f64 = s[3].parse()?;
-            cs[(n, m)] = v1;
+            cs[(n, m)] = c.parse()?;
             if m > 0 {
-                if s.len() < 5 {
-                    return Err(Error::InvalidLine((*line).to_string()));
-                }
-                let v2: f64 = s[4].parse()?;
-                cs[(m - 1, n)] = v2;
+                cs[(m - 1, n)] = s.next().ok_or_else(invalid)?.parse()?;
             }
         }
 
