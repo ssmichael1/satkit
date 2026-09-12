@@ -288,10 +288,16 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     // panic; treat it the same as "not loaded".
     let first = sw.first().ok_or(Error::NoRecordForDate)?;
 
-    // First, try simple indexing
-    let idx = (tm - first.date).as_days().floor() as usize;
-    if idx < sw.len() && (tm - sw[idx].date).as_days().abs() < 1.0 {
-        return Ok(sw[idx].clone());
+    // Index by UTC calendar day. Instants count leap seconds, so a
+    // continuous-day index lands on the next record in the last seconds of a
+    // day.
+    let day = tm.utc_day_number();
+    let first_day = first.date.utc_day_number();
+    if day >= first_day {
+        let idx = (day - first_day) as usize;
+        if idx < sw.len() && sw[idx].date.utc_day_number() == day {
+            return Ok(sw[idx].clone());
+        }
     }
 
     sw.iter()
@@ -329,6 +335,13 @@ mod tests {
         let r = get(&tm);
         println!("r = {:?}", r);
         println!("rdate = {}", r.unwrap().date);
+    }
+
+    #[test]
+    fn test_get_uses_utc_day() {
+        let noon = Instant::from_datetime(2023, 11, 14, 12, 0, 0.0).unwrap();
+        let late = Instant::from_datetime(2023, 11, 14, 23, 59, 50.0).unwrap();
+        assert_eq!(get(&noon).unwrap().date, get(&late).unwrap().date);
     }
 
     #[test]
