@@ -1,4 +1,5 @@
 from .satkit import *  # type: ignore
+from ._types import OMMDict
 from .satkit import __version__
 
 # The core data (IERS nutation tables, gravity models to degree 70) is
