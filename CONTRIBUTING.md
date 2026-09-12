@@ -115,6 +115,21 @@ Thank you for your interest in contributing to Satkit! This document provides gu
   file so it keeps the last five releases. Older entries stay in git history
   (`git show vX.Y.Z:CHANGELOG.md`); there is no archive file.
 
+### Releasing
+
+1. Refresh dependencies: `cargo update`, then the full Rust and Python test
+   suites. The committed `Cargo.lock` freezes the dependency set between
+   releases, so this is the point where new crate versions get exercised;
+   the refreshed lockfile ships with the release (it is in the sdist, and
+   conda-forge builds with `--locked`).
+2. Bump `version` in `Cargo.toml`, `python/Cargo.toml` and `pyproject.toml`
+   (the release workflow rejects a tag whose version does not match all
+   three), then `cargo build` so `Cargo.lock` records the new version.
+3. Roll the changelog as described above.
+4. Open the release PR and merge it; tag `vX.Y.Z` on `main` and push the
+   tag. The release workflow publishes to crates.io and PyPI and creates the
+   GitHub release. Then follow `recipes/conda/README.md` for the conda recipe.
+
 ## Types of Contributions
 
 ### Bug Reports
