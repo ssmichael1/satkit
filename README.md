@@ -243,6 +243,10 @@ Licensed under either of
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
+The gravity models and IERS tables compiled into the library are third-party
+data with their own terms — notably the ITU_GRACE16 model, which is CC BY 4.0
+and truncated to degree 70 — see [THIRDPARTY-DATA.md](THIRDPARTY-DATA.md).
+
 at your option.
 
 ### Contribution

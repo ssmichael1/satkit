@@ -2,6 +2,8 @@ include Cargo.toml
 include Cargo.lock
 include LICENSE-MIT
 include LICENSE-APACHE
+# Attribution / licence notice for the datasets compiled into the extension.
+include THIRDPARTY-DATA.md
 include README.md
 include pyproject.toml
 include build.rs
