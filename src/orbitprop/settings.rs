@@ -80,6 +80,10 @@ impl std::fmt::Display for Integrator {
 ///   which covers very long propagation arcs (e.g., ~700 days of GJ8 at
 ///   60 s step) with plenty of headroom. Lower if you want a tighter
 ///   runaway-propagation safeguard.
+/// * `initial_step_secs` - first step (seconds) the adaptive integrators
+///   attempt. Default `None`: derived from the initial state, the tolerances
+///   and the integrator order (about 170 s for RKV98 at 1e-9 in LEO). Set it
+///   to warm-start from a previous arc's [`PropagationResult::next_step_secs`].
 ///
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PropSettings {
@@ -116,6 +120,28 @@ pub struct PropSettings {
     /// [`crate::earth_orientation_params::coverage`]. Default: `false`.
     #[serde(default)]
     pub require_eop_coverage: bool,
+    /// First step (seconds) the adaptive integrators attempt. `None` (the
+    /// default) derives it from the initial state and the tolerances as
+    /// `1.5 · |r|/|v| · tol^(1/(p+1))`, with `p` the integrator's order and
+    /// `tol = rel_error + abs_error/|r|` — within a factor of ~2.5 of the
+    /// settled stride across the Runge-Kutta integrators from 1e-6 to 1e-12
+    /// (about 170 s for RKV98 at 1e-9 in LEO), which the step controller
+    /// closes within a step or two. The
+    /// integrator's own starting-step heuristic is not used: it is scale
+    /// sensitive and, for an orbit in metres and seconds, starts several
+    /// orders of magnitude below the working step and spends a dozen steps
+    /// (half the derivative evaluations of a one-hour arc at 1e-9
+    /// tolerance) growing into it.
+    ///
+    /// Set it explicitly to warm-start a follow-on arc from the previous
+    /// arc's [`PropagationResult::next_step_secs`], which continues at full
+    /// stride, or to override the state-derived default. It is a magnitude:
+    /// backward propagation applies the sign, and a value longer than the
+    /// arc is clamped to it. Ignored by [`Integrator::GaussJackson8`] (fixed
+    /// step). Zero or non-finite values make `propagate` fail with
+    /// [`numeris::ode::OdeError::InvalidInitialStep`].
+    #[serde(default)]
+    pub initial_step_secs: Option<f64>,
     /// Regenerable ephemeris/EOP cache; excluded from serialization (a
     /// deserialized `PropSettings` recomputes it lazily as needed).
     #[serde(skip)]
@@ -140,6 +166,7 @@ impl Default for PropSettings {
             gj_step_seconds: 60.0,
             max_steps: 1_000_000,
             require_eop_coverage: false,
+            initial_step_secs: None,
             precomputed: None,
         }
     }
@@ -286,6 +313,7 @@ impl std::fmt::Display for PropSettings {
             Integrator: {},
             Max Steps: {},
             Require EOP Coverage: {},
+            Initial Step: {},
             {}"#,
             self.gravity_degree,
             self.gravity_order,
@@ -301,6 +329,10 @@ impl std::fmt::Display for PropSettings {
             self.integrator,
             self.max_steps,
             self.require_eop_coverage,
+            self.initial_step_secs.map_or_else(
+                || "auto (state, tolerance, order)".to_string(),
+                |h| format!("{h} s")
+            ),
             self.precomputed.as_ref().map_or_else(
                 || "No Precomputed".to_string(),
                 |p| format!("Precomputed: {} to {}", p.begin, p.end)

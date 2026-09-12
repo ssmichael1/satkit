@@ -126,6 +126,7 @@ impl PyPropResult {
             num_eval: 0,
             accepted_steps: 0,
             rejected_steps: 0,
+            next_step_secs: 0.0,
             odesol: None,
             gj_dense: None,
             integrator: satkit::orbitprop::Integrator::default(),
@@ -176,6 +177,23 @@ impl PyPropResult {
                 num_accept: r.accepted_steps,
                 num_reject: r.rejected_steps,
             },
+        }
+    }
+
+    /// Step the integrator would take next, seconds: its working stride at
+    /// ``time_end`` (the controller's last unclamped proposal for the adaptive
+    /// integrators, the fixed step for ``integrator.gauss_jackson8``, 0 for a
+    /// zero-duration propagation). Signed like the propagation direction.
+    /// Pass it as ``propsettings.initial_step_secs`` to continue this arc
+    /// without the start-up ramp.
+    ///
+    /// Returns:
+    ///     float: next integrator step, seconds
+    #[getter]
+    fn next_step_secs(&self) -> f64 {
+        match &self.0 {
+            PyPropResultType::R1(r) => r.next_step_secs,
+            PyPropResultType::R7(r) => r.next_step_secs,
         }
     }
 

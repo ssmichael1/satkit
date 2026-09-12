@@ -534,6 +534,9 @@ class TestPropSettingsPickle:
         assert restored.gravity_order == 6
         assert restored.use_spaceweather is False
         assert restored.use_sun_gravity is False
+        assert restored.initial_step_secs is None
+        ps.initial_step_secs = 45.0
+        assert pickle.loads(pickle.dumps(ps)).initial_step_secs == pytest.approx(45.0)
         assert restored.enable_interp is False
 
 
@@ -987,3 +990,62 @@ class TestSpaceWeather:
         and None far outside it."""
         # A date far in the past is outside the forecast range
         assert sk.spaceweather.predicted_f107(sk.time(1990, 1, 1)) is None
+
+
+class TestInitialStep:
+    """propsettings.initial_step_secs and propresult.next_step_secs."""
+
+    @staticmethod
+    def _leo():
+        r = sk.consts.earth_radius + 550e3
+        v = m.sqrt(sk.consts.mu_earth / r)
+        inc = m.radians(51.6)
+        state = np.array([r, 0.0, 0.0, 0.0, v * m.cos(inc), v * m.sin(inc)])
+        return state, sk.time(2025, 1, 1, 12, 0, 0)
+
+    def test_default_and_kwarg(self):
+        assert sk.propsettings().initial_step_secs is None
+        assert sk.propsettings(initial_step_secs=30.0).initial_step_secs == pytest.approx(30.0)
+        ps = sk.propsettings()
+        ps.initial_step_secs = 12.5
+        assert ps.initial_step_secs == pytest.approx(12.5)
+        ps.initial_step_secs = None
+        assert ps.initial_step_secs is None
+
+    def test_next_step_is_working_stride(self):
+        state, t0 = self._leo()
+        ps = sk.propsettings(abs_error=1e-9, rel_error=1e-9)
+        res = sk.propagate(state, t0, duration_secs=3600.0, propsettings=ps)
+        # RKV98 at 1e-9 on a 550 km orbit steps a few hundred seconds.
+        assert 50.0 < res.next_step_secs < 1000.0
+        back = sk.propagate(res.state, res.time_end, duration_secs=-3600.0, propsettings=ps)
+        assert back.next_step_secs < 0.0
+
+    def test_warm_start_saves_evals_and_matches(self):
+        state, t0 = self._leo()
+        ps = sk.propsettings(abs_error=1e-9, rel_error=1e-9)
+        seg1 = sk.propagate(state, t0, duration_secs=3600.0, propsettings=ps)
+        t1 = seg1.time_end
+        # A deliberately tiny hint reproduces a cold start; the default
+        # state-derived hint and the warm start must both beat it.
+        cold_ps = sk.propsettings(abs_error=1e-9, rel_error=1e-9, initial_step_secs=1e-3)
+        warm_ps = sk.propsettings(
+            abs_error=1e-9, rel_error=1e-9, initial_step_secs=seg1.next_step_secs
+        )
+        cold = sk.propagate(seg1.state, t1, duration_secs=3600.0, propsettings=cold_ps)
+        default = sk.propagate(seg1.state, t1, duration_secs=3600.0, propsettings=ps)
+        warm = sk.propagate(seg1.state, t1, duration_secs=3600.0, propsettings=warm_ps)
+        # A good default can tie the warm start to within one rkv98 step.
+        assert warm.stats.num_eval <= default.stats.num_eval + 21
+        assert default.stats.num_eval < cold.stats.num_eval
+        assert warm.stats.num_eval < 0.6 * cold.stats.num_eval
+        assert warm.pos == pytest.approx(cold.pos, abs=1e-2)
+        assert default.pos == pytest.approx(cold.pos, abs=1e-2)
+
+    def test_invalid_hint_raises(self):
+        state, t0 = self._leo()
+        for bad in (0.0, float("nan"), float("inf")):
+            ps = sk.propsettings(initial_step_secs=bad)
+            with pytest.raises(RuntimeError):
+                sk.propagate(state, t0, duration_secs=600.0, propsettings=ps)
+
