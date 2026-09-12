@@ -889,6 +889,40 @@ mod tests {
         assert!(checked > 100);
     }
 
+    /// `EPHEMERIS_TYPE: 4` (SGP4-XP) parses but cannot be propagated.
+    #[test]
+    fn test_sgp4xp_type4_rejected() {
+        let json = r#"{
+            "OBJECT_NAME": "VANGUARD 1",
+            "OBJECT_ID": "1958-002B",
+            "EPOCH": "2023-03-01T02:53:12.947",
+            "MEAN_MOTION": 10.84532081,
+            "ECCENTRICITY": 0.1849434,
+            "INCLINATION": 34.2437,
+            "RA_OF_ASC_NODE": 69.7250,
+            "ARG_OF_PERICENTER": 110.9844,
+            "MEAN_ANOMALY": 271.4417,
+            "EPHEMERIS_TYPE": 4,
+            "NORAD_CAT_ID": 5
+        }"#;
+        let mut omm = OMM::from_json_string(&format!("[{json}]"))
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(omm.ephemeris_type, Some(4));
+        let epoch = omm.epoch;
+        let err = match crate::sgp4::sgp4(&mut omm, &[epoch]) {
+            Ok(_) => panic!("type-4 element set must not propagate"),
+            Err(e) => e,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("SGP4-XP"), "unexpected message: {msg}");
+        assert!(
+            msg.contains("EPHEMERIS_TYPE 4"),
+            "unexpected message: {msg}"
+        );
+    }
+
     #[test]
     fn test_parse_omm_celestrak_json() {
         let filename = get_testvec_dir().unwrap().join("omm/celestrak_omm.json");

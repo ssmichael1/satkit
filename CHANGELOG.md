@@ -10,11 +10,13 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Fixed
 
+- `sgp4()` rejects SGP4-XP element sets (TLE ephemeris type 4, OMM `EPHEMERIS_TYPE` 4) with a clear error instead of propagating them: an SGP4-XP line 1 stores agom and a B term in the columns a classic TLE uses for nddot and B*, so the old behaviour ran classic SGP4 on the wrong inputs and returned a plausible but wrong state ([#174](https://github.com/ssmichael1/satkit/pull/174))
 - `satkit.density.nrlmsise(altitude_m, latitude_rad, longitude_rad, time)` converts its radian latitude/longitude to the degrees the model takes; the values were passed through unchanged, so a caller following the stub at 60° N was evaluated at 1.05° N (the `itrfcoord` overload and `nrlmsise00(latitude_deg=...)` were already correct) ([#171](https://github.com/ssmichael1/satkit/pull/171))
 - A corrupt or truncated `tab5.2*.txt` in a data directory no longer panics the first frame transform: satkit warns and uses the compiled-in copy of the same IERS table (exact, not an approximation), and the parser now rejects text with no table header or fewer rows than declared — an HTML notice page saved under the table's name previously loaded as six empty series and silently dropped the nutation terms ([#166](https://github.com/ssmichael1/satkit/pull/166))
 
 ### Changed
 
+- Propagation step time is ~3x faster (LEO, 40x40 field, drag, rkv98): the spherical-harmonic gravity kernels dispatch at runtime to a copy compiled with FMA on x86-64 (their `mul_add` calls were libm function calls on the baseline x86-64 that wheels target; ~5x on the 40x40 field, no change on arm64 where FMA is native), NRLMSISE-00 computes its latitude, longitude and local-time terms once per evaluation instead of in each of its 14 inner calls, the ITRF-to-geodetic conversion uses a single Bowring refinement (double precision from 1000 km below the surface to beyond lunar distance), gravity-model parsing skips coefficients above the requested degree, and `satkit.__version__` is read from the extension module instead of an `importlib.metadata` lookup at import time (contributed by @scottshambaugh, [#175](https://github.com/ssmichael1/satkit/pull/175))
 - `update_datafiles()` no longer downloads files that are compiled into the library: the IERS tables and gravity models are `default: false` in the manifest (still pinned and fetchable by name), and the unused `leap-seconds.list` (nothing ever read it — the runtime leap-second table is a compiled-in constant) is removed from the manifest entirely. The only static download left is the JPL ephemeris, alongside the daily EOP / space-weather / solar-cycle refreshes ([#163](https://github.com/ssmichael1/satkit/pull/163))
 
 ### Docs

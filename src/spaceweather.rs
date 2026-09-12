@@ -277,8 +277,12 @@ fn ensure_default_loaded() {
 /// * Space weather is updated daily in a file: SW-All.csv
 pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     let tm = tm.as_instant();
-    ensure_default_loaded();
-    let guard = SPACE_WEATHER.read();
+    let mut guard = SPACE_WEATHER.read();
+    if guard.is_none() {
+        drop(guard);
+        ensure_default_loaded();
+        guard = SPACE_WEATHER.read();
+    }
     let sw = guard.as_ref().ok_or(Error::NoRecordForDate)?;
     // Guard empty data (e.g. a header-only CSV) so the indexing below can't
     // panic; treat it the same as "not loaded".
