@@ -3474,6 +3474,17 @@ class propresult:
         ...
 
     @property
+    def next_step_secs(self) -> float:
+        """Step the integrator would take next, seconds: its working stride at
+        ``time_end`` (the controller's last unclamped proposal for the adaptive
+        integrators, the fixed step for ``integrator.gauss_jackson8``, 0 for a
+        zero-duration propagation). Signed like the propagation direction.
+        Pass it as ``propsettings.initial_step_secs`` to continue this arc
+        without the start-up ramp.
+        """
+        ...
+
+    @property
     def can_interp(self) -> bool:
         """Whether this result supports interpolation
 
@@ -4031,6 +4042,7 @@ class propsettings:
         gj_step_seconds: float = 60.0,
         max_steps: int = 1_000_000,
         require_eop_coverage: bool = False,
+        initial_step_secs: float | None = None,
     ) -> None:
         """Create propagation settings object used to configure high-precision orbit propagator
 
@@ -4054,7 +4066,9 @@ class propsettings:
                 Its position effect depends on the orbit, propagation arc, and
                 fitted parameters (~1 m/day at GPS altitude if omitted; the
                 geodesic term dominates beyond ~100,000 km); cost is negligible.
-            enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
+            enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True.
+                When False, no dense output is stored and ``integrator.rkv98`` runs its 16-stage
+                no-interpolant tableau (same order and error control, 24% fewer force evaluations per step).
             integrator: ODE integrator to use. Default is integrator.rkv98
             gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
                 Ignored by adaptive integrators. Typical values: 30-120 s for LEO, 60-300 s
@@ -4067,6 +4081,12 @@ class propsettings:
                 the end of the loaded Earth-orientation-parameter (EOP) table, instead of
                 holding the last EOP row constant with a one-time warning. Default is False.
                 See ``satkit.frametransform.eop_coverage`` / ``eop_status``.
+            initial_step_secs: First step (seconds) the adaptive integrators attempt. Default
+                None: derived from the initial state, the tolerances and the integrator order
+                as ``1.5 * |r|/|v| * tol**(1/(p+1))`` with ``tol = rel_error + abs_error/|r|``
+                (about 170 s for ``rkv98`` at 1e-9 in LEO; within a factor of ~2.5 of the
+                settled stride). Set it to a previous ``propresult.next_step_secs`` to warm-start a
+                follow-on arc at full stride. Ignored by ``integrator.gauss_jackson8``.
 
         Returns:
             propsettings: New propsettings object with default settings
@@ -4219,9 +4239,31 @@ class propsettings:
     @require_eop_coverage.setter
     def require_eop_coverage(self, value: bool) -> None: ...
     @property
+    def initial_step_secs(self) -> float | None:
+        """First step (seconds) the adaptive integrators attempt, or None for the
+        default, derived from the initial state, the tolerances and the integrator
+        order as ``1.5 * |r|/|v| * tol**(1/(p+1))`` with
+        ``tol = rel_error + abs_error/|r|`` (about 170 s for ``rkv98`` at 1e-9 in
+        LEO; within a factor of ~2.5 of the settled stride, which the step
+        controller closes within a step or two).
+
+        Set it to a previous ``propresult.next_step_secs`` to warm-start a
+        follow-on arc at full stride. A magnitude: backward propagation applies
+        the sign, and a value longer than the arc is clamped to it. Ignored by
+        ``integrator.gauss_jackson8``. Zero or non-finite raises ``RuntimeError``
+        from ``propagate``.
+        """
+        ...
+
+    @initial_step_secs.setter
+    def initial_step_secs(self, value: float | None) -> None: ...
+    @property
     def enable_interp(self) -> bool:
-        """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times
-        If not needed, there is a small computational advantage if set to False
+        """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times.
+
+        When False, no dense output is stored and ``integrator.rkv98`` runs its
+        16-stage no-interpolant tableau (same order and error control, 24% fewer
+        force evaluations per step).
         """
         ...
 

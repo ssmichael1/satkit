@@ -11,8 +11,8 @@ Select via the `integrator` parameter of `propsettings`:
 
 | Integrator | Order | Type | Dense Output | Notes |
 |---|---|---|---|---|
-| `rkv98` | 9(8) | adaptive RK, 21 stages (16 + 5 for dense output) | 8th-degree | Default. Best accuracy for precision work. |
-| `rkv98_nointerp` | 9(8) | adaptive RK, 16 stages | None | Same stepping accuracy, faster when interpolation is not needed. |
+| `rkv98` | 9(8) | adaptive RK, 21 stages (16 + 5 for dense output) | 8th-degree | Default. Best accuracy for precision work. With `enable_interp=False` it runs as `rkv98_nointerp`. |
+| `rkv98_nointerp` | 9(8) | adaptive RK, 16 stages | None | Same stepping accuracy, 24% fewer force evaluations per step; what `rkv98` becomes when interpolation is off. |
 | `rkv87` | 8(7) | adaptive RK, 17 stages (13 + 4 for dense output) | 7th-degree | Good balance of speed and accuracy. |
 | `rkv65` | 6(5) | adaptive RK, 10 stages | 6th-degree | Faster, moderate accuracy. |
 | `rkts54` | 5(4) | adaptive RK, 7 stages (FSAL) | 4th-degree | Fastest. Good for quick propagations. |
@@ -89,6 +89,47 @@ The adaptive RK integrators (and `rodas4`) accept the same step every time both:
 For sub-meter precision over a day, tighten both to `1e-10` to `1e-13`. For coarse mission planning, `1e-6` to `1e-8` is usually fine.
 
 `gauss_jackson8` ignores both — its accuracy is set by the fixed step `gj_step_seconds`.
+
+## Starting Step and Warm Start
+
+An adaptive integrator has to guess its first step. The textbook heuristic
+(Hairer–Nørsett–Wanner) is deliberately conservative and scale sensitive: for an
+orbit in metres and seconds at `1e-9` tolerance it starts `rkv98` at a fraction
+of a millisecond against a working step of a few hundred seconds, and the
+controller spends a dozen accepted steps growing into it — about half the force
+evaluations of a one-hour arc. satkit therefore does not use it. By default the
+first step is derived from the initial state, the tolerances and the integrator
+order:
+
+```text
+h0 = 1.5 · |r| / |v| · tol^(1/(p+1)),    tol = rel_error + abs_error / |r|
+```
+
+The settled stride of an order-`p` method scales as `tol^(1/(p+1))`, and the
+constant is fit to LEO strides. Across `rkts54` to `rkv98` and tolerances from
+`1e-6` to `1e-12` this lands within a factor of about 2.5 of the settled stride
+(for `rkv98` at `1e-9` in LEO: 170 s predicted, 270 s settled), which the
+controller closes within a step or two.
+
+Two settings give you control over this:
+
+- **`propsettings.initial_step_secs`** overrides the default. It is a magnitude
+  (backward propagation applies the sign) and is clamped to the arc length.
+  `None` restores the state-derived default. Ignored by `gauss_jackson8`.
+- **`propresult.next_step_secs`** is the step the integrator would take next —
+  its working stride at the end of the arc, not the final step that was
+  shortened to land exactly on the end time. Feed it to the next arc to continue
+  at full stride:
+
+```python
+ps = sk.propsettings(abs_error=1e-9, rel_error=1e-9)
+res = sk.propagate(state, t0, duration_secs=3600.0, propsettings=ps)
+ps.initial_step_secs = res.next_step_secs          # warm start
+res = sk.propagate(res.state, res.time_end, duration_secs=3600.0, propsettings=ps)
+```
+
+Chained arcs then cost the same as one continuous propagation. The step
+controller and the error tolerances are unchanged; only the starting point is.
 
 ## See Also
 

@@ -30,6 +30,16 @@ pub struct PropagationResult<const T: usize> {
     pub accepted_steps: u32,
     pub rejected_steps: u32,
     pub num_eval: u32,
+    /// Step (seconds) the integrator would take next, i.e. its working
+    /// stride at `time_end` — the controller's last unclamped proposal for
+    /// the adaptive integrators (the final step is shortened to land on
+    /// `time_end`; that shortening is not reflected here), the fixed step
+    /// for Gauss-Jackson 8, and 0 for a zero-duration propagation. Signed
+    /// like the propagation direction. Pass it as
+    /// [`PropSettings::initial_step_secs`] to continue this arc without the
+    /// start-up ramp.
+    #[serde(default)]
+    pub next_step_secs: f64,
     pub odesol: Option<ode::Solution<f64, 6, T>>,
     /// Dense output from Gauss-Jackson 8 (populated only when the propagation
     /// used `Integrator::GaussJackson8` with `settings.enable_interp = true`).
@@ -50,6 +60,7 @@ impl<const T: usize> std::fmt::Debug for PropagationResult<T> {
             .field("accepted_steps", &self.accepted_steps)
             .field("rejected_steps", &self.rejected_steps)
             .field("num_eval", &self.num_eval)
+            .field("next_step_secs", &self.next_step_secs)
             .field("odesol", &self.odesol.as_ref().map(|_| "..."))
             .field("integrator", &self.integrator)
             .finish()
@@ -420,6 +431,44 @@ fn force_model(
 /// ```
 ///
 ///
+/// Starting step for the adaptive integrators, derived from the initial state
+/// and the tolerances:
+///
+/// ```text
+/// h0 = 1.5 · |r|/|v| · tol^(1/(p+1)),   tol = rel_error + abs_error / |r|
+/// ```
+///
+/// where `p` is the integrator's order and `tol` is the effective relative
+/// tolerance of the position components (the tightest in the integrator's
+/// error norm). The settled stride of an order-`p` method scales as
+/// `tol^(1/(p+1))`; the constant is fit to LEO strides across RKTS54..RKV98
+/// and tolerances 1e-6..1e-12, where the prediction lands within ~2.5× of
+/// the settled stride (RKV98 at 1e-9: 170 s predicted, 270 s settled), so
+/// the controller is on stride within a step or two. `None` (Gauss-Jackson,
+/// or a degenerate state / tolerance) leaves the integrator's own heuristic
+/// in charge.
+fn default_initial_step<const C: usize>(
+    state: &StateType<C>,
+    settings: &PropSettings,
+) -> Option<f64> {
+    use crate::orbitprop::Integrator;
+    let order = match settings.integrator {
+        Integrator::RKV98 => ode::RKV98::ORDER,
+        Integrator::RKV98NoInterp => ode::RKV98NoInterp::ORDER,
+        Integrator::RKV87 => ode::RKV87::ORDER,
+        Integrator::RKV65 => ode::RKV65::ORDER,
+        Integrator::RKTS54 => ode::RKTS54::ORDER,
+        Integrator::RODAS4 => ode::RODAS4::ORDER,
+        Integrator::GaussJackson8 => return None,
+    };
+    let r: Vector3 = state.block::<3, 1>(0, 0);
+    let v: Vector3 = state.block::<3, 1>(3, 0);
+    let (r, v) = (r.norm(), v.norm());
+    let tol = settings.rel_error + settings.abs_error / r;
+    let h = 1.5 * r / v * tol.powf(1.0 / (order as f64 + 1.0));
+    (h.is_finite() && h > 0.0).then_some(h)
+}
+
 pub fn propagate<const C: usize, T: TimeLike>(
     state: &StateType<C>,
     begin: &T,
@@ -450,6 +499,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
             accepted_steps: 0,
             rejected_steps: 0,
             num_eval: 0,
+            next_step_secs: 0.0,
             odesol: None,
             gj_dense: None,
             integrator: settings.integrator,
@@ -473,6 +523,9 @@ pub fn propagate<const C: usize, T: TimeLike>(
         rel_tol: settings.rel_error,
         dense_output: settings.enable_interp,
         max_steps: settings.max_steps,
+        initial_step: settings
+            .initial_step_secs
+            .or_else(|| default_initial_step(state, settings)),
         ..Default::default()
     };
 
@@ -589,6 +642,13 @@ pub fn propagate<const C: usize, T: TimeLike>(
     use crate::orbitprop::Integrator;
 
     let res = match settings.integrator {
+        // Without dense output the 16-stage Verner 9(8) tableau has the same
+        // order and error control as the 21-stage interpolating one at 24%
+        // fewer force evaluations per step; the five extra stages exist only
+        // to build the interpolant.
+        Integrator::RKV98 if !settings.enable_interp => {
+            ode::RKV98NoInterp::integrate(0.0, x_end, state, &ydot, &odesettings)
+        }
         Integrator::RKV98 => ode::RKV98::integrate(0.0, x_end, state, &ydot, &odesettings),
         Integrator::RKV98NoInterp => {
             ode::RKV98NoInterp::integrate(0.0, x_end, state, &ydot, &odesettings)
@@ -639,6 +699,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
                 accepted_steps: rosenbrock_res.accepted as u32,
                 rejected_steps: rosenbrock_res.rejected as u32,
                 num_eval: rosenbrock_res.evals as u32,
+                next_step_secs: rosenbrock_res.next_step,
                 odesol: None,
                 gj_dense: None,
                 integrator: settings.integrator,
@@ -705,6 +766,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
                 accepted_steps: gj_sol.steps as u32,
                 rejected_steps: 0,
                 num_eval: gj_sol.evals as u32,
+                next_step_secs: settings.gj_step_seconds.abs().copysign(x_end),
                 odesol: None,
                 gj_dense: dense,
                 integrator: settings.integrator,
@@ -720,6 +782,7 @@ pub fn propagate<const C: usize, T: TimeLike>(
         accepted_steps: res.accepted as u32,
         rejected_steps: res.rejected as u32,
         num_eval: res.evals as u32,
+        next_step_secs: res.next_step,
         odesol: Some(res),
         gj_dense: None,
         integrator: settings.integrator,
@@ -1573,6 +1636,118 @@ mod tests {
             "Expected STM error, got: {}",
             err_msg
         );
+    }
+
+    #[test]
+    fn test_initial_step_and_warm_start() -> Result<()> {
+        // 550 km, 51.6° LEO at 1e-9 tolerances (the satkit #175 scenario).
+        let r = 6_928_137.0_f64;
+        let v = (crate::consts::MU_EARTH / r).sqrt();
+        let inc = 51.6_f64.to_radians();
+        let state: Vector6 = numeris::vector![r, 0.0, 0.0, 0.0, v * inc.cos(), v * inc.sin()];
+        let t0 = Instant::from_datetime(2025, 1, 1, 12, 0, 0.0).unwrap();
+        let t1 = t0 + Duration::from_seconds(3600.0);
+        let t2 = t1 + Duration::from_seconds(3600.0);
+        let base = PropSettings {
+            abs_error: 1e-9,
+            rel_error: 1e-9,
+            gravity_degree: 8,
+            gravity_order: 8,
+            ..Default::default()
+        };
+
+        // The working stride of RKV98 at this altitude is a few hundred seconds.
+        let seg1 = propagate(&state, &t0, &t1, &base, None)?;
+        assert!(
+            seg1.next_step_secs > 50.0 && seg1.next_step_secs < 1000.0,
+            "next_step_secs = {}",
+            seg1.next_step_secs
+        );
+
+        // An explicit hint is the first accepted step.
+        let hinted = PropSettings {
+            initial_step_secs: Some(60.0),
+            ..base.clone()
+        };
+        let res = propagate(&state, &t0, &t1, &hinted, None)?;
+        let first = res.odesol.as_ref().unwrap().dense.as_ref().unwrap().h[0];
+        assert_eq!(first, 60.0);
+
+        // Warm start ≲ tolerance-aware default < cold start (a tiny hint reproduces
+        // the integrator's own heuristic), all landing at the same place.
+        let cold = PropSettings {
+            initial_step_secs: Some(1e-3),
+            ..base.clone()
+        };
+        let warm = PropSettings {
+            initial_step_secs: Some(seg1.next_step_secs),
+            ..base.clone()
+        };
+        let r_cold = propagate(&seg1.state_end, &t1, &t2, &cold, None)?;
+        let r_def = propagate(&seg1.state_end, &t1, &t2, &base, None)?;
+        let r_warm = propagate(&seg1.state_end, &t1, &t2, &warm, None)?;
+        // (a good default can tie the warm start to within one step)
+        assert!(
+            r_warm.num_eval <= r_def.num_eval + 21 && r_def.num_eval < r_cold.num_eval,
+            "evals warm {} default {} cold {}",
+            r_warm.num_eval,
+            r_def.num_eval,
+            r_cold.num_eval
+        );
+        assert!((r_warm.num_eval as f64) < 0.6 * r_cold.num_eval as f64);
+        let pos_diff =
+            (r_warm.state_end.block::<3, 1>(0, 0) - r_cold.state_end.block::<3, 1>(0, 0)).norm();
+        assert!(pos_diff < 1e-2, "warm vs cold position diff = {pos_diff} m");
+
+        // Backward propagation reports a negative stride; GJ8 its fixed step.
+        let back = propagate(&seg1.state_end, &t1, &t0, &base, None)?;
+        assert!(back.next_step_secs < 0.0);
+        let gj = PropSettings {
+            integrator: crate::orbitprop::Integrator::GaussJackson8,
+            gj_step_seconds: 30.0,
+            ..base.clone()
+        };
+        assert_eq!(propagate(&state, &t0, &t1, &gj, None)?.next_step_secs, 30.0);
+
+        // Invalid hints fail instead of silently falling back.
+        let bad = PropSettings {
+            initial_step_secs: Some(0.0),
+            ..base
+        };
+        assert!(propagate(&state, &t0, &t1, &bad, None).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_rkv98_uses_16_stage_tableau_without_interp() -> Result<()> {
+        let r = 6_928_137.0_f64;
+        let v = (crate::consts::MU_EARTH / r).sqrt();
+        let state: Vector6 = numeris::vector![r, 0.0, 0.0, 0.0, 0.0, v];
+        let t0 = Instant::from_datetime(2025, 1, 1, 12, 0, 0.0).unwrap();
+        let t1 = t0 + Duration::from_seconds(3600.0);
+        // A hint skips the heuristic's probe evaluations, so evals is exactly
+        // stages × steps.
+        let with = PropSettings {
+            abs_error: 1e-9,
+            rel_error: 1e-9,
+            initial_step_secs: Some(100.0),
+            enable_interp: true,
+            ..Default::default()
+        };
+        let without = PropSettings {
+            enable_interp: false,
+            ..with.clone()
+        };
+        let a = propagate(&state, &t0, &t1, &with, None)?;
+        let b = propagate(&state, &t0, &t1, &without, None)?;
+        assert_eq!(a.num_eval, 21 * (a.accepted_steps + a.rejected_steps));
+        assert_eq!(b.num_eval, 16 * (b.accepted_steps + b.rejected_steps));
+        assert!(a.interp(&(t0 + Duration::from_seconds(1800.0))).is_ok());
+        assert!(b.interp(&(t0 + Duration::from_seconds(1800.0))).is_err());
+        assert_eq!(b.integrator, crate::orbitprop::Integrator::RKV98);
+        let pos_diff = (a.state_end.block::<3, 1>(0, 0) - b.state_end.block::<3, 1>(0, 0)).norm();
+        assert!(pos_diff < 1e-2, "position diff = {pos_diff} m");
+        Ok(())
     }
 
     #[test]

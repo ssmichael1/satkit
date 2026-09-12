@@ -108,11 +108,15 @@ impl From<TideModel> for PyTideModel {
 ///     use_moon_gravity (bool): Include moon third-body gravity. Default True
 ///     tide_model (satkit.tidemodel): Solid Earth tide model. Default tidemodel.solid_step1
 ///     use_relativistic_correction (bool): Include general-relativistic acceleration. Default True
-///     enable_interp (bool): Store dense output for interpolation. Default True
+///     enable_interp (bool): Store dense output for interpolation. Default True. False also runs
+///         integrator.rkv98 as its 16-stage no-interpolant tableau (24% fewer force evaluations per step)
 ///     integrator (satkit.integrator): ODE integrator. Default integrator.rkv98
 ///     gj_step_seconds (float): Fixed step size for integrator.gauss_jackson8, seconds. Default 60.0
 ///     max_steps (int): Maximum number of integrator steps. Default 1_000_000
 ///     require_eop_coverage (bool): Raise if the span extends past the EOP table. Default False
+///     initial_step_secs (float | None): First step the adaptive integrators attempt, seconds.
+///         Default None: derived from the initial state, tolerances and integrator order.
+///         Set to a previous result's ``next_step_secs`` to warm-start a follow-on arc.
 #[pyclass(name = "propsettings", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PyPropSettings(pub PropSettings);
@@ -211,6 +215,10 @@ impl PyPropSettings {
                 ps.require_eop_coverage = req.extract::<bool>()?;
                 kw.del_item("require_eop_coverage")?;
             }
+            if let Some(h0) = kw.get_item("initial_step_secs")? {
+                ps.initial_step_secs = h0.extract::<Option<f64>>()?;
+                kw.del_item("initial_step_secs")?;
+            }
             crate::pyutils::reject_unused_kwargs(kw)?;
             if order_explicitly_set {
                 // Clamp order to degree
@@ -304,6 +312,10 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Store dense output so ``propresult.interp`` works between the begin and
+    /// end times. Default True. When False, no dense output is stored and
+    /// ``integrator.rkv98`` runs its 16-stage no-interpolant tableau (same
+    /// order and error control, 24% fewer force evaluations per step).
     #[getter]
     fn get_enable_interp(&self) -> bool {
         self.0.enable_interp
@@ -406,6 +418,28 @@ impl PyPropSettings {
     #[setter(require_eop_coverage)]
     fn set_require_eop_coverage(&mut self, val: bool) -> PyResult<()> {
         self.0.require_eop_coverage = val;
+        Ok(())
+    }
+
+    /// First step (seconds) the adaptive integrators attempt, or None for
+    /// the default, derived from the initial state, the tolerances and the
+    /// integrator order as ``1.5 * |r|/|v| * tol**(1/(p+1))`` with
+    /// ``tol = rel_error + abs_error/|r|`` (about 170 s for rkv98 at 1e-9 in
+    /// LEO; within a factor of ~2.5 of the settled stride, which the step
+    /// controller closes within a step or two). Set it to a previous result's
+    /// ``propresult.next_step_secs`` to warm-start a follow-on arc at full
+    /// stride. A magnitude: backward propagation applies the sign, and a
+    /// value longer than the arc is clamped to it. Ignored by
+    /// ``integrator.gauss_jackson8``. Zero or non-finite raises from
+    /// ``propagate``.
+    #[getter]
+    fn get_initial_step_secs(&self) -> Option<f64> {
+        self.0.initial_step_secs
+    }
+
+    #[setter(initial_step_secs)]
+    fn set_initial_step_secs(&mut self, val: Option<f64>) -> PyResult<()> {
+        self.0.initial_step_secs = val;
         Ok(())
     }
 

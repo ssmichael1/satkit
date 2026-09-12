@@ -7,6 +7,19 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Added
 
 - Kepler: checked constructor `Kepler::try_new` / `Kepler::validate` (Python: the constructor and the `a`/`eccen`/`inclination`/`mu` setters raise `ValueError` for a non-finite value, `a <= 0`, `eccen` outside [0, 1), `incl` outside [0, π] or `mu <= 0` instead of producing NaN); per-instance gravitational parameter `mu` (`Kepler::with_mu`, `from_pv_with_mu`; Python `kepler(..., mu=)`, `kepler.mu`, `from_pv(..., mu=)`) so lunar and heliocentric elements have a correct period, `propagate` and `to_pv`; derived quantities `periapsis`, `apoapsis`, `specific_energy`, `angular_momentum`, `flight_path_angle`, `argument_of_latitude`, `true_longitude`; `SatState::from_kepler` / `satstate.from_kepler(time, kepler)`; a one-line `repr` for Python `kepler`; `Kepler` derives `PartialEq` and serde (`mu` defaults to Earth's when absent), `Anomaly` derives `Copy`/`PartialEq` ([#168](https://github.com/ssmichael1/satkit/pull/168))
+- `propsettings.initial_step_secs` and `propresult.next_step_secs` (Rust: `PropSettings::initial_step_secs`,
+  `PropagationResult::next_step_secs`). The adaptive integrators no longer use numeris' starting-step heuristic,
+  which is scale sensitive and started `rkv98` at a fraction of a millisecond for an orbit in metres and seconds —
+  about half the force evaluations of a one-hour arc at 1e-9 tolerance were spent growing that first step
+  ([#175](https://github.com/ssmichael1/satkit/pull/175) discussion). The default first step is now derived from the
+  initial state, the tolerances and the integrator order (`1.5·|r|/|v|·tol^(1/(p+1))`, within ~2.5× of the settled
+  stride across the RK integrators from 1e-6 to 1e-12); `initial_step_secs` overrides it, and `next_step_secs` reports the
+  integrator's working stride at the end of an arc so a follow-on arc can warm-start at full stride
+  (`ps.initial_step_secs = res.next_step_secs`). Requires numeris 0.6.
+- `integrator.rkv98` with `enable_interp=False` now runs the 16-stage `rkv98_nointerp` tableau automatically:
+  the five extra stages of the 21-stage tableau exist only to build the interpolant, so this is the same order
+  and error control at 24% fewer force evaluations per step. Results change at the tolerance level for that
+  combination (a different tableau takes different steps).
 
 ### Distribution
 

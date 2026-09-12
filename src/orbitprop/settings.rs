@@ -10,10 +10,14 @@ use super::error::{Error, Result};
 /// Choice of ODE integrator for orbit propagation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub enum Integrator {
-    /// Verner 9(8) with 8th-degree dense output, 21 stages (16 + 5 for the interpolant; default)
+    /// Verner 9(8) with 8th-degree dense output, 21 stages (16 + 5 for the
+    /// interpolant; default). With `enable_interp = false` the propagator
+    /// runs the 16-stage [`Integrator::RKV98NoInterp`] tableau instead —
+    /// same order and error control, 24% fewer force evaluations per step.
     #[default]
     RKV98,
-    /// Verner 9(8) without interpolation, 16 stages
+    /// Verner 9(8) without interpolation, 16 stages. Selecting it explicitly
+    /// is equivalent to `RKV98` with `enable_interp = false`.
     RKV98NoInterp,
     /// Verner 8(7) with 7th-degree dense output, 17 stages (13 + 4 for the interpolant)
     RKV87,
@@ -71,8 +75,9 @@ impl std::fmt::Display for Integrator {
 ///   post-Newtonian acceleration (IERS 2010 §10.3 Eq. 10.12). Default is true.
 ///   Its position effect depends on the orbit, propagation arc, and fitted
 ///   parameters; computational cost is negligible.
-/// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true
-///   slight computation savings if set to false
+/// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true.
+///   Setting it false skips storing dense output and, with the default `RKV98`, switches to the
+///   16-stage tableau (24% fewer force evaluations per step).
 /// * `integrator` - which Runge-Kutta integrator to use.  Default is RKV98
 /// * `max_steps` - maximum number of integrator steps before the propagator
 ///   aborts with [`numeris::ode::OdeError::MaxStepsExceeded`] (adaptive
@@ -80,6 +85,10 @@ impl std::fmt::Display for Integrator {
 ///   which covers very long propagation arcs (e.g., ~700 days of GJ8 at
 ///   60 s step) with plenty of headroom. Lower if you want a tighter
 ///   runaway-propagation safeguard.
+/// * `initial_step_secs` - first step (seconds) the adaptive integrators
+///   attempt. Default `None`: derived from the initial state, the tolerances
+///   and the integrator order (about 170 s for RKV98 at 1e-9 in LEO). Set it
+///   to warm-start from a previous arc's [`PropagationResult::next_step_secs`].
 ///
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PropSettings {
@@ -93,6 +102,11 @@ pub struct PropSettings {
     pub use_moon_gravity: bool,
     pub tide_model: TideModel,
     pub use_relativistic_correction: bool,
+    /// Store dense output so [`PropagationResult::interp`] works between
+    /// the begin and end times. Default `true`. When `false`, no dense
+    /// output is stored and [`Integrator::RKV98`] runs its 16-stage
+    /// no-interpolant tableau (same order and error control, 24% fewer
+    /// force evaluations per step).
     pub enable_interp: bool,
     pub integrator: Integrator,
     /// Fixed step size (seconds) used by [`Integrator::GaussJackson8`].
@@ -116,6 +130,28 @@ pub struct PropSettings {
     /// [`crate::earth_orientation_params::coverage`]. Default: `false`.
     #[serde(default)]
     pub require_eop_coverage: bool,
+    /// First step (seconds) the adaptive integrators attempt. `None` (the
+    /// default) derives it from the initial state and the tolerances as
+    /// `1.5 · |r|/|v| · tol^(1/(p+1))`, with `p` the integrator's order and
+    /// `tol = rel_error + abs_error/|r|` — within a factor of ~2.5 of the
+    /// settled stride across the Runge-Kutta integrators from 1e-6 to 1e-12
+    /// (about 170 s for RKV98 at 1e-9 in LEO), which the step controller
+    /// closes within a step or two. The
+    /// integrator's own starting-step heuristic is not used: it is scale
+    /// sensitive and, for an orbit in metres and seconds, starts several
+    /// orders of magnitude below the working step and spends a dozen steps
+    /// (half the derivative evaluations of a one-hour arc at 1e-9
+    /// tolerance) growing into it.
+    ///
+    /// Set it explicitly to warm-start a follow-on arc from the previous
+    /// arc's [`PropagationResult::next_step_secs`], which continues at full
+    /// stride, or to override the state-derived default. It is a magnitude:
+    /// backward propagation applies the sign, and a value longer than the
+    /// arc is clamped to it. Ignored by [`Integrator::GaussJackson8`] (fixed
+    /// step). Zero or non-finite values make `propagate` fail with
+    /// [`numeris::ode::OdeError::InvalidInitialStep`].
+    #[serde(default)]
+    pub initial_step_secs: Option<f64>,
     /// Regenerable ephemeris/EOP cache; excluded from serialization (a
     /// deserialized `PropSettings` recomputes it lazily as needed).
     #[serde(skip)]
@@ -140,6 +176,7 @@ impl Default for PropSettings {
             gj_step_seconds: 60.0,
             max_steps: 1_000_000,
             require_eop_coverage: false,
+            initial_step_secs: None,
             precomputed: None,
         }
     }
@@ -286,6 +323,7 @@ impl std::fmt::Display for PropSettings {
             Integrator: {},
             Max Steps: {},
             Require EOP Coverage: {},
+            Initial Step: {},
             {}"#,
             self.gravity_degree,
             self.gravity_order,
@@ -301,6 +339,10 @@ impl std::fmt::Display for PropSettings {
             self.integrator,
             self.max_steps,
             self.require_eop_coverage,
+            self.initial_step_secs.map_or_else(
+                || "auto (state, tolerance, order)".to_string(),
+                |h| format!("{h} s")
+            ),
             self.precomputed.as_ref().map_or_else(
                 || "No Precomputed".to_string(),
                 |p| format!("Precomputed: {} to {}", p.begin, p.end)
