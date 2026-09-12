@@ -94,7 +94,10 @@ pub struct TLE {
     pub mean_motion_dot_dot: f64,
     /// Starred ballistic coefficient, in units of inverse Earth radii
     pub bstar: f64,
-    /// Usually 0
+    /// Ephemeris type (line 1, column 63). Usually 0. A value of 4 marks
+    /// an SGP4-XP element set, which [`sgp4`](crate::sgp4::sgp4) rejects:
+    /// its line 1 stores agom and a B term where a classic TLE stores
+    /// nddot and B*, and satkit implements classic SGP4 only.
     pub ephem_type: u8,
     /// Bulliten number
     pub element_num: i32,
@@ -126,6 +129,13 @@ impl SGP4Source for TLE {
     }
 
     fn sgp4_init_args(&self) -> crate::sgp4::Result<SGP4InitArgs> {
+        // An SGP4-XP line 1 puts agom and a B term where a classic TLE has
+        // nddot and B*; classic SGP4 would run on them and be silently wrong.
+        if self.ephem_type == 4 {
+            return Err(crate::sgp4::Error::source(Error::UnsupportedEphemerisType(
+                self.ephem_type,
+            )));
+        }
         Ok(SGP4InitArgs::from_mean_elements(
             // Vallado expects JD UTC and then subtracts 2433281.5 inside the legacy interface.
             self.epoch.as_jd_with_scale(TimeScale::UTC),
@@ -1067,6 +1077,29 @@ mod tests {
             );
         }
 
+        Ok(())
+    }
+
+    /// An SGP4-XP element set (ephemeris type 4) parses, but SGP4 refuses
+    /// to propagate it: its drag columns do not mean what classic SGP4
+    /// expects. The lines are from the Astro Standards sample XP catalog,
+    /// with checksums appended.
+    #[test]
+    fn test_sgp4xp_type4_rejected() -> Result<()> {
+        let line1 = "1 00011U 59001A   23060.12028874 +.00002871  89876-2  73526-1 4 00010";
+        let line2 = "2 00011  32.8652 309.4507 1466152  63.9843 312.2337 11.85947359392148";
+        let mut tle = TLE::from_lines(&[line1.to_string(), line2.to_string()])?
+            .pop()
+            .unwrap();
+        assert_eq!(tle.ephem_type, 4);
+        let epoch = tle.epoch;
+        let err = match crate::sgp4::sgp4(&mut tle, &[epoch]) {
+            Ok(_) => panic!("type-4 element set must not propagate"),
+            Err(e) => e,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("SGP4-XP"), "unexpected message: {msg}");
+        assert!(msg.contains("type 4"), "unexpected message: {msg}");
         Ok(())
     }
 

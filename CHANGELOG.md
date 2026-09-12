@@ -6,6 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Fixed
 
+- `sgp4()` rejects SGP4-XP element sets (TLE ephemeris type 4, OMM `EPHEMERIS_TYPE` 4) with a clear error instead of propagating them: an SGP4-XP line 1 stores agom and a B term in the columns a classic TLE uses for nddot and B*, so the old behaviour ran classic SGP4 on the wrong inputs and returned a plausible but wrong state ([#174](https://github.com/ssmichael1/satkit/pull/174))
 - `satkit.density.nrlmsise(altitude_m, latitude_rad, longitude_rad, time)` converts its radian latitude/longitude to the degrees the model takes; the values were passed through unchanged, so a caller following the stub at 60° N was evaluated at 1.05° N (the `itrfcoord` overload and `nrlmsise00(latitude_deg=...)` were already correct) ([#171](https://github.com/ssmichael1/satkit/pull/171))
 - A corrupt or truncated `tab5.2*.txt` in a data directory no longer panics the first frame transform: satkit warns and uses the compiled-in copy of the same IERS table (exact, not an approximation), and the parser now rejects text with no table header or fewer rows than declared — an HTML notice page saved under the table's name previously loaded as six empty series and silently dropped the nutation terms ([#166](https://github.com/ssmichael1/satkit/pull/166))
 

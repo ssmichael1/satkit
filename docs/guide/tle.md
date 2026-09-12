@@ -15,6 +15,8 @@ There are multiple places to access the catalog, including:
 
 It was developed to support U.S. space surveillance as a fast, closed-form alternative to numerical integration, modeling Earth's oblateness (J2-J4), atmospheric drag via the TLE *B\** term, and key secular and periodic perturbations. The model is documented in Spacetrack Report No. 3 ([Hoots & Roehrich 1980](references.md#hoots1980)) and, in its modern reference form with test cases, in [Vallado et al. (2006)](references.md#vallado2006); satkit's implementation is a line-by-line Rust port of the C++ code accompanying the latter and is verified against its test vectors.
 
+satkit implements classic SGP4 only. Element sets flagged as **SGP4-XP** (ephemeris type 4 in TLE line 1, column 63, or `EPHEMERIS_TYPE: 4` in an OMM) parse normally, but `sgp4()` raises an error rather than propagating them: SGP4-XP is a different theory whose line 1 stores agom and a B term where a classic TLE stores nddot and $B^*$, and its reference implementation is distributed by the U.S. Space Force as binaries only. Such sets are rare in public catalogs.
+
 Today, SGP4 is the standard propagator for TLEs published by organizations like NORAD and CelesTrak, and is widely used for satellite tracking, visualization, conjunction screening, and mission planning — though its accuracy is fundamentally limited by TLE quality and simplifying assumptions.
 
 ## Ephemeris Representation

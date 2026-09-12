@@ -296,3 +296,34 @@ class TestSGP4ListKwargs:
         # And wgs84 must actually differ from the default wgs72
         p_72, _ = sk.sgp4(one(sk.TLE.from_lines([line1, line2])), t)
         assert not np.allclose(p_72, p_single, rtol=0, atol=1e-3)
+
+
+class TestSGP4XP:
+    def test_type4_tle_rejected(self):
+        """An SGP4-XP element set (ephemeris type 4) parses but cannot be propagated."""
+        line1 = "1 00011U 59001A   23060.12028874 +.00002871  89876-2  73526-1 4 00010"
+        line2 = "2 00011  32.8652 309.4507 1466152  63.9843 312.2337 11.85947359392148"
+        tle = sk.TLE.from_lines([line1, line2])
+        if isinstance(tle, list):
+            tle = tle[0]
+        assert tle.ephem_type == 4
+        with pytest.raises(RuntimeError, match="SGP4-XP"):
+            sk.sgp4(tle, tle.epoch)
+
+    def test_type4_omm_rejected(self):
+        """EPHEMERIS_TYPE 4 in an OMM is rejected the same way."""
+        omm = {
+            "OBJECT_NAME": "VANGUARD 1",
+            "OBJECT_ID": "1958-002B",
+            "EPOCH": "2023-03-01T02:53:12.947",
+            "MEAN_MOTION": 10.84532081,
+            "ECCENTRICITY": 0.1849434,
+            "INCLINATION": 34.2437,
+            "RA_OF_ASC_NODE": 69.7250,
+            "ARG_OF_PERICENTER": 110.9844,
+            "MEAN_ANOMALY": 271.4417,
+            "EPHEMERIS_TYPE": 4,
+            "NORAD_CAT_ID": 5,
+        }
+        with pytest.raises(RuntimeError, match="SGP4-XP"):
+            sk.sgp4(omm, sk.time(2023, 3, 1, 3, 0, 0))

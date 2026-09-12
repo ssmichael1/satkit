@@ -34,6 +34,11 @@ pub enum Error {
     #[error("Unsupported TIME_SYSTEM for SGP4: {0}")]
     UnsupportedTimeSystem(String),
 
+    /// `EPHEMERIS_TYPE` selects a propagator satkit does not implement
+    /// (4 is SGP4-XP).
+    #[error("Unsupported EPHEMERIS_TYPE {0} (SGP4-XP): satkit implements classic SGP4 only")]
+    UnsupportedEphemerisType(u8),
+
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 

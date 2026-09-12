@@ -59,6 +59,13 @@ pub enum Error {
     #[error("SGP4 evaluation failed: {0}")]
     Sgp4(String),
 
+    /// The element set's ephemeris type selects a propagator satkit does
+    /// not implement. Type 4 is SGP4-XP: its line 1 carries agom and a
+    /// B term in the columns a classic TLE uses for nddot and B*, so
+    /// running classic SGP4 on it would return a plausible but wrong state.
+    #[error("Ephemeris type {0} (SGP4-XP) is not supported: satkit implements classic SGP4 only, and an SGP4-XP element set stores agom and a B term where a classic TLE stores nddot and B*")]
+    UnsupportedEphemerisType(u8),
+
     #[error("Normal equations are singular: {0}")]
     SingularNormalEquations(String),
 
