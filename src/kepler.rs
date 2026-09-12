@@ -5,6 +5,7 @@ use thiserror::Error;
 
 /// Errors that can occur while constructing or converting [`Kepler`] elements.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Returned by [`Kepler::from_pv`] when the computed eccentricity is
     /// outside the valid range for an elliptical orbit.
@@ -16,6 +17,17 @@ pub enum Error {
     /// therefore inclination and RAAN — are undefined.
     #[error("Degenerate state: angular momentum is zero (rectilinear trajectory)")]
     Degenerate,
+
+    /// Returned by [`Kepler::try_new`] and [`Kepler::validate`] for an
+    /// element outside its domain: a non-finite value, `a <= 0`, `eccen`
+    /// outside `[0, 1)`, `incl` outside `[0, π]`, or `mu <= 0`.
+    #[error("invalid Keplerian element {name} = {value}: {reason}")]
+    #[non_exhaustive]
+    InvalidElement {
+        name: &'static str,
+        value: f64,
+        reason: &'static str,
+    },
 }
 
 /// Convenient type alias used throughout the `kepler` module.
@@ -45,10 +57,20 @@ pub type KeplerError = Error;
 ///   and perpendicular to the semimajor axis.  The eccentric anomaly is
 ///   a useful prerequisite to compute the mean anomaly
 ///
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Anomaly {
     Mean(f64),
     True(f64),
     Eccentric(f64),
+}
+
+impl Anomaly {
+    /// The angle carried by the variant, radians.
+    pub const fn value(self) -> f64 {
+        match self {
+            Self::Mean(v) | Self::True(v) | Self::Eccentric(v) => v,
+        }
+    }
 }
 
 // External library imports
@@ -56,21 +78,57 @@ use crate::mathtypes::*;
 
 /// Keplerian Orbital Elements
 ///
-/// The 6 Keplerian orbital elements are:
-/// a: semi-major axis, meters
-/// eccen: Eccentricity
-/// incl: Inclination, radians
-/// RAAN: Right Ascension of the Ascending Node, radians
-/// w: Argument of Perigee, radians
-/// an: Anomaly of given type, radians
-#[derive(Debug, Clone, Copy)]
+/// The 6 Keplerian orbital elements, plus the gravitational parameter of the
+/// central body they refer to:
+///
+/// * `a`: semi-major axis, meters
+/// * `eccen`: eccentricity, `0 <= eccen < 1`
+/// * `incl`: inclination, radians, `0 <= incl <= π`
+/// * `raan`: right ascension of the ascending node, radians
+/// * `argp`: argument of periapsis, radians
+/// * `nu`: true anomaly, radians
+/// * `mu`: gravitational parameter of the central body, m³/s²
+///   ([`MU_EARTH`](crate::consts::MU_EARTH) unless set with [`Kepler::with_mu`])
+///
+/// The fields are public and may be assigned directly; nothing is validated
+/// on assignment. [`Kepler::try_new`] and [`Kepler::validate`] are the
+/// checked paths.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Kepler {
     pub a: f64,
     pub eccen: f64,
     pub incl: f64,
     pub raan: f64,
-    pub w: f64,
-    pub nu: f64, // True anomaly
+    pub argp: f64,
+    /// True anomaly
+    pub nu: f64,
+    /// Gravitational parameter, m³/s². Serialized element sets that predate
+    /// this field deserialize with Earth's value.
+    #[serde(default = "default_mu")]
+    pub mu: f64,
+}
+
+const fn default_mu() -> f64 {
+    crate::consts::MU_EARTH
+}
+
+/// `Ok(())` when `value` is finite and `ok` holds; the error names the element.
+fn check(name: &'static str, value: f64, ok: bool, reason: &'static str) -> Result<()> {
+    if !value.is_finite() {
+        return Err(Error::InvalidElement {
+            name,
+            value,
+            reason: "must be finite",
+        });
+    }
+    if !ok {
+        return Err(Error::InvalidElement {
+            name,
+            value,
+            reason,
+        });
+    }
+    Ok(())
 }
 
 // Convert mean to eccentric anomaly
@@ -138,16 +196,85 @@ impl Kepler {
     ///
     /// # Returns
     ///
-    /// * `Kepler` - A new Keplerian orbital element object
+    /// * `Kepler` - A new Keplerian orbital element object, with Earth's
+    ///   gravitational parameter (see [`Kepler::with_mu`])
+    ///
+    /// Nothing is validated: `eccen >= 1`, `a <= 0` or non-finite inputs
+    /// produce meaningless (NaN) anomaly conversions rather than an error.
+    /// Use [`Kepler::try_new`] for a checked constructor.
     pub fn new(a: f64, eccen: f64, i: f64, raan: f64, argp: f64, an: Anomaly) -> Self {
         Self {
             a,
             eccen,
             incl: i,
             raan,
-            w: argp,
+            argp,
             nu: to_trueanomaly(an, eccen),
+            mu: default_mu(),
         }
+    }
+
+    /// Checked constructor: [`Kepler::new`] after validating every input.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidElement`] when any input is non-finite, `a <= 0`,
+    /// `eccen` is outside `[0, 1)`, or `i` is outside `[0, π]`. The bounds
+    /// are strict: `eccen = 1` and `i = π + 1e-16` are rejected.
+    pub fn try_new(a: f64, eccen: f64, i: f64, raan: f64, argp: f64, an: Anomaly) -> Result<Self> {
+        check("raan", raan, true, "")?;
+        check("argp", argp, true, "")?;
+        check("anomaly", an.value(), true, "")?;
+        let k = Self::new(a, eccen, i, raan, argp, an);
+        k.validate()?;
+        Ok(k)
+    }
+
+    /// Check that the stored elements describe a closed orbit: every field
+    /// finite, `a > 0`, `0 <= eccen < 1`, `0 <= incl <= π`, `mu > 0`.
+    ///
+    /// This is the check [`Kepler::try_new`] applies; call it after
+    /// assigning fields directly.
+    pub fn validate(&self) -> Result<()> {
+        check(
+            "a",
+            self.a,
+            self.a > 0.0,
+            "semi-major axis must be positive",
+        )?;
+        check(
+            "eccen",
+            self.eccen,
+            (0.0..1.0).contains(&self.eccen),
+            "eccentricity must be in [0, 1) (closed orbits only)",
+        )?;
+        check(
+            "incl",
+            self.incl,
+            (0.0..=std::f64::consts::PI).contains(&self.incl),
+            "inclination must be in [0, π] radians",
+        )?;
+        check("raan", self.raan, true, "")?;
+        check("argp", self.argp, true, "")?;
+        check("nu", self.nu, true, "")?;
+        check(
+            "mu",
+            self.mu,
+            self.mu > 0.0,
+            "gravitational parameter must be positive",
+        )?;
+        Ok(())
+    }
+
+    /// The same elements referred to a central body with gravitational
+    /// parameter `mu` (m³/s²), e.g. [`MU_MOON`](crate::consts::MU_MOON).
+    ///
+    /// Only the dynamics change (mean motion, period, `propagate`, the
+    /// element ↔ state conversions); the six geometric elements are kept
+    /// as they are. Not validated; see [`Kepler::validate`].
+    pub const fn with_mu(mut self, mu: f64) -> Self {
+        self.mu = mu;
+        self
     }
 
     /// Create a new Keplerian orbital element object with true anomaly
@@ -220,14 +347,7 @@ impl Kepler {
         let n = self.mean_motion();
         let ma = n.mul_add(dt.as_seconds(), self.mean_anomaly());
         let nu = mean2true(ma, self.eccen);
-        Self {
-            a: self.a,
-            eccen: self.eccen,
-            incl: self.incl,
-            raan: self.raan,
-            w: self.w,
-            nu,
-        }
+        Self { nu, ..*self }
     }
 
     /// Return the eccentric anomaly of the satellite in radians
@@ -255,7 +375,7 @@ impl Kepler {
     ///
     /// * `f64` - Mean motion, radians/second
     pub fn mean_motion(&self) -> f64 {
-        (crate::consts::MU_EARTH / self.a.powi(3)).sqrt()
+        (self.mu / self.a.powi(3)).sqrt()
     }
 
     /// Return the period of the satellite in seconds
@@ -267,7 +387,52 @@ impl Kepler {
         2.0 * std::f64::consts::PI / self.mean_motion()
     }
 
-    /// Convert Cartesian coordinates to Keplerian orbital elements
+    /// Radius of periapsis `a (1 - e)`, meters
+    pub fn periapsis(&self) -> f64 {
+        self.a * (1.0 - self.eccen)
+    }
+
+    /// Radius of apoapsis `a (1 + e)`, meters
+    pub fn apoapsis(&self) -> f64 {
+        self.a * (1.0 + self.eccen)
+    }
+
+    /// Specific orbital energy `-μ / 2a`, J/kg (m²/s²)
+    pub fn specific_energy(&self) -> f64 {
+        -self.mu / (2.0 * self.a)
+    }
+
+    /// Magnitude of the specific angular momentum `√(μ p)`, m²/s
+    pub fn angular_momentum(&self) -> f64 {
+        (self.mu * self.semiparameter()).sqrt()
+    }
+
+    /// Flight-path angle `γ = atan2(e sin ν, 1 + e cos ν)`, radians: the
+    /// angle of the velocity above the local horizontal, zero at periapsis
+    /// and apoapsis, positive while climbing.
+    pub fn flight_path_angle(&self) -> f64 {
+        f64::atan2(
+            self.eccen * self.nu.sin(),
+            self.eccen.mul_add(self.nu.cos(), 1.0),
+        )
+    }
+
+    /// Argument of latitude `u = ω + ν`, radians, reduced to `[0, 2π)`.
+    /// Well defined for circular orbits, where ω and ν separately are not.
+    pub fn argument_of_latitude(&self) -> f64 {
+        (self.argp + self.nu).rem_euclid(std::f64::consts::TAU)
+    }
+
+    /// True longitude `λ = Ω + ω + ν`, radians, reduced to `[0, 2π)`.
+    /// Well defined for circular equatorial orbits, where Ω, ω and ν
+    /// separately are not.
+    pub fn true_longitude(&self) -> f64 {
+        (self.raan + self.argp + self.nu).rem_euclid(std::f64::consts::TAU)
+    }
+
+    /// Convert Cartesian coordinates to Keplerian orbital elements about
+    /// the Earth ([`MU_EARTH`](crate::consts::MU_EARTH)); see
+    /// [`Kepler::from_pv_with_mu`].
     ///
     /// # Arguments
     ///
@@ -279,8 +444,21 @@ impl Kepler {
     /// * `Kepler` - A new Keplerian orbital element object
     ///
     pub fn from_pv(r: Vector3, v: Vector3) -> Result<Self> {
+        Self::from_pv_with_mu(r, v, default_mu())
+    }
+
+    /// Convert Cartesian coordinates to Keplerian orbital elements about a
+    /// central body with gravitational parameter `mu` (m³/s²).
+    ///
+    /// The returned elements carry `mu`, so their period, `propagate` and
+    /// `to_pv` refer to the same body.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Degenerate`] for (near-)zero angular momentum,
+    /// [`Error::EccenOutOfBound`] for an open (parabolic/hyperbolic) state.
+    pub fn from_pv_with_mu(r: Vector3, v: Vector3, mu: f64) -> Result<Self> {
         use std::f64::consts::TAU;
-        let mu = crate::consts::MU_EARTH;
         let rmag = r.norm();
 
         let h = r.cross(&v);
@@ -345,7 +523,7 @@ impl Kepler {
             (raan, w, nu)
         };
 
-        Ok(Self::new(a, eccen, incl, raan, w, Anomaly::True(nu)))
+        Ok(Self::new(a, eccen, incl, raan, w, Anomaly::True(nu)).with_mu(mu))
     }
 
     /// Convert Keplerian orbital elements to Cartesian coordinates
@@ -359,9 +537,9 @@ impl Kepler {
         let r = p / self.eccen.mul_add(self.nu.cos(), 1.0);
         let r_pqw = numeris::vector![r * self.nu.cos(), r * self.nu.sin(), 0.0];
         let v_pqw = numeris::vector![-self.nu.sin(), self.eccen + self.nu.cos(), 0.0]
-            * (crate::consts::MU_EARTH / p).sqrt();
+            * (self.mu / p).sqrt();
         let q =
-            Quaternion::rotz(self.raan) * Quaternion::rotx(self.incl) * Quaternion::rotz(self.w);
+            Quaternion::rotz(self.raan) * Quaternion::rotx(self.incl) * Quaternion::rotz(self.argp);
         (q * r_pqw, q * v_pqw)
     }
 }
@@ -375,8 +553,8 @@ impl std::fmt::Display for Kepler {
         )?;
         write!(
             f,
-            "  Ω = {:.3} rad\n  ω = {:.3} rad\n  ν = {:.3} rad\n",
-            self.raan, self.w, self.nu
+            "  Ω = {:.3} rad\n  ω = {:.3} rad\n  ν = {:.3} rad\n  μ = {:.6e} m³/s²\n",
+            self.raan, self.argp, self.nu, self.mu
         )
     }
 }
@@ -425,7 +603,7 @@ mod tests {
         let k = Kepler::new(a, 0.0, 0.0, 0.0, 0.0, Anomaly::True(0.7));
         let (r, v) = k.to_pv();
         let k2 = Kepler::from_pv(r, v).unwrap();
-        assert!(k2.raan.is_finite() && k2.w.is_finite() && k2.nu.is_finite());
+        assert!(k2.raan.is_finite() && k2.argp.is_finite() && k2.nu.is_finite());
         let (r2, v2) = k2.to_pv();
         assert!((r - r2).norm() / r.norm() < 1.0e-9);
         assert!((v - v2).norm() / v.norm() < 1.0e-9);
@@ -439,7 +617,7 @@ mod tests {
         let k = Kepler::new(a, 0.1, 0.0, 0.0, 0.5, Anomaly::True(1.0));
         let (r, v) = k.to_pv();
         let k2 = Kepler::from_pv(r, v).unwrap();
-        assert!(k2.raan.is_finite() && k2.w.is_finite() && k2.nu.is_finite());
+        assert!(k2.raan.is_finite() && k2.argp.is_finite() && k2.nu.is_finite());
         let (r2, v2) = k2.to_pv();
         assert!((r - r2).norm() / r.norm() < 1.0e-9);
         assert!((v - v2).norm() / v.norm() < 1.0e-9);
@@ -592,7 +770,7 @@ mod tests {
                             && k2.eccen.is_finite()
                             && k2.incl.is_finite()
                             && k2.raan.is_finite()
-                            && k2.w.is_finite()
+                            && k2.argp.is_finite()
                             && k2.nu.is_finite(),
                         "non-finite element e={e} i={i} nu={nu}: {k2:?}"
                     );
@@ -641,6 +819,123 @@ mod tests {
     }
 
     #[test]
+    fn test_try_new_rejects_out_of_domain_elements() {
+        use std::f64::consts::PI;
+        let ok = Kepler::try_new(7000.0e3, 0.1, 0.5, 1.0, 0.3, Anomaly::True(0.7));
+        assert!(ok.is_ok());
+        let bad = [
+            (0.0, 0.1, 0.5, "a"),
+            (-7000.0e3, 0.1, 0.5, "a"),
+            (f64::NAN, 0.1, 0.5, "a"),
+            (7000.0e3, 1.0, 0.5, "eccen"),
+            (7000.0e3, -1.0e-3, 0.5, "eccen"),
+            (7000.0e3, f64::INFINITY, 0.5, "eccen"),
+            (7000.0e3, 0.1, -1.0e-9, "incl"),
+            (7000.0e3, 0.1, PI + 1.0e-9, "incl"),
+            (7000.0e3, 0.1, f64::NAN, "incl"),
+        ];
+        for (a, e, i, which) in bad {
+            match Kepler::try_new(a, e, i, 1.0, 0.3, Anomaly::True(0.7)) {
+                Err(Error::InvalidElement { name, .. }) => assert_eq!(name, which),
+                other => panic!("expected InvalidElement({which}), got {other:?}"),
+            }
+        }
+        // Non-finite angles, including the anomaly, are rejected too.
+        assert!(Kepler::try_new(7000.0e3, 0.1, 0.5, f64::NAN, 0.3, Anomaly::True(0.7)).is_err());
+        assert!(Kepler::try_new(7000.0e3, 0.1, 0.5, 1.0, 0.3, Anomaly::Mean(f64::NAN)).is_err());
+        // Boundaries: e = 0 and i ∈ {0, π} are valid.
+        assert!(Kepler::try_new(7000.0e3, 0.0, 0.0, 0.0, 0.0, Anomaly::True(0.0)).is_ok());
+        assert!(Kepler::try_new(7000.0e3, 0.0, PI, 0.0, 0.0, Anomaly::True(0.0)).is_ok());
+        // validate() catches a bad direct assignment, mu included.
+        let mut k = ok.unwrap();
+        k.mu = 0.0;
+        assert!(matches!(
+            k.validate(),
+            Err(Error::InvalidElement { name: "mu", .. })
+        ));
+    }
+
+    #[test]
+    fn test_mu_changes_dynamics_not_geometry() {
+        use crate::consts::{MU_EARTH, MU_MOON};
+        let k_earth = Kepler::new(2000.0e3, 0.05, 1.0, 0.2, 0.3, Anomaly::True(0.4));
+        assert_eq!(k_earth.mu, MU_EARTH);
+        let k_moon = k_earth.with_mu(MU_MOON);
+        // Same six elements …
+        assert_eq!(k_moon.a, k_earth.a);
+        assert_eq!(k_moon.nu, k_earth.nu);
+        // … different period: T ∝ 1/√μ.
+        let ratio = k_moon.period() / k_earth.period();
+        assert!((ratio - (MU_EARTH / MU_MOON).sqrt()).abs() < 1.0e-12);
+        // 2000 km about the Moon: ~ 2.1 h. Sanity check the magnitude.
+        assert!(
+            (k_moon.period() - 8022.0).abs() < 5.0,
+            "{}",
+            k_moon.period()
+        );
+        // The state round trip must use the same μ on both legs.
+        let (r, v) = k_moon.to_pv();
+        let back = Kepler::from_pv_with_mu(r, v, MU_MOON).unwrap();
+        assert_eq!(back.mu, MU_MOON);
+        assert!((back.a - k_moon.a).abs() / k_moon.a < 1.0e-9);
+        assert!((back.eccen - k_moon.eccen).abs() < 1.0e-9);
+        // Interpreting a lunar state with Earth's μ gives a different orbit.
+        let wrong = Kepler::from_pv(r, v).unwrap();
+        assert!((wrong.a - k_moon.a).abs() / k_moon.a > 0.1);
+        // propagate keeps mu.
+        assert_eq!(
+            k_moon.propagate(&crate::Duration::from_seconds(10.0)).mu,
+            MU_MOON
+        );
+    }
+
+    #[test]
+    fn test_derived_helpers() {
+        use std::f64::consts::{PI, TAU};
+        let a = 26_600.0e3;
+        let e = 0.74;
+        let k = Kepler::new(a, e, 1.1, 5.0, 4.0, Anomaly::True(0.0));
+        assert!((k.periapsis() - a * (1.0 - e)).abs() < 1.0e-6);
+        assert!((k.apoapsis() - a * (1.0 + e)).abs() < 1.0e-6);
+        assert!((k.periapsis() + k.apoapsis() - 2.0 * a).abs() < 1.0e-6);
+        // Vis-viva at periapsis agrees with the energy helper.
+        let (r, v) = k.to_pv();
+        let xi = v.norm_squared() / 2.0 - k.mu / r.norm();
+        assert!((xi - k.specific_energy()).abs() / xi.abs() < 1.0e-12);
+        // |r × v| agrees with the angular-momentum helper.
+        assert!((r.cross(&v).norm() - k.angular_momentum()).abs() / k.angular_momentum() < 1.0e-12);
+        // Flight-path angle: zero at periapsis and apoapsis, positive on the
+        // outbound leg, and equal to atan(e sinν / (1 + e cosν)) elsewhere.
+        assert_eq!(k.flight_path_angle(), 0.0);
+        let k_apo = Kepler::new(a, e, 1.1, 5.0, 4.0, Anomaly::True(PI));
+        assert!(k_apo.flight_path_angle().abs() < 1.0e-15);
+        let k_out = Kepler::new(a, e, 1.1, 5.0, 4.0, Anomaly::True(1.0));
+        assert!(k_out.flight_path_angle() > 0.0);
+        let (r, v) = k_out.to_pv();
+        let gamma = (r.dot(&v) / (r.norm() * v.norm())).asin();
+        assert!((gamma - k_out.flight_path_angle()).abs() < 1.0e-12);
+        // u and λ wrap into [0, 2π): ω + ν = 4 + 1 = 5; Ω + ω + ν = 10 → 10 - 2π.
+        assert!((k_out.argument_of_latitude() - 5.0).abs() < 1.0e-12);
+        assert!((k_out.true_longitude() - (10.0 - TAU)).abs() < 1.0e-12);
+        let k_neg = Kepler::new(a, e, 1.1, -1.0, -1.0, Anomaly::True(-1.0));
+        assert!((k_neg.argument_of_latitude() - (TAU - 2.0)).abs() < 1.0e-12);
+        assert!((k_neg.true_longitude() - (TAU - 3.0)).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn test_serde_roundtrip_and_missing_mu_defaults_to_earth() {
+        let k = Kepler::new(7000.0e3, 0.1, 0.5, 1.0, 0.3, Anomaly::True(0.7))
+            .with_mu(crate::consts::MU_MOON);
+        let json = serde_json::to_string(&k).unwrap();
+        let back: Kepler = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, k);
+        // An element set serialized before `mu` existed still loads.
+        let legacy = r#"{"a":7000000.0,"eccen":0.1,"incl":0.5,"raan":1.0,"argp":0.3,"nu":0.7}"#;
+        let old: Kepler = serde_json::from_str(legacy).unwrap();
+        assert_eq!(old.mu, crate::consts::MU_EARTH);
+    }
+
+    #[test]
     fn test_topv() {
         // Example 2-6 from Vallado
         let p = 11067790.0;
@@ -671,7 +966,7 @@ mod tests {
         assert!((k.eccen - 0.83285).abs() < 1e-3);
         assert!((k.incl - 87.87_f64.to_radians()).abs() < 1e-3);
         assert!((k.raan - 227.89_f64.to_radians()).abs() < 1e-3);
-        assert!((k.w - 53.38_f64.to_radians()).abs() < 1e-3);
+        assert!((k.argp - 53.38_f64.to_radians()).abs() < 1e-3);
         assert!((k.nu - 92.335_f64.to_radians()).abs() < 1e-3);
     }
 }

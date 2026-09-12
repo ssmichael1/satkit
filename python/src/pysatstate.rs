@@ -80,6 +80,24 @@ impl PySatState {
         Ok(Self(state))
     }
 
+    /// Create a state from Keplerian elements
+    ///
+    /// The two-body position and velocity of the elements (``kepler.to_pv()``)
+    /// are taken as GCRF at ``time``; no covariance, no maneuvers. The
+    /// elements are treated as osculating GCRF elements, so ``kepler.mu``
+    /// should be Earth's.
+    ///
+    /// Args:
+    ///     time (satkit.time): epoch of the state
+    ///     kepler (satkit.kepler): osculating Keplerian elements
+    ///
+    /// Returns:
+    ///     satkit.satstate: state at ``time``
+    #[staticmethod]
+    fn from_kepler(time: &PyInstant, kepler: &crate::pykepler::PyKepler) -> Self {
+        Self(SatState::from_kepler(&time.0, &kepler.0))
+    }
+
     /// Set 1-sigma position uncertainty in a satellite-local or inertial frame.
     ///
     /// The uncertainty is interpreted as a diagonal 3x3 covariance in the

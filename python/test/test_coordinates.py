@@ -21,7 +21,7 @@ class TestKepler:
         assert kep.eccen == pytest.approx(0.83285, 1.0e-5)
         assert kep.inclination * rad2deg == pytest.approx(87.87, 1.0e-3)
         assert kep.raan * rad2deg == pytest.approx(227.89, 1.0e-3)
-        assert kep.w * rad2deg == pytest.approx(53.38, 1.0e-3)
+        assert kep.argp * rad2deg == pytest.approx(53.38, 1.0e-3)
         assert kep.nu * rad2deg == pytest.approx(92.335, 1.0e-3)
 
     def test_kepler_to_pv(self):
@@ -68,30 +68,40 @@ class TestKepler:
         with pytest.raises(TypeError):
             sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7, bogus=1.0)
 
-    def test_mean_anomaly_setter_nan_does_not_hang(self):
-        """Regression: the setter used to spin forever on NaN with the GIL held."""
+    def test_anomaly_setters_reject_non_finite_and_high_e_converges(self):
+        """Regression for the setter that used to spin forever on NaN.
+
+        Non-finite input is now refused before reaching the solver (the
+        solver itself is iteration-capped; see the Rust test
+        ``test_mean2eccentric_nan_returns``), so no setter can leave a NaN
+        element behind. A high-eccentricity solve still runs, capped, in a
+        watchdog thread.
+        """
         import threading
+
+        k = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
+        k0 = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
+        for attr in ("mean_anomaly", "eccentric_anomaly"):
+            for bad in (float("nan"), float("inf"), float("-inf")):
+                with pytest.raises(ValueError, match=attr):
+                    setattr(k, attr, bad)
+        assert k == k0
+        with pytest.raises(ValueError):
+            k.eccen = 1.5
+        assert k == k0
 
         results = {}
 
         def worker():
-            k = sk.kepler(7000e3, 0.5, 0.5, 1.0, 0.3, 0.0)
-            k.mean_anomaly = float("nan")
-            results["nan"] = k.nu
-            k.mean_anomaly = float("inf")
-            results["inf"] = k.nu
-            # e >= 1 is outside the supported domain but must still return
-            k.eccen = 1.5
-            k.mean_anomaly = 1.0
-            results["hyper"] = k.nu
+            k.eccen = 0.999
+            k.mean_anomaly = 6.0
+            results["high_e"] = k.nu
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
         t.join(timeout=10.0)
         assert not t.is_alive(), "mean_anomaly setter hung"
-        assert m.isnan(results["nan"])
-        assert m.isnan(results["inf"])
-        assert "hyper" in results
+        assert m.isfinite(results["high_e"])
 
     def test_mean_anomaly_setter_roundtrip(self):
         """Set M, read it back: |dM| < 1e-12 at e = 0.9 over a full revolution."""
@@ -116,17 +126,149 @@ class TestKepler:
     def test_kepler_pickle_roundtrip(self):
         import pickle
 
-        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7, mu=sk.consts.mu_moon)
         k2 = pickle.loads(pickle.dumps(k))
         assert k2 == k
-        assert (k2.a, k2.eccen, k2.inclination, k2.raan, k2.w, k2.nu) == (
+        assert (k2.a, k2.eccen, k2.inclination, k2.raan, k2.argp, k2.nu, k2.mu) == (
             k.a,
             k.eccen,
             k.inclination,
             k.raan,
-            k.w,
+            k.argp,
             k.nu,
+            k.mu,
         )
+        # mu is part of the state: a different central body is a different set
+        k_earth = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        assert k_earth != k
+        assert k_earth.mu == sk.consts.mu_earth
+
+    def test_kepler_validation_raises_value_error(self):
+        good = dict(a=7000e3, eccen=0.1, incl=0.5, raan=1.0, argp=0.3, nu=0.7)
+        sk.kepler(**good)
+        for bad in (
+            dict(a=0.0),
+            dict(a=-7000e3),
+            dict(a=float("nan")),
+            dict(eccen=1.0),
+            dict(eccen=-1e-3),
+            dict(eccen=float("inf")),
+            dict(incl=-1e-9),
+            dict(incl=m.pi + 1e-9),
+            dict(raan=float("nan")),
+            dict(nu=float("nan")),
+            dict(mu=0.0),
+            dict(mu=-1.0),
+        ):
+            with pytest.raises(ValueError):
+                sk.kepler(**{**good, **bad})
+        # Boundaries are inclusive where the domain is closed
+        sk.kepler(**{**good, "eccen": 0.0, "incl": 0.0})
+        sk.kepler(**{**good, "incl": m.pi})
+        # Setters validate too, and leave the element set unchanged on failure
+        k = sk.kepler(**good)
+        for attr, val in (
+            ("a", -1.0),
+            ("a", float("nan")),
+            ("eccen", 1.0),
+            ("inclination", 4.0),
+            ("mu", 0.0),
+            ("raan", float("nan")),
+            ("raan", float("inf")),
+            ("argp", float("nan")),
+            ("nu", float("-inf")),
+        ):
+            with pytest.raises(ValueError):
+                setattr(k, attr, val)
+        with pytest.warns(DeprecationWarning), pytest.raises(ValueError):
+            k.w = float("nan")
+        assert k == sk.kepler(**good)
+        # Finite angles of any size are accepted (stored as given)
+        k.raan = -10.0
+        k.argp = 100.0
+        k.nu = 7.0
+        assert (k.raan, k.argp, k.nu) == (-10.0, 100.0, 7.0)
+
+    def test_kepler_from_pv_open_or_rectilinear_is_value_error(self):
+        r = np.array([7000e3, 0.0, 0.0])
+        # Escape velocity and beyond: hyperbolic
+        v_esc = m.sqrt(2 * sk.consts.mu_earth / 7000e3)
+        with pytest.raises(ValueError, match="[Ee]ccentricity"):
+            sk.kepler.from_pv(r, np.array([0.0, 1.5 * v_esc, 0.0]))
+        # Parallel r and v: zero angular momentum
+        with pytest.raises(ValueError, match="angular momentum"):
+            sk.kepler.from_pv(r, np.array([1000.0, 0.0, 0.0]))
+        # Malformed input is still a RuntimeError (shape, not physics)
+        with pytest.raises(RuntimeError):
+            sk.kepler.from_pv(np.zeros(4), np.zeros(3))
+
+    def test_kepler_argp_and_deprecated_w(self):
+        k_argp = sk.kepler(7000e3, 0.1, 0.5, 1.0, argp=0.3, nu=0.7)
+        k_w = sk.kepler(7000e3, 0.1, 0.5, 1.0, w=0.3, nu=0.7)
+        k_pos = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        assert k_argp == k_w == k_pos
+        assert k_argp.argp == 0.3
+        with pytest.raises(ValueError):
+            sk.kepler(7000e3, 0.1, 0.5, 1.0, argp=0.3, w=0.3, nu=0.7)
+        with pytest.raises(TypeError):
+            sk.kepler(7000e3, 0.1, 0.5, 1.0, nu=0.7)
+        with pytest.warns(DeprecationWarning, match="argp"):
+            assert k_argp.w == 0.3
+        with pytest.warns(DeprecationWarning, match="argp"):
+            k_argp.w = 0.4
+        assert k_argp.argp == 0.4
+
+    def test_kepler_mu(self):
+        k = sk.kepler(2000e3, 0.05, 1.0, 0.2, 0.3, 0.4)
+        k_moon = sk.kepler(2000e3, 0.05, 1.0, 0.2, 0.3, 0.4, mu=sk.consts.mu_moon)
+        assert k.mu == sk.consts.mu_earth
+        assert k_moon.mu == sk.consts.mu_moon
+        assert k_moon.period / k.period == pytest.approx(
+            m.sqrt(sk.consts.mu_earth / sk.consts.mu_moon), rel=1e-12
+        )
+        assert k_moon.period == pytest.approx(8022.0, abs=5.0)
+        # from_pv with the same mu round-trips; with Earth's it does not
+        r, v = k_moon.to_pv()
+        back = sk.kepler.from_pv(r, v, mu=sk.consts.mu_moon)
+        assert back.mu == sk.consts.mu_moon
+        assert back.a == pytest.approx(k_moon.a, rel=1e-9)
+        assert abs(sk.kepler.from_pv(r, v).a - k_moon.a) / k_moon.a > 0.1
+        with pytest.raises(ValueError):
+            sk.kepler.from_pv(r, v, mu=0.0)
+        # propagate keeps mu, and the mu setter works
+        assert k_moon.propagate(10.0).mu == sk.consts.mu_moon
+        k.mu = sk.consts.mu_moon
+        assert k == k_moon
+
+    def test_kepler_derived_helpers(self):
+        a, e = 26600e3, 0.74
+        k = sk.kepler(a, e, 1.1, 5.0, 4.0, 0.0)
+        assert k.periapsis == pytest.approx(a * (1 - e))
+        assert k.apoapsis == pytest.approx(a * (1 + e))
+        assert k.specific_energy == pytest.approx(-sk.consts.mu_earth / (2 * a), rel=1e-12)
+        r, v = k.to_pv()
+        assert k.angular_momentum == pytest.approx(np.linalg.norm(np.cross(r, v)), rel=1e-12)
+        assert k.flight_path_angle == 0.0
+        k_out = sk.kepler(a, e, 1.1, 5.0, 4.0, 1.0)
+        r, v = k_out.to_pv()
+        gamma = m.asin(np.dot(r, v) / (np.linalg.norm(r) * np.linalg.norm(v)))
+        assert k_out.flight_path_angle == pytest.approx(gamma, abs=1e-12)
+        assert k_out.flight_path_angle > 0
+        assert k_out.argument_of_latitude == pytest.approx(5.0, abs=1e-12)
+        assert k_out.true_longitude == pytest.approx(10.0 - 2 * m.pi, abs=1e-12)
+
+    def test_kepler_repr_and_satstate_from_kepler(self):
+        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        text = repr(k)
+        assert text.startswith("kepler(a=7.000000e6") and "argp=" in text and "mu=" in text
+        assert "\n" not in text
+        assert str(k).startswith("Keplerian Elements:")
+        t0 = sk.time(2024, 1, 1)
+        s = sk.satstate.from_kepler(t0, k)
+        r, v = k.to_pv()
+        np.testing.assert_allclose(s.pos, r)
+        np.testing.assert_allclose(s.vel, v)
+        assert s.time == t0
 
     def test_kepler_propagate_accepts_int_and_duration(self):
         k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
