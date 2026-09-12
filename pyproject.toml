@@ -45,7 +45,7 @@ test = ["pytest", "mypy", "scipy"]
 data = ["satkit-data>=0.9.0"]
 
 [tool.setuptools]
-license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRDPARTY-DATA.md"]
 
 [tool.setuptools.packages.find]
 where = ["python"]

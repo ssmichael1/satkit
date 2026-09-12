@@ -2,6 +2,12 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
+## Unreleased
+
+### Docs
+
+- `THIRDPARTY-DATA.md` states the source, citation, licence and truncation of every dataset compiled into the library (ITU_GRACE16 is CC BY 4.0; EGM96, JGM-2/3 and the IERS tables are public-domain / freely redistributable); it ships in the sdist and wheels as a licence file and is linked from the README ([#182](https://github.com/ssmichael1/satkit/pull/182))
+
 ## 0.22.0 - 2026-09-12
 
 ### Added
