@@ -99,7 +99,7 @@ Plus ENU, NED, and geodesic distance ([Vincenty 1975](guide/references.md#vincen
 
 ### Orbit Propagation
 
-- **Numerical** -- Adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4); [Verner 2010](guide/references.md#verner2010), [Tsitouras 2011](guide/references.md#tsitouras2011)), RODAS4 and Gauss-Jackson 8 ([Berry & Healy 2004](guide/references.md#berry2004)), with dense output, state transition matrix, and configurable force models
+- **Numerical** -- Adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4); [Verner 2010](guide/references.md#verner2010), [Tsitouras 2011](guide/references.md#tsitouras2011)), RODAS4 and Gauss-Jackson 8 ([Berry & Healy 2004](guide/references.md#berry2004)), with dense output, state transition matrix, configurable force models, and a state-derived starting step with warm-start handoff between arcs ([ODE Integrators](guide/integrators.md#starting-step-and-warm-start))
 - **SGP4** -- Standard TLE/OMM propagator ([Vallado et al. 2006](guide/references.md#vallado2006)) with TLE fitting from precision states
 - **Keplerian** -- Analytical two-body propagation
 - **Lambert** -- Multi-revolution Lambert targeting for orbit transfer design ([Izzo 2015](guide/references.md#izzo2015))

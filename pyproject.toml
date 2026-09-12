@@ -11,7 +11,7 @@ requires-python = ">= 3.10"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
-version = "0.21.2"
+version = "0.22.0"
 license = "MIT OR Apache-2.0"
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
@@ -106,3 +106,6 @@ target = "satkit/satkit"
 path = "python/Cargo.toml"
 binding = "PyO3"
 debug = false
+# Build against the committed Cargo.lock exactly (fail instead of resolving
+# newer crates); conda-forge and other packagers rely on this.
+cargo-manifest-args = ["--locked"]

@@ -2,7 +2,7 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.22.0 - 2026-09-12
 
 ### Added
 
@@ -15,11 +15,11 @@ Only recent releases are listed. Older entries are in this file's git history (`
   initial state, the tolerances and the integrator order (`1.5·|r|/|v|·tol^(1/(p+1))`, within ~2.5× of the settled
   stride across the RK integrators from 1e-6 to 1e-12); `initial_step_secs` overrides it, and `next_step_secs` reports the
   integrator's working stride at the end of an arc so a follow-on arc can warm-start at full stride
-  (`ps.initial_step_secs = res.next_step_secs`). Requires numeris 0.6.
+  (`ps.initial_step_secs = res.next_step_secs`). Requires numeris 0.6 ([#178](https://github.com/ssmichael1/satkit/pull/178))
 - `integrator.rkv98` with `enable_interp=False` now runs the 16-stage `rkv98_nointerp` tableau automatically:
   the five extra stages of the 21-stage tableau exist only to build the interpolant, so this is the same order
   and error control at 24% fewer force evaluations per step. Results change at the tolerance level for that
-  combination (a different tableau takes different steps).
+  combination (a different tableau takes different steps) ([#178](https://github.com/ssmichael1/satkit/pull/178))
 
 ### Distribution
 
@@ -27,6 +27,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Fixed
 
+- Space-weather records are indexed by UTC calendar day. The lookup counted continuous days from the first record, and since `Instant` counts leap seconds the last 37 seconds of each UTC day read the *next* day's record (F10.7, Ap, and the 3-hourly Ap history fed to NRLMSISE-00). Density, and hence drag, in that window changes very slightly (contributed by @scottshambaugh, [#176](https://github.com/ssmichael1/satkit/pull/176))
 - `sgp4()` rejects SGP4-XP element sets (TLE ephemeris type 4, OMM `EPHEMERIS_TYPE` 4) with a clear error instead of propagating them: an SGP4-XP line 1 stores agom and a B term in the columns a classic TLE uses for nddot and B*, so the old behaviour ran classic SGP4 on the wrong inputs and returned a plausible but wrong state ([#174](https://github.com/ssmichael1/satkit/pull/174))
 - `satkit.density.nrlmsise(altitude_m, latitude_rad, longitude_rad, time)` converts its radian latitude/longitude to the degrees the model takes; the values were passed through unchanged, so a caller following the stub at 60° N was evaluated at 1.05° N (the `itrfcoord` overload and `nrlmsise00(latitude_deg=...)` were already correct) ([#171](https://github.com/ssmichael1/satkit/pull/171))
 - A corrupt or truncated `tab5.2*.txt` in a data directory no longer panics the first frame transform: satkit warns and uses the compiled-in copy of the same IERS table (exact, not an approximation), and the parser now rejects text with no table header or fewer rows than declared — an HTML notice page saved under the table's name previously loaded as six empty series and silently dropped the nutation terms ([#166](https://github.com/ssmichael1/satkit/pull/166))
@@ -255,12 +256,3 @@ Only recent releases are listed. Older entries are in this file's git history (`
   - `time.from_rfc3339`: `s` → `rfc3339`;  `time.from_datetime`: `tm` → `dt`
   - `time.strftime`: `fmt` → `format`;  `time.strptime`: `(s, fmt)` → `(date_string, format)`
   - `kepler.from_pv`: `(r, v)` → `(pos, vel)`
-
-
-## 0.20.3 - 2026-08-21
-
-Released with the panic-hardening audit (PR #124), the `lambert::Error` /
-typed `sgp4::Error::SatRecInit` API cleanups (PR #123) and the stubtest CI
-check (PR #122). Those entries were recorded under 0.20.4 above when 0.20.4
-followed a week later; see that section for details.
-
