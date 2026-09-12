@@ -1,5 +1,4 @@
 /target
-/Cargo.lock
 /testdata/vallado*
 /testdata/testpo*
 .vscode
