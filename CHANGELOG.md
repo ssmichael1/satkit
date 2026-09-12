@@ -11,6 +11,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Changed
 
+- Propagation step time is ~3x faster (LEO, 40x40 field, drag, rkv98): the spherical-harmonic gravity kernels dispatch at runtime to a copy compiled with FMA on x86-64 (their `mul_add` calls were libm function calls on the baseline x86-64 that wheels target; ~5x on the 40x40 field, no change on arm64 where FMA is native), NRLMSISE-00 computes its latitude, longitude and local-time terms once per evaluation instead of in each of its 14 inner calls, the ITRF-to-geodetic conversion uses a single Bowring refinement (double precision from 1000 km below the surface to beyond lunar distance), gravity-model parsing skips coefficients above the requested degree, and `satkit.__version__` is read from the extension module instead of an `importlib.metadata` lookup at import time (contributed by @scottshambaugh, [#175](https://github.com/ssmichael1/satkit/pull/175))
 - `update_datafiles()` no longer downloads files that are compiled into the library: the IERS tables and gravity models are `default: false` in the manifest (still pinned and fetchable by name), and the unused `leap-seconds.list` (nothing ever read it — the runtime leap-second table is a compiled-in constant) is removed from the manifest entirely. The only static download left is the JPL ephemeris, alongside the daily EOP / space-weather / solar-cycle refreshes ([#163](https://github.com/ssmichael1/satkit/pull/163))
 
 ### Docs
