@@ -170,7 +170,7 @@ class TLE:
     def desig_piece(self, value: str) -> None: ...
     @property
     def ephem_type(self) -> int:
-        """Ephemeris type (usually 0)"""
+        """Ephemeris type (usually 0). A value of 4 marks an SGP4-XP element set, which ``sgp4`` rejects: satkit implements classic SGP4 only."""
         ...
 
     @ephem_type.setter

@@ -111,6 +111,19 @@ fn float_from_py(val: &Bound<'_, PyAny>) -> Result<f64> {
     }
 }
 
+/// EPHEMERIS_TYPE arrives as an int from JSON and as a string from XML.
+fn ephemeris_type_from_py(val: &Bound<'_, PyAny>) -> Result<u8> {
+    if let Ok(v) = val.extract::<u8>() {
+        return Ok(v);
+    }
+    let s: String = val
+        .extract()
+        .map_err(|e| anyhow::anyhow!("Invalid EPHEMERIS_TYPE: {}", e))?;
+    s.trim()
+        .parse::<u8>()
+        .map_err(|e| anyhow::anyhow!("Invalid EPHEMERIS_TYPE {:?}: {}", s, e))
+}
+
 fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<satkit::omm::OMM> {
     let mut omm = satkit::omm::OMM::default();
 
@@ -151,6 +164,9 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<satkit::omm::OMM> {
     }
     if let Some(v) = dict.get_item("MEAN_MOTION_DDOT")? {
         omm.mean_motion_ddot = Some(float_from_py(&v)?);
+    }
+    if let Some(v) = dict.get_item("EPHEMERIS_TYPE")? {
+        omm.ephemeris_type = Some(ephemeris_type_from_py(&v)?);
     }
     if let Some(d) = dict.get_item("meanElements")? {
         let d = d.cast::<PyDict>().map_err(|e| {
@@ -196,6 +212,9 @@ fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<satkit::omm::OMM> {
         }
         if let Some(v) = d.get_item("MEAN_MOTION_DDOT")? {
             omm.mean_motion_ddot = Some(float_from_py(&v)?);
+        }
+        if let Some(v) = d.get_item("EPHEMERIS_TYPE")? {
+            omm.ephemeris_type = Some(ephemeris_type_from_py(&v)?);
         }
     }
     if omm.epoch.is_empty() {

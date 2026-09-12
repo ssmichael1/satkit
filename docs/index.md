@@ -13,7 +13,7 @@
 
 SatKit is a high-performance orbital mechanics library written in Rust with complete Python bindings via PyO3. It handles coordinate transforms, orbit propagation, time systems, gravity models, atmospheric density, and JPL ephemerides -- everything needed for satellite astrodynamics work.
 
-Pre-built wheels are available for **Linux**, **macOS**, and **Windows** on Python 3.10--3.14.
+Pre-built wheels are available for **Linux** (x86_64, aarch64), **macOS** (Apple silicon), and **Windows** (x86_64) on Python 3.10--3.14; Intel Macs build from source or use conda-forge.
 
 ## Quick Start
 

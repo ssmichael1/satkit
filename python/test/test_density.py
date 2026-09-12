@@ -51,3 +51,17 @@ def test_spaceweather_feed_changes_density_within_the_day():
     # Fixed indices ignore the file entirely.
     rho_fixed = sk.nrlmsise00(420.0, time=sk.time(2023, 2, 27, 13, 30, 0), use_spaceweather=False, **coord)[0]
     assert abs(rho_fixed / rho_storm[1] - 1.0) > 0.05
+
+
+def test_density_float_form_takes_radians():
+    # density.nrlmsise(altitude_m, latitude_rad, longitude_rad, time) is
+    # documented in radians; it must land on the same atmosphere as the
+    # itrfcoord form (which hands the model degrees) for the same point.
+    t = sk.time(2023, 3, 1, 12, 0, 0)
+    coord = sk.itrfcoord(latitude_deg=60.0, longitude_deg=-70.0, altitude=400e3)
+    rho_coord, temp_coord = sk.density.nrlmsise(coord, t)
+    rho_float, temp_float = sk.density.nrlmsise(
+        400e3, math.radians(60.0), math.radians(-70.0), t
+    )
+    assert math.isclose(rho_float, rho_coord, rel_tol=1e-6)
+    assert math.isclose(temp_float, temp_coord, rel_tol=1e-6)

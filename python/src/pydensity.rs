@@ -51,16 +51,19 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
         ))
     } else if args.get_item(0)?.is_instance_of::<PyFloat>() {
         let altitude = args.get_item(0)?.extract::<f64>().unwrap();
+        // The stub documents these as radians (satkit's convention without a
+        // `_deg` suffix); the model takes degrees, as the itrfcoord branch
+        // above and `nrlmsise00(latitude_deg=...)` already supply.
         let latitude: Option<f64> = {
             if args.len() > 1 && args.get_item(1)?.is_instance_of::<PyFloat>() {
-                Some(args.get_item(1)?.extract::<f64>().unwrap())
+                Some(args.get_item(1)?.extract::<f64>().unwrap().to_degrees())
             } else {
                 None
             }
         };
         let longitude: Option<f64> = {
             if args.len() > 2 && args.get_item(2)?.is_instance_of::<PyFloat>() {
-                Some(args.get_item(2)?.extract::<f64>().unwrap())
+                Some(args.get_item(2)?.extract::<f64>().unwrap().to_degrees())
             } else {
                 None
             }
