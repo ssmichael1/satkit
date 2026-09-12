@@ -10,10 +10,14 @@ use super::error::{Error, Result};
 /// Choice of ODE integrator for orbit propagation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub enum Integrator {
-    /// Verner 9(8) with 8th-degree dense output, 21 stages (16 + 5 for the interpolant; default)
+    /// Verner 9(8) with 8th-degree dense output, 21 stages (16 + 5 for the
+    /// interpolant; default). With `enable_interp = false` the propagator
+    /// runs the 16-stage [`Integrator::RKV98NoInterp`] tableau instead —
+    /// same order and error control, 24% fewer force evaluations per step.
     #[default]
     RKV98,
-    /// Verner 9(8) without interpolation, 16 stages
+    /// Verner 9(8) without interpolation, 16 stages. Selecting it explicitly
+    /// is equivalent to `RKV98` with `enable_interp = false`.
     RKV98NoInterp,
     /// Verner 8(7) with 7th-degree dense output, 17 stages (13 + 4 for the interpolant)
     RKV87,
@@ -71,8 +75,9 @@ impl std::fmt::Display for Integrator {
 ///   post-Newtonian acceleration (IERS 2010 §10.3 Eq. 10.12). Default is true.
 ///   Its position effect depends on the orbit, propagation arc, and fitted
 ///   parameters; computational cost is negligible.
-/// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true
-///   slight computation savings if set to false
+/// * `enable_interp` - Do we enable interpolation of the state between begin and end times.  Default is true.
+///   Setting it false skips storing dense output and, with the default `RKV98`, switches to the
+///   16-stage tableau (24% fewer force evaluations per step).
 /// * `integrator` - which Runge-Kutta integrator to use.  Default is RKV98
 /// * `max_steps` - maximum number of integrator steps before the propagator
 ///   aborts with [`numeris::ode::OdeError::MaxStepsExceeded`] (adaptive
@@ -97,6 +102,11 @@ pub struct PropSettings {
     pub use_moon_gravity: bool,
     pub tide_model: TideModel,
     pub use_relativistic_correction: bool,
+    /// Store dense output so [`PropagationResult::interp`] works between
+    /// the begin and end times. Default `true`. When `false`, no dense
+    /// output is stored and [`Integrator::RKV98`] runs its 16-stage
+    /// no-interpolant tableau (same order and error control, 24% fewer
+    /// force evaluations per step).
     pub enable_interp: bool,
     pub integrator: Integrator,
     /// Fixed step size (seconds) used by [`Integrator::GaussJackson8`].

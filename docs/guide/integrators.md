@@ -11,8 +11,8 @@ Select via the `integrator` parameter of `propsettings`:
 
 | Integrator | Order | Type | Dense Output | Notes |
 |---|---|---|---|---|
-| `rkv98` | 9(8) | adaptive RK, 21 stages (16 + 5 for dense output) | 8th-degree | Default. Best accuracy for precision work. |
-| `rkv98_nointerp` | 9(8) | adaptive RK, 16 stages | None | Same stepping accuracy, faster when interpolation is not needed. |
+| `rkv98` | 9(8) | adaptive RK, 21 stages (16 + 5 for dense output) | 8th-degree | Default. Best accuracy for precision work. With `enable_interp=False` it runs as `rkv98_nointerp`. |
+| `rkv98_nointerp` | 9(8) | adaptive RK, 16 stages | None | Same stepping accuracy, 24% fewer force evaluations per step; what `rkv98` becomes when interpolation is off. |
 | `rkv87` | 8(7) | adaptive RK, 17 stages (13 + 4 for dense output) | 7th-degree | Good balance of speed and accuracy. |
 | `rkv65` | 6(5) | adaptive RK, 10 stages | 6th-degree | Faster, moderate accuracy. |
 | `rkts54` | 5(4) | adaptive RK, 7 stages (FSAL) | 4th-degree | Fastest. Good for quick propagations. |

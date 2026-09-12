@@ -1042,6 +1042,20 @@ class TestInitialStep:
         assert warm.pos == pytest.approx(cold.pos, abs=1e-2)
         assert default.pos == pytest.approx(cold.pos, abs=1e-2)
 
+    def test_rkv98_without_interp_uses_16_stages(self):
+        state, t0 = self._leo()
+        # A hint skips the heuristic's probe evaluations: evals == stages × steps.
+        with_interp = sk.propsettings(abs_error=1e-9, rel_error=1e-9, initial_step_secs=100.0)
+        without = sk.propsettings(
+            abs_error=1e-9, rel_error=1e-9, initial_step_secs=100.0, enable_interp=False
+        )
+        a = sk.propagate(state, t0, duration_secs=3600.0, propsettings=with_interp)
+        b = sk.propagate(state, t0, duration_secs=3600.0, propsettings=without)
+        assert a.stats.num_eval == 21 * (a.stats.num_accept + a.stats.num_reject)
+        assert b.stats.num_eval == 16 * (b.stats.num_accept + b.stats.num_reject)
+        assert b.stats.num_eval < a.stats.num_eval
+        assert b.pos == pytest.approx(a.pos, abs=1e-2)
+
     def test_invalid_hint_raises(self):
         state, t0 = self._leo()
         for bad in (0.0, float("nan"), float("inf")):

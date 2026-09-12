@@ -4066,7 +4066,9 @@ class propsettings:
                 Its position effect depends on the orbit, propagation arc, and
                 fitted parameters (~1 m/day at GPS altitude if omitted; the
                 geodesic term dominates beyond ~100,000 km); cost is negligible.
-            enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True
+            enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True.
+                When False, no dense output is stored and ``integrator.rkv98`` runs its 16-stage
+                no-interpolant tableau (same order and error control, 24% fewer force evaluations per step).
             integrator: ODE integrator to use. Default is integrator.rkv98
             gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
                 Ignored by adaptive integrators. Typical values: 30-120 s for LEO, 60-300 s
@@ -4257,8 +4259,11 @@ class propsettings:
     def initial_step_secs(self, value: float | None) -> None: ...
     @property
     def enable_interp(self) -> bool:
-        """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times
-        If not needed, there is a small computational advantage if set to False
+        """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times.
+
+        When False, no dense output is stored and ``integrator.rkv98`` runs its
+        16-stage no-interpolant tableau (same order and error control, 24% fewer
+        force evaluations per step).
         """
         ...
 

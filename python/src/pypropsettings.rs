@@ -108,7 +108,8 @@ impl From<TideModel> for PyTideModel {
 ///     use_moon_gravity (bool): Include moon third-body gravity. Default True
 ///     tide_model (satkit.tidemodel): Solid Earth tide model. Default tidemodel.solid_step1
 ///     use_relativistic_correction (bool): Include general-relativistic acceleration. Default True
-///     enable_interp (bool): Store dense output for interpolation. Default True
+///     enable_interp (bool): Store dense output for interpolation. Default True. False also runs
+///         integrator.rkv98 as its 16-stage no-interpolant tableau (24% fewer force evaluations per step)
 ///     integrator (satkit.integrator): ODE integrator. Default integrator.rkv98
 ///     gj_step_seconds (float): Fixed step size for integrator.gauss_jackson8, seconds. Default 60.0
 ///     max_steps (int): Maximum number of integrator steps. Default 1_000_000
@@ -311,6 +312,10 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Store dense output so ``propresult.interp`` works between the begin and
+    /// end times. Default True. When False, no dense output is stored and
+    /// ``integrator.rkv98`` runs its 16-stage no-interpolant tableau (same
+    /// order and error control, 24% fewer force evaluations per step).
     #[getter]
     fn get_enable_interp(&self) -> bool {
         self.0.enable_interp

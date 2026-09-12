@@ -642,6 +642,13 @@ pub fn propagate<const C: usize, T: TimeLike>(
     use crate::orbitprop::Integrator;
 
     let res = match settings.integrator {
+        // Without dense output the 16-stage Verner 9(8) tableau has the same
+        // order and error control as the 21-stage interpolating one at 24%
+        // fewer force evaluations per step; the five extra stages exist only
+        // to build the interpolant.
+        Integrator::RKV98 if !settings.enable_interp => {
+            ode::RKV98NoInterp::integrate(0.0, x_end, state, &ydot, &odesettings)
+        }
         Integrator::RKV98 => ode::RKV98::integrate(0.0, x_end, state, &ydot, &odesettings),
         Integrator::RKV98NoInterp => {
             ode::RKV98NoInterp::integrate(0.0, x_end, state, &ydot, &odesettings)
@@ -1708,6 +1715,38 @@ mod tests {
             ..base
         };
         assert!(propagate(&state, &t0, &t1, &bad, None).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_rkv98_uses_16_stage_tableau_without_interp() -> Result<()> {
+        let r = 6_928_137.0_f64;
+        let v = (crate::consts::MU_EARTH / r).sqrt();
+        let state: Vector6 = numeris::vector![r, 0.0, 0.0, 0.0, 0.0, v];
+        let t0 = Instant::from_datetime(2025, 1, 1, 12, 0, 0.0).unwrap();
+        let t1 = t0 + Duration::from_seconds(3600.0);
+        // A hint skips the heuristic's probe evaluations, so evals is exactly
+        // stages × steps.
+        let with = PropSettings {
+            abs_error: 1e-9,
+            rel_error: 1e-9,
+            initial_step_secs: Some(100.0),
+            enable_interp: true,
+            ..Default::default()
+        };
+        let without = PropSettings {
+            enable_interp: false,
+            ..with.clone()
+        };
+        let a = propagate(&state, &t0, &t1, &with, None)?;
+        let b = propagate(&state, &t0, &t1, &without, None)?;
+        assert_eq!(a.num_eval, 21 * (a.accepted_steps + a.rejected_steps));
+        assert_eq!(b.num_eval, 16 * (b.accepted_steps + b.rejected_steps));
+        assert!(a.interp(&(t0 + Duration::from_seconds(1800.0))).is_ok());
+        assert!(b.interp(&(t0 + Duration::from_seconds(1800.0))).is_err());
+        assert_eq!(b.integrator, crate::orbitprop::Integrator::RKV98);
+        let pos_diff = (a.state_end.block::<3, 1>(0, 0) - b.state_end.block::<3, 1>(0, 0)).norm();
+        assert!(pos_diff < 1e-2, "position diff = {pos_diff} m");
         Ok(())
     }
 

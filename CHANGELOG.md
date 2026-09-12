@@ -16,6 +16,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
   stride across the RK integrators from 1e-6 to 1e-12); `initial_step_secs` overrides it, and `next_step_secs` reports the
   integrator's working stride at the end of an arc so a follow-on arc can warm-start at full stride
   (`ps.initial_step_secs = res.next_step_secs`). Requires numeris 0.6.
+- `integrator.rkv98` with `enable_interp=False` now runs the 16-stage `rkv98_nointerp` tableau automatically:
+  the five extra stages of the 21-stage tableau exist only to build the interpolant, so this is the same order
+  and error control at 24% fewer force evaluations per step. Results change at the tolerance level for that
+  combination (a different tableau takes different steps).
 
 ### Distribution
 
