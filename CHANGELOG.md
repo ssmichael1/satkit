@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Distribution
+
+- **Breaking (Python packaging):** macOS wheels are arm64 (Apple silicon) only; the `x86_64-apple-darwin` wheels are no longer built, matching SciPy/Polars and the arm64-only GitHub runners, and the macOS deployment target moves from 10.12 to 11.0. Intel-Mac users install from source (`pip install --no-binary satkit satkit`, stable Rust toolchain required) or from conda-forge, which builds `osx-64` ([#172](https://github.com/ssmichael1/satkit/pull/172))
+
 ### Fixed
 
 - `sgp4()` rejects SGP4-XP element sets (TLE ephemeris type 4, OMM `EPHEMERIS_TYPE` 4) with a clear error instead of propagating them: an SGP4-XP line 1 stores agom and a B term in the columns a classic TLE uses for nddot and B*, so the old behaviour ran classic SGP4 on the wrong inputs and returned a plausible but wrong state ([#174](https://github.com/ssmichael1/satkit/pull/174))

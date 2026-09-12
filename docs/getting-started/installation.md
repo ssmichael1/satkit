@@ -4,7 +4,7 @@ The `satkit` package is hosted at <https://github.com/ssmichael1/satkit/>. The p
 
 ## PIP
 
-Pre-built Python binary packages are provided by the [PyPI](https://pypi.org) package manager, and are the simplest to install. Binary packages are provided for 64-bit x86 platforms running Windows, Linux, and macOS, as well as macOS systems on the ARM platform. To install via PyPI:
+Pre-built Python binary packages are provided by the [PyPI](https://pypi.org) package manager, and are the simplest to install. Binary packages are provided for Linux (x86_64 and aarch64), Windows (x86_64), and macOS on Apple silicon (arm64). Intel-based Macs are not shipped a wheel since 0.22: install from source with `pip install --no-binary satkit satkit` (needs a stable Rust toolchain) or via conda-forge, which builds `osx-64`. To install via PyPI:
 
 ```bash
 python -m pip install satkit
