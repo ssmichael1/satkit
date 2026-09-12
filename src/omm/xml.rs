@@ -1,56 +1,11 @@
+//! CCSDS NDM/XML representation of OMMs (feature `omm-xml`).
+
+use std::collections::HashMap;
+
 use serde::Deserialize;
+use serde_json::Value;
 
-use super::{Error, Result, OMM};
-
-fn parse_required_f64(field: &'static str, value: Option<String>) -> Result<f64> {
-    let value = value.ok_or(Error::MissingField(field))?;
-    value
-        .trim()
-        .parse::<f64>()
-        .map_err(|source| Error::InvalidFloatField { field, source })
-}
-
-fn parse_optional_f64(value: Option<String>) -> Result<Option<f64>> {
-    match value {
-        None => Ok(None),
-        Some(s) => {
-            let s = s.trim();
-            if s.is_empty() {
-                Ok(None)
-            } else {
-                s.parse::<f64>().map(Some).map_err(Error::from)
-            }
-        }
-    }
-}
-
-fn parse_optional_u8(value: Option<String>) -> Result<Option<u8>> {
-    match value {
-        None => Ok(None),
-        Some(s) => {
-            let s = s.trim();
-            if s.is_empty() {
-                Ok(None)
-            } else {
-                s.parse::<u8>().map(Some).map_err(Error::from)
-            }
-        }
-    }
-}
-
-fn parse_optional_u32(value: Option<String>) -> Result<Option<u32>> {
-    match value {
-        None => Ok(None),
-        Some(s) => {
-            let s = s.trim();
-            if s.is_empty() {
-                Ok(None)
-            } else {
-                s.parse::<u32>().map(Some).map_err(Error::from)
-            }
-        }
-    }
-}
+use super::{parse_opt_field, parse_req_field, Error, Result, OMM};
 
 #[derive(Debug, Deserialize)]
 struct OmmXmlRoot {
@@ -70,8 +25,16 @@ struct OmmXmlMessage {
 
 #[derive(Debug, Deserialize)]
 struct OmmXmlHeader {
+    #[serde(rename = "COMMENT", default)]
+    comments: Vec<String>,
+    #[serde(rename = "CREATION_DATE")]
+    creation_date: Option<String>,
     #[serde(rename = "ORIGINATOR")]
     originator: Option<String>,
+    #[serde(rename = "CLASSIFICATION")]
+    classification: Option<String>,
+    #[serde(rename = "MESSAGE_ID")]
+    message_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,10 +53,12 @@ struct OmmXmlSegment {
 
 #[derive(Debug, Deserialize)]
 struct OmmXmlMetadata {
+    #[serde(rename = "COMMENT", default)]
+    comments: Vec<String>,
     #[serde(rename = "OBJECT_NAME")]
-    object_name: String,
+    object_name: Option<String>,
     #[serde(rename = "OBJECT_ID")]
-    object_id: String,
+    object_id: Option<String>,
     #[serde(rename = "CENTER_NAME")]
     center_name: Option<String>,
     #[serde(rename = "REF_FRAME")]
@@ -104,18 +69,20 @@ struct OmmXmlMetadata {
     time_system: Option<String>,
     #[serde(rename = "MEAN_ELEMENT_THEORY")]
     mean_element_theory: Option<String>,
-    #[serde(rename = "CLASSIFICATION")]
-    classification: Option<String>,
-    #[serde(rename = "MESSAGE_ID")]
-    message_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OmmXmlData {
+    #[serde(rename = "COMMENT", default)]
+    comments: Vec<String>,
     #[serde(rename = "meanElements")]
     mean_elements: OmmXmlMeanElements,
+    #[serde(rename = "spacecraftParameters")]
+    spacecraft_parameters: Option<OmmXmlSpacecraftParameters>,
     #[serde(rename = "tleParameters")]
     tle_parameters: Option<OmmXmlTleParameters>,
+    #[serde(rename = "userDefinedParameters")]
+    user_defined_parameters: Option<OmmXmlUserDefinedParameters>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,7 +105,23 @@ struct OmmXmlMeanElements {
     gm: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+/// CCSDS puts mass and the drag/SRP areas and coefficients in their own
+/// block; older producers put them under `tleParameters`. Both are read.
+#[derive(Debug, Deserialize, Default)]
+struct OmmXmlSpacecraftParameters {
+    #[serde(rename = "MASS")]
+    mass: Option<String>,
+    #[serde(rename = "SOLAR_RAD_AREA")]
+    solar_rad_area: Option<String>,
+    #[serde(rename = "SOLAR_RAD_COEFF")]
+    solar_rad_coeff: Option<String>,
+    #[serde(rename = "DRAG_AREA")]
+    drag_area: Option<String>,
+    #[serde(rename = "DRAG_COEFF")]
+    drag_coeff: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
 struct OmmXmlTleParameters {
     #[serde(rename = "EPHEMERIS_TYPE")]
     ephemeris_type: Option<String>,
@@ -172,73 +155,134 @@ struct OmmXmlTleParameters {
     drag_coeff: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct OmmXmlUserDefinedParameters {
+    #[serde(rename = "COMMENT", default)]
+    comments: Vec<String>,
+    #[serde(rename = "USER_DEFINED", default)]
+    params: Vec<OmmXmlUserDefined>,
+}
+
+/// `<USER_DEFINED parameter="NAME">value</USER_DEFINED>`; an empty element
+/// (`<USER_DEFINED parameter="RCS_SIZE"/>`) is a null, as in Space-Track JSON.
+#[derive(Debug, Deserialize)]
+struct OmmXmlUserDefined {
+    #[serde(rename = "@parameter")]
+    name: String,
+    #[serde(rename = "$text", default)]
+    value: Option<String>,
+}
+
+fn join_comments(groups: &[&[String]]) -> Option<String> {
+    let lines: Vec<&str> = groups
+        .iter()
+        .flat_map(|g| g.iter().map(|s| s.trim()))
+        .filter(|s| !s.is_empty())
+        .collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
 impl TryFrom<OmmXmlMessage> for OMM {
     type Error = Error;
 
     fn try_from(xml: OmmXmlMessage) -> Result<Self> {
+        let header = xml.header;
         let metadata = xml.body.segment.metadata;
-        let mean = xml.body.segment.data.mean_elements;
-        let tle = xml.body.segment.data.tle_parameters;
+        let data = xml.body.segment.data;
+        let mean = data.mean_elements;
+        let tle = data.tle_parameters.unwrap_or_default();
+        let sc = data.spacecraft_parameters.unwrap_or_default();
+        let user = data.user_defined_parameters.unwrap_or_default();
 
-        let (ephemeris_type, classification_type, norad_cat_id, element_set_no, rev_at_epoch) =
-            if let Some(ref tle) = tle {
-                (
-                    parse_optional_u8(tle.ephemeris_type.clone())?,
-                    tle.classification_type.clone(),
-                    parse_optional_u32(tle.norad_cat_id.clone())?,
-                    parse_optional_u32(tle.element_set_no.clone())?,
-                    parse_optional_u32(tle.rev_at_epoch.clone())?,
-                )
-            } else {
-                (None, None, None, None, None)
-            };
+        let comments = join_comments(&[
+            header.as_ref().map_or(&[][..], |h| &h.comments),
+            &metadata.comments,
+            &data.comments,
+            &user.comments,
+        ]);
+
+        let mut extra_fields: HashMap<String, Value> = user
+            .params
+            .into_iter()
+            .map(|p| {
+                let v = match p.value.as_deref().map(str::trim) {
+                    None | Some("") => Value::Null,
+                    Some(s) => Value::String(s.to_string()),
+                };
+                (p.name, v)
+            })
+            .collect();
+        // CREATION_DATE has no struct field; JSON keeps it as an extra, so
+        // the XML form does the same.
+        if let Some(created) = header
+            .as_ref()
+            .and_then(|h| h.creation_date.as_deref())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            extra_fields.insert(
+                "CREATION_DATE".to_string(),
+                Value::String(created.to_string()),
+            );
+        }
+
+        // Prefer the CCSDS spacecraftParameters block, fall back to the
+        // legacy placement under tleParameters.
+        let first = |a: Option<String>, b: Option<String>| a.or(b);
 
         Ok(Self {
             omm_version: xml.version,
-            comments: None,
-            originator: xml.header.and_then(|h| h.originator),
-            classification: metadata.classification,
-            message_id: metadata.message_id,
-            object_name: metadata.object_name,
-            object_id: metadata.object_id,
+            comments,
+            originator: header.as_ref().and_then(|h| h.originator.clone()),
+            classification: header.as_ref().and_then(|h| h.classification.clone()),
+            message_id: header.as_ref().and_then(|h| h.message_id.clone()),
+            object_name: metadata.object_name.unwrap_or_else(super::unknown),
+            object_id: metadata.object_id.unwrap_or_else(super::unknown),
             center_name: metadata.center_name,
             reference_frame: metadata.reference_frame,
             reference_frame_epoch: metadata.reference_frame_epoch,
             time_system: metadata.time_system,
             mean_element_theory: metadata.mean_element_theory,
-            epoch: mean.epoch,
-            mean_motion: parse_required_f64("MEAN_MOTION", mean.mean_motion)?,
-            eccentricity: parse_required_f64("ECCENTRICITY", mean.eccentricity)?,
-            inclination: parse_required_f64("INCLINATION", mean.inclination)?,
-            raan: parse_required_f64("RA_OF_ASC_NODE", mean.raan)?,
-            arg_of_pericenter: parse_required_f64("ARG_OF_PERICENTER", mean.arg_of_pericenter)?,
-            mean_anomaly: parse_required_f64("MEAN_ANOMALY", mean.mean_anomaly)?,
-            gm: parse_optional_f64(mean.gm)?,
-            mass: parse_optional_f64(tle.as_ref().and_then(|x| x.mass.clone()))?,
-            solar_rad_area: parse_optional_f64(
-                tle.as_ref().and_then(|x| x.solar_rad_area.clone()),
+            epoch: crate::Instant::from_rfc3339(mean.epoch.trim())?,
+            mean_motion: parse_req_field("MEAN_MOTION", mean.mean_motion.as_deref())?,
+            eccentricity: parse_req_field("ECCENTRICITY", mean.eccentricity.as_deref())?,
+            inclination: parse_req_field("INCLINATION", mean.inclination.as_deref())?,
+            raan: parse_req_field("RA_OF_ASC_NODE", mean.raan.as_deref())?,
+            arg_of_pericenter: parse_req_field(
+                "ARG_OF_PERICENTER",
+                mean.arg_of_pericenter.as_deref(),
             )?,
-            drag_area: parse_optional_f64(tle.as_ref().and_then(|x| x.drag_area.clone()))?,
-            solar_rad_coeff: parse_optional_f64(
-                tle.as_ref().and_then(|x| x.solar_rad_coeff.clone()),
+            mean_anomaly: parse_req_field("MEAN_ANOMALY", mean.mean_anomaly.as_deref())?,
+            gm: parse_opt_field("GM", mean.gm.as_deref())?,
+            mass: parse_opt_field("MASS", first(sc.mass, tle.mass).as_deref())?,
+            solar_rad_area: parse_opt_field(
+                "SOLAR_RAD_AREA",
+                first(sc.solar_rad_area, tle.solar_rad_area).as_deref(),
             )?,
-            drag_coeff: parse_optional_f64(tle.as_ref().and_then(|x| x.drag_coeff.clone()))?,
-            ephemeris_type,
-            classification_type,
-            norad_cat_id,
-            element_set_no,
-            rev_at_epoch,
-            bstar: parse_optional_f64(tle.as_ref().and_then(|x| x.bstar.clone()))?,
-            bterm: parse_optional_f64(tle.as_ref().and_then(|x| x.bterm.clone()))?,
-            mean_motion_dot: parse_optional_f64(
-                tle.as_ref().and_then(|x| x.mean_motion_dot.clone()),
+            drag_area: parse_opt_field("DRAG_AREA", first(sc.drag_area, tle.drag_area).as_deref())?,
+            solar_rad_coeff: parse_opt_field(
+                "SOLAR_RAD_COEFF",
+                first(sc.solar_rad_coeff, tle.solar_rad_coeff).as_deref(),
             )?,
-            mean_motion_ddot: parse_optional_f64(
-                tle.as_ref().and_then(|x| x.mean_motion_ddot.clone()),
+            drag_coeff: parse_opt_field(
+                "DRAG_COEFF",
+                first(sc.drag_coeff, tle.drag_coeff).as_deref(),
             )?,
-            agom: parse_optional_f64(tle.as_ref().and_then(|x| x.agom.clone()))?,
+            ephemeris_type: parse_opt_field("EPHEMERIS_TYPE", tle.ephemeris_type.as_deref())?,
+            classification_type: tle
+                .classification_type
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            norad_cat_id: parse_opt_field("NORAD_CAT_ID", tle.norad_cat_id.as_deref())?,
+            element_set_no: parse_opt_field("ELEMENT_SET_NO", tle.element_set_no.as_deref())?,
+            rev_at_epoch: parse_opt_field("REV_AT_EPOCH", tle.rev_at_epoch.as_deref())?,
+            bstar: parse_opt_field("BSTAR", tle.bstar.as_deref())?,
+            bterm: parse_opt_field("BTERM", tle.bterm.as_deref())?,
+            mean_motion_dot: parse_opt_field("MEAN_MOTION_DOT", tle.mean_motion_dot.as_deref())?,
+            mean_motion_ddot: parse_opt_field("MEAN_MOTION_DDOT", tle.mean_motion_ddot.as_deref())?,
+            agom: parse_opt_field("AGOM", tle.agom.as_deref())?,
             satrec: None,
-            extra_fields: std::collections::HashMap::new(),
+            extra_fields,
         })
     }
 }
@@ -247,7 +291,10 @@ impl OMM {
     /// Deserializes OMM records from an XML string.
     ///
     /// Supports CelesTrak/CCSDS NDM wrappers (`<ndm><omm>...`) and single
-    /// message payloads (`<omm>...`).
+    /// message payloads (`<omm>...`). Header, metadata, and data `COMMENT`
+    /// lines are joined into [`comments`](Self::comments);
+    /// `userDefinedParameters` land in [`extra_fields`](Self::extra_fields)
+    /// keyed by their `parameter` attribute.
     ///
     /// Available only when the `omm-xml` feature is enabled.
     ///
@@ -329,6 +376,8 @@ impl OMM {
 #[cfg(test)]
 mod tests {
     use super::OMM;
+    use crate::utils::test::get_testvec_dir;
+    use serde_json::Value;
 
     #[test]
     fn test_parse_omm_celestrak_xml() {
@@ -378,5 +427,46 @@ mod tests {
         assert_eq!(msg[0].object_id, "1998-067A");
         assert_eq!(msg[0].omm_version.as_deref(), Some("2.0"));
         assert_eq!(msg[0].norad_cat_id, Some(25544));
+        assert_eq!(msg[0].comments, None);
+        assert!(msg[0].extra_fields.is_empty());
+        assert_eq!(msg[0].epoch.as_rfc3339(), "2026-02-14T05:08:48.534432Z");
+
+        // The same message via the auto-detecting entry point
+        let auto = OMM::from_text(xml).unwrap();
+        assert_eq!(auto[0].mean_motion, msg[0].mean_motion);
+    }
+
+    /// Space-Track XML carries a header COMMENT and a userDefinedParameters
+    /// block; both must survive, matching what the JSON endpoint gives.
+    #[test]
+    fn test_spacetrack_xml_matches_json() {
+        let dir = get_testvec_dir().unwrap();
+        let xml = OMM::from_xml_file(dir.join("omm/spacetrack_omm.xml")).unwrap();
+        let json = OMM::from_json_file(dir.join("omm/spacetrack_omm.json")).unwrap();
+        assert_eq!(xml.len(), json.len());
+
+        let (x, j) = (&xml[0], &json[0]);
+        assert_eq!(
+            x.comments.as_deref(),
+            Some("GENERATED VIA SPACE-TRACK.ORG API")
+        );
+        assert_eq!(x.originator, j.originator);
+        assert_eq!(x.omm_version, j.omm_version);
+        assert_eq!(x.epoch, j.epoch);
+        assert_eq!(x.mean_motion, j.mean_motion);
+        assert_eq!(x.bstar, j.bstar);
+        assert_eq!(x.norad_cat_id, j.norad_cat_id);
+        assert_eq!(x.ephemeris_type, j.ephemeris_type);
+        assert_eq!(x.extra_fields["OBJECT_TYPE"], j.extra_fields["OBJECT_TYPE"]);
+        assert_eq!(
+            x.extra_fields["SEMIMAJOR_AXIS"],
+            j.extra_fields["SEMIMAJOR_AXIS"]
+        );
+        assert_eq!(x.extra_fields["RCS_SIZE"], Value::Null);
+        assert_eq!(j.extra_fields["RCS_SIZE"], Value::Null);
+        assert_eq!(
+            x.extra_fields["CREATION_DATE"],
+            j.extra_fields["CREATION_DATE"]
+        );
     }
 }

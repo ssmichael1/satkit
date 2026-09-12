@@ -341,6 +341,45 @@ impl PyTLE {
         self.0 != other.0
     }
 
+    /// Build a TLE from an OMM (Orbital Mean-Element Message) dictionary
+    ///
+    /// The dictionary is the same shape ``satkit.sgp4`` accepts: the flat
+    /// CCSDS keys of a Space-Track / CelesTrak JSON record (see
+    /// ``satkit.OMMDict``), or the nested ``meanElements`` / ``tleParameters``
+    /// groups of an XML-derived dict. Numbers may be strings.
+    ///
+    /// The six mean elements, epoch, ``BSTAR``, ``MEAN_MOTION_DOT``,
+    /// ``MEAN_MOTION_DDOT``, ``NORAD_CAT_ID``, ``ELEMENT_SET_NO``,
+    /// ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; absent optional
+    /// values become zero. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
+    /// international designator. Other metadata is dropped.
+    ///
+    /// Args:
+    ///     omm (dict): OMM dictionary
+    ///
+    /// Returns:
+    ///     TLE: the equivalent two-line element set
+    #[staticmethod]
+    fn from_omm(omm: &Bound<'_, pyo3::types::PyDict>) -> Result<Self> {
+        let omm = crate::pyomm::omm_from_pydict(omm)?;
+        Ok(Self(omm.to_tle()))
+    }
+
+    /// Render this TLE as an OMM (Orbital Mean-Element Message) dictionary
+    ///
+    /// The result uses the flat CCSDS keys (see ``satkit.OMMDict``) with
+    /// ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
+    /// revolutions per day, and can be passed back to ``satkit.sgp4`` or
+    /// serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
+    /// international designator (``98067A`` becomes ``1998-067A``). The TLE
+    /// carries no classification letter, so ``CLASSIFICATION_TYPE`` is absent.
+    ///
+    /// Returns:
+    ///     dict: OMM dictionary
+    fn to_omm<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        crate::pyomm::omm_to_pydict(py, &satkit::omm::OMM::from_tle(&self.0))
+    }
+
     /// Output as 2 canonical TLE Lines
     fn to_2line(&self) -> Result<[String; 2]> {
         Ok(self.0.to_2line()?)

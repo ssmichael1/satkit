@@ -19,6 +19,7 @@ numpy = "0.29"
 numeris = { version = "0.5.18", features = ["serde", "ode"] }
 anyhow = "1"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 serde-pickle = "1.2.0"
 process_path = "0.1.4"
 
