@@ -1,2 +1,6 @@
 *.ipynb filter=nbstripout
 *.ipynb diff=ipynb
+
+# Collapse the lockfile in GitHub diffs and keep it out of language stats;
+# review the Cargo.toml change instead. Regenerate on conflict with `cargo build`.
+Cargo.lock linguist-generated=true
