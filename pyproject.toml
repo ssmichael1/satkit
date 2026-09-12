@@ -106,3 +106,6 @@ target = "satkit/satkit"
 path = "python/Cargo.toml"
 binding = "PyO3"
 debug = false
+# Build against the committed Cargo.lock exactly (fail instead of resolving
+# newer crates); conda-forge and other packagers rely on this.
+cargo-manifest-args = ["--locked"]
