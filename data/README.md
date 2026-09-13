@@ -137,10 +137,13 @@ python tools/make_manifest.py --data-dir "$D" --data-version data-v2   # new rel
 - **Retiring GCS**: once a release or two have shipped with the release-asset
   URLs first, drop the `storage.googleapis.com` entries from `urls` and
   delete the bucket. No client change is needed.
-- **conda recipe** (`recipes/conda/satkit-data/recipe.yaml`): its `source:`
-  list should become the manifest's release-asset (or origin) URLs with the
-  manifest's sha256 values — no GCS. Not done in this branch because the
-  recipe is being reworked separately.
+- **conda**: there is deliberately no `satkit-data` conda package. The
+  conda-forge `satkit` package (built in
+  [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock))
+  relies on the embedded core data plus the on-demand, verified ephemeris
+  download like the wheels do; offline conda users populate a directory with
+  `satkit.utils.update_datafiles()` and set `SATKIT_DATA`, or set
+  `SATKIT_DATA_URL` to a mirror.
 
 ## Client behaviour
 
