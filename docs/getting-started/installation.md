@@ -34,6 +34,16 @@ sk.utils.update_datafiles()   # ephemeris (verified) + EOP/SW + solar-cycle fore
 
 See [Data Files](datafiles.md) for the full search order per platform.
 
+## Conda
+
+The same package is on [conda-forge](https://anaconda.org/conda-forge/satkit), built from the PyPI source distribution by [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock):
+
+```bash
+conda install -c conda-forge satkit
+```
+
+It behaves exactly like the wheel: the core data is compiled in, the JPL ephemeris is downloaded on first use, and the offline/mirror environment variables above apply. Intel Macs get a native `osx-64` build here.
+
 ## Build from Source
 
 The package can be downloaded and installed from the Rust source directly. The "pybindings" feature must be enabled. The simplest way to do this is to manually build the wheel package:

@@ -128,7 +128,11 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 3. Roll the changelog as described above.
 4. Open the release PR and merge it; tag `vX.Y.Z` on `main` and push the
    tag. The release workflow publishes to crates.io and PyPI and creates the
-   GitHub release. Then follow `recipes/conda/README.md` for the conda recipe.
+   GitHub release. The conda-forge package is built from the PyPI sdist by
+   [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock):
+   the autotick bot opens a version-bump PR there within a day of the PyPI
+   release; check the dependencies it detected (it only updates the version
+   and sha256) and merge it once CI is green.
 
 ## Types of Contributions
 
