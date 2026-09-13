@@ -6,6 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Docs
 
+- README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))
 - satkit is on conda-forge (`conda install -c conda-forge satkit`, built by [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock)); the installation docs say so and the in-repo recipe copy is removed, since the feedstock is now the source of truth and version bumps arrive there as bot PRs ([#184](https://github.com/ssmichael1/satkit/pull/184))
 - `THIRDPARTY-DATA.md` states the source, citation, licence and truncation of every dataset compiled into the library (ITU_GRACE16 is CC BY 4.0; EGM96, JGM-2/3 and the IERS tables are public-domain / freely redistributable); it ships in the sdist and wheels as a licence file and is linked from the README ([#182](https://github.com/ssmichael1/satkit/pull/182))
 

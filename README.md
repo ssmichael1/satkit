@@ -11,6 +11,8 @@
 [![PyPI](https://img.shields.io/pypi/v/satkit)](https://pypi.org/project/satkit/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/satkit)](https://pypi.org/project/satkit/)
 [![Python](https://img.shields.io/pypi/pyversions/satkit)](https://pypi.org/project/satkit/)
+[![conda-forge](https://img.shields.io/conda/vn/conda-forge/satkit)](https://anaconda.org/conda-forge/satkit)
+[![conda-forge Downloads](https://img.shields.io/conda/dn/conda-forge/satkit)](https://anaconda.org/conda-forge/satkit)
 
 ---
 
