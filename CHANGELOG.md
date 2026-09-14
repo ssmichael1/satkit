@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Fixed
+
+- Lockfile: rustls 0.23.44 → 0.23.45 for [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285) (TLS 1.3 handshake messages accepted across encryption-level boundaries, medium); reached through `ureq`, so it affects the data downloader in the published wheels ([#188](https://github.com/ssmichael1/satkit/pull/188))
+
 ### Docs
 
 - README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))
