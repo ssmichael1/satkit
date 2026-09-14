@@ -387,8 +387,8 @@ class TestITRFCoord:
             # Check to_ned, to_enu against manually computed values
             ned = coord2.to_ned(coord1)
             enu = coord2.to_enu(coord1)
-            ned2 = coord1.qned2itrf.conj * (coord2-coord1)
-            enu2 = coord1.qenu2itrf.conj * (coord2-coord1)
+            ned2 = coord1.qned2itrf.conj() * (coord2-coord1)
+            enu2 = coord1.qenu2itrf.conj() * (coord2-coord1)
             assert ned[0] == pytest.approx(ned2[0], rel=1e-8)
             assert ned[1] == pytest.approx(ned2[1], rel=1e-8)
             assert ned[2] == pytest.approx(ned2[2], rel=1e-8)
