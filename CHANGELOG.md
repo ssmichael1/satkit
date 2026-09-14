@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Changed
+
+- **Breaking (Python):** `quaternion.conj` and `quaternion.conjugate` are methods (`q.conj()`), matching numpy's `a.conj()`, scipy's `Rotation.inv()` and satkit's own `inverse()`; `tlefitstatus.converged` and `time.day_of_year` are properties (`status.converged`, `t.day_of_year`), like `propresult.can_interp` and `duration.days`. Every other zero-argument member already followed the rule now written in CONTRIBUTING.md ([#187](https://github.com/ssmichael1/satkit/pull/187))
+
 ### Docs
 
 - README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))

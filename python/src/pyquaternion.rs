@@ -363,20 +363,20 @@ impl PyQuaternion {
         })
     }
 
-    /// Quaternion representing inverse rotation
+    /// Quaternion conjugate, which for a unit (rotation) quaternion
+    /// is the inverse rotation. Same as ``conjugate()`` and ``inverse()``.
     ///
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
-    #[getter]
     fn conj(&self) -> Self {
         self.0.conjugate().into()
     }
 
-    /// Quaternion representing inverse rotation
+    /// Quaternion conjugate, which for a unit (rotation) quaternion
+    /// is the inverse rotation. Same as ``conj()`` and ``inverse()``.
     ///
     /// Returns:
     ///     quaternion: Quaternion representing inverse rotation
-    #[getter]
     fn conjugate(&self) -> Self {
         self.0.conjugate().into()
     }
