@@ -8,6 +8,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - **Breaking (Python):** `quaternion.conj` and `quaternion.conjugate` are methods (`q.conj()`), matching numpy's `a.conj()`, scipy's `Rotation.inv()` and satkit's own `inverse()`; `tlefitstatus.converged` and `time.day_of_year` are properties (`status.converged`, `t.day_of_year`), like `propresult.can_interp` and `duration.days`. Every other zero-argument member already followed the rule now written in CONTRIBUTING.md ([#187](https://github.com/ssmichael1/satkit/pull/187))
 
+### Fixed
+
+- Lockfile: rustls 0.23.44 → 0.23.45 for [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285) (TLS 1.3 handshake messages accepted across encryption-level boundaries, medium); reached through `ureq`, so it affects the data downloader in the published wheels ([#188](https://github.com/ssmichael1/satkit/pull/188))
+
 ### Docs
 
 - README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))
