@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Changed
+
+- `Precomputed` stores its interpolation table behind an `Arc`, so cloning `PropSettings` (which the Python `propagate` does on every call) shares the table instead of copying it — with a one-year table that was a 55 MB allocation and ~2 ms per call, multiplied by the thread count since the GIL is released ([#193](https://github.com/ssmichael1/satkit/pull/193), [#190](https://github.com/ssmichael1/satkit/issues/190))
+
 ### Docs
 
 - README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))
