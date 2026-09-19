@@ -7,13 +7,16 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Changed
 
 - The one-time "using the compiled-in copy of tab5.2a.txt" note is gone: the embedded IERS tables and gravity files are byte-identical to the downloadable ones and `update_datafiles()` deliberately does not install them, so the note fired on every fresh install (and as a red stderr block in every satkit.dev tutorial) while describing nothing to act on. `SATKIT_QUIET=1` still silences the warning for a corrupt table that is replaced by the compiled-in copy, and the docs build sets it ([#194](https://github.com/ssmichael1/satkit/pull/194))
+- `Precomputed` stores its interpolation table behind an `Arc`, so cloning `PropSettings` (which the Python `propagate` does on every call) shares the table instead of copying it — with a one-year table that was a 55 MB allocation and ~2 ms per call, multiplied by the thread count since the GIL is released ([#193](https://github.com/ssmichael1/satkit/pull/193), [#190](https://github.com/ssmichael1/satkit/issues/190))
 
 ### Fixed
 
+- `TLE::fit_from_states` could return a negative eccentricity and stall far from the optimum on near-circular orbits (the doc example fitted a 400 km circular arc at 7.5 km RMS with e = -1.2e-4): the Levenberg-Marquardt damping is now Marquardt-scaled and solved in column-scaled form, a trial step across e = 0 is mapped onto the equivalent orbit with e ≥ 0, and the result is validated (`Error::FitElementOutOfRange`); `TLE::to_2line` now rejects an eccentricity outside [0, 1) (`Error::EccentricityOutOfRange`) instead of silently writing |e| ([#192](https://github.com/ssmichael1/satkit/pull/192))
 - Lockfile: rustls 0.23.44 → 0.23.45 for [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285) (TLS 1.3 handshake messages accepted across encryption-level boundaries, medium); reached through `ureq`, so it affects the data downloader in the published wheels ([#188](https://github.com/ssmichael1/satkit/pull/188))
 
 ### Docs
 
+- Notebook stderr output (Python warnings, the stale-EOP notice) on satkit.dev renders as a neutral code block with an amber edge instead of JupyterLab's red error background, in both light and dark themes ([#191](https://github.com/ssmichael1/satkit/pull/191))
 - README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))
 - satkit is on conda-forge (`conda install -c conda-forge satkit`, built by [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock)); the installation docs say so and the in-repo recipe copy is removed, since the feedstock is now the source of truth and version bumps arrive there as bot PRs ([#184](https://github.com/ssmichael1/satkit/pull/184))
 - `THIRDPARTY-DATA.md` states the source, citation, licence and truncation of every dataset compiled into the library (ITU_GRACE16 is CC BY 4.0; EGM96, JGM-2/3 and the IERS tables are public-domain / freely redistributable); it ships in the sdist and wheels as a licence file and is linked from the README ([#182](https://github.com/ssmichael1/satkit/pull/182))

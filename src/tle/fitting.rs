@@ -60,18 +60,71 @@ fn wrap_deg(x: f64) -> f64 {
     v
 }
 
+/// Map a raw parameter vector onto the equivalent orbit with a non-negative
+/// eccentricity. A negative eccentricity describes the same ellipse with the
+/// perigee direction reversed, so `(-e, ω, M)` is the orbit `(e, ω + 180°,
+/// M − 180°)`. Reflecting (rather than clamping at zero) lets the optimizer
+/// cross e = 0 freely instead of stalling against a bound.
+fn canonicalize(p: &mut [f64; NPARAM]) {
+    if p[1] < 0.0 {
+        p[1] = -p[1];
+        p[3] += 180.0;
+        p[5] -= 180.0;
+    }
+    p[0] = wrap_deg(p[0]);
+    p[2] = wrap_deg(p[2]);
+    p[3] = wrap_deg(p[3]);
+    p[5] = wrap_deg(p[5]);
+}
+
 fn tle_from_params(p: &[f64; NPARAM], epoch: Instant) -> TLE {
+    let mut p = *p;
+    canonicalize(&mut p);
     TLE {
         epoch,
-        inclination: wrap_deg(p[0]),
-        eccen: p[1] % 360.0,
-        raan: wrap_deg(p[2]),
-        arg_of_perigee: wrap_deg(p[3]),
+        inclination: p[0],
+        eccen: p[1],
+        raan: p[2],
+        arg_of_perigee: p[3],
         mean_motion: p[4],
-        mean_anomaly: wrap_deg(p[5]),
+        mean_anomaly: p[5],
         bstar: p[6],
         ..Default::default()
     }
+}
+
+/// Check that a fitted element set lies in the domain a TLE can represent.
+fn validate_fit(tle: &TLE) -> Result<()> {
+    let check = |field: &'static str, value: f64, ok: bool, range: &'static str| {
+        if ok {
+            Ok(())
+        } else {
+            Err(Error::FitElementOutOfRange {
+                field,
+                value,
+                range,
+            })
+        }
+    };
+    check(
+        "eccentricity",
+        tle.eccen,
+        (0.0..1.0).contains(&tle.eccen),
+        "[0, 1)",
+    )?;
+    check(
+        "mean motion",
+        tle.mean_motion,
+        tle.mean_motion > 0.0 && tle.mean_motion.is_finite(),
+        "> 0",
+    )?;
+    check(
+        "inclination",
+        tle.inclination,
+        (0.0..=180.0).contains(&tle.inclination),
+        "[0, 180] degrees",
+    )?;
+    Ok(())
 }
 
 /// Evaluate position residuals (in TEME, meters) for the given parameters.
@@ -141,6 +194,15 @@ impl TLE {
     ///
     /// * First and second derivatives of mean motion are ignored, as they are
     ///   not used by SGP4.
+    ///
+    /// * The damping is Marquardt-scaled (`μ·diag(JᵀJ)`), so it is
+    ///   effective regardless of the residual count or the units of the
+    ///   parameters. A trial step that drives the eccentricity negative is
+    ///   mapped onto the equivalent orbit with `e ≥ 0` (perigee direction
+    ///   reversed), so the returned TLE always has a non-negative
+    ///   eccentricity; the fit fails with
+    ///   [`Error::FitElementOutOfRange`] if it terminates outside the
+    ///   domain a TLE can represent.
     ///
     /// * Parameters in the TLE that are fit:
     ///   - 0: Inclination (degrees)
@@ -283,8 +345,14 @@ impl TLE {
         let x_tol = 1e-12_f64;
         let f_tol = 1e-12_f64;
         let max_iter = 100_usize;
-        let mu_min = 1e-10_f64;
-        let mu_max = 1e10_f64;
+        // The damping parameter is dimensionless: it multiplies the diagonal
+        // of JᵀJ (Marquardt scaling), so its useful range does not depend on
+        // the number of residuals or the units of the parameters. (An
+        // absolute `μ·I` never bit here — diag(JᵀJ) is ~1e14–1e18 for a day
+        // of 10 s samples, so the loop degenerated to undamped Gauss-Newton
+        // and stalled near e = 0, where the ω and M columns are collinear.)
+        let mu_min = 1e-12_f64;
+        let mu_max = 1e12_f64;
         let sqrt_eps = f64::EPSILON.sqrt();
 
         let mut r = residuals(&params, times, &states_teme, epoch)?;
@@ -353,18 +421,44 @@ impl TLE {
                 break 'outer;
             }
 
+            // Marquardt scaling: damp each parameter in proportion to its own
+            // curvature, and solve the normal equations in the column-scaled
+            // space (unit diagonal) so the 1e20-fold spread between, say, the
+            // mean-motion and B* columns does not swamp the LU solve. A
+            // column that does not affect the residuals at all (e.g. B* on a
+            // drag-free arc) has a zero diagonal; floor it so that direction
+            // is still damped rather than left singular.
+            let max_diag = (0..NPARAM).fold(0.0_f64, |m, i| m.max(jtj[(i, i)]));
+            let diag_floor = (max_diag * 1e-12).max(f64::MIN_POSITIVE);
+            let mut dscale = [0.0_f64; NPARAM];
+            for (i, d) in dscale.iter_mut().enumerate() {
+                *d = jtj[(i, i)].max(diag_floor);
+            }
+            let sqrt_d: [f64; NPARAM] = core::array::from_fn(|i| dscale[i].sqrt());
+            let mut jtj_s = Matrix::<f64, NPARAM, NPARAM>::zeros();
+            let mut neg_g_s = Vector::<f64, NPARAM>::zeros();
+            for i in 0..NPARAM {
+                for j in 0..NPARAM {
+                    jtj_s[(i, j)] = jtj[(i, j)] / (sqrt_d[i] * sqrt_d[j]);
+                }
+                neg_g_s[i] = -jtr[i] / sqrt_d[i];
+            }
+
             // Inner loop: try increasingly damped steps until one is accepted
             // or the damping saturates.
             loop {
-                let mut damped = jtj;
+                let mut damped = jtj_s;
                 for i in 0..NPARAM {
                     damped[(i, i)] += mu;
                 }
                 let lu = damped
                     .lu()
                     .map_err(|e| Error::SingularNormalEquations(format!("{e:?}")))?;
-                let neg_g: Vector<f64, NPARAM> = -jtr;
-                let delta = lu.solve(&neg_g);
+                let delta_s = lu.solve(&neg_g_s);
+                let mut delta = Vector::<f64, NPARAM>::zeros();
+                for i in 0..NPARAM {
+                    delta[i] = delta_s[i] / sqrt_d[i];
+                }
 
                 let mut trial = params;
                 for k in 0..NPARAM {
@@ -388,16 +482,18 @@ impl TLE {
                 };
                 let cost_new = 0.5 * norm_sq(&r_new);
 
-                // Predicted reduction: delta^T (mu * delta - g)
-                //                   = mu * |delta|^2 - delta . g
+                // Predicted reduction: delta^T (mu * D * delta - g)
                 let delta_norm_sq: f64 = (0..NPARAM).map(|i| delta[i] * delta[i]).sum();
+                let delta_dot_dd: f64 = (0..NPARAM).map(|i| dscale[i] * delta[i] * delta[i]).sum();
                 let delta_dot_g: f64 = (0..NPARAM).map(|i| delta[i] * jtr[i]).sum();
-                let predicted = mu * delta_norm_sq - delta_dot_g;
+                let predicted = mu * delta_dot_dd - delta_dot_g;
                 let actual = cost - cost_new;
 
                 if predicted > 0.0 && actual > 0.0 {
-                    // Accept step
+                    // Accept step, keeping the parameters canonical (e ≥ 0,
+                    // angles wrapped) so the next Jacobian is taken there.
                     params = trial;
+                    canonicalize(&mut params);
                     r = r_new;
                     cost = cost_new;
                     mu = (mu * 0.1).max(mu_min);
@@ -427,6 +523,7 @@ impl TLE {
         }
 
         let final_tle = tle_from_params(&params, epoch);
+        validate_fit(&final_tle)?;
         Ok((
             final_tle,
             TleFitResult {
@@ -522,5 +619,115 @@ mod tests {
         println!("status = {}", result.status);
         println!("Fitted TLE: {}", tle);
         Ok(())
+    }
+
+    /// Propagate a state for `hours` with the high-fidelity propagator and
+    /// fit a TLE to 10 s samples of the arc. Returns the TLE, the fit
+    /// result and the position RMS (metres) over the samples.
+    fn fit_hifi_arc(
+        r0: f64,
+        inc_deg: f64,
+        eccen: f64,
+        hours: f64,
+        satprops: Option<&dyn crate::orbitprop::SatProperties>,
+    ) -> Result<(TLE, TleFitResult, f64)> {
+        let a = r0 / (1.0 - eccen);
+        let v0 = (crate::consts::MU_EARTH * (2.0 / r0 - 1.0 / a)).sqrt();
+        let inc = inc_deg.to_radians();
+        let state0 = numeris::vector![r0, 0.0, 0.0, 0.0, v0 * inc.cos(), v0 * inc.sin()];
+        let time0: Instant = Instant::from_datetime(2023, 5, 16, 12, 0, 0.0)?;
+        let settings = crate::orbitprop::PropSettings {
+            enable_interp: true,
+            ..Default::default()
+        };
+        let res = crate::orbitprop::propagate(
+            &state0,
+            &time0,
+            &(time0 + crate::Duration::from_seconds(hours * 3600.0)),
+            &settings,
+            satprops,
+        )?;
+        let n = (hours * 360.0) as usize;
+        let times = (0..n)
+            .map(|i| time0 + crate::Duration::from_seconds(i as f64 * 10.0))
+            .collect::<Vec<_>>();
+        let states = times
+            .iter()
+            .map(|t| {
+                let s = res.interp(t).unwrap();
+                [s[0], s[1], s[2], s[3], s[4], s[5]]
+            })
+            .collect::<Vec<_>>();
+        let (tle, result) = TLE::fit_from_states(&states, &times, time0)?;
+        let rms = result.best_norm / ((3 * n) as f64).sqrt();
+        println!(
+            "fit r0={:.0} i={} e0={}: e={:+.3e} rms={:.1} m orig_rms={:.1} m iters={} evals={} status={}",
+            r0,
+            inc_deg,
+            eccen,
+            tle.eccen,
+            rms,
+            result.orig_norm / ((3 * n) as f64).sqrt(),
+            result.n_iter,
+            result.n_res_evals,
+            result.status
+        );
+        Ok((tle, result, rms))
+    }
+
+    /// Regression for issue #189: a circular LEO arc (the doc example above)
+    /// used to stall at ~7.5 km RMS with a *negative* eccentricity because
+    /// the damping never bit and the fit wandered across e = 0. The fitted
+    /// TLE must be physical and must survive a trip through its two lines.
+    #[test]
+    fn test_fit_circular_leo_eccentricity_nonnegative() -> Result<()> {
+        let satprops =
+            crate::orbitprop::SatPropertiesSimple::new(2.0 * 10.0 / 3500.0, 10.0 / 3500.0);
+        let r0 = crate::consts::EARTH_RADIUS + 400.0e3;
+        for props in [
+            None,
+            Some(&satprops as &dyn crate::orbitprop::SatProperties),
+        ] {
+            let (tle, _result, rms) = fit_hifi_arc(r0, 97.0, 0.0, 24.0, props)?;
+            assert!(tle.eccen >= 0.0, "negative eccentricity: {}", tle.eccen);
+            assert!(rms < 1500.0, "fit RMS {rms} m too large");
+            let lines = tle.to_2line()?;
+            let back = TLE::from_lines(&lines)?.remove(0);
+            assert!((back.eccen - tle.eccen).abs() < 1e-7);
+            assert!(back.eccen >= 0.0);
+        }
+        // A circular geosynchronous arc: SGP4's deep-space resonance model
+        // floors the 24 h fit at ~7 km RMS (an independent scaled-LM
+        // reference lands at 6.9 km from the same seed), so only the sign of
+        // the eccentricity is asserted here.
+        let (tle, _result, _rms) = fit_hifi_arc(crate::consts::GEO_R, 15.0, 0.0, 24.0, None)?;
+        assert!(tle.eccen >= 0.0, "negative eccentricity: {}", tle.eccen);
+        // Slightly eccentric seed fits well already; must not regress.
+        let (tle, _result, rms) = fit_hifi_arc(r0, 97.0, 1e-3, 24.0, None)?;
+        assert!(tle.eccen >= 0.0);
+        assert!(rms < 1000.0, "fit RMS {rms} m too large");
+        Ok(())
+    }
+
+    /// A negative eccentricity has no TLE representation; writing `|e|`
+    /// would silently describe a different orbit.
+    #[test]
+    fn test_to_2line_rejects_negative_eccentricity() {
+        let tle = TLE {
+            epoch: Instant::from_datetime(2023, 5, 16, 12, 0, 0.0).unwrap(),
+            inclination: 97.0,
+            eccen: -1.2e-4,
+            mean_motion: 15.5,
+            ..Default::default()
+        };
+        assert!(matches!(
+            tle.to_2line(),
+            Err(Error::EccentricityOutOfRange(e)) if e < 0.0
+        ));
+        let tle = TLE {
+            eccen: 1.2e-4,
+            ..tle
+        };
+        assert!(tle.to_2line().is_ok());
     }
 }
