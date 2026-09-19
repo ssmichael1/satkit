@@ -154,6 +154,8 @@ pub struct PropSettings {
     pub initial_step_secs: Option<f64>,
     /// Regenerable ephemeris/EOP cache; excluded from serialization (a
     /// deserialized `PropSettings` recomputes it lazily as needed).
+    /// The table is reference counted, so cloning these settings shares it
+    /// rather than copying it.
     #[serde(skip)]
     pub precomputed: Option<Precomputed>,
 }
@@ -265,6 +267,11 @@ impl PropSettings {
     /// Pre-computing these terms means the settings can be used for multiple propagations
     /// between the same begin and end instants without needing to recompute these terms each time.
     /// (significant speedup when propagating many orbits over the same time span)
+    ///
+    /// The table is stored behind an [`Arc`](std::sync::Arc): cloning the
+    /// settings (for example once per thread, or per call as the Python
+    /// bindings do) shares the table instead of copying it, and the memory
+    /// is released when the last clone drops.
     ///
     /// The precomputed range is automatically padded to accommodate the
     /// selected integrator. For [`Integrator::GaussJackson8`] the padding

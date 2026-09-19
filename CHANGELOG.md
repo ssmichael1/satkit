@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Changed
+
+- `Precomputed` stores its interpolation table behind an `Arc`, so cloning `PropSettings` (which the Python `propagate` does on every call) shares the table instead of copying it — with a one-year table that was a 55 MB allocation and ~2 ms per call, multiplied by the thread count since the GIL is released ([#193](https://github.com/ssmichael1/satkit/pull/193), [#190](https://github.com/ssmichael1/satkit/issues/190))
+
 ### Fixed
 
 - `TLE::fit_from_states` could return a negative eccentricity and stall far from the optimum on near-circular orbits (the doc example fitted a 400 km circular arc at 7.5 km RMS with e = -1.2e-4): the Levenberg-Marquardt damping is now Marquardt-scaled and solved in column-scaled form, a trial step across e = 0 is mapped onto the equivalent orbit with e ≥ 0, and the result is validated (`Error::FitElementOutOfRange`); `TLE::to_2line` now rejects an eccentricity outside [0, 1) (`Error::EccentricityOutOfRange`) instead of silently writing |e| ([#192](https://github.com/ssmichael1/satkit/pull/192))
