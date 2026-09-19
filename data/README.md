@@ -198,9 +198,10 @@ inputs must be in the sdist — the same lesson as `manifest.json`).
 
 A file found in a *search directory* always wins over the embedded copy, so a
 full-degree gravity file or an updated IERS table can be dropped in without a
-rebuild; the embedded copy is the fallback, and a one-time note says when it
-is used (silence with `SATKIT_QUIET=1`). Because the evaluator uses at most
-degree 40, the truncated files give bit-identical results to the full ones.
+rebuild; the embedded copy is the silent fallback (a file that exists but
+cannot be parsed still produces a warning, silenced with `SATKIT_QUIET=1`).
+Because the evaluator uses at most degree 40, the truncated files give
+bit-identical results to the full ones.
 
 ### Search vs. write
 

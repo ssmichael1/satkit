@@ -24,7 +24,6 @@
 //! gravity models, and the SHA-256 of the inflated bytes.
 
 use std::io::Read;
-use std::sync::OnceLock;
 
 /// Highest spherical-harmonic degree kept in the embedded gravity files.
 /// The evaluator uses at most [`crate::earthgravity::MAX_GRAVITY_DEGREE`]
@@ -84,25 +83,7 @@ pub fn get(name: &str) -> Option<Vec<u8>> {
     flate2::read::GzDecoder::new(gz)
         .read_to_end(&mut out)
         .expect("embedded data blob is not valid gzip");
-    note_once(name);
     Some(out)
-}
-
-/// Print a one-time note (per process, not per file) that embedded data is
-/// being used, so it is clear which source is in effect. Suppressed by
-/// `SATKIT_QUIET=1`.
-fn note_once(name: &str) {
-    static NOTED: OnceLock<()> = OnceLock::new();
-    NOTED.get_or_init(|| {
-        if std::env::var_os("SATKIT_QUIET").is_none() {
-            eprintln!(
-                "satkit: using the compiled-in copy of {name} (no copy found in the data \
-                 directory); frames and gravity models to degree {EMBED_MAX_DEGREE} work \
-                 without any data files. Run satkit::utils::update_datafiles() to install \
-                 the full files if you need them."
-            );
-        }
-    });
 }
 
 #[cfg(test)]

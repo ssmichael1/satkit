@@ -32,12 +32,22 @@ pub struct InterpSample {
 pub type InterpType = InterpSample;
 
 use super::error::{Error, Result};
+use std::sync::Arc;
+
+/// Interpolation table of the slowly varying force-model inputs (frame
+/// rotation, Sun and Moon positions) over a padded time span; see
+/// [`Precomputed::new_padded`].
+///
+/// The table data is reference counted: `clone()` shares the samples
+/// rather than copying them, so a [`PropSettings`](super::PropSettings)
+/// holding a large table can be cloned per call or per thread for the cost
+/// of a pointer copy (the samples are freed when the last clone drops).
 #[derive(Debug, Clone)]
 pub struct Precomputed {
     pub begin: Instant,
     pub end: Instant,
     pub step: f64,
-    data: Vec<InterpType>,
+    data: Arc<[InterpType]>,
 }
 
 /// Default padding (seconds) applied to each end of the
@@ -207,7 +217,7 @@ impl Precomputed {
                         sun_vel_gcrf: vsun,
                     });
                 }
-                data
+                Arc::from(data)
             },
         })
     }
@@ -280,6 +290,24 @@ impl Precomputed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Cloning a table must share the sample allocation (issue #190: the
+    /// Python bindings clone `PropSettings`, table included, on every
+    /// `propagate` call) and interpolate identically.
+    #[test]
+    fn test_clone_shares_table() {
+        let t0 = Instant::from_datetime(2023, 5, 16, 20, 0, 0.0).unwrap();
+        let t1 = t0 + Duration::from_hours(6.0);
+        let a = Precomputed::new(&t0, &t1).unwrap();
+        let b = a.clone();
+        assert!(Arc::ptr_eq(&a.data, &b.data));
+        assert_eq!(Arc::strong_count(&a.data), 2);
+        let t = t0 + Duration::from_seconds(1234.5);
+        assert_eq!(a.interp(&t).unwrap(), b.interp(&t).unwrap());
+        drop(a);
+        assert_eq!(Arc::strong_count(&b.data), 1);
+        assert!(b.interp(&t).is_ok());
+    }
 
     /// The tabulated GCRF→ITRF rotation must match the full
     /// `frametransform::qgcrf2itrf` chain to well under a milliarcsecond.
