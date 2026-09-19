@@ -6,6 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Changed
 
+- The one-time "using the compiled-in copy of tab5.2a.txt" note is gone: the embedded IERS tables and gravity files are byte-identical to the downloadable ones and `update_datafiles()` deliberately does not install them, so the note fired on every fresh install (and as a red stderr block in every satkit.dev tutorial) while describing nothing to act on. `SATKIT_QUIET=1` still silences the warning for a corrupt table that is replaced by the compiled-in copy, and the docs build sets it ([#194](https://github.com/ssmichael1/satkit/pull/194))
 - `Precomputed` stores its interpolation table behind an `Arc`, so cloning `PropSettings` (which the Python `propagate` does on every call) shares the table instead of copying it — with a one-year table that was a 55 MB allocation and ~2 ms per call, multiplied by the thread count since the GIL is released ([#193](https://github.com/ssmichael1/satkit/pull/193), [#190](https://github.com/ssmichael1/satkit/issues/190))
 
 ### Fixed
