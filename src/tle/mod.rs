@@ -576,7 +576,10 @@ impl TLE {
         // ------- Build Line 2 -------
         let incl = format!("{:8.4}", self.inclination);
         let raan = format!("{:8.4}", self.raan);
-        let ecc7 = format!("{:0>7}", (self.eccen.abs() * 1.0e7 + 0.5).floor() as u64);
+        if !(0.0..1.0).contains(&self.eccen) {
+            return Err(Error::EccentricityOutOfRange(self.eccen));
+        }
+        let ecc7 = format!("{:0>7}", (self.eccen * 1.0e7 + 0.5).floor() as u64);
         let argp = format!("{:8.4}", self.arg_of_perigee);
         let mean_anom = format!("{:8.4}", self.mean_anomaly);
         let n = format!("{:11.8}", self.mean_motion);

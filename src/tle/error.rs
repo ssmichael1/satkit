@@ -69,6 +69,22 @@ pub enum Error {
     #[error("Normal equations are singular: {0}")]
     SingularNormalEquations(String),
 
+    /// [`TLE::fit_from_states`](crate::TLE::fit_from_states) terminated on
+    /// an element set outside the domain a TLE can represent.
+    #[error("Fitted TLE has {field} = {value}, outside the valid range {range}")]
+    FitElementOutOfRange {
+        field: &'static str,
+        value: f64,
+        range: &'static str,
+    },
+
+    /// [`TLE::to_2line`](crate::TLE::to_2line) refuses an eccentricity
+    /// outside `[0, 1)`: the 7-digit field cannot hold it, and writing
+    /// `|e|` for a negative value would silently describe a different orbit
+    /// (the perigee direction reversed).
+    #[error("Eccentricity {0} cannot be written to a TLE; it must be in [0, 1)")]
+    EccentricityOutOfRange(f64),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
