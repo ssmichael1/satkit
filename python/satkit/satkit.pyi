@@ -802,6 +802,7 @@ class tlefitstatus:
     DampingSaturated: ClassVar[tlefitstatus]
     """Levenberg-Marquardt damping parameter saturated"""
 
+    @property
     def converged(self) -> bool:
         """True if the fit converged successfully."""
         ...
@@ -1228,12 +1229,10 @@ class time:
         """
         ...
 
+    @property
     def day_of_year(self) -> int:
         """
-        Return the 1-based Gregorian day of the year (1 = January 1, 365 = December 31)
-
-        Returns:
-            The 1-based day of the year
+        The 1-based Gregorian day of the year (1 = January 1, 365 = December 31)
         """
         ...
 
@@ -2253,18 +2252,18 @@ class quaternion:
         """
         ...
 
-    @property
     def conj(self) -> quaternion:
-        """Return conjugate or inverse of the rotation
+        """Quaternion conjugate, which for a unit (rotation) quaternion is the
+        inverse rotation. Same as ``conjugate()`` and ``inverse()``.
 
         Returns:
             Conjugate or inverse of the rotation
         """
         ...
 
-    @property
     def conjugate(self) -> quaternion:
-        """Return conjugate or inverse of the rotation
+        """Quaternion conjugate, which for a unit (rotation) quaternion is the
+        inverse rotation. Same as ``conj()`` and ``inverse()``.
 
         Returns:
             Conjugate or inverse of the rotation
@@ -2849,7 +2848,7 @@ class itrfcoord:
             3-element ``[E, N, U]`` vector from ``origin`` to ``self``, in meters.
 
         Notes:
-            - This is equivalent to calling: origin.qenu2itrf.conj * (self - origin)
+            - This is equivalent to calling: origin.qenu2itrf.conj() * (self - origin)
 
         Example:
             ```python
@@ -2876,7 +2875,7 @@ class itrfcoord:
             3-element ``[N, E, D]`` vector from ``origin`` to ``self``, in meters.
 
         Notes:
-            - This is equivalent to calling: origin.qned2itrf.conj * (self - origin)
+            - This is equivalent to calling: origin.qned2itrf.conj() * (self - origin)
 
         """
         ...

@@ -484,6 +484,7 @@ impl PyInstant {
     /// Returns:
     ///     int : The 1-based day of the year
     ///
+    #[getter]
     fn day_of_year(&self) -> u32 {
         self.0.day_of_year()
     }

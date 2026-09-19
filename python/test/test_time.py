@@ -183,27 +183,33 @@ class TestTime:
         assert minute == 0
         assert sec == 0
 
+    def test_day_of_year_is_property(self):
+        t = sk.time(2024, 3, 1)
+        assert isinstance(t.day_of_year, int)
+        with pytest.raises(TypeError):
+            t.day_of_year()  # type: ignore[operator]
+
     def test_day_of_year(self):
         t = sk.time(2021, 1, 1)
-        assert t.day_of_year() == 1
+        assert t.day_of_year == 1
 
         t = sk.time(2021, 12, 31)
-        assert t.day_of_year() == 365
+        assert t.day_of_year == 365
 
         t = sk.time(2020, 12, 31)
-        assert t.day_of_year() == 366
+        assert t.day_of_year == 366
 
         t = sk.time(2100, 12, 31)
-        assert t.day_of_year() == 365
+        assert t.day_of_year == 365
 
         t = sk.time(2400, 12, 31)
-        assert t.day_of_year() == 366
+        assert t.day_of_year == 366
 
         t = sk.time(2024, 2, 29)
-        assert t.day_of_year() == 60
+        assert t.day_of_year == 60
 
         t = sk.time(2025, 8, 16)
-        assert t.day_of_year() == 228
+        assert t.day_of_year == 228
 
     def test_from_gps_week_and_second(self):
         """

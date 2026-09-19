@@ -41,6 +41,7 @@ impl PyTleFitStatus {
     }
 
     /// True if the fit converged successfully.
+    #[getter]
     pub fn converged(&self) -> bool {
         matches!(
             self,
