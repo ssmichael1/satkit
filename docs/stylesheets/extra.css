@@ -96,3 +96,23 @@
     max-width: 100%;
     height: auto;
 }
+
+/*
+ * Notebook stderr output (Python warnings, satkit's stale-EOP notices, ...).
+ * mkdocs-jupyter inlines JupyterLab's stylesheet, which paints
+ * `application/vnd.jupyter.stderr` outputs on --jp-rendermime-error-background
+ * (#fdd in light mode, translucent red in slate). That inlined rule sits in
+ * the page body, after this stylesheet, so these selectors carry one extra
+ * attribute of specificity to win the cascade. Keep the text visible (it can
+ * carry real information) but render it as an ordinary code block with a
+ * muted amber edge rather than an error.
+ */
+[data-md-color-scheme] .jupyter-wrapper .jp-RenderedText[data-mime-type="application/vnd.jupyter.stderr"] {
+    background: var(--md-code-bg-color);
+    color: var(--md-code-fg-color);
+    border-left: 0.2rem solid #d97706;
+    padding-left: 0.6rem;
+}
+[data-md-color-scheme="slate"] .jupyter-wrapper .jp-RenderedText[data-mime-type="application/vnd.jupyter.stderr"] {
+    border-left-color: #fbbf24;
+}
