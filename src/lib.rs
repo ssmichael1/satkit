@@ -52,7 +52,7 @@
 //!
 //! ### Force Models
 //! Comprehensive perturbation modeling:
-//! - High-order Earth gravity (JGM2, JGM3, EGM96, ITU GRACE16)
+//! - High-order Earth gravity (EGM96, EGM2008, JGM2, JGM3, ITU GRACE16)
 //! - Solar and lunar gravity perturbations
 //! - Atmospheric drag using NRLMSISE-00 density model with space weather data
 //! - Solar radiation pressure

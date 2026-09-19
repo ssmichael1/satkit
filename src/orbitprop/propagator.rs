@@ -238,7 +238,13 @@ fn force_model(
     if need_accel && settings.tide_model != TideModel::None {
         let sun_itrf = qgcrf2itrf * sun_gcrf;
         let moon_itrf = qgcrf2itrf * moon_gcrf;
-        let deltas = tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
+        let mut deltas =
+            tides::solid_tide_deltas(&sun_itrf, &moon_itrf, &time, settings.tide_model);
+        // Step 1 includes the permanent tide; a zero-tide model already has
+        // it in C20, so take it back out rather than count it twice.
+        if gravity.tide_system.includes_permanent_tide() {
+            tides::remove_permanent_tide(&mut deltas);
+        }
         accel += qitrf2gcrf
             * tides::tide_accel(&pos_itrf, &deltas, gravity.gravity_constant, gravity.radius);
     }
@@ -562,7 +568,9 @@ pub fn propagate<const C: usize, T: TimeLike>(
         _ => &Precomputed::new_padded(&begin, &end, 60.0, padding_secs)?,
     };
 
-    let gravity = settings.gravity_model.get();
+    // A typed error (not a panic) when the model cannot be loaded: the
+    // on-demand ITU_GRACE16 download can fail offline.
+    let gravity = crate::earthgravity::ensure_loaded(settings.gravity_model)?;
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> Matrix<6, C> {
         let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
@@ -890,6 +898,7 @@ pub fn interp_propresult_batch<const C: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::earthgravity::GravityModel;
     use crate::{consts, orbitprop::SatPropertiesSimple};
     use std::f64::consts::PI;
 
@@ -1457,6 +1466,81 @@ mod tests {
             diff
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_zero_tide_model_with_tides_matches_tide_free() -> Result<()> {
+        // JGM3 is zero-tide (C20 carries the permanent tide, 4.2e-9 more
+        // negative than EGM96's tide-free value). With Step 1 tides on, the
+        // propagator removes the permanent part from the correction for
+        // JGM3, so J2-only propagation with tides on must agree between the
+        // two models to the level their C20 actually differ (2.5e-11):
+        // well under 0.5 m over a day at 500 km. Before the fix the
+        // permanent tide was counted twice for JGM3 and the two differed
+        // by several metres.
+        use crate::orbitprop::TideModel;
+        assert_eq!(
+            crate::earthgravity::egm96().tide_system,
+            crate::earthgravity::TideSystem::TideFree
+        );
+        assert_eq!(
+            crate::earthgravity::jgm3().tide_system,
+            crate::earthgravity::TideSystem::ZeroTide
+        );
+
+        let starttime = Instant::from_datetime(2015, 3, 20, 0, 0, 0.0)?;
+        let stoptime = starttime + Duration::from_days(1.0);
+        let r = consts::EARTH_RADIUS + 500.0e3;
+        let v = (consts::MU_EARTH / r).sqrt();
+        let inc: f64 = 51.6f64.to_radians();
+        let mut state: SimpleState = SimpleState::zeros();
+        state[0] = r;
+        state[4] = v * inc.cos();
+        state[5] = v * inc.sin();
+
+        let base = PropSettings {
+            abs_error: 1.0e-10,
+            rel_error: 1.0e-12,
+            gravity_degree: 2,
+            gravity_order: 0,
+            gravity_model: GravityModel::EGM96,
+            tide_model: TideModel::SolidStep1,
+            use_sun_gravity: false,
+            use_moon_gravity: false,
+            use_relativistic_correction: false,
+            ..Default::default()
+        };
+        let jgm3 = PropSettings {
+            gravity_model: GravityModel::JGM3,
+            ..base.clone()
+        };
+        let no_tides = PropSettings {
+            tide_model: TideModel::None,
+            ..base.clone()
+        };
+        let jgm3_no_tides = PropSettings {
+            tide_model: TideModel::None,
+            ..jgm3.clone()
+        };
+        let pos = |s: &PropSettings| -> Result<Vector3> {
+            Ok(propagate(&state, &starttime, &stoptime, s, None)?
+                .state_end
+                .block::<3, 1>(0, 0))
+        };
+        let with_tides = (pos(&base)? - pos(&jgm3)?).norm();
+        let without = (pos(&no_tides)? - pos(&jgm3_no_tides)?).norm();
+        println!("EGM96 vs JGM3 (J2 only, 1 day, 500 km): tides on {with_tides:.3} m, off {without:.3} m");
+        // Tides off: the published C20 values differ by the permanent tide
+        // → metres per day. Tides on: the correction absorbs it.
+        assert!(
+            without > 1.0,
+            "expected the raw C20 mismatch to be visible: {without} m"
+        );
+        assert!(
+            with_tides < 0.5,
+            "zero-tide handling failed: {with_tides} m"
+        );
         Ok(())
     }
 

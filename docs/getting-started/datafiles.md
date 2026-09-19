@@ -4,8 +4,8 @@
 
 | tier | files | how it is provided |
 |---|---|---|
-| **Compiled in** | IERS Conventions (2010) Tables 5.2a/b/d (nutation and CIO series); EGM96, JGM-2, JGM-3 and ITU_GRACE16 gravity coefficients to degree 70 | gzip'd into the library (~300 KB) and inflated on first use. Frame transforms and gravity work with **no data directory and no network** |
-| **Downloaded once, on first use** | JPL DE440 ephemeris `linux_p1550p2650.440` (102 MB), or DE421 `lnxp1900p2053.421` (14 MB) | fetched the first time a planet, Sun or Moon position is needed, SHA-256 verified against a manifest compiled into satkit, written to the [data directory](#where-satkit-looks-for-data-and-where-it-writes) |
+| **Compiled in** | IERS Conventions (2010) Tables 5.2a/b/d (nutation and CIO series); EGM96, EGM2008, JGM-2 and JGM-3 gravity coefficients to degree 70 | gzip'd into the library (~300 KB) and inflated on first use. Frame transforms and gravity work with **no data directory and no network** |
+| **Downloaded once, on first use** | JPL DE440 ephemeris `linux_p1550p2650.440` (102 MB), or DE421 `lnxp1900p2053.421` (14 MB); the ITU_GRACE16 gravity model `ITU_GRACE16.gfc` (1.8 MB) | fetched the first time a planet, Sun or Moon position (or `gravmodel.itugrace16`) is needed, SHA-256 verified against a manifest compiled into satkit, written to the [data directory](#where-satkit-looks-for-data-and-where-it-writes) |
 | **Refreshed** | `EOP-All.csv` (Earth orientation), `SW-All.csv` (space weather) | change daily; fetched from CelesTrak on first use and refreshed by `satkit.utils.update_datafiles()` |
 
 Everything that does not need the ephemeris or Earth orientation — gravity accelerations, the precession-nutation part of the frame chain, SGP4, time scales, Keplerian propagation, Lambert targeting — therefore works immediately after `pip install satkit`, offline. The numerical propagator needs the ephemeris (Sun and Moon) and the Earth-fixed frame chain needs the EOP file.
@@ -18,7 +18,9 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 
 - **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt** — Tables 5.2a, 5.2b and 5.2d of the IERS Conventions (2010), Technical Note 36 ([Petit & Luzum 2010](../guide/references.md#petit2010)): the CIP $X$, $Y$ and CIO-locator $s$ series used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame. Compiled in.
 
-- **EGM96.gfc**, **JGM2.gfc**, **JGM3.gfc**, **ITU_GRACE16.gfc** — Gravity coefficients for EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)), JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)) and ITU_GRACE16 ([Akyilmaz et al. 2016](../guide/references.md#akyilmaz2016)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). Compiled in, truncated to degree 70 (the evaluator uses at most degree 40, so results are identical to the full files). A full-degree copy placed in a data directory is used in preference.
+- **EGM96.gfc**, **EGM2008.gfc**, **JGM2.gfc**, **JGM3.gfc** — Gravity coefficients for EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), EGM2008 ([Pavlis et al. 2012](../guide/references.md#pavlis2012)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)) and JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). Compiled in, truncated to degree 70 (the evaluator uses at most degree 40, so results are identical to the full files). A full-degree copy placed in a data directory is used in preference.
+
+- **ITU_GRACE16.gfc** — Gravity coefficients for ITU_GRACE16 ([Akyilmaz et al. 2016](../guide/references.md#akyilmaz2016)), a GRACE-only satellite solution to degree 180. Licensed CC BY 4.0, so it is not compiled in: downloaded (1.8 MB, verified) on first use of `gravmodel.itugrace16`; with `SATKIT_OFFLINE=1` and no copy on disk, selecting it is a `RuntimeError`. Results derived from it should cite the model.
 
 - **SW-All.csv** — Space Weather. The solar flux at $\lambda = 10.7\text{cm}$ (2800 MHz) is an indication of solar activity, which in turn is an important predictor of air density at altitudes relevant for low-Earth orbits. This file is updated at [celestrak.org](https://www.celestrak.org) ([CelesTrak Space Data](../guide/references.md#celestrak-spacedata)) every 3 hours with the most-recent space weather information.
 
@@ -115,8 +117,9 @@ data bytes.
 
 Sources and attribution: DE440 / DE421 — JPL (Park et al. 2021; Folkner et al.
 2009), US Government work; `tab5.2a/b/d.txt` — IERS Conventions (2010), TN 36;
-EGM96, JGM-2, JGM-3 — NASA GSFC (public), via ICGEM; ITU_GRACE16 — Akyilmaz et
-al. 2016, GFZ Data Services, CC BY 4.0. The
+EGM96, EGM2008, JGM-2, JGM-3 — NASA GSFC / NGA (US Government work), via ICGEM;
+ITU_GRACE16 — Akyilmaz et al. 2016, GFZ Data Services, CC BY 4.0 (downloaded on
+demand, not compiled in). The
 Earth-orientation and space-weather files are fetched from CelesTrak on every
 update and are not pinned (they change daily). The full table, with licences,
 is in `data/README.md`.

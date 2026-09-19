@@ -70,7 +70,7 @@ r0 = 6378e3 + 500e3  # 500 km altitude
 v0 = np.sqrt(sk.consts.mu_earth / r0)
 
 settings = sk.propsettings(
-    gravity_model=sk.gravmodel.egm96,  # default; also jgm3, jgm2, itugrace16
+    gravity_model=sk.gravmodel.egm96,  # default; also egm2008, jgm3, jgm2, itugrace16
     gravity_degree=8,
     integrator=sk.integrator.rkv98,    # default; also rkv87, rkv65, rkts54,
                                        # gauss_jackson8 (fixed-step multistep)
@@ -139,7 +139,7 @@ Plus satellite-local RTN, NTW, and LVLH frames (maneuvers, covariance), and ENU,
 
 ### Force Models
 
-- **Earth gravity**: JGM2, JGM3, EGM96, ITU GRACE16 (spherical harmonics up to degree/order 40; Montenbruck & Gill 2000, §3.2)
+- **Earth gravity**: EGM96, EGM2008, JGM2, JGM3, ITU GRACE16 (spherical harmonics up to degree/order 40; Montenbruck & Gill 2000, §3.2), with tide-system-aware solid tides
 - **Solid Earth tides**: IERS Conventions 2010 §6.2.1 Step-1 corrections to the gravity field
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
 - **Atmospheric drag**: NRLMSISE-00 (Picone et al. 2002) fed automatically from CelesTrak space-weather data — observed F10.7 / centred F10.7A and the 7-element 3-hourly geomagnetic ap history, so density responds to storms within hours; validated against GMAT (below)
@@ -176,9 +176,9 @@ numeris = { version = "0.5.18", features = ["nalgebra"] }
 
 Three tiers, handled differently by size and how often they change:
 
-**Compiled in (no files needed):** IERS 2010 nutation tables and the EGM96 / JGM2 / JGM3 / ITU_GRACE16 gravity models to degree 70 (~300 KB gzip'd). Frames, gravity, SGP4, time scales, Kepler and Lambert work offline out of the box.
+**Compiled in (no files needed):** IERS 2010 nutation tables and the EGM96 / EGM2008 / JGM2 / JGM3 gravity models to degree 70 (~300 KB gzip'd). Frames, gravity, SGP4, time scales, Kepler and Lambert work offline out of the box.
 
-**Downloaded once, on first use:** the JPL DE440 ephemeris (~100 MB; DE421 at 14 MB via `SATKIT_JPLEPHEM_FILE`), SHA-256 verified against the manifest compiled into satkit (`data/manifest.json`), fetched from the GitHub release asset, the origin server (JPL), or a `SATKIT_DATA_URL` mirror.
+**Downloaded once, on first use:** the JPL DE440 ephemeris (~100 MB; DE421 at 14 MB via `SATKIT_JPLEPHEM_FILE`) and, only if selected, the ITU_GRACE16 gravity model (1.8 MB, CC BY 4.0), SHA-256 verified against the manifest compiled into satkit (`data/manifest.json`), fetched from the GitHub release asset, the origin server (JPL / ICGEM), or a `SATKIT_DATA_URL` mirror.
 
 **Refreshed periodically:** space weather (F10.7, Ap) and Earth orientation parameters (polar motion, UT1−UTC), sourced from [CelesTrak](https://celestrak.org/SpaceData/) by `update_datafiles()`.
 
@@ -246,8 +246,9 @@ Licensed under either of
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 The gravity models and IERS tables compiled into the library are third-party
-data with their own terms — notably the ITU_GRACE16 model, which is CC BY 4.0
-and truncated to degree 70 — see [THIRDPARTY-DATA.md](THIRDPARTY-DATA.md).
+data (US Government works and IERS tables, all freely redistributable) — see
+[THIRDPARTY-DATA.md](THIRDPARTY-DATA.md). The optional ITU_GRACE16 model
+(CC BY 4.0) is not part of the library; it is downloaded only when selected.
 
 at your option.
 

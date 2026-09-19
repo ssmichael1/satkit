@@ -145,6 +145,12 @@ code follows where that is useful.
   TOPEX/POSEIDON: Joint Gravity Models 1 and 2." *Journal of Geophysical
   Research: Oceans*, 99(C12), 24421–24447. <https://doi.org/10.1029/94JC01376>.
 
+<a id="pavlis2012"></a>
+- **Pavlis, N. K., Holmes, S. A., Kenyon, S. C., & Factor, J. K. (2012).**
+  "The development and evaluation of the Earth Gravitational Model 2008
+  (EGM2008)." *Journal of Geophysical Research: Solid Earth*, 117, B04406.
+  <https://doi.org/10.1029/2011JB008916>.
+
 <a id="akyilmaz2016"></a>
 - **Akyilmaz, O., et al. (2016).** *ITU_GRACE16: The global gravity field
   model including GRACE data up to degree and order 180 of ITU and other

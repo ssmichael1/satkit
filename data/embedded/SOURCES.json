@@ -30,13 +30,13 @@
    "embedded_sha256": "ecf991dbf97b839ea02aaae7ed5ba73ef53002cb58adb9f47e4e9ba13713bfa6",
    "embedded_size": 220490
   },
-  "ITU_GRACE16.gfc": {
-   "source": "ITU_GRACE16.gfc",
-   "source_sha256": "b6bea9c78ad168f1e206fc7211f90b64fba54325c832f4473f6c05a07adbc718",
-   "source_size": 1782369,
+  "EGM2008.gfc": {
+   "source": "EGM2008.gfc",
+   "source_sha256": "ab5b524da073e63b5bdceb7ca47a0de07a26dd44a1c5798f39fc98dc80af70fd",
+   "source_size": 252140870,
    "truncated_to_degree": 70,
-   "embedded_sha256": "a9a2b237109d51fce0e02703472b62a9bd8f8d5371ff448f237db32d69e8952c",
-   "embedded_size": 279549
+   "embedded_sha256": "99ff1e2ca2a0d2fa13c815ee7c04feb777182c0da4af895eb46c1c0794a35b60",
+   "embedded_size": 268970
   },
   "JGM2.gfc": {
    "source": "JGM2.gfc",

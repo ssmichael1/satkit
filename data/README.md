@@ -50,14 +50,16 @@ All manifest URLs must be `https://` (validated on load).
 | `lnxp1900p2053.421` | 14.0 MB | JPL | DE421 (Folkner et al. 2009). US Government work, public domain. `default: false` — fetched only by name (e.g. the conda package ships this one) | ephemeris |
 | `tab5.2a.txt`, `tab5.2b.txt`, `tab5.2d.txt` | 171 / 137 / 9 KB | IERS | IERS Conventions (2010), TN 36, Tables 5.2a/b/d. Freely redistributable. Origin URLs verified byte-identical. `default: false` — embedded byte-identical in the binary | core |
 | `EGM96.gfc` | 5.6 MB | ICGEM (GFZ) | EGM96, Lemoine et al. 1998, NASA GSFC/NIMA — US Government work. `default: false` — embedded to degree 70 | core |
+| `EGM2008.gfc` | 252 MB | ICGEM (GFZ) | EGM2008, Pavlis et al. 2012, NGA — US Government work. `default: false` — embedded to degree 70. Origin URL verified byte-identical; the release-asset URL is listed first for consistency but the file is not uploaded (it is only ever fetched by name, and the client falls through to ICGEM) | core |
 | `JGM2.gfc`, `JGM3.gfc` | 118 / 215 KB | ICGEM (GFZ) | JGM-2 (Nerem et al. 1994), JGM-3 (Tapley et al. 1996), NASA GSFC / UT CSR — US Government work. `default: false` — embedded to degree 70 | core |
-| `ITU_GRACE16.gfc` | 1.8 MB | ICGEM (GFZ) | Akyilmaz et al. 2016, GFZ Data Services, **CC BY 4.0** — keep the file's header block, it carries the attribution. `default: false` — embedded to degree 70 | core |
+| `ITU_GRACE16.gfc` | 1.8 MB | ICGEM (GFZ) | Akyilmaz et al. 2016, GFZ Data Services, **CC BY 4.0** — the file's header block carries the attribution. **Not embedded** (the licence would otherwise attach to the library and its packages): `default: false`, fetched on first use of `GravityModel::ITUGrace16`. Origin URL verified byte-identical | core |
 
 `tier` is informational: `core` = the small files frames and gravity need
 (embedded in the binary since Phase 2, below — which is why their manifest
 entries are `default: false`: pinned and fetchable by name, but pointless to
-download while evaluation is capped at degree 40), `ephemeris` = the large
-JPL files. The only `default: true` entry — the only file
+download while evaluation is capped at degree 40; ITU_GRACE16 is the one
+`core` file that is not embedded and is fetched on demand), `ephemeris` =
+the large JPL files. The only `default: true` entry — the only file
 `update_datafiles()` downloads besides the daily refreshes — is the DE440
 ephemeris.
 
@@ -98,6 +100,11 @@ gh release create data-v1 --repo ssmichael1/satkit-data --latest=false \
   "$D/tab5.2a.txt" "$D/tab5.2b.txt" "$D/tab5.2d.txt" \
   "$D/EGM96.gfc" "$D/ITU_GRACE16.gfc" "$D/JGM2.gfc" "$D/JGM3.gfc"
 ```
+
+(`EGM2008.gfc` was pinned later and is deliberately not uploaded: 252 MB for
+a file nothing downloads by default. Its manifest entry lists the release URL
+first for consistency; the fetch falls through to the ICGEM origin, verified
+by hash.)
 
 (`lnxp1900p2053.421` can be fetched first with
 `curl -O https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de421/lnxp1900p2053.421`;
@@ -183,8 +190,9 @@ handled in three tiers:
 
 | tier | files | how |
 |---|---|---|
-| **embedded** | `tab5.2a/b/d.txt`; `EGM96/ITU_GRACE16/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (309 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
+| **embedded** | `tab5.2a/b/d.txt`; `EGM96/EGM2008/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (295 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
 | **ephemeris** | `linux_p1550p2650.440` (DE440, 102 MB) or `lnxp1900p2053.421` (DE421, 14 MB) | downloaded on first use through the verified manifest fetch, into the write location |
+| **on demand** | `ITU_GRACE16.gfc` (1.8 MB, CC BY 4.0) | same verified fetch, on first use of `GravityModel::ITUGrace16`; not embedded so the licence does not attach to the library |
 | **refreshed** | `EOP-All.csv`, `SW-All.csv` | fetched from CelesTrak on first use; `update_datafiles()` refreshes them |
 
 `tools/embed_data.py` regenerates the blobs from a data directory whose files

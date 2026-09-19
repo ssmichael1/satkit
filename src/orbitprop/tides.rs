@@ -70,6 +70,25 @@ const K_IM: [[f64; 4]; 4] = [
 /// (IERS 2010 Eq. 6.7), indexed by m ∈ {0,1,2}.
 const K_PLUS: [f64; 3] = [-0.00089, -0.00080, -0.00057];
 
+/// Permanent-tide part of ΔC̄₂₀ produced by the Step 1 correction:
+/// A₀H₀k₂₀ with A₀ = 4.4228×10⁻⁸, H₀ = −0.31460 and the Table 6.3
+/// anelastic k₂₀ used by [`solid_tide_deltas`] (IERS 2010 §6.2.2,
+/// Eq. 6.13–6.14), ≈ −4.20×10⁻⁹.
+///
+/// This is the time average of the Step 1 ΔC̄₂₀ over the Sun's and Moon's
+/// orbits. A **zero-tide** gravity model already carries it in its C̄20,
+/// so applying Step 1 unmodified to such a model counts it twice;
+/// [`remove_permanent_tide`] takes it back out.
+pub const PERMANENT_TIDE_DC20: f64 = 4.4228e-8 * -0.31460 * K_RE[2][0];
+
+/// Remove the permanent tide from a Step 1 correction, for use with a
+/// gravity model whose C̄20 already includes it
+/// ([`TideSystem::includes_permanent_tide`](crate::earthgravity::TideSystem::includes_permanent_tide)):
+/// ΔC̄₂₀ ← ΔC̄₂₀ − A₀H₀k₂₀ (IERS 2010 Eq. 6.13).
+pub fn remove_permanent_tide(deltas: &mut TideDeltas) {
+    deltas.dc[2][0] -= PERMANENT_TIDE_DC20;
+}
+
 // ---------------------------------------------------------------------------
 // Fully-normalized associated-Legendre normalization factors
 // N_nm = sqrt((2 - δ_0m)(2n+1)(n-m)!/(n+m)!). Constants chosen to allow
@@ -369,6 +388,21 @@ mod tests {
         // ΔC̄_20 should be clearly nonzero, and positive: P̄_20(1) = +√5,
         // and k20_re > 0 → contribution is positive.
         assert!(deltas.dc[2][0] > 0.0);
+    }
+
+    #[test]
+    fn permanent_tide_constant_matches_iers() {
+        // IERS 2010 §6.2.2: A0 H0 k20 = (4.4228e-8)(-0.31460)(0.30190) = -4.201e-9
+        assert!(
+            (PERMANENT_TIDE_DC20 - -4.201e-9).abs() < 1e-12,
+            "{PERMANENT_TIDE_DC20:e}"
+        );
+        let mut d = TideDeltas::default();
+        d.dc[2][0] = 1.0e-8;
+        d.dc[2][2] = 2.0e-9;
+        remove_permanent_tide(&mut d);
+        assert!((d.dc[2][0] - (1.0e-8 + 4.201e-9)).abs() < 1e-12);
+        assert_eq!(d.dc[2][2], 2.0e-9);
     }
 
     #[test]

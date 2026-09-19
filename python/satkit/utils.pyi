@@ -34,10 +34,11 @@ def update_datafiles(**kwargs) -> None:
             - ``predicted-solar-cycle.json`` : NOAA/SWPC solar cycle forecast (~5 years of predicted F10.7)
 
         - The IERS nutation tables (``tab5.2a/b/d.txt``) and the gravity
-          models (EGM96, JGM2, JGM3, ITU_GRACE16 — to degree 70) are compiled
-          into satkit and are not downloaded. A full-degree gravity file or an
-          updated IERS table placed in the data directory still takes
-          precedence over the compiled-in copy.
+          models (EGM96, EGM2008, JGM2, JGM3 — to degree 70) are compiled
+          into satkit and are not downloaded; ITU_GRACE16 (CC BY 4.0) is
+          fetched on first use of ``gravmodel.itugrace16``. A full-degree
+          gravity file or an updated IERS table placed in the data directory
+          still takes precedence over the compiled-in copy.
 
         - The space weather and earth orientation parameters files are updated
           daily and will always be downloaded regardless of the overwrite flag

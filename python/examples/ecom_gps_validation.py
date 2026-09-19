@@ -155,7 +155,7 @@ def gps_settings(degree: int = 12, eclipses: bool = False):
     s.gravity_order = degree
     s.use_sun_gravity = True
     s.use_moon_gravity = True
-    s.tide_model = sk.tidemodel.solid_step1  # EGM96 (default) is tide-free: consistent with Step 1
+    s.tide_model = sk.tidemodel.solid_step1  # tide-system aware: any gravity model is fine here
     s.use_relativistic_correction = True
     s.use_spaceweather = False
     s.abs_error = 1e-11
