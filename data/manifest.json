@@ -148,7 +148,21 @@
     }
   ],
   "refresh": [
-    "https://celestrak.org/SpaceData/EOP-All.csv",
     "https://celestrak.org/SpaceData/SW-All.csv"
+  ],
+  "eop": [
+    {
+      "name": "finals2000A.all",
+      "urls": [
+        "https://maia.usno.navy.mil/ser7/finals2000A.all",
+        "https://datacenter.iers.org/data/9/finals2000A.all"
+      ]
+    },
+    {
+      "name": "EOP-All.csv",
+      "urls": [
+        "https://celestrak.org/SpaceData/EOP-All.csv"
+      ]
+    }
   ]
 }

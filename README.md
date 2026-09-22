@@ -180,7 +180,7 @@ Three tiers, handled differently by size and how often they change:
 
 **Downloaded once, on first use:** the JPL DE440 ephemeris (~100 MB; DE421 at 14 MB via `SATKIT_JPLEPHEM_FILE`) and, only if selected, the ITU_GRACE16 gravity model (1.8 MB, CC BY 4.0), SHA-256 verified against the manifest compiled into satkit (`data/manifest.json`), fetched from the GitHub release asset, the origin server (JPL / ICGEM), or a `SATKIT_DATA_URL` mirror.
 
-**Refreshed periodically:** space weather (F10.7, Ap) and Earth orientation parameters (polar motion, UT1−UTC), sourced from [CelesTrak](https://celestrak.org/SpaceData/) by `update_datafiles()`.
+**Refreshed periodically:** Earth orientation parameters (polar motion, UT1−UTC) from the [IERS](https://maia.usno.navy.mil/ser7/) Bulletin A file `finals2000A.all` (CelesTrak's `EOP-All.csv` as fallback) and space weather (F10.7, Ap) from [CelesTrak](https://celestrak.org/SpaceData/), by `update_datafiles()`.
 
 Downloads go to the platform user-data directory (`satkit.utils.datadir()`: `~/Library/Application Support/satkit-data`, `$XDG_DATA_HOME/satkit-data`, or `%LOCALAPPDATA%\satkit-data`) unless `SATKIT_DATA` is set; files are also looked up in an installed `satkit-data` package and `/usr/share/satkit-data`. `SATKIT_OFFLINE=1` turns any needed download into an error. Details: [Data Files](https://satkit.dev/getting-started/datafiles/).
 

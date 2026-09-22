@@ -29,7 +29,8 @@ def update_datafiles(**kwargs) -> None:
     Notes:
         - Files downloaded:
             - ``linux_p1550p2650.440`` : JPL Ephemeris version 440 (~ 100 MB)
-            - ``EOP-All.csv`` : Earth orientation parameters, updated daily
+            - ``finals2000A.all`` : Earth orientation parameters (IERS Bulletin A), updated daily;
+              CelesTrak's ``EOP-All.csv`` is fetched instead when both IERS mirrors are unreachable
             - ``SW-All.csv`` : Space weather data, updated daily
             - ``predicted-solar-cycle.json`` : NOAA/SWPC solar cycle forecast (~5 years of predicted F10.7)
 
@@ -44,7 +45,7 @@ def update_datafiles(**kwargs) -> None:
           usage policy <https://celestrak.org/usage-policy.php>`_ rather than
           transferring the whole 1957-to-present table on every call: no
           request is made while the local copy is inside its publication
-          cadence (3 h for ``SW-All.csv``, 24 h for ``EOP-All.csv``), and past
+          cadence (3 h for ``SW-All.csv``, 24 h for the Earth-orientation file), and past
           that the request carries ``If-Modified-Since``, so an unchanged file
           costs a ``304``. ``overwrite=True`` forces a full re-fetch of these
           too. Calling this at the start of every script is therefore fine.

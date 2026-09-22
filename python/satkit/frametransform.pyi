@@ -552,7 +552,7 @@ def earth_orientation_params(
             0 : (UT1 - UTC) in seconds
             1 : X polar motion in arcsecs
             2 : Y polar motion in arcsecs
-            3 : LOD: instantaneous rate of change in (UT1-UTC), msec/day
+            3 : LOD: excess length of day, -d(UT1-UTC)/dt, seconds per day
             4 : dX wrt IAU-2000A nutation, milli-arcsecs
             5 : dY wrt IAU-2000A nutation, milli-arcsecs
 
@@ -847,6 +847,21 @@ def eop_coverage() -> tuple[time, time, time] | None:
         >>> first, last_observed, last = satkit.frametransform.eop_coverage()
     """
     ...
+
+def eop_source() -> str | None:
+    """Which file the loaded Earth Orientation Parameters (EOP) table came from.
+
+    satkit reads the IERS Bulletin A combined file ``finals2000A.all`` (primary; fetched
+    from the USNO and IERS mirrors, observed values from 1973 plus about a year of
+    predictions) and CelesTrak's ``EOP-All.csv`` (fallback when both mirrors are
+    unreachable; also read when present, e.g. a hand-provisioned data directory). When
+    both are present the one whose observed record runs later is used.
+
+    Returns:
+        str | None: ``"finals2000A"`` for the IERS file (a table with the CelesTrak file's
+        pre-1973 rows in front of it reports this too), ``"celestrak"`` for ``EOP-All.csv``,
+        ``None`` if no table is loaded.
+    """
 
 def eop_status(tm: time) -> str:
     """Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.

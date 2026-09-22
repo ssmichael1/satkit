@@ -322,10 +322,19 @@ code follows where that is useful.
 
 ## Data sources
 
+<a id="iers-finals2000a"></a>
+- **IERS Rapid Service / Prediction Centre, `finals2000A.all`** —
+  <https://maia.usno.navy.mil/ser7/finals2000A.all> (USNO) and
+  <https://datacenter.iers.org/data/9/finals2000A.all> (IERS data centre);
+  format in <https://maia.usno.navy.mil/ser7/readme.finals2000A>. The
+  Bulletin A combined file of Earth orientation parameters (polar motion,
+  UT1−UTC, LOD, IAU 2000A celestial-pole offsets): observed values from 1973
+  and about a year of predictions, updated daily. satkit's primary EOP source.
 <a id="celestrak-spacedata"></a>
 - **CelesTrak Space Data** — <https://celestrak.org/SpaceData/>. Daily
-  `EOP-All.csv` (Earth orientation parameters, from IERS Bulletin A /
-  finals) and `SW-All.csv` (space weather: F10.7, Ap; from GFZ and NOAA).
+  `EOP-All.csv` (Earth orientation parameters repackaged from the IERS
+  series, from 1962; satkit's fallback EOP source) and `SW-All.csv` (space
+  weather: F10.7, Ap; from GFZ and NOAA).
 - **NOAA/SWPC predicted solar cycle** —
   <https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json>,
   the F10.7 forecast used when propagating beyond the space-weather record.
