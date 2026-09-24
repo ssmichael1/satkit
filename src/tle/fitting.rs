@@ -329,10 +329,17 @@ impl TLE {
             kepler = kepler.propagate(&(epoch - closest_time));
         }
 
-        // Create initial guess of parameters from 2-body Kepler
+        // Create initial guess of parameters from 2-body Kepler. At e = 0 the
+        // (e, ω, M) parameterization is singular: ω is arbitrary, and if the
+        // gradient points toward negative e the reflection in
+        // `canonicalize` turns every step uphill, so the fit stalls on its
+        // first iteration. Whether that happens hinges on the sign of
+        // round-off in an exactly circular input, so start from a small
+        // positive eccentricity where the ellipse can rotate smoothly.
+        const MIN_ECCEN_GUESS: f64 = 1.0e-4;
         let mut params: [f64; NPARAM] = [
             kepler.incl.to_degrees(),
-            kepler.eccen,
+            kepler.eccen.max(MIN_ECCEN_GUESS),
             kepler.raan.to_degrees(),
             kepler.argp.to_degrees(),
             kepler.mean_motion() * 60.0 * 60.0 * 24.0 / (2.0 * std::f64::consts::PI),
@@ -696,12 +703,13 @@ mod tests {
             assert!((back.eccen - tle.eccen).abs() < 1e-7);
             assert!(back.eccen >= 0.0);
         }
-        // A circular geosynchronous arc: SGP4's deep-space resonance model
-        // floors the 24 h fit at ~7 km RMS (an independent scaled-LM
-        // reference lands at 6.9 km from the same seed), so only the sign of
-        // the eccentricity is asserted here.
-        let (tle, _result, _rms) = fit_hifi_arc(crate::consts::GEO_R, 15.0, 0.0, 24.0, None)?;
+        // A circular geosynchronous arc. Seeded at e = 0 exactly this used to
+        // stall at ~7 km RMS against the e = 0 singularity (it looked like a
+        // deep-space model floor); from the positive-e seed it fits to
+        // ~650 m.
+        let (tle, _result, rms) = fit_hifi_arc(crate::consts::GEO_R, 15.0, 0.0, 24.0, None)?;
         assert!(tle.eccen >= 0.0, "negative eccentricity: {}", tle.eccen);
+        assert!(rms < 1500.0, "GEO fit RMS {rms} m too large");
         // Slightly eccentric seed fits well already; must not regress.
         let (tle, _result, rms) = fit_hifi_arc(r0, 97.0, 1e-3, 24.0, None)?;
         assert!(tle.eccen >= 0.0);
