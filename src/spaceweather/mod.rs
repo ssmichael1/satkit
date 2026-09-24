@@ -1,3 +1,9 @@
+pub mod assemble;
+pub mod cssi;
+pub mod gfz;
+pub mod msafe;
+pub mod swpc;
+
 use std::cmp::Ordering;
 use std::path::PathBuf;
 
@@ -62,8 +68,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// sentinel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpaceWeatherDataType {
-    /// `OBS` — measured.
+    /// Measured and definitive (`OBS` in `SW-All.csv`; GFZ `D = 2`).
     Observed,
+    /// Measured but still preliminary — GFZ's `D = 0`, replaced by a
+    /// definitive value once it is available. `SW-All.csv` has no equivalent.
+    ObservedPreliminary,
     /// `INT` — interpolated across a gap in the measured record.
     Interpolated,
     /// `PRD` — daily prediction (NOAA/SWPC 45-day forecast). Kp/ap present.
@@ -89,13 +98,15 @@ impl SpaceWeatherDataType {
     /// Whether the row is a measurement (`OBS` or `INT`) rather than a
     /// prediction.
     pub fn is_observed(&self) -> bool {
-        matches!(self, Self::Observed | Self::Interpolated)
+        matches!(
+            self,
+            Self::Observed | Self::ObservedPreliminary | Self::Interpolated
+        )
     }
 
-    /// Whether the row carries 3-hourly and daily geomagnetic values.
-    /// False for [`PredictedMonthly`](Self::PredictedMonthly), whose
-    /// `kp`/`ap` fields are all `-1`.
-    pub fn has_geomagnetic(&self) -> bool {
+    /// Whether the row is at daily cadence — measured, interpolated or the
+    /// daily forecast — as opposed to a monthly row.
+    pub fn is_daily(&self) -> bool {
         !matches!(self, Self::PredictedMonthly | Self::Unknown)
     }
 
@@ -103,6 +114,7 @@ impl SpaceWeatherDataType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Observed => "OBS",
+            Self::ObservedPreliminary => "OBS-P",
             Self::Interpolated => "INT",
             Self::PredictedDaily => "PRD",
             Self::PredictedMonthly => "PRM",
@@ -188,19 +200,16 @@ pub struct SpaceWeatherRecord {
     pub f10p7_adj_l81: f64,
 }
 
-fn str2num<T: core::str::FromStr>(
-    s: &str,
-    sidx: usize,
-    eidx: usize,
-    field: &'static str,
-) -> Result<T> {
-    s.chars()
-        .skip(sidx)
-        .take(eidx - sidx)
-        .collect::<String>()
-        .trim()
-        .parse()
-        .map_err(|_| Error::InvalidNumber(field))
+impl SpaceWeatherRecord {
+    /// Whether this row carries geomagnetic data NRLMSISE-00 can use.
+    ///
+    /// False when the daily Ap is the `-1` sentinel — CelesTrak's monthly
+    /// predicted rows — in which case the model falls back to a quiet-time
+    /// `Ap = 4`. MSAFE monthly rows carry a climatological Ap and return
+    /// true.
+    pub fn has_geomagnetic(&self) -> bool {
+        self.ap_avg >= 0
+    }
 }
 
 impl PartialEq for SpaceWeatherRecord {
@@ -227,72 +236,6 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
     }
 }
 
-/// Parse a `SW-All.csv` text buffer into space-weather records.
-fn parse_csv(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
-    text.lines()
-        .skip(1)
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| -> Result<SpaceWeatherRecord> {
-            let lvals: Vec<&str> = line.split(",").collect();
-            // The record reads fixed column indices up to 30; bail on a
-            // truncated line rather than panicking on out-of-bounds indexing.
-            if lvals.len() < 31 {
-                return Err(Error::InvalidEntry);
-            }
-
-            let year: u32 = str2num(lvals[0], 0, 4, "year")?;
-            let mon: u32 = str2num(lvals[0], 5, 7, "month")?;
-            let day: u32 = str2num(lvals[0], 8, 10, "day of month")?;
-
-            Ok(SpaceWeatherRecord {
-                date: (Instant::from_date(year as i32, mon as i32, day as i32)?),
-                bsrn: lvals[1].parse().unwrap_or(-1),
-                nd: lvals[2].parse().unwrap_or(-1),
-                kp: {
-                    let mut kparr: [i32; 8] = [-1, -1, -1, -1, -1, -1, -1, -1];
-                    for idx in 0..8 {
-                        kparr[idx] = lvals[idx + 3].parse().unwrap_or(-1);
-                    }
-                    kparr
-                },
-                kp_sum: lvals[11].parse().unwrap_or(-1),
-                ap: {
-                    let mut aparr: [i32; 8] = [-1, -1, -1, -1, -1, -1, -1, -1];
-                    for idx in 0..8 {
-                        aparr[idx] = lvals[12 + idx].parse().unwrap_or(-1)
-                    }
-                    aparr
-                },
-                ap_avg: lvals[20].parse().unwrap_or(-1),
-                cp: lvals[21].parse().unwrap_or(-1.0),
-                c9: lvals[22].parse().unwrap_or(-1),
-                isn: lvals[23].parse().unwrap_or(-1),
-                f10p7_obs: lvals[24].parse().unwrap_or(-1.0),
-                f10p7_adj: lvals[25].parse().unwrap_or(-1.0),
-                data_type: SpaceWeatherDataType::parse(lvals[26]),
-                f10p7_obs_c81: lvals[27].parse().unwrap_or(-1.0),
-                f10p7_obs_l81: lvals[28].parse().unwrap_or(-1.0),
-                f10p7_adj_c81: lvals[29].parse().unwrap_or(-1.0),
-                f10p7_adj_l81: lvals[30].parse().unwrap_or(-1.0),
-            })
-        })
-        .collect()
-}
-
-/// Check that the file at `path` is a parsable `SW-All.csv`, without touching
-/// the loaded records. Same role as
-/// [`earth_orientation_params::validate_file`](crate::earth_orientation_params::validate_file):
-/// let the downloader reject a proxy notice page or a truncated transfer
-/// before it replaces a good file on disk.
-pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    match parse_csv(&text) {
-        Ok(rows) if rows.is_empty() => Err("the file holds no space-weather rows".to_string()),
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("not a parsable SW-All.csv ({e})")),
-    }
-}
-
 fn load_default_path() -> Result<PathBuf> {
     // Found in any search directory, else downloaded into the write location.
     Ok(crate::utils::datadir::path_for("SW-All.csv")?)
@@ -302,7 +245,14 @@ fn load_default_path() -> Result<PathBuf> {
 fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
     let path = load_default_path()?;
     download_if_not_exist(&path, Some("https://celestrak.org/SpaceData/"))?;
-    parse_csv(&std::fs::read_to_string(&path)?)
+    cssi::parse_csv(&std::fs::read_to_string(&path)?)
+}
+
+/// UTC day number of the last day of the month containing `date`.
+pub(crate) fn month_end_day(date: Instant) -> i64 {
+    let (y, m, _, _, _, _) = date.as_datetime();
+    let (ny, nm) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+    Instant::from_date(ny, nm, 1).unwrap().utc_day_number() - 1
 }
 
 /// Module-scope refreshable singleton. The lazy default load (best-effort,
@@ -325,7 +275,7 @@ static NOT_LOADED_WARNING_SHOWN: std::sync::atomic::AtomicBool =
 /// previously loaded data — space-weather records update daily and the
 /// refresh-in-place semantics are intentional.
 pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
-    SPACE_WEATHER.set(parse_csv(std::str::from_utf8(bytes)?)?);
+    SPACE_WEATHER.set(cssi::parse_csv(std::str::from_utf8(bytes)?)?);
     Ok(())
 }
 
@@ -334,7 +284,7 @@ pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
 /// Same semantics as [`init_from_bytes`] but reads the file from disk.
 /// Always replaces any previously loaded data.
 pub fn init_from_path(path: &std::path::Path) -> Result<()> {
-    SPACE_WEATHER.set(parse_csv(&std::fs::read_to_string(path)?)?);
+    SPACE_WEATHER.set(cssi::parse_csv(&std::fs::read_to_string(path)?)?);
     Ok(())
 }
 
@@ -353,7 +303,7 @@ fn ensure_default_loaded() {
         };
         if path.is_file() {
             if let Ok(text) = std::fs::read_to_string(&path) {
-                if let Ok(records) = parse_csv(&text) {
+                if let Ok(records) = cssi::parse_csv(&text) {
                     if !records.is_empty() {
                         SPACE_WEATHER.set(records);
                     }
@@ -413,7 +363,7 @@ fn coverage_of(sw: &[SpaceWeatherRecord]) -> Option<SpaceWeatherCoverage> {
     let last_daily = sw
         .iter()
         .rev()
-        .find(|r| r.data_type.has_geomagnetic())
+        .find(|r| r.data_type.is_daily())
         .unwrap_or(last_observed);
     Some(SpaceWeatherCoverage {
         first: first.date,
@@ -538,7 +488,7 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
 
     // A monthly-predicted row carries no geomagnetic data at all: every
     // kp/ap field is -1, so NRLMSISE-00 falls back to a quiet-time Ap = 4.
-    if !rec.data_type.has_geomagnetic() && !MONTHLY_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+    if !rec.has_geomagnetic() && !MONTHLY_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
         eprintln!(
             "Warning: the space-weather record for {tm} is a monthly prediction ({}); it \
              carries F10.7 but no Kp/ap, so NRLMSISE-00 runs on a quiet-time Ap = 4 with no \
@@ -611,7 +561,7 @@ mod tests {
             rows.push_str(&f.join(","));
             rows.push('\n');
         }
-        let recs = parse_csv(&rows).unwrap();
+        let recs = cssi::parse_csv(&rows).unwrap();
         let got: Vec<SpaceWeatherDataType> = recs.iter().map(|r| r.data_type).collect();
         assert_eq!(
             got,
@@ -626,9 +576,9 @@ mod tests {
         assert!(recs[0].data_type.is_observed());
         assert!(recs[1].data_type.is_observed());
         assert!(!recs[2].data_type.is_observed());
-        // Only the monthly rows lack geomagnetic data.
-        assert!(recs[2].data_type.has_geomagnetic());
-        assert!(!recs[3].data_type.has_geomagnetic());
+        // Only the monthly rows are off daily cadence.
+        assert!(recs[2].data_type.is_daily());
+        assert!(!recs[3].data_type.is_daily());
     }
 
     /// Build a synthetic table: OBS days 1-3, PRD day 4, PRM day 5.
@@ -652,7 +602,7 @@ mod tests {
     #[test]
     fn test_coverage_and_status_boundaries() {
         // Pure core, so the shared singleton is left alone.
-        let sw = parse_csv(&synthetic_table()).unwrap();
+        let sw = cssi::parse_csv(&synthetic_table()).unwrap();
         let c = coverage_of(&sw).unwrap();
         let d = |n| Instant::from_date(2023, 11, n).unwrap();
         assert_eq!(c.first, d(1));
@@ -690,7 +640,7 @@ mod tests {
             rows.push_str(&f.join(","));
             rows.push('\n');
         }
-        let sw = parse_csv(&rows).unwrap();
+        let sw = cssi::parse_csv(&rows).unwrap();
         let c = coverage_of(&sw).unwrap();
         assert_eq!(c.last_observed, c.last_daily);
         assert_eq!(c.last_daily, c.last);
@@ -701,7 +651,7 @@ mod tests {
         // A truncated data line (fewer than the required fields) must return a
         // clean error rather than panicking on out-of-bounds indexing.
         let csv = "HEADER\n2023-11-14,1,2,3\n";
-        assert!(matches!(parse_csv(csv), Err(Error::InvalidEntry)));
+        assert!(matches!(cssi::parse_csv(csv), Err(Error::InvalidEntry)));
     }
 
     #[test]
@@ -713,7 +663,7 @@ mod tests {
             row.push_str(",0");
         }
         let csv = format!("HEADER\n{row}\n\n");
-        let recs = parse_csv(&csv).unwrap();
+        let recs = cssi::parse_csv(&csv).unwrap();
         assert_eq!(recs.len(), 1);
     }
 }

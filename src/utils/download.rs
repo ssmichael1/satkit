@@ -543,7 +543,7 @@ fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
     }
     match name {
         "EOP-All.csv" | "finals2000A.all" => crate::earth_orientation_params::validate_file(path),
-        "SW-All.csv" => crate::spaceweather::validate_file(path),
+        "SW-All.csv" => crate::spaceweather::cssi::validate_file(path),
         _ => Ok(()),
     }
 }

@@ -1,0 +1,187 @@
+//! NASA MSFC Marshall Solar Activity Future Estimation (MSAFE) — the monthly
+//! forecast.
+//!
+//! The long-range source: monthly 13-month-smoothed F10.7 **and Ap** for the
+//! balance of the current solar cycle plus a mean cycle beyond it, each with
+//! 95 / 50 / 5 percentile bands. US Government work, public domain. This is
+//! what Orekit consumes through `MarshallSolarActivityFutureEstimation`, and
+//! what CelesTrak's monthly rows lack: they carry F10.7 only, which is why
+//! satkit used to fall back to a quiet-time `Ap = 4` past the daily data.
+//!
+//! The record fed to NRLMSISE-00 uses the 50 % (median) band. The full
+//! forecast, with both bands, is kept on [`Forecast`] for lifetime studies
+//! that want to bracket rather than point-estimate.
+//!
+//! Published at
+//! <https://www.nasa.gov/solar-cycle-progression-and-forecast/archived-forecast/>.
+
+use super::{Error, Result, SpaceWeatherDataType, SpaceWeatherRecord};
+use crate::Instant;
+
+/// One month of the MSAFE forecast, with its percentile bands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MsafeMonth {
+    /// First day of the month.
+    pub date: Instant,
+    /// F10.7 at the 95th / 50th / 5th percentile, sfu.
+    pub f107: [f64; 3],
+    /// Daily Ap at the 95th / 50th / 5th percentile.
+    pub ap: [f64; 3],
+}
+
+/// The parsed MSAFE table.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Forecast {
+    pub months: Vec<MsafeMonth>,
+}
+
+pub(super) fn month_number(name: &str) -> Option<i32> {
+    Some(match name.to_ascii_uppercase().as_str() {
+        "JAN" => 1,
+        "FEB" => 2,
+        "MAR" => 3,
+        "APR" => 4,
+        "MAY" => 5,
+        "JUN" => 6,
+        "JUL" => 7,
+        "AUG" => 8,
+        "SEP" => 9,
+        "OCT" => 10,
+        "NOV" => 11,
+        "DEC" => 12,
+        _ => return None,
+    })
+}
+
+/// Parse an MSAFE `*f10-prd.txt` (or older `*f10.txt`) table.
+///
+/// Data rows look like
+/// ` 2026.5837   AUG   138.2     126.1     113.9      19.8      15.0      10.1`
+/// — decimal year, month name, then F10.7 and Ap at 95 / 50 / 5 %. Header and
+/// caption lines are skipped by shape.
+pub fn parse(text: &str) -> Result<Forecast> {
+    let mut months = Vec::new();
+    for line in text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() != 8 {
+            continue;
+        }
+        let Ok(decimal_year) = f[0].parse::<f64>() else {
+            continue;
+        };
+        let Some(month) = month_number(f[1]) else {
+            continue;
+        };
+        let num = |s: &str| -> Result<f64> {
+            s.parse::<f64>()
+                .map_err(|_| Error::InvalidNumber("msafe value"))
+        };
+        // The decimal year is mid-month-ish; the integer part is the year
+        // (Dec 2026 = 2026.917, Jan 2027 = 2027.000).
+        let year = decimal_year.floor() as i32;
+        months.push(MsafeMonth {
+            date: Instant::from_date(year, month, 1)?,
+            f107: [num(f[2])?, num(f[3])?, num(f[4])?],
+            ap: [num(f[5])?, num(f[6])?, num(f[7])?],
+        });
+    }
+    if months.is_empty() {
+        return Err(Error::InvalidEntry);
+    }
+    months.sort_by(|a, b| a.date.partial_cmp(&b.date).unwrap());
+    Ok(Forecast { months })
+}
+
+impl Forecast {
+    /// Monthly records for the space-weather table, from the 50 % band.
+    ///
+    /// Ap fills all eight 3-hourly slots (a smoothed climatology has no
+    /// intra-day structure), Kp is not provided and stays `-1`, Cp/C9 come
+    /// from the Bartels table on `8 × Ap`, and F10.7 is used for both the
+    /// observed and 1 AU-adjusted fields — the ±3 % seasonal adjustment is
+    /// below the resolution of a 13-month-smoothed climatology, and
+    /// NRLMSISE-00 reads the observed value.
+    pub fn records(&self) -> Vec<SpaceWeatherRecord> {
+        self.months
+            .iter()
+            .map(|m| {
+                let ap = m.ap[1].round() as i32;
+                let (cp, c9) = super::gfz::cp_c9(8 * ap);
+                SpaceWeatherRecord {
+                    date: m.date,
+                    bsrn: -1,
+                    nd: -1,
+                    data_type: SpaceWeatherDataType::PredictedMonthly,
+                    kp: [-1; 8],
+                    kp_sum: -1,
+                    ap: [ap; 8],
+                    ap_avg: ap,
+                    cp,
+                    c9,
+                    isn: -1,
+                    f10p7_obs: m.f107[1],
+                    f10p7_adj: m.f107[1],
+                    f10p7_obs_c81: -1.0,
+                    f10p7_obs_l81: -1.0,
+                    f10p7_adj_c81: -1.0,
+                    f10p7_adj_l81: -1.0,
+                }
+            })
+            .collect()
+    }
+}
+
+/// Check that the file at `path` parses as an MSAFE table.
+pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    parse(&text)
+        .map(|_| ())
+        .map_err(|e| format!("not a parsable MSAFE table ({e})"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE: &str = "\
+  TABLE 3 ESTIMATES OF 13-MONTH SMOOTH SOLAR ACTIVITY FOR
+  BALANCE OF CYCLE 25 WITH A MEAN CYCLE GIVEN FOR CYCLE 26
+
+    TIME         10.7 CM SOLAR FLUX   (F10.7)      GEOMAGNETIC INDEX   (Ap)
+                         PERCENTILE                    PERCENTILE
+                  95.0%       50%      5.0%     95.0%       50%      5.0% 
+
+ 2026.9170   DEC   135.1     117.3     105.8      21.7      15.7      11.7
+ 2027.0003   JAN   132.1     115.5     103.0      22.3      16.0      11.4
+ 2026.5837   AUG   138.2     126.1     113.9      19.8      15.0      10.1
+";
+
+    #[test]
+    fn test_parse_and_sort() {
+        let f = parse(SAMPLE).unwrap();
+        assert_eq!(f.months.len(), 3);
+        // sorted, and the year boundary handled by the integer part
+        assert_eq!(f.months[0].date, Instant::from_date(2026, 8, 1).unwrap());
+        assert_eq!(f.months[1].date, Instant::from_date(2026, 12, 1).unwrap());
+        assert_eq!(f.months[2].date, Instant::from_date(2027, 1, 1).unwrap());
+        assert_eq!(f.months[0].f107, [138.2, 126.1, 113.9]);
+        assert_eq!(f.months[0].ap, [19.8, 15.0, 10.1]);
+    }
+
+    #[test]
+    fn test_records_carry_ap() {
+        // The whole point: monthly rows with geomagnetic data.
+        let r = parse(SAMPLE).unwrap().records();
+        assert_eq!(r[0].data_type, SpaceWeatherDataType::PredictedMonthly);
+        assert_eq!(r[0].ap_avg, 15);
+        assert_eq!(r[0].ap, [15; 8]);
+        assert!(r[0].has_geomagnetic());
+        assert_eq!(r[0].f10p7_obs, 126.1);
+        assert_eq!(r[0].kp_sum, -1);
+    }
+
+    #[test]
+    fn test_empty_is_error() {
+        assert!(parse("no data here\n").is_err());
+    }
+}
