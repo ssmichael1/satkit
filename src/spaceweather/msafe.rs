@@ -142,6 +142,7 @@ pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), S
 }
 
 /// NASA's URL for the forecast issued in a given month.
+#[cfg(feature = "download")]
 fn nasa_url(year: i32, month: i32) -> String {
     const MON: [&str; 12] = [
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
@@ -160,6 +161,9 @@ fn nasa_url(year: i32, month: i32) -> String {
 /// an issue). The copy on disk is kept under one stable name; its
 /// `.http-cache` sidecar carries the age gate, so a copy checked within the
 /// last week is reported current with no request.
+///
+/// Without the `download` feature this is [`Error::FeatureDisabled`](download::Error::FeatureDisabled).
+#[cfg(feature = "download")]
 pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome> {
     use download::{read_refresh_marker, write_refresh_marker};
     let dest = dir.join(super::MSAFE_FILE);
@@ -209,6 +213,11 @@ pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome>
                 .to_string(),
         ),
     })
+}
+
+#[cfg(not(feature = "download"))]
+pub fn refresh_into(_dir: &Path, _force: bool) -> download::Result<RefreshOutcome> {
+    Err(download::Error::FeatureDisabled)
 }
 
 #[cfg(test)]
