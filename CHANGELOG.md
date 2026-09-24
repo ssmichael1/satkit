@@ -2,7 +2,7 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.23.0 - 2026-09-24
 
 ### Added
 
@@ -11,13 +11,14 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Changed
 
+- Lockfile refreshed for the release (4 minor crate updates, no new dependencies) ([#204](https://github.com/ssmichael1/satkit/pull/204))
 - **Breaking (Rust):** `tle::Error` is `#[non_exhaustive]`, like `kepler::Error`, `omm::Error` and `download::Error`: downstream matches need a wildcard arm, so the variants 0.22.1 added (and future ones) land without breaking compiles ([#203](https://github.com/ssmichael1/satkit/pull/203))
 - **Breaking:** the `solar_cycle_forecast` module, `spaceweather.predicted_f107()` and the `predicted-solar-cycle.json` download are removed: the NOAA/SWPC solar-cycle JSON was the density model's fallback for dates past the space-weather record, and with MSAFE in the table it was no longer reached. `update_datafiles()` no longer fetches it ([#203](https://github.com/ssmichael1/satkit/pull/203))
 - **Breaking:** the default gravity model is EGM2008 (was EGM96) and the gravity degree/order cap is 70 (was 40; the compiled-in models were already stored to degree 70, so nothing new is downloaded). Propagations that relied on the default model shift by a few metres per day at LEO and centimetres at GPS; pass `gravity_model=gravmodel.egm96` to reproduce old results. Degree 41–70 is worth tens of metres per day at 400 km and a few metres at 800 km; each acceleration costs about 3× the degree-40 one ([#201](https://github.com/ssmichael1/satkit/pull/201))
 - **Breaking:** ITU_GRACE16 is no longer compiled in — its CC BY 4.0 licence attached to the library and every package built from it — but stays available as `gravmodel.itugrace16`: the 1.8 MB file is downloaded (SHA-256 verified) on first use, so selecting it offline with no copy on disk is now a `RuntimeError` / `orbitprop::Error::Gravity` at `propagate` entry rather than working from the embedded copy; `THIRDPARTY-DATA.md` lists only public-domain and IERS data ([#196](https://github.com/ssmichael1/satkit/pull/196), [#183](https://github.com/ssmichael1/satkit/issues/183))
 - Solid Earth tides are tide-system aware: for a zero-tide gravity model (`jgm3`, `itugrace16`) the propagator removes the permanent tide (IERS 2010 Eq. 6.13, A₀H₀k₂₀ = −4.201e-9 in C̄20) from the Step 1 correction instead of counting it twice — J2-only EGM96 vs JGM3 over a day at 500 km with tides on goes from 8.5 m to 5 cm; results with `tidemodel.none`, and with the tide-free `egm96` / `egm2008` / `jgm2`, are unchanged ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195))
 - The ICGEM `.gfc` parser accepts Fortran `D` exponents (EGM2008's `1.0d0` row, the GGM05 headers) and Latin-1 headers, reads ICGEM 2.0 `gfct` rows as the static field at the reference epoch and skips the `trnd` / `asin` / `acos` / `dot` time-variable rows, which it used to read as coefficients ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195))
-- EOP and space-weather refreshes follow [CelesTrak's usage policy](https://celestrak.org/usage-policy.php) instead of re-downloading the whole 1957-to-present table on every call: `utils::refresh_file` makes no request while the local copy is inside the file's publication cadence (3 h for `SW-All.csv`, 24 h for the EOP file, `finals2000A.all` or `EOP-All.csv`) and a conditional `If-Modified-Since` request outside it, so an unchanged file costs a `304`; `update_datafiles(overwrite=True)` still forces a full fetch. CI stopped refreshing in the test jobs entirely (every EOP test works from the table's own bounds) and the docs/release workflows only refresh a cached copy over a week old, down from ~12 full-file downloads per push; `python/test/download_data.py` now identifies itself instead of sending `python-requests/x.y` ([#199](https://github.com/ssmichael1/satkit/pull/199))
+- EOP and space-weather refreshes follow [CelesTrak's usage policy](https://celestrak.org/usage-policy.php) instead of re-downloading the whole 1957-to-present table on every call: `utils::refresh_file` makes no request while the local copy is inside the file's publication cadence (3 h for the space-weather file, 24 h for the EOP file, `finals2000A.all` or `EOP-All.csv`) and a conditional `If-Modified-Since` request outside it, so an unchanged file costs a `304`; `update_datafiles(overwrite=True)` still forces a full fetch. CI stopped refreshing in the test jobs entirely (every EOP test works from the table's own bounds) and the docs/release workflows only refresh a cached copy over a week old, down from ~12 full-file downloads per push; `python/test/download_data.py` now identifies itself instead of sending `python-requests/x.y` ([#199](https://github.com/ssmichael1/satkit/pull/199))
 - Earth orientation parameters are now read from the IERS Bulletin A combined file `finals2000A.all` (fetched from the USNO mirror, then the IERS data centre), with CelesTrak's `EOP-All.csv` as the fallback when both mirrors are unreachable and still read when present; when both files are on disk the one whose observed record runs later is used, with the CSV's 1962–1972 rows kept in front of the IERS table. The IERS file carries about a year of predictions instead of six months, so the silent constant extrapolation past the table end starts later. The source order is the manifest's new `eop` section; `earth_orientation_params::source()` / `satkit.frametransform.eop_source()` report which file is loaded, and `earth_orientation_params::refresh_into` / `load_from_dir` expose the refresh and load steps. A data directory that only holds `EOP-All.csv` keeps working ([#198](https://github.com/ssmichael1/satkit/pull/198), [#164](https://github.com/ssmichael1/satkit/issues/164))
 
 ### Deprecated
@@ -136,41 +137,3 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - HTTP requests send a descriptive `satkit/<version>` User-Agent; a CelesTrak 503/403 from `TLE.from_url` / `omm_from_url` now explains CelesTrak's throttling of repeated identical queries instead of a bare status code; the TLE, OMM and Optical Observations tutorials fall back to a pinned element set when the live fetch is unavailable, so the docs build no longer depends on CelesTrak ([#144](https://github.com/ssmichael1/satkit/pull/144))
 - Python `kepler.mean_anomaly` setter no longer hangs on NaN or `eccen >= 1` (delegates to the core capped solver); `from_pv` extracts inclination and the anomalies with `atan2` (exact down to i = 1e-9 rad, e ≤ 0.999); constructor accepts keyword arguments matching the stub (`a, eccen, incl, raan, w, nu`), `propagate` accepts `int` seconds, and a new [Keplerian Elements guide](https://satkit.dev/guide/kepler/) ([#146](https://github.com/ssmichael1/satkit/pull/146))
 - Drag: NRLMSISE-00 was given geodetic latitude/longitude in radians instead of degrees (pointwise density error up to +200 %, ~6 % of the 3-day drag displacement at ISS altitude); the space-weather feed now follows the NRLMSISE-00 interface (observed rather than 1 AU-adjusted F10.7, current-day daily Ap); Python `propagate(..., satproperties=None)` is accepted; eight 3-day drag cases (constant and CelesTrak-file space weather, 250–550 km) added to the GMAT regression corpus with the measured floors documented in `tests/gmat/README.md` ([#150](https://github.com/ssmichael1/satkit/pull/150))
-
-## 0.21.0 - 2026-08-30
-
-### Added
-
-- **Experimental:** ECOM (Empirical CODE Orbit Model) solar-radiation-pressure model — reduced/ECOM1/ECOM2 coefficients in the DYB frame, Rust (`EcomParams`, `SatProperties::srp_ecom`) and Python (`ecomparams`, `satproperties(ecom=...)`), with a GPS SP3 fit/prediction tutorial; the interface may change in a minor release ([#131](https://github.com/ssmichael1/satkit/pull/131))
-- Static data files are downloaded from a manifest pinned to the release (`data/manifest.json`, SHA-256 verified), trying GitHub release assets, then the origin servers (JPL, IERS), then the GCS bucket; `SATKIT_DATA_URL` overrides the source for mirrors ([#137](https://github.com/ssmichael1/satkit/pull/137))
-- GMAT regression corpus: 17 seven-day reference trajectories (LEO to cislunar; `j2`/`full`/`gr` force models) replayed and gated under `cargo test` and `pytest`; regenerate with `tests/gmat/generate.py` ([#127](https://github.com/ssmichael1/satkit/pull/127))
-- EOP coverage is visible and enforceable: `earth_orientation_params::{coverage, status}` (Python `frametransform.eop_coverage()` / `eop_status()`), one-time warnings past the table end or with no table, and `PropSettings::require_eop_coverage` ([#133](https://github.com/ssmichael1/satkit/pull/133))
-- `frametransform::ierstable::preload()`; a missing `tab5.2*.txt` now raises `RuntimeError` in Python instead of `PanicException` ([#133](https://github.com/ssmichael1/satkit/pull/133))
-- Python test pinning the EME2000 frame bias (23.1 mas) against IERS 2010 values ([#132](https://github.com/ssmichael1/satkit/pull/132))
-
-### Changed
-
-- **Breaking (Python packaging):** core data (IERS tables, gravity models to degree 70) is compiled in and the JPL ephemeris downloads on first use (SHA-256 verified) into the platform user-data directory, so `satkit-data` is no longer a dependency (optional: `pip install satkit[data]`); `SATKIT_OFFLINE=1` / `utils.set_offline()` forbid network access, and read-only or missing data locations are typed errors ([#139](https://github.com/ssmichael1/satkit/pull/139))
-- Propagator's GCRF→ITRF table now uses the full IAU 2006/2000A chain instead of the ~1″ IAU-76 approximation; removes an inclination-dependent drift of ~50 m over 7 days at LEO versus GMAT ([#127](https://github.com/ssmichael1/satkit/pull/127))
-- Relativistic correction now includes geodesic precession and Lense–Thirring (all three IERS 2010 Eq. 10.12 terms); shifts results by ≤ 1 m over 7 days at 200,000 km, cm at LEO. **Breaking (Rust):** `Precomputed::interp` returns the named struct `InterpSample` instead of a tuple ([#129](https://github.com/ssmichael1/satkit/pull/129))
-- **Breaking:** gravity degree/order above 40 is rejected (`Error::InvalidGravityDegree`, Python `ValueError`) instead of being silently evaluated at 40 ([#130](https://github.com/ssmichael1/satkit/pull/130))
-- `Precomputed` table size is capped (`Error::PrecomputeTooLarge`) and non-finite padding rejected, instead of allocating gigabytes ([#130](https://github.com/ssmichael1/satkit/pull/130))
-- A propagation with no EOP table loaded fails with `Error::EopUnavailable` instead of running with zero polar motion and UT1−UTC ([#133](https://github.com/ssmichael1/satkit/pull/133))
-- Data downloads use `https://celestrak.org` and validate manifest paths and URLs ([#130](https://github.com/ssmichael1/satkit/pull/130))
-- numeris 0.5.14 → 0.5.18: the adaptive Runge–Kutta integrators no longer abort at shadow-boundary kinks on eclipsing arcs ([#128](https://github.com/ssmichael1/satkit/pull/128)) ([#135](https://github.com/ssmichael1/satkit/pull/135))
-
-- **Cannonball SRP acts along the satellite→Sun line** rather than the
-  geocentric Sun direction (a ~1e-4 rad difference at LEO). `test_gps`
-  residual 1.7997 → 1.7868 m.
-
-### Fixed
-
-- SP3 epochs are read as GPS time, not UTC (18 s error) in `test_gps`, `sp3file.py` and the validation script — `test_gps` residual 1.80 → 1.21 m; cannonball SRP now acts along the satellite→Sun line; `jgm3`/`itugrace16` documented as zero-tide models ([#131](https://github.com/ssmichael1/satkit/pull/131))
-- `import satkit` no longer fails when the optional `satkit_data` bundle is installed as a namespace package (the conda layout, no `__init__.py`): its `data/` directory is discovered via `__path__` ([#140](https://github.com/ssmichael1/satkit/pull/140))
-- References page rebuilt as a full bibliography and every guide, API page and tutorial now cites its primary source; wrong SGP4 (AIAA 2006-6753), JGM-3 DOI and box-wing citations corrected; drag gate, Lambert multi-revolution, leap-second and GR descriptions brought in line with the code; RK stage counts corrected (RKV98 is 21 stages) ([#136](https://github.com/ssmichael1/satkit/pull/136))
-- Frame-bias docs: `EME2000` is 23.1 mas from GCRF (docs said 17); GMAT's `EarthMJ2000Eq` is an IAU-76 realization ~44 mas from ICRF, not the constant bias ([#132](https://github.com/ssmichael1/satkit/pull/132))
-- Doc fixes: Gauss–Jackson dense-output note, dual licence in crate docs, CONTRIBUTING versions/paths, gravity degree limit in `docs/index.md`, leap-second table described as compiled in ([#130](https://github.com/ssmichael1/satkit/pull/130))
-
-### CI
-
-- Published wheels are import-tested by cibuildwheel; the NOAA network test is `#[ignore]`d and run explicitly; `doc = false` on the extension crate so `cargo doc --workspace` builds ([#130](https://github.com/ssmichael1/satkit/pull/130))
