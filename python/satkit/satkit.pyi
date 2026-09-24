@@ -3729,7 +3729,7 @@ class ecomparams:
     harmonic terms. The coefficients are normally *estimated* in orbit
     determination; satkit propagates with the values you supply.
 
-    Coefficients (all accelerations in m/s²; typical GPS sizes in nm/s²):
+    Coefficients (all accelerations in m/s² at 1 AU; typical GPS sizes in nm/s²):
 
         d0        e_D (toward Sun), constant, all models      -80 to -110 (negative)
         y0        e_Y (solar-panel axis), constant, all       ~1  (attitude/thermal Y-bias)
@@ -3751,20 +3751,24 @@ class ecomparams:
 
     Model::
 
-        a = ν · [ D(φ)·e_D + Y(φ)·e_Y + B(φ)·e_B ]
+        a = ν · (AU / d)² · [ D(φ)·e_D + Y(φ)·e_Y + B(φ)·e_B ]
         D(φ) = d0 + dc cos φ + ds sin φ + d2c cos 2φ + d2s sin 2φ + d4c cos 4φ + d4s sin 4φ
         Y(φ) = y0 + yc cos φ + ys sin φ
         B(φ) = b0 + bc cos φ + bs sin φ
 
     where ``ν`` is the Earth-shadow factor applied to all three axes (the
     CODE/Bernese convention: the whole ECOM acceleration is switched off in
-    umbra) and ``φ`` is the argument of
+    umbra), ``d`` is the satellite-Sun distance, and ``φ`` is the argument of
     latitude ``u`` when ``sun_relative`` is False (ECOM1) or ``Δu``, measured
     from orbit noon, when True (ECOM2).
 
     Because ``e_D`` points *at* the Sun, the physical ``d0`` is negative:
     about -1e-7 m/s² for a GPS satellite; ``y0`` and the B terms are ~1e-9.
-    All coefficients are in m/s².
+    All coefficients are in m/s² referred to 1 AU and scaled by ``(AU / d)²``
+    like the cannonball pressure, so ``d0 = -consts.solar_pressure_1au * craoverm``
+    reproduces the cannonball term. Coefficients estimated with software that
+    applies them unscaled convert by multiplying by ``(d / AU)²`` at the arc
+    epoch. satkit 0.23.1 and earlier applied them unscaled.
 
     Attach to a propagation via ``satproperties(ecom=...)``. The ECOM
     acceleration is added to the cannonball term, so use ``craoverm=0`` for
@@ -3799,7 +3803,7 @@ class ecomparams:
         d4s: float = 0.0,
         sun_relative: bool = False,
     ) -> None:
-        """Create ECOM coefficients (m/s²); all default to zero.
+        """Create ECOM coefficients (m/s² at 1 AU); all default to zero.
 
         Args:
             d0, y0, b0 (float): constant D, Y, B terms
