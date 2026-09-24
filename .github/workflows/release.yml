@@ -180,7 +180,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.2.0
+        uses: pypa/cibuildwheel@v4.2.1
         with:
           package-dir: .
           output-dir: wheelhouse
