@@ -159,6 +159,7 @@ fn settings_for(fm: &ForceModel) -> PropSettings {
         "JGM3" => GravityModel::JGM3,
         "JGM2" => GravityModel::JGM2,
         "ITUGrace16" => GravityModel::ITUGrace16,
+        "EGM2008" => GravityModel::EGM2008,
         other => panic!("unknown gravity_model {other:?}"),
     };
     let tide_model = match fm.tides.as_str() {

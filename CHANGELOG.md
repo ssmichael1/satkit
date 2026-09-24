@@ -2,6 +2,22 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
+## Unreleased
+
+### Added
+
+- EGM2008 gravity model (`GravityModel::EGM2008` / `gravmodel.egm2008`, Pavlis et al. 2012, public domain), compiled in to degree 70 like EGM96 / JGM2 / JGM3; `Gravity::tide_system` and `earthgravity::TideSystem` record each model's permanent-tide convention from the ICGEM `tide_system` header or, for the headerless JGM files, from the C20 value; `earthgravity::ensure_loaded` / `is_loaded` load a model with a typed error instead of a panic ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195), [#183](https://github.com/ssmichael1/satkit/issues/183))
+
+### Changed
+
+- **Breaking:** ITU_GRACE16 is no longer compiled in — its CC BY 4.0 licence attached to the library and every package built from it — but stays available as `gravmodel.itugrace16`: the 1.8 MB file is downloaded (SHA-256 verified) on first use, so selecting it offline with no copy on disk is now a `RuntimeError` / `orbitprop::Error::Gravity` at `propagate` entry rather than working from the embedded copy; `THIRDPARTY-DATA.md` lists only public-domain and IERS data ([#196](https://github.com/ssmichael1/satkit/pull/196), [#183](https://github.com/ssmichael1/satkit/issues/183))
+- Solid Earth tides are tide-system aware: for a zero-tide gravity model (`jgm3`, `itugrace16`) the propagator removes the permanent tide (IERS 2010 Eq. 6.13, A₀H₀k₂₀ = −4.201e-9 in C̄20) from the Step 1 correction instead of counting it twice — J2-only EGM96 vs JGM3 over a day at 500 km with tides on goes from 8.5 m to 5 cm; results with `tidemodel.none`, and with the tide-free `egm96` / `egm2008` / `jgm2`, are unchanged ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195))
+- The ICGEM `.gfc` parser accepts Fortran `D` exponents (EGM2008's `1.0d0` row, the GGM05 headers) and Latin-1 headers, reads ICGEM 2.0 `gfct` rows as the static field at the reference epoch and skips the `trnd` / `asin` / `acos` / `dot` time-variable rows, which it used to read as coefficients ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195))
+
+### Docs
+
+- Force-model guide: JGM2 is tide-free, not zero-tide (its C20 is EGM96's to 1e-10); the gravity-model table now lists each model's tide system and how it is provided, and the tide-system note describes the automatic handling ([#196](https://github.com/ssmichael1/satkit/pull/196))
+
 ## 0.22.1 - 2026-09-20
 
 ### Changed

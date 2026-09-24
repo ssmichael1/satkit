@@ -567,31 +567,47 @@ class gravmodel:
     Earth gravity models available for use
 
     For details, see: <http://icgem.gfz-potsdam.de/>
+
+    ``egm96``, ``egm2008``, ``jgm2`` and ``jgm3`` are compiled into satkit
+    (to degree 70) and need no data directory or network; ``itugrace16``
+    is downloaded on first use. Each model's tide system (tide-free or
+    zero-tide C20) is read when it is loaded and the propagator's
+    ``tidemodel.solid_step1`` correction accounts for it, so any model can
+    be combined with any tide model without double-counting the permanent
+    tide.
     """
 
     jgm3: ClassVar[gravmodel]
     """
-    The "JGM3" gravity model (zero-tide C20).
-
-    Combining a zero-tide model with ``tidemodel.solid_step1`` (which
-    includes the permanent tide) double-counts the permanent tide; use
-    ``egm96`` with tides on, or ``tidemodel.none`` with this model.
+    The "JGM3" gravity model, Tapley et al. (1996). Zero-tide C20.
+    Compiled in.
     """
 
     jgm2: ClassVar[gravmodel]
     """
-    The "JGM2" gravity model (tide-free C20, like ``egm96``).
+    The "JGM2" gravity model, Nerem et al. (1994). Tide-free C20.
+    Compiled in.
     """
 
     egm96: ClassVar[gravmodel]
     """
-    The "EGM96" gravity model (tide-free C20). Default for the orbit
-    propagator, and the model to use with ``tidemodel.solid_step1``.
+    The "EGM96" gravity model, Lemoine et al. (1998). Tide-free C20.
+    Compiled in. Default for the orbit propagator.
     """
 
     itugrace16: ClassVar[gravmodel]
     """
-    The ITU GRACE16 gravity model (zero-tide C20; see ``jgm3``).
+    The ITU_GRACE16 gravity model, Akyilmaz et al. (2016), a GRACE-only
+    satellite solution. Zero-tide C20. Licensed CC BY 4.0, so it is not
+    compiled in: the coefficient file (1.8 MB) is downloaded into the data
+    directory on first use, and selecting it offline raises
+    ``RuntimeError``. Results derived from it should cite the model.
+    """
+
+    egm2008: ClassVar[gravmodel]
+    """
+    The "EGM2008" gravity model, Pavlis et al. (2012). Tide-free C20.
+    Compiled in (truncated to degree 70).
     """
 
 def nrlmsise00(

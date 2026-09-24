@@ -155,6 +155,14 @@ pub enum Error {
     /// while building a [`Precomputed`](crate::orbitprop::Precomputed) table.
     #[error(transparent)]
     FrameTransform(#[from] crate::frametransform::Error),
+
+    /// The gravity model selected in [`PropSettings`](crate::orbitprop::PropSettings)
+    /// could not be loaded — for a model fetched on demand (ITU_GRACE16),
+    /// typically because satkit is offline. Raised by
+    /// [`earthgravity::ensure_loaded`](crate::earthgravity::ensure_loaded)
+    /// at [`propagate`](crate::orbitprop::propagate) entry.
+    #[error(transparent)]
+    Gravity(#[from] crate::earthgravity::Error),
 }
 
 impl From<ode::OdeError> for Error {

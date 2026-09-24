@@ -123,9 +123,11 @@ fn download_refresh_files(dir: &std::path::Path) -> Result<()> {
 /// first working source (`SATKIT_DATA_URL` mirror if set, then the GitHub
 /// release asset, the origin server, and the legacy bucket) and is only
 /// accepted when its size and SHA-256 match the manifest. The IERS nutation
-/// tables and gravity coefficients are compiled into the library and not
-/// downloaded (their manifest entries are `default: false`, still fetchable
-/// by name); a copy placed in a search directory takes precedence.
+/// tables and the EGM96 / EGM2008 / JGM2 / JGM3 gravity coefficients are
+/// compiled into the library and not downloaded (their manifest entries are
+/// `default: false`, still fetchable by name); ITU_GRACE16 is fetched only
+/// when that model is first used. A copy placed in a search directory takes
+/// precedence.
 ///
 /// The space weather and Earth orientation files are refreshed from
 /// celestrak on every call, and the NOAA solar-cycle forecast is fetched;

@@ -30,15 +30,31 @@ fn offline_gravity_acceleration() {
     // ~ GM / r^2 = 3.986e14 / (7e6)^2 = 8.13 m/s^2
     assert!((mag - 8.135).abs() < 0.02, "|a| = {mag}");
     assert!(a[0] < 0.0, "points toward Earth");
-    // All four models must be available without a data directory.
+    // The compiled-in models must be available without a data directory.
     for model in [
         GravityModel::JGM3,
         GravityModel::JGM2,
-        GravityModel::ITUGrace16,
+        GravityModel::EGM2008,
     ] {
         let b = earthgravity::accel(&pos_itrf, 12, 12, model);
         assert!((b.norm() - mag).abs() < 0.01, "{model:?}");
     }
+}
+
+/// ITU_GRACE16 (CC BY 4.0) is not compiled in: offline, with no copy in a
+/// data directory, selecting it is a typed error at `propagate` entry and
+/// from `ensure_loaded`, not a panic.
+#[test]
+fn offline_itu_grace16_is_typed_error() {
+    if !offline_env() || satkit::utils::find_data_file("ITU_GRACE16.gfc").is_some() {
+        // A developer machine may have a network, or a downloaded copy in
+        // the platform data directory (searched even with SATKIT_DATA set).
+        return;
+    }
+    let err = earthgravity::ensure_loaded(GravityModel::ITUGrace16).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("ITU_GRACE16.gfc"), "{msg}");
+    assert!(!earthgravity::is_loaded(GravityModel::ITUGrace16));
 }
 
 /// The IERS 2010 nutation / CIO tables load from the compiled-in copies, and

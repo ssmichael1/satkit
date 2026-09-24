@@ -18,8 +18,10 @@ pub enum Error {
     #[error("Failed to open gravity model file: {0}")]
     OpenFailed(#[source] std::io::Error),
 
-    /// Bytes passed to [`Gravity::from_bytes`] were not valid UTF-8 — the
-    /// ICGEM `.gfc` gravity-model file is a text format.
+    /// No longer returned: [`Gravity::from_bytes`] decodes non-UTF-8 bytes
+    /// (some ICGEM headers are Latin-1) lossily, since only the ASCII header
+    /// keywords and coefficient rows are read. Retained so the variant set
+    /// stays stable.
     #[error("gravity-model byte buffer is not valid UTF-8: {0}")]
     Utf8(#[from] std::str::Utf8Error),
 
@@ -76,18 +78,48 @@ pub const MAX_GRAVITY_DEGREE: u16 = 40;
 
 use std::sync::OnceLock;
 
+/// Parse a number that may use a Fortran `D` exponent (`1.0d0`,
+/// `0.3986004415D+15`), as EGM2008 and the GGM05 files do.
+fn parse_f64(tok: &str) -> std::result::Result<f64, ParseFloatError> {
+    tok.parse::<f64>().or_else(|e| {
+        if tok.contains(['d', 'D']) {
+            tok.replace(['d', 'D'], "e").parse::<f64>()
+        } else {
+            Err(e)
+        }
+    })
+}
+
 ///
 /// Gravity model enumeration
 ///
 /// For details of models, see:
 /// <http://icgem.gfz-potsdam.de/tom_longtime>
 ///
+/// EGM96, EGM2008, JGM2 and JGM3 are compiled into the library (truncated
+/// to degree 70, above the evaluator's cap of 40) and need no data
+/// directory or network. ITU_GRACE16 is fetched on first use through the
+/// SHA-256-verified data manifest (its licence is CC BY 4.0, so it is not
+/// redistributed inside the library); see [`ensure_loaded`].
+///
+/// Each model's tide system (see [`TideSystem`]) is recorded on load and the
+/// propagator's solid-tide correction accounts for it, so any model can be
+/// combined with any [`TideModel`](crate::orbitprop::TideModel).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum GravityModel {
+    /// Joint Gravity Model 3 (Tapley et al. 1996). Zero-tide. Compiled in.
     JGM3,
+    /// Joint Gravity Model 2 (Nerem et al. 1994). Tide-free. Compiled in.
     JGM2,
+    /// Earth Gravitational Model 1996 (Lemoine et al. 1998). Tide-free.
+    /// Compiled in. The default for the orbit propagator.
     EGM96,
+    /// ITU_GRACE16 (Akyilmaz et al. 2016), a GRACE-only satellite solution.
+    /// Zero-tide. Downloaded on first use (CC BY 4.0).
     ITUGrace16,
+    /// Earth Gravitational Model 2008 (Pavlis et al. 2012). Tide-free.
+    /// Compiled in.
+    EGM2008,
 }
 
 impl std::fmt::Display for GravityModel {
@@ -97,19 +129,144 @@ impl std::fmt::Display for GravityModel {
             Self::JGM2 => write!(f, "JGM2"),
             Self::EGM96 => write!(f, "EGM96"),
             Self::ITUGrace16 => write!(f, "ITU_GRACE16"),
+            Self::EGM2008 => write!(f, "EGM2008"),
         }
     }
 }
 
 impl GravityModel {
-    /// Get the singleton Gravity instance for this model
+    /// Get the singleton Gravity instance for this model.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the model's coefficient file cannot be loaded (for
+    /// ITU_GRACE16: cannot be downloaded, e.g. offline). Call
+    /// [`ensure_loaded`] first to get a typed error instead.
     pub fn get(&self) -> &'static Gravity {
-        match self {
-            Self::JGM3 => jgm3(),
-            Self::JGM2 => jgm2(),
-            Self::EGM96 => egm96(),
-            Self::ITUGrace16 => itu_grace16(),
+        ensure_loaded(*self).unwrap_or_else(|e| {
+            let fname = default_filename(*self);
+            panic!(
+                "Failed to load Earth gravity model {self:?} from \"{fname}\": {e}. \
+                 Ensure the data files are present (set the SATKIT_DATA environment \
+                 variable to your data directory, or run \
+                 satkit::utils::update_datafiles to download them)."
+            )
+        })
+    }
+}
+
+/// Permanent-tide convention of a gravity model's C̄20 coefficient
+/// (IERS Conventions 2010, §6.2.2 and §1.1).
+///
+/// The Sun and Moon raise a *permanent* deformation of the Earth whose
+/// contribution to C̄20 is A₀H₀k₂₀ ≈ −4.2×10⁻⁹. A **zero-tide** model keeps
+/// that deformation in its coefficients (what a satellite actually senses);
+/// a **tide-free** model has it removed with a conventional k₂₀. A
+/// **mean-tide** model additionally keeps the direct tidal potential of
+/// the bodies (A₀H₀ ≈ −1.4×10⁻⁸); it is a geoid convention and is not used
+/// for orbit propagation, where the third-body force already supplies the
+/// direct potential.
+///
+/// The IERS Step 1 solid-tide correction
+/// ([`TideModel::SolidStep1`](crate::orbitprop::TideModel::SolidStep1))
+/// includes the permanent tide, so it is only complete on a tide-free
+/// model; for a zero-tide (or mean-tide) model the propagator removes the
+/// permanent part from the correction
+/// ([`tides::remove_permanent_tide`](crate::orbitprop::tides::remove_permanent_tide))
+/// instead of double-counting it. The coefficients themselves are never
+/// modified, so with tides off every model propagates exactly as published.
+///
+/// Read from the ICGEM `tide_system` header when present; otherwise
+/// classified from the C̄20 value (see [`TideSystem::classify_c20`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum TideSystem {
+    /// Permanent tide removed from C̄20 (ICGEM `tide_free`).
+    TideFree,
+    /// Permanent deformation retained in C̄20 (ICGEM `zero_tide`).
+    ZeroTide,
+    /// Permanent deformation and direct permanent potential retained
+    /// (ICGEM `mean_tide`). Not appropriate for orbit propagation.
+    MeanTide,
+    /// No header and a C̄20 that is not Earth-like (a custom or non-Earth
+    /// model): treated as tide-free, i.e. the tide correction is applied
+    /// as published.
+    Unknown,
+}
+
+impl std::fmt::Display for TideSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::TideFree => "tide_free",
+            Self::ZeroTide => "zero_tide",
+            Self::MeanTide => "mean_tide",
+            Self::Unknown => "unknown",
+        })
+    }
+}
+
+/// Fully-normalized C̄20 midway between the tide-free value of EGM96
+/// (−4.84165372×10⁻⁴) and the zero-tide value of JGM3 / ITU_GRACE16
+/// (−4.84169548×10⁻⁴): the two conventions differ by the permanent tide,
+/// ≈4.2×10⁻⁹, so a headerless Earth model is classified by which side of
+/// this it falls on.
+const C20_TIDE_SYSTEM_THRESHOLD: f64 = -4.841675e-4;
+/// Half-width of the C̄20 band accepted as "Earth-like" for classification.
+/// Earth models agree to ~5×10⁻⁹; anything further off is a different body
+/// or a synthetic test model.
+const C20_EARTH_TOLERANCE: f64 = 1.0e-7;
+
+impl TideSystem {
+    /// Parse the value of an ICGEM `tide_system` header line. Accepts the
+    /// documented `tide_free` / `zero_tide` / `mean_tide` and the
+    /// space- or hyphen-separated spellings some files use (ITU_GRACE16
+    /// writes `zero tide`). Anything else is [`Unknown`](Self::Unknown).
+    pub fn from_header(value: &str) -> Self {
+        let norm: String = value
+            .trim()
+            .to_ascii_lowercase()
+            .chars()
+            .map(|c| {
+                if c == '-' || c.is_whitespace() {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .collect();
+        // Collapse runs of separators ("zero  tide" → "zero_tide").
+        let norm = norm
+            .split('_')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("_");
+        match norm.as_str() {
+            "tide_free" | "tidefree" => Self::TideFree,
+            "zero_tide" | "zerotide" => Self::ZeroTide,
+            "mean_tide" | "meantide" => Self::MeanTide,
+            _ => Self::Unknown,
         }
+    }
+
+    /// Classify a model without a `tide_system` header from its
+    /// fully-normalized C̄20. Returns [`Unknown`](Self::Unknown) when the
+    /// value is not within 1×10⁻⁷ of Earth's.
+    pub fn classify_c20(c20_normalized: f64) -> Self {
+        if !c20_normalized.is_finite()
+            || (c20_normalized - C20_TIDE_SYSTEM_THRESHOLD).abs() > C20_EARTH_TOLERANCE
+        {
+            Self::Unknown
+        } else if c20_normalized < C20_TIDE_SYSTEM_THRESHOLD {
+            Self::ZeroTide
+        } else {
+            Self::TideFree
+        }
+    }
+
+    /// `true` if the model's C̄20 already contains the permanent tidal
+    /// deformation, so a solid-tide correction that includes the permanent
+    /// tide must have that part removed.
+    pub const fn includes_permanent_tide(self) -> bool {
+        matches!(self, Self::ZeroTide | Self::MeanTide)
     }
 }
 
@@ -120,6 +277,7 @@ static JGM3_INSTANCE: OnceLock<Gravity> = OnceLock::new();
 static JGM2_INSTANCE: OnceLock<Gravity> = OnceLock::new();
 static EGM96_INSTANCE: OnceLock<Gravity> = OnceLock::new();
 static ITU_GRACE16_INSTANCE: OnceLock<Gravity> = OnceLock::new();
+static EGM2008_INSTANCE: OnceLock<Gravity> = OnceLock::new();
 
 fn instance_for(model: GravityModel) -> &'static OnceLock<Gravity> {
     match model {
@@ -127,6 +285,7 @@ fn instance_for(model: GravityModel) -> &'static OnceLock<Gravity> {
         GravityModel::JGM2 => &JGM2_INSTANCE,
         GravityModel::EGM96 => &EGM96_INSTANCE,
         GravityModel::ITUGrace16 => &ITU_GRACE16_INSTANCE,
+        GravityModel::EGM2008 => &EGM2008_INSTANCE,
     }
 }
 
@@ -138,52 +297,75 @@ const fn default_filename(model: GravityModel) -> &'static str {
         GravityModel::JGM2 => "JGM2.gfc",
         GravityModel::EGM96 => "EGM96.gfc",
         GravityModel::ITUGrace16 => "ITU_GRACE16.gfc",
+        GravityModel::EGM2008 => "EGM2008.gfc",
     }
 }
 
-/// Load a gravity model's coefficient file, or panic with an actionable
-/// message. These singletons back the `accel` hot path (and cannot return a
-/// `Result` without rippling through the propagator and Python bindings), so a
-/// missing data file — a setup error — fails loudly and clearly here rather
-/// than as an opaque `unwrap` panic.
-fn load_or_panic(model: GravityModel) -> Gravity {
-    let fname = default_filename(model);
-    Gravity::from_file(fname).unwrap_or_else(|e| {
-        panic!(
-            "Failed to load Earth gravity model {model:?} from \"{fname}\": {e}. \
-             Ensure the data files are present (set the SATKIT_DATA environment \
-             variable to your data directory, or run \
-             satkit::utils::update_datafiles to download them)."
-        )
-    })
+/// Load the singleton for `model` if it is not loaded yet, returning a
+/// typed error instead of panicking when its coefficient file is
+/// unavailable.
+///
+/// The compiled-in models (EGM96, EGM2008, JGM2, JGM3) always succeed.
+/// ITU_GRACE16 is fetched into the data directory on first use, so this
+/// fails with a [`download`](crate::utils::download::Error) error when
+/// offline (`SATKIT_OFFLINE=1`, a build without the `download` feature, or
+/// no network) and no copy is present in a data search directory.
+///
+/// [`propagate`](crate::orbitprop::propagate) calls this on entry, and the
+/// Python `gravity()` functions before evaluating; [`GravityModel::get`]
+/// and the module-level [`accel`] panic with the same message instead.
+pub fn ensure_loaded(model: GravityModel) -> Result<&'static Gravity> {
+    let lock = instance_for(model);
+    if let Some(g) = lock.get() {
+        return Ok(g);
+    }
+    let gravity = Gravity::from_file(default_filename(model))?;
+    // Two threads may both load; the first `set` wins and the other copy is
+    // dropped — both parsed the same bytes.
+    Ok(lock.get_or_init(|| gravity))
+}
+
+/// `true` if the singleton for `model` has been loaded (by any of
+/// [`ensure_loaded`], [`GravityModel::get`], [`init_from_bytes`] or
+/// [`init_from_path`]).
+pub fn is_loaded(model: GravityModel) -> bool {
+    instance_for(model).get().is_some()
 }
 
 ///
 /// Singleton for JGM3 gravity model
 ///
 pub fn jgm3() -> &'static Gravity {
-    JGM3_INSTANCE.get_or_init(|| load_or_panic(GravityModel::JGM3))
+    GravityModel::JGM3.get()
 }
 
 ///
 /// Singleton for JGM2 gravity model
 ///
 pub fn jgm2() -> &'static Gravity {
-    JGM2_INSTANCE.get_or_init(|| load_or_panic(GravityModel::JGM2))
+    GravityModel::JGM2.get()
 }
 
 ///
 /// Singleton for EGM96 gravity model
 ///
 pub fn egm96() -> &'static Gravity {
-    EGM96_INSTANCE.get_or_init(|| load_or_panic(GravityModel::EGM96))
+    GravityModel::EGM96.get()
 }
 
 ///
 /// Singleton for ITU GRACE16 gravity model
 ///
+/// Downloaded on first use; see [`ensure_loaded`] for the failure mode.
 pub fn itu_grace16() -> &'static Gravity {
-    ITU_GRACE16_INSTANCE.get_or_init(|| load_or_panic(GravityModel::ITUGrace16))
+    GravityModel::ITUGrace16.get()
+}
+
+///
+/// Singleton for EGM2008 gravity model
+///
+pub fn egm2008() -> &'static Gravity {
+    GravityModel::EGM2008.get()
 }
 
 /// Initialize the gravity-model singleton for `model` from an in-memory
@@ -285,6 +467,9 @@ pub struct Gravity {
     pub gravity_constant: f64,
     pub radius: f64,
     pub max_degree: usize,
+    /// Permanent-tide convention of the coefficients, from the file's
+    /// `tide_system` header or classified from C̄20 (see [`TideSystem`]).
+    pub tide_system: TideSystem,
     pub coeffs: CoeffTable,
     pub divisor_table: DivisorTable,
     pub divisor_table2: DivisorTable,
@@ -737,22 +922,33 @@ impl Gravity {
     /// Load gravity-model coefficients from a file at `path`. No download
     /// is attempted — the file is expected to already exist.
     pub fn from_path(path: &std::path::Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path).map_err(Error::OpenFailed)?;
-        Self::parse(&text)
+        let bytes = std::fs::read(path).map_err(Error::OpenFailed)?;
+        Self::from_bytes(&bytes)
     }
 
-    /// Load gravity-model coefficients from an in-memory byte buffer.
-    /// The buffer must be a valid ICGEM `.gfc` text file (UTF-8).
+    /// Load gravity-model coefficients from an in-memory byte buffer
+    /// holding an ICGEM `.gfc` text file. Non-UTF-8 bytes (some model
+    /// headers are Latin-1) are decoded lossily; only ASCII keywords and
+    /// numbers are read.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        Self::parse(std::str::from_utf8(bytes)?)
+        Self::parse(&String::from_utf8_lossy(bytes))
     }
 
     /// Parse gravity-model coefficients from an ICGEM `.gfc` text string.
+    ///
+    /// Reads the `modelname`, `earth_gravity_constant`, `radius`,
+    /// `max_degree` and `tide_system` header keywords, then the `gfc`
+    /// coefficient rows (and `gfct` rows, the static part of an ICGEM 2.0
+    /// time-variable model, taken at their reference epoch; the `trnd`,
+    /// `asin`, `acos` and `dot` rows describing the time variation are
+    /// skipped). Numbers may use Fortran `D` exponents (`1.0d0`). Any other
+    /// row keyword after `end_of_head` is an [`Error::InvalidLine`].
     pub fn parse(text: &str) -> Result<Self> {
         let mut name = String::new();
         let mut gravity_constant: f64 = 0.0;
         let mut radius: f64 = 0.0;
         let mut max_degree: usize = 0;
+        let mut tide_system: Option<TideSystem> = None;
 
         let mut lines = text.lines();
 
@@ -772,11 +968,13 @@ impl Gravity {
             if s[0] == "modelname" {
                 name = String::from(s[1]);
             } else if s[0] == "earth_gravity_constant" {
-                gravity_constant = s[1].parse::<f64>()?;
+                gravity_constant = parse_f64(s[1])?;
             } else if s[0] == "radius" {
-                radius = s[1].parse::<f64>()?;
+                radius = parse_f64(s[1])?;
             } else if s[0] == "max_degree" {
                 max_degree = s[1].parse::<usize>()?;
+            } else if s[0] == "tide_system" {
+                tide_system = Some(TideSystem::from_header(&s[1..].join(" ")));
             } else if s[0] == "end_of_head" {
                 break;
             }
@@ -798,7 +996,20 @@ impl Gravity {
             // the S coefficient is required only when m > 0. The tokens are
             // read one at a time so the lines beyond the stored degree, most
             // of a full-resolution file, cost only two integer parses.
-            let mut s = line.split_whitespace().skip(1);
+            let mut s = line.split_whitespace();
+            match s.next() {
+                // Blank line (e.g. a trailing newline).
+                None => continue,
+                // Static coefficients; `gfct` is the ICGEM 2.0 static part
+                // of a time-variable coefficient, valid at its reference
+                // epoch (the C and S columns are in the same positions).
+                Some("gfc" | "gfct") => {}
+                // ICGEM 2.0 time-variable terms: trend and periodic
+                // components. Not modelled; skipping them yields the
+                // field at the reference epoch.
+                Some("trnd" | "asin" | "acos" | "dot") => continue,
+                Some(_) => return Err(invalid()),
+            }
             let n: usize = s.next().ok_or_else(invalid)?.parse()?;
             let m: usize = s.next().ok_or_else(invalid)?.parse()?;
             // The gfc format requires order <= degree; a violating line would
@@ -812,11 +1023,36 @@ impl Gravity {
             if n >= table_dim {
                 continue;
             }
-            cs[(n, m)] = c.parse()?;
+            cs[(n, m)] = parse_f64(c)?;
             if m > 0 {
-                cs[(m - 1, n)] = s.next().ok_or_else(invalid)?.parse()?;
+                cs[(m - 1, n)] = parse_f64(s.next().ok_or_else(invalid)?)?;
             }
         }
+
+        // Tide system: the header wins; a file without one (JGM2, JGM3) is
+        // classified from its fully-normalized C̄20, read here before the
+        // denormalization below. A header that contradicts an Earth-like
+        // C̄20 is reported, since the propagator's tide handling depends on
+        // it (silenced with SATKIT_QUIET=1).
+        let c20 = if table_dim > 2 { cs[(2, 0)] } else { f64::NAN };
+        let by_value = TideSystem::classify_c20(c20);
+        let tide_system = match tide_system {
+            Some(declared) => {
+                if declared != TideSystem::Unknown
+                    && by_value != TideSystem::Unknown
+                    && declared != TideSystem::MeanTide
+                    && declared != by_value
+                    && std::env::var_os("SATKIT_QUIET").is_none()
+                {
+                    eprintln!(
+                        "Warning: gravity model {name:?} declares tide_system {declared} \
+                         but its C20 ({c20:e}) is a {by_value} value; using the header"
+                    );
+                }
+                declared
+            }
+            None => by_value,
+        };
 
         // Convert from normalized coefficients to actual coefficients
         for n in 0..table_dim {
@@ -857,6 +1093,7 @@ impl Gravity {
             gravity_constant,
             radius,
             max_degree,
+            tide_system,
             coeffs: cs,
             divisor_table: d1,
             divisor_table2: d2,
@@ -883,6 +1120,152 @@ gfc 0 0 1.0 0.0
 gfc 2 0 -4.841653e-4 0.0
 gfc 2 2 2.439383e-6 -1.400273e-6
 ";
+
+    #[test]
+    fn tide_system_from_header_spellings() {
+        for (s, want) in [
+            ("tide_free", TideSystem::TideFree),
+            ("zero_tide", TideSystem::ZeroTide),
+            ("zero tide", TideSystem::ZeroTide), // ITU_GRACE16 spelling
+            ("Zero-Tide", TideSystem::ZeroTide),
+            ("mean_tide", TideSystem::MeanTide),
+            ("unknown", TideSystem::Unknown),
+            ("", TideSystem::Unknown),
+        ] {
+            assert_eq!(TideSystem::from_header(s), want, "{s:?}");
+        }
+        let with = |v: &str| {
+            TINY_MODEL.replacen(
+                "max_degree 4\n",
+                &format!("max_degree 4\ntide_system {v}\n"),
+                1,
+            )
+        };
+        assert_eq!(
+            Gravity::parse(&with("zero tide")).unwrap().tide_system,
+            TideSystem::ZeroTide
+        );
+        assert_eq!(
+            Gravity::parse(&with("tide_free")).unwrap().tide_system,
+            TideSystem::TideFree
+        );
+        assert_eq!(
+            Gravity::parse(&with("mean_tide")).unwrap().tide_system,
+            TideSystem::MeanTide
+        );
+        assert!(TideSystem::MeanTide.includes_permanent_tide());
+        assert!(TideSystem::ZeroTide.includes_permanent_tide());
+        assert!(!TideSystem::TideFree.includes_permanent_tide());
+        assert!(!TideSystem::Unknown.includes_permanent_tide());
+    }
+
+    #[test]
+    fn tide_system_classified_from_c20_without_header() {
+        // TINY_MODEL has no tide_system line and EGM96's C20 → tide-free.
+        assert_eq!(
+            Gravity::parse(TINY_MODEL).unwrap().tide_system,
+            TideSystem::TideFree
+        );
+        // JGM3's C20 (4.2e-9 more negative) → zero-tide.
+        let zt = TINY_MODEL.replace("-4.841653e-4", "-4.841695e-4");
+        assert_eq!(
+            Gravity::parse(&zt).unwrap().tide_system,
+            TideSystem::ZeroTide
+        );
+        // A C20 that is not Earth's (a synthetic or non-Earth body) → unknown.
+        let other = TINY_MODEL.replace("-4.841653e-4", "-2.0e-4");
+        assert_eq!(
+            Gravity::parse(&other).unwrap().tide_system,
+            TideSystem::Unknown
+        );
+        // A model that stops below degree 2 has no C20 to classify.
+        let deg1 = "modelname t\nearth_gravity_constant 3.986e14\nradius 6378136.3\nmax_degree 1\nend_of_head\ngfc 0 0 1.0 0.0\n";
+        assert_eq!(
+            Gravity::parse(deg1).unwrap().tide_system,
+            TideSystem::Unknown
+        );
+        assert_eq!(
+            TideSystem::classify_c20(-4.84165371736e-4),
+            TideSystem::TideFree
+        );
+        assert_eq!(
+            TideSystem::classify_c20(-4.84169548456e-4),
+            TideSystem::ZeroTide
+        );
+    }
+
+    #[test]
+    fn builtin_models_tide_systems() {
+        // Header-declared: EGM96 / EGM2008 tide_free. Headerless, by value:
+        // JGM2 tide-free, JGM3 zero-tide. (The forces guide once listed
+        // JGM2 as zero-tide; its C20 says otherwise.)
+        assert_eq!(egm96().tide_system, TideSystem::TideFree);
+        assert_eq!(egm2008().tide_system, TideSystem::TideFree);
+        assert_eq!(jgm2().tide_system, TideSystem::TideFree);
+        assert_eq!(jgm3().tide_system, TideSystem::ZeroTide);
+        // ITU_GRACE16 is downloaded on demand; only check it when available.
+        if let Ok(g) = ensure_loaded(GravityModel::ITUGrace16) {
+            assert_eq!(g.tide_system, TideSystem::ZeroTide);
+            assert!(is_loaded(GravityModel::ITUGrace16));
+        }
+    }
+
+    #[test]
+    fn parse_fortran_d_exponents() {
+        // EGM2008 writes its C00 row as `1.0d0`; GGM05 uses D in the header.
+        let txt = TINY_MODEL
+            .replace(
+                "earth_gravity_constant 3.986004415e14",
+                "earth_gravity_constant 0.3986004415D+15",
+            )
+            .replace("gfc 0 0 1.0 0.0", "gfc 0 0 1.0d0 0.0d0");
+        let g = Gravity::parse(&txt).unwrap();
+        assert_eq!(g.gravity_constant, 3.986004415e14);
+        assert_eq!(g.coeffs[(0, 0)], 1.0);
+        assert!(Gravity::parse(&TINY_MODEL.replace("gfc 0 0 1.0 0.0", "gfc 0 0 abc 0.0")).is_err());
+    }
+
+    #[test]
+    fn parse_icgem2_time_variable_rows() {
+        // `gfct` is the static part (read); trnd/asin/acos describe the
+        // time variation (skipped); anything else is an error.
+        let txt = format!(
+            "{TINY_MODEL}gfct 3 0 9.5e-7 0.0 0.0 0.0 20050101.0000\n\
+             trnd 3 0 1.0e-11 0.0 0.0 0.0\n\
+             asin 3 0 2.0e-11 0.0 0.0 0.0 1.0\n\
+             acos 3 0 3.0e-11 0.0 0.0 0.0 1.0\n\n"
+        );
+        let g = Gravity::parse(&txt).unwrap();
+        let g0 = Gravity::parse(TINY_MODEL).unwrap();
+        assert!(g.coeffs[(3, 0)] != 0.0, "gfct row read as a coefficient");
+        assert_eq!(g.coeffs[(2, 0)], g0.coeffs[(2, 0)], "static rows untouched");
+        let bad = format!("{TINY_MODEL}bogus 3 0 1.0 0.0\n");
+        assert!(matches!(Gravity::parse(&bad), Err(Error::InvalidLine(_))));
+    }
+
+    #[test]
+    fn from_bytes_tolerates_latin1_header() {
+        // EIGEN-6C4's header carries a Latin-1 author name; only the ASCII
+        // keywords matter.
+        let mut bytes = b"modelname t\xe9st\n".to_vec();
+        bytes.extend_from_slice(TINY_MODEL.as_bytes());
+        assert!(Gravity::from_bytes(&bytes).is_ok());
+    }
+
+    #[test]
+    fn egm2008_agrees_with_egm96_at_low_degree() {
+        // The two NGA models agree at the 1e-9 level in the low-degree
+        // coefficients; at 400 km the degree-20 accelerations differ by
+        // well under 1e-6 relative.
+        let coord = ITRFCoord::from_geodetic_deg(35.0, -100.0, 400.0e3);
+        let a96 = egm96().accel(&coord.itrf, 20, 20);
+        let a08 = egm2008().accel(&coord.itrf, 20, 20);
+        let rel = (a96 - a08).norm() / a96.norm();
+        assert!(rel < 1.0e-6, "EGM96 vs EGM2008 relative difference {rel:e}");
+        assert!(rel > 0.0, "the two models are not identical");
+        assert_eq!(egm2008().name, "EGM2008");
+        assert_eq!(GravityModel::EGM2008.to_string(), "EGM2008");
+    }
 
     #[test]
     fn test_parse_rejects_order_above_degree() {

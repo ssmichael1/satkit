@@ -30,13 +30,38 @@ def _offline_env() -> bool:
 def test_gravity_acceleration_all_models():
     pos = np.array([7000.0e3, 0.0, 0.0])
     ref = None
-    for model in (sk.gravmodel.egm96, sk.gravmodel.jgm3, sk.gravmodel.jgm2, sk.gravmodel.itugrace16):
+    for model in (sk.gravmodel.egm96, sk.gravmodel.egm2008, sk.gravmodel.jgm3, sk.gravmodel.jgm2):
         a = sk.gravity(pos, model=model, degree=20)
         mag = np.linalg.norm(a)
         assert abs(mag - 8.135) < 0.02, (model, mag)  # ~GM/r^2
         assert a[0] < 0.0
         ref = ref or mag
         assert abs(mag - ref) < 0.01
+
+
+def _itugrace16_on_disk() -> bool:
+    # The platform data directory is searched even with SATKIT_DATA set, so a
+    # developer machine that has downloaded the file once cannot test this.
+    return any(os.path.isfile(os.path.join(d, "ITU_GRACE16.gfc")) for d in sk.utils.data_search_dirs())
+
+
+@pytest.mark.skipif(
+    not _offline_env() or _itugrace16_on_disk(),
+    reason="only meaningful with SATKIT_OFFLINE=1 and no ITU_GRACE16.gfc in any search directory",
+)
+def test_itugrace16_offline_is_typed_error():
+    # ITU_GRACE16 (CC BY 4.0) is downloaded on first use, not compiled in.
+    pos = np.array([7000.0e3, 0.0, 0.0])
+    with pytest.raises(RuntimeError, match="ITU_GRACE16.gfc"):
+        sk.gravity(pos, model=sk.gravmodel.itugrace16, degree=20)
+    settings = sk.propsettings(gravity_model=sk.gravmodel.itugrace16)
+    with pytest.raises(RuntimeError, match="ITU_GRACE16.gfc"):
+        sk.propagate(
+            np.array([7000.0e3, 0.0, 0.0, 0.0, 7546.0, 0.0]),
+            sk.time(2024, 1, 1, 0, 0, 0),
+            sk.time(2024, 1, 1, 1, 0, 0),
+            propsettings=settings,
+        )
 
 
 def test_iers_tables_and_precession_nutation():
