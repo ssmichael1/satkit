@@ -426,7 +426,6 @@ pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<St
     ))
 }
 
-#[cfg(feature = "download")]
 pub(crate) fn check_online(name: &str) -> Result<()> {
     if offline_requested() {
         return Err(offline_error(name, "SATKIT_OFFLINE is set"));
