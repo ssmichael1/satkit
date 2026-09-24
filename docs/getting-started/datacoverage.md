@@ -44,9 +44,9 @@ epoch falls in decides how much the density model actually knows:
 | daily predicted | NOAA/SWPC 45-day forecast | daily, ~45 days | — | daily $A_p$, held across the eight slots |
 | monthly predicted | NASA MSAFE | monthly, decades | — | daily $A_p$ (13-month-smoothed climatology), held across the eight slots |
 
-Through satkit 0.22.0 the table was CelesTrak's `SW-All.csv`, whose monthly
-rows carry $F_{10.7}$ but **no** geomagnetic data, so past the 45-day forecast
-NRLMSISE-00 silently fell back to a quiet-time $A_p = 4$. Geomagnetic activity
+Through satkit 0.22 the table was CelesTrak's merged space-weather file, whose
+monthly rows carry $F_{10.7}$ but **no** geomagnetic data, so past the 45-day
+forecast NRLMSISE-00 silently fell back to a quiet-time $A_p = 4$. Geomagnetic activity
 is not a small correction — taking the 2024-05-11 Gannon storm ($A_p = 271$)
 against 2024-05-14 ($A_p = 6$), with $F_{10.7}$ almost matched so the
 geomagnetic term is isolated:
@@ -69,7 +69,7 @@ quality, not just the row's origin.
 |---|---|---|
 | `"observed"` | on or before the last measured row | returns that day's record, with the 3-hourly $a_p$ history NRLMSISE-00 prefers |
 | `"predicted_daily"` | inside the SWPC 45-day forecast | returns the forecast row: daily $F_{10.7}$ and $A_p$ |
-| `"predicted_monthly"` | past the daily rows | returns that month's MSAFE row: smoothed $F_{10.7}$ and $A_p$. **One-time warning** only if the row has no $A_p$ (a hand-loaded `SW-All.csv`) |
+| `"predicted_monthly"` | past the daily rows | returns that month's MSAFE row: smoothed $F_{10.7}$ and $A_p$. **One-time warning** only if the row carries no $A_p$ (a table loaded from a file that lacks it) |
 | `"extrapolated"` | after the last row of the table | returns that row unchanged. **One-time warning** |
 | `"before_table"` | before 1932 | `RuntimeError` |
 | `"not_loaded"` | no table at all | `RuntimeError`, **one-time warning** |
@@ -104,8 +104,7 @@ the assembled series — a centred window reaches 40 days into the forecast —
 with the same convention as CelesTrak's published columns (mean over
 $[t-40, t+40]$ and $[t-80, t]$), which they reproduce to the rounding digit.
 
-`satkit.spaceweather.init_from_path()` loads a GFZ table or a CelesTrak
-`SW-All.csv` directly, for a comparison that must pin against the file another
-tool read. The MSAFE percentile bands are in the file but not yet exposed
+`satkit.spaceweather.init_from_path()` loads a GFZ table directly, for a
+comparison that must pin against one fixed input file. The MSAFE percentile bands are in the file but not yet exposed
 through the API. The warnings can be silenced with
 `satkit.spaceweather.disable_space_weather_time_warning()`.

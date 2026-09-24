@@ -166,8 +166,9 @@ fn download_refresh_files(
 /// when that model is first used. A copy placed in a search directory takes
 /// precedence.
 ///
-/// The space weather file is refreshed from celestrak, the Earth orientation
-/// file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
+/// The space-weather files are refreshed from their producers (GFZ, SWPC and
+/// MSAFE — see [`spaceweather::update`](crate::spaceweather::update)), the
+/// Earth orientation file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
 /// when both are unreachable — see
 /// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into));
 /// these change daily to monthly and are not pinned. The refresh respects each file's publication cadence: a copy
@@ -220,10 +221,11 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
     // Refresh the in-memory space-weather / EOP singletons from the files just
     // downloaded, so a process whose lazy first load failed (e.g. it started
     // before the data directory was populated) recovers without a restart.
-    let sw_path = downloaddir.join("SW-All.csv");
-    if sw_path.is_file() {
-        if let Err(e) = crate::spaceweather::init_from_path(&sw_path) {
-            eprintln!("Warning: could not load downloaded space-weather file: {e}");
+    if downloaddir.join(crate::spaceweather::GFZ_FILE).is_file()
+        || downloaddir.join(crate::spaceweather::CSSI_FILE).is_file()
+    {
+        if let Err(e) = crate::spaceweather::load_from_dir(&downloaddir) {
+            eprintln!("Warning: could not load the refreshed space-weather files: {e}");
         }
     }
     if let Err(e) = crate::earth_orientation_params::load_from_dir(&downloaddir) {
@@ -890,7 +892,7 @@ mod tests {
             );
         }
         assert!(dir.join("finals2000A.all").is_file() || dir.join("EOP-All.csv").is_file());
-        assert!(dir.join("SW-All.csv").is_file());
+        assert!(dir.join(crate::spaceweather::GFZ_FILE).is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

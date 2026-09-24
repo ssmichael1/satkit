@@ -11,8 +11,10 @@ downloaded on demand, not embedded; their sources and licences are listed in
 `data/README.md`. So is the optional ITU_GRACE16 gravity model (Akyilmaz et
 al. 2016, GFZ Data Services, CC BY 4.0): it is fetched, unmodified and with
 its attribution header, only when `gravmodel.itugrace16` is selected, and is
-not part of the library or its packages. Everything compiled in is a US
-Government work or an IERS table, freely redistributable.
+not part of the library or its packages; the same holds for the GFZ Potsdam
+space-weather record (Matzka et al. 2021, CC BY 4.0), fetched at runtime and
+never embedded. Everything compiled in is a US Government work or an IERS
+table, freely redistributable.
 
 ## EGM2008 gravity model — US Government work
 

@@ -79,13 +79,16 @@ pub enum Error {
 /// Convenient type alias used throughout the `spaceweather` module.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Provenance of a space-weather row, from the `F10.7_DATA_TYPE` column of
-/// `SW-All.csv` (the one-digit `Q` field in the fixed-width `.txt` twin).
+/// Provenance of a space-weather row: which of the three sources it came
+/// from (GFZ observed record, NOAA/SWPC 45-day forecast, NASA MSAFE monthly
+/// forecast) and, for GFZ, whether the value is definitive yet. For a
+/// CelesTrak `SW-All.csv` it is the `F10.7_DATA_TYPE` column (the one-digit
+/// `Q` field in the fixed-width `.txt` twin).
 ///
-/// The distinction matters for drag: only [`Observed`](Self::Observed) rows
-/// are measurements, and [`PredictedMonthly`](Self::PredictedMonthly) rows
-/// carry no geomagnetic data at all — every `kp`/`ap` field is the `-1`
-/// sentinel.
+/// The distinction matters for drag: only the observed variants are
+/// measurements, and [`PredictedMonthly`](Self::PredictedMonthly) rows have
+/// no 3-hourly structure — a single climatological daily Ap from MSAFE, or
+/// no geomagnetic data at all (every `kp`/`ap` field `-1`) from `SW-All.csv`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpaceWeatherDataType {
     /// Measured and definitive (`OBS` in `SW-All.csv`; GFZ `D = 2`).
@@ -153,15 +156,19 @@ pub enum SpaceWeatherStatus {
     /// After the last measured row, inside the daily predictions: F10.7 and
     /// the geomagnetic indices are the NOAA/SWPC 45-day forecast.
     PredictedDaily,
-    /// Past the daily predictions. Only monthly F10.7 is available; the
-    /// record returned is the most recent month's, and it carries **no**
-    /// geomagnetic data, so NRLMSISE-00 falls back to a quiet-time
-    /// `Ap = 4`. Density can be wrong by a factor of two during a storm.
+    /// Past the daily predictions, inside the MSAFE monthly forecast: the
+    /// record returned is that month's 13-month-smoothed F10.7 and
+    /// climatological daily Ap — the expected activity for that point in the
+    /// solar cycle, with no storm timing and no 3-hourly structure. (A
+    /// hand-loaded `SW-All.csv` carries **no** geomagnetic data here, so
+    /// NRLMSISE-00 falls back to a quiet-time `Ap = 4`, up to a factor of
+    /// two low in density during a storm; a one-time warning says so.)
     PredictedMonthly,
     /// After the last row of the table: that row's values are returned
     /// unchanged.
     Extrapolated,
-    /// Before the first row of the table (1957 for `SW-All.csv`).
+    /// Before the first row of the table (1932 for the GFZ record, 1957 for
+    /// `SW-All.csv`).
     BeforeTable,
     /// No space-weather table is loaded at all.
     NotLoaded,
@@ -274,10 +281,8 @@ fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
             .unwrap_or_else(|| "https://www-app3.gfz-potsdam.de/kp_index/".to_string());
         download_if_not_exist(&gfz_path, Some(&base))?;
     }
-    let observed = gfz::parse(&std::fs::read_to_string(&gfz_path)?)?;
-
-    // The two forecasts are best-effort: an observed-only table is still a
-    // table, and `status()` says where it ends.
+    // The two forecasts are best-effort: a failed fetch leaves an
+    // observed-only table.
     let swpc_path = path_for(SWPC_FILE)?;
     if !swpc_path.is_file() {
         if let Some(base) =
@@ -286,24 +291,61 @@ fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
             let _ = download_if_not_exist(&swpc_path, Some(&base));
         }
     }
-    let daily = std::fs::read_to_string(&swpc_path)
-        .ok()
-        .and_then(|s| swpc::parse(&s).ok())
-        .unwrap_or_default();
-
     let msafe_path = path_for(MSAFE_FILE)?;
     if !msafe_path.is_file() {
         if let Ok(dir) = datadir() {
             let _ = msafe::refresh_into(&dir, false);
         }
     }
-    let monthly = std::fs::read_to_string(&msafe_path)
+    assemble_from_paths(&gfz_path, &swpc_path, &msafe_path)
+}
+
+/// Assemble the table from the three source files on disk, no download.
+/// The GFZ record is required; the two forecasts are best-effort, since an
+/// observed-only table is still a table and `status()` says where it ends.
+fn assemble_from_paths(
+    gfz_path: &std::path::Path,
+    swpc_path: &std::path::Path,
+    msafe_path: &std::path::Path,
+) -> Result<Vec<SpaceWeatherRecord>> {
+    let observed = gfz::parse(&std::fs::read_to_string(gfz_path)?)?;
+    let daily = std::fs::read_to_string(swpc_path)
+        .ok()
+        .and_then(|s| swpc::parse(&s).ok())
+        .unwrap_or_default();
+    let monthly = std::fs::read_to_string(msafe_path)
         .ok()
         .and_then(|s| msafe::parse(&s).ok())
         .map(|f| f.records())
         .unwrap_or_default();
-
     Ok(assemble::assemble(observed, daily, monthly))
+}
+
+/// Assemble the table from the files in one directory, disk only: the three
+/// primary sources when the GFZ record is there, otherwise the CSSI table.
+fn assemble_from_dir(dir: &std::path::Path) -> Result<Vec<SpaceWeatherRecord>> {
+    let gfz_path = dir.join(GFZ_FILE);
+    if gfz_path.is_file() {
+        return assemble_from_paths(&gfz_path, &dir.join(SWPC_FILE), &dir.join(MSAFE_FILE));
+    }
+    let csv = dir.join(CSSI_FILE);
+    if csv.is_file() {
+        return cssi::parse_csv(&std::fs::read_to_string(&csv)?);
+    }
+    Err(Error::Io(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("no space-weather table in {}", dir.display()),
+    )))
+}
+
+/// Load the space-weather table from the files in `dir`, replacing any
+/// current contents. Disk only — nothing is downloaded. This is what
+/// [`update_datafiles`](crate::utils::update_datafiles) calls after
+/// refreshing into `dir`, so the in-memory table follows the files just
+/// written rather than whatever was loaded first.
+pub fn load_from_dir(dir: &std::path::Path) -> Result<()> {
+    SPACE_WEATHER.set(assemble_from_dir(dir)?);
+    Ok(())
 }
 
 /// Parse a space-weather text buffer, detecting the format from its first
@@ -452,8 +494,9 @@ fn coverage_of(sw: &[SpaceWeatherRecord]) -> Option<SpaceWeatherCoverage> {
 ///
 /// Useful before a long drag propagation: a result of
 /// [`SpaceWeatherStatus::PredictedMonthly`] means NRLMSISE-00 is running on
-/// a quiet-time `Ap = 4` with no storm information, and
-/// [`SpaceWeatherStatus::Extrapolated`] means the file should be refreshed.
+/// a smoothed monthly F10.7 and a climatological Ap with no storm
+/// information, and [`SpaceWeatherStatus::Extrapolated`] means the files
+/// should be refreshed.
 pub fn status<T: TimeLike>(tm: &T) -> SpaceWeatherStatus {
     let tm = tm.as_instant();
     let Some(c) = coverage() else {
@@ -481,14 +524,14 @@ fn status_in(c: &SpaceWeatherCoverage, tm: Instant) -> SpaceWeatherStatus {
 }
 
 ///
-/// Return full Space Weather record from Space Weather file,
-/// as a function of requested instant in time.
+/// Return the full space-weather record for the requested instant.
 ///
 /// Returns the record for the same day when present, otherwise the most
 /// recent prior record (no interpolation). For dates beyond the last record
-/// the final record is returned. Predicted rows may carry `-1`
-/// sentinel values in fields CelesTrak has not filled in; monthly
-/// predicted rows carry no geomagnetic data at all. See [`status`] and
+/// the final record is returned. Forecast rows carry `-1` in the fields
+/// their source does not publish — `kp` on every forecast row, `isn` on the
+/// whole default table (see [`gfz`]) — and the monthly rows of a hand-loaded
+/// `SW-All.csv` carry no geomagnetic data at all. See [`status`] and
 /// [`coverage`] to classify an epoch before relying on the result.
 ///
 /// # Arguments
@@ -501,7 +544,9 @@ fn status_in(c: &SpaceWeatherCoverage, tm: Instant) -> SpaceWeatherStatus {
 ///
 /// # Notes:
 ///
-/// * Space weather is updated daily in a file: SW-All.csv
+/// * The table is assembled from the three files named by [`GFZ_FILE`],
+///   [`SWPC_FILE`] and [`MSAFE_FILE`], refreshed by [`update`] or
+///   [`update_datafiles`](crate::utils::update_datafiles).
 pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     use std::sync::atomic::Ordering;
     let tm = tm.as_instant();
@@ -518,7 +563,8 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
                  defaults (F10.7 = F10.7A = 150, Ap = 4), which can be wrong by a factor of \
                  two in atmospheric density.\n\
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
-                 to download SW-All.csv, or set SATKIT_DATA to a directory containing it.\n\
+                 to download the space-weather files, or set SATKIT_DATA to a directory \
+                 containing them.\n\
                  To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
                  (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)"
             );
@@ -618,6 +664,44 @@ mod tests {
         let noon = Instant::from_datetime(2023, 11, 14, 12, 0, 0.0).unwrap();
         let late = Instant::from_datetime(2023, 11, 14, 23, 59, 50.0).unwrap();
         assert_eq!(get(&noon).unwrap().date, get(&late).unwrap().date);
+    }
+
+    /// `update_datafiles` reloads the singleton through `load_from_dir`: with
+    /// the GFZ record beside a stale cached CSSI file the primary sources win,
+    /// and the CSSI file is only read when no GFZ record is there.
+    #[test]
+    fn test_assemble_from_dir_prefers_primary_sources() {
+        let dir = std::env::temp_dir().join(format!("satkit_sw_dir_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let gfz = "# comment\n\
+2026 09 12 34588 34588.5 2633 11  1.333  2.333  2.333  2.000  1.667  1.333  1.000  0.667    5    9    9    7    6    5    4    3     6  92  109.9  111.8 2\n";
+        let mut csv = String::from("HEADER\n");
+        let mut f: Vec<String> = vec!["2023-11-01".to_string()];
+        f.extend((1..31).map(|i| {
+            if i == 26 {
+                "OBS".to_string()
+            } else {
+                "0".to_string()
+            }
+        }));
+        csv.push_str(&f.join(","));
+        csv.push('\n');
+        std::fs::write(dir.join(GFZ_FILE), gfz).unwrap();
+        std::fs::write(dir.join(CSSI_FILE), &csv).unwrap();
+
+        let recs = assemble_from_dir(&dir).unwrap();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].date, Instant::from_date(2026, 9, 12).unwrap());
+        assert_eq!(recs[0].isn, -1, "GFZ table leaves isn unset");
+
+        std::fs::remove_file(dir.join(GFZ_FILE)).unwrap();
+        let recs = assemble_from_dir(&dir).unwrap();
+        assert_eq!(recs[0].date, Instant::from_date(2023, 11, 1).unwrap());
+
+        std::fs::remove_file(dir.join(CSSI_FILE)).unwrap();
+        assert!(assemble_from_dir(&dir).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

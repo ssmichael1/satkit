@@ -42,7 +42,7 @@ def update_datafiles(**kwargs) -> None:
 
         - The space weather and Earth-orientation files follow `CelesTrak's
           usage policy <https://celestrak.org/usage-policy.php>`_ rather than
-          transferring the whole 1957-to-present table on every call: no
+          transferring the whole 1932-to-present table on every call: no
           request is made while the local copy is inside its publication
           cadence (3 h for the GFZ record, 24 h for the SWPC forecast and the Earth-orientation file, a week for MSAFE), and past
           that the request carries ``If-Modified-Since``, so an unchanged file

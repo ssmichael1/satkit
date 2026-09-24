@@ -1,7 +1,7 @@
 # Downloads and Refresh
 
 How `satkit` fetches the files it does not compile in, how each download is
-verified, how often the two daily tables are refreshed, and what happens when a
+verified, how often the Earth-orientation and space-weather tables are refreshed, and what happens when a
 fetch fails.
 
 ## Where the files come from, and how downloads are verified

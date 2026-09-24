@@ -12,6 +12,6 @@ Only the first block is measurement. Use
 relying on the result; see
 [Data coverage](../getting-started/datacoverage.md#space-weather-coverage) for
 what each regime does and does not know. [`init_from_path`][satkit.spaceweather.init_from_path]
-loads a file of your own, including CelesTrak's `SW-All.csv`.
+loads a GFZ table of your own.
 
 ::: satkit.spaceweather

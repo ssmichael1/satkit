@@ -520,8 +520,9 @@ fn reject_html(path: &Path) -> std::result::Result<(), String> {
 
 /// Check a freshly downloaded, *unverified* file before it replaces the copy
 /// on disk. The manifest-pinned files are covered by their SHA-256; these are
-/// the ones with nothing to compare against — so the daily CelesTrak feeds
-/// are parsed with the same parser that will later read them, and anything
+/// the ones with nothing to compare against — so the refreshed EOP and
+/// space-weather feeds are parsed with the same parser that will later read
+/// them, and anything
 /// else is at least checked for not being an HTML notice page.
 ///
 /// `name` is the file's base name; `path` is the completed `.part` file.
@@ -672,7 +673,7 @@ pub(crate) fn write_atomic_verified(
 ///   (release asset → origin → legacy bucket, SHA-256 verified). A name that
 ///   is not in the manifest falls back to an *unverified* fetch from the
 ///   legacy bucket, so user-supplied alternative files keep working.
-/// * With `seturl == Some(base)` (the celestrak space-weather refresh file)
+/// * With `seturl == Some(base)` (a refreshed feed on first use)
 ///   the file is fetched unverified from `base + name`, as before.
 #[cfg(feature = "download")]
 pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
@@ -903,9 +904,9 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
 }
 
 /// Refresh one of the periodically updated feeds (the GFZ and SWPC
-/// space-weather files, `finals2000A.all` and `EOP-All.csv` from
-/// CelesTrak, `finals2000A.all` from the IERS mirrors) into `downloaddir`,
-/// respecting the publication cadence.
+/// space-weather files, `finals2000A.all` from the IERS mirrors,
+/// `EOP-All.csv` from CelesTrak) into `downloaddir`, respecting the
+/// publication cadence.
 ///
 /// Unlike [`download_file`], which transfers the whole file on every call,
 /// this makes the smallest request that can still keep the local copy
@@ -917,9 +918,9 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
 ///    costs a `304` and no body ([`RefreshOutcome::NotModified`]);
 /// 3. only genuinely new bytes are transferred and installed.
 ///
-/// These files hold the whole record back to 1957 (several MB), so an
-/// unconditional re-fetch per run is exactly the pattern CelesTrak's usage
-/// policy asks clients to avoid. `force` skips both the age gate and the
+/// The GFZ and EOP files hold the whole record back to 1932 or 1962
+/// (several MB), so an unconditional re-fetch per run is exactly the pattern
+/// CelesTrak's usage policy asks clients to avoid. `force` skips both the age gate and the
 /// conditional header and always transfers the file.
 ///
 /// The freshness state lives in a `<name>.http-cache` sidecar next to the

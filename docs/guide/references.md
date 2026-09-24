@@ -341,9 +341,8 @@ code follows where that is useful.
 <a id="celestrak-spacedata"></a>
 - **CelesTrak Space Data** — <https://celestrak.org/SpaceData/>. Daily
   `EOP-All.csv` (Earth orientation parameters repackaged from the IERS
-  series, from 1962; satkit's fallback EOP source) and `SW-All.csv` (space
-  weather: F10.7, Ap, merged from GFZ and NOAA; no longer downloaded by
-  satkit, but read when present and through `spaceweather.init_from_path`).
+  series, from 1962; satkit's fallback EOP source). Its merged space-weather
+  file is no longer used: satkit reads the producers directly (below).
 <a id="gfz-kp"></a>
 - **GFZ Potsdam Kp index service** — <https://kp.gfz.de/>; the file satkit
   reads is

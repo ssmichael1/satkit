@@ -40,8 +40,7 @@ use satkit::spaceweather;
 ///
 ///     Note: fields not yet published for predicted (future) rows are ``-1``.
 ///     MSAFE ``"PRM"`` rows carry a climatological daily Ap in every ``ap``
-///     slot and ``-1`` for ``kp``; a CelesTrak ``SW-All.csv`` loaded by hand
-///     has ``-1`` for all of them. Use :func:`coverage` / :func:`status` to
+///     slot and ``-1`` for ``kp``. Use :func:`coverage` / :func:`status` to
 ///     find out which regime an epoch is in before propagating.
 ///
 /// Raises:
@@ -87,8 +86,8 @@ pub fn update() -> anyhow::Result<()> {
 /// Time bounds of the loaded space-weather table
 ///
 /// ``last_daily`` is the boundary that matters for atmospheric drag: past it
-/// the table holds only monthly rows, which carry F10.7 but no Kp/ap, so
-/// NRLMSISE-00 runs on a quiet-time ``Ap = 4`` with no storm information.
+/// the table holds only monthly MSAFE rows — a 13-month-smoothed F10.7 and a
+/// climatological daily Ap, with no 3-hourly structure and no storm timing.
 ///
 /// Returns:
 ///     (satkit.time, satkit.time, satkit.time, satkit.time) | None:
@@ -121,8 +120,8 @@ pub fn coverage() -> Option<(
 ///
 /// Returns:
 ///     str: One of ``"observed"`` (measured), ``"predicted_daily"`` (inside
-///     the NOAA/SWPC 45-day forecast), ``"predicted_monthly"`` (only monthly
-///     F10.7 — **no geomagnetic data**, NRLMSISE-00 uses ``Ap = 4``),
+///     the NOAA/SWPC 45-day forecast), ``"predicted_monthly"`` (the MSAFE monthly
+///     forecast: smoothed F10.7 and a climatological Ap, no storm timing),
 ///     ``"extrapolated"`` (past the table; the last row is returned
 ///     unchanged), ``"before_table"``, or ``"not_loaded"``.
 #[pyfunction]
@@ -156,9 +155,8 @@ pub fn disable_space_weather_time_warning() {
 /// Load the space-weather table from a file, replacing whatever is loaded
 ///
 /// Accepts the GFZ ``Kp_ap_Ap_SN_F107_since_1932.txt`` table (observed
-/// only) or CelesTrak's ``SW-All.csv``, detected from the content. This is
-/// how to make satkit read the same CSSI file GMAT or Orekit used, when a
-/// comparison must pin against one input.
+/// only). This is how to pin satkit to one fixed input file when a
+/// comparison must not move with the daily refresh.
 ///
 /// Args:
 ///     path (str | os.PathLike): File to load

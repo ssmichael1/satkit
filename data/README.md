@@ -88,8 +88,8 @@ ephemeris.
   SILSO and is not ingested), the 45-day forecast NOAA/SWPC's and the monthly
   forecast NASA MSFC's (both US Government work). The first two are in the
   manifest's `refresh` list; MSAFE has no stable URL and is month-walked by
-  the library. Never pinned. CelesTrak's `SW-All.csv` is no longer fetched
-  but is still read when present (and through `spaceweather::init_from_path`).
+  the library. Never pinned. CelesTrak's merged space-weather file is no
+  longer fetched.
 - **`sw19571001.txt`** — an orphan on the old bucket; nothing reads it.
 - **`leap-seconds.list`** — nothing reads it: the runtime leap-second table
   is a compiled-in constant (`src/time/instant.rs`). It was pinned
@@ -103,7 +103,7 @@ space-weather record and the two space-weather forecasts are the only files
 satkit fetches repeatedly, and the first two are whole-history tables (1932 or
 1973 to the present, several MB); the CelesTrak fallback is served by one
 person's site. The policy below was written to [CelesTrak's usage
-policy](https://celestrak.org/usage-policy.php) asks clients to "only download
+policy](https://celestrak.org/usage-policy.php), which asks clients to "only download
 the data you need, when you are going to use it, and only download data once
 per update", publishes space weather every 3 hours and EOP once a day, and
 warns that machine-to-machine clients ignoring non-200 responses get
@@ -199,9 +199,9 @@ python tools/make_manifest.py --data-dir "$D" --data-version data-v2   # new rel
 ## Client behaviour
 
 - `satkit.utils.update_datafiles()` / `utils::update_datafiles` — fetches all
-  `default: true` files (in parallel, verified), then the `refresh` files,
-  `overwrite=True` re-downloads even
-  verified files.
+  `default: true` files (in parallel, verified), then the `refresh` files (with
+  the EOP mirror walk and the MSAFE month walk beside them). `overwrite=True`
+  re-downloads even verified files.
 - First-use lazy loads (`jplephem`, `earthgravity`, `ierstable`) go through
   the same verified fetch by name. A file name that is not in the manifest
   (a user's alternative ephemeris, say) falls back to the old unverified
@@ -237,7 +237,7 @@ handled in three tiers:
 | **embedded** | `tab5.2a/b/d.txt`; `EGM96/EGM2008/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (295 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
 | **ephemeris** | `linux_p1550p2650.440` (DE440, 102 MB) or `lnxp1900p2053.421` (DE421, 14 MB) | downloaded on first use through the verified manifest fetch, into the write location |
 | **on demand** | `ITU_GRACE16.gfc` (1.8 MB, CC BY 4.0) | same verified fetch, on first use of `GravityModel::ITUGrace16`; not embedded so the licence does not attach to the library |
-| **refreshed** | `finals2000A.all` (IERS; `EOP-All.csv` from CelesTrak as fallback), `SW-All.csv` | fetched on first use; `update_datafiles()` refreshes them, rate-limited (below) |
+| **refreshed** | `finals2000A.all` (IERS; `EOP-All.csv` from CelesTrak as fallback); `Kp_ap_Ap_SN_F107_since_1932.txt` (GFZ), `45-day-forecast.txt` (SWPC), `msafe-f10-prd.txt` (NASA MSFC) | fetched on first use; `update_datafiles()` refreshes them, rate-limited (below) |
 
 `tools/embed_data.py` regenerates the blobs from a data directory whose files
 match `manifest.json` (it checks the source hashes) and records provenance in

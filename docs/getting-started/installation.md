@@ -15,7 +15,7 @@ That is the whole install (~10 MB). The core data — the IERS nutation tables a
 Two things are fetched later, on demand:
 
 - **The JPL ephemeris** (DE440, 102 MB) is downloaded the first time a planetary or lunar position is needed — the first `propagate()`, `jplephem` query or `sun`/`moon` call. The download is SHA-256 verified against the manifest compiled into satkit, and is written to the platform user-data directory (`satkit.utils.datadir()`), never inside `site-packages`. Set `SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421` to use the 14 MB DE421 (1900–2053) instead.
-- **Earth orientation and space weather** (`finals2000A.all` from the IERS mirrors, with CelesTrak's `EOP-All.csv` as fallback; `SW-All.csv` from CelesTrak) are fetched on first use and refreshed by `satkit.utils.update_datafiles()`; they change daily, so re-run that periodically.
+- **Earth orientation and space weather** (`finals2000A.all` from the IERS mirrors, with CelesTrak's `EOP-All.csv` as fallback; the GFZ Potsdam observed record, the NOAA/SWPC 45-day forecast and the NASA MSAFE monthly forecast) are fetched on first use and refreshed by `satkit.utils.update_datafiles()`; they change daily, so re-run that periodically.
 
 To provision everything up front (a Docker image, a CI job, a machine that will later be offline):
 
