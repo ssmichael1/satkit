@@ -4491,8 +4491,8 @@ def propagate(
         For future propagation (beyond available data files):
 
         - Earth orientation parameters use the last available values (constant extrapolation)
-        - Space weather uses the NOAA/SWPC solar cycle forecast for predicted F10.7 values;
-          Ap defaults to 4. If no forecast is available, F10.7 defaults to 150.
+        - Space weather past the observed record comes from the NOAA/SWPC 45-day
+          forecast and then NASA's MSAFE monthly forecast, which carries a climatological Ap;
 
     Example:
         ```python

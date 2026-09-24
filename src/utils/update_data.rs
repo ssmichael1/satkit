@@ -170,7 +170,7 @@ fn download_refresh_files(
 /// file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
 /// when both are unreachable — see
 /// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into)),
-/// and the NOAA solar-cycle forecast is fetched; these change daily and are
+///; these change daily and are
 /// not pinned. The refresh respects each file's publication cadence: a copy
 /// newer than that (3 h for space weather, 24 h for EOP) is left alone
 /// without contacting the server, and otherwise the request is conditional so
