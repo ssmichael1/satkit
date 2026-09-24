@@ -169,10 +169,10 @@ fn download_refresh_files(
 /// The space weather file is refreshed from celestrak, the Earth orientation
 /// file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
 /// when both are unreachable — see
-/// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into)),
-///; these change daily and are
-/// not pinned. The refresh respects each file's publication cadence: a copy
-/// newer than that (3 h for space weather, 24 h for EOP) is left alone
+/// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into));
+/// these change daily to monthly and are not pinned. The refresh respects each file's publication cadence: a copy
+/// newer than that (3 h for the GFZ record, 24 h for the SWPC forecast and
+/// EOP, a week for MSAFE) is left alone
 /// without contacting the server, and otherwise the request is conditional so
 /// an unchanged file costs a `304`. `overwrite_if_exists` forces a full
 /// re-fetch of these too.

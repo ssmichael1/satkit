@@ -4492,7 +4492,8 @@ def propagate(
 
         - Earth orientation parameters use the last available values (constant extrapolation)
         - Space weather past the observed record comes from the NOAA/SWPC 45-day
-          forecast and then NASA's MSAFE monthly forecast, which carries a climatological Ap;
+          forecast and then NASA's MSAFE monthly forecast, which carries a climatological Ap.
+          With no space-weather table at all, F10.7 = F10.7A = 150 and Ap = 4.
 
     Example:
         ```python
