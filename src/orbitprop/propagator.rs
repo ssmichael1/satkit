@@ -535,6 +535,12 @@ pub fn propagate<const C: usize, T: TimeLike>(
         ..Default::default()
     };
 
+    // A typed error (not a panic) when the model cannot be loaded: the
+    // on-demand ITU_GRACE16 download can fail offline. Checked before the
+    // ephemeris table is built so a settings problem is reported as itself
+    // rather than masked by a missing JPL ephemeris.
+    let gravity = crate::earthgravity::ensure_loaded(settings.gravity_model)?;
+
     // Get or create precomputed ephemeris data.
     //
     // The integrator determines how far outside the nominal [begin, end]
@@ -567,10 +573,6 @@ pub fn propagate<const C: usize, T: TimeLike>(
         Some(p) if required_min >= p.begin && required_max <= p.end => p,
         _ => &Precomputed::new_padded(&begin, &end, 60.0, padding_secs)?,
     };
-
-    // A typed error (not a panic) when the model cannot be loaded: the
-    // on-demand ITU_GRACE16 download can fail offline.
-    let gravity = crate::earthgravity::ensure_loaded(settings.gravity_model)?;
 
     let ydot = |x: f64, y: &Matrix<6, C>| -> Matrix<6, C> {
         let pos_gcrf: Vector3 = y.block::<3, 1>(0, 0);
