@@ -751,16 +751,29 @@ mod tests {
 
     const LAST_MODIFIED: &str = "Wed, 17 Sep 2026 12:00:00 GMT";
 
-    /// Rewrite the freshness sidecar so the file looks `age_secs` old,
-    /// keeping the recorded `Last-Modified`. This is how a test reaches the
-    /// "cadence has elapsed" branch without sleeping.
-    fn backdate_marker(path: &std::path::Path, age_secs: u64) {
-        let (checked_at, lm) = download::read_refresh_marker(path).expect("marker written");
+    /// Write the freshness sidecar by hand, with the size and mtime of the
+    /// file as it is now, so only the fields under test differ.
+    fn write_marker(path: &std::path::Path, checked_at: u64, last_modified: &str) {
+        let md = std::fs::metadata(path).unwrap();
+        let mtime = md
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         std::fs::write(
             download::refresh_marker_path(path),
-            format!("{}\n{}\n", checked_at - age_secs, lm.unwrap_or_default()),
+            format!("{checked_at} {} {mtime}\n{last_modified}\n", md.len()),
         )
         .unwrap();
+    }
+
+    /// Make the file look `age_secs` old, keeping the recorded
+    /// `Last-Modified`. This is how a test reaches the "cadence has elapsed"
+    /// branch without sleeping.
+    fn backdate_marker(path: &std::path::Path, age_secs: u64) {
+        let (checked_at, lm) = download::read_refresh_marker(path).expect("marker written");
+        write_marker(path, checked_at - age_secs, &lm.unwrap_or_default());
     }
 
     /// Inside the publication cadence, a refresh makes **no request at all**:
@@ -881,11 +894,7 @@ mod tests {
         download::refresh_file(&url, &dir, false).unwrap();
         // Cadence elapsed, and the recorded `Last-Modified` no longer matches
         // the server's, so the conditional GET returns 200 with a body.
-        std::fs::write(
-            download::refresh_marker_path(&path),
-            "0\nMon, 01 Jan 1990 00:00:00 GMT\n",
-        )
-        .unwrap();
+        write_marker(&path, 0, "Mon, 01 Jan 1990 00:00:00 GMT");
         server.set_body("Feed.csv", new.clone());
 
         assert_eq!(
@@ -927,5 +936,79 @@ mod tests {
     fn refresh_cadence_matches_celestrak_publication() {
         assert_eq!(download::refresh_min_age_secs("SW-All.csv"), 3 * 3600);
         assert_eq!(download::refresh_min_age_secs("EOP-All.csv"), 24 * 3600);
+    }
+
+    /// A file replaced underneath the sidecar must be re-fetched, not
+    /// reported as current. Without the size/mtime fields the stale marker
+    /// would both hold the age gate shut and echo the previous file's
+    /// `Last-Modified`, so the swapped-in bytes would be trusted forever.
+    #[test]
+    fn refresh_marker_is_ignored_when_the_file_changed_underneath() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let body = b"feed,body\n1,2\n".to_vec();
+        let server = TestServer::start_with_last_modified(
+            HashMap::from([("Feed.csv".to_string(), body.clone())]),
+            Some(LAST_MODIFIED),
+        );
+        let dir = tmpdir("refresh_swapped");
+        let url = server.url("Feed.csv");
+        let path = dir.join("Feed.csv");
+
+        download::refresh_file(&url, &dir, false).unwrap();
+        assert_eq!(server.hits(), 1);
+        assert!(download::read_refresh_marker(&path).is_some());
+
+        // Someone drops a different copy in, well inside the cadence.
+        std::fs::write(&path, b"feed,body\n9,9\n9,9\n").unwrap();
+        assert!(
+            download::read_refresh_marker(&path).is_none(),
+            "the marker must stop describing a file it no longer matches"
+        );
+
+        // Not `Fresh`, and not a conditional request that would come back 304.
+        assert_eq!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        assert_eq!(server.conditional_hits(), 0);
+        assert_eq!(std::fs::read(&path).unwrap(), body);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An empty 200 body is rejected before it can replace a good file. No
+    /// file satkit downloads is legitimately empty, and for a feed without a
+    /// parser this is the only thing between a broken server and a truncated
+    /// table.
+    #[test]
+    fn refresh_rejects_an_empty_body() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let body = b"feed,body\n1,2\n".to_vec();
+        let server = TestServer::start(HashMap::from([("Feed.csv".to_string(), body.clone())]));
+        let dir = tmpdir("refresh_empty");
+        let url = server.url("Feed.csv");
+        let path = dir.join("Feed.csv");
+
+        download::refresh_file(&url, &dir, false).unwrap();
+        server.set_body("Feed.csv", Vec::new());
+
+        let err = download::refresh_file(&url, &dir, true).unwrap_err();
+        assert!(
+            matches!(&err, download::Error::ContentRejected { reason, .. } if reason.contains("empty")),
+            "expected ContentRejected, got {err:?}"
+        );
+        // The good file is still there, and no `.part` was left behind.
+        assert_eq!(std::fs::read(&path).unwrap(), body);
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains(".part"))
+            .collect();
+        assert!(leftovers.is_empty(), "left behind {leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

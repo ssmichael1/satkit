@@ -99,8 +99,9 @@ firewalled. Satkit follows it in four places:
 | | |
 |---|---|
 | **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for `SW-All.csv`, 24 h for `EOP-All.csv`). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
-| **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar; delete it (or the file) to force a full fetch |
+| **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar, which also records the file's size and whole-second mtime and is ignored once those stop matching, so a copy swapped in by hand is re-fetched rather than reported current by a `304`; delete it (or the file) to force a full fetch |
 | **identification** | every request sends `User-Agent: satkit/<version> (+https://github.com/ssmichael1/satkit)` (`download::USER_AGENT`) rather than `ureq/3.x`, so a misbehaving client is traceable to the project |
+| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `EOP-All.csv` / `SW-All.csv` are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
 | **no retry loop** | an HTTP error is returned to the caller, with `celestrak_throttle_hint` explaining 403/503 and telling the user to cache rather than retry |
 
 CI is the other half of the problem: a data-cache hit used to be followed by an

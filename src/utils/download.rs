@@ -528,6 +528,14 @@ fn reject_html(path: &Path) -> std::result::Result<(), String> {
 /// `name` is the file's base name; `path` is the completed `.part` file.
 #[cfg(feature = "download")]
 fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
+    // No file satkit fetches is legitimately empty, and an empty body is what
+    // a misbehaving server or a conditional response mishandled by the client
+    // produces. The named feeds below are additionally parsed, but a feed
+    // added to the manifest's `refresh` list later would have nothing else
+    // standing between a zero-byte response and the good file it replaces.
+    if std::fs::metadata(path).map_err(|e| e.to_string())?.len() == 0 {
+        return Err("the response body was empty".to_string());
+    }
     let is_html_file = std::path::Path::new(name)
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("html") || e.eq_ignore_ascii_case("htm"));
@@ -810,14 +818,48 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
+/// Whole seconds of a file's modification time.
+///
+/// Sub-second precision is deliberately dropped: it does not survive a
+/// tar/rsync round trip (restoring a CI data cache, copying a provisioned
+/// directory into an image), and a marker invalidated by nothing but a lost
+/// nanosecond would cost a needless full download.
+#[cfg(feature = "download")]
+fn mtime_secs(md: &std::fs::Metadata) -> u64 {
+    md.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 /// Read the sidecar written by [`write_refresh_marker`]: `(when we last
-/// checked, the server's `Last-Modified` for the bytes on disk)`. `None` for
-/// a missing or unparsable marker — the caller then fetches unconditionally.
+/// checked, the server's `Last-Modified` for the bytes on disk)`.
+///
+/// `None` — meaning "fetch unconditionally" — for a missing or unparsable
+/// marker, **and for one that no longer describes the file on disk**. The
+/// marker records the file's size and modification time for exactly that
+/// reason: a copy placed in the data directory by hand, or restored from a
+/// backup, would otherwise inherit the previous file's `Last-Modified`, come
+/// back `304`, and be reported as current forever. These feeds carry no hash,
+/// so this is a drift guard, not an integrity check.
+///
+/// A marker written before those fields existed has a one-field first line,
+/// fails to parse here, and costs one full fetch before being rewritten.
 #[cfg(feature = "download")]
 pub(crate) fn read_refresh_marker(path: &Path) -> Option<(u64, Option<String>)> {
     let text = std::fs::read_to_string(refresh_marker_path(path)).ok()?;
     let mut lines = text.lines();
-    let checked_at: u64 = lines.next()?.trim().parse().ok()?;
+    let mut head = lines.next()?.split_whitespace();
+    let checked_at: u64 = head.next()?.parse().ok()?;
+    let size: u64 = head.next()?.parse().ok()?;
+    let mtime: u64 = head.next()?.parse().ok()?;
+    let md = std::fs::metadata(path).ok()?;
+    if md.len() != size || mtime_secs(&md) != mtime {
+        return None;
+    }
+    // The `Last-Modified` string is opaque and may contain spaces, so it has
+    // a line to itself.
     let last_modified = lines
         .next()
         .map(str::trim)
@@ -826,13 +868,23 @@ pub(crate) fn read_refresh_marker(path: &Path) -> Option<(u64, Option<String>)> 
     Some((checked_at, last_modified))
 }
 
-/// Record a successful check. Best effort: a read-only directory simply means
-/// the next call fetches unconditionally, as every call did before.
+/// Record a successful check against the file now on disk. Best effort: a
+/// read-only directory simply means the next call fetches unconditionally,
+/// as every call did before.
 #[cfg(feature = "download")]
 pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
+    let Ok(md) = std::fs::metadata(path) else {
+        return;
+    };
     let _ = std::fs::write(
         refresh_marker_path(path),
-        format!("{}\n{}\n", unix_now(), last_modified.unwrap_or("")),
+        format!(
+            "{} {} {}\n{}\n",
+            unix_now(),
+            md.len(),
+            mtime_secs(&md),
+            last_modified.unwrap_or("")
+        ),
     );
 }
 
@@ -855,7 +907,10 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
 /// conditional header and always transfers the file.
 ///
 /// The freshness state lives in a `<name>.http-cache` sidecar next to the
-/// file. Deleting it (or the file) restores a full fetch.
+/// file, which also records the file's size and modification time and is
+/// ignored once those stop matching — a file replaced by hand is re-fetched
+/// rather than reported as current. Deleting the sidecar (or the file)
+/// restores a full fetch.
 #[cfg(feature = "download")]
 pub fn refresh_file(url: &str, downloaddir: &Path, force: bool) -> Result<RefreshOutcome> {
     let fname = Path::new(url)

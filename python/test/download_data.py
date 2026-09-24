@@ -60,11 +60,21 @@ def marker_path(dest: Path) -> Path:
 
 
 def read_marker(dest: Path):
-    """``(checked_at_unix, last_modified_or_None)``, or None if unusable."""
+    """``(checked_at_unix, last_modified_or_None)``, or None if unusable.
+
+    None means "fetch unconditionally". The marker records the size and
+    whole-second mtime of the file it describes, so a copy swapped in by hand
+    cannot inherit the previous file's ``Last-Modified`` and be reported as
+    current by a ``304``. Sub-second mtime is ignored: it does not survive the
+    tar round trip of a CI cache restore.
+    """
     try:
         lines = marker_path(dest).read_text().splitlines()
-        checked_at = int(lines[0].strip())
+        checked_at, size, mtime = (int(x) for x in lines[0].split()[:3])
+        st = dest.stat()
     except (OSError, ValueError, IndexError):
+        return None
+    if st.st_size != size or int(st.st_mtime) != mtime:
         return None
     last_modified = lines[1].strip() if len(lines) > 1 and lines[1].strip() else None
     return checked_at, last_modified
@@ -72,7 +82,10 @@ def read_marker(dest: Path):
 
 def write_marker(dest: Path, last_modified) -> None:
     try:
-        marker_path(dest).write_text(f"{int(time.time())}\n{last_modified or ''}\n")
+        st = dest.stat()
+        marker_path(dest).write_text(
+            f"{int(time.time())} {st.st_size} {int(st.st_mtime)}\n{last_modified or ''}\n"
+        )
     except OSError:
         pass  # best effort: the next run simply fetches unconditionally
 
@@ -156,6 +169,10 @@ def fetch_refresh(url: str, dest_dir: Path, max_age: int = None, force: bool = F
                 for chunk in r.iter_content(1 << 20):
                     f.write(chunk)
             last_modified = r.headers.get("Last-Modified")
+        # No feed is legitimately empty; an empty body must not replace a
+        # good file (the Rust client rejects this in `check_content`).
+        if part.stat().st_size == 0:
+            raise ValueError("the response body was empty")
         part.replace(dest)
         write_marker(dest, last_modified)
         return f"refreshed from {url}"

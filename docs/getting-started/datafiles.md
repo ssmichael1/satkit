@@ -169,7 +169,10 @@ So calling `update_datafiles()` at the top of every script is fine — it will
 not hit CelesTrak more than the data actually changes. `overwrite=True` skips
 the gate and always transfers, which is the way to replace a copy you suspect
 is damaged. The freshness state is a `<name>.http-cache` sidecar next to the
-file; deleting it (or the file) restores a full fetch.
+file. It also records the file's size and modification time and is ignored
+once those stop matching, so a copy you replace by hand is re-fetched rather
+than assumed current; deleting the sidecar (or the file) also restores a full
+fetch.
 
 Every request satkit makes also identifies itself as
 `satkit/<version> (+https://github.com/ssmichael1/satkit)`, and an HTTP error
