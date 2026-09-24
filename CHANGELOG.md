@@ -4,6 +4,32 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Added
+
+- EGM2008 gravity model (`GravityModel::EGM2008` / `gravmodel.egm2008`, Pavlis et al. 2012, public domain), compiled in to degree 70 like EGM96 / JGM2 / JGM3; `Gravity::tide_system` and `earthgravity::TideSystem` record each model's permanent-tide convention from the ICGEM `tide_system` header or, for the headerless JGM files, from the C20 value; `earthgravity::ensure_loaded` / `is_loaded` load a model with a typed error instead of a panic ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195), [#183](https://github.com/ssmichael1/satkit/issues/183))
+
+### Changed
+
+- **Breaking:** ITU_GRACE16 is no longer compiled in — its CC BY 4.0 licence attached to the library and every package built from it — but stays available as `gravmodel.itugrace16`: the 1.8 MB file is downloaded (SHA-256 verified) on first use, so selecting it offline with no copy on disk is now a `RuntimeError` / `orbitprop::Error::Gravity` at `propagate` entry rather than working from the embedded copy; `THIRDPARTY-DATA.md` lists only public-domain and IERS data ([#196](https://github.com/ssmichael1/satkit/pull/196), [#183](https://github.com/ssmichael1/satkit/issues/183))
+- Solid Earth tides are tide-system aware: for a zero-tide gravity model (`jgm3`, `itugrace16`) the propagator removes the permanent tide (IERS 2010 Eq. 6.13, A₀H₀k₂₀ = −4.201e-9 in C̄20) from the Step 1 correction instead of counting it twice — J2-only EGM96 vs JGM3 over a day at 500 km with tides on goes from 8.5 m to 5 cm; results with `tidemodel.none`, and with the tide-free `egm96` / `egm2008` / `jgm2`, are unchanged ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195))
+- The ICGEM `.gfc` parser accepts Fortran `D` exponents (EGM2008's `1.0d0` row, the GGM05 headers) and Latin-1 headers, reads ICGEM 2.0 `gfct` rows as the static field at the reference epoch and skips the `trnd` / `asin` / `acos` / `dot` time-variable rows, which it used to read as coefficients ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195))
+- EOP and space-weather refreshes follow [CelesTrak's usage policy](https://celestrak.org/usage-policy.php) instead of re-downloading the whole 1957-to-present table on every call: `utils::refresh_file` makes no request while the local copy is inside the file's publication cadence (3 h for `SW-All.csv`, 24 h for the EOP file, `finals2000A.all` or `EOP-All.csv`) and a conditional `If-Modified-Since` request outside it, so an unchanged file costs a `304`; `update_datafiles(overwrite=True)` still forces a full fetch. CI stopped refreshing in the test jobs entirely (every EOP test works from the table's own bounds) and the docs/release workflows only refresh a cached copy over a week old, down from ~12 full-file downloads per push; `python/test/download_data.py` now identifies itself instead of sending `python-requests/x.y` ([#199](https://github.com/ssmichael1/satkit/pull/199))
+- Earth orientation parameters are now read from the IERS Bulletin A combined file `finals2000A.all` (fetched from the USNO mirror, then the IERS data centre), with CelesTrak's `EOP-All.csv` as the fallback when both mirrors are unreachable and still read when present; when both files are on disk the one whose observed record runs later is used, with the CSV's 1962–1972 rows kept in front of the IERS table. The IERS file carries about a year of predictions instead of six months, so the silent constant extrapolation past the table end starts later. The source order is the manifest's new `eop` section; `earth_orientation_params::source()` / `satkit.frametransform.eop_source()` report which file is loaded, and `earth_orientation_params::refresh_into` / `load_from_dir` expose the refresh and load steps. A data directory that only holds `EOP-All.csv` keeps working ([#198](https://github.com/ssmichael1/satkit/pull/198), [#164](https://github.com/ssmichael1/satkit/issues/164))
+
+### Deprecated
+
+- Python: the `as_X` conversion methods on `time` (`as_date`, `as_gregorian`, `as_datetime`, `as_mjd`, `as_jd`, `as_unixtime`, `as_iso8601`, `as_rfc3339`) and `quaternion` (`as_rotation_matrix`, `as_euler`) are renamed `to_X` to pair with the `from_X` constructors; the old names still work but emit a `DeprecationWarning` and are removed in 0.25 ([#200](https://github.com/ssmichael1/satkit/pull/200))
+
+### Fixed
+
+- The IAU 2000A celestial-pole offsets dX/dY from `EOP-All.csv` were read as milliarcseconds but the file holds arcseconds, so the correction applied in the CIRS→GCRS rotation was 1000× too small (about 0.2 mas, i.e. ~1 cm at LEO and ~5 cm at GEO); `earth_orientation_params(t)[4:6]` now returns milliarcseconds as documented. LOD is documented as seconds per day, which is what the files hold ([#198](https://github.com/ssmichael1/satkit/pull/198))
+
+### Docs
+
+- Force-model guide: JGM2 is tide-free, not zero-tide (its C20 is EGM96's to 1e-10); the gravity-model table now lists each model's tide system and how it is provided, and the tide-system note describes the automatic handling ([#196](https://github.com/ssmichael1/satkit/pull/196))
+
+## 0.22.1 - 2026-09-20
+
 ### Changed
 
 - **Breaking (Python):** `quaternion.conj` and `quaternion.conjugate` are methods (`q.conj()`), matching numpy's `a.conj()`, scipy's `Rotation.inv()` and satkit's own `inverse()`; `quaternion.norm`, `tlefitstatus.converged`, `time.day_of_year` and `time.weekday` are properties (`q.norm`, `status.converged`, `t.day_of_year`, `t.weekday`), like `quaternion.angle` and `propresult.can_interp`. The rule ("a property tells you something about the object; a method gives you something to use instead of it") is in CONTRIBUTING.md and enforced by a stub-parsing test ([#187](https://github.com/ssmichael1/satkit/pull/187))
@@ -13,6 +39,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Fixed
 
 - `TLE::fit_from_states` could return a negative eccentricity and stall far from the optimum on near-circular orbits (the doc example fitted a 400 km circular arc at 7.5 km RMS with e = -1.2e-4): the Levenberg-Marquardt damping is now Marquardt-scaled and solved in column-scaled form, a trial step across e = 0 is mapped onto the equivalent orbit with e ≥ 0, and the result is validated (`Error::FitElementOutOfRange`); `TLE::to_2line` now rejects an eccentricity outside [0, 1) (`Error::EccentricityOutOfRange`) instead of silently writing |e| ([#192](https://github.com/ssmichael1/satkit/pull/192))
+- Lockfile refreshed for the release (13 minor crate updates, no new dependencies) ([#197](https://github.com/ssmichael1/satkit/pull/197))
 - Lockfile: rustls 0.23.44 → 0.23.45 for [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285) (TLS 1.3 handshake messages accepted across encryption-level boundaries, medium); reached through `ureq`, so it affects the data downloader in the published wheels ([#188](https://github.com/ssmichael1/satkit/pull/188))
 
 ### Docs
@@ -143,136 +170,3 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### CI
 
 - Published wheels are import-tested by cibuildwheel; the NOAA network test is `#[ignore]`d and run explicitly; `doc = false` on the extension crate so `cargo doc --workspace` builds ([#130](https://github.com/ssmichael1/satkit/pull/130))
-
-## 0.20.4 - 2026-08-28
-
-### Added
-
-- **`scale=` keyword on the `time(...)` constructor** (Python): Gregorian
-  date/time components passed to `satkit.time(year, month, day[, hour, minute,
-  second])` can now be interpreted in an explicit time scale, e.g.
-  `satkit.time(2020, 1, 1, scale=satkit.timescale.TAI)`, mirroring the existing
-  `time.from_mjd(..., scale=...)` / `time.from_jd(..., scale=...)` API. The
-  keyword defaults to `satkit.timescale.UTC`, so all existing calls are
-  unchanged. Backed by a new scale-aware core constructor
-  `Instant::from_datetime_with_scale`.
-- **`SGP4InitArgs::from_mean_elements`** — a constructor that performs the
-  rev/day → rad/min and degree → radian conversions from catalog units. Both
-  the `TLE` and CCSDS `OMM` SGP4 sources now build their init args through it,
-  so the conversion factors are defined in one place.
-- **`time` and `duration` are now hashable.** Both define `__eq__` but
-  previously lacked `__hash__`, which made them unhashable (unusable as `dict`
-  keys or `set` members). The hash is derived from the underlying microsecond
-  count, so it is consistent with equality.
-- **Equality and `repr` on more value types.** `TLE`, `kepler`, and `itrfcoord`
-  now implement `__eq__`; `TLE`, `kepler`, `satstate`, and `propsettings` now
-  implement `__repr__` (delegating to their `str` form). The three float-backed
-  types that gained `__eq__` are intentionally left unhashable — a failed
-  `hash()` is clearer than silently-wrong float-keyed lookups.
-- **`mypy.stubtest` in CI.** The `python bindings test` job now verifies that
-  the hand-written `.pyi` type stubs match the compiled PyO3 bindings. Two CLI
-  flags (`--ignore-positional-only`, `--ignore-disjoint-bases`) plus
-  `python/stubtest_allowlist.txt` suppress systematic PyO3 idioms (constructors,
-  final classes, native submodules); everything else must agree.
-
-### Fixed
-
-- **Canonical physical constants corrected and documented.** The lunar
-  gravitational parameter now uses the JPL DE440 value
-  (`4.902800118e12 m³/s²`) instead of the erroneous `4.9048695e12`; duplicate
-  lunar-GM literals in point-gravity tests now reference the shared constant.
-  The solar GM, WGS 84 flattening and rotation rate, nominal solar radius,
-  DE440 Earth–Moon mass ratio, and derived geosynchronous radius were updated
-  to their canonical values. `JGM3_J2` now uses the conventional positive `J2`
-  sign. Every constant in `consts.rs` now identifies its authoritative source.
-- **Relativity documentation now describes the Schwarzschild correction
-  accurately.** Removed misleading fixed position-drift-per-day estimates and
-  clarified that, for a state satisfying the Newtonian circular-orbit
-  relation, the post-Newtonian correction points radially outward while the
-  much larger Newtonian acceleration points inward. The corresponding test
-  name and Python type-stub documentation were corrected as well.
-- **Type stubs now type-check and match the runtime.** The `.pyi` files had
-  never been checked and contained illegal overload-implementation blocks, a
-  `time.__add__` overload group split by other methods, and `time`-as-annotation
-  shadowing. Filled in stub gaps (`itrfcoord.height`, `time.add_utc_days`,
-  `weekday.Invalid`) and removed/fixed a phantom `time.as_gregorian(scale=)`
-  parameter and a mis-declared `sgp4_opsmode.improved` property.
-- **Panic hardening: malformed and edge-case input now returns errors instead
-  of panicking** (PR #124), following a codebase-wide audit:
-  - *TLE parsing*: day-of-year is range-checked, negative satellite numbers
-    are rejected, and non-finite implied-exponent fields (bstar, nddot) error
-    at parse time instead of overflowing later in epoch math, `Display`, or
-    `to_2line`. `Display` also falls back to the raw satellite number rather
-    than unwrapping a failed alpha5 conversion.
-  - *Time*: `from_rfc3339` no longer panics on non-ASCII input while scanning
-    for a timezone offset; `from_datetime` errors on extreme years (new
-    `InstantError::InvalidYear`); MJD conversions, `from_gps_week_and_second`,
-    and leap-second folding saturate at the i64 boundaries; chrono `DateTime`
-    conversion saturates to `MIN_UTC`/`MAX_UTC`; `strftime` `%B`/`%b` handle
-    out-of-range months.
-  - *JPL ephemerides*: querying exactly at the file's end epoch (`jd_stop`)
-    now clamps to the last Chebyshev record instead of indexing past it, and
-    the parser validates header fields and declared sizes (with checked
-    arithmetic, before allocating) so a corrupt or crafted file errors
-    cleanly. Unpopulated bodies error instead of underflowing.
-  - *Gravity models*: `Gravity::parse` rejects `.gfc` lines with order >
-    degree (previously a panic for large orders and **silent coefficient
-    aliasing** for moderate ones), and the evaluators clamp the requested
-    degree to the loaded model's table so a custom low-degree model cannot be
-    indexed out of bounds. A spec-conformant bare `end_of_head` line now
-    terminates the header instead of silently yielding an all-zero model.
-  - *Orbit propagation*: the force model falls back to direct computation
-    when an adaptive integrator probes outside the precomputed interp table
-    (previously an unwrap panic for high-altitude states);
-    `propagate::<C>` with unsupported column counts, zero/negative/non-finite
-    `Precomputed` steps, and invalid thrust frames constructed via pub
-    fields/`Deserialize` all surface as errors instead of panics.
-  - *Utilities*: `datadir()` no longer panics (and permanently poisons its
-    singleton mutex) if a candidate directory cannot be stat-ed; download
-    helpers return an error for paths/URLs with no valid file name.
-- **Python bindings: invalid input raises clean exceptions instead of
-  `PanicException`**, and non-contiguous numpy input now works:
-  - Wrong-size/shape arrays to `propagate`, frame transforms,
-    `kepler.from_pv`, `satstate.add_maneuver`, and `thrust.constant` raise
-    `ValueError`/`RuntimeError` (via shape validation in `py_to_smatrix`).
-  - Strided views and Fortran-order arrays are now accepted by `itrfcoord`,
-    `gravity`, `gravity_and_partials`, and the `satstate`
-    covariance/uncertainty setters (previously `as_slice().unwrap()` panics).
-  - `TLE.from_lines`/`from_url` raise on input containing no valid TLEs;
-    `TLE.from_file` handles non-UTF-8 files; `sgp4` rejects empty TLE
-    lists/time arrays; `kepler(...)` rejects non-numeric positional args;
-    `quaternion.from_axis_angle` validates axis length;
-    `planets.heliocentric_pos` raises for Sun/Moon and out-of-range times
-    (previously a panic with the GIL released); `time` arithmetic with ints
-    too large for f64 raises `OverflowError`; `datetime.timestamp()` failures
-    propagate; `utils.datadir()` handles non-UTF-8 paths.
-
-### Changed
-
-- **BREAKING: `sgp4::Error::SatRecInit` now carries a typed `SGP4Error`
-  instead of a raw `i32`.** The raw Vallado init error code is mapped to the
-  corresponding `SGP4Error` variant (eccentricity, mean motion, perturbed
-  eccentricity, semi-latus rectum, orbit decay) at construction, so the
-  `Display` output is now a description rather than a bare number.
-  Additionally, the `SGP4Error` enum has moved from `sgp4::sgp4_impl` to
-  `sgp4::error`; it remains re-exported at `satkit::sgp4::SGP4Error`, so the
-  public path is unchanged.
-- **`LambertError` renamed to `lambert::Error`** to match the per-module
-  `module::Error` convention used everywhere else in the crate. The old name
-  remains as a `#[deprecated]` type alias, so existing code compiles with a
-  deprecation warning; update `satkit::lambert::LambertError` →
-  `satkit::lambert::Error`. A `lambert::Result<T>` alias was also added.
-- **`itrfcoord(...)`, `sgp4(...)`, and `satstate.propagate(...)` now reject
-  unknown keyword arguments** instead of silently ignoring them. Previously a
-  typo such as `itrfcoord(..., alttiude=100)` was dropped, leaving the ground
-  station at 0 m altitude; it now raises `ValueError`. Callers passing only
-  documented keywords are unaffected.
-- **Renamed keyword arguments on several bindings** so the accepted Python
-  keyword matches its documentation (the stubs previously advertised names the
-  runtime rejected). Positional calls are unaffected; only callers passing these
-  by the *old* keyword must update:
-  - `duration.from_hours` / `from_minutes` / `from_seconds`: `d` → `hours` / `minutes` / `seconds`
-  - `time.from_string`: `s` → `string`;  `time.from_unixtime`: `t` → `unixtime`
-  - `time.from_rfc3339`: `s` → `rfc3339`;  `time.from_datetime`: `tm` → `dt`
-  - `time.strftime`: `fmt` → `format`;  `time.strptime`: `(s, fmt)` → `(date_string, format)`
-  - `kepler.from_pv`: `(r, v)` → `(pos, vel)`

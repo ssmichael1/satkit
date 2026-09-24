@@ -126,11 +126,11 @@ pub enum Error {
     /// then run with zero polar motion / UT1−UTC / nutation corrections and
     /// be silently wrong by metres, so it is refused. Run
     /// `satkit::utils::update_datafiles()` or point `SATKIT_DATA` at a
-    /// directory containing `EOP-All.csv`.
+    /// directory containing `finals2000A.all` (or CelesTrak's `EOP-All.csv`).
     #[error(
         "no Earth Orientation Parameters (EOP) table is loaded; run \
          satkit::utils::update_datafiles() or set SATKIT_DATA to a directory \
-         containing EOP-All.csv"
+         containing finals2000A.all (or EOP-All.csv)"
     )]
     EopUnavailable,
 
@@ -155,6 +155,14 @@ pub enum Error {
     /// while building a [`Precomputed`](crate::orbitprop::Precomputed) table.
     #[error(transparent)]
     FrameTransform(#[from] crate::frametransform::Error),
+
+    /// The gravity model selected in [`PropSettings`](crate::orbitprop::PropSettings)
+    /// could not be loaded — for a model fetched on demand (ITU_GRACE16),
+    /// typically because satkit is offline. Raised by
+    /// [`earthgravity::ensure_loaded`](crate::earthgravity::ensure_loaded)
+    /// at [`propagate`](crate::orbitprop::propagate) entry.
+    #[error(transparent)]
+    Gravity(#[from] crate::earthgravity::Error),
 }
 
 impl From<ode::OdeError> for Error {

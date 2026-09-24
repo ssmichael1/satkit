@@ -52,7 +52,7 @@
 //!
 //! ### Force Models
 //! Comprehensive perturbation modeling:
-//! - High-order Earth gravity (JGM2, JGM3, EGM96, ITU GRACE16)
+//! - High-order Earth gravity (EGM96, EGM2008, JGM2, JGM3, ITU GRACE16)
 //! - Solar and lunar gravity perturbations
 //! - Atmospheric drag using NRLMSISE-00 density model with space weather data
 //! - Solar radiation pressure
@@ -100,7 +100,7 @@
 //! - [JPL Planetary Ephemerides](https://ssd.jpl.nasa.gov/ephem.html) - High-precision planetary positions
 //! - [Earth Gravity Models](http://icgem.gfz-potsdam.de/) - Spherical harmonic coefficients
 //! - [Space Weather Data](https://celestrak.org/SpaceData/) - Solar flux and geomagnetic indices
-//! - [Earth Orientation Parameters](https://celestrak.org/SpaceData/) - Polar motion and UT1-UTC
+//! - [Earth Orientation Parameters](https://maia.usno.navy.mil/ser7/finals2000A.all) - IERS Bulletin A: polar motion, UT1-UTC, celestial-pole offsets (CelesTrak's copy as fallback)
 //! - [IERS Conventions Tables](https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn36.html) - Nutation coefficients
 //!
 //! Data files need to be downloaded once. Space weather and Earth orientation parameter files are

@@ -9,6 +9,8 @@ use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
 
+use crate::pyutils::warn_deprecated;
+
 use anyhow::{bail, Result};
 
 ///
@@ -42,6 +44,10 @@ impl From<Quaternion> for PyQuaternion {
     }
 }
 
+// The Python API names conversions `to_*` (paired with `from_*`); PyQuaternion
+// is Copy, so clippy would rather those took `self` by value. PyO3 methods take
+// `&self`, and the name is fixed by the Python API, so the lint is silenced here.
+#[allow(clippy::wrong_self_convention)]
 #[pymethods]
 impl PyQuaternion {
     #[new]
@@ -220,7 +226,7 @@ impl PyQuaternion {
     ///
     /// Returns:
     ///     numpy.ndarray: 3x3 numpy array representing rotation matrix
-    fn as_rotation_matrix(&self) -> Py<PyAny> {
+    fn to_rotation_matrix(&self) -> Py<PyAny> {
         let rot = self.0.to_rotation_matrix();
 
         pyo3::Python::attach(|py| -> Py<PyAny> {
@@ -240,12 +246,30 @@ impl PyQuaternion {
     ///
     /// Returns:
     ///     (f64, f64, f64): Tuple of roll, pitch, yaw angles in radians
-    fn as_euler(&self) -> (f64, f64, f64) {
+    fn to_euler(&self) -> (f64, f64, f64) {
         self.0.to_euler()
     }
 
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_rotation_matrix()``.
+    fn as_rotation_matrix(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        warn_deprecated(
+            py,
+            c"quaternion.as_rotation_matrix() is deprecated since 0.23 and will be removed in 0.25; use quaternion.to_rotation_matrix()",
+        )?;
+        Ok(self.to_rotation_matrix())
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_euler()``.
+    fn as_euler(&self, py: Python<'_>) -> PyResult<(f64, f64, f64)> {
+        warn_deprecated(
+            py,
+            c"quaternion.as_euler() is deprecated since 0.23 and will be removed in 0.25; use quaternion.to_euler()",
+        )?;
+        Ok(self.to_euler())
+    }
+
     /// Create quaternion from "roll", "pitch", "yaw" euler angles in radians
-    /// (inverse of `as_euler`)
+    /// (inverse of `to_euler`)
     ///
     /// Args:
     ///     roll (float): Roll angle in radians

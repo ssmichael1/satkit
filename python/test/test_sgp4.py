@@ -294,7 +294,7 @@ class TestSGP4:
             "ARG_OF_PERICENTER", "MEAN_ANOMALY")}
         minimal["BSTAR"] = float(flat["BSTAR"])
         minimal["MEAN_MOTION_DOT"] = float(flat["MEAN_MOTION_DOT"])
-        for ep in (epoch, epoch.as_datetime(), flat["EPOCH"]):
+        for ep in (epoch, epoch.to_datetime(), flat["EPOCH"]):
             p, _v = sk.sgp4({**minimal, "EPOCH": ep}, tm)
             assert np.linalg.norm(p - p_ref) < 1e-6
 

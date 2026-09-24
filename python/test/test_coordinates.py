@@ -456,13 +456,13 @@ class TestQuaternion:
         # Test rotations of 90 degrees with right-hande rule of 3 coordinate axes
         assert sk.quaternion.rotz(
             m.pi / 2
-        ).as_rotation_matrix() @ xhat == pytest.approx(yhat, 1.0e-10)
+        ).to_rotation_matrix() @ xhat == pytest.approx(yhat, 1.0e-10)
         assert sk.quaternion.rotx(
             m.pi / 2
-        ).as_rotation_matrix() @ yhat == pytest.approx(zhat, 1.0e-10)
+        ).to_rotation_matrix() @ yhat == pytest.approx(zhat, 1.0e-10)
         assert sk.quaternion.roty(
             m.pi / 2
-        ).as_rotation_matrix() @ zhat == pytest.approx(xhat, 1.0e-10)
+        ).to_rotation_matrix() @ zhat == pytest.approx(xhat, 1.0e-10)
 
     def test_dcm2quaternion(self):
         """
@@ -473,7 +473,7 @@ class TestQuaternion:
         zhat = np.array([0.0, 0.0, 1.0])
 
         q = sk.quaternion.from_rotation_matrix(
-            sk.quaternion.rotz(m.pi / 2).as_rotation_matrix()
+            sk.quaternion.rotz(m.pi / 2).to_rotation_matrix()
         )
         assert q * xhat == pytest.approx(yhat, 1.0e-10)
 
@@ -485,9 +485,9 @@ class TestQuaternion:
         yhat = np.array([0.0, 1.0, 0.0])
         zhat = np.array([0.0, 0.0, 1.0])
         q = sk.quaternion.from_rotation_matrix(
-            sk.quaternion.rotz(m.pi / 2).as_rotation_matrix()
+            sk.quaternion.rotz(m.pi / 2).to_rotation_matrix()
         )
-        dcm = q.as_rotation_matrix()
+        dcm = q.to_rotation_matrix()
         assert dcm @ xhat == pytest.approx(yhat, 1.0e-10)
 
     def test_construction(self):
@@ -510,19 +510,19 @@ class TestQuaternion:
         Test conversion of quaternion to Euler angles
         """
         q = sk.quaternion.rotz(m.pi / 3)
-        euler = q.as_euler()
+        euler = q.to_euler()
         assert euler[0] == pytest.approx(0.0)
         assert euler[1] == pytest.approx(0.0)
         assert euler[2] == pytest.approx(m.pi / 3)
 
         q = sk.quaternion.rotx(m.pi / 3)
-        euler = q.as_euler()
+        euler = q.to_euler()
         assert euler[0] == pytest.approx(m.pi / 3)
         assert euler[1] == pytest.approx(0.0)
         assert euler[2] == pytest.approx(0.0)
 
         q = sk.quaternion.roty(m.pi / 3)
-        euler = q.as_euler()
+        euler = q.to_euler()
         assert euler[0] == pytest.approx(0.0)
         assert euler[1] == pytest.approx(m.pi / 3)
         assert euler[2] == pytest.approx(0.0)
@@ -544,9 +544,9 @@ class TestNewBindings:
     def test_quaternion_new_methods(self):
         import math
 
-        # from_euler is the inverse of as_euler
+        # from_euler is the inverse of to_euler
         q = sk.quaternion.from_euler(0.1, -0.2, 0.3)
-        roll, pitch, yaw = q.as_euler()
+        roll, pitch, yaw = q.to_euler()
         assert roll == pytest.approx(0.1, abs=1e-12)
         assert pitch == pytest.approx(-0.2, abs=1e-12)
         assert yaw == pytest.approx(0.3, abs=1e-12)

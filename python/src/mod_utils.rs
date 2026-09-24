@@ -24,13 +24,15 @@ use anyhow::Result;
 /// Files downloaded:
 ///
 /// * linux_p1550p2650.440 :: JPL Ephemeris version 440 (~ 100 MB)
-/// * EOP-All.csv :: Earth orientation parameters, updated daily
+/// * finals2000A.all :: Earth orientation parameters (IERS Bulletin A), updated daily;
+///   CelesTrak's EOP-All.csv is fetched instead when both IERS mirrors are unreachable
 /// * SW-All.csv :: Space weather data, updated daily
 /// * predicted-solar-cycle.json :: NOAA/SWPC solar cycle forecast
 ///
 /// The IERS nutation tables (tab5.2a/b/d.txt) and the gravity models
-/// (EGM96, JGM2, JGM3, ITU_GRACE16 — to degree 70) are compiled into
-/// satkit and are not downloaded. A full-degree gravity file or an updated
+/// (EGM96, EGM2008, JGM2, JGM3 — to degree 70) are compiled into satkit
+/// and are not downloaded; ITU_GRACE16 (CC BY 4.0) is fetched on first use
+/// of ``gravmodel.itugrace16``. A full-degree gravity file or an updated
 /// IERS table placed in the data directory still takes precedence over the
 /// compiled-in copy.
 ///
@@ -40,8 +42,12 @@ use anyhow::Result;
 /// only kept when size and SHA-256 match. Files already present and verified
 /// are skipped unless `overwrite=True`.
 ///
-/// Note: Files updated daily (EOP, space weather) are always downloaded
-/// regardless of the overwrite flag.
+/// The daily EOP and space-weather files follow CelesTrak's usage policy
+/// rather than being re-downloaded every call: no request is made while the
+/// local copy is inside the file's publication cadence (3 hours for
+/// `SW-All.csv`, 24 hours for the Earth-orientation file), and past that the request is
+/// conditional, so an unchanged file costs a `304` and no transfer.
+/// `overwrite=True` forces a full re-fetch of these too.
 ///
 #[pyfunction]
 #[pyo3(signature=(**kwds))]

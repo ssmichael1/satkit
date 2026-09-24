@@ -6,7 +6,9 @@ satkit compiles a small subset of its data directly into the library so that
 frame transforms and gravity work with no data directory and no network:
 
 * IERS Conventions (2010) Tables 5.2a / 5.2b / 5.2d  (nutation / CIO series)
-* the four gravity models, truncated to degree <= EMBED_MAX_DEGREE
+* the public-domain gravity models (EGM96, EGM2008, JGM2, JGM3), truncated
+  to degree <= EMBED_MAX_DEGREE; ITU_GRACE16 (CC BY 4.0) is deliberately not
+  embedded and is downloaded on first use
   (the evaluator uses degree <= 40; the extra headroom keeps the files
   useful if that cap is raised)
 
@@ -39,7 +41,7 @@ MANIFEST = REPO / "data" / "manifest.json"
 
 EMBED_MAX_DEGREE = 70
 IERS_TABLES = ["tab5.2a.txt", "tab5.2b.txt", "tab5.2d.txt"]
-GRAVITY = ["EGM96.gfc", "ITU_GRACE16.gfc", "JGM2.gfc", "JGM3.gfc"]
+GRAVITY = ["EGM96.gfc", "EGM2008.gfc", "JGM2.gfc", "JGM3.gfc"]
 
 
 def sha256(b: bytes) -> str:

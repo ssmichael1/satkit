@@ -54,7 +54,7 @@ def make_density_plot():
     rho_500 = [sk.density.nrlmsise(500e3, 0, 0, x)[0] for x in timearray]
 
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    dates = [t.as_datetime() for t in timearray]
+    dates = [t.to_datetime() for t in timearray]
     ax.semilogy(dates, rho_400, color=COLORS[0], linewidth=1,
                 label="Altitude = 400 km")
     ax.semilogy(dates, rho_500, color=COLORS[1], linewidth=1,

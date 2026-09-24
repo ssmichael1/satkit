@@ -13,11 +13,24 @@ use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
+/// Load the model's coefficients (a download, for itugrace16) before the
+/// evaluator's infallible `get()` would panic on a missing file.
+fn ensure_loaded(model: &GravModel) -> Result<()> {
+    satkit::earthgravity::ensure_loaded(model.clone().into())
+        .map(|_| ())
+        .map_err(|e| anyhow::anyhow!("{e}"))
+}
+
 ///
 /// Gravity model enumeration
 ///
 /// For details of models, see:
 /// http://icgem.gfz-potsdam.de/tom_longtime
+///
+/// egm96, egm2008, jgm2 and jgm3 are compiled into satkit; itugrace16 is
+/// downloaded on first use (CC BY 4.0). Each model's tide system
+/// (tide-free / zero-tide) is read on load and the propagator's solid-tide
+/// correction accounts for it.
 ///
 #[allow(non_camel_case_types)]
 #[pyclass(name = "gravmodel", eq, eq_int, from_py_object)]
@@ -27,6 +40,7 @@ pub enum GravModel {
     jgm2 = GravityModel::JGM2 as isize,
     egm96 = GravityModel::EGM96 as isize,
     itugrace16 = GravityModel::ITUGrace16 as isize,
+    egm2008 = GravityModel::EGM2008 as isize,
 }
 
 impl From<GravModel> for GravityModel {
@@ -36,6 +50,7 @@ impl From<GravModel> for GravityModel {
             GravModel::jgm2 => Self::JGM2,
             GravModel::egm96 => Self::EGM96,
             GravModel::itugrace16 => Self::ITUGrace16,
+            GravModel::egm2008 => Self::EGM2008,
         }
     }
 }
@@ -47,6 +62,7 @@ impl From<GravityModel> for GravModel {
             GravityModel::JGM2 => Self::jgm2,
             GravityModel::EGM96 => Self::egm96,
             GravityModel::ITUGrace16 => Self::itugrace16,
+            GravityModel::EGM2008 => Self::egm2008,
         }
     }
 }
@@ -92,6 +108,7 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
         }
     }
     let order = order.unwrap_or(degree);
+    ensure_loaded(&model)?;
 
     if pos.is_instance_of::<PyITRFCoord>() {
         let pyitrf: PyRef<PyITRFCoord> = pos
@@ -167,6 +184,7 @@ pub fn gravity_and_partials(
         }
     }
     let order = order.unwrap_or(degree);
+    ensure_loaded(&model)?;
 
     if pos.is_instance_of::<PyITRFCoord>() {
         let pyitrf: PyRef<PyITRFCoord> = pos

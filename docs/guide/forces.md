@@ -40,14 +40,17 @@ $$
 
 The $\bar{C}_{20}$ term (commonly called **J2**) captures Earth's equatorial bulge and is responsible for orbital precession. The expansion and the recursive evaluation of the normalized Legendre functions follow [Montenbruck & Gill (2000)](references.md#montenbruck2000), §3.2, Eqs. 3.28–3.33.
 
-Coefficient files come from [ICGEM](https://icgem.gfz.de/) ([Ince et al. 2019](references.md#ince2019)). satkit ships with four models, selectable via `gravity_model`:
+Coefficient files come from [ICGEM](https://icgem.gfz.de/) ([Ince et al. 2019](references.md#ince2019)). Five models are selectable via `gravity_model`:
 
-| Model | Description |
-|---|---|
-| `egm96` | Earth Gravitational Model 1996 (default) — [Lemoine et al. (1998)](references.md#lemoine1998); tide-free |
-| `jgm3` | Joint Gravity Model 3 — [Tapley et al. (1996)](references.md#tapley1996); zero-tide |
-| `jgm2` | Joint Gravity Model 2 — [Nerem et al. (1994)](references.md#nerem1994); zero-tide |
-| `itugrace16` | ITU_GRACE16 — [Akyilmaz et al. (2016)](references.md#akyilmaz2016); zero-tide |
+| Model | Description | Tide system | Provided |
+|---|---|---|---|
+| `egm96` | Earth Gravitational Model 1996 (default) — [Lemoine et al. (1998)](references.md#lemoine1998) | tide-free | compiled in |
+| `egm2008` | Earth Gravitational Model 2008 — [Pavlis et al. (2012)](references.md#pavlis2012) | tide-free | compiled in |
+| `jgm3` | Joint Gravity Model 3 — [Tapley et al. (1996)](references.md#tapley1996) | zero-tide | compiled in |
+| `jgm2` | Joint Gravity Model 2 — [Nerem et al. (1994)](references.md#nerem1994) | tide-free | compiled in |
+| `itugrace16` | ITU_GRACE16, GRACE-only — [Akyilmaz et al. (2016)](references.md#akyilmaz2016); CC BY 4.0 | zero-tide | downloaded on first use |
+
+The compiled-in models are truncated to degree 70 (the evaluator uses at most degree 40, so nothing is lost). At degree ≤ 40 the post-GRACE models agree with each other to ~10⁻¹¹ in the coefficients; the choice among them changes a one-day LEO propagation by a few metres and a GPS one by centimetres. The degree cap matters more: at 400 km the terms above degree 40 are worth tens of metres per day, at 800 km a few metres, above 1200 km nothing.
 
 The `gravity_degree` and `gravity_order` parameters cap the expansion (default 4×4). For high-precision work, degree-8 to degree-20 is typical; gains beyond ~degree-20 are small for satellites above ~500 km (satkit's recommendation — see the order-of-magnitude discussion of gravity-model truncation in [Montenbruck & Gill 2000](references.md#montenbruck2000), §3.2). Order may be set lower than degree to zero out the longitudinal (tesseral) terms.
 
@@ -76,7 +79,7 @@ Set with `tide_model`:
 | `tidemodel.none` | Disable solid tides (use for reproducibility with pre-tide versions) |
 
 !!! note "Tide system of the gravity model"
-    Step 1 includes the *permanent* tide, so it belongs on a **tide-free** gravity model. `gravmodel.egm96` (the default) is tide-free ($\bar{C}_{20} = -4.84165371736\times10^{-4}$); `gravmodel.jgm3` and `gravmodel.itugrace16` are **zero-tide** ($\bar{C}_{20} \approx -4.841695\times10^{-4}$), so combining them with `solid_step1` double-counts the permanent tide — about 5–7 cm cross-track over 3 days at GPS altitude. Use `egm96` with tides on, or `tidemodel.none` with a zero-tide model.
+    Step 1 includes the *permanent* tide (its time average, $A_0 H_0 k_{20} \approx -4.2\times10^{-9}$ in $\bar{C}_{20}$; [Petit & Luzum 2010](references.md#petit2010), §6.2.2). A **tide-free** model (`egm96`, `egm2008`, `jgm2`; $\bar{C}_{20} \approx -4.841654\times10^{-4}$) has that part removed from its coefficients, so Step 1 completes it. A **zero-tide** model (`jgm3`, `itugrace16`; $\bar{C}_{20} \approx -4.841695\times10^{-4}$) already carries it. satkit reads each model's tide system on load (from the ICGEM `tide_system` header, or from the $\bar{C}_{20}$ value for the older files that lack one) and, for a zero-tide model, removes the permanent part from the Step 1 correction (IERS 2010 Eq. 6.13) instead of counting it twice. The published coefficients are never altered, so with `tidemodel.none` every model propagates exactly as published — and a zero-tide model with tides off still differs from a tide-free one by the permanent tide, about 8 m/day at 500 km with J2 alone. Any model can therefore be paired with any tide setting; before 0.23, `jgm3` or `itugrace16` with `solid_step1` double-counted the permanent tide (3–12 m/day at LEO, 0.3 m/day at GPS).
 
 ## Atmospheric Drag
 

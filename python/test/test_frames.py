@@ -44,9 +44,9 @@ class TestFrameTransform:
         assert dut1 == pytest.approx(-0.4399619, rel=1e-3)
         assert xp == pytest.approx(-0.140857, rel=1e-3)
         assert yp == pytest.approx(0.333309, rel=1e-3)
-        jd_tt = tm.as_jd(sk.timescale.TT)
+        jd_tt = tm.to_jd(sk.timescale.TT)
         assert jd_tt == pytest.approx(2453101.828154745)
-        t_tt = (tm.as_jd(sk.timescale.TT) - 2451545.0) / 36525.0
+        t_tt = (tm.to_jd(sk.timescale.TT) - 2451545.0) / 36525.0
 
         assert t_tt == pytest.approx(0.0426236319, rel=1e-8)
         # Check transform to terrestial intermediate frame
@@ -215,7 +215,7 @@ class TestFrameTransform:
         tm = sk.time(1992, 8, 20, 12, 14, 0)
 
         # Spooof UTC as UT1 value (as is done in example from Vallado)
-        tdiff = tm.as_mjd(sk.timescale.UT1) - tm.as_mjd(sk.timescale.UTC)
+        tdiff = tm.to_mjd(sk.timescale.UT1) - tm.to_mjd(sk.timescale.UTC)
         tm = tm - sk.duration.from_days(tdiff)
         gmst = sk.frametransform.gmst(tm)
         truth = -207.4212121875 * m.pi / 180
@@ -474,7 +474,7 @@ def test_eme2000_frame_bias_matches_iers_2010():
     expected = np.array([-6.819, 16.617, 14.600]) * mas
 
     def rotvec(q):
-        R = np.asarray(q.as_rotation_matrix())
+        R = np.asarray(q.to_rotation_matrix())
         return 0.5 * np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
 
     for t in (sk.time(2000, 1, 1, 12, 0, 0), sk.time(2026, 8, 28, 0, 0, 0)):

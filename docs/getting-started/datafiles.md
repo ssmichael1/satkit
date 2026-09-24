@@ -4,13 +4,13 @@
 
 | tier | files | how it is provided |
 |---|---|---|
-| **Compiled in** | IERS Conventions (2010) Tables 5.2a/b/d (nutation and CIO series); EGM96, JGM-2, JGM-3 and ITU_GRACE16 gravity coefficients to degree 70 | gzip'd into the library (~300 KB) and inflated on first use. Frame transforms and gravity work with **no data directory and no network** |
-| **Downloaded once, on first use** | JPL DE440 ephemeris `linux_p1550p2650.440` (102 MB), or DE421 `lnxp1900p2053.421` (14 MB) | fetched the first time a planet, Sun or Moon position is needed, SHA-256 verified against a manifest compiled into satkit, written to the [data directory](#where-satkit-looks-for-data-and-where-it-writes) |
-| **Refreshed** | `EOP-All.csv` (Earth orientation), `SW-All.csv` (space weather) | change daily; fetched from CelesTrak on first use and refreshed by `satkit.utils.update_datafiles()` |
+| **Compiled in** | IERS Conventions (2010) Tables 5.2a/b/d (nutation and CIO series); EGM96, EGM2008, JGM-2 and JGM-3 gravity coefficients to degree 70 | gzip'd into the library (~300 KB) and inflated on first use. Frame transforms and gravity work with **no data directory and no network** |
+| **Downloaded once, on first use** | JPL DE440 ephemeris `linux_p1550p2650.440` (102 MB), or DE421 `lnxp1900p2053.421` (14 MB); the ITU_GRACE16 gravity model `ITU_GRACE16.gfc` (1.8 MB) | fetched the first time a planet, Sun or Moon position (or `gravmodel.itugrace16`) is needed, SHA-256 verified against a manifest compiled into satkit, written to the [data directory](#where-satkit-looks-for-data-and-where-it-writes) |
+| **Refreshed** | `finals2000A.all` (Earth orientation, IERS), `SW-All.csv` (space weather, CelesTrak) | change daily; fetched on first use and refreshed by `satkit.utils.update_datafiles()`. CelesTrak's `EOP-All.csv` is the Earth-orientation fallback, and is still read when present |
 
 Everything that does not need the ephemeris or Earth orientation — gravity accelerations, the precession-nutation part of the frame chain, SGP4, time scales, Keplerian propagation, Lambert targeting — therefore works immediately after `pip install satkit`, offline. The numerical propagator needs the ephemeris (Sun and Moon) and the Earth-fixed frame chain needs the EOP file.
 
-Two caveats on "offline". Frame transforms need Earth-orientation parameters as well as the compiled-in nutation tables: with an `EOP-All.csv` present in a search directory they are exact; with none at all (a first run with no network) they fall back to zero polar motion and $\Delta UT1$, warn once, and are off by up to ~0.5″ (metres at LEO), while `propagate()` refuses to run (`EopUnavailable`) rather than integrate with a tilted gravity field. And the ephemeris is only "offline" once it has been downloaded (or provisioned by hand): `SATKIT_OFFLINE=1` turns a missing ephemeris into an error, not a degraded answer.
+Two caveats on "offline". Frame transforms need Earth-orientation parameters as well as the compiled-in nutation tables: with an Earth-orientation file (`finals2000A.all` or `EOP-All.csv`) present in a search directory they are exact; with none at all (a first run with no network) they fall back to zero polar motion and $\Delta UT1$, warn once, and are off by up to ~0.5″ (metres at LEO), while `propagate()` refuses to run (`EopUnavailable`) rather than integrate with a tilted gravity field. And the ephemeris is only "offline" once it has been downloaded (or provisioned by hand): `SATKIT_OFFLINE=1` turns a missing ephemeris into an error, not a degraded answer.
 
 ## The files
 
@@ -18,13 +18,15 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 
 - **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt** — Tables 5.2a, 5.2b and 5.2d of the IERS Conventions (2010), Technical Note 36 ([Petit & Luzum 2010](../guide/references.md#petit2010)): the CIP $X$, $Y$ and CIO-locator $s$ series used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame. Compiled in.
 
-- **EGM96.gfc**, **JGM2.gfc**, **JGM3.gfc**, **ITU_GRACE16.gfc** — Gravity coefficients for EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)), JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)) and ITU_GRACE16 ([Akyilmaz et al. 2016](../guide/references.md#akyilmaz2016)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). Compiled in, truncated to degree 70 (the evaluator uses at most degree 40, so results are identical to the full files). A full-degree copy placed in a data directory is used in preference.
+- **EGM96.gfc**, **EGM2008.gfc**, **JGM2.gfc**, **JGM3.gfc** — Gravity coefficients for EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), EGM2008 ([Pavlis et al. 2012](../guide/references.md#pavlis2012)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)) and JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). Compiled in, truncated to degree 70 (the evaluator uses at most degree 40, so results are identical to the full files). A full-degree copy placed in a data directory is used in preference.
+
+- **ITU_GRACE16.gfc** — Gravity coefficients for ITU_GRACE16 ([Akyilmaz et al. 2016](../guide/references.md#akyilmaz2016)), a GRACE-only satellite solution to degree 180. Licensed CC BY 4.0, so it is not compiled in: downloaded (1.8 MB, verified) on first use of `gravmodel.itugrace16`; with `SATKIT_OFFLINE=1` and no copy on disk, selecting it is a `RuntimeError`. Results derived from it should cite the model.
 
 - **SW-All.csv** — Space Weather. The solar flux at $\lambda = 10.7\text{cm}$ (2800 MHz) is an indication of solar activity, which in turn is an important predictor of air density at altitudes relevant for low-Earth orbits. This file is updated at [celestrak.org](https://www.celestrak.org) ([CelesTrak Space Data](../guide/references.md#celestrak-spacedata)) every 3 hours with the most-recent space weather information.
 
 - **predicted-solar-cycle.json** — [NOAA/SWPC solar cycle forecast](https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json). Monthly predicted F10.7 solar flux values extending ~5 years into the future. Used as a fallback for atmospheric density calculations when propagating beyond the range of historical space weather data.
 
-- **EOP-All.csv** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis. This file is updated daily with most-recent values at [celestrak.org](https://www.celestrak.org) (which repackages the IERS Bulletin A / finals series) and carries IERS predictions roughly six months ahead. For dates beyond the file, the last entry's values are used (constant extrapolation) — see [EOP coverage](#eop-coverage) below.
+- **finals2000A.all** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis, and the $dX$, $dY$ celestial-pole offsets. It is the [IERS Rapid Service / Prediction Centre](../guide/references.md#iers-finals2000a)'s Bulletin A combined file: observed values from 1973 and about a year of predictions, updated daily, fetched from the USNO mirror and then the IERS data centre. When both mirrors are unreachable satkit falls back to CelesTrak's **EOP-All.csv** ([CelesTrak Space Data](../guide/references.md#celestrak-spacedata)), a repackaging of the same IERS series that reaches back to 1962 and carries about six months of predictions; an `EOP-All.csv` already in a data directory (a hand-provisioned machine, the `satkit-data` bundle) is still read, and when both files are present the one whose observed record runs later is used, with the CSV's pre-1973 rows kept in front of the IERS table. `satkit.frametransform.eop_source()` says which one is loaded. For dates beyond the file, the last entry's values are used (constant extrapolation) — see [EOP coverage](#eop-coverage) below.
 
 - **Leap seconds** — not a file: the UTC↔TAI leap-second table is compiled into the library (current through the most recent leap second, 2017-01-01, when UTC began lagging TAI by 37 s), and a future leap second will require a new `satkit` release. The table is transcribed from [IERS Bulletin C](../guide/references.md#bulletinc); UTC and leap seconds are defined by [ITU-R TF.460-6](../guide/references.md#itu460). (Releases through 0.21.2 also downloaded a reference `leap-seconds.list`; nothing ever read it, and it is no longer fetched.)
 
@@ -85,7 +87,7 @@ really is untrusted and the download should not be forced through. satkit has no
 "skip verification" switch.
 
 A proxy that answers with a notice page instead of blocking outright cannot
-corrupt the data either: `EOP-All.csv` and `SW-All.csv` are parsed before they
+corrupt the data either: `finals2000A.all`, `EOP-All.csv` and `SW-All.csv` are parsed before they
 replace the copy on disk, and any download that opens with an HTML document is
 rejected. The partial file is discarded and the existing one left in place, so a
 blocked refresh degrades to a stale table rather than a broken one.
@@ -115,11 +117,14 @@ data bytes.
 
 Sources and attribution: DE440 / DE421 — JPL (Park et al. 2021; Folkner et al.
 2009), US Government work; `tab5.2a/b/d.txt` — IERS Conventions (2010), TN 36;
-EGM96, JGM-2, JGM-3 — NASA GSFC (public), via ICGEM; ITU_GRACE16 — Akyilmaz et
-al. 2016, GFZ Data Services, CC BY 4.0. The
-Earth-orientation and space-weather files are fetched from CelesTrak on every
-update and are not pinned (they change daily). The full table, with licences,
-is in `data/README.md`.
+EGM96, EGM2008, JGM-2, JGM-3 — NASA GSFC / NGA (US Government work), via ICGEM;
+ITU_GRACE16 — Akyilmaz et al. 2016, GFZ Data Services, CC BY 4.0 (downloaded on
+demand, not compiled in). The
+Earth-orientation file is fetched from the IERS mirrors (CelesTrak's copy as
+the fallback) and the space-weather file from CelesTrak; neither is pinned
+(they change daily). See [How often they are
+refreshed](#how-often-eop-and-space-weather-are-refreshed). The full table,
+with licences, is in `data/README.md`.
 
 ### Failure behaviour
 
@@ -130,6 +135,7 @@ is in `data/README.md`.
 | an ephemeris already on disk under a pinned name is corrupt or truncated | detected on first load (the file is hashed once, ~0.2 s for DE440, and a `<name>.sha256-verified` marker records the result so later loads only compare size and mtime); re-downloaded if downloads are allowed, otherwise `RuntimeError` naming the expected hash. Files not in the manifest (a user-supplied ephemeris) are trusted as-is |
 | no writable location (`SATKIT_DATA` unset and no home / `%LOCALAPPDATA%`; a read-only directory) | `RuntimeError` listing the directories consulted and asking for `SATKIT_DATA`; never the current directory or a temp dir |
 | an existing file cannot be replaced (Windows: another process has it open) | the rename is retried a few times, then `RuntimeError` naming the file |
+| both IERS mirrors are unreachable for the Earth-orientation refresh | CelesTrak's `EOP-All.csv` is fetched instead and a warning names the URLs that failed; the loader then uses whichever of the two files on disk has the later observed record |
 | every source fails (no network, all mirrors down) | `RuntimeError` listing each URL and why it failed |
 
 ## Provisioning up front
@@ -143,8 +149,38 @@ sk.utils.update_datafiles()   # ephemeris (verified) + EOP/SW + solar-cycle fore
 ```
 
 Files already present with the right hash are skipped; the space-weather and
-Earth-orientation files are always refreshed. `update_datafiles(dir="...")`
-writes somewhere else; `overwrite=True` re-downloads even verified files.
+Earth-orientation files are refreshed if they are due (below).
+`update_datafiles(dir="...")` writes somewhere else; `overwrite=True`
+re-downloads even verified files, including those two.
+
+### How often EOP and space weather are refreshed
+
+`finals2000A.all` (or its fallback `EOP-All.csv`) and `SW-All.csv` are
+whole-history tables — 1957 or 1973 to the present, several MB — and are the
+only files satkit fetches more than once.
+[CelesTrak's usage policy](https://celestrak.org/usage-policy.php) asks for one
+download per update, so satkit makes the smallest request that keeps the local
+copy current, from the IERS mirrors and CelesTrak alike:
+
+| local copy | what happens |
+|---|---|
+| younger than its publication cadence (3 h for space weather, 24 h for EOP) | **no request is made** |
+| older than that, unchanged upstream | a conditional `If-Modified-Since` request; the server answers `304` and no body is transferred |
+| older than that, changed upstream | the new file is downloaded and installed |
+
+So calling `update_datafiles()` at the top of every script is fine — it will
+not hit the IERS mirrors or CelesTrak more than the data actually changes. `overwrite=True` skips
+the gate and always transfers, which is the way to replace a copy you suspect
+is damaged. The freshness state is a `<name>.http-cache` sidecar next to the
+file. It also records the file's size and modification time and is ignored
+once those stop matching, so a copy you replace by hand is re-fetched rather
+than assumed current; deleting the sidecar (or the file) also restores a full
+fetch.
+
+Every request satkit makes also identifies itself as
+`satkit/<version> (+https://github.com/ssmichael1/satkit)`, and an HTTP error
+from CelesTrak is returned to you with an explanation rather than retried in a
+loop — repeated retries are what gets a client firewalled.
 
 The IERS tables and gravity models are **not** downloaded — they are compiled
 in (the tables byte-identical, gravity to degree 70, identical results at the
@@ -172,14 +208,14 @@ Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Ear
 | `"before_table"` | before 1962 | zeros, one-time warning |
 | `"not_loaded"` | no table at all (first use offline, or the fetch failed) | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
 
-`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
+`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded; `satkit.frametransform.eop_source()` reports which file the table came from (`"finals2000A"` or `"celestrak"`). For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
 
 ```python
 import satkit as sk
 
 first, last_observed, last = sk.frametransform.eop_coverage()
 if sk.frametransform.eop_status(t_end) == "extrapolated":
-    sk.utils.update_datafiles()   # re-downloads EOP-All.csv (and SW-All.csv)
+    sk.utils.update_datafiles()   # re-downloads finals2000A.all (and SW-All.csv)
 ```
 
 The warnings can be silenced with `satkit.frametransform.disable_eop_time_warning()`.

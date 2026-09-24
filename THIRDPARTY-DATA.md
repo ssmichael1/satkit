@@ -8,29 +8,21 @@ below. `data/embedded/SOURCES.json` records the SHA-256 of every original
 file and of the embedded copy. Larger files — the JPL DE440/DE421
 ephemerides and the Earth-orientation and space-weather tables — are
 downloaded on demand, not embedded; their sources and licences are listed in
-`data/README.md`.
+`data/README.md`. So is the optional ITU_GRACE16 gravity model (Akyilmaz et
+al. 2016, GFZ Data Services, CC BY 4.0): it is fetched, unmodified and with
+its attribution header, only when `gravmodel.itugrace16` is selected, and is
+not part of the library or its packages. Everything compiled in is a US
+Government work or an IERS table, freely redistributable.
 
-## ITU_GRACE16 gravity model — CC BY 4.0
+## EGM2008 gravity model — US Government work
 
-- **Citation:** Akyilmaz, O.; Ustun, A.; Aydin, C.; Arslan, N.; Doganalp, S.;
-  Guney, C.; Mercan, H.; Uygur, S.O.; Uz, M.; Yagci, O. (2016): *ITU_GRACE16
-  The global gravity field model including GRACE data up to degree and order
-  180 of ITU and other collaborating institutions.* GFZ Data Services.
-  <https://doi.org/10.5880/icgem.2016.006>
-- **Distributed by:** International Centre for Global Earth Models (ICGEM),
-  GFZ German Research Centre for Geosciences, <https://icgem.gfz-potsdam.de/>
-- **Licence:** Creative Commons Attribution 4.0 International (CC BY 4.0),
-  <https://creativecommons.org/licenses/by/4.0/>
-- **Modification:** the embedded copy is **truncated from degree/order 180 to
-  degree/order 70** (satkit evaluates the field to at most degree 40). The
-  file's header block, which carries the citation and licence statement, is
-  retained unchanged. Original file SHA-256
-  `b6bea9c78ad168f1e206fc7211f90b64fba54325c832f4473f6c05a07adbc718`
-  (1,782,369 bytes); embedded copy
-  `a9a2b237109d51fce0e02703472b62a9bd8f8d5371ff448f237db32d69e8952c`
-  (279,549 bytes).
-
-Results derived from `gravmodel.itu_grace16` should cite the model as above.
+- Pavlis, N.K., Holmes, S.A., Kenyon, S.C., & Factor, J.K. (2012): *The
+  development and evaluation of the Earth Gravitational Model 2008
+  (EGM2008)*, J. Geophys. Res. 117, B04406. National Geospatial-Intelligence
+  Agency (NGA).
+- Distributed by ICGEM. A work of the United States Government, not subject
+  to copyright (public domain).
+- Modification: truncated from degree/order 2190 to degree/order 70.
 
 ## EGM96 gravity model — US Government work
 

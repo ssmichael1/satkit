@@ -50,14 +50,16 @@ All manifest URLs must be `https://` (validated on load).
 | `lnxp1900p2053.421` | 14.0 MB | JPL | DE421 (Folkner et al. 2009). US Government work, public domain. `default: false` — fetched only by name (e.g. the conda package ships this one) | ephemeris |
 | `tab5.2a.txt`, `tab5.2b.txt`, `tab5.2d.txt` | 171 / 137 / 9 KB | IERS | IERS Conventions (2010), TN 36, Tables 5.2a/b/d. Freely redistributable. Origin URLs verified byte-identical. `default: false` — embedded byte-identical in the binary | core |
 | `EGM96.gfc` | 5.6 MB | ICGEM (GFZ) | EGM96, Lemoine et al. 1998, NASA GSFC/NIMA — US Government work. `default: false` — embedded to degree 70 | core |
+| `EGM2008.gfc` | 252 MB | ICGEM (GFZ) | EGM2008, Pavlis et al. 2012, NGA — US Government work. `default: false` — embedded to degree 70. Origin URL verified byte-identical; the release-asset URL is listed first for consistency but the file is not uploaded (it is only ever fetched by name, and the client falls through to ICGEM) | core |
 | `JGM2.gfc`, `JGM3.gfc` | 118 / 215 KB | ICGEM (GFZ) | JGM-2 (Nerem et al. 1994), JGM-3 (Tapley et al. 1996), NASA GSFC / UT CSR — US Government work. `default: false` — embedded to degree 70 | core |
-| `ITU_GRACE16.gfc` | 1.8 MB | ICGEM (GFZ) | Akyilmaz et al. 2016, GFZ Data Services, **CC BY 4.0** — keep the file's header block, it carries the attribution. `default: false` — embedded to degree 70 | core |
+| `ITU_GRACE16.gfc` | 1.8 MB | ICGEM (GFZ) | Akyilmaz et al. 2016, GFZ Data Services, **CC BY 4.0** — the file's header block carries the attribution. **Not embedded** (the licence would otherwise attach to the library and its packages): `default: false`, fetched on first use of `GravityModel::ITUGrace16`. Origin URL verified byte-identical | core |
 
 `tier` is informational: `core` = the small files frames and gravity need
 (embedded in the binary since Phase 2, below — which is why their manifest
 entries are `default: false`: pinned and fetchable by name, but pointless to
-download while evaluation is capped at degree 40), `ephemeris` = the large
-JPL files. The only `default: true` entry — the only file
+download while evaluation is capped at degree 40; ITU_GRACE16 is the one
+`core` file that is not embedded and is fetched on demand), `ephemeris` =
+the large JPL files. The only `default: true` entry — the only file
 `update_datafiles()` downloads besides the daily refreshes — is the DE440
 ephemeris.
 
@@ -69,10 +71,17 @@ ephemeris.
   reads it (the NRLMSIS 2 port is on an unmerged branch); if that feature
   ships it must be an opt-in download with its own notice, not part of the
   default bundle.
-- **`EOP-All.csv`, `SW-All.csv`** — Earth orientation and space weather.
-  CelesTrak asks that its compiled files not be mirrored, and they change
-  daily, so they are never pinned: `update_datafiles()` fetches them from
-  CelesTrak every run via the manifest's `refresh` list.
+- **`finals2000A.all`, `EOP-All.csv`, `SW-All.csv`** — Earth orientation and
+  space weather. They change daily, so they are never pinned, and CelesTrak
+  grants no redistribution licence for its compiled files, so satkit does not
+  mirror them. Space weather is fetched from CelesTrak via the manifest's
+  `refresh` list. Earth orientation is fetched via the manifest's `eop` list,
+  in order: the IERS Bulletin A combined file `finals2000A.all` from the USNO
+  mirror, then from the IERS data centre, then CelesTrak's `EOP-All.csv` as
+  the fallback. The loader reads both formats and, when both are on disk,
+  uses the one whose observed record runs later (the CSV's 1962–1972 rows are
+  kept in front of the IERS table, which starts in 1973). See
+  [Refresh policy](#refresh-policy-celestrak) for how often either is fetched.
 - **`sw19571001.txt`** — an orphan on the old bucket; nothing reads it.
 - **`leap-seconds.list`** — nothing reads it: the runtime leap-second table
   is a compiled-in constant (`src/time/instant.rs`). It was pinned
@@ -80,6 +89,36 @@ ephemeris.
   `data-v1` tag, but the manifest entry is gone.
 - **`predicted-solar-cycle.json`** — fetched directly from NOAA/SWPC by
   `solar_cycle_forecast::update()`; not a bundle file.
+
+## Refresh policy (CelesTrak)
+
+`finals2000A.all` (or its CelesTrak fallback `EOP-All.csv`) and `SW-All.csv`
+are the only files satkit fetches repeatedly, and they are whole-history
+tables (1957 or 1973 to the present, several MB); the CelesTrak ones are
+served by one person's site. [CelesTrak's usage
+policy](https://celestrak.org/usage-policy.php) asks clients to "only download
+the data you need, when you are going to use it, and only download data once
+per update", publishes space weather every 3 hours and EOP once a day, and
+warns that machine-to-machine clients ignoring non-200 responses get
+firewalled. Satkit follows it in four places, and applies the same cadence gate
+and conditional request to the IERS mirrors:
+
+| | |
+|---|---|
+| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for `SW-All.csv`, 24 h for `EOP-All.csv` and `finals2000A.all`). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
+| **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar, which also records the file's size and whole-second mtime and is ignored once those stop matching, so a copy swapped in by hand is re-fetched rather than reported current by a `304`; delete it (or the file) to force a full fetch |
+| **identification** | every request sends `User-Agent: satkit/<version> (+https://github.com/ssmichael1/satkit)` (`download::USER_AGENT`) rather than `ureq/3.x`, so a misbehaving client is traceable to the project |
+| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `finals2000A.all` / `EOP-All.csv` / `SW-All.csv` are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
+| **no retry loop** | an HTTP error is returned to the caller, with `celestrak_throttle_hint` explaining 403/503 and telling the user to cache rather than retry |
+
+CI is the other half of the problem: a data-cache hit used to be followed by an
+unconditional refresh in every job, which is ~12 full-file downloads per push
+from GitHub's datacenter ranges. The test jobs no longer refresh at all — every
+test that touches the EOP table works from the table's own bounds, so a cached
+copy stays valid however old it is — and the docs and release workflows refresh
+only when the cached copy is more than a week old
+(`download_data.py --max-age-hours 168`), which is well inside the ~1 year of
+predictions `finals2000A.all` carries.
 
 ## Publishing the release assets (maintainer)
 
@@ -98,6 +137,11 @@ gh release create data-v1 --repo ssmichael1/satkit-data --latest=false \
   "$D/tab5.2a.txt" "$D/tab5.2b.txt" "$D/tab5.2d.txt" \
   "$D/EGM96.gfc" "$D/ITU_GRACE16.gfc" "$D/JGM2.gfc" "$D/JGM3.gfc"
 ```
+
+(`EGM2008.gfc` was pinned later and is deliberately not uploaded: 252 MB for
+a file nothing downloads by default. Its manifest entry lists the release URL
+first for consistency; the fetch falls through to the ICGEM origin, verified
+by hash.)
 
 (`lnxp1900p2053.421` can be fetched first with
 `curl -O https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de421/lnxp1900p2053.421`;
@@ -183,9 +227,10 @@ handled in three tiers:
 
 | tier | files | how |
 |---|---|---|
-| **embedded** | `tab5.2a/b/d.txt`; `EGM96/ITU_GRACE16/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (309 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
+| **embedded** | `tab5.2a/b/d.txt`; `EGM96/EGM2008/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (295 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
 | **ephemeris** | `linux_p1550p2650.440` (DE440, 102 MB) or `lnxp1900p2053.421` (DE421, 14 MB) | downloaded on first use through the verified manifest fetch, into the write location |
-| **refreshed** | `EOP-All.csv`, `SW-All.csv` | fetched from CelesTrak on first use; `update_datafiles()` refreshes them |
+| **on demand** | `ITU_GRACE16.gfc` (1.8 MB, CC BY 4.0) | same verified fetch, on first use of `GravityModel::ITUGrace16`; not embedded so the licence does not attach to the library |
+| **refreshed** | `finals2000A.all` (IERS; `EOP-All.csv` from CelesTrak as fallback), `SW-All.csv` | fetched on first use; `update_datafiles()` refreshes them, rate-limited (below) |
 
 `tools/embed_data.py` regenerates the blobs from a data directory whose files
 match `manifest.json` (it checks the source hashes) and records provenance in

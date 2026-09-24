@@ -41,9 +41,11 @@
 //! the next URL is tried; if every URL fails the error lists each attempt.
 //! An existing file whose hash matches is never re-downloaded.
 //!
-//! The regularly refreshed files (`EOP-All.csv`, `SW-All.csv`) are *not*
-//! pinned — they change daily — and are listed under `refresh` as plain
-//! URLs (celestrak).
+//! The regularly refreshed files are *not* pinned — they change daily.
+//! Space weather (`SW-All.csv`) is listed under `refresh` as a plain URL
+//! (celestrak); the Earth orientation sources are listed under `eop` in
+//! order of preference (IERS `finals2000A.all` mirrors, then CelesTrak's
+//! `EOP-All.csv`).
 
 use serde::Deserialize;
 use std::io::Read;
@@ -74,9 +76,25 @@ pub struct Manifest {
     pub release_base: String,
     /// The pinned static files.
     pub files: Vec<ManifestEntry>,
-    /// Regularly refreshed files (EOP, space weather): plain URLs, never pinned.
+    /// Regularly refreshed files (space weather): plain URLs, never pinned.
     #[serde(default)]
     pub refresh: Vec<String>,
+    /// Earth orientation sources in order of preference: the first entry is
+    /// the primary (`finals2000A.all`, with its mirrors), later entries are
+    /// fallbacks (CelesTrak's `EOP-All.csv`). Never pinned. See
+    /// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into).
+    #[serde(default)]
+    pub eop: Vec<RefreshSource>,
+}
+
+/// One regularly refreshed file and the URLs it may be fetched from, in
+/// order of preference.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct RefreshSource {
+    /// File name (a single plain path component) under the data directory.
+    pub name: String,
+    /// Download URLs in order of preference (all `https://`).
+    pub urls: Vec<String>,
 }
 
 /// One pinned static data file.
@@ -180,6 +198,28 @@ impl Manifest {
         for u in &self.refresh {
             if !u.starts_with("https://") {
                 return Err(invalid(format!("refresh URL {u:?} must be https://")));
+            }
+        }
+        for s in &self.eop {
+            if crate::earth_orientation_params::EopSource::from_file_name(&s.name).is_none() {
+                return Err(invalid(format!(
+                    "eop source {:?} is not a known EOP file",
+                    s.name
+                )));
+            }
+            if s.urls.is_empty() {
+                return Err(invalid(format!(
+                    "eop source {}: needs at least one URL",
+                    s.name
+                )));
+            }
+            for u in &s.urls {
+                if !u.starts_with("https://") {
+                    return Err(invalid(format!(
+                        "eop source {}: URL {u:?} must be https://",
+                        s.name
+                    )));
+                }
             }
         }
         Ok(())
@@ -483,7 +523,13 @@ mod tests {
         // Refresh files must not be pinned.
         assert!(m.entry("EOP-All.csv").is_none());
         assert!(m.entry("SW-All.csv").is_none());
-        assert!(m.refresh.iter().any(|u| u.ends_with("EOP-All.csv")));
+        assert!(m.refresh.iter().any(|u| u.ends_with("SW-All.csv")));
+        assert!(!m.refresh.iter().any(|u| u.ends_with("EOP-All.csv")));
+        // EOP: the IERS file (two mirrors) first, CelesTrak as the fallback.
+        let names: Vec<&str> = m.eop.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["finals2000A.all", "EOP-All.csv"]);
+        assert_eq!(m.eop[0].urls.len(), 2);
+        assert!(m.eop[1].urls[0].starts_with("https://celestrak.org/"));
         // Every entry: GitHub release asset first.
         for e in &m.files {
             assert!(

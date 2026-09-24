@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::path::PathBuf;
 
-use crate::utils::{datadir, download_file, download_if_not_exist, RefreshableSingleton};
+use crate::utils::{datadir, download_if_not_exist, RefreshableSingleton};
 use crate::Instant;
 use crate::TimeLike;
 use thiserror::Error;
@@ -318,8 +318,12 @@ pub fn update() -> Result<()> {
     // Download most-recent SW file. This must be the same file the loader
     // parses (`SW-All.csv`); downloading `sw19571001.txt` here left the loader
     // reading stale data and made this a silent no-op.
+    //
+    // CelesTrak publishes space weather every 3 hours and asks clients to
+    // download it once per update, so a copy younger than that is reused
+    // without contacting the server and an unchanged one costs a `304`.
     let url = "https://celestrak.org/SpaceData/SW-All.csv";
-    download_file(url, &d, true)?;
+    crate::utils::refresh_file(url, &d, false)?;
 
     SPACE_WEATHER.set(load_space_weather_csv()?);
     Ok(())

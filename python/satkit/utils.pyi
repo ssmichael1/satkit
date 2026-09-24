@@ -29,18 +29,26 @@ def update_datafiles(**kwargs) -> None:
     Notes:
         - Files downloaded:
             - ``linux_p1550p2650.440`` : JPL Ephemeris version 440 (~ 100 MB)
-            - ``EOP-All.csv`` : Earth orientation parameters, updated daily
+            - ``finals2000A.all`` : Earth orientation parameters (IERS Bulletin A), updated daily;
+              CelesTrak's ``EOP-All.csv`` is fetched instead when both IERS mirrors are unreachable
             - ``SW-All.csv`` : Space weather data, updated daily
             - ``predicted-solar-cycle.json`` : NOAA/SWPC solar cycle forecast (~5 years of predicted F10.7)
 
         - The IERS nutation tables (``tab5.2a/b/d.txt``) and the gravity
-          models (EGM96, JGM2, JGM3, ITU_GRACE16 — to degree 70) are compiled
-          into satkit and are not downloaded. A full-degree gravity file or an
-          updated IERS table placed in the data directory still takes
-          precedence over the compiled-in copy.
+          models (EGM96, EGM2008, JGM2, JGM3 — to degree 70) are compiled
+          into satkit and are not downloaded; ITU_GRACE16 (CC BY 4.0) is
+          fetched on first use of ``gravmodel.itugrace16``. A full-degree
+          gravity file or an updated IERS table placed in the data directory
+          still takes precedence over the compiled-in copy.
 
-        - The space weather and earth orientation parameters files are updated
-          daily and will always be downloaded regardless of the overwrite flag
+        - The space weather and Earth-orientation files follow `CelesTrak's
+          usage policy <https://celestrak.org/usage-policy.php>`_ rather than
+          transferring the whole 1957-to-present table on every call: no
+          request is made while the local copy is inside its publication
+          cadence (3 h for ``SW-All.csv``, 24 h for the Earth-orientation file), and past
+          that the request carries ``If-Modified-Since``, so an unchanged file
+          costs a ``304``. ``overwrite=True`` forces a full re-fetch of these
+          too. Calling this at the start of every script is therefore fine.
 
     Example:
         ```python

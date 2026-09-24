@@ -5,9 +5,10 @@
 //!
 //! | tier | files | how it is provided |
 //! |---|---|---|
-//! | **embedded** (this module) | IERS Tables 5.2a/b/d (nutation / CIO series); EGM96, JGM2, JGM3, ITU_GRACE16 gravity coefficients truncated to degree 70 | gzip'd and compiled in with `include_bytes!` (~300 KB total), inflated on first use. Frames and gravity therefore work with **no data directory and no network** |
+//! | **embedded** (this module) | IERS Tables 5.2a/b/d (nutation / CIO series); EGM96, EGM2008, JGM2, JGM3 gravity coefficients truncated to degree 70 | gzip'd and compiled in with `include_bytes!` (~300 KB total), inflated on first use. Frames and gravity therefore work with **no data directory and no network** |
 //! | **ephemeris** | JPL DE440 (102 MB) or DE421 (14 MB) | downloaded on first use through the SHA-256-verified [manifest](super::manifest) fetch, or provided by the user |
-//! | **refreshed** | Earth orientation (`EOP-All.csv`), space weather (`SW-All.csv`) | change daily; fetched from CelesTrak by `update_datafiles()` or on first use |
+//! | **on demand** | the ITU_GRACE16 gravity model (CC BY 4.0, so not compiled in) | same verified fetch, on first use of `GravityModel::ITUGrace16` |
+//! | **refreshed** | Earth orientation (`finals2000A.all`, IERS; `EOP-All.csv`, CelesTrak fallback), space weather (`SW-All.csv`, CelesTrak) | change daily; fetched by `update_datafiles()` or on first use |
 //!
 //! # Precedence
 //!
@@ -37,7 +38,7 @@ pub const EMBEDDED_FILES: [&str; 7] = [
     "tab5.2b.txt",
     "tab5.2d.txt",
     "EGM96.gfc",
-    "ITU_GRACE16.gfc",
+    "EGM2008.gfc",
     "JGM2.gfc",
     "JGM3.gfc",
 ];
@@ -51,7 +52,7 @@ fn compressed(name: &str) -> Option<&'static [u8]> {
         "tab5.2b.txt" => include_bytes!("../../data/embedded/tab5.2b.txt.gz"),
         "tab5.2d.txt" => include_bytes!("../../data/embedded/tab5.2d.txt.gz"),
         "EGM96.gfc" => include_bytes!("../../data/embedded/EGM96.gfc.gz"),
-        "ITU_GRACE16.gfc" => include_bytes!("../../data/embedded/ITU_GRACE16.gfc.gz"),
+        "EGM2008.gfc" => include_bytes!("../../data/embedded/EGM2008.gfc.gz"),
         "JGM2.gfc" => include_bytes!("../../data/embedded/JGM2.gfc.gz"),
         "JGM3.gfc" => include_bytes!("../../data/embedded/JGM3.gfc.gz"),
         _ => return None,
@@ -116,6 +117,10 @@ mod tests {
         }
         assert!(get("nonexistent").is_none());
         assert!(
+            !has("ITU_GRACE16.gfc"),
+            "CC BY 4.0 model is fetched on demand, not compiled in"
+        );
+        assert!(
             compressed_size() < 1_500_000,
             "embedded data budget exceeded"
         );
@@ -126,7 +131,7 @@ mod tests {
     /// through the normal loader.
     #[test]
     fn offline_embedded_gravity_files_parse() {
-        for name in ["EGM96.gfc", "ITU_GRACE16.gfc", "JGM2.gfc", "JGM3.gfc"] {
+        for name in ["EGM96.gfc", "EGM2008.gfc", "JGM2.gfc", "JGM3.gfc"] {
             let bytes = get(name).unwrap();
             let text = String::from_utf8_lossy(&bytes);
             assert!(text.contains("end_of_head"), "{name}: header terminator");
@@ -162,7 +167,7 @@ mod tests {
     fn embedded_gravity_matches_full_file_to_degree_40() {
         use crate::earthgravity::Gravity;
         let mut compared = 0;
-        for name in ["EGM96.gfc", "ITU_GRACE16.gfc", "JGM2.gfc", "JGM3.gfc"] {
+        for name in ["EGM96.gfc", "EGM2008.gfc", "JGM2.gfc", "JGM3.gfc"] {
             let Some(full_path) = crate::utils::find_data_file(name) else {
                 continue;
             };
