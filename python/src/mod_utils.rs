@@ -24,7 +24,8 @@ use anyhow::Result;
 /// Files downloaded:
 ///
 /// * linux_p1550p2650.440 :: JPL Ephemeris version 440 (~ 100 MB)
-/// * EOP-All.csv :: Earth orientation parameters, updated daily
+/// * finals2000A.all :: Earth orientation parameters (IERS Bulletin A), updated daily;
+///   CelesTrak's EOP-All.csv is fetched instead when both IERS mirrors are unreachable
 /// * SW-All.csv :: Space weather data, updated daily
 /// * predicted-solar-cycle.json :: NOAA/SWPC solar cycle forecast
 ///
@@ -44,7 +45,7 @@ use anyhow::Result;
 /// The daily EOP and space-weather files follow CelesTrak's usage policy
 /// rather than being re-downloaded every call: no request is made while the
 /// local copy is inside the file's publication cadence (3 hours for
-/// `SW-All.csv`, 24 hours for `EOP-All.csv`), and past that the request is
+/// `SW-All.csv`, 24 hours for the Earth-orientation file), and past that the request is
 /// conditional, so an unchanged file costs a `304` and no transfer.
 /// `overwrite=True` forces a full re-fetch of these too.
 ///

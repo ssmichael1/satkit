@@ -71,12 +71,17 @@ ephemeris.
   reads it (the NRLMSIS 2 port is on an unmerged branch); if that feature
   ships it must be an opt-in download with its own notice, not part of the
   default bundle.
-- **`EOP-All.csv`, `SW-All.csv`** — Earth orientation and space weather.
-  They change daily, so they are never pinned, and CelesTrak grants no
-  redistribution licence for its compiled files, so satkit does not mirror
-  them: `update_datafiles()` fetches them from CelesTrak via the manifest's
-  `refresh` list. See [Refresh policy](#refresh-policy-celestrak) for how
-  often.
+- **`finals2000A.all`, `EOP-All.csv`, `SW-All.csv`** — Earth orientation and
+  space weather. They change daily, so they are never pinned, and CelesTrak
+  grants no redistribution licence for its compiled files, so satkit does not
+  mirror them. Space weather is fetched from CelesTrak via the manifest's
+  `refresh` list. Earth orientation is fetched via the manifest's `eop` list,
+  in order: the IERS Bulletin A combined file `finals2000A.all` from the USNO
+  mirror, then from the IERS data centre, then CelesTrak's `EOP-All.csv` as
+  the fallback. The loader reads both formats and, when both are on disk,
+  uses the one whose observed record runs later (the CSV's 1962–1972 rows are
+  kept in front of the IERS table, which starts in 1973). See
+  [Refresh policy](#refresh-policy-celestrak) for how often either is fetched.
 - **`sw19571001.txt`** — an orphan on the old bucket; nothing reads it.
 - **`leap-seconds.list`** — nothing reads it: the runtime leap-second table
   is a compiled-in constant (`src/time/instant.rs`). It was pinned
@@ -87,21 +92,23 @@ ephemeris.
 
 ## Refresh policy (CelesTrak)
 
-`EOP-All.csv` and `SW-All.csv` are the only files satkit fetches repeatedly,
-and they are whole-history tables (1957 to the present, several MB) served by
-one person's site. [CelesTrak's usage
+`finals2000A.all` (or its CelesTrak fallback `EOP-All.csv`) and `SW-All.csv`
+are the only files satkit fetches repeatedly, and they are whole-history
+tables (1957 or 1973 to the present, several MB); the CelesTrak ones are
+served by one person's site. [CelesTrak's usage
 policy](https://celestrak.org/usage-policy.php) asks clients to "only download
 the data you need, when you are going to use it, and only download data once
 per update", publishes space weather every 3 hours and EOP once a day, and
 warns that machine-to-machine clients ignoring non-200 responses get
-firewalled. Satkit follows it in four places:
+firewalled. Satkit follows it in four places, and applies the same cadence gate
+and conditional request to the IERS mirrors:
 
 | | |
 |---|---|
-| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for `SW-All.csv`, 24 h for `EOP-All.csv`). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
+| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for `SW-All.csv`, 24 h for `EOP-All.csv` and `finals2000A.all`). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
 | **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar, which also records the file's size and whole-second mtime and is ignored once those stop matching, so a copy swapped in by hand is re-fetched rather than reported current by a `304`; delete it (or the file) to force a full fetch |
 | **identification** | every request sends `User-Agent: satkit/<version> (+https://github.com/ssmichael1/satkit)` (`download::USER_AGENT`) rather than `ureq/3.x`, so a misbehaving client is traceable to the project |
-| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `EOP-All.csv` / `SW-All.csv` are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
+| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `finals2000A.all` / `EOP-All.csv` / `SW-All.csv` are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
 | **no retry loop** | an HTTP error is returned to the caller, with `celestrak_throttle_hint` explaining 403/503 and telling the user to cache rather than retry |
 
 CI is the other half of the problem: a data-cache hit used to be followed by an
@@ -110,8 +117,8 @@ from GitHub's datacenter ranges. The test jobs no longer refresh at all — ever
 test that touches the EOP table works from the table's own bounds, so a cached
 copy stays valid however old it is — and the docs and release workflows refresh
 only when the cached copy is more than a week old
-(`download_data.py --max-age-hours 168`), which is well inside the ~6 months of
-IERS predictions `EOP-All.csv` carries.
+(`download_data.py --max-age-hours 168`), which is well inside the ~1 year of
+predictions `finals2000A.all` carries.
 
 ## Publishing the release assets (maintainer)
 
@@ -223,7 +230,7 @@ handled in three tiers:
 | **embedded** | `tab5.2a/b/d.txt`; `EGM96/EGM2008/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (295 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
 | **ephemeris** | `linux_p1550p2650.440` (DE440, 102 MB) or `lnxp1900p2053.421` (DE421, 14 MB) | downloaded on first use through the verified manifest fetch, into the write location |
 | **on demand** | `ITU_GRACE16.gfc` (1.8 MB, CC BY 4.0) | same verified fetch, on first use of `GravityModel::ITUGrace16`; not embedded so the licence does not attach to the library |
-| **refreshed** | `EOP-All.csv`, `SW-All.csv` | fetched from CelesTrak on first use; `update_datafiles()` refreshes them, rate-limited (below) |
+| **refreshed** | `finals2000A.all` (IERS; `EOP-All.csv` from CelesTrak as fallback), `SW-All.csv` | fetched on first use; `update_datafiles()` refreshes them, rate-limited (below) |
 
 `tools/embed_data.py` regenerates the blobs from a data directory whose files
 match `manifest.json` (it checks the source hashes) and records provenance in

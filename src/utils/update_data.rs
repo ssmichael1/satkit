@@ -3,9 +3,10 @@
 //! Static files (ephemeris, IERS tables, gravity coefficients, leap-second
 //! list) come from the embedded [data manifest](crate::utils::manifest)
 //! and are SHA-256 verified; the regularly updated files (EOP, space weather)
-//! are listed in the manifest's `refresh` section and fetched unverified from
-//! celestrak, rate-limited to their publication cadence and with a
-//! conditional GET outside it. See `data/README.md` for the design.
+//! are listed in the manifest's `refresh` and `eop` sections and fetched
+//! unverified from their sources, rate-limited to their publication cadence
+//! and with a conditional GET outside it. See `data/README.md` for the
+//! design.
 
 use super::download::{self, refresh_file_async, RefreshOutcome};
 use super::manifest::{self, FetchOutcome};
@@ -86,17 +87,19 @@ pub fn download_static_files(
     Ok(out)
 }
 
-/// Refresh the regularly updated files (EOP, space weather) listed in the
-/// manifest's `refresh` section.
+/// Refresh the regularly updated files: the plain URLs of the manifest's
+/// `refresh` section (space weather) in parallel with the Earth orientation
+/// refresh, which tries the manifest's `eop` sources in order (IERS
+/// `finals2000A.all` mirrors, then CelesTrak's `EOP-All.csv`).
 ///
 /// Each one goes through [`refresh_file`](download::refresh_file), which
 /// skips the request entirely while the local copy is inside its publication
 /// cadence and otherwise sends a conditional GET. `force` re-fetches
-/// unconditionally. Returns one `(name, outcome)` per feed.
+/// unconditionally. Returns one `(name, url, outcome)` per file.
 fn download_refresh_files(
     dir: &std::path::Path,
     force: bool,
-) -> Result<Vec<(String, RefreshOutcome)>> {
+) -> Result<Vec<(String, String, RefreshOutcome)>> {
     let m = manifest::embedded();
     let handles: Vec<(String, JoinHandle<download::Result<RefreshOutcome>>)> = m
         .refresh
@@ -109,10 +112,20 @@ fn download_refresh_files(
             Ok((name, refresh_file_async(url.clone(), dir, force)))
         })
         .collect::<Result<Vec<_>>>()?;
-    let mut out = Vec::with_capacity(handles.len());
+    let eop_dir = dir.to_path_buf();
+    let eop =
+        std::thread::spawn(move || crate::earth_orientation_params::refresh_into(&eop_dir, force));
+    let mut out = Vec::with_capacity(handles.len() + 1);
     for (name, jh) in handles {
-        out.push((name, jh.join().map_err(|_| Error::ThreadPanic)??));
+        let url = m.refresh.iter().find(|u| u.ends_with(&name)).cloned();
+        out.push((
+            name,
+            url.unwrap_or_default(),
+            jh.join().map_err(|_| Error::ThreadPanic)??,
+        ));
     }
+    let eop = eop.join().map_err(|_| Error::ThreadPanic)??;
+    out.push((eop.source.file_name().to_string(), eop.url, eop.fetch));
     Ok(out)
 }
 
@@ -140,10 +153,13 @@ fn download_refresh_files(
 /// when that model is first used. A copy placed in a search directory takes
 /// precedence.
 ///
-/// The space weather and Earth orientation files are refreshed from
-/// celestrak and the NOAA solar-cycle forecast is fetched; these change daily
-/// and are not pinned. The refresh respects CelesTrak's publication cadence:
-/// a copy newer than that (3 h for space weather, 24 h for EOP) is left alone
+/// The space weather file is refreshed from celestrak, the Earth orientation
+/// file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
+/// when both are unreachable — see
+/// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into)),
+/// and the NOAA solar-cycle forecast is fetched; these change daily and are
+/// not pinned. The refresh respects each file's publication cadence: a copy
+/// newer than that (3 h for space weather, 24 h for EOP) is left alone
 /// without contacting the server, and otherwise the request is conditional so
 /// an unchanged file costs a `304`. `overwrite_if_exists` forces a full
 /// re-fetch of these too.
@@ -177,14 +193,14 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
     }
 
     println!("Regularly updated files (Space Weather, Earth Orientation Parameters):");
-    for (name, outcome) in download_refresh_files(&downloaddir, overwrite_if_exists)? {
+    for (name, url, outcome) in download_refresh_files(&downloaddir, overwrite_if_exists)? {
         match outcome {
             RefreshOutcome::Fresh { age_secs } => println!(
                 "  {name}: current ({:.1} h old); no request made",
                 age_secs as f64 / 3600.0
             ),
             RefreshOutcome::NotModified => println!("  {name}: unchanged on the server (304)"),
-            RefreshOutcome::Downloaded => println!("  {name}: downloaded"),
+            RefreshOutcome::Downloaded => println!("  {name}: downloaded from {url}"),
         }
     }
 
@@ -202,11 +218,8 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
             eprintln!("Warning: could not load downloaded space-weather file: {e}");
         }
     }
-    let eop_path = downloaddir.join("EOP-All.csv");
-    if eop_path.is_file() {
-        if let Err(e) = crate::earth_orientation_params::init_from_path(&eop_path) {
-            eprintln!("Warning: could not load downloaded EOP file: {e}");
-        }
+    if let Err(e) = crate::earth_orientation_params::load_from_dir(&downloaddir) {
+        eprintln!("Warning: could not load downloaded EOP file: {e}");
     }
 
     Ok(())
@@ -715,6 +728,144 @@ mod tests {
     }
 
     /// URL each file came from. `cargo test --lib real_network_update -- --ignored --nocapture`.
+    /// A few real `finals2000A.all` lines (Bulletin A columns) and a
+    /// CelesTrak table, for the EOP source-order tests.
+    const FINALS: &str = "\
+26 917 61300.00 I  0.190054 0.000090  0.329163 0.000090  I-0.0086337 0.0000267                 P     0.084    0.128     0.235    0.160
+26 918 61301.00 P  0.189180 0.000600  0.329137 0.000401  P-0.0091919 0.0001080                 P     0.094    0.128     0.236    0.160
+";
+    const EOP_CSV: &str = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE\n\
+        2026-09-18,61301,0.187672,0.328316,-0.0073956,0.0000148,-0.124590,-0.011105,0.000295,-0.000027,37,P\n";
+
+    fn eop_sources(server: &TestServer) -> Vec<crate::utils::manifest::RefreshSource> {
+        vec![
+            crate::utils::manifest::RefreshSource {
+                name: "finals2000A.all".into(),
+                urls: vec![
+                    server.url("usno/finals2000A.all"),
+                    server.url("iers/finals2000A.all"),
+                ],
+            },
+            crate::utils::manifest::RefreshSource {
+                name: "EOP-All.csv".into(),
+                urls: vec![server.url("celestrak/EOP-All.csv")],
+            },
+        ]
+    }
+
+    /// The EOP refresh walks the manifest's sources in order: the second
+    /// IERS mirror when the first is down, CelesTrak's file when both are,
+    /// and a typed error naming every URL when nothing answers. A mirror
+    /// that answers with an HTML page instead of the file is skipped too.
+    /// Between forced fetches, a copy inside its 24 h cadence is reported
+    /// current without any request — even when every mirror is down.
+    #[test]
+    fn eop_refresh_falls_through_mirrors_then_celestrak() {
+        use crate::earth_orientation_params::{self as eop, EopSource};
+        let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::utils::download::clear_offline_override();
+        let dir = tmpdir("eop_order");
+
+        // Both IERS mirrors up: the first one is used and nothing else is asked.
+        let server = TestServer::start(HashMap::from([
+            (
+                "usno/finals2000A.all".to_string(),
+                FINALS.as_bytes().to_vec(),
+            ),
+            (
+                "iers/finals2000A.all".to_string(),
+                FINALS.as_bytes().to_vec(),
+            ),
+            (
+                "celestrak/EOP-All.csv".to_string(),
+                EOP_CSV.as_bytes().to_vec(),
+            ),
+        ]));
+        let out = eop::refresh_into_with_sources(&dir, &eop_sources(&server), false).unwrap();
+        assert_eq!(out.source, EopSource::IersFinals2000A);
+        assert_eq!(out.url, server.url("usno/finals2000A.all"));
+        assert_eq!(out.fetch, RefreshOutcome::Downloaded);
+        assert_eq!(server.hits(), 1);
+        assert!(dir.join("finals2000A.all").is_file());
+        assert!(!dir.join("EOP-All.csv").exists());
+
+        // Inside the cadence: current, no request made.
+        let out = eop::refresh_into_with_sources(&dir, &eop_sources(&server), false).unwrap();
+        assert_eq!(out.source, EopSource::IersFinals2000A);
+        assert!(matches!(out.fetch, RefreshOutcome::Fresh { .. }), "{out:?}");
+        assert_eq!(server.hits(), 1);
+        drop(server);
+
+        // First mirror answers with a notice page: rejected, second mirror used.
+        let page = b"<!DOCTYPE html><html><body>maintenance</body></html>".to_vec();
+        let server = TestServer::start(HashMap::from([
+            ("usno/finals2000A.all".to_string(), page.clone()),
+            (
+                "iers/finals2000A.all".to_string(),
+                FINALS.as_bytes().to_vec(),
+            ),
+        ]));
+        let out = eop::refresh_into_with_sources(&dir, &eop_sources(&server), true).unwrap();
+        assert_eq!(out.url, server.url("iers/finals2000A.all"));
+        assert_eq!(out.fetch, RefreshOutcome::Downloaded);
+        assert_eq!(server.hits(), 2);
+        drop(server);
+
+        // Both mirrors 404: CelesTrak's file is fetched instead.
+        let server = TestServer::start(HashMap::from([(
+            "celestrak/EOP-All.csv".to_string(),
+            EOP_CSV.as_bytes().to_vec(),
+        )]));
+        let out = eop::refresh_into_with_sources(&dir, &eop_sources(&server), true).unwrap();
+        assert_eq!(out.source, EopSource::CelesTrak);
+        assert_eq!(server.hits(), 3);
+        assert!(dir.join("EOP-All.csv").is_file());
+        drop(server);
+
+        // Nothing answers: every URL is named, and the files already on disk
+        // are untouched.
+        let server = TestServer::start(HashMap::new());
+        let err = eop::refresh_into_with_sources(&dir, &eop_sources(&server), true).unwrap_err();
+        match &err {
+            download::Error::AllSourcesFailed { attempts, .. } => assert_eq!(attempts.len(), 3),
+            other => panic!("expected AllSourcesFailed, got {other:?}"),
+        }
+        assert!(err.to_string().contains("celestrak/EOP-All.csv"));
+        assert_eq!(
+            std::fs::read_to_string(dir.join("finals2000A.all")).unwrap(),
+            FINALS
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("EOP-All.csv")).unwrap(),
+            EOP_CSV
+        );
+
+        // ... but an unforced refresh still finds the primary copy inside its
+        // cadence and asks nobody.
+        let hits_before = server.hits();
+        let out = eop::refresh_into_with_sources(&dir, &eop_sources(&server), false).unwrap();
+        assert_eq!(out.source, EopSource::IersFinals2000A);
+        assert!(matches!(out.fetch, RefreshOutcome::Fresh { .. }), "{out:?}");
+        assert_eq!(server.hits(), hits_before);
+        drop(server);
+
+        // (Which file the loader then picks is covered in
+        // earth_orientation_params::tests::load_from_paths_picks_the_fresher_file.)
+
+        // Offline: no request is made at all, and no cadence shortcut either.
+        crate::utils::download::set_offline(true);
+        let server = TestServer::start(HashMap::from([(
+            "usno/finals2000A.all".to_string(),
+            FINALS.as_bytes().to_vec(),
+        )]));
+        let err = eop::refresh_into_with_sources(&dir, &eop_sources(&server), false).unwrap_err();
+        assert!(matches!(err, download::Error::Offline { .. }), "{err}");
+        assert_eq!(server.hits(), 0);
+        crate::utils::download::clear_offline_override();
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     #[ignore = "requires network access; downloads ~110 MB"]
     fn real_network_update_datafiles_into_tmp() {
@@ -730,7 +881,8 @@ mod tests {
                 e.name
             );
         }
-        assert!(dir.join("EOP-All.csv").is_file() && dir.join("SW-All.csv").is_file());
+        assert!(dir.join("finals2000A.all").is_file() || dir.join("EOP-All.csv").is_file());
+        assert!(dir.join("SW-All.csv").is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

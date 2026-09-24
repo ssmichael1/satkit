@@ -10,18 +10,21 @@ before the Rust build. Mirrors ``satkit.utils.update_datafiles()``:
   from the manifest's URLs in order (GitHub release asset, origin server,
   legacy bucket), and is only kept when its size and SHA-256 match;
 * a file already present with the right hash is skipped;
-* the regularly refreshed files (EOP, space weather) are fetched from the
-  manifest's ``refresh`` URLs, unverified; a failed refresh keeps the existing
-  copy and prints a warning instead of failing the run.
+* the regularly refreshed files are fetched unverified: space weather from
+  the manifest's ``refresh`` URLs, Earth orientation from the first of the
+  manifest's ``eop`` sources that answers (the IERS ``finals2000A.all``
+  mirrors, then CelesTrak's ``EOP-All.csv``); a failed refresh keeps the
+  existing copy and prints a warning instead of failing the run.
 
 The refresh follows `CelesTrak's usage policy
 <https://celestrak.org/usage-policy.php>`_, which asks clients to download
 each file once per update: a local copy younger than its cadence (3 h for
 space weather, 24 h for EOP; ``--max-age-hours`` overrides) is left alone with
 **no request at all**, and otherwise the request carries ``If-Modified-Since``
-so an unchanged file costs a ``304`` rather than several MB. The freshness
-state lives in a ``<name>.http-cache`` sidecar, the same format the Rust
-client writes, so the two agree about a shared data directory.
+so an unchanged file costs a ``304`` rather than several MB. The same gate
+applies to the IERS mirrors. The freshness state lives in a
+``<name>.http-cache`` sidecar, the same format the Rust client writes, so the
+two agree about a shared data directory.
 
 Usage: ``python python/test/download_data.py [dest_dir] [--refresh-only]
 [--max-age-hours N] [--force-refresh]`` (default ``astro-data``).
@@ -49,9 +52,14 @@ USER_AGENT = "satkit-ci (+https://github.com/ssmichael1/satkit)"
 SESSION = requests.Session()
 SESSION.headers["User-Agent"] = USER_AGENT
 
-# CelesTrak's publication cadence per file, in seconds; the default covers
-# any feed added to the manifest later.
-REFRESH_MIN_AGE = {"EOP-All.csv": 24 * 3600, "SW-All.csv": 3 * 3600}
+# Publication cadence per file, in seconds (CelesTrak's for its feeds; the
+# IERS finals file is likewise updated daily); the default covers any feed
+# added to the manifest later.
+REFRESH_MIN_AGE = {
+    "finals2000A.all": 24 * 3600,
+    "EOP-All.csv": 24 * 3600,
+    "SW-All.csv": 3 * 3600,
+}
 DEFAULT_MIN_AGE = 3 * 3600
 
 
@@ -134,14 +142,13 @@ def fetch_verified(entry: dict, dest_dir: Path) -> str:
     raise SystemExit(f"could not download {entry['name']} from any source:\n  " + "\n  ".join(attempts))
 
 
-def fetch_refresh(url: str, dest_dir: Path, max_age: int = None, force: bool = False) -> str:
-    """Re-fetch a regularly updated file; on failure keep the existing copy.
+def _refresh(url: str, dest: Path, max_age: int = None, force: bool = False) -> str:
+    """Bring ``dest`` up to date from ``url``; raise on any failure.
 
     Makes the smallest request that keeps the copy current: none at all while
     it is inside its cadence, a conditional GET after that.
     """
-    name = url.rsplit("/", 1)[-1]
-    dest = dest_dir / name
+    name = dest.name
     part = dest.with_name(name + ".part")
     # A sidecar without the file it describes says nothing about what is on
     # disk, so a missing file is always fetched in full.
@@ -170,17 +177,49 @@ def fetch_refresh(url: str, dest_dir: Path, max_age: int = None, force: bool = F
                     f.write(chunk)
             last_modified = r.headers.get("Last-Modified")
         # No feed is legitimately empty; an empty body must not replace a
-        # good file (the Rust client rejects this in `check_content`).
+        # good file (the Rust client rejects this in `check_content`), and
+        # neither must a notice page served in place of the file.
         if part.stat().st_size == 0:
             raise ValueError("the response body was empty")
+        head = part.open("rb").read(256).lstrip().lower()
+        if head.startswith(b"<!doctype html") or head.startswith(b"<html"):
+            raise ValueError("the response is an HTML page, not the data file")
         part.replace(dest)
         write_marker(dest, last_modified)
         return f"refreshed from {url}"
-    except Exception as exc:  # noqa: BLE001 - any failure keeps the old file
+    except Exception:
         part.unlink(missing_ok=True)
+        raise
+
+
+def fetch_refresh(url: str, dest_dir: Path, max_age: int = None, force: bool = False) -> str:
+    """Re-fetch a regularly updated file; on failure keep the existing copy."""
+    dest = dest_dir / url.rsplit("/", 1)[-1]
+    try:
+        return _refresh(url, dest, max_age=max_age, force=force)
+    except Exception as exc:  # noqa: BLE001 - any failure keeps the old file
         if dest.exists():
             return f"WARNING: refresh failed ({exc}); keeping existing copy"
         return f"WARNING: refresh failed ({exc}); file absent"
+
+
+def fetch_eop(sources: list, dest_dir: Path, max_age: int = None, force: bool = False) -> str:
+    """Bring the Earth orientation file up to date from the first source that answers.
+
+    A copy of the primary file inside its cadence is reported current without
+    any request, exactly as the Rust client does.
+    """
+    attempts = []
+    for source in sources:
+        dest = dest_dir / source["name"]
+        for url in source["urls"]:
+            try:
+                return f"{source['name']}: {_refresh(url, dest, max_age=max_age, force=force)}"
+            except Exception as exc:  # noqa: BLE001 - try the next source
+                attempts.append(f"{url}: {exc}")
+    present = [s["name"] for s in sources if (dest_dir / s["name"]).exists()]
+    kept = f"keeping existing {', '.join(present)}" if present else "no EOP file present"
+    return "WARNING: EOP refresh failed (" + "; ".join(attempts) + f"); {kept}"
 
 
 def main() -> None:
@@ -219,6 +258,8 @@ def main() -> None:
     for url in manifest.get("refresh", []):
         outcome = fetch_refresh(url, dest_dir, max_age=max_age, force=ns.force_refresh)
         print(f"  {url.rsplit('/', 1)[-1]}: {outcome}")
+    if manifest.get("eop"):
+        print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
 
 
 if __name__ == "__main__":

@@ -426,7 +426,6 @@ pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<St
     ))
 }
 
-#[cfg(feature = "download")]
 pub(crate) fn check_online(name: &str) -> Result<()> {
     if offline_requested() {
         return Err(offline_error(name, "SATKIT_OFFLINE is set"));
@@ -543,7 +542,7 @@ fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
         reject_html(path)?;
     }
     match name {
-        "EOP-All.csv" => crate::earth_orientation_params::validate_file(path),
+        "EOP-All.csv" | "finals2000A.all" => crate::earth_orientation_params::validate_file(path),
         "SW-All.csv" => crate::spaceweather::validate_file(path),
         _ => Ok(()),
     }
@@ -666,8 +665,8 @@ pub(crate) fn write_atomic_verified(
 ///   (release asset → origin → legacy bucket, SHA-256 verified). A name that
 ///   is not in the manifest falls back to an *unverified* fetch from the
 ///   legacy bucket, so user-supplied alternative files keep working.
-/// * With `seturl == Some(base)` (the celestrak refresh files) the file is
-///   fetched unverified from `base + name`, as before.
+/// * With `seturl == Some(base)` (the celestrak space-weather refresh file)
+///   the file is fetched unverified from `base + name`, as before.
 #[cfg(feature = "download")]
 pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
     if fname.is_file() {
@@ -721,8 +720,10 @@ pub fn download_if_not_exist(fname: &Path, _seturl: Option<&str>) -> Result<()> 
 }
 
 /// Download `url` into `downloaddir` (unverified; used for the regularly
-/// refreshed EOP / space-weather files). Returns `Ok(false)` if the file
-/// already exists and `overwrite_if_exists` is false.
+/// refreshed EOP / space-weather files, whose content is parsed before it
+/// replaces the copy on disk). The file name is the URL's last path
+/// component. Returns `Ok(false)` if the file already exists and
+/// `overwrite_if_exists` is false.
 #[cfg(feature = "download")]
 pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -> Result<bool> {
     let fname = std::path::Path::new(url)
@@ -789,12 +790,13 @@ pub enum RefreshOutcome {
 ///
 /// From CelesTrak's [usage policy](https://celestrak.org/usage-policy.php),
 /// which asks clients to "only download data once per update": space weather
-/// is published every 3 hours and EOP once a day. Inside this window
-/// [`refresh_file`] makes no request at all; outside it, the request is a
-/// conditional GET that usually costs a `304` rather than the whole file.
+/// is published every 3 hours and EOP once a day (the IERS `finals2000A.all`
+/// is likewise updated daily). Inside this window [`refresh_file`] makes no
+/// request at all; outside it, the request is a conditional GET that usually
+/// costs a `304` rather than the whole file.
 pub fn refresh_min_age_secs(name: &str) -> u64 {
     match name {
-        "EOP-All.csv" => 24 * 3600,
+        "EOP-All.csv" | "finals2000A.all" => 24 * 3600,
         // Space weather, and any feed added to the manifest's `refresh` list
         // later: the shortest cadence CelesTrak publishes for a bulk file.
         _ => 3 * 3600,
@@ -888,8 +890,9 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
     );
 }
 
-/// Refresh one of the daily CelesTrak feeds (`EOP-All.csv`, `SW-All.csv`)
-/// into `downloaddir`, respecting the publication cadence.
+/// Refresh one of the daily feeds (`SW-All.csv` and `EOP-All.csv` from
+/// CelesTrak, `finals2000A.all` from the IERS mirrors) into `downloaddir`,
+/// respecting the publication cadence.
 ///
 /// Unlike [`download_file`], which transfers the whole file on every call,
 /// this makes the smallest request that can still keep the local copy

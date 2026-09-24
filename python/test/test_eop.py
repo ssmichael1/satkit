@@ -13,13 +13,18 @@ import satkit as sk
 
 def test_eop_coverage_bounds():
     cov = sk.frametransform.eop_coverage()
-    assert cov is not None, "EOP-All.csv must be available for the test suite"
+    assert cov is not None, "an EOP file (finals2000A.all or EOP-All.csv) must be available for the test suite"
     first, last_observed, last = cov
     assert isinstance(first, sk.time)
     assert first < last_observed <= last
-    # The table starts in 1962 and must cover a well-observed historical epoch.
-    assert first < sk.time(1963, 1, 1)
+    # The table starts in 1973 (finals2000A.all) or 1962 (EOP-All.csv) and
+    # must cover a well-observed historical epoch.
+    assert first < sk.time(1974, 1, 1)
     assert last_observed > sk.time(2020, 1, 1)
+
+
+def test_eop_source():
+    assert sk.frametransform.eop_source() in ("finals2000A", "celestrak")
 
 
 def test_eop_status_values():
