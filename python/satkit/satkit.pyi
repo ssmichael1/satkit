@@ -3051,6 +3051,14 @@ class consts:
     sun_radius: ClassVar[float]
     """Radius of sun, meters"""
 
+    solar_pressure_1au: ClassVar[float]
+    """Solar radiation pressure at 1 AU (1367 W/m^2 / c), N/m^2.
+
+    The cannonball SRP force scales this by (AU / d)^2, with d the
+    satellite-Sun distance. The measured solar constant is 1361 W/m^2
+    (Kopp & Lean 2011; IAU 2015 Resolution B3); 1367 matches GMAT and STK.
+    """
+
     moon_radius: ClassVar[float]
     """Radius of moon, meters"""
 

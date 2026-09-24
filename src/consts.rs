@@ -65,6 +65,20 @@ pub const AU: f64 = 149_597_870_700.0;
 /// <https://www.iau.org/common/Uploaded%20files/IAUGA2015-Resolution-B3-recommended-nominal-conversion.pdf>
 pub const SUN_RADIUS: f64 = 695_700_000.0;
 
+/// Solar radiation pressure at 1 AU, in N/m² (`1367 W/m² / c`).
+///
+/// The cannonball SRP model scales this by `(AU / d)²`, with `d` the
+/// satellite–Sun distance. The 1367 W/m² solar constant matches the GMAT
+/// and STK defaults; the current measured total solar irradiance is lower,
+/// 1361 W/m² (Kopp & Lean 2011, adopted as the nominal value by IAU 2015
+/// Resolution B3), a 0.4 % difference that is well inside typical `C_R`
+/// uncertainty.
+///
+/// Source: G. Kopp and J. L. Lean, "A new, lower value of total solar
+/// irradiance: Evidence and climate significance", *Geophys. Res. Lett.*
+/// 38, L01706 (2011): <https://doi.org/10.1029/2010GL045777>
+pub const SOLAR_PRESSURE_1AU: f64 = 1367.0 / C;
+
 /// IAU lunar reference-sphere radius, in meters.
 ///
 /// Source: IAU WGCCRE value, documented by the USGS Lunar Data Interoperability Standard:

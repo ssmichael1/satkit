@@ -43,7 +43,7 @@ $$
 | $D_{2c}, D_{2s}$ | $\hat{e}_D$ | $\cos 2\Delta u, \sin 2\Delta u$ | ECOM2 | few, mostly in eclipse seasons | `d2c`, `d2s` |
 | $D_{4c}, D_{4s}$ | $\hat{e}_D$ | $\cos 4\Delta u, \sin 4\Delta u$ | ECOM2 | few, mostly in eclipse seasons | `d4c`, `d4s` |
 
-The constructors set the fields for you: `reduced(d0, y0, b0, bc, bs)`, `ecom1(d0, y0, b0, dc, ds, yc, ys, bc, bs)` and `ecom2(d0, y0, b0, b1c, b1s, d2c, d2s, d4c, d4s)` (ECOM2's $B_{1c}, B_{1s}$ are stored in `bc`, `bs`; `ecom2` sets `sun_relative=True`). Any coefficient left at zero costs nothing, so a 7-parameter ECOM2 is `ecom2(..., d4c=0, d4s=0)`. All values are accelerations in m/s².
+The constructors set the fields for you: `reduced(d0, y0, b0, bc, bs)`, `ecom1(d0, y0, b0, dc, ds, yc, ys, bc, bs)` and `ecom2(d0, y0, b0, b1c, b1s, d2c, d2s, d4c, d4s)` (ECOM2's $B_{1c}, B_{1s}$ are stored in `bc`, `bs`; `ecom2` sets `sun_relative=True`). Any coefficient left at zero costs nothing, so a 7-parameter ECOM2 is `ecom2(..., d4c=0, d4s=0)`. All values are accelerations in m/s². They are applied as given — unlike the cannonball term, they are **not** scaled by the Sun-distance factor $(\text{AU}/d)^2$ — so a $D_0$ meant to reproduce the cannonball term must include that factor for its epoch.
 
 ## Conventions
 

@@ -292,6 +292,14 @@ code follows where that is useful.
   <https://doi.org/10.1016/j.asr.2012.01.016>. The box-wing SRP model
   referred to (but not implemented) in the force-model guide.
 
+<a id="kopp2011"></a>
+- **Kopp, G., & Lean, J. L. (2011).** "A new, lower value of total solar
+  irradiance: Evidence and climate significance." *Geophysical Research
+  Letters*, 38, L01706. <https://doi.org/10.1029/2010GL045777>. The 1361 W/m²
+  measured solar constant and why earlier radiometers read ~1365–1367 W/m²;
+  satkit keeps 1367 W/m² for the SRP reference pressure (see
+  [Solar Radiation Pressure](forces.md#solar-radiation-pressure)).
+
 <a id="beutler1994"></a>
 - **Beutler, G., Brockmann, E., Gurtner, W., Hugentobler, U., Mervart, L.,
   Rothacher, M., & Verdun, A. (1994).** "Extended orbit modeling techniques at

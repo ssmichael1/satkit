@@ -268,9 +268,10 @@ class TestHighPrecisionPropagation:
         # refitted against ESA SP3 truth (epochs in GPS time) with the
         # current default force model (degree-4 gravity, solid tides Step 1,
         # full IERS 10.12 relativity). Refit when the default force model
-        # changes.
+        # changes. Cr*A/m was divided by (AU / d)^2 = 1.03417 at this
+        # perihelion arc when SRP gained Sun-distance scaling (#206).
         fitparam = np.array(
-            [2.47517168e03, 2.94357938e03, -5.34181014e02, 2.31985404e-02]
+            [2.47517168e03, 2.94357938e03, -5.34181014e02, 2.24320920e-02]
         )
 
         # Values for craoverm and velocity come from orbitprop_gps_fit.py

@@ -154,7 +154,7 @@ Plus satellite-local RTN, NTW, and LVLH frames (maneuvers, covariance), and ENU,
 - **Solid Earth tides**: IERS Conventions 2010 §6.2.1 Step-1 corrections to the gravity field
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides
 - **Atmospheric drag**: NRLMSISE-00 (Picone et al. 2002) fed automatically from the GFZ Potsdam observed record (observed F10.7 / centred F10.7A and the 7-element 3-hourly geomagnetic ap history, so density responds to storms within hours), then the NOAA/SWPC 45-day and NASA MSAFE monthly forecasts, which carry a climatological Ap years ahead; validated against GMAT (below)
-- **Solar radiation pressure**: Cannonball model with shadow function
+- **Solar radiation pressure**: Cannonball model with shadow function and inverse-square Sun-distance scaling
 - **Relativity**: IERS 2010 Eq. 10.12 — Schwarzschild, geodesic (de Sitter) precession, and Lense–Thirring
 
 ### Time Systems

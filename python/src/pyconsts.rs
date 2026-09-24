@@ -52,6 +52,10 @@ impl Consts {
     #[classattr]
     const sun_radius: f64 = cconsts::SUN_RADIUS;
 
+    /// Solar radiation pressure at 1 AU (1367 W/m^2 / c), N/m^2
+    #[classattr]
+    const solar_pressure_1au: f64 = cconsts::SOLAR_PRESSURE_1AU;
+
     /// Radius of moon, meters
     #[classattr]
     const moon_radius: f64 = cconsts::MOON_RADIUS;

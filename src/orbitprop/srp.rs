@@ -68,6 +68,9 @@
 //!
 //! All values are accelerations in m/s². Zero coefficients cost nothing, so
 //! a 7-parameter ECOM2 is `ecom2(.., d4c: 0, d4s: 0)`.
+//! They are applied as given: unlike the cannonball term, whose pressure is
+//! scaled by `(AU / d)²` with the satellite–Sun distance `d`, ECOM
+//! coefficients carry no distance scaling.
 //!
 //! # Stability
 //!
@@ -523,13 +526,18 @@ mod tests {
 
     /// A D0-only ECOM with `d0 = −P☉·C_R A/m` and `craoverm = 0` must
     /// reproduce the cannonball model: both are `−ν·P☉·C_R A/m` along the
-    /// satellite→Sun line.
+    /// satellite→Sun line. The cannonball pressure is scaled by
+    /// `(AU / d)²` and ECOM coefficients are applied as given, so `d0`
+    /// carries the scale at the epoch's Sun distance; the epoch is at
+    /// perihelion, where that distance is stationary over the arc.
     #[test]
     fn d0_only_reproduces_cannonball() {
         use crate::orbitprop::{propagate, PropSettings, SatPropertiesSimple};
-        use crate::{Duration, Instant};
+        use crate::{consts, Duration, Instant};
         let cr_a_over_m = 0.02;
-        let t0 = Instant::from_datetime(2024, 1, 15, 0, 0, 0.0).unwrap();
+        let t0 = Instant::from_datetime(2024, 1, 3, 0, 0, 0.0).unwrap();
+        let sun = crate::jplephem::geocentric_pos(crate::SolarSystem::Sun, &t0).unwrap();
+        let scale = (consts::AU / sun.norm()).powi(2);
         let t1 = t0 + Duration::from_days(1.0);
         let settings = PropSettings {
             abs_error: 1e-12,
@@ -542,13 +550,25 @@ mod tests {
             numeris::vector![1.5e7, 2.0e7, 1.0e7, -2.5e3, 1.5e3, 1.0e3];
         let cannon = SatPropertiesSimple::new(0.0, cr_a_over_m);
         let ecom = SatPropertiesSimple::new(0.0, 0.0).with_ecom(EcomParams {
-            d0: -4.56e-6 * cr_a_over_m,
+            d0: -consts::SOLAR_PRESSURE_1AU * scale * cr_a_over_m,
             ..Default::default()
         });
         let a = propagate(&state, &t0, &t1, &settings, Some(&cannon)).unwrap();
         let b = propagate(&state, &t0, &t1, &settings, Some(&ecom)).unwrap();
         let dr = (a.state_end.block::<3, 1>(0, 0) - b.state_end.block::<3, 1>(0, 0)).norm();
-        assert!(dr < 1e-3, "cannonball vs D0-only ECOM differ by {dr} m");
+        // The cannonball scale follows the satellite–Sun distance around the
+        // orbit (±r/AU ≈ 3e-4 in pressure at GPS altitude); a constant d0
+        // can't, which leaves ~6 mm over the day.
+        assert!(dr < 1e-2, "cannonball vs D0-only ECOM differ by {dr} m");
+        // Without the (AU / d)² factor in d0 the two differ by metres: the
+        // cannonball term really is distance-scaled.
+        let unscaled = SatPropertiesSimple::new(0.0, 0.0).with_ecom(EcomParams {
+            d0: -consts::SOLAR_PRESSURE_1AU * cr_a_over_m,
+            ..Default::default()
+        });
+        let u = propagate(&state, &t0, &t1, &settings, Some(&unscaled)).unwrap();
+        let dru = (a.state_end.block::<3, 1>(0, 0) - u.state_end.block::<3, 1>(0, 0)).norm();
+        assert!(dru > 1.0, "cannonball not distance-scaled: {dru} m");
         // And the SRP actually did something (vs. no SRP at all).
         let none = SatPropertiesSimple::new(0.0, 0.0);
         let c = propagate(&state, &t0, &t1, &settings, Some(&none)).unwrap();

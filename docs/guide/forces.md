@@ -100,10 +100,20 @@ Drag is skipped above 700 km regardless of settings.
 Solar photons absorbed or scattered by the satellite transfer momentum, producing a force away from the Sun:
 
 $$
-\vec{a}_\text{SRP}~=~-P_\text{sun}\,C_R\frac{A}{m}\,\hat{p}_\text{sun} \cdot \nu(\vec{p}, \vec{p}_\text{sun})
+\vec{a}_\text{SRP}~=~-P_\text{sun}\left(\frac{\text{AU}}{d}\right)^2 C_R\frac{A}{m}\,\hat{p}_\text{sun} \cdot \nu(\vec{p}, \vec{p}_\text{sun})
 $$
 
-where $P_\text{sun} \approx 4.56 \times 10^{-6}$ N/m² is the radiation pressure at 1 AU, $C_R A/m$ is the satellite's radiation susceptibility (the user-supplied `satproperties.craoverm`), and $\nu(\vec{p}, \vec{p}_\text{sun}) \in [0, 1]$ is a shadow function that vanishes when the satellite is in Earth's umbra — the conical umbra/penumbra model of [Montenbruck & Gill (2000)](references.md#montenbruck2000), §3.4.2; the cannonball force itself is their §3.4, Eq. 3.75.
+where $P_\text{sun} = 1367\,\text{W/m}^2 / c \approx 4.56 \times 10^{-6}$ N/m² is the radiation pressure at 1 AU (`consts.solar_pressure_1au`), $d$ is the satellite–Sun distance ($\hat{p}_\text{sun}$ is the satellite→Sun direction), $C_R A/m$ is the satellite's radiation susceptibility (the user-supplied `satproperties.craoverm`), and $\nu(\vec{p}, \vec{p}_\text{sun}) \in [0, 1]$ is a shadow function that vanishes when the satellite is in Earth's umbra — the conical umbra/penumbra model of [Montenbruck & Gill (2000)](references.md#montenbruck2000), §3.4.2; the cannonball force itself is their §3.4, Eq. 3.75.
+
+The $(\text{AU}/d)^2$ factor makes the flux follow Earth's eccentric orbit: it is 3.4 % above the 1 AU value at perihelion (early January) and 3.3 % below at aphelion (early July). satkit versions before 0.23.1 held it at the 1 AU value year-round.
+
+!!! note "Solar constant: satkit uses 1367 W/m², not the measured 1361 W/m²"
+    | Solar constant | $P_\text{sun}$ at 1 AU | Source |
+    |---|---|---|
+    | **1367 W/m²** (satkit) | $4.560 \times 10^{-6}$ N/m² | 1980s–90s radiometry (Nimbus-7, ACRIM, VIRGO); WMO standard; GMAT and STK default |
+    | 1361 W/m² (measured) | $4.540 \times 10^{-6}$ N/m² | SORCE/TIM (2003–); [Kopp & Lean (2011)](references.md#kopp2011); IAU 2015 Resolution B3 nominal value |
+
+    The Sun did not dim: the older radiometers read high because light scattered past their precision aperture into the detector cavity, which ground tests at the NIST/LASP TSI Radiometer Facility later confirmed. satkit keeps 1367 W/m² so SRP results compare directly with GMAT and STK. The 0.4 % difference is well inside typical $C_R$ uncertainty and is absorbed whenever `craoverm` is estimated; to model 1361 W/m² exactly, multiply `craoverm` by 1361/1367.
 
 satkit's default is a **cannonball model** — the satellite's surface is treated as if its normal points toward the Sun, and the force acts along the satellite→Sun line. A physical box-wing model ([Rodriguez-Solano et al. 2012](references.md#rodriguez2012)) is not provided.
 
