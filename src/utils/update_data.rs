@@ -113,9 +113,8 @@ fn download_refresh_files(
         })
         .collect::<Result<Vec<_>>>()?;
     let eop_dir = dir.to_path_buf();
-    let eop = std::thread::spawn(move || {
-        crate::earth_orientation_params::refresh_into(&eop_dir, force)
-    });
+    let eop =
+        std::thread::spawn(move || crate::earth_orientation_params::refresh_into(&eop_dir, force));
     let mut out = Vec::with_capacity(handles.len() + 1);
     for (name, jh) in handles {
         let url = m.refresh.iter().find(|u| u.ends_with(&name)).cloned();
@@ -843,10 +842,11 @@ mod tests {
 
         // ... but an unforced refresh still finds the primary copy inside its
         // cadence and asks nobody.
+        let hits_before = server.hits();
         let out = eop::refresh_into_with_sources(&dir, &eop_sources(&server), false).unwrap();
         assert_eq!(out.source, EopSource::IersFinals2000A);
         assert!(matches!(out.fetch, RefreshOutcome::Fresh { .. }), "{out:?}");
-        assert_eq!(server.hits(), 0);
+        assert_eq!(server.hits(), hits_before);
         drop(server);
 
         // (Which file the loader then picks is covered in
