@@ -21,7 +21,7 @@ use std::num::ParseFloatError;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::utils::datadir;
-use crate::utils::{download_file, download_if_not_exist};
+use crate::utils::download_if_not_exist;
 use crate::{Instant, TimeLike, TimeScale};
 
 use thiserror::Error;
@@ -286,8 +286,11 @@ pub fn update() -> Result<()> {
         return Err(Error::DataDirReadOnly);
     }
 
+    // CelesTrak publishes EOP once a day and asks clients to download it once
+    // per update, so a copy younger than that is reused without contacting the
+    // server and an unchanged one costs a `304`.
     let url = "https://celestrak.org/SpaceData/EOP-All.csv";
-    download_file(url, &d, true)?;
+    crate::utils::refresh_file(url, &d, false)?;
 
     EOP.set(load_eop_file_csv()?);
     Ok(())

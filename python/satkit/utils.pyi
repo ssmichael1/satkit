@@ -40,8 +40,14 @@ def update_datafiles(**kwargs) -> None:
           gravity file or an updated IERS table placed in the data directory
           still takes precedence over the compiled-in copy.
 
-        - The space weather and earth orientation parameters files are updated
-          daily and will always be downloaded regardless of the overwrite flag
+        - The space weather and Earth-orientation files follow `CelesTrak's
+          usage policy <https://celestrak.org/usage-policy.php>`_ rather than
+          transferring the whole 1957-to-present table on every call: no
+          request is made while the local copy is inside its publication
+          cadence (3 h for ``SW-All.csv``, 24 h for ``EOP-All.csv``), and past
+          that the request carries ``If-Modified-Since``, so an unchanged file
+          costs a ``304``. ``overwrite=True`` forces a full re-fetch of these
+          too. Calling this at the start of every script is therefore fine.
 
     Example:
         ```python

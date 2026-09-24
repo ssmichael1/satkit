@@ -41,8 +41,12 @@ use anyhow::Result;
 /// only kept when size and SHA-256 match. Files already present and verified
 /// are skipped unless `overwrite=True`.
 ///
-/// Note: Files updated daily (EOP, space weather) are always downloaded
-/// regardless of the overwrite flag.
+/// The daily EOP and space-weather files follow CelesTrak's usage policy
+/// rather than being re-downloaded every call: no request is made while the
+/// local copy is inside the file's publication cadence (3 hours for
+/// `SW-All.csv`, 24 hours for `EOP-All.csv`), and past that the request is
+/// conditional, so an unchanged file costs a `304` and no transfer.
+/// `overwrite=True` forces a full re-fetch of these too.
 ///
 #[pyfunction]
 #[pyo3(signature=(**kwds))]

@@ -120,9 +120,10 @@ Sources and attribution: DE440 / DE421 — JPL (Park et al. 2021; Folkner et al.
 EGM96, EGM2008, JGM-2, JGM-3 — NASA GSFC / NGA (US Government work), via ICGEM;
 ITU_GRACE16 — Akyilmaz et al. 2016, GFZ Data Services, CC BY 4.0 (downloaded on
 demand, not compiled in). The
-Earth-orientation and space-weather files are fetched from CelesTrak on every
-update and are not pinned (they change daily). The full table, with licences,
-is in `data/README.md`.
+Earth-orientation and space-weather files are fetched from CelesTrak and are
+not pinned (they change daily); see [How often they are
+refreshed](#how-often-eop-and-space-weather-are-refreshed). The full table,
+with licences, is in `data/README.md`.
 
 ### Failure behaviour
 
@@ -146,8 +147,37 @@ sk.utils.update_datafiles()   # ephemeris (verified) + EOP/SW + solar-cycle fore
 ```
 
 Files already present with the right hash are skipped; the space-weather and
-Earth-orientation files are always refreshed. `update_datafiles(dir="...")`
-writes somewhere else; `overwrite=True` re-downloads even verified files.
+Earth-orientation files are refreshed if they are due (below).
+`update_datafiles(dir="...")` writes somewhere else; `overwrite=True`
+re-downloads even verified files, including those two.
+
+### How often EOP and space weather are refreshed
+
+`EOP-All.csv` and `SW-All.csv` are whole-history tables — 1957 to the present,
+several MB — and are the only files satkit fetches more than once.
+[CelesTrak's usage policy](https://celestrak.org/usage-policy.php) asks for one
+download per update, so satkit makes the smallest request that keeps the local
+copy current:
+
+| local copy | what happens |
+|---|---|
+| younger than its publication cadence (3 h for space weather, 24 h for EOP) | **no request is made** |
+| older than that, unchanged upstream | a conditional `If-Modified-Since` request; the server answers `304` and no body is transferred |
+| older than that, changed upstream | the new file is downloaded and installed |
+
+So calling `update_datafiles()` at the top of every script is fine — it will
+not hit CelesTrak more than the data actually changes. `overwrite=True` skips
+the gate and always transfers, which is the way to replace a copy you suspect
+is damaged. The freshness state is a `<name>.http-cache` sidecar next to the
+file. It also records the file's size and modification time and is ignored
+once those stop matching, so a copy you replace by hand is re-fetched rather
+than assumed current; deleting the sidecar (or the file) also restores a full
+fetch.
+
+Every request satkit makes also identifies itself as
+`satkit/<version> (+https://github.com/ssmichael1/satkit)`, and an HTTP error
+from CelesTrak is returned to you with an explanation rather than retried in a
+loop — repeated retries are what gets a client firewalled.
 
 The IERS tables and gravity models are **not** downloaded — they are compiled
 in (the tables byte-identical, gravity to degree 70, identical results at the
