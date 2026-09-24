@@ -23,7 +23,7 @@ Satkit is a high-performance orbital mechanics library written in Rust with comp
 ## What's new in 0.23
 
 - **Space weather from its producers.** The NRLMSISE-00 inputs come from GFZ Potsdam's observed record (CC BY 4.0), the NOAA/SWPC 45-day forecast and NASA's MSAFE monthly forecast, assembled into one table. MSAFE carries a climatological Ap, so long-horizon drag runs no longer fall back silently to a quiet-time Ap = 4 past the 45-day forecast. `satkit.spaceweather.coverage()` / `status(t)` say which regime an epoch is in, mirroring the EOP API.
-- **EGM2008 is the default gravity model, evaluated to degree/order 70** (was EGM96 to degree 40). Default-model propagations shift by metres per day at LEO; pass `gravity_model=gravmodel.egm96` to reproduce earlier results. Solid tides are tide-system aware.
+- **EGM2008 is the default gravity model** (was EGM96), and the degree/order cap is raised from 40 to 70. The default expansion is unchanged at 4×4, so default-settings propagations shift only by the model change, a few metres per day at LEO; pass `gravity_model=gravmodel.egm96` to reproduce earlier results. Solid tides are tide-system aware.
 - **IERS `finals2000A.all` is the primary Earth-orientation source**, with CelesTrak's `EOP-All.csv` as the fallback: a year of predictions instead of six months. The dX/dY celestial-pole offsets from the CSV were read 1000× too small (~1 cm at LEO); fixed.
 - **Plain MIT / Apache-2.0 packages.** ITU_GRACE16 (CC BY 4.0) is no longer compiled in; it is downloaded on first use of `gravmodel.itugrace16`.
 - **Polite refreshes.** EOP and space-weather files are re-fetched only past their publication cadence, with conditional requests, so `update_datafiles()` at the top of every script is fine.
