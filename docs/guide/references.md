@@ -120,6 +120,14 @@ code follows where that is useful.
   107(A12), 1468. <https://doi.org/10.1029/2002JA009430>. satkit's density
   model is a Rust port of Dominik Brodowski's C implementation of NRLMSISE-00.
 
+<a id="matzka2021"></a>
+- **Matzka, J., Stolle, C., Yamazaki, Y., Bronkalla, O., & Morschhauser, A.
+  (2021).** "The geomagnetic Kp index and derived indices of geomagnetic
+  activity." *Space Weather*, 19, e2020SW002641.
+  <https://doi.org/10.1029/2020SW002641>. The Kp/ap series satkit's observed
+  space-weather record comes from; the data publication is
+  <https://doi.org/10.5880/Kp.0001> (CC BY 4.0).
+
 <a id="park2021"></a>
 - **Park, R. S., Folkner, W. M., Williams, J. G., & Boggs, D. H. (2021).**
   "The JPL Planetary and Lunar Ephemerides DE440 and DE441." *The Astronomical
@@ -333,11 +341,27 @@ code follows where that is useful.
 <a id="celestrak-spacedata"></a>
 - **CelesTrak Space Data** — <https://celestrak.org/SpaceData/>. Daily
   `EOP-All.csv` (Earth orientation parameters repackaged from the IERS
-  series, from 1962; satkit's fallback EOP source) and `SW-All.csv` (space
-  weather: F10.7, Ap; from GFZ and NOAA).
-- **NOAA/SWPC predicted solar cycle** —
-  <https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json>,
-  the F10.7 forecast used when propagating beyond the space-weather record.
+  series, from 1962; satkit's fallback EOP source). Its merged space-weather
+  file is no longer used: satkit reads the producers directly (below).
+<a id="gfz-kp"></a>
+- **GFZ Potsdam Kp index service** — <https://kp.gfz.de/>; the file satkit
+  reads is
+  <https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt>
+  (Kp, ap, Ap, sunspot number and F10.7, daily since 1932; Matzka et al.
+  2021). Kp, ap and F10.7 are CC BY 4.0; the sunspot column is CC BY-NC 4.0
+  (SILSO) and satkit does not ingest it. satkit's observed space-weather
+  record.
+<a id="swpc-45day"></a>
+- **NOAA/SWPC 45-day Ap and F10.7 forecast** —
+  <https://services.swpc.noaa.gov/text/45-day-forecast.txt>, issued daily.
+  US Government work. satkit's daily-resolution forecast block.
+<a id="nasa-msafe"></a>
+- **NASA MSFC Solar Activity Future Estimation (MSAFE)** —
+  <https://www.nasa.gov/solar-cycle-progression-and-forecast/> (archive:
+  <https://www.nasa.gov/solar-cycle-progression-and-forecast/archived-forecast/>).
+  Monthly 13-month-smoothed F10.7 and Ap with 95 / 50 / 5 percentile bands,
+  one file per month. US Government work. satkit's monthly forecast block,
+  and the source that carries Ap past the daily record.
 - **NAIF generic kernels** —
   <https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/>
   (`de440.bsp`, used by GMAT in the validation corpus). satkit itself reads

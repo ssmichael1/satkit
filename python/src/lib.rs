@@ -51,8 +51,14 @@ use pysatstate::PySatState;
 fn spaceweather(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyspaceweather::get, m)?)
         .unwrap();
-    m.add_function(wrap_pyfunction!(pyspaceweather::predicted_f107, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pyspaceweather::coverage, m)?)?;
+    m.add_function(wrap_pyfunction!(pyspaceweather::status, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        pyspaceweather::disable_space_weather_time_warning,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(pyspaceweather::init_from_path, m)?)?;
+    m.add_function(wrap_pyfunction!(pyspaceweather::init_from_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(pyspaceweather::update, m)?)
         .unwrap();
     Ok(())

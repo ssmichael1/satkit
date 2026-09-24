@@ -7,7 +7,7 @@
     "URL order per file: GitHub release asset, then the origin server when it serves byte-identical bytes, then the legacy GCS bucket (transitional).",
     "SATKIT_DATA_URL, if set, is a base URL tried before all of these.",
     "Regenerate with tools/make_manifest.py; see data/README.md.",
-    "Deliberately excluded: msis21.parm (NRLMSIS 2.1 licence is academic/non-commercial), EOP-All.csv / SW-All.csv (no redistribution licence is granted for CelesTrak's compiled files, and they change daily; fetched at runtime via `refresh`, rate-limited to CelesTrak's publication cadence), sw19571001.txt (orphan), leap-seconds.list (nothing reads it; the runtime leap-second table is compiled into src/time/instant.rs). See data/README.md.",
+    "Deliberately excluded: msis21.parm (NRLMSIS 2.1 licence is academic/non-commercial), EOP-All.csv (no redistribution licence is granted for CelesTrak's compiled file, and it changes daily; the EOP fallback under `eop`); space weather is fetched at runtime from its producers — GFZ Potsdam (`refresh`, CC BY 4.0), NOAA/SWPC (`refresh`, public domain) and NASA MSFC MSAFE (month-walked by the library, public domain) — each rate-limited to its publication cadence; CelesTrak's merged space-weather file is no longer fetched, sw19571001.txt (orphan), leap-seconds.list (nothing reads it; the runtime leap-second table is compiled into src/time/instant.rs). See data/README.md.",
     "default: false = pinned and fetchable by name, but skipped by update_datafiles: the IERS tables are embedded byte-identical, the full gravity files add nothing while evaluation is capped at degree 40 (the embedded copies carry degree 70), and ITU_GRACE16 (CC BY 4.0, not embedded) is fetched only when that model is selected."
   ],
   "files": [
@@ -148,7 +148,8 @@
     }
   ],
   "refresh": [
-    "https://celestrak.org/SpaceData/SW-All.csv"
+    "https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt",
+    "https://services.swpc.noaa.gov/text/45-day-forecast.txt"
   ],
   "eop": [
     {

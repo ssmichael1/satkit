@@ -17,7 +17,7 @@ to the manifest, then running this tool to fill in size and hash. Bump
 the GitHub release tag changes.
 
 Only files already listed in the manifest are touched; unknown files in the
-data directory are ignored (the refresh files — SW-All.csv under ``refresh``,
+data directory are ignored (the refresh files — the GFZ and SWPC space-weather feeds under ``refresh``,
 finals2000A.all / EOP-All.csv under ``eop`` — are never pinned).
 """
 

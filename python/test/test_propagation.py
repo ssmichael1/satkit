@@ -985,12 +985,6 @@ class TestSpaceWeather:
         )
         assert rec2["f10p7_adj"] == rec["f10p7_adj"]
 
-    def test_predicted_f107(self):
-        """predicted_f107 returns a plausible flux inside the forecast range
-        and None far outside it."""
-        # A date far in the past is outside the forecast range
-        assert sk.spaceweather.predicted_f107(sk.time(1990, 1, 1)) is None
-
 
 class TestInitialStep:
     """propsettings.initial_step_secs and propresult.next_step_secs."""

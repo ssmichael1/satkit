@@ -19,7 +19,6 @@
     clippy::type_complexity, // test data tables use wide tuples from the reference implementation
 )]
 
-use crate::solar_cycle_forecast;
 use crate::spaceweather;
 use crate::Duration;
 use crate::Instant;
@@ -4962,8 +4961,9 @@ fn ap_history(
 ///
 /// # Space weather feed
 ///
-/// With `use_spaceweather` and a time, the indices come from the CelesTrak
-/// `SW-All.csv` table following the NRLMSISE-00 interface: F10.7 is the
+/// With `use_spaceweather` and a time, the indices come from the
+/// space-weather table (GFZ observed record, then the SWPC 45-day and MSAFE
+/// monthly forecasts) following the NRLMSISE-00 interface: F10.7 is the
 /// observed flux of the previous UTC day, F10.7A the observed 81-day average
 /// centred on the current day, and the geomagnetic forcing is the 7-element
 /// 3-hourly ap history (daily Ap of the current day, the current 3-hourly ap
@@ -4972,8 +4972,7 @@ fn ap_history(
 /// up-to-four days involved, or a row without either 3-hourly or daily values
 /// (monthly predicted rows) — the model runs on the current day's daily Ap
 /// alone (switch 9 = +1), and when not even that exists on Ap = 4. Without a
-/// usable F10.7 record the NOAA/SWPC solar-cycle forecast supplies F10.7 =
-/// F10.7A and Ap stays at 4; without space weather at all F10.7 = F10.7A = 150,
+/// usable F10.7 record, or without space weather at all, F10.7 = F10.7A = 150,
 /// Ap = 4.
 ///
 /// # Outputs
@@ -5011,10 +5010,10 @@ pub fn nrlmsise(
             // assembled by `ap_history` (used in preference to AP when it can
             // be built).
             //
-            // Predicted (future) rows in SW-All.csv carry -1 sentinels for
-            // fields celestrak has not filled in. Treat a record with an
-            // invalid F10.7 as unusable and fall back to the solar-cycle
-            // forecast, and never let a -1 index reach the density model.
+            // A CelesTrak SW-All.csv loaded by hand carries -1 sentinels on
+            // its monthly predicted rows (MSAFE rows carry Ap). Treat a record
+            // with an invalid F10.7 as unusable, and never let a -1 index
+            // reach the density model.
             let prev = spaceweather::get(&(time - Duration::from_days(1.0)))
                 .ok()
                 .filter(|r| r.f10p7_obs >= 0.0);
@@ -5046,9 +5045,6 @@ pub fn nrlmsise(
                         record.filter(|rec| (rec.date - d).as_days().abs() < 0.5)
                     });
                 }
-            } else if let Some(predicted) = solar_cycle_forecast::get_predicted_f107(&time) {
-                f107 = predicted;
-                f107a = predicted;
             }
         }
     }
@@ -5265,6 +5261,7 @@ mod tests {
             date: Instant::from_date(2023, 3, 4).unwrap() - Duration::from_days(n as f64),
             bsrn: 0,
             nd: 0,
+            data_type: crate::spaceweather::SpaceWeatherDataType::Observed,
             kp: [0; 8],
             kp_sum: 0,
             ap: core::array::from_fn(|i| base + i as i32),

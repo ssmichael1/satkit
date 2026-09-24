@@ -115,6 +115,9 @@ fn download_refresh_files(
     let eop_dir = dir.to_path_buf();
     let eop =
         std::thread::spawn(move || crate::earth_orientation_params::refresh_into(&eop_dir, force));
+    let msafe_dir = dir.to_path_buf();
+    let msafe =
+        std::thread::spawn(move || crate::spaceweather::msafe::refresh_into(&msafe_dir, force));
     let mut out = Vec::with_capacity(handles.len() + 1);
     for (name, jh) in handles {
         let url = m.refresh.iter().find(|u| u.ends_with(&name)).cloned();
@@ -126,6 +129,16 @@ fn download_refresh_files(
     }
     let eop = eop.join().map_err(|_| Error::ThreadPanic)??;
     out.push((eop.source.file_name().to_string(), eop.url, eop.fetch));
+    // MSAFE is best-effort: NASA's hosting is the least dependable of the
+    // three, and an observed-only table is still usable.
+    match msafe.join().map_err(|_| Error::ThreadPanic)? {
+        Ok(fetch) => out.push((
+            crate::spaceweather::MSAFE_FILE.to_string(),
+            String::new(),
+            fetch,
+        )),
+        Err(e) => eprintln!("Warning: MSAFE forecast not refreshed: {e}"),
+    }
     Ok(out)
 }
 
@@ -153,13 +166,14 @@ fn download_refresh_files(
 /// when that model is first used. A copy placed in a search directory takes
 /// precedence.
 ///
-/// The space weather file is refreshed from celestrak, the Earth orientation
-/// file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
+/// The space-weather files are refreshed from their producers (GFZ, SWPC and
+/// MSAFE — see [`spaceweather::update`](crate::spaceweather::update)), the
+/// Earth orientation file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
 /// when both are unreachable — see
-/// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into)),
-/// and the NOAA solar-cycle forecast is fetched; these change daily and are
-/// not pinned. The refresh respects each file's publication cadence: a copy
-/// newer than that (3 h for space weather, 24 h for EOP) is left alone
+/// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into));
+/// these change daily to monthly and are not pinned. The refresh respects each file's publication cadence: a copy
+/// newer than that (3 h for the GFZ record, 24 h for the SWPC forecast and
+/// EOP, a week for MSAFE) is left alone
 /// without contacting the server, and otherwise the request is conditional so
 /// an unchanged file costs a `304`. `overwrite_if_exists` forces a full
 /// re-fetch of these too.
@@ -204,18 +218,14 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
         }
     }
 
-    println!("  Solar Cycle Forecast");
-    if let Err(e) = crate::solar_cycle_forecast::update() {
-        eprintln!("Warning: could not download solar cycle forecast: {e}");
-    }
-
     // Refresh the in-memory space-weather / EOP singletons from the files just
     // downloaded, so a process whose lazy first load failed (e.g. it started
     // before the data directory was populated) recovers without a restart.
-    let sw_path = downloaddir.join("SW-All.csv");
-    if sw_path.is_file() {
-        if let Err(e) = crate::spaceweather::init_from_path(&sw_path) {
-            eprintln!("Warning: could not load downloaded space-weather file: {e}");
+    if downloaddir.join(crate::spaceweather::GFZ_FILE).is_file()
+        || downloaddir.join(crate::spaceweather::CSSI_FILE).is_file()
+    {
+        if let Err(e) = crate::spaceweather::load_from_dir(&downloaddir) {
+            eprintln!("Warning: could not load the refreshed space-weather files: {e}");
         }
     }
     if let Err(e) = crate::earth_orientation_params::load_from_dir(&downloaddir) {
@@ -882,7 +892,7 @@ mod tests {
             );
         }
         assert!(dir.join("finals2000A.all").is_file() || dir.join("EOP-All.csv").is_file());
-        assert!(dir.join("SW-All.csv").is_file());
+        assert!(dir.join(crate::spaceweather::GFZ_FILE).is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

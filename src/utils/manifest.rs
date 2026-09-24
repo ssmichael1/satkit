@@ -42,7 +42,7 @@
 //! An existing file whose hash matches is never re-downloaded.
 //!
 //! The regularly refreshed files are *not* pinned — they change daily.
-//! Space weather (`SW-All.csv`) is listed under `refresh` as a plain URL
+//! Space weather (the GFZ table and the SWPC forecast) is listed under `refresh` as plain URLs
 //! (celestrak); the Earth orientation sources are listed under `eop` in
 //! order of preference (IERS `finals2000A.all` mirrors, then CelesTrak's
 //! `EOP-All.csv`).
@@ -76,7 +76,8 @@ pub struct Manifest {
     pub release_base: String,
     /// The pinned static files.
     pub files: Vec<ManifestEntry>,
-    /// Regularly refreshed files (space weather): plain URLs, never pinned.
+    /// Regularly refreshed files (the GFZ observed record and the SWPC
+    /// 45-day forecast): plain URLs, never pinned.
     #[serde(default)]
     pub refresh: Vec<String>,
     /// Earth orientation sources in order of preference: the first entry is
@@ -523,7 +524,15 @@ mod tests {
         // Refresh files must not be pinned.
         assert!(m.entry("EOP-All.csv").is_none());
         assert!(m.entry("SW-All.csv").is_none());
-        assert!(m.refresh.iter().any(|u| u.ends_with("SW-All.csv")));
+        assert!(!m.refresh.iter().any(|u| u.ends_with("SW-All.csv")));
+        assert!(m
+            .refresh
+            .iter()
+            .any(|u| u.ends_with(crate::spaceweather::GFZ_FILE)));
+        assert!(m
+            .refresh
+            .iter()
+            .any(|u| u.ends_with(crate::spaceweather::SWPC_FILE)));
         assert!(!m.refresh.iter().any(|u| u.ends_with("EOP-All.csv")));
         // EOP: the IERS file (two mirrors) first, CelesTrak as the fallback.
         let names: Vec<&str> = m.eop.iter().map(|s| s.name.as_str()).collect();

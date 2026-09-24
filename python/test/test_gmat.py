@@ -35,7 +35,8 @@ TIDES = {
 def _use_spaceweather(drag) -> bool:
     """satkit's fixed indices (``use_spaceweather=False``) are F10.7 = F10.7A =
     150, Ap = 4 -- what the ``constant`` cases were generated with; the
-    file-driven cases read SW-All.csv."""
+    file-driven cases read satkit's space-weather table (GFZ observed record,
+    identical to the CelesTrak values GMAT read across the corpus window)."""
     if drag is None:
         return False
     assert drag["atmosphere"] == "NRLMSISE00"

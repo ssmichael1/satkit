@@ -201,7 +201,6 @@ pub mod orbitprop;
 /// SGP-4 Orbit Propagator
 pub mod sgp4;
 /// Solar Cycle Forecast (NOAA/SWPC predicted F10.7)
-pub mod solar_cycle_forecast;
 /// Solar system bodies
 mod solarsystem;
 /// Space Weather

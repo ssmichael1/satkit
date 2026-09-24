@@ -35,7 +35,7 @@ satkit settings used on the replay side: `RKV98NoInterp`, `abs_error = rel_error
 = 1e-13`, no SRP in any case, everything else from the case's `force_model`
 block. The drag cases pass `SatPropertiesSimple(Cd·A/m)` from the case's
 `spacecraft` block; only the file-driven ones (`drag_*_sw`) turn on
-`use_spaceweather`, so the rest of the corpus does not depend on `SW-All.csv`.
+`use_spaceweather`, so the rest of the corpus does not depend on the space-weather table.
 
 ## Orbital regimes
 
@@ -75,7 +75,7 @@ dominated by it). All carry the same spacecraft: `Cd = 2.2`, `DragArea = 10 m²`
 | `full` | EGM96 36×36 | on | on (`Solid` / `SolidStep1`) | off | everything both tools model the same way |
 | `gr` | EGM96 36×36 | on | on | on | full IERS 2010 eq. 10.12 relativity on both sides |
 | `drag_const` | as `full` | on | on | off | + NRLMSISE-00 drag with fixed F10.7 = F10.7A = 150, Ap = 4: the density model and drag force alone |
-| `drag_sw` | as `full` | on | on | off | + NRLMSISE-00 drag driven by the CelesTrak space-weather file on both sides: the whole chain, including each tool's F10.7/Ap feed conventions |
+| `drag_sw` | as `full` | on | on | off | + NRLMSISE-00 drag driven by file space weather on both sides — CelesTrak's `SW-All.txt` in GMAT, satkit's own table (GFZ observed record) in satkit, which reproduces the CelesTrak values across this window (F10.7A to 0.044 sfu, ≤ 0.05 % in density, under the 0.06 % rms the two NRLMSISE-00 implementations agree to): the whole chain, including each tool's F10.7/Ap feed conventions |
 
 Cases: every gravity orbit × `j2` and `full`, plus `gr` for `leo_iss`, `tess` and
 `cislunar` (17), and every drag orbit × `drag_const` and `drag_sw` (8) — 25 in
@@ -113,8 +113,10 @@ leak into the constant cases.
   `HistoricWeatherSource = PredictedWeatherSource = 'ConstantFluxAndGeoMag'`
   with `Drag.F107 = Drag.F107A = 150`, `Drag.MagneticIndex = 1` (Kp);
   file-driven via `'CSSISpaceWeatherFile'` and `Drag.CSSISpaceWeatherFile`
-  pointing at CelesTrak's `SW-All.txt` (the `.txt` twin of satkit's
-  `SW-All.csv`; the file's `UPDATED` stamp is recorded in the JSON).
+  pointing at CelesTrak's `SW-All.txt` (the file's `UPDATED` stamp is
+  recorded in the JSON). satkit's side reads its own GFZ-based table — the
+  observed values are identical, and `spaceweather::init_from_path` can load
+  the CelesTrak file instead to pin both tools to one input.
   `drag_leo300_sw` runs at `Accuracy = 1e-13`: GMAT's RK89 refuses 1e-14
   through the file-driven weather steps at 300 km ("Accuracy settings will
   be violated").

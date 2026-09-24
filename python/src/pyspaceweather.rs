@@ -3,12 +3,13 @@ use pyo3::types::PyDict;
 use pyo3::IntoPyObjectExt;
 
 use crate::pyutils::instant_from_pyany;
-use satkit::{solar_cycle_forecast, spaceweather};
+use satkit::spaceweather;
 
 /// Space-weather record for the given time
 ///
-/// Returns the daily space-weather record (from CelesTrak's `SW-All.csv`,
-/// originally from NOAA) closest to and not after the given time. These are
+/// Returns the daily space-weather record closest to and not after the
+/// given time, from the GFZ Potsdam observed record, then the NOAA/SWPC
+/// 45-day forecast, then the NASA MSAFE monthly forecast. These are
 /// the values the NRLMSISE-00 density model consumes when
 /// `use_spaceweather` is enabled — exposing them lets you inspect or
 /// reproduce the propagator's density inputs.
@@ -33,8 +34,14 @@ use satkit::{solar_cycle_forecast, spaceweather};
 ///         * ``c9`` (int) — Cp scaled to [0, 9]
 ///         * ``bsrn`` (int) — Bartels solar rotation number
 ///         * ``nd`` (int) — day within the Bartels rotation
+///         * ``data_type`` (str) — provenance of the row: ``"OBS"`` measured,
+///           ``"INT"`` interpolated, ``"PRD"`` daily prediction, ``"PRM"``
+///           monthly prediction, ``""`` unknown
 ///
 ///     Note: fields not yet published for predicted (future) rows are ``-1``.
+///     MSAFE ``"PRM"`` rows carry a climatological daily Ap in every ``ap``
+///     slot and ``-1`` for ``kp``. Use :func:`coverage` / :func:`status` to
+///     find out which regime an epoch is in before propagating.
 ///
 /// Raises:
 ///     RuntimeError: If no space-weather record is available for the date
@@ -60,34 +67,111 @@ pub fn get(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
         d.set_item("c9", rec.c9)?;
         d.set_item("bsrn", rec.bsrn)?;
         d.set_item("nd", rec.nd)?;
+        d.set_item("data_type", rec.data_type.as_str())?;
         Ok(d.into_py_any(py)?)
     })
 }
 
-/// Predicted F10.7 solar flux for a (future) time
+/// Refresh the space-weather files and reload the in-memory table
 ///
-/// Linearly interpolates the NOAA/SWPC monthly solar-cycle forecast. This is
-/// the value the NRLMSISE-00 density model falls back to when the
-/// space-weather file has no usable record for the requested (future) date —
-/// exposing it enables future-epoch density and orbit-lifetime studies.
-///
-/// Args:
-///     time (satkit.time|datetime.datetime): Time for which to return predicted F10.7
-///
-/// Returns:
-///     float | None: Predicted F10.7 solar flux in sfu (10^-22 W m^-2 Hz^-1),
-///     or None if the time is outside the forecast range (or no forecast data is available)
-#[pyfunction]
-pub fn predicted_f107(time: &Bound<'_, PyAny>) -> anyhow::Result<Option<f64>> {
-    let tm = instant_from_pyany(time)?;
-    Ok(solar_cycle_forecast::get_predicted_f107(&tm))
-}
-
-/// Download the latest space-weather file and reload the in-memory data
-///
-/// Space weather is updated daily; run this (or
-/// `satkit.utils.update_datafiles`) periodically for current values.
+/// The GFZ observed record (every 3 h), the SWPC 45-day forecast (daily)
+/// and the MSAFE monthly forecast are each re-fetched only when older than
+/// their publication cadence. Run this (or `satkit.utils.update_datafiles`)
+/// periodically for current values.
 #[pyfunction]
 pub fn update() -> anyhow::Result<()> {
     Ok(spaceweather::update()?)
+}
+
+/// Time bounds of the loaded space-weather table
+///
+/// ``last_daily`` is the boundary that matters for atmospheric drag: past it
+/// the table holds only monthly MSAFE rows — a 13-month-smoothed F10.7 and a
+/// climatological daily Ap, with no 3-hourly structure and no storm timing.
+///
+/// Returns:
+///     (satkit.time, satkit.time, satkit.time, satkit.time) | None:
+///     ``(first, last_observed, last_daily, last)``, or None if no
+///     space-weather table is loaded.
+///
+/// Example:
+///     >>> first, last_obs, last_daily, last = satkit.spaceweather.coverage()
+#[pyfunction]
+pub fn coverage() -> Option<(
+    crate::pyinstant::PyInstant,
+    crate::pyinstant::PyInstant,
+    crate::pyinstant::PyInstant,
+    crate::pyinstant::PyInstant,
+)> {
+    spaceweather::coverage().map(|c| {
+        (
+            crate::pyinstant::PyInstant(c.first),
+            crate::pyinstant::PyInstant(c.last_observed),
+            crate::pyinstant::PyInstant(c.last_daily),
+            crate::pyinstant::PyInstant(c.last),
+        )
+    })
+}
+
+/// Where a time falls relative to the loaded space-weather table
+///
+/// Args:
+///     time (satkit.time|datetime.datetime): Time to classify
+///
+/// Returns:
+///     str: One of ``"observed"`` (measured), ``"predicted_daily"`` (inside
+///     the NOAA/SWPC 45-day forecast), ``"predicted_monthly"`` (the MSAFE monthly
+///     forecast: smoothed F10.7 and a climatological Ap, no storm timing),
+///     ``"extrapolated"`` (past the table; the last row is returned
+///     unchanged), ``"before_table"``, or ``"not_loaded"``.
+#[pyfunction]
+pub fn status(time: &Bound<'_, PyAny>) -> anyhow::Result<&'static str> {
+    use satkit::spaceweather::SpaceWeatherStatus::*;
+    let tm = instant_from_pyany(time)?;
+    Ok(match spaceweather::status(&tm) {
+        Observed => "observed",
+        PredictedDaily => "predicted_daily",
+        PredictedMonthly => "predicted_monthly",
+        Extrapolated => "extrapolated",
+        BeforeTable => "before_table",
+        NotLoaded => "not_loaded",
+    })
+}
+
+/// Disable the warnings about out-of-range or missing space-weather data
+///
+/// Three one-time warnings exist: an epoch past the daily predictions (only
+/// monthly F10.7, no geomagnetic data), an epoch past the end of the table,
+/// and no table loaded at all. Each is shown at most once per process; this
+/// suppresses all of them.
+///
+/// Example:
+///     >>> satkit.spaceweather.disable_space_weather_time_warning()
+#[pyfunction]
+pub fn disable_space_weather_time_warning() {
+    spaceweather::disable_space_weather_time_warning();
+}
+
+/// Load the space-weather table from a file, replacing whatever is loaded
+///
+/// Accepts the GFZ ``Kp_ap_Ap_SN_F107_since_1932.txt`` table (observed
+/// only). This is how to pin satkit to one fixed input file when a
+/// comparison must not move with the daily refresh.
+///
+/// Args:
+///     path (str | os.PathLike): File to load
+#[pyfunction]
+pub fn init_from_path(path: std::path::PathBuf) -> anyhow::Result<()> {
+    Ok(spaceweather::init_from_path(&path)?)
+}
+
+/// Load the space-weather table from bytes, replacing whatever is loaded
+///
+/// Same formats as :func:`init_from_path`.
+///
+/// Args:
+///     data (bytes): File contents
+#[pyfunction]
+pub fn init_from_bytes(data: &[u8]) -> anyhow::Result<()> {
+    Ok(spaceweather::init_from_bytes(data)?)
 }

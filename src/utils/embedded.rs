@@ -8,7 +8,7 @@
 //! | **embedded** (this module) | IERS Tables 5.2a/b/d (nutation / CIO series); EGM96, EGM2008, JGM2, JGM3 gravity coefficients truncated to degree 70 | gzip'd and compiled in with `include_bytes!` (~300 KB total), inflated on first use. Frames and gravity therefore work with **no data directory and no network** |
 //! | **ephemeris** | JPL DE440 (102 MB) or DE421 (14 MB) | downloaded on first use through the SHA-256-verified [manifest](super::manifest) fetch, or provided by the user |
 //! | **on demand** | the ITU_GRACE16 gravity model (CC BY 4.0, so not compiled in) | same verified fetch, on first use of `GravityModel::ITUGrace16` |
-//! | **refreshed** | Earth orientation (`finals2000A.all`, IERS; `EOP-All.csv`, CelesTrak fallback), space weather (`SW-All.csv`, CelesTrak) | change daily; fetched by `update_datafiles()` or on first use |
+//! | **refreshed** | Earth orientation (`finals2000A.all`, IERS; `EOP-All.csv`, CelesTrak fallback), space weather (GFZ Potsdam observed record, NOAA/SWPC 45-day and NASA MSAFE monthly forecasts) | change daily; fetched by `update_datafiles()` or on first use |
 //!
 //! # Precedence
 //!
