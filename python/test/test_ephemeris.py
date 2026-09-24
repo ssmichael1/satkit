@@ -116,7 +116,7 @@ class TestMoon:
         # Vallado approximates UTC as TBD, so we will
         # make the same approximation
         # for the purposes of this test case
-        t1 = sk.time.from_mjd(t0.as_mjd(sk.timescale.UTC), sk.timescale.TDB)
+        t1 = sk.time.from_mjd(t0.to_mjd(sk.timescale.UTC), sk.timescale.TDB)
         p = sk.moon.pos_gcrf(t1)
         ref_pos = np.array([-134240.626e3, -311571.590e3, -126693.785e3])
         assert p == pytest.approx(ref_pos)
@@ -167,7 +167,7 @@ class TestSun:
         # Vallado approximates UTC as TBD, so we will
         # make the same approximation
         # for the purposes of this test case
-        t1 = sk.time.from_mjd(t0.as_mjd(sk.timescale.UTC), sk.timescale.TDB)
+        t1 = sk.time.from_mjd(t0.to_mjd(sk.timescale.UTC), sk.timescale.TDB)
         p = sk.sun.pos_gcrf(t1)
         pref = np.array([146259922.0e3, 28585947.0e3, 12397430.0e3])
         assert p == pytest.approx(pref, 5e-4)
@@ -179,14 +179,14 @@ class TestSun:
         coord = sk.itrfcoord(latitude_deg=40.0, longitude_deg=0.0)
         tm = sk.time(1996, 3, 23, 0, 0, 0)
         sunrise, sunset = sk.sun.rise_set(tm, coord)
-        (year, mon, day, hour, minute, sec) = sunrise.as_gregorian()
+        (year, mon, day, hour, minute, sec) = sunrise.to_gregorian()
         assert year == 1996
         assert mon == 3
         assert day == 23
         assert hour == 5
         assert minute == 58
         assert sec == pytest.approx(21.97, 1e-3)
-        (year, mon, day, hour, minute, sec) = sunset.as_gregorian()
+        (year, mon, day, hour, minute, sec) = sunset.to_gregorian()
         assert year == 1996
         assert mon == 3
         assert day == 23

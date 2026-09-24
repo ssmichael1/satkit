@@ -9,6 +9,7 @@ use pyo3::IntoPyObjectExt;
 use satkit::{Instant, TimeScale, Weekday};
 
 use crate::pyduration::PyDuration;
+use crate::pyutils::warn_deprecated;
 
 use anyhow::{bail, Result};
 
@@ -156,7 +157,10 @@ pub fn instant_into_py(instant: Instant, py: Python<'_>) -> Py<PyAny> {
     PyInstant(instant).into_py_any(py).unwrap()
 }
 
-/// Extract a satkit::Instant from a Python object (expects PyInstant)
+// The Python API names conversions `to_*` (paired with `from_*`); PyInstant is
+// Copy, so clippy would rather those took `self` by value. PyO3 methods take
+// `&self`, and the name is fixed by the Python API, so the lint is silenced here.
+#[allow(clippy::wrong_self_convention)]
 #[pymethods]
 impl PyInstant {
     /// Representation of an instant in time
@@ -380,7 +384,7 @@ impl PyInstant {
     /// Notes:
     ///  RFC3339 is a standard for representing time in a string format
     ///  Return string also matches ISO8601
-    fn as_rfc3339(&self) -> String {
+    fn to_rfc3339(&self) -> String {
         self.0.as_rfc3339()
     }
 
@@ -392,7 +396,7 @@ impl PyInstant {
     /// Notes:
     /// ISO8601 is a standard for representing time in a string format
     /// Return string also matches RFC3339
-    fn as_iso8601(&self) -> String {
+    fn to_iso8601(&self) -> String {
         self.0.as_iso8601()
     }
 
@@ -464,7 +468,7 @@ impl PyInstant {
     ///
     /// Returns:
     ///    (int, int, int): Tuple with 3 elements representing Gregorian year, month, and day
-    fn as_date(&self) -> (i32, i32, i32) {
+    fn to_date(&self) -> (i32, i32, i32) {
         let dt = self.0.as_datetime();
         (dt.0, dt.1, dt.2)
     }
@@ -474,7 +478,7 @@ impl PyInstant {
     /// Returns:
     ///     (int, int, int, int, int, float): Tuple with 6 elements representing Gregorian year, month, day, hour, minute, and second
     ///
-    fn as_gregorian(&self) -> (i32, i32, i32, i32, i32, f64) {
+    fn to_gregorian(&self) -> (i32, i32, i32, i32, i32, f64) {
         self.0.as_datetime()
     }
 
@@ -536,9 +540,9 @@ impl PyInstant {
     ///     datetime.datetime:  datetime object matching the input satkit.time
     ///
     #[pyo3(signature = (utc=true))]
-    fn as_datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
+    fn to_datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
         pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let timestamp: f64 = self.as_unixtime();
+            let timestamp: f64 = self.to_unixtime();
             let tz = match utc {
                 false => None,
                 true => Some(PyTzInfo::utc(py)),
@@ -557,17 +561,12 @@ impl PyInstant {
     ///     datetime.datetime:  datetime object matching the input satkit.time
     ///
     #[pyo3(signature = (utc=true))]
-    fn datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let warning_type = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
-            let msg = std::ffi::CString::new(
-                "satkit.time.datetime() is deprecated; use satkit.time.as_datetime() instead.",
-            )
-            .expect("CString::new failed");
-
-            PyErr::warn(py, warning_type.as_any(), msg.as_c_str(), 2)?;
-            self.as_datetime(utc)
-        })
+    fn datetime(&self, py: Python<'_>, utc: bool) -> PyResult<Py<PyAny>> {
+        warn_deprecated(
+            py,
+            c"satkit.time.datetime() is deprecated; use satkit.time.to_datetime() instead.",
+        )?;
+        self.to_datetime(utc)
     }
 
     /// Convert to Modified Julian date
@@ -578,7 +577,7 @@ impl PyInstant {
     /// Returns:
     ///     float: Modified Julian Date, days
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
-    fn as_mjd(&self, scale: &PyTimeScale) -> f64 {
+    fn to_mjd(&self, scale: &PyTimeScale) -> f64 {
         self.0.as_mjd_with_scale(scale.into())
     }
 
@@ -590,7 +589,7 @@ impl PyInstant {
     /// Returns:
     ///     float: Julian Date, days
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
-    fn as_jd(&self, scale: &PyTimeScale) -> f64 {
+    fn to_jd(&self, scale: &PyTimeScale) -> f64 {
         self.0.as_jd_with_scale(scale.into())
     }
 
@@ -599,8 +598,83 @@ impl PyInstant {
     ///
     /// Returns:
     ///     float: Unix time (seconds since 1970-01-01 00:00:00 UTC)
-    fn as_unixtime(&self) -> f64 {
+    fn to_unixtime(&self) -> f64 {
         self.0.as_unixtime()
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_rfc3339()``.
+    fn as_rfc3339(&self, py: Python<'_>) -> PyResult<String> {
+        warn_deprecated(
+            py,
+            c"time.as_rfc3339() is deprecated since 0.23 and will be removed in 0.25; use time.to_rfc3339()",
+        )?;
+        Ok(self.to_rfc3339())
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_iso8601()``.
+    fn as_iso8601(&self, py: Python<'_>) -> PyResult<String> {
+        warn_deprecated(
+            py,
+            c"time.as_iso8601() is deprecated since 0.23 and will be removed in 0.25; use time.to_iso8601()",
+        )?;
+        Ok(self.to_iso8601())
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_date()``.
+    fn as_date(&self, py: Python<'_>) -> PyResult<(i32, i32, i32)> {
+        warn_deprecated(
+            py,
+            c"time.as_date() is deprecated since 0.23 and will be removed in 0.25; use time.to_date()",
+        )?;
+        Ok(self.to_date())
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_gregorian()``.
+    fn as_gregorian(&self, py: Python<'_>) -> PyResult<(i32, i32, i32, i32, i32, f64)> {
+        warn_deprecated(
+            py,
+            c"time.as_gregorian() is deprecated since 0.23 and will be removed in 0.25; use time.to_gregorian()",
+        )?;
+        Ok(self.to_gregorian())
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_datetime()``.
+    #[pyo3(signature = (utc=true))]
+    fn as_datetime(&self, py: Python<'_>, utc: bool) -> PyResult<Py<PyAny>> {
+        warn_deprecated(
+            py,
+            c"time.as_datetime() is deprecated since 0.23 and will be removed in 0.25; use time.to_datetime()",
+        )?;
+        self.to_datetime(utc)
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_mjd()``.
+    #[pyo3(signature=(scale=&PyTimeScale::UTC))]
+    fn as_mjd(&self, py: Python<'_>, scale: &PyTimeScale) -> PyResult<f64> {
+        warn_deprecated(
+            py,
+            c"time.as_mjd() is deprecated since 0.23 and will be removed in 0.25; use time.to_mjd()",
+        )?;
+        Ok(self.to_mjd(scale))
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_jd()``.
+    #[pyo3(signature=(scale=&PyTimeScale::UTC))]
+    fn as_jd(&self, py: Python<'_>, scale: &PyTimeScale) -> PyResult<f64> {
+        warn_deprecated(
+            py,
+            c"time.as_jd() is deprecated since 0.23 and will be removed in 0.25; use time.to_jd()",
+        )?;
+        Ok(self.to_jd(scale))
+    }
+
+    /// Deprecated since 0.23, removed in 0.25. Use ``to_unixtime()``.
+    fn as_unixtime(&self, py: Python<'_>) -> PyResult<f64> {
+        warn_deprecated(
+            py,
+            c"time.as_unixtime() is deprecated since 0.23 and will be removed in 0.25; use time.to_unixtime()",
+        )?;
+        Ok(self.to_unixtime())
     }
 
     /// Return time object representing input GPS week and seconds of week

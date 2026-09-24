@@ -75,10 +75,10 @@ def test_iers_tables_and_precession_nutation():
 
 def test_time_scales():
     t = sk.time(2024, 1, 1, 0, 0, 0)
-    tai = t.as_mjd(sk.timescale.TAI)
-    utc = t.as_mjd(sk.timescale.UTC)
+    tai = t.to_mjd(sk.timescale.TAI)
+    utc = t.to_mjd(sk.timescale.UTC)
     assert abs((tai - utc) * 86400.0 - 37.0) < 1e-6
-    tt = t.as_mjd(sk.timescale.TT)
+    tt = t.to_mjd(sk.timescale.TT)
     assert abs((tt - tai) * 86400.0 - 32.184) < 1e-6
 
 

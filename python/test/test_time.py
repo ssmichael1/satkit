@@ -19,7 +19,7 @@ class TestDateTime:
         tm1 = sk.time(2023, 3, 4, 12, 5, 6)
         tm2 = datetime(2023, 3, 4, 12, 5, 6, tzinfo=timezone.utc)
 
-        assert tm1.as_datetime() == tm2
+        assert tm1.to_datetime() == tm2
         # Check that function calls work
         # Pick gmst as the test function call for time
         # it can be anything since under the hood the same function call is used
@@ -86,14 +86,14 @@ class TestTime:
         Test RFC3339 conversion
         """
         t = sk.time(2021, 9, 30, 12, 45, 13.345)
-        assert t.as_rfc3339() == "2021-09-30T12:45:13.345000Z"
+        assert t.to_rfc3339() == "2021-09-30T12:45:13.345000Z"
 
     def test_mjd(self):
         """
         Test MJD conversion
         """
         t = sk.time(2021, 1, 1, 0, 0, 0)
-        mjd = t.as_mjd(sk.timescale.UTC)
+        mjd = t.to_mjd(sk.timescale.UTC)
         assert mjd == pytest.approx(59215.0)
 
     def test_jd(self):
@@ -101,7 +101,7 @@ class TestTime:
         Test JD conversion
         """
         t = sk.time(2021, 1, 1, 0, 0, 0)
-        jd = t.as_jd(sk.timescale.UTC)
+        jd = t.to_jd(sk.timescale.UTC)
         assert jd == pytest.approx(2459215.5)
 
     def test_duration(self):
@@ -175,7 +175,7 @@ class TestTime:
         Test conversion to Gregorian calendar
         """
         t = sk.time(2021, 1, 1, 0, 0, 0)
-        (year, mon, day, hour, minute, sec) = t.as_gregorian()
+        (year, mon, day, hour, minute, sec) = t.to_gregorian()
         assert year == 2021
         assert mon == 1
         assert day == 1
@@ -211,7 +211,7 @@ class TestTime:
         """
         # GPS epoch: January 6, 1980 00:00:00 UTC
         gps_epoch = sk.time.from_gps_week_and_second(0, 0)
-        g = gps_epoch.as_gregorian()
+        g = gps_epoch.to_gregorian()
         assert g[0] == 1980
         assert g[1] == 1
         assert g[2] == 6
@@ -219,7 +219,7 @@ class TestTime:
 
         # Week 1 should be 7 days later: January 13, 1980
         week1 = sk.time.from_gps_week_and_second(1, 0)
-        g = week1.as_gregorian()
+        g = week1.to_gregorian()
         assert g[0] == 1980
         assert g[1] == 1
         assert g[2] == 13
@@ -230,7 +230,7 @@ class TestTime:
 
         # Day 2 of week 0: January 7, 1980
         day2 = sk.time.from_gps_week_and_second(0, 86400)
-        g = day2.as_gregorian()
+        g = day2.to_gregorian()
         assert g[0] == 1980
         assert g[1] == 1
         assert g[2] == 7
@@ -244,14 +244,14 @@ class TestTime:
 class TestEpochConstants:
     def test_epoch_constants(self):
         # J2000: 2000-01-01 12:00:00 TT
-        assert sk.time.J2000.as_mjd(sk.timescale.TT) == pytest.approx(51544.5, abs=1e-9)
+        assert sk.time.J2000.to_mjd(sk.timescale.TT) == pytest.approx(51544.5, abs=1e-9)
         # GPS epoch: 1980-01-06 00:00:00 UTC
-        g = sk.time.GPS_EPOCH.as_datetime()
+        g = sk.time.GPS_EPOCH.to_datetime()
         assert (g.year, g.month, g.day) == (1980, 1, 6)
         # Unix epoch: 1970-01-01 00:00:00 UTC
-        assert sk.time.UNIX_EPOCH.as_unixtime() == pytest.approx(0.0, abs=1e-6)
+        assert sk.time.UNIX_EPOCH.to_unixtime() == pytest.approx(0.0, abs=1e-6)
         # MJD epoch: MJD 0
-        assert sk.time.MJD_EPOCH.as_mjd(sk.timescale.UTC) == pytest.approx(0.0, abs=1e-9)
+        assert sk.time.MJD_EPOCH.to_mjd(sk.timescale.UTC) == pytest.approx(0.0, abs=1e-9)
 
 
 class TestDurationUnits:
