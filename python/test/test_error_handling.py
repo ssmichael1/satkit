@@ -109,17 +109,18 @@ class TestNonContiguousInput:
         assert s.cov is not None
 
     def test_gravity_degree_above_max_rejected(self):
-        # Degrees above 40 used to be accepted and silently evaluated at 40.
+        # Degrees above the cap used to be accepted and silently evaluated
+        # at the cap (40 before 0.23, 70 since).
         s = sk.propsettings()
-        s.gravity_degree = 40
-        s.gravity_order = 40
+        s.gravity_degree = 70
+        s.gravity_order = 70
         with pytest.raises(ValueError):
-            s.gravity_degree = 41
+            s.gravity_degree = 71
         with pytest.raises(ValueError):
-            s.gravity_order = 41
+            s.gravity_order = 71
         with pytest.raises(ValueError):
             sk.propsettings(gravity_degree=360, gravity_order=360)
-        assert (s.gravity_degree, s.gravity_order) == (40, 40)
+        assert (s.gravity_degree, s.gravity_order) == (70, 70)
 
     def test_precompute_table_size_cap(self):
         # A tiny step would need billions of entries; must raise, not OOM.

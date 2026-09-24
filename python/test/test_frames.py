@@ -410,6 +410,21 @@ class TestGravity:
         g_default = sk.gravity(itrf, degree=8)
         assert np.allclose(g_full, g_default), "order should default to degree"
 
+
+    def test_gravity_default_model_and_degree_70(self):
+        # 0.23: EGM2008 is the default model and the cap is 70 (was 40).
+        assert sk.propsettings().gravity_model == sk.gravmodel.egm2008
+        pos = sk.itrfcoord(latitude_deg=35.0, longitude_deg=-100.0, altitude=400.0e3)
+        a_default = sk.gravity(pos, degree=70, order=70)
+        a_2008 = sk.gravity(pos, model=sk.gravmodel.egm2008, degree=70, order=70)
+        a_96 = sk.gravity(pos, model=sk.gravmodel.egm96, degree=70, order=70)
+        assert np.array_equal(a_default, a_2008)
+        assert not np.array_equal(a_2008, a_96)
+        # Degrees 41-70 are a real, small signal at 400 km (a few 1e-6 m/s^2).
+        band = np.linalg.norm(a_2008 - sk.gravity(pos, model=sk.gravmodel.egm2008, degree=40, order=40))
+        assert 1.0e-7 < band < 1.0e-4
+        with pytest.raises(ValueError):
+            sk.gravity(pos, degree=71, order=71)
     def test_propsettings_new_fields(self):
         """Test new propsettings fields: gravity_degree, gravity_order, use_sun_gravity, use_moon_gravity"""
         # Default values

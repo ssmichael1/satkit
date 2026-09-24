@@ -100,9 +100,9 @@ impl From<TideModel> for PyTideModel {
 ///     abs_error (float): Maximum absolute error of any element in the propagated state, in the
 ///         units of the state (meters for position elements, m/s for velocity elements). Default 1e-8
 ///     rel_error (float): Maximum relative error of any element in the propagated state, unitless. Default 1e-8
-///     gravity_degree (int): Maximum degree of spherical harmonic gravity model (at most 40). Default 4
+///     gravity_degree (int): Maximum degree of spherical harmonic gravity model (at most 70). Default 4
 ///     gravity_order (int): Maximum order of spherical harmonic gravity model. Default same as gravity_degree
-///     gravity_model (satkit.gravmodel): Gravity model. Default gravmodel.egm96
+///     gravity_model (satkit.gravmodel): Gravity model. Default gravmodel.egm2008
 ///     use_spaceweather (bool): Use space weather data for atmospheric density. Default True
 ///     use_sun_gravity (bool): Include sun third-body gravity. Default True
 ///     use_moon_gravity (bool): Include moon third-body gravity. Default True

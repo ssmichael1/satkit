@@ -23,6 +23,7 @@ GRAVITY = {
     "JGM3": sk.gravmodel.jgm3,
     "JGM2": sk.gravmodel.jgm2,
     "ITUGrace16": sk.gravmodel.itugrace16,
+    "EGM2008": sk.gravmodel.egm2008,
 }
 TIDES = {
     "None": sk.tidemodel.none,
@@ -57,7 +58,7 @@ def _settings(fm: dict) -> "sk.propsettings":
     # Mirrors tests/gmat_regression.rs: tolerances 10x tighter than the
     # tightest gate, no dense output, space weather only for the
     # file-driven drag cases.
-    assert fm["gravity_degree"] <= 40 and fm["gravity_order"] <= fm["gravity_degree"]
+    assert fm["gravity_degree"] <= 70 and fm["gravity_order"] <= fm["gravity_degree"]
     s = sk.propsettings()
     s.gravity_model = GRAVITY[fm["gravity_model"]]
     s.gravity_degree = fm["gravity_degree"]

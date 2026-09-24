@@ -53,28 +53,30 @@ pub type Result<T> = std::result::Result<T, Error>;
 use crate::mathtypes::*;
 type CoeffTable = DMatrix<f64>;
 
-type DivisorTable = Matrix<44, 44>;
+type DivisorTable = Matrix<MAX_COEFF_DIM, MAX_COEFF_DIM>;
 
 /// Largest table dimension the evaluator can ever index. Acceleration and
-/// partials are dispatched at degree ≤ 40 (see `dispatch_degree!`) and the
-/// Cunningham recursion uses NP4 = degree + 4 ≤ 44, matching the 44×44
+/// partials are dispatched at degree ≤ 70 (see `dispatch_degree!`) and the
+/// Cunningham recursion uses NP4 = degree + 4 ≤ 74, matching the 74×74
 /// divisor tables. Storing coefficients beyond this is not just wasted
-/// memory — for high-resolution models (EGM96 is degree 360) it inflates the
-/// column-major stride of `coeffs`, scattering the S-coefficient reads
-/// `coeffs[(m-1, n)]` across ~3 KB strides and thrashing the cache in the
-/// hot loops. Capping the stored table keeps the working set in L1.
-const MAX_COEFF_DIM: usize = 44;
+/// memory — for high-resolution models (EGM96 is degree 360, EGM2008 degree
+/// 2190) it inflates the column-major stride of `coeffs`, scattering the
+/// S-coefficient reads `coeffs[(m-1, n)]` across multi-KB strides and
+/// thrashing the cache in the hot loops. Capping the stored table keeps the
+/// working set small (a 74×74 table is 44 KB).
+const MAX_COEFF_DIM: usize = MAX_GRAVITY_DEGREE as usize + 4;
 
 /// Highest spherical-harmonic degree (and order) the evaluator supports.
 ///
 /// The built-in coefficient tables are capped at [`MAX_COEFF_DIM`] rows and
-/// the accelerator dispatches on degree ≤ 40; requests above this are
+/// the accelerator dispatches on degree ≤ 70; requests above this are
 /// rejected by [`PropSettings::set_gravity`](crate::orbitprop::PropSettings::set_gravity)
 /// and at [`propagate`](crate::orbitprop::propagate) entry rather than
-/// silently clamped. (EGM96 itself is defined to degree 360; supporting
-/// that would need heap-allocated Legendre tables — see the note on
-/// `MAX_COEFF_DIM`.)
-pub const MAX_GRAVITY_DEGREE: u16 = 40;
+/// silently clamped. The compiled-in models are truncated to exactly this
+/// degree, so they give the same results as the full files. (EGM96 itself is
+/// defined to degree 360 and EGM2008 to 2190; supporting that would need
+/// heap-allocated Legendre tables — see the note on `MAX_COEFF_DIM`.)
+pub const MAX_GRAVITY_DEGREE: u16 = 70;
 
 use std::sync::OnceLock;
 
@@ -97,7 +99,7 @@ fn parse_f64(tok: &str) -> std::result::Result<f64, ParseFloatError> {
 /// <http://icgem.gfz-potsdam.de/tom_longtime>
 ///
 /// EGM96, EGM2008, JGM2 and JGM3 are compiled into the library (truncated
-/// to degree 70, above the evaluator's cap of 40) and need no data
+/// to degree 70, the evaluator's cap) and need no data
 /// directory or network. ITU_GRACE16 is fetched on first use through the
 /// SHA-256-verified data manifest (its licence is CC BY 4.0, so it is not
 /// redistributed inside the library); see [`ensure_loaded`].
@@ -485,7 +487,7 @@ macro_rules! dispatch_degree {
      $($d:literal),+ $(,)?) => {
         match $degree {
             $($d => $self.$method::<$d, { $d + 4 }>($arg1, $arg2),)+
-            _ => $self.$method::<40, 44>($arg1, $arg2),
+            _ => $self.$method::<{ MAX_GRAVITY_DEGREE as usize }, MAX_COEFF_DIM>($arg1, $arg2),
         }
     };
 }
@@ -500,7 +502,7 @@ macro_rules! dispatch_degree {
 /// * `pos` - Position as ITRF coordinate (satkit.itrfcoord) or numpy
 ///   3-vector representing ITRF position in meters
 ///
-/// * `order` - Order of the gravity model, up to 40
+/// * `order` - Order of the gravity model, up to 70
 ///
 /// # References
 ///
@@ -511,7 +513,7 @@ impl Gravity {
         // Clamp to the stored coefficient table: a custom low-degree model
         // combined with a larger requested degree would index past the table.
         // (A no-op for the built-in models, whose tables hold MAX_COEFF_DIM.)
-        // The lower bound of 1 keeps degree 0 out of the `_ => 40` dispatch
+        // The lower bound of 1 keeps degree 0 out of the `_ => 70` dispatch
         // arm; degree 1 is the point-mass field (the n=1 terms vanish for a
         // center-of-mass-origin model).
         let degree = degree.clamp(1, self.coeffs.nrows().saturating_sub(1));
@@ -559,6 +561,36 @@ impl Gravity {
             37,
             38,
             39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
         )
     }
 
@@ -614,6 +646,36 @@ impl Gravity {
             37,
             38,
             39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
         )
     }
 
@@ -906,7 +968,7 @@ impl Gravity {
     pub fn from_file(filename: &str) -> Result<Self> {
         // Precedence: a copy in the data directory wins (e.g. a full-degree
         // file installed by `update_datafiles`); otherwise the compiled-in
-        // copy (degree ≤ 70, more than the evaluator's cap of 40); a download
+        // copy (degree 70, the evaluator's cap); a download
         // is only attempted for a name that is not embedded.
         if let Some(path) = crate::utils::find_data_file(filename) {
             return Self::from_path(&path);
@@ -1076,13 +1138,13 @@ impl Gravity {
 
         let mut d1 = DivisorTable::zeros();
         let mut d2 = DivisorTable::zeros();
-        for m in 0..43 {
+        for m in 0..(MAX_COEFF_DIM - 1) {
             if m > 0 {
                 d1[(m, m)] = (2 * m - 1) as f64
             }
             let n = m + 1;
             d1[(n, m)] = (2 * n - 1) as f64 / (n - m) as f64;
-            for n in (m + 2)..43 {
+            for n in (m + 2)..(MAX_COEFF_DIM - 1) {
                 d1[(n, m)] = (2 * n - 1) as f64 / (n - m) as f64;
                 d2[(n, m)] = (n + m - 1) as f64 / (n - m) as f64;
             }
@@ -1267,6 +1329,133 @@ gfc 2 2 2.439383e-6 -1.400273e-6
         assert_eq!(GravityModel::EGM2008.to_string(), "EGM2008");
     }
 
+    /// Textbook reference for the tests below: the potential
+    /// V = μ/r Σₙ (R/r)ⁿ Σₘ Pₙₘ(sin φ)(Cₙₘ cos mλ + Sₙₘ sin mλ) with
+    /// *unnormalised* Pₙₘ from the forward-column recursion and the stored
+    /// (de-normalised) coefficients, differentiated by central differences.
+    /// It shares nothing with the Cunningham V/W recursion the evaluator uses.
+    fn reference_accel(
+        g: &Gravity,
+        pos: &Vector3,
+        nmin: usize,
+        nmax: usize,
+        mmax: usize,
+    ) -> Vector3 {
+        let potential = |p: &Vector3| -> f64 {
+            let r = p.norm();
+            let t = p[2] / r;
+            let u = (p[0] * p[0] + p[1] * p[1]).sqrt() / r;
+            let lam = p[1].atan2(p[0]);
+            let dim = nmax + 1;
+            let mut pnm = vec![0.0_f64; dim * dim];
+            pnm[0] = 1.0;
+            for m in 1..=nmax {
+                pnm[m * dim + m] = (2 * m - 1) as f64 * u * pnm[(m - 1) * dim + (m - 1)];
+            }
+            for m in 0..nmax {
+                pnm[(m + 1) * dim + m] = (2 * m + 1) as f64 * t * pnm[m * dim + m];
+                for n in (m + 2)..=nmax {
+                    pnm[n * dim + m] = ((2 * n - 1) as f64 * t * pnm[(n - 1) * dim + m]
+                        - (n + m - 1) as f64 * pnm[(n - 2) * dim + m])
+                        / (n - m) as f64;
+                }
+            }
+            let mut v = 0.0;
+            for n in nmin..=nmax {
+                let mut sum = 0.0;
+                for m in 0..=n.min(mmax) {
+                    let c = g.coeffs[(n, m)];
+                    let s = if m > 0 { g.coeffs[(m - 1, n)] } else { 0.0 };
+                    let ml = m as f64 * lam;
+                    sum += pnm[n * dim + m] * (c * ml.cos() + s * ml.sin());
+                }
+                v += (g.radius / r).powi(n as i32) * sum;
+            }
+            g.gravity_constant / r * v
+        };
+        let h = 1.0;
+        let mut a = Vector3::zeros();
+        for i in 0..3 {
+            let mut pp = *pos;
+            pp[i] += h;
+            let mut pm = *pos;
+            pm[i] -= h;
+            a[i] = (potential(&pp) - potential(&pm)) / (2.0 * h);
+        }
+        a
+    }
+
+    #[test]
+    fn embedded_models_hold_degree_70() {
+        // The compiled-in files hold every coefficient up to MAX_GRAVITY_DEGREE
+        // (EGM96/EGM2008 truncated to it, JGM2/JGM3 natively degree 70).
+        for g in [egm96(), egm2008(), jgm2(), jgm3()] {
+            let n = MAX_GRAVITY_DEGREE as usize;
+            assert!(
+                g.coeffs.nrows() > n,
+                "{}: {} rows",
+                g.name,
+                g.coeffs.nrows()
+            );
+            assert!(g.coeffs[(n, 0)] != 0.0, "{}: C(70,0) missing", g.name);
+            assert!(g.coeffs[(n, n)] != 0.0, "{}: C(70,70) missing", g.name);
+            assert!(g.coeffs[(n - 1, n)] != 0.0, "{}: S(70,70) missing", g.name);
+        }
+    }
+
+    #[test]
+    fn degree_70_matches_reference_potential() {
+        // Degrees 41–70 were never exercised before the cap was raised (0.23);
+        // check the full field, the new band alone and an order truncation
+        // against the finite-difference reference at LEO, near the pole and
+        // at GEO. The finite-difference floor is ~1e-9 relative.
+        let pts = [
+            ITRFCoord::from_geodetic_deg(35.0, -100.0, 400.0e3).itrf,
+            ITRFCoord::from_geodetic_deg(89.0, 20.0, 400.0e3).itrf,
+            ITRFCoord::from_geodetic_deg(0.0, 137.0, 400.0e3).itrf,
+            ITRFCoord::from_geodetic_deg(-60.0, 45.0, 800.0e3).itrf,
+        ];
+        for g in [egm96(), egm2008(), jgm3()] {
+            for pos in &pts {
+                let a70 = g.accel(pos, 70, 70);
+                let full = reference_accel(g, pos, 0, 70, 70);
+                let rel = (a70 - full).norm() / full.norm();
+                assert!(rel < 1.0e-7, "{} full field rel err {rel:e}", g.name);
+
+                // Degrees 41–70 alone: a linear difference on both sides.
+                let band = a70 - g.accel(pos, 40, 40);
+                let band_ref = reference_accel(g, pos, 41, 70, 70);
+                let rel = (band - band_ref).norm() / band_ref.norm();
+                assert!(rel < 1.0e-6, "{} band 41–70 rel err {rel:e}", g.name);
+                // ...and it is a real signal, not zeros from a short table.
+                assert!(
+                    band_ref.norm() > 1.0e-7 && band_ref.norm() < 1.0e-4,
+                    "{} band 41–70 magnitude {:e}",
+                    g.name,
+                    band_ref.norm()
+                );
+
+                let a70o30 = g.accel(pos, 70, 30);
+                let o30 = reference_accel(g, pos, 0, 70, 30);
+                let rel = (a70o30 - o30).norm() / o30.norm();
+                assert!(
+                    rel < 1.0e-7,
+                    "{} degree 70 / order 30 rel err {rel:e}",
+                    g.name
+                );
+
+                let (a2, p2) = g.accel_and_partials(pos, 70, 70);
+                assert_eq!(a2, a70);
+                assert!(p2.as_slice().iter().all(|v| v.is_finite()));
+            }
+        }
+        // GEO: the band is ~1e-40 m/s²; only the full field is meaningful.
+        let geo = numeris::vector![42164.0e3 * 0.985, 42164.0e3 * 0.174, 0.0];
+        let full = reference_accel(egm2008(), &geo, 0, 70, 70);
+        let rel = (egm2008().accel(&geo, 70, 70) - full).norm() / full.norm();
+        assert!(rel < 1.0e-7, "GEO rel err {rel:e}");
+    }
+
     #[test]
     fn test_parse_rejects_order_above_degree() {
         // m > n would index outside the triangular coefficient layout
@@ -1291,7 +1480,7 @@ gfc 2 2 2.439383e-6 -1.400273e-6
         let (a2, p2) = g.accel_and_partials(&pos, 16, 16);
         assert!(a2.norm().is_finite());
         assert!(p2.as_slice().iter().all(|v| v.is_finite()));
-        // Degree 0 no longer falls into the degree-40 dispatch arm
+        // Degree 0 no longer falls into the top dispatch arm
         let a0 = g.accel(&pos, 0, 0);
         assert!(a0.norm().is_finite());
     }

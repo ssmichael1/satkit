@@ -63,7 +63,7 @@ impl std::fmt::Display for Integrator {
 /// * `gravity_degree` - maximum degree of spherical harmonic gravity model.  Default is 4
 /// * `gravity_order` - maximum order of spherical harmonic gravity model.  Default is same as `gravity_degree`.
 ///   Must be ≤ `gravity_degree`.
-/// * `gravity_model` - gravity model to use.  Default is EGM96.  Options: EGM96, JGM3, JGM2, ITUGrace16
+/// * `gravity_model` - gravity model to use.  Default is EGM2008.  Options: EGM2008, EGM96, JGM3, JGM2, ITUGrace16
 /// * `abs_error` - the maximum absolute error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
 /// * `rel_error` - the maximum relative error for the infinity norm of the state in Runge-Kutta integrator.  Default is 1e-8
 /// * `use_spaceweather` -  Do we use space weather when computing the atmospheric density.  Default is true
@@ -165,7 +165,7 @@ impl Default for PropSettings {
         Self {
             gravity_degree: 4,
             gravity_order: 4,
-            gravity_model: GravityModel::EGM96,
+            gravity_model: GravityModel::EGM2008,
             abs_error: 1e-8,
             rel_error: 1e-8,
             use_spaceweather: true,
@@ -193,7 +193,7 @@ impl PropSettings {
     ///
     /// # Errors
     /// Returns error if order > degree, or if degree exceeds
-    /// [`MAX_GRAVITY_DEGREE`](crate::earthgravity::MAX_GRAVITY_DEGREE) (40).
+    /// [`MAX_GRAVITY_DEGREE`](crate::earthgravity::MAX_GRAVITY_DEGREE) (70).
     pub fn set_gravity(&mut self, degree: u16, order: u16) -> Result<()> {
         Self::check_gravity(degree, order)?;
         self.gravity_degree = degree;
@@ -371,13 +371,13 @@ mod test {
     #[test]
     fn set_gravity_rejects_degree_above_max() {
         let mut s = PropSettings::default();
-        assert!(s.set_gravity(40, 40).is_ok());
-        assert_eq!((s.gravity_degree, s.gravity_order), (40, 40));
+        assert!(s.set_gravity(70, 70).is_ok());
+        assert_eq!((s.gravity_degree, s.gravity_order), (70, 70));
         assert!(matches!(
-            s.set_gravity(41, 41),
+            s.set_gravity(71, 71),
             Err(Error::InvalidGravityDegree {
-                degree: 41,
-                max: 40
+                degree: 71,
+                max: 70
             })
         ));
         assert!(matches!(
@@ -392,14 +392,14 @@ mod test {
             })
         ));
         // A rejected call leaves the settings untouched.
-        assert_eq!((s.gravity_degree, s.gravity_order), (40, 40));
+        assert_eq!((s.gravity_degree, s.gravity_order), (70, 70));
     }
 
     #[test]
     fn validate_gravity_catches_struct_literal() {
         let s = PropSettings {
-            gravity_degree: 41,
-            gravity_order: 41,
+            gravity_degree: 71,
+            gravity_order: 71,
             ..Default::default()
         };
         assert!(matches!(

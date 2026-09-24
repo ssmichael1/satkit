@@ -140,6 +140,12 @@ fn bench_earthgravity(c: &mut Criterion) {
     group.bench_function("accel_deg16", |b| {
         b.iter(|| gravity.accel(black_box(&pos), 16, 16))
     });
+    group.bench_function("accel_deg40", |b| {
+        b.iter(|| gravity.accel(black_box(&pos), 40, 40))
+    });
+    group.bench_function("accel_deg70", |b| {
+        b.iter(|| gravity.accel(black_box(&pos), 70, 70))
+    });
     group.bench_function("accel_and_partials_deg4", |b| {
         b.iter(|| gravity.accel_and_partials(black_box(&pos), 4, 4))
     });
