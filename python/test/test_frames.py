@@ -14,8 +14,15 @@ class TestQuaternion:
         for qi in (q.conj(), q.conjugate(), q.inverse()):
             assert np.allclose(qi * (q * v), v)
         assert abs((q.conj() * q).angle) < 1e-12
+        assert callable(q.conj) and callable(q.conjugate)
+
+    def test_norm_is_property(self):
+        """norm is a scalar characteristic of the quaternion, like angle."""
+        q = sk.quaternion.rotz(0.3) * sk.quaternion.rotx(-1.1)
+        assert isinstance(q.norm, float)
+        assert q.norm == pytest.approx(1.0, abs=1e-12)
         with pytest.raises(TypeError):
-            q.conj * v  # type: ignore[operator]
+            q.norm()  # type: ignore[operator]
 
 
 class TestFrameTransform:

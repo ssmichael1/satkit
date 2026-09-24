@@ -86,14 +86,21 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 - Provide type hints in `.pyi` stub files for IDE support
 - Include docstrings for all public functions and classes
 - Test Python bindings separately when making changes; see `python/test/` (`test_*.py`)
-- Property vs method, for zero-argument members: a **property** (`#[getter]`)
-  is a cheap noun describing a component or characteristic of the object
-  (`x`, `angle`, `period`, `can_interp`, `converged`, `day_of_year`), even
-  when derived. A **method** is a verb, a conversion (`as_*` / `to_*`), or
-  anything returning a transformed copy of the whole object (`normalize()`,
-  `conj()`, `inverse()`, `to_omm()`). Follow numpy / scipy / `datetime`
-  precedent when the name matches theirs. There is no deprecation path
-  between the two, so decide before the first release.
+- Property vs method: **a property tells you something about the object; a
+  method gives you something to use instead of it.** After reading a property
+  (`#[getter]`) you are still working with the object and the result describes
+  it: `x`, `angle`, `norm`, `period`, `day_of_year`, `weekday`, `converged`,
+  `latitude_deg`, a position's `geodetic` form or its local `qenu2itrf` frame.
+  A method's result replaces the object, in one of two ways: another instance
+  of the same type (`inverse()`, `conj()`, `normalize()`), or a re-encoding for
+  something else to consume (`as_rotation_matrix()` for numpy, `as_iso8601()`
+  for a file, `to_omm()` for JSON). Re-encodings always return a non-satkit
+  type and are always named `as_*` / `to_*`, so the call site reads as a
+  conversion. Every zero-argument member is therefore a property unless it
+  returns its own type or carries a conversion prefix; `test_api_shape.py`
+  enforces this from the stub. Properties must be cheap and pure (no I/O, no
+  allocation beyond the return value). There is no deprecation path between
+  the two, so decide before the first release.
 
 ### Testing
 

@@ -617,6 +617,11 @@ impl PyInstant {
         Self(Instant::from_gps_week_and_second(week, seconds))
     }
 
+    /// Day of the week (UTC)
+    ///
+    /// Returns:
+    ///     satkit.weekday: Day of the week
+    #[getter]
     fn weekday(&self) -> PyWeekday {
         PyWeekday::from(self.0.day_of_week())
     }

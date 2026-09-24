@@ -273,6 +273,7 @@ impl PyQuaternion {
     ///
     /// Returns:
     ///     float: Norm of the quaternion
+    #[getter]
     fn norm(&self) -> f64 {
         self.0.norm()
     }

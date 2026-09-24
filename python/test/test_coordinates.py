@@ -558,8 +558,8 @@ class TestNewBindings:
 
         # norm / normalize / inverse / dot
         qr = sk.quaternion.rotz(math.radians(30))
-        assert qr.norm() == pytest.approx(1.0, abs=1e-12)
-        assert qr.normalize().norm() == pytest.approx(1.0, abs=1e-12)
+        assert qr.norm == pytest.approx(1.0, abs=1e-12)
+        assert qr.normalize().norm == pytest.approx(1.0, abs=1e-12)
         # inverse of a unit quaternion undoes the rotation
         assert np.allclose(qr.inverse() * (qr * v), v)
         assert qr.dot(qr) == pytest.approx(1.0, abs=1e-12)

@@ -1220,12 +1220,10 @@ class time:
         """
         ...
 
+    @property
     def weekday(self) -> weekday:
         """
-        Return the day of the week
-
-        Returns:
-            Day of the week
+        Day of the week (UTC)
         """
         ...
 
@@ -2216,6 +2214,7 @@ class quaternion:
         """The identity (no-rotation) quaternion (w=1, x=y=z=0)"""
         ...
 
+    @property
     def norm(self) -> float:
         """Quaternion norm (Euclidean length of the 4 components; 1 for a
         unit rotation quaternion)"""
