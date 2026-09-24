@@ -1193,7 +1193,7 @@ dependencies = [
 
 [[package]]
 name = "satkit"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "anyhow",
  "approx",
@@ -1215,7 +1215,7 @@ dependencies = [
 
 [[package]]
 name = "satkit-python"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "anyhow",
  "numeris",

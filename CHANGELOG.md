@@ -2,7 +2,7 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.23.1 - 2026-09-24
 
 ### Fixed
 
@@ -122,25 +122,3 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### CI
 
 - Build workflow runs once per change: pull requests build on the PR event only (branch pushes without a PR no longer build), `main` builds on the merge commit, the redundant run on PR close is gone, and a new push to a PR cancels its superseded run ([#158](https://github.com/ssmichael1/satkit/pull/158))
-
-## 0.21.1 - 2026-08-30
-
-### CI
-
-- Build/test workflow skips pure documentation changes: `mkdocs.yml`, any `*.md`, `LICENSE*`, `recipes/**` and the docs workflow file, in addition to `docs/**` ([#153](https://github.com/ssmichael1/satkit/pull/153))
-- Docs build uses an absolute `SATKIT_DATA` and no longer installs the `satkit-data` bundle: notebooks executed from `docs/tutorials/` could not resolve the relative path and fell back to the bundle's frozen `EOP-All.csv` (ending 2026-08-23), which produced the stale-EOP warning on satkit.dev ([#148](https://github.com/ssmichael1/satkit/pull/148))
-- `on_disk_file_is_verified_once_via_sidecar_marker` test sets the restored file's mtime explicitly; Windows file-time granularity (~1–15 ms) let a rewrite reuse the marker's mtime and fail intermittently ([#149](https://github.com/ssmichael1/satkit/pull/149))
-- CI refreshes `EOP-All.csv` / `SW-All.csv` on every run (also on an `astro-data` cache hit) via `download_data.py --refresh-only`, so docs and tests no longer run on a stale EOP table; a failed refresh keeps the cached copy instead of failing the job ([#147](https://github.com/ssmichael1/satkit/pull/147))
-- GitHub Actions updated to current major versions (checkout v7, setup-python v7, cache v6, upload-artifact v7, download-artifact v8, upload-pages-artifact v5, deploy-pages v5, sccache-action v0.0.11, cibuildwheel v4.2.0; Windows wheel repair explicitly kept off) ([#145](https://github.com/ssmichael1/satkit/pull/145))
-
-### Changed
-
-- NRLMSISE-00 is fed the 7-element 3-hourly geomagnetic ap history from `SW-All.csv` (model switch 9 = −1: current-day daily Ap, the current and three preceding 3-hourly ap, the 12–33 h and 36–57 h means; falls back to the daily Ap when the history is incomplete) instead of the daily Ap alone, so file-driven densities follow storms within hours — along the ISS orbit after the 2023-02-27 storm the 3-day drag residual against GMAT drops from 6.8 km to 0.3 km (gates tightened accordingly); `satkit.density.nrlmsise(itrfcoord, ...)` passed latitude/longitude in radians to the degree-taking model ([#154](https://github.com/ssmichael1/satkit/pull/154))
-
-### Fixed
-
-- TLE, OMM and Optical Observations tutorials: the CelesTrak-throttling note is a plain blockquote (mkdocs-jupyter renders notebook markdown with nbconvert, which does not support `!!! note` admonitions) ([#152](https://github.com/ssmichael1/satkit/pull/152))
-- An EOP query at exactly the last table epoch is no longer treated as extrapolation (it returned the right values but printed the out-of-range warning); the Coordinate Frames tutorial ends its rotation sweep at the last EOP entry instead of 2030, so the docs build no longer emits that warning ([#151](https://github.com/ssmichael1/satkit/pull/151))
-- HTTP requests send a descriptive `satkit/<version>` User-Agent; a CelesTrak 503/403 from `TLE.from_url` / `omm_from_url` now explains CelesTrak's throttling of repeated identical queries instead of a bare status code; the TLE, OMM and Optical Observations tutorials fall back to a pinned element set when the live fetch is unavailable, so the docs build no longer depends on CelesTrak ([#144](https://github.com/ssmichael1/satkit/pull/144))
-- Python `kepler.mean_anomaly` setter no longer hangs on NaN or `eccen >= 1` (delegates to the core capped solver); `from_pv` extracts inclination and the anomalies with `atan2` (exact down to i = 1e-9 rad, e ≤ 0.999); constructor accepts keyword arguments matching the stub (`a, eccen, incl, raan, w, nu`), `propagate` accepts `int` seconds, and a new [Keplerian Elements guide](https://satkit.dev/guide/kepler/) ([#146](https://github.com/ssmichael1/satkit/pull/146))
-- Drag: NRLMSISE-00 was given geodetic latitude/longitude in radians instead of degrees (pointwise density error up to +200 %, ~6 % of the 3-day drag displacement at ISS altitude); the space-weather feed now follows the NRLMSISE-00 interface (observed rather than 1 AU-adjusted F10.7, current-day daily Ap); Python `propagate(..., satproperties=None)` is accepted; eight 3-day drag cases (constant and CelesTrak-file space weather, 250–550 km) added to the GMAT regression corpus with the measured floors documented in `tests/gmat/README.md` ([#150](https://github.com/ssmichael1/satkit/pull/150))
