@@ -18,7 +18,7 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 
 - **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt** — Tables 5.2a, 5.2b and 5.2d of the IERS Conventions (2010), Technical Note 36 ([Petit & Luzum 2010](../guide/references.md#petit2010)): the CIP $X$, $Y$ and CIO-locator $s$ series used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame. Compiled in.
 
-- **EGM96.gfc**, **EGM2008.gfc**, **JGM2.gfc**, **JGM3.gfc** — Gravity coefficients for EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), EGM2008 ([Pavlis et al. 2012](../guide/references.md#pavlis2012)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)) and JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). Compiled in, truncated to degree 70 (the evaluator uses at most degree 40, so results are identical to the full files). A full-degree copy placed in a data directory is used in preference.
+- **EGM96.gfc**, **EGM2008.gfc**, **JGM2.gfc**, **JGM3.gfc** — Gravity coefficients for EGM96 ([Lemoine et al. 1998](../guide/references.md#lemoine1998)), EGM2008 ([Pavlis et al. 2012](../guide/references.md#pavlis2012)), JGM-2 ([Nerem et al. 1994](../guide/references.md#nerem1994)) and JGM-3 ([Tapley et al. 1996](../guide/references.md#tapley1996)), in the ICGEM `.gfc` format ([Ince et al. 2019](../guide/references.md#ince2019)). Compiled in, truncated to degree 70, the evaluator's cap, so results are identical to the full files. A full-degree copy placed in a data directory is used in preference.
 
 - **ITU_GRACE16.gfc** — Gravity coefficients for ITU_GRACE16 ([Akyilmaz et al. 2016](../guide/references.md#akyilmaz2016)), a GRACE-only satellite solution to degree 180. Licensed CC BY 4.0, so it is not compiled in: downloaded (1.8 MB, verified) on first use of `gravmodel.itugrace16`; with `SATKIT_OFFLINE=1` and no copy on disk, selecting it is a `RuntimeError`. Results derived from it should cite the model.
 
@@ -183,8 +183,8 @@ from CelesTrak is returned to you with an explanation rather than retried in a
 loop — repeated retries are what gets a client firewalled.
 
 The IERS tables and gravity models are **not** downloaded — they are compiled
-in (the tables byte-identical, gravity to degree 70, identical results at the
-degree-40 evaluation cap). The full-degree `.gfc` files remain pinned in the
+in (the tables byte-identical, gravity to degree 70 — the evaluation cap, so
+results are identical). The full-degree `.gfc` files remain pinned in the
 manifest and hosted on the `data-v1` release; drop one into a search
 directory and it takes precedence over the compiled-in copy.
 

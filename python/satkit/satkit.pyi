@@ -647,8 +647,8 @@ def gravity(
         pos (list[float] | satkit.itrfcoord | npt.ArrayLike[np.float]): Position as ITRF coordinate or numpy 3-vector representing ITRF position in meters
 
     Keyword Args:
-        model (gravmodel): The gravity model to use.  Default is gravmodel.egm96
-        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
+        model (gravmodel): The gravity model to use.  Default is gravmodel.egm2008
+        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 70
         order (int): Maximum order of gravity model to use.  Default is same as degree
 
     Returns:
@@ -678,8 +678,8 @@ def gravity_and_partials(
 
 
     Keyword Args:
-        model (gravmodel): The gravity model to use.  Default is gravmodel.egm96
-        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 40
+        model (gravmodel): The gravity model to use.  Default is gravmodel.egm2008
+        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 70
         order (int): Maximum order of gravity model to use.  Default is same as degree
 
     Returns:
@@ -4074,7 +4074,7 @@ class propsettings:
             - rel_error: 1e-8
             - gravity_degree: 4
             - gravity_order: 4
-            - gravity_model: gravmodel.egm96
+            - gravity_model: gravmodel.egm2008
             - use_spaceweather: True
             - use_sun_gravity: True
             - use_moon_gravity: True
@@ -4115,9 +4115,9 @@ class propsettings:
             abs_error: Maximum absolute value of error for any element in propagated state following ODE integration,
                 in the units of the state (meters for position elements, m/s for velocity elements). Default is 1e-8
             rel_error: Maximum relative error of any element in propagated state following ODE integration, unitless. Default is 1e-8
-            gravity_degree: Maximum degree of spherical harmonic gravity model, at most 40 (``ValueError`` above that). Default is 4
-            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 40). Default is same as gravity_degree
-            gravity_model: Gravity model to use. Default is gravmodel.egm96
+            gravity_degree: Maximum degree of spherical harmonic gravity model, at most 70 (``ValueError`` above that). Default is 4
+            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 70). Default is same as gravity_degree
+            gravity_model: Gravity model to use. Default is gravmodel.egm2008
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
             use_moon_gravity: Include moon third-body gravitational perturbation. Default is True
@@ -4339,7 +4339,7 @@ class propsettings:
         """Gravity model used for Earth gravity computation
 
         Returns:
-            gravmodel: The gravity model, default is gravmodel.egm96
+            gravmodel: The gravity model, default is gravmodel.egm2008
 
         """
         ...

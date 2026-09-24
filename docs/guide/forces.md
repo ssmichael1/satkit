@@ -44,15 +44,15 @@ Coefficient files come from [ICGEM](https://icgem.gfz.de/) ([Ince et al. 2019](r
 
 | Model | Description | Tide system | Provided |
 |---|---|---|---|
-| `egm96` | Earth Gravitational Model 1996 (default) — [Lemoine et al. (1998)](references.md#lemoine1998) | tide-free | compiled in |
-| `egm2008` | Earth Gravitational Model 2008 — [Pavlis et al. (2012)](references.md#pavlis2012) | tide-free | compiled in |
+| `egm96` | Earth Gravitational Model 1996 — [Lemoine et al. (1998)](references.md#lemoine1998) | tide-free | compiled in |
+| `egm2008` | Earth Gravitational Model 2008 (default) — [Pavlis et al. (2012)](references.md#pavlis2012) | tide-free | compiled in |
 | `jgm3` | Joint Gravity Model 3 — [Tapley et al. (1996)](references.md#tapley1996) | zero-tide | compiled in |
 | `jgm2` | Joint Gravity Model 2 — [Nerem et al. (1994)](references.md#nerem1994) | tide-free | compiled in |
 | `itugrace16` | ITU_GRACE16, GRACE-only — [Akyilmaz et al. (2016)](references.md#akyilmaz2016); CC BY 4.0 | zero-tide | downloaded on first use |
 
-The compiled-in models are truncated to degree 70 (the evaluator uses at most degree 40, so nothing is lost). At degree ≤ 40 the post-GRACE models agree with each other to ~10⁻¹¹ in the coefficients; the choice among them changes a one-day LEO propagation by a few metres and a GPS one by centimetres. The degree cap matters more: at 400 km the terms above degree 40 are worth tens of metres per day, at 800 km a few metres, above 1200 km nothing.
+The compiled-in models are truncated to degree 70, the evaluator's cap, so nothing is lost. At degree ≤ 40 the post-GRACE models agree with each other to ~10⁻¹¹ in the coefficients; the choice among them changes a one-day LEO propagation by a few metres and a GPS one by centimetres. Truncation matters more than the choice of model: at 400 km the terms from degree 41 to 70 are worth tens of metres per day, at 800 km a few metres, above 1200 km nothing.
 
-The `gravity_degree` and `gravity_order` parameters cap the expansion (default 4×4). For high-precision work, degree-8 to degree-20 is typical; gains beyond ~degree-20 are small for satellites above ~500 km (satkit's recommendation — see the order-of-magnitude discussion of gravity-model truncation in [Montenbruck & Gill 2000](references.md#montenbruck2000), §3.2). Order may be set lower than degree to zero out the longitudinal (tesseral) terms.
+The `gravity_degree` and `gravity_order` parameters cap the expansion (default 4×4, maximum 70×70). For high-precision work, degree-8 to degree-20 is typical; gains beyond ~degree-20 are small for satellites above ~500 km (satkit's recommendation — see the order-of-magnitude discussion of gravity-model truncation in [Montenbruck & Gill 2000](references.md#montenbruck2000), §3.2). Order may be set lower than degree to zero out the longitudinal (tesseral) terms.
 
 ## Third-Body Gravity (Sun, Moon)
 

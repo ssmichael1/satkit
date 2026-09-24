@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use satkit::earthgravity::{accel, accel_and_partials, GravityModel};
+use satkit::earthgravity::{accel, accel_and_partials, GravityModel, MAX_GRAVITY_DEGREE};
 
 use crate::pyitrfcoord::PyITRFCoord;
 use numpy as np;
@@ -77,8 +77,8 @@ impl From<GravityModel> for GravModel {
 ///     numpy.ndarray: 3-element numpy array representing acceleration due to Earth gravity at input position.  Units are m/s^2
 ///
 /// Keyword Args:
-///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm96
-///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 40
+///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm2008
+///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 70
 ///     order (int): maximum order of gravity model to use.  Default is same as degree
 ///
 /// Notes:
@@ -88,7 +88,7 @@ impl From<GravityModel> for GravModel {
 pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<Py<PyAny>> {
     let mut degree: usize = 6;
     let mut order: Option<usize> = None;
-    let mut model: GravModel = GravModel::egm96;
+    let mut model: GravModel = GravModel::egm2008;
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("model")? {
             model = v
@@ -108,6 +108,12 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
         }
     }
     let order = order.unwrap_or(degree);
+    if degree > MAX_GRAVITY_DEGREE as usize {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "gravity degree {degree} exceeds the maximum supported value ({MAX_GRAVITY_DEGREE})"
+        ))
+        .into());
+    }
     ensure_loaded(&model)?;
 
     if pos.is_instance_of::<PyITRFCoord>() {
@@ -149,8 +155,8 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
 ///     (numpy.ndarray, numpy.ndarray): tuple of 3-element numpy array representing acceleration due to Earth gravity at input position and 3x3 numpy array of partials of acceleration with respect to position.  Units are m/s^2 for gravity and m/s^2/m for partials
 ///
 /// Keyword Args:
-///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm96
-///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 40
+///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm2008
+///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 70
 ///     order (int): maximum order of gravity model to use.  Default is same as degree
 ///
 /// Notes:
@@ -164,7 +170,7 @@ pub fn gravity_and_partials(
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
     let mut degree: usize = 6;
     let mut order: Option<usize> = None;
-    let mut model: GravModel = GravModel::egm96;
+    let mut model: GravModel = GravModel::egm2008;
     if let Some(kw) = kwds {
         if let Some(v) = kw.get_item("model")? {
             model = v
@@ -184,6 +190,12 @@ pub fn gravity_and_partials(
         }
     }
     let order = order.unwrap_or(degree);
+    if degree > MAX_GRAVITY_DEGREE as usize {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "gravity degree {degree} exceeds the maximum supported value ({MAX_GRAVITY_DEGREE})"
+        ))
+        .into());
+    }
     ensure_loaded(&model)?;
 
     if pos.is_instance_of::<PyITRFCoord>() {

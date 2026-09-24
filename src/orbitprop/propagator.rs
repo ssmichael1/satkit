@@ -976,15 +976,15 @@ mod tests {
         state[0] = 7000.0e3;
         state[4] = 7.5e3;
         let settings = PropSettings {
-            gravity_degree: 41,
-            gravity_order: 41,
+            gravity_degree: 71,
+            gravity_order: 71,
             ..Default::default()
         };
         assert!(matches!(
             propagate(&state, &t0, &t1, &settings, None),
             Err(Error::InvalidGravityDegree {
-                degree: 41,
-                max: 40
+                degree: 71,
+                max: 70
             })
         ));
         Ok(())

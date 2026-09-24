@@ -106,7 +106,7 @@ Plus ENU, NED, and geodesic distance ([Vincenty 1975](guide/references.md#vincen
 
 ### Force Models
 
-- **Earth gravity**: EGM96, EGM2008, JGM2, JGM3, ITU GRACE16 (spherical harmonics up to degree/order 40; [Montenbruck & Gill 2000](guide/references.md#montenbruck2000), §3.2), with tide-system-aware solid tides
+- **Earth gravity**: EGM96, EGM2008, JGM2, JGM3, ITU GRACE16 (spherical harmonics up to degree/order 70; [Montenbruck & Gill 2000](guide/references.md#montenbruck2000), §3.2), with tide-system-aware solid tides
 - **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides ([Park et al. 2021](guide/references.md#park2021))
 - **Atmospheric drag**: NRLMSISE-00 ([Picone et al. 2002](guide/references.md#picone2002); pure Rust) with automatic space weather data
 - **Solar radiation pressure**: Cannonball model with shadow function

@@ -18,7 +18,7 @@
 
 use std::path::{Path, PathBuf};
 
-use satkit::earthgravity::GravityModel;
+use satkit::earthgravity::{GravityModel, MAX_GRAVITY_DEGREE};
 use satkit::orbitprop::{
     propagate, Integrator, PropSettings, SatProperties, SatPropertiesSimple, SimpleState, TideModel,
 };
@@ -169,8 +169,8 @@ fn settings_for(fm: &ForceModel) -> PropSettings {
         other => panic!("unknown tides {other:?}"),
     };
     assert!(
-        fm.gravity_degree <= 40,
-        "gravity_degree {} exceeds the built-in coefficient tables (40)",
+        fm.gravity_degree <= MAX_GRAVITY_DEGREE,
+        "gravity_degree {} exceeds the evaluator's cap ({MAX_GRAVITY_DEGREE})",
         fm.gravity_degree
     );
     // Drag: satkit has one atmosphere model (NRLMSISE-00) and, with
