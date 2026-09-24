@@ -37,7 +37,7 @@
 //! # Model
 //!
 //! ```text
-//! a = ν · [ D(φ)·ê_D + Y(φ)·ê_Y + B(φ)·ê_B ]
+//! a = ν · (AU / d)² · [ D(φ)·ê_D + Y(φ)·ê_Y + B(φ)·ê_B ]
 //!
 //! D(φ) = D0 + Dc cos φ + Ds sin φ + D2c cos 2φ + D2s sin 2φ + D4c cos 4φ + D4s sin 4φ
 //! Y(φ) = Y0 + Yc cos φ + Ys sin φ
@@ -45,7 +45,8 @@
 //! ```
 //!
 //! where `ν ∈ [0, 1]` is the Earth-shadow factor (the same conical
-//! umbra/penumbra function as the cannonball term). All three axes are
+//! umbra/penumbra function as the cannonball term) and `d` is the
+//! satellite–Sun distance (see *Sun-distance scaling* below). All three axes are
 //! scaled by `ν`, matching CODE/Bernese, where "the acceleration due to the
 //! solar radiation pressure is switched off when the satellite is in the
 //! Earth's shadow" (Bernese GNSS Software v5.2 §2.2.2.3) — so coefficients
@@ -66,11 +67,28 @@
 //! | `d2c`, `d2s` | ê_D | cos 2Δu, sin 2Δu | ECOM2 | few (eclipse seasons) |
 //! | `d4c`, `d4s` | ê_D | cos 4Δu, sin 4Δu | ECOM2 | few (eclipse seasons) |
 //!
-//! All values are accelerations in m/s². Zero coefficients cost nothing, so
-//! a 7-parameter ECOM2 is `ecom2(.., d4c: 0, d4s: 0)`.
-//! They are applied as given: unlike the cannonball term, whose pressure is
-//! scaled by `(AU / d)²` with the satellite–Sun distance `d`, ECOM
-//! coefficients carry no distance scaling.
+//! All values are accelerations in m/s² **at 1 AU**. Zero coefficients cost
+//! nothing, so a 7-parameter ECOM2 is `ecom2(.., d4c: 0, d4s: 0)`.
+//!
+//! # Sun-distance scaling
+//!
+//! The whole ECOM acceleration is scaled by `(AU / d)²`, with `d` the
+//! satellite–Sun distance, exactly like the cannonball pressure: the solar
+//! flux, and with it every radiation-pressure coefficient, varies by ±3.4 %
+//! over the year with Earth's orbital eccentricity. Coefficients referred to
+//! 1 AU stay constant across seasons; unscaled ones drift with the Sun
+//! distance and cost metres per week in long predictions. So `d0 =
+//! −P☉·C_R A/m` reproduces the cannonball term exactly, at any epoch.
+//!
+//! Public descriptions of ECOM (Bernese GNSS Software v5.2 §2.2.2.3; Arnold
+//! et al. 2015) write the model without a distance factor, and
+//! implementations differ: Orekit's `ECOM2` applies none, Ginan scales the
+//! D/Y/B terms by `(AU / d)²` as satkit does. Over the 1–3-day arcs on which
+//! ECOM is estimated the factor changes by ≤ 0.1 %, so this only matters
+//! when coefficients are carried across software or over long spans. To use
+//! coefficients estimated with an unscaled implementation, multiply them by
+//! `(d / AU)²` at the arc epoch. satkit 0.23.1 and earlier applied ECOM
+//! coefficients without the factor.
 //!
 //! # Stability
 //!
@@ -107,6 +125,7 @@
 //! * Arnold, D. et al. (2015), "CODE's new solar radiation pressure model
 //!   for GNSS orbit determination", J. Geodesy 89, 775–791.
 
+use crate::consts;
 use crate::mathtypes::Vector3;
 use serde::{Deserialize, Serialize};
 
@@ -357,6 +376,10 @@ pub fn orbit_angle(
 
 /// ECOM acceleration in GCRF (m/s²).
 ///
+/// The coefficients in `p` are accelerations at 1 AU; the result is scaled
+/// by `(AU / d)²` with `d = |sun_gcrf − pos_gcrf|`, the satellite–Sun
+/// distance (see the [module docs](self#sun-distance-scaling)).
+///
 /// * `pos_gcrf`, `vel_gcrf` — satellite state in GCRF (m, m/s).
 /// * `sun_gcrf` — geocentric Sun position in GCRF (m).
 /// * `shadow` — the Earth-shadow factor `ν ∈ [0, 1]` (1 = full sunlight,
@@ -388,7 +411,8 @@ pub fn ecom_accel(
         y += p.yc * c1 + p.ys * s1;
         b += p.bc * c1 + p.bs * s1;
     }
-    (e_d * d + e_y * y + e_b * b) * shadow
+    let scale = consts::AU * consts::AU / (sun_gcrf - pos_gcrf).norm_squared();
+    (e_d * d + e_y * y + e_b * b) * (shadow * scale)
 }
 
 #[cfg(test)]
@@ -432,9 +456,34 @@ mod tests {
         };
         let a = ecom_accel(&p, &pos, &vel, &sun, 1.0);
         let (e_d, _, _) = dyb_basis(&pos, &vel, &sun);
-        assert!((a - e_d * -1e-7).norm() < 1e-22);
+        let scale = (AU / (sun - pos).norm()).powi(2);
+        assert!((a - e_d * (-1e-7 * scale)).norm() < 1e-22);
         // Points away from the Sun.
         assert!(a.dot(&(sun - pos)) < 0.0);
+    }
+
+    /// Coefficients are referred to 1 AU and fall off as the inverse square
+    /// of the satellite–Sun distance: ±3.4 % at perihelion / aphelion.
+    #[test]
+    fn scaled_by_inverse_square_sun_distance() {
+        let pos: Vector3 = numeris::vector![2.66e7, 0.0, 0.0];
+        let vel: Vector3 = numeris::vector![0.0, 2.0e3, 3.2e3];
+        let p = EcomParams::reduced(-1e-7, 2e-9, 3e-9, 0.0, 0.0);
+        let at_1au = ecom_accel(&p, &pos, &vel, &(pos + numeris::vector![0.0, AU, 0.0]), 1.0);
+        let (e_d, e_y, e_b) = dyb_basis(&pos, &vel, &(pos + numeris::vector![0.0, AU, 0.0]));
+        let expected = e_d * -1e-7 + e_y * 2e-9 + e_b * 3e-9;
+        assert!((at_1au - expected).norm() < 1e-22, "{at_1au:?}");
+        let e: f64 = 0.0167;
+        for d in [1.0 - e, 1.0 + e] {
+            let a = ecom_accel(
+                &p,
+                &pos,
+                &vel,
+                &(pos + numeris::vector![0.0, d * AU, 0.0]),
+                1.0,
+            );
+            assert!((a.norm() / at_1au.norm() - 1.0 / (d * d)).abs() < 1e-12);
+        }
     }
 
     /// CODE/Bernese convention: the whole ECOM acceleration is switched off
@@ -525,15 +574,14 @@ mod tests {
     }
 
     /// A D0-only ECOM with `d0 = −P☉·C_R A/m` and `craoverm = 0` must
-    /// reproduce the cannonball model: both are `−ν·P☉·C_R A/m` along the
-    /// satellite→Sun line. The cannonball pressure is scaled by
-    /// `(AU / d)²` and ECOM coefficients are applied as given, so `d0`
-    /// carries the scale at the epoch's Sun distance; the epoch is at
-    /// perihelion, where that distance is stationary over the arc.
+    /// reproduce the cannonball model: both are `−ν·P☉·(AU / d)²·C_R A/m`
+    /// along the satellite→Sun line. The epoch is at perihelion, where the
+    /// factor is largest (1.034), so a missing or doubled distance factor on
+    /// either side shows up.
     #[test]
     fn d0_only_reproduces_cannonball() {
         use crate::orbitprop::{propagate, PropSettings, SatPropertiesSimple};
-        use crate::{consts, Duration, Instant};
+        use crate::{Duration, Instant};
         let cr_a_over_m = 0.02;
         let t0 = Instant::from_datetime(2024, 1, 3, 0, 0, 0.0).unwrap();
         let sun = crate::jplephem::geocentric_pos(crate::SolarSystem::Sun, &t0).unwrap();
@@ -550,25 +598,23 @@ mod tests {
             numeris::vector![1.5e7, 2.0e7, 1.0e7, -2.5e3, 1.5e3, 1.0e3];
         let cannon = SatPropertiesSimple::new(0.0, cr_a_over_m);
         let ecom = SatPropertiesSimple::new(0.0, 0.0).with_ecom(EcomParams {
-            d0: -consts::SOLAR_PRESSURE_1AU * scale * cr_a_over_m,
+            d0: -consts::SOLAR_PRESSURE_1AU * cr_a_over_m,
             ..Default::default()
         });
         let a = propagate(&state, &t0, &t1, &settings, Some(&cannon)).unwrap();
         let b = propagate(&state, &t0, &t1, &settings, Some(&ecom)).unwrap();
         let dr = (a.state_end.block::<3, 1>(0, 0) - b.state_end.block::<3, 1>(0, 0)).norm();
-        // The cannonball scale follows the satellite–Sun distance around the
-        // orbit (±r/AU ≈ 3e-4 in pressure at GPS altitude); a constant d0
-        // can't, which leaves ~6 mm over the day.
-        assert!(dr < 1e-2, "cannonball vs D0-only ECOM differ by {dr} m");
-        // Without the (AU / d)² factor in d0 the two differ by metres: the
-        // cannonball term really is distance-scaled.
-        let unscaled = SatPropertiesSimple::new(0.0, 0.0).with_ecom(EcomParams {
-            d0: -consts::SOLAR_PRESSURE_1AU * cr_a_over_m,
+        // Same force, same distance factor: agreement to integrator noise.
+        assert!(dr < 1e-6, "cannonball vs D0-only ECOM differ by {dr} m");
+        // Pre-scaling d0 by the epoch's (AU / d)² — what unscaled ECOM
+        // needed — now double-counts it and misses by metres.
+        let prescaled = SatPropertiesSimple::new(0.0, 0.0).with_ecom(EcomParams {
+            d0: -consts::SOLAR_PRESSURE_1AU * scale * cr_a_over_m,
             ..Default::default()
         });
-        let u = propagate(&state, &t0, &t1, &settings, Some(&unscaled)).unwrap();
+        let u = propagate(&state, &t0, &t1, &settings, Some(&prescaled)).unwrap();
         let dru = (a.state_end.block::<3, 1>(0, 0) - u.state_end.block::<3, 1>(0, 0)).norm();
-        assert!(dru > 1.0, "cannonball not distance-scaled: {dru} m");
+        assert!(dru > 1.0, "ECOM not distance-scaled: {dru} m");
         // And the SRP actually did something (vs. no SRP at all).
         let none = SatPropertiesSimple::new(0.0, 0.0);
         let c = propagate(&state, &t0, &t1, &settings, Some(&none)).unwrap();

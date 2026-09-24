@@ -108,10 +108,10 @@ class TestEcomPropagation:
     def test_d0_only_matches_cannonball(self):
         """d0 = -P_sun * Cr A/m with craoverm = 0 reproduces the cannonball model.
 
-        The cannonball pressure is scaled by (AU / d)^2 and ECOM coefficients
-        are applied as given, so d0 carries the scale at the epoch's Sun
-        distance; the epoch is at perihelion, where that distance is
-        stationary over the arc.
+        Both are scaled by (AU / d)^2 with the satellite-Sun distance, so they
+        agree to integrator noise. The epoch is at perihelion, where the factor
+        is largest: pre-scaling d0 by it (what unscaled ECOM needed before
+        #210) now double-counts it and misses by metres.
         """
         cr_a_over_m = 0.02
         t0 = sk.time(2024, 1, 3)
@@ -123,15 +123,16 @@ class TestEcomPropagation:
         settings.use_spaceweather = False
         state = np.array([1.5e7, 2.0e7, 1.0e7, -2.5e3, 1.5e3, 1.0e3])
         cannon = sk.satproperties(craoverm=cr_a_over_m)
-        ecom = sk.satproperties(
+        ecom = sk.satproperties(craoverm=0.0, ecom=sk.ecomparams(d0=-sk.consts.solar_pressure_1au * cr_a_over_m))
+        prescaled = sk.satproperties(
             craoverm=0.0, ecom=sk.ecomparams(d0=-sk.consts.solar_pressure_1au * scale * cr_a_over_m)
         )
         a = sk.propagate(state, t0, t1, propsettings=settings, satproperties=cannon).state
         b = sk.propagate(state, t0, t1, propsettings=settings, satproperties=ecom).state
+        u = sk.propagate(state, t0, t1, propsettings=settings, satproperties=prescaled).state
         c = sk.propagate(state, t0, t1, propsettings=settings).state
-        # A constant d0 can't follow the satellite-Sun distance around the
-        # orbit; that leaves ~6 mm over the day.
-        assert np.linalg.norm(a[:3] - b[:3]) < 1e-2
+        assert np.linalg.norm(a[:3] - b[:3]) < 1e-6
+        assert np.linalg.norm(a[:3] - u[:3]) > 1.0
         assert np.linalg.norm(a[:3] - c[:3]) > 10.0
 
     def test_y_bias_is_cross_track(self):

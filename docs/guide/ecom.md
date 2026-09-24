@@ -19,7 +19,7 @@ $$
 ($\hat{e}_D$ points from the satellite **to** the Sun; $\hat{e}_Y$ is the solar-panel rotation axis.) The acceleration is
 
 $$
-\vec{a}_\text{ECOM} = \nu \left[ D(\varphi)\,\hat{e}_D + Y(\varphi)\,\hat{e}_Y + B(\varphi)\,\hat{e}_B \right]
+\vec{a}_\text{ECOM} = \nu \left(\frac{\text{AU}}{d}\right)^2 \left[ D(\varphi)\,\hat{e}_D + Y(\varphi)\,\hat{e}_Y + B(\varphi)\,\hat{e}_B \right]
 $$
 
 $$
@@ -43,11 +43,11 @@ $$
 | $D_{2c}, D_{2s}$ | $\hat{e}_D$ | $\cos 2\Delta u, \sin 2\Delta u$ | ECOM2 | few, mostly in eclipse seasons | `d2c`, `d2s` |
 | $D_{4c}, D_{4s}$ | $\hat{e}_D$ | $\cos 4\Delta u, \sin 4\Delta u$ | ECOM2 | few, mostly in eclipse seasons | `d4c`, `d4s` |
 
-The constructors set the fields for you: `reduced(d0, y0, b0, bc, bs)`, `ecom1(d0, y0, b0, dc, ds, yc, ys, bc, bs)` and `ecom2(d0, y0, b0, b1c, b1s, d2c, d2s, d4c, d4s)` (ECOM2's $B_{1c}, B_{1s}$ are stored in `bc`, `bs`; `ecom2` sets `sun_relative=True`). Any coefficient left at zero costs nothing, so a 7-parameter ECOM2 is `ecom2(..., d4c=0, d4s=0)`. All values are accelerations in m/s². They are applied as given — unlike the cannonball term, they are **not** scaled by the Sun-distance factor $(\text{AU}/d)^2$ — so a $D_0$ meant to reproduce the cannonball term must include that factor for its epoch.
+The constructors set the fields for you: `reduced(d0, y0, b0, bc, bs)`, `ecom1(d0, y0, b0, dc, ds, yc, ys, bc, bs)` and `ecom2(d0, y0, b0, b1c, b1s, d2c, d2s, d4c, d4s)` (ECOM2's $B_{1c}, B_{1s}$ are stored in `bc`, `bs`; `ecom2` sets `sun_relative=True`). Any coefficient left at zero costs nothing, so a 7-parameter ECOM2 is `ecom2(..., d4c=0, d4s=0)`. All values are accelerations in m/s² **at 1 AU** (see [Sun-distance scaling](#sun-distance-scaling)).
 
 ## Conventions
 
-where $\nu$ is the same shadow function as the cannonball term, applied to all three axes — the CODE/Bernese convention ("the acceleration due to the solar radiation pressure is switched off when the satellite is in the Earth's shadow", [Bernese GNSS Software v5.2](references.md#dach2015) §2.2.2.3), so coefficients taken from CODE products keep their meaning. The argument $\varphi$ is selected by `sun_relative`:
+where $d$ is the satellite–Sun distance ([Sun-distance scaling](#sun-distance-scaling)) and $\nu$ is the same shadow function as the cannonball term, applied to all three axes — the CODE/Bernese convention ("the acceleration due to the solar radiation pressure is switched off when the satellite is in the Earth's shadow", [Bernese GNSS Software v5.2](references.md#dach2015) §2.2.2.3), so coefficients taken from CODE products keep their meaning. The argument $\varphi$ is selected by `sun_relative`:
 
 | `sun_relative` | $\varphi$ | Model family |
 |---|---|---|
@@ -55,6 +55,14 @@ where $\nu$ is the same shadow function as the cannonball term, applied to all t
 | `True` | $\Delta u = u - u_\odot$ measured from *orbit noon* — zero at the point closest to the Sun's projection into the orbit plane, $\pi$ at midnight; computed node-free and regular at all inclinations | ECOM2 ([Arnold 2015](references.md#arnold2015)) |
 
 Because $\hat{e}_D$ points at the Sun, the physical $D_0$ is **negative** — about $-1\times10^{-7}$ m/s² for a GPS satellite ($C_R A/m \approx 0.02$ m²/kg), and 10–30 nm/s² when ECOM is applied as a residual on top of an a-priori model. $Y_0$ and the B terms are typically $\sim10^{-9}$ m/s². The coefficients are *estimated* in orbit determination; satkit propagates with the values you supply and adds the ECOM term to the cannonball, so use `craoverm=0` for a pure ECOM model:
+
+## Sun-distance scaling
+
+The whole ECOM acceleration is scaled by $(\text{AU}/d)^2$, with $d$ the satellite–Sun distance, exactly like the [cannonball pressure](forces.md#solar-radiation-pressure). The solar flux, and with it every radiation-pressure coefficient, varies by ±3.4 % over the year with Earth's orbital eccentricity. Coefficients referred to 1 AU stay constant across seasons, and $D_0 = -P_\odot\,C_R A/m$ (`-consts.solar_pressure_1au * craoverm`) reproduces the cannonball term exactly, at any epoch.
+
+The effect shows up in long predictions. For GPS G20, the reduced ECOM was re-fitted on rolling 3-day windows from January to March 2024. Unscaled, $D_0$ drifted by +1.5 nm/s² (1.4 %), and three-quarters of that was the $1/d^2$ change in flux. With the scaling, the error of a 60-day prediction from a 3-day fit drops by 11 % (622 → 551 m), and the best single coefficient set for the whole two months fits twice as well (9.0 → 4.2 m RMS). The remaining drift follows the Sun elevation β over the orbit plane, which constant coefficients cannot capture.
+
+Public descriptions of ECOM ([Bernese GNSS Software v5.2](references.md#dach2015) §2.2.2.3; [Arnold et al. 2015](references.md#arnold2015)) write the model without a distance factor, and implementations differ: Orekit's `ECOM2` applies none, while Ginan scales the D/Y/B terms by $(\text{AU}/d)^2$ as satkit does. Over the 1–3-day arcs on which ECOM is normally estimated the factor changes by ≤ 0.1 %, so the choice only matters when coefficients move between programs or are used over long spans. To use coefficients estimated with an unscaled implementation, multiply them by $(d/\text{AU})^2$ at the arc epoch. satkit 0.23.1 and earlier applied ECOM coefficients unscaled.
 
 ## Usage
 
@@ -74,7 +82,7 @@ Rust users can also implement `SatProperties::srp_ecom(&self, tm, state) -> Opti
 
 ## What to expect
 
- Fitting an initial state plus the reduced 5-parameter ECOM to 3 days of IGS final GPS orbits (`python/examples/ecom_gps_validation.py`, 12×12 gravity, no a-priori box-wing) reproduces the orbit at the accuracy of the IGS product itself — 5 cm 3D RMS versus 3.8 m for the cannonball — and predicts the next 24 h to a median 6–7 cm 3D across the constellation (2-day fits, ten satellites), against ~5 cm for the IGS ultra-rapid predicted product and 8–10 cm reported by [Duan & Hugentobler (2021)](references.md#duan2021) from 3-day arcs with a full analysis-centre force model. Beyond a few days the error grows along-track roughly as $t^2$: ~0.8 m at 7 days, 10 m after ~12 days and ~100 m at 30 days from a 3-day fit (~15 days and ~60 m from a 7-day fit), because the true coefficients drift with the Sun elevation angle β over weeks — which is exactly why analysis centres re-estimate them every day. Constant ECOM coefficients are a short-arc (days) model, not a month-long one. The [ECOM Solar Radiation Pressure](../tutorials/ECOM Solar Radiation Pressure.ipynb) tutorial walks through the fit, the prediction and the constellation benchmark with plots.
+ Fitting an initial state plus the reduced 5-parameter ECOM to 3 days of IGS final GPS orbits (`python/examples/ecom_gps_validation.py`, 12×12 gravity, no a-priori box-wing) reproduces the orbit at the accuracy of the IGS product itself — 5 cm 3D RMS versus 3.8 m for the cannonball — and predicts the next 24 h to a median 6–7 cm 3D across the constellation (2-day fits, ten satellites), against ~5 cm for the IGS ultra-rapid predicted product and 8–10 cm reported by [Duan & Hugentobler (2021)](references.md#duan2021) from 3-day arcs with a full analysis-centre force model. Beyond a few days the error grows along-track roughly as $t^2$: ~0.9 m at 7 days, 10 m after ~12 days and ~95 m at 30 days from a 3-day fit (~15 days and ~60 m from a 7-day fit), because the true coefficients drift with the Sun elevation angle β over weeks — which is exactly why analysis centres re-estimate them every day. Constant ECOM coefficients are a short-arc (days) model, not a month-long one. The [ECOM Solar Radiation Pressure](../tutorials/ECOM Solar Radiation Pressure.ipynb) tutorial walks through the fit, the prediction and the constellation benchmark with plots.
 
 ## Practical notes
 
