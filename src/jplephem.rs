@@ -390,13 +390,18 @@ impl JPLEphem {
         if !path.is_file() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if let Some(entry) = crate::utils::manifest::embedded().entry(name) {
-                eprintln!(
-                    "satkit: downloading the JPL ephemeris {name} ({:.0} MB) to {} \
-                     (SHA-256 verified). Set SATKIT_JPLEPHEM_FILE to use another file, \
-                     SATKIT_DATA_URL to fetch from a mirror, or SATKIT_OFFLINE=1 to forbid downloads.",
-                    entry.size as f64 / 1e6,
-                    path.parent().unwrap_or(std::path::Path::new(".")).display()
-                );
+                // Announce only a download that will happen: offline (or
+                // without the `download` feature) `download_if_not_exist`
+                // goes straight to the typed error below.
+                if cfg!(feature = "download") && !crate::utils::is_offline() {
+                    eprintln!(
+                        "satkit: downloading the JPL ephemeris {name} ({:.0} MB) to {} \
+                         (SHA-256 verified). Set SATKIT_JPLEPHEM_FILE to use another file, \
+                         SATKIT_DATA_URL to fetch from a mirror, or SATKIT_OFFLINE=1 to forbid downloads.",
+                        entry.size as f64 / 1e6,
+                        path.parent().unwrap_or(std::path::Path::new(".")).display()
+                    );
+                }
                 download_if_not_exist(path, None)?;
             }
         } else if let Some(entry) = path
