@@ -4962,8 +4962,9 @@ fn ap_history(
 ///
 /// # Space weather feed
 ///
-/// With `use_spaceweather` and a time, the indices come from the CelesTrak
-/// `SW-All.csv` table following the NRLMSISE-00 interface: F10.7 is the
+/// With `use_spaceweather` and a time, the indices come from the
+/// space-weather table (GFZ observed record, then the SWPC 45-day and MSAFE
+/// monthly forecasts) following the NRLMSISE-00 interface: F10.7 is the
 /// observed flux of the previous UTC day, F10.7A the observed 81-day average
 /// centred on the current day, and the geomagnetic forcing is the 7-element
 /// 3-hourly ap history (daily Ap of the current day, the current 3-hourly ap
@@ -5011,8 +5012,8 @@ pub fn nrlmsise(
             // assembled by `ap_history` (used in preference to AP when it can
             // be built).
             //
-            // Predicted (future) rows in SW-All.csv carry -1 sentinels for
-            // fields celestrak has not filled in. Treat a record with an
+            // A CelesTrak SW-All.csv loaded by hand carries -1 sentinels on
+            // its monthly predicted rows (MSAFE rows carry Ap). Treat a record with an
             // invalid F10.7 as unusable and fall back to the solar-cycle
             // forecast, and never let a -1 index reach the density model.
             let prev = spaceweather::get(&(time - Duration::from_days(1.0)))

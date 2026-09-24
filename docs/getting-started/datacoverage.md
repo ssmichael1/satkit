@@ -28,34 +28,28 @@ import satkit as sk
 
 first, last_observed, last = sk.frametransform.eop_coverage()
 if sk.frametransform.eop_status(t_end) == "extrapolated":
-    sk.utils.update_datafiles()   # re-downloads finals2000A.all (and SW-All.csv)
+    sk.utils.update_datafiles()   # re-downloads finals2000A.all (and the space-weather files)
 ```
 
 The warnings can be silenced with `satkit.frametransform.disable_eop_time_warning()`.
 
 ## Space weather coverage
 
-`SW-All.csv` is not one table but three, and only the first is measurement:
+The space-weather table is assembled from three sources, and which one an
+epoch falls in decides how much the density model actually knows:
 
-| block | cadence | Kp / ap | what it is |
-|---|---|---|---|
-| observed | daily | yes | measured values, from GFZ Potsdam (geomagnetic) and DRAO / Natural Resources Canada (F10.7) |
-| daily predicted | daily | yes | the NOAA/SWPC 45-day forecast |
-| monthly predicted | **monthly** | **no** | monthly F10.7 only, running years ahead |
+| block | source | cadence | $K_p$ | $a_p$ / $A_p$ |
+|---|---|---|---|---|
+| observed | GFZ Potsdam | daily, 1932 → about yesterday | 3-hourly | 3-hourly + daily |
+| daily predicted | NOAA/SWPC 45-day forecast | daily, ~45 days | — | daily $A_p$, held across the eight slots |
+| monthly predicted | NASA MSAFE | monthly, decades | — | daily $A_p$ (13-month-smoothed climatology), held across the eight slots |
 
-The last block is the one to watch. Its rows carry F10.7 but every `kp` and `ap`
-field is the `-1` sentinel, so NRLMSISE-00 falls back to a quiet-time
-$A_p = 4$ with no storm information at all. The table runs well past the daily
-data — years of it — so a query never fails and nothing looks wrong:
-
-```python
->>> satkit.spaceweather.get(satkit.time(2028, 3, 15))
-{'date': 2028-03-01T00:00:00.000000Z, 'ap_avg': -1, 'data_type': 'PRM', ...}
-```
-
-Geomagnetic activity is not a small correction. Taking the 2024-05-11 Gannon
-storm ($A_p = 271$) against 2024-05-14 ($A_p = 6$), with F10.7 almost matched at
-213.7 and 219.8 so the geomagnetic term is isolated:
+Through satkit 0.22.0 the table was CelesTrak's `SW-All.csv`, whose monthly
+rows carry $F_{10.7}$ but **no** geomagnetic data, so past the 45-day forecast
+NRLMSISE-00 silently fell back to a quiet-time $A_p = 4$. Geomagnetic activity
+is not a small correction — taking the 2024-05-11 Gannon storm ($A_p = 271$)
+against 2024-05-14 ($A_p = 6$), with $F_{10.7}$ almost matched so the
+geomagnetic term is isolated:
 
 | altitude | storm | quiet | ratio |
 |---|---|---|---|
@@ -63,43 +57,55 @@ storm ($A_p = 271$) against 2024-05-14 ($A_p = 6$), with F10.7 almost matched at
 | 400 km | 1.80e-11 | 9.68e-12 | 1.86x |
 | 550 km | 2.88e-12 | 1.35e-12 | 2.14x |
 
-So a long-horizon drag run past the daily data is pinned to the quiet floor.
-That is a limitation of the input data, not a satkit defect — but it should be a
-visible one.
+MSAFE closes that gap: its monthly rows carry a climatological $A_p$, so a
+long-horizon drag run past the daily data runs on the expected level of
+activity for that point in the solar cycle rather than on the quiet floor.
+What it cannot give is storm timing — that is unknowable months ahead — and
+the model has no 3-hourly structure past the observed record, so
+`predicted_daily` and `predicted_monthly` are honest labels for the answer's
+quality, not just the row's origin.
 
 | `satkit.spaceweather.status(t)` | meaning | what satkit does |
 |---|---|---|
-| `"observed"` | on or before the last measured row | returns that day's record |
-| `"predicted_daily"` | inside the NOAA/SWPC 45-day forecast | returns the forecast row; F10.7 and ap are both present |
-| `"predicted_monthly"` | past the daily rows | returns the most recent **monthly** row: F10.7 only, no geomagnetic data, NRLMSISE-00 runs on $A_p = 4$. **One-time warning** |
+| `"observed"` | on or before the last measured row | returns that day's record, with the 3-hourly $a_p$ history NRLMSISE-00 prefers |
+| `"predicted_daily"` | inside the SWPC 45-day forecast | returns the forecast row: daily $F_{10.7}$ and $A_p$ |
+| `"predicted_monthly"` | past the daily rows | returns that month's MSAFE row: smoothed $F_{10.7}$ and $A_p$. **One-time warning** only if the row has no $A_p$ (a hand-loaded `SW-All.csv`) |
 | `"extrapolated"` | after the last row of the table | returns that row unchanged. **One-time warning** |
-| `"before_table"` | before 1957 | `RuntimeError` |
+| `"before_table"` | before 1932 | `RuntimeError` |
 | `"not_loaded"` | no table at all | `RuntimeError`, **one-time warning** |
 
 `satkit.spaceweather.coverage()` returns
 `(first, last_observed, last_daily, last)` as `satkit.time` values, or `None`
-if nothing is loaded. `last_daily` is the boundary that matters for drag:
+if nothing is loaded:
 
 ```python
 import satkit as sk
 
 first, last_observed, last_daily, last = sk.spaceweather.coverage()
-if sk.spaceweather.status(t_end) == "predicted_monthly":
-    sk.utils.update_datafiles()   # may move last_daily forward by up to 45 days
+if sk.spaceweather.status(t_end) != "observed":
+    sk.utils.update_datafiles()   # observed record to ~yesterday, forecasts refreshed
 ```
 
-Refreshing helps only so far: the daily block ends about 45 days out by
-construction, so any propagation beyond that horizon is in the monthly regime no
-matter how fresh the file is.
+Refreshing moves `last_observed` to about yesterday and `last_daily` about 45
+days past it; `last` is decades out and never the binding constraint.
 
-Every record also carries its own provenance in `data_type` — `"OBS"` measured,
-`"INT"` interpolated across a gap in the measured record, `"PRD"` daily
-prediction, `"PRM"` monthly prediction:
+Every record carries its provenance in `data_type` — `"OBS"` measured and
+definitive, `"OBS-P"` measured but still preliminary (GFZ's nowcast, the last
+few days), `"INT"` interpolated across a gap, `"PRD"` daily prediction,
+`"PRM"` monthly prediction:
 
 ```python
 >>> sk.spaceweather.get(sk.time(2023, 3, 1))["data_type"]
 'OBS'
 ```
 
-The warnings can be silenced with
+The 81-day averages that feed NRLMSISE-00's $F_{10.7A}$ are computed across
+the assembled series — a centred window reaches 40 days into the forecast —
+with the same convention as CelesTrak's published columns (mean over
+$[t-40, t+40]$ and $[t-80, t]$), which they reproduce to the rounding digit.
+
+`satkit.spaceweather.init_from_path()` loads a GFZ table or a CelesTrak
+`SW-All.csv` directly, for a comparison that must pin against the file another
+tool read. The MSAFE percentile bands are in the file but not yet exposed
+through the API. The warnings can be silenced with
 `satkit.spaceweather.disable_space_weather_time_warning()`.

@@ -21,7 +21,7 @@ Pre-built wheels are available for **Linux** (x86_64, aarch64), **macOS** (Apple
 pip install satkit
 ```
 
-The IERS nutation tables and gravity models are compiled into the package, so frames, gravity and SGP4 work with no data files at all. The JPL ephemeris (~100 MB, SHA-256 verified) is downloaded on first use into the user data directory; Earth orientation and space weather are fetched from CelesTrak on first use. To provision everything up front, or to refresh the daily files, run:
+The IERS nutation tables and gravity models are compiled into the package, so frames, gravity and SGP4 work with no data files at all. The JPL ephemeris (~100 MB, SHA-256 verified) is downloaded on first use into the user data directory; Earth orientation is fetched from the IERS and space weather from GFZ Potsdam, NOAA/SWPC and NASA on first use. To provision everything up front, or to refresh the daily files, run:
 
 ```python
 import satkit as sk

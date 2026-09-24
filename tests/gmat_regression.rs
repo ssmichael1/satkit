@@ -176,7 +176,9 @@ fn settings_for(fm: &ForceModel) -> PropSettings {
     // Drag: satkit has one atmosphere model (NRLMSISE-00) and, with
     // `use_spaceweather = false`, fixed F10.7 = F10.7A = 150, Ap = 4 -- the
     // constants the `constant` cases were generated with. The file-driven
-    // cases read the space-weather data file (SW-All.csv).
+    // cases read satkit's space-weather table (GFZ observed record; in the
+    // corpus window it reproduces the CelesTrak values GMAT read, F10.7A to
+    // 0.044 sfu).
     let use_spaceweather = match &fm.drag {
         None => false,
         Some(d) => {

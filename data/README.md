@@ -71,17 +71,25 @@ ephemeris.
   reads it (the NRLMSIS 2 port is on an unmerged branch); if that feature
   ships it must be an opt-in download with its own notice, not part of the
   default bundle.
-- **`finals2000A.all`, `EOP-All.csv`, `SW-All.csv`** — Earth orientation and
-  space weather. They change daily, so they are never pinned, and CelesTrak
-  grants no redistribution licence for its compiled files, so satkit does not
-  mirror them. Space weather is fetched from CelesTrak via the manifest's
-  `refresh` list. Earth orientation is fetched via the manifest's `eop` list,
+- **`finals2000A.all`, `EOP-All.csv`** — Earth orientation. It changes daily,
+  so it is never pinned, and CelesTrak grants no redistribution licence for
+  its compiled file, so satkit does not mirror it. Earth orientation is fetched via the manifest's `eop` list,
   in order: the IERS Bulletin A combined file `finals2000A.all` from the USNO
   mirror, then from the IERS data centre, then CelesTrak's `EOP-All.csv` as
   the fallback. The loader reads both formats and, when both are on disk,
   uses the one whose observed record runs later (the CSV's 1962–1972 rows are
   kept in front of the IERS table, which starts in 1973). See
   [Refresh policy](#refresh-policy-celestrak) for how often either is fetched.
+- **`Kp_ap_Ap_SN_F107_since_1932.txt`, `45-day-forecast.txt`,
+  `msafe-f10-prd.txt`** — space weather, from its producers rather than a
+  redistributor. The observed record is GFZ Potsdam's (CC BY 4.0; cite
+  Matzka et al. 2021, *The geomagnetic Kp index*, and the data publication
+  doi:10.5880/Kp.0001 in derived work; its `SN` column is CC BY-NC 4.0 from
+  SILSO and is not ingested), the 45-day forecast NOAA/SWPC's and the monthly
+  forecast NASA MSFC's (both US Government work). The first two are in the
+  manifest's `refresh` list; MSAFE has no stable URL and is month-walked by
+  the library. Never pinned. CelesTrak's `SW-All.csv` is no longer fetched
+  but is still read when present (and through `spaceweather::init_from_path`).
 - **`sw19571001.txt`** — an orphan on the old bucket; nothing reads it.
 - **`leap-seconds.list`** — nothing reads it: the runtime leap-second table
   is a compiled-in constant (`src/time/instant.rs`). It was pinned
@@ -90,12 +98,13 @@ ephemeris.
 - **`predicted-solar-cycle.json`** — fetched directly from NOAA/SWPC by
   `solar_cycle_forecast::update()`; not a bundle file.
 
-## Refresh policy (CelesTrak)
+## Refresh policy
 
-`finals2000A.all` (or its CelesTrak fallback `EOP-All.csv`) and `SW-All.csv`
-are the only files satkit fetches repeatedly, and they are whole-history
-tables (1957 or 1973 to the present, several MB); the CelesTrak ones are
-served by one person's site. [CelesTrak's usage
+`finals2000A.all` (or its CelesTrak fallback `EOP-All.csv`), the GFZ
+space-weather record and the two space-weather forecasts are the only files
+satkit fetches repeatedly, and the first two are whole-history tables (1932 or
+1973 to the present, several MB); the CelesTrak fallback is served by one
+person's site. The policy below was written to [CelesTrak's usage
 policy](https://celestrak.org/usage-policy.php) asks clients to "only download
 the data you need, when you are going to use it, and only download data once
 per update", publishes space weather every 3 hours and EOP once a day, and
@@ -105,10 +114,10 @@ and conditional request to the IERS mirrors:
 
 | | |
 |---|---|
-| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for `SW-All.csv`, 24 h for `EOP-All.csv` and `finals2000A.all`). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
+| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for the GFZ record, 24 h for the SWPC forecast, `EOP-All.csv` and `finals2000A.all`, a week for MSAFE). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
 | **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar, which also records the file's size and whole-second mtime and is ignored once those stop matching, so a copy swapped in by hand is re-fetched rather than reported current by a `304`; delete it (or the file) to force a full fetch |
 | **identification** | every request sends `User-Agent: satkit/<version> (+https://github.com/ssmichael1/satkit)` (`download::USER_AGENT`) rather than `ureq/3.x`, so a misbehaving client is traceable to the project |
-| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `finals2000A.all` / `EOP-All.csv` / `SW-All.csv` are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
+| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `finals2000A.all` / `EOP-All.csv` and the three space-weather files are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
 | **no retry loop** | an HTTP error is returned to the caller, with `celestrak_throttle_hint` explaining 403/503 and telling the user to cache rather than retry |
 
 CI is the other half of the problem: a data-cache hit used to be followed by an

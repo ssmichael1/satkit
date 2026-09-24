@@ -12,16 +12,20 @@ use satkit::spaceweather;
 use satkit::utils::datadir;
 use satkit::Instant;
 
+/// The GFZ table if provisioned (what the default loader reads now), else a
+/// cached CelesTrak `SW-All.csv`: `init_from_bytes` detects either format.
 fn sw_bytes() -> Option<Vec<u8>> {
-    let path = datadir().ok()?.join("SW-All.csv");
-    std::fs::read(path).ok()
+    let dir = datadir().ok()?;
+    ["Kp_ap_Ap_SN_F107_since_1932.txt", "SW-All.csv"]
+        .iter()
+        .find_map(|name| std::fs::read(dir.join(name)).ok())
 }
 
 #[test]
 fn init_from_bytes_replaces_and_query_works() {
     let Some(bytes) = sw_bytes() else {
         eprintln!(
-            "skipping: SW-All.csv not available in datadir(); \
+            "skipping: no space-weather file in datadir(); \
              run `python -m satkit.utils.update_datafiles` or set SATKIT_DATA"
         );
         return;

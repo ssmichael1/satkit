@@ -9,7 +9,7 @@
 //! observed record into the forecast — which is also what CelesTrak does.
 
 use super::SpaceWeatherRecord;
-use crate::{Duration, Instant};
+use crate::Duration;
 
 /// Merge observed, daily-forecast and monthly-forecast rows into one
 /// date-ordered table and fill the 81-day averages.
@@ -50,7 +50,7 @@ pub fn assemble(
                     Some(r)
                 } else if super::month_end_day(r.date) >= bridge_day {
                     // This month is still running when the daily rows stop.
-                    r.date = r.date + Duration::from_days((bridge_day - d) as f64);
+                    r.date += Duration::from_days((bridge_day - d) as f64);
                     Some(r)
                 } else {
                     None
@@ -72,8 +72,9 @@ pub fn assemble(
 /// Fill `f10p7_{obs,adj}_{c81,l81}` on every row.
 ///
 /// `CENTER81` is the unweighted mean over `[t−40, t+40]` and `LAST81` over
-/// `[t−80, t]`, both clipped to the table — the convention verified to
-/// reproduce CelesTrak's published columns to the rounding digit. Between
+/// `[t−80, t]`, both clipped to the table and published to 0.1 sfu — the
+/// convention verified to reproduce CelesTrak's published columns exactly
+/// on the same daily values. Between
 /// monthly rows the daily series holds the most recent row's value, which is
 /// also how [`get`](super::get) answers for those days.
 pub fn fill_81day_averages(rows: &mut [SpaceWeatherRecord]) {
@@ -119,12 +120,17 @@ pub fn fill_81day_averages(rows: &mut [SpaceWeatherRecord]) {
         (p[b + 1] - p[a]) / (b + 1 - a) as f64
     };
 
+    // Published to 0.1 sfu, like CelesTrak's columns: on the same daily
+    // values the unrounded means never differ from the published ones by
+    // more than 0.049, so rounding makes the observed interior reproduce
+    // the shared standard exactly.
+    let tenth = |x: f64| (x * 10.0).round() / 10.0;
     for r in rows.iter_mut() {
         let i = r.date.utc_day_number() - d0;
-        r.f10p7_obs_c81 = mean(&pobs, i - 40, i + 40);
-        r.f10p7_obs_l81 = mean(&pobs, i - 80, i);
-        r.f10p7_adj_c81 = mean(&padj, i - 40, i + 40);
-        r.f10p7_adj_l81 = mean(&padj, i - 80, i);
+        r.f10p7_obs_c81 = tenth(mean(&pobs, i - 40, i + 40));
+        r.f10p7_obs_l81 = tenth(mean(&pobs, i - 80, i));
+        r.f10p7_adj_c81 = tenth(mean(&padj, i - 40, i + 40));
+        r.f10p7_adj_l81 = tenth(mean(&padj, i - 80, i));
     }
 }
 
@@ -132,6 +138,7 @@ pub fn fill_81day_averages(rows: &mut [SpaceWeatherRecord]) {
 mod tests {
     use super::*;
     use crate::spaceweather::SpaceWeatherDataType;
+    use crate::Instant;
 
     fn row(y: i32, m: i32, d: i32, flux: f64, ty: SpaceWeatherDataType) -> SpaceWeatherRecord {
         SpaceWeatherRecord {
@@ -229,8 +236,8 @@ mod tests {
             row(2026, 10, 2, 200.0, PredictedMonthly),
         ];
         fill_81day_averages(&mut rows);
-        // trailing mean at the monthly row: 31 days of 100 + 1 day of 200
-        let expect = (31.0 * 100.0 + 200.0) / 32.0;
-        assert!((rows[1].f10p7_obs_l81 - expect).abs() < 1e-9);
+        // trailing mean at the monthly row: 31 days of 100 + 1 day of 200 =
+        // 103.125, published to 0.1 sfu
+        assert!((rows[1].f10p7_obs_l81 - 103.1).abs() < 1e-9);
     }
 }

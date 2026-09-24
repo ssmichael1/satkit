@@ -34,7 +34,7 @@ The gravity/third-body cases share the epoch 2023-05-16 20:00:00 UTC and run for
 | `tess` | (Cartesian) | ~0.55 | ~37 | 13.7 d | 2:1 lunar-resonant HEO — the case that exposed the `MU_MOON` error |
 | `cislunar` | 300000 | 0.0 | 20.0 | 19 d | third-body dominated; closest approach to the Moon ~85,000 km |
 
-The drag orbits start at 2023-03-01 00:00:00 UTC — inside the *observed* block of the CelesTrak space-weather file on both sides, two days after a G2 storm (Ap 91 on 2023-02-27) so the 3-hourly ap history still matters on day 1 — and run for 3 days: drag error grows roughly as $t^2$, and 7 days at 300 km would be dominated by it. All carry the same spacecraft, $C_d = 2.2$, area 10 m², mass 1000 kg ($C_d A/m = 0.022$ m²/kg).
+The drag orbits start at 2023-03-01 00:00:00 UTC — inside the *observed* block of the space-weather record on both sides (CelesTrak's file in GMAT, satkit's GFZ-based table, identical there), two days after a G2 storm (Ap 91 on 2023-02-27) so the 3-hourly ap history still matters on day 1 — and run for 3 days: drag error grows roughly as $t^2$, and 7 days at 300 km would be dominated by it. All carry the same spacecraft, $C_d = 2.2$, area 10 m², mass 1000 kg ($C_d A/m = 0.022$ m²/kg).
 
 | orbit | $a$ (km) | $e$ | $i$ (°) | perigee altitude | what it stresses |
 |---|---|---|---|---|---|
@@ -53,7 +53,7 @@ Each orbit is run under two or three force models so that a discrepancy can be a
 | `full` | EGM96 36×36 | on | on | off | everything both tools model the same way |
 | `gr` | EGM96 36×36 | on | on | on | exercises the relativistic correction (below) |
 | `drag_const` | as `full` | on | on | off | + NRLMSISE-00 drag with fixed F10.7 = F10.7A = 150, Ap = 4: the density model and drag force alone |
-| `drag_sw` | as `full` | on | on | off | + NRLMSISE-00 drag driven by the CelesTrak space-weather file on both sides: the whole chain, including each tool's F10.7 / Ap feed conventions |
+| `drag_sw` | as `full` | on | on | off | + NRLMSISE-00 drag driven by file space weather on both sides — CelesTrak's `SW-All.txt` in GMAT, satkit's own table (GFZ observed record) in satkit, which reproduces the CelesTrak values across this window (F10.7A to 0.044 sfu, ≤ 0.05 % in density): the whole chain, including each tool's F10.7 / Ap feed conventions |
 
 Every gravity orbit is run with `j2` and `full`; `leo_iss`, `tess` and `cislunar` are also run with `gr` (17 cases); every drag orbit is run with `drag_const` and `drag_sw` (8 cases) — 25 in total. Solar radiation pressure is off throughout: its inputs (shadow model, reflectivity conventions) cannot be matched closely enough between the two tools for the residual to say anything about satkit.
 

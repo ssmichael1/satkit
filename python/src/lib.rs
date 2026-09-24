@@ -59,6 +59,8 @@ fn spaceweather(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         pyspaceweather::disable_space_weather_time_warning,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(pyspaceweather::init_from_path, m)?)?;
+    m.add_function(wrap_pyfunction!(pyspaceweather::init_from_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(pyspaceweather::update, m)?)
         .unwrap();
     Ok(())

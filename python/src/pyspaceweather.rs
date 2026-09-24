@@ -7,8 +7,9 @@ use satkit::{solar_cycle_forecast, spaceweather};
 
 /// Space-weather record for the given time
 ///
-/// Returns the daily space-weather record (from CelesTrak's `SW-All.csv`,
-/// originally from NOAA) closest to and not after the given time. These are
+/// Returns the daily space-weather record closest to and not after the
+/// given time, from the GFZ Potsdam observed record, then the NOAA/SWPC
+/// 45-day forecast, then the NASA MSAFE monthly forecast. These are
 /// the values the NRLMSISE-00 density model consumes when
 /// `use_spaceweather` is enabled — exposing them lets you inspect or
 /// reproduce the propagator's density inputs.
@@ -38,10 +39,10 @@ use satkit::{solar_cycle_forecast, spaceweather};
 ///           monthly prediction, ``""`` unknown
 ///
 ///     Note: fields not yet published for predicted (future) rows are ``-1``.
-///     ``"PRM"`` rows carry F10.7 but **no** geomagnetic data at all — every
-///     ``kp``/``ap`` entry is ``-1`` — so NRLMSISE-00 falls back to a
-///     quiet-time ``Ap = 4``. Use :func:`coverage` / :func:`status` to find
-///     out before propagating.
+///     MSAFE ``"PRM"`` rows carry a climatological daily Ap in every ``ap``
+///     slot and ``-1`` for ``kp``; a CelesTrak ``SW-All.csv`` loaded by hand
+///     has ``-1`` for all of them. Use :func:`coverage` / :func:`status` to
+///     find out which regime an epoch is in before propagating.
 ///
 /// Raises:
 ///     RuntimeError: If no space-weather record is available for the date
@@ -91,10 +92,12 @@ pub fn predicted_f107(time: &Bound<'_, PyAny>) -> anyhow::Result<Option<f64>> {
     Ok(solar_cycle_forecast::get_predicted_f107(&tm))
 }
 
-/// Download the latest space-weather file and reload the in-memory data
+/// Refresh the space-weather files and reload the in-memory table
 ///
-/// Space weather is updated daily; run this (or
-/// `satkit.utils.update_datafiles`) periodically for current values.
+/// The GFZ observed record (every 3 h), the SWPC 45-day forecast (daily)
+/// and the MSAFE monthly forecast are each re-fetched only when older than
+/// their publication cadence. Run this (or `satkit.utils.update_datafiles`)
+/// periodically for current values.
 #[pyfunction]
 pub fn update() -> anyhow::Result<()> {
     Ok(spaceweather::update()?)
@@ -167,4 +170,29 @@ pub fn status(time: &Bound<'_, PyAny>) -> anyhow::Result<&'static str> {
 #[pyfunction]
 pub fn disable_space_weather_time_warning() {
     spaceweather::disable_space_weather_time_warning();
+}
+
+/// Load the space-weather table from a file, replacing whatever is loaded
+///
+/// Accepts the GFZ ``Kp_ap_Ap_SN_F107_since_1932.txt`` table (observed
+/// only) or CelesTrak's ``SW-All.csv``, detected from the content. This is
+/// how to make satkit read the same CSSI file GMAT or Orekit used, when a
+/// comparison must pin against one input.
+///
+/// Args:
+///     path (str | os.PathLike): File to load
+#[pyfunction]
+pub fn init_from_path(path: std::path::PathBuf) -> anyhow::Result<()> {
+    Ok(spaceweather::init_from_path(&path)?)
+}
+
+/// Load the space-weather table from bytes, replacing whatever is loaded
+///
+/// Same formats as :func:`init_from_path`.
+///
+/// Args:
+///     data (bytes): File contents
+#[pyfunction]
+pub fn init_from_bytes(data: &[u8]) -> anyhow::Result<()> {
+    Ok(spaceweather::init_from_bytes(data)?)
 }

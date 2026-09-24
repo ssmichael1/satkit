@@ -16,7 +16,9 @@
 //! <https://www.nasa.gov/solar-cycle-progression-and-forecast/archived-forecast/>.
 
 use super::{Error, Result, SpaceWeatherDataType, SpaceWeatherRecord};
+use crate::utils::download::{self, RefreshOutcome};
 use crate::Instant;
+use std::path::Path;
 
 /// One month of the MSAFE forecast, with its percentile bands.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -137,6 +139,76 @@ pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), S
     parse(&text)
         .map(|_| ())
         .map_err(|e| format!("not a parsable MSAFE table ({e})"))
+}
+
+/// NASA's URL for the forecast issued in a given month.
+fn nasa_url(year: i32, month: i32) -> String {
+    const MON: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    format!(
+        "https://www.nasa.gov/wp-content/uploads/{year}/{month:02}/{}{year}f10-prd.txt",
+        MON[(month - 1) as usize]
+    )
+}
+
+/// Bring the MSAFE file in `dir` up to date, as [`MSAFE_FILE`](super::MSAFE_FILE).
+///
+/// NASA publishes one file per month under a month-specific name with no
+/// stable "latest" URL, so this walks back from the current month until a
+/// file answers (six months is more than the series has ever gone without
+/// an issue). The copy on disk is kept under one stable name; its
+/// `.http-cache` sidecar carries the age gate, so a copy checked within the
+/// last week is reported current with no request.
+pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome> {
+    use download::{read_refresh_marker, write_refresh_marker};
+    let dest = dir.join(super::MSAFE_FILE);
+    if !force && dest.is_file() {
+        if let Some((checked_at, _)) = read_refresh_marker(&dest) {
+            let age = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+                .saturating_sub(checked_at);
+            if age < download::refresh_min_age_secs(super::MSAFE_FILE) {
+                return Ok(RefreshOutcome::Fresh { age_secs: age });
+            }
+        }
+    }
+    download::check_online(super::MSAFE_FILE)?;
+    let (mut y, mut m, ..) = Instant::now().as_datetime();
+    let mut attempts = Vec::new();
+    for _ in 0..6 {
+        let url = nasa_url(y, m);
+        match download::download_to_string(&url) {
+            Ok(text) => {
+                // Validate before it replaces a good file.
+                if let Err(e) = parse(&text) {
+                    attempts.push(format!("{url}: {e}"));
+                } else {
+                    download::write_atomic(&mut std::io::Cursor::new(text), &dest, &url)?;
+                    write_refresh_marker(&dest, None);
+                    return Ok(RefreshOutcome::Downloaded);
+                }
+            }
+            Err(e) => attempts.push(format!("{url}: {e}")),
+        }
+        if m == 1 {
+            y -= 1;
+            m = 12;
+        } else {
+            m -= 1;
+        }
+    }
+    Err(download::Error::AllSourcesFailed {
+        name: super::MSAFE_FILE.to_string(),
+        attempts,
+        hint: Some(
+            "NASA publishes the MSAFE forecast monthly at \
+             https://www.nasa.gov/solar-cycle-progression-and-forecast/archived-forecast/"
+                .to_string(),
+        ),
+    })
 }
 
 #[cfg(test)]

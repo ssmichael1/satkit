@@ -4,8 +4,28 @@ pub mod gfz;
 pub mod msafe;
 pub mod swpc;
 
+/// GFZ Potsdam observed record (CC BY 4.0).
+pub const GFZ_FILE: &str = "Kp_ap_Ap_SN_F107_since_1932.txt";
+/// NOAA/SWPC 45-day Ap and F10.7 forecast.
+pub const SWPC_FILE: &str = "45-day-forecast.txt";
+/// NASA MSFC MSAFE monthly forecast, stored under a stable name (NASA's own
+/// file name changes every month).
+pub const MSAFE_FILE: &str = "msafe-f10-prd.txt";
+/// CelesTrak's `SW-All.csv`: no longer downloaded, still readable through
+/// [`init_from_path`] for a cached copy or the file GMAT and Orekit read.
+pub const CSSI_FILE: &str = "SW-All.csv";
+
+/// The refresh URL for one of the daily feeds, from the manifest's
+/// `refresh` list.
+fn refresh_url(file: &str) -> Option<String> {
+    crate::utils::manifest::embedded()
+        .refresh
+        .iter()
+        .find(|u| u.ends_with(file))
+        .cloned()
+}
+
 use std::cmp::Ordering;
-use std::path::PathBuf;
 
 use crate::utils::{datadir, download_if_not_exist, RefreshableSingleton};
 use crate::Instant;
@@ -236,16 +256,67 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
     }
 }
 
-fn load_default_path() -> Result<PathBuf> {
-    // Found in any search directory, else downloaded into the write location.
-    Ok(crate::utils::datadir::path_for("SW-All.csv")?)
+/// Lazy default load: the three primary sources under [`datadir`],
+/// fetched on first use, assembled into one table. A `SW-All.csv` already
+/// in a search directory with no GFZ file beside it is read instead, so an
+/// existing cache or an offline bundle keeps working.
+fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
+    use crate::utils::datadir::path_for;
+    let gfz_path = path_for(GFZ_FILE)?;
+    if !gfz_path.is_file() {
+        if let Ok(csv) = path_for(CSSI_FILE) {
+            if csv.is_file() {
+                return cssi::parse_csv(&std::fs::read_to_string(&csv)?);
+            }
+        }
+        let base = refresh_url(GFZ_FILE)
+            .and_then(|u| u.strip_suffix(GFZ_FILE).map(str::to_string))
+            .unwrap_or_else(|| "https://www-app3.gfz-potsdam.de/kp_index/".to_string());
+        download_if_not_exist(&gfz_path, Some(&base))?;
+    }
+    let observed = gfz::parse(&std::fs::read_to_string(&gfz_path)?)?;
+
+    // The two forecasts are best-effort: an observed-only table is still a
+    // table, and `status()` says where it ends.
+    let swpc_path = path_for(SWPC_FILE)?;
+    if !swpc_path.is_file() {
+        if let Some(base) =
+            refresh_url(SWPC_FILE).and_then(|u| u.strip_suffix(SWPC_FILE).map(str::to_string))
+        {
+            let _ = download_if_not_exist(&swpc_path, Some(&base));
+        }
+    }
+    let daily = std::fs::read_to_string(&swpc_path)
+        .ok()
+        .and_then(|s| swpc::parse(&s).ok())
+        .unwrap_or_default();
+
+    let msafe_path = path_for(MSAFE_FILE)?;
+    if !msafe_path.is_file() {
+        if let Ok(dir) = datadir() {
+            let _ = msafe::refresh_into(&dir, false);
+        }
+    }
+    let monthly = std::fs::read_to_string(&msafe_path)
+        .ok()
+        .and_then(|s| msafe::parse(&s).ok())
+        .map(|f| f.records())
+        .unwrap_or_default();
+
+    Ok(assemble::assemble(observed, daily, monthly))
 }
 
-/// Lazy default load from `SW-All.csv` under [`datadir`], with auto-download.
-fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
-    let path = load_default_path()?;
-    download_if_not_exist(&path, Some("https://celestrak.org/SpaceData/"))?;
-    cssi::parse_csv(&std::fs::read_to_string(&path)?)
+/// Parse a space-weather text buffer, detecting the format from its first
+/// line: CelesTrak's `SW-All.csv` (`DATE,BSRN,...`) or the GFZ table (`#`
+/// header). A GFZ buffer becomes an observed-only table.
+fn parse_any(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
+    let first = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    if first.starts_with("DATE,") {
+        cssi::parse_csv(text)
+    } else {
+        let observed = gfz::parse(text)?;
+        Ok(assemble::assemble(observed, Vec::new(), Vec::new()))
+    }
 }
 
 /// UTC day number of the last day of the month containing `date`.
@@ -270,21 +341,22 @@ static NOT_LOADED_WARNING_SHOWN: std::sync::atomic::AtomicBool =
 
 /// Initialize the space-weather singleton from an in-memory byte buffer.
 ///
-/// The bytes must be a valid `SW-All.csv` text file (UTF-8). Unlike the
-/// static-data subsystems, this *always* succeeds and replaces any
-/// previously loaded data — space-weather records update daily and the
-/// refresh-in-place semantics are intentional.
+/// Either CelesTrak's `SW-All.csv` or the GFZ `Kp_ap_Ap_SN_F107_since_1932.txt`
+/// table (UTF-8), detected from the content; a GFZ buffer yields an
+/// observed-only table. Always succeeds and replaces any previously loaded
+/// data — space weather updates daily and refresh-in-place is intended.
 pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
-    SPACE_WEATHER.set(cssi::parse_csv(std::str::from_utf8(bytes)?)?);
+    SPACE_WEATHER.set(parse_any(std::str::from_utf8(bytes)?)?);
     Ok(())
 }
 
-/// Initialize the space-weather singleton from a file at `path`.
+/// Initialize the space-weather singleton from a file at `path` (either
+/// format — see [`init_from_bytes`]). Always replaces.
 ///
-/// Same semantics as [`init_from_bytes`] but reads the file from disk.
-/// Always replaces any previously loaded data.
+/// This is also the way to feed satkit the CSSI file GMAT and Orekit
+/// read, when a comparison must pin against the same input.
 pub fn init_from_path(path: &std::path::Path) -> Result<()> {
-    SPACE_WEATHER.set(cssi::parse_csv(&std::fs::read_to_string(path)?)?);
+    SPACE_WEATHER.set(parse_any(&std::fs::read_to_string(path)?)?);
     Ok(())
 }
 
@@ -296,17 +368,19 @@ pub fn init_from_path(path: &std::path::Path) -> Result<()> {
 /// network), so a process that started before the data directory was populated
 /// recovers once `update_datafiles` (or anything else) writes the file.
 fn ensure_default_loaded() {
-    SPACE_WEATHER.ensure_default_loaded(|| load_space_weather_csv().ok());
+    SPACE_WEATHER.ensure_default_loaded(|| load_default().ok());
     if SPACE_WEATHER.read().is_none() {
-        let Ok(path) = load_default_path() else {
-            return;
-        };
-        if path.is_file() {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                if let Ok(records) = cssi::parse_csv(&text) {
-                    if !records.is_empty() {
-                        SPACE_WEATHER.set(records);
-                    }
+        // Retry from disk only (no network) once the files have appeared.
+        let on_disk = crate::utils::datadir::path_for(GFZ_FILE)
+            .map(|p| p.is_file())
+            .unwrap_or(false)
+            || crate::utils::datadir::path_for(CSSI_FILE)
+                .map(|p| p.is_file())
+                .unwrap_or(false);
+        if on_disk {
+            if let Ok(records) = load_default() {
+                if !records.is_empty() {
+                    SPACE_WEATHER.set(records);
                 }
             }
         }
@@ -504,25 +578,26 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     Ok(rec.clone())
 }
 
-/// Download new Space Weather file, and load it.
+/// Bring the three space-weather files in the data directory up to date and
+/// load them.
+///
+/// GFZ and SWPC go through [`refresh_file`](crate::utils::refresh_file) —
+/// a copy fetched within its publication cadence is not re-requested, an
+/// older one costs a conditional GET — and MSAFE through
+/// [`msafe::refresh_into`], which walks back from the current month to the
+/// newest file NASA has published.
 pub fn update() -> Result<()> {
-    // Get data directory
     let d = datadir()?;
     if d.metadata()?.permissions().readonly() {
         return Err(Error::DataDirReadOnly);
     }
-
-    // Download most-recent SW file. This must be the same file the loader
-    // parses (`SW-All.csv`); downloading `sw19571001.txt` here left the loader
-    // reading stale data and made this a silent no-op.
-    //
-    // CelesTrak publishes space weather every 3 hours and asks clients to
-    // download it once per update, so a copy younger than that is reused
-    // without contacting the server and an unchanged one costs a `304`.
-    let url = "https://celestrak.org/SpaceData/SW-All.csv";
-    crate::utils::refresh_file(url, &d, false)?;
-
-    SPACE_WEATHER.set(load_space_weather_csv()?);
+    for file in [GFZ_FILE, SWPC_FILE] {
+        if let Some(url) = refresh_url(file) {
+            crate::utils::refresh_file(&url, &d, false)?;
+        }
+    }
+    msafe::refresh_into(&d, false)?;
+    SPACE_WEATHER.set(load_default()?);
     Ok(())
 }
 

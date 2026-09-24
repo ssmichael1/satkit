@@ -115,6 +115,9 @@ fn download_refresh_files(
     let eop_dir = dir.to_path_buf();
     let eop =
         std::thread::spawn(move || crate::earth_orientation_params::refresh_into(&eop_dir, force));
+    let msafe_dir = dir.to_path_buf();
+    let msafe =
+        std::thread::spawn(move || crate::spaceweather::msafe::refresh_into(&msafe_dir, force));
     let mut out = Vec::with_capacity(handles.len() + 1);
     for (name, jh) in handles {
         let url = m.refresh.iter().find(|u| u.ends_with(&name)).cloned();
@@ -126,6 +129,16 @@ fn download_refresh_files(
     }
     let eop = eop.join().map_err(|_| Error::ThreadPanic)??;
     out.push((eop.source.file_name().to_string(), eop.url, eop.fetch));
+    // MSAFE is best-effort: NASA's hosting is the least dependable of the
+    // three, and an observed-only table is still usable.
+    match msafe.join().map_err(|_| Error::ThreadPanic)? {
+        Ok(fetch) => out.push((
+            crate::spaceweather::MSAFE_FILE.to_string(),
+            String::new(),
+            fetch,
+        )),
+        Err(e) => eprintln!("Warning: MSAFE forecast not refreshed: {e}"),
+    }
     Ok(out)
 }
 

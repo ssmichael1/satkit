@@ -2,12 +2,15 @@
 Space weather data access
 
 Daily space-weather records (Kp/Ap geomagnetic indices, F10.7 solar flux and
-81-day averages) from CelesTrak's ``SW-All.csv``, plus the NOAA/SWPC
-solar-cycle forecast used for future-epoch predictions. These are the inputs
-the NRLMSISE-00 density model consumes when ``use_spaceweather`` is enabled.
+81-day averages) assembled from three primary sources: the GFZ Potsdam
+observed record (CC BY 4.0), the NOAA/SWPC 45-day forecast and the NASA MSFC
+MSAFE monthly forecast (both public domain). These are the inputs the
+NRLMSISE-00 density model consumes when ``use_spaceweather`` is enabled.
 """
 
 from __future__ import annotations
+
+import os
 
 from .satkit import time as _time, TimeScalar
 
@@ -41,10 +44,10 @@ def get(time: TimeScalar) -> dict:
               prediction, ``""`` unknown
 
         Fields not yet published for predicted (future) rows are ``-1``.
-        ``"PRM"`` rows carry F10.7 but **no** geomagnetic data at all — every
-        ``kp``/``ap`` entry is ``-1`` — so NRLMSISE-00 falls back to a
-        quiet-time ``Ap = 4``. Use :func:`coverage` / :func:`status` to check
-        before propagating.
+        MSAFE ``"PRM"`` rows carry a climatological daily Ap in every ``ap``
+        slot and ``-1`` for ``kp``; a CelesTrak ``SW-All.csv`` loaded by hand
+        has ``-1`` for all of them. Use :func:`coverage` / :func:`status` to
+        check which regime an epoch is in before propagating.
 
     Raises:
         RuntimeError: If no space-weather record is available for the date
@@ -67,10 +70,35 @@ def predicted_f107(time: TimeScalar) -> float | None:
     ...
 
 def update() -> None:
-    """Download the latest space-weather file and reload the in-memory data
+    """Refresh the space-weather files and reload the in-memory table
 
-    Space weather is updated daily; run this (or
-    ``satkit.utils.update_datafiles``) periodically for current values.
+    The GFZ observed record (every 3 h), the SWPC 45-day forecast (daily)
+    and the MSAFE monthly forecast are each re-fetched only when older than
+    their publication cadence. Run this (or ``satkit.utils.update_datafiles``)
+    periodically for current values.
+    """
+    ...
+
+def init_from_path(path: str | os.PathLike) -> None:
+    """Load the space-weather table from a file, replacing whatever is loaded
+
+    Accepts the GFZ ``Kp_ap_Ap_SN_F107_since_1932.txt`` table (observed only)
+    or CelesTrak's ``SW-All.csv``, detected from the content. This is how to
+    make satkit read the same CSSI file GMAT or Orekit used, when a comparison
+    must pin against one input.
+
+    Args:
+        path (str | os.PathLike): File to load
+    """
+    ...
+
+def init_from_bytes(data: bytes) -> None:
+    """Load the space-weather table from bytes, replacing whatever is loaded
+
+    Same formats as :func:`init_from_path`.
+
+    Args:
+        data (bytes): File contents
     """
     ...
 

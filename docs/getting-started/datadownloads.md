@@ -29,28 +29,32 @@ EGM96, EGM2008, JGM-2, JGM-3 — NASA GSFC / NGA (US Government work), via ICGEM
 ITU_GRACE16 — Akyilmaz et al. 2016, GFZ Data Services, CC BY 4.0 (downloaded on
 demand, not compiled in). The
 Earth-orientation file is fetched from the IERS mirrors (CelesTrak's copy as
-the fallback) and the space-weather file from CelesTrak; neither is pinned
-(they change daily). See [How often they are
+the fallback). Space weather comes from its producers: the observed record
+from GFZ Potsdam (CC BY 4.0, Matzka et al. 2021 — cite the index in derived
+work), the 45-day forecast from NOAA/SWPC and the monthly forecast from NASA
+MSFC (both US Government work). None of these is pinned (they change daily to
+monthly). See [How often they are
 refreshed](#how-often-eop-and-space-weather-are-refreshed). The full table,
 with licences, is in `data/README.md`.
 
 ## How often EOP and space weather are refreshed
 
-`finals2000A.all` (or its fallback `EOP-All.csv`) and `SW-All.csv` are
-whole-history tables — 1957 or 1973 to the present, several MB — and are the
-only files satkit fetches more than once.
-[CelesTrak's usage policy](https://celestrak.org/usage-policy.php) asks for one
-download per update, so satkit makes the smallest request that keeps the local
-copy current, from the IERS mirrors and CelesTrak alike:
+`finals2000A.all` (or its fallback `EOP-All.csv`), the GFZ space-weather
+record (1932 to the present, several MB) and the two forecasts are the only
+files satkit fetches more than once. satkit makes the smallest request that
+keeps each local copy current, from every source alike:
 
 | local copy | what happens |
 |---|---|
-| younger than its publication cadence (3 h for space weather, 24 h for EOP) | **no request is made** |
+| younger than its publication cadence (3 h for the GFZ record, 24 h for the SWPC forecast and EOP, a week for MSAFE) | **no request is made** |
 | older than that, unchanged upstream | a conditional `If-Modified-Since` request; the server answers `304` and no body is transferred |
 | older than that, changed upstream | the new file is downloaded and installed |
 
 So calling `update_datafiles()` at the top of every script is fine — it will
-not hit the IERS mirrors or CelesTrak more than the data actually changes. `overwrite=True` skips
+not hit any of the sources more than the data actually changes. (MSAFE has no
+stable URL — NASA names each month's file after the month — so satkit walks
+back from the current month to the newest issue, and keeps the copy under the
+stable name `msafe-f10-prd.txt`.) `overwrite=True` skips
 the gate and always transfers, which is the way to replace a copy you suspect
 is damaged. The freshness state is a `<name>.http-cache` sidecar next to the
 file. It also records the file's size and modification time and is ignored
@@ -60,8 +64,8 @@ fetch.
 
 Every request satkit makes also identifies itself as
 `satkit/<version> (+https://github.com/ssmichael1/satkit)`, and an HTTP error
-from CelesTrak is returned to you with an explanation rather than retried in a
-loop — repeated retries are what gets a client firewalled.
+is returned to you with an explanation rather than retried in a loop —
+repeated retries are what gets a client firewalled.
 
 The IERS tables and gravity models are **not** downloaded — they are compiled
 in (the tables byte-identical, gravity to degree 70 — the evaluation cap, so
@@ -81,7 +85,7 @@ downloads work with no configuration.
 If they do not, the failure looks like this:
 
 ```
-RuntimeError: could not fetch https://celestrak.org/SpaceData/SW-All.csv: io: invalid peer certificate: UnknownIssuer
+RuntimeError: could not fetch https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt: io: invalid peer certificate: UnknownIssuer
 ```
 
 The certificate presented is signed by something the machine does not trust.
@@ -92,8 +96,9 @@ really is untrusted and the download should not be forced through. satkit has no
 "skip verification" switch.
 
 A proxy that answers with a notice page instead of blocking outright cannot
-corrupt the data either: `finals2000A.all`, `EOP-All.csv` and `SW-All.csv` are parsed before they
-replace the copy on disk, and any download that opens with an HTML document is
+corrupt the data either: `finals2000A.all`, `EOP-All.csv` and each of the three
+space-weather files are parsed before they replace the copy on disk, and any
+download that opens with an HTML document is
 rejected. The partial file is discarded and the existing one left in place, so a
 blocked refresh degrades to a stale table rather than a broken one.
 

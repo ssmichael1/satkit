@@ -43,6 +43,12 @@ pub fn parse(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
             continue;
         }
         let f: Vec<&str> = l.split_whitespace().collect();
+        // The data block ends at the first line that does not open with a
+        // date: the `FORECASTER:` footer and the `99999` terminator.
+        if f.first().and_then(|s| parse_date(s)).is_none() {
+            section = 0;
+            continue;
+        }
         for pair in f.chunks(2) {
             if pair.len() != 2 {
                 return Err(Error::InvalidEntry);
@@ -119,6 +125,8 @@ mod tests {
 45-DAY F10.7 CM FLUX FORECAST
 24Sep26 120 25Sep26 120 26Sep26 118 27Sep26 114 28Sep26 110
 29Sep26 108
+FORECASTER:  AUTOMATED - SWPC Forecasting System
+99999
 ";
 
     #[test]

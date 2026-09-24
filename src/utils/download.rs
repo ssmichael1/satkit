@@ -544,6 +544,9 @@ fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
     match name {
         "EOP-All.csv" | "finals2000A.all" => crate::earth_orientation_params::validate_file(path),
         "SW-All.csv" => crate::spaceweather::cssi::validate_file(path),
+        crate::spaceweather::GFZ_FILE => crate::spaceweather::gfz::validate_file(path),
+        crate::spaceweather::SWPC_FILE => crate::spaceweather::swpc::validate_file(path),
+        crate::spaceweather::MSAFE_FILE => crate::spaceweather::msafe::validate_file(path),
         _ => Ok(()),
     }
 }
@@ -559,7 +562,11 @@ fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
 /// a silently wrong table days later. `url` only names the source in
 /// [`Error::ContentRejected`].
 #[cfg(feature = "download")]
-fn write_atomic(reader: &mut impl std::io::Read, final_path: &Path, url: &str) -> Result<()> {
+pub(crate) fn write_atomic(
+    reader: &mut impl std::io::Read,
+    final_path: &Path,
+    url: &str,
+) -> Result<()> {
     let part = part_path(final_path);
     let mut write = || -> Result<()> {
         let mut dest = std::fs::File::create(&part)?;
@@ -788,17 +795,22 @@ pub enum RefreshOutcome {
 
 /// How long a freshly fetched feed is treated as current, in seconds.
 ///
-/// From CelesTrak's [usage policy](https://celestrak.org/usage-policy.php),
-/// which asks clients to "only download data once per update": space weather
-/// is published every 3 hours and EOP once a day (the IERS `finals2000A.all`
-/// is likewise updated daily). Inside this window [`refresh_file`] makes no
+/// Each feed's own publication cadence — GFZ issues the Kp nowcast every
+/// 3 hours, SWPC the 45-day forecast and the IERS `finals2000A.all` daily,
+/// NASA the MSAFE forecast monthly — following the principle in CelesTrak's
+/// [usage policy](https://celestrak.org/usage-policy.php) of downloading
+/// "data once per update". Inside this window [`refresh_file`] makes no
 /// request at all; outside it, the request is a conditional GET that usually
 /// costs a `304` rather than the whole file.
 pub fn refresh_min_age_secs(name: &str) -> u64 {
     match name {
         "EOP-All.csv" | "finals2000A.all" => 24 * 3600,
-        // Space weather, and any feed added to the manifest's `refresh` list
-        // later: the shortest cadence CelesTrak publishes for a bulk file.
+        // SWPC issues the 45-day forecast once a day; MSAFE is monthly, and a
+        // weekly check catches a new issue soon enough.
+        crate::spaceweather::SWPC_FILE => 24 * 3600,
+        crate::spaceweather::MSAFE_FILE => 7 * 24 * 3600,
+        // GFZ publishes the Kp nowcast every 3 hours, and any feed added to
+        // the manifest's `refresh` list later gets the same default.
         _ => 3 * 3600,
     }
 }
@@ -890,7 +902,8 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
     );
 }
 
-/// Refresh one of the daily feeds (`SW-All.csv` and `EOP-All.csv` from
+/// Refresh one of the periodically updated feeds (the GFZ and SWPC
+/// space-weather files, `finals2000A.all` and `EOP-All.csv` from
 /// CelesTrak, `finals2000A.all` from the IERS mirrors) into `downloaddir`,
 /// respecting the publication cadence.
 ///

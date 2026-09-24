@@ -58,8 +58,42 @@ SESSION.headers["User-Agent"] = USER_AGENT
 REFRESH_MIN_AGE = {
     "finals2000A.all": 24 * 3600,
     "EOP-All.csv": 24 * 3600,
-    "SW-All.csv": 3 * 3600,
+    "Kp_ap_Ap_SN_F107_since_1932.txt": 3 * 3600,
+    "45-day-forecast.txt": 24 * 3600,
+    "msafe-f10-prd.txt": 7 * 24 * 3600,
 }
+# NASA publishes the MSAFE forecast under a month-specific name with no
+# stable "latest" URL; mirror the library and walk back from the current month.
+MSAFE_LOCAL = "msafe-f10-prd.txt"
+MSAFE_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+
+def msafe_candidate_urls(n: int = 6):
+    y, m = time.gmtime().tm_year, time.gmtime().tm_mon
+    for _ in range(n):
+        yield f"https://www.nasa.gov/wp-content/uploads/{y}/{m:02d}/{MSAFE_MONTHS[m - 1]}{y}f10-prd.txt"
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+
+
+def refresh_msafe(dest_dir: Path, max_age: int, force: bool) -> None:
+    dest = dest_dir / MSAFE_LOCAL
+    if not force and dest.is_file():
+        marker = read_marker(dest)
+        if marker and time.time() - marker[0] < max_age:
+            print(f"  {MSAFE_LOCAL}: fresh, no request")
+            return
+    for url in msafe_candidate_urls():
+        try:
+            r = SESSION.get(url, timeout=60)
+            if r.status_code != 200 or "F10.7" not in r.text:
+                continue
+            dest.write_text(r.text)
+            write_marker(dest, None)
+            print(f"  {MSAFE_LOCAL}: downloaded from {url}")
+            return
+        except requests.RequestException:
+            continue
+    print(f"  warning: {MSAFE_LOCAL} not refreshed (no monthly file answered); keeping any existing copy")
 DEFAULT_MIN_AGE = 3 * 3600
 
 
@@ -258,6 +292,7 @@ def main() -> None:
     for url in manifest.get("refresh", []):
         outcome = fetch_refresh(url, dest_dir, max_age=max_age, force=ns.force_refresh)
         print(f"  {url.rsplit('/', 1)[-1]}: {outcome}")
+    refresh_msafe(dest_dir, max_age if max_age is not None else REFRESH_MIN_AGE[MSAFE_LOCAL], ns.force_refresh)
     if manifest.get("eop"):
         print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
 
