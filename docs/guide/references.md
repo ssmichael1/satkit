@@ -363,10 +363,6 @@ code follows where that is useful.
   Monthly 13-month-smoothed F10.7 and Ap with 95 / 50 / 5 percentile bands,
   one file per month. US Government work. satkit's monthly forecast block,
   and the source that carries Ap past the daily record.
-- **NOAA/SWPC predicted solar cycle** —
-  <https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json>,
-  an F10.7 forecast; still fetched for `spaceweather.predicted_f107()`, but
-  no longer reached by the density model now that MSAFE is in the table.
 - **NAIF generic kernels** —
   <https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/>
   (`de440.bsp`, used by GMAT in the validation corpus). satkit itself reads

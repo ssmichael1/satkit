@@ -58,9 +58,6 @@ pub enum Error {
     SpaceWeather(#[from] crate::spaceweather::Error),
 
     #[error(transparent)]
-    SolarCycleForecast(#[from] crate::solar_cycle_forecast::Error),
-
-    #[error(transparent)]
     EarthOrientationParams(#[from] crate::earth_orientation_params::Error),
 
     #[error(transparent)]

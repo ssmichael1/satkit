@@ -1,7 +1,6 @@
 //! A small helper for module-scope, refreshable, lazily-loaded singletons.
 //!
 //! The refreshable data subsystems (space weather, Earth-orientation
-//! parameters, solar-cycle forecast) all share the same lifecycle: a global
 //! `RwLock<Option<T>>` that is lazily populated on first read (best-effort,
 //! at most once) and can be replaced at any time from bytes / a path / a fresh
 //! download. Before this helper each module hand-rolled that scaffolding, with

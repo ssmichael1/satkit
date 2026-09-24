@@ -3,7 +3,7 @@ use pyo3::types::PyDict;
 use pyo3::IntoPyObjectExt;
 
 use crate::pyutils::instant_from_pyany;
-use satkit::{solar_cycle_forecast, spaceweather};
+use satkit::spaceweather;
 
 /// Space-weather record for the given time
 ///
@@ -71,25 +71,6 @@ pub fn get(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
         d.set_item("data_type", rec.data_type.as_str())?;
         Ok(d.into_py_any(py)?)
     })
-}
-
-/// Predicted F10.7 solar flux for a (future) time
-///
-/// Linearly interpolates the NOAA/SWPC monthly solar-cycle forecast. This is
-/// the value the NRLMSISE-00 density model falls back to when the
-/// space-weather file has no usable record for the requested (future) date —
-/// exposing it enables future-epoch density and orbit-lifetime studies.
-///
-/// Args:
-///     time (satkit.time|datetime.datetime): Time for which to return predicted F10.7
-///
-/// Returns:
-///     float | None: Predicted F10.7 solar flux in sfu (10^-22 W m^-2 Hz^-1),
-///     or None if the time is outside the forecast range (or no forecast data is available)
-#[pyfunction]
-pub fn predicted_f107(time: &Bound<'_, PyAny>) -> anyhow::Result<Option<f64>> {
-    let tm = instant_from_pyany(time)?;
-    Ok(solar_cycle_forecast::get_predicted_f107(&tm))
 }
 
 /// Refresh the space-weather files and reload the in-memory table

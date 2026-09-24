@@ -53,7 +53,7 @@ a CI job, or a machine that will later be offline:
 
 ```python
 import satkit as sk
-sk.utils.update_datafiles()   # ephemeris (verified) + EOP/SW + solar-cycle forecast
+sk.utils.update_datafiles()   # ephemeris (verified) + EOP + space weather
 ```
 
 Files already present with the right hash are skipped; the space-weather and

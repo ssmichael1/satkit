@@ -217,11 +217,6 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
         }
     }
 
-    println!("  Solar Cycle Forecast");
-    if let Err(e) = crate::solar_cycle_forecast::update() {
-        eprintln!("Warning: could not download solar cycle forecast: {e}");
-    }
-
     // Refresh the in-memory space-weather / EOP singletons from the files just
     // downloaded, so a process whose lazy first load failed (e.g. it started
     // before the data directory was populated) recovers without a restart.

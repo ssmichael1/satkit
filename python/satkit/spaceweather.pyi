@@ -54,20 +54,6 @@ def get(time: TimeScalar) -> dict:
     """
     ...
 
-def predicted_f107(time: TimeScalar) -> float | None:
-    """Predicted F10.7 solar flux for a (future) time
-
-    Linearly interpolates the NOAA/SWPC monthly solar-cycle forecast — the
-    value the NRLMSISE-00 density model falls back to for future dates.
-
-    Args:
-        time (satkit.time | datetime.datetime): Time for which to return predicted F10.7
-
-    Returns:
-        float | None: Predicted F10.7 solar flux in sfu (10^-22 W m^-2 Hz^-1),
-        or None if the time is outside the forecast range
-    """
-    ...
 
 def update() -> None:
     """Refresh the space-weather files and reload the in-memory table

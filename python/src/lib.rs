@@ -51,8 +51,6 @@ use pysatstate::PySatState;
 fn spaceweather(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyspaceweather::get, m)?)
         .unwrap();
-    m.add_function(wrap_pyfunction!(pyspaceweather::predicted_f107, m)?)
-        .unwrap();
     m.add_function(wrap_pyfunction!(pyspaceweather::coverage, m)?)?;
     m.add_function(wrap_pyfunction!(pyspaceweather::status, m)?)?;
     m.add_function(wrap_pyfunction!(

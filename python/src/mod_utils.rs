@@ -27,7 +27,6 @@ use anyhow::Result;
 /// * finals2000A.all :: Earth orientation parameters (IERS Bulletin A), updated daily;
 ///   CelesTrak's EOP-All.csv is fetched instead when both IERS mirrors are unreachable
 /// * Kp_ap_Ap_SN_F107_since_1932.txt, 45-day-forecast.txt, msafe-f10-prd.txt :: Space weather (GFZ observed record, SWPC and MSAFE forecasts)
-/// * predicted-solar-cycle.json :: NOAA/SWPC solar cycle forecast
 ///
 /// The IERS nutation tables (tab5.2a/b/d.txt) and the gravity models
 /// (EGM96, EGM2008, JGM2, JGM3 — to degree 70) are compiled into satkit

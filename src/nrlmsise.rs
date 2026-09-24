@@ -19,7 +19,6 @@
     clippy::type_complexity, // test data tables use wide tuples from the reference implementation
 )]
 
-use crate::solar_cycle_forecast;
 use crate::spaceweather;
 use crate::Duration;
 use crate::Instant;
@@ -4973,8 +4972,7 @@ fn ap_history(
 /// up-to-four days involved, or a row without either 3-hourly or daily values
 /// (monthly predicted rows) — the model runs on the current day's daily Ap
 /// alone (switch 9 = +1), and when not even that exists on Ap = 4. Without a
-/// usable F10.7 record the NOAA/SWPC solar-cycle forecast supplies F10.7 =
-/// F10.7A and Ap stays at 4; without space weather at all F10.7 = F10.7A = 150,
+/// usable F10.7 record, or without space weather at all, F10.7 = F10.7A = 150,
 /// Ap = 4.
 ///
 /// # Outputs
@@ -5013,9 +5011,9 @@ pub fn nrlmsise(
             // be built).
             //
             // A CelesTrak SW-All.csv loaded by hand carries -1 sentinels on
-            // its monthly predicted rows (MSAFE rows carry Ap). Treat a record with an
-            // invalid F10.7 as unusable and fall back to the solar-cycle
-            // forecast, and never let a -1 index reach the density model.
+            // its monthly predicted rows (MSAFE rows carry Ap). Treat a record
+            // with an invalid F10.7 as unusable, and never let a -1 index
+            // reach the density model.
             let prev = spaceweather::get(&(time - Duration::from_days(1.0)))
                 .ok()
                 .filter(|r| r.f10p7_obs >= 0.0);
@@ -5047,9 +5045,6 @@ pub fn nrlmsise(
                         record.filter(|rec| (rec.date - d).as_days().abs() < 0.5)
                     });
                 }
-            } else if let Some(predicted) = solar_cycle_forecast::get_predicted_f107(&time) {
-                f107 = predicted;
-                f107a = predicted;
             }
         }
     }

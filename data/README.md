@@ -95,8 +95,6 @@ ephemeris.
   is a compiled-in constant (`src/time/instant.rs`). It was pinned
   (`tier: reference`) through 0.21.2 and remains an asset on the immutable
   `data-v1` tag, but the manifest entry is gone.
-- **`predicted-solar-cycle.json`** — fetched directly from NOAA/SWPC by
-  `solar_cycle_forecast::update()`; not a bundle file.
 
 ## Refresh policy
 
@@ -202,7 +200,7 @@ python tools/make_manifest.py --data-dir "$D" --data-version data-v2   # new rel
 
 - `satkit.utils.update_datafiles()` / `utils::update_datafiles` — fetches all
   `default: true` files (in parallel, verified), then the `refresh` files,
-  then the NOAA solar-cycle forecast. `overwrite=True` re-downloads even
+  `overwrite=True` re-downloads even
   verified files.
 - First-use lazy loads (`jplephem`, `earthgravity`, `ierstable`) go through
   the same verified fetch by name. A file name that is not in the manifest
