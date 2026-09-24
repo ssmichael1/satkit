@@ -7,6 +7,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Fixed
 
 - Cannonball solar radiation pressure scales the 1 AU pressure by `(AU / d)²` with the satellite–Sun distance instead of holding it at its 1 AU value, a seasonal error of up to ±3.4 % (a few metres per day at GPS); the reference stays at 1367 W/m², now `consts::SOLAR_PRESSURE_1AU` / `consts.solar_pressure_1au` ([#207](https://github.com/ssmichael1/satkit/pull/207), [#206](https://github.com/ssmichael1/satkit/issues/206))
+- With `SATKIT_OFFLINE=1` (or without the `download` feature) a missing JPL ephemeris no longer prints a "downloading ..." notice before the offline error ([#208](https://github.com/ssmichael1/satkit/pull/208), [#205](https://github.com/ssmichael1/satkit/issues/205))
 
 ## 0.23.0 - 2026-09-24
 

@@ -133,7 +133,7 @@ def test_set_offline_round_trip():
     not _offline_env() or sk.utils.datafiles_exist(),
     reason="only meaningful with an empty data directory and SATKIT_OFFLINE=1",
 )
-def test_missing_ephemeris_is_typed_error():
+def test_missing_ephemeris_is_typed_error(capfd):
     t = sk.time(2024, 1, 1, 0, 0, 0)
     with pytest.raises(RuntimeError) as ei:
         sk.jplephem.geocentric_pos(sk.solarsystem.Moon, t)
@@ -141,3 +141,5 @@ def test_missing_ephemeris_is_typed_error():
     assert "SATKIT_OFFLINE" in msg
     assert "linux_p1550p2650.440" in msg
     assert "https://" in msg
+    # No "downloading ..." notice for a download that offline mode refuses (#205).
+    assert "downloading the JPL ephemeris" not in capfd.readouterr().err
