@@ -37,9 +37,11 @@ Notes on the setup (each of these was found the hard way):
   ``diff_step`` is relative and silently falls back to sqrt(eps) for
   zero-valued parameters, which is below integrator noise for the harmonic
   ECOM coefficients.
-* Arcs that contain Earth-shadow passes use the Gauss-Jackson 8 integrator:
-  the adaptive Runge-Kutta steppers can abort with "too many consecutive step
-  rejections" at a shadow boundary.
+* Arcs that contain Earth-shadow passes use the Gauss-Jackson 8 integrator.
+  The adaptive Runge-Kutta steppers integrate through eclipses fine, but where
+  their steps fall relative to the shadow edges shifts with the initial state,
+  which adds ~cm of noise to the propagated orbit and corrupts the
+  finite-difference Jacobian; the fixed Gauss-Jackson grid does not.
 
 A 3-day fit plus a 30-day prediction runs in a few seconds.
 """
@@ -162,8 +164,9 @@ def gps_settings(degree: int = 12, eclipses: bool = False):
     s.rel_error = 1e-11
     s.enable_interp = True
     if eclipses:
-        # Adaptive RK steppers can abort at a shadow boundary ("too many
-        # consecutive step rejections"); the fixed-step multistep is immune.
+        # Adaptive RK step placement around the shadow edges shifts with the
+        # initial state (~cm noise that corrupts the finite-difference
+        # Jacobian); the fixed-step Gauss-Jackson grid does not.
         s.integrator = sk.integrator.gauss_jackson8
         s.gj_step_seconds = 60.0
     return s

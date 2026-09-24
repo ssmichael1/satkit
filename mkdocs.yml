@@ -117,7 +117,6 @@ nav:
           - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
           - "Validation: GMAT Comparison": guide/gmat_validation.md
           - "GPS Example": tutorials/GPS Example.ipynb
-          - "ECOM Solar Radiation Pressure": tutorials/ECOM Solar Radiation Pressure.ipynb
           - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
       - Applications:
           - Plots: tutorials/Plots.ipynb

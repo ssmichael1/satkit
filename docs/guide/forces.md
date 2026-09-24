@@ -119,8 +119,6 @@ satkit's default is a **cannonball model** — the satellite's surface is treate
 
 For GNSS-class work satkit also offers the **Empirical CODE Orbit Model (ECOM)** — the empirical, Sun-oriented D/Y/B parameterization used by CODE and most IGS analysis centres — as an **experimental** addition to the cannonball term, enabled by supplying coefficients through `satproperties(ecom=...)`. Its equations, coefficient table, sign and eclipse conventions, and measured performance are on the [Empirical SRP: ECOM](ecom.md) page.
 
-Moon geometry and quadruples the fit residual. And for arcs that cross Earth's shadow, use `integrator = gauss_jackson8`: the adaptive Runge–Kutta steppers can abort at a shadow boundary with *too many consecutive step rejections*, whereas the fixed-step multistep integrator is immune and fits an eclipsing satellite just as well (G08, 8% umbra: 4.7 cm fit, 5.6 cm at 24 h).
-
 ## General-Relativistic Correction
 
 The full IERS 2010 §10.3 Eq. 10.12 correction ([Petit & Luzum 2010](references.md#petit2010)) with PPN parameters $\beta = \gamma = 1$, three terms:
