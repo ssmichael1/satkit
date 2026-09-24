@@ -106,9 +106,16 @@ class TestSatPropertiesEcom:
 
 class TestEcomPropagation:
     def test_d0_only_matches_cannonball(self):
-        """d0 = -P_sun * Cr A/m with craoverm = 0 reproduces the cannonball model."""
+        """d0 = -P_sun * Cr A/m with craoverm = 0 reproduces the cannonball model.
+
+        The cannonball pressure is scaled by (AU / d)^2 and ECOM coefficients
+        are applied as given, so d0 carries the scale at the epoch's Sun
+        distance; the epoch is at perihelion, where that distance is
+        stationary over the arc.
+        """
         cr_a_over_m = 0.02
-        t0 = sk.time(2024, 1, 15)
+        t0 = sk.time(2024, 1, 3)
+        scale = (sk.consts.au / np.linalg.norm(sk.jplephem.geocentric_pos(sk.solarsystem.Sun, t0))) ** 2
         t1 = t0 + sk.duration.from_days(1)
         settings = sk.propsettings()
         settings.abs_error = 1e-12
@@ -116,11 +123,15 @@ class TestEcomPropagation:
         settings.use_spaceweather = False
         state = np.array([1.5e7, 2.0e7, 1.0e7, -2.5e3, 1.5e3, 1.0e3])
         cannon = sk.satproperties(craoverm=cr_a_over_m)
-        ecom = sk.satproperties(craoverm=0.0, ecom=sk.ecomparams(d0=-4.56e-6 * cr_a_over_m))
+        ecom = sk.satproperties(
+            craoverm=0.0, ecom=sk.ecomparams(d0=-sk.consts.solar_pressure_1au * scale * cr_a_over_m)
+        )
         a = sk.propagate(state, t0, t1, propsettings=settings, satproperties=cannon).state
         b = sk.propagate(state, t0, t1, propsettings=settings, satproperties=ecom).state
         c = sk.propagate(state, t0, t1, propsettings=settings).state
-        assert np.linalg.norm(a[:3] - b[:3]) < 1e-3
+        # A constant d0 can't follow the satellite-Sun distance around the
+        # orbit; that leaves ~6 mm over the day.
+        assert np.linalg.norm(a[:3] - b[:3]) < 1e-2
         assert np.linalg.norm(a[:3] - c[:3]) > 10.0
 
     def test_y_bias_is_cross_track(self):

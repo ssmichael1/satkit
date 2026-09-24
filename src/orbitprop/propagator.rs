@@ -106,7 +106,10 @@ pub type CovState = StateType<7>;
 /// [`shadowfunc`](crate::lpephem::sun::shadowfunc)), computed once by the
 /// caller and shared with the ECOM term. The force is directed along the
 /// satellite→Sun line (not the geocentric Sun direction; the ~1e-4 rad
-/// difference at LEO is small but free to get right).
+/// difference at LEO is small but free to get right), and the 1 AU
+/// pressure [`consts::SOLAR_PRESSURE_1AU`] is scaled by `(AU / d)²` with
+/// `d` the satellite–Sun distance (±3.4 % over the year from Earth's
+/// orbital eccentricity).
 fn solar_pressure_accel(
     sun_gcrf: &Vector3,
     pos_gcrf: &Vector3,
@@ -114,7 +117,9 @@ fn solar_pressure_accel(
     cr_a_over_m: f64,
 ) -> Vector3 {
     let sat_to_sun = sun_gcrf - pos_gcrf;
-    sat_to_sun * (-shadow * cr_a_over_m * 4.56e-6 / sat_to_sun.norm())
+    let d2 = sat_to_sun.norm_squared();
+    let pressure = consts::SOLAR_PRESSURE_1AU * (consts::AU * consts::AU / d2);
+    sat_to_sun * (-shadow * cr_a_over_m * pressure / d2.sqrt())
 }
 
 /// GCRF radius (meters) above which atmospheric density is negligible and
@@ -928,6 +933,38 @@ mod tests {
         Ok(())
     }
 
+    /// Cannonball SRP: 1 AU reference pressure along −(satellite→Sun),
+    /// falling off as the inverse square of the satellite–Sun distance.
+    #[test]
+    fn test_solar_pressure_inverse_square() {
+        let cr_a_over_m = 0.02;
+        let pos: Vector3 = numeris::vector![7.0e6, 0.0, 0.0];
+        let at_1au = solar_pressure_accel(
+            &(pos + numeris::vector![0.0, consts::AU, 0.0]),
+            &pos,
+            1.0,
+            cr_a_over_m,
+        );
+        let expected: Vector3 =
+            numeris::vector![0.0, -consts::SOLAR_PRESSURE_1AU * cr_a_over_m, 0.0];
+        assert!((at_1au - expected).norm() < 1e-22, "{at_1au:?}");
+
+        // Perihelion (1 − e) and aphelion (1 + e): ±3.4 % around the 1 AU value.
+        let e: f64 = 0.0167;
+        for (d, ratio) in [
+            (1.0 - e, 1.0 / (1.0 - e).powi(2)),
+            (1.0 + e, 1.0 / (1.0 + e).powi(2)),
+        ] {
+            let a = solar_pressure_accel(
+                &(pos + numeris::vector![0.0, d * consts::AU, 0.0]),
+                &pos,
+                0.5,
+                cr_a_over_m,
+            );
+            assert!((a.norm() / (0.5 * at_1au.norm()) - ratio).abs() < 1e-12);
+        }
+    }
+
     /// `require_eop_coverage` turns a span past the EOP table end into an
     /// error; the default keeps the (warned) constant extrapolation.
     #[test]
@@ -1283,11 +1320,17 @@ mod tests {
         // Result: max per-axis residual 1.214 m with tides, 1.429 m without
         // (was 1.80 m with the epochs mis-read as UTC). When the force model
         // changes, refit using the same procedure.
+        //
+        // Cr*A/m was then divided by (AU / d)² = 1.03417 when the cannonball
+        // pressure gained Sun-distance scaling (#206): this arc is at
+        // perihelion, and over one day the factor is constant to 1e-5, so
+        // the velocities carry over. Max per-axis residual 1.234 m with
+        // tides, 1.406 m without (1.209 / 1.418 m before).
         let v0 = numeris::vector![
             2.47517168e+03,
             2.94357938e+03,
             -5.34181014e+02,
-            2.31985404e-02,
+            2.24320920e-02,
         ];
 
         let state0 = numeris::vector![pgcrf[0][0], pgcrf[0][1], pgcrf[0][2], v0[0], v0[1], v0[2]];
