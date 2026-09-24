@@ -4,9 +4,10 @@
 //! list) come from the embedded [data manifest](crate::utils::manifest)
 //! and are SHA-256 verified; the regularly updated files (EOP, space weather)
 //! are listed in the manifest's `refresh` section and fetched unverified from
-//! celestrak on every run. See `data/README.md` for the design.
+//! celestrak, rate-limited to their publication cadence and with a
+//! conditional GET outside it. See `data/README.md` for the design.
 
-use super::download::{self, download_file_async};
+use super::download::{self, refresh_file_async, RefreshOutcome};
 use super::manifest::{self, FetchOutcome};
 use crate::utils::datadir;
 use std::path::PathBuf;
@@ -34,7 +35,7 @@ pub enum Error {
     )]
     DataDirReadOnly,
 
-    /// A worker thread launched by [`download_file_async`] or the static
+    /// A worker thread launched by [`refresh_file_async`] or the static
     /// fetch panicked.
     #[error("Background download thread panicked")]
     ThreadPanic,
@@ -85,24 +86,34 @@ pub fn download_static_files(
     Ok(out)
 }
 
-/// Download the regularly refreshed files (EOP, space weather) listed in the
-/// manifest's `refresh` section, always overwriting.
-fn download_refresh_files(dir: &std::path::Path) -> Result<()> {
+/// Refresh the regularly updated files (EOP, space weather) listed in the
+/// manifest's `refresh` section.
+///
+/// Each one goes through [`refresh_file`](download::refresh_file), which
+/// skips the request entirely while the local copy is inside its publication
+/// cadence and otherwise sends a conditional GET. `force` re-fetches
+/// unconditionally. Returns one `(name, outcome)` per feed.
+fn download_refresh_files(
+    dir: &std::path::Path,
+    force: bool,
+) -> Result<Vec<(String, RefreshOutcome)>> {
     let m = manifest::embedded();
-    let handles: Vec<JoinHandle<download::Result<bool>>> = m
+    let handles: Vec<(String, JoinHandle<download::Result<RefreshOutcome>>)> = m
         .refresh
         .iter()
         .map(|url| -> Result<_> {
             if !url.starts_with("https://") {
                 return Err(Error::InsecureManifestUrl { url: url.clone() });
             }
-            Ok(download_file_async(url.clone(), dir, true))
+            let name = url.rsplit('/').next().unwrap_or(url).to_string();
+            Ok((name, refresh_file_async(url.clone(), dir, force)))
         })
         .collect::<Result<Vec<_>>>()?;
-    for jh in handles {
-        jh.join().map_err(|_| Error::ThreadPanic)??;
+    let mut out = Vec::with_capacity(handles.len());
+    for (name, jh) in handles {
+        out.push((name, jh.join().map_err(|_| Error::ThreadPanic)??));
     }
-    Ok(())
+    Ok(out)
 }
 
 ///
@@ -130,8 +141,12 @@ fn download_refresh_files(dir: &std::path::Path) -> Result<()> {
 /// precedence.
 ///
 /// The space weather and Earth orientation files are refreshed from
-/// celestrak on every call, and the NOAA solar-cycle forecast is fetched;
-/// these change daily and are not pinned.
+/// celestrak and the NOAA solar-cycle forecast is fetched; these change daily
+/// and are not pinned. The refresh respects CelesTrak's publication cadence:
+/// a copy newer than that (3 h for space weather, 24 h for EOP) is left alone
+/// without contacting the server, and otherwise the request is conditional so
+/// an unchanged file costs a `304`. `overwrite_if_exists` forces a full
+/// re-fetch of these too.
 ///
 pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Result<()> {
     let downloaddir = match dir {
@@ -161,9 +176,17 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
         }
     }
 
-    println!("Now downloading files that are regularly updated:");
-    println!("  Space Weather & Earth Orientation Parameters");
-    download_refresh_files(&downloaddir)?;
+    println!("Regularly updated files (Space Weather, Earth Orientation Parameters):");
+    for (name, outcome) in download_refresh_files(&downloaddir, overwrite_if_exists)? {
+        match outcome {
+            RefreshOutcome::Fresh { age_secs } => println!(
+                "  {name}: current ({:.1} h old); no request made",
+                age_secs as f64 / 3600.0
+            ),
+            RefreshOutcome::NotModified => println!("  {name}: unchanged on the server (304)"),
+            RefreshOutcome::Downloaded => println!("  {name}: downloaded"),
+        }
+    }
 
     println!("  Solar Cycle Forecast");
     if let Err(e) = crate::solar_cycle_forecast::update() {
@@ -208,19 +231,30 @@ mod tests {
     struct TestServer {
         base: String,
         hits: Arc<AtomicUsize>,
+        conditional_hits: Arc<AtomicUsize>,
+        files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
         stop: Arc<AtomicBool>,
         thread: Option<std::thread::JoinHandle<()>>,
     }
 
     impl TestServer {
         fn start(files: HashMap<String, Vec<u8>>) -> Self {
+            Self::start_with_last_modified(files, None)
+        }
+
+        /// As [`start`], but every 200 carries `Last-Modified: <lm>` and a
+        /// request whose `If-Modified-Since` equals it is answered `304`.
+        fn start_with_last_modified(files: HashMap<String, Vec<u8>>, lm: Option<&str>) -> Self {
+            let last_modified = lm.map(str::to_string);
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
             let port = listener.local_addr().unwrap().port();
             let hits = Arc::new(AtomicUsize::new(0));
+            let conditional_hits = Arc::new(AtomicUsize::new(0));
             let stop = Arc::new(AtomicBool::new(false));
             let files = Arc::new(Mutex::new(files));
             let (h2, s2, f2) = (hits.clone(), stop.clone(), files.clone());
+            let c2 = conditional_hits.clone();
             let thread = std::thread::spawn(move || {
                 while !s2.load(Ordering::Relaxed) {
                     match listener.accept() {
@@ -237,11 +271,35 @@ mod tests {
                                 .unwrap_or("/")
                                 .trim_start_matches('/')
                                 .to_string();
+                            // Header names are matched case-insensitively:
+                            // HTTP/1.1 does not fix their case and clients
+                            // differ.
+                            let ims = req.lines().find_map(|l| {
+                                let (k, v) = l.split_once(':')?;
+                                k.trim()
+                                    .eq_ignore_ascii_case("if-modified-since")
+                                    .then(|| v.trim().to_string())
+                            });
+                            if ims.is_some() {
+                                c2.fetch_add(1, Ordering::Relaxed);
+                            }
                             let body = f2.lock().unwrap().get(&path).cloned();
+                            let lm_header = last_modified
+                                .as_deref()
+                                .map(|lm| format!("Last-Modified: {lm}\r\n"))
+                                .unwrap_or_default();
+                            let not_modified = matches!(
+                                (last_modified.as_deref(), ims.as_deref()),
+                                (Some(lm), Some(ims)) if lm == ims
+                            );
                             let resp = match body {
+                                Some(_) if not_modified => format!(
+                                    "HTTP/1.1 304 Not Modified\r\n{lm_header}Connection: close\r\n\r\n"
+                                )
+                                .into_bytes(),
                                 Some(b) => {
                                     let mut r = format!(
-                                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{lm_header}Connection: close\r\n\r\n",
                                         b.len()
                                     )
                                     .into_bytes();
@@ -263,6 +321,8 @@ mod tests {
             Self {
                 base: format!("http://127.0.0.1:{port}"),
                 hits,
+                conditional_hits,
+                files,
                 stop,
                 thread: Some(thread),
             }
@@ -272,6 +332,14 @@ mod tests {
         }
         fn hits(&self) -> usize {
             self.hits.load(Ordering::Relaxed)
+        }
+        /// Requests that carried an `If-Modified-Since` header.
+        fn conditional_hits(&self) -> usize {
+            self.conditional_hits.load(Ordering::Relaxed)
+        }
+        /// Replace the bytes served for `path` (simulates a feed update).
+        fn set_body(&self, path: &str, body: Vec<u8>) {
+            self.files.lock().unwrap().insert(path.to_string(), body);
         }
     }
 
@@ -679,5 +747,185 @@ mod tests {
         println!("{out:?}");
         assert!(e.verify(&dir.join("tab5.2d.txt")).unwrap());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    const LAST_MODIFIED: &str = "Wed, 17 Sep 2026 12:00:00 GMT";
+
+    /// Rewrite the freshness sidecar so the file looks `age_secs` old,
+    /// keeping the recorded `Last-Modified`. This is how a test reaches the
+    /// "cadence has elapsed" branch without sleeping.
+    fn backdate_marker(path: &std::path::Path, age_secs: u64) {
+        let (checked_at, lm) = download::read_refresh_marker(path).expect("marker written");
+        std::fs::write(
+            download::refresh_marker_path(path),
+            format!("{}\n{}\n", checked_at - age_secs, lm.unwrap_or_default()),
+        )
+        .unwrap();
+    }
+
+    /// Inside the publication cadence, a refresh makes **no request at all**:
+    /// the whole point of the gate is that re-running a script, or a CI job
+    /// that restored a cached data directory, does not touch CelesTrak.
+    #[test]
+    fn refresh_inside_cadence_makes_no_request() {
+        // Shares `ENV_LOCK` with the offline tests: they flip the global
+        // offline flag, which would turn these fetches into `Offline` errors.
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+
+        let body = b"feed,body\n1,2\n".to_vec();
+        let server = TestServer::start(HashMap::from([("Feed.csv".to_string(), body.clone())]));
+        let dir = tmpdir("refresh_fresh");
+        let url = server.url("Feed.csv");
+
+        assert_eq!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        assert_eq!(server.hits(), 1);
+        assert_eq!(std::fs::read(dir.join("Feed.csv")).unwrap(), body);
+
+        // Second call, immediately: served from disk, server untouched.
+        match download::refresh_file(&url, &dir, false).unwrap() {
+            RefreshOutcome::Fresh { age_secs } => assert!(age_secs < 60),
+            other => panic!("expected Fresh, got {other:?}"),
+        }
+        assert_eq!(server.hits(), 1);
+
+        // `force` is the escape hatch and always transfers.
+        assert_eq!(
+            download::refresh_file(&url, &dir, true).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        assert_eq!(server.hits(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Once the cadence has elapsed the request goes out, but conditionally:
+    /// an unchanged file comes back as a bodyless `304` and the copy on disk
+    /// is kept.
+    #[test]
+    fn refresh_past_cadence_is_conditional() {
+        // Shares `ENV_LOCK` with the offline tests: they flip the global
+        // offline flag, which would turn these fetches into `Offline` errors.
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+
+        let body = b"feed,body\n1,2\n".to_vec();
+        let server = TestServer::start_with_last_modified(
+            HashMap::from([("Feed.csv".to_string(), body.clone())]),
+            Some(LAST_MODIFIED),
+        );
+        let dir = tmpdir("refresh_304");
+        let url = server.url("Feed.csv");
+        let path = dir.join("Feed.csv");
+
+        assert_eq!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        // The first fetch has nothing to compare against, so it is not
+        // conditional.
+        assert_eq!(server.conditional_hits(), 0);
+
+        backdate_marker(&path, 4 * 3600);
+        assert_eq!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::NotModified
+        );
+        assert_eq!(server.hits(), 2);
+        assert_eq!(server.conditional_hits(), 1);
+        assert_eq!(std::fs::read(&path).unwrap(), body);
+
+        // The 304 re-stamps the marker, so the gate closes again.
+        assert!(matches!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Fresh { .. }
+        ));
+        assert_eq!(server.hits(), 2);
+
+        // `force` must not send the conditional header: it is the way to get
+        // the bytes back when a local copy is suspect.
+        assert_eq!(
+            download::refresh_file(&url, &dir, true).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        assert_eq!(server.conditional_hits(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// New bytes on the server replace the local copy once the cadence has
+    /// elapsed — the gate must not pin a stale file indefinitely.
+    #[test]
+    fn refresh_past_cadence_installs_changed_bytes() {
+        // Shares `ENV_LOCK` with the offline tests: they flip the global
+        // offline flag, which would turn these fetches into `Offline` errors.
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+
+        let old = b"feed,body\n1,2\n".to_vec();
+        let new = b"feed,body\n1,2\n3,4\n".to_vec();
+        let server = TestServer::start_with_last_modified(
+            HashMap::from([("Feed.csv".to_string(), old.clone())]),
+            // A `Last-Modified` the client will never echo back, so the
+            // server always answers 200: the "file changed" case.
+            Some("Thu, 18 Sep 2026 12:00:00 GMT"),
+        );
+        let dir = tmpdir("refresh_changed");
+        let url = server.url("Feed.csv");
+        let path = dir.join("Feed.csv");
+
+        download::refresh_file(&url, &dir, false).unwrap();
+        // Cadence elapsed, and the recorded `Last-Modified` no longer matches
+        // the server's, so the conditional GET returns 200 with a body.
+        std::fs::write(
+            download::refresh_marker_path(&path),
+            "0\nMon, 01 Jan 1990 00:00:00 GMT\n",
+        )
+        .unwrap();
+        server.set_body("Feed.csv", new.clone());
+
+        assert_eq!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), new);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A marker left behind by a deleted file must not suppress the fetch.
+    #[test]
+    fn refresh_refetches_when_file_is_gone() {
+        // Shares `ENV_LOCK` with the offline tests: they flip the global
+        // offline flag, which would turn these fetches into `Offline` errors.
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+
+        let body = b"feed,body\n1,2\n".to_vec();
+        let server = TestServer::start(HashMap::from([("Feed.csv".to_string(), body.clone())]));
+        let dir = tmpdir("refresh_gone");
+        let url = server.url("Feed.csv");
+
+        download::refresh_file(&url, &dir, false).unwrap();
+        std::fs::remove_file(dir.join("Feed.csv")).unwrap();
+        assert!(download::refresh_marker_path(&dir.join("Feed.csv")).is_file());
+
+        assert_eq!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        assert_eq!(server.hits(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The gate lengths are CelesTrak's publication cadences.
+    #[test]
+    fn refresh_cadence_matches_celestrak_publication() {
+        assert_eq!(download::refresh_min_age_secs("SW-All.csv"), 3 * 3600);
+        assert_eq!(download::refresh_min_age_secs("EOP-All.csv"), 24 * 3600);
     }
 }

@@ -55,10 +55,16 @@ jobs:
           pip install requests
           python python/test/download_data.py astro-data
 
-      - name: Refresh EOP and space weather (every run, cache hit or not)
+      # Only when the cached copy is genuinely old: EOP-All.csv carries about
+      # six months of IERS predictions, so a week-old table still covers
+      # "now" without an extrapolation warning, and CelesTrak's usage policy
+      # asks for one download per update rather than one per CI job. The
+      # script skips the request entirely inside that window and sends a
+      # conditional GET outside it.
+      - name: Refresh EOP and space weather (if the cached copy is over a week old)
         run: |
           pip install requests
-          python python/test/download_data.py astro-data --refresh-only
+          python python/test/download_data.py astro-data --refresh-only --max-age-hours 168
 
       - name: Install system dependencies for cartopy
         run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data

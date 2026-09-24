@@ -764,6 +764,188 @@ pub fn download_file_async(
     std::thread::spawn(|| Err(Error::FeatureDisabled))
 }
 
+/// Outcome of a [`refresh_file`] call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefreshOutcome {
+    /// The local copy was fetched recently enough to still be current; no
+    /// request was made. Carries the age of the local copy in seconds.
+    Fresh { age_secs: u64 },
+    /// The server answered `304 Not Modified`: the local copy is current and
+    /// no body was transferred.
+    NotModified,
+    /// New bytes were downloaded and installed.
+    Downloaded,
+}
+
+/// How long a freshly fetched feed is treated as current, in seconds.
+///
+/// From CelesTrak's [usage policy](https://celestrak.org/usage-policy.php),
+/// which asks clients to "only download data once per update": space weather
+/// is published every 3 hours and EOP once a day. Inside this window
+/// [`refresh_file`] makes no request at all; outside it, the request is a
+/// conditional GET that usually costs a `304` rather than the whole file.
+pub fn refresh_min_age_secs(name: &str) -> u64 {
+    match name {
+        "EOP-All.csv" => 24 * 3600,
+        // Space weather, and any feed added to the manifest's `refresh` list
+        // later: the shortest cadence CelesTrak publishes for a bulk file.
+        _ => 3 * 3600,
+    }
+}
+
+/// Sidecar path recording the last conditional GET of a refreshed feed.
+#[cfg(feature = "download")]
+pub(crate) fn refresh_marker_path(path: &Path) -> std::path::PathBuf {
+    let mut p = path.as_os_str().to_owned();
+    p.push(".http-cache");
+    std::path::PathBuf::from(p)
+}
+
+/// Seconds since the Unix epoch, or 0 if the clock is before it.
+#[cfg(feature = "download")]
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Read the sidecar written by [`write_refresh_marker`]: `(when we last
+/// checked, the server's `Last-Modified` for the bytes on disk)`. `None` for
+/// a missing or unparsable marker — the caller then fetches unconditionally.
+#[cfg(feature = "download")]
+pub(crate) fn read_refresh_marker(path: &Path) -> Option<(u64, Option<String>)> {
+    let text = std::fs::read_to_string(refresh_marker_path(path)).ok()?;
+    let mut lines = text.lines();
+    let checked_at: u64 = lines.next()?.trim().parse().ok()?;
+    let last_modified = lines
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    Some((checked_at, last_modified))
+}
+
+/// Record a successful check. Best effort: a read-only directory simply means
+/// the next call fetches unconditionally, as every call did before.
+#[cfg(feature = "download")]
+pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
+    let _ = std::fs::write(
+        refresh_marker_path(path),
+        format!("{}\n{}\n", unix_now(), last_modified.unwrap_or("")),
+    );
+}
+
+/// Refresh one of the daily CelesTrak feeds (`EOP-All.csv`, `SW-All.csv`)
+/// into `downloaddir`, respecting the publication cadence.
+///
+/// Unlike [`download_file`], which transfers the whole file on every call,
+/// this makes the smallest request that can still keep the local copy
+/// current:
+///
+/// 1. if the local copy was checked less than [`refresh_min_age_secs`] ago,
+///    **no request is made** ([`RefreshOutcome::Fresh`]);
+/// 2. otherwise the request carries `If-Modified-Since`, so an unchanged file
+///    costs a `304` and no body ([`RefreshOutcome::NotModified`]);
+/// 3. only genuinely new bytes are transferred and installed.
+///
+/// These files hold the whole record back to 1957 (several MB), so an
+/// unconditional re-fetch per run is exactly the pattern CelesTrak's usage
+/// policy asks clients to avoid. `force` skips both the age gate and the
+/// conditional header and always transfers the file.
+///
+/// The freshness state lives in a `<name>.http-cache` sidecar next to the
+/// file. Deleting it (or the file) restores a full fetch.
+#[cfg(feature = "download")]
+pub fn refresh_file(url: &str, downloaddir: &Path, force: bool) -> Result<RefreshOutcome> {
+    let fname = Path::new(url)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .ok_or_else(|| Error::InvalidFileName {
+            path: url.to_string(),
+        })?;
+    let fullpath = downloaddir.join(fname);
+    // A marker without the file it describes is meaningless: a deleted or
+    // never-downloaded file must be fetched in full.
+    let marker = if fullpath.is_file() {
+        read_refresh_marker(&fullpath)
+    } else {
+        None
+    };
+
+    if !force {
+        if let Some((checked_at, _)) = marker.as_ref() {
+            let age = unix_now().saturating_sub(*checked_at);
+            if age < refresh_min_age_secs(fname) {
+                return Ok(RefreshOutcome::Fresh { age_secs: age });
+            }
+        }
+    }
+
+    check_online(fname)?;
+    let agent = http_agent();
+    let mut req = agent.get(url);
+    // `If-Modified-Since` echoes the server's own `Last-Modified` string
+    // verbatim. The local mtime would be the time *we* wrote the file, which
+    // is later than the data's own timestamp, and sending it would suppress
+    // updates the server does have.
+    let prev_lm = if force {
+        None
+    } else {
+        marker.and_then(|(_, lm)| lm)
+    };
+    if let Some(lm) = prev_lm.as_deref() {
+        req = req.header("If-Modified-Since", lm);
+    }
+    // A 304 carries no body and the file on disk is already what the server
+    // would have sent: re-stamp the marker so the age gate restarts, and
+    // never let the empty body reach `write_atomic`. ureq surfaces 304 as a
+    // successful response (`http_status_as_error` only covers 4xx/5xx), so
+    // the status is checked here as well as in the error arm.
+    let not_modified = |prev_lm: Option<&str>| {
+        write_refresh_marker(&fullpath, prev_lm);
+        Ok(RefreshOutcome::NotModified)
+    };
+    match req.call() {
+        Ok(resp) if resp.status().as_u16() == 304 => not_modified(prev_lm.as_deref()),
+        Ok(mut resp) => {
+            let lm = resp
+                .headers()
+                .get("last-modified")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string);
+            write_atomic(&mut resp.body_mut().as_reader(), &fullpath, url)?;
+            write_refresh_marker(&fullpath, lm.as_deref());
+            Ok(RefreshOutcome::Downloaded)
+        }
+        Err(ureq::Error::StatusCode(304)) => not_modified(prev_lm.as_deref()),
+        Err(e) => Err(request_error(url, e)),
+    }
+}
+
+#[cfg(not(feature = "download"))]
+pub fn refresh_file(url: &str, _downloaddir: &Path, _force: bool) -> Result<RefreshOutcome> {
+    let name = Path::new(url)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("<unnamed>");
+    Err(offline_error(
+        name,
+        "satkit was built without the `download` feature",
+    ))
+}
+
+/// [`refresh_file`] on a worker thread, so the feeds can be refreshed in
+/// parallel.
+pub fn refresh_file_async(
+    url: String,
+    downloaddir: &Path,
+    force: bool,
+) -> std::thread::JoinHandle<Result<RefreshOutcome>> {
+    let dir = downloaddir.to_path_buf();
+    std::thread::spawn(move || refresh_file(url.as_str(), &dir, force))
+}
+
 #[cfg(feature = "download")]
 pub fn download_to_string(url: &str) -> Result<String> {
     check_online(url)?;

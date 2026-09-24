@@ -24,6 +24,10 @@ pub use download::download_file;
 pub use download::download_file_async;
 pub use download::download_if_not_exist;
 pub use download::download_to_string;
+pub use download::refresh_file;
+pub use download::refresh_file_async;
+pub use download::refresh_min_age_secs;
+pub use download::RefreshOutcome;
 pub use download::{is_offline, set_offline, OFFLINE_ENV};
 pub use manifest::{fetch_static_file, Manifest, ManifestEntry};
 

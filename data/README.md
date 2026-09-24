@@ -72,9 +72,11 @@ ephemeris.
   ships it must be an opt-in download with its own notice, not part of the
   default bundle.
 - **`EOP-All.csv`, `SW-All.csv`** — Earth orientation and space weather.
-  CelesTrak asks that its compiled files not be mirrored, and they change
-  daily, so they are never pinned: `update_datafiles()` fetches them from
-  CelesTrak every run via the manifest's `refresh` list.
+  They change daily, so they are never pinned, and CelesTrak grants no
+  redistribution licence for its compiled files, so satkit does not mirror
+  them: `update_datafiles()` fetches them from CelesTrak via the manifest's
+  `refresh` list. See [Refresh policy](#refresh-policy-celestrak) for how
+  often.
 - **`sw19571001.txt`** — an orphan on the old bucket; nothing reads it.
 - **`leap-seconds.list`** — nothing reads it: the runtime leap-second table
   is a compiled-in constant (`src/time/instant.rs`). It was pinned
@@ -82,6 +84,33 @@ ephemeris.
   `data-v1` tag, but the manifest entry is gone.
 - **`predicted-solar-cycle.json`** — fetched directly from NOAA/SWPC by
   `solar_cycle_forecast::update()`; not a bundle file.
+
+## Refresh policy (CelesTrak)
+
+`EOP-All.csv` and `SW-All.csv` are the only files satkit fetches repeatedly,
+and they are whole-history tables (1957 to the present, several MB) served by
+one person's site. [CelesTrak's usage
+policy](https://celestrak.org/usage-policy.php) asks clients to "only download
+the data you need, when you are going to use it, and only download data once
+per update", publishes space weather every 3 hours and EOP once a day, and
+warns that machine-to-machine clients ignoring non-200 responses get
+firewalled. Satkit follows it in four places:
+
+| | |
+|---|---|
+| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for `SW-All.csv`, 24 h for `EOP-All.csv`). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
+| **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar; delete it (or the file) to force a full fetch |
+| **identification** | every request sends `User-Agent: satkit/<version> (+https://github.com/ssmichael1/satkit)` (`download::USER_AGENT`) rather than `ureq/3.x`, so a misbehaving client is traceable to the project |
+| **no retry loop** | an HTTP error is returned to the caller, with `celestrak_throttle_hint` explaining 403/503 and telling the user to cache rather than retry |
+
+CI is the other half of the problem: a data-cache hit used to be followed by an
+unconditional refresh in every job, which is ~12 full-file downloads per push
+from GitHub's datacenter ranges. The test jobs no longer refresh at all — every
+test that touches the EOP table works from the table's own bounds, so a cached
+copy stays valid however old it is — and the docs and release workflows refresh
+only when the cached copy is more than a week old
+(`download_data.py --max-age-hours 168`), which is well inside the ~6 months of
+IERS predictions `EOP-All.csv` carries.
 
 ## Publishing the release assets (maintainer)
 
@@ -193,7 +222,7 @@ handled in three tiers:
 | **embedded** | `tab5.2a/b/d.txt`; `EGM96/EGM2008/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (295 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
 | **ephemeris** | `linux_p1550p2650.440` (DE440, 102 MB) or `lnxp1900p2053.421` (DE421, 14 MB) | downloaded on first use through the verified manifest fetch, into the write location |
 | **on demand** | `ITU_GRACE16.gfc` (1.8 MB, CC BY 4.0) | same verified fetch, on first use of `GravityModel::ITUGrace16`; not embedded so the licence does not attach to the library |
-| **refreshed** | `EOP-All.csv`, `SW-All.csv` | fetched from CelesTrak on first use; `update_datafiles()` refreshes them |
+| **refreshed** | `EOP-All.csv`, `SW-All.csv` | fetched from CelesTrak on first use; `update_datafiles()` refreshes them, rate-limited (below) |
 
 `tools/embed_data.py` regenerates the blobs from a data directory whose files
 match `manifest.json` (it checks the source hashes) and records provenance in
