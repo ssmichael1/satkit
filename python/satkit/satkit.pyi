@@ -12,6 +12,7 @@ import datetime
 
 from collections.abc import Sequence
 from typing import Any, ClassVar, Optional, TypeAlias, Union, overload
+from typing_extensions import deprecated
 
 from ._types import OMMDict
 
@@ -1272,7 +1273,7 @@ class time:
         """
         ...
 
-    def as_date(self) -> tuple[int, int, int]:
+    def to_date(self) -> tuple[int, int, int]:
         """Return tuple representing as UTC Gegorian date of the time object.
 
         Returns:
@@ -1283,7 +1284,12 @@ class time:
         """
         ...
 
-    def as_gregorian(
+    @deprecated("use to_date()")
+    def as_date(self) -> tuple[int, int, int]:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_date`."""
+        ...
+
+    def to_gregorian(
         self,
     ) -> tuple[int, int, int, int, int, float]:
         """Return tuple representing as UTC Gegorian date and time of the time object.
@@ -1293,6 +1299,11 @@ class time:
                 Month is in range [1,12].
                 Day is in range [1,31].
         """
+        ...
+
+    @deprecated("use to_gregorian()")
+    def as_gregorian(self) -> tuple[int, int, int, int, int, float]:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_gregorian`."""
         ...
 
     @staticmethod
@@ -1337,7 +1348,7 @@ class time:
         """
         ...
 
-    def as_datetime(self, utc: bool = True) -> datetime.datetime:
+    def to_datetime(self, utc: bool = True) -> datetime.datetime:
         """Convert object to "datetime.datetime" object representing same instant in time.
 
         Args:
@@ -1348,19 +1359,24 @@ class time:
 
         Example:
             ```python
-            dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(True)
+            dt = satkit.time(2023, 6, 3, 6, 19, 34).to_datetime(True)
             print(dt)
             # 2023-06-03 06:19:34+00:00
 
-            dt = satkit.time(2023, 6, 3, 6, 19, 34).as_datetime(False)
+            dt = satkit.time(2023, 6, 3, 6, 19, 34).to_datetime(False)
             print(dt)
             # 2023-06-03 02:19:34
             ```
         """
         ...
 
+    @deprecated("use to_datetime()")
+    def as_datetime(self, utc: bool = True) -> datetime.datetime:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_datetime`."""
+        ...
+
     def datetime(self, utc: bool = True) -> datetime.datetime:
-        """Deprecated: use :meth:`satkit.time.as_datetime`.
+        """Deprecated: use :meth:`satkit.time.to_datetime`.
 
         Convert object to "datetime.datetime" object representing same instant in time.
 
@@ -1397,7 +1413,7 @@ class time:
         """
         ...
 
-    def as_mjd(self, scale: timescale = timescale.UTC) -> float:
+    def to_mjd(self, scale: timescale = timescale.UTC) -> float:
         """
         Represent time instance as a Modified Julian Date
         with the provided time scale
@@ -1409,7 +1425,12 @@ class time:
         """
         ...
 
-    def as_jd(self, scale: timescale = timescale.UTC) -> float:
+    @deprecated("use to_mjd()")
+    def as_mjd(self, scale: timescale = timescale.UTC) -> float:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_mjd`."""
+        ...
+
+    def to_jd(self, scale: timescale = timescale.UTC) -> float:
         """
         Represent time instance as Julian Date with
         the provided time scale
@@ -1421,7 +1442,12 @@ class time:
         """
         ...
 
-    def as_unixtime(self) -> float:
+    @deprecated("use to_jd()")
+    def as_jd(self, scale: timescale = timescale.UTC) -> float:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_jd`."""
+        ...
+
+    def to_unixtime(self) -> float:
         """
         Represent time as unixtime
 
@@ -1434,7 +1460,12 @@ class time:
         """
         ...
 
-    def as_iso8601(self) -> str:
+    @deprecated("use to_unixtime()")
+    def as_unixtime(self) -> float:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_unixtime`."""
+        ...
+
+    def to_iso8601(self) -> str:
         """
         Represent time as ISO 8601 string
 
@@ -1443,13 +1474,23 @@ class time:
         """
         ...
 
-    def as_rfc3339(self) -> str:
+    @deprecated("use to_iso8601()")
+    def as_iso8601(self) -> str:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_iso8601`."""
+        ...
+
+    def to_rfc3339(self) -> str:
         """
         Represent time as RFC 3339 string
 
         Returns:
             RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
         """
+        ...
+
+    @deprecated("use to_rfc3339()")
+    def as_rfc3339(self) -> str:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_rfc3339`."""
         ...
 
     def strftime(self, format: str) -> str:
@@ -2187,7 +2228,7 @@ class quaternion:
         """
         ...
 
-    def as_rotation_matrix(self) -> npt.NDArray[np.float64]:
+    def to_rotation_matrix(self) -> npt.NDArray[np.float64]:
         """Return 3x3 rotation matrix representing equivalent rotation
 
         Returns:
@@ -2195,7 +2236,12 @@ class quaternion:
         """
         ...
 
-    def as_euler(self) -> tuple[float, float, float]:
+    @deprecated("use to_rotation_matrix()")
+    def as_rotation_matrix(self) -> npt.NDArray[np.float64]:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`quaternion.to_rotation_matrix`."""
+        ...
+
+    def to_euler(self) -> tuple[float, float, float]:
         """Return equivalent rotation as intrinsic ZYX Euler angles (yaw, pitch, roll).
 
         The decomposition follows the aerospace convention (Tait-Bryan angles):
@@ -2208,15 +2254,20 @@ class quaternion:
         Example:
             ```python
             q = satkit.quaternion.rotz(0.1) * satkit.quaternion.roty(0.2)
-            roll, pitch, yaw = q.as_euler()
+            roll, pitch, yaw = q.to_euler()
             ```
         """
+        ...
+
+    @deprecated("use to_euler()")
+    def as_euler(self) -> tuple[float, float, float]:
+        """Deprecated since 0.23, removed in 0.25. Use :meth:`quaternion.to_euler`."""
         ...
 
     @staticmethod
     def from_euler(roll: float, pitch: float, yaw: float) -> quaternion:
         """Create quaternion from roll, pitch, yaw Euler angles in radians
-        (inverse of ``as_euler``)
+        (inverse of ``to_euler``)
 
         Args:
             roll (float): Roll angle in radians

@@ -85,6 +85,10 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 - Follow [PEP 8](https://pep8.org/) style guidelines
 - Provide type hints in `.pyi` stub files for IDE support
 - Include docstrings for all public functions and classes
+- Conversions to another representation are methods named `to_X` (`to_mjd()`,
+  `to_datetime()`, `to_rotation_matrix()`), paired with the `from_X` constructor
+  that inverts them. Do not introduce `as_X` names in the Python API — `as_*`
+  is the Rust core's convention, and the Python `as_*` aliases are deprecated
 - Test Python bindings separately when making changes; see `python/test/` (`test_*.py`)
 
 ### Testing

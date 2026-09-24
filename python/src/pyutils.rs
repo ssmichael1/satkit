@@ -16,6 +16,16 @@ use pyo3::IntoPyObjectExt;
 
 use anyhow::Result;
 
+/// Emit a `DeprecationWarning` attributed to the Python line that called the
+/// deprecated method.
+///
+/// A PyO3 method has no Python frame of its own, so from here stack level 1
+/// is already the caller (level 2 would blame the caller's caller).
+pub fn warn_deprecated(py: Python<'_>, msg: &std::ffi::CStr) -> PyResult<()> {
+    let warning_type = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
+    PyErr::warn(py, warning_type.as_any(), msg, 1)
+}
+
 pub fn kwargs_or_default<'py, T>(
     kwargs: &mut Option<&Bound<'py, PyDict>>,
     name: &str,
