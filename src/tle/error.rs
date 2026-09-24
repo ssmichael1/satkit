@@ -3,7 +3,11 @@
 use thiserror::Error;
 
 /// Errors that can occur while parsing, formatting, or fitting TLEs.
+///
+/// `#[non_exhaustive]`: variants are added as the parser and fitter learn to
+/// reject more malformed input, so downstream matches need a wildcard arm.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error("Invalid TLE line lengths: line1 = {line1}, line2 = {line2}")]
     InvalidLineLengths { line1: usize, line2: usize },
