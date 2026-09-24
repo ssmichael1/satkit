@@ -5265,6 +5265,7 @@ mod tests {
             date: Instant::from_date(2023, 3, 4).unwrap() - Duration::from_days(n as f64),
             bsrn: 0,
             nd: 0,
+            data_type: crate::spaceweather::SpaceWeatherDataType::Observed,
             kp: [0; 8],
             kp_sum: 0,
             ap: core::array::from_fn(|i| base + i as i32),

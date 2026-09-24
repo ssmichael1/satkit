@@ -6,6 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Added
 
+- Space-weather provenance and coverage: `SpaceWeatherRecord::data_type` (the `F10.7_DATA_TYPE` column, previously parsed over) with `spaceweather::coverage()` / `status()` / `disable_space_weather_time_warning()` and their Python equivalents, plus one-time warnings when an epoch falls past the daily rows (only monthly F10.7 remains, so NRLMSISE-00 runs on a quiet-time `Ap = 4` — up to 2x too little density during a storm), past the end of the table, or with no table loaded; the Data Files documentation is split into Data Files / Data Directories / Downloads and Refresh / Data Coverage and `satkit.spaceweather` gains an API reference page ([#203](https://github.com/ssmichael1/satkit/pull/203), [#202](https://github.com/ssmichael1/satkit/issues/202))
 - EGM2008 gravity model (`GravityModel::EGM2008` / `gravmodel.egm2008`, Pavlis et al. 2012, public domain), compiled in to degree 70 like EGM96 / JGM2 / JGM3; `Gravity::tide_system` and `earthgravity::TideSystem` record each model's permanent-tide convention from the ICGEM `tide_system` header or, for the headerless JGM files, from the C20 value; `earthgravity::ensure_loaded` / `is_loaded` load a model with a typed error instead of a panic ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195), [#183](https://github.com/ssmichael1/satkit/issues/183))
 
 ### Changed

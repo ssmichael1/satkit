@@ -53,6 +53,102 @@ pub enum Error {
 /// Convenient type alias used throughout the `spaceweather` module.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Provenance of a space-weather row, from the `F10.7_DATA_TYPE` column of
+/// `SW-All.csv` (the one-digit `Q` field in the fixed-width `.txt` twin).
+///
+/// The distinction matters for drag: only [`Observed`](Self::Observed) rows
+/// are measurements, and [`PredictedMonthly`](Self::PredictedMonthly) rows
+/// carry no geomagnetic data at all — every `kp`/`ap` field is the `-1`
+/// sentinel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpaceWeatherDataType {
+    /// `OBS` — measured.
+    Observed,
+    /// `INT` — interpolated across a gap in the measured record.
+    Interpolated,
+    /// `PRD` — daily prediction (NOAA/SWPC 45-day forecast). Kp/ap present.
+    PredictedDaily,
+    /// `PRM` — monthly prediction. F10.7 only; Kp/ap are all `-1`.
+    PredictedMonthly,
+    /// The column was empty or held an unrecognised value.
+    Unknown,
+}
+
+impl SpaceWeatherDataType {
+    /// Parse the `F10.7_DATA_TYPE` column.
+    fn parse(s: &str) -> Self {
+        match s.trim() {
+            "OBS" => Self::Observed,
+            "INT" => Self::Interpolated,
+            "PRD" => Self::PredictedDaily,
+            "PRM" => Self::PredictedMonthly,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Whether the row is a measurement (`OBS` or `INT`) rather than a
+    /// prediction.
+    pub fn is_observed(&self) -> bool {
+        matches!(self, Self::Observed | Self::Interpolated)
+    }
+
+    /// Whether the row carries 3-hourly and daily geomagnetic values.
+    /// False for [`PredictedMonthly`](Self::PredictedMonthly), whose
+    /// `kp`/`ap` fields are all `-1`.
+    pub fn has_geomagnetic(&self) -> bool {
+        !matches!(self, Self::PredictedMonthly | Self::Unknown)
+    }
+
+    /// The column text this variant was parsed from.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Observed => "OBS",
+            Self::Interpolated => "INT",
+            Self::PredictedDaily => "PRD",
+            Self::PredictedMonthly => "PRM",
+            Self::Unknown => "",
+        }
+    }
+}
+
+/// Where an epoch falls relative to the loaded space-weather table.
+///
+/// Returned by [`status`]; see [`coverage`] for the table bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpaceWeatherStatus {
+    /// On or before the last measured row.
+    Observed,
+    /// After the last measured row, inside the daily predictions: F10.7 and
+    /// the geomagnetic indices are the NOAA/SWPC 45-day forecast.
+    PredictedDaily,
+    /// Past the daily predictions. Only monthly F10.7 is available; the
+    /// record returned is the most recent month's, and it carries **no**
+    /// geomagnetic data, so NRLMSISE-00 falls back to a quiet-time
+    /// `Ap = 4`. Density can be wrong by a factor of two during a storm.
+    PredictedMonthly,
+    /// After the last row of the table: that row's values are returned
+    /// unchanged.
+    Extrapolated,
+    /// Before the first row of the table (1957 for `SW-All.csv`).
+    BeforeTable,
+    /// No space-weather table is loaded at all.
+    NotLoaded,
+}
+
+/// Time bounds of the loaded space-weather table (UTC).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpaceWeatherCoverage {
+    /// Epoch of the first row.
+    pub first: Instant,
+    /// Epoch of the last measured row (`OBS`/`INT`).
+    pub last_observed: Instant,
+    /// Epoch of the last row at daily cadence (`OBS`/`INT`/`PRD`). After
+    /// this, only monthly rows remain and no geomagnetic data is available.
+    pub last_daily: Instant,
+    /// Epoch of the last row of any kind.
+    pub last: Instant,
+}
+
 #[derive(Debug, Clone)]
 pub struct SpaceWeatherRecord {
     /// Date of record
@@ -79,6 +175,9 @@ pub struct SpaceWeatherRecord {
     pub cp: f64,
     /// Scale cp to \[0, 9\]
     pub c9: i32,
+    /// Provenance of this row — measured, interpolated, or predicted.
+    /// See [`SpaceWeatherDataType`].
+    pub data_type: SpaceWeatherDataType,
     /// International Sunspot Number
     pub isn: i32,
     pub f10p7_obs: f64,
@@ -170,6 +269,7 @@ fn parse_csv(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
                 isn: lvals[23].parse().unwrap_or(-1),
                 f10p7_obs: lvals[24].parse().unwrap_or(-1.0),
                 f10p7_adj: lvals[25].parse().unwrap_or(-1.0),
+                data_type: SpaceWeatherDataType::parse(lvals[26]),
                 f10p7_obs_c81: lvals[27].parse().unwrap_or(-1.0),
                 f10p7_obs_l81: lvals[28].parse().unwrap_or(-1.0),
                 f10p7_adj_c81: lvals[29].parse().unwrap_or(-1.0),
@@ -209,6 +309,14 @@ fn load_space_weather_csv() -> Result<Vec<SpaceWeatherRecord>> {
 /// silent on failure) runs at most once; [`init_from_bytes`] /
 /// [`init_from_path`] / [`update`] replace any current contents.
 static SPACE_WEATHER: RefreshableSingleton<Vec<SpaceWeatherRecord>> = RefreshableSingleton::new();
+
+/// One-time warning latches; see [`disable_space_weather_time_warning`].
+static MONTHLY_WARNING_SHOWN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+static EXTRAP_WARNING_SHOWN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+static NOT_LOADED_WARNING_SHOWN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Initialize the space-weather singleton from an in-memory byte buffer.
 ///
@@ -255,14 +363,109 @@ fn ensure_default_loaded() {
     }
 }
 
+/// Disable the warnings about out-of-range or missing space-weather data.
+///
+/// Three one-time warnings exist: an epoch past the daily predictions (only
+/// monthly F10.7, no geomagnetic data), an epoch past the end of the table,
+/// and no table loaded at all. Each is shown at most once per process; call
+/// this to suppress all of them.
+///
+/// # Example
+///
+/// ```rust
+/// satkit::spaceweather::disable_space_weather_time_warning();
+/// ```
+pub fn disable_space_weather_time_warning() {
+    use std::sync::atomic::Ordering;
+    MONTHLY_WARNING_SHOWN.store(true, Ordering::Relaxed);
+    EXTRAP_WARNING_SHOWN.store(true, Ordering::Relaxed);
+    NOT_LOADED_WARNING_SHOWN.store(true, Ordering::Relaxed);
+}
+
+/// Time bounds of the loaded space-weather table, or `None` if no table is
+/// loaded (file missing and download failed, or an empty table installed).
+///
+/// `last_daily` is the boundary that matters for drag: past it the table
+/// holds only monthly rows, which carry no geomagnetic data at all.
+///
+/// # Example
+///
+/// ```rust
+/// if let Some(c) = satkit::spaceweather::coverage() {
+///     println!("observed through {}, daily through {}", c.last_observed, c.last_daily);
+/// }
+/// ```
+pub fn coverage() -> Option<SpaceWeatherCoverage> {
+    ensure_default_loaded();
+    let guard = SPACE_WEATHER.read();
+    coverage_of(guard.as_ref()?)
+}
+
+/// Pure core of [`coverage`], over a table slice.
+fn coverage_of(sw: &[SpaceWeatherRecord]) -> Option<SpaceWeatherCoverage> {
+    let first = sw.first()?;
+    let last = sw.last()?;
+    let last_observed = sw
+        .iter()
+        .rev()
+        .find(|r| r.data_type.is_observed())
+        .unwrap_or(first);
+    let last_daily = sw
+        .iter()
+        .rev()
+        .find(|r| r.data_type.has_geomagnetic())
+        .unwrap_or(last_observed);
+    Some(SpaceWeatherCoverage {
+        first: first.date,
+        last_observed: last_observed.date,
+        last_daily: last_daily.date,
+        last: last.date,
+    })
+}
+
+/// Classify an epoch against the loaded space-weather table — see
+/// [`SpaceWeatherStatus`].
+///
+/// Useful before a long drag propagation: a result of
+/// [`SpaceWeatherStatus::PredictedMonthly`] means NRLMSISE-00 is running on
+/// a quiet-time `Ap = 4` with no storm information, and
+/// [`SpaceWeatherStatus::Extrapolated`] means the file should be refreshed.
+pub fn status<T: TimeLike>(tm: &T) -> SpaceWeatherStatus {
+    let tm = tm.as_instant();
+    let Some(c) = coverage() else {
+        return SpaceWeatherStatus::NotLoaded;
+    };
+    status_in(&c, tm)
+}
+
+/// Pure core of [`status`], against known table bounds.
+fn status_in(c: &SpaceWeatherCoverage, tm: Instant) -> SpaceWeatherStatus {
+    let day = tm.utc_day_number();
+    if day < c.first.utc_day_number() {
+        return SpaceWeatherStatus::BeforeTable;
+    }
+    if day > c.last.utc_day_number() {
+        return SpaceWeatherStatus::Extrapolated;
+    }
+    if day <= c.last_observed.utc_day_number() {
+        SpaceWeatherStatus::Observed
+    } else if day <= c.last_daily.utc_day_number() {
+        SpaceWeatherStatus::PredictedDaily
+    } else {
+        SpaceWeatherStatus::PredictedMonthly
+    }
+}
+
 ///
 /// Return full Space Weather record from Space Weather file,
 /// as a function of requested instant in time.
 ///
 /// Returns the record for the same day when present, otherwise the most
 /// recent prior record (no interpolation). For dates beyond the last record
-/// the final record is returned; note that predicted rows may carry `-1`
-/// sentinel values in fields celestrak has not filled in.
+/// the final record is returned. Predicted rows may carry `-1`
+/// sentinel values in fields CelesTrak has not filled in; monthly
+/// predicted rows carry no geomagnetic data at all. See [`status`] and
+/// [`coverage`] to classify an epoch before relying on the result.
 ///
 /// # Arguments
 ///
@@ -276,6 +479,7 @@ fn ensure_default_loaded() {
 ///
 /// * Space weather is updated daily in a file: SW-All.csv
 pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
+    use std::sync::atomic::Ordering;
     let tm = tm.as_instant();
     let mut guard = SPACE_WEATHER.read();
     if guard.is_none() {
@@ -283,28 +487,71 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
         ensure_default_loaded();
         guard = SPACE_WEATHER.read();
     }
-    let sw = guard.as_ref().ok_or(Error::NoRecordForDate)?;
+    let Some(sw) = guard.as_ref().filter(|s| !s.is_empty()) else {
+        if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "Warning: no space-weather table is loaded; NRLMSISE-00 is running on its \
+                 defaults (F10.7 = F10.7A = 150, Ap = 4), which can be wrong by a factor of \
+                 two in atmospheric density.\n\
+                 Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+                 to download SW-All.csv, or set SATKIT_DATA to a directory containing it.\n\
+                 To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
+                 (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)"
+            );
+        }
+        return Err(Error::NoRecordForDate);
+    };
     // Guard empty data (e.g. a header-only CSV) so the indexing below can't
     // panic; treat it the same as "not loaded".
     let first = sw.first().ok_or(Error::NoRecordForDate)?;
+    let last = sw.last().ok_or(Error::NoRecordForDate)?;
+
+    // Past the final row every query returns that row unchanged.
+    if tm.utc_day_number() > last.date.utc_day_number()
+        && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed)
+    {
+        eprintln!(
+            "Warning: the space-weather table ends at {}; the request for {tm} and all later \
+             epochs return that row's values unchanged.\n\
+             Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+             to download the most recent space-weather file.\n\
+             To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
+                 (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
+            last.date
+        );
+    }
 
     // Index by UTC calendar day. Instants count leap seconds, so a
     // continuous-day index lands on the next record in the last seconds of a
     // day.
     let day = tm.utc_day_number();
     let first_day = first.date.utc_day_number();
-    if day >= first_day {
-        let idx = (day - first_day) as usize;
-        if idx < sw.len() && sw[idx].date.utc_day_number() == day {
-            return Ok(sw[idx].clone());
-        }
-    }
+    let found = if day >= first_day
+        && ((day - first_day) as usize) < sw.len()
+        && sw[(day - first_day) as usize].date.utc_day_number() == day
+    {
+        Some(&sw[(day - first_day) as usize])
+    } else {
+        sw.iter().rev().find(|x| x.date <= tm)
+    };
+    let rec = found.ok_or(Error::NoRecordForDate)?;
 
-    sw.iter()
-        .rev()
-        .find(|x| x.date <= tm)
-        .cloned()
-        .ok_or(Error::NoRecordForDate)
+    // A monthly-predicted row carries no geomagnetic data at all: every
+    // kp/ap field is -1, so NRLMSISE-00 falls back to a quiet-time Ap = 4.
+    if !rec.data_type.has_geomagnetic() && !MONTHLY_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+        eprintln!(
+            "Warning: the space-weather record for {tm} is a monthly prediction ({}); it \
+             carries F10.7 but no Kp/ap, so NRLMSISE-00 runs on a quiet-time Ap = 4 with no \
+             storm information. Density can be wrong by a factor of two during a geomagnetic \
+             storm (measured 1.9x at 400 km for the 2024-05-11 event).\n\
+             Daily data ends shortly after the last observed day; see \
+             `satkit::spaceweather::coverage()` / `status()`.\n\
+             To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
+                 (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
+            rec.date
+        );
+    }
+    Ok(rec.clone())
 }
 
 /// Download new Space Weather file, and load it.
@@ -346,6 +593,107 @@ mod tests {
         let noon = Instant::from_datetime(2023, 11, 14, 12, 0, 0.0).unwrap();
         let late = Instant::from_datetime(2023, 11, 14, 23, 59, 50.0).unwrap();
         assert_eq!(get(&noon).unwrap().date, get(&late).unwrap().date);
+    }
+
+    #[test]
+    fn test_data_type_parsed_from_column_27() {
+        // One full row per data type; the column is index 26 (0-based).
+        let mut rows = String::from("HEADER\n");
+        for (day, ty) in [(1, "OBS"), (2, "INT"), (3, "PRD"), (4, "PRM"), (5, "")] {
+            let mut f: Vec<String> = vec![format!("2023-11-0{day}")];
+            for i in 1..31 {
+                f.push(if i == 26 {
+                    ty.to_string()
+                } else {
+                    "0".to_string()
+                });
+            }
+            rows.push_str(&f.join(","));
+            rows.push('\n');
+        }
+        let recs = parse_csv(&rows).unwrap();
+        let got: Vec<SpaceWeatherDataType> = recs.iter().map(|r| r.data_type).collect();
+        assert_eq!(
+            got,
+            vec![
+                SpaceWeatherDataType::Observed,
+                SpaceWeatherDataType::Interpolated,
+                SpaceWeatherDataType::PredictedDaily,
+                SpaceWeatherDataType::PredictedMonthly,
+                SpaceWeatherDataType::Unknown,
+            ]
+        );
+        assert!(recs[0].data_type.is_observed());
+        assert!(recs[1].data_type.is_observed());
+        assert!(!recs[2].data_type.is_observed());
+        // Only the monthly rows lack geomagnetic data.
+        assert!(recs[2].data_type.has_geomagnetic());
+        assert!(!recs[3].data_type.has_geomagnetic());
+    }
+
+    /// Build a synthetic table: OBS days 1-3, PRD day 4, PRM day 5.
+    fn synthetic_table() -> String {
+        let mut rows = String::from("HEADER\n");
+        for (day, ty) in [(1, "OBS"), (2, "OBS"), (3, "OBS"), (4, "PRD"), (5, "PRM")] {
+            let mut f: Vec<String> = vec![format!("2023-11-0{day}")];
+            for i in 1..31 {
+                f.push(if i == 26 {
+                    ty.to_string()
+                } else {
+                    "0".to_string()
+                });
+            }
+            rows.push_str(&f.join(","));
+            rows.push('\n');
+        }
+        rows
+    }
+
+    #[test]
+    fn test_coverage_and_status_boundaries() {
+        // Pure core, so the shared singleton is left alone.
+        let sw = parse_csv(&synthetic_table()).unwrap();
+        let c = coverage_of(&sw).unwrap();
+        let d = |n| Instant::from_date(2023, 11, n).unwrap();
+        assert_eq!(c.first, d(1));
+        assert_eq!(c.last_observed, d(3));
+        assert_eq!(c.last_daily, d(4));
+        assert_eq!(c.last, d(5));
+
+        assert_eq!(status_in(&c, d(1)), SpaceWeatherStatus::Observed);
+        assert_eq!(status_in(&c, d(3)), SpaceWeatherStatus::Observed);
+        assert_eq!(status_in(&c, d(4)), SpaceWeatherStatus::PredictedDaily);
+        assert_eq!(status_in(&c, d(5)), SpaceWeatherStatus::PredictedMonthly);
+        assert_eq!(
+            status_in(&c, Instant::from_date(2023, 12, 1).unwrap()),
+            SpaceWeatherStatus::Extrapolated
+        );
+        assert_eq!(
+            status_in(&c, Instant::from_date(2000, 1, 1).unwrap()),
+            SpaceWeatherStatus::BeforeTable
+        );
+    }
+
+    #[test]
+    fn test_coverage_with_no_predictions() {
+        // An all-observed table: every boundary collapses onto the last row.
+        let mut rows = String::from("HEADER\n");
+        for day in 1..=3 {
+            let mut f: Vec<String> = vec![format!("2023-11-0{day}")];
+            for i in 1..31 {
+                f.push(if i == 26 {
+                    "OBS".to_string()
+                } else {
+                    "0".to_string()
+                });
+            }
+            rows.push_str(&f.join(","));
+            rows.push('\n');
+        }
+        let sw = parse_csv(&rows).unwrap();
+        let c = coverage_of(&sw).unwrap();
+        assert_eq!(c.last_observed, c.last_daily);
+        assert_eq!(c.last_daily, c.last);
     }
 
     #[test]

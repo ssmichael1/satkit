@@ -92,6 +92,9 @@ nav:
   - Getting Started:
       - Installation: getting-started/installation.md
       - Data Files: getting-started/datafiles.md
+      - Data Directories: getting-started/datadirs.md
+      - Downloads and Refresh: getting-started/datadownloads.md
+      - Data Coverage: getting-started/datacoverage.md
   - Learn:
       - tutorials/index.md
       - Foundations:
@@ -145,6 +148,7 @@ nav:
       - Planets: api/planets.md
       - JPL Ephemerides: api/jplephem.md
       - Density: api/density.md
+      - Space Weather: api/spaceweather.md
       - Gravity: api/gravity.md
       - Kepler: api/kepler.md
       - Lambert: api/lambert.md

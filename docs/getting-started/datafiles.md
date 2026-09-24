@@ -5,7 +5,7 @@
 | tier | files | how it is provided |
 |---|---|---|
 | **Compiled in** | IERS Conventions (2010) Tables 5.2a/b/d (nutation and CIO series); EGM96, EGM2008, JGM-2 and JGM-3 gravity coefficients to degree 70 | gzip'd into the library (~300 KB) and inflated on first use. Frame transforms and gravity work with **no data directory and no network** |
-| **Downloaded once, on first use** | JPL DE440 ephemeris `linux_p1550p2650.440` (102 MB), or DE421 `lnxp1900p2053.421` (14 MB); the ITU_GRACE16 gravity model `ITU_GRACE16.gfc` (1.8 MB) | fetched the first time a planet, Sun or Moon position (or `gravmodel.itugrace16`) is needed, SHA-256 verified against a manifest compiled into satkit, written to the [data directory](#where-satkit-looks-for-data-and-where-it-writes) |
+| **Downloaded once, on first use** | JPL DE440 ephemeris `linux_p1550p2650.440` (102 MB), or DE421 `lnxp1900p2053.421` (14 MB); the ITU_GRACE16 gravity model `ITU_GRACE16.gfc` (1.8 MB) | fetched the first time a planet, Sun or Moon position (or `gravmodel.itugrace16`) is needed, SHA-256 verified against a manifest compiled into satkit, written to the [data directory](datadirs.md#where-satkit-looks-for-data-and-where-it-writes) |
 | **Refreshed** | `finals2000A.all` (Earth orientation, IERS), `SW-All.csv` (space weather, CelesTrak) | change daily; fetched on first use and refreshed by `satkit.utils.update_datafiles()`. CelesTrak's `EOP-All.csv` is the Earth-orientation fallback, and is still read when present |
 
 Everything that does not need the ephemeris or Earth orientation — gravity accelerations, the precession-nutation part of the frame chain, SGP4, time scales, Keplerian propagation, Lambert targeting — therefore works immediately after `pip install satkit`, offline. The numerical propagator needs the ephemeris (Sun and Moon) and the Earth-fixed frame chain needs the EOP file.
@@ -14,7 +14,7 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 
 ## The files
 
-- **linux_p1550p2650.440** — File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL) — the DE440 ephemeris of [Park et al. (2021)](../guide/references.md#park2021). Large (~100 MB); downloaded on first use. The smaller `lnxp1900p2053.421` (DE421, [Folkner et al. 2009](../guide/references.md#folkner2009), ~14 MB, 1900–2053) is an alternative — see [Selecting a JPL ephemeris file](#selecting-a-jpl-ephemeris-file).
+- **linux_p1550p2650.440** — File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL) — the DE440 ephemeris of [Park et al. (2021)](../guide/references.md#park2021). Large (~100 MB); downloaded on first use. The smaller `lnxp1900p2053.421` (DE421, [Folkner et al. 2009](../guide/references.md#folkner2009), ~14 MB, 1900–2053) is an alternative — see [Selecting a JPL ephemeris file](datadirs.md#selecting-a-jpl-ephemeris-file).
 
 - **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt** — Tables 5.2a, 5.2b and 5.2d of the IERS Conventions (2010), Technical Note 36 ([Petit & Luzum 2010](../guide/references.md#petit2010)): the CIP $X$, $Y$ and CIO-locator $s$ series used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame. Compiled in.
 
@@ -26,226 +26,18 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 
 - **predicted-solar-cycle.json** — [NOAA/SWPC solar cycle forecast](https://services.swpc.noaa.gov/json/solar-cycle/predicted-solar-cycle.json). Monthly predicted F10.7 solar flux values extending ~5 years into the future. Used as a fallback for atmospheric density calculations when propagating beyond the range of historical space weather data.
 
-- **finals2000A.all** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis, and the $dX$, $dY$ celestial-pole offsets. It is the [IERS Rapid Service / Prediction Centre](../guide/references.md#iers-finals2000a)'s Bulletin A combined file: observed values from 1973 and about a year of predictions, updated daily, fetched from the USNO mirror and then the IERS data centre. When both mirrors are unreachable satkit falls back to CelesTrak's **EOP-All.csv** ([CelesTrak Space Data](../guide/references.md#celestrak-spacedata)), a repackaging of the same IERS series that reaches back to 1962 and carries about six months of predictions; an `EOP-All.csv` already in a data directory (a hand-provisioned machine, the `satkit-data` bundle) is still read, and when both files are present the one whose observed record runs later is used, with the CSV's pre-1973 rows kept in front of the IERS table. `satkit.frametransform.eop_source()` says which one is loaded. For dates beyond the file, the last entry's values are used (constant extrapolation) — see [EOP coverage](#eop-coverage) below.
+- **finals2000A.all** — Earth orientation parameters. This includes $\Delta UT1$, the difference between $UT1$ and $UTC$, as well as $x_p$ and $y_p$, the polar "wander" of the Earth rotation axis, and the $dX$, $dY$ celestial-pole offsets. It is the [IERS Rapid Service / Prediction Centre](../guide/references.md#iers-finals2000a)'s Bulletin A combined file: observed values from 1973 and about a year of predictions, updated daily, fetched from the USNO mirror and then the IERS data centre. When both mirrors are unreachable satkit falls back to CelesTrak's **EOP-All.csv** ([CelesTrak Space Data](../guide/references.md#celestrak-spacedata)), a repackaging of the same IERS series that reaches back to 1962 and carries about six months of predictions; an `EOP-All.csv` already in a data directory (a hand-provisioned machine, the `satkit-data` bundle) is still read, and when both files are present the one whose observed record runs later is used, with the CSV's pre-1973 rows kept in front of the IERS table. `satkit.frametransform.eop_source()` says which one is loaded. For dates beyond the file, the last entry's values are used (constant extrapolation) — see [EOP coverage](datacoverage.md#eop-coverage) below.
 
 - **Leap seconds** — not a file: the UTC↔TAI leap-second table is compiled into the library (current through the most recent leap second, 2017-01-01, when UTC began lagging TAI by 37 s), and a future leap second will require a new `satkit` release. The table is transcribed from [IERS Bulletin C](../guide/references.md#bulletinc); UTC and leap seconds are defined by [ITU-R TF.460-6](../guide/references.md#itu460). (Releases through 0.21.2 also downloaded a reference `leap-seconds.list`; nothing ever read it, and it is no longer fetched.)
 
-## Where satkit looks for data, and where it writes
+## Where to next
 
-Two separate questions. Files are **looked up** across an ordered list of directories, any of which may be read-only; downloads are **written** to exactly one directory. `satkit.utils.data_search_dirs()` returns the first list, `satkit.utils.datadir()` the write location.
-
-| order | searched | macOS | Linux / other Unix | Windows |
-|---|---|---|---|---|
-| 1 | `SATKIT_DATA` environment variable — **also the write location when set** | ✓ | ✓ | ✓ |
-| 2 | directory passed to `set_datadir()` — also the write location | ✓ | ✓ | ✓ |
-| 3 | directories registered with `add_search_dir()` (the `satkit` Python package registers an installed `satkit_data` bundle this way) | ✓ | ✓ | ✓ |
-| 4 | `<directory of the satkit shared library>/satkit-data` | ✓ | ✓ | ✓ |
-| 5 | `<site-packages>/satkit_data/data` — the optional [`satkit-data` bundle](#the-optional-satkit-data-bundle) | ✓ | ✓ | ✓ |
-| 6 | **platform user-data directory — the default write location** | `~/Library/Application Support/satkit-data` | `$XDG_DATA_HOME/satkit-data`, default `~/.local/share/satkit-data` | `%LOCALAPPDATA%\satkit-data` |
-| 7 | `~/.satkit-data` (legacy location, read only) | ✓ | ✓ | ✓ (`%USERPROFILE%`) |
-| 8 | `/usr/share/satkit-data` (system-wide, read only) | ✓ | ✓ | — |
-| 9 | `/Library/Application Support/satkit-data` (system-wide, read only) | ✓ | — | — |
-
-A file is used from the first directory that contains it. The ephemeris is also auto-detected across all of them (highest DE version wins). satkit never creates a directory next to its own shared library or inside `site-packages` — such a directory is often not writable and is wiped on reinstall.
-
-### Environment variables and API
-
-| control | effect |
-|---|---|
-| `SATKIT_DATA=/path` | search first and write here (created if needed) |
-| `SATKIT_DATA_URL=https://mirror/base` | try `"$SATKIT_DATA_URL/<name>"` before the manifest's sources for every download (plain `http://` accepted; still hash-verified) |
-| `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` | honoured for every download (standard proxy environment variables; read by the HTTP client) |
-| `SATKIT_CA_BUNDLE=/path/bundle.pem` | verify servers against the certificates in this PEM file instead of the operating system's trust store. The file replaces the trust store outright, so it must also carry the public roots (`python -m certifi` with the private CA appended). Also accepts `platform` (the default) and `webpki` (the Mozilla list compiled into satkit, for a container with no system trust store). See [Downloads behind a TLS-inspecting proxy](#downloads-behind-a-tls-inspecting-proxy) |
-| `SATKIT_OFFLINE=1` / `satkit.utils.set_offline(True)` | forbid **downloads** — `update_datafiles()`, the lazy ephemeris fetch, the EOP/SW refresh, any non-embedded file — with a `RuntimeError` naming the file and its sources; no connection is opened. Search locations and the compiled-in data are unaffected. The setter wins once called; otherwise the variable is read. `satkit.utils.is_offline()` reports the effective state |
-| `SATKIT_JPLEPHEM_FILE=name-or-path` | which ephemeris to load — see [below](#selecting-a-jpl-ephemeris-file) |
-| `SATKIT_QUIET=1` | suppress the warning printed when a corrupt or unreadable IERS table in a search directory is replaced by the compiled-in copy |
-| `satkit.utils.datadir()` | the write location (`None` if none can be determined — no `SATKIT_DATA`, no home / `%LOCALAPPDATA%`) |
-| `satkit.utils.data_search_dirs()` | the search list, in order |
-| `satkit.utils.set_datadir(path)` / `add_search_dir(path)` | add an override / a read-only search location |
-| `satkit.utils.datafiles_exist()` | whether an ephemeris file is present in any search directory (the marker of a provisioned data location) |
-
-### Downloads behind a TLS-inspecting proxy
-
-Organisations that inspect outbound TLS put a gateway between satkit and the
-data servers: it terminates the connection and re-signs every certificate with
-a private CA. satkit verifies servers against the **operating system's trust
-store** — the keychain on macOS, the certificate store on Windows, `/etc/ssl`
-and friends on Unix — which is exactly where such a CA is installed, so those
-downloads work with no configuration.
-
-If they do not, the failure looks like this:
-
-```
-RuntimeError: could not fetch https://celestrak.org/SpaceData/SW-All.csv: io: invalid peer certificate: UnknownIssuer
-```
-
-The certificate presented is signed by something the machine does not trust.
-Either the private CA is not installed system-wide — install it, or point
-`SATKIT_CA_BUNDLE` at a PEM file containing it *together with* the public roots
-— or no interception is expected on that network, in which case the certificate
-really is untrusted and the download should not be forced through. satkit has no
-"skip verification" switch.
-
-A proxy that answers with a notice page instead of blocking outright cannot
-corrupt the data either: `finals2000A.all`, `EOP-All.csv` and `SW-All.csv` are parsed before they
-replace the copy on disk, and any download that opens with an HTML document is
-rejected. The partial file is discarded and the existing one left in place, so a
-blocked refresh degrades to a stale table rather than a broken one.
-
-Note that `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are deliberately ignored:
-Python tooling routinely points them at a stock public bundle, which is the one
-trust store guaranteed to fail on an intercepting network.
-
-### Where the files come from, and how downloads are verified
-
-The downloadable files are described by a manifest compiled into the library
-(`data/manifest.json` in the repository) that pins each file's exact size and
-SHA-256 and lists where it may be downloaded from, in order of preference:
-
-1. `SATKIT_DATA_URL` — if set, tried first for every file.
-2. The GitHub release asset (`github.com/ssmichael1/satkit-data/releases/download/data-v1/…`).
-3. The originating server where it serves identical bytes: JPL for the DE
-   ephemerides, IERS for the `tab5.2*` tables.
-4. The legacy `storage.googleapis.com/astrokit-astro-data` bucket (transitional).
-
-A download is streamed to `<name>.part`, hashed as it goes, and only renamed
-into place when both size and SHA-256 match the manifest; otherwise it is
-discarded and the next source is tried. A file already present with the right
-hash is never re-downloaded. The manifest is therefore what makes a given
-satkit release reproducible: the same version always resolves to the same
-data bytes.
-
-Sources and attribution: DE440 / DE421 — JPL (Park et al. 2021; Folkner et al.
-2009), US Government work; `tab5.2a/b/d.txt` — IERS Conventions (2010), TN 36;
-EGM96, EGM2008, JGM-2, JGM-3 — NASA GSFC / NGA (US Government work), via ICGEM;
-ITU_GRACE16 — Akyilmaz et al. 2016, GFZ Data Services, CC BY 4.0 (downloaded on
-demand, not compiled in). The
-Earth-orientation file is fetched from the IERS mirrors (CelesTrak's copy as
-the fallback) and the space-weather file from CelesTrak; neither is pinned
-(they change daily). See [How often they are
-refreshed](#how-often-eop-and-space-weather-are-refreshed). The full table,
-with licences, is in `data/README.md`.
-
-### Failure behaviour
-
-| situation | what satkit does |
-|---|---|
-| download interrupted, or bytes don't match the manifest | the temporary `*.part.<pid>.<seq>` file is deleted and the next source is tried; a final file is only ever renamed into place after its size and SHA-256 matched |
-| two processes fetch the same file at once (parallel test workers, several notebooks) | each writes its own temporary file; whichever finishes first is renamed into place, the others verify it and discard their copy — one verified file, no lock files, no partial reads |
-| an ephemeris already on disk under a pinned name is corrupt or truncated | detected on first load (the file is hashed once, ~0.2 s for DE440, and a `<name>.sha256-verified` marker records the result so later loads only compare size and mtime); re-downloaded if downloads are allowed, otherwise `RuntimeError` naming the expected hash. Files not in the manifest (a user-supplied ephemeris) are trusted as-is |
-| no writable location (`SATKIT_DATA` unset and no home / `%LOCALAPPDATA%`; a read-only directory) | `RuntimeError` listing the directories consulted and asking for `SATKIT_DATA`; never the current directory or a temp dir |
-| an existing file cannot be replaced (Windows: another process has it open) | the rename is retried a few times, then `RuntimeError` naming the file |
-| both IERS mirrors are unreachable for the Earth-orientation refresh | CelesTrak's `EOP-All.csv` is fetched instead and a warning names the URLs that failed; the loader then uses whichever of the two files on disk has the later observed record |
-| every source fails (no network, all mirrors down) | `RuntimeError` listing each URL and why it failed |
-
-## Provisioning up front
-
-Nothing needs to be downloaded before first use, but for a container image,
-a CI job, or a machine that will later be offline:
-
-```python
-import satkit as sk
-sk.utils.update_datafiles()   # ephemeris (verified) + EOP/SW + solar-cycle forecast
-```
-
-Files already present with the right hash are skipped; the space-weather and
-Earth-orientation files are refreshed if they are due (below).
-`update_datafiles(dir="...")` writes somewhere else; `overwrite=True`
-re-downloads even verified files, including those two.
-
-### How often EOP and space weather are refreshed
-
-`finals2000A.all` (or its fallback `EOP-All.csv`) and `SW-All.csv` are
-whole-history tables — 1957 or 1973 to the present, several MB — and are the
-only files satkit fetches more than once.
-[CelesTrak's usage policy](https://celestrak.org/usage-policy.php) asks for one
-download per update, so satkit makes the smallest request that keeps the local
-copy current, from the IERS mirrors and CelesTrak alike:
-
-| local copy | what happens |
-|---|---|
-| younger than its publication cadence (3 h for space weather, 24 h for EOP) | **no request is made** |
-| older than that, unchanged upstream | a conditional `If-Modified-Since` request; the server answers `304` and no body is transferred |
-| older than that, changed upstream | the new file is downloaded and installed |
-
-So calling `update_datafiles()` at the top of every script is fine — it will
-not hit the IERS mirrors or CelesTrak more than the data actually changes. `overwrite=True` skips
-the gate and always transfers, which is the way to replace a copy you suspect
-is damaged. The freshness state is a `<name>.http-cache` sidecar next to the
-file. It also records the file's size and modification time and is ignored
-once those stop matching, so a copy you replace by hand is re-fetched rather
-than assumed current; deleting the sidecar (or the file) also restores a full
-fetch.
-
-Every request satkit makes also identifies itself as
-`satkit/<version> (+https://github.com/ssmichael1/satkit)`, and an HTTP error
-from CelesTrak is returned to you with an explanation rather than retried in a
-loop — repeated retries are what gets a client firewalled.
-
-The IERS tables and gravity models are **not** downloaded — they are compiled
-in (the tables byte-identical, gravity to degree 70 — the evaluation cap, so
-results are identical). The full-degree `.gfc` files remain pinned in the
-manifest and hosted on the `data-v1` release; drop one into a search
-directory and it takes precedence over the compiled-in copy.
-
-### The optional `satkit-data` bundle
-
-`pip install satkit[data]` installs the `satkit-data` package (~110 MB: the
-ephemeris, full-degree gravity files, IERS tables) into `site-packages`. It is
-picked up automatically as a read-only search location (rows 3 and 5 above),
-so no first-use download happens. It is not required — earlier releases made
-it a hard dependency of `satkit`; it is now optional.
-
-## EOP coverage
-
-Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Earth rotation angle), and the high-precision propagator depend on the EOP table, so it matters where an epoch falls relative to it:
-
-| `satkit.frametransform.eop_status(t)` | meaning | what satkit does |
-|---|---|---|
-| `"observed"` | on or before the last observed (`O`) row | interpolates measured values |
-| `"predicted"` | after the last observed row, inside the table | interpolates IERS predictions (~6 months ahead) |
-| `"extrapolated"` | after the last row | holds the last row constant and prints a **one-time warning**. Polar motion drifts ~0.1″ and $\Delta UT1$ ~10 ms over a few months — metres of position error at LEO |
-| `"before_table"` | before 1962 | zeros, one-time warning |
-| `"not_loaded"` | no table at all (first use offline, or the fetch failed) | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
-
-`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded; `satkit.frametransform.eop_source()` reports which file the table came from (`"finals2000A"` or `"celestrak"`). For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
-
-```python
-import satkit as sk
-
-first, last_observed, last = sk.frametransform.eop_coverage()
-if sk.frametransform.eop_status(t_end) == "extrapolated":
-    sk.utils.update_datafiles()   # re-downloads finals2000A.all (and SW-All.csv)
-```
-
-The warnings can be silenced with `satkit.frametransform.disable_eop_time_warning()`.
-
-## Selecting a JPL ephemeris file
-
-By default `satkit` uses `linux_p1550p2650.440` (DE440), downloading it on first use if no ephemeris is found in any search directory. There are two ways to override that choice.
-
-### Environment variable
-
-Set `SATKIT_JPLEPHEM_FILE` to either an absolute path or a basename:
-
-```bash
-# Absolute path — file used directly (no download)
-SATKIT_JPLEPHEM_FILE=/opt/jpl/lnxp1900p2053.421 python script.py
-
-# Basename — found in any search directory, or downloaded to datadir() if it is a manifest file
-SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421 python script.py
-```
-
-**If the value is wrong.** The ephemeris is loaded on first use and the outcome is cached for the process, so a bad setting surfaces as an error from the first ephemeris query (`satkit::jplephem::Error::LoadFailed` in Rust, `RuntimeError` in Python) rather than at import. The message names the resolved path and that it was selected by `SATKIT_JPLEPHEM_FILE`:
-
-- a path that does not exist → `… No such file or directory`;
-- a bare name that is not in the data manifest → resolved against the write directory and reported as missing (only manifest-pinned names such as `linux_p1550p2650.440` and `lnxp1900p2053.421` are downloaded on demand);
-- a file that exists but is not a JPL Linux-format binary ephemeris → `not a JPL binary ephemeris (header starts with …)`.
-
-There is no silent fallback to another ephemeris: an explicit selection that fails stays failed until the setting is fixed and the process restarted.
-
-Both DE440 and DE421 are in the manifest and can be downloaded by name; any other file must already exist.
-
-### Autodetect
-
-With no environment variable set, every search directory is scanned for JPL Linux-binary ephemeris files (`linux_p*.4XX`, `lnxp*.4XX`) and the highest DE version found is used, so dropping a file into the data directory is enough to switch to it.
+- **[Data directories](datadirs.md)** — where satkit looks for files and where
+  it writes them, the environment variables, provisioning a machine up front,
+  the optional `satkit-data` bundle, and choosing a JPL ephemeris.
+- **[Downloads and refresh](datadownloads.md)** — where each file comes from,
+  how downloads are hash-verified, the refresh cadence for the two daily
+  tables, TLS-inspecting proxies, and what happens when a fetch fails.
+- **[Data coverage](datacoverage.md)** — whether the Earth-orientation and
+  space-weather tables actually cover the epoch you are propagating over, and
+  what satkit does when they do not.
