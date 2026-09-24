@@ -98,7 +98,11 @@ class TestTLEFitting:
         state_arr = [res.interp(t) for t in time_arr]
         epoch = time_arr[0]
 
-        _tle, _result = sk.TLE.fit_from_states(state_arr, time_arr, epoch)  # type: ignore
+        _tle, result = sk.TLE.fit_from_states(state_arr, time_arr, epoch)  # type: ignore
+        # tlefitstatus.converged is a property (a state flag), not a method
+        status = result["status"]
+        assert isinstance(status.converged, bool)
+        assert status.converged == result["converged"]
 
 
 class TestSGP4:

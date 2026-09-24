@@ -5,6 +5,26 @@ import math as m
 import satkit as sk
 
 
+class TestQuaternion:
+    def test_conj_is_method(self):
+        """conj() / conjugate() are methods (numpy/scipy shape); all three
+        spellings of the inverse rotation agree."""
+        q = sk.quaternion.rotz(0.3) * sk.quaternion.rotx(-1.1)
+        v = np.array([1.0, 2.0, 3.0])
+        for qi in (q.conj(), q.conjugate(), q.inverse()):
+            assert np.allclose(qi * (q * v), v)
+        assert abs((q.conj() * q).angle) < 1e-12
+        assert callable(q.conj) and callable(q.conjugate)
+
+    def test_norm_is_property(self):
+        """norm is a scalar characteristic of the quaternion, like angle."""
+        q = sk.quaternion.rotz(0.3) * sk.quaternion.rotx(-1.1)
+        assert isinstance(q.norm, float)
+        assert q.norm == pytest.approx(1.0, abs=1e-12)
+        with pytest.raises(TypeError):
+            q.norm()  # type: ignore[operator]
+
+
 class TestFrameTransform:
     def test_itrf2gcrf(self):
         """
@@ -366,7 +386,7 @@ class TestGravity:
         assert np.linalg.norm(gravity) == pytest.approx(reference_gravity, rel=1e-9)
 
         # Rotate gravity into East-North-Up frame to check deflections
-        gravity_enu = itrf.qenu2itrf.conj * gravity
+        gravity_enu = itrf.qenu2itrf.conj() * gravity
         ew_deflection = (
             -m.atan2(gravity_enu[0], -gravity_enu[2]) * 180.0 / m.pi * 3600.0
         )

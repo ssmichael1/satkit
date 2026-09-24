@@ -488,6 +488,7 @@ impl PyInstant {
     /// Returns:
     ///     int : The 1-based day of the year
     ///
+    #[getter]
     fn day_of_year(&self) -> u32 {
         self.0.day_of_year()
     }
@@ -690,6 +691,11 @@ impl PyInstant {
         Self(Instant::from_gps_week_and_second(week, seconds))
     }
 
+    /// Day of the week (UTC)
+    ///
+    /// Returns:
+    ///     satkit.weekday: Day of the week
+    #[getter]
     fn weekday(&self) -> PyWeekday {
         PyWeekday::from(self.0.day_of_week())
     }
