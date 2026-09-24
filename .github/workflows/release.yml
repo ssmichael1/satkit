@@ -9,14 +9,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  check_version:
-    name: verify version
+  preflight:
+    # Runs for tags and for wheel* branches. On a tag it checks that the
+    # version strings match and that the Build workflow passed on this exact
+    # commit, so a release never re-runs the test suite here (Build already
+    # did, on three platforms) and never publishes from an untested or
+    # mis-versioned commit. On a wheel* branch both checks are skipped and
+    # the job is a no-op gate.
+    name: preflight (version + green Build)
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v7
 
       - name: Verify tag matches Cargo.toml, pyproject.toml, and python/Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
 
@@ -48,77 +54,42 @@ jobs:
           fi
           echo "All version strings match tag ($TAG_VERSION)"
 
-  test:
-    name: test before release
-    runs-on: ubuntu-latest
-
-    env:
-      SATKIT_DATA: astro-data
-      SATKIT_TESTVEC_ROOT: satkit-testvecs
-
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-
-      - name: Cache Satkit Data
-        id: cache-satkit-data
-        uses: actions/cache@v6
-        with:
-          path: astro-data
-          enableCrossOsArchive: true
-          key: satkit-data-${{ hashFiles('data/manifest.json') }}
-          # Seed from the newest older cache on a manifest change, so EOP/SW
-          # survive a CelesTrak outage.
-          restore-keys: satkit-data-
-
-      - name: Download Satkit Data
-        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+      - name: Require a green Build run on this commit
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          pip install requests
-          python python/test/download_data.py astro-data
-
-      # Only when the cached copy is genuinely old: EOP-All.csv carries about
-      # six months of IERS predictions, so a week-old table still covers
-      # "now" without an extrapolation warning, and CelesTrak's usage policy
-      # asks for one download per update rather than one per CI job. The
-      # script skips the request entirely inside that window and sends a
-      # conditional GET outside it.
-      - name: Refresh EOP and space weather (if the cached copy is over a week old)
-        run: |
-          pip install requests
-          python python/test/download_data.py astro-data --refresh-only --max-age-hours 168
-
-      - name: Cache Satkit Test Vectors
-        id: cache-satkit-testvecs
-        uses: actions/cache@v6
-        with:
-          path: satkit-testvecs
-          enableCrossOsArchive: true
-          key: satkit-testvecs-cache
-
-      - name: Download Satkit Test Vectors
-        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
-        run: |
-          pip install requests
-          python python/test/download_testvecs.py satkit-testvecs
-
-      - name: Rust tests
-        run: cargo test --features chrono
-
-      - name: Install satkit
-        run: pip install -e ".[test]"
-
-      - name: Python tests
-        run: pytest python/test/
+          # Build runs on every push to main. Wait for its run on the tagged
+          # commit (it may still be going if the tag followed the merge
+          # quickly) and require it to have succeeded.
+          id=""; status=""; conclusion=""
+          for attempt in $(seq 1 80); do
+            out=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml \
+                    --commit "$GITHUB_SHA" --limit 1 \
+                    --json databaseId,status,conclusion \
+                    -q 'if length == 0 then empty else .[0] | "\(.databaseId) \(.status) \(.conclusion // "-")" end' || true)
+            if [ -n "$out" ]; then
+              id=${out%% *}; rest=${out#* }; status=${rest%% *}; conclusion=${rest#* }
+              [ "$status" = "completed" ] && break
+              echo "Build run $id is $status (attempt $attempt)"
+            else
+              echo "no Build run for $GITHUB_SHA yet (attempt $attempt)"
+            fi
+            sleep 15
+          done
+          if [ -z "$id" ]; then
+            echo "::error::No Build workflow run found for $GITHUB_SHA. Tag a commit that is on main and has been built, or run Build via workflow_dispatch first."
+            exit 1
+          fi
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::Build run $id for $GITHUB_SHA finished with '$conclusion'; refusing to release from a commit that did not pass CI."
+            exit 1
+          fi
+          echo "Build run $id succeeded for $GITHUB_SHA"
 
   publish_crate:
     name: publish to crates.io
-    needs: [check_version, test]
+    needs: preflight
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
@@ -132,7 +103,7 @@ jobs:
 
   build_wheels:
     name: build wheels (${{ matrix.os }} ${{ matrix.python }})
-    needs: test
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -233,7 +204,7 @@ jobs:
 
   publish_pypi:
     name: publish to PyPI
-    needs: build_wheels
+    needs: [preflight, build_wheels]
     runs-on: ubuntu-latest
     environment: PyPiPublish
     if: startsWith(github.ref, 'refs/tags/v')

@@ -67,16 +67,21 @@ jobs:
       - name: Clippy (deny warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-  audit:
-    name: cargo audit
+  deny:
+    # cargo-deny covers the RustSec advisories the cargo-audit job used to
+    # check here (the weekly audit.yml schedule still runs cargo-audit, so
+    # advisories published between pushes are caught too), plus the
+    # dependency licence allowlist, crate sources and duplicate versions.
+    # The policy lives in deny.toml at the repository root.
+    name: cargo deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
-      - name: Audit dependencies (RustSec advisories)
-        run: cargo audit
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+      - name: Advisories, licences, sources, bans
+        run: cargo deny check
 
   sdist:
     # Guard against source-unbuildable sdists: a broken 0.20.0 sdist (missing
@@ -86,6 +91,11 @@ jobs:
     # import the result.
     name: sdist installs from source
     runs-on: ubuntu-latest
+    env:
+      # pip builds the sdist in a temporary directory; pointing cargo's target
+      # at the workspace lets the cache below carry the compiled dependencies
+      # from run to run instead of compiling the crate cold every time.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -100,6 +110,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            target/
           key: ${{ runner.os }}-cargo-sdist-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-sdist-
       - name: Build sdist
@@ -181,8 +192,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Build
-        run: cargo build --release
 
       - name: Test
         run: cargo test --features chrono
@@ -208,6 +217,8 @@ jobs:
         run: cargo test --test gmat_regression -- --nocapture
 
       - name: Doc
+        # Identical output on every OS; once is enough.
+        if: matrix.os == 'ubuntu'
         run: cargo doc --no-deps
 
   python:

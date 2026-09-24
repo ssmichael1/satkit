@@ -1,0 +1,11 @@
+# Keeps the GitHub Actions pins in .github/workflows current. One grouped PR a
+# month; the workflows pin major tags, so this mostly catches major bumps.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
