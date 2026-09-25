@@ -1,6 +1,6 @@
 # Time Representation
 
-`satkit.time` is an instant with microsecond resolution that converts between the UTC, TAI, TT, TDB, UT1 and GPS time scales; `satkit.duration` is a time interval. What the scales are, how leap seconds and Earth orientation data enter, and which scale each part of the library uses are covered in [Theory: Time Systems](../guide/time.md); worked examples are in the [Time Systems tutorial](../tutorials/Time%20Systems.ipynb).
+`satkit.time` is an instant with microsecond resolution that converts between the UTC, TAI, TT, TDB, UT1 and GPS time scales; `satkit.duration` is a time interval. What the scales are, how leap seconds and Earth orientation data enter, and which scale each part of the library uses are explained, with runnable examples, in [Time Systems](../tutorials/Time%20Systems.ipynb).
 
 ## Python `datetime` interoperability
 
