@@ -110,8 +110,8 @@ impl PySatState {
     ///         components along the frame's axes. Units: meters.
     ///     frame (satkit.frame): Coordinate frame — **required**, no
     ///         default (matching the Rust API). Supported values:
-    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RTN`` (= RSW = RIC),
-    ///         ``frame.NTW``.
+    ///         ``frame.GCRF``, ``frame.RTN`` (= RSW = RIC), ``frame.NTW``,
+    ///         ``frame.LVLH``.
     ///
     /// Raises:
     ///     RuntimeError: if the frame is not one of the supported
@@ -143,7 +143,7 @@ impl PySatState {
     ///         components along the frame's axes. Units: m/s.
     ///     frame (satkit.frame): Coordinate frame — **required**, no
     ///         default (matching the Rust API). Supported values:
-    ///         ``frame.GCRF``, ``frame.LVLH``, ``frame.RTN``, ``frame.NTW``.
+    ///         ``frame.GCRF``, ``frame.RTN``, ``frame.NTW``, ``frame.LVLH``.
     ///
     /// Raises:
     ///     RuntimeError: if the frame is not one of the supported

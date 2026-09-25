@@ -28,8 +28,6 @@ pub enum StateCov {
 /// * [`Frame::RTN`] (a.k.a. RSW/RTN) — radial / in-track / cross-track,
 ///   tied to the position vector. Natural for radial and cross-track
 ///   burn components, and the CCSDS OEM covariance-message convention.
-///   Note: `satkit`'s own covariance-uncertainty API uses LVLH (see
-///   [`Frame::LVLH`]), not RIC.
 /// * [`Frame::NTW`] — normal-to-velocity / tangent / cross-track, tied to
 ///   the velocity vector. Natural for prograde/retrograde burns.
 /// * [`Frame::LVLH`] — Local Vertical / Local Horizontal, the classical
@@ -303,7 +301,7 @@ impl SatState {
     /// * `sigma` — 3-vector of 1-sigma position uncertainty components
     ///   along the `frame`'s axes [m]
     /// * `frame` — coordinate frame. Supported: [`Frame::GCRF`],
-    ///   [`Frame::LVLH`], [`Frame::RTN`] (= RSW = RTN), [`Frame::NTW`].
+    ///   [`Frame::RTN`] (= RSW = RIC), [`Frame::NTW`], [`Frame::LVLH`].
     ///
     /// # Errors
     ///

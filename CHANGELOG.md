@@ -8,6 +8,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - **Breaking (experimental ECOM):** ECOM coefficients are referred to 1 AU and the ECOM acceleration is scaled by `(AU / d)²` with the satellite–Sun distance, like the cannonball term, so fitted coefficients no longer drift ±3.4 % with the season; coefficients from an unscaled implementation convert by `(d / AU)²` at their epoch ([#213](https://github.com/ssmichael1/satkit/pull/213), [#210](https://github.com/ssmichael1/satkit/issues/210))
 
+### Docs
+
+- Covariance docs use RTN (R exactly along position) instead of LVLH, whose x axis is only approximately along-track, and the Covariance Propagation tutorial adds an eccentric-orbit comparison of RTN and NTW (T exactly along velocity); the Coordinate Frames tutorial opens with tables of the Earth/celestial and satellite frames ([#214](https://github.com/ssmichael1/satkit/pull/214))
+
 ### CI
 
 - Release workflow: a `preflight` job replaces the redundant pre-release test job — it verifies the version strings and waits for a green Build run on the tagged commit — and the PyPI publish now depends on it, so a mis-versioned tag can no longer reach PyPI while being refused by crates.io. The Build workflow drops its duplicate `cargo build --release` pass, runs `cargo doc` on Ubuntu only, caches the sdist job's compile, and replaces the per-PR cargo-audit job with cargo-deny (RustSec advisories plus a dependency licence allowlist and crate-source check; policy in `deny.toml`, weekly cargo-audit schedule kept). Dependabot keeps the GitHub Actions pins current ([#211](https://github.com/ssmichael1/satkit/pull/211))
