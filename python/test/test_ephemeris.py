@@ -59,7 +59,8 @@ class TestJPLEphem:
             src = int(s[4])
             coord = int(s[5])
             truth = float(s[6])
-            time = sk.time.from_jd(jd, sk.timescale.TT)
+            # testpo epochs are JD in T_eph (TDB)
+            time = sk.time.from_jd(jd, sk.timescale.TDB)
             # Don't handle any of the exotic test vectors, just do sun, moon,
             # and planetary ephemerides
             if tar <= 10 and src <= 10 and coord <= 6:

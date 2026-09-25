@@ -790,8 +790,16 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     let v1 = &eop[idx];
     let g1 = (mjd_utc - v0.mjd_utc) / (v1.mjd_utc - v0.mjd_utc);
     let g0 = 1.0 - g1;
+    // UT1 − UTC jumps by the leap second at 00:00 UTC of the row after it
+    // (v1), i.e. at the end of this interval. Interpolate the continuous
+    // UT1 − TAI instead by taking the step out of v1: the whole interval
+    // [v0, v1) still carries v0's TAI − UTC. The step is taken from the data
+    // (a jump of about a second; the daily UT1 drift is milliseconds) so the
+    // pre-1972 fractional UTC steps in EOP-All.csv are left alone.
+    let jump = v1.dut1 - v0.dut1;
+    let leap_step = if jump.abs() > 0.5 { jump.round() } else { 0.0 };
     Some([
-        g0.mul_add(v0.dut1, g1 * v1.dut1),
+        g0.mul_add(v0.dut1, g1 * (v1.dut1 - leap_step)),
         g0.mul_add(v0.xp, g1 * v1.xp),
         g0.mul_add(v0.yp, g1 * v1.yp),
         g0.mul_add(v0.lod, g1 * v1.lod),
@@ -1140,6 +1148,23 @@ mod tests {
             assert!(((a - b) / b).abs() < 1.0e-3, "{a} vs {b}");
         }
         assert!((v[3] - -0.0002255).abs() < 5.0e-5, "LOD {}", v[3]);
+    }
+
+    /// Between the rows that bracket a leap second (2016-12-31 and
+    /// 2017-01-01), UT1 − UTC is interpolated without the +1 s step, which
+    /// only takes effect at the second row.
+    #[test]
+    fn interp_across_leap_second() {
+        let v0 = eop_from_mjd_utc(57753.0).unwrap()[0];
+        let v1 = eop_from_mjd_utc(57754.0).unwrap()[0];
+        assert!((v1 - v0 - 1.0).abs() < 0.01, "step {v0} -> {v1}");
+        for x in 0..100 {
+            let g = x as f64 / 100.0;
+            let v = eop_from_mjd_utc(57753.0 + g).unwrap()[0];
+            let expected = (1.0 - g) * v0 + g * (v1 - 1.0);
+            assert!((v - expected).abs() < 1.0e-9, "{g}: {v} vs {expected}");
+        }
+        assert_eq!(eop_from_mjd_utc(57754.0).unwrap()[0], v1);
     }
 
     /// Interpolation between two table rows is linear in every column.
