@@ -502,7 +502,10 @@ class TestUT1:
     def test_ut1_vs_erfa_utcut1(self, eop_span):
         """UT1 = UTC + (UT1 - UTC) with satkit's own UT1 - UTC fed to ERFA"""
         rng = np.random.default_rng(8)
-        times = [sk.time.from_mjd(m) for m in rng.uniform(eop_span[0] + 1, eop_span[1] - 1, 1000)]
+        # from 1972-01-01: ERFA models pre-1972 rubber-second UTC (TAI - UTC up
+        # to 9.87 s), satkit uses TAI - UTC = 0 there by convention
+        first = max(eop_span[0], 41317.0)
+        times = [sk.time.from_mjd(m) for m in rng.uniform(first + 1, eop_span[1] - 1, 1000)]
         e1, e2 = _erfa_ut1(times)
         err = mjd_minus_pair_seconds([t.to_mjd(TS.UT1) for t in times], e1, e2)
         assert np.max(np.abs(err)) < TOL_MJD_S
