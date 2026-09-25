@@ -1029,6 +1029,11 @@ class time:
         - If no arguments are passed in, the created object represents the current time
         - If year is passed in, month and day must also be passed in
         - If hour is passed in, minute and second must also be passed in
+        - UTC before 1972 follows the "rubber second" model of USNO
+          ``tai-utc.dat`` / ERFA ``dat`` from 1961-01-01: TAI - UTC drifts
+          linearly and steps by fractions of a second (positive steps are
+          labelled ``23:59:60.x``). Before 1961, UTC is taken to equal TAI
+          (unlike ERFA, which also models 1960).
 
     Example:
         ```python
@@ -1095,7 +1100,9 @@ class time:
             hour: Hour of day, in range [0,23]
             min: Minute of hour, in range [0,59]
             sec: Floating point second of minute, in range [0,60); up to 61
-                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31)
+                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31),
+                and within a pre-1972 positive UTC step (e.g. ``23:59:60.05``
+                on 1963-10-31, up to 61.422818 on 1960-12-31)
             scale: Time scale in which the Gregorian components are
                 interpreted, default is satkit.timescale.UTC. Ignored for the
                 string and no-argument forms.

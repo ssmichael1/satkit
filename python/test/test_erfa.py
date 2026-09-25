@@ -15,9 +15,11 @@ Cases marked ``xfail(strict=True)`` are confirmed satkit defects; being
 strict, they fail once the defect is fixed, so remove the marker with the fix.
 
 Instants are read and built through the internal microsecond count, which is
-TAI (``raw / 86400e6 + 40587`` is the TAI MJD), via the public duration API:
-``(t - time.UNIX_EPOCH).microseconds`` and ``time.UNIX_EPOCH +
-duration(microseconds=raw)``. Both are exact.
+TAI (``raw / 86400e6 + 40587`` is the TAI MJD), via the public duration API
+relative to 1970-01-01 00:00:00 TAI (``TAI_1970`` below):
+``(t - TAI_1970).microseconds`` and ``TAI_1970 + duration(microseconds=raw)``.
+Both are exact. (``time.UNIX_EPOCH`` is the UTC label 1970-01-01T00:00:00,
+8.000082 s of TAI later.)
 """
 
 import calendar
@@ -56,13 +58,18 @@ TOL_MJD_S = 1.5e-6
 # ----------------------------------------------------------------------------
 
 
+# 1970-01-01 00:00:00 TAI, where satkit's microsecond count is zero (TAI MJD
+# 40587 is exact in f64, so this is exact)
+TAI_1970 = sk.time.from_mjd(MJD_UNIX, TS.TAI)
+
+
 def raw_us(t):
     """satkit's internal microsecond count (TAI since 1970-01-01 00:00:00 TAI)"""
-    return (t - sk.time.UNIX_EPOCH).microseconds
+    return (t - TAI_1970).microseconds
 
 
 def from_raw(raw):
-    return sk.time.UNIX_EPOCH + sk.duration(microseconds=int(raw))
+    return TAI_1970 + sk.duration(microseconds=int(raw))
 
 
 def tai_pair(raw):
@@ -275,22 +282,17 @@ class TestLeapSeconds:
         for c in [(1972, 1, 1, 0, 0, 10.0), (1972, 1, 1, 6, 0, 0.0), (1972, 3, 1, 0, 0, 0.0)]:
             assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
-    def test_pre1972_utc_is_treated_as_tai(self):
-        """Convention, not a bug: satkit does not model pre-1972 ("rubber
-        second") UTC and sets TAI - UTC = 0 before 1972. ERFA's dat gives
-        1.42 s (1961) rising to 9.89 s (end of 1971), so pre-1972 TAI / TT /
-        GPS / TDB built from a UTC label differ from ERFA by that much. UT1 is
-        UTC label + UT1 - UTC and is unaffected."""
-        for y in (1950, 1961, 1965, 1969, 1971):
-            c = (y, 6, 1, 12, 0, 0.0)
-            assert_us(sk.time(*c), pair_to_us(*erfa.dtf2d("TAI", *c)), c)
-        assert 1.4 < erfa.dat(1961, 6, 1, 0.5) < 10.0 and 9.8 < erfa.dat(1971, 12, 31, 0.99) < 9.9
+    def test_pre1961_utc_is_treated_as_tai(self):
+        """Convention: satkit models UTC from 1961-01-01 (the first line of
+        USNO tai-utc.dat) and takes TAI - UTC = 0 before it. ERFA's dat also
+        has a 1960 entry (1.42 s), so 1960 labels deliberately differ from
+        ERFA; see TestPre1972UTC for 1961 on."""
+        for c in [(1950, 6, 1, 12, 0, 0.0), (1960, 6, 1, 12, 0, 0.0), (1960, 12, 31, 23, 59, 59.0)]:
+            assert_us(sk.time(*c), pair_to_us(*erfa.dtf2d("TAI", *c)), c, tol_us=0)
 
     def test_pre1970_construction(self):
-        """Construction before 1970 is right (under the pre-1972 convention);
-        only the printing is broken (see next test)"""
         c = (1965, 6, 1, 12, 30, 15.25)
-        assert_us(sk.time(*c), pair_to_us(*erfa.dtf2d("TAI", *c)), c)
+        assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
     def test_pre1970_gregorian_fields(self):
         for c in [(1969, 12, 31, 23, 0, 0.0), (1965, 6, 1, 12, 30, 15.25), (1901, 3, 1, 1, 2, 3.5)]:
@@ -318,14 +320,6 @@ class TestLeapSeconds:
             n += 1
             assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "NEW: the Gregorian constructor truncates second * 1e6 to integer microseconds "
-            "instead of rounding, so ~0.7% of microsecond-exact inputs land 1 us early "
-            "(src/time/instant.rs from_datetime)"
-        ),
-    )
     def test_gregorian_seconds_round_to_microsecond(self):
         bad = []
         for us in range(0, 1_000_000, 997):
@@ -334,6 +328,239 @@ class TestLeapSeconds:
             if got != us:
                 bad.append((us, got))
         assert not bad, f"{len(bad)} inputs truncated, e.g. {bad[:3]}"
+
+
+# ----------------------------------------------------------------------------
+# Pre-1972 ("rubber second") UTC, 1961-01-01 .. 1972-01-01
+# ----------------------------------------------------------------------------
+
+# 1st-of-month 00:00 UTC at which a pre-1972 segment of ERFA's dat starts
+# (1961-01-01 excluded: satkit starts its model there, see
+# test_pre1961_utc_is_treated_as_tai), plus 1972-01-01
+PRE72_BOUNDARIES = [
+    (1961, 8), (1962, 1), (1963, 11), (1964, 1), (1964, 4), (1964, 9), (1965, 1),
+    (1965, 3), (1965, 7), (1965, 9), (1966, 1), (1968, 2), (1972, 1),
+]  # fmt: skip
+
+
+def prev_day(y, m, d=1):
+    iy, im, iday, _ = erfa.jd2cal(2400000.5, erfa.cal2jd(y, m, d)[1] - 1.0)
+    return int(iy), int(im), int(iday)
+
+
+def erfa_step(y, m):
+    """ERFA's TAI - UTC step (s) at 00:00 UTC on the 1st of (y, m): the new
+    value less the preceding day's linear TAI - UTC carried to midnight"""
+    pd = prev_day(y, m)
+    end_of_prev = 2.0 * erfa.dat(*pd, 0.5) - erfa.dat(*pd, 0.0)
+    return erfa.dat(y, m, 1, 0.0) - end_of_prev
+
+
+def is_pre72_step_day(mjd_utc_day):
+    """True for the UTC day that ends in a nonzero pre-1972 step"""
+    for y, m in PRE72_BOUNDARIES:
+        if abs(erfa_step(y, m)) > 1e-9 and erfa.cal2jd(y, m, 1)[1] - 1 == mjd_utc_day:
+            return True
+    return False
+
+
+PRE72_STEP_DAYS = None
+
+
+def pre72_step_days():
+    """(y, m, d) of the days that end in a nonzero pre-1972 step"""
+    global PRE72_STEP_DAYS
+    if PRE72_STEP_DAYS is None:
+        PRE72_STEP_DAYS = {prev_day(y, m) for y, m in PRE72_BOUNDARIES if abs(erfa_step(y, m)) > 1e-9}
+    return PRE72_STEP_DAYS
+
+
+def assert_label_matches_erfa(r, g, iy, im, iday, ihmsf):
+    """satkit's label g of TAI microsecond count r against ERFA.
+
+    ERFA's d2dtf only treats a day as a leap-second day when its step
+    exceeds 0.5 s, so on the days that end in a fractional pre-1972 step it
+    prints the quasi-JD fraction times 86400 (off by up to the step) rather
+    than the label its own dtf2d + utctai map to that instant. satkit follows
+    dtf2d + utctai; there the label must map back to r through ERFA."""
+    if g[:3] in pre72_step_days():
+        assert abs(erfa_us_from_utc(*g) - r) <= 1, (int(r), g)
+        return
+    exp = (int(iy), int(im), int(iday), int(ihmsf["h"]), int(ihmsf["m"]))
+    sec = ihmsf["s"] + ihmsf["f"] * 1e-6
+    assert g[:5] == exp and g[5] == pytest.approx(sec, abs=1.5e-6), (int(r), g, exp, sec)
+
+
+def random_pre72_labels(n, seed):
+    """Random microsecond UTC labels 1961-01-01 .. 1971-12-31"""
+    rng = np.random.default_rng(seed)
+    out = []
+    while len(out) < n:
+        c = (
+            int(rng.integers(1961, 1972)),
+            int(rng.integers(1, 13)),
+            int(rng.integers(1, 29)),
+            int(rng.integers(0, 24)),
+            int(rng.integers(0, 60)),
+            float(rng.integers(0, 60_000_000)) * 1e-6,
+        )
+        out.append(c)
+    return out
+
+
+class TestPre1972UTC:
+    def test_steps(self):
+        """The steps of ERFA's table (and so of satkit's): +-0.05/0.1 s,
+        zero where only the rate changes, +0.107758 s at 1972-01-01"""
+        steps = {ym: round(erfa_step(*ym), 7) for ym in PRE72_BOUNDARIES}
+        assert steps == {
+            (1961, 8): -0.05, (1962, 1): 0.0, (1963, 11): 0.1, (1964, 1): 0.0, (1964, 4): 0.1,
+            (1964, 9): 0.1, (1965, 1): 0.1, (1965, 3): 0.1, (1965, 7): 0.1, (1965, 9): 0.1,
+            (1966, 1): 0.0, (1968, 2): -0.1, (1972, 1): 0.107758,
+        }  # fmt: skip
+        # satkit's step: elapsed TAI over the last UTC second of the day,
+        # less that second's length (1 s plus its drift)
+        for y, m in PRE72_BOUNDARIES:
+            pd = prev_day(y, m)
+            if steps[(y, m)] < 0:
+                continue  # 23:59:59 + 1 s lands in the next day; covered below
+            dt = (sk.time(y, m, 1) - sk.time(*pd, 23, 59, 59.0)).microseconds
+            drift = erfa.dat(*pd, 1.0) - erfa.dat(*pd, 1.0 - 1.0 / 86400.0)
+            assert abs(dt - 1e6 * (1.0 + drift + steps[(y, m)])) <= 1, (y, m, dt)
+
+    def test_dat_every_day(self):
+        """TAI - UTC at 00:00, 12:00 and 23:59:59 of every day 1961-1971
+        against erfa.dat"""
+        d0 = erfa.cal2jd(1961, 1, 1)[1]
+        d1 = erfa.cal2jd(1972, 1, 1)[1]
+        worst = 0
+        for mjd in np.arange(d0, d1):
+            y, m, d, _ = erfa.jd2cal(2400000.5, mjd)
+            y, m, d = int(y), int(m), int(d)
+            for h, mi, s, fd in ((0, 0, 0.0, 0.0), (12, 0, 0.0, 0.5), (23, 59, 59.0, 86399.0 / 86400.0)):
+                got = raw_us(sk.time(y, m, d, h, mi, s)) - pair_to_us(*erfa.dtf2d("TAI", y, m, d, h, mi, s))
+                err = got - erfa.dat(y, m, d, fd) * 1e6
+                worst = max(worst, abs(err))
+                assert abs(err) <= 0.5 + 1e-6, ((y, m, d, h, mi, s), err)
+        assert worst <= 0.5 + 1e-6
+
+    def test_random_labels(self):
+        """3000 random microsecond labels against ERFA dtf2d + utctai"""
+        for c in random_pre72_labels(3000, 11):
+            assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
+
+    @pytest.mark.parametrize("ym", PRE72_BOUNDARIES, ids=[f"{y}-{m:02d}" for y, m in PRE72_BOUNDARIES])
+    def test_labels_around_step(self, ym):
+        """Labels across each boundary, including 23:59:60.x inside a positive
+        step and the never-occurring labels of a negative step, which both
+        satkit and ERFA put on the first |step| of the next day"""
+        y, m = ym
+        pd = prev_day(y, m)
+        step = round(erfa_step(y, m), 7)
+        labels = [(*pd, 23, 59, s) for s in (58.0, 58.5, 59.0, 59.5, 59.85, 59.899999, 59.9, 59.94, 59.96, 59.999999)]
+        if step > 0:
+            labels += [(*pd, 23, 59, 60.0 + f * step) for f in (0.0, 0.5)]
+            labels.append((*pd, 23, 59, round(60.0 + step - 1e-6, 6)))
+        labels += [(y, m, 1, 0, 0, s) for s in (0.0, 0.000001, 0.02, 0.05, 0.1, 0.5, 1.0)]
+        for c in labels:
+            t = sk.time(*c)
+            assert_us(t, erfa_us_from_utc(*c), c)
+            g = t.to_gregorian()
+            missing = step < 0 and c[:3] == pd and c[5] >= 60.0 + step
+            if missing:
+                # ... and reads back as the next day's label
+                assert g[:5] == (y, m, 1, 0, 0) and g[5] == pytest.approx(c[5] - 60.0 - step, abs=1.5e-6), (c, g)
+            else:
+                assert g[:5] == c[:5] and g[5] == pytest.approx(c[5], abs=1e-7), (c, g)
+        if step <= 0:
+            with pytest.raises(Exception):
+                sk.time(*pd, 23, 59, 60.0)
+        else:
+            with pytest.raises(Exception):
+                sk.time(*pd, 23, 59, 60.0 + step + 1e-6)
+
+    @pytest.mark.parametrize("ym", PRE72_BOUNDARIES, ids=[f"{y}-{m:02d}" for y, m in PRE72_BOUNDARIES])
+    def test_instants_to_labels_around_step(self, ym):
+        """TAI instants within +/-2.5 s of each boundary, and every microsecond
+        near both ends of a step, against ERFA (see assert_label_matches_erfa),
+        and strictly increasing labels"""
+        y, m = ym
+        r0 = erfa_us_from_utc(y, m, 1, 0, 0, 0.0)
+        step_us = round(erfa_step(y, m) * 1e6)
+        offsets = list(range(-2_500_000, 2_500_001, 125_000))
+        for edge in {0, -step_us}:
+            offsets += [edge + k for k in range(-3, 4)]
+        raws = np.array(sorted({r0 + o for o in offsets}), dtype=np.int64)
+        u1, u2 = erfa.taiutc(*tai_pair(raws))
+        iy, im, iday, ihmsf = erfa.d2dtf("UTC", 6, u1, u2)
+        prev = None
+        for k, r in enumerate(raws):
+            g = from_raw(r).to_gregorian()
+            assert_label_matches_erfa(r, g, iy[k], im[k], iday[k], ihmsf[k])
+            if prev is not None:
+                assert (g[:5], g[5]) > prev, (int(r - r0), prev, g)
+            prev = (g[:5], g[5])
+
+    def test_random_instants_to_labels(self):
+        """2000 random TAI instants 1961-1971 against ERFA taiutc + d2dtf"""
+        lo = erfa_us_from_utc(1961, 1, 1, 0, 0, 0.0)
+        hi = erfa_us_from_utc(1972, 1, 1, 0, 0, 0.0)
+        raws = np.random.default_rng(12).integers(lo, hi, 2000)
+        u1, u2 = erfa.taiutc(*tai_pair(raws))
+        iy, im, iday, ihmsf = erfa.d2dtf("UTC", 6, u1, u2)
+        for k, r in enumerate(raws):
+            assert_label_matches_erfa(r, from_raw(r).to_gregorian(), iy[k], im[k], iday[k], ihmsf[k])
+
+    def test_to_mjd_utc_off_step_days(self):
+        """UTC MJD against ERFA's quasi-JD, except on the days that end in a
+        step (ERFA stretches or shrinks those days' fraction; satkit keeps
+        86400 s, as for leap seconds)"""
+        lo = erfa_us_from_utc(1961, 1, 1, 0, 0, 0.0)
+        hi = erfa_us_from_utc(1972, 1, 1, 0, 0, 0.0)
+        raws = np.random.default_rng(13).integers(lo, hi, 2000)
+        u1, u2 = erfa.taiutc(*tai_pair(raws))
+        keep = np.array([not is_pre72_step_day(np.floor((a - 2400000.5) + b)) for a, b in zip(u1, u2)])
+        got = np.array([from_raw(r).to_mjd(TS.UTC) for r in raws])
+        err = mjd_minus_pair_seconds(got, u1, u2)[keep]
+        assert np.max(np.abs(err)) < TOL_MJD_S
+        # and from_mjd inverts it
+        for r, mjd in zip(raws[keep][:300], got[keep][:300]):
+            assert abs(raw_us(sk.time.from_mjd(mjd)) - r) <= 2
+
+    def test_tt_gps_tdb_of_labels(self):
+        """TT / GPS of pre-1972 UTC labels (TDB follows TT)"""
+        for c in random_pre72_labels(300, 14):
+            a1, a2 = erfa.utctai(*erfa.dtf2d("UTC", *c))
+            t = sk.time(*c)
+            tt1, tt2 = erfa.taitt(a1, a2)
+            assert mjd_minus_pair_seconds(t.to_mjd(TS.TT), tt1, tt2) == pytest.approx(0.0, abs=TOL_MJD_S), c
+            gps = mjd_minus_pair_seconds(t.to_mjd(TS.GPS), a1, a2 - 19.0 / 86400.0)
+            assert gps == pytest.approx(0.0, abs=TOL_MJD_S), c
+
+    def test_unix_epoch_and_unixtime(self):
+        """UNIX_EPOCH is the UTC label 1970-01-01T00:00:00 (TAI - UTC =
+        8.000082 s), and Unix time stays UTC-based before 1972"""
+        assert sk.time.UNIX_EPOCH == sk.time(1970, 1, 1)
+        assert raw_us(sk.time.UNIX_EPOCH) == erfa_us_from_utc(1970, 1, 1, 0, 0, 0.0) == 8_000_082
+        assert sk.time.UNIX_EPOCH.to_unixtime() == 0.0
+        for c in random_pre72_labels(300, 15):
+            ut = calendar.timegm((*c[:5], 0)) + c[5]
+            t = sk.time.from_unixtime(ut)
+            assert_us(t, erfa_us_from_utc(*c), c)
+            assert t.to_unixtime() == pytest.approx(ut, abs=1e-6)
+
+    def test_1961_step(self):
+        """satkit's own 1.422818 s step from TAI-aligned labels to the 1961
+        segment: an inserted interval 1960-12-31T23:59:60 .. 23:59:61.422817"""
+        t = sk.time(1961, 1, 1)
+        assert raw_us(t) == erfa_us_from_utc(1961, 1, 1, 0, 0, 0.0)
+        assert (t - sk.time(1960, 12, 31, 23, 59, 59.0)).microseconds == 2_422_818
+        t = sk.time(1960, 12, 31, 23, 59, 61.25)
+        assert str(t) == "1960-12-31T23:59:61.250000Z"
+        assert sk.time.from_rfc3339(str(t)) == t
+        assert str(from_raw(raw_us(sk.time(1961, 1, 1)) - 1)) == "1960-12-31T23:59:61.422817Z"
+        with pytest.raises(Exception):
+            sk.time(1960, 12, 31, 23, 59, 61.422818)
 
 
 # ----------------------------------------------------------------------------
@@ -491,21 +718,32 @@ def eop_rows():
 
 
 def _erfa_ut1(times):
-    """ERFA UT1 two-part JD from satkit's TAI, with satkit's UT1 - UTC"""
+    """ERFA UT1 two-part JD from satkit's TAI, with satkit's UT1 - UTC.
+
+    Before 1972 erfa.utcut1 forms UT1 - TAI with TAI - UTC at 0h of the day,
+    so it drops that day's drift of TAI - UTC (up to 2.6 ms by 24h) and is
+    not UT1 = UTC + (UT1 - UTC). There UT1 = TAI + (UT1 - UTC) - (TAI - UTC)
+    is formed with erfa.taiut1 and erfa.dat at the instant instead."""
     raws = np.array([raw_us(t) for t in times], dtype=np.int64)
-    u1, u2 = erfa.taiutc(*tai_pair(raws))
+    a1, a2 = tai_pair(raws)
+    u1, u2 = erfa.taiutc(a1, a2)
     dut1 = np.array([ft.earth_orientation_params(t)[0] for t in times])
-    return erfa.utcut1(u1, u2, dut1)
+    e1, e2 = erfa.utcut1(u1, u2, dut1)
+    for k in np.nonzero((u1 - 2400000.5) + u2 < 41317.0)[0]:
+        iy, im, iday, fd = erfa.jd2cal(u1[k], u2[k])
+        if fd > 1.0 - 1e-12:
+            # taiutc can return 00:00 of a step day as 1e-14 d before it
+            iy, im, iday, _ = erfa.jd2cal(u1[k], u2[k] + 1e-9)
+            fd = 0.0
+        e1[k], e2[k] = erfa.taiut1(a1[k], a2[k], dut1[k] - erfa.dat(iy, im, iday, fd))
+    return e1, e2
 
 
 class TestUT1:
     def test_ut1_vs_erfa_utcut1(self, eop_span):
         """UT1 = UTC + (UT1 - UTC) with satkit's own UT1 - UTC fed to ERFA"""
         rng = np.random.default_rng(8)
-        # from 1972-01-01: ERFA models pre-1972 rubber-second UTC (TAI - UTC up
-        # to 9.87 s), satkit uses TAI - UTC = 0 there by convention
-        first = max(eop_span[0], 41317.0)
-        times = [sk.time.from_mjd(m) for m in rng.uniform(first + 1, eop_span[1] - 1, 1000)]
+        times = [sk.time.from_mjd(m) for m in rng.uniform(eop_span[0] + 1, eop_span[1] - 1, 1000)]
         e1, e2 = _erfa_ut1(times)
         err = mjd_minus_pair_seconds([t.to_mjd(TS.UT1) for t in times], e1, e2)
         assert np.max(np.abs(err)) < TOL_MJD_S
@@ -521,6 +759,26 @@ class TestUT1:
             t = sk.time.from_mjd(m)
             t2 = sk.time.from_mjd(t.to_mjd(TS.UT1), TS.UT1)
             assert abs(raw_us(t2) - raw_us(t)) <= 2, m
+
+    def test_ut1_across_pre72_steps(self, eop_span):
+        """UT1 is continuous through the fractional pre-1972 UTC steps (UT1 -
+        UTC is interpolated as UT1 - TAI) and matches ERFA. Needs an EOP table
+        reaching before 1972 (CelesTrak's EOP-All.csv next to finals2000A.all)."""
+        bounds = [(y, m) for (y, m) in PRE72_BOUNDARIES if erfa.cal2jd(y, m, 1)[1] - 1 > eop_span[0]]
+        if not bounds:
+            pytest.skip("EOP table starts after 1972; add EOP-All.csv for 1962-1972")
+        for y, m in bounds:
+            r0 = erfa_us_from_utc(y, m, 1, 0, 0, 0.0)
+            # every 0.25 s, plus inside a 0.1 s inserted interval
+            offsets = list(range(-2_000_000, 2_000_001, 250_000)) + [-50_000, -1]
+            times = [from_raw(r0 + o) for o in sorted(offsets)]
+            ut1 = np.array([t.to_mjd(TS.UT1) for t in times])
+            ut1_minus_tai = (ut1 - np.array([t.to_mjd(TS.TAI) for t in times])) * 86400.0
+            # UT1 - TAI changes by ~3 ms/day, i.e. < 0.2 us over these 4 s
+            assert np.ptp(ut1_minus_tai) < 5e-6, (y, m, np.ptp(ut1_minus_tai))
+            e1, e2 = _erfa_ut1(times)
+            err = mjd_minus_pair_seconds(ut1, e1, e2)
+            assert np.max(np.abs(err)) < TOL_MJD_S, (y, m, np.max(np.abs(err)))
 
     def test_ut1_inside_leap_second(self, eop_span):
         times = []

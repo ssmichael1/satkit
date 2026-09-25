@@ -91,6 +91,23 @@ code follows where that is useful.
   Observatoire de Paris). <https://hpiers.obspm.fr/iers/bul/bulc/bulletinc.dat>.
   Source of the TAI−UTC table compiled into `satkit`.
 
+<a id="usnotaiutc"></a>
+- **USNO `tai-utc.dat`** — TAI−UTC since 1961, with the drift terms of
+  pre-1972 ("rubber second") UTC. <https://maia.usno.navy.mil/ser7/tai-utc.dat>.
+  Source of `satkit`'s 1961–1971 UTC model.
+
+<a id="erfa"></a>
+- **ERFA** — Essential Routines for Fundamental Astronomy, the BSD-licensed
+  derivative of the IAU SOFA library. <https://github.com/liberfa/erfa>. Its
+  `dat` carries the same pre-1972 coefficients as `tai-utc.dat`; `satkit`'s
+  time scales are tested against `dat`, `utctai`/`taiutc` and
+  `dtf2d`/`d2dtf` through `pyerfa`.
+
+<a id="urban2013"></a>
+- **Urban, S. E., & Seidelmann, P. K. (eds.) (2013).** *Explanatory
+  Supplement to the Astronomical Almanac*, 3rd ed. University Science Books.
+  Used for: the definition of pre-1972 UTC.
+
 ## Papers and reports
 
 <a id="hoots1980"></a>

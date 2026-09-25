@@ -137,6 +137,10 @@ impl From<PyTimeScale> for TimeScale {
 ///
 /// Note: If no arguments are passed in, the created object represents the current time
 ///
+/// Note: UTC before 1972 follows the "rubber second" model of USNO
+/// ``tai-utc.dat`` / ERFA ``dat`` from 1961-01-01 (TAI - UTC drifts and steps
+/// by fractions of a second); before 1961, UTC is taken to equal TAI.
+///
 /// Args:
 ///     year (int): Gregorian year (e.g., 2024) (optional)
 ///     month (int): Gregorian month (1 = January, 2 = February, ...) (optional)

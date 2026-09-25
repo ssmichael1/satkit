@@ -1,3 +1,4 @@
+use super::utc_pre1972;
 use super::{InstantError, TimeScale};
 use serde::{Deserialize, Serialize};
 
@@ -8,8 +9,8 @@ type Result<T> = std::result::Result<T, InstantError>;
 const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 /// A module for handling time and date conversions.  Time is stored natively as
-/// the number of microseconds since the Unix epoch (1970-01-01 00:00:00 UTC)
-/// with leap seconds accounted for.
+/// a continuous count of TAI microseconds since 1970-01-01 00:00:00 TAI, so
+/// leap seconds (and the pre-1972 UTC offsets) are accounted for.
 ///
 /// The Instant struct provides methods for converting to and from Unix time, GPS time,
 /// Julian Date, Modified Julian Date, and Gregorian calendar date.
@@ -22,8 +23,9 @@ const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 ///
 #[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct Instant {
-    /// The number of microseconds since
-    /// Unix epoch (1970-01-01 00:00:00 UTC)
+    /// TAI microseconds since 1970-01-01 00:00:00 TAI (the TAI MJD is
+    /// `40587 + raw / 86400e6`). This is not Unix time: 1970-01-01 00:00:00
+    /// UTC is `raw = 8_000_082`, since TAI − UTC was 8.000082 s then.
     pub raw: i64,
 }
 
@@ -74,15 +76,12 @@ mod gregorian_coefficients {
 /// The inserted interval is `[t, t + (ls - ls_prev))`: one second for every
 /// real leap second.
 ///
-/// The oldest entry is special. satkit treats TAI − UTC as zero before 1972
-/// (pre-1972 "rubber second" UTC is not modelled), so the 10 s offset that
-/// UTC started with on 1972-01-01 is represented here as a single 10 s
-/// inserted interval ending at 1972-01-01 00:00:00 UTC: `t` is
-/// 1972-01-01 00:00:00 UTC on the pre-1972 basis (`ls_prev` = 0), and the
-/// `raw` values in `[t, t + 10 s)` are labelled `1971-12-31T23:59:60` through
-/// `23:59:69.999999`. Those labels do not correspond to any real UTC time;
-/// they only keep the mapping one-to-one and monotonic. As a consequence,
-/// `1972-01-01 00:00:00 − 1971-12-31 00:00:00` is 86410 s.
+/// The oldest entry is the 1972-01-01 step from pre-1972 UTC (see
+/// `utc_pre1972`), whose drifting TAI − UTC had reached 9.892242 s at
+/// 1972-01-01 00:00:00 UTC. Its `ls_prev` is that value, so the step is a
+/// 0.107758 s inserted interval labelled `1971-12-31T23:59:60.0` to
+/// `23:59:60.107757`, and 1971-12-31 is 86,400.107758 SI seconds plus that
+/// day's drift (0.002592 s) long.
 const LEAP_SECOND_TABLE: [(i64, i64); 28] = [
     (1483228836000000, 37000000), // 2017-01-01
     (1435708835000000, 36000000), // 2015-07-01
@@ -111,16 +110,20 @@ const LEAP_SECOND_TABLE: [(i64, i64); 28] = [
     (126230412000000, 13000000),  // 1974-01-01
     (94694411000000, 12000000),   // 1973-01-01
     (78796810000000, 11000000),   // 1972-07-01
-    (63072000000000, 10000000),   // 1972-01-01 (10 s step; see above)
+    // 1972-01-01: +0.107758 s from pre-1972 UTC (see above)
+    (63072000000000 + utc_pre1972::DAT_US_AT_END, 10000000),
 ];
 
 /// Iterate the leap-second table as `(t, ls, ls_prev)`, newest first, where
-/// `ls_prev` is the offset in effect before `t` (zero before the oldest entry).
+/// `ls_prev` is the offset in effect before `t` (for the oldest entry, the
+/// pre-1972 TAI − UTC at 1972-01-01 00:00:00 UTC).
 fn leap_entries() -> impl Iterator<Item = (i64, i64, i64)> {
-    LEAP_SECOND_TABLE
-        .iter()
-        .enumerate()
-        .map(|(i, &(t, ls))| (t, ls, LEAP_SECOND_TABLE.get(i + 1).map_or(0, |e| e.1)))
+    LEAP_SECOND_TABLE.iter().enumerate().map(|(i, &(t, ls))| {
+        let ls_prev = LEAP_SECOND_TABLE
+            .get(i + 1)
+            .map_or(utc_pre1972::DAT_US_AT_END, |e| e.1);
+        (t, ls, ls_prev)
+    })
 }
 
 /// TAI − UTC, in microseconds, at the internal `raw` count.
@@ -129,13 +132,14 @@ fn leap_entries() -> impl Iterator<Item = (i64, i64, i64)> {
 /// so `raw - microleapseconds(raw)` repeats the last second(s) of the day
 /// (e.g. `23:59:59.x` for the whole of `23:59:60.x`), which keeps UTC MJD,
 /// unixtime and the UTC day number on the day the leap second belongs to.
+/// Before 1972 the offset drifts (see `utc_pre1972`); before 1961 it is zero.
 fn microleapseconds(raw: i64) -> i64 {
     for (t, ls) in LEAP_SECOND_TABLE.iter() {
         if raw >= *t {
             return *ls;
         }
     }
-    0
+    utc_pre1972::raw_to_utc(raw).map_or(0, |(utc, _)| raw - utc)
 }
 
 /// TAI − UTC, in microseconds, in effect at the UTC-basis (leap-second-free,
@@ -147,7 +151,7 @@ fn utc_microleapseconds(utc: i64) -> i64 {
             return ls;
         }
     }
-    0
+    utc_pre1972::dat_us(utc).unwrap_or(0)
 }
 
 /// Fold leap seconds into a raw count that was built on a UTC basis (i.e. as if
@@ -168,12 +172,24 @@ fn leap_interval_offset(raw: i64) -> Option<i64> {
     leap_entries()
         .find(|(t, ls, ls_prev)| raw >= *t && raw - *t < ls - ls_prev)
         .map(|(t, _, _)| raw - t)
+        .or_else(|| utc_pre1972::raw_to_utc(raw).and_then(|(_, offset)| offset))
+}
+
+/// If an inserted interval (a leap second, or a positive pre-1972 step) ends
+/// at the UTC-basis count `utc` (a 00:00:00 UTC), return the `raw` count at
+/// which it starts and its length in microseconds.
+pub(super) fn inserted_interval_ending_at(utc: i64) -> Option<(i64, i64)> {
+    leap_entries()
+        .find(|(t, _, ls_prev)| utc == t - ls_prev)
+        .map(|(t, ls, ls_prev)| (t, ls - ls_prev))
+        .or_else(|| utc_pre1972::inserted_interval_ending_at(utc))
 }
 
 /// TAI − UTC, in seconds, in effect at the given UTC MJD (new offset from
-/// 00:00:00 UTC of the day after each leap second). Used to route UT1
-/// conversions through the continuous UT1 − TAI.
-fn tai_minus_utc_at_mjd_utc(mjd_utc: f64) -> f64 {
+/// 00:00:00 UTC of the day after each leap second; before 1972 the drifting
+/// offset of `utc_pre1972`, zero before 1961). Used to route UT1 conversions
+/// and the UT1 − UTC interpolation through the continuous UT1 − TAI.
+pub(crate) fn tai_minus_utc_at_mjd_utc(mjd_utc: f64) -> f64 {
     // Compare in MJD (as the EOP table lookup does) rather than rounding the
     // query to microseconds, so both switch at exactly the same value.
     for (t, ls, ls_prev) in leap_entries() {
@@ -182,7 +198,7 @@ fn tai_minus_utc_at_mjd_utc(mjd_utc: f64) -> f64 {
             return ls as f64 * 1.0e-6;
         }
     }
-    0.0
+    utc_pre1972::dat_seconds(mjd_utc).unwrap_or(0.0)
 }
 
 /// Argument, in radians, of the periodic TDB − TT term (Vallado Eq. 3-50):
@@ -197,7 +213,8 @@ impl Instant {
     /// Construct a new Instant from raw microseconds
     ///
     /// # Arguments
-    /// * `raw` - The number of microseconds since unixtime epoch
+    /// * `raw` - TAI microseconds since 1970-01-01 00:00:00 TAI (see
+    ///   [`Instant::raw`]; not Unix time)
     ///
     /// # Returns
     /// A new Instant object
@@ -243,10 +260,10 @@ impl Instant {
     /// Unixtime is the number of non-leap seconds since Jan 1 1970 00:00:00 UTC
     /// (Leap seconds are ignored!!)
     pub fn from_unixtime(unixtime: f64) -> Self {
-        let raw = (unixtime * 1.0e6) as i64 + Self::UNIX_EPOCH.raw;
-        // unixtime ignores leap seconds; fold them in.
+        // unixtime is the UTC-basis count (it ignores leap seconds and the
+        // pre-1972 offsets); fold TAI − UTC in.
         Self {
-            raw: add_leapseconds(raw),
+            raw: add_leapseconds((unixtime * 1.0e6).round() as i64),
         }
     }
 
@@ -259,8 +276,8 @@ impl Instant {
     /// Unixtime is the number of non-leap seconds since
     /// 1970-01-01 00:00:00 UTC.
     pub fn as_unixtime(&self) -> f64 {
-        // Subtract leap seconds since unixtime ignores them
-        (self.raw - Self::UNIX_EPOCH.raw - microleapseconds(self.raw)) as f64 * 1.0e-6
+        // Subtract TAI − UTC since unixtime ignores it
+        (self.raw - microleapseconds(self.raw)) as f64 * 1.0e-6
     }
 
     /// J2000 epoch is 2000-01-01 12:00:00 TT
@@ -269,8 +286,9 @@ impl Instant {
         raw: 946727967816000,
     };
 
-    /// Unix epoch is 1970-01-01 00:00:00 UTC
-    pub const UNIX_EPOCH: Self = Self { raw: 0 };
+    /// Unix epoch is 1970-01-01 00:00:00 UTC. TAI − UTC was 8.000082 s then
+    /// (pre-1972 UTC), so its `raw` is 8,000,082 µs, not zero.
+    pub const UNIX_EPOCH: Self = Self { raw: 8_000_082 };
 
     /// GPS epoch is 1980-01-06 00:00:00 UTC
     pub const GPS_EPOCH: Self = Self {
@@ -281,6 +299,10 @@ impl Instant {
 
     /// Modified Julian day epoch is
     /// 1858-11-17 00:00:00 UTC
+    ///
+    /// satkit takes TAI − UTC = 0 before 1961, so this is also 1858-11-17
+    /// 00:00:00 TAI, and its `raw` (−40587 days) doubles as the UTC-basis
+    /// (unixtime-style) microsecond count of MJD 0 in the UTC conversions.
     pub const MJD_EPOCH: Self = Self {
         raw: -3506716800000000,
     };
@@ -584,8 +606,9 @@ impl Instant {
         let mut minute = (utc_usec_of_day % 3_600_000_000) / 60_000_000;
         let mut second = (utc_usec_of_day % 60_000_000) as f64 * 1.0e-6;
 
-        // Inside an inserted interval: label as 23:59:60.x (23:59:60 to
-        // 23:59:69.x for the 10 s step at 1972-01-01; see LEAP_SECOND_TABLE)
+        // Inside an inserted interval: label as 23:59:60.x (up to
+        // 23:59:61.422817 for the 1.422818 s step at 1961-01-01; see
+        // utc_pre1972)
         if let Some(offset) = leap_interval_offset(self.raw) {
             hour = 23;
             minute = 59;
@@ -703,9 +726,19 @@ impl Instant {
     ///
     /// # Leap seconds
     /// `second` in `[60, 61)` is accepted only as the label of a real UTC leap
-    /// second, e.g. `2016-12-31 23:59:60.5`, and is otherwise an error (the
-    /// 10 s step at 1972-01-01 allows `[60, 70)` on 1971-12-31; see the
-    /// leap-second table).
+    /// second, e.g. `2016-12-31 23:59:60.5`, and is otherwise an error. Before
+    /// 1972 the positive UTC steps are labelled the same way: 0.1 s (e.g.
+    /// `1963-10-31 23:59:60.05`), 0.107758 s on 1971-12-31, and 1.422818 s on
+    /// 1960-12-31 (`[60, 61.422818)`).
+    ///
+    /// # Pre-1972 UTC
+    /// From 1961 to 1972 TAI − UTC drifted ("rubber seconds") and stepped by
+    /// fractions of a second; it is evaluated at the label, as in ERFA `dat`
+    /// and `utctai`. UTC stepped back on 1961-08-01 (0.05 s) and 1968-02-01
+    /// (0.1 s), so the last 0.05 s / 0.1 s of labels on the preceding days
+    /// never occurred; they are accepted and, as in ERFA, land on the same
+    /// instants as the first 0.05 s / 0.1 s of the next day. Before 1961,
+    /// TAI − UTC is taken as 0.
     pub fn from_datetime(
         year: i32,
         month: i32,
@@ -739,10 +772,10 @@ impl Instant {
             return Err(InstantError::InvalidMinute(minute));
         }
         if !(0.0..60.0).contains(&second) {
-            // Check for rare case of leap second. Seconds up to 70 are only
-            // ever valid for the 10 s step at 1972-01-01 (see
-            // LEAP_SECOND_TABLE); ordinary leap seconds allow [60, 61).
-            if (60.0..70.0).contains(&second) {
+            // Check for rare case of leap second. Ordinary leap seconds allow
+            // [60, 61); the longest inserted interval, the 1.422818 s step at
+            // 1961-01-01, allows up to 61.422818 (checked exactly below).
+            if (60.0..62.0).contains(&second) {
                 check_leapsecond = true;
             } else {
                 return Err(InstantError::InvalidSecondF(second));
@@ -766,7 +799,7 @@ impl Instant {
         // minute (i.e. 00:00:00 of the next day, on the UTC basis) plus an
         // offset into the inserted interval; everything else directly.
         let (minute_second, leap_offset) = if check_leapsecond {
-            (60.0, ((second - 60.0) * 1_000_000.0) as i64)
+            (60.0, ((second - 60.0) * 1_000_000.0).round() as i64)
         } else {
             (second, 0)
         };
@@ -777,17 +810,16 @@ impl Instant {
             .checked_mul(86_400_000_000)
             .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000))
             .and_then(|v| v.checked_add(minute as i64 * 60_000_000))
-            .and_then(|v| v.checked_add((minute_second * 1_000_000.0) as i64))
+            .and_then(|v| v.checked_add((minute_second * 1_000_000.0).round() as i64))
             .and_then(|v| v.checked_add(Self::MJD_EPOCH.raw))
             .ok_or(InstantError::InvalidYear(year))?;
 
         if check_leapsecond {
-            // Valid only if `utc` is the 00:00:00 UTC at which a leap second
-            // ends and the offset lies inside that leap second
-            return leap_entries()
-                .find(|(t, _, ls_prev)| utc == t - ls_prev)
-                .filter(|(_, ls, ls_prev)| leap_offset < ls - ls_prev)
-                .map(|(t, _, _)| Self {
+            // Valid only if `utc` is the 00:00:00 UTC at which an inserted
+            // interval ends and the offset lies inside that interval
+            return inserted_interval_ending_at(utc)
+                .filter(|(_, len)| leap_offset < *len)
+                .map(|(t, _)| Self {
                     raw: t + leap_offset,
                 })
                 .ok_or(InstantError::InvalidLeapSecond);
