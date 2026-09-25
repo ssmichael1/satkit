@@ -59,9 +59,30 @@ mod gregorian_coefficients {
     pub const C: i64 = -38;
 }
 
-/// Leap second table
-/// The first element is the number of microseconds since unixtime epoch
-/// The second element is the number of leap seconds to add as microseconds
+/// Leap second table, newest first.
+///
+/// Each entry is `(t, ls)`:
+///
+/// * `t` is the internal (continuous) `raw` count, in microseconds, at which
+///   the inserted time *begins* — i.e. the instant labelled `23:59:60` on the
+///   last day before the new offset takes effect. Equivalently,
+///   `t = u + ls_prev`, where `u` is the UTC-basis (leap-second-free, unixtime)
+///   microsecond count of the following 00:00:00 UTC and `ls_prev` is the
+///   previous entry's offset.
+/// * `ls` is TAI − UTC, in microseconds, from `t` onwards.
+///
+/// The inserted interval is `[t, t + (ls - ls_prev))`: one second for every
+/// real leap second.
+///
+/// The oldest entry is special. satkit treats TAI − UTC as zero before 1972
+/// (pre-1972 "rubber second" UTC is not modelled), so the 10 s offset that
+/// UTC started with on 1972-01-01 is represented here as a single 10 s
+/// inserted interval ending at 1972-01-01 00:00:00 UTC: `t` is
+/// 1972-01-01 00:00:00 UTC on the pre-1972 basis (`ls_prev` = 0), and the
+/// `raw` values in `[t, t + 10 s)` are labelled `1971-12-31T23:59:60` through
+/// `23:59:69.999999`. Those labels do not correspond to any real UTC time;
+/// they only keep the mapping one-to-one and monotonic. As a consequence,
+/// `1972-01-01 00:00:00 − 1971-12-31 00:00:00` is 86410 s.
 const LEAP_SECOND_TABLE: [(i64, i64); 28] = [
     (1483228836000000, 37000000), // 2017-01-01
     (1435708835000000, 36000000), // 2015-07-01
@@ -90,15 +111,40 @@ const LEAP_SECOND_TABLE: [(i64, i64); 28] = [
     (126230412000000, 13000000),  // 1974-01-01
     (94694411000000, 12000000),   // 1973-01-01
     (78796810000000, 11000000),   // 1972-07-01
-    (63072009000000, 10000000),   // 1972-01-01
+    (63072000000000, 10000000),   // 1972-01-01 (10 s step; see above)
 ];
 
-/// Return the number of leap "micro" seconds at "raw" time,
-/// which is microseconds since unixtime epoch
+/// Iterate the leap-second table as `(t, ls, ls_prev)`, newest first, where
+/// `ls_prev` is the offset in effect before `t` (zero before the oldest entry).
+fn leap_entries() -> impl Iterator<Item = (i64, i64, i64)> {
+    LEAP_SECOND_TABLE
+        .iter()
+        .enumerate()
+        .map(|(i, &(t, ls))| (t, ls, LEAP_SECOND_TABLE.get(i + 1).map_or(0, |e| e.1)))
+}
+
+/// TAI − UTC, in microseconds, at the internal `raw` count.
+///
+/// Inside an inserted (leap-second) interval this is already the new offset,
+/// so `raw - microleapseconds(raw)` repeats the last second(s) of the day
+/// (e.g. `23:59:59.x` for the whole of `23:59:60.x`), which keeps UTC MJD,
+/// unixtime and the UTC day number on the day the leap second belongs to.
 fn microleapseconds(raw: i64) -> i64 {
     for (t, ls) in LEAP_SECOND_TABLE.iter() {
-        if raw > *t {
+        if raw >= *t {
             return *ls;
+        }
+    }
+    0
+}
+
+/// TAI − UTC, in microseconds, in effect at the UTC-basis (leap-second-free,
+/// unixtime-style) microsecond count `utc`. The new offset applies from
+/// 00:00:00 UTC of the day after the leap second.
+fn utc_microleapseconds(utc: i64) -> i64 {
+    for (t, ls, ls_prev) in leap_entries() {
+        if utc >= t - ls_prev {
+            return ls;
         }
     }
     0
@@ -107,15 +153,44 @@ fn microleapseconds(raw: i64) -> i64 {
 /// Fold leap seconds into a raw count that was built on a UTC basis (i.e. as if
 /// leap seconds did not exist), producing the internal continuous-time raw
 /// count. Applied when constructing an [`Instant`] from unixtime, a UTC MJD, or
-/// a Gregorian date. The second lookup handles the rare case where adding the
-/// offset pushes the time across another leap-second boundary.
-fn add_leapseconds(raw: i64) -> i64 {
-    // Saturating: `raw` may already be pegged at the i64 boundaries (the
-    // MJD/unixtime constructors saturate out-of-range inputs), where the
-    // plain additions would overflow
-    let ls = microleapseconds(raw);
-    let raw = raw.saturating_add(ls);
-    raw.saturating_add(microleapseconds(raw)).saturating_sub(ls)
+/// a Gregorian date. A UTC-basis value can never land inside an inserted
+/// interval: 00:00:00 of the day after a leap second maps to the end of the
+/// leap second, not its start.
+fn add_leapseconds(utc: i64) -> i64 {
+    // Saturating: `utc` may already be pegged at the i64 boundaries (the
+    // MJD/unixtime constructors saturate out-of-range inputs)
+    utc.saturating_add(utc_microleapseconds(utc))
+}
+
+/// If `raw` falls inside an inserted (leap-second) interval, return the
+/// microseconds elapsed since the start of that interval.
+fn leap_interval_offset(raw: i64) -> Option<i64> {
+    leap_entries()
+        .find(|(t, ls, ls_prev)| raw >= *t && raw - *t < ls - ls_prev)
+        .map(|(t, _, _)| raw - t)
+}
+
+/// TAI − UTC, in seconds, in effect at the given UTC MJD (new offset from
+/// 00:00:00 UTC of the day after each leap second). Used to route UT1
+/// conversions through the continuous UT1 − TAI.
+fn tai_minus_utc_at_mjd_utc(mjd_utc: f64) -> f64 {
+    // Compare in MJD (as the EOP table lookup does) rather than rounding the
+    // query to microseconds, so both switch at exactly the same value.
+    for (t, ls, ls_prev) in leap_entries() {
+        let boundary = (t - ls_prev - Instant::MJD_EPOCH.raw) as f64 / 86_400_000_000.0;
+        if mjd_utc >= boundary {
+            return ls as f64 * 1.0e-6;
+        }
+    }
+    0.0
+}
+
+/// Argument, in radians, of the periodic TDB − TT term (Vallado Eq. 3-50):
+/// `628.3076 T + 6.2401`, with `T` in Julian centuries of TT from J2000.
+/// One revolution per year.
+#[inline]
+fn tdb_minus_tt_arg(ttc: f64) -> f64 {
+    628.3076f64.mul_add(ttc, 6.2401)
 }
 
 impl Instant {
@@ -336,10 +411,15 @@ impl Instant {
                 Self { raw }
             }
             TimeScale::UT1 => {
-                // This will be approximately correct for computing ut1
-                let eop = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd);
-                let dut1 = eop[0];
-                Self::from_mjd_with_scale(mjd - dut1 / 86_400.0, TimeScale::UTC)
+                // Go through UT1 − TAI, which is continuous across leap
+                // seconds (UT1 − UTC is not). The EOP table is indexed by UTC,
+                // so it is evaluated at the UT1 value itself; |UT1 − UTC| < 0.9 s
+                // and UT1 − TAI changes by ~ns over that span, so the
+                // approximation is exact for practical purposes, including
+                // inside a leap second.
+                let dut1 = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd)[0];
+                let ut1_minus_tai = dut1 - tai_minus_utc_at_mjd_utc(mjd);
+                Self::from_mjd_with_scale(mjd - ut1_minus_tai / 86_400.0, TimeScale::TAI)
             }
             TimeScale::GPS => {
                 // GPS = TAI - 19 seconds
@@ -350,11 +430,12 @@ impl Instant {
             }
             TimeScale::Invalid => Self::INVALID,
             TimeScale::TDB => {
+                // Inverse of the TT -> TDB series in `as_mjd_with_scale`.
+                // The periodic term is evaluated at TDB instead of TT; the
+                // two differ by < 2 ms, which moves the term by ~1e-13 s.
                 let ttc: f64 = (mjd - (2451545.0 - 2400000.5)) / 36525.0;
-                let mjd = (0.001657f64 / 86400.0f64).mul_add(
-                    -(std::f64::consts::PI / 180.0 * 628.3076f64.mul_add(ttc, 6.2401)).sin(),
-                    mjd,
-                ) - 32.184 / 86400.0;
+                let mjd = (0.001657f64 / 86400.0f64).mul_add(-tdb_minus_tt_arg(ttc).sin(), mjd)
+                    - 32.184 / 86400.0;
                 Self::from_mjd_with_scale(mjd, TimeScale::TAI)
             }
         }
@@ -443,10 +524,22 @@ impl Instant {
                     / 86_400_000_000.0
             }
             TimeScale::UT1 => {
+                // UT1 = UTC + (UT1 − UTC), except that inside a leap second
+                // the UTC MJD repeats the last second of the day while UT1
+                // keeps running. Using the TAI − UTC of the UTC *day*
+                // (rather than of `raw`) makes this UT1 = TAI + (UT1 − TAI),
+                // continuous through the leap second; elsewhere it is the
+                // plain UTC MJD plus UT1 − UTC.
                 let mjd_utc = self.as_mjd_utc();
-                let eop = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd_utc);
-                let dut1 = eop[0];
-                mjd_utc + dut1 / 86_400.0
+                let dut1 = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd_utc)[0];
+                let utc = self.raw.saturating_sub(microleapseconds(self.raw));
+                let mjd_utc_day_basis = (self
+                    .raw
+                    .saturating_sub(Self::MJD_EPOCH.raw)
+                    .saturating_sub(utc_microleapseconds(utc)))
+                    as f64
+                    / 86_400_000_000.0;
+                mjd_utc_day_basis + dut1 / 86_400.0
             }
             TimeScale::TAI => {
                 self.raw.saturating_sub(Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0
@@ -462,10 +555,10 @@ impl Instant {
             TimeScale::TDB => {
                 let tt: f64 = self.as_mjd_with_scale(TimeScale::TT);
                 let ttc: f64 = (tt - (2451545.0f64 - 2400000.5f64)) / 36525.0;
-                (0.001657f64 / 86400.0f64).mul_add(
-                    (std::f64::consts::PI / 180.0 * 628.3076f64.mul_add(ttc, 6.2401)).sin(),
-                    tt,
-                )
+                // Vallado Eq. 3-50: TDB − TT ≈ 0.001657 s · sin(628.3076 T + 6.2401),
+                // T in Julian centuries of TT; the argument is in radians
+                // (annual period, mean anomaly of the Earth).
+                (0.001657f64 / 86400.0f64).mul_add(tdb_minus_tt_arg(ttc).sin(), tt)
             }
             // Return NaN rather than 0.0 (a perfectly valid MJD, 1858-11-17) so
             // that using an Invalid time scale visibly poisons downstream math
@@ -479,37 +572,31 @@ impl Instant {
     /// # Returns
     /// (year, month, day, hour, minute, second), UTC
     pub fn as_datetime(&self) -> (i32, i32, i32, i32, i32, f64) {
-        // Fractional part of UTC day, accounting for leapseconds and TT - TAI
-        let utc_usec_of_day = (self.raw - microleapseconds(self.raw)) % 86_400_000_000;
-        let mut jdadd: i64 = 0;
+        // UTC-basis (leap-second-free) microseconds since the Unix epoch.
+        // Inside a leap second this repeats 23:59:59.x of the same day; the
+        // label is patched to 23:59:60.x below. Euclidean division keeps the
+        // time of day in [0, 86400 s) for instants before 1970.
+        let utc = self.raw.saturating_sub(microleapseconds(self.raw));
+        let unix_day = utc.div_euclid(86_400_000_000);
+        let utc_usec_of_day = utc.rem_euclid(86_400_000_000);
 
         let mut hour = utc_usec_of_day / 3_600_000_000;
-        if hour < 12 {
-            jdadd += 1
-        }
-        let mut minute = (utc_usec_of_day - (hour * 3_600_000_000)) / 60_000_000;
-        let mut second =
-            (utc_usec_of_day - (hour * 3_600_000_000) - (minute * 60_000_000)) as f64 * 1.0e-6;
+        let mut minute = (utc_usec_of_day % 3_600_000_000) / 60_000_000;
+        let mut second = (utc_usec_of_day % 60_000_000) as f64 * 1.0e-6;
 
-        // Rare case where we are in the middle of a leap-second
-        for (t, _) in LEAP_SECOND_TABLE.iter() {
-            if self.raw >= *t && self.raw - *t < 1_000_000 {
-                hour = 23;
-                minute = 59;
-                if second == 0.0 {
-                    second = 60.0;
-                    jdadd -= 1;
-                } else {
-                    second += 1.0;
-                }
-            }
+        // Inside an inserted interval: label as 23:59:60.x (23:59:60 to
+        // 23:59:69.x for the 10 s step at 1972-01-01; see LEAP_SECOND_TABLE)
+        if let Some(offset) = leap_interval_offset(self.raw) {
+            hour = 23;
+            minute = 59;
+            second = 60.0 + offset as f64 * 1.0e-6;
         }
 
         /// See: https://en.wikipedia.org/wiki/Julian_day
         /// or Expl. Suppl. Astron. Almanac, P. 619
         use gregorian_coefficients as gc;
-        let mut jd = self.as_jd_utc().floor() as i64;
-        jd += jdadd;
+        // Julian Day Number of the UTC calendar day (1970-01-01 is JDN 2440588)
+        let jd = unix_day + 2_440_588;
         let f = jd + gc::j + (((4 * jd + gc::B) / 146097) * 3) / 4 + gc::C;
         let e = gc::r * f + gc::v;
         let g = (e % gc::p) / gc::r;
@@ -613,6 +700,12 @@ impl Instant {
     /// # Returns
     /// A new Instant object representing the given date and time, or error if invalid
     /// or error if the month, day, hour, minute, or second are out of bounds
+    ///
+    /// # Leap seconds
+    /// `second` in `[60, 61)` is accepted only as the label of a real UTC leap
+    /// second, e.g. `2016-12-31 23:59:60.5`, and is otherwise an error (the
+    /// 10 s step at 1972-01-01 allows `[60, 70)` on 1971-12-31; see the
+    /// leap-second table).
     pub fn from_datetime(
         year: i32,
         month: i32,
@@ -646,9 +739,10 @@ impl Instant {
             return Err(InstantError::InvalidMinute(minute));
         }
         if !(0.0..60.0).contains(&second) {
-            // Check for rare case of leap second
-            if (60.0..61.0).contains(&second) {
-                // Are we in a leap second?
+            // Check for rare case of leap second. Seconds up to 70 are only
+            // ever valid for the 10 s step at 1972-01-01 (see
+            // LEAP_SECOND_TABLE); ordinary leap seconds allow [60, 61).
+            if (60.0..70.0).contains(&second) {
                 check_leapsecond = true;
             } else {
                 return Err(InstantError::InvalidSecondF(second));
@@ -668,38 +762,38 @@ impl Instant {
         let jd = jd as f64 - 0.5;
         let mjd = jd - 2400000.5;
 
+        // A leap-second label 23:59:60.x is built as the start of the next
+        // minute (i.e. 00:00:00 of the next day, on the UTC basis) plus an
+        // offset into the inserted interval; everything else directly.
+        let (minute_second, leap_offset) = if check_leapsecond {
+            (60.0, ((second - 60.0) * 1_000_000.0) as i64)
+        } else {
+            (second, 0)
+        };
+
         // Checked: an extreme year overflows the i64 microsecond count
         // (panicking in debug builds, silently wrapping in release)
-        let mut raw = (mjd as i64)
+        let utc = (mjd as i64)
             .checked_mul(86_400_000_000)
             .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000))
             .and_then(|v| v.checked_add(minute as i64 * 60_000_000))
-            .and_then(|v| v.checked_add((second * 1_000_000.0) as i64))
+            .and_then(|v| v.checked_add((minute_second * 1_000_000.0) as i64))
             .and_then(|v| v.checked_add(Self::MJD_EPOCH.raw))
             .ok_or(InstantError::InvalidYear(year))?;
-        // Account for additional leap seconds if needed
-        raw = add_leapseconds(raw);
 
-        // Very rare -- check if second is in range [60, 61).  If so, make sure
-        // this is in the middle of a leap second
-        // I can't believe I'm even doing this...
         if check_leapsecond {
-            let mut valid_leap_second = false;
-            // Check if raw is within a leap second
-            for (t, _) in LEAP_SECOND_TABLE.iter() {
-                // The table holds the first of the "second" that happens twice, so
-                // we are in leap second if raw is between [t + 1_000_000, t + 2_000_000)
-                if raw >= *t + 1_000_000 && raw < *t + 2_000_000 {
-                    // We are in a leap second
-                    valid_leap_second = true;
-                    break;
-                }
-            }
-            if !valid_leap_second {
-                return Err(InstantError::InvalidLeapSecond);
-            }
+            // Valid only if `utc` is the 00:00:00 UTC at which a leap second
+            // ends and the offset lies inside that leap second
+            return leap_entries()
+                .find(|(t, _, ls_prev)| utc == t - ls_prev)
+                .filter(|(_, ls, ls_prev)| leap_offset < ls - ls_prev)
+                .map(|(t, _, _)| Self {
+                    raw: t + leap_offset,
+                })
+                .ok_or(InstantError::InvalidLeapSecond);
         }
 
+        let raw = add_leapseconds(utc);
         Ok(Self { raw })
     }
 

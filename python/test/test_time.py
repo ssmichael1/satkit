@@ -274,3 +274,97 @@ class TestDurationUnits:
         assert d.seconds == pytest.approx(1.5, rel=1e-12)
         assert d.microseconds == 1_500_000
         assert sk.duration(seconds=2).microseconds == 2_000_000
+
+
+class TestLeapSeconds:
+    def test_midnight_after_leap_second(self):
+        # 00:00:00 on the day after a leap second is the end of the leap
+        # second, not its start; the leap-second day is 86401 s long
+        t = sk.time(2017, 1, 1)
+        assert str(t) == "2017-01-01T00:00:00.000000Z"
+        assert (t - sk.time(2016, 12, 31)).seconds == pytest.approx(86401.0, abs=1e-9)
+        assert sk.time.from_mjd(57754.0) == t
+        assert sk.time.from_jd(2457754.5) == t
+        assert sk.time.from_unixtime(1483228800.0) == t
+        assert sk.time(2016, 12, 31).add_utc_days(1.0) == t
+
+    def test_leap_second_label(self):
+        # The leap second can be entered by its own label and round-trips
+        t = sk.time(2016, 12, 31, 23, 59, 60.5)
+        s = t.to_rfc3339()
+        assert s == "2016-12-31T23:59:60.500000Z"
+        assert str(t) == s
+        assert sk.time.from_rfc3339(s) == t
+        assert sk.time(s) == t
+        assert t - sk.time(2016, 12, 31, 23, 59, 59) == sk.duration(seconds=1.5)
+        g = t.to_gregorian()
+        assert g[:5] == (2016, 12, 31, 23, 59)
+        assert g[5] == pytest.approx(60.5)
+        # Exactly :60, from a string
+        t60 = sk.time.from_rfc3339("2016-12-31T23:59:60Z")
+        assert t60 == sk.time(2016, 12, 31, 23, 59, 60.0)
+        assert (t - t60).seconds == pytest.approx(0.5)
+        # :60 on a day without a leap second is an error
+        with pytest.raises(Exception):
+            sk.time(2024, 12, 31, 23, 59, 60.0)
+        with pytest.raises(Exception):
+            sk.time.from_rfc3339("2024-12-31T23:59:60Z")
+
+    def test_1972_step(self):
+        # TAI - UTC is 0 before 1972 and 10 s from 1972-01-01 00:00:00 UTC
+        t = sk.time(1972, 1, 1)
+        assert str(t) == "1972-01-01T00:00:00.000000Z"
+        assert (t - sk.time(1971, 12, 31, 23, 59, 59)).seconds == pytest.approx(11.0)
+
+
+class TestPre1970:
+    def test_time_of_day_before_1970(self):
+        t = sk.time(1960, 1, 1, 12, 0, 0)
+        assert str(t) == "1960-01-01T12:00:00.000000Z"
+        assert t.to_rfc3339() == "1960-01-01T12:00:00.000000Z"
+        g = t.to_gregorian()
+        assert g[:5] == (1960, 1, 1, 12, 0)
+        assert g[5] == pytest.approx(0.0)
+        t = sk.time(1969, 12, 31, 23, 59, 59.5)
+        assert str(t) == "1969-12-31T23:59:59.500000Z"
+
+
+@pytest.mark.skipif(not hasattr(__import__("time"), "tzset"), reason="needs time.tzset")
+class TestDatetimeTimeZone:
+    """A naive datetime is local time (Python's convention); an aware one
+    uses its own offset."""
+
+    def test_naive_is_local_aware_uses_offset(self):
+        import os
+        import time as systime
+        from datetime import timedelta
+
+        old_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/New_York"
+            systime.tzset()
+            # Naive: 12:30 US Eastern (EDT, UTC-4) = 16:30 UTC
+            naive = datetime(2024, 6, 15, 12, 30)
+            assert sk.time.from_datetime(naive) == sk.time(2024, 6, 15, 16, 30, 0)
+            # Aware UTC: 12:30 UTC on any machine
+            aware = datetime(2024, 6, 15, 12, 30, tzinfo=timezone.utc)
+            assert sk.time.from_datetime(aware) == sk.time(2024, 6, 15, 12, 30, 0)
+            # Aware with another offset
+            plus2 = datetime(2024, 6, 15, 12, 30, tzinfo=timezone(timedelta(hours=2)))
+            assert sk.time.from_datetime(plus2) == sk.time(2024, 6, 15, 10, 30, 0)
+            # Functions that take a datetime use the same convention
+            gmst = sk.frametransform.gmst(naive)
+            assert gmst == pytest.approx(sk.frametransform.gmst(sk.time(2024, 6, 15, 16, 30, 0)))
+            # to_datetime(utc=False) is naive local time and round-trips
+            t = sk.time(2024, 6, 15, 16, 30, 0)
+            local = t.to_datetime(False)
+            assert local.tzinfo is None
+            assert (local.hour, local.minute) == (12, 30)
+            assert sk.time.from_datetime(local) == t
+            assert t.to_datetime().tzinfo is not None
+        finally:
+            if old_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old_tz
+            systime.tzset()
