@@ -11,9 +11,8 @@ model (the ``_approx`` reduction, the one-term TDB - TT series, the
 two-term equation of the equinoxes) the test checks the documented accuracy,
 and the tolerance comment says where the number comes from.
 
-Cases marked ``xfail(strict=True)`` are confirmed satkit defects. Those whose
-reason names ``fix/time-scale-defects`` are fixed on that branch and will
-XPASS (and so fail, being strict) once it merges; remove the marker then.
+Cases marked ``xfail(strict=True)`` are confirmed satkit defects; being
+strict, they fail once the defect is fixed, so remove the marker with the fix.
 
 Instants are read and built through the internal microsecond count, which is
 TAI (``raw / 86400e6 + 40587`` is the TAI MJD), via the public duration API:
@@ -50,39 +49,6 @@ R_GEO = 42.164e6
 # through `to_mjd` / `from_mjd` carries up to ~1.3 us of rounding.
 TOL_MJD_S = 1.5e-6
 
-FIX_BRANCH = "fixed by fix/time-scale-defects"
-XFAIL_TDB = pytest.mark.xfail(
-    strict=True,
-    reason=f"known defect #1: TDB - TT periodic term has a spurious PI/180 in its argument; {FIX_BRANCH}",
-)
-XFAIL_MIDNIGHT = pytest.mark.xfail(
-    strict=True,
-    reason=f"known defect #2: 00:00:00 UTC after a leap second is built 1 s early; {FIX_BRANCH}",
-)
-XFAIL_SEC60 = pytest.mark.xfail(
-    strict=True,
-    reason=f"known defect #3: 23:59:60.x cannot be entered (60.0 raises, 60.x lands 1 s late); {FIX_BRANCH}",
-)
-XFAIL_1972 = pytest.mark.xfail(
-    strict=True,
-    reason=f"known defect #4: 1972-01-01 leap-second entry is 9 s late; {FIX_BRANCH}",
-)
-XFAIL_PRE1970 = pytest.mark.xfail(
-    strict=True,
-    reason=f"known defect #5: pre-1970 times print with negative fields; {FIX_BRANCH}",
-)
-XFAIL_EOP_LEAP = pytest.mark.xfail(
-    strict=True,
-    reason=f"known defect #6: UT1 - UTC interpolated across the leap-second step; {FIX_BRANCH}",
-)
-XFAIL_UT1_IN_LEAP = pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "UT1 inside a leap second (23:59:60.x) is 1 s late: to_mjd(UT1) adds UT1 - UTC to "
-        "a UTC MJD that repeats 23:59:59.x (not one of the six listed defects; the UT1 - TAI "
-        f"rework on the branch covers it); {FIX_BRANCH}"
-    ),
-)
 
 
 # ----------------------------------------------------------------------------
@@ -269,31 +235,26 @@ class TestLeapSeconds:
             sec = ihmsf["s"][k] + ihmsf["f"][k] * 1e-6
             assert g[:5] == exp and g[5] == pytest.approx(sec, abs=1e-7), (int(r - r0), g, exp, sec)
 
-    @XFAIL_MIDNIGHT
     def test_midnight_after_leap_second_gregorian(self):
         for y, m in LEAPS:
             t = sk.time(y, m, 1, 0, 0, 0.0)
             assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
 
-    @XFAIL_MIDNIGHT
     def test_midnight_after_leap_second_from_mjd(self):
         for y, m in LEAPS:
             t = sk.time.from_mjd(erfa.cal2jd(y, m, 1)[1])
             assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
 
-    @XFAIL_MIDNIGHT
     def test_midnight_after_leap_second_from_unixtime(self):
         for y, m in LEAPS:
             t = sk.time.from_unixtime(float(calendar.timegm((y, m, 1, 0, 0, 0))))
             assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
 
-    @XFAIL_MIDNIGHT
     def test_midnight_after_leap_second_add_utc_days(self):
         for y, m in LEAPS:
             t = sk.time(*day_before(y, m), 12, 0, 0.0).add_utc_days(0.5)
             assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
 
-    @XFAIL_SEC60
     def test_enter_leap_second_label(self):
         for y, m in LEAPS:
             for s in (60.0, 60.5, 60.999999):
@@ -305,7 +266,6 @@ class TestLeapSeconds:
             t = sk.time.from_rfc3339(f"{py:04d}-{pm:02d}-{pd:02d}T23:59:60.5Z")
             assert_us(t, erfa_us_from_utc(py, pm, pd, 23, 59, 60.5), "rfc3339")
 
-    @XFAIL_1972
     def test_first_seconds_of_1972(self):
         for s in (0.0, 0.5, 5.0, 9.0):
             c = (1972, 1, 1, 0, 0, s)
@@ -332,7 +292,6 @@ class TestLeapSeconds:
         c = (1965, 6, 1, 12, 30, 15.25)
         assert_us(sk.time(*c), pair_to_us(*erfa.dtf2d("TAI", *c)), c)
 
-    @XFAIL_PRE1970
     def test_pre1970_gregorian_fields(self):
         for c in [(1969, 12, 31, 23, 0, 0.0), (1965, 6, 1, 12, 30, 15.25), (1901, 3, 1, 1, 2, 3.5)]:
             g = sk.time(*c).to_gregorian()
@@ -482,7 +441,6 @@ class TestTDB:
         assert np.max(np.abs(d)) < self.TOL_ONE_TERM_VS_DTDB
         assert np.sqrt(np.mean(d**2)) < 25e-6
 
-    @XFAIL_TDB
     def test_tdb_minus_tt_is_the_one_term_series(self):
         t1, t2 = self._tt_pairs()
         T = ((t1 - 2451545.0) + t2) / 36525.0
@@ -492,7 +450,6 @@ class TestTDB:
         got = np.array([(t.to_mjd(TS.TDB) - t.to_mjd(TS.TT)) * 86400.0 for t in times])
         assert np.max(np.abs(got - expected)) < 2 * TOL_MJD_S
 
-    @XFAIL_TDB
     def test_tdb_vs_erfa_dtdb(self):
         t1, t2 = self._tt_pairs()
         mjd_tt = (t1 - 2400000.5) + t2
@@ -500,7 +457,6 @@ class TestTDB:
         got = np.array([(t.to_mjd(TS.TDB) - t.to_mjd(TS.TT)) * 86400.0 for t in times])
         assert np.max(np.abs(got - erfa.dtdb(t1, t2, 0.0, 0.0, 0.0, 0.0))) < self.TOL_ONE_TERM_VS_DTDB
 
-    @XFAIL_TDB
     def test_tdb_constructor(self):
         rng = np.random.default_rng(7)
         for i in range(200):
@@ -563,7 +519,6 @@ class TestUT1:
             t2 = sk.time.from_mjd(t.to_mjd(TS.UT1), TS.UT1)
             assert abs(raw_us(t2) - raw_us(t)) <= 2, m
 
-    @XFAIL_UT1_IN_LEAP
     def test_ut1_inside_leap_second(self, eop_span):
         times = []
         for y, m in LEAPS:
@@ -600,7 +555,6 @@ class TestUT1:
                     (exp[3], exp[1], exp[2], exp[4], exp[5]), abs=1e-9
                 ), r0[0] + g
 
-    @XFAIL_EOP_LEAP
     def test_eop_interpolation_across_leap_second(self, eop_rows):
         """UT1 - UTC steps by 1 s at 00:00 UTC after a leap second; on the day
         before, interpolation must use the continuous UT1 - TAI"""
