@@ -445,15 +445,17 @@ class TLE:
         """
         ...
 
-@overload
 def sgp4(
     tle: TLE | OMMDict | list[TLE | OMMDict],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
     opsmode: sgp4_opsmode = ...,
-    errflag: typing.Literal[False] = False,
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    errflag: bool = False,
+) -> (
+    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+    | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]
+):
     """SGP-4 propagator for TLE
 
     Run Simplified General Perturbations (SGP)-4 propagator on Two-Line Element Set to
@@ -555,38 +557,6 @@ def sgp4(
         ```
 
     """
-    ...
-
-@overload
-def sgp4(
-    tle: TLE | OMMDict | list[TLE | OMMDict],
-    time: TimeInput,
-    *,
-    gravconst: sgp4_gravconst = ...,
-    opsmode: sgp4_opsmode = ...,
-    errflag: typing.Literal[True],
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]:
-    """SGP-4 propagator for TLE, also returning an ``int32`` array of error codes
-
-    See the ``errflag=False`` form for arguments and shapes. The third
-    element holds one :class:`sgp4_error` value per TLE and time as a plain
-    ``int32``; ``err == satkit.sgp4_error.success`` compares elementwise.
-    """
-    ...
-
-@overload
-def sgp4(
-    tle: TLE | OMMDict | list[TLE | OMMDict],
-    time: TimeInput,
-    *,
-    gravconst: sgp4_gravconst = ...,
-    opsmode: sgp4_opsmode = ...,
-    errflag: bool,
-) -> (
-    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
-    | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]
-):
-    """SGP-4 propagator for TLE, with ``errflag`` not known statically"""
     ...
 
 class sgp4_gravconst:
