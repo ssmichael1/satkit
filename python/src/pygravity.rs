@@ -84,7 +84,12 @@ impl From<GravityModel> for GravModel {
 /// Notes:
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 #[pyfunction]
-#[pyo3(signature=(pos, **kwds))]
+// The keywords are parsed by hand from `kwds`; `text_signature` publishes
+// them so `inspect.signature` and stubtest see the real parameters.
+#[pyo3(
+    signature=(pos, **kwds),
+    text_signature = "(pos, *, model=..., degree=6, order=...)"
+)]
 pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<Py<PyAny>> {
     let mut degree: usize = 6;
     let mut order: Option<usize> = None;
@@ -163,7 +168,12 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 ///
 #[pyfunction]
-#[pyo3(signature=(pos, **kwds))]
+// The keywords are parsed by hand from `kwds`; `text_signature` publishes
+// them so `inspect.signature` and stubtest see the real parameters.
+#[pyo3(
+    signature=(pos, **kwds),
+    text_signature = "(pos, *, model=..., degree=6, order=...)"
+)]
 pub fn gravity_and_partials(
     pos: &Bound<'_, PyAny>,
     kwds: Option<&Bound<'_, PyDict>>,

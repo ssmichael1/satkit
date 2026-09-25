@@ -5,7 +5,7 @@ Utility functions for SatKit
 from __future__ import annotations
 
 
-def update_datafiles(**kwargs) -> None:
+def update_datafiles(*, overwrite: bool = False, dir: str = ...) -> None:
     """Download & store data files needed for "satkit" computations
 
     Not required for normal use: the IERS nutation tables and gravity models

@@ -49,7 +49,8 @@ use anyhow::Result;
 /// `overwrite=True` forces a full re-fetch of these too.
 ///
 #[pyfunction]
-#[pyo3(signature=(**kwds))]
+// Keywords parsed by hand; `text_signature` publishes them for inspect/stubtest.
+#[pyo3(signature=(**kwds), text_signature = "(*, overwrite=False, dir=...)")]
 fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
     let overwrite_files = match kwds {
         None => false,

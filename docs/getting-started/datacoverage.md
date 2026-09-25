@@ -26,6 +26,7 @@ Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Ear
 ```python
 import satkit as sk
 
+t_end = sk.time(2024, 6, 1)   # the last epoch your propagation needs
 first, last_observed, last = sk.frametransform.eop_coverage()
 if sk.frametransform.eop_status(t_end) == "extrapolated":
     sk.utils.update_datafiles()   # re-downloads finals2000A.all (and the space-weather files)
@@ -81,6 +82,7 @@ if nothing is loaded:
 ```python
 import satkit as sk
 
+t_end = sk.time(2024, 6, 1)   # the last epoch your propagation needs
 first, last_observed, last_daily, last = sk.spaceweather.coverage()
 if sk.spaceweather.status(t_end) != "observed":
     sk.utils.update_datafiles()   # observed record to ~yesterday, forecasts refreshed
