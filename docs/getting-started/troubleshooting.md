@@ -65,11 +65,16 @@ below cover the usual reasons.
 
 ### "Warning: EOP data not available for MJD UTC = … (too early)"
 
+```
+Warning: EOP data not available for MJD UTC = 40000 (too early): the loaded table starts at 1973-01-02T00:00:00.000000Z (MJD 41684), and polar motion, UT1-UTC and nutation corrections are treated as zero before it.
+Refreshing the data files does not help: finals2000A.all (the default) starts at 1973-01-02. For 1962-1972, put CelesTrak's EOP-All.csv (https://celestrak.org/SpaceData/EOP-All.csv) in the data directory; ...
+```
+
 **Cause.** The epoch is before the start of the loaded EOP table. The IERS
 `finals2000A.all` file satkit downloads begins in **1973**; CelesTrak's
 `EOP-All.csv` reaches back to 1962, but it is only downloaded when both IERS
-mirrors are unreachable. Despite what the warning says, refreshing the data
-does not move the start of the table.
+mirrors are unreachable, so refreshing the data does not move the start of the
+table.
 
 **Fix.** For 1962–1972, place a copy of
 [`EOP-All.csv`](https://celestrak.org/SpaceData/EOP-All.csv) in
@@ -84,7 +89,7 @@ used there.
 | message begins | cause | fix |
 |---|---|---|
 | `Warning: no space-weather table is loaded` | no space-weather files on disk and the first-use download failed. NRLMSISE-00 runs on $F_{10.7} = F_{10.7A} = 150$, $A_p = 4$, which can be wrong by a factor of two in density | `sk.utils.update_datafiles()` with network access, or `SATKIT_DATA` pointing at a directory with the files |
-| `Warning: the space-weather table ends at …` | the epoch is past the last row; that row's values are used unchanged | the default table runs decades ahead (NASA MSAFE monthly forecast), so this usually means an old file or a table loaded by hand — refresh with `sk.utils.update_datafiles()`. For epochs past the MSAFE forecast, refreshing cannot help |
+| `Warning: the space-weather table ends at …` | the epoch is past the last row; that row's values are used unchanged | the warning says which case applies. *"The table ends in the past, so it is out of date"*: an old file or a table loaded by hand — refresh with `sk.utils.update_datafiles()`. *"The table already reaches past today to the end of its long-range forecast"*: the epoch is beyond the NASA MSAFE forecast (about 15 years ahead) and no refresh can help |
 | `Warning: the space-weather record for … is a monthly prediction` | the record carries $F_{10.7}$ but no $K_p$/$a_p$ (a CelesTrak `SW-All.csv` left in a data directory by satkit 0.22 or earlier, or loaded by hand), so NRLMSISE-00 uses a quiet-time $A_p = 4$ | `sk.utils.update_datafiles()` fetches the GFZ / SWPC / MSAFE files, whose monthly rows do carry $A_p$ |
 
 `sk.spaceweather.get(t)` itself raises `RuntimeError: No space weather record found for date`
@@ -103,10 +108,8 @@ sk.frametransform.disable_eop_time_warning()
 sk.spaceweather.disable_space_weather_time_warning()
 ```
 
-The EOP warnings name only the Rust function
-(`satkit::earth_orientation_params::disable_eop_time_warning()`); in Python it
-is `sk.frametransform.disable_eop_time_warning()`. Silencing a warning does not
-change the result: prefer refreshing the data, or checking
+Each warning's "To disable" line names both the Rust and the Python function.
+Silencing a warning does not change the result: prefer refreshing the data, or checking
 `eop_status(t)` / `spaceweather.status(t)` explicitly.
 
 ### The Earth-orientation or space-weather data is old, although I have network access
@@ -119,10 +122,14 @@ ages from the day it was written.
 
 **Fix.** Run `sk.utils.update_datafiles()` periodically (it is cheap: see
 [below](#update_datafiles-says-no-request-made-how-do-i-force-a-refresh)).
-The fresh files go to `sk.utils.datadir()`. For Earth orientation, when
-several copies exist satkit uses whichever has the later observed record; for
-space weather, the GFZ / SWPC / MSAFE files are preferred over an older
-CelesTrak `SW-All.csv`. See [Data Directories](datadirs.md).
+The fresh files go to `sk.utils.datadir()`. For space weather, when several
+copies of a file exist across the search directories, satkit uses the one whose
+table runs latest, so an old copy elsewhere does not shadow the refreshed one;
+the GFZ / SWPC / MSAFE files are also preferred over an older CelesTrak
+`SW-All.csv`. For Earth orientation, satkit picks between `finals2000A.all` and
+`EOP-All.csv` by whichever has the later observed record, but between two
+copies of `finals2000A.all` it takes the first in search order — delete a stale
+copy in an earlier search directory. See [Data Directories](datadirs.md).
 
 ## Data files and downloads
 
@@ -169,14 +176,16 @@ To force a transfer anyway:
 - deleting a file's `<name>.http-cache` sidecar in `datadir()` forces a full
   fetch of just that file on the next `update_datafiles()`.
 
-The keyword is `overwrite`. Other keyword arguments (`force=True`, say) are
-currently ignored without an error. See
+`overwrite` and `dir` are keyword-only; anything else is rejected
+(`TypeError: update_datafiles() got an unexpected keyword argument 'force'`).
+See
 [How often EOP and space weather are refreshed](datadownloads.md#how-often-eop-and-space-weather-are-refreshed).
 
 ### "No writeable data directory" or "Read-only file system" (containers, shared installs)
 
 ```
 RuntimeError: No writeable data directory: /data/satkit could not be created or is not writable (...). Set SATKIT_DATA to a directory satkit may write to
+RuntimeError: Data directory /data/satkit is not writable (Read-only file system (os error 30)). Pass a writable directory (Python: update_datafiles(dir=...)), or set the environment variable SATKIT_DATA to one and restart
 ```
 
 satkit only writes to `datadir()`. In a container with a read-only root
@@ -185,9 +194,10 @@ point `SATKIT_DATA` at a writable volume (or call `sk.utils.set_datadir(path)`
 with an existing directory before the first data access; `SATKIT_DATA`
 takes precedence over it). Read-only directories are fine as **search**
 locations: provision the files once (below) and they are read from there.
-With `update_datafiles(dir=...)` the directory is used as given, so a
-read-only one fails with the operating system's error (e.g.
-`Read-only file system (os error 30)`).
+`update_datafiles(dir=...)` uses the directory as given, and a refresh into a
+directory that cannot be written (read-only filesystem, no permission, owned
+by another user) fails with the `Data directory … is not writable` error above,
+naming the directory and the operating system's reason.
 
 ### Downloads fail with `invalid peer certificate: UnknownIssuer`
 
@@ -262,18 +272,25 @@ epochs you work with. `pip install satkit[data]` is an alternative for the
 ephemeris. See [Offline and air-gapped use](installation.md#offline-and-air-gapped-use)
 and [Provisioning up front](datadirs.md#provisioning-up-front).
 
-### "… is not present and cannot be downloaded (SATKIT_OFFLINE is set)"
+### "… is not present and cannot be downloaded (SATKIT_OFFLINE is set)" (or "offline mode was turned on …")
 
 ```
 RuntimeError: ... linux_p1550p2650.440 is not present and cannot be downloaded (SATKIT_OFFLINE is set). Provide it in the data directory (SATKIT_DATA) or install the `satkit-data` bundle; sources: https://github.com/ssmichael1/satkit-data/releases/download/data-v1/linux_p1550p2650.440, ...
 ```
 
-Downloads are forbidden (by `SATKIT_OFFLINE`, or by `sk.utils.set_offline(True)`,
-which gives the same message) and the file is in none of the search
-directories. The message lists the URLs the file can be fetched from by hand;
+Downloads are forbidden and the file is in none of the search directories. The
+parenthesis says why: `SATKIT_OFFLINE is set`, or `offline mode was turned on
+with satkit.utils.set_offline(True) in Python or satkit::utils::set_offline(true) in Rust`. The message lists the URLs the file can be fetched from by hand;
 put it in `datadir()` or any search directory. Check `sk.utils.is_offline()`
 if you did not expect offline mode: a leftover `SATKIT_OFFLINE` in a CI
 environment is a common cause.
+
+`update_datafiles()` checks for offline mode before doing anything, and fails
+without printing a download banner or creating a directory:
+
+```
+RuntimeError: update_datafiles cannot run: downloads are forbidden (SATKIT_OFFLINE is set); nothing was fetched
+```
 
 ## Installation
 
@@ -315,7 +332,7 @@ the `from_*` constructors. The old names still work but warn, and are
 | `time.as_date()`, `as_gregorian()`, `as_datetime()`, `as_mjd()`, `as_jd()`, `as_unixtime()`, `as_iso8601()`, `as_rfc3339()` | `to_date()`, `to_gregorian()`, `to_datetime()`, `to_mjd()`, `to_jd()`, `to_unixtime()`, `to_iso8601()`, `to_rfc3339()` |
 | `time.datetime()` | `time.to_datetime()` |
 | `quaternion.as_rotation_matrix()`, `as_euler()` | `to_rotation_matrix()`, `to_euler()` |
-| `kepler.w` (constructor keyword and property) | `kepler.argp` (`w` is kept, with a warning) |
+| `kepler.w` (property) | `kepler.argp` (`w` still works, with a warning attributed to your line) |
 
 Python hides `DeprecationWarning` outside `__main__` by default; run with
 `python -W error::DeprecationWarning` to find every remaining call.
@@ -425,8 +442,9 @@ and takes altitude in metres.
 ### `sgp4()` returns `nan`
 
 SGP4 failed for that element set and time, most often because the satellite
-has decayed or the time is far from the TLE epoch. Pass `errflag=True` to get
-the error code for each output (`sk.sgp4_error.orbit_decay`, etc.):
+has decayed or the time is far from the TLE epoch. Pass `errflag=True` to also get
+the error code for each output, as an `int32` NumPy array that compares
+element-wise with `sk.sgp4_error` values (`err == sk.sgp4_error.orbit_decay`):
 
 ```python
 p, v, err = sk.sgp4(tle, times, errflag=True)
