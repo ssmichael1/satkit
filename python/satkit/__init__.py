@@ -9,19 +9,20 @@ from .satkit import __version__
 # are refreshed by `satkit.utils.update_datafiles()`.
 #
 # If the optional offline bundle (the `satkit_data` package, from
-# `pip install satkit-data` or the conda `satkit-data` package) is importable,
-# register its `data/` directory as a read-only search location so its
-# ephemeris and files are used wherever the package happens to be installed.
-# Downloads still go to `datadir()`.
+# `pip install satkit-data`, or a bare `satkit_data/` directory on sys.path) is
+# importable, register its `data/` directory as a read-only search location so
+# its ephemeris and files are used wherever the package happens to be
+# installed. Downloads still go to `datadir()`. There is deliberately no conda
+# `satkit-data` package (see data/README.md).
 
 
 def _optional_data_bundle_dirs(module) -> list:
     """Candidate ``data`` directories of an installed ``satkit_data`` package.
 
-    The conda package (and any directory without ``__init__.py``) imports as
-    a *namespace* package, whose ``__file__`` is ``None`` — only ``__path__``
-    is meaningful. The PyPI wheel is a regular package with ``__file__``.
-    Both layouts put the files under ``<package>/data``.
+    A directory without ``__init__.py`` (e.g. a hand-copied bundle) imports
+    as a *namespace* package, whose ``__file__`` is ``None`` — only
+    ``__path__`` is meaningful. The PyPI wheel is a regular package with
+    ``__file__``. Both layouts put the files under ``<package>/data``.
     """
     import os
 
