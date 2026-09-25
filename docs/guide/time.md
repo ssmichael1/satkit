@@ -73,7 +73,8 @@ each algorithm reads it in the scale it needs.
 |-----------|-------|
 | Internal instant count, `time` − `time`, `time` ± `duration` | TAI (continuous SI microseconds) |
 | Numerical propagator independent variable; SGP4 time since epoch | elapsed SI seconds between instants (TAI) |
-| Calendar components, strings, `datetime`, Unix time (input and output) | UTC, unless `scale=` is given |
+| Calendar components, strings, Unix time (input and output) | UTC, unless `scale=` is given |
+| Python `datetime` input | its own time zone if aware; the machine's local time zone if naive (Python's convention) |
 | TLE and OMM epochs; SGP4 initialization | UTC |
 | EOP lookup ($\Delta$UT1, polar motion, $dX$/$dY$) | UTC (daily rows at 0 h UTC) |
 | Space-weather lookup for the density models | UTC calendar day |
@@ -256,7 +257,7 @@ Sun/Moon directions.
     print(noon + sk.duration(days=1))    # 2017-01-01T11:59:59.000000Z (86,400 s)
     print(noon.add_utc_days(1.0))        # 2017-01-01T12:00:00.000000Z (one UTC day)
 
-    # Pass time-zone-aware datetimes (see Known Limitations)
+    # A naive datetime is local time (Python's convention); attach UTC explicitly
     t_dt = sk.time.from_datetime(datetime(2024, 6, 15, 12, 0, tzinfo=timezone.utc))
 
     # Is UT1 measured, predicted or extrapolated at this epoch?
@@ -324,11 +325,6 @@ the affected dates can be recognised.
   `to_rfc3339()` return negative hour/minute/second fields (e.g.
   `1960-01-02T-12:00:00` for 1960-01-01 12:00 UTC). The instant itself, its
   MJD/JD and `to_datetime()` are correct.
-- **Naive `datetime` objects are read as local time.**
-  `time.from_datetime()`, and every API that accepts a `datetime`, convert
-  via Python's `datetime.timestamp()`, which interprets a naive `datetime`
-  in the machine's local time zone, not UTC. Pass time-zone-aware
-  `datetime`s (`tzinfo=timezone.utc`), or run with `TZ=UTC`.
 
 ## See Also
 
