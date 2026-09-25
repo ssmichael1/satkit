@@ -379,8 +379,12 @@ The `time` constructor takes either the date alone or all six fields:
 `sk.time.from_datetime(dt)` (and SGP4 given a list of `datetime`s) converts the
 instant the `datetime` represents, and Python treats a naive `datetime` as
 **local** time. On a machine in New York, `datetime(2024, 1, 1, 12)` becomes
-17:00 UTC. Attach a time zone (`tzinfo=datetime.timezone.utc`) or construct
-`sk.time` directly.
+17:00 UTC. This is intentional and matches Python's own convention
+(`datetime.timestamp()`, `datetime.now()`), and `to_datetime(utc=False)`
+returns a naive local-time `datetime` that round-trips. For UTC, attach a time
+zone (`tzinfo=datetime.timezone.utc`) or construct `sk.time` directly; avoid
+`datetime.utcnow()`, which returns a naive UTC value (and is deprecated since
+Python 3.12).
 
 ### SGP4 positions are 1000 times larger than expected, or in the wrong frame
 
