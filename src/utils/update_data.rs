@@ -28,13 +28,14 @@ pub enum Error {
     #[error("Manifest file name {name:?} is not a plain path component")]
     InvalidManifestPath { name: String },
 
-    /// The configured data directory is read-only and cannot receive
-    /// new or refreshed files.
+    /// The target directory cannot receive new or refreshed files:
+    /// read-only filesystem, no write permission, or owned by another user.
     #[error(
-        "Data directory is read-only. Try setting SATKIT_DATA environment variable \
-         to a writeable directory and re-starting"
+        "Data directory {path} is not writable ({reason}). Pass a writable directory \
+         (Python: update_datafiles(dir=...)), or set the environment variable SATKIT_DATA \
+         to one and restart"
     )]
-    DataDirReadOnly,
+    DataDirReadOnly { path: String, reason: String },
 
     /// A worker thread launched by [`refresh_file_async`] or the static
     /// fetch panicked.
@@ -171,23 +172,43 @@ fn download_refresh_files(
 /// Earth orientation file from the IERS `finals2000A.all` mirrors (CelesTrak's `EOP-All.csv`
 /// when both are unreachable — see
 /// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into));
-/// these change daily to monthly and are not pinned. The refresh respects each file's publication cadence: a copy
+/// these change daily to monthly, are not pinned, and are always fetched from
+/// those sources (`SATKIT_DATA_URL` does not apply to them). The refresh respects each file's publication cadence: a copy
 /// newer than that (3 h for the GFZ record, 24 h for the SWPC forecast and
 /// EOP, a week for MSAFE) is left alone
 /// without contacting the server, and otherwise the request is conditional so
 /// an unchanged file costs a `304`. `overwrite_if_exists` forces a full
 /// re-fetch of these too.
 ///
+/// # Errors
+///
+/// * [`download::Error::UpdateOffline`] under offline mode, before anything
+///   is printed or written.
+/// * [`Error::DataDirReadOnly`] when the target directory cannot be
+///   written (read-only filesystem, no permission, another user's
+///   directory), naming it.
+///
 pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Result<()> {
+    // Offline mode forbids the whole operation: fail before announcing a
+    // download or touching the directory.
+    if let Some(reason) = download::offline_reason() {
+        return Err(download::Error::UpdateOffline { reason }.into());
+    }
     let downloaddir = match dir {
         Some(d) => d,
         None => datadir()?,
     };
-    if !downloaddir.is_dir() {
-        std::fs::create_dir_all(&downloaddir)?;
-    }
-    if downloaddir.metadata()?.permissions().readonly() {
-        return Err(Error::DataDirReadOnly);
+    // Probe with a real file rather than the mode bits, which say nothing
+    // about a read-only filesystem or a directory owned by another user.
+    if let Err(e) = datadir::ensure_writable(&downloaddir) {
+        return Err(if datadir::is_not_writable_error(&e) {
+            Error::DataDirReadOnly {
+                path: downloaddir.display().to_string(),
+                reason: e.to_string(),
+            }
+        } else {
+            e.into()
+        });
     }
 
     let m = manifest::embedded();
@@ -197,7 +218,10 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
         downloaddir.to_string_lossy()
     );
     if let Some(mirror) = manifest::mirror_base() {
-        println!("  {} = {mirror} (tried first)", manifest::MIRROR_ENV);
+        println!(
+            "  {} = {mirror} (tried first for the files pinned in the manifest)",
+            manifest::MIRROR_ENV
+        );
     }
     for (name, outcome) in download_static_files(&downloaddir, overwrite_if_exists)? {
         match outcome {
@@ -428,6 +452,112 @@ mod tests {
         manifest::fetch_static_file(&e, &dir, false).unwrap();
         assert_eq!(server.hits(), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The offline error names what actually turned offline mode on: the
+    /// setter or the environment variable, not always the variable.
+    #[test]
+    fn offline_error_reports_the_actual_reason() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prior_env = std::env::var_os(download::OFFLINE_ENV);
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                download::clear_offline_override();
+                match self.0.take() {
+                    Some(v) => std::env::set_var(download::OFFLINE_ENV, v),
+                    None => std::env::remove_var(download::OFFLINE_ENV),
+                }
+            }
+        }
+        let _restore = Restore(prior_env);
+
+        std::env::remove_var(download::OFFLINE_ENV);
+        download::set_offline(true);
+        let msg = download::check_online("f.txt").unwrap_err().to_string();
+        assert!(msg.contains("set_offline"), "{msg}");
+        assert!(!msg.contains("SATKIT_OFFLINE"), "{msg}");
+
+        download::clear_offline_override();
+        std::env::set_var(download::OFFLINE_ENV, "1");
+        let msg = download::check_online("f.txt").unwrap_err().to_string();
+        assert!(msg.contains("SATKIT_OFFLINE is set"), "{msg}");
+
+        std::env::remove_var(download::OFFLINE_ENV);
+        assert!(download::check_online("f.txt").is_ok());
+    }
+
+    /// Under offline mode `update_datafiles` fails up front: typed error,
+    /// the target directory is not even created.
+    #[test]
+    fn update_datafiles_offline_fails_before_touching_dir() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "satkit_update_offline_{}/not-created",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+        download::set_offline(true);
+        let res = update_datafiles(Some(dir.clone()), false);
+        download::clear_offline_override();
+        let err = res.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::Download(download::Error::UpdateOffline { reason }) if reason.contains("set_offline")
+            ),
+            "{err}"
+        );
+        assert!(!dir.exists());
+    }
+
+    /// A target directory that cannot be written is reported as
+    /// `DataDirReadOnly` naming it, not as a bare I/O error.
+    #[test]
+    #[cfg(unix)]
+    fn update_datafiles_unwritable_dir_is_named() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = tmpdir("readonly");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        // root ignores permission bits; nothing to check there.
+        if std::fs::write(dir.join(".rootcheck"), b"").is_err() {
+            download::set_offline(false);
+            let res = update_datafiles(Some(dir.clone()), false);
+            download::clear_offline_override();
+            let err = res.unwrap_err();
+            assert!(
+                matches!(&err, Error::DataDirReadOnly { path, .. } if *path == dir.display().to_string()),
+                "{err}"
+            );
+            assert!(err.to_string().contains(&dir.display().to_string()));
+        }
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn not_writable_error_kinds() {
+        use std::io::{Error as IoError, ErrorKind};
+        assert!(datadir::is_not_writable_error(&IoError::from(
+            ErrorKind::PermissionDenied
+        )));
+        assert!(datadir::is_not_writable_error(&IoError::from(
+            ErrorKind::ReadOnlyFilesystem
+        )));
+        assert!(!datadir::is_not_writable_error(&IoError::from(
+            ErrorKind::NotFound
+        )));
+        #[cfg(unix)]
+        assert!(datadir::is_not_writable_error(&IoError::from_raw_os_error(
+            30
+        ))); // EROFS
     }
 
     /// `set_offline` overrides `SATKIT_OFFLINE` in both directions; with no

@@ -7,8 +7,8 @@ import satkit
 
 
 def test_namespace_package_without___file__(tmp_path):
-    # conda's satkit-data (and any bare directory) imports as a namespace
-    # package: __file__ is None, only __path__ is set.
+    # A bare directory without __init__.py imports as a namespace package:
+    # __file__ is None, only __path__ is set.
     (tmp_path / "data").mkdir()
     mod = types.ModuleType("satkit_data")
     mod.__file__ = None

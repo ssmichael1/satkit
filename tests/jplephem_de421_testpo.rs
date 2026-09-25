@@ -77,7 +77,8 @@ fn de421_loads_and_matches_testpo_positions() {
             continue;
         }
 
-        let tm = Instant::from_jd_with_scale(jd, TimeScale::TT);
+        // testpo epochs are JD in T_eph (TDB)
+        let tm = Instant::from_jd_with_scale(jd, TimeScale::TDB);
         let tbody = SolarSystem::try_from(tar - 1).expect("valid solar body index");
         let sbody = SolarSystem::try_from(src - 1).expect("valid solar body index");
         // testpo.421 includes rows at the very edge of DE421's span; the

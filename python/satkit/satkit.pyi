@@ -21,6 +21,10 @@ from ._types import OMMDict
 # functions, a list or numpy array of either). These aliases capture that so
 # the individual signatures stay readable.
 #
+# A ``datetime.datetime`` is converted with Python's own convention
+# (``datetime.timestamp()``): a naive datetime is the machine's local time, an
+# aware one uses its own offset (see ``time.from_datetime``).
+#
 # * ``TimeScalar``    — a single time value.
 # * ``TimeArrayLike`` — a list or numpy array of time values.
 # * ``TimeInput``     — either a scalar or an array of times.
@@ -448,8 +452,14 @@ class TLE:
 def sgp4(
     tle: TLE | OMMDict | list[TLE | OMMDict],
     time: TimeInput,
-    **kwargs,
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: bool = False,
+) -> (
+    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+    | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]
+):
     """SGP-4 propagator for TLE
 
     Run Simplified General Perturbations (SGP)-4 propagator on Two-Line Element Set to
@@ -464,14 +474,14 @@ def sgp4(
     Args:
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
             ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list mixing both
-        time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity
+        time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity.
+            A naive ``datetime`` is local time, not UTC (see :meth:`time.from_datetime`)
 
     Keyword Args:
         gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
         opsmode (satkit.sgp4_opsmode): opsmode.afspc (Air Force Space Command) or opsmode.improved.  Default is opsmode.afspc
         errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
                         (this is likely rarely needed, but can be useful for debugging)
-                        (this may also flag a typing error ... I can't figure out how to get rid of it)
 
     Returns:
         tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: position and velocity
@@ -480,8 +490,12 @@ def sgp4(
             Shape is (3,) for a single TLE and single time, (Ntime, 3) for a single TLE
             and multiple times, (Ntle, 3) for a list of TLEs and a single time, and
             (Ntle, Ntime, 3) for a list of TLEs and multiple times.
-            Additional return value if errflag is True:
-            list[sgp4_error] with error conditions for each TLE and time output.
+            If errflag is True, a third element is returned: an ``int32`` numpy
+            array of error codes, one per TLE and time — shape ``(1,)`` for a single
+            TLE and time, ``(Ntime,)``, ``(Ntle,)`` or ``(Ntle, Ntime)`` otherwise.
+            ``0`` is success. The codes are the integer values of
+            :class:`sgp4_error`, so comparing against the enum works
+            elementwise: ``err == satkit.sgp4_error.success`` is a boolean array.
 
     Notes:
         - **Units:** the canonical Vallado SGP4 implementation (and most other SGP4
@@ -495,7 +509,7 @@ def sgp4(
           :func:`omm_from_text`, from ``json.load`` on a CelesTrak or Space-Track response
           (numbers may be strings), or from ``xmltodict`` on the XML form (the nested
           ``meanElements`` / ``tleParameters`` groups are understood). ``EPOCH`` may be an
-          RFC 3339 string, a ``satkit.time`` or a ``datetime``. Other keys are ignored,
+          RFC 3339 string, a ``satkit.time`` or a ``datetime`` (naive = local time). Other keys are ignored,
           except that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be
           ``UTC`` and ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
         - The "TEME" frame of the SGP4 state vectors is not a truly inertial frame.  It is a "True Equator Mean Equinox"
@@ -504,28 +518,36 @@ def sgp4(
 
     Example:
         ```python
+        import numpy as np
+        import satkit
+
         lines = [
-               "0 INTELSAT 902",
+            "0 INTELSAT 902",
             "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
-            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981"
+            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981",
         ]
 
-        tle = satkit.TLE.from_lines(lines)[0]
+        tle = satkit.TLE.from_lines(lines)  # a single TLE, not a list
+        tm = tle.epoch
 
         # Compute TEME position & velocity at epoch
-        pteme, vteme = satkit.sgp4(tle, tle.epoch)
+        pteme, vteme = satkit.sgp4(tle, tm)
 
-        # Rotate to ITRF frame
+        # Rotate to ITRF frame; the velocity also loses the Earth-rotation term
         q = satkit.frametransform.qteme2itrf(tm)
         pitrf = q * pteme
-        vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
+        vitrf = q * vteme - np.cross(np.array([0, 0, satkit.consts.omega_earth]), pitrf)
 
         # convert to ITRF coordinate object
-        coord = satkit.itrfcoord.from_vector(pitrf)
+        coord = satkit.itrfcoord(pitrf)
 
         # Print ITRF coordinate object location
         print(coord)
-        # ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
+        # ITRFCoord(lat:  -0.0362 deg, lon:  62.0172 deg, hae: 35799.52 km)
+
+        # Error codes per output
+        pteme, vteme, err = satkit.sgp4(tle, tm, errflag=True)
+        assert (err == satkit.sgp4_error.success).all()
         ```
 
 
@@ -1039,18 +1061,25 @@ class time:
     UNIX_EPOCH: ClassVar[time]
     """The Unix epoch: 1970-01-01 00:00:00 UTC"""
 
+    @overload
+    def __init__(self) -> None: ...
+    @overload
+    def __init__(self, string: str, /) -> None: ...
+    @overload
+    def __init__(self, year: int, month: int, day: int, /, *, scale: timescale = ...) -> None: ...
+    @overload
     def __init__(
         self,
-        year: int = ...,
-        month: int = ...,
-        day: int = ...,
-        hour: int = 0,
-        min: int = 0,
-        sec: float = 0.0,
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        min: int,
+        sec: float,
+        /,
         *,
         scale: timescale = ...,
-        str: str = ...,
-    ):
+    ) -> None:
         """Create a time object representing input date and time
 
         This has functionality similar to the "datetime" object, and in fact has
@@ -1058,20 +1087,26 @@ class time:
         time representation is needed as the "datetime" object does not allow for
         conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
 
-        Notes:
-            - If no arguments are passed in, the created object represents the current time
-            - If year is passed in, month and day must also be passed in
-            - If hour is passed in, minute and second must also be passed in
+        Accepted forms (all positional):
+
+        - ``time()``: the current time
+        - ``time(string)``: parse a string, RFC 3339 first (e.g.
+          ``"2023-03-05T11:03:45.453Z"``), then other common formats
+        - ``time(year, month, day)``: midnight at the start of the day
+        - ``time(year, month, day, hour, min, sec)``: all six components
 
         Args:
+            string: String representation of time
             year: Gregorian year (e.g., 2024)
             month: Gregorian month (1 = January, 2 = February, ...)
             day: Day of month, beginning with 1
-            hour: Hour of day, in range [0,23], default is 0
-            min: Minute of hour, in range [0,59], default is 0
-            sec: Floating point second of minute, in range [0,60), default is 0
-            scale: Time scale, default is satkit.timescale.UTC
-            str: String representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
+            hour: Hour of day, in range [0,23]
+            min: Minute of hour, in range [0,59]
+            sec: Floating point second of minute, in range [0,60); up to 61
+                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31)
+            scale: Time scale in which the Gregorian components are
+                interpreted, default is satkit.timescale.UTC. Ignored for the
+                string and no-argument forms.
 
         Example:
             ```python
@@ -1345,6 +1380,15 @@ class time:
     def from_datetime(dt: datetime.datetime) -> time:
         """Convert input "datetime.datetime" object to an "satkit.time" object representing the same instant in time
 
+        Follows Python's own convention (``datetime.timestamp()``):
+
+        - A naive datetime (no ``tzinfo``) is interpreted in the machine's
+          **local time zone**, not UTC.
+        - An aware datetime uses its own UTC offset.
+
+        For UTC, pass ``tzinfo=datetime.timezone.utc`` or build a
+        ``satkit.time`` directly.
+
         Args:
             dt (datetime.datetime): "datetime.datetime" object to convert
 
@@ -1357,7 +1401,9 @@ class time:
         """Convert object to "datetime.datetime" object representing same instant in time.
 
         Args:
-            utc (bool, optional): Whether to make the "datetime.datetime" object represent time in the local timezone or "UTC".  Default is True
+            utc (bool, optional): If True (default), return an aware datetime in UTC.
+                If False, return a naive datetime in the machine's local time zone,
+                which round-trips through :meth:`time.from_datetime`.
 
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object
@@ -1386,7 +1432,9 @@ class time:
         Convert object to "datetime.datetime" object representing same instant in time.
 
         Args:
-            utc (bool, optional): Whether to make the "datetime.datetime" object represent time in the local timezone or "UTC".  Default is True
+            utc (bool, optional): If True (default), return an aware datetime in UTC.
+                If False, return a naive datetime in the machine's local time zone,
+                which round-trips through :meth:`time.from_datetime`.
 
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object
@@ -4518,13 +4566,15 @@ def propagate(
 
         Included forces:
 
-        - Earth gravity with higher-order zonal terms
+        - Earth gravity with higher-order spherical-harmonic terms
         - Sun, Moon gravity
+        - Solid Earth tides (IERS 2010 Step 1 by default; ``propsettings.tide_model``
+          selects ``tidemodel.solid_step1``, ``tidemodel.solid_full`` or ``tidemodel.none``)
+        - General relativity (IERS 2010 Eq. 10.12; ``propsettings.use_relativistic_correction``)
         - Radiation pressure
         - Atmospheric drag: NRL-MSISE 2000 density model, with option to include space weather effects
 
         End time must be set by keyword argument, either explicitly or by duration.
-        Solid Earth tides are not (yet) included in the model.
 
         For future propagation (beyond available data files):
 

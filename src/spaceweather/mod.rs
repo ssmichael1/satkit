@@ -49,14 +49,14 @@ pub enum Error {
     #[error("No space weather record found for date")]
     NoRecordForDate,
 
-    /// The configured data directory is read-only and cannot receive an
-    /// updated space-weather file.
+    /// The data directory cannot receive updated space-weather files:
+    /// read-only filesystem, no write permission, or owned by another user.
     #[error(
-        "Data directory is read-only. Try setting the environment variable SATKIT_DATA \
-         to a writeable directory and re-starting or explicitly set data directory to \
-         a writeable directory"
+        "Data directory {path} is not writable ({reason}). Set the environment variable \
+         SATKIT_DATA to a writable directory and restart, or call set_datadir \
+         (Python: satkit.utils.set_datadir) with one"
     )]
-    DataDirReadOnly,
+    DataDirReadOnly { path: String, reason: String },
 
     /// Bytes passed to [`init_from_bytes`] were not valid UTF-8 — the
     /// space-weather file is a CSV text format.
@@ -263,13 +263,66 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
     }
 }
 
+/// Of several copies of one space-weather file, the one whose last record
+/// is latest (ties keep the earlier copy in `copies`, i.e. search order).
+/// Copies that cannot be read or parsed are skipped; if none can, the first
+/// copy is returned so the load reports its error. With one copy nothing is
+/// parsed.
+///
+/// A read-only copy in a search directory ahead of the write location (an
+/// `add_search_dir` directory, `<dylib>/satkit-data`, the `satkit-data`
+/// bundle) would otherwise shadow every later download: [`path_for`]
+/// returns the first match. The Earth-orientation loader makes the same
+/// choice between its two files by their last observed row.
+///
+/// [`path_for`]: crate::utils::datadir::path_for
+fn freshest_of(
+    copies: Vec<std::path::PathBuf>,
+    last_day: impl Fn(&str) -> Option<i64>,
+) -> Option<std::path::PathBuf> {
+    if copies.len() <= 1 {
+        return copies.into_iter().next();
+    }
+    let mut best: Option<(i64, &std::path::PathBuf)> = None;
+    for p in &copies {
+        let Some(day) = std::fs::read_to_string(p).ok().and_then(|t| last_day(&t)) else {
+            continue;
+        };
+        if best.is_none_or(|(d, _)| day > d) {
+            best = Some((day, p));
+        }
+    }
+    best.map(|(_, p)| p.clone())
+        .or_else(|| copies.into_iter().next())
+}
+
+/// UTC day number of the last row of a parsed file, for [`freshest_of`].
+fn last_row_day(rows: &[SpaceWeatherRecord]) -> Option<i64> {
+    rows.last().map(|r| r.date.utc_day_number())
+}
+
+/// The path to read `name` from — the freshest copy across the search
+/// directories (see [`freshest_of`]) — or, when there is none, where it
+/// would be written.
+fn freshest_path_for(
+    name: &str,
+    last_day: impl Fn(&str) -> Option<i64>,
+) -> Result<std::path::PathBuf> {
+    match freshest_of(datadir::find_all(name), last_day) {
+        Some(p) => Ok(p),
+        None => Ok(datadir()?.join(name)),
+    }
+}
+
 /// Lazy default load: the three primary sources under [`datadir`],
-/// fetched on first use, assembled into one table. A `SW-All.csv` already
-/// in a search directory with no GFZ file beside it is read instead, so an
-/// existing cache or an offline bundle keeps working.
+/// fetched on first use, assembled into one table. When a file exists in
+/// more than one search directory the copy with the latest last row is
+/// used, so a stale read-only copy cannot shadow a fresh download. A
+/// `SW-All.csv` already in a search directory with no GFZ file anywhere is
+/// read instead, so an existing cache or an offline bundle keeps working.
 fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
     use crate::utils::datadir::path_for;
-    let gfz_path = path_for(GFZ_FILE)?;
+    let gfz_path = freshest_path_for(GFZ_FILE, |t| last_row_day(&gfz::parse(t).ok()?))?;
     if !gfz_path.is_file() {
         if let Ok(csv) = path_for(CSSI_FILE) {
             if csv.is_file() {
@@ -283,7 +336,7 @@ fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
     }
     // The two forecasts are best-effort: a failed fetch leaves an
     // observed-only table.
-    let swpc_path = path_for(SWPC_FILE)?;
+    let swpc_path = freshest_path_for(SWPC_FILE, |t| last_row_day(&swpc::parse(t).ok()?))?;
     if !swpc_path.is_file() {
         if let Some(base) =
             refresh_url(SWPC_FILE).and_then(|u| u.strip_suffix(SWPC_FILE).map(str::to_string))
@@ -291,7 +344,9 @@ fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
             let _ = download_if_not_exist(&swpc_path, Some(&base));
         }
     }
-    let msafe_path = path_for(MSAFE_FILE)?;
+    let msafe_path = freshest_path_for(MSAFE_FILE, |t| {
+        last_row_day(&msafe::parse(t).ok()?.records())
+    })?;
     if !msafe_path.is_file() {
         if let Ok(dir) = datadir() {
             let _ = msafe::refresh_into(&dir, false);
@@ -580,13 +635,24 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     if tm.utc_day_number() > last.date.utc_day_number()
         && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed)
     {
+        // A table that ends in the past is stale and a refresh extends it;
+        // one that ends in the future already runs to the end of the
+        // long-range forecast, which no refresh moves.
+        let advice = if last.date < Instant::now() {
+            "The table ends in the past, so it is out of date: run \
+             `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+             to download the current space-weather files."
+        } else {
+            "The table already reaches past today to the end of its long-range forecast \
+             (the default NASA MSAFE forecast runs about 15 years ahead); refreshing the data \
+             files will not move that end."
+        };
         eprintln!(
             "Warning: the space-weather table ends at {}; the request for {tm} and all later \
              epochs return that row's values unchanged.\n\
-             Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
-             to download the most recent space-weather file.\n\
+             {advice}\n\
              To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
-                 (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
+             (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
             last.date
         );
     }
@@ -615,9 +681,10 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
              storm information. Density can be wrong by a factor of two during a geomagnetic \
              storm (measured 1.9x at 400 km for the 2024-05-11 event).\n\
              Daily data ends shortly after the last observed day; see \
-             `satkit::spaceweather::coverage()` / `status()`.\n\
+             `satkit::spaceweather::coverage()` / `status()` (Python: \
+             `satkit.spaceweather.coverage()` / `status()`).\n\
              To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
-                 (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
+             (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
             rec.date
         );
     }
@@ -634,8 +701,15 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
 /// newest file NASA has published.
 pub fn update() -> Result<()> {
     let d = datadir()?;
-    if d.metadata()?.permissions().readonly() {
-        return Err(Error::DataDirReadOnly);
+    if let Err(e) = datadir::ensure_writable(&d) {
+        return Err(if datadir::is_not_writable_error(&e) {
+            Error::DataDirReadOnly {
+                path: d.display().to_string(),
+                reason: e.to_string(),
+            }
+        } else {
+            e.into()
+        });
     }
     for file in [GFZ_FILE, SWPC_FILE] {
         if let Some(url) = refresh_url(file) {
@@ -650,6 +724,38 @@ pub fn update() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stale copy earlier in the search order must not shadow a fresher
+    /// one later in it; ties and unparseable copies fall back to order.
+    #[test]
+    fn freshest_of_prefers_latest_last_row() {
+        let dir = std::env::temp_dir().join(format!("satkit_sw_fresh_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (a, b, c) = (dir.join("a"), dir.join("b"), dir.join("c"));
+        for d in [&a, &b, &c] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        // "File content" is just the last day number in these tests.
+        std::fs::write(a.join("f"), "100").unwrap(); // stale, first in order
+        std::fs::write(b.join("f"), "200").unwrap(); // fresh
+        std::fs::write(c.join("f"), "garbage").unwrap();
+        let parse = |t: &str| t.trim().parse::<i64>().ok();
+        let paths = |ds: &[&std::path::PathBuf]| ds.iter().map(|d| d.join("f")).collect();
+
+        assert_eq!(freshest_of(paths(&[&a, &b]), parse), Some(b.join("f")));
+        assert_eq!(freshest_of(paths(&[&b, &a]), parse), Some(b.join("f")));
+        assert_eq!(freshest_of(paths(&[&c, &a]), parse), Some(a.join("f")));
+        // Single copy: returned as is, even if it would not parse.
+        assert_eq!(freshest_of(paths(&[&c]), parse), Some(c.join("f")));
+        // Nothing parses: first copy, so the load reports the real error.
+        std::fs::write(a.join("f"), "junk").unwrap();
+        assert_eq!(freshest_of(paths(&[&a, &c]), parse), Some(a.join("f")));
+        // Tie: search order wins.
+        std::fs::write(a.join("f"), "200").unwrap();
+        assert_eq!(freshest_of(paths(&[&a, &b]), parse), Some(a.join("f")));
+        assert_eq!(freshest_of(Vec::new(), parse), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn test_load() {

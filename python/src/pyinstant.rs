@@ -521,12 +521,17 @@ impl PyInstant {
 
     /// Convert from Python datetime object
     ///
+    /// Follows Python's own convention (``datetime.timestamp()``): a naive
+    /// datetime (no ``tzinfo``) is interpreted in the machine's local time
+    /// zone, not UTC; an aware datetime uses its own UTC offset. For UTC,
+    /// pass ``tzinfo=datetime.timezone.utc`` or build a ``satkit.time``
+    /// directly.
+    ///
     /// Args:
     ///     datetime (datetime.datetime): datetime object to convert
     ///
     /// Returns:
-    ///     satkit.time: satkit.time object that matches input datetime
-    /// SatKit Time object representing input datetime
+    ///     satkit.time: satkit.time object representing the same instant as the input datetime
     #[staticmethod]
     fn from_datetime(dt: &Bound<'_, PyDateTime>) -> PyResult<Self> {
         Ok(Self(datetime_to_instant(dt)?))
@@ -535,7 +540,9 @@ impl PyInstant {
     /// Convert to Python datetime object
     ///
     /// Args:
-    ///     utc (bool, optional): Use UTC as timezone; if not passed in, defaults to true
+    ///     utc (bool, optional): If true (default), return an aware datetime in UTC;
+    ///         if false, return a naive datetime in the machine's local time zone,
+    ///         which round-trips through ``from_datetime``
     ///
     /// Returns:
     ///     datetime.datetime:  datetime object matching the input satkit.time
@@ -556,7 +563,9 @@ impl PyInstant {
     /// Convert to Python datetime object
     ///
     /// Args:
-    ///     utc (bool, optional): Use UTC as timezone; if not passed in, defaults to true
+    ///     utc (bool, optional): If true (default), return an aware datetime in UTC;
+    ///         if false, return a naive datetime in the machine's local time zone,
+    ///         which round-trips through ``from_datetime``
     ///
     /// Returns:
     ///     datetime.datetime:  datetime object matching the input satkit.time
@@ -929,6 +938,9 @@ impl PyInstant {
     }
 }
 
+/// Convert a Python `datetime` with Python's own convention
+/// (`datetime.timestamp()`): a naive datetime is local time, an aware one
+/// uses its own offset. Shared by every binding that accepts a datetime.
 fn datetime_to_instant(tm: &Bound<PyDateTime>) -> PyResult<Instant> {
     // datetime.timestamp() can itself raise (e.g. pre-1970 naive datetimes
     // on Windows, extreme years via mktime); propagate rather than panic

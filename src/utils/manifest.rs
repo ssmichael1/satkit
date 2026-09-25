@@ -12,8 +12,8 @@
 //! static file by size and SHA-256 and lists, in order of preference, the
 //! URLs it may be fetched from. A given satkit build therefore always
 //! resolves to the same data bytes, downloads are verified before they are
-//! trusted, and the same manifest drives the CI cache key, the Python
-//! bootstrap script and (by hand, for now) the conda recipe.
+//! trusted, and the same manifest drives the CI cache key and the Python
+//! bootstrap script.
 //!
 //! # URL order
 //!
@@ -432,10 +432,10 @@ pub fn fetch_static_file(
             Err(e) => return Err(e),
         }
     }
-    if download::is_offline() {
+    if let Some(reason) = download::offline_reason() {
         return Err(Error::Offline {
             name: entry.name.clone(),
-            reason: "SATKIT_OFFLINE is set",
+            reason,
             urls: entry.candidate_urls(),
         });
     }

@@ -80,13 +80,11 @@ impl PyKepler {
     }
 
     fn warn_w_deprecated(py: Python) -> PyResult<()> {
-        let warning_type = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
-        PyErr::warn(
-            py,
-            warning_type.as_any(),
-            c"kepler.w is deprecated; use kepler.argp",
-            2,
-        )
+        // Stack level 1 is the Python line that touched `.w` (a PyO3
+        // getter has no frame of its own); level 2 pointed one frame
+        // further out — `<sys>:0` at module level — where the default
+        // filters hide DeprecationWarning.
+        crate::pyutils::warn_deprecated(py, c"kepler.w is deprecated; use kepler.argp")
     }
 }
 

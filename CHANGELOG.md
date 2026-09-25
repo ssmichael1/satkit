@@ -8,14 +8,25 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - **Breaking (experimental ECOM):** ECOM coefficients are referred to 1 AU and the ECOM acceleration is scaled by `(AU / d)²` with the satellite–Sun distance, like the cannonball term, so fitted coefficients no longer drift ±3.4 % with the season; coefficients from an unscaled implementation convert by `(d / AU)²` at their epoch ([#213](https://github.com/ssmichael1/satkit/pull/213), [#210](https://github.com/ssmichael1/satkit/issues/210))
 
+### Fixed
+
+- Time scales: TDB − TT had a ~57-year instead of a one-year period (up to 1.7 ms wrong), and the JPL ephemerides are now evaluated at TDB instead of TT (Moon ~2 m); 00:00:00 UTC after a leap second was built 1 s early, `23:59:60.x` could not be entered, the 1972-01-01 leap-second entry was 9 s late, pre-1970 times of day printed negative, and UT1 − UTC was interpolated across the leap-second step on the preceding day (0.5 s off); docs now say that a naive `datetime` is local time, as in Python ([#217](https://github.com/ssmichael1/satkit/pull/217))
+- Messages, stubs and docs cleanup: `utils.update_datafiles()` raises `TypeError` for an unknown keyword (was silently ignored) and fails before printing anything under offline mode; offline errors say whether `set_offline(True)` or `SATKIT_OFFLINE` is the cause; an unwritable data directory (read-only filesystem, another user's directory) is reported with its path (Rust: `DataDirReadOnly` gains `path` / `reason`); EOP and space-weather warnings and the `propagate` EOP errors name the Python functions, and no longer suggest a refresh for epochs before 1973 or past the MSAFE forecast; the CelesTrak throttle hint is limited to GP queries; space weather reads the freshest copy of each file across the data search directories; the `kepler.w` `DeprecationWarning` points at the caller; `sgp4` stub overloads for `errflag` (an `int32` array) and a runnable example; docs fixes for `SATKIT_DATA_URL` scope, EOP coverage from 1973, tides in `propagate`, and the ephemeris trigger ([#218](https://github.com/ssmichael1/satkit/pull/218))
+
 ### Docs
 
 - Covariance docs use RTN (R exactly along position) instead of LVLH, whose x axis is only approximately along-track, and the Covariance Propagation tutorial adds an eccentric-orbit comparison of RTN and NTW (T exactly along velocity); the Coordinate Frames tutorial opens with tables of the Earth/celestial and satellite frames ([#214](https://github.com/ssmichael1/satkit/pull/214))
+- New Troubleshooting & FAQ page under Getting Started, organised by symptom: EOP/space-weather warnings, data directories and downloads, TLS/proxy/offline setups, installation, API renames and results that look wrong ([#216](https://github.com/ssmichael1/satkit/pull/216))
 
 ### CI
 
 - Release workflow: a `preflight` job replaces the redundant pre-release test job — it verifies the version strings and waits for a green Build run on the tagged commit — and the PyPI publish now depends on it, so a mis-versioned tag can no longer reach PyPI while being refused by crates.io. The Build workflow drops its duplicate `cargo build --release` pass, runs `cargo doc` on Ubuntu only, caches the sdist job's compile, and replaces the per-PR cargo-audit job with cargo-deny (RustSec advisories plus a dependency licence allowlist and crate-source check; policy in `deny.toml`, weekly cargo-audit schedule kept). Dependabot keeps the GitHub Actions pins current ([#211](https://github.com/ssmichael1/satkit/pull/211))
 - stubtest now checks all eleven stub modules (the eight submodule stubs were previously skipped) against an exact, commented allowlist; the Python examples in the docs and docstrings are executed in CI; several stub signatures and doc examples corrected ([#220](https://github.com/ssmichael1/satkit/pull/220))
+
+### Tests
+
+- Differential tests against ERFA (`pyerfa`, a new test dependency) for the time scales around every leap second, ERA/GMST/equation of the equinoxes, the CIO/precession–nutation chain, TEME and WGS-84 geodetic conversion; three confirmed defects are pinned as strict xfails ([#219](https://github.com/ssmichael1/satkit/pull/219))
+- Property tests: leap-second-biased generators, construction-route agreement, UTC day length, TDB periodicity, UT1 continuity and frame-transform invariants (proptest), and datetime/pickle/vectorisation properties (hypothesis, a new test dependency); a weekly 100k-case run; seven defects pinned as ignored/xfail tests ([#221](https://github.com/ssmichael1/satkit/pull/221))
 
 ## 0.23.1 - 2026-09-24
 

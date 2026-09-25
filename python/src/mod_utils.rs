@@ -1,5 +1,4 @@
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use pyo3::wrap_pyfunction;
 use pyo3::IntoPyObjectExt;
 
@@ -16,9 +15,14 @@ use anyhow::Result;
 /// Call this to provision everything up front (a container image, a machine
 /// that will later be offline) or to refresh the daily files.
 ///
-/// Args:
+/// Keyword Args:
 ///     overwrite (bool): Download and overwrite files if they already exist
-///     dir (str): Target directory for files.  Uses ``datadir()`` if not specified
+///     dir (str | os.PathLike): Target directory for files.  Uses ``datadir()`` if not specified
+///
+/// Raises:
+///     TypeError: for any other keyword argument (e.g. ``force=True``)
+///     RuntimeError: under offline mode (``SATKIT_OFFLINE`` / ``set_offline(True)``),
+///         before anything is printed or fetched
 ///
 ///
 /// Files downloaded:
@@ -49,25 +53,11 @@ use anyhow::Result;
 /// `overwrite=True` forces a full re-fetch of these too.
 ///
 #[pyfunction]
-// Keywords parsed by hand; `text_signature` publishes them for inspect/stubtest.
-#[pyo3(signature=(**kwds), text_signature = "(*, overwrite=False, dir=...)")]
-fn update_datafiles(kwds: Option<&Bound<'_, PyDict>>) -> Result<()> {
-    let overwrite_files = match kwds {
-        None => false,
-        Some(u) => match u.get_item("overwrite")? {
-            Some(v) => v.extract::<bool>()?,
-            None => false,
-        },
-    };
-    let datadir = match kwds {
-        None => None,
-        Some(u) => match u.get_item("dir")? {
-            Some(v) => Some(PathBuf::from(v.extract::<String>()?)),
-            None => None,
-        },
-    };
-
-    satkit::utils::update_datafiles(datadir, overwrite_files)?;
+#[pyo3(signature=(*, overwrite=false, dir=None))]
+fn update_datafiles(overwrite: bool, dir: Option<PathBuf>) -> Result<()> {
+    // Keyword-only parameters: an unknown keyword (e.g. `force=True`) is a
+    // `TypeError` from PyO3's argument parsing instead of being ignored.
+    satkit::utils::update_datafiles(dir, overwrite)?;
     Ok(())
 }
 

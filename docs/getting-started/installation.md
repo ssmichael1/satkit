@@ -14,7 +14,7 @@ That is the whole install (~10 MB). The core data — the IERS nutation tables a
 
 Two things are fetched later, on demand:
 
-- **The JPL ephemeris** (DE440, 102 MB) is downloaded the first time a planetary or lunar position is needed — the first `propagate()`, `jplephem` query or `sun`/`moon` call. The download is SHA-256 verified against the manifest compiled into satkit, and is written to the platform user-data directory (`satkit.utils.datadir()`), never inside `site-packages`. Set `SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421` to use the 14 MB DE421 (1900–2053) instead.
+- **The JPL ephemeris** (DE440, 102 MB) is downloaded the first time it is needed — the first `propagate()` or `satkit.jplephem` query. The `sun`, `moon` and `planets` modules are analytic low-precision models and never load it. The download is SHA-256 verified against the manifest compiled into satkit, and is written to the platform user-data directory (`satkit.utils.datadir()`), never inside `site-packages`. Set `SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421` to use the 14 MB DE421 (1900–2053) instead.
 - **Earth orientation and space weather** (`finals2000A.all` from the IERS mirrors, with CelesTrak's `EOP-All.csv` as fallback; the GFZ Potsdam observed record, the NOAA/SWPC 45-day forecast and the NASA MSAFE monthly forecast) are fetched on first use and refreshed by `satkit.utils.update_datafiles()`; they change daily, so re-run that periodically.
 
 To provision everything up front (a Docker image, a CI job, a machine that will later be offline):
@@ -28,7 +28,7 @@ sk.utils.update_datafiles()   # ephemeris (verified) + EOP + space weather
 ### Offline and air-gapped use
 
 - `SATKIT_OFFLINE=1` forbids all network access: anything that would need a download raises `RuntimeError` naming the missing file and its sources instead of connecting.
-- `SATKIT_DATA_URL=https://mirror.example/satkit-data` makes satkit fetch from a mirror first (plain `http://` is accepted for an internal mirror; downloads are still verified).
+- `SATKIT_DATA_URL=https://mirror.example/satkit-data` makes satkit fetch the manifest-pinned files (the JPL ephemeris, ITU_GRACE16) from a mirror first (plain `http://` is accepted for an internal mirror; downloads are still verified). It does not cover the Earth-orientation and space-weather files, which are always refreshed from their producers; copy those into `SATKIT_DATA` on an air-gapped machine.
 - `pip install satkit[data]` installs the optional **`satkit-data`** bundle (the ephemeris and full-degree gravity files, ~110 MB) into `site-packages`; satkit finds it automatically as a read-only source. Use it where a first-use download is unwelcome.
 - `SATKIT_DATA=/path` names a directory that is both searched first and written to.
 - `SATKIT_CA_BUNDLE=/path/bundle.pem` verifies downloads against that PEM file instead of the system trust store — for a network whose TLS is inspected by a proxy whose CA is not installed system-wide, or a container with no trust store at all (`SATKIT_CA_BUNDLE=webpki` uses the roots compiled into satkit). See [Data Files](datadownloads.md#downloads-behind-a-tls-inspecting-proxy).
@@ -56,3 +56,7 @@ mkdir wheel
 cd wheel
 python -m pip wheel ..
 ```
+
+## Something not working?
+
+See [Troubleshooting & FAQ](troubleshooting.md) for pip falling back to a source build, data warnings, and download failures.
