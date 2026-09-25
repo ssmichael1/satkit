@@ -3,14 +3,42 @@
 //! Each test asserts an invariant over a *domain* of randomly generated
 //! inputs rather than hand-picked examples. proptest over-weights boundary
 //! values (0, endpoints), automatically shrinks any failure to a minimal
-//! counterexample, and records failures in `proptest-regressions/` (checked
-//! into git) so they replay as regression tests forever.
+//! counterexample. proptest's own failure file
+//! (`tests/properties.proptest-regressions`) is gitignored: a real
+//! counterexample is pinned as a named `regression_*` test at the bottom of
+//! this file instead, so it replays forever with an explanation attached.
 //!
 //! Everything here is deliberately independent of the external data files
 //! (no EOP / space weather / ephemerides), so the suite runs anywhere
-//! `cargo test` does. UT1 conversions are excluded for that reason.
+//! `cargo test` does. UT1 conversions and frame transforms need EOP data and
+//! live in `tests/properties_data.rs`.
+//!
+//! # Case counts
+//!
+//! Properties run proptest's default 256 cases, except the cheap
+//! edge-biased time properties, which run `TIME_CASES` (1024); the whole
+//! file takes well under a second once built. Set `PROPTEST_CASES` to
+//! override every count for a deeper run, e.g.
+//! `PROPTEST_CASES=100000 cargo test --test properties` (about 2 s; the
+//! weekly `deep-proptest` job in `.github/workflows/audit.yml` runs this).
+//!
+//! # Time properties and why they look the way they do
+//!
+//! The time-scale defects fixed in #217 were all invisible to the original
+//! round-trip properties, for two reasons: an inverse pair shares a
+//! symmetric bug (a wrong TDB − TT period cancels in MJD → Instant → MJD),
+//! and uniform sampling over 1972–2045 essentially never lands near one of
+//! the 28 leap-second boundaries or before 1970. The time sections below
+//! therefore (a) draw from the edge-biased generators in `time_edges/`, and
+//! (b) prefer properties that reach the same answer by *different routes*
+//! (calendar components vs strings vs MJD vs unixtime) or check a physical
+//! invariant against an independent source (day lengths from IERS
+//! Bulletin C, the published TDB − TT series) rather than a self-inverse.
+
+mod time_edges;
 
 use proptest::prelude::*;
+use time_edges::*;
 
 use satkit::kepler::Anomaly;
 use satkit::{Duration, ITRFCoord, Instant, Kepler, Quaternion, TimeScale, TLE};
@@ -266,6 +294,484 @@ proptest! {
     }
 }
 
+// ─────────────── Time: edge-biased generators (sanity) ───────────────
+
+/// Cases for the (cheap) edge-biased time properties; `PROPTEST_CASES`
+/// overrides.
+const TIME_CASES: u32 = 1024;
+
+proptest! {
+    #![proptest_config(cases(TIME_CASES))]
+
+    /// The independent calendar used by the generators round-trips, and
+    /// agrees with satkit's Gregorian arithmetic on the date of every
+    /// non-leap label (different algorithms, same answer). Covers 1900–2045
+    /// including 1900 (not a leap year) and 2000 (a leap year).
+    #[test]
+    fn generator_calendar_matches_satkit(l in any_non_leap_label()) {
+        prop_assert_eq!(civil_from_days(l.days()), (l.y, l.mo, l.d));
+        let t = l.instant();
+        let (y, mo, d, ..) = t.as_datetime();
+        prop_assert_eq!((y, mo, d), (l.y, l.mo, l.d), "label {}", l.iso());
+        // Unixtime day number from the independent calendar
+        prop_assert_eq!(t.as_unixtime().div_euclid(86_400.0) as i64, l.days());
+    }
+}
+
+// ─────────────── Time: construction paths agree ───────────────
+
+/// `YYYY-MM-DD HH:MM:SS.ffffff` (space separator, no zone): not RFC 3339,
+/// so `from_string` falls through to its tokenizer.
+fn spaced(l: &Label) -> String {
+    let (s, f) = l.sec_frac();
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:06}",
+        l.y, l.mo, l.d, l.h, l.mi, s, f
+    )
+}
+
+/// Labels without the leap-second bias (uniform 1900–2045 plus the Unix
+/// epoch and 1972-01-01 edges), for properties that shift a label by a
+/// UTC offset of up to ±14 h; spans that contain a leap second are then
+/// skipped with [`span_crosses_leap_second`].
+fn no_leap_day_label() -> impl Strategy<Value = Label> {
+    prop_oneof![
+        4 => uniform_label(1972, 2045),
+        2 => uniform_label(1900, 1972),
+        1 => prop::sample::select(vec![
+            Label::new(1970, 1, 1, 0, 0, 0),
+            Label::new(1969, 12, 31, 23, 59, 59_999_999),
+            Label::new(1972, 1, 2, 0, 0, 0),
+            Label::new(2000, 2, 29, 12, 0, 0),
+        ]),
+    ]
+}
+
+/// Whether the label span between UTC day `a` and local day `b` crosses the
+/// end of a leap-second day (i.e. contains inserted time).
+fn span_crosses_leap_second(a: i64, b: i64) -> bool {
+    (a.min(b)..a.max(b)).any(|d| inserted_seconds(d) > 0)
+}
+
+/// `|a − b|` in microseconds.
+fn diff_us(a: &Instant, b: &Instant) -> i64 {
+    (*a - *b).as_microseconds().abs()
+}
+
+proptest! {
+    #![proptest_config(cases(TIME_CASES))]
+
+    /// Every way of entering the same UTC label yields the same instant:
+    /// calendar components (`from_datetime`, `from_datetime_with_scale(UTC)`),
+    /// RFC 3339 (`from_rfc3339`, `from_string`), the `from_string`
+    /// tokenizer, `strptime`, and — where the label is representable —
+    /// `from_mjd_with_scale(UTC)` and `from_unixtime`.
+    ///
+    /// Exclusions: unixtime and UTC MJD count 86400 s per day and cannot
+    /// name `23:59:60.x`, so those two routes are skipped for leap labels.
+    ///
+    /// Tolerance: the reference is [`Label::instant`] (integer µs). Routes
+    /// that pass the seconds as `f64` are allowed 1 µs because
+    /// `from_datetime` truncates `second * 1e6` (see
+    /// `from_datetime_float_seconds_exact` below); the MJD / unixtime
+    /// routes are allowed 2 µs (f64 day / second quantization plus the same
+    /// truncation).
+    #[test]
+    fn construction_paths_agree(l in any_label()) {
+        let t = l.instant();
+        let iso = l.iso();
+
+        let dt = Instant::from_datetime(l.y, l.mo, l.d, l.h, l.mi, l.seconds_f64());
+        prop_assert!(dt.is_ok(), "from_datetime rejected {iso}: {:?}", dt.err());
+        let dt = dt.unwrap();
+        prop_assert!(diff_us(&dt, &t) <= 1, "from_datetime({iso}) = {dt}");
+
+        let dts = Instant::from_datetime_with_scale(
+            l.y, l.mo, l.d, l.h, l.mi, l.seconds_f64(), TimeScale::UTC,
+        );
+        prop_assert_eq!(dts.ok(), Some(dt), "from_datetime_with_scale(UTC) differs");
+
+        for (route, s, parsed) in [
+            ("from_rfc3339", iso.clone(), Instant::from_rfc3339(&iso)),
+            ("from_string(rfc)", iso.clone(), Instant::from_string(&iso)),
+            ("from_string(tokenizer)", spaced(&l), Instant::from_string(&spaced(&l))),
+            (
+                "strptime",
+                spaced(&l),
+                Instant::strptime(&spaced(&l), "%Y-%m-%d %H:%M:%S.%f"),
+            ),
+        ] {
+            prop_assert!(parsed.is_ok(), "{route} rejected {s:?}: {:?}", parsed.err());
+            let p = parsed.unwrap();
+            prop_assert!(diff_us(&p, &t) <= 1, "{route}({s:?}) = {p} ≠ {t}");
+        }
+
+        if !l.is_leap() {
+            let basis = l.utc_basis_us();
+            let unix = Instant::from_unixtime(basis as f64 * 1.0e-6);
+            prop_assert!(diff_us(&unix, &t) <= 2, "from_unixtime → {unix} ≠ {t}");
+            // MJD epoch 1858-11-17 is 40587 days before the Unix epoch
+            let mjd = (basis as f64 / US_DAY as f64) + 40_587.0;
+            let m = Instant::from_mjd_with_scale(mjd, TimeScale::UTC);
+            prop_assert!(diff_us(&m, &t) <= 2, "from_mjd_utc({mjd}) → {m} ≠ {t}");
+        }
+    }
+
+    /// An RFC 3339 string with a UTC offset names the same instant as the
+    /// equivalent `Z` string. The offset label is built independently (UTC
+    /// label + offset on the 86400-s-per-day label axis), as RFC 3339
+    /// defines it.
+    ///
+    /// Offsets that span a leap second are excluded here: `from_rfc3339`
+    /// applies the offset as an SI-seconds `Duration`, which is 1 s off when
+    /// the offset spans a leap second — pinned separately in
+    /// `regression_rfc3339_offset_across_leap_second`.
+    #[test]
+    fn rfc3339_offset_matches_utc(
+        l in no_leap_day_label(),
+        offset_min in -14 * 60..=14 * 60i64,
+    ) {
+        let local = l.utc_basis_us() + offset_min * US_MIN;
+        let ll = Label::from_day_tod(local.div_euclid(US_DAY), local.rem_euclid(US_DAY));
+        // Skip labels whose local/UTC span touches a leap-second day
+        prop_assume!(!span_crosses_leap_second(l.days(), ll.days()));
+        let sign = if offset_min < 0 { '-' } else { '+' };
+        let s = format!(
+            "{}{}{:02}:{:02}",
+            &ll.iso()[..ll.iso().len() - 1],
+            sign,
+            offset_min.abs() / 60,
+            offset_min.abs() % 60
+        );
+        let p = Instant::from_rfc3339(&s);
+        prop_assert!(p.is_ok(), "rejected {s:?}: {:?}", p.err());
+        let p = p.unwrap();
+        prop_assert!(diff_us(&p, &l.instant()) <= 1, "{s:?} → {p}, expected {}", l.iso());
+    }
+
+    /// `strptime`'s `%z` agrees with `from_rfc3339`'s offset handling (and
+    /// hence with the `Z` label): `+HHMM` means local time is ahead of UTC.
+    #[test]
+    #[ignore = "NEW BUG: strptime adds the %z offset instead of subtracting it \
+                (src/time/instantparse.rs:339, `instant += from_minutes(offset)`); \
+                see regression_strptime_z_offset_sign"]
+    fn strptime_z_offset_sign(
+        l in no_leap_day_label(),
+        offset_min in -14 * 60..=14 * 60i64,
+    ) {
+        prop_assume!(offset_min != 0);
+        let local = l.utc_basis_us() + offset_min * US_MIN;
+        let ll = Label::from_day_tod(local.div_euclid(US_DAY), local.rem_euclid(US_DAY));
+        prop_assume!(!span_crosses_leap_second(l.days(), ll.days()));
+        let sign = if offset_min < 0 { '-' } else { '+' };
+        let s = format!(
+            "{}{}{:02}{:02}",
+            spaced(&ll),
+            sign,
+            offset_min.abs() / 60,
+            offset_min.abs() % 60
+        );
+        let p = Instant::strptime(&s, "%Y-%m-%d %H:%M:%S.%f%z");
+        prop_assert!(p.is_ok(), "rejected {s:?}: {:?}", p.err());
+        let p = p.unwrap();
+        prop_assert!(diff_us(&p, &l.instant()) <= 1, "{s:?} → {p}, expected {}", l.iso());
+    }
+
+    /// Passing seconds as `f64` loses no microseconds: `from_datetime` with
+    /// `second = us · 1e-6` and `from_rfc3339` of a 6-digit fraction give
+    /// exactly the label's instant, and `from_rfc3339(t.to_string())` is
+    /// exactly `t`.
+    #[test]
+    #[ignore = "NEW BUG: from_datetime truncates `second * 1e6` \
+                (src/time/instant.rs:780, and :769 for 23:59:60.x) instead of rounding; \
+                see regression_from_datetime_truncates_microseconds"]
+    fn from_datetime_float_seconds_exact(l in any_label()) {
+        let t = l.instant();
+        let dt = Instant::from_datetime(l.y, l.mo, l.d, l.h, l.mi, l.seconds_f64()).unwrap();
+        prop_assert_eq!(dt, t, "from_datetime({}) off by {} µs", l.iso(), (dt - t).as_microseconds());
+        let (y, mo, d, h, mi, s) = t.as_datetime();
+        let back = Instant::from_datetime(y, mo, d, h, mi, s).unwrap();
+        prop_assert_eq!(back, t, "from_datetime(as_datetime({}))", l.iso());
+        let p = Instant::from_rfc3339(&t.to_string()).unwrap();
+        prop_assert_eq!(p, t, "from_rfc3339({})", t);
+    }
+}
+
+// ─────────────── Time: calendar round-trips and formatting ───────────────
+
+proptest! {
+    #![proptest_config(cases(TIME_CASES))]
+
+    /// Calendar label → instant → calendar label is the identity over the
+    /// edge-biased domain (pre-1970, leap seconds, `23:59:60.x`), the
+    /// fields are in range, and the formatted string (`Display`,
+    /// `as_iso8601`, `as_rfc3339`) is exactly the label and re-parses to the
+    /// instant.
+    ///
+    /// Range: `0 ≤ h < 24`, `0 ≤ m < 60`, `0 ≤ s < 60` except `s < 61`
+    /// during a leap second and `s < 70` on 1971-12-31 23:59 (the 10 s step
+    /// satkit models at 1972-01-01).
+    #[test]
+    fn calendar_roundtrip_and_format(l in any_label()) {
+        let t = l.instant();
+        let (y, mo, d, h, mi, s) = t.as_datetime();
+        prop_assert_eq!((y, mo, d, h, mi), (l.y, l.mo, l.d, l.h, l.mi), "label {}", l.iso());
+        prop_assert_eq!((s * 1.0e6).round() as i64, l.us, "seconds field for {}", l.iso());
+
+        prop_assert!((0..24).contains(&h) && (0..60).contains(&mi), "{h}:{mi}");
+        let s_max = if (y, mo, d, h, mi) == (1971, 12, 31, 23, 59) {
+            70.0
+        } else if inserted_seconds(l.days()) > 0 && (h, mi) == (23, 59) {
+            61.0
+        } else {
+            60.0
+        };
+        prop_assert!((0.0..s_max).contains(&s), "second {s} out of [0, {s_max}) for {}", l.iso());
+
+        let iso = l.iso();
+        prop_assert_eq!(t.to_string(), iso.clone());
+        prop_assert_eq!(t.as_iso8601(), iso.clone());
+        prop_assert_eq!(t.as_rfc3339(), iso.clone());
+        let p = Instant::from_rfc3339(&t.to_string()).unwrap();
+        prop_assert!(diff_us(&p, &t) <= 1, "re-parse of {iso} → {p}");
+    }
+
+    /// The ISO label is monotonic: a later instant never gets a
+    /// lexicographically smaller label (years 1900–2045 are all four
+    /// digits, so string order is time order). Checked for nearby pairs
+    /// (which cross the leap-second boundaries the generator targets) and
+    /// for arbitrary pairs.
+    #[test]
+    fn iso_label_monotonic(
+        a in any_instant(),
+        b in any_instant(),
+        dt_us in 1..20_000_000i64,
+    ) {
+        let a2 = a + Duration::from_microseconds(dt_us);
+        prop_assert!(a.to_string() < a2.to_string(), "{a} !< {a2} (dt {dt_us} µs)");
+        prop_assert_eq!(a.cmp(&b), a.to_string().cmp(&b.to_string()), "{} vs {}", a, b);
+    }
+}
+
+/// Deterministic sweep of *every* leap second: from 3 s before the inserted
+/// interval to 3 s after it, in 250 ms steps plus the microseconds either
+/// side of each boundary, the formatted label is exactly the independently
+/// computed one and strictly increasing.
+#[test]
+fn iso_label_monotonic_at_every_leap_second() {
+    for (i, &(y, mo, d, ins)) in LEAP_DAYS.iter().enumerate() {
+        let ins_us = ins * US;
+        let start = Label::new(y, mo, d, 23, 59, 57 * US).instant();
+        let mut offsets: Vec<i64> = (-12..=(ins * 4 + 12)).map(|k| k * US / 4).collect();
+        offsets.extend([-1, 0, 1, ins_us - 1, ins_us, ins_us + 1]);
+        offsets.sort_unstable();
+        offsets.dedup();
+        let mut prev = String::new();
+        for off in offsets {
+            let t = start + Duration::from_microseconds(off + 3 * US);
+            let s = t.to_string();
+            assert_eq!(
+                s,
+                leap_label(i, off).iso(),
+                "leap day {y}-{mo}-{d} offset {off} µs"
+            );
+            assert!(prev < s, "labels not increasing: {prev} then {s}");
+            prev = s;
+        }
+    }
+}
+
+// ─────────────── Time: physical invariants ───────────────
+
+/// UTC day length, exhaustively for 1900–2050: `00:00` of the next day
+/// minus `00:00` of this day is 86400 s, plus the inserted seconds on the
+/// 27 leap-second days (86401 s) and on 1971-12-31 (86410 s, satkit's 10 s
+/// step). The expected lengths come from IERS Bulletin C, not from satkit.
+/// `add_utc_days(1.0)` agrees with the calendar route.
+#[test]
+fn utc_day_length() {
+    let first = days_from_civil(1900, 1, 1);
+    let last = days_from_civil(2051, 1, 1);
+    let mut t0 = Label::from_day_tod(first, 0).instant();
+    for day in first..last {
+        let t1 = Label::from_day_tod(day + 1, 0).instant();
+        let (y, m, d) = civil_from_days(day);
+        let expected = US_DAY + inserted_seconds(day) * US;
+        assert_eq!(
+            (t1 - t0).as_microseconds(),
+            expected,
+            "length of {y:04}-{m:02}-{d:02}"
+        );
+        assert_eq!(
+            t0.add_utc_days(1.0),
+            t1,
+            "add_utc_days(1) from {y:04}-{m:02}-{d:02}"
+        );
+        t0 = t1;
+    }
+}
+
+proptest! {
+    #![proptest_config(cases(TIME_CASES))]
+
+    /// `add_utc_days(n)` keeps the time-of-day label and moves the date by
+    /// `n` calendar days, whatever leap seconds lie in between.
+    #[test]
+    fn add_utc_days_keeps_label(
+        l in any_non_leap_label(),
+        n in -3000..3000i64,
+    ) {
+        let expected = Label::from_day_tod(l.days() + n, l.utc_basis_us().rem_euclid(US_DAY));
+        let got = l.instant().add_utc_days(n as f64);
+        prop_assert!(
+            diff_us(&got, &expected.instant()) <= 2,
+            "{} + {n} d → {got}, expected {}", l.iso(), expected.iso()
+        );
+    }
+
+    /// Elapsed SI time from `23:59:00` on a leap-second day to any label
+    /// near the boundary is `60 s + offset`: the inserted second(s) are
+    /// contiguous with the minute before and the day after. Catches both a
+    /// midnight that lands on the start of the leap second instead of its
+    /// end and a table entry keyed to the wrong second.
+    #[test]
+    fn elapsed_time_across_leap_second((i, off) in leap_offset()) {
+        let (y, mo, d, _) = LEAP_DAYS[i];
+        let base = Label::new(y, mo, d, 23, 59, 0).instant();
+        let l = leap_label(i, off);
+        let t = Instant::from_datetime(l.y, l.mo, l.d, l.h, l.mi, (l.us / US) as f64).unwrap()
+            + Duration::from_microseconds(l.us % US);
+        prop_assert_eq!((t - base).as_microseconds(), US_MIN + off, "label {}", l.iso());
+    }
+
+    /// TT − TAI = 32.184 s and TAI − GPS = 19 s exactly, for every instant
+    /// and in both directions: the same MJD read in two scales differs by
+    /// the offset (integer µs), and an instant read back in two scales
+    /// differs by it to f64 MJD resolution.
+    #[test]
+    fn fixed_scale_offsets(mjd in 15_020.0..69_807.0f64, t in any_instant()) {
+        let tai = Instant::from_mjd_with_scale(mjd, TimeScale::TAI);
+        let tt = Instant::from_mjd_with_scale(mjd, TimeScale::TT);
+        let gps = Instant::from_mjd_with_scale(mjd, TimeScale::GPS);
+        prop_assert_eq!((tai - tt).as_microseconds(), 32_184_000);
+        prop_assert_eq!((gps - tai).as_microseconds(), 19_000_000);
+
+        let m = |s| t.as_mjd_with_scale(s) * 86_400.0;
+        prop_assert!((m(TimeScale::TT) - m(TimeScale::TAI) - 32.184).abs() < 2e-6);
+        prop_assert!((m(TimeScale::TAI) - m(TimeScale::GPS) - 19.0).abs() < 2e-6);
+    }
+
+    /// GPS week/second, GPS MJD and the calendar all agree: the GPS epoch is
+    /// 1980-01-06T00:00:00 UTC (when TAI − UTC was 19 s, so GPS = UTC), and
+    /// a GPS week is exactly 604800 SI seconds.
+    #[test]
+    fn gps_week_routes_agree(week in 0..3000i32, sow_us in 0..604_800_000_000i64) {
+        prop_assert_eq!(Instant::GPS_EPOCH, Instant::from_date(1980, 1, 6).unwrap());
+        let sow = sow_us as f64 * 1.0e-6;
+        let t = Instant::from_gps_week_and_second(week, sow);
+        let direct = Instant::GPS_EPOCH
+            + Duration::from_microseconds(week as i64 * 604_800_000_000 + sow_us);
+        prop_assert!(diff_us(&t, &direct) <= 1, "week {week} sow {sow}: {t} vs {direct}");
+        let mjd = 44_244.0 + 7.0 * week as f64 + sow / 86_400.0;
+        let m = Instant::from_mjd_with_scale(mjd, TimeScale::GPS);
+        prop_assert!(diff_us(&m, &direct) <= 2, "GPS MJD {mjd}: {m} vs {direct}");
+    }
+
+    /// TAI − UTC matches IERS Bulletin C: 0 before 1972, then an integer
+    /// number of seconds equal to 10 + the number of leap seconds so far.
+    /// Read two ways: raw count minus unixtime (integer µs), and the TAI
+    /// and UTC MJDs (f64). Labels inside a leap second are excluded (UTC
+    /// MJD / unixtime cannot name them).
+    #[test]
+    fn tai_minus_utc_matches_table(l in any_non_leap_label()) {
+        let t = l.instant();
+        let expected = tai_minus_utc_on_day(l.days());
+        let raw_minus_unix = (t - Instant::UNIX_EPOCH).as_microseconds()
+            - (t.as_unixtime() * 1.0e6).round() as i64;
+        prop_assert_eq!(raw_minus_unix, expected * US, "{}", l.iso());
+        let via_mjd =
+            (t.as_mjd_with_scale(TimeScale::TAI) - t.as_mjd_with_scale(TimeScale::UTC)) * 86_400.0;
+        prop_assert!((via_mjd - expected as f64).abs() < 2e-6, "{}: {via_mjd}", l.iso());
+    }
+
+    /// TAI − UTC never decreases (UTC never repeats a label).
+    #[test]
+    fn tai_minus_utc_nondecreasing(a in any_instant(), b in any_instant()) {
+        let (a, b) = if a <= b { (a, b) } else { (b, a) };
+        let off = |t: Instant| (t - Instant::UNIX_EPOCH).as_seconds() - t.as_unixtime();
+        prop_assert!(off(a) <= off(b) + 1e-6, "{a}: {} > {b}: {}", off(a), off(b));
+    }
+
+    /// Instant ± Duration is exact at microsecond resolution across leap
+    /// seconds and before 1970: `(t + d) − t == d` and `t + d − d == t`.
+    #[test]
+    fn duration_arithmetic_exact_across_leap_seconds(
+        t in any_instant(),
+        d_us in prop_oneof![
+            -20 * US..20 * US,
+            -1_000_000 * US..1_000_000 * US,
+            -1_500_000_000 * US..1_500_000_000 * US,
+        ],
+    ) {
+        let d = Duration::from_microseconds(d_us);
+        prop_assert_eq!(((t + d) - t).as_microseconds(), d_us);
+        prop_assert_eq!(t + d - d, t);
+    }
+}
+
+// ─────────────── Time: TDB − TT ───────────────
+
+/// Mean period of the TDB − TT series satkit implements (Vallado Eq. 3-50,
+/// argument `628.3076 T + 6.2401` rad, `T` in Julian centuries of TT):
+/// 2π / 628.3076 centuries ≈ 365.256 days.
+const TDB_PERIOD_S: f64 = std::f64::consts::TAU / 628.3076 * 36_525.0 * 86_400.0;
+
+fn tdb_minus_tt(t: &Instant) -> f64 {
+    (t.as_mjd_with_scale(TimeScale::TDB) - t.as_mjd_with_scale(TimeScale::TT)) * 86_400.0
+}
+
+proptest! {
+    #![proptest_config(cases(TIME_CASES))]
+
+    /// TDB − TT is bounded (|x| < 1.7 ms), periodic with one (anomalistic)
+    /// year, and actually swings through its ±1.657 ms amplitude within
+    /// that year. Also matches the independent USNO approximation
+    /// `0.001657 sin g + 0.000014 sin 2g`, g = 357.53° + 0.98560028° d,
+    /// to 4e-5 s (satkit omits the 2g term and uses a slightly different
+    /// rate; the difference over ±1 century is ~1e-5 s). A wrong period
+    /// (the #217 `PI/180` bug stretched it to ~57 years) fails all four.
+    #[test]
+    fn tdb_minus_tt_bounded_and_annual(t in uniform_label(1900, 2100).prop_map(|l| l.instant())) {
+        let x = tdb_minus_tt(&t);
+        prop_assert!(x.abs() < 1.7e-3, "TDB − TT = {x} s at {t}");
+
+        let t_next = t + Duration::from_seconds(TDB_PERIOD_S);
+        let x_next = tdb_minus_tt(&t_next);
+        prop_assert!((x - x_next).abs() < 1e-5, "not periodic: {x} at {t}, {x_next} a period later");
+
+        let samples: Vec<f64> = (0..16)
+            .map(|k| tdb_minus_tt(&(t + Duration::from_seconds(TDB_PERIOD_S * k as f64 / 16.0))))
+            .collect();
+        let span = samples.iter().cloned().fold(f64::MIN, f64::max)
+            - samples.iter().cloned().fold(f64::MAX, f64::min);
+        prop_assert!(span > 3.0e-3, "TDB − TT spans only {span} s over one year from {t}");
+
+        let d = t.as_jd_with_scale(TimeScale::TT) - 2_451_545.0;
+        let g = (357.53 + 0.985_600_28 * d).to_radians();
+        let usno = 0.001_657 * g.sin() + 0.000_014 * (2.0 * g).sin();
+        prop_assert!((x - usno).abs() < 4e-5, "TDB − TT {x} vs USNO {usno} at {t}");
+    }
+
+    /// TDB MJD → Instant → TDB MJD round-trips (the inverse evaluates the
+    /// periodic term at TDB instead of TT; the difference is ~1e-13 s).
+    #[test]
+    fn tdb_inverse(t in any_instant()) {
+        let m = t.as_mjd_with_scale(TimeScale::TDB);
+        let back = Instant::from_mjd_with_scale(m, TimeScale::TDB);
+        prop_assert!(diff_us(&back, &t) <= 2, "{t} → TDB {m} → {back}");
+    }
+}
+
 // ───────────────────── Pinned regressions ─────────────────────
 
 /// CI-found counterexample (2026-07-03, ubuntu runner): high-eccentricity
@@ -288,4 +794,74 @@ fn regression_high_eccen_period_closure() {
     let (r2, _) = k2.to_pv();
     let rel = (r - r2).norm() / r.norm();
     assert!(rel < 1e-6, "one-period closure error {rel:e}");
+}
+
+// Counterexamples for defects found by the edge-biased time properties
+// (2026-09-25). Each is `#[ignore]`d until the library is fixed; run with
+// `cargo test --test properties -- --ignored` to see them fail.
+
+/// `from_datetime` truncates `second * 1e6` instead of rounding
+/// (src/time/instant.rs:780, and :769 for `23:59:60.x`). Microsecond
+/// values are rarely exact in `f64`: `0.000249 * 1e6 = 248.99999999999997`
+/// → 248 µs. About 1.2% of 6-digit fractions written as decimal literals
+/// or RFC 3339 strings (`from_rfc3339` builds `S + f / 1e6`), and about 29%
+/// of the seconds values `as_datetime()` returns, come back 1 µs early.
+/// proptest's minimal counterexample: seconds `45773591 as f64 * 1e-6`
+/// on 1972-01-01T05:30.
+#[test]
+#[ignore = "NEW BUG: from_datetime truncates second * 1e6 (src/time/instant.rs:780)"]
+fn regression_from_datetime_truncates_microseconds() {
+    let midnight = Instant::from_date(2024, 1, 1).unwrap();
+    let t = Instant::from_datetime(2024, 1, 1, 0, 0, 0.000249).unwrap();
+    assert_eq!(
+        (t - midnight).as_microseconds(),
+        249,
+        "from_datetime(…, 0.000249)"
+    );
+
+    let s = "2024-01-01T00:00:00.000249Z";
+    assert_eq!(
+        Instant::from_rfc3339(s).unwrap().to_string(),
+        s,
+        "from_rfc3339"
+    );
+
+    let exact = Instant::from_datetime(1972, 1, 1, 5, 30, 45.0).unwrap()
+        + Duration::from_microseconds(773_591);
+    let (y, mo, d, h, mi, sec) = exact.as_datetime();
+    let back = Instant::from_datetime(y, mo, d, h, mi, sec).unwrap();
+    assert_eq!(
+        back,
+        exact,
+        "from_datetime(as_datetime(t)) off by {} µs",
+        (back - exact).as_microseconds()
+    );
+}
+
+/// `strptime`'s `%z` adds the UTC offset instead of subtracting it
+/// (src/time/instantparse.rs:339): `+HHMM` means local time is *ahead* of
+/// UTC, so `12:00+0100` is `11:00Z`. proptest's minimal counterexample:
+/// `1972-01-02 00:01:00.000000+0001` → `00:02Z` instead of `00:00Z`.
+#[test]
+#[ignore = "NEW BUG: strptime %z offset has the wrong sign (src/time/instantparse.rs:339)"]
+fn regression_strptime_z_offset_sign() {
+    let t = Instant::strptime("2024-01-01T12:00:00+0100", "%Y-%m-%dT%H:%M:%S%z").unwrap();
+    assert_eq!(
+        t,
+        Instant::from_datetime(2024, 1, 1, 11, 0, 0.0).unwrap(),
+        "got {t}"
+    );
+}
+
+/// `from_rfc3339` applies a UTC offset as an SI-seconds `Duration`
+/// (src/time/instantparse.rs:390), so an offset that spans a leap second
+/// is 1 s off. RFC 3339 offsets act on labels:
+/// `2017-01-01T00:30:00+01:00` is `2016-12-31T23:30:00Z`.
+#[test]
+#[ignore = "NEW BUG: from_rfc3339 offset is 1 s off across a leap second \
+            (src/time/instantparse.rs:390)"]
+fn regression_rfc3339_offset_across_leap_second() {
+    let p = Instant::from_rfc3339("2017-01-01T00:30:00+01:00").unwrap();
+    let expected = Instant::from_datetime(2016, 12, 31, 23, 30, 0.0).unwrap();
+    assert_eq!(p, expected, "got {p}");
 }

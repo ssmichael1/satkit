@@ -20,6 +20,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - Release workflow: a `preflight` job replaces the redundant pre-release test job — it verifies the version strings and waits for a green Build run on the tagged commit — and the PyPI publish now depends on it, so a mis-versioned tag can no longer reach PyPI while being refused by crates.io. The Build workflow drops its duplicate `cargo build --release` pass, runs `cargo doc` on Ubuntu only, caches the sdist job's compile, and replaces the per-PR cargo-audit job with cargo-deny (RustSec advisories plus a dependency licence allowlist and crate-source check; policy in `deny.toml`, weekly cargo-audit schedule kept). Dependabot keeps the GitHub Actions pins current ([#211](https://github.com/ssmichael1/satkit/pull/211))
 
+### Tests
+
+- Property tests: leap-second-biased generators, construction-route agreement, UTC day length, TDB periodicity, UT1 continuity and frame-transform invariants (proptest), and datetime/pickle/vectorisation properties (hypothesis, a new test dependency); a weekly 100k-case run; seven defects pinned as ignored/xfail tests ([#221](https://github.com/ssmichael1/satkit/pull/221))
+
 ## 0.23.1 - 2026-09-24
 
 ### Fixed
