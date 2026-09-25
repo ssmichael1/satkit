@@ -19,6 +19,7 @@ Two things are fetched later, on demand:
 
 To provision everything up front (a Docker image, a CI job, a machine that will later be offline):
 
+<!-- skip-test: needs the network (downloads the data files) -->
 ```python
 import satkit as sk
 sk.utils.update_datafiles()   # ephemeris (verified) + EOP + space weather

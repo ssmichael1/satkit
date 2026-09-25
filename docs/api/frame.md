@@ -4,6 +4,16 @@ The `satkit.frame` enum identifies a coordinate reference frame throughout
 the satkit API — most visibly in the maneuver, thrust, uncertainty, and
 frame-transform functions. Frames are passed by value, e.g.:
 
+<!-- test-setup
+import numpy as np
+import satkit as sk
+pos = np.array([sk.consts.earth_radius + 500e3, 0.0, 0.0])
+vel = np.array([0.0, 7600.0, 0.0])
+sat = sk.satstate(sk.time(2024, 1, 1), pos, vel)
+t_burn = sat.time + sk.duration.from_minutes(30)
+sigma = np.array([10.0, 200.0, 30.0])
+-->
+
 ```python
 import satkit as sk
 

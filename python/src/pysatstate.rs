@@ -410,7 +410,11 @@ impl PySatState {
     ///
     /// Returns:
     ///     satkit.satstate: New state at input time
-    #[pyo3(signature=(timedur, **kwargs))]
+    // Keywords parsed by hand; `text_signature` publishes them for inspect/stubtest.
+    #[pyo3(
+        signature=(timedur, **kwargs),
+        text_signature = "($self, timedur, *, propsettings=None, satproperties=None)"
+    )]
     fn propagate(
         &self,
         timedur: &Bound<'_, PyAny>,

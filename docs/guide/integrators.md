@@ -121,6 +121,13 @@ Two settings give you control over this:
   shortened to land exactly on the end time. Feed it to the next arc to continue
   at full stride:
 
+<!-- test-setup
+import numpy as np
+r = sk.consts.earth_radius + 500e3
+state = np.array([r, 0.0, 0.0, 0.0, np.sqrt(sk.consts.mu_earth / r), 0.0])
+t0 = sk.time(2024, 1, 1)
+-->
+
 ```python
 ps = sk.propsettings(abs_error=1e-9, rel_error=1e-9)
 res = sk.propagate(state, t0, duration_secs=3600.0, propsettings=ps)

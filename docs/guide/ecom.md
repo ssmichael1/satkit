@@ -66,6 +66,16 @@ Public descriptions of ECOM ([Bernese GNSS Software v5.2](references.md#dach2015
 
 ## Usage
 
+<!-- test-setup
+import numpy as np
+import satkit as sk
+r = 26_560e3  # GPS-like circular orbit
+state = np.array([r, 0.0, 0.0, 0.0, np.sqrt(sk.consts.mu_earth / r), 0.0])
+t0 = sk.time(2024, 1, 1)
+t1 = t0 + sk.duration.from_hours(6)
+settings = sk.propsettings()
+-->
+
 ```python
 import satkit as sk
 
