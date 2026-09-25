@@ -5,6 +5,7 @@ old names warn and are removed in 0.25.  Each alias must emit a
 ``DeprecationWarning`` naming its replacement and return the same value.
 """
 
+import os
 import warnings
 
 import numpy as np
@@ -72,3 +73,36 @@ def test_warning_points_at_caller():
         T.as_mjd()
     assert len(record) == 1
     assert record[0].filename == __file__
+
+
+def _kepler():
+    return sk.kepler(7000e3, 0.01, 0.9, 0.3, 0.2, 0.1)
+
+
+def test_kepler_w_warning_points_at_caller():
+    """kepler.w (getter and setter) warns from the caller's line."""
+    k = _kepler()
+    with pytest.warns(DeprecationWarning, match="kepler.argp") as record:
+        w = k.w
+    assert w == k.argp
+    assert len(record) == 1
+    assert record[0].filename == __file__
+    with pytest.warns(DeprecationWarning) as record:
+        k.w = 0.5
+    assert k.argp == 0.5
+    assert record[0].filename == __file__
+
+
+def test_kepler_w_warning_shown_by_default_in_main():
+    """Attributed to ``__main__``, the default filters show it (they hide a
+    DeprecationWarning attributed to ``<sys>``)."""
+    import subprocess
+    import sys
+
+    code = "import satkit as sk; k = sk.kepler(7000e3, 0.01, 0.9, 0.3, 0.2, 0.1); k.w"
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONWARNINGS"}
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
+    )
+    assert "DeprecationWarning: kepler.w is deprecated" in out.stderr
+    assert "<string>:1" in out.stderr

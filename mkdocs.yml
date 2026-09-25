@@ -95,6 +95,7 @@ nav:
       - Data Directories: getting-started/datadirs.md
       - Downloads and Refresh: getting-started/datadownloads.md
       - Data Coverage: getting-started/datacoverage.md
+      - Troubleshooting & FAQ: getting-started/troubleshooting.md
   - Learn:
       - tutorials/index.md
       - Foundations:

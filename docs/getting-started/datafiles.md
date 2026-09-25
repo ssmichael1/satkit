@@ -44,3 +44,5 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 - **[Data coverage](datacoverage.md)** — whether the Earth-orientation and
   space-weather tables actually cover the epoch you are propagating over, and
   what satkit does when they do not.
+- **[Troubleshooting & FAQ](troubleshooting.md)** — what the data warnings
+  mean, failed downloads, offline machines, and other common problems.
