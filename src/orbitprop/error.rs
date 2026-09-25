@@ -129,8 +129,8 @@ pub enum Error {
     /// directory containing `finals2000A.all` (or CelesTrak's `EOP-All.csv`).
     #[error(
         "no Earth Orientation Parameters (EOP) table is loaded; run \
-         satkit::utils::update_datafiles() or set SATKIT_DATA to a directory \
-         containing finals2000A.all (or EOP-All.csv)"
+         satkit.utils.update_datafiles() (Rust: satkit::utils::update_datafiles()) \
+         or set SATKIT_DATA to a directory containing finals2000A.all (or EOP-All.csv)"
     )]
     EopUnavailable,
 
@@ -141,8 +141,10 @@ pub enum Error {
     /// row is held constant and a one-time warning is printed instead.
     #[error(
         "propagation span extends to {span_end} but EOP data ends at {table_end} \
-         (PropSettings::require_eop_coverage is set); refresh the data files with \
-         satkit::utils::update_datafiles() or clear the flag to extrapolate"
+         (require_eop_coverage is set in the propagation settings); refresh the data \
+         files with satkit.utils.update_datafiles() (Rust: satkit::utils::update_datafiles()), \
+         or set require_eop_coverage=False (Rust: PropSettings::require_eop_coverage = false) \
+         to hold the last EOP row constant instead"
     )]
     EopCoverage {
         span_end: Instant,

@@ -4,21 +4,31 @@ Utility functions for SatKit
 
 from __future__ import annotations
 
+import os
 
-def update_datafiles(**kwargs) -> None:
+
+def update_datafiles(
+    *, overwrite: bool = False, dir: str | os.PathLike[str] | None = None
+) -> None:
     """Download & store data files needed for "satkit" computations
 
     Not required for normal use: the IERS nutation tables and gravity models
     are compiled into satkit, the JPL ephemeris is downloaded on first use,
     and the Earth-orientation / space-weather files are fetched on first use.
     Call this to provision everything up front (a container image, a machine
-    that will later be offline) or to refresh the daily files. Raises
-    ``RuntimeError`` if ``SATKIT_OFFLINE=1`` is set.
+    that will later be offline) or to refresh the daily files.
 
     Keyword Args:
 
       overwrite (bool):  Re-download static files even when a verified copy is already present
-      dir(string): Target directory for files.  Uses ``datadir()`` if not specified
+      dir (str | os.PathLike): Target directory for files.  Uses ``datadir()`` if not specified
+
+    Raises:
+        TypeError: for any other keyword argument (e.g. ``force=True``).
+        RuntimeError: under offline mode (``SATKIT_OFFLINE=1`` or
+            ``set_offline(True)``), before anything is printed or fetched;
+            or when the target directory is not writable (read-only
+            filesystem, or owned by another user) — the message names it.
 
     Static files are fetched according to the data manifest compiled into
     satkit (``data/manifest.json``): each is tried from ``SATKIT_DATA_URL``
@@ -79,7 +89,9 @@ def datadir() -> str | None:
     satkit never writes next to its own extension module or inside
     ``site-packages``. Set ``SATKIT_OFFLINE=1`` to forbid downloads entirely
     (a missing file then raises ``RuntimeError`` naming its sources), and
-    ``SATKIT_DATA_URL`` to fetch from a mirror.
+    ``SATKIT_DATA_URL`` to fetch the manifest-pinned files (the JPL
+    ephemeris, ITU_GRACE16) from a mirror; the Earth-orientation and
+    space-weather refreshes always go to their producers.
 
     Returns:
         str | None: directory downloads are written to (created on first use),

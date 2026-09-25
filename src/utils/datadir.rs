@@ -223,6 +223,15 @@ pub fn find_file(name: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
+/// Every copy of `name` in the search directories, in search order.
+pub fn find_all(name: &str) -> Vec<PathBuf> {
+    search_dirs()
+        .into_iter()
+        .map(|d| d.join(name))
+        .filter(|p| p.is_file())
+        .collect()
+}
+
 /// The path to use for `name`: where it was found in the search
 /// directories, or else where it would be written (the write location).
 /// Errors — rather than falling back to the current directory — when the
@@ -253,6 +262,18 @@ pub fn ensure_writable(dir: &Path) -> std::io::Result<()> {
     std::fs::write(&probe, b"")?;
     let _ = std::fs::remove_file(&probe);
     Ok(())
+}
+
+/// `true` for the I/O errors that mean a directory cannot receive files —
+/// permission denied (mode bits, or a directory owned by another user) or a
+/// read-only filesystem — as opposed to a transient or unrelated failure.
+/// Used to turn an [`ensure_writable`] failure into a "data directory is
+/// read-only" error that names the directory.
+pub fn is_not_writable_error(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem
+    )
 }
 
 /// Why the platform user-data directory could not be determined, for the

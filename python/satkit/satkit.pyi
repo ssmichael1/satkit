@@ -445,10 +445,14 @@ class TLE:
         """
         ...
 
+@overload
 def sgp4(
     tle: TLE | OMMDict | list[TLE | OMMDict],
     time: TimeInput,
-    **kwargs,
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: typing.Literal[False] = False,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """SGP-4 propagator for TLE
 
@@ -471,7 +475,6 @@ def sgp4(
         opsmode (satkit.sgp4_opsmode): opsmode.afspc (Air Force Space Command) or opsmode.improved.  Default is opsmode.afspc
         errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
                         (this is likely rarely needed, but can be useful for debugging)
-                        (this may also flag a typing error ... I can't figure out how to get rid of it)
 
     Returns:
         tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: position and velocity
@@ -480,8 +483,12 @@ def sgp4(
             Shape is (3,) for a single TLE and single time, (Ntime, 3) for a single TLE
             and multiple times, (Ntle, 3) for a list of TLEs and a single time, and
             (Ntle, Ntime, 3) for a list of TLEs and multiple times.
-            Additional return value if errflag is True:
-            list[sgp4_error] with error conditions for each TLE and time output.
+            If errflag is True, a third element is returned: an ``int32`` numpy
+            array of error codes, one per TLE and time — shape ``(1,)`` for a single
+            TLE and time, ``(Ntime,)``, ``(Ntle,)`` or ``(Ntle, Ntime)`` otherwise.
+            ``0`` is success. The codes are the integer values of
+            :class:`sgp4_error`, so comparing against the enum works
+            elementwise: ``err == satkit.sgp4_error.success`` is a boolean array.
 
     Notes:
         - **Units:** the canonical Vallado SGP4 implementation (and most other SGP4
@@ -504,28 +511,36 @@ def sgp4(
 
     Example:
         ```python
+        import numpy as np
+        import satkit
+
         lines = [
-               "0 INTELSAT 902",
+            "0 INTELSAT 902",
             "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
-            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981"
+            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981",
         ]
 
-        tle = satkit.TLE.from_lines(lines)[0]
+        tle = satkit.TLE.from_lines(lines)  # a single TLE, not a list
+        tm = tle.epoch
 
         # Compute TEME position & velocity at epoch
-        pteme, vteme = satkit.sgp4(tle, tle.epoch)
+        pteme, vteme = satkit.sgp4(tle, tm)
 
-        # Rotate to ITRF frame
+        # Rotate to ITRF frame; the velocity also loses the Earth-rotation term
         q = satkit.frametransform.qteme2itrf(tm)
         pitrf = q * pteme
-        vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
+        vitrf = q * vteme - np.cross(np.array([0, 0, satkit.consts.omega_earth]), pitrf)
 
         # convert to ITRF coordinate object
-        coord = satkit.itrfcoord.from_vector(pitrf)
+        coord = satkit.itrfcoord(pitrf)
 
         # Print ITRF coordinate object location
         print(coord)
-        # ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
+        # ITRFCoord(lat:  -0.0362 deg, lon:  62.0172 deg, hae: 35799.52 km)
+
+        # Error codes per output
+        pteme, vteme, err = satkit.sgp4(tle, tm, errflag=True)
+        assert (err == satkit.sgp4_error.success).all()
         ```
 
 
@@ -540,6 +555,38 @@ def sgp4(
         ```
 
     """
+    ...
+
+@overload
+def sgp4(
+    tle: TLE | OMMDict | list[TLE | OMMDict],
+    time: TimeInput,
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: typing.Literal[True],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]:
+    """SGP-4 propagator for TLE, also returning an ``int32`` array of error codes
+
+    See the ``errflag=False`` form for arguments and shapes. The third
+    element holds one :class:`sgp4_error` value per TLE and time as a plain
+    ``int32``; ``err == satkit.sgp4_error.success`` compares elementwise.
+    """
+    ...
+
+@overload
+def sgp4(
+    tle: TLE | OMMDict | list[TLE | OMMDict],
+    time: TimeInput,
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: bool,
+) -> (
+    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+    | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]
+):
+    """SGP-4 propagator for TLE, with ``errflag`` not known statically"""
     ...
 
 class sgp4_gravconst:
@@ -4495,13 +4542,15 @@ def propagate(
 
         Included forces:
 
-        - Earth gravity with higher-order zonal terms
+        - Earth gravity with higher-order spherical-harmonic terms
         - Sun, Moon gravity
+        - Solid Earth tides (IERS 2010 Step 1 by default; ``propsettings.tide_model``
+          selects ``tidemodel.solid_step1``, ``tidemodel.solid_full`` or ``tidemodel.none``)
+        - General relativity (IERS 2010 Eq. 10.12; ``propsettings.use_relativistic_correction``)
         - Radiation pressure
         - Atmospheric drag: NRL-MSISE 2000 density model, with option to include space weather effects
 
         End time must be set by keyword argument, either explicitly or by duration.
-        Solid Earth tides are not (yet) included in the model.
 
         For future propagation (beyond available data files):
 

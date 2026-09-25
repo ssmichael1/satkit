@@ -158,8 +158,9 @@ fn pack_sgp4_result(states: &psgp4::SGP4State, output_err: bool) -> Result<Py<Py
 ///     "Ntime" input times and each of the "Ntle" tles. Shape is (3,) for a single TLE and
 ///     single time, (Ntime, 3) for a single TLE and multiple times, (Ntle, 3) for a list of
 ///     TLEs and a single time, and (Ntle, Ntime, 3) for a list of TLEs and multiple times.
-///     If errflag is True, a third element is returned: an array of sgp4_error codes for
-///     each TLE and time.
+///     If errflag is True, a third element is returned: an int32 numpy array of error
+///     codes for each TLE and time (0 = success). The codes are the integer values of
+///     ``sgp4_error``, so ``err == satkit.sgp4_error.success`` compares elementwise.
 ///
 /// Note:
 ///     Units: the canonical Vallado SGP4 implementation (and most other SGP4 libraries)
@@ -171,28 +172,32 @@ fn pack_sgp4_result(states: &psgp4::SGP4State, output_err: bool) -> Result<Py<Py
 /// Example:
 ///
 ///
+/// >>> import numpy as np
+/// >>> import satkit
+/// >>>
 /// >>> lines = [
-/// >>>        "0 INTELSAT 902",
+/// >>>     "0 INTELSAT 902",
 /// >>>     "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
-/// >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
+/// >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981",
 /// >>> ]
 /// >>>
-/// >>> tle = satkit.TLE.from_lines(lines)[0]
+/// >>> tle = satkit.TLE.from_lines(lines)  # a single TLE, not a list
+/// >>> tm = tle.epoch
 /// >>>
 /// >>> # Compute TEME position & velocity at epoch
-/// >>> pteme, vteme = satkit.sgp4(tle, tle.epoch)
+/// >>> pteme, vteme = satkit.sgp4(tle, tm)
 /// >>>
-/// >>> # Rotate to ITRF frame
+/// >>> # Rotate to ITRF frame; the velocity also loses the Earth-rotation term
 /// >>> q = satkit.frametransform.qteme2itrf(tm)
 /// >>> pitrf = q * pteme
-/// >>> vitrf = q * vteme - np.cross(np.array([0, 0, satkit.univ.omega_earth]), pitrf)
+/// >>> vitrf = q * vteme - np.cross(np.array([0, 0, satkit.consts.omega_earth]), pitrf)
 /// >>>
 /// >>> # convert to ITRF coordinate object
-/// >>> coord = satkit.itrfcoord.from_vector(pitrf)
+/// >>> coord = satkit.itrfcoord(pitrf)
 /// >>>
 /// >>> # Print ITRF coordinate object location
 /// >>> print(coord)
-/// ITRFCoord(lat:  -0.0363 deg, lon:  -2.2438 deg, hae: 35799.51 km)
+/// ITRFCoord(lat:  -0.0362 deg, lon:  62.0172 deg, hae: 35799.52 km)
 #[pyfunction]
 #[pyo3(signature=(tle, time, **kwds))]
 pub fn sgp4(
