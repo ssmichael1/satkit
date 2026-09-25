@@ -16,6 +16,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Docs
 
 - Covariance docs use RTN (R exactly along position) instead of LVLH, whose x axis is only approximately along-track, and the Covariance Propagation tutorial adds an eccentric-orbit comparison of RTN and NTW (T exactly along velocity); the Coordinate Frames tutorial opens with tables of the Earth/celestial and satellite frames ([#214](https://github.com/ssmichael1/satkit/pull/214))
+- New Troubleshooting & FAQ page under Getting Started, organised by symptom: EOP/space-weather warnings, data directories and downloads, TLS/proxy/offline setups, installation, API renames and results that look wrong ([#216](https://github.com/ssmichael1/satkit/pull/216))
 
 ### CI
 
