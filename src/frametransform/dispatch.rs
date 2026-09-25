@@ -40,7 +40,8 @@ use super::{
     gcrf_to_itrf_state, gcrf_to_itrf_state_approx, itrf_to_gcrf_state, itrf_to_gcrf_state_approx,
 };
 use super::{
-    qcirs2gcrs, qitrf2gcrf, qitrf2gcrf_approx, qitrf2tirs, qteme2itrf, qtirs2cirs, Error, Result,
+    qcirs2gcrs, qitrf2gcrf, qitrf2gcrf_approx, qitrf2tirs, qteme2gcrf, qteme2itrf, qteme2pef,
+    qtirs2cirs, Error, Result,
 };
 use crate::frames::Frame;
 use crate::mathtypes::{Quaternion, Vector3};
@@ -204,7 +205,7 @@ pub fn rotation<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quaternion
 /// use satkit::frametransform::rotation_with_state;
 ///
 /// let t = Instant::from_datetime(2026, 5, 22, 12, 0, 0.0).unwrap();
-/// // TEME (Earth) directly to RTN (orbit) in one call:
+/// // TEME (the quasi-inertial SGP4 frame) directly to RTN (orbit) in one call:
 /// let q = rotation_with_state(Frame::TEME, Frame::RTN, &t, &pos_gcrf, &vel_gcrf)?;
 /// ```
 pub fn rotation_with_state<T: TimeLike>(
@@ -254,14 +255,16 @@ pub fn rotation_with_state<T: TimeLike>(
     Ok(q_to.conjugate() * q_from)
 }
 
-/// Quaternion rotating a vector from `from` to `to` using the
-/// IAU-76/FK5 approximate reduction (~1 arcsec, much cheaper than full
-/// IERS 2010).
+/// Quaternion rotating a vector from `from` to `to` using the approximate
+/// reduction of [`qitrf2gcrf_approx`] (~1 arcsec, much cheaper than full
+/// IERS 2010; see the module docs). TEME ↔ GCRF / EME2000 / ICRF is
+/// [`qteme2gcrf`] (0.55 arcsec, no polar motion); TEME ↔ ITRF is the exact
+/// [`qteme2itrf`].
 ///
-/// Only defined for pairs at the endpoints of the FK5 chain: [`Frame::ITRF`]
+/// Only defined for pairs at the endpoints of the approximate chain: [`Frame::ITRF`]
 /// and the inertial cluster ([`Frame::GCRF`], [`Frame::EME2000`],
 /// [`Frame::ICRF`], [`Frame::TEME`]). [`Frame::TIRS`] and [`Frame::CIRS`] are
-/// defined by the IERS 2010 reduction and have no FK5 analogue — requests
+/// defined by the IERS 2010 reduction and have no analogue in it — requests
 /// involving them return [`Error::ApproxNotSupportedForFrame`].
 pub fn rotation_approx<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quaternion> {
     if from == to {
@@ -300,10 +303,11 @@ pub fn transform_state<T: TimeLike>(
     state_dispatch(from, to, t, pos, vel, /* approx = */ false)
 }
 
-/// State (position + velocity) transform using the IAU-76/FK5 approximate
-/// reduction (~1 arcsec). Same domain restrictions as
+/// State (position + velocity) transform using the approximate reduction
+/// of [`rotation_approx`] (~1 arcsec). TEME ↔ ITRF does not use that chain
+/// and equals [`transform_state`]. Same domain restrictions as
 /// [`rotation_approx`]: [`Frame::TIRS`] and [`Frame::CIRS`] are rejected
-/// (no FK5 analogue); valid pairs are between [`Frame::ITRF`] and the
+/// (no analogue in the approximate chain); valid pairs are between [`Frame::ITRF`] and the
 /// inertial cluster ([`Frame::GCRF`], [`Frame::EME2000`], [`Frame::ICRF`],
 /// [`Frame::TEME`]), or within the inertial cluster.
 pub fn transform_state_approx<T: TimeLike>(
@@ -375,9 +379,8 @@ fn canonical_rotation<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quat
         (TIRS, EME2000) => qeme2000_to_gcrf().conjugate() * qcirs2gcrs(t) * qtirs2cirs(t),
         (CIRS, EME2000) => qeme2000_to_gcrf().conjugate() * qcirs2gcrs(t),
         // (GCRF, TEME): canonical pair wants q_{GCRF→TEME}. We compose
-        // through ITRF for full IERS 2010 (the existing `qteme2gcrf` uses
-        // `qitrf2gcrf_approx` internally — that flavour belongs in
-        // `rotation_approx`). The natural expression `qitrf2gcrf *
+        // through ITRF for full IERS 2010 (`qteme2gcrf` is the approximate
+        // chain — that flavour belongs in `rotation_approx`). The natural expression `qitrf2gcrf *
         // qteme2itrf` is q_{TEME→GCRF}; conjugate to flip direction.
         (GCRF, TEME) => (qitrf2gcrf(t) * qteme2itrf(t)).conjugate(),
 
@@ -397,12 +400,12 @@ fn canonical_rotation<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quat
     Ok(q)
 }
 
-/// Canonical-direction rotation for the FK5 approximate reduction.
+/// Canonical-direction rotation for the approximate reduction.
 /// Only inertial-cluster + ITRF + TEME pairs are valid.
 ///
-/// Note on `EME2000` in approx mode: the IAU-76/FK5 chain behind
-/// [`qitrf2gcrf_approx`] has no frame bias, so its "GCRF" is already an
-/// FK5-flavoured J2000; applying the constant 23 mas bias on top is
+/// Note on `EME2000` in approx mode: the precession behind
+/// [`qitrf2gcrf_approx`] ([`super::qmod2gcrf`]) has no frame bias, so its
+/// "GCRF" is really the J2000 mean equator and equinox; applying the constant 23 mas bias on top is
 /// formally inconsistent, but the difference is far inside the ~1 arcsec
 /// accuracy of the approximate reduction.
 fn canonical_rotation_approx<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Result<Quaternion> {
@@ -416,11 +419,12 @@ fn canonical_rotation_approx<T: TimeLike>(from: Frame, to: Frame, t: &T) -> Resu
         (GCRF, EME2000) => qeme2000_to_gcrf().conjugate(),
         (GCRF, ICRF) => Quaternion::identity(),
         // (GCRF, TEME): same direction flip as in `canonical_rotation`.
-        (GCRF, TEME) => (qitrf2gcrf_approx(t) * qteme2itrf(t)).conjugate(),
+        // TEME -> GCRF without polar motion (see `qteme2gcrf`).
+        (GCRF, TEME) => qteme2gcrf(t).conjugate(),
 
         (EME2000, ICRF) => qeme2000_to_gcrf(),
-        (TEME, EME2000) => qeme2000_to_gcrf().conjugate() * qitrf2gcrf_approx(t) * qteme2itrf(t),
-        (TEME, ICRF) => qitrf2gcrf_approx(t) * qteme2itrf(t),
+        (TEME, EME2000) => qeme2000_to_gcrf().conjugate() * qteme2gcrf(t),
+        (TEME, ICRF) => qteme2gcrf(t),
 
         // TIRS / CIRS already rejected by reject_for_approx().
         // Orbit frames:
@@ -483,11 +487,35 @@ fn state_dispatch<T: TimeLike>(
     // Case B: both rotating (ITRF ↔ TIRS) — polar motion only, treated as
     // static, no sweep term.
     if is_rotating(from) && is_rotating(to) {
-        // No approx variant: ITRF/TIRS aren't part of the FK5 chain. If
+        // No approx variant: TIRS isn't part of the approximate chain. If
         // approx was requested for one of these, reject_for_approx() would
         // already have caught TIRS upstream.
         let q = rotation(from, to, t)?;
         return Ok((q * *pos, q * *vel));
+    }
+
+    // Case T: TEME ↔ ITRF / TIRS. TEME → PEF is GMST82 alone and PEF
+    // (satkit's TIRS) → ITRF is polar motion: no precession-nutation, so the
+    // transform is exact in both modes and does not go via GCRF (the
+    // approximate GCRF leg neglects polar motion, which TEME → ITRF needs).
+    // The sweep term is applied in PEF, where ω⊕ is along +z.
+    if (from == TEME && is_rotating(to)) || (is_rotating(from) && to == TEME) {
+        let omega: Vector3 = numeris::vector![0.0, 0.0, crate::consts::OMEGA_EARTH];
+        let q_teme2pef = qteme2pef(t);
+        if from == TEME {
+            let p_pef = q_teme2pef * *pos;
+            let v_pef = q_teme2pef * *vel - omega.cross(&p_pef);
+            let q = rotation(TIRS, to, t)?;
+            return Ok((q * p_pef, q * v_pef));
+        }
+        let q = rotation(from, TIRS, t)?;
+        let p_pef = q * *pos;
+        let v_pef = q * *vel;
+        let q_pef2teme = q_teme2pef.conjugate();
+        return Ok((
+            q_pef2teme * p_pef,
+            q_pef2teme * (v_pef + omega.cross(&p_pef)),
+        ));
     }
 
     // Case C: rotating ↔ inertial — route via ITRF↔GCRF.
@@ -628,7 +656,7 @@ mod tests {
         // the reference for `rotation_approx` (which composes with the
         // same approximate ITRF↔GCRF). For full `rotation`, allow ~10 m
         // tolerance because dispatch uses the full IERS 2010 reduction
-        // and qteme2gcrf is FK5-approx.
+        // and qteme2gcrf is the approximate chain.
         let q_teme_to_gcrf_ref = qteme2gcrf(&tm);
 
         // rotation_approx(TEME, GCRF) should match qteme2gcrf to float

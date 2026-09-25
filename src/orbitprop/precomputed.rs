@@ -311,8 +311,8 @@ mod tests {
 
     /// The tabulated GCRF→ITRF rotation must match the full
     /// `frametransform::qgcrf2itrf` chain to well under a milliarcsecond.
-    /// (Regression: the table was once built from the ~1 arcsec IAU-76/FK5
-    /// approximation, which tilted the gravity field enough to drift a LEO
+    /// (Regression: the table was once built from the ~1 arcsec approximate
+    /// reduction, which tilted the gravity field enough to drift a LEO
     /// orbit by ~50 m over 7 days relative to GMAT.)
     #[test]
     fn test_table_matches_full_transform() {

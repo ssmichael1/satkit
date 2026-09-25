@@ -113,7 +113,8 @@ pub fn propagate(
             })?
             .0;
     }
-    if args.len() > 2 {
+    // `end=None` (the stub's default) means "not given"
+    if args.len() > 2 && !args.get_item(2)?.is_none() {
         endtime = args
             .get_item(2)?
             .extract::<PyInstant>()
@@ -147,16 +148,19 @@ pub fn propagate(
                 .0;
             kw.del_item("begin")?;
         }
-        if let Some(kws) = kw.get_item("end")? {
+        if let Some(kws) = kw.get_item("end")?.filter(|v| !v.is_none()) {
             endtime = kws
                 .extract::<PyInstant>()
                 .map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {}", e))
                 })?
                 .0;
+        }
+        // Consumed, including an explicit None
+        if kw.contains("end")? {
             kw.del_item("end")?;
         }
-        if let Some(kwd) = kw.get_item("duration")? {
+        if let Some(kwd) = kw.get_item("duration")?.filter(|v| !v.is_none()) {
             endtime = begintime
                 + kwd
                     .extract::<PyDuration>()
@@ -164,20 +168,29 @@ pub fn propagate(
                         pyo3::exceptions::PyValueError::new_err(format!("Invalid duration: {}", e))
                     })?
                     .0;
+        }
+        // Consumed, including an explicit None
+        if kw.contains("duration")? {
             kw.del_item("duration")?;
         }
-        if let Some(kwd) = kw.get_item("duration_days")? {
+        if let Some(kwd) = kw.get_item("duration_days")?.filter(|v| !v.is_none()) {
             endtime = begintime
                 + Duration::from_days(kwd.extract::<f64>().map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_days: {}", e))
                 })?);
+        }
+        // Consumed, including an explicit None
+        if kw.contains("duration_days")? {
             kw.del_item("duration_days")?;
         }
-        if let Some(kwd) = kw.get_item("duration_secs")? {
+        if let Some(kwd) = kw.get_item("duration_secs")?.filter(|v| !v.is_none()) {
             endtime = begintime
                 + Duration::from_seconds(kwd.extract::<f64>().map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_secs: {}", e))
                 })?);
+        }
+        // Consumed, including an explicit None
+        if kw.contains("duration_secs")? {
             kw.del_item("duration_secs")?;
         }
         if let Some(kws) = kw.get_item("satproperties")? {

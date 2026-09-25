@@ -15,7 +15,7 @@ use anyhow::{bail, Result};
 ///
 /// Notes:
 ///     * Vallado algorithm 15:
-///     * GMST = 67310.5481 + (876600h + 8640184.812866) * tᵤₜ₁ * (0.983104 + tᵤₜ₁ * −6.2e−6)
+///     * GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GMST
 ///
@@ -31,6 +31,12 @@ pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// The difference between apparent and mean sidereal time (GAST - GMST),
 /// arising from nutation of the Earth's axis.
 ///
+/// Notes:
+///     * Two-term approximation (Vallado 2013, §3.7.3); against the IAU 1994
+///       equation of the equinoxes with the full IAU 1980 nutation (ERFA
+///       ``eqeq94``) it is good to about 0.6" (0.65" max, 43 ms of time,
+///       over 1950-2100)
+///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate output
 ///
@@ -41,7 +47,11 @@ pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::eqeq, tm)
 }
 
-/// Greenwich apparant sidereal time, radians
+/// Greenwich apparent sidereal time, radians
+///
+/// GMST (IAU 1982) plus the two-term equation of the equinoxes (``eqeq``),
+/// so good to about 0.6" (0.65" max, 43 ms of time, over 1950-2100)
+/// against ERFA ``gst94``.
 ///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GAST
@@ -152,7 +162,14 @@ pub fn qgcrf2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// Approximate rotation from Geocentric Celestrial Reference Frame to International Terrestrial Reference Frame
 ///
 /// Notes:
-///     * Uses an approximation of the IAU-76/FK5 Reduction; see Vallado section 3.7.3
+///     * Accurate to about 1 arcsec (1.0" max against the full IERS 2010
+///       reduction, 1973-2026), of which up to 0.6" is polar motion, which
+///       this chain neglects
+///     * The chain is GAST (GMST82 + two-term equation of the equinoxes),
+///       two-term nutation (``qtod2mod_approx``) and IAU 2006 precession
+///       without frame bias (``qmod2gcrf``); see Vallado section 3.7.3. It is
+///       often labelled "IAU-76/FK5", but it is neither the IAU 1976
+///       precession nor the 106-term IAU 1980 nutation series
 ///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
@@ -167,7 +184,14 @@ pub fn qgcrf2itrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// Approximate rotation from International Terrestrial Reference Frame to Geocentric Celestrial Reference Frame
 ///
 /// Notes:
-///     * Uses an approximation of the IAU-76/FK5 Reduction; see Vallado section 3.7.3
+///     * Accurate to about 1 arcsec (1.0" max against the full IERS 2010
+///       reduction, 1973-2026), of which up to 0.6" is polar motion, which
+///       this chain neglects
+///     * The chain is GAST (GMST82 + two-term equation of the equinoxes),
+///       two-term nutation (``qtod2mod_approx``) and IAU 2006 precession
+///       without frame bias (``qmod2gcrf``); see Vallado section 3.7.3. It is
+///       often labelled "IAU-76/FK5", but it is neither the IAU 1976
+///       precession nor the 106-term IAU 1980 nutation series
 ///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
@@ -183,7 +207,10 @@ pub fn qitrf2gcrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///
 /// Notes:
 ///     * TEME is output frame of SGP4 propagator
-///     * This is Equation 3-90 in Vallado
+///     * This is Equation 3-90 in Vallado: GMST (IAU 1982) rotation TEME -> PEF,
+///       then polar motion PEF -> ITRF. No precession-nutation, so it is exact
+///       to the model and the same as rotation(TEME, ITRF) and
+///       rotation_approx(TEME, ITRF)
 ///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
@@ -198,8 +225,12 @@ pub fn qteme2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// Rotation from True Equator Mean Equinox (TEME) frame to Geocentric Celestial Reference Frame (GCRF)
 ///
 /// Notes:
-///    * TEME is output frame of SGP4 propagator
-///    * Approximate rotation from TEME to GCRF, accurate to 1 asec
+///    * TEME is output frame of SGP4 propagator (quasi-inertial)
+///    * **Approximate**: the same as rotation_approx(TEME, GCRF), not
+///      rotation(TEME, GCRF). GMST82 to PEF, then the approximate chain of
+///      qitrf2gcrf_approx; no polar motion. Accurate to 0.55" max against the
+///      full IERS 2010 reduction (1973-2026): ~19 m at LEO, ~110 m at GEO
+///    * rotation(TEME, GCRF) is the full reduction (matches ERFA to ~5 uas)
 ///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
@@ -261,7 +292,8 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
 ///
 /// Raises:
 ///     RuntimeError: if the frame is not a satellite-local orbital frame.
-///         Inertial / Earth-fixed frames (ITRF, TEME, EME2000, etc.) need
+///         Time-dependent frames (the Earth-fixed ITRF, the quasi-inertial
+///         TEME, EME2000, etc.) need
 ///         the time-based quaternion helpers instead (qitrf2gcrf,
 ///         qteme2gcrf, ...).
 #[pyfunction]
@@ -322,6 +354,12 @@ pub fn from_gcrf(
 /// Rotation from the Mean-of-Date frame (MOD) to the Geocentric Celestial
 /// Reference Frame (GCRF). Accounts for precession but not nutation.
 ///
+/// Notes:
+///     * Precession only: the IAU 2006 angles zeta_A, z_A, theta_A (Vallado
+///       Eqs. 3-88, 3-89), not the IAU 1976 precession
+///     * No frame bias: the target is the J2000 mean equator and equinox
+///       (EME2000), 23 mas from GCRF
+///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
@@ -335,6 +373,10 @@ pub fn qmod2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 
 /// Approximate rotation from True-of-Date (TOD) to Mean-of-Date (MOD).
 /// Accounts for nutation only.
+///
+/// Notes:
+///     * Two-term nutation (Vallado 2013, §3.7.3), good to 0.9" (0.88" max
+///       over 1950-2100) against the IAU 2006/2000A nutation
 ///
 /// Args:
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
@@ -423,7 +465,8 @@ pub fn gcrf_to_itrf_state(
     state_transform_batch(pos_gcrf, vel_gcrf, time, ft::gcrf_to_itrf_state)
 }
 
-/// Approximate ITRF → GCRF state transform using the IAU-76/FK5 reduction.
+/// Approximate ITRF → GCRF state transform using the approximate reduction
+/// of :func:`qitrf2gcrf_approx`.
 ///
 /// Faster alternative to :func:`itrf_to_gcrf_state` when the full IERS 2010
 /// precision is not required; accurate to ~1 arcsec on position. Neglects
@@ -448,7 +491,8 @@ pub fn itrf_to_gcrf_state_approx(
     state_transform_batch(pos_itrf, vel_itrf, time, ft::itrf_to_gcrf_state_approx)
 }
 
-/// Approximate GCRF → ITRF state transform using the IAU-76/FK5 reduction.
+/// Approximate GCRF → ITRF state transform using the approximate reduction
+/// of :func:`qgcrf2itrf_approx`.
 ///
 /// Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to ~1 arcsec on
 /// position. Accepts scalar or batched inputs like
@@ -584,11 +628,13 @@ pub fn rotation(
 }
 
 /// Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
-/// the IAU-76/FK5 approximate reduction (~1 arcsec).
+/// the approximate reduction of :func:`qitrf2gcrf_approx` (~1 arcsec;
+/// TEME <-> GCRF / EME2000 / ICRF 0.55", as :func:`qteme2gcrf`; TEME <-> ITRF
+/// is exact, as :func:`qteme2itrf`).
 ///
 /// Only valid between ITRF and the inertial cluster (GCRF, EME2000, ICRF,
 /// TEME). TIRS and CIRS are defined by the IERS 2010 reduction and have
-/// no FK5 analogue.
+/// no analogue in the approximate chain.
 ///
 /// Args:
 ///     from_frame (satkit.frame): Source frame
@@ -622,7 +668,10 @@ fn rotation_dispatch_batch(
 ) -> Result<Py<PyAny>> {
     let from: satkit::Frame = from_frame.into();
     let to: satkit::Frame = to_frame.into();
-    let tvec = tm.to_time_vec()?;
+    let crate::pyinstant::TimeInput {
+        times: tvec,
+        scalar,
+    } = tm.to_time_input()?;
     let py = tm.py();
     let cfunc = move |t: &Instant| -> Result<Quaternion> {
         if approx {
@@ -631,12 +680,12 @@ fn rotation_dispatch_batch(
             Ok(ft::rotation(from, to, t)?)
         }
     };
-    match tvec.len() {
-        1 => {
+    match scalar {
+        true => {
             let q = cfunc(&tvec[0])?;
             Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
         }
-        _ => {
+        false => {
             let qs: Result<Vec<crate::pyquaternion::PyQuaternion>> = tvec
                 .iter()
                 .map(|t| cfunc(t).map(crate::pyquaternion::PyQuaternion))
@@ -684,8 +733,9 @@ pub fn transform_state(
     })
 }
 
-/// State transform using the IAU-76/FK5 approximate reduction. Same
-/// supported-pair set as :func:`transform_state`.
+/// State transform using the approximate reduction of :func:`rotation_approx`.
+/// Same supported-pair set as :func:`transform_state`; TEME <-> ITRF does not
+/// use the approximate chain and equals the full transform.
 ///
 /// Args:
 ///     from_frame (satkit.frame): Source frame

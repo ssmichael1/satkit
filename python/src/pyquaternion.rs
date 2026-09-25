@@ -1,7 +1,6 @@
 use anyhow::Context;
 use numpy as np;
 use numpy::PyArrayMethods;
-use numpy::PyUntypedArrayMethods;
 use numpy::ToPyArray;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
@@ -9,7 +8,7 @@ use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
 
-use crate::pyutils::warn_deprecated;
+use crate::pyutils::{to_f64_ndarray, to_vector3, warn_deprecated};
 
 use anyhow::{bail, Result};
 
@@ -118,7 +117,7 @@ impl PyQuaternion {
     /// Quaternion representing rotation about given axis by given angle in radians
     ///
     /// Args:
-    ///     axis (numpy.ndarray): 3-element numpy array representing axis about which to rotate (does not need to be normalized)
+    ///     axis (array-like): 3-element vector (any real numeric array-like) representing axis about which to rotate (does not need to be normalized)
     ///     angle (float): Angle in radians to rotate about axis (right-handed rotation of vector)
     ///
     /// Returns:
@@ -126,15 +125,8 @@ impl PyQuaternion {
     ///     unit quaternion is returned
     ///
     #[staticmethod]
-    fn from_axis_angle(axis: np::PyReadonlyArray1<f64>, angle: f64) -> Result<Self> {
-        let s = axis.as_array();
-        if s.len() != 3 {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "Axis must be a 3-element numpy array",
-            )
-            .into());
-        }
-        let v = numeris::vector![s[0], s[1], s[2]];
+    fn from_axis_angle(axis: &Bound<'_, PyAny>, angle: f64) -> Result<Self> {
+        let v = to_vector3(axis, "axis")?;
         let n = v.norm();
         if n < 1.0e-9 {
             // If the axis is zero, return identity quaternion
@@ -147,41 +139,15 @@ impl PyQuaternion {
     /// Quaternion representing rotation from V1 to V2
     ///
     /// Args:
-    ///     v1 (numpy.ndarray): 3-element numpy array representing vector rotating from
-    ///     v2 (numpy.ndarray): 3-element numpy array representing vector rotating to
+    ///     v1 (array-like): 3-element vector (any real numeric array-like) representing vector rotating from
+    ///     v2 (array-like): 3-element vector (any real numeric array-like) representing vector rotating to
     ///
     /// Returns:
     ///     quaternion: Quaternion representing rotation from v1 to v2
     #[staticmethod]
-    fn rotation_between(
-        v1: np::PyReadonlyArray1<f64>,
-        v2: np::PyReadonlyArray1<f64>,
-    ) -> Result<Self> {
-        if v1.len() != 3 || v2.len() != 3 {
-            bail!("Invalid input.  Must be two 3-element vectors");
-        }
-        let v1 = match v1.is_contiguous() {
-            true => {
-                let s = v1.as_slice().context("Cannot convert v1 to 3D vector")?;
-                numeris::vector![s[0], s[1], s[2]]
-            }
-            false => numeris::vector![
-                *v1.get(0).unwrap(),
-                *v1.get(1).unwrap(),
-                *v1.get(2).unwrap(),
-            ],
-        };
-        let v2 = match v2.is_contiguous() {
-            true => {
-                let s = v2.as_slice().context("Cannot convert v2 to 3D vector")?;
-                numeris::vector![s[0], s[1], s[2]]
-            }
-            false => numeris::vector![
-                *v2.get(0).unwrap(),
-                *v2.get(1).unwrap(),
-                *v2.get(2).unwrap(),
-            ],
-        };
+    fn rotation_between(v1: &Bound<'_, PyAny>, v2: &Bound<'_, PyAny>) -> Result<Self> {
+        let v1 = to_vector3(v1, "v1")?;
+        let v2 = to_vector3(v2, "v2")?;
 
         // Compute rotation between two vectors
         let n1 = v1.norm();
@@ -203,21 +169,23 @@ impl PyQuaternion {
     /// Return quaternion representing same rotation as input direction cosine matrix (3x3 rotation matrix)
     ///
     /// Args:
-    ///     dcm (numpy.ndarray): 3x3 numpy array representing rotation matrix
+    ///     dcm (array-like): 3x3 array representing rotation matrix
     ///
     /// Returns:
     ///     quaternion: Quaternion representing same rotation as input matrix
     #[staticmethod]
-    fn from_rotation_matrix(dcm: np::PyReadonlyArray2<f64>) -> Result<Self> {
-        if dcm.dims() != [3, 3] {
+    fn from_rotation_matrix(dcm: &Bound<'_, PyAny>) -> Result<Self> {
+        let dcm = to_f64_ndarray(dcm)?;
+        let dcm = dcm.readonly();
+        let dcm = dcm.as_array();
+        if dcm.shape() != [3, 3] {
             bail!("Invalid DCM.  Must be 3x3 matrix");
         }
-        let dcm = dcm.as_array();
         // numpy arrays are row-major, build Matrix3 row-by-row
         let mat = Matrix3::new([
-            [dcm[(0, 0)], dcm[(0, 1)], dcm[(0, 2)]],
-            [dcm[(1, 0)], dcm[(1, 1)], dcm[(1, 2)]],
-            [dcm[(2, 0)], dcm[(2, 1)], dcm[(2, 2)]],
+            [dcm[[0, 0]], dcm[[0, 1]], dcm[[0, 2]]],
+            [dcm[[1, 0]], dcm[[1, 1]], dcm[[1, 2]]],
+            [dcm[[2, 0]], dcm[[2, 1]], dcm[[2, 2]]],
         ]);
         Ok(Quaternion::from_rotation_matrix(&mat).into())
     }
@@ -444,45 +412,42 @@ impl PyQuaternion {
             let q: PyRef<Self> = other
                 .extract()
                 .map_err(|e| anyhow::anyhow!("Failed to extract quaternion: {}", e))?;
-            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
+            return Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Self(self.0 * q.0).into_py_any(py)
-            })?)
+            })?);
         }
-        // This incorrectly matches for all PyArray types
-        else if let Ok(v) = other.cast::<np::PyArray2<f64>>() {
-            if v.dims()[1] != 3 {
-                bail!("Invalid rhs.  2nd dimension must be 3 in size");
+        // Rotate a 3-vector or an Nx3 array of vectors: any real numeric
+        // array-like (integer arrays, lists) is converted to float64 first
+        let arr = to_f64_ndarray(other)?;
+        let ro = arr.readonly();
+        let a = ro.as_array();
+        match a.shape() {
+            [3] => {
+                let vout = self.0 * numeris::vector![a[[0]], a[[1]], a[[2]]];
+                Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
+                    np::PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]])
+                        .into_py_any(py)
+                })?)
             }
-            let rot = self.0.to_rotation_matrix();
-            let qmat = rot.transpose();
-
-            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let nd = unsafe {
-                    np::ndarray::ArrayView2::from_shape_ptr((3, 3), qmat.as_slice().as_ptr())
-                };
-                let res = v.readonly().as_array().dot(&nd).to_pyarray(py);
-
-                res.into_py_any(py)
-            })?)
-        } else if let Ok(v1d) = other.cast::<np::PyArray1<f64>>() {
-            if v1d.len() != 3 {
-                bail!("Invalid rhs.  1D array must be of length 3");
+            [_, 3] => {
+                // Row i of the result is (R v_i)^T, i.e. V · Rᵀ. Built by
+                // index: numeris matrices are column-major, so viewing their
+                // storage as a row-major ndarray would silently transpose R
+                // (which is how this path used to return the inverse rotation).
+                let r = self.0.to_rotation_matrix();
+                let rt = np::ndarray::Array2::from_shape_fn((3, 3), |(i, j)| r[(j, i)]);
+                let a2 = a
+                    .into_dimensionality::<np::ndarray::Ix2>()
+                    .context("Invalid rhs")?;
+                Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
+                    a2.dot(&rt).to_pyarray(py).into_py_any(py)
+                })?)
             }
-
-            let m = numeris::vector![
-                v1d.get_owned(0).unwrap(),
-                v1d.get_owned(1).unwrap(),
-                v1d.get_owned(2).unwrap(),
-            ];
-
-            let vout = self.0 * m;
-
-            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let vnd = np::PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]]);
-                vnd.into_py_any(py)
-            })?)
-        } else {
-            bail!("Invalid type: {}", other.get_type());
+            shape => Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid rhs.  Expected a quaternion, a 3-element vector or an Nx3 array, got shape {:?}",
+                shape
+            ))
+            .into()),
         }
     }
 }

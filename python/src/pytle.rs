@@ -96,6 +96,10 @@ impl PyTLE {
     /// Returns:
     ///     TLE or list[TLE]: Single TLE or list of TLEs parsed from the response
     ///
+    /// Raises:
+    ///     RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
+    ///         ``satkit.utils.set_offline(True)``); no connection is opened
+    ///
     /// Example:
     ///     ```python
     ///     tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")

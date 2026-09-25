@@ -30,6 +30,12 @@ impl From<TleFitStatus> for PyTleFitStatus {
 
 #[pymethods]
 impl PyTleFitStatus {
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
+        crate::pyutils::enum_reduce(slf.as_any(), "tlefitstatus")
+    }
+
     pub fn __str__(&self) -> &str {
         match self {
             Self::GradientConverged => "Converged (gradient tolerance)",
