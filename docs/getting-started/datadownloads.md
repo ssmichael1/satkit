@@ -10,7 +10,9 @@ The downloadable files are described by a manifest compiled into the library
 (`data/manifest.json` in the repository) that pins each file's exact size and
 SHA-256 and lists where it may be downloaded from, in order of preference:
 
-1. `SATKIT_DATA_URL` — if set, tried first for every file.
+1. `SATKIT_DATA_URL` — if set, tried first for every file in the manifest. The
+   Earth-orientation and space-weather files are not in it and never use the
+   mirror (see [How often EOP and space weather are refreshed](#how-often-eop-and-space-weather-are-refreshed) below).
 2. The GitHub release asset (`github.com/ssmichael1/satkit-data/releases/download/data-v1/…`).
 3. The originating server where it serves identical bytes: JPL for the DE
    ephemerides, IERS for the `tab5.2*` tables.

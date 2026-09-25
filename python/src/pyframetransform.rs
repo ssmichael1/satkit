@@ -227,7 +227,8 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     * 5 : dY wrt IAU-2000A nutation, milli-arcsecs
 ///
 ///     Or None if the time is outside the range of available Earth Orientation Parameters (EOP)
-///    (EOP are only available from 1962 to current, and predict to current + ~ 4 months)
+///    (EOP are available from 1973-01-02 with the default finals2000A.all, or from 1962 with
+///    CelesTrak's EOP-All.csv in a data directory, to current, with predictions up to a year ahead)
 ///
 #[pyfunction(name = "earth_orientation_params")]
 pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
@@ -825,7 +826,8 @@ pub fn eop_source() -> Option<&'static str> {
 ///     * ``"extrapolated"`` — after the table end: the last row is held constant
 ///       (accuracy degrades by ~0.1 arcsec / ~10 ms per few months — refresh the
 ///       data files)
-///     * ``"before_table"`` — before 1962: no EOP, zeros are used
+///     * ``"before_table"`` — before the table's first row (1973-01-02 for the default
+///       ``finals2000A.all``, 1962 with ``EOP-All.csv``): no EOP, zeros are used
 ///     * ``"not_loaded"`` — no EOP table loaded at all: zeros are used
 #[pyfunction(name = "eop_status")]
 pub fn eop_status(tm: &PyInstant) -> &'static str {
