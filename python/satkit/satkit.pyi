@@ -661,7 +661,11 @@ def nrlmsise00(
     ...
 
 def gravity(
-    pos: list[float] | itrfcoord | npt.ArrayLike, **kwargs
+    pos: list[float] | itrfcoord | npt.ArrayLike,
+    *,
+    model: gravmodel = ...,
+    degree: int = 6,
+    order: int = ...,
 ) -> npt.NDArray[np.float64]:
     """Return acceleration due to Earth gravity at the input position
 
@@ -691,7 +695,11 @@ def gravity(
     ...
 
 def gravity_and_partials(
-    pos: itrfcoord | npt.NDArray[np.float64], **kwargs
+    pos: itrfcoord | npt.NDArray[np.float64],
+    *,
+    model: gravmodel = ...,
+    degree: int = 6,
+    order: int = ...,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Gravity and partial derivatives of gravity with respect to Cartesian coordinates
 
@@ -1166,7 +1174,7 @@ class time:
 
         Example:
             ```python
-            print(satkit.time.from_rfctime("2023-03-05T11:03:45.453Z"))
+            print(satkit.time.from_rfc3339("2023-03-05T11:03:45.453Z"))
             # 2023-03-05 11:03:45.453Z
             ```
         """
@@ -1799,8 +1807,8 @@ class duration:
         hours: float = 0,
         minutes: float = 0,
         seconds: float = 0.0,
-        microseconds: float = 0.0,
-    ):
+        microseconds: int = 0,
+    ) -> None:
         """Create a duration object representing input time duration
 
         Args:
@@ -1808,7 +1816,7 @@ class duration:
             hours: Number of hours, default is 0
             minutes: Number of minutes, default is 0
             seconds: Number of seconds, default is 0.0
-            microseconds: Number of microseconds, default is 0.0
+            microseconds: Number of microseconds (an integer), default is 0
 
         Notes:
             - If no arguments are passed in, the created object represents a duration of 0 seconds
@@ -1908,7 +1916,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) + duration.from_minutes(1))
+            print(satkit.duration.from_hours(1) + satkit.duration.from_minutes(1))
             # Duration: 1 hours, 1 minutes, 0.000 seconds
             ```
         """
@@ -1926,7 +1934,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_days(1) + 2.5)
+            print(satkit.duration.from_days(1) + 2.5)
             # Duration: 3 days, 0 hours, 0 minutes, 0.000 seconds
             ```
         """
@@ -1944,8 +1952,8 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
-            # 2023-06-04 13:30:00.000Z
+            print(satkit.duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
+            # 2023-06-04T12:30:00.000000Z
             ```
         """
         ...
@@ -1961,7 +1969,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) - duration.from_minutes(1))
+            print(satkit.duration.from_hours(1) - satkit.duration.from_minutes(1))
             # Duration: 59 minutes, 0.000 seconds
             ```
         """
@@ -1978,7 +1986,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_days(1) * 2.5)
+            print(satkit.duration.from_days(1) * 2.5)
             # Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
             ```
         """
@@ -1996,7 +2004,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_days(1) / 2)
+            print(satkit.duration.from_days(1) / 2)
             # Duration: 12 hours, 0 minutes, 0.000 seconds
             ```
         """
@@ -2014,7 +2022,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) / duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) / satkit.duration.from_minutes(30))
             # 2.0
             ```
         """
@@ -2030,7 +2038,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) > duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) > satkit.duration.from_minutes(30))
             # True
             ```
         """
@@ -2046,7 +2054,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) < duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) < satkit.duration.from_minutes(30))
             # False
             ```
         """
@@ -2062,7 +2070,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) >= duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) >= satkit.duration.from_minutes(30))
             # True
             ```
         """
@@ -2078,7 +2086,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) <= duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) <= satkit.duration.from_minutes(30))
             # False
             ```
         """
@@ -2152,11 +2160,20 @@ class quaternion:
         - Under the hood, this is using the "UnitQuaternion" object in the rust "nalgebra" crate.
     """
 
-    def __init__(self, w: float = 1.0, x: float = 0.0, y: float = 0.0, z: float = 0.0):
+    @overload
+    def __init__(self) -> None: ...
+    @overload
+    def __init__(self, w: float, x: float, y: float, z: float, /) -> None:
         """Return quaternion with input (w,x,y,z) values
+
+        With no arguments, return the identity quaternion. Otherwise pass all
+        four components positionally (keywords are not accepted).
 
         Args:
             w: Scalar component of the quaternion
+            x: X component of the quaternion
+            y: Y component of the quaternion
+            z: Z component of the quaternion
 
         Example:
             ```python
@@ -2167,9 +2184,6 @@ class quaternion:
             import math
             q = satkit.quaternion.rotz(math.radians(90))
             ```
-            x: X component of the quaternion
-            y: Y component of the quaternion
-            z: Z component of the quaternion
         """
         ...
 
@@ -2478,7 +2492,7 @@ class quaternion:
             q1 = satkit.quaternion.rotz(math.radians(0))
             q2 = satkit.quaternion.rotz(math.radians(90))
             q_mid = q1.slerp(q2, 0.5)
-            print(f"Mid-rotation angle: {math.degrees(q_mid.angle()):.1f} deg")
+            print(f"Mid-rotation angle: {math.degrees(q_mid.angle):.1f} deg")
             # Mid-rotation angle: 45.0 deg
             ```
         """
@@ -2851,20 +2865,24 @@ class itrfcoord:
         Create ITRF coord from Cartesian:
 
         ```python
-        coord = itrfcoord([ 1523128.63570828, -4461395.28873207,  4281865.94218203 ])
+        coord = satkit.itrfcoord([ 1523128.63570828, -4461395.28873207,  4281865.94218203 ])
         ```
 
         Create ITRF coord from Geodetic:
 
         ```python
-        coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
+        coord = satkit.itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
         ```
 
     """
 
+    @overload
+    def __init__(self, vec: npt.NDArray[np.float64] | list[float], /) -> None: ...
+    @overload
+    def __init__(self, x: float, y: float, z: float, /) -> None: ...
+    @overload
     def __init__(
         self,
-        vec: npt.NDArray[np.float64] | list[float] | None = None,
         *,
         latitude_deg: float = ...,
         longitude_deg: float = ...,
@@ -2872,11 +2890,15 @@ class itrfcoord:
         longitude_rad: float = ...,
         altitude: float = ...,
         height: float = ...,
-    ):
+    ) -> None:
         """Create ITRF coordinate from Cartesian vector or geodetic parameters.
 
+        Pass the Cartesian position positionally, either as one 3-element
+        numpy array or list, or as three floats; or pass the geodetic
+        position as keywords (latitude and longitude are required).
+
         Args:
-            vec: ITRF Cartesian location in meters (3-element array, list, or tuple)
+            vec: ITRF Cartesian location in meters (3-element numpy array or list)
             latitude_deg: Latitude in degrees
             longitude_deg: Longitude in degrees
             latitude_rad: Latitude in radians
@@ -3218,6 +3240,7 @@ class satstate:
 
         Example:
             ```python
+            import math
             k = satkit.kepler(7000e3, 0.001, math.radians(98), 0, 0, 0)
             state = satkit.satstate.from_kepler(satkit.time(2024, 1, 1), k)
             ```

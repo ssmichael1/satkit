@@ -17,9 +17,12 @@ take a source and destination [`frame`](frame.md) and pick the appropriate
 rotation internally:
 
 ```python
+import numpy as np
 import satkit as sk
 
 t = sk.time(2024, 1, 1, 12, 0, 0)
+pos_itrf = sk.itrfcoord(latitude_deg=42.0, longitude_deg=-71.0, altitude=400e3).vector
+vel_itrf = np.array([0.0, 7600.0, 0.0])  # m/s, in ITRF
 
 # Full IERS 2010 reduction. Keyword arguments are recommended at the call
 # site so the source / destination direction is unambiguous; positional
@@ -68,7 +71,8 @@ involve an orbit-dependent frame compose through GCRF. The orbit state is only
 consulted when an orbit frame is involved:
 
 ```python
-# TEME (Earth-fixed SGP4 frame) directly to RTN (orbit-local) in one call.
+# TEME (the SGP4 output frame) directly to RTN (orbit-local) in one call;
+# the orbit state is given in GCRF.
 q = sk.frametransform.rotation_with_state(
     from_frame=sk.frame.TEME, to_frame=sk.frame.RTN,
     tm=t, pos=pos_gcrf, vel=vel_gcrf,

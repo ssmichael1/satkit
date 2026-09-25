@@ -103,7 +103,7 @@ def pos_mod(
     ...
 
 def rise_set(
-    time: satkit.time, coord: satkit.itrfcoord, sigma: float = 90.0 + 50.0 / 60.0
+    time: satkit.time, coord: satkit.itrfcoord, sigma: float | None = None
 ) -> tuple[satkit.time, satkit.time]:
     """
     Sunrise and sunset times on the day given by input time
@@ -124,7 +124,7 @@ def rise_set(
                 "Nautical Twilight": 102 deg
             "Astronomical Twilight": 108 deg
 
-            If not passed in, "Standard" is used (90.0 + 50.0/60.0)
+            If None or not passed in, "Standard" is used (90.0 + 50.0/60.0)
 
     Returns:
         tuple[satkit.time, satkit.time]: (sunrise, sunset)

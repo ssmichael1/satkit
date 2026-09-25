@@ -51,6 +51,7 @@ it a hard dependency of `satkit`; it is now optional.
 Nothing needs to be downloaded before first use, but for a container image,
 a CI job, or a machine that will later be offline:
 
+<!-- skip-test: needs the network (downloads the data files) -->
 ```python
 import satkit as sk
 sk.utils.update_datafiles()   # ephemeris (verified) + EOP + space weather

@@ -1,36 +1,76 @@
 # stubtest allowlist for satkit.
 #
-# Entries are regexes, fullmatched against each error's OBJECT PATH. This file
-# is used together with two CLI flags that switch off whole PyO3-idiom check
+# Entries are regexes, fullmatched against each error's OBJECT PATH. Run the
+# check with the wrapper, which also registers the native submodules
+# (satkit.sun, satkit.density, ...) so their own .pyi files are checked:
+#
+#   python python/run_stubtest.py
+#
+# The wrapper passes two CLI flags that switch off whole PyO3-idiom check
 # categories globally (cleaner than listing every object path):
 #
-#   python -m mypy.stubtest satkit \
-#       --allowlist python/stubtest_allowlist.txt \
-#       --ignore-positional-only \      # operator dunders are positional-only at runtime
-#       --ignore-disjoint-bases         # every pyclass is a PEP 800 disjoint base
+#   --ignore-positional-only   operator dunders are positional-only at runtime
+#   --ignore-disjoint-bases    every pyclass is a PEP 800 disjoint base
 #
-# What remains here suppresses systematic PyO3 idioms that have no CLI flag.
-# It deliberately contains NO real stub/runtime drift — those are fixed in the
-# .pyi and Rust bindings. stubtest errors on unused entries, so if you fix an
-# idiom (e.g. mark a class @final) its entry must be deleted here.
+# Every entry below is an exact object path with a reason. Real stub/runtime
+# drift is fixed in the .pyi; the only drift listed here is owned by another
+# open branch and says so. stubtest errors on unused entries, so an entry must
+# be deleted as soon as its cause is fixed.
+#
+# What stubtest cannot see at all (so the doc-example tests and the unit tests
+# have to): return types; parameter types (only names, kinds and defaults are
+# compared); the keywords of a binding that takes `**kwargs`/`*args` without a
+# `text_signature`; and anything about constructors (next block).
 
-# --- PyO3 constructors -------------------------------------------------------
-# #[new] parses (*args, **kwargs) manually, so runtime __init__/__new__ carry no
-# named params. We keep keyword-rich __init__ stubs for IDE autocomplete.
-.*\.__(init|new)__
+# --- PyO3 constructors ---------------------------------------------------------
+# A pyclass constructor is `__new__` at runtime (the #[new] signature is the
+# class __text_signature__) and runtime `__init__` takes nothing, while the stubs
+# declare `__init__` so mkdocstrings and IDEs render the constructor. stubtest
+# reports every stub __init__ parameter as missing and every runtime __new__
+# parameter as missing from the stub, so constructors are not checked here.
+# python/test/test_stub_signatures.py compares each stub __init__ with the
+# runtime __text_signature__ instead, where the binding declares one.
+#
+# Declared runtime signature, checked by test_stub_signatures.py:
+satkit\.satkit\.ecomparams\.__init__
+satkit\.satkit\.ecomparams\.__new__
+satkit\.satkit\.kepler\.__init__
+satkit\.satkit\.kepler\.__new__
+satkit\.satkit\.satstate\.__init__
+satkit\.satkit\.satstate\.__new__
+# Declared runtime signature `(*py_args, scale=...)`; the stub spells out the
+# accepted forms as positional-only overloads, which stubtest cannot match
+# against `*py_args`.
+satkit\.satkit\.time\.__init__
+satkit\.satkit\.time\.__new__
+# #[new] parses `*args` / `**kwargs` by hand, so the runtime has no signature to
+# compare against (checked by the constructor calls in the doc examples).
+satkit\.satkit\.duration\.__init__
+satkit\.satkit\.itrfcoord\.__init__
+satkit\.satkit\.itrfcoord\.__new__
+satkit\.satkit\.propsettings\.__init__
+satkit\.satkit\.quaternion\.__init__
+satkit\.satkit\.quaternion\.__new__
+satkit\.satkit\.satproperties\.__init__
+satkit\.satkit\.satproperties\.__new__
 
-# --- PyO3 pickle support -----------------------------------------------------
+# --- PyO3 pickle support -------------------------------------------------------
 # Emitted for pickling; not user-facing API.
-.*\.__getnewargs_ex__
+satkit\.satkit\.itrfcoord\.__getnewargs_ex__
+satkit\.satkit\.kepler\.__getnewargs_ex__
+satkit\.satkit\.propresult\.__getnewargs_ex__
+satkit\.satkit\.propsettings\.__getnewargs_ex__
+satkit\.satkit\.satstate\.__getnewargs_ex__
+satkit\.satkit\.time\.__getnewargs_ex__
 
-# --- Native submodules -------------------------------------------------------
-# Importable only as attributes of the compiled extension; each is documented in
-# its own top-level .pyi, so it appears both as an un-importable module and as an
-# attribute of satkit.satkit that satkit.pyi doesn't redeclare.
-satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)
+# --- Native submodules ---------------------------------------------------------
+# Attributes of the compiled extension, each documented in its own top-level
+# .pyi, which satkit.pyi therefore doesn't redeclare.
 satkit\.satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)
+# PyO3 gives each submodule an `__all__`; the stubs list names explicitly.
+satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)\.__all__
 
-# --- Final classes -----------------------------------------------------------
+# --- Final classes -------------------------------------------------------------
 # Every pyclass is final at runtime; we never subclass in stubs. (Alternative:
 # mark each class @final in the stub and drop this block.)
 satkit\.satkit\.TLE
@@ -59,14 +99,16 @@ satkit\.satkit\.time
 satkit\.satkit\.timescale
 satkit\.satkit\.tlefitstatus
 satkit\.satkit\.weekday
+satkit\.moon\.moonphase
 
-# --- Stub-only type aliases --------------------------------------------------
+# --- Stub-only type aliases ----------------------------------------------------
 # TypeAliases used across the stubs; intentionally have no runtime object.
 satkit\.satkit\.TimeScalar
 satkit\.satkit\.TimeInput
 satkit\.satkit\.TimeArrayLike
 
-# --- __all__ -----------------------------------------------------------------
+# --- __all__ -------------------------------------------------------------------
+# satkit/__init__.pyi declares __all__ for the re-exports; the runtime package
+# has none. The extension module has one; satkit.pyi doesn't.
 satkit\.__all__
 satkit\.satkit\.__all__
-

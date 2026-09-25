@@ -51,6 +51,7 @@ In Rust the same message is the `satkit::omm::OMM` struct, which implements `SGP
 
 Both TLEs and OMMs can be loaded directly from a URL:
 
+<!-- skip-test: needs the network (CelesTrak) -->
 ```python
 import satkit as sk
 
@@ -99,6 +100,7 @@ print(coord)
 
 ### SGP4 from a URL (TLE)
 
+<!-- skip-test: needs the network (CelesTrak) -->
 ```python
 import satkit as sk
 
@@ -111,6 +113,7 @@ pos, vel = sk.sgp4(iss, sk.time(2024, 6, 1))
 
 ### SGP4 from a URL (OMM)
 
+<!-- skip-test: needs the network (CelesTrak) -->
 ```python
 import satkit as sk
 
@@ -133,12 +136,24 @@ coord = [sk.itrfcoord(x) for x in pITRF]
 
 XML format works the same way -- just change the URL:
 
+<!-- skip-test: needs the network (CelesTrak) -->
 ```python
 omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=xml")
 ```
 
 ### OMM from a local file, and conversion to a TLE
 
+<!-- test-setup
+import json
+import satkit as sk
+iss = sk.TLE.from_lines([
+    "ISS (ZARYA)",
+    "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9003",
+    "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357",
+])
+with open("gp.json", "w") as f:
+    json.dump([iss.to_omm()], f)
+-->
 ```python
 import satkit as sk
 
