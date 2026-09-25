@@ -98,6 +98,7 @@ nav:
   - Learn:
       - tutorials/index.md
       - Foundations:
+          - "Theory: Time Systems": guide/time.md
           - Time Systems: tutorials/Time Systems.ipynb
           - Quaternions: tutorials/Quaternions.ipynb
           - Coordinate Frames: tutorials/Coordinate Frames.ipynb
