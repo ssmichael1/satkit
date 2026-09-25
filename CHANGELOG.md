@@ -23,6 +23,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Tests
 
 - Property tests: leap-second-biased generators, construction-route agreement, UTC day length, TDB periodicity, UT1 continuity and frame-transform invariants (proptest), and datetime/pickle/vectorisation properties (hypothesis, a new test dependency); a weekly 100k-case run; seven defects pinned as ignored/xfail tests ([#221](https://github.com/ssmichael1/satkit/pull/221))
+- Differential tests against ERFA (`pyerfa`, a new test dependency) for the time scales around every leap second, ERA/GMST/equation of the equinoxes, the CIO/precession–nutation chain, TEME and WGS-84 geodetic conversion; three confirmed defects are pinned as strict xfails ([#219](https://github.com/ssmichael1/satkit/pull/219))
 
 ## 0.23.1 - 2026-09-24
 
