@@ -3,9 +3,37 @@
 This page describes the time scales `satkit` supports, how
 [`satkit.time`](../api/time.md) (Rust: `satkit::Instant`) represents an
 instant internally, how leap seconds and Earth orientation data enter the
-conversions, and which scale each part of the library runs on. It closes with
-the known limitations of the current implementation. For a hands-on notebook
-see the [Time Systems tutorial](../tutorials/Time%20Systems.ipynb).
+conversions, and which scale each part of the library runs on. It is the
+reference; the [Time Systems tutorial](../tutorials/Time%20Systems.ipynb)
+works through the same material in runnable Python — creating times,
+converting between scales, durations, leap seconds and GPS week/second.
+
+## Why a Dedicated Time Type
+
+Python already has `datetime`, NumPy `datetime64` and astropy `Time`.
+`satkit.time` exists because the rest of the library needs properties none of
+the first two have, without taking on astropy as a dependency:
+
+- **The time scale is explicit.** A `datetime` cannot say whether it is UTC,
+  TAI or TT, and subtracting two of them across a leap second is silently
+  wrong by a second. A `satkit.time` is an unambiguous instant; the scale is
+  chosen when you build it and when you read it out.
+- **Leap seconds exist.** `23:59:60` has its own label and a leap-second day
+  is 86,401 s long (see [Leap Seconds](#leap-seconds)).
+- **Exact integer arithmetic.** Instants and durations are integer
+  microsecond counts (see [How an Instant Is Stored](#how-an-instant-is-stored)),
+  so differences, ordering and hashing are exact.
+- **UT1 and TDB come for free.** The Earth orientation table and the TDB
+  series are already part of the library for the frame transforms and
+  ephemerides.
+- **One type everywhere.** The propagator, frame transforms, SGP4, ephemerides
+  and ground-contact search all take a `satkit.time`, in Python and Rust
+  alike.
+
+Every public Python API that takes a time also accepts a `datetime`, and
+`satkit.time` converts to and from one. A naive `datetime` (no `tzinfo`)
+follows Python's convention and is read as the machine's **local** time; an
+aware one uses its own offset.
 
 ## The Time Scales
 
@@ -80,7 +108,7 @@ each algorithm reads it in the scale it needs.
 | Space-weather lookup for the density models | UTC calendar day |
 | Earth rotation angle (ITRF ↔ GCRF), GMST (TEME ↔ ITRF) | UT1 |
 | IAU 2006/2000A precession–nutation, TIO locator $s'$, equation of the equinoxes | TT |
-| JPL DE ephemerides (`satkit.jplephem`) | TT (see [TDB and TT](#tdb-and-tt)) |
+| JPL DE ephemerides (`satkit.jplephem`) | TDB |
 | Low-precision Sun and Moon (`satkit.sun`, `satkit.moon`) | TDB |
 | Low-precision planets (`satkit.planets`) | TT |
 
@@ -88,7 +116,7 @@ Because the frame transforms read UT1 and TT from the same instant, a time
 given in the wrong scale is not a small error: labelling a GPS-time epoch as
 UTC shifts it by 18 s, which is 18 s of Earth rotation (about 1.3 mrad, or
 8 km at the equator) in any ITRF ↔ GCRF rotation. Build such times with
-`scale=satkit.timescale.GPS` (see [Examples](#examples)).
+`scale=satkit.timescale.GPS` or `satkit.time.from_gps_week_and_second()`.
 
 ## How an Instant Is Stored
 
@@ -119,7 +147,11 @@ Consequences of the integer representation:
   exact integer number of microseconds that includes any leap seconds in
   between.
 - **`satkit.duration`** is also an integer microsecond count. Fractional
-  microseconds passed to its constructors are truncated toward zero.
+  microseconds passed to its constructors are truncated toward zero, and so
+  are fractional microseconds in calendar seconds and in floating-point
+  MJD/JD input. A decimal like `0.253922` s has no exact binary
+  representation and is stored just below its value, so about 1 % of
+  microsecond-exact inputs land 1 µs early (`0.253922` → `0.253921`).
 - **Floating-point dates lose precision.** `to_mjd()` and `to_jd()` return
   `f64` days. Near the present an MJD is resolved to about 0.6 µs, so MJD
   round trips are exact at the microsecond level, but a Julian Date (a number
@@ -144,7 +176,9 @@ remains correct until IERS announces another leap second.
 `satkit` handles that second as follows:
 
 - Calendar output (`str()`, `to_gregorian()`, `to_rfc3339()`) shows it as
-  `23:59:60.xxxxxx`.
+  `23:59:60.xxxxxx`, and calendar and RFC 3339 input accept that label on a
+  day that has a leap second (`satkit.time(2016, 12, 31, 23, 59, 60.5)`);
+  on any other day `:60` is an error.
 - `to_mjd()` / `to_jd()` in UTC, and `to_unixtime()`, map it onto a repeat of
   `23:59:59.xxxxxx`, the POSIX convention: every UTC day is 86,400 s long in
   these units, so the UTC MJD is not monotonic across a leap second. The TAI,
@@ -152,14 +186,19 @@ remains correct until IERS announces another leap second.
 - `to_datetime()` goes through Unix time, so Python's `datetime`, which has
   no second 60, also receives `23:59:59.xxxxxx`.
 - Durations and `time` differences count the leap second: adding 2 s to
-  2016-12-31 23:59:59 UTC gives 2017-01-01 00:00:00 UTC.
+  2016-12-31 23:59:59 UTC gives 2017-01-01 00:00:00 UTC, and
+  `time(2017, 1, 1) - time(2016, 12, 31)` is 86,401 s.
+  `add_utc_days(1.0)` steps one calendar day instead.
 
 **Before 1972** UTC was not a leap-second scale: from 1961 it ran at an offset
 rate with fractional-second steps, and TAI − UTC grew to about 10 s by the end
 of 1971. `satkit` does not model this and takes $\Delta AT = 0$ before
 1972-01-01. Pre-1972 UTC input is therefore converted to TAI, TT and GPS with
-an error of up to ~10 s, and the 10 s step appears at the start of 1972. (UT1
-uses the EOP table, which reaches back to 1962, and is unaffected.)
+an error of up to ~10 s (1.4 s in 1961, rising to 9.9 s at the end of 1971).
+The 10 s step is represented as one 10-second inserted interval at the end of
+1971-12-31, labelled `23:59:60` through `23:59:69`, so that day is 86,410 s
+long and the mapping between labels and instants stays one-to-one. (UT1 uses
+the EOP table, which reaches back to 1962, and is unaffected.)
 
 ## UT1 and Earth Orientation Parameters
 
@@ -167,11 +206,13 @@ $\Delta\text{UT1}$ comes from the Earth orientation parameter (EOP) table,
 loaded from the IERS `finals2000A.all` file
 ([IERS Rapid Service](references.md#iers-finals2000a)) with CelesTrak's
 `EOP-All.csv` as the fallback. The table has one row per day at 0 h UTC and
-is looked up by UTC MJD; values between rows are linearly interpolated. The
-inverse conversion (`from_mjd(..., scale=UT1)`) looks $\Delta\text{UT1}$ up at
-the given UT1 value as though it were UTC; since $\Delta\text{UT1}$ changes by
-only milliseconds per day, the error of that shortcut is far below a
-microsecond.
+is looked up by UTC MJD; values between rows are linearly interpolated.
+$\Delta\text{UT1}$ jumps by +1 s at every leap second, so when two rows
+straddle one the step is removed before interpolating: conversions go through
+$\text{UT1} - \text{TAI}$, which is continuous, and UT1 advances smoothly
+through the leap second. The inverse conversion
+(`from_mjd(..., scale=UT1)`) uses the same continuous quantity and
+round-trips to the microsecond.
 
 What happens outside the table depends on where the epoch falls, as reported
 by `satkit.frametransform.eop_status(t)`:
@@ -209,126 +250,56 @@ $$
 
 with the argument in radians (628.3076 rad per century is one revolution per
 year; the phase is the Earth's mean anomaly at J2000). The terms left out are
-each at most a few tens of microseconds. The inverse (`from_mjd(...,
-scale=TDB)`) evaluates the same term at the TDB date, which is equivalent to
-well under a microsecond. (The implementation currently deviates from this
-formula; see [Known Limitations](#known-limitations).)
+individually small; against the full series (ERFA `dtdb`) the one-term
+formula is within 54 µs over 1900–2100 (20 µs RMS). The inverse
+(`from_mjd(..., scale=TDB)`) evaluates the same term at the TDB date, which is
+equivalent to well under a microsecond.
 
-Only the low-precision Sun and Moon models read TDB. The JPL DE ephemerides,
-whose native argument is TDB (strictly $T_\text{eph}$), are evaluated at
-**TT**. The difference of at most ~1.7 ms moves the geocentric Moon by at most
-~2 m (its geocentric speed is ~1 km/s) and the geocentric Sun by at most ~50 m
-(the Earth's barycentric speed is ~30 km/s, a direction error of
-$3\times10^{-10}$ rad), both negligible for third-body accelerations and
-Sun/Moon directions.
+TDB is read by the JPL DE ephemerides (whose native argument is TDB, strictly
+$T_\text{eph}$) and by the low-precision Sun and Moon models.
 
-## Examples
+## Rust Usage
 
-=== "Python"
+The [tutorial](../tutorials/Time%20Systems.ipynb) covers the Python API. The
+Rust equivalents are methods on `satkit::Instant`, with the scale passed
+explicitly:
 
-    ```python
-    from datetime import datetime, timezone
-    import satkit as sk
+```rust
+use satkit::{Duration, Instant, TimeScale};
 
-    ts = sk.timescale
+// Calendar input is UTC
+let t = Instant::from_datetime(2024, 6, 15, 12, 0, 0.0)?;
+let tt_minus_utc =
+    (t.as_mjd_with_scale(TimeScale::TT) - t.as_mjd_with_scale(TimeScale::UTC)) * 86400.0;
+println!("TT - UTC = {tt_minus_utc:.3} s"); // 69.184 s
 
-    # Calendar input is UTC by default
-    t = sk.time(2024, 6, 15, 12, 0, 0)
-    for scale in (ts.TAI, ts.TT, ts.GPS, ts.UT1):
-        offset = (t.to_mjd(scale) - t.to_mjd(ts.UTC)) * 86400.0
-        print(f"{scale} - UTC = {offset:+.6f} s")
-    # TAI: +37 s, TT: +69.184 s, GPS: +18 s, UT1: from the EOP table
+// The same calendar components interpreted in TT
+let t_tt = Instant::from_datetime_with_scale(2024, 6, 15, 12, 0, 0.0, TimeScale::TT)?;
+let dt: Duration = t - t_tt; // exact integer microseconds
+assert_eq!(dt.as_microseconds(), 69_184_000);
 
-    # The same calendar components interpreted in another scale
-    t_tt = sk.time(2024, 6, 15, 12, 0, 0, scale=ts.TT)
-    print(t_tt)                     # 2024-06-15T11:58:50.816000Z
-    print((t - t_tt).seconds)       # 69.184
+// Crossing a leap second
+let t0 = Instant::from_datetime(2016, 12, 31, 23, 59, 59.0)?;
+println!("{}", t0 + Duration::from_seconds(1.0)); // 2016-12-31T23:59:60.000000Z
+```
 
-    # GPS week / second of week (full week number, no 1024-week rollover)
-    t_gps = sk.time.from_gps_week_and_second(2319, 302400.0)
-    print(t_gps)                    # 2024-06-19T11:59:42.000000Z
+## Limitations
 
-    # Crossing the 2016-12-31 leap second
-    t0 = sk.time(2016, 12, 31, 23, 59, 59)
-    print(t0 + sk.duration(seconds=1))   # 2016-12-31T23:59:60.000000Z
-    print(t0 + sk.duration(seconds=2))   # 2017-01-01T00:00:00.000000Z
-
-    noon = sk.time(2016, 12, 31, 12, 0, 0)
-    print(noon + sk.duration(days=1))    # 2017-01-01T11:59:59.000000Z (86,400 s)
-    print(noon.add_utc_days(1.0))        # 2017-01-01T12:00:00.000000Z (one UTC day)
-
-    # A naive datetime is local time (Python's convention); attach UTC explicitly
-    t_dt = sk.time.from_datetime(datetime(2024, 6, 15, 12, 0, tzinfo=timezone.utc))
-
-    # Is UT1 measured, predicted or extrapolated at this epoch?
-    print(sk.frametransform.eop_status(t))
-    ```
-
-=== "Rust"
-
-    ```rust
-    use satkit::{Duration, Instant, TimeScale};
-
-    // Calendar input is UTC
-    let t = Instant::from_datetime(2024, 6, 15, 12, 0, 0.0)?;
-    let tt_minus_utc =
-        (t.as_mjd_with_scale(TimeScale::TT) - t.as_mjd_with_scale(TimeScale::UTC)) * 86400.0;
-    println!("TT - UTC = {tt_minus_utc:.3} s"); // 69.184 s
-
-    // The same calendar components interpreted in TT
-    let t_tt = Instant::from_datetime_with_scale(2024, 6, 15, 12, 0, 0.0, TimeScale::TT)?;
-    let dt: Duration = t - t_tt; // exact integer microseconds
-    assert_eq!(dt.as_microseconds(), 69_184_000);
-
-    // Crossing a leap second
-    let t0 = Instant::from_datetime(2016, 12, 31, 23, 59, 59.0)?;
-    println!("{}", t0 + Duration::from_seconds(1.0)); // 2016-12-31T23:59:60.000000Z
-    # Ok::<(), satkit::InstantError>(())
-    ```
-
-## Known Limitations
-
-These are defects of the current implementation, listed so that results near
-the affected dates can be recognised.
-
-- **TDB − TT has the wrong period.** The code converts the argument
-  $628.3076\,T + 6.2401$ from degrees to radians although it is already in
-  radians, so the 1.657 ms term cycles every ~57 years instead of every
-  year. TDB is therefore off by up to ~3.3 ms (currently about 0.7 ms).
-  This affects `to_mjd(TDB)` / `from_mjd(..., TDB)` and the low-precision
-  Sun and Moon, where it is far below their accuracy; the JPL ephemerides
-  (evaluated at TT) and the frame transforms do not use TDB.
-- **Midnight after a leap second is built one second early.** Constructing
-  exactly 00:00:00.000000 UTC on a day that follows a leap second — from
-  calendar components, `from_mjd`, `from_jd` or `from_unixtime` — yields
-  the first instant of the leap second, which prints as `23:59:60` on the
-  previous day. For example `sk.time(2017, 1, 1) - sk.time(2016, 12, 31)`
-  is 86,400 s rather than 86,401 s, and `add_utc_days` landing exactly on
-  such a midnight is affected in the same way. One microsecond later is
-  correct.
-- **A leap second cannot be entered by its label.** A seconds value of
-  exactly 60.0 is rejected as an invalid leap second, and 60.x lands on
-  00:00:00.x of the next day; `from_rfc3339` does not accept `:60`. Reach
-  the leap second by adding a duration to 23:59:59, as in the example above.
-- **The first seconds of 1972 are duplicated.** The table places the
-  0 → 10 s step in $\Delta AT$ at 1972-01-01 00:00:09 UTC instead of
-  00:00:00, so the labels 00:00:00–00:00:09 of that day occur twice and one
-  second in between prints with a malformed time of day.
-- **UT1 is wrong on the day before a leap second.** $\Delta\text{UT1}$ jumps
-  by +1 s at each leap second, and the daily EOP rows are interpolated
-  linearly across the jump, so during the last UTC day before a leap second
-  $\Delta\text{UT1}$ ramps through the step instead of holding: up to ~1 s
-  of UT1 error (~0.5 s at noon, a few hundred metres of Earth rotation).
-  This only affects past dates up to 2016-12-31.
-- **Pre-1970 times of day print incorrectly.** For instants before
-  1970-01-01 that are not at midnight, `str()`, `to_gregorian()` and
-  `to_rfc3339()` return negative hour/minute/second fields (e.g.
-  `1960-01-02T-12:00:00` for 1960-01-01 12:00 UTC). The instant itself, its
-  MJD/JD and `to_datetime()` are correct.
+- **Pre-1972 UTC is not modelled**: $\Delta AT = 0$ before 1972, an error
+  of up to ~10 s in TAI/TT/GPS for UTC labels in 1961–1971 (see
+  [Leap Seconds](#leap-seconds)).
+- **Future leap seconds need a new release**: the $\Delta AT$ table is
+  compiled in.
+- **TDB is a one-term series**, good to ~50 µs, with no observer-dependent
+  (topocentric) terms.
+- **Input is truncated, not rounded, to the microsecond** (see
+  [How an Instant Is Stored](#how-an-instant-is-stored)).
+- **UT1 needs EOP data**: outside the table it is extrapolated or taken equal
+  to UTC (see [UT1 and Earth Orientation Parameters](#ut1-and-earth-orientation-parameters)).
 
 ## See Also
 
-- **Tutorial**: [Time Systems](../tutorials/Time%20Systems.ipynb) — creating times, converting between scales, durations and GPS week/second, with plots of the offsets.
+- **Tutorial**: [Time Systems](../tutorials/Time%20Systems.ipynb) — runnable Python: creating times, converting between scales, durations, leap seconds, EOP coverage and GPS week/second, with plots of the offsets.
 - **Theory**: [TLEs, SGP4 & OMMs](tle.md) for UTC element-set epochs; [Force Model](forces.md#future-propagation) for how stale EOP data affects propagation.
 - **Data**: [Data Coverage](../getting-started/datacoverage.md#eop-coverage) for the span of the EOP table.
 - **API**: [`satkit.time`, `satkit.timescale`, `satkit.duration`](../api/time.md); [`satkit.frametransform`](../api/frametransform.md) (`eop_status`, `eop_coverage`, `disable_eop_time_warning`).

@@ -15,7 +15,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Docs
 
 - Covariance docs use RTN (R exactly along position) instead of LVLH, whose x axis is only approximately along-track, and the Covariance Propagation tutorial adds an eccentric-orbit comparison of RTN and NTW (T exactly along velocity); the Coordinate Frames tutorial opens with tables of the Earth/celestial and satellite frames ([#214](https://github.com/ssmichael1/satkit/pull/214))
-- New "Theory: Time Systems" guide page: the time scales and which one satkit uses where, how an `Instant` is stored, leap-second handling, UT1/EOP coverage regimes and the TDB approximation, with known limitations ([#215](https://github.com/ssmichael1/satkit/pull/215))
+- New "Theory: Time Systems" guide page: the time scales and which one satkit uses where, how an `Instant` is stored, leap-second handling, UT1/EOP coverage regimes and the TDB approximation, with its limitations; the Time Systems tutorial now covers only runnable examples (adding leap-second and EOP-coverage sections) and links to the theory page for the concepts ([#215](https://github.com/ssmichael1/satkit/pull/215))
 
 ### CI
 
