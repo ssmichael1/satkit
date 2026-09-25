@@ -21,6 +21,10 @@ from ._types import OMMDict
 # functions, a list or numpy array of either). These aliases capture that so
 # the individual signatures stay readable.
 #
+# A ``datetime.datetime`` is converted with Python's own convention
+# (``datetime.timestamp()``): a naive datetime is the machine's local time, an
+# aware one uses its own offset (see ``time.from_datetime``).
+#
 # * ``TimeScalar``    — a single time value.
 # * ``TimeArrayLike`` — a list or numpy array of time values.
 # * ``TimeInput``     — either a scalar or an array of times.
@@ -464,7 +468,8 @@ def sgp4(
     Args:
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
             ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list mixing both
-        time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity
+        time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity.
+            A naive ``datetime`` is local time, not UTC (see :meth:`time.from_datetime`)
 
     Keyword Args:
         gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
@@ -495,7 +500,7 @@ def sgp4(
           :func:`omm_from_text`, from ``json.load`` on a CelesTrak or Space-Track response
           (numbers may be strings), or from ``xmltodict`` on the XML form (the nested
           ``meanElements`` / ``tleParameters`` groups are understood). ``EPOCH`` may be an
-          RFC 3339 string, a ``satkit.time`` or a ``datetime``. Other keys are ignored,
+          RFC 3339 string, a ``satkit.time`` or a ``datetime`` (naive = local time). Other keys are ignored,
           except that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be
           ``UTC`` and ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
         - The "TEME" frame of the SGP4 state vectors is not a truly inertial frame.  It is a "True Equator Mean Equinox"
@@ -1031,18 +1036,25 @@ class time:
     UNIX_EPOCH: ClassVar[time]
     """The Unix epoch: 1970-01-01 00:00:00 UTC"""
 
+    @overload
+    def __init__(self) -> None: ...
+    @overload
+    def __init__(self, string: str, /) -> None: ...
+    @overload
+    def __init__(self, year: int, month: int, day: int, /, *, scale: timescale = ...) -> None: ...
+    @overload
     def __init__(
         self,
-        year: int = ...,
-        month: int = ...,
-        day: int = ...,
-        hour: int = 0,
-        min: int = 0,
-        sec: float = 0.0,
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        min: int,
+        sec: float,
+        /,
         *,
         scale: timescale = ...,
-        str: str = ...,
-    ):
+    ) -> None:
         """Create a time object representing input date and time
 
         This has functionality similar to the "datetime" object, and in fact has
@@ -1050,20 +1062,26 @@ class time:
         time representation is needed as the "datetime" object does not allow for
         conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
 
-        Notes:
-            - If no arguments are passed in, the created object represents the current time
-            - If year is passed in, month and day must also be passed in
-            - If hour is passed in, minute and second must also be passed in
+        Accepted forms (all positional):
+
+        - ``time()``: the current time
+        - ``time(string)``: parse a string, RFC 3339 first (e.g.
+          ``"2023-03-05T11:03:45.453Z"``), then other common formats
+        - ``time(year, month, day)``: midnight at the start of the day
+        - ``time(year, month, day, hour, min, sec)``: all six components
 
         Args:
+            string: String representation of time
             year: Gregorian year (e.g., 2024)
             month: Gregorian month (1 = January, 2 = February, ...)
             day: Day of month, beginning with 1
-            hour: Hour of day, in range [0,23], default is 0
-            min: Minute of hour, in range [0,59], default is 0
-            sec: Floating point second of minute, in range [0,60), default is 0
-            scale: Time scale, default is satkit.timescale.UTC
-            str: String representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to guess
+            hour: Hour of day, in range [0,23]
+            min: Minute of hour, in range [0,59]
+            sec: Floating point second of minute, in range [0,60); up to 61
+                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31)
+            scale: Time scale in which the Gregorian components are
+                interpreted, default is satkit.timescale.UTC. Ignored for the
+                string and no-argument forms.
 
         Example:
             ```python
@@ -1337,6 +1355,15 @@ class time:
     def from_datetime(dt: datetime.datetime) -> time:
         """Convert input "datetime.datetime" object to an "satkit.time" object representing the same instant in time
 
+        Follows Python's own convention (``datetime.timestamp()``):
+
+        - A naive datetime (no ``tzinfo``) is interpreted in the machine's
+          **local time zone**, not UTC.
+        - An aware datetime uses its own UTC offset.
+
+        For UTC, pass ``tzinfo=datetime.timezone.utc`` or build a
+        ``satkit.time`` directly.
+
         Args:
             dt (datetime.datetime): "datetime.datetime" object to convert
 
@@ -1349,7 +1376,9 @@ class time:
         """Convert object to "datetime.datetime" object representing same instant in time.
 
         Args:
-            utc (bool, optional): Whether to make the "datetime.datetime" object represent time in the local timezone or "UTC".  Default is True
+            utc (bool, optional): If True (default), return an aware datetime in UTC.
+                If False, return a naive datetime in the machine's local time zone,
+                which round-trips through :meth:`time.from_datetime`.
 
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object
@@ -1378,7 +1407,9 @@ class time:
         Convert object to "datetime.datetime" object representing same instant in time.
 
         Args:
-            utc (bool, optional): Whether to make the "datetime.datetime" object represent time in the local timezone or "UTC".  Default is True
+            utc (bool, optional): If True (default), return an aware datetime in UTC.
+                If False, return a naive datetime in the machine's local time zone,
+                which round-trips through :meth:`time.from_datetime`.
 
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object

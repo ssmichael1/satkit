@@ -313,13 +313,17 @@ impl JPLEphem {
 
     /// Compute Chebyshev setup parameters for a given body and time
     fn cheby_setup(&self, body: SolarSystem, tm: &Instant) -> Result<ChebySetup> {
-        let tt = tm.as_jd_with_scale(TimeScale::TT);
-        if self.jd_start > tt || self.jd_stop < tt {
-            return Err(Error::InvalidJulianDate(tt));
+        // The DE ephemerides are tabulated in the JPL ephemeris time scale,
+        // T_eph, which is TDB for practical purposes. satkit's TDB is the
+        // one-term series (within ~50 µs of the full series), versus up to
+        // 1.7 ms if the ephemeris were evaluated at TT.
+        let tdb = tm.as_jd_with_scale(TimeScale::TDB);
+        if self.jd_start > tdb || self.jd_stop < tdb {
+            return Err(Error::InvalidJulianDate(tdb));
         }
 
-        let t_int = (tt - self.jd_start) / self.jd_step;
-        // tt == jd_stop passes the range check above but floors to an index
+        let t_int = (tdb - self.jd_start) / self.jd_step;
+        // tdb == jd_stop passes the range check above but floors to an index
         // one past the last record (and likewise for the sub-interval), so
         // clamp both; the endpoint then evaluates at t_seg == 1.0 exactly.
         let int_num = (t_int.floor() as usize).min(self.cheby.ncols() - 1);
@@ -918,10 +922,10 @@ mod tests {
         // floored to a record index one past the last Chebyshev record,
         // panicking on the matrix index instead of returning a result.
         let jpl = jplephem_singleton().as_ref().unwrap();
-        let tm = Instant::from_jd_with_scale(jpl.jd_stop, TimeScale::TT);
+        let tm = Instant::from_jd_with_scale(jpl.jd_stop, TimeScale::TDB);
         // The Instant roundtrip may land a hair above or below jd_stop;
         // either way the call must not panic, and in-range must be Ok.
-        if tm.as_jd_with_scale(TimeScale::TT) <= jpl.jd_stop {
+        if tm.as_jd_with_scale(TimeScale::TDB) <= jpl.jd_stop {
             assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_ok());
         } else {
             assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_err());
@@ -951,7 +955,7 @@ mod tests {
         //let tm = &Instant::from_date(2010, 3, 1);
         let jpl = jplephem_singleton().as_ref().unwrap();
 
-        let tm = Instant::from_jd_with_scale(2451545.0, TimeScale::TT);
+        let tm = Instant::from_jd_with_scale(2451545.0, TimeScale::TDB);
         //let tm = &Instant::from_jd(2451545.0, Scale::UTC);
         let (_, _): (Vector3, Vector3) = jpl.geocentric_state(SolarSystem::Moon, &tm).unwrap();
         println!("au = {:.20}", jpl._au);
@@ -997,7 +1001,8 @@ mod tests {
             let src: i32 = s[4].parse().unwrap();
             let coord: usize = s[5].parse().unwrap();
             let truth: f64 = s[6].parse().unwrap();
-            let tm = Instant::from_jd_with_scale(jd, TimeScale::TT);
+            // Test-vector epochs are JD in T_eph (TDB)
+            let tm = Instant::from_jd_with_scale(jd, TimeScale::TDB);
             if tar <= 10 && src <= 10 && coord <= 6 {
                 let (mut tpos, mut tvel) = jpl
                     .geocentric_state(SolarSystem::try_from(tar - 1).unwrap(), &tm)
