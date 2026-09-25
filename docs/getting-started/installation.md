@@ -55,3 +55,7 @@ mkdir wheel
 cd wheel
 python -m pip wheel ..
 ```
+
+## Something not working?
+
+See [Troubleshooting & FAQ](troubleshooting.md) for pip falling back to a source build, data warnings, and download failures.
