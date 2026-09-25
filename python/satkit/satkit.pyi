@@ -3111,7 +3111,7 @@ class satstate:
         sat = sk.satstate(sk.time(2024, 1, 1), np.array([r, 0, 0]), np.array([0, v, 0]))
 
         # Add covariance and maneuver
-        sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
+        sat.set_pos_uncertainty(np.array([50.0, 200.0, 100.0]), frame=sk.frame.RTN)
         sat.add_prograde(sat.time + sk.duration.from_hours(1), 10.0)
 
         # Propagate -- covariance and maneuver handled automatically
@@ -3242,20 +3242,23 @@ class satstate:
                 the Rust API). Supported values:
 
                 - ``frame.GCRF`` — inertial Cartesian
-                - ``frame.LVLH`` — Local Vertical / Local Horizontal
-                - ``frame.RTN`` — Radial / In-track / Cross-track (= RSW = RTN)
-                - ``frame.NTW`` — Normal-to-velocity / Tangent / Cross-track
+                - ``frame.RTN`` — Radial / Transverse / Normal (= RSW = RIC);
+                  R exactly along position. CCSDS OEM / CDM convention.
+                - ``frame.NTW`` — Normal-to-velocity / Tangent / Cross-track;
+                  T exactly along velocity.
+                - ``frame.LVLH`` — Local Vertical / Local Horizontal (RTN
+                  axes relabeled: x = T, y = -N, z = -R)
 
         Raises:
             RuntimeError: if the frame is not one of the supported frames.
 
         Example:
             ```python
-            # LVLH: 100 m along-track, 200 m cross-track, 50 m nadir
-            sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
-
-            # RIC: 10 m radial, 200 m in-track, 30 m cross-track
+            # RTN: 10 m radial, 200 m transverse, 30 m normal
             sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RTN)
+
+            # NTW: 10 m normal-to-velocity, 200 m along velocity, 30 m cross-track
+            sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.NTW)
             ```
         """
         ...
@@ -3276,7 +3279,7 @@ class satstate:
                 along the frame's axes. Units: m/s.
             frame: Coordinate frame — **required**, no default (matching
                 the Rust API). Supported values: ``frame.GCRF``,
-                ``frame.LVLH``, ``frame.RTN``, ``frame.NTW``.
+                ``frame.RTN``, ``frame.NTW``, ``frame.LVLH``.
 
         Raises:
             RuntimeError: if the frame is not one of the supported frames.

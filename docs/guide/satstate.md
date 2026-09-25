@@ -55,18 +55,19 @@ print(new_state.pos)  # position at t + 6h
 Attach position and/or velocity uncertainty and it will be propagated automatically via the STM. The `set_pos_uncertainty` and `set_vel_uncertainty` methods accept 1-sigma components along any supported satellite-local or inertial frame:
 
 ```python
-# 1-sigma position uncertainty in LVLH (frame is required — no default)
-sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
-
-# Or in RTN — the convention used in CCSDS OEM messages, CCSDS 502.0-B-3
-# (RSW and RIC are Python-level aliases for the same frame)
+# 1-sigma position uncertainty in RTN: [radial, transverse, normal]
+# (frame is required — no default). RTN is the CCSDS OEM / CDM covariance
+# convention; RSW and RIC are Python-level aliases for the same frame.
 sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.RTN)
+
+# Or in NTW, whose T axis is exactly along the velocity
+sat.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), frame=sk.frame.NTW)
 
 # Or directly in GCRF
 sat.set_pos_uncertainty(np.array([150.0, 150.0, 150.0]), frame=sk.frame.GCRF)
 
 # Set velocity uncertainty the same way — the position block is preserved
-sat.set_vel_uncertainty(np.array([0.1, 0.2, 0.05]), frame=sk.frame.LVLH)
+sat.set_vel_uncertainty(np.array([0.01, 0.2, 0.05]), frame=sk.frame.RTN)
 
 # Or set the full 6x6 covariance matrix directly (in GCRF)
 sat.cov = my_6x6_matrix
@@ -76,7 +77,15 @@ new_state = sat.propagate(sat.time + sk.duration.from_hours(6))
 print(new_state.cov)  # 6x6 covariance at the new time
 ```
 
-Supported uncertainty frames are `GCRF`, `LVLH`, `RIC` (= RSW = RTN), and `NTW`. See the [Maneuver Coordinate Frames](maneuver_frames.md) guide for a side-by-side comparison and guidance on which to use.
+The sigmas define a covariance that is diagonal in the chosen frame, so pick
+the frame the sigmas were actually specified in. RTN's $\hat{R}$ is exactly
+along the position and NTW's $\hat{T}$ is exactly along the velocity; the
+two differ by the flight-path angle, so on eccentric orbits a covariance
+diagonal in one is not diagonal in the other. The
+[Covariance Propagation](../tutorials/Covariance Propagation.ipynb) tutorial
+compares them on an eccentric orbit.
+
+Supported uncertainty frames are `GCRF`, `RTN` (= RSW = RIC), `NTW`, and `LVLH`. See the [Maneuver Coordinate Frames](maneuver_frames.md) guide for a side-by-side comparison and guidance on which to use.
 
 ### Impulsive Maneuvers
 

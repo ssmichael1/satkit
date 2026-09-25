@@ -107,12 +107,14 @@ class-level aliases that compare equal to `sk.frame.RTN`, so
 
 !!! note "Covariance convention in `satkit`"
     `satkit`'s state-vector uncertainty API — `SatState.set_pos_uncertainty`
-    and `set_vel_uncertainty` — accepts any of `GCRF`, `LVLH`, `RTN`, or
-    `NTW` via a `frame` parameter. Pass `frame=sk.frame.RTN` if you're
-    loading covariance values from a CCSDS OEM file (or use the
+    and `set_vel_uncertainty` — accepts any of `GCRF`, `RTN`, `NTW`, or
+    `LVLH` via a `frame` parameter. Pass `frame=sk.frame.RTN` if you're
+    loading covariance values from a CCSDS OEM or CDM (or use the
     equivalent `sk.frame.RIC` / `sk.frame.RSW` aliases), or
-    `frame=sk.frame.LVLH` if you're thinking in nadir/along-track/
-    cross-track sigmas.
+    `frame=sk.frame.NTW` if your along-track sigma is along the velocity.
+    The two differ by the flight-path angle on eccentric orbits; the
+    [Covariance Propagation](../tutorials/Covariance Propagation.ipynb)
+    tutorial compares them.
 
 **When *not* to use RTN:**
 
