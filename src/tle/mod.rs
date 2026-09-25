@@ -436,10 +436,10 @@ impl TLE {
             });
         }
 
-        // Note: day_of_year starts from 1, not zero,
-        // also, go from Jan 2 to avoid leap-second
-        // issues, hence the "-2" at end
-        let epoch = Instant::from_date(year as i32, 1, 2)?.add_utc_days(day_of_year - 2.0);
+        // Note: day_of_year starts from 1, not zero. `add_utc_days` counts
+        // 86400 s UTC days, so a 30 June leap second does not shift the
+        // epoch.
+        let epoch = Instant::from_date(year as i32, 1, 1)?.add_utc_days(day_of_year - 1.0);
 
         Ok(Self {
             name: "none".to_string(),
@@ -644,8 +644,8 @@ impl TLE {
         let doy_int = self.epoch.day_of_year();
 
         // Fraction of day.
-        // Note: This works with days that have leap seconds
-        // (in which second of day is normalized to 86401 instead of 86400).
+        // Note: inside a leap second the UTC MJD repeats 23:59:59.x (a TLE
+        // day fraction cannot express 23:59:60).
         let frac = self.epoch.as_mjd_utc() % 1.0;
         let doy = (doy_int as f64) + frac;
         // Years >= 1957 = 1900s

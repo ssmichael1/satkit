@@ -386,7 +386,8 @@ where
 #[allow(dead_code)]
 /// Extract a single `satkit::Instant` from a Python object.
 ///
-/// Accepts `satkit.time` (PyInstant) or `datetime.datetime` (interpreted as UTC).
+/// Accepts `satkit.time` (PyInstant) or `datetime.datetime` (a naive datetime
+/// is local time, an aware one uses its own offset; see `datetime_to_instant`).
 /// Returns a `PyTypeError` if the object is neither.
 pub fn instant_from_pyany(obj: &Bound<'_, PyAny>) -> PyResult<Instant> {
     let v = obj.to_time_vec()?;
