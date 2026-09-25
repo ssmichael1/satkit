@@ -25,10 +25,7 @@ STUB = pathlib.Path(__file__).resolve().parents[1] / "satkit" / "satkit.pyi"
 P = inspect.Parameter
 
 # Known drift owned by another open branch (not fixed here).
-KNOWN_DRIFT = {
-    "time": "stub advertises str= and year=/month=/... keywords the binding rejects; "
-    "owned by branch fix/time-scale-defects (PR #217)",
-}
+KNOWN_DRIFT: dict[str, str] = {}
 
 
 def _stub_params(fn: ast.FunctionDef) -> list[tuple[str, inspect._ParameterKind, bool]]:

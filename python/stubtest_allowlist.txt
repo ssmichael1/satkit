@@ -38,9 +38,9 @@ satkit\.satkit\.kepler\.__init__
 satkit\.satkit\.kepler\.__new__
 satkit\.satkit\.satstate\.__init__
 satkit\.satkit\.satstate\.__new__
-# Declared runtime signature `(*py_args, scale=...)`; the stub's `str=` keyword
-# and hour-only positional forms are rejected at runtime. Owned by branch
-# fix/time-scale-defects (PR #217), which rewrites this stub as overloads.
+# Declared runtime signature `(*py_args, scale=...)`; the stub spells out the
+# accepted forms as positional-only overloads, which stubtest cannot match
+# against `*py_args`.
 satkit\.satkit\.time\.__init__
 satkit\.satkit\.time\.__new__
 # #[new] parses `*args` / `**kwargs` by hand, so the runtime has no signature to

@@ -73,7 +73,6 @@ INT_ARRAYS = (
     "code bug: quaternion rotation of an integer numpy array raises "
     "(TypeError/RuntimeError) instead of converting it to float, unlike frametransform"
 )
-MESSAGES_BRANCH = "sgp4 docstring example is fixed on branch fix/messages-docs-cleanup"
 
 # Docstring examples that must not run or are known to fail, keyed by the
 # qualified name of the documented object; applies to both the stub and the
@@ -87,7 +86,6 @@ DOCSTRING_MARKS: dict[str, tuple[str, str]] = {
     "satkit.utils.update_datafiles": ("skip", NETWORK + " (downloads the data files)"),
     "satkit.quaternion.rotation_between": ("xfail", INT_ARRAYS),
     "satkit.quaternion.__mul__": ("xfail", INT_ARRAYS),
-    "satkit.sgp4": ("elsewhere", MESSAGES_BRANCH),
     "satkit.duration.__add__#2": (
         "xfail",
         "stub overload `duration + float` (days) is not implemented by the binding; "

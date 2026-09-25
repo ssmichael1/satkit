@@ -39,6 +39,7 @@ LEO.
 
 **Fix.** Refresh the file, which also reloads the table in the running process:
 
+<!-- skip-test: needs the network (downloads the data files) -->
 ```python
 sk.utils.update_datafiles()
 ```
@@ -445,6 +446,10 @@ SGP4 failed for that element set and time, most often because the satellite
 has decayed or the time is far from the TLE epoch. Pass `errflag=True` to also get
 the error code for each output, as an `int32` NumPy array that compares
 element-wise with `sk.sgp4_error` values (`err == sk.sgp4_error.orbit_decay`):
+
+<!-- test-setup
+times = [tle.epoch + sk.duration.from_hours(h) for h in range(3)]
+-->
 
 ```python
 p, v, err = sk.sgp4(tle, times, errflag=True)
