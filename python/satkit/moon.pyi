@@ -48,7 +48,8 @@ def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
     """
     Approximate Moon position in the GCRF Frame
 
-    From Vallado Algorithm 31
+    Algorithm 31 from Vallado for the moon in Mean of Date (MOD), then rotated
+    from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
 
     Args:
         time (satkit.time): time at which to compute position
@@ -58,7 +59,8 @@ def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
         at given time.  Units are meters
 
     Notes:
-        Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
+        Accurate to about 0.3 degree in ecliptic longitude (0.36 degree worst case
+        against JPL DE440 over 1950-2100), 0.2 degree in ecliptic latitude,
         and 1275 km in range
 
     Example:
@@ -78,7 +80,8 @@ def pos_gcrf(
     """
     Approximate Moon position in the GCRF Frame
 
-    From Vallado Algorithm 31
+    Algorithm 31 from Vallado for the moon in Mean of Date (MOD), then rotated
+    from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
 
     Args:
         time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time
@@ -89,7 +92,8 @@ def pos_gcrf(
         at given times.  Units are meters
 
     Notes:
-        Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
+        Accurate to about 0.3 degree in ecliptic longitude (0.36 degree worst case
+        against JPL DE440 over 1950-2100), 0.2 degree in ecliptic latitude,
         and 1275 km in range
     """
     ...

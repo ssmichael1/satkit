@@ -27,7 +27,9 @@ pub enum Error {
     NoSunriseOrSunset,
 
     /// Returned by [`heliocentric_pos`] when the requested body is not
-    /// represented in the low-precision Keplerian-element table.
+    /// represented in the low-precision Keplerian-element table (the Sun
+    /// or the Moon; valid bodies are Mercury through Pluto and the
+    /// Earth-Moon barycenter).
     #[error("Invalid body")]
     InvalidBody,
 

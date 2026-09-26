@@ -132,53 +132,91 @@ pub fn pos_mod<T: TimeLike>(time: &T) -> Vector3 {
 ///   * 0 = full occlusion
 ///   * 1 = full sunlight
 ///
+/// # Notes
+///
+/// * Beyond ~1.4 million km on the anti-Sun side (e.g. near Sun-Earth L2)
+///   the Earth's disc is smaller than the Sun's, and a satellite on the
+///   shadow axis sees an annular eclipse: the fraction is `1 - b²/a²`,
+///   with `a` and `b` the apparent radii of the Sun and the Earth
+/// * A position at or below the Earth's (spherical) surface is lit when the
+///   Sun is above its local horizon plane and shadowed otherwise; the
+///   Earth's center returns 0
+///
 /// # Reference
 ///
 /// * See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
 ///
 ///
 pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
-    let a = (consts::SUN_RADIUS / (psun - psat).norm()).asin();
-    let b = (consts::EARTH_RADIUS / psat.norm()).asin();
     let snorm = psat.norm();
-    let c = (-psat.dot(&(psun - psat)) / snorm / (psun - psat).norm()).acos();
+    let dsun = psun - psat;
+    let dnorm = dsun.norm();
+    if snorm == 0.0 {
+        return 0.0;
+    }
+    if dnorm == 0.0 {
+        return 1.0;
+    }
+    // Apparent radii of the Sun (a) and the Earth (b), and their apparent
+    // separation (c).  The clamps keep asin / acos in range at or below the
+    // Earth's surface and against rounding.
+    let a = (consts::SUN_RADIUS / dnorm).min(1.0).asin();
+    let b = (consts::EARTH_RADIUS / snorm).min(1.0).asin();
+    let c = (-psat.dot(&dsun) / snorm / dnorm).clamp(-1.0, 1.0).acos();
     if a + b <= c {
+        // No occultation
         1.0
-    } else if c < (b - a) {
+    } else if c <= b - a {
+        // Total: the Earth's disc covers the Sun's
         0.0
+    } else if c <= a - b {
+        // Annular: the Earth's disc lies entirely inside the Sun's
+        1.0 - (b * b) / (a * a)
     } else {
+        // Partial; here c > |a - b| >= 0
         let x = b.mul_add(-b, c.mul_add(c, a * a)) / 2.0 / c;
-        let y = a.mul_add(a, -(x * x)).sqrt();
+        let y = a.mul_add(a, -(x * x)).max(0.0).sqrt();
         let big_a = c.mul_add(
             -y,
-            (a * a).mul_add((x / a).acos(), b * b * ((c - x) / b).acos()),
+            (a * a).mul_add(
+                (x / a).clamp(-1.0, 1.0).acos(),
+                b * b * ((c - x) / b).clamp(-1.0, 1.0).acos(),
+            ),
         );
 
-        1.0 - big_a / std::f64::consts::PI / a / a
+        (1.0 - big_a / std::f64::consts::PI / a / a).clamp(0.0, 1.0)
     }
 }
 
 ///
 /// # Compute sunrise and sunset
 ///
-/// Sunrise and sunset times on the day given by input time
-/// and at the given location.
+/// Sunrise and sunset times on a calendar date at the given location.
 ///
-/// Since sunrise and sunset are local, the input time will have its
-/// local hour angle subtracted off to compute the sunrise and sunset
-/// at the date of the input time locally
+/// The input time selects the date: its **UTC calendar date** is used and
+/// its time of day is ignored.  The returned sunrise and sunset are those
+/// of that date at the location's longitude, i.e. between the local
+/// (mean solar) midnights that begin and end that date there.  Both are
+/// returned as UTC instants, so at far-west longitudes the sunset may fall
+/// on the next UTC date, and at far-east longitudes the sunrise may fall on
+/// the previous one.
 ///
-/// For example, the time 2020-08-20 00:00:00.000Z is actually a date of
-/// 2020-08-19 in local time of Boston, Ma.  The time will be shifted such
-/// that the sunrise and sunset times are computed for 2020-08-20 in Boston.
+/// For example, any time on 2024-10-14 UTC gives the sunrise and sunset of
+/// 2024-10-14 in Honolulu: sunrise at about 16:40 UTC on 2024-10-14 and
+/// sunset at about 04:25 UTC on 2024-10-15 (06:40 and 18:25 local time).
 ///
+/// To get the events of a *local* date, pass a time at local noon on that
+/// date: for time zones within UTC-11 to UTC+11 local noon falls on the
+/// same UTC date, while local midnight falls on the previous UTC date east
+/// of Greenwich.
 ///
 /// Will return an error if the sun does not rise or set on the given date
 /// at given location (e.g., Alaska in summer)
 ///
 /// # Input Arguments
 ///
-/// * `time`  - Date at which to compute sunrise & sunset
+/// * `time`  - Time whose UTC calendar date selects the day (time of day
+///   is ignored)
 ///
 /// * `coord` - ITRFCoord representing location for which to compute
 ///   sunrise & sunset
@@ -223,7 +261,10 @@ pub fn riseset<T: TimeLike>(
         ) % 360.0
     };
 
-    let jd0h: f64 = (time.as_jd_with_scale(TimeScale::UTC) - longitude / 360.0).floor() + 0.5;
+    // 0h UTC of the input's UTC calendar date; the rise & set searches then
+    // start at 6h & 18h local mean time on that date
+    let (year, month, day, _, _, _) = time.as_datetime();
+    let jd0h: f64 = Instant::from_date(year, month, day)?.as_jd_with_scale(TimeScale::UTC);
     let jdsunrise = jd0h + 0.25 - longitude / 360.0;
     let jdsunset = jd0h + 0.75 - longitude / 360.0;
 
@@ -361,5 +402,81 @@ mod tests {
 
         assert!((rise - rise_web).as_seconds().abs() < 60.0);
         assert!((set - set_web).as_seconds().abs() < 60.0);
+    }
+
+    /// Geometric elevation of the Sun's center, degrees
+    fn sun_elevation(t: &Instant, coord: &ITRFCoord) -> f64 {
+        let s = crate::frametransform::qgcrf2itrf(t) * pos_gcrf(t) - coord.itrf;
+        let enu = coord.q_enu2itrf().conjugate() * s;
+        (enu[2] / enu.norm()).asin().to_degrees()
+    }
+
+    #[test]
+    fn riseset_uses_utc_date() {
+        // Any time of day on 2024-10-14 UTC selects 2024-10-14; the old day
+        // selection returned the next day's events for about half the inputs
+        for (lat, lon, rise_utc, set_utc) in [
+            // Greenwich: rise ~06:20, set ~17:12 UTC on the 14th
+            (51.48, 0.0, (14, 6), (14, 17)),
+            // Honolulu (UTC-10): rise ~06:40 and set ~18:25 local time on
+            // the 14th, which is 16:40 on the 14th and 04:25 on the 15th UTC
+            (21.31, -157.86, (14, 16), (15, 4)),
+        ] {
+            let coord = ITRFCoord::from_geodetic_deg(lat, lon, 0.0);
+            let (rise0, set0) =
+                riseset(&Instant::from_date(2024, 10, 14).unwrap(), &coord, None).unwrap();
+            for hour in [0, 6, 12, 18, 23] {
+                let t = Instant::from_datetime(2024, 10, 14, hour, 59, 59.0).unwrap();
+                let (rise, set) = riseset(&t, &coord, None).unwrap();
+                assert_eq!((rise, set), (rise0, set0), "lon {lon} input {t}");
+            }
+            let (_, _, rday, rhour, _, _) = rise0.as_datetime();
+            let (_, _, sday, shour, _, _) = set0.as_datetime();
+            assert_eq!((rday, rhour), rise_utc, "lon {lon} rise {rise0}");
+            assert_eq!((sday, shour), set_utc, "lon {lon} set {set0}");
+            // Standard rise/set: the Sun's center is 50' below the horizon
+            for t in [rise0, set0] {
+                let el = sun_elevation(&t, &coord);
+                assert!((el + 50.0 / 60.0).abs() < 0.1, "lon {lon} {t}: {el}");
+            }
+        }
+    }
+
+    #[test]
+    fn shadowfunc_edge_cases() {
+        let psun = numeris::vector![consts::AU, 0.0, 0.0];
+        let apparent = |d: f64, r: f64| (r / d).asin();
+
+        // Anti-Sun axis beyond the umbra (~1.38e6 km): annular eclipse,
+        // 1 - b^2/a^2 (Montenbruck & Gill 3.4.2).  Used to return NaN.
+        for d_km in [1.5e6, 2.0e6] {
+            let psat = numeris::vector![-d_km * 1.0e3, 0.0, 0.0];
+            let a = apparent(consts::AU + d_km * 1.0e3, consts::SUN_RADIUS);
+            let b = apparent(d_km * 1.0e3, consts::EARTH_RADIUS);
+            let expected = 1.0 - (b / a).powi(2);
+            approx::assert_relative_eq!(shadowfunc(&psun, &psat), expected, max_relative = 1e-12);
+            assert!(expected > 0.1 && expected < 0.6);
+            // Continuous with the partial branch just off the axis, and
+            // never NaN off-axis
+            let mut last = expected;
+            for off_km in [1.0, 100.0, 1000.0, 3000.0, 5000.0, 10000.0, 20000.0] {
+                let psat = numeris::vector![-d_km * 1.0e3, off_km * 1.0e3, 0.0];
+                let f = shadowfunc(&psun, &psat);
+                assert!((0.0..=1.0).contains(&f), "{d_km} {off_km}: {f}");
+                assert!(f >= last - 1.0e-9, "{d_km} {off_km}: {f} < {last}");
+                last = f;
+            }
+            assert_eq!(last, 1.0);
+        }
+        // Inside the umbra, and in full sunlight
+        assert_eq!(shadowfunc(&psun, &numeris::vector![-7.0e6, 0.0, 0.0]), 0.0);
+        assert_eq!(shadowfunc(&psun, &numeris::vector![7.0e6, 0.0, 0.0]), 1.0);
+        // At or inside the Earth: lit on the day side, dark on the night
+        // side, and at the center
+        assert_eq!(shadowfunc(&psun, &numeris::vector![6.0e6, 0.0, 0.0]), 1.0);
+        assert_eq!(shadowfunc(&psun, &numeris::vector![-6.0e6, 0.0, 0.0]), 0.0);
+        assert_eq!(shadowfunc(&psun, &Vector3::zeros()), 0.0);
+        let f = shadowfunc(&psun, &numeris::vector![0.0, 6.0e6, 0.0]);
+        assert!((0.0..=1.0).contains(&f));
     }
 }

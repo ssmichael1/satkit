@@ -55,8 +55,8 @@ impl From<moon::MoonPhase> for MoonPhase {
 /// Approximate Moon position in the GCRF Frame
 ///
 /// Notes:
-///   * From Vallado Algorithm 31
-///   * Valid with accuracy of 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude, and 1275 km in range
+///   * Algorithm 31 from Vallado for the moon in Mean of Date (MOD), then rotated from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
+///   * Valid with accuracy of about 0.3 degree in ecliptic longitude (0.36 degree worst case against JPL DE440 over 1950-2100), 0.2 degree in ecliptic latitude, and 1275 km in range
 ///
 /// Args:
 ///     time (satkit.time|numpy.ndarray|list): time[s] at which to compute position
