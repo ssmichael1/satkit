@@ -5,13 +5,24 @@
 //! which references original paper at:
 //! <https://www.researchgate.net/publication/232203657_Orbital_Ephemerides_of_the_Sun_Moon_and_Planets>
 //!
-//! Approximate uncertainties for the given date ranges are reported below
-//! as stated in the JPL website.
+//! Valid bodies are Mercury through Pluto plus the Earth-Moon barycenter
+//! ([`SolarSystem::EMB`]); the Sun and Moon are rejected with
+//! [`Error::InvalidBody`](super::Error::InvalidBody).
 //!
+//! Approximate errors for the given date ranges are reported below as
+//! stated on the JPL website, in heliocentric J2000-ecliptic longitude λ,
+//! latitude φ, and range.  Against DE440 the RMS error is within these
+//! figures; single excursions reach up to ~4x them.
+//!
+//! The Uranus, Neptune and Pluto elements follow each planet's orbit about
+//! the solar-system barycenter.  The Sun's own motion about the barycenter
+//! (up to ~0.01 AU, driven by Jupiter and Saturn) is not modeled, so from
+//! 1800 to 2050 their heliocentric errors exceed the table: up to ~2 arcmin
+//! in λ and ~2.3 million km in range.
 //!
 //! For 1800 AD to 2050 AD:
-//! |  Planet  | RA (arcsec) | Dec (arcsec) | Range (Mm) |
-//! | -------- | ----------- | ------------ | ---------- |
+//! |  Planet  | λ (arcsec) | φ (arcsec) | Range (Mm) |
+//! | -------- | ---------- | ---------- | ---------- |
 //! | Mercury  | 15          | 1            | 1          |
 //! | Venus    | 20          | 1            | 4          |
 //! | EM Bary  | 20          | 8            | 6          |
@@ -23,8 +34,8 @@
 //! | Pluto    | 5           | 2            | 300        |
 //!
 //! From 3000 BC to 3000 AD:
-//! |  Planet  | RA (arcsec) | Dec (arcsec) | Range (Mm) |
-//! | -------- | ----------- | ------------ | ---------- |
+//! |  Planet  | λ (arcsec) | φ (arcsec) | Range (Mm) |
+//! | -------- | ---------- | ---------- | ---------- |
 //! | Mercury  | 20          | 15           | 1          |
 //! | Venus    | 40          | 30           | 8          |
 //! | EM Bary  | 40          | 15           | 15         |
@@ -44,16 +55,36 @@ use crate::TimeScale;
 use super::{Error, Result};
 use crate::mathtypes::*;
 
-/// Returns the heliocentric position of a planet
+/// Returns the approximate heliocentric position of a planet
+///
+/// Keplerian-element approximation of Standish & Williams
+/// (<https://ssd.jpl.nasa.gov/planets/approx_pos.html>): the 1800 AD -
+/// 2050 AD element set inside that span, the 3000 BC - 3000 AD set
+/// (with the extra mean-anomaly terms for Jupiter through Pluto) outside it.
+///
+/// Approximate errors, in heliocentric J2000-ecliptic longitude / latitude /
+/// range, range from 15" / 1" / 1000 km (Mercury, 1800 - 2050) to
+/// 2000" / 30" / 8 million km (Uranus, 3000 BC - 3000 AD); see JPL's table.
+/// The Uranus, Neptune and Pluto elements follow the orbit about the
+/// solar-system barycenter, so from 1800 to 2050 their heliocentric errors
+/// are dominated by the Sun's unmodeled barycentric motion (up to ~2 arcmin
+/// and ~2.3 million km).
 ///
 /// # Arguments
 ///
-/// * `body` - The planet to compute the position of
+/// * `body` - Mercury through Pluto, or the Earth-Moon barycenter
+///   ([`SolarSystem::EMB`])
 /// * `time` - The time at which to compute the position
 ///
 /// # Returns
 ///
-/// * `Vector3` - The heliocentric position of the planet
+/// * `Vector3` - The heliocentric position of the body in the ICRF (J2000
+///   equatorial) frame, meters
+///
+/// # Errors
+///
+/// * [`Error::InvalidBody`] for the Sun or the Moon
+/// * [`Error::TimeOutOfRange`] outside 3000 BC - 3000 AD
 ///
 /// # Example
 ///
@@ -307,10 +338,11 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
     // Mean anomaly
     let mut m = match terms {
         None => l - wbar,
+        // Extra terms for Jupiter through Pluto (JPL Table 2b): b, c and s
+        // are in degrees, f in degrees per Julian century
         Some([b, c, s, f]) => {
-            (b * jcen).mul_add(jcen, l - wbar)
-                + (c * (f * jcen).cos()).to_degrees()
-                + (s * (f * jcen).sin()).to_degrees()
+            let (fsin, fcos) = (f * jcen).to_radians().sin_cos();
+            (b * jcen).mul_add(jcen, l - wbar) + c.mul_add(fcos, s * fsin)
         }
     };
     // Get m into range [-180, 180]
@@ -325,15 +357,7 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
     let mrad = m.to_radians();
 
     // Get the eccentric anomaly
-    let mut enrad = eccen.mul_add(mrad.sin(), mrad);
-    loop {
-        let deltamrad = mrad - eccen.mul_add(-enrad.sin(), enrad);
-        let deltaerad = deltamrad / eccen.mul_add(-enrad.cos(), 1.0);
-        enrad += deltaerad;
-        if (deltaerad / enrad).abs() < 1.0e-8 {
-            break;
-        }
-    }
+    let enrad = eccentric_anomaly(mrad, eccen);
     // Get heliocentric coordinates in orbital plane
     let xprime = a * (enrad.cos() - eccen);
     let yprime = a * eccen.mul_add(-eccen, 1.0).sqrt() * enrad.sin();
@@ -343,88 +367,230 @@ pub fn heliocentric_pos<T: TimeLike>(body: SolarSystem, time: &T) -> Result<Vect
         * Quaternion::rotz(w.to_radians())
         * rprime;
 
-    // Rotate to the equatorial plane
-    // Obliquity at J2000
-    let obliquity = 1.21e-11f64
-        .mul_add(
-            jcen.powi(5),
-            1.6e-10f64.mul_add(
-                jcen.powi(4),
-                5.565e-7f64.mul_add(
-                    jcen.powi(3),
-                    (5.086e-8 * jcen).mul_add(-jcen, 0.0130102f64.mul_add(-jcen, 23.439279)),
-                ),
-            ),
-        )
-        .to_radians();
+    // Rotate from the J2000 ecliptic to the ICRF equator.  The elements are
+    // referred to the mean ecliptic and equinox of J2000, so this uses the
+    // fixed J2000 obliquity, not the obliquity of date
+    const OBLIQUITY_J2000_DEG: f64 = 23.43928;
 
-    Ok(Quaternion::rotx(obliquity) * recl * crate::consts::AU)
+    Ok(Quaternion::rotx(OBLIQUITY_J2000_DEG.to_radians()) * recl * crate::consts::AU)
+}
+
+/// Solve Kepler's equation `M = E - e sin(E)` for the eccentric anomaly by
+/// Newton iteration, with an absolute tolerance and an iteration cap.
+/// Angles in radians.
+fn eccentric_anomaly(mrad: f64, eccen: f64) -> f64 {
+    let mut enrad = eccen.mul_add(mrad.sin(), mrad);
+    for _ in 0..50 {
+        let deltamrad = mrad - eccen.mul_add(-enrad.sin(), enrad);
+        let deltaerad = deltamrad / eccen.mul_add(-enrad.cos(), 1.0);
+        enrad += deltaerad;
+        if deltaerad.abs() < 1.0e-12 {
+            break;
+        }
+    }
+    enrad
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::jplephem;
+    use crate::Duration;
 
-    const fn errors_precise(planet: &SolarSystem) -> (usize, usize, usize) {
+    const PLANETS: [SolarSystem; 9] = [
+        SolarSystem::Mercury,
+        SolarSystem::Venus,
+        SolarSystem::EMB,
+        SolarSystem::Mars,
+        SolarSystem::Jupiter,
+        SolarSystem::Saturn,
+        SolarSystem::Uranus,
+        SolarSystem::Neptune,
+        SolarSystem::Pluto,
+    ];
+
+    /// JPL's published approximate errors for 1800 AD - 2050 AD:
+    /// heliocentric ecliptic longitude (arcsec), latitude (arcsec), range (Mm)
+    const fn errors_1800_2050(planet: SolarSystem) -> (f64, f64, f64) {
         match planet {
-            SolarSystem::Mercury => (15, 1, 1),
-            SolarSystem::Venus => (20, 1, 4),
-            SolarSystem::EMB => (20, 1, 4),
-            SolarSystem::Mars => (40, 2, 25),
-            SolarSystem::Jupiter => (400, 10, 1600),
-            SolarSystem::Saturn => (600, 25, 1500),
-            SolarSystem::Uranus => (50, 2, 1000),
-            SolarSystem::Neptune => (10, 1, 200),
-            SolarSystem::Pluto => (5, 2, 300),
-            _ => (0, 0, 0),
+            SolarSystem::Mercury => (15.0, 1.0, 1.0),
+            SolarSystem::Venus => (20.0, 1.0, 4.0),
+            SolarSystem::EMB => (20.0, 8.0, 6.0),
+            SolarSystem::Mars => (40.0, 2.0, 25.0),
+            SolarSystem::Jupiter => (400.0, 10.0, 600.0),
+            SolarSystem::Saturn => (600.0, 25.0, 1500.0),
+            SolarSystem::Uranus => (50.0, 2.0, 1000.0),
+            SolarSystem::Neptune => (10.0, 1.0, 200.0),
+            SolarSystem::Pluto => (5.0, 2.0, 300.0),
+            _ => (0.0, 0.0, 0.0),
+        }
+    }
+
+    /// JPL's published approximate errors for 3000 BC - 3000 AD, same units
+    const fn errors_3000bc_3000ad(planet: SolarSystem) -> (f64, f64, f64) {
+        match planet {
+            SolarSystem::Mercury => (20.0, 15.0, 1.0),
+            SolarSystem::Venus => (40.0, 30.0, 8.0),
+            SolarSystem::EMB => (40.0, 15.0, 15.0),
+            SolarSystem::Mars => (100.0, 40.0, 30.0),
+            SolarSystem::Jupiter => (600.0, 100.0, 1000.0),
+            SolarSystem::Saturn => (1000.0, 100.0, 4000.0),
+            SolarSystem::Uranus => (2000.0, 30.0, 8000.0),
+            SolarSystem::Neptune => (400.0, 15.0, 4000.0),
+            SolarSystem::Pluto => (400.0, 100.0, 2500.0),
+            _ => (0.0, 0.0, 0.0),
+        }
+    }
+
+    /// Heliocentric J2000-ecliptic longitude, latitude (radians) and range
+    fn ecliptic(v: &Vector3) -> (f64, f64, f64) {
+        let e = Quaternion::rotx(-23.43928f64.to_radians()) * v;
+        (e[1].atan2(e[0]), (e[2] / e.norm()).asin(), e.norm())
+    }
+
+    /// RMS and maximum errors in heliocentric ecliptic longitude (arcsec),
+    /// latitude (arcsec) and range (Mm) against the JPL ephemeris, sampled
+    /// every 7.3 days in [t0, t1).  With `barycentric`, the reference is the
+    /// planet's position about the solar-system barycenter instead of the Sun.
+    fn errors(
+        planet: SolarSystem,
+        t0: Instant,
+        t1: Instant,
+        barycentric: bool,
+    ) -> ([f64; 3], [f64; 3]) {
+        let (mut rms, mut max, mut n) = ([0.0f64; 3], [0.0f64; 3], 0.0);
+        let mut t = t0;
+        while t < t1 {
+            let mut pjpl = jplephem::barycentric_pos(planet, &t).unwrap();
+            if !barycentric {
+                pjpl -= jplephem::barycentric_pos(SolarSystem::Sun, &t).unwrap();
+            }
+            let (l2, p2, r2) = ecliptic(&pjpl);
+            let (l1, p1, r1) = ecliptic(&heliocentric_pos(planet, &t).unwrap());
+            let dl = (l1 - l2 + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
+                - std::f64::consts::PI;
+            let e = [
+                dl.to_degrees() * 3600.0,
+                (p1 - p2).to_degrees() * 3600.0,
+                (r1 - r2) * 1.0e-6,
+            ];
+            for i in 0..3 {
+                rms[i] += e[i] * e[i];
+                max[i] = max[i].max(e[i].abs());
+            }
+            n += 1.0;
+            t += Duration::from_days(7.3);
+        }
+        (rms.map(|s| (s / n).sqrt()), max)
+    }
+
+    /// JPL's table gives "approximate" errors.  Against DE440 the RMS error
+    /// is within the table value for every body and coordinate; the largest
+    /// single excursion reaches ~3.6x it (Mercury latitude, 1800 - 2050).
+    fn check(
+        planet: SolarSystem,
+        span: &str,
+        (rms, max): ([f64; 3], [f64; 3]),
+        tol: (f64, f64, f64),
+    ) {
+        let tol = [tol.0, tol.1, tol.2];
+        println!("{planet:?} {span}: rms {rms:.1?} max {max:.1?} table {tol:?}");
+        for i in 0..3 {
+            assert!(
+                rms[i] <= tol[i] && max[i] <= 4.0 * tol[i],
+                "{planet:?} {span}: coordinate {i} rms {:.2} max {:.2} vs table {}",
+                rms[i],
+                max[i],
+                tol[i]
+            );
         }
     }
 
     #[test]
-    fn compare_with_jplephem() {
-        //               1800 AD - 2050             AD	3000 BC - 3000 AD
-        //         λ (asec) : ϕ (asec)	: ρ (Mm) :: λ (asec): ϕ( asec) : ρ (Mm)
-        // Mercury	15	1	1	20	15	1
-        // Venus	20	1	4	40	30	8
-        // EM Bary	20	8	6	40	15	15
-        // Mars	40	2	25	100	40	30
-        // Jupiter	400	10	600	600	100	1000
-        // Saturn	600	25	1500	1000	100	4000
-        // Uranus	50	2	1000	2000	30	8000
-        // Neptune	10	1	200	400	15	4000
-        // Pluto	5	2	300	400	100	2500
+    fn compare_with_jplephem_1800_2050() {
+        let t0 = Instant::from_date(1800, 1, 2).unwrap();
+        let t1 = Instant::from_date(2050, 12, 30).unwrap();
+        for planet in PLANETS {
+            // The Uranus, Neptune and Pluto elements follow the orbit about
+            // the barycenter: the Sun's own ~0.01 AU motion about it (from
+            // Jupiter and Saturn) is not in the model and dominates their
+            // heliocentric error over this span (see the module docs)
+            let barycentric = matches!(
+                planet,
+                SolarSystem::Uranus | SolarSystem::Neptune | SolarSystem::Pluto
+            );
+            check(
+                planet,
+                "1800-2050",
+                errors(planet, t0, t1, barycentric),
+                errors_1800_2050(planet),
+            );
+        }
+    }
 
-        let planets = [
-            SolarSystem::Mercury,
-            SolarSystem::Venus,
-            SolarSystem::EMB,
-            SolarSystem::Mars,
-            SolarSystem::Jupiter,
-            SolarSystem::Saturn,
-            SolarSystem::Uranus,
-            SolarSystem::Neptune,
-            SolarSystem::Pluto,
-        ];
+    #[test]
+    fn compare_with_jplephem_extended() {
+        // DE440 spans 1550 - 2650; test the parts of that span outside
+        // 1800 - 2050, where the 3000 BC - 3000 AD elements (and the extra
+        // mean-anomaly terms for Jupiter through Pluto) apply
+        for (span, t0, t1) in [
+            (
+                "1550-1800",
+                Instant::from_date(1550, 1, 2).unwrap(),
+                Instant::from_date(1799, 12, 30).unwrap(),
+            ),
+            (
+                "2051-2650",
+                Instant::from_date(2051, 1, 2).unwrap(),
+                Instant::from_date(2649, 12, 30).unwrap(),
+            ),
+        ] {
+            for planet in PLANETS {
+                check(
+                    planet,
+                    span,
+                    errors(planet, t0, t1, false),
+                    errors_3000bc_3000ad(planet),
+                );
+            }
+        }
+    }
 
-        for planet in planets {
-            //let time = Instant::from_date(2000, 1, 1);
-            let time = Instant::from_datetime(2010, 1, 1, 12, 0, 0.0).unwrap();
-            let psun = jplephem::barycentric_pos(SolarSystem::Sun, &time).unwrap();
-            let p2 = jplephem::barycentric_pos(planet, &time).unwrap() - psun;
-            let p1 = heliocentric_pos(planet, &time).unwrap();
-            let lambda1 = f64::atan2(p1[1], p1[0]);
-            let lambda2 = f64::atan2(p2[1], p2[0]);
-            let phi1 = f64::asin(p1[2] / p1.norm());
-            let phi2 = f64::asin(p2[2] / p2.norm());
-            let lerr = (lambda1 - lambda2).abs().to_degrees() * 3600.0;
-            let perr = (phi1 - phi2).abs().to_degrees() * 3600.0;
-            let rerr = (p1.norm() - p2.norm()).abs() * 1.0e-6;
-            let (lerr_approx, perr_approx, rerr_approx) = errors_precise(&planet);
+    #[test]
+    fn zero_mean_anomaly_converges() {
+        // M == 0 exactly made the old relative convergence test 0/0 = NaN,
+        // so the Newton loop never exited
+        assert_eq!(eccentric_anomaly(0.0, 0.2), 0.0);
+        for e in [0.0, 0.2, 0.9] {
+            for m in [-3.0, -1.0e-300, 1.0e-300, 0.5, 3.1] {
+                let ea = eccentric_anomaly(m, e);
+                assert!((ea - e * ea.sin() - m).abs() < 1.0e-12, "e={e} m={m}");
+            }
+        }
 
-            assert!(lerr < f64::max(lerr_approx as f64, 15.0) * 8.0);
-            assert!(perr < f64::max(perr_approx as f64, 15.0) * 8.0);
-            assert!(rerr < rerr_approx as f64 * 12.0);
+        // An instant at which Mercury's mean anomaly is exactly zero
+        // (found by the review); run with a timeout so a regression fails
+        // instead of hanging the test suite
+        let t = Instant::from_rfc3339("1803-08-04T18:23:43.274833Z").unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(heliocentric_pos(SolarSystem::Mercury, &t).map(|p| p.norm()));
+        });
+        let r = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("heliocentric_pos did not return")
+            .unwrap();
+        assert!(r.is_finite());
+    }
+
+    #[test]
+    fn invalid_bodies() {
+        let t = Instant::from_date(2020, 1, 1).unwrap();
+        for body in [SolarSystem::Sun, SolarSystem::Moon] {
+            assert!(matches!(
+                heliocentric_pos(body, &t),
+                Err(Error::InvalidBody)
+            ));
         }
     }
 }

@@ -179,8 +179,6 @@ pub fn phase_name<T: TimeLike>(time: &T) -> MoonPhase {
 ///
 /// Approximate Moon position in the GCRF Frame
 ///
-/// From Vallado Algorithm 31
-///
 /// # Arguments
 ///
 /// * `time` - Instant at which to compute moon position
@@ -192,10 +190,38 @@ pub fn phase_name<T: TimeLike>(time: &T) -> MoonPhase {
 ///
 /// # Notes
 ///
-/// * Accurate to 0.3 degree in ecliptic longitude, 0.2 degree in ecliptic latitude,
-///   and 1275 km in range
+/// * Algorithm 31 from Vallado for the moon in Mean of Date (MOD), then
+///   rotated from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
+/// * Accurate to about 0.3 degree in ecliptic longitude (0.36 degree worst
+///   case against JPL DE440 over 1950 - 2100), 0.2 degree in ecliptic
+///   latitude, and 1275 km in range
 ///
+#[inline]
 pub fn pos_gcrf<T: TimeLike>(time: &T) -> Vector3 {
+    let time = time.as_instant();
+    crate::frametransform::qmod2gcrf(&time) * pos_mod(&time)
+}
+
+///
+/// Approximate Moon position in the Mean-of-Date (MOD) Frame
+///
+/// From Vallado Algorithm 31
+///
+/// # Arguments
+///
+/// * `time` - Instant at which to compute moon position
+///
+/// Output:
+///
+///  * Vector representing moon position in MOD frame
+///    at given time.  Units are meters
+///
+/// # Notes
+///
+/// * Accurate to about 0.3 degree in ecliptic longitude (0.36 degree worst
+///   case), 0.2 degree in ecliptic latitude, and 1275 km in range
+///
+pub fn pos_mod<T: TimeLike>(time: &T) -> Vector3 {
     let time = time.as_instant();
     // Julian centuries since Jan 1, 2000 12pm
 
@@ -285,7 +311,8 @@ mod tests {
         // Approximate this UTC as TDB to match example...
         let t = Instant::from_mjd_with_scale(t0.as_mjd_with_scale(TimeScale::UTC), TimeScale::TDB);
 
-        let pos = pos_gcrf(&t);
+        // Vallado's worked example is the mean-of-date output
+        let pos = pos_mod(&t);
 
         // Below value is from Vallado example
         let ref_pos = [-134240.626E3, -311571.590E3, -126693.785E3];
@@ -293,6 +320,56 @@ mod tests {
             let err = f64::abs(pos[idx] / ref_pos[idx] - 1.0);
             assert!(err < 1.0e-6);
         }
+    }
+
+    /// Compare against the JPL ephemeris over 1950 - 2100.  `pos_gcrf` used
+    /// to return mean-of-date coordinates labelled GCRF, which drifted from
+    /// the truth by precession (~1.4 deg / century in longitude).
+    #[test]
+    fn moonpos_vs_jplephem() {
+        // J2000 ecliptic longitude & latitude of a GCRF vector
+        let eps0 = (84381.406f64 / 3600.0).to_radians();
+        let ecliptic = |v: &Vector3| {
+            let e = Quaternion::rotx(-eps0) * v;
+            (e[1].atan2(e[0]), (e[2] / e.norm()).asin())
+        };
+
+        let t0 = Instant::from_date(1950, 1, 1).unwrap();
+        let t1 = Instant::from_date(2100, 1, 1).unwrap();
+        let (mut lmax, mut bmax, mut rmax) = (0.0f64, 0.0f64, 0.0f64);
+        // Least-squares slope of the longitude error vs time, deg / century
+        let (mut n, mut sx, mut sy, mut sxx, mut sxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        let mut t = t0;
+        while t < t1 {
+            let pjpl = crate::jplephem::geocentric_pos(crate::SolarSystem::Moon, &t).unwrap();
+            let p = pos_gcrf(&t);
+            let (l1, b1) = ecliptic(&p);
+            let (l2, b2) = ecliptic(&pjpl);
+            let dl = ((l1 - l2 + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
+                - std::f64::consts::PI)
+                .to_degrees();
+            lmax = lmax.max(dl.abs());
+            bmax = bmax.max((b1 - b2).abs().to_degrees());
+            rmax = rmax.max((p.norm() - pjpl.norm()).abs());
+            let x = (t.as_jd_with_scale(TimeScale::TT) - 2451545.0) / 36525.0;
+            n += 1.0;
+            sx += x;
+            sy += dl;
+            sxx += x * x;
+            sxy += x * dl;
+            t += crate::Duration::from_days(1.37);
+        }
+        let slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+        println!(
+            "moon vs JPL 1950-2100: max lon {lmax:.3} deg, lat {bmax:.3} deg, \
+             range {:.0} km, lon drift {slope:.4} deg/century",
+            rmax / 1.0e3
+        );
+        // Vallado quotes 0.3 deg; the worst case here is 0.36 deg
+        assert!(lmax < 0.37, "longitude error {lmax} deg");
+        assert!(bmax < 0.2, "latitude error {bmax} deg");
+        assert!(rmax < 1275.0e3, "range error {rmax} m");
+        assert!(slope.abs() < 0.01, "longitude drift {slope} deg/century");
     }
 
     #[test]

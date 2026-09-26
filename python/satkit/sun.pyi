@@ -103,19 +103,26 @@ def pos_mod(
     ...
 
 def rise_set(
-    time: satkit.time, coord: satkit.itrfcoord, sigma: float | None = None
+    time: TimeScalar, coord: satkit.itrfcoord, sigma: float | None = None
 ) -> tuple[satkit.time, satkit.time]:
     """
-    Sunrise and sunset times on the day given by input time
-    and at the given location.
+    Sunrise and sunset times on a calendar date at the given location.
 
-    Time is a "date" at location, and should have hours, minutes, and seconds
-    set to zero
+    The input selects the UTC calendar date (its time of day is ignored);
+    the returned sunrise and sunset are those of that date at the location's
+    longitude, as UTC times.  At far-west longitudes the sunset can fall on
+    the next UTC date (and at far-east longitudes the sunrise on the
+    previous one).
+
+    To get the events of a *local* date, pass a timezone-aware datetime at
+    local noon: for time zones UTC-11 to UTC+11 local noon falls on the same
+    UTC date, while local midnight falls on the previous UTC date east of
+    Greenwich.
 
     Vallado Algorithm 30
 
     Args:
-        time (satkit.time): date for which to compute sunrise & sunset
+        time (satkit.time | datetime.datetime): time whose UTC calendar date selects the day
         coord (satkit.itrfcoord): location for which to compute sunrise & sunset
         sigma (float, optional): angle in degrees between noon & rise/set.
             Common Values:
@@ -131,11 +138,16 @@ def rise_set(
 
     Example:
         ```python
-        coord = satkit.itrfcoord(latitude_deg=42.36, longitude_deg=-71.06, altitude=0)
-        t = satkit.time.from_date(2024, 6, 21)
-        sunrise, sunset = satkit.sun.rise_set(t, coord)
-        print(f"Sunrise: {sunrise}")
-        print(f"Sunset:  {sunset}")
+        from datetime import datetime, timedelta, timezone
+
+        # Sunrise and sunset on 2024-10-14 in Honolulu: pass local noon on that
+        # date (a ZoneInfo("Pacific/Honolulu") tzinfo works the same way)
+        honolulu = timezone(timedelta(hours=-10))
+        coord = satkit.itrfcoord(latitude_deg=21.31, longitude_deg=-157.86)
+        noon = datetime(2024, 10, 14, 12, tzinfo=honolulu)
+        sunrise, sunset = satkit.sun.rise_set(noon, coord)
+        print(f"Sunrise: {sunrise.to_datetime().astimezone(honolulu)}")
+        print(f"Sunset:  {sunset.to_datetime().astimezone(honolulu)}")
         ```
     """
     ...
@@ -152,6 +164,11 @@ def shadowfunc(
 
     Notes:
         - See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
+        - Beyond ~1.4 million km on the anti-Sun side the Earth's disc is smaller
+          than the Sun's, and on the shadow axis the eclipse is annular:
+          1 - b^2/a^2, with a and b the apparent radii of the Sun and the Earth
+        - A position at or below the Earth's surface is lit when the Sun is above
+          its local horizon plane; the Earth's center returns 0
 
     Returns:
         float: number in range [0,1] indicating no sun or full sun (no occlusion) hitting satellite

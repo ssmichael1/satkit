@@ -169,6 +169,20 @@ integer arrays or nested lists.
 
 ## Other result changes
 
+- **`moon.pos_gcrf` now returns GCRF coordinates.** Through 0.23 it returned
+  mean-of-date coordinates, which differ by precession: about 0.7° in 1950
+  and 2050 and 1.4° by 2100. **Do this:** recompute stored low-precision Moon
+  positions; code that rotated the result from mean-of-date to GCRF itself
+  must stop doing so.
+- **`planets.heliocentric_pos` is more accurate.** It rotates the J2000
+  ecliptic elements with the fixed J2000 obliquity (it used the obliquity of
+  date, ~47″ per century from 2000), and outside 1800–2050 the extra terms
+  for Jupiter through Pluto are in the right units (these planets were off by
+  up to tens of degrees). **Do this:** recompute stored planet positions.
+- **`sun.rise_set` returns the sunrise and sunset of the input's UTC
+  calendar date**, whatever its time of day. Through 0.23 about half of the
+  inputs gave the next day's events. **Do this:** for a local date, pass a
+  timezone-aware `datetime` at local noon.
 - **ECOM coefficients (experimental) are referred to 1 AU** and scale by
   $(\text{AU}/d)^2$ with the satellite–Sun distance $d$. **Do this:** multiply
   coefficients fitted with the old scaling by $(d/\text{AU})^2$ at their
