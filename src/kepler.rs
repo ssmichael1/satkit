@@ -35,7 +35,7 @@ pub enum Error {
 /// Convenient type alias used throughout the `kepler` module.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Backwards-compatible alias for [`Error`].
+/// Backwards-compatible alias for [`enum@Error`].
 #[deprecated(note = "use kepler::Error instead")]
 pub type KeplerError = Error;
 

@@ -160,7 +160,7 @@ impl ImpulsiveManeuver {
 ///
 /// `SatState` bundles a GCRF position/velocity with optional covariance and
 /// a list of impulsive maneuvers into a single propagatable object. Use it
-/// instead of the free [`propagate()`] function when you need:
+/// instead of the free [`propagate()`](crate::orbitprop::propagate) function when you need:
 ///
 /// * **Covariance propagation** -- attach a 6x6 uncertainty matrix and it
 ///   will be propagated via the state transition matrix automatically.
@@ -170,7 +170,7 @@ impl ImpulsiveManeuver {
 ///   the original state (maneuvers are reversed automatically).
 ///
 /// For simple state-vector propagation without covariance or maneuvers,
-/// the free function [`propagate()`] is more direct.
+/// the free function [`propagate()`](crate::orbitprop::propagate) is more direct.
 ///
 /// # Units
 ///
@@ -192,8 +192,8 @@ impl SatState {
     /// # Arguments
     ///
     /// * `time` - Epoch of the state
-    /// * `pos` - Position vector in GCRF [meters]
-    /// * `vel` - Velocity vector in GCRF [meters/second]
+    /// * `pos` - Position vector in GCRF `[meters]`
+    /// * `vel` - Velocity vector in GCRF `[meters/second]`
     pub fn from_pv<T: TimeLike>(time: &T, pos: &Vector3, vel: &Vector3) -> Self {
         Self {
             time: time.as_instant(),
@@ -214,12 +214,12 @@ impl SatState {
         Self::from_pv(time, &pos, &vel)
     }
 
-    /// Position vector in GCRF [meters]
+    /// Position vector in GCRF `[meters]`
     pub fn pos_gcrf(&self) -> Vector3 {
         self.pv.block::<3, 1>(0, 0)
     }
 
-    /// Velocity vector in GCRF [meters/second]
+    /// Velocity vector in GCRF `[meters/second]`
     pub fn vel_gcrf(&self) -> Vector3 {
         self.pv.block::<3, 1>(3, 0)
     }
@@ -299,7 +299,7 @@ impl SatState {
     /// # Arguments
     ///
     /// * `sigma` — 3-vector of 1-sigma position uncertainty components
-    ///   along the `frame`'s axes [m]
+    ///   along the `frame`'s axes `[m]`
     /// * `frame` — coordinate frame. Supported: [`Frame::GCRF`],
     ///   [`Frame::RTN`] (= RSW = RIC), [`Frame::NTW`], [`Frame::LVLH`].
     ///

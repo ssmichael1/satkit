@@ -82,6 +82,10 @@ jobs:
       # must still build warning-free.
       - name: Clippy without default features
         run: cargo clippy -p satkit --no-default-features --all-targets -- -D warnings
+      # Catches broken/ambiguous intra-doc links before they reach docs.rs.
+      # --no-deps keeps it cheap (only satkit's own docs are built).
+      - name: Rustdoc (deny warnings)
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p satkit --all-features
 
   deny:
     # cargo-deny covers the RustSec advisories the cargo-audit job used to

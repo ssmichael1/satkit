@@ -57,6 +57,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - TLE loader docs de-duplicated ([#241](https://github.com/ssmichael1/satkit/pull/241))
 - New Migrating to 0.24 page, and time-parsing docstrings brought up to date ([#246](https://github.com/ssmichael1/satkit/pull/246))
 - Migration page and CHANGELOG edited for the release: one-line "check old results" list, merged duplicate entries ([#258](https://github.com/ssmichael1/satkit/pull/258))
+- Rustdoc has no broken intra-doc links (`RUSTDOCFLAGS="-D warnings" cargo doc`), checked in CI ([#259](https://github.com/ssmichael1/satkit/pull/259))
 
 ### CI
 

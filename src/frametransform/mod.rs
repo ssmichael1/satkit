@@ -7,15 +7,15 @@
 //!
 //! | Function | From | To | Accuracy | Notes |
 //! |---|---|---|---|---|
-//! | [`qitrf2gcrf`] | ITRF | GCRF | Full IERS 2010 | Computationally expensive; requires EOP |
-//! | [`qgcrf2itrf`] | GCRF | ITRF | Full IERS 2010 | Conjugate of `qitrf2gcrf` |
-//! | [`qitrf2gcrf_approx`] | ITRF | GCRF | ~1 arcsec | Approximate chain (see below); no polar motion; fast |
-//! | [`qgcrf2itrf_approx`] | GCRF | ITRF | ~1 arcsec | Conjugate of `qitrf2gcrf_approx` |
-//! | [`qteme2itrf`] | TEME | ITRF | Exact | For SGP4 output: GMST82 then polar motion; Vallado Eq. 3-90 |
-//! | [`qteme2gcrf`] | TEME | GCRF | 0.55 arcsec | Approximate: GMST82 to PEF, then the approximate chain (no polar motion); `rotation(TEME, GCRF)` is the full one |
-//! | [`qmod2gcrf`] | MOD | EME2000 | Precession only | IAU 2006 precession, no frame bias (23 mas from GCRF); Vallado Eqs. 3-88, 3-89 |
-//! | [`qtod2mod_approx`] | TOD | MOD | 0.9 arcsec | Two-term nutation |
-//! | [`qtirs2cirs`] | TIRS | CIRS | Full | Earth rotation angle only |
+//! | [`qitrf2gcrf`](crate::frametransform::qitrf2gcrf) | ITRF | GCRF | Full IERS 2010 | Computationally expensive; requires EOP |
+//! | [`qgcrf2itrf`](crate::frametransform::qgcrf2itrf) | GCRF | ITRF | Full IERS 2010 | Conjugate of `qitrf2gcrf` |
+//! | [`qitrf2gcrf_approx`](crate::frametransform::qitrf2gcrf_approx) | ITRF | GCRF | ~1 arcsec | Approximate chain (see below); no polar motion; fast |
+//! | [`qgcrf2itrf_approx`](crate::frametransform::qgcrf2itrf_approx) | GCRF | ITRF | ~1 arcsec | Conjugate of `qitrf2gcrf_approx` |
+//! | [`qteme2itrf`](crate::frametransform::qteme2itrf) | TEME | ITRF | Exact | For SGP4 output: GMST82 then polar motion; Vallado Eq. 3-90 |
+//! | [`qteme2gcrf`](crate::frametransform::qteme2gcrf) | TEME | GCRF | 0.55 arcsec | Approximate: GMST82 to PEF, then the approximate chain (no polar motion); `rotation(TEME, GCRF)` is the full one |
+//! | [`qmod2gcrf`](crate::frametransform::qmod2gcrf) | MOD | EME2000 | Precession only | IAU 2006 precession, no frame bias (23 mas from GCRF); Vallado Eqs. 3-88, 3-89 |
+//! | [`qtod2mod_approx`](crate::frametransform::qtod2mod_approx) | TOD | MOD | 0.9 arcsec | Two-term nutation |
+//! | [`qtirs2cirs`](crate::frametransform::qtirs2cirs) | TIRS | CIRS | Full | Earth rotation angle only |
 //!
 //! # Frame Descriptions
 //!
@@ -28,10 +28,11 @@
 //!
 //! # The approximate reduction
 //!
-//! The `_approx` functions ([`qitrf2gcrf_approx`], [`qgcrf2itrf_approx`],
-//! [`qteme2gcrf`], [`rotation_approx`], ...) chain GAST ([`gmst`] (IAU 1982)
-//! plus the two-term [`eqeq`]), the two-term nutation of
-//! [`qtod2mod_approx`] and the IAU 2006 precession of [`qmod2gcrf`] (no frame
+//! The `_approx` functions ([`qitrf2gcrf_approx`](crate::frametransform::qitrf2gcrf_approx),
+//! [`qgcrf2itrf_approx`](crate::frametransform::qgcrf2itrf_approx),
+//! [`qteme2gcrf`](crate::frametransform::qteme2gcrf), [`rotation_approx`](crate::frametransform::rotation_approx), ...) chain GAST ([`gmst`](crate::frametransform::gmst) (IAU 1982)
+//! plus the two-term [`eqeq`](crate::frametransform::eqeq)), the two-term nutation of
+//! [`qtod2mod_approx`](crate::frametransform::qtod2mod_approx) and the IAU 2006 precession of [`qmod2gcrf`](crate::frametransform::qmod2gcrf) (no frame
 //! bias), after Vallado (2013) §3.7.3. The chain is often labelled
 //! "IAU-76/FK5", but it is neither the IAU 1976 precession nor the 106-term
 //! IAU 1980 nutation series. It neglects polar motion. Against the full IERS
@@ -595,7 +596,7 @@ pub fn qtirs2cirs<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Arguments
 ///
-/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `pos_gcrf` - Position vector in GCRF `[m]`
 /// * `vel_gcrf` - Velocity vector in GCRF [m/s]
 ///
 /// # Returns
@@ -651,7 +652,7 @@ pub fn gcrf_to_ric(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
 /// velocity maneuver planning.
 ///
 /// # Arguments
-/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `pos_gcrf` - Position vector in GCRF `[m]`
 /// * `vel_gcrf` - Velocity vector in GCRF [m/s]
 ///
 /// # Returns
@@ -691,7 +692,7 @@ pub fn gcrf_to_ntw(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
 /// velocity; use [`ntw_to_gcrf`] if you need that property.
 ///
 /// # Arguments
-/// * `pos_gcrf` - Position vector in GCRF [m]
+/// * `pos_gcrf` - Position vector in GCRF `[m]`
 /// * `vel_gcrf` - Velocity vector in GCRF [m/s]
 ///
 /// # Returns
@@ -765,7 +766,7 @@ pub fn gcrf_to_lvlh(pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Matrix3 {
 ///
 /// # Arguments
 ///
-/// * `pos_itrf` - Position in ITRF [m]
+/// * `pos_itrf` - Position in ITRF `[m]`
 /// * `vel_itrf` - Velocity as observed in ITRF [m/s]. For a point at rest
 ///   on Earth, this is zero.
 /// * `time` - Epoch of the state
@@ -834,7 +835,7 @@ pub fn itrf_to_gcrf_state_approx<T: TimeLike>(
 ///
 /// # Arguments
 ///
-/// * `pos_gcrf` - Position in GCRF [m]
+/// * `pos_gcrf` - Position in GCRF `[m]`
 /// * `vel_gcrf` - Velocity in GCRF [m/s]
 /// * `time` - Epoch of the state
 ///
@@ -903,10 +904,10 @@ pub fn gcrf_to_itrf_state_approx<T: TimeLike>(
 ///
 /// # Supported frames
 ///
-/// * [`Frame::GCRF`] — returns the 3×3 identity (trivial case)
-/// * [`Frame::LVLH`] — dispatches to [`lvlh_to_gcrf`]
-/// * [`Frame::RTN`] (a.k.a. RSW, RIC) — dispatches to [`rtn_to_gcrf`]
-/// * [`Frame::NTW`] — dispatches to [`ntw_to_gcrf`]
+/// * [`Frame::GCRF`](crate::Frame::GCRF) — returns the 3×3 identity (trivial case)
+/// * [`Frame::LVLH`](crate::Frame::LVLH) — dispatches to [`lvlh_to_gcrf`]
+/// * [`Frame::RTN`](crate::Frame::RTN) (a.k.a. RSW, RIC) — dispatches to [`rtn_to_gcrf`]
+/// * [`Frame::NTW`](crate::Frame::NTW) — dispatches to [`ntw_to_gcrf`]
 ///
 /// # Errors
 ///
