@@ -2,7 +2,7 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.24.0 - 2026-09-26
 
 Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for what to check and change.
 
@@ -161,22 +161,3 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 ### Docs
 
 - Every Python docstring states units for dimensioned arguments, returns and attributes (SI, radians unless the name ends in `_deg`); `sgp4` outputs are metres and m/s in TEME, not km ([#169](https://github.com/ssmichael1/satkit/pull/169))
-
-## 0.21.2 - 2026-08-30
-
-### Changed
-
-- **Breaking (Rust):** `utils::download::Error` and its field-carrying variants are `#[non_exhaustive]`: downstream matches need a wildcard arm and struct patterns a `..` ([#161](https://github.com/ssmichael1/satkit/pull/161))
-
-### Fixed
-
-- Downloads verify against the operating system's trust store (TLS-inspecting corporate proxies work), `SATKIT_CA_BUNDLE` overrides it, and errors name the failing URL; the daily CelesTrak files are parsed before replacing the copy on disk, so an HTML notice page can no longer overwrite the EOP table ([#160](https://github.com/ssmichael1/satkit/pull/160))
-
-### Docs
-
-- GMAT validation page: removed the "What the corpus found" note ([#159](https://github.com/ssmichael1/satkit/pull/159))
-- GMAT validation page and README describe the drag corpus: drag orbits, constant/file-driven force models, measured agreement against the drag-only displacement, anomalous-oxygen and F10.7-timing floors ([#157](https://github.com/ssmichael1/satkit/pull/157))
-
-### CI
-
-- Build workflow runs once per change: pull requests build on the PR event only, `main` builds on the merge commit, and a new push cancels the superseded run ([#158](https://github.com/ssmichael1/satkit/pull/158))
