@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 import satkit as sk
+from shared import ISS_2021
 
 
 class TestInvalidInputRaises:
@@ -74,9 +75,7 @@ class TestInvalidInputRaises:
 
     def test_sgp4_wrong_size_state(self):
         # propagate with an empty time list must raise cleanly
-        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
-        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
-        tle = sk.TLE.from_lines([line1, line2])
+        tle = sk.TLE.from_lines(ISS_2021)
         with pytest.raises(RuntimeError):
             sk.sgp4([tle], [])
 

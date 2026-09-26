@@ -24,9 +24,6 @@ import satkit
 STUB = pathlib.Path(__file__).resolve().parents[1] / "satkit" / "satkit.pyi"
 P = inspect.Parameter
 
-# Known drift owned by another open branch (not fixed here).
-KNOWN_DRIFT: dict[str, str] = {}
-
 
 def _stub_params(fn: ast.FunctionDef) -> list[tuple[str, inspect._ParameterKind, bool]]:
     a = fn.args
@@ -68,17 +65,7 @@ def _runtime_signature(name: str) -> inspect.Signature | None:
 
 
 STUB_INITS = _stub_inits()
-CASES = [
-    pytest.param(
-        name,
-        marks=[pytest.mark.xfail(reason=KNOWN_DRIFT[name], strict=False)]
-        if name in KNOWN_DRIFT
-        else [],
-        id=name,
-    )
-    for name in sorted(STUB_INITS)
-    if _runtime_signature(name) is not None
-]
+CASES = [name for name in sorted(STUB_INITS) if _runtime_signature(name) is not None]
 
 
 def test_cases_found():

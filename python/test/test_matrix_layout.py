@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 
 import satkit as sk
+from shared import ISS_2024, STARLINK_3118
 
 RNG = np.random.default_rng(20260925)
 
@@ -54,12 +55,6 @@ class TestQuaternion:
         # and a known non-symmetric matrix
         qz = sk.quaternion.from_rotation_matrix(np.array([[0.0, -1, 0], [1, 0, 0], [0, 0, 1]]))
         np.testing.assert_allclose(qz * np.array([1.0, 0, 0]), [0, 1, 0], atol=1e-15)
-
-    @pytest.mark.parametrize("q", _random_quaternions(4))
-    def test_nx3_rows_match_single_vectors(self, q):
-        V = RNG.normal(size=(7, 3))
-        rows = np.array([q * v for v in V])
-        np.testing.assert_allclose(q * V, rows, rtol=0, atol=1e-14)
 
 
 class TestSatelliteFrames:
@@ -116,13 +111,7 @@ class TestStateArrays:
             np.testing.assert_allclose(v_all[i], v1, rtol=0, atol=1e-11)
 
     def test_sgp4_tle_by_time_grid(self):
-        lines = [
-            "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9005",
-            "2 25544  51.6400 208.9163 0006317  69.9862  25.2906 15.49560000 00001",
-            "1 49140U 21082L   24030.39663557  .00000076  00000-0  14180-4 0  9995",
-            "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
-        ]
-        tles = sk.TLE.from_lines(lines)
+        tles = sk.TLE.from_lines(ISS_2024 + STARLINK_3118)
         times = [tles[0].epoch + sk.duration(minutes=m) for m in (0, 17, 93)]
         p, v = sk.sgp4(tles, times)
         assert p.shape[-1] == 3

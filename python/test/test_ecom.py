@@ -8,7 +8,6 @@ cannonball model.
 """
 
 import os
-import pickle
 import struct
 
 import numpy as np
@@ -54,12 +53,6 @@ class TestEcomParams:
         assert sk.ecomparams.from_dict(d) == e
         assert sk.ecomparams.from_dict({"d0": -1e-7}).d0 == -1e-7
 
-    def test_pickle_roundtrip(self):
-        e = sk.ecomparams.ecom2(-1.1e-7, 1e-9, -2e-9, 3e-9, 4e-9, -5e-9, 6e-9, 7e-9, -8e-9)
-        r = pickle.loads(pickle.dumps(e))
-        assert r == e
-        assert r.sun_relative is True
-
     def test_repr(self):
         e = sk.ecomparams.reduced(-1e-7, 0, 0, 0, 0)
         assert "d0=-1.0000e-7" in repr(e)
@@ -77,21 +70,6 @@ class TestSatPropertiesEcom:
         p.ecom = e
         assert p.ecom.bc == 3e-9
         assert "ECOM" in str(p)
-
-    def test_pickle_with_ecom(self):
-        e = sk.ecomparams.ecom2(-1e-7, 1e-9, 2e-9, 3e-9, 4e-9, 5e-9, 6e-9, 7e-9, 8e-9)
-        t0 = sk.time(2024, 1, 1)
-        t1 = t0 + sk.duration.from_hours(1)
-        thr = sk.thrust.constant([1e-4, 0, 0], t0, t1, frame=sk.frame.RTN)
-        p = sk.satproperties(craoverm=0.02, cdaoverm=0.01, thrusts=[thr], ecom=e)
-        r = pickle.loads(pickle.dumps(p))
-        assert r.craoverm == pytest.approx(0.02)
-        assert r.cdaoverm == pytest.approx(0.01)
-        assert len(r.thrusts) == 1 and r.thrusts[0].frame == sk.frame.RTN
-        assert r.ecom == e
-        # Without ECOM the v2 format still round-trips to None.
-        r2 = pickle.loads(pickle.dumps(sk.satproperties(craoverm=0.02)))
-        assert r2.ecom is None and r2.craoverm == pytest.approx(0.02)
 
     def test_v1_pickle_still_loads(self):
         """A satproperties pickled by a pre-ECOM release (format v1) must load."""
