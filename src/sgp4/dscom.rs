@@ -43,19 +43,6 @@
 *    zmol        -
 *    zmos        -
 *
-*  locals        :
-*    a1, a2, a3, a4, a5, a6, a7, a8, a9, a10         -
-*    betasq      -
-*    cc          -
-*    ctem, stem        -
-*    x1, x2, x3, x4, x5, x6, x7, x8          -
-*    xnodce      -
-*    xnoi        -
-*    zcosg  , zsing  , zcosgl , zsingl , zcosh  , zsinh  , zcoshl , zsinhl ,
-*    zcosi  , zsini  , zcosil , zsinil ,
-*    zx          -
-*    zy          -
-*
 *  coupling      :
 *    none.
 *

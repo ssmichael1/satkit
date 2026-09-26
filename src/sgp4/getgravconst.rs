@@ -18,8 +18,6 @@
 *    j2, j3, j4  - un-normalized zonal harmonic values
 *    j3oj2       - j3 divided by j2
 *
-*  locals        :
-*
 *  coupling      :
 *    none
 *

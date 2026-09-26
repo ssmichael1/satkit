@@ -84,13 +84,6 @@ fn gstime_sgp4(jdut1: f64) -> f64 {
 *    gsto        - gst at time of observation               rad
 *    no          - mean motion of satellite
 *
-*  locals        :
-*    ak          -
-*    d1          -
-*    del         -
-*    adel        -
-*    po          -
-*
 *  coupling      :
 *    getgravconst- no longer used
 *    gstime      - find greenwich sidereal time from the julian date

@@ -36,26 +36,6 @@ use super::OpsMode;
 *    argpp       - argument of perigee
 *    mp          - mean anomaly
 *
-*  locals        :
-*    alfdp       -
-*    betdp       -
-*    cosip  , sinip  , cosop  , sinop  ,
-*    dalf        -
-*    dbet        -
-*    dls         -
-*    f2, f3      -
-*    pe          -
-*    pgh         -
-*    ph          -
-*    pinc        -
-*    pl          -
-*    sel   , ses   , sghl  , sghs  , shl   , shs   , sil   , sinzf , sis   ,
-*    sll   , sls
-*    xls         -
-*    xnoh        -
-*    zf          -
-*    zm          -
-*
 *  coupling      :
 *    none.
 *
