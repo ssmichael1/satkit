@@ -7,8 +7,9 @@ use satkit::Instant;
 use numpy as np;
 use numpy::ndarray;
 
+use numpy::IntoPyArray;
+use numpy::PyArray1;
 use numpy::PyArrayMethods;
-use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 use pyo3::IntoPyObject;
 use pyo3::IntoPyObjectExt;
@@ -399,10 +400,10 @@ where
                 for (i, tm) in tm.iter().enumerate() {
                     match cfunc(tm) {
                         Ok(r) => {
-                            pout.row_mut(i)
-                                .assign(&ndarray::Array1::from_vec(vec![r.0[0], r.0[1], r.0[2]]));
-                            vout.row_mut(i)
-                                .assign(&ndarray::Array1::from_vec(vec![r.1[0], r.1[1], r.1[2]]));
+                            for j in 0..3 {
+                                pout[(i, j)] = r.0[j];
+                                vout[(i, j)] = r.1[j];
+                            }
                         }
                         Err(e) => {
                             return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
@@ -411,11 +412,7 @@ where
                 }
                 Ok((pout, vout))
             })?;
-            (
-                PyArray2::from_array(py, &arrs.0),
-                PyArray2::from_array(py, &arrs.1),
-            )
-                .into_py_any(py)
+            (arrs.0.into_pyarray(py), arrs.1.into_pyarray(py)).into_py_any(py)
         }
     }
 }
