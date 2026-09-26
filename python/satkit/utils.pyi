@@ -206,16 +206,12 @@ def dylib_path() -> str:
 def githash() -> str:
     """Return git hash of this satkit build
 
-    Returns:
-        str: Git hash of this satkit build
-    """
-    ...
-
-def build_date() -> str:
-    """Return build date of this satkit library as a string
+    ``"unknown"`` unless satkit was built from a git checkout of satkit
+    itself (not from an sdist or a copy vendored inside another repository).
+    Use ``satkit.__version__`` for the release version.
 
     Returns:
-        str: Build date of this satkit library
+        str: Git hash of this satkit build, or ``"unknown"``
     """
     ...
 

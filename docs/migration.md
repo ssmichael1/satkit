@@ -74,6 +74,9 @@ each change to its pull request, where the details are.
 - **`frametransform.eop_source()` is deprecated** and is removed in 0.25. It
   warns, and returns `"finals2000A"` or `None`. **Do this:** use
   `frametransform.eop_coverage()`, which is `None` when no table is loaded.
+- **`utils.build_date()` is removed** (builds are reproducible now).
+  **Do this:** use `satkit.__version__`, or `utils.githash()`, which is
+  `"unknown"` for builds not made from a satkit git checkout.
 
 ### Exception types
 
@@ -270,6 +273,10 @@ lists.
 - **`tle::Error` has new `Record` and `ChecksumMismatch` variants** (the enum
   is `#[non_exhaustive]`), and every `TLE::from_lines` / `from_url` error is
   wrapped in `Record` with its line number and satellite.
+- **`utils::build_date()` is removed** (builds are reproducible now).
+  **Do this:** use `utils::githash()`, which is `"unknown"` for builds not
+  made from a satkit git checkout; the satkit version is in your
+  `Cargo.lock`.
 - **`sgp4::SGP4InitArgs::jdsatepoch` is now `epoch_days_1950`** (days since
   1949-12-31 00:00 UTC, kept to sub-microsecond precision), and
   `SGP4InitArgs::from_mean_elements` takes the epoch as an `Instant`.

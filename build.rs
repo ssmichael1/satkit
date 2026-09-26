@@ -1,64 +1,72 @@
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() {
     // NRLMSISE-00 is now pure Rust (src/nrlmsise.rs), no C compilation needed
 
-    // Record git hash to compile-time environment variable. Sdist /
-    // tarball builds (PyPI source distributions, conda-forge builds from
-    // a github archive, etc.) have no .git directory — fall back to
-    // "unknown" rather than blowing up the build.
-    println!(
-        "cargo:rustc-env=GIT_HASH={}",
-        git_output(&["rev-parse", "HEAD"])
-    );
-    println!(
-        "cargo:rustc-env=GIT_TAG={}",
-        git_output(&["describe", "--tags"])
-    );
-    println!("cargo:rustc-env=BUILD_DATE={}", build_date_iso8601());
+    // Record the git hash and tag at compile time. Nothing else here depends
+    // on the build machine or clock, so builds are reproducible.
+    //
+    // Git is read only when this crate is the top level of its own git
+    // checkout. Sdist / crates.io / tarball builds have no .git, and a copy
+    // of satkit vendored inside another repository would otherwise pick up
+    // that repository's hash; both report "unknown".
+    println!("cargo:rerun-if-changed=build.rs");
+    let manifest_dir = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let in_own_repo = git_output(&manifest_dir, &["rev-parse", "--show-toplevel"])
+        .and_then(|top| std::fs::canonicalize(top).ok())
+        .is_some_and(|top| std::fs::canonicalize(&manifest_dir).is_ok_and(|m| m == top));
+
+    let (hash, tag) = if in_own_repo {
+        watch_git_refs(&manifest_dir);
+        (
+            git_output(&manifest_dir, &["rev-parse", "HEAD"]),
+            git_output(&manifest_dir, &["describe", "--tags"]),
+        )
+    } else {
+        (None, None)
+    };
+    let unknown = || "unknown".to_string();
+    println!("cargo:rustc-env=GIT_HASH={}", hash.unwrap_or_else(unknown));
+    println!("cargo:rustc-env=GIT_TAG={}", tag.unwrap_or_else(unknown));
 }
 
-fn git_output(args: &[&str]) -> String {
+/// Rerun this script when HEAD moves or tags change. `--git-path` resolves
+/// each file for plain checkouts and worktrees alike. Only existing paths are
+/// watched: cargo reruns every build for a missing one. The reftable ref
+/// backend keeps refs in `reftable/`, which is watched as a whole.
+fn watch_git_refs(dir: &Path) {
+    let mut paths = vec![
+        "HEAD".to_string(),
+        "packed-refs".to_string(),
+        "refs/tags".to_string(),
+        "reftable".to_string(),
+    ];
+    if let Some(r) = git_output(dir, &["symbolic-ref", "-q", "HEAD"]) {
+        paths.push(r);
+    }
+    for p in paths {
+        if let Some(path) = git_output(dir, &["rev-parse", "--git-path", &p]) {
+            let path = dir.join(path);
+            if path.exists() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+        }
+    }
+}
+
+fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
     Command::new("git")
         .args(args)
+        .current_dir(dir)
+        // Find the repository from `dir` alone, not from an outer build's
+        // environment.
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
         .output()
         .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                String::from_utf8(o.stdout)
-                    .ok()
-                    .map(|s| s.trim().to_string())
-            } else {
-                None
-            }
-        })
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "unknown".to_string())
-}
-
-fn build_date_iso8601() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-
-    // Civil-from-days, Howard Hinnant: https://howardhinnant.github.io/date_algorithms.html
-    let days = secs.div_euclid(86400);
-    let tod = secs.rem_euclid(86400);
-    let z = days + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y0 = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y0 + 1 } else { y0 };
-
-    let h = tod / 3600;
-    let mi = (tod % 3600) / 60;
-    let s = tod % 60;
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, h, mi, s)
 }

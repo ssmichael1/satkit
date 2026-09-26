@@ -34,20 +34,19 @@ pub use manifest::{fetch_static_file, Manifest, ManifestEntry};
 ///
 /// Return git hash of compiled library
 ///
+/// `"unknown"` unless the library was built from a git checkout of satkit
+/// itself (not, for example, from crates.io, an sdist, or a copy vendored
+/// inside another repository).
+///
 pub const fn githash<'a>() -> &'a str {
     env!("GIT_HASH")
 }
 
 ///
-/// Return git tag of compiled library
+/// Return git tag of compiled library (`git describe --tags`)
+///
+/// `"unknown"` under the same conditions as [`githash`].
 ///
 pub const fn gittag<'a>() -> &'a str {
     env!("GIT_TAG")
-}
-
-///
-/// Return libary compile date
-///
-pub const fn build_date<'a>() -> &'a str {
-    env!("BUILD_DATE")
 }
