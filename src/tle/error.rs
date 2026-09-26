@@ -25,6 +25,30 @@ pub enum Error {
         message: String,
     },
 
+    /// The checksum digit (column 69) of a TLE line does not match the
+    /// mod-10 sum of its first 68 columns. Only checked when requested, with
+    /// [`Records::check_checksums`](crate::tle::Records::check_checksums).
+    #[error("Line {line} checksum mismatch: column 69 is '{found}', but the line's checksum is {expected}")]
+    ChecksumMismatch { line: u8, expected: u8, found: char },
+
+    /// A record read by [`TLE::records`](crate::TLE::records),
+    /// [`TLE::from_lines`](crate::TLE::from_lines) or
+    /// [`TLE::from_url`](crate::TLE::from_url) failed. `line` is the 1-based
+    /// input line the record starts on (its name line, if it has one); `sat`
+    /// is its satellite number and/or name when they can be read; `hint`
+    /// flags a line longer than 69 characters, whose columns may be shifted.
+    #[error(
+        "TLE record starting at line {line}{}: {error}{}",
+        .sat.as_ref().map(|s| format!(" (sat {s})")).unwrap_or_default(),
+        .hint.as_ref().map(|h| format!(" ({h})")).unwrap_or_default()
+    )]
+    Record {
+        line: usize,
+        sat: Option<String>,
+        hint: Option<String>,
+        error: Box<Self>,
+    },
+
     #[error("Year out of range for TLE: {0}")]
     YearOutOfRange(i32),
 

@@ -89,7 +89,7 @@ def test_sgp4():
             "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927",
             "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537",
         ]
-    )
+    )[0]
     p, v = sk.sgp4(tle, tle.epoch + sk.duration.from_hours(1.0))
     assert abs(np.linalg.norm(p) - 6.78e6) < 5e4
     assert abs(np.linalg.norm(v) - 7.66e3) < 1e2

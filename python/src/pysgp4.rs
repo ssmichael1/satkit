@@ -202,7 +202,7 @@ crate::arg_extractor!(opsmode_arg: OpsMode, |e| {
 /// >>>     "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981",
 /// >>> ]
 /// >>>
-/// >>> tle = satkit.TLE.from_lines(lines)  # a single TLE, not a list
+/// >>> tle = satkit.TLE.from_lines(lines)[0]  # from_lines always returns a list
 /// >>> tm = tle.epoch
 /// >>>
 /// >>> # Compute TEME position & velocity at epoch

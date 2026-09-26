@@ -14,7 +14,7 @@ class TestTLE:
         """
         Test setting TLE parameters
         """
-        tle = sk.TLE.from_lines(ISS_2021)
+        tle = sk.TLE.from_lines(ISS_2021)[0]
         assert tle.inclination == pytest.approx(51.6432, rel=1e-7)
         assert tle.raan == pytest.approx(351.4697, rel=1e-7)
         assert tle.eccen == pytest.approx(0.0007417, rel=1e-7)
@@ -40,7 +40,7 @@ class TestTLE:
 
     def test_tle_pickle(self):
         """TLE pickle must round-trip every serialized field."""
-        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])[0]
 
         restored = pickle.loads(pickle.dumps(tle))
 
@@ -104,7 +104,7 @@ class TestSGP4:
         """
 
         lines = ["STARLINK-3118", *STARLINK_3118]
-        tle = sk.TLE.from_lines(lines)
+        tle = sk.TLE.from_lines(lines)[0]
 
         lines2 = tle.to_2line()
         assert lines[1:] == lines2
@@ -190,7 +190,7 @@ class TestSGP4:
         omms = sk.omm_from_file(basedir + "spacetrack_omm.json")
         checked = 0
         for rec in omms[:100]:
-            tle = sk.TLE.from_lines([rec["TLE_LINE1"], rec["TLE_LINE2"]])
+            tle = sk.TLE.from_lines([rec["TLE_LINE1"], rec["TLE_LINE2"]])[0]
             tm = sk.time(rec["EPOCH"]) + sk.duration(hours=3)
             p_tle, _v, e_tle = sk.sgp4(tle, tm, errflag=True)
             p_omm, _v, e_omm = sk.sgp4(rec, tm, errflag=True)
@@ -273,7 +273,7 @@ class TestSGP4:
         """
         TLE.to_omm / TLE.from_omm round-trip and agree with sgp4 on both
         """
-        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])[0]
 
         omm = tle.to_omm()
         assert omm["OBJECT_NAME"] == "ISS (ZARYA)"
@@ -321,7 +321,7 @@ class TestSGP4:
         lines = [l[0:69] for l in lines]
 
         tles = sk.TLE.from_lines(lines)
-        for tle in tles:  # type: ignore
+        for tle in tles:
             fname = f"{basedir}{os.path.sep}{tle.satnum:05}.e"
             with open(fname, "r") as fh:
                 testvecs = fh.readlines()
@@ -362,7 +362,7 @@ class TestSGP4:
 class TestTLEMetadata:
     def test_tle_metadata_getters(self):
         """The catalog-identity fields must be readable (and settable)."""
-        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])[0]
         assert tle.intl_desig == "98067A"
         assert tle.desig_year == 98
         assert tle.desig_launch == 67
@@ -379,8 +379,8 @@ class TestSGP4ListKwargs:
         """The list path must honor gravconst/opsmode kwargs (previously
         silently ignored): list results must match per-TLE results computed
         with the same non-default settings."""
-        tle_a = sk.TLE.from_lines(ISS_2021)
-        tle_b = sk.TLE.from_lines(ISS_2021)
+        tle_a = sk.TLE.from_lines(ISS_2021)[0]
+        tle_b = sk.TLE.from_lines(ISS_2021)[0]
         t = tle_a.epoch + sk.duration.from_hours(6)
 
         p_single, v_single = sk.sgp4(tle_a, t, gravconst=sk.sgp4_gravconst.wgs84)
@@ -389,7 +389,7 @@ class TestSGP4ListKwargs:
         assert np.allclose(np.asarray(v_list).squeeze(), v_single)
 
         # And wgs84 must actually differ from the default wgs72
-        p_72, _ = sk.sgp4(sk.TLE.from_lines(ISS_2021), t)
+        p_72, _ = sk.sgp4(sk.TLE.from_lines(ISS_2021)[0], t)
         assert not np.allclose(p_72, p_single, rtol=0, atol=1e-3)
 
 
@@ -398,7 +398,7 @@ class TestSGP4XP:
         """An SGP4-XP element set (ephemeris type 4) parses but cannot be propagated."""
         line1 = "1 00011U 59001A   23060.12028874 +.00002871  89876-2  73526-1 4 00010"
         line2 = "2 00011  32.8652 309.4507 1466152  63.9843 312.2337 11.85947359392148"
-        tle = sk.TLE.from_lines([line1, line2])
+        tle = sk.TLE.from_lines([line1, line2])[0]
         assert tle.ephem_type == 4
         with pytest.raises(RuntimeError, match="SGP4-XP"):
             sk.sgp4(tle, tle.epoch)
@@ -420,3 +420,69 @@ class TestSGP4XP:
         }
         with pytest.raises(RuntimeError, match="SGP4-XP"):
             sk.sgp4(omm, sk.time(2023, 3, 1, 3, 0, 0))
+
+
+class TestTLELoaders:
+    """TLE.from_lines / from_file always return a list and locate bad records."""
+
+    def test_one_tle_is_a_list(self):
+        tles = sk.TLE.from_lines([ISS_NAME, *ISS_2021])
+        assert isinstance(tles, list)
+        assert len(tles) == 1
+        assert tles[0].name == "ISS (ZARYA)"
+
+    def test_several_tles(self):
+        tles = sk.TLE.from_lines([*ISS_2021, *STARLINK_3118])
+        assert [t.satnum for t in tles] == [25544, 49140]
+
+    def test_from_file_is_a_list(self, tmp_path):
+        path = tmp_path / "one.tle"
+        path.write_text("\n".join(STARLINK_3118) + "\n")
+        tles = sk.TLE.from_file(str(path))
+        assert isinstance(tles, list) and len(tles) == 1
+        assert tles[0].satnum == 49140
+
+    def test_zero_tles_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="No valid TLEs"):
+            sk.TLE.from_lines([])
+        with pytest.raises(ValueError, match="No valid TLEs"):
+            sk.TLE.from_lines(["just a name", ""])
+        path = tmp_path / "empty.tle"
+        path.write_text("\n")
+        with pytest.raises(ValueError, match="No valid TLEs"):
+            sk.TLE.from_file(str(path))
+
+    def test_error_names_line_and_satellite(self):
+        # An 8-digit eccentricity shifts the rest of line 2 right by one
+        shifted = STARLINK_3118[1].replace(" 0002663 ", " 00026630 ")
+        assert len(shifted) == 70
+        lines = [ISS_NAME, *ISS_2021, "", "0 SHIFTED", STARLINK_3118[0], shifted]
+        with pytest.raises(RuntimeError) as exc:
+            sk.TLE.from_lines(lines)
+        msg = str(exc.value)
+        assert "TLE record starting at line 5" in msg
+        assert '49140 "SHIFTED"' in msg
+        assert "mean anomaly" in msg
+        assert "line 7 is 70 characters" in msg
+
+    def test_check_checksum(self):
+        # ISS_2021 has wrong checksums; STARLINK_3118 has correct ones
+        assert len(sk.TLE.from_lines(ISS_2021)) == 1
+        assert len(sk.TLE.from_lines(ISS_2021, check_checksum=False)) == 1
+        assert len(sk.TLE.from_lines(STARLINK_3118, check_checksum=True)) == 1
+        with pytest.raises(
+            RuntimeError,
+            match=r"starting at line 1 .*Line 1 checksum mismatch: column 69 is '3', but the line's checksum is 0",
+        ):
+            sk.TLE.from_lines(ISS_2021, check_checksum=True)
+
+    def test_check_checksum_from_file(self, tmp_path):
+        path = tmp_path / "bad.tle"
+        path.write_text("\n".join([*STARLINK_3118, *ISS_2021]) + "\n")
+        assert len(sk.TLE.from_file(str(path))) == 2
+        with pytest.raises(RuntimeError, match="starting at line 3 .*checksum mismatch"):
+            sk.TLE.from_file(str(path), check_checksum=True)
+
+    def test_check_checksum_is_keyword_only(self):
+        with pytest.raises(TypeError):
+            sk.TLE.from_lines(ISS_2021, True)  # type: ignore[misc]

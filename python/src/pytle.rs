@@ -12,49 +12,84 @@ use std::fs::File;
 use std::io;
 use std::io::BufRead;
 
+/// Two-Line Element Set (TLE) representing a satellite ephemeris
+///
+/// A Two-Line Element Set is a satellite ephemeris format from the 1970s
+/// that is still in wide use. Its mean elements are propagated with the
+/// "Simplified General Perturbations-4" (SGP4) model (``satkit.sgp4``),
+/// which gives position and velocity in the "TEME" frame (not-quite GCRF).
+///
+/// For details, see: <https://en.wikipedia.org/wiki/Two-line_element_set>
+///
+/// Catalogs in this format are publicly available at
+/// <https://www.space-track.org> (registration required) and
+/// <https://celestrak.org> (no registration needed).
+///
+/// TLEs sometimes have a "line 0" that includes the name of the satellite.
+///
+/// Load TLEs with ``TLE.from_lines``, ``TLE.from_file`` or ``TLE.from_url``;
+/// each returns a ``list[TLE]``, even for a single element set.
+///
+/// Example:
+///     ```python
+///     tle = satkit.TLE.from_lines([
+///         "0 ISS (ZARYA)",
+///         "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
+///         "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+///     ])[0]
+///     print(tle.name)
+///     # ISS (ZARYA)
+///     ```
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
 
-/// A single TLE, or a list when there is more than one; `what` names the
-/// source in the error when there are none
-fn tle_or_list(py: Python, mut tles: Vec<TLE>, what: &str) -> PyResult<Py<PyAny>> {
-    match tles.len() {
-        0 => Err(pyo3::exceptions::PyValueError::new_err(format!(
+/// The parsed TLEs as a list, or `ValueError` when there are none; `what`
+/// names the source in the error
+fn tle_list(tles: Vec<TLE>, what: &str) -> PyResult<Vec<PyTLE>> {
+    if tles.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
             "No valid TLEs found in {what}"
-        ))),
-        1 => PyTLE(tles.remove(0)).into_py_any(py),
-        _ => tles
-            .into_iter()
-            .map(PyTLE)
-            .collect::<Vec<_>>()
-            .into_py_any(py),
+        )));
     }
+    Ok(tles.into_iter().map(PyTLE).collect())
+}
+
+/// Parse `lines` into TLEs, stopping at the first bad record
+fn parse_lines(lines: &[String], check_checksum: bool) -> satkit::tle::Result<Vec<TLE>> {
+    TLE::records(lines)
+        .check_checksums(check_checksum)
+        .collect()
 }
 
 #[pymethods]
 impl PyTLE {
-    /// Return a list of TLES loaded from input text file.
+    /// Load TLEs from a text file
     ///
-    /// If the file contains lines only represent a single TLE, the TLE will
-    /// be output, rather than a list with a single TLE element
+    /// Args:
+    ///     filename (str): name of the text file holding the TLE lines
+    ///         (2-line or 3-line format, any number of element sets)
+    ///     check_checksum (bool, optional): also verify the checksum digit
+    ///         (column 69) of every data line. Default False.
     ///
-    /// # Arguments:
+    /// Returns:
+    ///     list[TLE]: one TLE per element set in the file, even if there is
+    ///     only one
     ///
-    /// * `filename` - name of textfile lines for TLE(s) to load
-    ///
-    /// # Returns:
-    ///
-    /// * `tle` - a list of TLE objects or a single TLE if lines for
-    ///           only 1 are passed in
+    /// Raises:
+    ///     ValueError: if the file holds no TLEs
+    ///     RuntimeError: if a record fails to parse (or, with
+    ///         ``check_checksum``, has a wrong checksum); the message gives
+    ///         the line the record starts on and its satellite
     #[staticmethod]
-    fn from_file(py: Python, filename: String) -> Result<Py<PyAny>> {
-        let file = File::open(std::path::PathBuf::from(filename))?;
+    #[pyo3(signature = (filename, *, check_checksum=false))]
+    fn from_file(filename: String, check_checksum: bool) -> Result<Vec<Self>> {
+        let file = File::open(std::path::PathBuf::from(&filename))?;
 
         let lines: Vec<String> = io::BufReader::new(file)
             .lines()
             .collect::<std::result::Result<_, _>>()?;
 
-        Self::from_lines(py, lines)
+        Ok(tle_list(parse_lines(&lines, check_checksum)?, &filename)?)
     }
 
     #[new]
@@ -62,25 +97,29 @@ impl PyTLE {
         Self(TLE::new())
     }
 
-    /// Return a list of TLES loaded from input list of lines
+    /// Load TLEs from a list of lines
     ///
-    /// If the file contains lines only represent a single TLE, the TLE will
-    /// be output, rather than a list with a single TLE element
+    /// Args:
+    ///     lines (Sequence[str]): the TLE lines (2-line or 3-line format,
+    ///         any number of element sets)
+    ///     check_checksum (bool, optional): also verify the checksum digit
+    ///         (column 69) of every data line. Default False.
     ///
-    /// # Arguments:
+    /// Returns:
+    ///     list[TLE]: one TLE per element set, even if there is only one
     ///
-    /// * `lines` - list of strings lines for TLE(s) to load
-    ///
-    /// # Returns:
-    ///
-    /// * `tle` - a list of TLE objects or a single TLE if lines for
-    ///           only 1 are passed in
+    /// Raises:
+    ///     ValueError: if the lines hold no TLEs
+    ///     RuntimeError: if a record fails to parse (or, with
+    ///         ``check_checksum``, has a wrong checksum); the message gives
+    ///         the line the record starts on and its satellite
     #[staticmethod]
-    fn from_lines(py: Python, lines: Vec<String>) -> Result<Py<PyAny>> {
-        Ok(tle_or_list(py, TLE::from_lines(&lines)?, "input")?)
+    #[pyo3(signature = (lines, *, check_checksum=false))]
+    fn from_lines(lines: Vec<String>, check_checksum: bool) -> Result<Vec<Self>> {
+        Ok(tle_list(parse_lines(&lines, check_checksum)?, "input")?)
     }
 
-    /// Load TLE(s) from a URL
+    /// Load TLEs from a URL
     ///
     /// Fetches the content at the given URL and parses it as TLE lines.
     /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
@@ -89,19 +128,23 @@ impl PyTLE {
     ///     url (str): URL to fetch TLE data from
     ///
     /// Returns:
-    ///     TLE or list[TLE]: Single TLE or list of TLEs parsed from the response
+    ///     list[TLE]: one TLE per element set in the response, even if there
+    ///     is only one
     ///
     /// Raises:
+    ///     ValueError: if the response holds no TLEs
     ///     RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-    ///         ``satkit.utils.set_offline(True)``); no connection is opened
+    ///         ``satkit.utils.set_offline(True)``; no connection is opened),
+    ///         the request fails, or a record fails to parse
     ///
     /// Example:
     ///     ```python
     ///     tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
     ///     ```
     #[staticmethod]
-    fn from_url(py: Python, url: String) -> Result<Py<PyAny>> {
-        Ok(tle_or_list(py, TLE::from_url(&url)?, "response")?)
+    fn from_url(py: Python, url: String) -> Result<Vec<Self>> {
+        let tles = py.detach(|| TLE::from_url(&url))?;
+        Ok(tle_list(tles, "response")?)
     }
 
     /// Satellite NORAD Catalog Number

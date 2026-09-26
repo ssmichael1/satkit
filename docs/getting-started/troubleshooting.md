@@ -364,7 +364,7 @@ import numpy as np
 tle = sk.TLE.from_lines([
     "1 25544U 98067A   24001.50000000  .00016717  00000-0  30306-3 0  9993",
     "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.49815367432047",
-])
+])[0]
 p_teme, v_teme = sk.sgp4(tle, tle.epoch)
 q = sk.frametransform.qteme2gcrf(tle.epoch)
 state_gcrf = np.concatenate([q * p_teme, q * v_teme])

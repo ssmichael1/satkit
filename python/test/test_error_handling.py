@@ -75,7 +75,7 @@ class TestInvalidInputRaises:
 
     def test_sgp4_wrong_size_state(self):
         # propagate with an empty time list must raise cleanly
-        tle = sk.TLE.from_lines(ISS_2021)
+        tle = sk.TLE.from_lines(ISS_2021)[0]
         with pytest.raises(RuntimeError):
             sk.sgp4([tle], [])
 

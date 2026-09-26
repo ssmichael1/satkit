@@ -47,6 +47,38 @@ A message whose `MEAN_ELEMENT_THEORY` is not SGP4, whose `TIME_SYSTEM` is not UT
 
 In Rust the same message is the `satkit::omm::OMM` struct, which implements `SGP4Source`, serializes back to JSON with `serde`, and converts with `OMM::from_tle` / `OMM::to_tle`.
 
+## Loading TLEs
+
+`TLE.from_lines()`, `TLE.from_file()` and `TLE.from_url()` accept 2-line and 3-line (named) element sets, any number of them, and always return a `list[TLE]`, even for a single element set. Input with no element sets raises `ValueError`.
+
+A record that fails to parse raises `RuntimeError` naming the input line the record starts on and its satellite. A data line longer than the standard 69 characters is accepted (the extra columns are ignored), but if a field of such a record then fails to parse, the message says so: a field written one column too wide shifts every later column of the line. Checksums (column 69) are not verified unless requested with `check_checksum=True` (`from_lines` and `from_file`).
+
+```python
+import satkit as sk
+
+lines = [
+    "0 STARLINK-3118",
+    "1 49140U 21082L   24030.39663557  .00000076  00000-0  14180-4 0  9995",
+    "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
+]
+tle = sk.TLE.from_lines(lines, check_checksum=True)[0]
+
+# An 8-digit eccentricity pushes the mean anomaly one column right
+bad = lines[:2] + [lines[2].replace(" 0002663 ", " 00026630 ")]
+try:
+    sk.TLE.from_lines(bad)
+except RuntimeError as e:
+    print(e)
+# TLE record starting at line 1 (sat 49140 "STARLINK-3118"): Could not parse mean anomaly:
+# invalid float literal (line 3 is 70 characters; a TLE line is 69, so its columns may be shifted)
+```
+
+In Rust, `TLE::from_lines` stops at the first bad record in the same way. To keep the good records of a large catalog file and skip the malformed ones, iterate `TLE::records` instead, optionally with `.check_checksums(true)`:
+
+```rust
+let tles: Vec<satkit::TLE> = satkit::TLE::records(&lines).filter_map(Result::ok).collect();
+```
+
 ## Loading from URLs
 
 Both TLEs and OMMs can be loaded directly from a URL:
@@ -81,7 +113,7 @@ tle_lines = [
 ]
 
 # Create a TLE object
-starlink30477 = sk.TLE.from_lines(tle_lines)
+starlink30477 = sk.TLE.from_lines(tle_lines)[0]
 
 # The state is output in the "TEME" frame
 pTEME, _vTEME = sk.sgp4(starlink30477, sk.time(2024, 4, 9, 12, 0, 0))
@@ -150,7 +182,7 @@ iss = sk.TLE.from_lines([
     "ISS (ZARYA)",
     "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9003",
     "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357",
-])
+])[0]
 with open("gp.json", "w") as f:
     json.dump([iss.to_omm()], f)
 -->
