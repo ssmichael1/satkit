@@ -123,6 +123,36 @@ class TestMoon:
         ref_pos = np.array([-134240.626e3, -311571.590e3, -126693.785e3])
         assert p == pytest.approx(sk.frametransform.qmod2gcrf(t1) * ref_pos)
 
+    def test_moonpos_mod(self):
+        """
+        Vallado example 5-3 for computing position of the moon,
+        reproduced directly against the Mean-of-Date (MOD) output
+        """
+        t0 = sk.time(1994, 4, 28)
+        # Vallado approximates UTC as TBD, so we will
+        # make the same approximation
+        # for the purposes of this test case
+        t1 = sk.time.from_mjd(t0.to_mjd(sk.timescale.UTC), sk.timescale.TDB)
+        p = sk.moon.pos_mod(t1)
+        ref_pos = np.array([-134240.626e3, -311571.590e3, -126693.785e3])
+        assert p == pytest.approx(ref_pos)
+
+    def test_moonpos_mod_to_gcrf(self):
+        """
+        pos_gcrf(t) is qmod2gcrf(t) * pos_mod(t) at a range of times,
+        for scalar, list and numpy-array inputs
+        """
+        t0 = sk.time(2024, 1, 1)
+        times = [t0 + sk.duration(days=d) for d in np.arange(0.0, 365.0, 17.0)]
+
+        for arg in (times, np.array(times)):
+            gcrf = np.asarray(sk.moon.pos_gcrf(arg))
+            mod = np.asarray(sk.moon.pos_mod(arg))
+            for t, g, m in zip(times, gcrf, mod):
+                assert g == pytest.approx(sk.frametransform.qmod2gcrf(t) * m)
+                # And the scalar call agrees with the vectorised one
+                assert m == pytest.approx(sk.moon.pos_mod(t))
+
     def test_moonpos_vs_jplephem(self):
         # pos_gcrf used to return mean-of-date coordinates, off from GCRF by
         # precession (~1.4 deg / century from J2000)
