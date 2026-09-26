@@ -86,6 +86,9 @@ the details.
 
 ## Python API
 
+- **Python 3.11 or newer is required.** Python 3.10 reaches end of life in
+  October 2026; 0.24 ships wheels for CPython 3.11–3.15. **Do this:** stay on
+  satkit 0.23.x for Python 3.10.
 - **`satproperties()` is keyword-only.** A positional call raises
   `TypeError`. **Do this:** write
   `sk.satproperties(cdaoverm=..., craoverm=..., thrusts=..., ecom=...)`.

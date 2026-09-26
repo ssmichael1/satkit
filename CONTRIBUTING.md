@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 ### Prerequisites
 
 - **Rust**: Install the latest stable Rust toolchain from [rustup.rs](https://rustup.rs/)
-- **Python**: Python 3.10 or later for Python bindings testing
+- **Python**: Python 3.11 or later for Python bindings testing
 - **Git**: For version control
 
 ### Setting Up Your Development Environment
@@ -240,7 +240,7 @@ Every pull request runs the Build workflow (`.github/workflows/build.yml`):
 - **Python tests** (Python 3.13): the full `pytest` suite, including the documentation and docstring examples, an offline smoke test, and stubtest
 
 The docs site is rebuilt from `main`; a weekly schedule runs `cargo audit` and
-a deep property-test pass; release builds smoke-test each wheel (3.10–3.14).
+a deep property-test pass; release builds smoke-test each wheel (3.11–3.15).
 Ensure all CI checks pass before requesting review.
 
 ## Code Review Process

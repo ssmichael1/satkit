@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "satkit"
 dependencies = ["numpy>=1.0.0"]
-requires-python = ">= 3.10"
+requires-python = ">= 3.11"
 authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
@@ -29,11 +29,11 @@ classifiers = [
     "Development Status :: 4 - Beta",
 
     # Specify the Python versions you support here.
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
 ]
 [project.optional-dependencies]
 test = ["pytest", "mypy", "scipy", "pyerfa", "hypothesis"]
@@ -48,11 +48,11 @@ exclude = ["test*", "docs*", "examples*", "src*"]
 
 [tool.cibuildwheel]
 build = [
+    "cp315-*",
     "cp314-*",
     "cp313-*",
     "cp312-*",
     "cp311-*",
-    "cp310-*",
 ]
 skip = ["pp*", "*_i686", "*_s390x", "*_ppc64le", "*-musllinux*"]
 # Import + native-call smoke test on every wheel (same check as the sdist job
