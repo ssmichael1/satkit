@@ -1,6 +1,5 @@
 use crate::sgp4::SatRec;
 use crate::Instant;
-use crate::TimeScale;
 
 use crate::sgp4::{SGP4InitArgs, SGP4Source};
 
@@ -116,7 +115,26 @@ pub struct TLE {
     /// Revolution number
     pub rev_num: i32,
 
-    pub(crate) satrec: Option<SatRec>,
+    pub(crate) satrec: SatRecCache,
+}
+
+/// The SGP4 initialization cached in a [`TLE`]. It is derived data, not part
+/// of the element set, so it never affects comparisons: a TLE equals its
+/// pickle, clone or a freshly parsed copy whether or not it has been
+/// propagated.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SatRecCache(pub(crate) Option<SatRec>);
+
+impl PartialEq for SatRecCache {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl PartialOrd for SatRecCache {
+    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
+        Some(std::cmp::Ordering::Equal)
+    }
 }
 
 impl SGP4Source for TLE {
@@ -125,7 +143,7 @@ impl SGP4Source for TLE {
     }
 
     fn satrec_mut(&mut self) -> &mut Option<SatRec> {
-        &mut self.satrec
+        &mut self.satrec.0
     }
 
     fn sgp4_init_args(&self) -> crate::sgp4::Result<SGP4InitArgs> {
@@ -137,8 +155,7 @@ impl SGP4Source for TLE {
             )));
         }
         Ok(SGP4InitArgs::from_mean_elements(
-            // Vallado expects JD UTC and then subtracts 2433281.5 inside the legacy interface.
-            self.epoch.as_jd_with_scale(TimeScale::UTC),
+            self.epoch,
             self.bstar,
             self.mean_motion,
             self.mean_motion_dot,
@@ -299,8 +316,17 @@ impl TLE {
             mean_anomaly: 0.0,
             mean_motion: 0.0,
             rev_num: 0,
-            satrec: None,
+            satrec: SatRecCache(None),
         }
+    }
+
+    /// Discards the cached SGP4 initialization.
+    ///
+    /// Never required for correctness: SGP4 re-initializes on its own when
+    /// the elements, gravity model or ops mode differ from those the cache
+    /// was built with. This only frees the cached state.
+    pub fn reset_cache(&mut self) {
+        self.satrec = SatRecCache(None);
     }
 
     /// Parse one TLE from a name line and its two data lines
@@ -435,6 +461,16 @@ impl TLE {
         // epoch.
         let epoch = Instant::from_date(year as i32, 1, 1)?.add_utc_days(day_of_year - 1.0);
 
+        // A line 1 and a line 2 of different satellites (e.g. a line lost from
+        // a file) would otherwise combine into a plausible hybrid element set.
+        let (num1, num2) = (line1[2..7].trim(), line2[2..7].trim());
+        if num1 != num2 && Self::alpha5_to_int(num1).ok() != Self::alpha5_to_int(num2).ok() {
+            return Err(Error::SatNumMismatch {
+                line1: num1.to_string(),
+                line2: num2.to_string(),
+            });
+        }
+
         Ok(Self {
             name: "none".to_string(),
             sat_num: Self::alpha5_to_int(&line1[2..7]).map_err(|e| Error::ParseField {
@@ -502,11 +538,16 @@ impl TLE {
             mean_motion: parse_field(line2[52..63].trim(), "mean motion")?,
 
             rev_num: parse_field(line2[63..68].trim(), "rev num")?,
-            satrec: None,
+            satrec: SatRecCache(None),
         })
     }
 
     /// Format this TLE back into the two canonical 69-char lines.
+    ///
+    /// The element set number (4 columns) and revolution number (5 columns)
+    /// are written modulo 10,000 and 100,000, so a larger value wraps around
+    /// the way catalog TLEs roll the revolution counter over; negative values
+    /// are written as 0.
     ///
     /// # Returns:
     ///
@@ -560,7 +601,8 @@ impl TLE {
         let ndot = format!("{}{}", ndot_sign, ndot_body); // cols 34-43 (10 chars total)
         let nddot = format!("{}{}{}", nddot_sign, nddot_mant, nddot_exp2); // cols 45-52 (8 chars)
         let bstar = format!("{}{}{}", bstar_sign, bstar_mant, bstar_exp2); // cols 54-61 (8 chars)
-        let elem_no = format!("{:>4}", self.element_num.max(0)); // cols 65-68
+                                                                           // Wrap to the column width (see the doc comment)
+        let elem_no = format!("{:>4}", self.element_num.max(0) % 10_000); // cols 65-68
 
         let mut l1 = format!("1 {sat5}U {desig} {epoch} {ndot} {nddot} {bstar} {et} {elem_no}");
 
@@ -577,7 +619,7 @@ impl TLE {
         let argp = format!("{:8.4}", self.arg_of_perigee);
         let mean_anom = format!("{:8.4}", self.mean_anomaly);
         let n = format!("{:11.8}", self.mean_motion);
-        let rev = format!("{:>5}", self.rev_num.max(0));
+        let rev = format!("{:>5}", self.rev_num.max(0) % 100_000);
 
         let mut l2 = format!("2 {sat_alpha5:<5} {incl} {raan} {ecc7} {argp} {mean_anom} {n}{rev}");
 
@@ -846,17 +888,20 @@ where
     type Item = Result<TLE>;
 
     fn next(&mut self) -> Option<Result<TLE>> {
-        for raw in self.lines.by_ref() {
+        while let Some(raw) = self.lines.next() {
             self.line_no += 1;
             // Trim trailing whitespace so CRLF-terminated files (trailing
             // `\r`) don't push line lengths off 69. A TLE data line is >= 69
             // chars (extra trailing content is ignored by `load_2line`) with
             // a `"1 "` / `"2 "` prefix; `starts_with` is byte-safe on
             // non-ASCII.
-            let line = raw.as_ref().trim_end();
-            if line.len() >= 69 && line.starts_with("1 ") {
-                self.line1 = Some((self.line_no, line.to_string()));
-            } else if line.len() >= 69 && line.starts_with("2 ") {
+            let mut line = raw.as_ref().trim_end();
+            if self.line_no == 1 {
+                // A UTF-8 byte-order mark (written by some Windows editors)
+                // is not part of the first line
+                line = line.strip_prefix('\u{feff}').unwrap_or(line);
+            }
+            if line.len() >= 69 && line.starts_with("2 ") {
                 let name = self.name.take();
                 let line1 = self.line1.take();
                 return Some(parse_record(
@@ -865,11 +910,95 @@ where
                     (self.line_no, line),
                     self.check_checksums,
                 ));
-            } else if !line.is_empty() {
+            }
+            if line.is_empty() {
+                continue;
+            }
+            // Its line 2 must come next: a pending line 1 followed by
+            // anything else is a record of its own, and an error
+            let orphan = self
+                .line1
+                .take()
+                .map(|l1| orphan_line1(self.name.take(), l1, Some((self.line_no, line))));
+            if line.len() >= 69 && line.starts_with("1 ") {
+                self.line1 = Some((self.line_no, line.to_string()));
+            } else {
                 self.name = Some((self.line_no, line.to_string()));
             }
+            if let Some(err) = orphan {
+                return Some(Err(err));
+            }
         }
-        None
+        // The input ended after a line 1
+        self.line1
+            .take()
+            .map(|l1| Err(orphan_line1(self.name.take(), l1, None)))
+    }
+}
+
+/// Why a line read as a satellite name may be a TLE data line in disguise
+/// (so its record will fail): e.g. "looks like a line 1 but is 68
+/// characters; a TLE line is 69". `None` for an ordinary name.
+fn data_line_lookalike(line: &str) -> Option<String> {
+    let (body, why) = if let Some(b) = line.strip_prefix('\u{feff}') {
+        (b, Some("starts with a UTF-8 byte-order mark".to_string()))
+    } else if line.starts_with(char::is_whitespace) {
+        (
+            line.trim_start(),
+            Some("starts with whitespace".to_string()),
+        )
+    } else {
+        (line, None)
+    };
+    let which = if body.starts_with("1 ") {
+        1
+    } else if body.starts_with("2 ") {
+        2
+    } else {
+        return None;
+    };
+    // A name can start with "1 "; a data line is ~69 characters
+    if body.len() < 60 {
+        return None;
+    }
+    let why = why.or_else(|| {
+        (body.len() < 69).then(|| format!("is {} characters; a TLE line is 69", body.len()))
+    })?;
+    Some(format!("looks like a line {which} but {why}"))
+}
+
+/// Satellite description for [`Error::Record`]: the number (as written,
+/// possibly alpha5) from the first data line that has one, and the name.
+fn record_sat(data_lines: &[&str], name: Option<&(usize, String)>) -> Option<String> {
+    let num = data_lines
+        .iter()
+        .filter_map(|l| l.get(2..7))
+        .map(str::trim)
+        .find(|s| !s.is_empty());
+    let nm = name.map(|(_, n)| n.strip_prefix("0 ").unwrap_or(n).trim());
+    match (num, nm) {
+        (Some(n), Some(m)) => Some(format!("{n} \"{m}\"")),
+        (Some(n), None) => Some(n.to_string()),
+        (None, Some(m)) => Some(format!("\"{m}\"")),
+        (None, None) => None,
+    }
+}
+
+/// The [`Error::Record`] for a line 1 that no line 2 follows. `next` is the
+/// line that ended the record (`None` at the end of the input).
+fn orphan_line1(
+    name: Option<(usize, String)>,
+    line1: (usize, String),
+    next: Option<(usize, &str)>,
+) -> Error {
+    let hint = next.and_then(|(n, l)| {
+        data_line_lookalike(l).map(|why| format!("line {n}, which follows it, {why}"))
+    });
+    Error::Record {
+        line: name.as_ref().map_or(line1.0, |(n, _)| *n),
+        sat: record_sat(&[&line1.1], name.as_ref()),
+        hint,
+        error: Box::new(Error::MissingLine2),
     }
 }
 
@@ -882,9 +1011,13 @@ fn parse_record(
 ) -> Result<TLE> {
     let l1 = line1.as_ref().map_or("", |(_, s)| s.as_str());
     let l2 = line2.1;
-    let parsed = match &name {
-        None => TLE::load_2line(l1, l2),
-        Some((_, n)) => TLE::load_3line(n, l1, l2),
+    let parsed = if line1.is_none() {
+        Err(Error::MissingLine1)
+    } else {
+        match &name {
+            None => TLE::load_2line(l1, l2),
+            Some((_, n)) => TLE::load_3line(n, l1, l2),
+        }
     }
     .and_then(|tle| {
         if check_checksums {
@@ -904,26 +1037,20 @@ fn parse_record(
             .min()
             .unwrap_or(line2.0);
 
-        // Satellite number (as written, possibly alpha5) and name, if readable
-        let num = [l1, l2]
-            .iter()
-            .filter_map(|l| l.get(2..7))
-            .map(str::trim)
-            .find(|s| !s.is_empty());
-        let nm = name
+        let mut hints: Vec<String> = Vec::new();
+        // A data line that is not quite one (68 characters, a leading space
+        // or byte-order mark) is read as the name, leaving its record short
+        // of a line
+        if let Some((n, why)) = name
             .as_ref()
-            .map(|(_, n)| n.strip_prefix("0 ").unwrap_or(n).trim());
-        let sat = match (num, nm) {
-            (Some(n), Some(m)) => Some(format!("{n} \"{m}\"")),
-            (Some(n), None) => Some(n.to_string()),
-            (None, Some(m)) => Some(format!("\"{m}\"")),
-            (None, None) => None,
-        };
-
+            .and_then(|(n, s)| data_line_lookalike(s).map(|why| (n, why)))
+        {
+            hints.push(format!("line {n}, read as the satellite name, {why}"));
+        }
         // A line longer than 69 characters is accepted (the extra is
         // ignored), but when a field then fails to parse, the likely cause
         // is a field one column too wide shifting the rest of the line.
-        let hint = if matches!(
+        if matches!(
             error,
             Error::ParseField { .. } | Error::ChecksumMismatch { .. }
         ) {
@@ -933,20 +1060,18 @@ fn parse_record(
                 .filter(|(_, s)| s.len() > 69)
                 .map(|(n, s)| format!("line {n} is {} characters", s.len()))
                 .collect();
-            (!long.is_empty()).then(|| {
-                format!(
+            if !long.is_empty() {
+                hints.push(format!(
                     "{}; a TLE line is 69, so its columns may be shifted",
                     long.join(", ")
-                )
-            })
-        } else {
-            None
-        };
+                ));
+            }
+        }
 
         Error::Record {
             line: start,
-            sat,
-            hint,
+            sat: record_sat(&[l1, l2], name.as_ref()),
+            hint: (!hints.is_empty()).then(|| hints.join("; ")),
             error: Box::new(error),
         }
     })
@@ -1278,12 +1403,13 @@ mod tests {
             "1 12345U 67890A 12345.67890123  .00000123  00000-0  12345-6 0  9992".to_string(),
             "2 12345  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615".to_string(),
         ]);
-        assert!(res.is_err(), "Expected error due to short lines, got OK");
+        // The short line 1 is read as the name, leaving line 2 without a
+        // line 1; the hint says what happened
+        let msg = res.expect_err("short line 1 must fail").to_string();
+        assert!(msg.contains("Line 2 without a line 1"), "{msg}");
         assert!(
-            res.unwrap_err()
-                .to_string()
-                .contains("Invalid TLE line lengths"),
-            "Expected error about invalid line lengths."
+            msg.contains("line 2, read as the satellite name, looks like a line 1 but is 67 characters; a TLE line is 69"),
+            "{msg}"
         );
 
         Ok(())
@@ -1380,7 +1506,7 @@ mod tests {
             }
             other => panic!("expected Error::Record, got {other:?}"),
         }
-        assert!(err.to_string().contains("Line 1 too short"), "{err}");
+        assert!(err.to_string().contains("Line 2 without a line 1"), "{err}");
     }
 
     #[test]
@@ -1698,5 +1824,146 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    const ISS1: &str = "1 25544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992";
+    const ISS2: &str = "2 25544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615";
+    const PF1: &str = "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995";
+    const PF2: &str = "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085";
+
+    #[test]
+    fn test_eq_ignores_sgp4_cache() {
+        let fresh = TLE::load_2line(ISS1, ISS2).unwrap();
+        let mut tle = fresh.clone();
+        let t = tle.epoch;
+        crate::sgp4::sgp4(&mut tle, &[t]).unwrap();
+        assert!(tle.satrec.0.is_some());
+        assert_eq!(tle, fresh);
+        assert_eq!(tle.partial_cmp(&fresh), Some(std::cmp::Ordering::Equal));
+        tle.reset_cache();
+        assert!(tle.satrec.0.is_none());
+        assert_eq!(tle, fresh);
+    }
+
+    #[test]
+    fn test_satnum_mismatch_rejected() {
+        // Line 1 of one satellite with line 2 of another: python-sgp4 raises,
+        // and satkit used to build a hybrid element set
+        let err = TLE::load_2line(ISS1, PF2).unwrap_err();
+        assert!(
+            matches!(&err, Error::SatNumMismatch { line1, line2 } if line1 == "25544" && line2 == "45727"),
+            "{err:?}"
+        );
+        let err =
+            TLE::from_lines(&["0 ISS".to_string(), ISS1.to_string(), PF2.to_string()]).unwrap_err();
+        assert!(matches!(err, Error::Record { line: 1, .. }), "{err:?}");
+        assert!(
+            err.to_string().contains("Satellite number differs"),
+            "{err}"
+        );
+
+        // The same number written with a leading zero is not a mismatch
+        let l1 = "1 05485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992";
+        let l2 = "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065";
+        assert_eq!(TLE::load_2line(l1, l2).unwrap().sat_num, 5485);
+    }
+
+    #[test]
+    fn test_orphan_line1_is_an_error() {
+        // A line 1 replaced by another line 1: its own record fails, and the
+        // next record still parses
+        let lines = ["0 LOST", ISS1, "0 PATHFINDER", PF1, PF2];
+        let recs: Vec<_> = TLE::records(lines).collect();
+        assert_eq!(recs.len(), 2);
+        let err = recs[0].as_ref().unwrap_err();
+        assert!(
+            matches!(err, Error::Record { line: 1, sat: Some(s), error, .. }
+                if s == "25544 \"LOST\"" && matches!(**error, Error::MissingLine2)),
+            "{err:?}"
+        );
+        assert_eq!(recs[1].as_ref().unwrap().name, "PATHFINDER");
+
+        let recs: Vec<_> = TLE::records([ISS1, PF1, PF2]).collect();
+        assert_eq!(recs.len(), 2);
+        assert!(matches!(recs[0], Err(Error::Record { line: 1, .. })));
+        assert_eq!(recs[1].as_ref().unwrap().sat_num, 45727);
+
+        // A trailing name + line 1 at the end of the input
+        let lines = [PF1, PF2, "0 TRUNCATED", ISS1];
+        let recs: Vec<_> = TLE::records(lines).collect();
+        assert_eq!(recs.len(), 2);
+        assert!(recs[0].is_ok());
+        let err = recs[1].as_ref().unwrap_err();
+        assert!(matches!(err, Error::Record { line: 3, .. }), "{err:?}");
+        assert!(err.to_string().contains("Line 1 without a line 2"), "{err}");
+        assert!(TLE::from_lines(&lines.map(String::from)).is_err());
+    }
+
+    #[test]
+    fn test_hint_for_data_line_read_as_name() {
+        // A 68-character line 1 is not a data line, so it becomes the name
+        let short = &ISS1[..68];
+        let err = TLE::from_lines(&[short.to_string(), ISS2.to_string()]).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Line 2 without a line 1"), "{msg}");
+        assert!(
+            msg.contains("line 1, read as the satellite name, looks like a line 1 but is 68 characters; a TLE line is 69"),
+            "{msg}"
+        );
+
+        // So does one with a leading space
+        let err = TLE::from_lines(&[format!(" {ISS1}"), ISS2.to_string()]).unwrap_err();
+        assert!(err.to_string().contains("starts with whitespace"), "{err}");
+
+        // A 68-character line 2 ends its line 1's record
+        let err = TLE::from_lines(&[ISS1.to_string(), ISS2[..68].to_string()]).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Line 1 without a line 2"), "{msg}");
+        assert!(
+            msg.contains("line 2, which follows it, looks like a line 2 but is 68 characters"),
+            "{msg}"
+        );
+
+        // A byte-order mark at the start of the input is dropped; one later
+        // on (e.g. concatenated files) is named in the hint
+        let tles = TLE::from_lines(&[format!("\u{feff}{ISS1}"), ISS2.to_string()]).unwrap();
+        assert_eq!(tles[0].sat_num, 25544);
+        let tles = TLE::from_lines(&[
+            "\u{feff}0 ISS".to_string(),
+            ISS1.to_string(),
+            ISS2.to_string(),
+        ])
+        .unwrap();
+        assert_eq!(tles[0].name, "ISS");
+        let err = TLE::from_lines(&[
+            PF1.to_string(),
+            PF2.to_string(),
+            format!("\u{feff}{ISS1}"),
+            ISS2.to_string(),
+        ])
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("starts with a UTF-8 byte-order mark"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_2line_wraps_counters() {
+        let mut tle = TLE::load_2line(ISS1, ISS2).unwrap();
+        tle.element_num = 12345;
+        tle.rev_num = 123456;
+        let [l1, l2] = tle.to_2line().unwrap();
+        assert_eq!(l1.len(), 69, "{l1}");
+        assert_eq!(l2.len(), 69, "{l2}");
+        let back = TLE::records([l1.as_str(), l2.as_str()])
+            .check_checksums(true)
+            .next()
+            .unwrap()
+            .unwrap();
+        assert_eq!(back.element_num, 2345);
+        assert_eq!(back.rev_num, 23456);
+        assert_eq!(back.mean_motion, tle.mean_motion);
     }
 }

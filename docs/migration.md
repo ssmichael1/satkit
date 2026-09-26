@@ -25,6 +25,13 @@ each change to its pull request, where the details are.
   exactly π): its elements described a different state. **Do this:** recompute
   elements of such orbits.
 
+- **Editing a propagated TLE, or changing `gravconst` / `opsmode` between
+  calls on it, had no effect through 0.23.** SGP4 kept using the
+  initialization from the first call on that TLE (thousands of km after an
+  element edit, ~120 m at LEO after a gravity-model change). **Do this:**
+  recompute results from TLEs that were edited or re-propagated with other
+  settings.
+
 ## Python API
 
 - **`satproperties()` is keyword-only.** A positional call raises
@@ -49,6 +56,13 @@ each change to its pull request, where the details are.
   raises `ValueError`. **Do this:** `tle = sk.TLE.from_lines(lines)[0]`. See
   [Loading TLEs](guide/tle.md#loading-tles) for the located parse errors and
   the new `check_checksum=True` option.
+- **`sgp4(..., errflag=True)` no longer raises for an element set SGP4
+  cannot initialize** (decayed or eccentricity out of range at epoch,
+  SGP4-XP): its rows are NaN and every time carries its init code
+  (`sgp4_error.unsupported` for SGP4-XP or unusable OMM metadata), and the
+  other element sets of a list are still propagated. Without `errflag` it
+  still raises; for a list the message gives the index. **Do this:** check
+  the error array instead of catching `RuntimeError`.
 - **`TLE.from_url()` and `omm_from_url()` honour offline mode**
   (`SATKIT_OFFLINE=1` or `utils.set_offline(True)`) and raise `RuntimeError`.
   **Do this:** turn offline mode off in scripts that fetch element sets.
@@ -90,6 +104,9 @@ they used to return a meaningless value:
 | `kepler.from_pv(<NaN or inf>)` | NaN elements | `ValueError` |
 | `kepler.propagate(nan)`, `kepler.propagate(inf)` | unchanged or a garbage anomaly | `ValueError` |
 | `density.nrlmsise(..., <not a time>)` (a `str`, a number, ...) | ignored: ran on the default indices | `TypeError` |
+| `TLE.from_lines()` with a line 1 and line 2 of different satellites | a hybrid TLE | `RuntimeError` |
+| `TLE.from_lines()` with a line 1 whose line 2 is missing | dropped silently | `RuntimeError` |
+| `sgp4()` of an OMM whose `REF_FRAME` is not TEME or `CENTER_NAME` not EARTH | propagated | `RuntimeError` |
 
 Some calls that raised now work: `gravity([7e6, 0, 0])` and integer arrays,
 `time - [t1, t2]` (an array of `duration`), `time + <integer or float32
@@ -216,6 +233,14 @@ lists.
 - **`density.nrlmsise()` uses a `datetime.datetime` time and integer
   angles.** Through 0.23 a `datetime` was silently ignored (defaults, up to
   8× low in a storm) and an `int` latitude or longitude was read as 0.
+- **Rust `sgp4::sgp4()` uses WGS72 and the AFSPC ops mode** (was WGS84 and
+  IMPROVED), the Python default; the ISS moves 14 m at epoch and ~280 m after
+  a week. **Do this:** call `sgp4_full(..., GravConst::WGS84,
+  OpsMode::IMPROVED)` to keep the old numbers.
+- **`TLE.fit_from_states()` fits with WGS72** (was WGS84) and the full TEME →
+  GCRF rotation. **Do this:** propagate fitted TLEs with the default
+  `sgp4()`, or pass `gravconst=sgp4_gravconst.wgs84` (Rust:
+  `fit_from_states_full`) to both.
 
 ## Rust API
 
@@ -245,3 +270,8 @@ lists.
 - **`tle::Error` has new `Record` and `ChecksumMismatch` variants** (the enum
   is `#[non_exhaustive]`), and every `TLE::from_lines` / `from_url` error is
   wrapped in `Record` with its line number and satellite.
+- **`sgp4::SGP4InitArgs::jdsatepoch` is now `epoch_days_1950`** (days since
+  1949-12-31 00:00 UTC, kept to sub-microsecond precision), and
+  `SGP4InitArgs::from_mean_elements` takes the epoch as an `Instant`.
+  **Do this:** update custom `SGP4Source` implementations. `OMM::reset_cache`
+  and the new `TLE::reset_cache` are no longer needed after edits.

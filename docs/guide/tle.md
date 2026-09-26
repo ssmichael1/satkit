@@ -17,6 +17,16 @@ It was developed to support U.S. space surveillance as a fast, closed-form alter
 
 satkit implements classic SGP4 only. Element sets flagged as **SGP4-XP** (ephemeris type 4 in TLE line 1, column 63, or `EPHEMERIS_TYPE: 4` in an OMM) parse normally, but `sgp4()` raises an error rather than propagating them: SGP4-XP is a different theory whose line 1 stores agom and a B term where a classic TLE stores nddot and $B^*$, and its reference implementation is distributed by the U.S. Space Force as binaries only. Such sets are rare in public catalogs.
 
+### Gravity model, ops mode and time
+
+`satkit.sgp4()` and Rust `sgp4::sgp4()` use the WGS72 gravity model and the AFSPC ops mode by default, the model the catalog element sets are fitted with; pass `gravconst` / `opsmode` (Rust: `sgp4_full`) for the others. Before 0.24 the Rust `sgp4()` default was WGS84 with the IMPROVED ops mode (14 m apart at epoch and ~280 m after a week for the ISS). python-sgp4's `Satrec.twoline2rv` also uses WGS72, with the IMPROVED ops mode; the two ops modes differ only for deep-space orbits below about 11.5° inclination. `TLE.fit_from_states()` fits with the same defaults and takes the same keywords, so a fitted TLE should be propagated with the settings it was fitted with.
+
+The SGP4 initialization is cached in the TLE (or Rust `OMM`) after the first propagation, together with the elements, gravity model and ops mode it was built from; editing an element or passing another `gravconst` / `opsmode` rebuilds it, and TLE equality ignores it.
+
+The time since epoch is the physical (SI) time elapsed between the element-set epoch and the requested time. Across a leap second this is one second more than the difference of the UTC labels that Vallado's reference code and python-sgp4 use, so satkit differs from them by 1 s of along-track motion (~7.6 km at LEO) per leap second between epoch and time. This is deliberate: the satellite really flies 86,401 s over a day with a leap second, and SGP4's mean motion is per SI day.
+
+A time at which propagation fails (e.g. the orbit has decayed) gives a NaN row, with its code in the error array when `errflag=True`. An element set that cannot be initialized at all raises `RuntimeError`, unless `errflag=True`: then its rows are NaN and its initialization error code is reported at every time, so one bad element set does not fail a list.
+
 Today, SGP4 is the standard propagator for TLEs published by organizations like NORAD and CelesTrak, and is widely used for satellite tracking, visualization, conjunction screening, and mission planning — though its accuracy is fundamentally limited by TLE quality and simplifying assumptions.
 
 ## Ephemeris Representation
@@ -43,7 +53,7 @@ OMMs are commonly published as:
 
 satkit reads the JSON and XML forms (KVN is not supported). In Python an OMM is a plain dictionary keyed by the CCSDS field names: `satkit.omm_from_url()`, `satkit.omm_from_file()` and `satkit.omm_from_text()` return a list of them, with every field the source provided (Space-Track's catalog extras such as `OBJECT_TYPE` and `RCS_SIZE` included) and numbers converted from Space-Track's quoted strings. `satkit.sgp4()` accepts these dictionaries directly, as well as the raw output of `json.load` on a CelesTrak or Space-Track response. `satkit.TLE.from_omm()` and `satkit.TLE.to_omm()` convert between the two representations.
 
-A message whose `MEAN_ELEMENT_THEORY` is not SGP4, whose `TIME_SYSTEM` is not UTC, or whose `EPHEMERIS_TYPE` is 4 (SGP4-XP, which Space-Track distributes alongside classic SGP4 sets) is rejected rather than propagated with the wrong theory.
+A message whose `MEAN_ELEMENT_THEORY` is not SGP4, whose `TIME_SYSTEM` is not UTC, whose `REF_FRAME` is not TEME, whose `CENTER_NAME` is not EARTH, or whose `EPHEMERIS_TYPE` is 4 (SGP4-XP, which Space-Track distributes alongside classic SGP4 sets) is rejected rather than propagated with the wrong theory. `EPOCH` may be an RFC 3339 date-time or the CCSDS day-of-year form `YYYY-DDDThh:mm:ss`.
 
 In Rust the same message is the `satkit::omm::OMM` struct, which implements `SGP4Source`, serializes back to JSON with `serde`, and converts with `OMM::from_tle` / `OMM::to_tle`.
 
@@ -51,7 +61,7 @@ In Rust the same message is the `satkit::omm::OMM` struct, which implements `SGP
 
 `TLE.from_lines()`, `TLE.from_file()` and `TLE.from_url()` accept 2-line and 3-line (named) element sets, any number of them, and always return a `list[TLE]`, even for a single element set. Input with no element sets raises `ValueError`.
 
-A record that fails to parse raises `RuntimeError` naming the input line the record starts on and its satellite. A data line longer than the standard 69 characters is accepted (the extra columns are ignored), but if a field of such a record then fails to parse, the message says so: a field written one column too wide shifts every later column of the line. Checksums (column 69) are not verified unless requested with `check_checksum=True` (`from_lines` and `from_file`).
+A record that fails to parse raises `RuntimeError` naming the input line the record starts on and its satellite. So does a line 1 whose line 2 does not follow it, and a line 1 and line 2 with different satellite numbers. A line that is almost a data line (68 characters, or a leading space) is read as a satellite name, and the error then says so; a UTF-8 byte-order mark at the start of the input is ignored. A data line longer than the standard 69 characters is accepted (the extra columns are ignored), but if a field of such a record then fails to parse, the message says so: a field written one column too wide shifts every later column of the line. Checksums (column 69) are not verified unless requested with `check_checksum=True` (`from_lines` and `from_file`).
 
 ```python
 import satkit as sk

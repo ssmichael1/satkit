@@ -1,7 +1,10 @@
-use super::OpsMode;
+use super::{OpsMode, SatRecKey};
 
 #[derive(PartialEq, PartialOrd, Clone, Debug)]
 pub struct SatRec {
+    /// What this record was initialized from; `None` for a record not built
+    /// by [`sgp4_full`](super::sgp4_full), which is then never reused.
+    pub(crate) init_key: Option<SatRecKey>,
     pub epochyr: i32,
     pub epochtynumrev: i32,
     pub error: i32,
@@ -148,6 +151,7 @@ impl Default for SatRec {
 impl SatRec {
     pub const fn new() -> Self {
         Self {
+            init_key: None,
             epochyr: 0,
             epochtynumrev: 0,
             error: 0,
