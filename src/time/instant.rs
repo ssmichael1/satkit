@@ -38,6 +38,11 @@ fn days_in_month(year: i32, month: i32) -> i32 {
 /// handle different time scales such as UTC, TAI, TT, UT1, GPS, etc.
 /// This is necessary for high-precision coordinate transforms and orbit propagation.
 ///
+/// The range is about ±292,000 years around 1970. Adding or subtracting a
+/// [`Duration`](crate::Duration) with `+` / `-` saturates at its ends (never
+/// panics, never wraps); [`checked_add`](Self::checked_add) and
+/// [`checked_sub`](Self::checked_sub) return `None` instead.
+///
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Instant {
     /// TAI microseconds since 1970-01-01 00:00:00 TAI (the TAI MJD is
@@ -149,6 +154,13 @@ fn add_leapseconds(utc: i64) -> i64 {
     // Saturating: `utc` may already be pegged at the i64 boundaries (the
     // MJD/unixtime constructors saturate out-of-range inputs)
     utc.saturating_add(utc_microleapseconds(utc))
+}
+
+/// [`add_leapseconds`] for a calendar-date constructor, which reports a
+/// year beyond the representable range instead of saturating: `None` if the
+/// result does not fit.
+fn checked_add_leapseconds(utc: i64) -> Option<i64> {
+    utc.checked_add(utc_microleapseconds(utc))
 }
 
 /// If `raw` falls inside an inserted (leap-second) interval, return the
@@ -955,7 +967,7 @@ impl Instant {
                 .ok_or(InstantError::InvalidLeapSecond);
         }
 
-        let raw = add_leapseconds(utc);
+        let raw = checked_add_leapseconds(utc).ok_or(InstantError::InvalidYear(year))?;
         Ok(Self { raw })
     }
 
@@ -993,7 +1005,8 @@ impl Instant {
             // (Unix) basis, which `add_leapseconds` maps to the instant.
             return minute_start
                 .checked_add(second_us)
-                .map(Self::from_unixtime_microseconds)
+                .and_then(checked_add_leapseconds)
+                .map(|raw| Self { raw })
                 .ok_or(InstantError::InvalidYear(year));
         }
         // A leap-second label (`00:59:60.x+01:00`): rebuild the UTC minute

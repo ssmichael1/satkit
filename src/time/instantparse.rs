@@ -368,6 +368,12 @@ impl Instant {
                     }
                 };
                 offset = Some(offset_minutes(sign, h.parse()?, m.parse()?, s)?);
+            } else if fields[0].is_none() && frac.is_none() && offset.is_none() {
+                // The year keeps a sign written before it ("-0044-03-15",
+                // the ISO 8601 expanded form); it used to be dropped,
+                // turning 44 BC into AD 44.
+                let year: i32 = digits.parse()?;
+                fields[0] = Some(if sep == Some('-') { -year } else { year });
             } else if let Some(slot) = fields
                 .iter_mut()
                 .find(|f| f.is_none())

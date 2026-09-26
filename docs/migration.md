@@ -80,6 +80,8 @@ they used to return a meaningless value:
 | `duration(days=nan)`, `duration.from_seconds(inf)`, ... | 0 or saturated | `ValueError` |
 | `time + nan`, `time - inf` (scalar, list or array) | `t` or a garbage label | `ValueError` |
 | `duration(days=1e300)`, `time + 1e300` | saturated or a garbage label | `OverflowError` |
+| `duration(days=1e8, seconds=1e12)`, `(t + 1e8) + 1e8`, `duration + duration`: any result beyond about ±292,000 years | wrapped around (a negative duration, year −34949) | `OverflowError` |
+| `propsettings(gravity_degree=4, gravity_order=10)` | order clamped to 4 | `ValueError` (as the `gravity_order` setter) |
 | `propagate(..., duration_secs=nan)` | ran to an invalid end | `ValueError` |
 | `propresult.interp(..., output_phi=True)` without the STM | the state alone | `ValueError` |
 | `TLE.epoch = [t1, t2]` | used `t1` | `TypeError` |
@@ -90,8 +92,9 @@ they used to return a meaningless value:
 | `density.nrlmsise(..., <not a time>)` (a `str`, a number, ...) | ignored: ran on the default indices | `TypeError` |
 
 Some calls that raised now work: `gravity([7e6, 0, 0])` and integer arrays,
-`time - [t1, t2]` (an array of `duration`), and batch state transforms given
-integer arrays or nested lists.
+`time - [t1, t2]` (an array of `duration`), `time + <integer or float32
+array of days>`, and batch state transforms given integer arrays or nested
+lists.
 
 ## Time
 
@@ -123,7 +126,8 @@ integer arrays or nested lists.
 - **`strptime` `%z` sign is fixed**: `12:00:00+0100` is `11:00:00Z` (it was
   `13:00:00Z`). **Do this:** remove any workaround.
 - **Years outside 0000–9999 print in ISO 8601 expanded form** (`-0001`,
-  `+10000`), and `from_rfc3339` / `strptime` read them back.
+  `+10000`), and `from_rfc3339` / `strptime` read them back, as does
+  `from_string` (`"-0044-03-15 12:00:00"` was AD 44).
 - **UTC before 1972 follows the 1961–1971 "rubber second" model** of USNO
   `tai-utc.dat` / ERFA, and TAI − UTC is 0 before 1961. Pre-1972 labels
   convert up to 9.9 s differently. A stored pre-1972 instant (a pickle, say)
@@ -156,6 +160,10 @@ integer arrays or nested lists.
   provision data with `sk.utils.update_datafiles()` plus `SATKIT_DATA` or
   `sk.utils.add_search_dir()`, as in
   [Provisioning up front](getting-started/datadirs.md#provisioning-up-front).
+- **A truncated `finals2000A.all` is an error.** A line cut short (an
+  interrupted copy) fails to load instead of ending the table early, and a
+  download without predictions is rejected, keeping the file on disk.
+  **Do this:** re-copy or refresh a file that now fails to load.
 - **Stale predictions warn.** A lookup past the last observed row of a file
   whose observed data ended more than 30 days ago prints a one-time warning.
   **Do this:** refresh with `update_datafiles()`.
@@ -222,6 +230,14 @@ integer arrays or nested lists.
   and update exhaustive matches.
 - **`orbitprop::Error::EopCoverage` has new `span_start` and `table_start`
   fields.** **Do this:** use `EopCoverage { .. }` in patterns.
+- **`Instant` / `Duration` `+` and `-` saturate** at the ends of the
+  ±292,000-year range in every build (they panicked in debug builds and
+  wrapped in release). **Do this:** use the new `checked_add`, `checked_sub`
+  and `Instant::checked_duration_since` where overflow must be detected.
+- **`Gravity::parse` honours the ICGEM `norm` header** (an `unnormalized`
+  file was de-normalized twice), and rejects a header without a positive
+  `earth_gravity_constant` or `radius` (`Error::InvalidLine`); an unrecognised
+  `tide_system` is classified from C̄20. Only custom files are affected.
 - **`Instant::UNIX_EPOCH.raw` is `8_000_082`** (was 0), because TAI − UTC was
   8.000082 s on 1970-01-01 under the pre-1972 model. **Do this:** build
   Unix-time instants with `Instant::from_unixtime_microseconds`, not from raw

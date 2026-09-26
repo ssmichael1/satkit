@@ -207,10 +207,17 @@ fn download_refresh_files(
 
 /// Refresh the regularly updated files into `dir`, print what happened to
 /// each, and reload the space-weather and EOP tables from `dir` — also when
-/// some of the files failed, so whatever did arrive is used. Returns the
-/// failures ([`summarize_failures`]) after the reload.
+/// some of the files failed, so whatever did arrive is used. The EOP table
+/// is reloaded only when its own refresh succeeded: after a failure the copy
+/// in `dir` is the one that was already there, possibly older than the
+/// loaded table (the default load reads the freshest copy across the search
+/// directories). Returns the failures ([`summarize_failures`]) after the
+/// reload.
 fn refresh_and_reload(dir: &std::path::Path, sources: &RefreshSources, force: bool) -> Result<()> {
     let (refreshed, failures) = download_refresh_files(dir, sources, force);
+    let eop_refreshed = refreshed
+        .iter()
+        .any(|(name, _, _)| name == crate::earth_orientation_params::FINALS2000A_FILE);
     for (name, url, outcome) in refreshed {
         match outcome {
             RefreshOutcome::Fresh { age_secs } => println!(
@@ -236,9 +243,10 @@ fn refresh_and_reload(dir: &std::path::Path, sources: &RefreshSources, force: bo
             eprintln!("Warning: could not load the refreshed space-weather files: {e}");
         }
     }
-    if dir
-        .join(crate::earth_orientation_params::FINALS2000A_FILE)
-        .is_file()
+    if eop_refreshed
+        && dir
+            .join(crate::earth_orientation_params::FINALS2000A_FILE)
+            .is_file()
     {
         if let Err(e) = crate::earth_orientation_params::load_from_dir(dir) {
             eprintln!("Warning: could not load downloaded EOP file: {e}");
@@ -1086,6 +1094,29 @@ mod tests {
         assert_eq!(server.hits(), 2);
         drop(server);
 
+        // First mirror serves a truncated transfer — cut inside the UT1-UTC
+        // field of the predicted row ("P-0." used to parse as 0.0), or at a
+        // line boundary before the predictions: rejected, second mirror used.
+        let second = FINALS.lines().nth(1).unwrap();
+        let cut_in_field = format!("{}\n{}", FINALS.lines().next().unwrap(), &second[..62]);
+        let cut_at_line = format!("{}\n", FINALS.lines().next().unwrap());
+        for truncated in [cut_in_field, cut_at_line] {
+            let server = TestServer::start(HashMap::from([
+                ("usno/finals2000A.all".to_string(), truncated.into_bytes()),
+                (
+                    "iers/finals2000A.all".to_string(),
+                    FINALS.as_bytes().to_vec(),
+                ),
+            ]));
+            let out = eop::refresh_into_with_sources(&dir, &eop_sources(&server), true).unwrap();
+            assert_eq!(out.url, server.url("iers/finals2000A.all"));
+            assert_eq!(server.hits(), 2);
+            assert_eq!(
+                std::fs::read_to_string(dir.join("finals2000A.all")).unwrap(),
+                FINALS
+            );
+        }
+
         // Nothing answers: every URL is named, and the file already on disk
         // is untouched.
         let server = TestServer::start(HashMap::new());
@@ -1131,6 +1162,10 @@ mod tests {
         }
         let msg = err.to_string();
         assert!(msg.contains("cannot be refreshed while offline"), "{msg}");
+        // The copy named is left unchanged; it is not claimed to be the one
+        // in use (the default load picks the freshest copy anywhere).
+        assert!(msg.contains("nothing was changed"), "{msg}");
+        assert!(!msg.contains("still used"), "{msg}");
         assert!(msg.contains("set_offline"), "{msg}");
         assert!(msg.contains(&server.url("usno/finals2000A.all")), "{msg}");
         assert!(msg.contains(&server.url("iers/finals2000A.all")), "{msg}");
@@ -1599,20 +1634,28 @@ mod tests {
             other => panic!("expected AllSourcesFailed, got {other:?}"),
         }
 
-        // EOP failing (no mirror answers) does not stop the feeds either.
+        // EOP failing (no mirror answers) does not stop the feeds either,
+        // and the loaded table is not replaced by the older copy the failed
+        // refresh left in the directory (it used to be reloaded anyway).
         let _ = std::fs::remove_dir_all(&dir);
         let dir = tmpdir("refresh_partial_eop");
+        let older = "\
+92 3 2 48683.00 I  0.006416 0.000153  0.116395 0.000159  I-0.2719443 0.0000093  2.3575 0.0080  I     0.054    0.168     0.085    0.150\n";
+        std::fs::write(dir.join("finals2000A.all"), older).unwrap();
         let dead_eop = vec![crate::utils::manifest::RefreshSource {
             name: "finals2000A.all".into(),
             urls: vec![server.url("nowhere/finals2000A.all")],
         }];
         let feeds = vec![server.url("feeds/good.txt")];
-        let err = refresh_and_reload(&dir, &test_sources(&feeds, &dead_eop), false).unwrap_err();
+        let err = refresh_and_reload(&dir, &test_sources(&feeds, &dead_eop), true).unwrap_err();
         assert!(
             matches!(&err, Error::Download(download::Error::AllSourcesFailed { name, .. }) if name.contains("Earth orientation")),
             "{err:?}"
         );
         assert!(dir.join("good.txt").is_file());
+        let cov = eop::coverage().expect("EOP table still loaded");
+        assert_eq!(cov.first.as_mjd_utc(), 61300.0);
+        assert_eq!(cov.last.as_mjd_utc(), 61301.0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

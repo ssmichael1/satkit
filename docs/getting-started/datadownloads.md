@@ -84,8 +84,11 @@ A proxy that answers with a notice page instead of blocking outright cannot
 corrupt the data either: `finals2000A.all` and each of the three
 space-weather files are parsed before they replace the copy on disk, and any
 download that opens with an HTML document is
-rejected. The partial file is discarded and the existing one left in place, so a
-blocked refresh degrades to a stale table rather than a broken one.
+rejected. A `finals2000A.all` transfer cut short (inside a line, or before
+its predictions) is rejected the same way. The partial file is discarded and the
+existing one left in place, so a
+blocked refresh degrades to a stale table rather than a broken one, and the
+Earth-orientation table already loaded stays in use.
 
 Note that `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are deliberately ignored:
 Python tooling routinely points them at a stock public bundle, which is the one

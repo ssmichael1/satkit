@@ -41,6 +41,15 @@ pub(crate) fn check_duration_value(value: f64, us_per_unit: f64, what: &str) -> 
     Ok(())
 }
 
+/// The `OverflowError` for time or duration arithmetic whose result is
+/// beyond the ±2^63-microsecond range (about ±292,000 years). The core
+/// operators saturate there; the bindings use the checked forms and raise.
+pub(crate) fn arithmetic_overflow(what: &str) -> PyErr {
+    pyo3::exceptions::PyOverflowError::new_err(format!(
+        "{what} out of range (beyond about ±292,000 years)"
+    ))
+}
+
 /// Class representing durations of times, allowing for representation
 /// via common measures of duration (years, days, hours, minutes, seconds)
 ///
@@ -110,13 +119,18 @@ impl PyDuration {
         check_duration_value(hours, US_PER_HOUR, "hours")?;
         check_duration_value(minutes, US_PER_MINUTE, "minutes")?;
         check_duration_value(seconds, US_PER_SECOND, "seconds")?;
-        Ok(Self(
-            Duration::from_seconds(seconds)
-                + Duration::from_days(days)
-                + Duration::from_minutes(minutes)
-                + Duration::from_hours(hours)
-                + Duration::from_microseconds(microseconds),
-        ))
+        // Each component fits; their sum may not (it used to wrap:
+        // duration(days=1e8, seconds=1e12) came out negative)
+        [
+            Duration::from_days(days),
+            Duration::from_minutes(minutes),
+            Duration::from_hours(hours),
+            Duration::from_microseconds(microseconds),
+        ]
+        .into_iter()
+        .try_fold(Duration::from_seconds(seconds), |acc, d| acc.checked_add(d))
+        .map(Self)
+        .ok_or_else(|| arithmetic_overflow("duration"))
     }
 
     /// Create new duration object from the number of days
@@ -191,17 +205,18 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration|satkit.time: New duration or time object
-    fn __add__(&self, other: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+    ///
+    /// Raises:
+    ///     OverflowError: if the result is out of range (beyond about ±292,000 years)
+    fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         if other.is_instance_of::<Self>() {
-            let dur = other
-                .extract::<Self>()
-                .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
-            Ok(Self(self.0 + dur.0).into_py_any(other.py())?)
+            let dur = other.extract::<Self>()?;
+            let sum = self.0.checked_add(dur.0);
+            Self(sum.ok_or_else(|| arithmetic_overflow("duration"))?).into_py_any(other.py())
         } else if other.is_instance_of::<PyInstant>() {
-            let tm = other
-                .extract::<PyInstant>()
-                .map_err(|e| anyhow::anyhow!("Invalid time object: {}", e))?;
-            Ok(PyInstant(tm.0 + self.0).into_py_any(other.py())?)
+            let tm = other.extract::<PyInstant>()?;
+            let t = tm.0.checked_add(self.0);
+            PyInstant(t.ok_or_else(|| arithmetic_overflow("time"))?).into_py_any(other.py())
         } else {
             // Not a supported operand: let Python raise its standard
             // `TypeError: unsupported operand type(s)`. A bare number is
@@ -217,8 +232,14 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration: New duration object representing the difference
-    fn __sub__(&self, other: &Self) -> Self {
-        Self(self.0 - other.0)
+    ///
+    /// Raises:
+    ///     OverflowError: if the result is out of range (beyond about ±292,000 years)
+    fn __sub__(&self, other: &Self) -> PyResult<Self> {
+        self.0
+            .checked_sub(other.0)
+            .map(Self)
+            .ok_or_else(|| arithmetic_overflow("duration"))
     }
 
     /// Multiply duration by a scalar (scale duration)

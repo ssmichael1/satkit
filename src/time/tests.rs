@@ -1076,3 +1076,40 @@ fn test_parsed_fraction_rounds_and_carries() {
     // Rounding never makes a label valid that is not: no leap second here
     assert!(Instant::from_rfc3339("2024-12-31T23:59:60.0000001Z").is_err());
 }
+
+/// `from_string` keeps the sign of an expanded-form year when it falls back
+/// from RFC 3339 (a space separator, or a date alone). The sign used to be
+/// dropped: "-0044-03-15 12:00:00" parsed as AD 44.
+#[test]
+fn test_from_string_keeps_year_sign() {
+    for (s, ymd) in [
+        ("-0044-03-15 12:00:00", (-44, 3, 15)),
+        ("-0044-03-15", (-44, 3, 15)),
+        ("+0044-03-15 12:00:00", (44, 3, 15)),
+        ("-4716-01-01 00:00", (-4716, 1, 1)),
+        ("+10000-03-15", (10_000, 3, 15)),
+        ("0044-03-15 12:00:00", (44, 3, 15)),
+    ] {
+        let t = Instant::from_string(s).unwrap_or_else(|e| panic!("{s:?}: {e}"));
+        let (y, m, d, _, _, _) = t.as_datetime();
+        assert_eq!((y, m, d), ymd, "{s:?}");
+    }
+    // The RFC 3339 form agrees with the fallback.
+    assert_eq!(
+        Instant::from_string("-0044-03-15 12:00:00").unwrap(),
+        Instant::from_rfc3339("-0044-03-15T12:00:00Z").unwrap()
+    );
+}
+
+/// A calendar date whose instant would be past the i64 microsecond range is
+/// an error, not a silently saturated time (the leap-second fold used to
+/// saturate, so "+294247-01-10T04:00:54.775807Z" parsed to `i64::MAX`).
+#[test]
+fn test_year_beyond_range_is_an_error() {
+    assert!(Instant::from_rfc3339("+294247-01-10T04:00:54.775807Z").is_err());
+    assert!(Instant::from_string("+294247-01-10 04:00:54.775807").is_err());
+    assert!(Instant::from_datetime(294_247, 1, 10, 4, 0, 54.775807).is_err());
+    assert!(Instant::from_rfc3339("+294247-01-10T04:00:54.775807-01:00").is_err());
+    // A year well inside the range still works.
+    assert!(Instant::from_rfc3339("+200000-01-01T00:00:00Z").is_ok());
+}

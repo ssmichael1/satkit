@@ -250,6 +250,110 @@ class TestEpochConstants:
         assert sk.time.MJD_EPOCH.to_mjd(sk.timescale.UTC) == pytest.approx(0.0, abs=1e-9)
 
 
+class TestArithmeticOverflow:
+    """Time and duration arithmetic beyond the ±2^63-microsecond range
+    (about ±292,000 years) raises OverflowError; it used to wrap around
+    silently (duration(days=1e8, seconds=1e12) was negative, and adding 1e8
+    days twice to 2024 gave year -34949)."""
+
+    T = sk.time(2024, 1, 1)
+
+    def test_duration_constructor_sum(self):
+        with pytest.raises(OverflowError):
+            sk.duration(days=1e8, seconds=1e12)
+        # Each argument alone fits
+        assert sk.duration(days=1e8).days == 1e8
+        assert sk.duration(seconds=1e12).seconds == 1e12
+
+    def test_duration_add_sub(self):
+        big = sk.duration(days=1e8)
+        with pytest.raises(OverflowError):
+            big + big
+        with pytest.raises(OverflowError):
+            big - sk.duration(days=-1e8)
+        with pytest.raises(OverflowError):
+            sk.duration(microseconds=2**63 - 1) + sk.duration(microseconds=1)
+        with pytest.raises(OverflowError):
+            sk.duration(microseconds=-(2**63)) - sk.duration(microseconds=1)
+        assert (big - big).microseconds == 0
+
+    def test_time_plus_days(self):
+        far = self.T + 1e8
+        assert far > self.T
+        with pytest.raises(OverflowError):
+            far + 1e8
+        with pytest.raises(OverflowError):
+            (self.T - 1e8) - 1e8
+        with pytest.raises(OverflowError):
+            far + [0.0, 1e8]
+        with pytest.raises(OverflowError):
+            far + np.array([1e8])
+
+    def test_time_plus_duration(self):
+        big = sk.duration(days=1e8)
+        with pytest.raises(OverflowError):
+            self.T + big + big
+        with pytest.raises(OverflowError):
+            big + (self.T + big)
+        with pytest.raises(OverflowError):
+            self.T - big - big
+        with pytest.raises(OverflowError):
+            (self.T + big) + [big]
+
+    def test_time_difference(self):
+        far = self.T + 1e8
+        near = self.T - 1e8
+        with pytest.raises(OverflowError):
+            far - near
+        with pytest.raises(OverflowError):
+            far - [near]
+        assert (far - self.T).days == pytest.approx(1e8)
+
+
+class TestTimeArrayOperands:
+    """A real numeric 1-D numpy array of days is accepted whatever its
+    dtype (integer and float32 arrays used to raise TypeError)"""
+
+    T = sk.time(2024, 1, 1)
+
+    @pytest.mark.parametrize("dtype", [np.float64, np.float32, np.int64, np.int32, np.uint8])
+    def test_numeric_dtypes(self, dtype):
+        days = np.array([1, 2], dtype=dtype)
+        out = self.T + days
+        assert list(out) == [self.T + 1.0, self.T + 2.0]
+        out = self.T - days
+        assert list(out) == [self.T - 1.0, self.T - 2.0]
+
+    def test_non_numeric_arrays_raise(self):
+        with pytest.raises(TypeError):
+            self.T + np.array([True, False])
+        with pytest.raises(TypeError):
+            self.T + np.zeros((2, 2))
+        with pytest.raises(TypeError):
+            self.T + np.array([sk.duration(days=1)], dtype=object)
+
+
+class TestFromStringYearSign:
+    """from_string keeps the sign of an expanded-form year when it falls
+    back from RFC 3339 (the sign used to be dropped: 44 BC became AD 44)"""
+
+    @pytest.mark.parametrize(
+        "s, year",
+        [
+            ("-0044-03-15 12:00:00", -44),
+            ("-0044-03-15", -44),
+            ("+0044-03-15 12:00:00", 44),
+            ("+10000-03-15", 10000),
+        ],
+    )
+    def test_signed_year(self, s, year):
+        t = sk.time.from_string(s)
+        assert t.to_gregorian()[0] == year
+        assert t == sk.time.from_rfc3339(
+            s.replace(" ", "T") + ("Z" if " " in s else "T00:00:00Z")
+        )
+
+
 class TestDurationUnits:
     def test_from_milliseconds_and_microseconds(self):
         d = sk.duration.from_milliseconds(1500.0)

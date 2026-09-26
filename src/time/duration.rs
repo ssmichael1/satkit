@@ -4,7 +4,9 @@
 ///
 /// Duration is represented natively in microseconds. The floating-point
 /// constructors (`from_seconds`, `from_days`, ...) round to the nearest
-/// microsecond.
+/// microsecond. The range is about ±292,000 years; `+` and `-` saturate at
+/// its ends (never panic, never wrap) and [`checked_add`](Self::checked_add) /
+/// [`checked_sub`](Self::checked_sub) return `None` instead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Duration {
     pub usec: i64,
