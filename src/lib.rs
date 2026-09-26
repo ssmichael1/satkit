@@ -56,7 +56,6 @@
 //! - Solar and lunar gravity perturbations
 //! - Atmospheric drag using NRLMSISE-00 density model with space weather data
 //! - Solar radiation pressure
-//! - Continuous thrust acceleration
 //!
 //! ### Ephemerides
 //! - **JPL Ephemerides**: High-precision planetary and lunar positions
@@ -71,7 +70,7 @@
 //!
 //! - **Rust**: Native library available on [crates.io](https://crates.io/crates/satkit)
 //! - **Python**: Complete Python bindings via PyO3, available on [PyPI](https://pypi.org/project/satkit/)
-//!   - Binary wheels for Windows, macOS (Intel & ARM), and Linux (x86_64 & ARM64)
+//!   - Binary wheels for Windows (x86_64), macOS (Apple silicon), and Linux (x86_64 & ARM64)
 //!   - Python versions 3.10 through 3.14
 //!   - Documentation at <https://satkit.dev/>
 //!
@@ -91,33 +90,18 @@
 //! - **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
 //!   Activate with Cargo feature `chrono`.
 //!
-//! ## Getting Started
+//! ## Data Files
 //!
-//! ### Data Files
-//!
-//! The library requires external data files for many calculations:
-//!
-//! - [JPL Planetary Ephemerides](https://ssd.jpl.nasa.gov/ephem.html) - High-precision planetary positions
-//! - [Earth Gravity Models](http://icgem.gfz-potsdam.de/) - Spherical harmonic coefficients
-//! - [Space Weather Data](https://celestrak.org/SpaceData/) - Solar flux and geomagnetic indices
-//! - [Earth Orientation Parameters](https://maia.usno.navy.mil/ser7/finals2000A.all) - IERS Bulletin A: polar motion, UT1-UTC, celestial-pole offsets (CelesTrak's copy as fallback)
-//! - [IERS Conventions Tables](https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn36.html) - Nutation coefficients
-//!
-//! Data files need to be downloaded once. Space weather and Earth orientation parameter files are
-//! updated daily and should be refreshed periodically for optimal accuracy.
-//!
-//! ### Downloading Data Files
-//!
-//! Requires building with the `download` Cargo feature.
+//! The IERS nutation tables and the EGM96 / EGM2008 / JGM-2 / JGM-3 gravity
+//! models are compiled in, so frame transforms, gravity, SGP4 and time scales
+//! need no files. The JPL ephemeris (and ITU_GRACE16, if selected) is
+//! downloaded on first use and SHA-256 verified; the Earth orientation and
+//! space-weather tables are fetched on first use and refreshed by
+//! `utils::update_datafiles` (the `download` feature, on by default). See
+//! [Data Files](https://satkit.dev/getting-started/datafiles/) for
+//! directories, sources and offline use.
 //!
 //! ```no_run
-//! // Print the directory where data will be stored
-//! println!("Data directory: {:?}", satkit::utils::datadir());
-//!
-//! // Download required data files
-//! // - Downloads missing files
-//! // - Updates space weather and Earth orientation parameters
-//! // - Skips files that already exist
 //! # #[cfg(feature = "download")]
 //! satkit::utils::update_datafiles(None, false);
 //! ```
@@ -142,18 +126,8 @@
 //!
 //! ## Running Tests
 //!
-//! Tests require external data files and test vectors. Download them with the provided scripts:
-//!
-//! ```bash
-//! pip install requests
-//! python python/test/download_testvecs.py
-//! ```
-//!
-//! Then run with the environment variables set:
-//!
-//! ```bash
-//! SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs cargo test
-//! ```
+//! The tests need downloaded data files and test vectors; see
+//! [CONTRIBUTING.md](https://github.com/ssmichael1/satkit/blob/main/CONTRIBUTING.md#running-tests).
 //!
 //! ## References
 //!

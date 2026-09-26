@@ -1,7 +1,7 @@
 //! Download / refresh the data files satkit needs.
 //!
-//! Static files (ephemeris, IERS tables, gravity coefficients, leap-second
-//! list) come from the embedded [data manifest](crate::utils::manifest)
+//! Static files (ephemeris, IERS tables, gravity coefficients) come from the
+//! embedded [data manifest](crate::utils::manifest)
 //! and are SHA-256 verified; the regularly updated files (EOP, space weather)
 //! are listed in the manifest's `refresh` and `eop` sections and fetched
 //! unverified from their sources, rate-limited to their publication cadence

@@ -24,21 +24,8 @@ Thank you for your interest in contributing to Satkit! This document provides gu
    git remote add upstream https://github.com/ssmichael1/satkit.git
    ```
 
-2. **Download test vectors and data files**:
-   ```bash
-   python -m pip install requests
-   python ./python/test/download_testvecs.py
-   ```
-
-3. **Build the project**:
-   ```bash
-   cargo build
-   ```
-
-4. **Run the tests**:
-   ```bash
-   cargo test
-   ```
+2. **Download the test data, build and run the tests** as described in
+   [Running Tests](#running-tests).
 
 ## Development Workflow
 
@@ -53,9 +40,9 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 
 3. **Test your changes**:
    ```bash
-   cargo test
-   cargo clippy -- -D warnings
-   cargo fmt --check
+   cargo test --features chrono
+   cargo clippy --workspace --all-targets -- -D warnings
+   cargo fmt --all -- --check
    ```
 
 4. **Commit your changes** with clear, descriptive commit messages:
@@ -104,10 +91,10 @@ Thank you for your interest in contributing to Satkit! This document provides gu
   `latitude_deg`, a position's `geodetic` form or its local `qenu2itrf` frame.
   A method's result replaces the object, in one of two ways: another instance
   of the same type (`inverse()`, `conj()`, `normalize()`), or a re-encoding for
-  something else to consume (`as_rotation_matrix()` for numpy, `as_iso8601()`
+  something else to consume (`to_rotation_matrix()` for numpy, `to_iso8601()`
   for a file, `to_omm()` for JSON). Re-encodings always return a non-satkit
-  type and are always named `as_*` / `to_*`, so the call site reads as a
-  conversion. Every zero-argument member is therefore a property unless it
+  type and are always named `to_*` (the deprecated `as_*` aliases aside), so
+  the call site reads as a conversion. Every zero-argument member is therefore a property unless it
   returns its own type or carries a conversion prefix; `test_api_shape.py`
   enforces this from the stub. Properties must be cheap and pure (no I/O, no
   allocation beyond the return value). There is no deprecation path between
@@ -209,73 +196,47 @@ If you have a suggestion for a feature:
 
 ### Code Contributions
 
-We welcome contributions in these areas:
-
-#### High Priority
-- Bug fixes and correctness improvements
-- Performance optimizations
-- Additional test coverage
-- Documentation enhancements
-
-#### New Features
-
-- See issues in github page for current list
-
-## Building Python Bindings
-
-To build and test the Python package locally:
-
-```bash
-# Create and activate a virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install build dependencies and test
-pip install setuptools setuptools-rust setuptools-scm pytest
-
-# Build and install in development mode
-pip install -e .
-
-# Run Python tests
-python -m pytest python/test/
-```
-
-When you're done developing, deactivate the virtual environment:
-
-```bash
-deactivate
-```
+Bug fixes, correctness and performance improvements, test coverage and
+documentation are all welcome; the [issue tracker](https://github.com/ssmichael1/satkit/issues)
+lists open feature work.
 
 ## Running Tests
 
-### Full Test Suite
+The tests need the data files and the reference test vectors:
 
 ```bash
-cargo test
+pip install requests
+python python/test/download_data.py astro-data
+python python/test/download_testvecs.py satkit-testvecs
+export SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs
 ```
-
-### Specific Test Module
 
 ```bash
-cargo test ode::ode_tests
+cargo test --features chrono         # the full Rust suite, as CI runs it
+cargo test --test gmat_regression    # one integration-test file
+cargo test <name> -- --nocapture     # tests whose name contains <name>, with output
+
+# Python, in a virtual environment (builds the extension; needs the Rust toolchain)
+pip install -e ".[test]"
+pytest python/test/
+python python/run_stubtest.py        # .pyi stubs against the compiled bindings
 ```
 
-### With Output
-
-```bash
-cargo test -- --nocapture
-```
+The GMAT regression tests need only the data files; their reference
+trajectories are checked in.
 
 ## Continuous Integration
 
-All pull requests are automatically tested via GitHub Actions:
+Every pull request runs the Build workflow (`.github/workflows/build.yml`):
 
-- **Build**: Compiles on Linux, macOS, and Windows
-- **Test**: Runs full test suite on all platforms
-- **Lint**: Checks code style with clippy
-- **Format**: Verifies formatting with rustfmt
-- **Python**: Tests Python bindings (editable install, Python 3.13), runs the documentation and docstring examples, and checks the `.pyi` stubs with stubtest; release builds smoke-test each published wheel (3.10–3.14)
+- **rustfmt** and **clippy** (warnings are errors)
+- **cargo deny**: RustSec advisories, dependency licences and sources (`deny.toml`)
+- **sdist**: builds the source distribution and installs from it
+- **Rust tests** on Linux, macOS and Windows, plus an offline run with an empty data directory, and `cargo doc`
+- **Python tests** (Python 3.13): the full `pytest` suite, including the documentation and docstring examples, an offline smoke test, and stubtest
 
+The docs site is rebuilt from `main`; a weekly schedule runs `cargo audit` and
+a deep property-test pass; release builds smoke-test each wheel (3.10–3.14).
 Ensure all CI checks pass before requesting review.
 
 ## Code Review Process

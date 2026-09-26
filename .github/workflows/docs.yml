@@ -41,28 +41,17 @@ jobs:
           cache: pip
           cache-dependency-path: docs/requirements.txt
 
-      - name: Cache astro-data
-        id: cache-astro-data
-        uses: actions/cache@v6
+      - name: Satkit data
+        uses: ./.github/actions/satkit-data
         with:
-          path: astro-data
-          key: satkit-data-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
-          # Seed from the newest older cache on a manifest change, so EOP/SW
-          # survive a CelesTrak outage.
-          restore-keys: satkit-data-
+          testvecs: "false"
 
-      - name: Download satkit data (manifest-verified)
-        if: steps.cache-astro-data.outputs.cache-hit != 'true'
-        run: |
-          pip install requests
-          python python/test/download_data.py astro-data --all-eop-sources
-
-      # Only when the cached copy is genuinely old: EOP-All.csv carries about
-      # six months of IERS predictions, so a week-old table still covers
-      # "now" without an extrapolation warning, and CelesTrak's usage policy
-      # asks for one download per update rather than one per CI job. The
-      # script skips the request entirely inside that window and sends a
-      # conditional GET outside it.
+      # Only when the cached copy is over a week old (the script makes no
+      # request inside that window and a conditional GET outside it): the
+      # IERS EOP file, finals2000A.all, carries about a year of predictions,
+      # so a week-old table still covers "now" without an extrapolation
+      # warning. With --all-eop-sources the CelesTrak CSV, kept only for its
+      # historical rows, is fetched only if missing.
       - name: Refresh EOP and space weather (if the cached copy is over a week old)
         run: |
           pip install requests

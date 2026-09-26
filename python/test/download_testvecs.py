@@ -5,7 +5,7 @@ to a local directory
 
 from pathlib import Path
 import requests
-from download_from_json import download_from_json
+from download_from_json import TIMEOUT, download_from_json
 import sys
 
 if __name__ == "__main__":
@@ -21,5 +21,7 @@ if __name__ == "__main__":
 
     Path(basedir).mkdir(exist_ok=True, parents=True)
 
-    data = requests.get(fileurl, headers=headers).json()
+    r = requests.get(fileurl, headers=headers, timeout=TIMEOUT)
+    r.raise_for_status()
+    data = r.json()
     download_from_json(data, basedir, baseurl)

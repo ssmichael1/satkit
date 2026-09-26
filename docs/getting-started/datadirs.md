@@ -62,6 +62,20 @@ Earth-orientation files are refreshed if they are due (below).
 `update_datafiles(dir="...")` writes somewhere else; `overwrite=True`
 re-downloads even verified files, including those two.
 
+For a machine that will be offline or air-gapped:
+
+1. On a connected machine, fill a directory:
+   `SATKIT_DATA=/path/to/satkit-data python -c "import satkit; satkit.utils.update_datafiles()"`.
+2. Copy that directory to the target and set `SATKIT_DATA` to it there (or
+   copy it to the platform user-data directory, or to `/usr/share/satkit-data`
+   as a read-only system-wide location).
+3. Optionally set `SATKIT_OFFLINE=1` there (or call `satkit.utils.set_offline(True)`)
+   so that a missing file raises immediately instead of attempting a connection.
+
+The Earth-orientation and space-weather files still age on an offline
+machine: repeat the copy periodically, and check `eop_coverage()` against the
+epochs you work with.
+
 ## Selecting a JPL ephemeris file
 
 By default `satkit` uses `linux_p1550p2650.440` (DE440), downloading it on first use if no ephemeris is found in any search directory. There are two ways to override that choice.
