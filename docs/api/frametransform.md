@@ -80,8 +80,8 @@ q = sk.frametransform.rotation_with_state(
 )
 ```
 
-Any of these functions accept either a `satkit.time` or a `datetime.datetime`
-for the `tm` argument.
+Any of these functions accept a `satkit.time`, a `datetime.datetime` or a
+`numpy.datetime64` for the `tm` argument (see [Time](time.md#numpy-datetime64)).
 
 The per-pair functions below (`qitrf2gcrf`, `qteme2itrf`, `qcirs2gcrf`, …)
 remain available for direct use when the source / destination pair is

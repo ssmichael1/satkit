@@ -9,6 +9,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 ### Added
 
 - Python `moon.pos_mod` (mean-of-date Moon position), mirroring `sun.pos_mod` ([#254](https://github.com/ssmichael1/satkit/pull/254))
+- Every Python function that takes times accepts `numpy.datetime64` scalars and 1-D arrays of any unit, read as UTC; `quaternion * Nx3` and `sgp4` no longer copy their output arrays ([#263](https://github.com/ssmichael1/satkit/pull/263))
 
 ### Changed
 

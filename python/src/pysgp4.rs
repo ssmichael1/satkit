@@ -88,7 +88,7 @@ impl From<psgp4::SGP4Error> for PySGP4Error {
     }
 }
 
-/// Convert a Python value to an Instant. can be string, datetime, or PyInstant
+/// Convert a Python value to an Instant. can be string, datetime, numpy.datetime64, or PyInstant
 pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> {
     if val.is_instance_of::<crate::pyinstant::PyInstant>() {
         let instant: crate::pyinstant::PyInstant = val.extract().unwrap();
@@ -103,6 +103,9 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
         // Exact, with the same naive-is-local convention as satkit.time
         let tm = val.cast::<PyDateTime>().map_err(PyErr::from)?;
         Ok(crate::pyinstant::datetime_to_instant(tm)?)
+    } else if crate::pyinstant::is_time_scalar(val) {
+        // numpy.datetime64 (a UTC label)
+        Ok(val.extract::<crate::pyinstant::TimeArg>()?.0)
     } else {
         bail!("Invalid epoch type");
     }
@@ -123,17 +126,19 @@ fn init_error_code(e: &psgp4::Error) -> i32 {
 /// to initialize is NaN at every time, with its init error code.
 type Flat = (Vec<f64>, Vec<f64>, Vec<i32>);
 
-fn flatten(res: &std::result::Result<psgp4::SGP4State, psgp4::Error>, ntimes: usize) -> Flat {
+/// Takes the result by value so the position and velocity buffers are moved
+/// out, not copied.
+fn flatten(res: std::result::Result<psgp4::SGP4State, psgp4::Error>, ntimes: usize) -> Flat {
     match res {
         Ok(states) => (
-            states.pos.as_slice().to_vec(),
-            states.vel.as_slice().to_vec(),
+            states.pos.into_vec(),
+            states.vel.into_vec(),
             states.errcode.iter().map(|&x| x as i32).collect(),
         ),
         Err(e) => (
             vec![f64::NAN; 3 * ntimes],
             vec![f64::NAN; 3 * ntimes],
-            vec![init_error_code(e); ntimes],
+            vec![init_error_code(&e); ntimes],
         ),
     }
 }
@@ -223,7 +228,7 @@ fn sgp4_one(
     // including N = 1. The error array is (N,) either way.
     let n = tmvec.len();
     let dims = if time_scalar { vec![3] } else { vec![n, 3] };
-    pack_sgp4_result(py, flatten(&res, n), errflag, dims, vec![n])
+    pack_sgp4_result(py, flatten(res, n), errflag, dims, vec![n])
 }
 
 crate::arg_extractor!(pub(crate) gravconst_arg: GravConst, |e| {
@@ -439,7 +444,7 @@ pub fn sgp4(
             Vec::with_capacity(ntles * ntimes * 3),
             Vec::with_capacity(ntles * ntimes),
         );
-        for res in &results {
+        for res in results {
             let (p, v, e) = flatten(res, ntimes);
             flat.0.extend(p);
             flat.1.extend(v);

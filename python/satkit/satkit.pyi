@@ -25,13 +25,18 @@ from ._types import OMMDict
 # (``datetime.timestamp()``): a naive datetime is the machine's local time, an
 # aware one uses its own offset (see ``time.from_datetime``).
 #
+# A ``numpy.datetime64`` (scalar or 1-D array, any unit) is a UTC label:
+# numpy has no time zone and no leap seconds. Sub-microsecond values round to
+# the nearest microsecond; ``NaT`` raises ``ValueError``.
+#
 # * ``TimeScalar``    — a single time value.
-# * ``TimeArrayLike`` — a list, or a 1-D numpy object array, of time values
-#   (not any array-like: a tuple, a float array or a string is refused).
+# * ``TimeArrayLike`` — a list, a 1-D numpy object array of time values, or a
+#   1-D numpy ``datetime64`` array (not any array-like: a tuple, a float array
+#   or a string is refused).
 # * ``TimeInput``     — either a scalar or an array of times.
-TimeScalar: TypeAlias = "time | datetime.datetime"
+TimeScalar: TypeAlias = "time | datetime.datetime | np.datetime64"
 TimeArrayLike: TypeAlias = (
-    "list[time] | list[datetime.datetime] | list[time | datetime.datetime] | npt.NDArray[np.object_]"
+    "list[time] | list[datetime.datetime] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 

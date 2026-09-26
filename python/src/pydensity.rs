@@ -1,26 +1,27 @@
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDateTime, PyTuple};
+use pyo3::types::PyTuple;
 use pyo3::wrap_pyfunction;
 
 use satkit::nrlmsise;
 use satkit::Instant;
 
+use crate::pyinstant::is_time_scalar;
 use crate::pyutils::instant_from_pyany;
 use crate::PyITRFCoord;
-use crate::PyInstant;
 
 /// The optional time argument: `None`, or a single `satkit.time` /
-/// `datetime.datetime`. Anything else is a `TypeError` rather than being
-/// silently read as "no time" (which runs the model on its default indices).
+/// `datetime.datetime` / `numpy.datetime64`. Anything else is a `TypeError`
+/// rather than being silently read as "no time" (which runs the model on its
+/// default indices).
 fn time_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<Instant>> {
     if obj.is_none() {
         Ok(None)
-    } else if obj.is_instance_of::<PyInstant>() || obj.is_instance_of::<PyDateTime>() {
+    } else if is_time_scalar(obj) {
         Ok(Some(instant_from_pyany(obj)?))
     } else {
         Err(PyTypeError::new_err(format!(
-            "time must be satkit.time, datetime.datetime or None, not {}",
+            "time must be satkit.time, datetime.datetime, numpy.datetime64 or None, not {}",
             obj.get_type().name()?
         )))
     }
@@ -48,7 +49,7 @@ fn time_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<Instant>> {
 ///
 /// Raises:
 ///     TypeError: If an angle is not a real number, or ``time`` is not a
-///         ``satkit.time``, ``datetime.datetime`` or ``None``
+///         ``satkit.time``, ``datetime.datetime``, ``numpy.datetime64`` or ``None``
 #[pyfunction(name = "nrlmsise")]
 #[pyo3(signature=(*args))]
 fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
@@ -91,9 +92,7 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
     let mut angles: Vec<f64> = Vec::with_capacity(2);
     let mut time: Option<Instant> = None;
     for (i, item) in args.iter().enumerate().skip(1) {
-        let is_time = item.is_none()
-            || item.is_instance_of::<PyInstant>()
-            || item.is_instance_of::<PyDateTime>();
+        let is_time = item.is_none() || is_time_scalar(&item);
         if !is_time && angles.len() < 2 {
             let Ok(v) = item.extract::<f64>() else {
                 return Err(PyTypeError::new_err(format!(

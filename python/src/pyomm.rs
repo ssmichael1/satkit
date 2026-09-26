@@ -10,7 +10,7 @@
 //! kept) and the validation rules are identical in both languages.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDateTime, PyDict, PyFloat, PyInt, PyList, PyString};
+use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 
 use anyhow::{anyhow, Result};
 use satkit::omm::OMM;
@@ -31,7 +31,7 @@ const GROUP_KEYS: &[&str] = &[
 ];
 
 /// Python scalar/container → JSON value. `EPOCH` additionally accepts a
-/// `satkit.time` or `datetime.datetime`.
+/// `satkit.time`, `datetime.datetime` or `numpy.datetime64`.
 fn py_to_json(key: &str, obj: &Bound<'_, PyAny>) -> Result<Value> {
     if obj.is_none() {
         return Ok(Value::Null);
@@ -39,10 +39,7 @@ fn py_to_json(key: &str, obj: &Bound<'_, PyAny>) -> Result<Value> {
     if obj.is_instance_of::<PyBool>() {
         return Ok(Value::Bool(obj.extract::<bool>()?));
     }
-    if key == "EPOCH"
-        && (obj.is_instance_of::<crate::pyinstant::PyInstant>()
-            || obj.is_instance_of::<PyDateTime>())
-    {
+    if key == "EPOCH" && crate::pyinstant::is_time_scalar(obj) {
         return Ok(Value::String(
             crate::pysgp4::epoch_from_val(obj)?.as_rfc3339(),
         ));

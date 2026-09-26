@@ -35,7 +35,8 @@ def nrlmsise(
         tuple: (rho, T) where rho is mass density in kg/m^3 and T is temperature in Kelvin
 
     Raises:
-        TypeError: If ``time`` is not a ``satkit.time``, ``datetime.datetime`` or ``None``
+        TypeError: If ``time`` is not a ``satkit.time``, ``datetime.datetime``,
+            ``numpy.datetime64`` or ``None``
 
     Example:
         ```python
@@ -80,7 +81,7 @@ def nrlmsise(
 
     Raises:
         TypeError: If an angle is not a real number, or ``time`` is not a
-            ``satkit.time``, ``datetime.datetime`` or ``None``
+            ``satkit.time``, ``datetime.datetime``, ``numpy.datetime64`` or ``None``
     """
     ...
 
