@@ -77,7 +77,14 @@ pub enum Error {
     #[error("Parse error")]
     EmptySatNum,
 
-    #[error("Sat num >= 340000 cannot be represented in alpha5 format")]
+    /// [`TLE::int_to_alpha5`](crate::TLE::int_to_alpha5) (and, through it,
+    /// [`TLE::to_2line`](crate::TLE::to_2line)) refuses a catalog number of
+    /// 340000 or above: the Alpha-5 scheme ends at `Z9999` (339999), so no
+    /// five-character TLE field can hold it.
+    #[error(
+        "catalog numbers above 339999 cannot be written in a TLE (Alpha-5 ends at Z9999); \
+         use OMM instead (`OMM::from_tle` in Rust, `TLE.to_omm()` in Python)"
+    )]
     SatNumTooLargeForAlpha5,
 
     #[error("Invalid sat num value")]

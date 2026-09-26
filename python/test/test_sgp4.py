@@ -139,6 +139,17 @@ class TestSGP4:
         lines2 = tle.to_3line()
         assert lines == lines2
 
+    def test_to_2line_satnum_too_large_raises_value_error(self):
+        """A catalog number above the Alpha-5 range (339999) cannot be
+        written to a TLE; ``to_2line`` should raise ``ValueError`` (a bad
+        input value), not the generic ``RuntimeError`` other TLE formatting
+        failures raise."""
+        lines = ["STARLINK-3118", *STARLINK_3118]
+        tle = sk.TLE.from_lines(lines)[0]
+        tle.satnum = 340000
+        with pytest.raises(ValueError, match="OMM"):
+            tle.to_2line()
+
     def test_omm(self, testvec_dir):
         """
         Test propagation of Orbital Mean-Element Message (OMM)

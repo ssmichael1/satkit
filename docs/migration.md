@@ -177,6 +177,7 @@ they used to return a meaningless value:
 | `TLE.from_lines()` with a line 1 whose line 2 is missing | dropped silently | `RuntimeError` |
 | `TLE.from_url()`, `omm_from_url()` in offline mode | fetched anyway | `RuntimeError` |
 | `sgp4()` of an OMM whose `REF_FRAME` is not TEME or `CENTER_NAME` not EARTH | propagated | `RuntimeError` |
+| `TLE.to_2line()` with `satnum >= 340000` (no Alpha-5 representation) | `RuntimeError` | `ValueError` |
 
 Some calls that raised now work: `gravity([7e6, 0, 0])` and integer arrays,
 `time - [t1, t2]` (an array of `duration`), `time + <integer or float32
