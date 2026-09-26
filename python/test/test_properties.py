@@ -561,6 +561,38 @@ class TestVectorised:
     """Array-of-times calls give element-wise exactly the scalar results,
     for a list and for a numpy array of times."""
 
+    @_settings()
+    @given(
+        axis=st.tuples(*[st.floats(-1, 1, allow_nan=False)] * 3).filter(
+            lambda a: sum(x * x for x in a) > 1e-6
+        ),
+        angle=st.floats(-2 * math.pi, 2 * math.pi, allow_nan=False),
+        n=st.integers(1, 20),
+        seed=st.integers(0, 2**32 - 1),
+        layout=st.sampled_from(["C", "F", "strided", "list"]),
+    )
+    def test_quaternion_times_array_is_rowwise(self, axis, angle, n, seed, layout):
+        """q * V (Nx3) equals stacking q * v for each row, and V @ R.T, for
+        any memory layout of V. The Nx3 path applied the inverse rotation in
+        0.14.1-0.23.1 (a column-major matrix read as row-major)."""
+        q = sk.quaternion.from_axis_angle(np.array(axis), angle)
+        base = np.random.default_rng(seed).normal(size=(n, 6)) * 1e3
+        V = base[:, :3].copy()
+        rows = np.array([q * v for v in V])
+        if layout == "F":
+            arg = np.asfortranarray(V)
+        elif layout == "strided":
+            arg = base[:, ::2]  # non-contiguous view
+            V = arg.copy()
+            rows = np.array([q * v for v in V])
+        elif layout == "list":
+            arg = V.tolist()
+        else:
+            arg = V
+        out = q * arg
+        np.testing.assert_allclose(out, rows, rtol=0, atol=1e-9)
+        np.testing.assert_allclose(out, V @ q.to_rotation_matrix().T, rtol=0, atol=1e-9)
+
     @pytest.mark.parametrize(
         "fn",
         [sk.frametransform.gmst, sk.frametransform.qitrf2gcrf, sk.sun.pos_gcrf],
