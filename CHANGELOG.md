@@ -7,6 +7,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Added
 
 - Moonrise / moonset (`moon::riseset`, Python `moon.rise_set`: upper limb with refraction, `None` on days without the event) and principal Moon phase times (`moon::phase_times` / `next_phase`), built-in analytic or `use_jpl` ([#270](https://github.com/ssmichael1/satkit/pull/270))
+- `sun.rise_set(..., use_jpl=True)` (Rust `sun::riseset_with`) takes the Sun from the JPL ephemeris, within 0.01 s of Skyfield; the analytic Sun (`sun.pos_mod`, `pos_gcrf`, `rise_set`) adds the largest VSOP87 planetary and lunar terms to Meeus's solar coordinates, 3.6″ from JPL (was 43″), so `rise_set` is within 0.5 s (was 2.8 s) ([#272](https://github.com/ssmichael1/satkit/pull/272))
 
 ### Fixed
 
