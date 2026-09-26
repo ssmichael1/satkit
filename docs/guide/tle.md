@@ -89,6 +89,8 @@ In Rust, `TLE::from_lines` stops at the first bad record in the same way. To kee
 let tles: Vec<satkit::TLE> = satkit::TLE::records(&lines).filter_map(Result::ok).collect();
 ```
 
+[SGP4, TLEs and OMMs](../rust/sgp4.md) in the Rust section has a complete program: parsing, propagation, ground track, passes and fitting.
+
 ## Loading from URLs
 
 Both TLEs and OMMs can be loaded directly from a URL:
