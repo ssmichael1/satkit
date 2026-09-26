@@ -15,8 +15,8 @@ def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
-    Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated
-    from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
+    ``pos_mod`` rotated from mean of date to GCRF (Vallado Equations 3-88
+    and 3-89); see ``pos_mod`` for the model
 
     Args:
         time (satkit.time): time at which to compute position
@@ -26,7 +26,12 @@ def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
         at given time.  Units are meters
 
     Notes:
-        From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+        - The direction includes the annual aberration and no nutation (the
+          apparent direction in mean-of-date terms): it is 20.5 arcsec behind
+          the geometric direction of ``satkit.jplephem.geocentric_pos`` along
+          the ecliptic
+        - Against JPL DE440 over 1900-2100: within 3.6 arcsec in ecliptic
+          longitude (0.9 arcsec RMS) and 1600 km in distance
 
     Example:
         ```python
@@ -45,8 +50,8 @@ def pos_gcrf(
     """
     Sun position in the Geocentric Celestial Reference Frame (GCRF)
 
-    Algorithm 29 from Vallado for sun in Mean of Date (MOD), then rotated
-    from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
+    ``pos_mod`` rotated from mean of date to GCRF (Vallado Equations 3-88
+    and 3-89); see ``pos_mod`` for the model
 
     Args:
         time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time objects
@@ -57,7 +62,12 @@ def pos_gcrf(
         at the "N" given times.  Units are meters
 
     Notes:
-        From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+        - The direction includes the annual aberration and no nutation (the
+          apparent direction in mean-of-date terms): it is 20.5 arcsec behind
+          the geometric direction of ``satkit.jplephem.geocentric_pos`` along
+          the ecliptic
+        - Against JPL DE440 over 1900-2100: within 3.6 arcsec in ecliptic
+          longitude (0.9 arcsec RMS) and 1600 km in distance
     """
     ...
 
@@ -66,7 +76,7 @@ def pos_mod(time: TimeScalar) -> npt.NDArray[np.float64]:
     """
     Sun position in the Mean-of-Date Frame
 
-    Algorithm 29 from Vallado for sun in Mean of Date (MOD)
+    Mean equator and equinox of date; see the notes for the model
 
     Args:
         time (satkit.time): time at which to compute position
@@ -76,7 +86,18 @@ def pos_mod(time: TimeScalar) -> npt.NDArray[np.float64]:
         at given time.  Units are meters
 
     Notes:
-        From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+        - Meeus, "Astronomical Algorithms", 2nd ed., ch. 25 (low-accuracy
+          solar coordinates), plus the largest planetary (Venus, Jupiter,
+          Mars) and lunar (Earth-Moon barycentre) terms of VSOP87D
+          (Bretagnon & Francou 1988).  This replaces Vallado's Algorithm 29
+          (up to 43 arcsec off)
+        - As before, the direction includes the annual aberration (-20.5
+          arcsec in longitude) and no nutation: the apparent direction
+          referred to the mean equator and equinox of date.  The distance is
+          geometric
+        - Against JPL DE440 over 1900-2100: within 3.6 arcsec in ecliptic
+          longitude (0.9 arcsec RMS), 1 arcsec in latitude and 1600 km in
+          distance
     """
     ...
 
@@ -87,7 +108,7 @@ def pos_mod(
     """
     Sun position in the Mean-of-Date Frame
 
-    Algorithm 29 from Vallado for sun in Mean of Date (MOD)
+    Mean equator and equinox of date; see the notes for the model
 
     Args:
         time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time objects,
@@ -98,12 +119,27 @@ def pos_mod(
         at given times.  Units are meters
 
     Notes:
-        From Vallado: Valid with accuracy of .01 degrees from 1950 to 2050
+        - Meeus, "Astronomical Algorithms", 2nd ed., ch. 25 (low-accuracy
+          solar coordinates), plus the largest planetary (Venus, Jupiter,
+          Mars) and lunar (Earth-Moon barycentre) terms of VSOP87D
+          (Bretagnon & Francou 1988).  This replaces Vallado's Algorithm 29
+          (up to 43 arcsec off)
+        - As before, the direction includes the annual aberration (-20.5
+          arcsec in longitude) and no nutation: the apparent direction
+          referred to the mean equator and equinox of date.  The distance is
+          geometric
+        - Against JPL DE440 over 1900-2100: within 3.6 arcsec in ecliptic
+          longitude (0.9 arcsec RMS), 1 arcsec in latitude and 1600 km in
+          distance
     """
     ...
 
 def rise_set(
-    time: TimeScalar, coord: satkit.itrfcoord, sigma: float | None = None
+    time: TimeScalar,
+    coord: satkit.itrfcoord,
+    sigma: float | None = None,
+    *,
+    use_jpl: bool = False,
 ) -> tuple[satkit.time, satkit.time]:
     """
     Sunrise and sunset times on a calendar date at the given location.
@@ -123,13 +159,22 @@ def rise_set(
     day) or below it all day (polar night).
 
     Notes:
+        * Rise and set are when the topocentric apparent Sun's centre is at
+          zenith distance ``sigma``, by default 90 deg 50 arcmin: 34' of
+          refraction plus a fixed 16' semidiameter below a sea-level horizon
+          (the almanac convention of USNO and Skyfield).
         * Vallado Algorithm 30, repeated at the computed event until it moves
-          less than 0.1 s, with the main nutation term and solar parallax.
-          Against Skyfield (DE421) over 2024 at latitudes 60 S to 65 N the times
-          agree to within 3 s, typically about 1 s (the single pass was off by up
-          to 35 s).
-          Errors grow near the polar-day and polar-night thresholds.
-        * UTC is used in place of UT1 (they differ by less than 0.9 s).
+          less than 0.1 s.  The built-in model uses the analytic apparent Sun
+          of ``pos_mod`` with nutation and solar parallax, and UTC in place of
+          UT1.  With ``use_jpl=True`` the Sun is the apparent one from the JPL
+          ephemeris as seen from the site (light time, aberration, exact
+          parallax), with the full IERS 2010 Earth orientation (UT1,
+          precession-nutation, polar motion).
+        * Against Skyfield (DE421), every other day of 2024 at latitudes 60 S
+          to 65 N: within 0.5 s for the built-in model (typically 0.2 s), and
+          0.01 s with ``use_jpl=True``.  The built-in model's errors grow to
+          1 s, and a few seconds on the most grazing days, between 65 N and
+          the polar-day and polar-night thresholds.
         * The horizon is at sea level: the observer's altitude is ignored.  An
           elevated observer sees the horizon lowered by the dip,
           dip ≈ 1.76' × sqrt(h), h in meters above the surrounding terrain or
@@ -147,9 +192,18 @@ def rise_set(
             "Astronomical Twilight": 108 deg
 
             If None or not passed in, "Standard" is used (90.0 + 50.0/60.0)
+        use_jpl (bool, optional): use the JPL ephemeris (apparent,
+            topocentric) and the full IERS 2010 Earth orientation instead of
+            the built-in analytic Sun.  The ephemeris is downloaded on first
+            use.  Default False
 
     Returns:
         tuple[satkit.time, satkit.time]: (sunrise, sunset)
+
+    Raises:
+        RuntimeError: for polar day or night, or, with ``use_jpl``, if the JPL
+            ephemeris is unavailable or does not cover the date (there is no
+            fallback to the built-in model)
 
     Example:
         ```python
@@ -163,6 +217,9 @@ def rise_set(
         sunrise, sunset = satkit.sun.rise_set(noon, coord)
         print(f"Sunrise: {sunrise.to_datetime().astimezone(honolulu)}")
         print(f"Sunset:  {sunset.to_datetime().astimezone(honolulu)}")
+
+        # From the JPL ephemeris
+        sunrise, sunset = satkit.sun.rise_set(noon, coord, use_jpl=True)
         ```
     """
     ...
