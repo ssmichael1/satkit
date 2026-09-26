@@ -452,7 +452,7 @@ defaults are a quick, not a high-fidelity, configuration:
   0.23 (EGM96 before); `gravity_model=sk.gravmodel.egm96` reproduces older results.
 - **Drag and solar radiation pressure** are only applied when you pass
   `satproperties=sk.satproperties(cdaoverm=..., craoverm=...)`; without it
-  neither force is included. Drag is skipped above ~700 km altitude.
+  neither force is included. Drag is skipped above ~1,000 km altitude.
 - **Space weather and EOP** follow the tables above: past their coverage the
   inputs are forecasts or held constant.
 

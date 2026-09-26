@@ -72,7 +72,7 @@ quality, not just the row's origin.
 | `"predicted_daily"` | inside the SWPC 45-day forecast | returns the forecast row: daily $F_{10.7}$ and $A_p$ |
 | `"predicted_monthly"` | past the daily rows | returns that month's MSAFE row: smoothed $F_{10.7}$ and $A_p$. **One-time warning** only if the row carries no $A_p$ (a table loaded from a file that lacks it) |
 | `"extrapolated"` | after the last row of the table | returns that row unchanged. **One-time warning** |
-| `"before_table"` | before 1932 | `RuntimeError` |
+| `"before_table"` | before 1932 | `RuntimeError`; NRLMSISE-00 runs on its defaults ($F_{10.7} = F_{10.7A} = 150$, $A_p = 4$). **One-time warning** |
 | `"not_loaded"` | no table at all | `RuntimeError`, **one-time warning** |
 
 `satkit.spaceweather.coverage()` returns
@@ -105,6 +105,15 @@ The 81-day averages that feed NRLMSISE-00's $F_{10.7A}$ are computed across
 the assembled series — a centred window reaches 40 days into the forecast —
 with the same convention as CelesTrak's published columns (mean over
 $[t-40, t+40]$ and $[t-80, t]$), which they reproduce to the rounding digit.
+
+The observed record has a few days with no measured $F_{10.7}$ (GFZ writes
+`-1`; e.g. 2025-02-12, 2025-02-17, 2026-05-09), and none at all before
+1947-02-14. NRLMSISE-00 takes each index on its own: a missing previous-day
+flux is replaced by the most recent measured flux up to three days back, else
+by the 81-day average, and the day's $A_p$ and 3-hourly history are used as
+usual. The averages skip days before the first measured flux, so before 1947
+they are `-1` and the density model runs on $F_{10.7} = F_{10.7A} = 150$ with
+the measured $A_p$, after a one-time warning.
 
 `satkit.spaceweather.init_from_path()` loads a GFZ table directly, for a
 comparison that must pin against one fixed input file. The MSAFE percentile bands are in the file but not yet exposed

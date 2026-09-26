@@ -90,11 +90,11 @@ For the drag cases the residual has to be read against the size of the drag effe
 | `drag_iss_const` | 152 km | 26 m | 26 m | 1.7 × 10⁻⁴ |
 | `drag_leo300_const` | 1374 km | 293 m | 293 m | 2.1 × 10⁻⁴ |
 | `drag_sso550_const` | 19 km | 34 m | 34 m | 1.8 × 10⁻³ |
-| `drag_gto_const` | 106 km | 6 m | 10 m | 5.5 × 10⁻⁵ |
+| `drag_gto_const` | 106 km | 7.7 m | 13 m | 7.3 × 10⁻⁵ |
 | `drag_iss_sw` | 194 km | 198 m | 325 m | 1.6 × 10⁻³ |
 | `drag_leo300_sw` | 1643 km | 2.1 km | 2.3 km | 1.3 × 10⁻³ |
 | `drag_sso550_sw` | 27 km | 18 m | 37 m | 1.3 × 10⁻³ |
-| `drag_gto_sw` | 126 km | 113 m | 307 m | 2.3 × 10⁻³ |
+| `drag_gto_sw` | 132 km | 93 m | 274 m | 2.1 × 10⁻³ |
 
 With fixed indices the two NRLMSISE-00 implementations agree to +0.01 % mean / 0.06 % rms in density along the ISS orbit (GMAT's `AtmosDensity` report against satkit at the same latitude, longitude, altitude and time); the residual is the integrated effect of that plus integration noise. The remaining differences are the model-level ones described next.
 
