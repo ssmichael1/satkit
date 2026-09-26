@@ -270,6 +270,12 @@ pub(crate) fn in_own_process(module: &str, test: &str) -> bool {
     if std::env::var(CHILD_ENV).as_deref() == Ok(name.as_str()) {
         return true;
     }
+    // Hold the environment lock while spawning and waiting: the child
+    // inherits this process's environment, and another test may hold a
+    // variable such as SATKIT_DATA_URL or SATKIT_OFFLINE set temporarily.
+    let _env = crate::utils::manifest::ENV_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let exe = std::env::current_exe().expect("path of the test binary");
     let out = std::process::Command::new(exe)
         .args([name.as_str(), "--exact", "--test-threads=1", "--nocapture"])
