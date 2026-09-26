@@ -377,3 +377,9 @@ class TestDurationArithmetic:
 
     def test_add_time(self):
         assert self.d + T0 == T0 + self.d
+
+
+def test_utils_version_is_the_release_version():
+    # utils.version() used to return `git describe`, "unknown" in the wheels.
+    assert sk.utils.version() == sk.__version__
+    assert sk.utils.version()[0].isdigit()
