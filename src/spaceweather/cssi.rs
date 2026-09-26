@@ -6,7 +6,7 @@
 //! (F10.7) and SILSO (sunspot number).
 //!
 //! satkit no longer downloads this file, but reads it on request so that a
-//! cached copy, an offline bundle, or the file GMAT and Orekit consume can be
+//! cached copy, a provisioned copy, or the file GMAT and Orekit consume can be
 //! supplied through [`init_from_path`](super::init_from_path).
 
 use super::{Error, Result, SpaceWeatherDataType, SpaceWeatherRecord};

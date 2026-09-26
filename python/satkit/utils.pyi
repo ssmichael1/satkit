@@ -107,18 +107,17 @@ def data_search_dirs() -> list[str]:
     """Directories searched for data files, in order
 
     A file is used from the first directory that contains it; any of these
-    may be read-only (a system-wide directory, the optional ``satkit-data``
-    package inside ``site-packages``). Downloads go only to ``datadir()``.
+    may be read-only (a system-wide directory, a directory next to the
+    extension). Downloads go only to ``datadir()``.
 
     1. ``SATKIT_DATA`` (environment; also the write location)
     2. the directory given to ``set_datadir`` (also the write location)
     3. directories added with ``add_search_dir``
     4. ``<dir of the satkit extension>/satkit-data``
-    5. ``<site-packages>/satkit_data/data`` (the ``satkit-data`` pip package)
-    6. the platform user-data directory (the default write location)
-    7. ``~/.satkit-data`` (legacy)
-    8. ``/usr/share/satkit-data`` (not on Windows)
-    9. macOS: ``/Library/Application Support/satkit-data``
+    5. the platform user-data directory (the default write location)
+    6. ``~/.satkit-data`` (legacy)
+    7. ``/usr/share/satkit-data`` (not on Windows)
+    8. macOS: ``/Library/Application Support/satkit-data``
 
     Returns:
         list[str]: search directories in order
@@ -129,8 +128,8 @@ def add_search_dir(path: str) -> None:
     """Add a read-only directory to the data-file search list
 
     Tried after ``SATKIT_DATA`` / ``set_datadir`` and before the platform
-    locations. Downloads are never written here. The ``satkit`` package uses
-    this itself to register the optional ``satkit_data`` bundle.
+    locations. Downloads are never written here. Use it for a shared or
+    provisioned copy of the data files.
 
     Args:
         path (str): Directory to search

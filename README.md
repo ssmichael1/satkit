@@ -34,7 +34,7 @@ pip install satkit
 
 Pre-built wheels are available for Linux (x86_64, aarch64), macOS (Apple silicon), and Windows (x86_64) on Python 3.10--3.14; Intel Macs build from source (`pip install --no-binary satkit satkit`) or use conda-forge.
 
-The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris downloads on first use, and Earth orientation and space weather are fetched on first use and refreshed with `satkit.utils.update_datafiles()`. See [Data Files](https://satkit.dev/getting-started/datafiles/) for directories, offline use and the optional `satkit[data]` bundle.
+The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris downloads on first use, and Earth orientation and space weather are fetched on first use and refreshed with `satkit.utils.update_datafiles()`. See [Data Files](https://satkit.dev/getting-started/datafiles/) for directories and offline use.
 
 ## Quick Examples
 

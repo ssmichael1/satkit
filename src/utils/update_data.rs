@@ -80,71 +80,171 @@ pub fn download_static_files(
             )
         })
         .collect();
+    // Join every thread before reporting, so a failure never leaves the
+    // others running unobserved.
     let mut out = Vec::with_capacity(handles.len());
+    let mut failures = Vec::new();
     for (name, jh) in handles {
-        let outcome = jh.join().map_err(|_| Error::ThreadPanic)??;
-        out.push((name, outcome));
+        match jh.join() {
+            Ok(Ok(outcome)) => out.push((name, outcome)),
+            Ok(Err(e)) => failures.push((name, Error::from(e))),
+            Err(_) => failures.push((name, Error::ThreadPanic)),
+        }
     }
-    Ok(out)
+    summarize_failures(failures).map(|()| out)
 }
 
-/// Refresh the regularly updated files: the plain URLs of the manifest's
-/// `refresh` section (space weather) in parallel with the Earth orientation
-/// refresh, which tries the manifest's `eop` mirrors of IERS
-/// `finals2000A.all` in order.
+/// `Ok` when `failures` (`(file name, error)`) is empty, else one error for
+/// them all: a single failure is returned as it is, so its type can still be
+/// matched; several become one [`download::Error::AllSourcesFailed`] with a
+/// line per file.
+fn summarize_failures(mut failures: Vec<(String, Error)>) -> Result<()> {
+    match failures.len() {
+        0 => Ok(()),
+        1 => failures.pop().map_or(Ok(()), |(_, e)| Err(e)),
+        n => {
+            let names: Vec<&str> = failures.iter().map(|(name, _)| name.as_str()).collect();
+            Err(Error::Download(download::Error::AllSourcesFailed {
+                name: format!("{n} data files ({})", names.join(", ")),
+                attempts: failures
+                    .iter()
+                    .map(|(name, e)| format!("{name}: {e}"))
+                    .collect(),
+                hint: None,
+            }))
+        }
+    }
+}
+
+/// Where the regularly updated files come from: the embedded manifest in
+/// production, test servers in tests.
+struct RefreshSources<'a> {
+    /// Plain feed URLs (the manifest's `refresh` section: space weather).
+    feeds: &'a [String],
+    /// Mirrors of IERS `finals2000A.all` (the manifest's `eop` section).
+    eop: &'a [manifest::RefreshSource],
+    /// Whether to refresh the MSAFE forecast (NASA, month-specific URLs).
+    msafe: bool,
+}
+
+/// What [`download_refresh_files`] got: one `(name, url, outcome)` per file
+/// refreshed, and one `(name, error)` per file that was not.
+type RefreshReport = (Vec<(String, String, RefreshOutcome)>, Vec<(String, Error)>);
+
+/// Refresh the regularly updated files: the plain feed URLs (space weather)
+/// in parallel with the Earth orientation refresh, which tries the
+/// `finals2000A.all` mirrors in order, and the MSAFE forecast.
 ///
 /// Each one goes through [`refresh_file`](download::refresh_file), which
 /// skips the request entirely while the local copy is inside its publication
 /// cadence and otherwise sends a conditional GET. `force` re-fetches
-/// unconditionally. Returns one `(name, url, outcome)` per file.
+/// unconditionally.
+///
+/// Every thread is joined whatever the others did: one feed that fails does
+/// not stop the rest from being reported (and then reloaded). MSAFE is
+/// best-effort and only warns.
 fn download_refresh_files(
     dir: &std::path::Path,
+    sources: &RefreshSources,
     force: bool,
-) -> Result<Vec<(String, String, RefreshOutcome)>> {
-    let m = manifest::embedded();
+) -> RefreshReport {
     type Handle = (String, String, JoinHandle<download::Result<RefreshOutcome>>);
-    let handles: Vec<Handle> = m
-        .refresh
+    let handles: Vec<Handle> = sources
+        .feeds
         .iter()
-        .map(|url| -> Result<_> {
-            if !url.starts_with("https://") {
-                return Err(Error::InsecureManifestUrl { url: url.clone() });
-            }
+        .map(|url| {
             let name = url.rsplit('/').next().unwrap_or(url).to_string();
-            Ok((
+            (
                 name,
                 url.clone(),
                 refresh_file_async(url.clone(), dir, force),
-            ))
+            )
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect();
     let eop_dir = dir.to_path_buf();
-    let eop =
-        std::thread::spawn(move || crate::earth_orientation_params::refresh_into(&eop_dir, force));
-    let msafe_dir = dir.to_path_buf();
-    let msafe =
-        std::thread::spawn(move || crate::spaceweather::msafe::refresh_into(&msafe_dir, force));
-    let mut out = Vec::with_capacity(handles.len() + 1);
+    let eop_sources = sources.eop.to_vec();
+    let eop = std::thread::spawn(move || {
+        crate::earth_orientation_params::refresh_into_with_sources(&eop_dir, &eop_sources, force)
+    });
+    let msafe = sources.msafe.then(|| {
+        let msafe_dir = dir.to_path_buf();
+        std::thread::spawn(move || crate::spaceweather::msafe::refresh_into(&msafe_dir, force))
+    });
+
+    let mut out = Vec::with_capacity(handles.len() + 2);
+    let mut failures = Vec::new();
     for (name, url, jh) in handles {
-        out.push((name, url, jh.join().map_err(|_| Error::ThreadPanic)??));
+        match jh.join() {
+            Ok(Ok(fetch)) => out.push((name, url, fetch)),
+            Ok(Err(e)) => failures.push((name, Error::from(e))),
+            Err(_) => failures.push((name, Error::ThreadPanic)),
+        }
     }
-    let eop = eop.join().map_err(|_| Error::ThreadPanic)??;
-    out.push((
-        crate::earth_orientation_params::FINALS2000A_FILE.to_string(),
-        eop.url,
-        eop.fetch,
-    ));
+    let eop_name = crate::earth_orientation_params::FINALS2000A_FILE.to_string();
+    match eop.join() {
+        Ok(Ok(r)) => out.push((eop_name, r.url, r.fetch)),
+        Ok(Err(e)) => failures.push((eop_name, Error::from(e))),
+        Err(_) => failures.push((eop_name, Error::ThreadPanic)),
+    }
     // MSAFE is best-effort: NASA's hosting is the least dependable of the
     // three, and an observed-only table is still usable.
-    match msafe.join().map_err(|_| Error::ThreadPanic)? {
-        Ok(fetch) => out.push((
-            crate::spaceweather::MSAFE_FILE.to_string(),
-            String::new(),
-            fetch,
-        )),
-        Err(e) => eprintln!("Warning: MSAFE forecast not refreshed: {e}"),
+    if let Some(msafe) = msafe {
+        match msafe.join() {
+            Ok(Ok(fetch)) => out.push((
+                crate::spaceweather::MSAFE_FILE.to_string(),
+                String::new(),
+                fetch,
+            )),
+            Ok(Err(e)) => eprintln!("Warning: MSAFE forecast not refreshed: {e}"),
+            Err(_) => eprintln!(
+                "Warning: MSAFE forecast not refreshed: {}",
+                Error::ThreadPanic
+            ),
+        }
     }
-    Ok(out)
+    (out, failures)
+}
+
+/// Refresh the regularly updated files into `dir`, print what happened to
+/// each, and reload the space-weather and EOP tables from `dir` — also when
+/// some of the files failed, so whatever did arrive is used. Returns the
+/// failures ([`summarize_failures`]) after the reload.
+fn refresh_and_reload(dir: &std::path::Path, sources: &RefreshSources, force: bool) -> Result<()> {
+    let (refreshed, failures) = download_refresh_files(dir, sources, force);
+    for (name, url, outcome) in refreshed {
+        match outcome {
+            RefreshOutcome::Fresh { age_secs } => println!(
+                "  {name}: current ({:.1} h old); no request made",
+                age_secs as f64 / 3600.0
+            ),
+            RefreshOutcome::NotModified => println!("  {name}: unchanged on the server (304)"),
+            RefreshOutcome::Downloaded => println!("  {name}: downloaded from {url}"),
+        }
+    }
+    for (name, e) in &failures {
+        println!("  {name}: FAILED: {e}");
+    }
+
+    // Refresh the in-memory space-weather / EOP singletons from the files
+    // now in `dir`, so a process whose lazy first load failed (e.g. it
+    // started before the data directory was populated) recovers without a
+    // restart.
+    if dir.join(crate::spaceweather::GFZ_FILE).is_file()
+        || dir.join(crate::spaceweather::CSSI_FILE).is_file()
+    {
+        if let Err(e) = crate::spaceweather::load_from_dir(dir) {
+            eprintln!("Warning: could not load the refreshed space-weather files: {e}");
+        }
+    }
+    if dir
+        .join(crate::earth_orientation_params::FINALS2000A_FILE)
+        .is_file()
+    {
+        if let Err(e) = crate::earth_orientation_params::load_from_dir(dir) {
+            eprintln!("Warning: could not load downloaded EOP file: {e}");
+        }
+    }
+    summarize_failures(failures)
 }
 
 ///
@@ -190,6 +290,12 @@ fn download_refresh_files(
 /// * [`Error::DataDirReadOnly`] when the target directory cannot be
 ///   written (read-only filesystem, no permission, another user's
 ///   directory), naming it.
+/// * A file that could not be fetched does not stop the others: every
+///   download is waited for, the space-weather and EOP tables are reloaded
+///   from whatever is in the directory, and then the failure is returned —
+///   as its own error when one file failed, or as one
+///   [`download::Error::AllSourcesFailed`] with a line per file when
+///   several did. (The MSAFE forecast is best-effort and only warns.)
 ///
 pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Result<()> {
     // Offline mode forbids the whole operation: fail before announcing a
@@ -220,40 +326,41 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
             manifest::MIRROR_ENV
         );
     }
-    for (name, outcome) in download_static_files(&downloaddir, overwrite_if_exists)? {
-        match outcome {
-            FetchOutcome::AlreadyPresent => println!("  {name}: present and verified"),
-            FetchOutcome::Downloaded { url } => println!("  {name}: downloaded from {url}"),
+    if let Some(url) = m.refresh.iter().find(|u| !u.starts_with("https://")) {
+        return Err(Error::InsecureManifestUrl { url: url.clone() });
+    }
+    // A failed static file does not stop the refreshes (and their reload):
+    // its error is returned once they are done.
+    let static_result = download_static_files(&downloaddir, overwrite_if_exists);
+    match &static_result {
+        Ok(fetched) => {
+            for (name, outcome) in fetched {
+                match outcome {
+                    FetchOutcome::AlreadyPresent => println!("  {name}: present and verified"),
+                    FetchOutcome::Downloaded { url } => {
+                        println!("  {name}: downloaded from {url}")
+                    }
+                }
+            }
         }
+        Err(e) => println!("  FAILED: {e}"),
     }
 
     println!("Regularly updated files (Space Weather, Earth Orientation Parameters):");
-    for (name, url, outcome) in download_refresh_files(&downloaddir, overwrite_if_exists)? {
-        match outcome {
-            RefreshOutcome::Fresh { age_secs } => println!(
-                "  {name}: current ({:.1} h old); no request made",
-                age_secs as f64 / 3600.0
-            ),
-            RefreshOutcome::NotModified => println!("  {name}: unchanged on the server (304)"),
-            RefreshOutcome::Downloaded => println!("  {name}: downloaded from {url}"),
-        }
+    let sources = RefreshSources {
+        feeds: &m.refresh,
+        eop: &m.eop,
+        msafe: true,
+    };
+    let refresh_result = refresh_and_reload(&downloaddir, &sources, overwrite_if_exists);
+    match (static_result, refresh_result) {
+        (Ok(_), r) => r,
+        (Err(e), Ok(())) => Err(e),
+        (Err(s), Err(r)) => summarize_failures(vec![
+            ("static files".to_string(), s),
+            ("regularly updated files".to_string(), r),
+        ]),
     }
-
-    // Refresh the in-memory space-weather / EOP singletons from the files just
-    // downloaded, so a process whose lazy first load failed (e.g. it started
-    // before the data directory was populated) recovers without a restart.
-    if downloaddir.join(crate::spaceweather::GFZ_FILE).is_file()
-        || downloaddir.join(crate::spaceweather::CSSI_FILE).is_file()
-    {
-        if let Err(e) = crate::spaceweather::load_from_dir(&downloaddir) {
-            eprintln!("Warning: could not load the refreshed space-weather files: {e}");
-        }
-    }
-    if let Err(e) = crate::earth_orientation_params::load_from_dir(&downloaddir) {
-        eprintln!("Warning: could not load downloaded EOP file: {e}");
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -407,6 +514,21 @@ mod tests {
             tier: "core".into(),
             default: true,
         }
+    }
+
+    /// Downloads allowed for as long as the guard lives, whatever
+    /// `SATKIT_OFFLINE` a developer has exported; dropping it hands the
+    /// decision back to the environment. Take it while holding `ENV_LOCK`,
+    /// which orders it against the other tests that change offline mode.
+    struct Online;
+    impl Drop for Online {
+        fn drop(&mut self) {
+            download::clear_offline_override();
+        }
+    }
+    fn online() -> Online {
+        download::set_offline(false);
+        Online
     }
 
     fn tmpdir(tag: &str) -> PathBuf {
@@ -608,6 +730,7 @@ mod tests {
     #[test]
     fn fetch_success_is_verified_and_cached() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let data = b"the quick brown fox".to_vec();
         let srv = TestServer::start(HashMap::from([("good.bin".to_string(), data.clone())]));
         let dir = tmpdir("ok");
@@ -639,6 +762,7 @@ mod tests {
     #[test]
     fn fetch_falls_through_404_to_next_url() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let data = b"payload".to_vec();
         let first = TestServer::start(HashMap::new()); // serves nothing -> 404
         let second = TestServer::start(HashMap::from([("f.bin".to_string(), data.clone())]));
@@ -663,6 +787,7 @@ mod tests {
     #[test]
     fn fetch_rejects_hash_mismatch_and_tries_next_url() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let good = b"correct bytes".to_vec();
         let bad = b"corrupt bytes".to_vec(); // same length: exercises the sha check, not the size check
         let first = TestServer::start(HashMap::from([("f.bin".to_string(), bad)]));
@@ -691,6 +816,7 @@ mod tests {
     #[test]
     fn fetch_reports_every_failed_source() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let a = TestServer::start(HashMap::new());
         let b = TestServer::start(HashMap::from([("f.bin".to_string(), b"wrong".to_vec())]));
         let dir = tmpdir("allfail");
@@ -719,6 +845,7 @@ mod tests {
     #[test]
     fn mirror_override_is_tried_before_manifest_urls() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let data = b"mirror payload".to_vec();
         let mirror = TestServer::start(HashMap::from([("f.bin".to_string(), data.clone())]));
         let official = TestServer::start(HashMap::from([("f.bin".to_string(), data.clone())]));
@@ -745,6 +872,7 @@ mod tests {
     #[test]
     fn existing_corrupt_file_is_replaced() {
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let data = b"fresh".to_vec();
         let srv = TestServer::start(HashMap::from([("f.bin".to_string(), data.clone())]));
         let dir = tmpdir("corrupt");
@@ -765,6 +893,7 @@ mod tests {
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let bytes: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
         let server = TestServer::start(HashMap::from([("big.bin".to_string(), bytes.clone())]));
         let e = std::sync::Arc::new(entry("big.bin", &bytes, vec![server.url("big.bin")]));
@@ -916,7 +1045,7 @@ mod tests {
         }
         use crate::earth_orientation_params as eop;
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::utils::download::clear_offline_override();
+        let _online = online();
         let dir = tmpdir("eop_order");
 
         // Both IERS mirrors up: the first one is used and nothing else is asked.
@@ -986,9 +1115,29 @@ mod tests {
             FINALS.as_bytes().to_vec(),
         )]));
         let err = eop::refresh_into_with_sources(&dir, &eop_sources(&server), false).unwrap_err();
-        assert!(matches!(err, download::Error::Offline { .. }), "{err}");
         assert_eq!(server.hits(), 0);
-        crate::utils::download::clear_offline_override();
+        // A copy exists, so the error says it cannot be *refreshed* (not that
+        // it is missing), names the copy kept and the mirrors, and does not
+        // send anyone to a data bundle.
+        match &err {
+            download::Error::RefreshOffline { existing, urls, .. } => {
+                assert_eq!(
+                    existing.as_deref(),
+                    Some(dir.join("finals2000A.all").display().to_string().as_str())
+                );
+                assert_eq!(urls.len(), 2);
+            }
+            other => panic!("expected RefreshOffline, got {other:?}"),
+        }
+        let msg = err.to_string();
+        assert!(msg.contains("cannot be refreshed while offline"), "{msg}");
+        assert!(msg.contains("set_offline"), "{msg}");
+        assert!(msg.contains(&server.url("usno/finals2000A.all")), "{msg}");
+        assert!(msg.contains(&server.url("iers/finals2000A.all")), "{msg}");
+        assert!(!msg.contains("not present"), "{msg}");
+        assert!(!msg.contains("bundle"), "{msg}");
+        assert!(!msg.contains("(none listed)"), "{msg}");
+        download::set_offline(false);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1065,6 +1214,7 @@ mod tests {
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
 
         let body = b"feed,body\n1,2\n".to_vec();
         let server = TestServer::start(HashMap::from([("Feed.csv".to_string(), body.clone())]));
@@ -1104,6 +1254,7 @@ mod tests {
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
 
         let body = b"feed,body\n1,2\n".to_vec();
         let server = TestServer::start_with_last_modified(
@@ -1157,6 +1308,7 @@ mod tests {
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
 
         let old = b"feed,body\n1,2\n".to_vec();
         let new = b"feed,body\n1,2\n3,4\n".to_vec();
@@ -1192,6 +1344,7 @@ mod tests {
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
 
         let body = b"feed,body\n1,2\n".to_vec();
         let server = TestServer::start(HashMap::from([("Feed.csv".to_string(), body.clone())]));
@@ -1226,6 +1379,7 @@ mod tests {
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let body = b"feed,body\n1,2\n".to_vec();
         let server = TestServer::start_with_last_modified(
             HashMap::from([("Feed.csv".to_string(), body.clone())]),
@@ -1265,6 +1419,7 @@ mod tests {
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
         let body = b"feed,body\n1,2\n".to_vec();
         let server = TestServer::start(HashMap::from([("Feed.csv".to_string(), body.clone())]));
         let dir = tmpdir("refresh_empty");
@@ -1288,6 +1443,176 @@ mod tests {
             .filter(|n| n.contains(".part"))
             .collect();
         assert!(leftovers.is_empty(), "left behind {leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A refresh marker stamped in the future (a clock that was ahead, a
+    /// directory copied from such a machine) is invalid: its age would read
+    /// as zero until that date and hold the cadence gate shut. The next
+    /// refresh fetches in full. A few seconds of skew are tolerated.
+    #[test]
+    fn refresh_marker_in_the_future_is_ignored() {
+        let _guard = crate::utils::manifest::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _online = online();
+        let body = b"feed,body\n1,2\n".to_vec();
+        let server = TestServer::start_with_last_modified(
+            HashMap::from([("Feed.csv".to_string(), body.clone())]),
+            Some(LAST_MODIFIED),
+        );
+        let dir = tmpdir("refresh_future");
+        let url = server.url("Feed.csv");
+        let path = dir.join("Feed.csv");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        download::refresh_file(&url, &dir, false).unwrap();
+        assert_eq!(server.hits(), 1);
+
+        // Thirty days ahead: ignored, so the refresh is a full, unconditional
+        // fetch rather than `Fresh` for the next month.
+        write_marker(&path, now + 30 * 86400, LAST_MODIFIED);
+        assert!(download::read_refresh_marker(&path).is_none());
+        assert_eq!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Downloaded
+        );
+        assert_eq!(server.hits(), 2);
+        assert_eq!(server.conditional_hits(), 0);
+        // The fetch wrote a sane marker: the gate works again.
+        assert!(matches!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Fresh { .. }
+        ));
+        assert_eq!(server.hits(), 2);
+
+        // A minute ahead is ordinary skew: still honoured.
+        write_marker(&path, now + 60, LAST_MODIFIED);
+        assert!(download::read_refresh_marker(&path).is_some());
+        assert!(matches!(
+            download::refresh_file(&url, &dir, false).unwrap(),
+            RefreshOutcome::Fresh { age_secs: 0 }
+        ));
+        assert_eq!(server.hits(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// With no copy anywhere the offline refresh error says the file is not
+    /// present; the mirrors are listed and no bundle is suggested.
+    #[test]
+    fn refresh_offline_error_without_a_copy_says_not_present() {
+        let err = download::Error::RefreshOffline {
+            name: "Earth orientation parameters (finals2000A.all)".to_string(),
+            reason: "SATKIT_OFFLINE is set",
+            existing: None,
+            urls: vec![
+                "https://a/finals2000A.all".into(),
+                "https://b/finals2000A.all".into(),
+            ],
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("is not present and cannot be downloaded"),
+            "{msg}"
+        );
+        assert!(msg.contains("SATKIT_OFFLINE is set"), "{msg}");
+        assert!(
+            msg.contains("https://a/finals2000A.all, https://b/finals2000A.all"),
+            "{msg}"
+        );
+        assert!(!msg.contains("refreshed"), "{msg}");
+        assert!(!msg.contains("bundle"), "{msg}");
+    }
+
+    /// Sources for [`refresh_and_reload`] from a test server: `feeds` are
+    /// paths on it, EOP comes from its `usno/` and `iers/` mirrors, and
+    /// MSAFE (NASA, fixed URLs) is left out.
+    fn test_sources<'a>(
+        feeds: &'a [String],
+        eop: &'a [crate::utils::manifest::RefreshSource],
+    ) -> RefreshSources<'a> {
+        RefreshSources {
+            feeds,
+            eop,
+            msafe: false,
+        }
+    }
+
+    /// One feed that fails does not stop the others: every download is
+    /// waited for, the EOP table is still reloaded from the file that did
+    /// arrive, and the failure is returned afterwards — as itself for one
+    /// file, summarised for several. (The first feed error used to return
+    /// straight away, before the EOP refresh was joined or anything
+    /// reloaded.)
+    #[test]
+    fn refresh_failure_still_reloads_what_arrived() {
+        if !download::in_own_process(module_path!(), "refresh_failure_still_reloads_what_arrived") {
+            return; // ran, and passed, in a child process
+        }
+        use crate::earth_orientation_params as eop;
+        let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
+        let server = TestServer::start(HashMap::from([
+            ("feeds/good.txt".to_string(), b"a,b\n1,2\n".to_vec()),
+            (
+                "usno/finals2000A.all".to_string(),
+                FINALS.as_bytes().to_vec(),
+            ),
+        ]));
+        let dir = tmpdir("refresh_partial");
+        let eop_src = eop_sources(&server);
+
+        // One feed missing (404): its error comes back as itself, after the
+        // good feed and EOP were fetched and the EOP table reloaded.
+        let feeds = vec![
+            server.url("feeds/good.txt"),
+            server.url("feeds/missing.txt"),
+        ];
+        let err = refresh_and_reload(&dir, &test_sources(&feeds, &eop_src), false).unwrap_err();
+        assert!(
+            matches!(&err, Error::Download(download::Error::Request { url, .. }) if url.ends_with("missing.txt")),
+            "{err:?}"
+        );
+        assert!(dir.join("good.txt").is_file());
+        assert!(dir.join("finals2000A.all").is_file());
+        let cov = eop::coverage().expect("EOP reloaded from the refreshed file");
+        assert_eq!(cov.first.as_mjd_utc(), 61300.0);
+        assert_eq!(cov.last.as_mjd_utc(), 61301.0);
+
+        // Two feeds missing: one error naming both.
+        let feeds = vec![
+            server.url("feeds/missing.txt"),
+            server.url("feeds/gone.txt"),
+        ];
+        let err = refresh_and_reload(&dir, &test_sources(&feeds, &eop_src), true).unwrap_err();
+        match &err {
+            Error::Download(download::Error::AllSourcesFailed { name, attempts, .. }) => {
+                assert!(
+                    name.contains("missing.txt") && name.contains("gone.txt"),
+                    "{name}"
+                );
+                assert_eq!(attempts.len(), 2);
+            }
+            other => panic!("expected AllSourcesFailed, got {other:?}"),
+        }
+
+        // EOP failing (no mirror answers) does not stop the feeds either.
+        let _ = std::fs::remove_dir_all(&dir);
+        let dir = tmpdir("refresh_partial_eop");
+        let dead_eop = vec![crate::utils::manifest::RefreshSource {
+            name: "finals2000A.all".into(),
+            urls: vec![server.url("nowhere/finals2000A.all")],
+        }];
+        let feeds = vec![server.url("feeds/good.txt")];
+        let err = refresh_and_reload(&dir, &test_sources(&feeds, &dead_eop), false).unwrap_err();
+        assert!(
+            matches!(&err, Error::Download(download::Error::AllSourcesFailed { name, .. }) if name.contains("Earth orientation")),
+            "{err:?}"
+        );
+        assert!(dir.join("good.txt").is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

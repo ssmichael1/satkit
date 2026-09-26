@@ -10,7 +10,7 @@
 
 Everything that does not need the ephemeris or Earth orientation — gravity accelerations, the precession-nutation part of the frame chain, SGP4, time scales, Keplerian propagation, Lambert targeting — therefore works immediately after `pip install satkit`, offline. The numerical propagator needs the ephemeris (Sun and Moon) and the Earth-fixed frame chain needs the EOP file.
 
-Two caveats on "offline". Frame transforms need Earth-orientation parameters as well as the compiled-in nutation tables: with the Earth-orientation file (`finals2000A.all`) present in a search directory they are exact; with none at all (a first run with no network) they fall back to zero polar motion and $\Delta UT1$, warn once, and are off by up to ~0.5″ (metres at LEO), while `propagate()` refuses to run (`EopUnavailable`) rather than integrate with a tilted gravity field. And the ephemeris is only "offline" once it has been downloaded (or provisioned by hand): `SATKIT_OFFLINE=1` turns a missing ephemeris into an error, not a degraded answer.
+Two caveats on "offline". Frame transforms need Earth-orientation parameters as well as the compiled-in nutation tables: with the Earth-orientation file (`finals2000A.all`) present in a search directory they are exact; with none at all (a first run with no network) they fall back to zero polar motion and $\Delta UT1$, warn once, and are off by up to ~12″ ($\Delta UT1$ up to 0.9 s plus polar motion up to ~0.5″; typically ~3″), i.e. hundreds of metres at LEO, while `propagate()` refuses to run (`EopUnavailable`) rather than integrate with a tilted gravity field. And the ephemeris is only "offline" once it has been downloaded (or provisioned by hand): `SATKIT_OFFLINE=1` turns a missing ephemeris into an error, not a degraded answer.
 
 ## The files
 
@@ -37,7 +37,7 @@ Two caveats on "offline". Frame transforms need Earth-orientation parameters as 
 
 - **[Data directories](datadirs.md)** — where satkit looks for files and where
   it writes them, the environment variables, provisioning a machine up front,
-  the optional `satkit-data` bundle, and choosing a JPL ephemeris.
+  and choosing a JPL ephemeris.
 - **[Downloads and refresh](datadownloads.md)** — where each file comes from,
   how downloads are hash-verified, the refresh cadence for the two daily
   tables, TLS-inspecting proxies, and what happens when a fetch fails.

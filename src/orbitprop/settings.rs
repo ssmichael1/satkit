@@ -118,10 +118,13 @@ pub struct PropSettings {
     /// Runge-Kutta / Rosenbrock via [`numeris::ode::AdaptiveSettings`] and
     /// Gauss-Jackson 8 via its own settings). Default: 1_000_000.
     pub max_steps: usize,
-    /// Fail a propagation whose span (plus integrator padding) extends past
-    /// the end of the loaded Earth-orientation-parameter (EOP) table with
-    /// [`Error::EopCoverage`](super::Error::EopCoverage), instead of holding
-    /// the last EOP row constant with a one-time warning. Off by default —
+    /// Fail a propagation whose span (plus integrator padding) is not inside
+    /// the loaded Earth-orientation-parameter (EOP) table with
+    /// [`Error::EopCoverage`](super::Error::EopCoverage): one that extends
+    /// past the table's end (instead of holding the last EOP row constant
+    /// with a one-time warning) or starts before its first row, 1973-01-02
+    /// for `finals2000A.all` (instead of using zero EOP, UT1 = UTC, with a
+    /// one-time warning). Off by default —
     /// propagating into next year is a legitimate use and constant
     /// extrapolation is a reasonable best effort (polar motion and UT1−UTC
     /// drift by ~0.1″ / ~10 ms over a few months, i.e. metres at LEO) —

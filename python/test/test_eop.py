@@ -58,7 +58,7 @@ def test_require_eop_coverage_raises_past_table_end():
     t1 = t0 + sk.duration.from_seconds(600)
     strict = sk.propsettings(require_eop_coverage=True)
     assert strict.require_eop_coverage is True
-    with pytest.raises(RuntimeError, match="EOP data ends"):
+    with pytest.raises(RuntimeError, match="not inside the EOP table"):
         sk.propagate(_leo_state(), t0, end=t1, propsettings=strict)
     # Default: extrapolates and succeeds.
     res = sk.propagate(_leo_state(), t0, end=t1, propsettings=sk.propsettings())
@@ -66,6 +66,19 @@ def test_require_eop_coverage_raises_past_table_end():
     # Inside coverage the flag is inert.
     t0 = last - sk.duration.from_days(30)
     sk.propagate(_leo_state(), t0, end=t0 + sk.duration.from_seconds(600), propsettings=strict)
+
+
+def test_require_eop_coverage_raises_before_table_start():
+    """Before 1973-01-02 there is no EOP: the flag refuses the span (it used to
+    pass with zero EOP), while the default runs on zeros."""
+    t0 = sk.time(1970, 6, 1)
+    t1 = t0 + sk.duration.from_seconds(600)
+    assert sk.frametransform.eop_status(t0) == "before_table"
+    strict = sk.propsettings(require_eop_coverage=True)
+    with pytest.raises(RuntimeError, match="not inside the EOP table"):
+        sk.propagate(_leo_state(), t0, end=t1, propsettings=strict)
+    res = sk.propagate(_leo_state(), t0, end=t1, propsettings=sk.propsettings())
+    assert np.all(np.isfinite(res.state))
 
 
 def test_require_eop_coverage_property_and_pickle():

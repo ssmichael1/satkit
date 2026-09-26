@@ -22,8 +22,9 @@
 //!
 //! When the file has copies in more than one search directory, the copy
 //! with the latest last observed row is read, so a stale copy in an earlier
-//! directory (an `add_search_dir` directory, the `satkit-data` bundle) does
-//! not shadow a fresh download in the write location.
+//! directory (an `add_search_dir` directory, a system-wide copy) does not
+//! shadow a fresh download in the write location. A copy that cannot be
+//! parsed is skipped with a warning.
 //!
 //! The download URLs live in the embedded data manifest
 //! (`data/manifest.json`, `eop` section).
@@ -104,7 +105,7 @@ pub enum Error {
 /// `earth_orientation_params` module.
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(non_snake_case)]
 struct EOPEntry {
     mjd_utc: f64,
@@ -130,6 +131,9 @@ pub enum EopStatus {
     /// Inside the table, on or before the last observed row.
     Observed,
     /// Inside the table, after the last observed row: IERS predictions.
+    /// When that row is more than 30 days before the current date (the
+    /// file has not been refreshed), the first lookup here prints a
+    /// one-time warning.
     Predicted,
     /// After the last row of the table: the last row's values are held
     /// constant. Accuracy degrades with distance from the table end
@@ -181,9 +185,18 @@ fn cols(line: &str, start: usize, len: usize) -> &str {
 /// filled); nutation flag 96, dX 98–106 and dY 117–125 (mas, not always
 /// filled). Rows whose flag is blank (the tail of the file) end the table.
 ///
-/// A blank LOD is filled by the finite difference of UT1−UTC across the
-/// following day (the excess length of day is −d(UT1−UTC)/dt); a blank
-/// dX/dY is zero (no correction to the IAU 2000A model).
+/// Rows are sorted by date. A date that appears more than once (a repeated
+/// line, two copies of the file concatenated) keeps a single row: the
+/// observed (`I`) one over a predicted (`P`) one, and among rows of the same
+/// kind the one later in the file (in a concatenation, the newer copy).
+///
+/// A blank LOD is filled, after sorting and de-duplication, by the finite
+/// difference of UT1−UTC across the following day in the final table (the
+/// excess length of day is −d(UT1−UTC)/dt); a blank dX/dY is zero (no
+/// correction to the IAU 2000A model).
+///
+/// Malformed input is an [`Error::InvalidFinalsLine`], never a panic: that
+/// includes non-finite numbers and an MJD outside 0–100000.
 ///
 /// CelesTrak's `EOP-All.csv` (recognised by its `DATE,` header) is rejected
 /// with [`Error::UnsupportedCsv`].
@@ -192,10 +205,19 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
         return Err(Error::UnsupportedCsv);
     }
     let invalid = |line: usize, reason: String| Error::InvalidFinalsLine { line, reason };
+    // Rust's float parser also accepts "NaN", "inf" and exponents; none of
+    // them is a finals2000A.all value, and a non-finite number would reach
+    // the sort and the time conversions.
     let num = |line: usize, s: &str, what: &str| -> Result<f64> {
-        s.trim()
+        let v = s
+            .trim()
             .parse::<f64>()
-            .map_err(|e| invalid(line, format!("{what} {s:?}: {e}")))
+            .map_err(|e| invalid(line, format!("{what} {s:?}: {e}")))?;
+        if v.is_finite() {
+            Ok(v)
+        } else {
+            Err(invalid(line, format!("{what} {s:?} is not finite")))
+        }
     };
     let opt = |line: usize, s: &str, what: &str| -> Result<Option<f64>> {
         if s.trim().is_empty() {
@@ -205,8 +227,15 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
         }
     };
 
-    let mut rows: Vec<EOPEntry> = Vec::new();
-    let mut lod_missing: Vec<usize> = Vec::new();
+    // Each row keeps its LOD as read (`None` where the column is blank) and
+    // its line number until the table is sorted and de-duplicated; the blank
+    // LODs are filled only then, from the neighbours in the final table.
+    struct Parsed {
+        entry: EOPEntry,
+        lod: Option<f64>,
+        lineno: usize,
+    }
+    let mut rows: Vec<Parsed> = Vec::new();
     for (idx, raw) in text.lines().enumerate() {
         let lineno = idx + 1;
         let line = raw.trim_end();
@@ -224,6 +253,11 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
             other => return Err(invalid(lineno, format!("polar motion flag {other:?}"))),
         };
         let mjd_utc = num(lineno, cols(line, 8, 8), "MJD")?;
+        // MJD 0 is 1858-11-17 and 100000 is 2132-09-01: anything outside is
+        // not a date this file can hold.
+        if !(0.0..=100_000.0).contains(&mjd_utc) {
+            return Err(invalid(lineno, format!("MJD {mjd_utc} out of range")));
+        }
         let xp = num(lineno, cols(line, 19, 9), "x pole")?;
         let yp = num(lineno, cols(line, 38, 9), "y pole")?;
         // Polar motion without UT1−UTC would leave a row that cannot be
@@ -235,41 +269,64 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
         let lod = opt(lineno, cols(line, 80, 7), "LOD")?.map(|ms| ms * 1.0e-3);
         let dx = opt(lineno, cols(line, 98, 9), "dX")?.unwrap_or(0.0);
         let dy = opt(lineno, cols(line, 117, 9), "dY")?.unwrap_or(0.0);
-        if lod.is_none() {
-            lod_missing.push(rows.len());
-        }
-        rows.push(EOPEntry {
-            mjd_utc,
-            xp,
-            yp,
-            dut1,
-            lod: lod.unwrap_or(0.0),
-            dX: dx,
-            dY: dy,
-            observed,
+        rows.push(Parsed {
+            entry: EOPEntry {
+                mjd_utc,
+                xp,
+                yp,
+                dut1,
+                lod: 0.0,
+                dX: dx,
+                dY: dy,
+                observed,
+            },
+            lod,
+            lineno,
         });
     }
-    rows.sort_by(|a, b| a.mjd_utc.total_cmp(&b.mjd_utc));
-    rows.dedup_by(|a, b| a.mjd_utc == b.mjd_utc);
-    for &i in &lod_missing {
-        // Forward difference where there is a next row, else the backward
-        // one; a jump of about a second is a leap second, not a rate.
-        let pair = if i + 1 < rows.len() {
-            Some((i, i + 1))
-        } else if i > 0 {
-            Some((i - 1, i))
-        } else {
-            None
+    // Sort by date; for a date that appears more than once (a line repeated,
+    // two files concatenated) keep one row: an observed row over a
+    // predicted one, and otherwise the one later in the file. The sort puts
+    // that row first in each run of equal dates and `dedup_by` keeps the
+    // first.
+    rows.sort_by(|a, b| {
+        a.entry
+            .mjd_utc
+            .total_cmp(&b.entry.mjd_utc)
+            .then(b.entry.observed.cmp(&a.entry.observed))
+            .then(b.lineno.cmp(&a.lineno))
+    });
+    rows.dedup_by(|later, kept| later.entry.mjd_utc == kept.entry.mjd_utc);
+    let lods: Vec<Option<f64>> = rows.iter().map(|r| r.lod).collect();
+    let mut table: Vec<EOPEntry> = rows.into_iter().map(|r| r.entry).collect();
+    for (i, lod) in lods.into_iter().enumerate() {
+        table[i].lod = match lod {
+            Some(v) => v,
+            None => lod_from_neighbours(&table, i),
         };
-        if let Some((a, b)) = pair {
-            let d = rows[b].dut1 - rows[a].dut1;
-            let dt = rows[b].mjd_utc - rows[a].mjd_utc;
-            if dt > 0.0 && d.abs() < 0.5 {
-                rows[i].lod = -d / dt;
-            }
-        }
     }
-    Ok(rows)
+    Ok(table)
+}
+
+/// Excess length of day at row `i` of a sorted, de-duplicated table from
+/// UT1−UTC: the forward difference where there is a next row, else the
+/// backward one, else zero. A jump of about a second is a leap second, not a
+/// rate, and gives zero.
+fn lod_from_neighbours(table: &[EOPEntry], i: usize) -> f64 {
+    let (a, b) = if i + 1 < table.len() {
+        (i, i + 1)
+    } else if i > 0 {
+        (i - 1, i)
+    } else {
+        return 0.0;
+    };
+    let d = table[b].dut1 - table[a].dut1;
+    let dt = table[b].mjd_utc - table[a].mjd_utc;
+    if dt > 0.0 && d.abs() < 0.5 {
+        -d / dt
+    } else {
+        0.0
+    }
 }
 
 /// Check that the file at `path` is a parsable `finals2000A.all`, without
@@ -280,12 +337,17 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
 /// transfer — before it replaces a good table on disk. The check is the real
 /// parser, so anything that would later fail to load fails here instead,
 /// while the previous file is still in place.
+///
+/// A parser panic (a bug; malformed input is an error) is reported as a
+/// rejection rather than unwinding through the refresh thread, which would
+/// leave the partial download behind.
 pub(crate) fn validate_file(path: &Path) -> std::result::Result<(), String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    match parse_finals2000a(&text) {
-        Ok(t) if t.is_empty() => Err("the file holds no EOP rows".to_string()),
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("not a parsable EOP file ({e})")),
+    match std::panic::catch_unwind(|| parse_finals2000a(&text)) {
+        Ok(Ok(t)) if t.is_empty() => Err("the file holds no EOP rows".to_string()),
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(format!("not a parsable EOP file ({e})")),
+        Err(_) => Err("the EOP parser failed on this file".to_string()),
     }
 }
 
@@ -334,35 +396,49 @@ pub fn load_from_dir(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The freshest copy of `finals2000A.all` in `dirs`: the one whose last
-/// observed row is latest (ties keep search order; see
-/// [`datadir::freshest_of`]).
-fn freshest_copy(dirs: &[PathBuf]) -> Option<PathBuf> {
-    datadir::freshest_of(datadir::find_all_in(dirs, FINALS2000A_FILE), |text| {
-        parse_finals2000a(text)
-            .ok()
-            .filter(|t| !t.is_empty())
-            .map(|t| last_observed_mjd(&t))
-    })
+/// The freshest readable copy of `finals2000A.all` in `dirs`, parsed, with
+/// its path: the one whose last observed row is latest, ties keeping search
+/// order. A copy that cannot be read or parsed is skipped with a warning
+/// (see [`read_table`]), so one corrupt copy anywhere in the search path
+/// never stops a good one from loading.
+fn freshest_table(dirs: &[PathBuf]) -> Option<(PathBuf, Vec<EOPEntry>)> {
+    let mut best: Option<(PathBuf, Vec<EOPEntry>)> = None;
+    for p in datadir::find_all_in(dirs, FINALS2000A_FILE) {
+        let Some(t) = read_table(Some(&p)) else {
+            continue;
+        };
+        if best
+            .as_ref()
+            .is_none_or(|(_, b)| last_observed_mjd(&t) > last_observed_mjd(b))
+        {
+            best = Some((p, t));
+        }
+    }
+    best
 }
 
-/// Lazy default load: the freshest copy of `finals2000A.all` across the
-/// data search directories; when there is none, refresh into the write
-/// location first.
+/// Lazy default load: the freshest readable copy of `finals2000A.all`
+/// across the data search directories; when there is no copy at all,
+/// refresh into the write location first.
 fn load_default() -> Result<Vec<EOPEntry>> {
-    let finals = match freshest_copy(&datadir::search_dirs()) {
-        Some(p) => p,
-        None => {
-            let dir = datadir::datadir()?;
-            refresh_into(&dir, false)?;
-            dir.join(FINALS2000A_FILE)
-        }
-    };
-    read_table(existing(finals.clone()).as_deref()).ok_or_else(|| Error::NoEopFile {
-        dir: finals.parent().map_or_else(
-            || "the data directories".to_string(),
-            |d| d.display().to_string(),
-        ),
+    let dirs = datadir::search_dirs();
+    let copies = datadir::find_all_in(&dirs, FINALS2000A_FILE);
+    if !copies.is_empty() {
+        return freshest_table(&dirs)
+            .map(|(_, t)| t)
+            .ok_or_else(|| Error::NoEopFile {
+                dir: copies
+                    .iter()
+                    .filter_map(|p| p.parent())
+                    .map(|d| d.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            });
+    }
+    let dir = datadir::datadir()?;
+    refresh_into(&dir, false)?;
+    read_table(existing(dir.join(FINALS2000A_FILE)).as_deref()).ok_or_else(|| Error::NoEopFile {
+        dir: dir.display().to_string(),
     })
 }
 
@@ -388,8 +464,9 @@ pub struct RefreshOutcome {
 /// next URL tried). Does not change the loaded table — call
 /// [`load_from_dir`] or [`update`] for that.
 ///
-/// Fails with [`download::Error::Offline`] under offline mode without any
-/// network I/O, and with [`download::Error::AllSourcesFailed`] listing every
+/// Fails with [`download::Error::RefreshOffline`] under offline mode without
+/// any network I/O (it says whether a copy exists, which then stays in use,
+/// and lists the mirrors for fetching the file by hand), and with [`download::Error::AllSourcesFailed`] listing every
 /// URL and its error when nothing could be fetched.
 pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome> {
     refresh_into_with_sources(dir, &crate::utils::manifest::embedded().eop, force)
@@ -402,12 +479,24 @@ pub(crate) fn refresh_into_with_sources(
     sources: &[RefreshSource],
     force: bool,
 ) -> download::Result<RefreshOutcome> {
-    download::check_online("Earth orientation parameters")?;
-    let mut attempts: Vec<String> = Vec::new();
-    let urls = sources
+    let urls: Vec<&String> = sources
         .iter()
         .filter(|s| s.name == FINALS2000A_FILE)
-        .flat_map(|s| &s.urls);
+        .flat_map(|s| &s.urls)
+        .collect();
+    if let Some(reason) = download::offline_reason() {
+        // The copy a refresh would replace, else whichever copy the search
+        // directories hold: either way the message says it stays in use.
+        let copy = existing(dir.join(FINALS2000A_FILE))
+            .or_else(|| datadir::find_all(FINALS2000A_FILE).into_iter().next());
+        return Err(download::Error::RefreshOffline {
+            name: format!("Earth orientation parameters ({FINALS2000A_FILE})"),
+            reason,
+            existing: copy.map(|p| p.display().to_string()),
+            urls: urls.into_iter().cloned().collect(),
+        });
+    }
+    let mut attempts: Vec<String> = Vec::new();
     for url in urls {
         match refresh_file(url, dir, force) {
             Ok(fetch) => {
@@ -454,6 +543,27 @@ fn beyond_table(mjd_utc: f64, last: &EOPEntry) -> bool {
 static WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 static EXTRAP_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 static NOT_LOADED_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+static STALE_PREDICTION_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+
+/// Days after which the observed part of the table counts as stale: a query
+/// in the predicted range of a table whose last observed row is older than
+/// this (by the wall clock) gets a one-time warning. IERS updates the file
+/// daily; month-old predictions are already off by ~0.1″ and ~10–20 ms.
+const STALE_OBSERVED_DAYS: f64 = 30.0;
+
+/// For a query at `mjd_utc` after the last observed row of `eop`, when that
+/// row is more than [`STALE_OBSERVED_DAYS`] before `now_mjd`: the row's MJD
+/// and its age in days. Otherwise (a query on observed data, a recent
+/// table, a table with no observed rows) `None`.
+///
+/// The observed rows precede the predicted ones, so the boundary is a
+/// binary search: this runs on the lookup path.
+fn stale_prediction_age(eop: &[EOPEntry], mjd_utc: f64, now_mjd: f64) -> Option<(f64, f64)> {
+    let n_observed = eop.partition_point(|e| e.observed);
+    let last_observed = eop.get(n_observed.checked_sub(1)?)?.mjd_utc;
+    let age = now_mjd - last_observed;
+    (mjd_utc > last_observed && age > STALE_OBSERVED_DAYS).then_some((last_observed, age))
+}
 
 /// Module-scope refreshable singleton. The lazy default load (best-effort,
 /// silent on failure) runs at most once; [`init_from_bytes`] /
@@ -489,10 +599,11 @@ pub fn init_from_path(path: &Path) -> Result<()> {
 ///
 /// Disable the warnings about out-of-range or missing EOP data.
 ///
-/// Three one-time warnings exist: epoch before the table, epoch after the
-/// table (values held constant), and no table loaded at all (zeros used).
-/// Each is shown at most once per process; call this to suppress all of
-/// them.
+/// Four one-time warnings exist: epoch before the table, epoch after the
+/// table (values held constant), epoch in the predictions of a table whose
+/// observed data ended more than 30 days ago (stale predictions), and no
+/// table loaded at all (zeros used). Each is shown at most once per
+/// process; call this to suppress all of them.
 ///
 /// # Example
 ///
@@ -504,6 +615,7 @@ pub fn disable_eop_time_warning() {
     WARNING_SHOWN.store(true, Ordering::Relaxed);
     EXTRAP_WARNING_SHOWN.store(true, Ordering::Relaxed);
     NOT_LOADED_WARNING_SHOWN.store(true, Ordering::Relaxed);
+    STALE_PREDICTION_WARNING_SHOWN.store(true, Ordering::Relaxed);
 }
 
 /// Time bounds of the loaded EOP table, or `None` if no table is loaded
@@ -603,7 +715,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
             eprintln!(
                 "Warning: no Earth Orientation Parameters (EOP) table is loaded; polar motion, \
                  UT1-UTC and nutation corrections are being treated as zero, which biases \
-                 Earth-fixed frame transforms and orbit propagation by metres.\n\
+                 Earth-fixed frame transforms by up to ~12 arcsec (UT1-UTC up to 0.9 s \
+                 plus polar motion up to ~0.5 arcsec), i.e. hundreds of metres at LEO.\n\
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
                  to download finals2000A.all, or set SATKIT_DATA to a directory containing it.\n\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
@@ -651,6 +764,30 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
             );
         }
         return Some([last.dut1, last.xp, last.yp, last.lod, last.dX, last.dY]);
+    }
+
+    // Inside the predictions of a file that has not been refreshed for a
+    // month or more: the values are old forecasts, not measurements. The
+    // wall clock is read only for a query past an observed row, until the
+    // warning has been shown.
+    if !eop[idx].observed && !STALE_PREDICTION_WARNING_SHOWN.load(Ordering::Relaxed) {
+        let now = Instant::now().as_mjd_utc();
+        if let Some((last_observed, age)) = stale_prediction_age(eop, mjd_utc, now) {
+            if !STALE_PREDICTION_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+                eprintln!(
+                    "Warning: EOP for MJD UTC = {mjd_utc} comes from IERS predictions made \
+                     {age:.0} days ago: the loaded table's observed data ends at {} \
+                     (MJD {last_observed}), and the file has not been refreshed since. \
+                     Months-old predictions are off by ~0.3-0.6 arcsec in UT1 \
+                     (10-20 m at LEO).\n\
+                     Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+                     to download the current Earth orientation file.\n\
+                     To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
+                     (Python: `satkit.frametransform.disable_eop_time_warning()`)",
+                    Instant::from_mjd_utc(last_observed)
+                );
+            }
+        }
     }
 
     // Linear interpolation between bracketing entries
@@ -819,6 +956,201 @@ mod tests {
         assert!(parse_finals2000a("<!DOCTYPE html><html></html>").is_err());
     }
 
+    /// `text`'s lines in the given order, newline-terminated.
+    fn reorder(text: &str, order: &[usize]) -> String {
+        let lines: Vec<&str> = text.lines().collect();
+        order.iter().map(|&i| format!("{}\n", lines[i])).collect()
+    }
+
+    /// A repeated line, the file concatenated with itself, and the rows in
+    /// reverse or shuffled order all parse to the same table as the file
+    /// itself — including the LOD filled for the blank-LOD rows, which is
+    /// computed from the neighbours in the sorted table. (A repeated line
+    /// used to panic with an out-of-bounds index; unsorted rows used to get
+    /// LODs filled on the wrong rows.)
+    #[test]
+    fn parse_finals_duplicates_and_order_do_not_matter() {
+        let reference = parse_finals2000a(FINALS_SAMPLE).unwrap();
+        assert_eq!(reference.len(), 5);
+        let variants = [
+            // Line 3 (blank LOD) repeated, and line 5 (blank LOD, the last row).
+            reorder(FINALS_SAMPLE, &[0, 1, 2, 2, 3, 4, 4, 5]),
+            format!("{FINALS_SAMPLE}{FINALS_SAMPLE}"),
+            reorder(FINALS_SAMPLE, &[5, 4, 3, 2, 1, 0]),
+            reorder(FINALS_SAMPLE, &[3, 0, 4, 2, 5, 1]),
+            reorder(FINALS_SAMPLE, &[4, 2, 0, 3, 1, 2, 4]),
+        ];
+        for text in &variants {
+            let t = parse_finals2000a(text).unwrap();
+            assert_eq!(t, reference, "{text}");
+        }
+        // The validator accepts them too.
+        let dir = std::env::temp_dir().join(format!("satkit_eop_dup_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join(FINALS2000A_FILE);
+        std::fs::write(&p, &variants[0]).unwrap();
+        assert_eq!(validate_file(&p), Ok(()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// For a date that appears more than once the observed row wins over a
+    /// predicted one wherever they are in the file, and among rows of the
+    /// same kind the later one in the file wins.
+    #[test]
+    fn parse_finals_dedup_rule() {
+        let lines: Vec<&str> = FINALS_SAMPLE.lines().collect();
+        let observed = lines[2]; // 61300, observed
+        let predicted = observed.replacen(" I  ", " P  ", 1);
+        assert_eq!(cols(&predicted, 17, 1), "P");
+        for text in [
+            format!("{observed}\n{predicted}\n"),
+            format!("{predicted}\n{observed}\n"),
+        ] {
+            let t = parse_finals2000a(&text).unwrap();
+            assert_eq!(t.len(), 1);
+            assert!(t[0].observed, "{text}");
+        }
+        // Two observed rows for one date (a revised value): the later wins.
+        let revised = observed.replacen("0.190054", "0.190999", 1);
+        let t = parse_finals2000a(&format!("{observed}\n{revised}\n")).unwrap();
+        assert_eq!(t.len(), 1);
+        assert!((t[0].xp - 0.190999).abs() < 1e-12);
+        let t = parse_finals2000a(&format!("{revised}\n{observed}\n")).unwrap();
+        assert!((t[0].xp - 0.190054).abs() < 1e-12);
+    }
+
+    /// The same on the real file: concatenated with itself, or with every
+    /// row reversed, it parses to the table the file itself gives (the
+    /// duplicated file used to panic with "index out of bounds: the len is
+    /// 19997 but the index is 19997").
+    #[test]
+    fn parse_real_finals_duplicated_and_reversed() {
+        let path = datadir::find_all(FINALS2000A_FILE)
+            .into_iter()
+            .next()
+            .expect("finals2000A.all present in tests");
+        let text = std::fs::read_to_string(path).unwrap();
+        let reference = parse_finals2000a(&text).unwrap();
+        assert!(reference.len() > 19_000);
+        let doubled = parse_finals2000a(&format!("{text}{text}")).unwrap();
+        assert_eq!(doubled, reference);
+        let reversed: String = text.lines().rev().map(|l| format!("{l}\n")).collect();
+        assert_eq!(parse_finals2000a(&reversed).unwrap(), reference);
+        // One line repeated in the middle of the file.
+        let mut lines: Vec<&str> = text.lines().collect();
+        lines.insert(1000, lines[999]);
+        let dup: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert_eq!(parse_finals2000a(&dup).unwrap(), reference);
+    }
+
+    /// Values Rust's float parser accepts but no EOP file holds (NaN,
+    /// infinities, an absurd MJD) are errors, not table rows.
+    #[test]
+    fn parse_finals_rejects_non_finite_and_out_of_range() {
+        let good = FINALS_SAMPLE.lines().nth(1).unwrap();
+        for (from, to) in [
+            ("48683.00", "     NaN"),
+            ("48683.00", "     inf"),
+            ("48683.00", "   1e300"),
+            ("48683.00", "-4868.00"),
+            (" 0.006416", "      NaN"),
+            ("-0.2719443", "      -inf"),
+        ] {
+            let bad = good.replacen(from, to, 1);
+            assert_ne!(bad, good);
+            assert!(
+                matches!(
+                    parse_finals2000a(&bad),
+                    Err(Error::InvalidFinalsLine { line: 1, .. })
+                ),
+                "{bad}"
+            );
+        }
+    }
+
+    /// A copy in an earlier search directory that is duplicated (formerly a
+    /// parser panic inside the default load, which poisoned the singleton
+    /// for the rest of the process) or corrupt does not stop the default
+    /// load: the duplicated copy loads as the table it holds, the corrupt
+    /// one is skipped with a warning, and a singleton loaded through the
+    /// same path answers every later read.
+    #[test]
+    fn bad_copy_in_earlier_search_dir_does_not_poison_load() {
+        let root = std::env::temp_dir().join(format!("satkit_eop_poison_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (early, late) = (root.join("early"), root.join("late"));
+        std::fs::create_dir_all(&early).unwrap();
+        std::fs::create_dir_all(&late).unwrap();
+        // The early copy is the sample with lines repeated and shuffled but
+        // cut after its last observed row, the late one the full sample.
+        std::fs::write(
+            early.join(FINALS2000A_FILE),
+            reorder(FINALS_SAMPLE, &[2, 1, 0, 1, 2]),
+        )
+        .unwrap();
+        std::fs::write(late.join(FINALS2000A_FILE), FINALS_SAMPLE).unwrap();
+        let dirs = vec![early.clone(), late.clone()];
+        let reference = parse_finals2000a(FINALS_SAMPLE).unwrap();
+
+        // Both have the same last observed row: search order wins.
+        let (p, t) = freshest_table(&dirs).unwrap();
+        assert_eq!(p, early.join(FINALS2000A_FILE));
+        assert_eq!(t.len(), 3);
+        assert_eq!(t[..2], reference[..2]);
+
+        let single: RefreshableSingleton<Vec<EOPEntry>> = RefreshableSingleton::new();
+        single.ensure_default_loaded(|| freshest_table(&dirs).map(|(_, t)| t));
+        for _ in 0..3 {
+            single.ensure_default_loaded(|| unreachable!("the default load runs once"));
+            assert_eq!(single.read().as_ref().map(Vec::len), Some(3));
+        }
+
+        // A corrupt early copy is skipped for the good late one.
+        std::fs::write(early.join(FINALS2000A_FILE), "73 1 2 41684.00 X garbage\n").unwrap();
+        let (p, t) = freshest_table(&dirs).unwrap();
+        assert_eq!(p, late.join(FINALS2000A_FILE));
+        assert_eq!(t, reference);
+        // Nothing readable at all: no table, and no panic.
+        std::fs::write(late.join(FINALS2000A_FILE), "<html></html>\n").unwrap();
+        assert!(freshest_table(&dirs).is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A table whose observed data ends months before today (the real file
+    /// with every row after a past date re-flagged as predicted) makes a
+    /// query in its predictions stale; a query on observed data, or a table
+    /// observed up to a recent date, is not.
+    #[test]
+    fn stale_predictions_are_detected() {
+        let path = datadir::find_all(FINALS2000A_FILE)
+            .into_iter()
+            .next()
+            .expect("finals2000A.all present in tests");
+        let mut t = parse_finals2000a(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let now = Instant::now().as_mjd_utc();
+        let cutoff = (now - 200.0).floor();
+        for r in t.iter_mut().filter(|r| r.mjd_utc > cutoff) {
+            r.observed = false;
+        }
+        // Six months of predictions made 200 days ago.
+        let (last, age) = stale_prediction_age(&t, now, now).expect("stale");
+        assert_eq!(last, cutoff);
+        assert!((age - (now - cutoff)).abs() < 1e-9, "{age}");
+        assert!(stale_prediction_age(&t, cutoff + 10.5, now).is_some());
+        // Observed data is never stale, however old the file.
+        assert!(stale_prediction_age(&t, cutoff - 10.0, now).is_none());
+        assert!(stale_prediction_age(&t, cutoff, now).is_none());
+        // The same table seen from shortly after the cutoff: current.
+        assert!(stale_prediction_age(&t, cutoff + 10.5, cutoff + 20.0).is_none());
+        assert!(stale_prediction_age(&t, cutoff + 10.5, cutoff + 31.0).is_some());
+        // No observed rows at all: nothing to date the predictions by.
+        for r in t.iter_mut() {
+            r.observed = false;
+        }
+        assert!(stale_prediction_age(&t, now, now).is_none());
+        assert!(stale_prediction_age(&[], now, now).is_none());
+    }
+
     /// CelesTrak's `EOP-All.csv` is refused with an error that names
     /// `finals2000A.all` and `update_datafiles()`, from bytes, from a path
     /// and by the download validator.
@@ -867,15 +1199,20 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Path of the copy [`freshest_table`] picks.
+    fn freshest_copy(dirs: &[PathBuf]) -> Option<PathBuf> {
+        freshest_table(dirs).map(|(p, _)| p)
+    }
+
     /// A stale copy of `finals2000A.all` in an earlier search directory (an
-    /// `add_search_dir` directory, the `satkit-data` bundle) must not shadow
+    /// `add_search_dir` directory, a system-wide copy) must not shadow
     /// the fresh copy in a later one (the write location): the default load
     /// reads the copy with the latest observed row.
     #[test]
     fn stale_copy_in_earlier_search_dir_does_not_shadow_fresh_one() {
         let root = std::env::temp_dir().join(format!("satkit_eop_shadow_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let (early, late) = (root.join("bundle"), root.join("write"));
+        let (early, late) = (root.join("system"), root.join("write"));
         std::fs::create_dir_all(&early).unwrap();
         std::fs::create_dir_all(&late).unwrap();
         // Stale: the file truncated after its 1992 row.

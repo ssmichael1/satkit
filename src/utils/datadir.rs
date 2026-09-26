@@ -4,8 +4,8 @@
 //!
 //! * **Where to look** for a file — [`search_dirs`] / [`find_file`]: an
 //!   ordered list of read candidates. Any of them may be read-only (a
-//!   system-wide `/usr/share/satkit-data`, or the optional `satkit-data`
-//!   Python package inside `site-packages`).
+//!   system-wide `/usr/share/satkit-data`, a directory next to the shared
+//!   library).
 //! * **Where to write** downloads — [`datadir`]: exactly one directory, the
 //!   platform user-data directory unless `SATKIT_DATA` (or [`set_datadir`])
 //!   overrides it. satkit never creates a directory next to its own shared
@@ -20,18 +20,15 @@
 //!
 //! 1. `SATKIT_DATA` (environment) — also the write location when set
 //! 2. a directory given to [`set_datadir`] — also the write location
-//! 3. directories added with [`add_search_dir`] (e.g. by the Python package
-//!    when the optional `satkit_data` bundle is importable)
+//! 3. directories added with [`add_search_dir`]
 //! 4. `<dir of the satkit shared library>/satkit-data`
-//! 5. `<site-packages>/satkit_data/data` (the `satkit-data` pip package,
-//!    found relative to the shared library)
-//! 6. the platform user-data directory (the default write location):
+//! 5. the platform user-data directory (the default write location):
 //!    macOS `~/Library/Application Support/satkit-data`,
 //!    Linux/other `$XDG_DATA_HOME/satkit-data` (default
 //!    `~/.local/share/satkit-data`), Windows `%LOCALAPPDATA%\satkit-data`
-//! 7. `~/.satkit-data` (legacy location, read only)
-//! 8. `/usr/share/satkit-data`
-//! 9. macOS: `/Library/Application Support/satkit-data`
+//! 6. `~/.satkit-data` (legacy location, read only)
+//! 7. `/usr/share/satkit-data`
+//! 8. macOS: `/Library/Application Support/satkit-data`
 //!
 //! The resolution is a pure function of the environment ([`resolve`]) so it
 //! can be tested for every platform without touching the file system.
@@ -176,9 +173,6 @@ pub fn resolve(env: &Env, explicit: Option<&Path>, extra: &[PathBuf]) -> Resolve
     }
     if let Some(dylib) = &env.dylib_dir {
         push(dylib.join(DIR_NAME));
-        if let Some(site_packages) = dylib.parent() {
-            push(site_packages.join("satkit_data").join("data"));
-        }
     }
     let user_dir = user_data_dir(env);
     if let Some(d) = &user_dir {
@@ -238,15 +232,16 @@ pub(crate) fn find_all_in(dirs: &[PathBuf], name: &str) -> Vec<PathBuf> {
 
 /// Of several copies of one refreshed data file, the one whose content is
 /// freshest by `key` — for the space-weather files the day of the last
-/// row, for the Earth-orientation files the MJD of the last observed row.
+/// row. (The Earth-orientation loader does the same with the MJD of the
+/// last observed row, keeping each parsed table so it is read only once.)
 /// Ties keep the earlier copy in `copies`, i.e. search order. Copies that
 /// cannot be read, or for which `key` is `None`, are skipped; if none
 /// qualifies, the first copy is returned so the load reports its error.
 /// With one copy nothing is read.
 ///
 /// A read-only copy in a search directory ahead of the write location (an
-/// [`add_search_dir`] directory, `<dylib>/satkit-data`, the `satkit-data`
-/// bundle) would otherwise shadow every later download: [`find_file`] and
+/// [`add_search_dir`] directory, `<dylib>/satkit-data`) would otherwise
+/// shadow every later download: [`find_file`] and
 /// [`path_for`] return the first match.
 pub(crate) fn freshest_of<K: PartialOrd>(
     copies: Vec<PathBuf>,
@@ -345,9 +340,8 @@ fn no_write_dir_detail(env: &Env, search: &[PathBuf]) -> String {
 }
 
 /// Add a read-only search directory (tried after `SATKIT_DATA` and
-/// [`set_datadir`], before the platform locations). Used by the Python
-/// package to register the optional `satkit_data` bundle wherever it is
-/// installed.
+/// [`set_datadir`], before the platform locations): a shared or
+/// provisioned copy of the data files, for example.
 pub fn add_search_dir(d: &Path) {
     let mut v = EXTRA_SEARCH.lock().unwrap_or_else(|e| e.into_inner());
     if !v.iter().any(|x| x == d) {
@@ -481,7 +475,6 @@ mod tests {
             r.search,
             vec![
                 PathBuf::from("/venv/lib/python3.13/site-packages/satkit/satkit-data"),
-                PathBuf::from("/venv/lib/python3.13/site-packages/satkit_data/data"),
                 PathBuf::from("/home/u/Library/Application Support/satkit-data"),
                 PathBuf::from("/home/u/.satkit-data"),
                 PathBuf::from("/usr/share/satkit-data"),
@@ -502,7 +495,7 @@ mod tests {
         e.xdg_data_home = Some(PathBuf::from("/xdg"));
         let r = resolve(&e, None, &[]);
         assert_eq!(r.write.as_deref(), Some(Path::new("/xdg/satkit-data")));
-        assert_eq!(r.search[2], PathBuf::from("/xdg/satkit-data"));
+        assert_eq!(r.search[1], PathBuf::from("/xdg/satkit-data"));
         assert!(
             r.search.contains(&PathBuf::from("/home/u/.satkit-data")),
             "legacy read candidate"

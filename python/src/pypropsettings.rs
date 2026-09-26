@@ -117,7 +117,7 @@ impl From<TideModel> for PyTideModel {
 ///     integrator (satkit.integrator): ODE integrator. Default integrator.rkv98
 ///     gj_step_seconds (float): Fixed step size for integrator.gauss_jackson8, seconds. Default 60.0
 ///     max_steps (int): Maximum number of integrator steps. Default 1_000_000
-///     require_eop_coverage (bool): Raise if the span extends past the EOP table. Default False
+///     require_eop_coverage (bool): Raise if the span is not inside the EOP table (past its end or before 1973-01-02). Default False
 ///     initial_step_secs (float | None): First step the adaptive integrators attempt, seconds.
 ///         Default None: derived from the initial state, tolerances and integrator order.
 ///         Set to a previous result's ``next_step_secs`` to warm-start a follow-on arc.
@@ -387,10 +387,11 @@ impl PyPropSettings {
         Ok(())
     }
 
-    /// Fail a propagation whose span extends past the end of the loaded
-    /// Earth-orientation-parameter (EOP) table instead of holding the last
-    /// EOP row constant with a one-time warning. Default False. See
-    /// ``satkit.frametransform.eop_coverage``.
+    /// Fail a propagation whose span is not inside the loaded
+    /// Earth-orientation-parameter (EOP) table: past its end (instead of
+    /// holding the last EOP row constant) or before its start, 1973-01-02
+    /// (instead of using zero EOP), each otherwise with a one-time warning.
+    /// Default False. See ``satkit.frametransform.eop_coverage``.
     #[getter]
     fn get_require_eop_coverage(&self) -> bool {
         self.0.require_eop_coverage

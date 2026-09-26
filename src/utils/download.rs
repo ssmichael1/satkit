@@ -30,14 +30,31 @@ pub enum Error {
     /// (from the data manifest, when the file is a pinned one).
     #[error(
         "{name} is not present and cannot be downloaded ({reason}). \
-         Provide it in the data directory (SATKIT_DATA) or install the `satkit-data` bundle; \
-         sources: {}",
+         Provide it in the data directory (SATKIT_DATA); sources: {}",
         if urls.is_empty() { "(none listed)".to_string() } else { urls.join(", ") }
     )]
     #[non_exhaustive]
     Offline {
         name: String,
         reason: &'static str,
+        urls: Vec<String>,
+    },
+
+    /// A refresh of a periodically republished data file (the Earth
+    /// orientation table, `finals2000A.all`) was requested while downloads
+    /// are forbidden (`reason` says why). No network I/O is attempted.
+    /// `existing` is the copy that stays in use, or `None` when there is no
+    /// copy at all; `urls` are the sources the refresh would have used, for
+    /// fetching the file by hand.
+    #[error(
+        "{}",
+        refresh_offline_message(name, reason, existing.as_deref(), urls)
+    )]
+    #[non_exhaustive]
+    RefreshOffline {
+        name: String,
+        reason: &'static str,
+        existing: Option<String>,
         urls: Vec<String>,
     },
 
@@ -309,8 +326,32 @@ pub(crate) fn offline_error(name: &str, reason: &'static str) -> Error {
     }
 }
 
-/// Return [`Error::Offline`] if [`OFFLINE_ENV`] is set (checked before any
-/// network I/O by every download helper).
+/// Text of [`Error::RefreshOffline`]: "cannot be refreshed" when a copy
+/// exists (it stays in use), "not present" only when there is none.
+fn refresh_offline_message(
+    name: &str,
+    reason: &str,
+    existing: Option<&str>,
+    urls: &[String],
+) -> String {
+    let sources = if urls.is_empty() {
+        "(none listed)".to_string()
+    } else {
+        urls.join(", ")
+    };
+    match existing {
+        Some(path) => format!(
+            "{name} cannot be refreshed while offline ({reason}); the existing copy \
+             {path} is kept and still used. To refresh it, allow downloads and run \
+             update_datafiles(), or replace it by hand from: {sources}"
+        ),
+        None => format!(
+            "{name} is not present and cannot be downloaded ({reason}). Place a copy in \
+             the data directory (SATKIT_DATA); sources: {sources}"
+        ),
+    }
+}
+
 /// User-Agent sent with every HTTP request satkit makes.
 ///
 /// CelesTrak's usage policy asks clients to identify themselves and not to
@@ -516,6 +557,8 @@ fn file_name(path: &Path) -> Result<&str> {
         })
 }
 
+/// Return [`Error::Offline`] if downloads are forbidden (checked before any
+/// network I/O by every download helper).
 pub(crate) fn check_online(name: &str) -> Result<()> {
     match offline_reason() {
         Some(reason) => Err(offline_error(name, reason)),
@@ -919,6 +962,12 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
+/// How far in the future a refresh marker's check time may lie (clock
+/// adjustments, a directory shared between machines) before
+/// [`read_refresh_marker`] rejects it.
+#[cfg(feature = "download")]
+const MARKER_FUTURE_TOLERANCE_SECS: u64 = 300;
+
 /// Whole seconds of a file's modification time.
 ///
 /// Sub-second precision is deliberately dropped: it does not survive a
@@ -947,12 +996,20 @@ fn mtime_secs(md: &std::fs::Metadata) -> u64 {
 ///
 /// A marker written before those fields existed has a one-field first line,
 /// fails to parse here, and costs one full fetch before being rewritten.
+///
+/// A marker stamped more than [`MARKER_FUTURE_TOLERANCE_SECS`] in the future
+/// (written under a clock that was ahead, or a directory copied from such a
+/// machine) is invalid too: its age would read as zero until that date and
+/// hold the cadence gate shut, so no refresh would happen for as long.
 #[cfg(feature = "download")]
 pub(crate) fn read_refresh_marker(path: &Path) -> Option<(u64, Option<String>)> {
     let text = std::fs::read_to_string(refresh_marker_path(path)).ok()?;
     let mut lines = text.lines();
     let mut head = lines.next()?.split_whitespace();
     let checked_at: u64 = head.next()?.parse().ok()?;
+    if checked_at > unix_now().saturating_add(MARKER_FUTURE_TOLERANCE_SECS) {
+        return None;
+    }
     let size: u64 = head.next()?.parse().ok()?;
     let mtime: u64 = head.next()?.parse().ok()?;
     let md = std::fs::metadata(path).ok()?;

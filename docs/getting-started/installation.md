@@ -21,7 +21,7 @@ See [Data Files](datafiles.md) for what each file is and [Downloads and Refresh]
 
 ### Offline and air-gapped use
 
-Run `satkit.utils.update_datafiles()` once to provision everything up front (a Docker image, a CI job, a machine that will later be offline); the steps for copying the result to an air-gapped machine are in [Provisioning up front](datadirs.md#provisioning-up-front). `pip install satkit[data]` installs the optional [`satkit-data` bundle](datadirs.md#the-optional-satkit-data-bundle) instead. The environment variables that control the data directory, mirrors, offline mode and TLS (`SATKIT_DATA`, `SATKIT_DATA_URL`, `SATKIT_OFFLINE`, `SATKIT_CA_BUNDLE`, …) are listed in [Data Directories](datadirs.md#environment-variables-and-api), with the full search order per platform.
+Run `satkit.utils.update_datafiles()` once to provision everything up front (a Docker image, a CI job, a machine that will later be offline); the steps for copying the result to an air-gapped machine are in [Provisioning up front](datadirs.md#provisioning-up-front). The environment variables that control the data directory, mirrors, offline mode and TLS (`SATKIT_DATA`, `SATKIT_DATA_URL`, `SATKIT_OFFLINE`, `SATKIT_CA_BUNDLE`, …) are listed in [Data Directories](datadirs.md#environment-variables-and-api), with the full search order per platform.
 
 ## Conda
 

@@ -12,15 +12,14 @@ Two separate questions. Files are **looked up** across an ordered list of direct
 |---|---|---|---|---|
 | 1 | `SATKIT_DATA` environment variable — **also the write location when set** | ✓ | ✓ | ✓ |
 | 2 | directory passed to `set_datadir()` — also the write location | ✓ | ✓ | ✓ |
-| 3 | directories registered with `add_search_dir()` (the `satkit` Python package registers an installed `satkit_data` bundle this way) | ✓ | ✓ | ✓ |
+| 3 | directories registered with `add_search_dir()` | ✓ | ✓ | ✓ |
 | 4 | `<directory of the satkit shared library>/satkit-data` | ✓ | ✓ | ✓ |
-| 5 | `<site-packages>/satkit_data/data` — the optional [`satkit-data` bundle](#the-optional-satkit-data-bundle) | ✓ | ✓ | ✓ |
-| 6 | **platform user-data directory — the default write location** | `~/Library/Application Support/satkit-data` | `$XDG_DATA_HOME/satkit-data`, default `~/.local/share/satkit-data` | `%LOCALAPPDATA%\satkit-data` |
-| 7 | `~/.satkit-data` (legacy location, read only) | ✓ | ✓ | ✓ (`%USERPROFILE%`) |
-| 8 | `/usr/share/satkit-data` (system-wide, read only) | ✓ | ✓ | — |
-| 9 | `/Library/Application Support/satkit-data` (system-wide, read only) | ✓ | — | — |
+| 5 | **platform user-data directory — the default write location** | `~/Library/Application Support/satkit-data` | `$XDG_DATA_HOME/satkit-data`, default `~/.local/share/satkit-data` | `%LOCALAPPDATA%\satkit-data` |
+| 6 | `~/.satkit-data` (legacy location, read only) | ✓ | ✓ | ✓ (`%USERPROFILE%`) |
+| 7 | `/usr/share/satkit-data` (system-wide, read only) | ✓ | ✓ | — |
+| 8 | `/Library/Application Support/satkit-data` (system-wide, read only) | ✓ | — | — |
 
-A file is used from the first directory that contains it, except the refreshed Earth-orientation and space-weather files: of several copies of one of those, satkit reads the copy whose data runs latest (for `finals2000A.all`, the latest *observed* row), so a stale copy in an earlier directory — an `add_search_dir()` directory or the `satkit-data` bundle — cannot shadow a fresh download in the write location. The ephemeris is also auto-detected across all of them (highest DE version wins). satkit never creates a directory next to its own shared library or inside `site-packages` — such a directory is often not writable and is wiped on reinstall.
+A file is used from the first directory that contains it, except the refreshed Earth-orientation and space-weather files: of several copies of one of those, satkit reads the copy whose data runs latest (for `finals2000A.all`, the latest *observed* row), so a stale copy in an earlier directory — an `add_search_dir()` directory, say — cannot shadow a fresh download in the write location. The ephemeris is also auto-detected across all of them (highest DE version wins). satkit never creates a directory next to its own shared library or inside `site-packages` — such a directory is often not writable and is wiped on reinstall.
 
 ## Environment variables and API
 
@@ -37,14 +36,6 @@ A file is used from the first directory that contains it, except the refreshed E
 | `satkit.utils.data_search_dirs()` | the search list, in order |
 | `satkit.utils.set_datadir(path)` / `add_search_dir(path)` | add an override / a read-only search location |
 | `satkit.utils.datafiles_exist()` | whether an ephemeris file is present in any search directory (the marker of a provisioned data location) |
-
-## The optional `satkit-data` bundle
-
-`pip install satkit[data]` installs the `satkit-data` package (~110 MB: the
-ephemeris, full-degree gravity files, IERS tables) into `site-packages`. It is
-picked up automatically as a read-only search location (rows 3 and 5 above),
-so no first-use download happens. It is not required — earlier releases made
-it a hard dependency of `satkit`; it is now optional.
 
 ## Provisioning up front
 

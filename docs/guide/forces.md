@@ -143,7 +143,7 @@ Constant acceleration in a chosen frame (used to model low-thrust maneuvers or �
 
 When propagating into the future beyond the date range of downloaded data files:
 
-- **Earth Orientation Parameters** ($\Delta UT1$, $x_p$, $y_p$): the last available values are held constant, with a one-time warning. This is much more accurate than defaulting to zero, but still drifts by ~0.1″ / ~10 ms over a few months (metres at LEO); check `satkit.frametransform.eop_status(t)` or set `propsettings.require_eop_coverage = True` to make the propagator raise instead, and refresh with `satkit.utils.update_datafiles()`. A propagation with no EOP table loaded at all is refused.
+- **Earth Orientation Parameters** ($\Delta UT1$, $x_p$, $y_p$): the last available values are held constant, with a one-time warning. This is much more accurate than defaulting to zero, but still drifts by ~0.1″ / ~10 ms over a few months (metres at LEO); check `satkit.frametransform.eop_status(t)` or set `propsettings.require_eop_coverage = True` to make the propagator raise instead (it also raises for a span before the table's 1973-01-02 start, where zero EOP would otherwise be used), and refresh with `satkit.utils.update_datafiles()`. A propagation with no EOP table loaded at all is refused.
 - **Space Weather** (F10.7 solar flux, Ap geomagnetic index): past the observed record the table continues with the NOAA/SWPC 45-day forecast and then NASA's MSAFE monthly forecast, which carries a climatological Ap — see [Data coverage](../getting-started/datacoverage.md#space-weather-coverage).
 
 ## Forces vs Altitude
