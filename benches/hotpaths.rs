@@ -2,8 +2,8 @@
 //!
 //! Covers the per-call costs that dominate real workloads: high-precision
 //! propagation (per-regime and per-integrator), SGP4, frame transforms,
-//! spherical-harmonic gravity, JPL ephemeris lookup, and the NRLMSISE-00
-//! density model.
+//! spherical-harmonic gravity, JPL ephemeris lookup, the NRLMSISE-00
+//! density model, and the EOP and space-weather lookups under them.
 //!
 //! Data files (EOP, gravity models, JPL ephemeris, space weather) are
 //! resolved through the normal `satkit::utils::datadir()` discovery, same
@@ -210,6 +210,32 @@ fn bench_nrlmsise(c: &mut Criterion) {
     group.finish();
 }
 
+/// The per-call data lookups under the frame transforms and the drag model:
+/// an EOP row pair (on observed data, and in the predictions at the current
+/// epoch, where the stale-prediction check runs) and a space-weather record.
+fn bench_lookups(c: &mut Criterion) {
+    let mut group = c.benchmark_group("lookups");
+    let tm = epoch();
+    let mjd_observed = tm.as_mjd_utc();
+    let mjd_predicted = Instant::now().as_mjd_utc();
+
+    // Warm the singletons so first-load cost isn't measured
+    let _ = satkit::earth_orientation_params::eop_from_mjd_utc(mjd_observed);
+    let _ = satkit::spaceweather::get(&tm);
+
+    group.bench_function("eop_observed", |b| {
+        b.iter(|| satkit::earth_orientation_params::eop_from_mjd_utc(black_box(mjd_observed)))
+    });
+    group.bench_function("eop_predicted", |b| {
+        b.iter(|| satkit::earth_orientation_params::eop_from_mjd_utc(black_box(mjd_predicted)))
+    });
+    group.bench_function("spaceweather_get", |b| {
+        b.iter(|| satkit::spaceweather::get(black_box(&tm)))
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_propagation,
@@ -218,6 +244,7 @@ criterion_group!(
     bench_earthgravity,
     bench_jplephem,
     bench_leo_week,
-    bench_nrlmsise
+    bench_nrlmsise,
+    bench_lookups
 );
 criterion_main!(benches);

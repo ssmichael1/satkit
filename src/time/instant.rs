@@ -124,9 +124,14 @@ fn leap_entries() -> impl Iterator<Item = (i64, i64, i64)> {
 /// unixtime and the UTC day number on the day the leap second belongs to.
 /// Before 1972 the offset drifts (see `utc_pre1972`); before 1961 it is zero.
 fn microleapseconds(raw: i64) -> i64 {
-    for (t, ls) in LEAP_SECOND_TABLE.iter() {
-        if raw >= *t {
-            return *ls;
+    // Before the oldest entry (the 1972-01-01 step) none applies: skip the
+    // scan, which the pre-1972 rows of the space-weather table hit on every
+    // lookup.
+    if raw >= LEAP_SECOND_TABLE[LEAP_SECOND_TABLE.len() - 1].0 {
+        for (t, ls) in LEAP_SECOND_TABLE.iter() {
+            if raw >= *t {
+                return *ls;
+            }
         }
     }
     utc_pre1972::raw_to_utc(raw).map_or(0, |(utc, _)| raw - utc)
@@ -166,10 +171,13 @@ fn checked_add_leapseconds(utc: i64) -> Option<i64> {
 /// If `raw` falls inside an inserted (leap-second) interval, return the
 /// microseconds elapsed since the start of that interval.
 fn leap_interval_offset(raw: i64) -> Option<i64> {
-    leap_entries()
-        .find(|(t, ls, ls_prev)| raw >= *t && raw - *t < ls - ls_prev)
-        .map(|(t, _, _)| raw - t)
-        .or_else(|| utc_pre1972::raw_to_utc(raw).and_then(|(_, offset)| offset))
+    // Only the newest entry at or before `raw` can hold it: each inserted
+    // interval ends long before the next one starts. Stopping there spares
+    // a scan of the whole table on every calendar conversion.
+    match leap_entries().find(|(t, _, _)| raw >= *t) {
+        Some((t, ls, ls_prev)) => (raw - t < ls - ls_prev).then_some(raw - t),
+        None => utc_pre1972::raw_to_utc(raw).and_then(|(_, offset)| offset),
+    }
 }
 
 /// If an inserted interval (a leap second, or a positive pre-1972 step) ends
@@ -1114,5 +1122,53 @@ impl std::fmt::Debug for Instant {
             "Instant {{ year: {}, month: {}, day: {}, hour: {}, minute: {}, second: {:06.3} }}",
             year, month, day, hour, minute, second
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Probe counts around every leap-second and pre-1972 step, plus a sweep
+    /// from 1950 to 2040 and the ends of the range.
+    fn probes() -> Vec<i64> {
+        let mut p: Vec<i64> = Vec::new();
+        for (t, ls, ls_prev) in leap_entries() {
+            for edge in [t, t + (ls - ls_prev), t - ls_prev] {
+                p.extend(edge - 2..=edge + 2);
+            }
+        }
+        let (mut raw, stop) = (-631_152_000_000_000_i64, 2_208_988_800_000_000_i64);
+        while raw < stop {
+            p.push(raw);
+            raw += 987_654_321_011;
+        }
+        p.extend([i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX]);
+        p
+    }
+
+    /// The shortcuts in `microleapseconds` (skip the table before 1972) and
+    /// `leap_interval_offset` (stop at the first entry at or before `raw`)
+    /// return what a scan of the whole table returns.
+    #[test]
+    fn leap_lookups_match_full_scan() {
+        fn micro_scan(raw: i64) -> i64 {
+            for (t, ls) in LEAP_SECOND_TABLE.iter() {
+                if raw >= *t {
+                    return *ls;
+                }
+            }
+            utc_pre1972::raw_to_utc(raw).map_or(0, |(utc, _)| raw - utc)
+        }
+        fn offset_scan(raw: i64) -> Option<i64> {
+            leap_entries()
+                .find(|(t, ls, ls_prev)| raw >= *t && raw - *t < ls - ls_prev)
+                .map(|(t, _, _)| raw - t)
+                .or_else(|| utc_pre1972::raw_to_utc(raw).and_then(|(_, offset)| offset))
+        }
+        for raw in probes() {
+            assert_eq!(microleapseconds(raw), micro_scan(raw), "raw {raw}");
+            assert_eq!(leap_interval_offset(raw), offset_scan(raw), "raw {raw}");
+        }
     }
 }

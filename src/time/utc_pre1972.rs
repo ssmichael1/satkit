@@ -218,6 +218,32 @@ pub(super) fn dat_seconds(mjd_utc: f64) -> Option<f64> {
         .map(|s| s.dat_seconds(mjd_utc))
 }
 
+/// Internal count at which each segment starts, `raw_of(start_utc())`, and
+/// at which it ends, `raw_of(end_utc(k))`. Evaluated at compile time:
+/// [`raw_to_utc`] runs for every UTC conversion of a pre-1972 instant (the
+/// 1932 first row of the space-weather table among them), and computing
+/// these per call costs two 128-bit divisions per segment.
+const SEGMENT_START_RAW: [i64; SEGMENTS.len()] = {
+    let mut a = [0; SEGMENTS.len()];
+    let mut k = 0;
+    while k < SEGMENTS.len() {
+        a[k] = SEGMENTS[k].raw_of(SEGMENTS[k].start_utc());
+        k += 1;
+    }
+    a
+};
+
+/// See [`SEGMENT_START_RAW`].
+const SEGMENT_END_RAW: [i64; SEGMENTS.len()] = {
+    let mut a = [0; SEGMENTS.len()];
+    let mut k = 0;
+    while k < SEGMENTS.len() {
+        a[k] = SEGMENTS[k].raw_of(end_utc(k));
+        k += 1;
+    }
+    a
+};
+
 /// UTC-basis count of an internal count `raw` before the 1972-01-01
 /// inserted interval, and, if `raw` lies in an inserted interval (positive
 /// step), the microseconds since the interval began.
@@ -230,12 +256,18 @@ pub(super) fn raw_to_utc(raw: i64) -> Option<(i64, Option<i64>)> {
     if raw >= END_RAW {
         return None;
     }
+    // Before 1961-01-01 TAI − UTC = 0; the step to 1.422818 s is an inserted
+    // interval starting at the UTC-basis count of 1961-01-01.
+    let b = SEGMENTS[0].start_utc();
+    if raw < b {
+        return Some((raw, None));
+    }
     for (k, s) in SEGMENTS.iter().enumerate().rev() {
-        if raw < s.raw_of(s.start_utc()) {
+        if raw < SEGMENT_START_RAW[k] {
             continue;
         }
         let end = end_utc(k);
-        let end_raw = s.raw_of(end);
+        let end_raw = SEGMENT_END_RAW[k];
         if raw >= end_raw {
             // Only reachable for a positive step into segment k + 1 (the last
             // segment ends at END_RAW, and for a zero or negative step raw
@@ -245,14 +277,8 @@ pub(super) fn raw_to_utc(raw: i64) -> Option<(i64, Option<i64>)> {
         }
         return Some((s.utc_of(raw).min(end - 1), None));
     }
-    // Before 1961-01-01 TAI − UTC = 0; the step to 1.422818 s is an inserted
-    // interval starting at the UTC-basis count of 1961-01-01.
-    let b = SEGMENTS[0].start_utc();
-    if raw >= b {
-        Some((raw - SEGMENTS[0].dat_us(b), Some(raw - b)))
-    } else {
-        Some((raw, None))
-    }
+    // In the 1961-01-01 step, before segment 0 starts
+    Some((raw - SEGMENTS[0].dat_us(b), Some(raw - b)))
 }
 
 /// If a positive step (inserted interval) ends at the UTC-basis count `utc`
@@ -510,6 +536,55 @@ mod tests {
                 );
             }
             raw += 3_917_171_113;
+        }
+    }
+
+    /// `raw_to_utc` with the segment bounds from the compile-time tables and
+    /// the pre-1961 shortcut agrees with the direct evaluation of every bound
+    /// per call: at each segment's start and end (±2 µs, and across each
+    /// inserted interval) and on a sweep from 1950 to past 1972.
+    #[test]
+    fn raw_to_utc_matches_direct_evaluation() {
+        fn direct(raw: i64) -> Option<(i64, Option<i64>)> {
+            if raw >= END_RAW {
+                return None;
+            }
+            for (k, s) in SEGMENTS.iter().enumerate().rev() {
+                if raw < s.raw_of(s.start_utc()) {
+                    continue;
+                }
+                let end = end_utc(k);
+                let end_raw = s.raw_of(end);
+                if raw >= end_raw {
+                    let dat_new = SEGMENTS[k + 1].dat_us(end);
+                    return Some((raw - dat_new, Some(raw - end_raw)));
+                }
+                return Some((s.utc_of(raw).min(end - 1), None));
+            }
+            let b = SEGMENTS[0].start_utc();
+            if raw >= b {
+                Some((raw - SEGMENTS[0].dat_us(b), Some(raw - b)))
+            } else {
+                Some((raw, None))
+            }
+        }
+        let mut probes: Vec<i64> = Vec::new();
+        for (k, s) in SEGMENTS.iter().enumerate() {
+            for edge in [s.start_utc(), s.raw_of(s.start_utc()), s.raw_of(end_utc(k))] {
+                probes.extend(edge - 2..=edge + 2);
+            }
+        }
+        for edge in [END_RAW, utc_of_mjd(END_MJD)] {
+            probes.extend(edge - 2..=edge + 2);
+        }
+        let (mut raw, stop) = (utc_of_mjd(33282), END_RAW + 10 * DAY_US);
+        while raw < stop {
+            probes.push(raw);
+            raw += 1_234_567_891;
+        }
+        probes.extend([i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX]);
+        for raw in probes {
+            assert_eq!(raw_to_utc(raw), direct(raw), "raw {raw}");
         }
     }
 }

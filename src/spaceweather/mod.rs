@@ -644,22 +644,40 @@ fn status_in(c: &SpaceWeatherCoverage, tm: Instant) -> SpaceWeatherStatus {
 ///   [`update_datafiles`](crate::utils::update_datafiles).
 pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     let tm = tm.as_instant();
-    // Warnings are logged after the table's read lock is released.
-    diag::deferred(|| get_locked(tm))
-}
-
-/// [`get`] under the table lock.
-fn get_locked(tm: Instant) -> Result<SpaceWeatherRecord> {
-    use std::sync::atomic::Ordering;
     let mut guard = SPACE_WEATHER.read();
     if guard.is_none() {
         drop(guard);
-        ensure_default_loaded();
+        // The default load may log (and download); held back until it is
+        // done, as for every other lazy load.
+        diag::deferred(ensure_default_loaded);
         guard = SPACE_WEATHER.read();
     }
-    let Some(sw) = guard.as_ref().filter(|s| !s.is_empty()) else {
-        if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            diag::warn!(
+    let (rec, warnings) = lookup(guard.as_deref(), tm);
+    drop(guard);
+    // Logged only now that the table's read lock is released: a logger may
+    // block (the Python bindings' takes the GIL), and a thread holding the
+    // GIL could be waiting to replace the table. Deciding under the lock and
+    // logging here costs nothing on the common, warning-free path.
+    for w in warnings.into_iter().flatten() {
+        w.log(tm);
+    }
+    rec
+}
+
+/// A one-time warning a lookup decided to log (its flag already set), with
+/// what the message needs from the table. Logged by [`get`] once the table
+/// lock is released.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum LookupWarning {
+    NotLoaded,
+    Extrapolated { last: Instant },
+    Monthly { date: Instant },
+}
+
+impl LookupWarning {
+    fn log(self, tm: Instant) {
+        match self {
+            Self::NotLoaded => diag::warn!(
                 "no space-weather table is loaded; NRLMSISE-00 is running on its \
                  defaults (F10.7 = F10.7A = 150, Ap = 4), which can be wrong by a factor of \
                  two in atmospheric density.\n\
@@ -668,45 +686,71 @@ fn get_locked(tm: Instant) -> Result<SpaceWeatherRecord> {
                  containing them.\n\
                  To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
                  (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)"
-            );
+            ),
+            Self::Extrapolated { last } => {
+                // A table that ends in the past is stale and a refresh
+                // extends it; one that ends in the future already runs to
+                // the end of the long-range forecast, which no refresh moves.
+                let advice = if last < Instant::now() {
+                    "The table ends in the past, so it is out of date: run \
+                     `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+                     to download the current space-weather files."
+                } else {
+                    "The table already reaches past today to the end of its long-range forecast \
+                     (the default NASA MSAFE forecast runs about 15 years ahead); refreshing the data \
+                     files will not move that end."
+                };
+                diag::warn!(
+                    "the space-weather table ends at {last}; the request for {tm} and all later \
+                     epochs return that row's values unchanged.\n\
+                     {advice}\n\
+                     To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
+                     (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)"
+                );
+            }
+            Self::Monthly { date } => diag::warn!(
+                "the space-weather record for {tm} is a monthly prediction ({date}); it \
+                 carries F10.7 but no Kp/ap, so NRLMSISE-00 runs on a quiet-time Ap = 4 with no \
+                 storm information. Density can be wrong by a factor of two during a geomagnetic \
+                 storm (measured 1.9x at 400 km for the 2024-05-11 event).\n\
+                 Daily data ends shortly after the last observed day; see \
+                 `satkit::spaceweather::coverage()` / `status()` (Python: \
+                 `satkit.spaceweather.coverage()` / `status()`).\n\
+                 To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
+                 (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)"
+            ),
         }
-        return Err(Error::NoRecordForDate);
-    };
+    }
+}
+
+/// [`get`] on the locked table, returning the one-time warnings to log
+/// (at most two) instead of logging them under the lock.
+fn lookup(
+    table: Option<&[SpaceWeatherRecord]>,
+    tm: Instant,
+) -> (Result<SpaceWeatherRecord>, [Option<LookupWarning>; 2]) {
+    use std::sync::atomic::Ordering;
+    let mut warnings = [None; 2];
     // Guard empty data (e.g. a header-only CSV) so the indexing below can't
     // panic; treat it the same as "not loaded".
-    let first = sw.first().ok_or(Error::NoRecordForDate)?;
-    let last = sw.last().ok_or(Error::NoRecordForDate)?;
-
-    // Past the final row every query returns that row unchanged.
-    if tm.utc_day_number() > last.date.utc_day_number()
-        && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed)
-    {
-        // A table that ends in the past is stale and a refresh extends it;
-        // one that ends in the future already runs to the end of the
-        // long-range forecast, which no refresh moves.
-        let advice = if last.date < Instant::now() {
-            "The table ends in the past, so it is out of date: run \
-             `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
-             to download the current space-weather files."
-        } else {
-            "The table already reaches past today to the end of its long-range forecast \
-             (the default NASA MSAFE forecast runs about 15 years ahead); refreshing the data \
-             files will not move that end."
-        };
-        diag::warn!(
-            "the space-weather table ends at {}; the request for {tm} and all later \
-             epochs return that row's values unchanged.\n\
-             {advice}\n\
-             To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
-             (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
-            last.date
-        );
-    }
+    let Some(sw) = table.filter(|s| !s.is_empty()) else {
+        if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+            warnings[0] = Some(LookupWarning::NotLoaded);
+        }
+        return (Err(Error::NoRecordForDate), warnings);
+    };
+    let (first, last) = (&sw[0], &sw[sw.len() - 1]);
 
     // Index by UTC calendar day. Instants count leap seconds, so a
     // continuous-day index lands on the next record in the last seconds of a
     // day.
     let day = tm.utc_day_number();
+
+    // Past the final row every query returns that row unchanged.
+    if day > last.date.utc_day_number() && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+        warnings[0] = Some(LookupWarning::Extrapolated { last: last.date });
+    }
+
     let first_day = first.date.utc_day_number();
     let found = if day >= first_day
         && ((day - first_day) as usize) < sw.len()
@@ -716,25 +760,16 @@ fn get_locked(tm: Instant) -> Result<SpaceWeatherRecord> {
     } else {
         sw.iter().rev().find(|x| x.date <= tm)
     };
-    let rec = found.ok_or(Error::NoRecordForDate)?;
+    let Some(rec) = found else {
+        return (Err(Error::NoRecordForDate), warnings);
+    };
 
     // A monthly-predicted row carries no geomagnetic data at all: every
     // kp/ap field is -1, so NRLMSISE-00 falls back to a quiet-time Ap = 4.
     if !rec.has_geomagnetic() && !MONTHLY_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-        diag::warn!(
-            "the space-weather record for {tm} is a monthly prediction ({}); it \
-             carries F10.7 but no Kp/ap, so NRLMSISE-00 runs on a quiet-time Ap = 4 with no \
-             storm information. Density can be wrong by a factor of two during a geomagnetic \
-             storm (measured 1.9x at 400 km for the 2024-05-11 event).\n\
-             Daily data ends shortly after the last observed day; see \
-             `satkit::spaceweather::coverage()` / `status()` (Python: \
-             `satkit.spaceweather.coverage()` / `status()`).\n\
-             To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
-             (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)",
-            rec.date
-        );
+        warnings[1] = Some(LookupWarning::Monthly { date: rec.date });
     }
-    Ok(rec.clone())
+    (Ok(rec.clone()), warnings)
 }
 
 /// Bring the three space-weather files in the data directory up to date and
@@ -935,5 +970,85 @@ mod tests {
         let csv = format!("HEADER\n{row}\n\n");
         let recs = cssi::parse_csv(&csv).unwrap();
         assert_eq!(recs.len(), 1);
+    }
+
+    /// The lookup warnings reach an installed logger at Warn under this
+    /// module's target, once each, and only once the table's read lock is
+    /// released: a logger may block (the Python bindings' takes the GIL),
+    /// and a thread holding the GIL could be waiting to replace the table.
+    /// A query past a table ending on a monthly row raises two in one call,
+    /// in the order they always had. Runs in its own process, for its own
+    /// logger, fresh one-time flags and a table it can replace.
+    #[test]
+    fn warnings_are_logged_outside_the_table_lock() {
+        use std::sync::Mutex;
+        if !crate::utils::download::in_own_process(
+            module_path!(),
+            "warnings_are_logged_outside_the_table_lock",
+        ) {
+            return;
+        }
+        type Seen = (log::Level, String, String, bool);
+        static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
+        struct Probe;
+        impl log::Log for Probe {
+            fn enabled(&self, m: &log::Metadata) -> bool {
+                m.target().starts_with("satkit")
+            }
+            fn log(&self, r: &log::Record) {
+                if self.enabled(r.metadata()) {
+                    SEEN.lock().unwrap().push((
+                        r.level(),
+                        r.target().to_string(),
+                        r.args().to_string(),
+                        SPACE_WEATHER.is_locked(),
+                    ));
+                }
+            }
+            fn flush(&self) {}
+        }
+        log::set_logger(&Probe).unwrap();
+        log::set_max_level(log::LevelFilter::Info);
+
+        SPACE_WEATHER.set(Vec::new());
+        let tm = Instant::from_date(2023, 12, 1).unwrap();
+        assert!(get(&tm).is_err());
+        assert!(get(&tm).is_err());
+        // The monthly row without geomagnetic data, as CelesTrak publishes it.
+        let mut table = cssi::parse_csv(&synthetic_table()).unwrap();
+        table.last_mut().unwrap().ap_avg = -1;
+        SPACE_WEATHER.set(table);
+        let last = Instant::from_date(2023, 11, 5).unwrap();
+        assert_eq!(get(&tm).unwrap().date, last);
+        assert_eq!(get(&tm).unwrap().date, last);
+
+        let seen = SEEN.lock().unwrap();
+        assert_eq!(seen.len(), 3, "{seen:?}");
+        for (level, target, _, locked) in seen.iter() {
+            assert_eq!(*level, log::Level::Warn);
+            assert_eq!(target, "satkit::spaceweather");
+            assert!(!locked, "logged while the space-weather table was locked");
+        }
+        assert!(
+            seen[0].2.starts_with("no space-weather table is loaded"),
+            "{}",
+            seen[0].2
+        );
+        assert!(
+            seen[1]
+                .2
+                .starts_with("the space-weather table ends at 2023-11-05")
+                && seen[1].2.contains("the request for 2023-12-01"),
+            "{}",
+            seen[1].2
+        );
+        assert!(
+            seen[2]
+                .2
+                .starts_with("the space-weather record for 2023-12-01")
+                && seen[2].2.contains("is a monthly prediction (2023-11-05"),
+            "{}",
+            seen[2].2
+        );
     }
 }

@@ -278,9 +278,19 @@ fn resolve_default_path() -> Result<std::path::PathBuf> {
 static JPL_INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
 
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
-    if let Some(r) = JPL_INSTANCE.get() {
-        return r;
+    match JPL_INSTANCE.get() {
+        Some(r) => r,
+        None => jplephem_init(),
     }
+}
+
+/// First use of [`jplephem_singleton`]: resolve, announce and load the
+/// ephemeris. Out of line and cold, so that every later query pays only
+/// for the check above: inlined, the load path's large stack frame (and
+/// its stack probes) was set up on every call.
+#[cold]
+#[inline(never)]
+fn jplephem_init() -> &'static Result<JPLEphem> {
     // Logging may block (the Python bindings' logger takes the GIL), so
     // nothing is logged while other threads may be waiting on the cell: the
     // download notice goes out before it is locked, and anything the load
