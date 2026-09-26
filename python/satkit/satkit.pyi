@@ -1121,6 +1121,9 @@ class time:
                 interpreted, default is satkit.timescale.UTC. Ignored for the
                 string and no-argument forms.
 
+        Raises:
+            ValueError: If the string form cannot be parsed
+
         Example:
             ```python
             print(satkit.time(2023, 3, 5, 11, 3, 45.453))
@@ -1176,7 +1179,8 @@ class time:
             Time object representing input string
 
         Raises:
-            RuntimeError: If the string cannot be parsed
+            ValueError: If the string cannot be parsed; the message gives the
+                reason
 
         Example:
             ```python
@@ -1265,7 +1269,8 @@ class time:
             Time object representing input string
 
         Raises:
-            RuntimeError: If the string does not match the format
+            ValueError: If the string does not match the format; the message
+                gives the reason
 
         Example:
             ```python

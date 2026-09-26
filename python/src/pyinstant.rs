@@ -235,6 +235,9 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
+    ///
+    /// Raises:
+    ///     ValueError: If the string form cannot be parsed
     #[new]
     #[pyo3(signature=(*py_args, scale=&PyTimeScale::UTC))]
     fn py_new(py_args: &Bound<'_, PyTuple>, scale: &PyTimeScale) -> Result<Self> {
@@ -261,14 +264,9 @@ impl PyInstant {
             let item = py_args.get_item(0)?;
             let s = item.extract::<&str>()?;
 
-            // Input is a string, first try rfc3339 format
-            match Instant::from_rfc3339(s) {
-                Ok(v) => Ok(Self(v)),
-                Err(_) => {
-                    // Now try multiple formats
-                    Self::from_string(s)
-                }
-            }
+            // Input is a string: `from_string` tries RFC 3339 first, then
+            // the looser formats, and raises ValueError if neither parses
+            Ok(Self::from_string(s)?)
         } else {
             bail!("Must pass in year, month, day or year, month, day, hour, min, sec");
         }
@@ -304,11 +302,12 @@ impl PyInstant {
     ///   satkit.time: Time object representing input time
     ///
     /// Raises:
-    ///   RuntimeError: If input string cannot be parsed
+    ///   ValueError: If input string cannot be parsed; the message gives the
+    ///       reason
     ///
     #[staticmethod]
-    fn from_string(string: &str) -> Result<Self> {
-        Ok(Instant::from_string(string).map(Self)?)
+    fn from_string(string: &str) -> PyResult<Self> {
+        Instant::from_string(string).map(Self).map_err(parse_error)
     }
 
     /// Create satkit.time object from string with given format
@@ -321,7 +320,8 @@ impl PyInstant {
     ///   satkit.time: Time object representing input time
     ///
     /// Raises:
-    ///   RuntimeError: If the string does not match the format
+    ///   ValueError: If the string does not match the format; the message
+    ///       gives the reason
     ///
     /// The format string is a subset of the Python "datetime" strptime
     /// format. Characters other than format codes must match literally, and
@@ -345,8 +345,10 @@ impl PyInstant {
     /// %B: Full month name (January, February, ...)
     /// %%: A literal %
     #[staticmethod]
-    fn strptime(date_string: &str, format: &str) -> Result<Self> {
-        Ok(Instant::strptime(date_string, format).map(Self)?)
+    fn strptime(date_string: &str, format: &str) -> PyResult<Self> {
+        Instant::strptime(date_string, format)
+            .map(Self)
+            .map_err(parse_error)
     }
 
     /// Format time object as string
@@ -906,6 +908,13 @@ impl PyInstant {
             .collect::<PyResult<Vec<_>>>()?;
         np::PyArray1::<Py<PyAny>>::from_vec(py, objs).into_py_any(py)
     }
+}
+
+/// A time-string parse failure as a Python `ValueError` carrying the
+/// parser's message (`from_string`, `strptime` and the `time(str)`
+/// constructor; `from_rfc3339` adds its own prefix)
+fn parse_error(e: satkit::InstantError) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(e.to_string())
 }
 
 /// A duration of `days` days, refusing NaN and infinities with `ValueError`

@@ -91,8 +91,10 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
         Ok(instant.0)
     } else if val.is_instance_of::<PyString>() {
         let s: String = val.extract()?;
-        satkit::Instant::from_rfc3339(&s)
-            .map_err(|e| anyhow::anyhow!("Invalid epoch string: {}", e))
+        // ValueError, like the other time-string parsers
+        satkit::Instant::from_rfc3339(&s).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid epoch string: {e}")).into()
+        })
     } else if val.is_instance_of::<PyDateTime>() {
         // Exact, with the same naive-is-local convention as satkit.time
         let tm = val.cast::<PyDateTime>().map_err(PyErr::from)?;
