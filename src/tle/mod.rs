@@ -703,6 +703,16 @@ impl TLE {
     /// in the 100000 to 339999 range.
     /// 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
     ///
+    /// Two forms are accepted, and nothing else:
+    ///  * All-numeric: ASCII digits `0`-`9`, optionally preceded by ASCII spaces
+    ///    (some older TLEs pad short numbers with leading spaces). No sign is
+    ///    accepted, so `"+1234"` and `"-1234"` are rejected even though
+    ///    `str::parse` would otherwise accept the sign.
+    ///  * Letter form: a single ASCII letter (`A`-`Z` or `a`-`z`, excluding `I`/`O`;
+    ///    lowercase is accepted on input even though [`int_to_alpha5`] only ever
+    ///    writes uppercase) followed by exactly four ASCII digits — no spaces,
+    ///    no sign, no extra or missing digits.
+    ///
     /// # Arguments:
     ///  * `alpha5` - a reference to a str representing an alpha5 encoded satellite number.
     ///
@@ -719,21 +729,38 @@ impl TLE {
     pub fn alpha5_to_int(alpha5: &str) -> Result<i32> {
         match alpha5.chars().nth(0) {
             // Alpha char is only possible at the first position, so if the first char is a
-            // digit or a whitespace the standard `.parse()` can be used.
-            Some(c) if c.is_ascii_digit() || c.is_whitespace() => match alpha5.trim().parse() {
-                Ok(i) if i >= 0 => Ok(i),
-                Ok(_) => Err(Error::InvalidSatNumValue),
-                Err(e) => Err(Error::InvalidSatNum(format!("{e}"))),
-            },
+            // digit or a whitespace the numeric form applies.
+            Some(c) if c.is_ascii_digit() || c.is_whitespace() => {
+                let trimmed = alpha5.trim();
+                if trimmed.is_empty() || !trimmed.bytes().all(|b| b.is_ascii_digit()) {
+                    // Reject anything `str::parse` would accept beyond plain
+                    // digits, notably a leading `+`/`-` sign.
+                    return Err(Error::InvalidSatNum(format!(
+                        "{alpha5:?} is not all ASCII digits (optionally space-padded)"
+                    )));
+                }
+                trimmed
+                    .parse()
+                    .map_err(|e| Error::InvalidSatNum(format!("{e}")))
+            }
             Some(c) if c.is_alphabetic() => {
                 match ALPHA5_MATCHING
                     .chars()
                     .position(|m| m == c.to_ascii_uppercase())
                 {
-                    Some(p) => match alpha5[1..].parse::<i32>() {
-                        Ok(i) => Ok((p as i32 + 10) * 10000 + i),
-                        Err(e) => Err(Error::InvalidSatNum(format!("{e}"))),
-                    },
+                    Some(p) => {
+                        // `c` is ASCII (it matched an ASCII_MATCHING letter),
+                        // so byte index 1 is a valid char boundary.
+                        let rest = &alpha5[1..];
+                        if rest.len() == 4 && rest.bytes().all(|b| b.is_ascii_digit()) {
+                            let i: i32 = rest.parse().expect("4 ASCII digits always parse");
+                            Ok((p as i32 + 10) * 10000 + i)
+                        } else {
+                            Err(Error::InvalidSatNum(format!(
+                                "{rest:?} is not exactly four ASCII digits"
+                            )))
+                        }
+                    }
                     None => Err(Error::InvalidFirstDigit(c)),
                 }
             }
@@ -751,6 +778,12 @@ impl TLE {
     /// alpha5 string uses a character instead of the first digit to handle satellite numbers
     /// in the 100000 to 339999 range.
     /// 'I' and 'O' are not part of the allowed chars to avoid any confusion with 0 or 1
+    ///
+    /// `sat_num` must be in `0..=339999`: a catalog number of 340000 or above
+    /// has no Alpha-5 representation (there is no 24th letter after `Z9999`)
+    /// and cannot be written to a TLE at all; use
+    /// [`OMM::from_tle`](crate::omm::OMM::from_tle) (Rust) or `TLE.to_omm()`
+    /// (Python) instead.
     ///
     /// # Arguments:
     ///  * `sat_num` - An i32 of a plain numerical satellite number
@@ -1648,6 +1681,84 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    /// Alpha-5 round trips at the low end, a mid-range letter, and the
+    /// highest representable value.
+    #[test]
+    fn test_alpha5_to_int_roundtrip_bounds() -> Result<()> {
+        for (alpha5, expected) in [("A0000", 100000), ("S9994", 269994), ("Z9999", 339999)] {
+            match TLE::alpha5_to_int(alpha5) {
+                Ok(i) if i == expected => {}
+                Ok(i) => bail!("Error parsing '{alpha5}' as {expected}: got {i}"),
+                Err(e) => bail!("Error parsing '{alpha5}' as {expected}: {e}"),
+            }
+            match TLE::int_to_alpha5(expected) {
+                Ok(ref s) if s == alpha5 => {}
+                Ok(ref s) => bail!("Error converting {expected} to '{alpha5}': got {s}"),
+                Err(e) => bail!("Error converting {expected} to '{alpha5}': {e}"),
+            }
+        }
+        Ok(())
+    }
+
+    /// A sign character must never sneak past the strict digit/letter checks,
+    /// whether it appears after a letter or in the all-numeric form.
+    #[test]
+    fn test_alpha5_to_int_rejects_sign() {
+        // Without the fix, "A-123" parsed as (10)*10000 + (-123) == 99877.
+        assert!(TLE::alpha5_to_int("A-123").is_err());
+        // Without the fix, a leading sign was accepted by `str::parse` in
+        // the all-numeric branch.
+        assert!(TLE::alpha5_to_int("+1234").is_err());
+    }
+
+    #[test]
+    fn test_alpha5_to_int_rejects_malformed_letter_form() {
+        // Embedded whitespace instead of a fourth digit.
+        assert!(TLE::alpha5_to_int("A12 4").is_err());
+        // 'I' and 'O' are excluded from the alphabet (confusable with 0/1).
+        assert!(TLE::alpha5_to_int("I0000").is_err());
+        assert!(TLE::alpha5_to_int("O1234").is_err());
+    }
+
+    #[test]
+    fn test_alpha5_to_int_accepts_lowercase_letter() -> Result<()> {
+        // The encoder only ever writes uppercase, but a lowercase letter on
+        // input is harmless and accepted.
+        match TLE::alpha5_to_int("a1234") {
+            Ok(101234) => {}
+            Ok(i) => bail!("Error parsing 'a1234' as 101234: got {i}"),
+            Err(e) => bail!("Error parsing 'a1234' as 101234: {e}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_alpha5_to_int_accepts_leading_spaces() -> Result<()> {
+        // Some older TLEs pad short satellite numbers with leading spaces.
+        for (padded, expected) in [("    1", 1), ("   91", 91), (" 9991", 9991)] {
+            match TLE::alpha5_to_int(padded) {
+                Ok(i) if i == expected => {}
+                Ok(i) => bail!("Error parsing '{padded}' as {expected}: got {i}"),
+                Err(e) => bail!("Error parsing '{padded}' as {expected}: {e}"),
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_int_to_alpha5_too_large_mentions_omm() {
+        match TLE::int_to_alpha5(340000) {
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(
+                    msg.contains("OMM"),
+                    "expected the >=340000 error to mention OMM, got: {msg}"
+                );
+            }
+            Ok(s) => panic!("expected 340000 to be rejected, got '{s}'"),
+        }
     }
 
     #[test]

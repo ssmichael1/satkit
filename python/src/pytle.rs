@@ -421,8 +421,19 @@ impl PyTLE {
     /// The element set number (4 columns) and revolution number (5 columns) are
     /// written modulo 10,000 and 100,000, so a larger value wraps around the way
     /// catalog TLEs roll the revolution counter over.
-    fn to_2line(&self) -> Result<[String; 2]> {
-        Ok(self.0.to_2line()?)
+    ///
+    /// Raises:
+    ///     ValueError: if ``sat_num`` is 340000 or above: Alpha-5 (used for
+    ///         the 5-character satellite number field) ends at ``Z9999``
+    ///         (339999), so the catalog number cannot be written to a TLE.
+    ///         Use ``to_omm()`` instead.
+    fn to_2line(&self) -> PyResult<[String; 2]> {
+        self.0.to_2line().map_err(|e| match e {
+            satkit::tle::Error::SatNumTooLargeForAlpha5 => {
+                pyo3::exceptions::PyValueError::new_err(e.to_string())
+            }
+            e => anyhow::Error::from(e).into(),
+        })
     }
 
     /// Output as 2 canonical TLE lines preceded by a name line (3-line element set)

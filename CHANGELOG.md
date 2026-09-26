@@ -25,6 +25,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - **Breaking:** `time.strptime()`, `from_string()` and `time(<str>)` raise `ValueError` (was `RuntimeError`) for an unparseable string ([#247](https://github.com/ssmichael1/satkit/pull/247))
 - **Breaking:** time arithmetic beyond ±292,000 years raises `OverflowError` in Python (it wrapped) and saturates in Rust; `propsettings(gravity_order > gravity_degree)` raises; truncated `finals2000A.all` files are rejected ([#252](https://github.com/ssmichael1/satkit/pull/252))
 - **Breaking:** `utils.build_date()` is removed so builds are reproducible; `githash()` / `gittag()` are `"unknown"` outside satkit's own checkout ([#255](https://github.com/ssmichael1/satkit/pull/255))
+- **Breaking:** Python `TLE.to_2line()` raises `ValueError` (was `RuntimeError`) when `satnum` is 340000 or above and has no Alpha-5 representation ([#261](https://github.com/ssmichael1/satkit/pull/261))
 - **Breaking (Rust):** `DataDirReadOnly` is `DataDirReadOnly { path, reason }`; `update_datafiles()` rejects unknown keywords and fails up front when offline ([#218](https://github.com/ssmichael1/satkit/pull/218))
 - **Breaking (experimental ECOM):** coefficients are referred to 1 AU and scale by `(AU / d)²` ([#213](https://github.com/ssmichael1/satkit/pull/213), [#210](https://github.com/ssmichael1/satkit/issues/210))
 - **Behaviour change, wrong results:** time parsing applies the UTC offsets `from_rfc3339` / `from_string` dropped or misread, and rejects trailing input and malformed offsets ([#243](https://github.com/ssmichael1/satkit/pull/243))
@@ -42,6 +43,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - Of several copies of `finals2000A.all` across the search directories, the freshest is read ([#229](https://github.com/ssmichael1/satkit/pull/229))
 - `orbitprop::propagate` has its rustdoc again, and the crates.io publish job only runs for `v*` tags ([#226](https://github.com/ssmichael1/satkit/pull/226))
 - `help(satkit.satstate)` shows the class documentation again ([#237](https://github.com/ssmichael1/satkit/pull/237))
+- `TLE::alpha5_to_int` rejected only some malformed input: a sign after a letter (`"A-123"` silently became 99877) or a leading `+`/`-` in the numeric form passed straight to `str::parse`; both forms now require plain ASCII digits, and the letter form requires exactly four of them. The `>= 340000` error from `int_to_alpha5` / `to_2line` now says to use OMM instead ([#261](https://github.com/ssmichael1/satkit/pull/261))
 
 ### Docs
 

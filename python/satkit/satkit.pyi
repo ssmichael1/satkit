@@ -381,6 +381,12 @@ class TLE:
         Returns:
             2 canonical TLE Lines
 
+        Raises:
+            ValueError: if ``sat_num`` is 340000 or above: Alpha-5 (used for
+                the 5-character satellite number field) ends at ``Z9999``
+                (339999), so the catalog number cannot be written to a TLE.
+                Use ``to_omm()`` instead.
+
         Example:
             ```python
             lines = tle.to_2line()
