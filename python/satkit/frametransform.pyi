@@ -560,8 +560,9 @@ def earth_orientation_params(
         - Returns None if the time is before the range of available EOP data, or if no EOP table is loaded
         - For times after the last available EOP data, the last entry's values are returned (constant
           extrapolation) and a one-time warning is printed; use :func:`eop_status` / :func:`eop_coverage` to check
-        - EOP data is available from 1962 to current, with predictions ~6 months ahead; refresh with
-          ``satkit.utils.update_datafiles()``
+        - EOP data is available from 1973-01-02 (the default ``finals2000A.all``; from 1962 with
+          CelesTrak's ``EOP-All.csv`` also in a data directory) to current, with predictions up to
+          a year ahead; refresh with ``satkit.utils.update_datafiles()``
         - See: <https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html>
 
     Example:
@@ -873,7 +874,8 @@ def eop_status(tm: time) -> str:
         str: one of ``"observed"`` (inside the table, on or before the last observed row),
         ``"predicted"`` (inside the table, IERS prediction), ``"extrapolated"`` (after the table
         end — the last row is held constant; accuracy degrades by ~0.1 arcsec / ~10 ms per few
-        months, refresh the data files), ``"before_table"`` (before 1962; zeros used), or
+        months, refresh the data files), ``"before_table"`` (before the table's first row — 1973-01-02 for the default
+        ``finals2000A.all``, 1962 with ``EOP-All.csv`` — zeros used), or
         ``"not_loaded"`` (no EOP table loaded; zeros used).
     """
     ...

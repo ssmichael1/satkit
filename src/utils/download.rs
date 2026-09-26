@@ -23,8 +23,9 @@ pub enum Error {
     #[non_exhaustive]
     FileNotFoundNoDownload { path: String },
 
-    /// A download was needed but is forbidden: either `SATKIT_OFFLINE=1` is
-    /// set or satkit was built without the `download` feature. No network I/O
+    /// A download was needed but is forbidden: offline mode is on
+    /// (`SATKIT_OFFLINE=1`, or [`set_offline`]`(true)`) or satkit was built
+    /// without the `download` feature — `reason` says which. No network I/O
     /// is attempted. `urls` lists where the file could be obtained manually
     /// (from the data manifest, when the file is a pinned one).
     #[error(
@@ -39,6 +40,15 @@ pub enum Error {
         reason: &'static str,
         urls: Vec<String>,
     },
+
+    /// [`update_datafiles`](crate::utils::update_datafiles) was called while
+    /// downloads are forbidden (`reason` says why). Returned before anything
+    /// is printed or any directory touched.
+    #[error(
+        "update_datafiles cannot run: downloads are forbidden ({reason}); nothing was fetched"
+    )]
+    #[non_exhaustive]
+    UpdateOffline { reason: &'static str },
 
     /// Returned when a download path, URL or manifest name has no valid
     /// single-component file name (e.g. ends in `/`, is absolute, or contains
@@ -195,12 +205,23 @@ pub fn set_offline(offline: bool) {
 /// precedence between the setter and [`OFFLINE_ENV`]). One atomic load when
 /// the setter has been used; an environment lookup otherwise.
 pub fn is_offline() -> bool {
+    offline_reason().is_some()
+}
+
+/// Why downloads are forbidden, for error messages, or `None` when they
+/// are allowed: [`set_offline`]`(true)` or [`OFFLINE_ENV`], whichever is in
+/// effect (see [`set_offline`] for the precedence).
+pub(crate) fn offline_reason() -> Option<&'static str> {
     match OFFLINE_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed) {
-        1 => false,
-        2 => true,
+        1 => None,
+        2 => Some(
+            "offline mode was turned on with satkit.utils.set_offline(True) in Python \
+             or satkit::utils::set_offline(true) in Rust",
+        ),
         _ => std::env::var(OFFLINE_ENV)
-            .map(|v| !(v.is_empty() || v == "0" || v.eq_ignore_ascii_case("false")))
-            .unwrap_or(false),
+            .ok()
+            .filter(|v| !(v.is_empty() || v == "0" || v.eq_ignore_ascii_case("false")))
+            .map(|_| "SATKIT_OFFLINE is set"),
     }
 }
 
@@ -393,22 +414,26 @@ pub(crate) fn request_error(url: &str, source: ureq::Error) -> Error {
     }
 }
 
-/// For an HTTP error from a `celestrak.org` request, an actionable message
-/// explaining CelesTrak's throttling of repeated identical GP queries
-/// (HTTP 503, sometimes 403). `None` for any other host or error.
+/// For an HTTP error from a CelesTrak GP (element-set) query, an actionable
+/// message explaining CelesTrak's throttling of repeated identical GP
+/// queries (HTTP 503, sometimes 403). `None` for any other host, any other
+/// CelesTrak file (the `EOP-All.csv` fallback, where caching TLE text is not
+/// the remedy), or any other error.
 #[cfg(feature = "download")]
 pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<String> {
     let status = match err {
         ureq::Error::StatusCode(code @ (403 | 503)) => *code,
         _ => return None,
     };
-    let host_ok = url
+    let (host, path) = url
         .split("//")
         .nth(1)
-        .and_then(|rest| rest.split('/').next())
-        .map(|h| h.ends_with("celestrak.org") || h.ends_with("celestrak.com"))
-        .unwrap_or(false);
-    if !host_ok {
+        .map(|rest| rest.split_once('/').unwrap_or((rest, "")))?;
+    let host_ok = host.ends_with("celestrak.org") || host.ends_with("celestrak.com");
+    // GP queries: `/NORAD/elements/gp.php`, the supplemental `sup-gp.php`
+    // and the legacy `/NORAD/elements/*.txt` group files.
+    let gp_query = path.starts_with("NORAD/elements/") || path.contains("gp.php");
+    if !(host_ok && gp_query) {
         return None;
     }
     let proxy_note = if status == 403 {
@@ -427,10 +452,10 @@ pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<St
 }
 
 pub(crate) fn check_online(name: &str) -> Result<()> {
-    if offline_requested() {
-        return Err(offline_error(name, "SATKIT_OFFLINE is set"));
+    match offline_reason() {
+        Some(reason) => Err(offline_error(name, reason)),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 /// Sequence number so every in-flight download in this process gets its own
@@ -918,7 +943,7 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
 ///    costs a `304` and no body ([`RefreshOutcome::NotModified`]);
 /// 3. only genuinely new bytes are transferred and installed.
 ///
-/// The GFZ and EOP files hold the whole record back to 1932 or 1962
+/// The GFZ and EOP files hold the whole record back to 1932 or 1973
 /// (several MB), so an unconditional re-fetch per run is exactly the pattern
 /// CelesTrak's usage policy asks clients to avoid. `force` skips both the age gate and the
 /// conditional header and always transfers the file.
@@ -1388,5 +1413,18 @@ nqylLCIo7Z6QSP2wB/zARZQB9OLch0Fp5N3QsmtQpj+MQ3z9QYhySjE/ABNz8XHG\n\
             celestrak_throttle_hint("https://example.org/x", &ureq::Error::StatusCode(503))
                 .is_none()
         );
+        // Not a GP query: the EOP fallback download gets no TLE advice,
+        // and neither does its wrapped request error.
+        let eop = "https://celestrak.org/SpaceData/EOP-All.csv";
+        assert!(celestrak_throttle_hint(eop, &ureq::Error::StatusCode(503)).is_none());
+        assert!(matches!(
+            request_error(eop, ureq::Error::StatusCode(503)),
+            Error::Request { hint: None, .. }
+        ));
+        assert!(celestrak_throttle_hint(
+            "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?FILE=starlink",
+            &ureq::Error::StatusCode(503)
+        )
+        .is_some());
     }
 }

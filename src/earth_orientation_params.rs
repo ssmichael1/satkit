@@ -77,13 +77,14 @@ pub enum Error {
     )]
     NoEopFile { dir: String },
 
-    /// The configured data directory is read-only and cannot receive an
-    /// updated EOP file.
+    /// The data directory cannot receive an updated EOP file: read-only
+    /// filesystem, no write permission, or owned by another user.
     #[error(
-        "Data directory is read-only. Try setting the environment variable SATKIT_DATA \
-         to a writeable directory and re-starting or explicitly set data directory"
+        "Data directory {path} is not writable ({reason}). Set the environment variable \
+         SATKIT_DATA to a writable directory and restart, or call set_datadir \
+         (Python: satkit.utils.set_datadir) with one"
     )]
-    DataDirReadOnly,
+    DataDirReadOnly { path: String, reason: String },
 
     /// Bytes passed to [`init_from_bytes`] were not valid UTF-8 — both EOP
     /// file formats are text.
@@ -695,8 +696,15 @@ pub fn status<T: TimeLike>(tm: &T) -> EopStatus {
 /// load it.
 pub fn update() -> Result<()> {
     let d = datadir::datadir()?;
-    if d.metadata()?.permissions().readonly() {
-        return Err(Error::DataDirReadOnly);
+    if let Err(e) = datadir::ensure_writable(&d) {
+        return Err(if datadir::is_not_writable_error(&e) {
+            Error::DataDirReadOnly {
+                path: d.display().to_string(),
+                reason: e.to_string(),
+            }
+        } else {
+            e.into()
+        });
     }
     refresh_into(&d, false)?;
     load_from_dir(&d)
@@ -746,7 +754,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
                  to download finals2000A.all, or set SATKIT_DATA to a directory containing it \
                  (or a CelesTrak EOP-All.csv).\n\
-                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()`"
+                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
+                 (Python: `satkit.frametransform.disable_eop_time_warning()`)"
             );
         }
         return None;
@@ -757,10 +766,26 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 
     if idx == 0 {
         if !WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+            // finals2000A.all starts at 1973-01-02 (MJD 41684); only
+            // CelesTrak's EOP-All.csv reaches back to 1962.
+            let advice = if eop[0].mjd_utc >= 41684.0 {
+                "Refreshing the data files does not help: finals2000A.all (the default) starts \
+                 at 1973-01-02. For 1962-1972, put CelesTrak's EOP-All.csv \
+                 (https://celestrak.org/SpaceData/EOP-All.csv) in the data directory; its \
+                 pre-1973 rows are used in front of finals2000A.all. There is no EOP series \
+                 before 1962."
+            } else {
+                "There is no EOP series before 1962."
+            };
             eprintln!(
-                "Warning: EOP data not available for MJD UTC = {mjd_utc} (too early).\n\
-                 Run `satkit::utils::update_datafiles()` to download the most recent data.\n\
-                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()`"
+                "Warning: EOP data not available for MJD UTC = {mjd_utc} (too early): the \
+                 loaded table starts at {} (MJD {}), and polar motion, UT1-UTC and nutation \
+                 corrections are treated as zero before it.\n\
+                 {advice}\n\
+                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
+                 (Python: `satkit.frametransform.disable_eop_time_warning()`)",
+                Instant::from_mjd_utc(eop[0].mjd_utc),
+                eop[0].mjd_utc
             );
         }
         return None;
@@ -777,7 +802,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
                  UT1-UTC drift by ~0.1 arcsec / ~10 ms over a few months, i.e. metres at LEO.\n\
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
                  to download the most recent Earth orientation file.\n\
-                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()`",
+                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
+                 (Python: `satkit.frametransform.disable_eop_time_warning()`)",
                 Instant::from_mjd_utc(last.mjd_utc),
                 last.mjd_utc
             );

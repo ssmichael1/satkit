@@ -70,7 +70,7 @@ sat.set_pos_uncertainty(np.array([150.0, 150.0, 150.0]), frame=sk.frame.GCRF)
 sat.set_vel_uncertainty(np.array([0.01, 0.2, 0.05]), frame=sk.frame.RTN)
 
 # Or set the full 6x6 covariance matrix directly (in GCRF)
-sat.cov = my_6x6_matrix
+sat.cov = np.diag([150.0**2] * 3 + [0.1**2] * 3)
 
 # Propagate -- covariance propagates automatically
 new_state = sat.propagate(sat.time + sk.duration.from_hours(6))

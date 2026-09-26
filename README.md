@@ -48,6 +48,7 @@ Pre-built wheels are available for Linux (x86_64, aarch64), macOS (Apple silicon
 
 The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris (~100 MB) downloads on first use (SHA-256 verified) into the user data directory; Earth orientation and space weather are fetched on first use and should be refreshed periodically:
 
+<!-- skip-test: needs the network (downloads the data files) -->
 ```python
 import satkit as sk
 sk.utils.update_datafiles()  # provisions everything up front; re-run periodically for fresh EOP/space weather

@@ -25,8 +25,7 @@ With the manifest:
   source is tried; if all fail, the error lists every URL and why.
 - **One artefact drives everything.** The CI cache key is
   `hashFiles('data/manifest.json')`, so changing the data invalidates the
-  cache automatically (the old static keys never did). The conda recipe's
-  `source:` URLs + sha256 can be generated from the same file.
+  cache automatically (the old static keys never did).
 
 ## URL order and why
 
@@ -47,7 +46,7 @@ All manifest URLs must be `https://` (validated on load).
 | file | size | source | licence / attribution | tier |
 |---|---|---|---|---|
 | `linux_p1550p2650.440` | 102.3 MB | JPL | DE440 (Park et al. 2021). US Government work, public domain. Origin URL verified byte-identical | ephemeris (default) |
-| `lnxp1900p2053.421` | 14.0 MB | JPL | DE421 (Folkner et al. 2009). US Government work, public domain. `default: false` — fetched only by name (e.g. the conda package ships this one) | ephemeris |
+| `lnxp1900p2053.421` | 14.0 MB | JPL | DE421 (Folkner et al. 2009). US Government work, public domain. `default: false` — fetched only by name (`SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421`) | ephemeris |
 | `tab5.2a.txt`, `tab5.2b.txt`, `tab5.2d.txt` | 171 / 137 / 9 KB | IERS | IERS Conventions (2010), TN 36, Tables 5.2a/b/d. Freely redistributable. Origin URLs verified byte-identical. `default: false` — embedded byte-identical in the binary | core |
 | `EGM96.gfc` | 5.6 MB | ICGEM (GFZ) | EGM96, Lemoine et al. 1998, NASA GSFC/NIMA — US Government work. `default: false` — embedded to degree 70 | core |
 | `EGM2008.gfc` | 252 MB | ICGEM (GFZ) | EGM2008, Pavlis et al. 2012, NGA — US Government work. `default: false` — embedded to degree 70. Origin URL verified byte-identical; the release-asset URL is listed first for consistency but the file is not uploaded (it is only ever fetched by name, and the client falls through to ICGEM) | core |
@@ -112,7 +111,7 @@ and conditional request to the IERS mirrors:
 
 | | |
 |---|---|
-| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for the GFZ record, 24 h for the SWPC forecast, `EOP-All.csv` and `finals2000A.all`, a week for MSAFE). `update_datafiles(overwrite_if_exists=True)` forces a fetch anyway |
+| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for the GFZ record, 24 h for the SWPC forecast, `EOP-All.csv` and `finals2000A.all`, a week for MSAFE). `update_datafiles(overwrite=True)` (Rust: `overwrite_if_exists = true`) forces a fetch anyway |
 | **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar, which also records the file's size and whole-second mtime and is ignored once those stop matching, so a copy swapped in by hand is re-fetched rather than reported current by a `304`; delete it (or the file) to force a full fetch |
 | **identification** | every request sends `User-Agent: satkit/<version> (+https://github.com/ssmichael1/satkit)` (`download::USER_AGENT`) rather than `ureq/3.x`, so a misbehaving client is traceable to the project |
 | **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `finals2000A.all` / `EOP-All.csv` and the three space-weather files are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |

@@ -138,8 +138,66 @@ def test_missing_ephemeris_is_typed_error(capfd):
     with pytest.raises(RuntimeError) as ei:
         sk.jplephem.geocentric_pos(sk.solarsystem.Moon, t)
     msg = str(ei.value)
-    assert "SATKIT_OFFLINE" in msg
+    # The reason names what turned offline mode on: the variable, or — once
+    # test_set_offline_round_trip has restored the state through the setter —
+    # set_offline.
+    assert "SATKIT_OFFLINE" in msg or "set_offline" in msg
     assert "linux_p1550p2650.440" in msg
     assert "https://" in msg
     # No "downloading ..." notice for a download that offline mode refuses (#205).
     assert "downloading the JPL ephemeris" not in capfd.readouterr().err
+
+
+def test_update_datafiles_rejects_unknown_keyword():
+    """A misspelt or unsupported keyword is a TypeError, not silently ignored."""
+    with pytest.raises(TypeError, match="force"):
+        sk.utils.update_datafiles(force=True)
+    with pytest.raises(TypeError):
+        sk.utils.update_datafiles("/tmp")  # keyword-only
+
+
+def test_offline_error_names_set_offline(tmp_path, capfd):
+    """Offline mode from the setter is reported as such (not as SATKIT_OFFLINE),
+    and update_datafiles fails before announcing a download or creating the
+    target directory."""
+    target = tmp_path / "never-created"
+    before = sk.utils.is_offline()
+    try:
+        sk.utils.set_offline(True)
+        with pytest.raises(RuntimeError) as ei:
+            sk.utils.update_datafiles(dir=str(target))
+    finally:
+        sk.utils.set_offline(before)
+    msg = str(ei.value)
+    assert "set_offline" in msg
+    assert "SATKIT_OFFLINE is set" not in msg
+    assert not target.exists()
+    assert "Downloading data files" not in capfd.readouterr().out
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+def test_update_datafiles_unwritable_dir_names_it(tmp_path):
+    """A directory update_datafiles cannot write to is reported with its path."""
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    try:
+        try:
+            (ro / "probe").write_bytes(b"")
+            pytest.skip("running as root: permission bits are not enforced")
+        except PermissionError:
+            pass
+        before = sk.utils.is_offline()
+        try:
+            # Offline mode would be reported first; the writability check
+            # itself opens no connection.
+            sk.utils.set_offline(False)
+            with pytest.raises(RuntimeError) as ei:
+                sk.utils.update_datafiles(dir=str(ro))
+        finally:
+            sk.utils.set_offline(before)
+        msg = str(ei.value)
+        assert str(ro) in msg
+        assert "not writable" in msg
+    finally:
+        ro.chmod(0o700)

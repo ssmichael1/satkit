@@ -349,8 +349,12 @@ fn force_model(
 ///
 /// # Forces included in the propagator:
 ///
-/// * Earth gravity with higher-order zonal terms
+/// * Earth gravity with higher-order spherical-harmonic terms
 /// * Gravitational pull of sun, moon
+/// * Solid Earth tides (IERS 2010 Step 1 by default; see
+///   [`PropSettings::tide_model`](crate::orbitprop::PropSettings::tide_model))
+/// * General relativity (IERS 2010 Eq. 10.12; see
+///   [`PropSettings::use_relativistic_correction`](crate::orbitprop::PropSettings::use_relativistic_correction))
 /// * Solar radiation pressure
 /// * Atmospheric drag: NRL-MSISE 2000 model, with option to include space weather
 ///   (effects can be large)
