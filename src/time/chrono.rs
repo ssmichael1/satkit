@@ -9,19 +9,27 @@ use crate::Instant;
 /// microseconds rather than an f64 Unix time, which resolves only ~0.2 µs
 /// today and loses a microsecond to truncation about 1% of the time.
 ///
-/// chrono writes a leap second as `23:59:59` with a nanosecond field of
-/// 1e9 or more; the whole second goes through the Unix basis and the
-/// sub-second part is elapsed time, which lands inside the leap second.
-/// (`timestamp()` is the floor, and the nanoseconds are non-negative, also
-/// before 1970.)
+/// The fraction of a second is part of the label (Unix time), not elapsed
+/// time: before 1972 a UTC second was not an SI second. `timestamp()` is the
+/// floor and the nanoseconds are non-negative, also before 1970. chrono
+/// writes a leap second as `23:59:59` with a nanosecond field of 1e9 or
+/// more; that part is elapsed time into the leap second.
 #[inline]
 fn datetime_to_instant<Tz>(dt: &chrono::DateTime<Tz>) -> Instant
 where
     Tz: chrono::TimeZone,
 {
-    let whole = Instant::from_unixtime_microseconds(dt.timestamp().saturating_mul(1_000_000));
+    let whole = dt.timestamp().saturating_mul(1_000_000);
     let us = (dt.timestamp_subsec_nanos() as i64 + 500) / 1000;
-    whole + crate::Duration::from_microseconds(us)
+    if us < 1_000_000 {
+        Instant::from_unixtime_microseconds(whole.saturating_add(us))
+    } else {
+        // A leap second, or a fraction that rounded up to the next second
+        // (which is 23:59:60.000000 where a leap second follows): elapsed
+        // time from the last microsecond of the label's second
+        Instant::from_unixtime_microseconds(whole.saturating_add(999_999))
+            + crate::Duration::from_microseconds(us - 999_999)
+    }
 }
 
 /// Exact conversion from integer Unix microseconds, split with Euclidean
