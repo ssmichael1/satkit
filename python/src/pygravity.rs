@@ -43,6 +43,8 @@ pub enum GravModel {
     egm2008 = GravityModel::EGM2008 as isize,
 }
 
+crate::enum_pickle!(GravModel, "gravmodel");
+
 impl From<GravModel> for GravityModel {
     fn from(g: GravModel) -> Self {
         match g {
@@ -84,12 +86,18 @@ impl From<GravityModel> for GravModel {
 /// Notes:
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 #[pyfunction]
-#[pyo3(signature=(pos, **kwds))]
+// The keywords are parsed by hand from `kwds`; `text_signature` publishes
+// them so `inspect.signature` and stubtest see the real parameters.
+#[pyo3(
+    signature=(pos, **kwds),
+    text_signature = "(pos, *, model=..., degree=6, order=...)"
+)]
 pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<Py<PyAny>> {
     let mut degree: usize = 6;
     let mut order: Option<usize> = None;
     let mut model: GravModel = GravModel::egm2008;
     if let Some(kw) = kwds {
+        crate::pyutils::reject_unknown_kwargs("gravity", kw, &["model", "degree", "order"])?;
         if let Some(v) = kw.get_item("model")? {
             model = v
                 .extract::<GravModel>()
@@ -163,7 +171,12 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 ///
 #[pyfunction]
-#[pyo3(signature=(pos, **kwds))]
+// The keywords are parsed by hand from `kwds`; `text_signature` publishes
+// them so `inspect.signature` and stubtest see the real parameters.
+#[pyo3(
+    signature=(pos, **kwds),
+    text_signature = "(pos, *, model=..., degree=6, order=...)"
+)]
 pub fn gravity_and_partials(
     pos: &Bound<'_, PyAny>,
     kwds: Option<&Bound<'_, PyDict>>,
@@ -172,6 +185,11 @@ pub fn gravity_and_partials(
     let mut order: Option<usize> = None;
     let mut model: GravModel = GravModel::egm2008;
     if let Some(kw) = kwds {
+        crate::pyutils::reject_unknown_kwargs(
+            "gravity_and_partials",
+            kw,
+            &["model", "degree", "order"],
+        )?;
         if let Some(v) = kw.get_item("model")? {
             model = v
                 .extract::<GravModel>()

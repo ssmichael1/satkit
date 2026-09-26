@@ -30,7 +30,7 @@ A file is used from the first directory that contains it. The ephemeris is also 
 | `SATKIT_DATA_URL=https://mirror/base` | try `"$SATKIT_DATA_URL/<name>"` before the manifest's sources for the files pinned in the manifest — the JPL ephemerides, ITU_GRACE16 and the other static files (plain `http://` accepted; still hash-verified). The Earth-orientation and space-weather refreshes do not use it: they always go to IERS/USNO (CelesTrak as fallback), GFZ, NOAA/SWPC and NASA; for an air-gapped machine, copy those files into `SATKIT_DATA` instead |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` | honoured for every download (standard proxy environment variables; read by the HTTP client) |
 | `SATKIT_CA_BUNDLE=/path/bundle.pem` | verify servers against the certificates in this PEM file instead of the operating system's trust store. The file replaces the trust store outright, so it must also carry the public roots (`python -m certifi` with the private CA appended). Also accepts `platform` (the default) and `webpki` (the Mozilla list compiled into satkit, for a container with no system trust store). See [Downloads behind a TLS-inspecting proxy](datadownloads.md#downloads-behind-a-tls-inspecting-proxy) |
-| `SATKIT_OFFLINE=1` / `satkit.utils.set_offline(True)` | forbid **downloads** — `update_datafiles()`, the lazy ephemeris fetch, the EOP/SW refresh, any non-embedded file — with a `RuntimeError` naming the file and its sources; no connection is opened. Search locations and the compiled-in data are unaffected. The setter wins once called; otherwise the variable is read. `satkit.utils.is_offline()` reports the effective state |
+| `SATKIT_OFFLINE=1` / `satkit.utils.set_offline(True)` | forbid **network access** — `update_datafiles()`, the lazy ephemeris fetch, the EOP/SW refresh, any non-embedded file — with a `RuntimeError` naming the file and its sources; `TLE.from_url` / `omm_from_url` raise `RuntimeError` naming the URL. No connection is opened. Search locations and the compiled-in data are unaffected. The setter wins once called; otherwise the variable is read. `satkit.utils.is_offline()` reports the effective state |
 | `SATKIT_JPLEPHEM_FILE=name-or-path` | which ephemeris to load — see [below](#selecting-a-jpl-ephemeris-file) |
 | `SATKIT_QUIET=1` | suppress the warning printed when a corrupt or unreadable IERS table in a search directory is replaced by the compiled-in copy |
 | `satkit.utils.datadir()` | the write location (`None` if none can be determined — no `SATKIT_DATA`, no home / `%LOCALAPPDATA%`) |
@@ -51,6 +51,7 @@ it a hard dependency of `satkit`; it is now optional.
 Nothing needs to be downloaded before first use, but for a container image,
 a CI job, or a machine that will later be offline:
 
+<!-- skip-test: needs the network (downloads the data files) -->
 ```python
 import satkit as sk
 sk.utils.update_datafiles()   # ephemeris (verified) + EOP + space weather

@@ -185,6 +185,7 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pymodule]
 pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add_function(wrap_pyfunction!(pyutils::enum_member, m)?)?;
     m.add_class::<PyInstant>()?;
     m.add_class::<PyDuration>()?;
     m.add_class::<pyinstant::PyTimeScale>()?;

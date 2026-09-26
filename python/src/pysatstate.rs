@@ -1,5 +1,5 @@
 use crate::pyframes::PyFrame;
-use crate::pyinstant::PyInstant;
+use crate::pyinstant::{PyInstant, TimeArg};
 use crate::pypropsettings::PyPropSettings;
 use crate::pyquaternion::PyQuaternion;
 use crate::pysatproperties::PySatProperties;
@@ -36,7 +36,7 @@ impl PySatState {
     #[new]
     #[pyo3(signature=(time, pos, vel, cov=None))]
     fn py_new(
-        time: &PyInstant,
+        time: TimeArg,
         pos: &Bound<'_, np::PyArray1<f64>>,
         vel: &Bound<'_, np::PyArray1<f64>>,
         cov: Option<&Bound<'_, np::PyArray2<f64>>>,
@@ -94,7 +94,7 @@ impl PySatState {
     /// Returns:
     ///     satkit.satstate: state at ``time``
     #[staticmethod]
-    fn from_kepler(time: &PyInstant, kepler: &crate::pykepler::PyKepler) -> Self {
+    fn from_kepler(time: TimeArg, kepler: &crate::pykepler::PyKepler) -> Self {
         Self(SatState::from_kepler(&time.0, &kepler.0))
     }
 
@@ -304,7 +304,7 @@ impl PySatState {
     ///     :meth:`add_normal` for ergonomic scalar-magnitude alternatives.
     fn add_maneuver(
         &mut self,
-        time: PyInstant,
+        time: TimeArg,
         delta_v: &Bound<'_, PyAny>,
         frame: PyFrame,
     ) -> Result<()> {
@@ -323,7 +323,7 @@ impl PySatState {
     /// Args:
     ///     time (satkit.time): Time at which to apply the burn
     ///     dv_mps (float): Magnitude along velocity vector [m/s]
-    fn add_prograde(&mut self, time: PyInstant, dv_mps: f64) {
+    fn add_prograde(&mut self, time: TimeArg, dv_mps: f64) {
         self.0
             .add_maneuver(ImpulsiveManeuver::prograde(time.0, dv_mps));
     }
@@ -336,7 +336,7 @@ impl PySatState {
     /// Args:
     ///     time (satkit.time): Time at which to apply the burn
     ///     dv_mps (float): Magnitude along anti-velocity vector [m/s]
-    fn add_retrograde(&mut self, time: PyInstant, dv_mps: f64) {
+    fn add_retrograde(&mut self, time: TimeArg, dv_mps: f64) {
         self.0
             .add_maneuver(ImpulsiveManeuver::retrograde(time.0, dv_mps));
     }
@@ -350,7 +350,7 @@ impl PySatState {
     /// Args:
     ///     time (satkit.time): Time at which to apply the burn
     ///     dv_mps (float): Magnitude along in-plane normal-to-velocity [m/s]
-    fn add_radial(&mut self, time: PyInstant, dv_mps: f64) {
+    fn add_radial(&mut self, time: TimeArg, dv_mps: f64) {
         self.0
             .add_maneuver(ImpulsiveManeuver::radial_out(time.0, dv_mps));
     }
@@ -363,7 +363,7 @@ impl PySatState {
     /// Args:
     ///     time (satkit.time): Time at which to apply the burn
     ///     dv_mps (float): Magnitude along angular momentum direction [m/s]
-    fn add_normal(&mut self, time: PyInstant, dv_mps: f64) {
+    fn add_normal(&mut self, time: TimeArg, dv_mps: f64) {
         self.0
             .add_maneuver(ImpulsiveManeuver::normal(time.0, dv_mps));
     }
@@ -403,56 +403,66 @@ impl PySatState {
     /// Automatically segments propagation at impulsive maneuver times.
     ///
     /// Args:
-    ///     time (satkit.time|satkit.duration): Time for which to compute new state or alternatively
+    ///     timedur (satkit.time|datetime.datetime|satkit.duration): Time for which to compute new state or alternatively
     ///         a duration to propagate from the current time
     ///     propsettings (satkit.propsettings, optional): Propagation settings
     ///     satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
     ///
     /// Returns:
     ///     satkit.satstate: New state at input time
-    #[pyo3(signature=(timedur, **kwargs))]
+    // Keywords parsed by hand; `text_signature` publishes them for inspect/stubtest.
+    #[pyo3(
+        signature=(timedur, **kwargs),
+        text_signature = "($self, timedur, *, propsettings=None, satproperties=None)"
+    )]
     fn propagate(
         &self,
         timedur: &Bound<'_, PyAny>,
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> Result<Self> {
         let time: Instant = {
-            if timedur.is_instance_of::<PyInstant>() {
-                timedur
-                    .extract::<PyInstant>()
-                    .map_err(|e| anyhow::anyhow!("Invalid instant: {}", e))?
-                    .0
-            } else if timedur.is_instance_of::<PyDuration>() {
-                let dur = timedur
-                    .extract::<PyDuration>()
-                    .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
-                self.0.time + dur.0
+            if let Ok(dur) = timedur.cast::<PyDuration>() {
+                self.0.time + dur.borrow().0
+            } else if let Ok(t) = timedur.extract::<TimeArg>() {
+                t.0
             } else {
-                bail!("1st argument must be satkit.time or satkit.duration");
+                return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                    "timedur must be satkit.time, datetime.datetime or satkit.duration, got {}",
+                    timedur.get_type()
+                ))
+                .into());
             }
         };
 
         let mut propsettings: Option<PropSettings> = None;
         let mut satprops_obj: Option<PySatProperties> = None;
 
+        // An explicit `propsettings=None` / `satproperties=None` is the default
         if let Some(kw) = kwargs {
             if let Some(v) = kw.get_item("propsettings")? {
-                propsettings = Some(
-                    v.extract::<PyPropSettings>()
-                        .map_err(|e| {
-                            pyo3::exceptions::PyValueError::new_err(format!(
-                                "Invalid propsettings: {}",
-                                e
-                            ))
-                        })?
-                        .0,
-                );
+                if !v.is_none() {
+                    propsettings = Some(
+                        v.extract::<PyPropSettings>()
+                            .map_err(|e| {
+                                pyo3::exceptions::PyValueError::new_err(format!(
+                                    "Invalid propsettings: {}",
+                                    e
+                                ))
+                            })?
+                            .0,
+                    );
+                }
                 kw.del_item("propsettings")?;
             }
             if let Some(v) = kw.get_item("satproperties")? {
-                satprops_obj = Some(v.extract::<PySatProperties>().map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {}", e))
-                })?);
+                if !v.is_none() {
+                    satprops_obj = Some(v.extract::<PySatProperties>().map_err(|e| {
+                        pyo3::exceptions::PyValueError::new_err(format!(
+                            "Invalid satproperties: {}",
+                            e
+                        ))
+                    })?);
+                }
                 kw.del_item("satproperties")?;
             }
             // Reject typo'd keywords rather than silently ignoring them.

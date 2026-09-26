@@ -20,7 +20,11 @@ use satkit::Instant;
 ///  (float, float): Tuple of density (kg/m^3) and temperature (K)
 ///
 #[pyfunction]
-#[pyo3(signature=(alt_km, **option_kwds))]
+// Keywords parsed by hand; `text_signature` publishes them for inspect/stubtest.
+#[pyo3(
+    signature=(alt_km, **option_kwds),
+    text_signature = "(alt_km, *, latitude_deg=0.0, longitude_deg=0.0, time=None, use_spaceweather=True)"
+)]
 pub fn nrlmsise00(
     alt_km: f64,
     option_kwds: Option<&Bound<'_, PyDict>>,
@@ -39,7 +43,10 @@ pub fn nrlmsise00(
             kwds.del_item("longitude_deg")?;
         }
         if let Some(v) = kwds.get_item("time")? {
-            tm = Some(crate::pyutils::instant_from_pyany(&v)?);
+            // `time=None` is the documented default
+            if !v.is_none() {
+                tm = Some(crate::pyutils::instant_from_pyany(&v)?);
+            }
             kwds.del_item("time")?;
         }
         if let Some(v) = kwds.get_item("use_spaceweather")? {

@@ -83,7 +83,14 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 ### Python Bindings
 
 - Follow [PEP 8](https://pep8.org/) style guidelines
-- Provide type hints in `.pyi` stub files for IDE support
+- Provide type hints in `.pyi` stub files for IDE support. CI checks them
+  against the compiled bindings with `python python/run_stubtest.py`
+  (mypy's stubtest over every stub, native submodules included); the stub is
+  wrong when they disagree, unless the entry in
+  `python/stubtest_allowlist.txt` says why not. stubtest compares parameter
+  names, kinds and defaults only, and sees nothing of a binding that parses
+  `*args` / `**kwargs` by hand, so give such a binding a
+  `#[pyo3(text_signature = "...")]`
 - Include docstrings for all public functions and classes
 - Conversions to another representation are methods named `to_X` (`to_mjd()`,
   `to_datetime()`, `to_rotation_matrix()`), paired with the `from_X` constructor
@@ -116,7 +123,29 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 ### Documentation
 
 - Update relevant documentation for API changes
-- Add examples for new features
+- Add examples for new features. Python examples are executed by
+  `python/test/test_doc_examples.py`: every fenced ```` ```python ```` block
+  in `docs/**/*.md` and `README.md` (a page's blocks run in order in one
+  namespace), and the fenced or `>>>` code of every docstring, in the `.pyi`
+  stubs and in the `///` comments of `python/src/*.rs` (each docstring runs
+  on its own, with `satkit`, `sk` and `np` already imported; `>>>` output
+  lines are not compared). Notebooks are executed by the docs build instead.
+  Examples run with `SATKIT_OFFLINE=1`, in a scratch directory. Mark a block
+  that cannot run there explicitly, on the line before its fence:
+  - `<!-- skip-test: reason -->` — not run (it needs the network, a
+    download, or a file the reader supplies)
+  - `<!-- xfail-test: reason -->` — runs and must fail; for an example that
+    exposes a known code bug (remove the marker with the fix)
+  - `<!-- test-setup` … `-->` — hidden code run at that point of the page,
+    for a fragment that uses names the prose defines elsewhere; the rendered
+    page does not show it
+
+  For docstrings the same markers live in `DOCSTRING_MARKS` and
+  `DOCSTRING_SETUP` at the top of `test_doc_examples.py`, keyed by
+  qualified name (`satkit.TLE.from_url`; `#n` selects one example of
+  several). Nothing is skipped automatically. `SATKIT_OFFLINE=1` stops data
+  file downloads but not `TLE.from_url` / `omm_from_url`, so mark every
+  example that fetches anything
 - Keep README.md up to date with new capabilities
 - Document any breaking changes clearly
 
@@ -245,7 +274,7 @@ All pull requests are automatically tested via GitHub Actions:
 - **Test**: Runs full test suite on all platforms
 - **Lint**: Checks code style with clippy
 - **Format**: Verifies formatting with rustfmt
-- **Python**: Tests Python bindings (editable install, Python 3.13) and checks the `.pyi` stubs with stubtest; release builds smoke-test each published wheel (3.10–3.14)
+- **Python**: Tests Python bindings (editable install, Python 3.13), runs the documentation and docstring examples, and checks the `.pyi` stubs with stubtest; release builds smoke-test each published wheel (3.10–3.14)
 
 Ensure all CI checks pass before requesting review.
 

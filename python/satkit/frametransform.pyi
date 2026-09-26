@@ -24,7 +24,7 @@ def gmst(tm: TimeScalar) -> float:
     Notes:
         - GMST is the angle between the vernal equinox and the Greenwich meridian
         - Vallado algorithm 15
-        - GMST = 67310.5481 + (876600h + 8640184.812866) * tᵤₜ₁ * (0.983104 + tᵤₜ₁ * −6.2e−6)
+        - GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 
     Args:
         tm (satkit.time | datetime.datetime): scalar time at which to calculate output
@@ -51,7 +51,7 @@ def gmst(
     Notes:
         - GMST is the angle between the vernal equinox and the Greenwich meridian
         - Vallado algorithm 15
-        - GMST = 67310.5481 + (876600h + 8640184.812866) * tᵤₜ₁ * (0.983104 + tᵤₜ₁ * −6.2e−6)
+        - GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
@@ -67,6 +67,13 @@ def eqeq(tm: TimeScalar) -> float:
 
     The equation of the equinoxes is the difference between apparent and mean
     sidereal time (GAST - GMST), arising from nutation of the Earth's axis.
+
+    Notes:
+        - Two-term approximation, dPsi cos(eps) with dPsi = -17.2" sin(Omega)
+          - 1.3" sin(2L) (Vallado 2013, §3.7.3). Against the IAU 1994
+          equation of the equinoxes with the full IAU 1980 nutation (ERFA
+          ``eqeq94``) it is good to about 0.6" (0.65" max, 43 ms of time,
+          over 1950-2100); use :func:`rotation` for the full reduction.
 
     Args:
         tm (satkit.time | datetime.datetime): scalar time at which to calculate output
@@ -95,6 +102,10 @@ def gast(
     tm: TimeScalar,
 ) -> float:
     """Greenwich Apparent Sidereal Time
+
+    GMST (IAU 1982) plus the two-term equation of the equinoxes
+    (:func:`eqeq`), so good to about 0.6" (0.65" max, 43 ms of time,
+    over 1950-2100) against ERFA ``gst94``.
 
     Args:
         tm (satkit.time): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
@@ -206,6 +217,19 @@ def qteme2gcrf(
 ) -> quaternion:
     """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
 
+    Notes:
+        - **Approximate**: the same as ``rotation_approx(TEME, GCRF)``, not
+          ``rotation(TEME, GCRF)``. TEME (a quasi-inertial frame) is rotated
+          to PEF by GMST82 alone, then to GCRF by the approximate chain of
+          :func:`qitrf2gcrf_approx` (two-term equation of the equinoxes and
+          nutation, IAU 2006 precession, no frame bias). No polar motion is
+          involved. Accurate to 0.55" max against the full IERS 2010
+          reduction (1973-2026): ~19 m at LEO, ~110 m at GEO.
+        - For the full reduction use ``rotation(TEME, GCRF)`` (GMST82, polar
+          motion, then the IERS 2010 ITRF -> GCRF chain; matches ERFA to
+          ~5 uas), at a higher cost.
+        - TEME is the output frame of the SGP4 propagator
+
     Args:
         tm (satkit.time| datetime.datetime ): Time[s] at which to calculate the quaternion
 
@@ -225,6 +249,8 @@ def qteme2gcrf(
     tm: TimeArrayLike,
 ) -> list[quaternion]:
     """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
+
+    Approximate (0.55" max); see the scalar overload.
 
     Args:
         tm (npt.ArrayLike[satkit.time] | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -297,7 +323,14 @@ def qgcrf2itrf_approx(
     """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        - Accurate to approx. 1 arcsec
+        - Accurate to about 1 arcsec (1.0" max against the full IERS 2010
+          reduction, 1973-2026; ~35 m at LEO), of which up to 0.6" is polar
+          motion, which this chain neglects
+        - The chain is GAST (GMST82 + the two-term :func:`eqeq`), the
+          two-term nutation of :func:`qtod2mod_approx` and the IAU 2006
+          precession of :func:`qmod2gcrf` (no frame bias). It is often
+          labelled "IAU-76/FK5", but it is neither the IAU 1976 precession
+          nor the 106-term IAU 1980 nutation series
         - **Velocity transforms**: this quaternion rotates *position* vectors
           between GCRF and ITRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
@@ -320,7 +353,7 @@ def qgcrf2itrf_approx(
     """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        - Accurate to approx. 1 arcsec
+        - Accurate to about 1 arcsec; see the scalar overload
 
     Args:
         tm (npt.ArrayLike[satkit.time] | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -337,7 +370,14 @@ def qitrf2gcrf_approx(
     """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
     Notes:
-        - Accurate to approx. 1 arcsec
+        - Accurate to about 1 arcsec (1.0" max against the full IERS 2010
+          reduction, 1973-2026; ~35 m at LEO), of which up to 0.6" is polar
+          motion, which this chain neglects
+        - The chain is GAST (GMST82 + the two-term :func:`eqeq`), the
+          two-term nutation of :func:`qtod2mod_approx` and the IAU 2006
+          precession of :func:`qmod2gcrf` (no frame bias). It is often
+          labelled "IAU-76/FK5", but it is neither the IAU 1976 precession
+          nor the 106-term IAU 1980 nutation series
         - **Velocity transforms**: this quaternion rotates *position* vectors
           between ITRF and GCRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
@@ -360,7 +400,7 @@ def qitrf2gcrf_approx(
     """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
     Notes:
-        - Accurate to approx. 1 arcsec
+        - Accurate to about 1 arcsec; see the scalar overload
 
     Args:
         tm (npt.ArrayLike[satkit.time] | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -498,7 +538,11 @@ def qteme2itrf(
     """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        - This is equation 3-90 in Vallado
+        - This is equation 3-90 in Vallado: the GMST (IAU 1982) rotation
+          TEME -> PEF followed by polar motion PEF -> ITRF. No
+          precession-nutation is involved, so it is exact to the model (it
+          matches ERFA to ~10 uas) and identical to ``rotation(TEME, ITRF)``
+          and ``rotation_approx(TEME, ITRF)``.
         - TEME is the output frame of the SGP4 propagator used to compute position from two-line element sets.
 
     Args:
@@ -528,7 +572,11 @@ def qteme2itrf(
     """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
 
     Notes:
-        - This is equation 3-90 in Vallado
+        - This is equation 3-90 in Vallado: the GMST (IAU 1982) rotation
+          TEME -> PEF followed by polar motion PEF -> ITRF. No
+          precession-nutation is involved, so it is exact to the model (it
+          matches ERFA to ~10 uas) and identical to ``rotation(TEME, ITRF)``
+          and ``rotation_approx(TEME, ITRF)``.
         - TEME is the output frame of the SGP4 propagator used to compute position from two-line element sets.
 
     Args:
@@ -582,6 +630,16 @@ def qmod2gcrf(tm: TimeScalar) -> quaternion:
 
     Mean-of-Date accounts for precession but not nutation. For the
     precession+nutation pair see :func:`qcirs2gcrf` or :func:`qitrf2gcrf`.
+
+    Notes:
+        - Precession only: the IAU 2006 angles zeta_A, z_A, theta_A
+          (Capitaine et al. 2003; Vallado Eqs. 3-88, 3-89), not the IAU 1976
+          precession. It matches the precession matrix of ERFA ``bp06`` to
+          0.1 uas.
+        - No frame bias: the target is the J2000 mean equator and equinox
+          (EME2000), which differs from GCRF by the constant 23 mas frame
+          bias (0.8 m at LEO). Compose with
+          ``rotation(EME2000, GCRF)`` for a true MOD -> GCRF.
     """
     ...
 
@@ -596,6 +654,12 @@ def qmod2gcrf(
 def qtod2mod_approx(tm: TimeScalar) -> quaternion:
     """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at the
     given time. Accounts for nutation only.
+
+    Notes:
+        - Two-term nutation (the 18.6-year and semi-annual terms; Vallado
+          2013, §3.7.3), good to 0.9" (0.88" max over 1950-2100) against the
+          IAU 2006/2000A nutation (ERFA ``nut06a``) and equally against the
+          IAU 1980 series
     """
     ...
 
@@ -641,8 +705,8 @@ def to_gcrf(
 
     Raises:
         RuntimeError: if ``frame`` is not a satellite-local orbital frame.
-            Earth-fixed / celestial frames (ITRF, TEME, EME2000, etc.) need
-            a time argument for their rotation to GCRF and must use the
+            Time-dependent frames (the Earth-fixed ITRF, the quasi-inertial
+            TEME, EME2000, etc.) need a time argument for their rotation to GCRF and must use the
             dedicated quaternion helpers (:func:`qitrf2gcrf`,
             :func:`qteme2gcrf`, etc.) instead.
 
@@ -756,8 +820,8 @@ def itrf_to_gcrf_state_approx(
     vel_itrf: npt.ArrayLike,
     time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """Approximate ITRF → GCRF state transform using the IAU-76/FK5
-    reduction (accurate to ~1 arcsec on position).
+    """Approximate ITRF → GCRF state transform using the approximate
+    reduction of :func:`qitrf2gcrf_approx` (accurate to ~1 arcsec on position).
 
     Faster alternative to :func:`itrf_to_gcrf_state` when the full IERS
     2010 precision is not required. Neglects polar motion, so the
@@ -779,8 +843,8 @@ def gcrf_to_itrf_state_approx(
     vel_gcrf: npt.ArrayLike,
     time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """Approximate GCRF → ITRF state transform using the IAU-76/FK5
-    reduction. Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to
+    """Approximate GCRF → ITRF state transform using the approximate
+    reduction of :func:`qgcrf2itrf_approx`. Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to
     ~1 arcsec on position. Accepts scalar or batched inputs.
 
     Args:
@@ -947,11 +1011,13 @@ def rotation_approx(
     tm: TimeScalar,
 ) -> quaternion:
     """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
-    the IAU-76/FK5 approximate reduction (~1 arcsec).
+    the approximate reduction of :func:`qitrf2gcrf_approx` (~1 arcsec;
+    TEME <-> GCRF / EME2000 / ICRF 0.55", as :func:`qteme2gcrf`; TEME <-> ITRF
+    is exact, as :func:`qteme2itrf`).
 
     Only valid between ``ITRF`` and the inertial cluster (``GCRF``,
     ``EME2000``, ``ICRF``, ``TEME``). ``TIRS`` and ``CIRS`` are defined by
-    the IERS 2010 reduction and have no FK5 analogue.
+    the IERS 2010 reduction and have no analogue in the approximate chain.
 
     Raises:
         RuntimeError: if either frame is ``TIRS`` / ``CIRS``, or if the pair
@@ -993,8 +1059,10 @@ def transform_state_approx(
     pos: npt.ArrayLike,
     vel: npt.ArrayLike,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """State transform using the IAU-76/FK5 approximate reduction. Same
-    supported-pair set as :func:`transform_state`.
+    """State transform using the approximate reduction of
+    :func:`rotation_approx`. Same supported-pair set as
+    :func:`transform_state`; TEME <-> ITRF does not use the approximate chain
+    and equals the full transform.
 
     Args:
         from_frame: Source frame

@@ -130,6 +130,10 @@ class TLE:
         Returns:
             Single TLE or list of TLEs parsed from the response
 
+        Raises:
+            RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
+                ``satkit.utils.set_offline(True)``); no connection is opened
+
         Example:
             ```python
             tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
@@ -661,7 +665,11 @@ def nrlmsise00(
     ...
 
 def gravity(
-    pos: list[float] | itrfcoord | npt.ArrayLike, **kwargs
+    pos: list[float] | itrfcoord | npt.ArrayLike,
+    *,
+    model: gravmodel = ...,
+    degree: int = 6,
+    order: int = ...,
 ) -> npt.NDArray[np.float64]:
     """Return acceleration due to Earth gravity at the input position
 
@@ -691,7 +699,11 @@ def gravity(
     ...
 
 def gravity_and_partials(
-    pos: itrfcoord | npt.NDArray[np.float64], **kwargs
+    pos: itrfcoord | npt.NDArray[np.float64],
+    *,
+    model: gravmodel = ...,
+    degree: int = 6,
+    order: int = ...,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Gravity and partial derivatives of gravity with respect to Cartesian coordinates
 
@@ -1029,6 +1041,11 @@ class time:
         - If no arguments are passed in, the created object represents the current time
         - If year is passed in, month and day must also be passed in
         - If hour is passed in, minute and second must also be passed in
+        - UTC before 1972 follows the "rubber second" model of USNO
+          ``tai-utc.dat`` / ERFA ``dat`` from 1961-01-01: TAI - UTC drifts
+          linearly and steps by fractions of a second (positive steps are
+          labelled ``23:59:60.x``). Before 1961, UTC is taken to equal TAI
+          (unlike ERFA, which also models 1960).
 
     Example:
         ```python
@@ -1095,7 +1112,9 @@ class time:
             hour: Hour of day, in range [0,23]
             min: Minute of hour, in range [0,59]
             sec: Floating point second of minute, in range [0,60); up to 61
-                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31)
+                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31),
+                and within a pre-1972 positive UTC step (e.g. ``23:59:60.05``
+                on 1963-10-31, up to 61.422818 on 1960-12-31)
             scale: Time scale in which the Gregorian components are
                 interpreted, default is satkit.timescale.UTC. Ignored for the
                 string and no-argument forms.
@@ -1159,7 +1178,7 @@ class time:
 
         Example:
             ```python
-            print(satkit.time.from_rfctime("2023-03-05T11:03:45.453Z"))
+            print(satkit.time.from_rfc3339("2023-03-05T11:03:45.453Z"))
             # 2023-03-05 11:03:45.453Z
             ```
         """
@@ -1792,8 +1811,8 @@ class duration:
         hours: float = 0,
         minutes: float = 0,
         seconds: float = 0.0,
-        microseconds: float = 0.0,
-    ):
+        microseconds: int = 0,
+    ) -> None:
         """Create a duration object representing input time duration
 
         Args:
@@ -1801,7 +1820,7 @@ class duration:
             hours: Number of hours, default is 0
             minutes: Number of minutes, default is 0
             seconds: Number of seconds, default is 0.0
-            microseconds: Number of microseconds, default is 0.0
+            microseconds: Number of microseconds (an integer), default is 0
 
         Notes:
             - If no arguments are passed in, the created object represents a duration of 0 seconds
@@ -1901,26 +1920,8 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) + duration.from_minutes(1))
+            print(satkit.duration.from_hours(1) + satkit.duration.from_minutes(1))
             # Duration: 1 hours, 1 minutes, 0.000 seconds
-            ```
-        """
-        ...
-
-    @typing.overload
-    def __add__(self, other: float) -> duration:
-        """Add a number of days to the current duration
-
-        Args:
-            other (float): number of days to add to the current duration
-
-        Returns:
-            Duration object representing the input number of days added to the current duration
-
-        Example:
-            ```python
-            print(duration.from_days(1) + 2.5)
-            # Duration: 3 days, 0 hours, 0 minutes, 0.000 seconds
             ```
         """
         ...
@@ -1937,8 +1938,8 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
-            # 2023-06-04 13:30:00.000Z
+            print(satkit.duration.from_hours(1) + satkit.time(2023, 6, 4, 11,30,0))
+            # 2023-06-04T12:30:00.000000Z
             ```
         """
         ...
@@ -1954,7 +1955,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) - duration.from_minutes(1))
+            print(satkit.duration.from_hours(1) - satkit.duration.from_minutes(1))
             # Duration: 59 minutes, 0.000 seconds
             ```
         """
@@ -1971,7 +1972,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_days(1) * 2.5)
+            print(satkit.duration.from_days(1) * 2.5)
             # Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
             ```
         """
@@ -1989,7 +1990,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_days(1) / 2)
+            print(satkit.duration.from_days(1) / 2)
             # Duration: 12 hours, 0 minutes, 0.000 seconds
             ```
         """
@@ -2007,7 +2008,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) / duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) / satkit.duration.from_minutes(30))
             # 2.0
             ```
         """
@@ -2023,7 +2024,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) > duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) > satkit.duration.from_minutes(30))
             # True
             ```
         """
@@ -2039,7 +2040,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) < duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) < satkit.duration.from_minutes(30))
             # False
             ```
         """
@@ -2055,7 +2056,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) >= duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) >= satkit.duration.from_minutes(30))
             # True
             ```
         """
@@ -2071,7 +2072,7 @@ class duration:
 
         Example:
             ```python
-            print(duration.from_hours(1) <= duration.from_minutes(30))
+            print(satkit.duration.from_hours(1) <= satkit.duration.from_minutes(30))
             # False
             ```
         """
@@ -2145,11 +2146,20 @@ class quaternion:
         - Under the hood, this is using the "UnitQuaternion" object in the rust "nalgebra" crate.
     """
 
-    def __init__(self, w: float = 1.0, x: float = 0.0, y: float = 0.0, z: float = 0.0):
+    @overload
+    def __init__(self) -> None: ...
+    @overload
+    def __init__(self, w: float, x: float, y: float, z: float, /) -> None:
         """Return quaternion with input (w,x,y,z) values
+
+        With no arguments, return the identity quaternion. Otherwise pass all
+        four components positionally (keywords are not accepted).
 
         Args:
             w: Scalar component of the quaternion
+            x: X component of the quaternion
+            y: Y component of the quaternion
+            z: Z component of the quaternion
 
         Example:
             ```python
@@ -2160,14 +2170,11 @@ class quaternion:
             import math
             q = satkit.quaternion.rotz(math.radians(90))
             ```
-            x: X component of the quaternion
-            y: Y component of the quaternion
-            z: Z component of the quaternion
         """
         ...
 
     @staticmethod
-    def from_axis_angle(axis: npt.NDArray[np.float64], angle: float) -> quaternion:
+    def from_axis_angle(axis: npt.ArrayLike, angle: float) -> quaternion:
         """Quaternion representing right-handed rotation of vector by "angle" radians about the given axis
 
         Args:
@@ -2181,7 +2188,7 @@ class quaternion:
 
     @staticmethod
     def from_rotation_matrix(
-        dcm: npt.NDArray[np.float64],
+        dcm: npt.ArrayLike,
     ) -> quaternion:
         """Return quaternion representing identical rotation to input 3x3 rotation matrix
 
@@ -2250,13 +2257,13 @@ class quaternion:
 
     @staticmethod
     def rotation_between(
-        v1: npt.NDArray[np.float64], v2: npt.NDArray[np.float64]
+        v1: npt.ArrayLike, v2: npt.ArrayLike
     ) -> quaternion:
         """Quaternion representation rotation between two input vectors
 
         Args:
-            v1 (npt.ArrayLike[np.float64]): vector rotating from
-            v2 (npt.ArrayLike[np.float64]): vector rotating to
+            v1 (npt.ArrayLike): 3-element vector rotating from (any real numeric array-like)
+            v2 (npt.ArrayLike): 3-element vector rotating to (any real numeric array-like)
 
         Returns:
             Quaternion that rotates from v1 to v2
@@ -2436,11 +2443,11 @@ class quaternion:
         ...
 
     @typing.overload
-    def __mul__(self, other: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    def __mul__(self, other: npt.ArrayLike) -> npt.NDArray[np.float64]:
         """Multiply by a vector to rotate the vector
 
         Args:
-            other (npt.ArrayLike[np.float64]): 3-element array representing vector to rotate or Nx3 array of vectors to rotate
+            other (npt.ArrayLike): 3-element vector to rotate, or Nx3 array of vectors to rotate (any real numeric array-like; integer arrays and lists are converted to float64)
 
         Returns:
             3-element array representing rotated vector or Nx3 array of rotated vectors
@@ -2471,7 +2478,7 @@ class quaternion:
             q1 = satkit.quaternion.rotz(math.radians(0))
             q2 = satkit.quaternion.rotz(math.radians(90))
             q_mid = q1.slerp(q2, 0.5)
-            print(f"Mid-rotation angle: {math.degrees(q_mid.angle()):.1f} deg")
+            print(f"Mid-rotation angle: {math.degrees(q_mid.angle):.1f} deg")
             # Mid-rotation angle: 45.0 deg
             ```
         """
@@ -2844,20 +2851,24 @@ class itrfcoord:
         Create ITRF coord from Cartesian:
 
         ```python
-        coord = itrfcoord([ 1523128.63570828, -4461395.28873207,  4281865.94218203 ])
+        coord = satkit.itrfcoord([ 1523128.63570828, -4461395.28873207,  4281865.94218203 ])
         ```
 
         Create ITRF coord from Geodetic:
 
         ```python
-        coord = itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
+        coord = satkit.itrfcoord(latitude_deg=42.44, longitude_deg=-71.15, altitude=100)
         ```
 
     """
 
+    @overload
+    def __init__(self, vec: npt.NDArray[np.float64] | list[float], /) -> None: ...
+    @overload
+    def __init__(self, x: float, y: float, z: float, /) -> None: ...
+    @overload
     def __init__(
         self,
-        vec: npt.NDArray[np.float64] | list[float] | None = None,
         *,
         latitude_deg: float = ...,
         longitude_deg: float = ...,
@@ -2865,11 +2876,15 @@ class itrfcoord:
         longitude_rad: float = ...,
         altitude: float = ...,
         height: float = ...,
-    ):
+    ) -> None:
         """Create ITRF coordinate from Cartesian vector or geodetic parameters.
 
+        Pass the Cartesian position positionally, either as one 3-element
+        numpy array or list, or as three floats; or pass the geodetic
+        position as keywords (latitude and longitude are required).
+
         Args:
-            vec: ITRF Cartesian location in meters (3-element array, list, or tuple)
+            vec: ITRF Cartesian location in meters (3-element numpy array or list)
             latitude_deg: Latitude in degrees
             longitude_deg: Longitude in degrees
             latitude_rad: Latitude in radians
@@ -3169,7 +3184,7 @@ class satstate:
 
     def __init__(
         self,
-        time: _Time,
+        time: TimeScalar,
         pos: npt.NDArray[np.float64],
         vel: npt.NDArray[np.float64],
         cov: npt.NDArray[np.float64] | None = None,
@@ -3194,7 +3209,7 @@ class satstate:
         ...
 
     @staticmethod
-    def from_kepler(time: _Time, kepler: kepler) -> satstate:
+    def from_kepler(time: TimeScalar, kepler: kepler) -> satstate:
         """Create a state from Keplerian elements
 
         The two-body position (meters) and velocity (m/s) of the elements
@@ -3211,6 +3226,7 @@ class satstate:
 
         Example:
             ```python
+            import math
             k = satkit.kepler(7000e3, 0.001, math.radians(98), 0, 0, 0)
             state = satkit.satstate.from_kepler(satkit.time(2024, 1, 1), k)
             ```
@@ -3336,7 +3352,7 @@ class satstate:
 
     def add_maneuver(
         self,
-        time: _Time,
+        time: TimeScalar,
         delta_v: npt.ArrayLike,
         frame: frame,
     ) -> None:
@@ -3378,7 +3394,7 @@ class satstate:
         """
         ...
 
-    def add_prograde(self, time: _Time, dv_mps: float) -> None:
+    def add_prograde(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a prograde impulsive burn (NTW +T, along velocity).
 
         A positive ``dv_mps`` adds energy (raises semi-major axis). The burn
@@ -3395,7 +3411,7 @@ class satstate:
         """
         ...
 
-    def add_retrograde(self, time: _Time, dv_mps: float) -> None:
+    def add_retrograde(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a retrograde impulsive burn (NTW -T, opposite velocity).
 
         Equivalent to ``add_prograde`` with a negated magnitude. ``dv_mps``
@@ -3407,7 +3423,7 @@ class satstate:
         """
         ...
 
-    def add_radial(self, time: _Time, dv_mps: float) -> None:
+    def add_radial(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a radial-outward impulsive burn (NTW +N axis).
 
         For circular orbits this is the outward radial direction. For
@@ -3420,7 +3436,7 @@ class satstate:
         """
         ...
 
-    def add_normal(self, time: _Time, dv_mps: float) -> None:
+    def add_normal(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a cross-track ("normal") impulsive burn (NTW +W axis).
 
         Positive values push in the +angular-momentum direction. Changes
@@ -3450,7 +3466,7 @@ class satstate:
 
     def propagate(
         self,
-        timedur: _Time | duration,
+        timedur: TimeScalar | duration,
         *,
         propsettings: propsettings | None = None,
         satproperties: satproperties | None = None,
@@ -3463,7 +3479,7 @@ class satstate:
         Maneuvers are preserved on the returned state.
 
         Args:
-            timedur (satkit.time|satkit.duration): Target time, or duration from current time
+            timedur (satkit.time|datetime.datetime|satkit.duration): Target time, or duration from current time
             propsettings (satkit.propsettings, optional): Propagation settings
             satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
 
@@ -3948,15 +3964,20 @@ class satproperties:
 
     def __init__(
         self,
+        *,
         cdaoverm: float = 0,
         craoverm: float = 0,
-        *,
         thrusts: list[thrust] | None = None,
         ecom: ecomparams | None = None,
     ) -> None:
         """Create a satproperties object
 
-        Args:
+        All arguments are keyword-only; a positional call raises ``TypeError``.
+        (Earlier releases read positional arguments as ``(craoverm, cdaoverm)``,
+        the reverse of the documented order, so scripts that passed them
+        positionally had drag and radiation pressure swapped.)
+
+        Keyword Args:
             cdaoverm (float, optional): Coefficient of drag times area over mass in m^2/kg
             craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
             thrusts (list[thrust], optional): List of continuous thrust arcs
@@ -4592,6 +4613,10 @@ def omm_from_url(url: str) -> list[OMMDict]:
     Returns:
         list[OMMDict]: one dictionary per message, with every CCSDS field the
             source provided plus its extra keys (see :class:`OMMDict`)
+
+    Raises:
+        RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
+            ``satkit.utils.set_offline(True)``); no connection is opened
 
     Example:
         ```python

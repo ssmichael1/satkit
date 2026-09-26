@@ -12,7 +12,7 @@ code follows where that is useful.
   4th ed. Microcosm Press, Hawthorne, CA. ISBN 978-1881883180. Companion
   software and errata: <https://celestrak.org/software/vallado-sw.php>.
   Used for: SGP4 reference implementation (the C++ code satkit's port follows),
-  GMST (Algorithm 15, Eq. 3-45), IAU-76/FK5 reduction (§3.7, Eqs. 3-88 to
+  GMST (Algorithm 15, Eq. 3-45), the approximate (`_approx`) reduction (§3.7, Eqs. 3-88 to
   3-90), TEME (§3.7.3), RSW/NTW frames (§3.3, Eq. 3-31), Kepler's equation
   (Algorithm 2), Sun position (Algorithm 29, §5.1.1), sunrise/sunset
   (Algorithm 30, §5.3.1), Moon position (Algorithm 31, §5.2.3), Hohmann
@@ -90,6 +90,23 @@ code follows where that is useful.
 - **IERS Bulletin C** — leap-second announcements (Earth Orientation Center,
   Observatoire de Paris). <https://hpiers.obspm.fr/iers/bul/bulc/bulletinc.dat>.
   Source of the TAI−UTC table compiled into `satkit`.
+
+<a id="usnotaiutc"></a>
+- **USNO `tai-utc.dat`** — TAI−UTC since 1961, with the drift terms of
+  pre-1972 ("rubber second") UTC. <https://maia.usno.navy.mil/ser7/tai-utc.dat>.
+  Source of `satkit`'s 1961–1971 UTC model.
+
+<a id="erfa"></a>
+- **ERFA** — Essential Routines for Fundamental Astronomy, the BSD-licensed
+  derivative of the IAU SOFA library. <https://github.com/liberfa/erfa>. Its
+  `dat` carries the same pre-1972 coefficients as `tai-utc.dat`; `satkit`'s
+  time scales are tested against `dat`, `utctai`/`taiutc` and
+  `dtf2d`/`d2dtf` through `pyerfa`.
+
+<a id="urban2013"></a>
+- **Urban, S. E., & Seidelmann, P. K. (eds.) (2013).** *Explanatory
+  Supplement to the Astronomical Almanac*, 3rd ed. University Science Books.
+  Used for: the definition of pre-1972 UTC.
 
 ## Papers and reports
 
@@ -251,8 +268,9 @@ code follows where that is useful.
 <a id="seidelmann1982"></a>
 - **Seidelmann, P. K. (1982).** "1980 IAU Theory of Nutation: The final report
   of the IAU Working Group on Nutation." *Celestial Mechanics*, 27, 79–106.
-  <https://doi.org/10.1007/BF01228952>. The nutation series used by the
-  IAU-76/FK5 (`_approx`) reduction and by TEME.
+  <https://doi.org/10.1007/BF01228952>. The IAU 1980 nutation theory: the
+  two-term nutation and equation of the equinoxes of the `_approx` reduction
+  are its leading terms, and the classical definition of TEME uses it.
 
 <a id="charlot2020"></a>
 - **Charlot, P., et al. (2020).** "The third realization of the International
