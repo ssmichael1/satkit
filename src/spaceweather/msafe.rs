@@ -107,38 +107,15 @@ impl Forecast {
         self.months
             .iter()
             .map(|m| {
-                let ap = m.ap[1].round() as i32;
-                let (cp, c9) = super::gfz::cp_c9(8 * ap);
-                SpaceWeatherRecord {
-                    date: m.date,
-                    bsrn: -1,
-                    nd: -1,
-                    data_type: SpaceWeatherDataType::PredictedMonthly,
-                    kp: [-1; 8],
-                    kp_sum: -1,
-                    ap: [ap; 8],
-                    ap_avg: ap,
-                    cp,
-                    c9,
-                    isn: -1,
-                    f10p7_obs: m.f107[1],
-                    f10p7_adj: m.f107[1],
-                    f10p7_obs_c81: -1.0,
-                    f10p7_obs_l81: -1.0,
-                    f10p7_adj_c81: -1.0,
-                    f10p7_adj_l81: -1.0,
-                }
+                SpaceWeatherRecord::forecast(
+                    m.date,
+                    SpaceWeatherDataType::PredictedMonthly,
+                    m.ap[1].round() as i32,
+                    m.f107[1],
+                )
             })
             .collect()
     }
-}
-
-/// Check that the file at `path` parses as an MSAFE table.
-pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    parse(&text)
-        .map(|_| ())
-        .map_err(|e| format!("not a parsable MSAFE table ({e})"))
 }
 
 /// NASA's URL for the forecast issued in a given month.

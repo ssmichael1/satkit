@@ -312,6 +312,22 @@ pub fn is_not_writable_error(e: &std::io::Error) -> bool {
     )
 }
 
+/// [`ensure_writable`], with a not-writable failure mapped to the caller's
+/// "data directory is read-only" error by `read_only(path, reason)` and any
+/// other I/O error converted with `From`.
+pub(crate) fn check_writable<E: From<std::io::Error>>(
+    dir: &Path,
+    read_only: impl FnOnce(String, String) -> E,
+) -> std::result::Result<(), E> {
+    ensure_writable(dir).map_err(|e| {
+        if is_not_writable_error(&e) {
+            read_only(dir.display().to_string(), e.to_string())
+        } else {
+            e.into()
+        }
+    })
+}
+
 /// Why the platform user-data directory could not be determined, for the
 /// [`Error::NoWriteableDirectory`] message.
 fn no_write_dir_detail(env: &Env, search: &[PathBuf]) -> String {

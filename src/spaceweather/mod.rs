@@ -25,7 +25,13 @@ fn refresh_url(file: &str) -> Option<String> {
         .cloned()
 }
 
+/// The directory part of [`refresh_url`], for `download_if_not_exist`.
+fn refresh_base(file: &str) -> Option<String> {
+    refresh_url(file)?.strip_suffix(file).map(str::to_string)
+}
+
 use std::cmp::Ordering;
+use std::sync::atomic::AtomicBool;
 
 use crate::utils::{datadir, download_if_not_exist, RefreshableSingleton};
 use crate::Instant;
@@ -228,6 +234,37 @@ pub struct SpaceWeatherRecord {
 }
 
 impl SpaceWeatherRecord {
+    /// A forecast row: daily `ap` (in all eight 3-hour slots, with the
+    /// matching Cp / C9) and F10.7 `flux` (observed and adjusted); every
+    /// other field is the `-1` "not given" sentinel.
+    pub(crate) fn forecast(
+        date: Instant,
+        data_type: SpaceWeatherDataType,
+        ap: i32,
+        flux: f64,
+    ) -> Self {
+        let (cp, c9) = gfz::cp_c9(8 * ap);
+        Self {
+            date,
+            bsrn: -1,
+            nd: -1,
+            data_type,
+            kp: [-1; 8],
+            kp_sum: -1,
+            ap: [ap; 8],
+            ap_avg: ap,
+            cp,
+            c9,
+            isn: -1,
+            f10p7_obs: flux,
+            f10p7_adj: flux,
+            f10p7_obs_c81: -1.0,
+            f10p7_obs_l81: -1.0,
+            f10p7_adj_c81: -1.0,
+            f10p7_adj_l81: -1.0,
+        }
+    }
+
     /// Whether this row carries geomagnetic data NRLMSISE-00 can use.
     ///
     /// False when the daily Ap is the `-1` sentinel — CelesTrak's monthly
@@ -297,8 +334,7 @@ fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
                 return cssi::parse_csv(&std::fs::read_to_string(&csv)?);
             }
         }
-        let base = refresh_url(GFZ_FILE)
-            .and_then(|u| u.strip_suffix(GFZ_FILE).map(str::to_string))
+        let base = refresh_base(GFZ_FILE)
             .unwrap_or_else(|| "https://www-app3.gfz-potsdam.de/kp_index/".to_string());
         download_if_not_exist(&gfz_path, Some(&base))?;
     }
@@ -306,9 +342,7 @@ fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
     // observed-only table.
     let swpc_path = freshest_path_for(SWPC_FILE, |t| last_row_day(&swpc::parse(t).ok()?))?;
     if !swpc_path.is_file() {
-        if let Some(base) =
-            refresh_url(SWPC_FILE).and_then(|u| u.strip_suffix(SWPC_FILE).map(str::to_string))
-        {
+        if let Some(base) = refresh_base(SWPC_FILE) {
             let _ = download_if_not_exist(&swpc_path, Some(&base));
         }
     }
@@ -397,12 +431,9 @@ pub(crate) fn month_end_day(date: Instant) -> i64 {
 static SPACE_WEATHER: RefreshableSingleton<Vec<SpaceWeatherRecord>> = RefreshableSingleton::new();
 
 /// One-time warning latches; see [`disable_space_weather_time_warning`].
-static MONTHLY_WARNING_SHOWN: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-static EXTRAP_WARNING_SHOWN: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-static NOT_LOADED_WARNING_SHOWN: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static MONTHLY_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+static EXTRAP_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+static NOT_LOADED_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 
 /// Initialize the space-weather singleton from an in-memory byte buffer.
 ///
@@ -436,12 +467,9 @@ fn ensure_default_loaded() {
     SPACE_WEATHER.ensure_default_loaded(|| load_default().ok());
     if SPACE_WEATHER.read().is_none() {
         // Retry from disk only (no network) once the files have appeared.
-        let on_disk = crate::utils::datadir::path_for(GFZ_FILE)
-            .map(|p| p.is_file())
-            .unwrap_or(false)
-            || crate::utils::datadir::path_for(CSSI_FILE)
-                .map(|p| p.is_file())
-                .unwrap_or(false);
+        let on_disk = [GFZ_FILE, CSSI_FILE]
+            .iter()
+            .any(|f| datadir::path_for(f).is_ok_and(|p| p.is_file()));
         if on_disk {
             if let Ok(records) = load_default() {
                 if !records.is_empty() {
@@ -669,16 +697,7 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
 /// newest file NASA has published.
 pub fn update() -> Result<()> {
     let d = datadir()?;
-    if let Err(e) = datadir::ensure_writable(&d) {
-        return Err(if datadir::is_not_writable_error(&e) {
-            Error::DataDirReadOnly {
-                path: d.display().to_string(),
-                reason: e.to_string(),
-            }
-        } else {
-            e.into()
-        });
-    }
+    datadir::check_writable(&d, |path, reason| Error::DataDirReadOnly { path, reason })?;
     for file in [GFZ_FILE, SWPC_FILE] {
         if let Some(url) = refresh_url(file) {
             crate::utils::refresh_file(&url, &d, false)?;
