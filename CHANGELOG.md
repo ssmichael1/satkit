@@ -23,6 +23,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - **Wrong results:** `quaternion * V` for an Nx3 array applied the *inverse* rotation in 0.14.1–0.23.1 (single 3-vectors were correct) — recompute such results; also the Earth rotation angle precision (1 cm LEO / 6 cm GEO in ITRF ↔ GCRF), no stray polar motion in the approximate TEME → GCRF, and many binding edge cases ([#222](https://github.com/ssmichael1/satkit/pull/222))
 - Time precision: float → microsecond conversions round instead of truncating, the `strptime` `%z` sign is fixed, UTC offsets are exact across leap seconds, and `datetime` / chrono interop and pickles are exact (integer µs; older pickles still load) ([#225](https://github.com/ssmichael1/satkit/pull/225))
 - `orbitprop::propagate` has its rustdoc again (the doc block had drifted onto a private helper, so docs.rs showed the main propagation API undocumented), and the release workflow's crates.io publish job only runs for `v*` tags ([#226](https://github.com/ssmichael1/satkit/pull/226))
+- `help(satkit.satstate)` shows the class documentation again (it had been attached to a private helper), and a stray doc line is removed from the TLE bindings ([#237](https://github.com/ssmichael1/satkit/pull/237))
 
 ### Docs
 
