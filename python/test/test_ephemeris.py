@@ -338,3 +338,46 @@ class TestSun:
             pass
         else:
             assert 1 == 0
+
+    def test_sun_rise_set_use_jpl(self):
+        # Skyfield 1.55 (DE421, IERS polar motion), sea level, horizon -50':
+        # seconds after 0h UTC; rows of the Rust test table
+        for lat, lon, month, day, rise, set_ in [
+            (45.0, -75.0, 6, 20, 33191.81, 89418.52),
+            (65.0, 139.7, 12, 21, 3114.72, 16000.48),
+            (-35.0, 139.7, 3, 20, -11739.20, 31940.33),
+        ]:
+            coord = sk.itrfcoord(latitude_deg=lat, longitude_deg=lon)
+            t0 = sk.time(2024, month, day)
+            r, s = sk.sun.rise_set(t0, coord, use_jpl=True)
+            assert abs((r - t0).seconds - rise) < 0.05
+            assert abs((s - t0).seconds - set_) < 0.05
+            # The built-in model is within 0.5 s of it
+            ra, sa = sk.sun.rise_set(t0, coord, use_jpl=False)
+            assert abs((ra - r).seconds) < 0.5 and abs((sa - s).seconds) < 0.5
+            assert sk.sun.rise_set(t0, coord) == (ra, sa)
+        # Keyword-only
+        with pytest.raises(TypeError):
+            sk.sun.rise_set(t0, coord, None, True)
+        # Polar day, and no silent fall back outside the ephemeris (DE440
+        # covers 1550-2650)
+        coord = sk.itrfcoord(latitude_deg=66.0, longitude_deg=-75.0)
+        with pytest.raises(RuntimeError, match="polar day"):
+            sk.sun.rise_set(sk.time(2024, 6, 20), coord, use_jpl=True)
+        coord = sk.itrfcoord(latitude_deg=40.0, longitude_deg=-75.0)
+        sk.sun.rise_set(sk.time(2700, 3, 20), coord)
+        with pytest.raises(RuntimeError):
+            sk.sun.rise_set(sk.time(2700, 3, 20), coord, use_jpl=True)
+
+    def test_sun_pos_vs_jpl(self):
+        # pos_gcrf is the apparent direction without nutation: 20.5" of
+        # annual aberration behind the geometric JPL direction, to within the
+        # model's 3.6"; the distance is geometric
+        times = [sk.time(2024, 1, 1) + sk.duration(days=d) for d in range(0, 366, 5)]
+        p = sk.sun.pos_gcrf(times)
+        jpl = sk.jplephem.geocentric_pos(sk.solarsystem.Sun, times)
+        cosang = np.sum(p * jpl, axis=1) / np.linalg.norm(p, axis=1) / np.linalg.norm(jpl, axis=1)
+        ang = np.degrees(np.arccos(np.clip(cosang, -1.0, 1.0))) * 3600.0
+        assert np.all(np.abs(ang - 20.5) < 4.0), ang
+        dr = np.linalg.norm(p, axis=1) - np.linalg.norm(jpl, axis=1)
+        assert np.all(np.abs(dr) < 1.7e6)

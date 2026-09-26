@@ -298,6 +298,12 @@ nested lists.
   calendar date**, whatever its time of day. Through 0.23 about half of the
   inputs gave the next day's events. **Do this:** for a local date, pass a
   timezone-aware `datetime` at local noon.
+- **0.24.1: the low-precision Sun is more accurate.** `sun.pos_mod`,
+  `sun.pos_gcrf` and `sun.rise_set` use Meeus's solar coordinates with the
+  largest VSOP87 planetary and lunar terms, within 3.6″ of JPL (Algorithm 29
+  was off by up to 43″ and 16,000 km); the frames and the aberration
+  convention are unchanged. **Do this:** expect differences of that size;
+  `rise_set(..., use_jpl=True)` uses the JPL Sun.
 - **The Earth rotation angle is more precise** (1 cm at LEO, 6 cm at GEO in
   ITRF ↔ GCRF), and the approximate TEME → GCRF rotation (`qteme2gcrf`,
   `rotation_approx`) no longer includes a stray 0.3–0.6″ polar-motion
