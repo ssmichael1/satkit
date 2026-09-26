@@ -270,20 +270,19 @@ class TestSun:
         coord = sk.itrfcoord(latitude_deg=40.0, longitude_deg=0.0)
         tm = sk.time(1996, 3, 23, 0, 0, 0)
         sunrise, sunset = sk.sun.rise_set(tm, coord)
-        (year, mon, day, hour, minute, sec) = sunrise.to_gregorian()
-        assert year == 1996
-        assert mon == 3
-        assert day == 23
-        assert hour == 5
-        assert minute == 58
-        assert sec == pytest.approx(21.97, 1e-3)
-        (year, mon, day, hour, minute, sec) = sunset.to_gregorian()
-        assert year == 1996
-        assert mon == 3
-        assert day == 23
-        assert hour == 18
-        assert minute == 15
-        assert sec == pytest.approx(17.76, 1.0e-3)
+        # The book's values are from a single pass of Algorithm 30, without
+        # nutation or parallax; the refined times differ by about a second
+        rise_book = sk.time(1996, 3, 23, 5, 58, 21.97)
+        set_book = sk.time(1996, 3, 23, 18, 15, 17.76)
+        assert abs((sunrise - rise_book).seconds) < 2.0
+        assert abs((sunset - set_book).seconds) < 2.0
+
+    def test_sun_rise_set_polar(self):
+        # Polar day at 66 N in June, polar night at 70 N in December
+        for lat, month, day in [(66.0, 6, 20), (70.0, 12, 21)]:
+            coord = sk.itrfcoord(latitude_deg=lat, longitude_deg=-75.0)
+            with pytest.raises(RuntimeError, match="polar day.*polar night"):
+                sk.sun.rise_set(sk.time(2024, month, day), coord)
 
     def test_sun_rise_set_utc_date(self):
         # Any time on 2024-10-14 UTC gives that date's events; the old day

@@ -210,8 +210,32 @@ pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
 /// same UTC date, while local midnight falls on the previous UTC date east
 /// of Greenwich.
 ///
-/// Will return an error if the sun does not rise or set on the given date
-/// at given location (e.g., Alaska in summer)
+/// Returns [`Error::NoSunriseOrSunset`] if the Sun stays above the threshold
+/// all day (polar day) or below it all day (polar night).  Near those
+/// thresholds an event is returned only if the Sun reaches the threshold
+/// at the time of the event.
+///
+/// # Accuracy
+///
+/// * Algorithm 30 evaluates the Sun once, at 6h (rise) or 18h (set) local
+///   mean time.  Here that pass is repeated at the computed event until it
+///   moves less than 0.1 s, and the main nutation term and the solar
+///   parallax (8.8") are included.  Against Skyfield with the DE421
+///   ephemeris, over 2024 at latitudes 60 S to 65 N, the times agree to
+///   within 3 s, and typically about 1 s (the single pass was off by up
+///   to 35 s at 65 N).  The remainder is the low-precision solar series,
+///   which is up to ~20" off in longitude.  Errors grow near the polar-day
+///   and polar-night thresholds, where the Sun meets the threshold at a
+///   grazing angle (up to ~10 s at 67 to 72 N).
+/// * UTC is used in place of UT1 (they differ by less than 0.9 s).
+/// * The horizon is at sea level: the observer's altitude is ignored.  An
+///   elevated observer sees a horizon lowered by the dip,
+///   dip ≈ 1.76' × √h, with h the height in meters above the surrounding
+///   terrain or sea (this includes typical terrestrial refraction), which
+///   makes sunrise earlier and sunset later.  To account for it, pass
+///   `sigma = 90° 50' + dip`, e.g. `90.0 + (50.0 + 1.76 * h.sqrt()) / 60.0`;
+///   at 100 m this moves each event by 1.5 to 3 minutes at latitudes 30 to
+///   55 deg.
 ///
 /// # Input Arguments
 ///
@@ -237,6 +261,7 @@ pub fn shadowfunc(psun: &Vector3, psat: &Vector3) -> f64 {
 /// # References
 ///
 /// * Vallado Algorithm 30
+/// * Meeus, "Astronomical Algorithms", ch. 25 (nutation terms)
 ///
 pub fn riseset<T: TimeLike>(
     time: &T,
@@ -251,6 +276,11 @@ pub fn riseset<T: TimeLike>(
 
     let sind: fn(f64) -> f64 = |x: f64| x.to_radians().sin();
     let cosd: fn(f64) -> f64 = |x: f64| x.to_radians().cos();
+
+    // `sigma` is seen from the site; the Sun's direction below is
+    // geocentric.  Solar parallax (8.794") puts the geocentric Sun that
+    // much higher, which moves rise & set by several seconds at high latitude.
+    let sigma = sigma - 8.794 / 3600.0 * sind(sigma);
     const RAD2DEG: f64 = 180.0 / PI;
 
     // Zero-hour GMST, equation 3-45 in Vallado
@@ -261,14 +291,18 @@ pub fn riseset<T: TimeLike>(
         ) % 360.0
     };
 
-    // 0h UTC of the input's UTC calendar date; the rise & set searches then
-    // start at 6h & 18h local mean time on that date
+    // Local mean midnight that begins the input's UTC calendar date at the
+    // site's longitude.  Each event is this plus its local mean time as a
+    // fraction of a day in [0, 1), so it stays on that date.
     let (year, month, day, _, _, _) = time.as_datetime();
     let jd0h: f64 = Instant::from_date(year, month, day)?.as_jd_with_scale(TimeScale::UTC);
-    let jdsunrise = jd0h + 0.25 - longitude / 360.0;
-    let jdsunset = jd0h + 0.75 - longitude / 360.0;
+    let jdbase = jd0h - longitude / 360.0;
 
-    let criseset = |jd: f64, lhafunc: fn(f64) -> f64| -> Result<f64> {
+    // One pass of Algorithm 30, with the Sun and the "GMST" term evaluated
+    // at UTC Julian date `jd`: the local mean time of the event as a
+    // fraction of a day, or `Err(cos(LHA))` when |cos(LHA)| > 1, i.e. the
+    // Sun doesn't reach the threshold that day
+    let pass = |jd: f64, rising: bool| -> std::result::Result<f64, f64> {
         let t = (jd - 2451545.0) / 36525.0;
 
         let lambda_sun = 36000.77005361f64.mul_add(t, 280.4606184);
@@ -280,6 +314,15 @@ pub fn riseset<T: TimeLike>(
         // Longitude in ecliptic coordinates
         let epsilon = 0.0130042f64.mul_add(-t, 23.439291);
 
+        // Nutation, main term (Meeus, "Astronomical Algorithms", ch. 25),
+        // for the true equinox & obliquity; the longitude above already
+        // includes annual aberration.  Nutation in obliquity (up to 9")
+        // moves rise & set by several seconds at high latitude.
+        let omega = 1934.136f64.mul_add(-t, 125.04);
+        let dpsi = -0.00478 * sind(omega);
+        let lambda_ecliptic = lambda_ecliptic + dpsi;
+        let epsilon = 0.00256f64.mul_add(cosd(omega), epsilon);
+
         let sindelta_sun = sind(epsilon) * sind(lambda_ecliptic);
         let deltasun = f64::asin(sindelta_sun) * RAD2DEG;
         //let alpha_sun = f64::atan(tanalpha_sun) * RAD2DEG;
@@ -290,12 +333,15 @@ pub fn riseset<T: TimeLike>(
         let coslha = sind(deltasun).mul_add(-sind(latitude), cosd(sigma))
             / (cosd(deltasun) * cosd(latitude));
         if coslha.abs() > 1.0 {
-            return Err(Error::NoSunriseOrSunset);
+            return Err(coslha);
         }
         let mut lha = f64::acos(coslha) * RAD2DEG;
+        if rising {
+            lha = 360.0 - lha;
+        }
 
-        lha = lhafunc(lha);
-        let gmst = gmst0h(t) % 360.0;
+        // Apparent sidereal angle: add the equation of the equinoxes
+        let gmst = dpsi.mul_add(cosd(epsilon), gmst0h(t)) % 360.0;
         let mut ret = (lha + alpha_sun - gmst) % 360.0;
         if ret < 0.0 {
             ret += 360.0;
@@ -303,10 +349,40 @@ pub fn riseset<T: TimeLike>(
         Ok(ret / 360.0)
     };
 
-    Ok((
-        Instant::from_jd_utc(jdsunrise + criseset(jdsunrise, |x| 360.0 - x)? - 0.25),
-        Instant::from_jd_utc(jdsunset + criseset(jdsunset, |x| x)? - 0.75),
-    ))
+    // Algorithm 30 evaluates the Sun at a first guess of 6h (rise) or 18h
+    // (set) local mean time, which costs up to ~35 s at 65 deg latitude.
+    // Re-evaluate it at the computed event until the event moves < 0.1 s.
+    let event = |guess: f64, rising: bool| -> Result<Instant> {
+        let mut frac = match pass(jdbase + guess, rising) {
+            Ok(frac) => frac,
+            // No crossing at the guess.  Near polar night (cos(LHA) > 1) any
+            // rise & set straddle noon; near polar day (cos(LHA) < -1) they
+            // straddle midnight.  Decide there.
+            Err(coslha) => {
+                let retry = if coslha > 1.0 {
+                    0.5
+                } else if rising {
+                    0.0
+                } else {
+                    1.0
+                };
+                pass(jdbase + retry, rising).map_err(|_| Error::NoSunriseOrSunset)?
+            }
+        };
+        for _ in 0..10 {
+            // The Sun doesn't reach the threshold at the time the event would
+            // occur, so the event doesn't happen that day
+            let next = pass(jdbase + frac, rising).map_err(|_| Error::NoSunriseOrSunset)?;
+            let change = (next - frac).abs();
+            frac = next;
+            if change < 0.1 / 86400.0 {
+                break;
+            }
+        }
+        Ok(Instant::from_jd_utc(jdbase + frac))
+    };
+
+    Ok((event(0.25, true)?, event(0.75, false)?))
 }
 
 #[cfg(test)]
@@ -366,20 +442,17 @@ mod tests {
         let itrf = ITRFCoord::from_geodetic_deg(40.0, 0.0, 0.0);
         let tm = Instant::from_datetime(1996, 3, 23, 0, 0, 0.0).unwrap();
         let (sunrise, sunset) = riseset(&tm, &itrf, None).unwrap();
-        let (ryear, rmon, rday, rhour, rmin, rsec) = sunrise.as_datetime();
-        assert!(ryear == 1996);
-        assert!(rmon == 3);
-        assert!(rday == 23);
-        assert!(rhour == 5);
-        assert!(rmin == 58);
-        assert!((rsec / 21.97 - 1.0).abs() < 1.0e-3);
-        let (syear, smon, sday, shour, smin, ssec) = sunset.as_datetime();
-        assert!(syear == 1996);
-        assert!(smon == 3);
-        assert!(sday == 23);
-        assert!(shour == 18);
-        assert!(smin == 15);
-        assert!((ssec / 17.76 - 1.0).abs() < 1.0e-3);
+        // The book's values are from a single pass of Algorithm 30, without
+        // nutation or parallax; the refined times differ by about a second
+        let rise_book = Instant::from_datetime(1996, 3, 23, 5, 58, 21.97).unwrap();
+        let set_book = Instant::from_datetime(1996, 3, 23, 18, 15, 17.76).unwrap();
+        let (drise, dset) = (
+            (sunrise - rise_book).as_seconds(),
+            (sunset - set_book).as_seconds(),
+        );
+        println!("Vallado example 5-2: rise {drise:+.2} s, set {dset:+.2} s");
+        assert!(drise.abs() < 2.0, "{sunrise}");
+        assert!(dset.abs() < 2.0, "{sunset}");
 
         // Check for error returned on 24-hour sunlight condition
         let itrf2 = ITRFCoord::from_geodetic_deg(85.0, 30.0, 0.0);
@@ -438,6 +511,194 @@ mod tests {
             for t in [rise0, set0] {
                 let el = sun_elevation(&t, &coord);
                 assert!((el + 50.0 / 60.0).abs() < 0.1, "lon {lon} {t}: {el}");
+            }
+        }
+    }
+
+    /// Sunrise & sunset in 2024 from Skyfield 1.55 (`almanac.find_risings` /
+    /// `find_settings`) with the DE421 ephemeris: the topocentric apparent
+    /// Sun (light time & aberration, no light deflection) crossing
+    /// `horizon_degrees = -50/60` (34' refraction + 16' semidiameter,
+    /// Skyfield's own value for the Sun, passed explicitly) at a sea-level
+    /// `wgs84.latlon(lat, lon)` site.  The search window is this function's
+    /// day: the local mean midnights that begin and end the UTC date.
+    ///
+    /// Columns: latitude, longitude (deg), month, day, then sunrise and
+    /// sunset in seconds of UTC after 0h UTC on that date, to 0.1 s.  The
+    /// generating script is in the description of PR #268.
+    #[rustfmt::skip]
+    const SKYFIELD_2024: [(f64, f64, i32, i32, f64, f64); 64] = [
+        (0.0, -75.0, 3, 20, 39839.8, 83429.6),
+        (0.0, -75.0, 6, 20, 39484.4, 83125.7),
+        (0.0, -75.0, 9, 22, 38953.1, 82541.3),
+        (0.0, -75.0, 12, 21, 39278.7, 82928.5),
+        (30.0, -75.0, 3, 20, 39790.8, 83506.3),
+        (30.0, -75.0, 6, 20, 35962.6, 86647.6),
+        (30.0, -75.0, 9, 22, 38917.9, 82549.2),
+        (30.0, -75.0, 12, 21, 42717.5, 79489.8),
+        (45.0, -75.0, 3, 20, 39725.9, 83591.7),
+        (45.0, -75.0, 6, 20, 33191.9, 89418.5),
+        (45.0, -75.0, 9, 22, 38863.0, 82584.2),
+        (45.0, -75.0, 12, 21, 45325.1, 76882.3),
+        (55.0, -75.0, 3, 20, 39646.9, 83691.6),
+        (55.0, -75.0, 6, 20, 30030.4, 92580.1),
+        (55.0, -75.0, 9, 22, 38794.0, 82632.8),
+        (55.0, -75.0, 12, 21, 48204.0, 74003.6),
+        (60.0, -75.0, 3, 20, 39586.4, 83767.1),
+        (60.0, -75.0, 6, 20, 27342.9, 95267.8),
+        (60.0, -75.0, 9, 22, 38740.4, 82671.8),
+        (60.0, -75.0, 12, 21, 50538.9, 71668.7),
+        (65.0, -75.0, 3, 20, 39500.6, 83873.3),
+        (65.0, -75.0, 6, 20, 21638.7, 100973.8),
+        (65.0, -75.0, 9, 22, 38664.0, 82728.2),
+        (65.0, -75.0, 12, 21, 54661.0, 67546.7),
+        (-35.0, -75.0, 3, 20, 39817.8, 83418.1),
+        (-35.0, -75.0, 6, 20, 43665.9, 78944.1),
+        (-35.0, -75.0, 9, 22, 38914.3, 82613.1),
+        (-35.0, -75.0, 12, 21, 34974.0, 87232.9),
+        (-55.0, -75.0, 3, 20, 39736.4, 83464.6),
+        (-55.0, -75.0, 6, 20, 48407.7, 74202.2),
+        (-55.0, -75.0, 9, 22, 38815.7, 82746.5),
+        (-55.0, -75.0, 12, 21, 29822.3, 92383.9),
+        (0.0, 139.7, 3, 20, -11677.6, 31912.3),
+        (0.0, 139.7, 6, 20, -12051.3, 31590.0),
+        (0.0, 139.7, 9, 22, -12562.2, 31025.9),
+        (0.0, 139.7, 12, 21, -12267.1, 31382.7),
+        (30.0, 139.7, 3, 20, -11693.9, 31956.3),
+        (30.0, 139.7, 6, 20, -15572.6, 35111.7),
+        (30.0, 139.7, 9, 22, -12629.6, 31066.0),
+        (30.0, 139.7, 12, 21, -8828.4, 27943.9),
+        (45.0, 139.7, 3, 20, -11735.0, 32017.8),
+        (45.0, 139.7, 6, 20, -18342.9, 37882.6),
+        (45.0, 139.7, 9, 22, -12708.1, 31124.4),
+        (45.0, 139.7, 12, 21, -6220.9, 25336.3),
+        (55.0, 139.7, 3, 20, -11789.8, 32093.3),
+        (55.0, 139.7, 6, 20, -21503.5, 41044.2),
+        (55.0, 139.7, 9, 22, -12801.0, 31196.8),
+        (55.0, 139.7, 12, 21, -3342.1, 22457.4),
+        (60.0, 139.7, 3, 20, -11833.2, 32151.6),
+        (60.0, 139.7, 6, 20, -24190.0, 43731.9),
+        (60.0, 139.7, 9, 22, -12871.6, 31252.6),
+        (60.0, 139.7, 12, 21, -1007.2, 20122.4),
+        (65.0, 139.7, 3, 20, -11895.7, 32234.4),
+        (65.0, 139.7, 6, 20, -29888.0, 49438.1),
+        (65.0, 139.7, 9, 22, -12971.1, 31332.0),
+        (65.0, 139.7, 12, 21, 3114.8, 16000.3),
+        (-35.0, 139.7, 3, 20, -11739.2, 31940.3),
+        (-35.0, 139.7, 6, 20, -7870.4, 27408.6),
+        (-35.0, 139.7, 9, 22, -12562.1, 31058.7),
+        (-35.0, 139.7, 12, 21, -16571.5, 35687.4),
+        (-55.0, 139.7, 3, 20, -11861.9, 32027.8),
+        (-55.0, 139.7, 6, 20, -3129.3, 22667.1),
+        (-55.0, 139.7, 9, 22, -12620.3, 31151.4),
+        (-55.0, 139.7, 12, 21, -21722.6, 40839.1),
+    ];
+
+    /// Against Skyfield over latitudes 0 to 65 N, 35 S and 55 S, at a
+    /// western and an eastern longitude, at the 2024 equinoxes & solstices.
+    /// Includes 65 N at the June solstice, where the Sun is below -50' for
+    /// only about two hours around local midnight.
+    #[test]
+    fn riseset_vs_skyfield() {
+        let mut worst = 0.0f64;
+        for (lat, lon, month, day, rise, set) in SKYFIELD_2024 {
+            let coord = ITRFCoord::from_geodetic_deg(lat, lon, 0.0);
+            let t0 = Instant::from_date(2024, month, day).unwrap();
+            let (r, s) = riseset(&t0, &coord, None).unwrap();
+            let dr = (r - t0).as_seconds() - rise;
+            let ds = (s - t0).as_seconds() - set;
+            println!("{lat:5} {lon:6} {month:2}/{day:2}: rise {dr:+5.2} s, set {ds:+5.2} s");
+            worst = worst.max(dr.abs()).max(ds.abs());
+        }
+        println!("max |riseset - Skyfield| = {worst:.2} s");
+        // Before the refinement, parallax & nutation: 13.9 s (65 N, December)
+        assert!(worst < 1.5, "max error vs Skyfield {worst} s");
+    }
+
+    /// Against the US Naval Observatory's rise/set service (sea level),
+    /// which gives times to the minute.  Fetched 2026-09-26 from
+    /// `https://aa.usno.navy.mil/api/rstt/oneday?date=<date>&coords=<lat>,<lon>&tz=<tz>&dst=false`.
+    #[test]
+    fn riseset_vs_usno() {
+        // (date, lat, lon, tz (h), USNO rise & set, local time)
+        for ((year, month, day), lat, lon, tz, (rh, rm), (sh, sm)) in [
+            ((2024, 6, 20), 38.8895, -77.0353, -5, (4, 43), (19, 37)), // Washington
+            ((2024, 12, 21), 35.6762, 139.6503, 9, (6, 47), (16, 32)), // Tokyo
+            ((2024, 6, 20), -33.8688, 151.2093, 10, (7, 0), (16, 54)), // Sydney
+            ((2024, 12, 21), 64.1466, -21.9426, 0, (11, 23), (15, 30)), // Reykjavik
+            ((2024, 9, 22), -0.1807, -78.4678, -5, (6, 3), (18, 10)),  // Quito
+            ((2024, 3, 20), 64.8378, -147.7164, -9, (6, 49), (19, 9)), // Fairbanks
+            ((2024, 10, 14), 21.3069, -157.8583, -10, (6, 27), (18, 7)), // Honolulu
+        ] {
+            let coord = ITRFCoord::from_geodetic_deg(lat, lon, 0.0);
+            // The local date is the UTC date that selects the day here
+            let t0 = Instant::from_date(year, month, day).unwrap();
+            let (r, s) = riseset(&t0, &coord, None).unwrap();
+            for (t, h, m) in [(r, rh, rm), (s, sh, sm)] {
+                let usno = t0 + crate::Duration::from_hours((h - tz) as f64 + m as f64 / 60.0);
+                let err = (t - usno).as_seconds();
+                assert!(
+                    err.abs() < 60.0,
+                    "{year}-{month}-{day} {lat} {lon}: {t} vs {usno}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn riseset_polar_day_and_night() {
+        for lon in [-75.0, 139.7] {
+            // Polar day: at 66 N the Sun's center stays above -50' at the
+            // June solstice (lowest ~ -0.56 deg) ...
+            let coord = ITRFCoord::from_geodetic_deg(66.0, lon, 0.0);
+            let t = Instant::from_date(2024, 6, 20).unwrap();
+            assert!(matches!(
+                riseset(&t, &coord, None),
+                Err(Error::NoSunriseOrSunset)
+            ));
+            // ... and polar night at 70 N at the December solstice
+            // (highest ~ -3.4 deg)
+            let coord = ITRFCoord::from_geodetic_deg(70.0, lon, 0.0);
+            let t = Instant::from_date(2024, 12, 21).unwrap();
+            assert!(matches!(
+                riseset(&t, &coord, None),
+                Err(Error::NoSunriseOrSunset)
+            ));
+        }
+        let msg = Error::NoSunriseOrSunset.to_string();
+        assert!(
+            msg.contains("polar day") && msg.contains("polar night"),
+            "{msg}"
+        );
+    }
+
+    /// Every day of 2024 at far-west and far-east sites, from mid-latitudes
+    /// through the polar-day and polar-night thresholds: the events stay on
+    /// the documented day, and are real -50' crossings
+    #[test]
+    fn riseset_stays_on_day() {
+        for lon in [-179.5, 179.5] {
+            for lat in [40.0, 64.0, 65.5, 66.5, 67.5, 69.0] {
+                let coord = ITRFCoord::from_geodetic_deg(lat, lon, 0.0);
+                let t0 = Instant::from_date(2024, 1, 1).unwrap();
+                let mut nevents = 0;
+                for iday in 0..366 {
+                    let t = t0 + crate::Duration::from_days(iday as f64);
+                    let Ok((rise, set)) = riseset(&t, &coord, None) else {
+                        assert!(lat > 64.0, "{lat} {lon} {t}");
+                        continue;
+                    };
+                    nevents += 1;
+                    // Local mean midnight to midnight
+                    let base = t - crate::Duration::from_days(lon / 360.0);
+                    for ev in [rise, set] {
+                        let dt = (ev - base).as_days();
+                        assert!((0.0..1.0).contains(&dt), "{lat} {lon} {t}: {ev}");
+                        let el = sun_elevation(&ev, &coord);
+                        assert!((el + 50.0 / 60.0).abs() < 0.02, "{lat} {lon} {ev}: {el}");
+                    }
+                }
+                assert!(nevents > 250, "{lat} {lon}: {nevents}");
             }
         }
     }
