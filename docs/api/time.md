@@ -9,7 +9,9 @@
 - A *naive* datetime (no `tzinfo`) is interpreted in the machine's **local time zone**, not UTC.
 - An *aware* datetime uses its own UTC offset.
 
-For UTC, pass `tzinfo=datetime.timezone.utc` or build a `satkit.time` directly. `satkit.time.to_datetime()` returns an aware UTC datetime; `to_datetime(utc=False)` returns a naive local-time datetime, which round-trips through `satkit.time.from_datetime`.
+For UTC, pass `tzinfo=datetime.timezone.utc` or build a `satkit.time` directly. `satkit.time.to_datetime()` returns an aware UTC datetime; `to_datetime(utc=False)` returns a naive local-time datetime, which round-trips through `satkit.time.from_datetime`. Both directions are exact to the microsecond.
+
+A `satkit.time` is an integer count of microseconds. Floating-point inputs (seconds of the minute, Unix time, MJD/JD, `satkit.duration` fields) are rounded to the nearest microsecond.
 
 ```python
 import datetime

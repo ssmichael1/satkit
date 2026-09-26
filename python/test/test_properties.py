@@ -12,9 +12,9 @@ pre-1970 dates back to 1900 (with the 1961-1971 rubber-second era), and a few
 fixed edges, mixed with uniform sampling.
 
 Properties that exposed a defect are kept, marked ``xfail(strict=True)``
-with the root cause, and carry the minimal counterexample as an
-``@example`` so they fail deterministically (a strict xfail that passed by
-luck would fail the run).
+with the root cause until it is fixed, and carry the minimal
+counterexample as an ``@example`` so they fail deterministically (a strict
+xfail that passed by luck would fail the run).
 
 Case counts: hypothesis's default 100 examples per test (fewer for the
 expensive ones); set ``HYPOTHESIS_MAX_EXAMPLES`` for a deeper run.
@@ -23,6 +23,7 @@ expensive ones); set ``HYPOTHESIS_MAX_EXAMPLES`` for a deeper run.
 import math
 import os
 import pickle
+import struct
 import time as systime
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -204,19 +205,21 @@ class TestDatetime:
     @given(non_leap_labels, st.sampled_from(ZONES))
     def test_aware_datetime_roundtrip(self, lb, tz):
         """Aware datetime -> satkit.time -> to_datetime() names the same
-        instant, in any time zone, and matches the calendar route (the
-        datetime's UTC label). Tolerance 1 us: see the strict test below."""
+        instant, exactly, in any time zone, and matches the calendar route
+        (the datetime's UTC label)."""
         dt = label_datetime(lb, tz)
         t = sk.time.from_datetime(dt)
-        assert us_between(t, label_time(lb)) <= 1, (dt, t)
+        assert t == label_time(lb), (dt, t)
         back = t.to_datetime()
         assert back.tzinfo is not None
-        assert abs(back - dt) <= timedelta(microseconds=1), (dt, back)
+        assert back == dt, (dt, back)
 
     @_settings()
     @example(lb=(2039, 4, 6, 11, 5, 6_748_275))
     @given(non_leap_labels)
     def test_aware_datetime_roundtrip_exact(self, lb):
+        """Regression: from_datetime went through the f64 timestamp() and
+        lost a microsecond ~2% of the time."""
         dt = label_datetime(lb)
         t = sk.time.from_datetime(dt)
         assert t == label_time(lb)
@@ -237,10 +240,11 @@ class TestDatetime:
             aware = label_datetime(lb)
             naive = aware.astimezone().replace(tzinfo=None)  # keeps fold
             t = sk.time.from_datetime(naive)
-            assert us_between(t, sk.time.from_datetime(aware)) <= 1, (tzname, aware, naive)
+            assert t == sk.time.from_datetime(aware), (tzname, aware, naive)
             local = t.to_datetime(False)
             assert local.tzinfo is None
-            assert us_between(sk.time.from_datetime(local), t) <= 1
+            assert local == naive, (tzname, local, naive)
+            assert sk.time.from_datetime(local) == t
 
 
 # ───────────────────────── strings ─────────────────────────
@@ -257,8 +261,8 @@ class TestStrings:
         iso = label_iso(lb)
         assert str(t) == iso
         assert t.to_rfc3339() == iso
-        assert us_between(sk.time(str(t)), t) <= 1
-        assert us_between(sk.time.from_rfc3339(str(t)), t) <= 1
+        assert sk.time(str(t)) == t
+        assert sk.time.from_rfc3339(str(t)) == t
         y, mo, d, h, mi, s = t.to_gregorian()
         assert (y, mo, d, h, mi) == lb[:5]
         assert 0 <= h < 24 and 0 <= mi < 60
@@ -269,6 +273,7 @@ class TestStrings:
     @example(lb=(2024, 1, 1, 0, 0, 249))
     @given(labels)
     def test_str_roundtrip_exact(self, lb):
+        """Regression: '...00.000249Z' parsed as 248 us (truncation)."""
         t = label_time(lb)
         assert sk.time(str(t)) == t
 
@@ -381,32 +386,78 @@ class TestPickle:
     @_settings()
     @given(st.tuples(*tle_args))
     def test_tle(self, args):
-        """Every TLE field survives pickling (the epoch to 1 us; see the
-        strict test below)."""
+        """Every TLE field survives pickling, the epoch exactly."""
         tle = self._tle(*args)
         tle2 = roundtrip(tle)
         assert self._tle_fields(tle2) == self._tle_fields(tle)
-        assert us_between(tle2.epoch, tle.epoch) <= 1
+        assert tle2.epoch == tle.epoch
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NEW BUG: TLE / satstate / satproperties pickles store times as a "
-        "TAI MJD f64 and restore them with from_mjd_with_scale, which truncates "
-        "(python/src/pytle.rs:460, pysatstate.rs:585 and :605 for maneuvers, "
-        "pysatproperties.rs:268); "
-        "~1.3% of times come back 1 us early. satkit.time itself pickles its raw "
-        "i64 exactly.",
-    )
     @_settings()
     @example(t=sk.time(2039, 2, 25, 21, 42, 35.0) + sk.duration(microseconds=990_070))
     @given(times)
     def test_embedded_times_exact(self, t):
+        """Regression: these pickles stored times as a TAI MJD f64 and lost a
+        microsecond ~1% of the time; they now store the raw microseconds."""
         tle = self._tle(25544, 51.6, 10.0, 0.001, 30.0, 40.0, 15.5, 1e-4, t, "X", 1)
         assert roundtrip(tle).epoch == t
         s = sk.satstate(t, np.array([7e6, 0, 0.0]), np.array([0, 7.5e3, 0.0]))
         assert roundtrip(s).time == t
         props = sk.satproperties(thrusts=[sk.thrust.constant([0, 1e-4, 0], t, t + sk.duration(hours=1), sk.frame.RTN)])
         assert roundtrip(props).thrusts[0].start == t
+
+    def test_old_time_formats_load(self):
+        """Pickles written by satkit <= 0.23 (times as a TAI MJD f64: TLE v1,
+        satstate v1, satproperties v1/v2) still load, rounded to the nearest
+        microsecond, which recovers the time exactly before ~2038. The old
+        bytes are rebuilt from the new ones: same layout, version byte and
+        time fields swapped."""
+        t = sk.time(2024, 3, 1, 12, 0, 0.0) + sk.duration(microseconds=990_070)
+        t2 = t + sk.duration(seconds=100.000249)
+
+        def mjd(tm):
+            return struct.pack("<d", tm.to_mjd(sk.timescale.TAI))
+
+        def patch(b, version, fields):
+            b = bytearray(b)
+            b[0] = version
+            for at, tm in fields:
+                b[at : at + 8] = mjd(tm)
+            return bytes(b)
+
+        def load(obj, state):
+            fresh = roundtrip(obj)
+            fresh.__setstate__(state)
+            return fresh
+
+        tle = self._tle(25544, 51.6, 10.0, 0.001, 30.0, 40.0, 15.5, 1e-4, t, "X", 1)
+        new = tle.__getstate__()
+        assert new[0] == 2
+        old = load(tle, patch(new, 1, [(85, t)]))
+        assert old.epoch == t
+        assert self._tle_fields(old) == self._tle_fields(tle)
+
+        s = sk.satstate(t, np.array([7e6, 0, 0.0]), np.array([0, 7.5e3, 0.0]))
+        s.add_maneuver(t2, [0.0, 1.0, 0.0], sk.frame.RTN)
+        new = s.__getstate__()
+        assert new[0] == 2
+        # header 58 bytes, no covariance, 4-byte count, then the maneuver
+        old = load(s, patch(new, 1, [(1, t), (58 + 4, t2)]))
+        assert old.time == t and old.maneuvers[0]["time"] == t2
+        np.testing.assert_array_equal(old.pos, s.pos)
+
+        p = sk.satproperties(
+            cdaoverm=0.01, craoverm=0.02, thrusts=[sk.thrust.constant([0, 1e-4, 0], t, t2, sk.frame.RTN)]
+        )
+        new = p.__getstate__()
+        assert new[0] == 3
+        # 21-byte header, then 24 accel + 1 frame, start, end
+        for version in (1, 2):
+            b = patch(new, version, [(21 + 25, t), (21 + 33, t2)])
+            if version == 1:
+                b = b[:-1]  # v1 has no ECOM flag
+            old = load(p, b)
+            assert (old.thrusts[0].start, old.thrusts[0].end) == (t, t2), version
+            assert (old.cdaoverm, old.craoverm) == (0.01, 0.02)
 
     @_settings()
     @given(
@@ -423,7 +474,7 @@ class TestPickle:
         for mt, dv, fr in mans:
             s.add_maneuver(mt, dv, fr)
         s2 = roundtrip(s)
-        assert us_between(s2.time, s.time) <= 1
+        assert s2.time == s.time
         np.testing.assert_array_equal(s2.pos, s.pos)
         np.testing.assert_array_equal(s2.vel, s.vel)
         if with_cov:
@@ -433,7 +484,7 @@ class TestPickle:
         m1, m2 = s.maneuvers, s2.maneuvers
         assert len(m1) == len(m2)
         for a, b in zip(m1, m2):
-            assert us_between(a["time"], b["time"]) <= 1
+            assert a["time"] == b["time"]
             np.testing.assert_array_equal(a["delta_v"], b["delta_v"])
             assert a["frame"] == b["frame"]
 
@@ -462,10 +513,10 @@ class TestPickle:
         for a, b in zip(p.thrusts, p2.thrusts):
             assert list(a.accel) == list(b.accel)
             assert a.frame == b.frame
-            assert us_between(a.start, b.start) <= 1 and us_between(a.end, b.end) <= 1
+            assert (a.start, a.end) == (b.start, b.end)
             b3 = roundtrip(a)  # thrust on its own (__reduce__)
             assert list(b3.accel) == list(a.accel) and b3.frame == a.frame
-            assert us_between(b3.start, a.start) <= 1 and us_between(b3.end, a.end) <= 1
+            assert (b3.start, b3.end) == (a.start, a.end)
         if e is None:
             assert p2.ecom is None
         else:

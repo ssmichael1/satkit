@@ -163,8 +163,35 @@ fn bench_jplephem(c: &mut Criterion) {
     group.bench_function("moon_geocentric_pos", |b| {
         b.iter(|| satkit::jplephem::geocentric_pos(satkit::SolarSystem::Moon, black_box(&tm)))
     });
+    group.bench_function("sun_geocentric_pos", |b| {
+        b.iter(|| satkit::jplephem::geocentric_pos(satkit::SolarSystem::Sun, black_box(&tm)))
+    });
     group.bench_function("sun_geocentric_state", |b| {
         b.iter(|| satkit::jplephem::geocentric_state(satkit::SolarSystem::Sun, black_box(&tm)))
+    });
+
+    group.finish();
+}
+
+/// Default-settings 7-day LEO propagation, dominated at this length by the
+/// per-call Sun/Moon/frame table (one JPL lookup set per 60 s sample), and
+/// that table on its own.
+fn bench_leo_week(c: &mut Criterion) {
+    let mut group = c.benchmark_group("leo_week");
+    group
+        .sample_size(30)
+        .warm_up_time(std::time::Duration::from_secs(2))
+        .measurement_time(std::time::Duration::from_secs(10));
+
+    let t0 = epoch();
+    let t1 = t0 + Duration::from_days(7.0);
+    let state = numeris::vector![6_778_137.0, 0.0, 0.0, 0.0, 7_668.6, 0.0];
+    let settings = PropSettings::default();
+    group.bench_function("propagate_default", |b| {
+        b.iter(|| propagate(black_box(&state), &t0, &t1, &settings, None).unwrap())
+    });
+    group.bench_function("precompute_table", |b| {
+        b.iter(|| satkit::orbitprop::Precomputed::new(black_box(&t0), &t1).unwrap())
     });
 
     group.finish();
@@ -190,6 +217,7 @@ criterion_group!(
     bench_frametransform,
     bench_earthgravity,
     bench_jplephem,
+    bench_leo_week,
     bench_nrlmsise
 );
 criterion_main!(benches);

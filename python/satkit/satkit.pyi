@@ -1114,7 +1114,9 @@ class time:
             sec: Floating point second of minute, in range [0,60); up to 61
                 within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31),
                 and within a pre-1972 positive UTC step (e.g. ``23:59:60.05``
-                on 1963-10-31, up to 61.422818 on 1960-12-31)
+                on 1963-10-31, up to 61.422818 on 1960-12-31). Rounded to the
+                nearest microsecond, so the seconds from ``to_gregorian()``
+                round-trip exactly
             scale: Time scale in which the Gregorian components are
                 interpreted, default is satkit.timescale.UTC. Ignored for the
                 string and no-argument forms.
@@ -1205,6 +1207,10 @@ class time:
                 - %f - microsecond, allowing for trailing zeros
                 - %b - abbreviated month name (Jan, Feb, ...)
                 - %B - full month name (January, February, ...)
+                - %z - UTC offset ``+HHMM``, ``-HHMM`` or ``+HH:MM``, or ``Z``.
+                  ``+HHMM`` means local time is ahead of UTC, so
+                  ``12:00:00+0100`` is ``11:00:00Z``; the offset shifts the
+                  calendar label, so it is exact across a leap second
 
         Returns:
             Time object representing input string
@@ -1264,7 +1270,8 @@ class time:
 
         Args:
             ut (float): unixtime, UTC seconds since Jan 1, 1970 00:00:00
-                        (leap seconds are not included)
+                        (leap seconds are not included); rounded to the
+                        nearest microsecond
 
         Returns:
             Time object representing input unixtime
@@ -1398,7 +1405,9 @@ class time:
         - An aware datetime uses its own UTC offset.
 
         For UTC, pass ``tzinfo=datetime.timezone.utc`` or build a
-        ``satkit.time`` directly.
+        ``satkit.time`` directly. The conversion is exact to the microsecond
+        (it does not go through the float ``timestamp()``), and so is
+        ``to_datetime()``.
 
         Args:
             dt (datetime.datetime): "datetime.datetime" object to convert
@@ -1824,6 +1833,8 @@ class duration:
 
         Notes:
             - If no arguments are passed in, the created object represents a duration of 0 seconds
+            - A duration is an integer number of microseconds; each floating-point
+              argument is rounded to the nearest microsecond
 
         Example:
             ```python

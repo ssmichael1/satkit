@@ -2,7 +2,9 @@
 /// This can be used to add or subtract times from
 /// an `Instant` object.
 ///
-/// Duration is represented natively in microseconds.
+/// Duration is represented natively in microseconds. The floating-point
+/// constructors (`from_seconds`, `from_days`, ...) round to the nearest
+/// microsecond.
 #[derive(Clone, Copy, Debug)]
 pub struct Duration {
     pub usec: i64,
@@ -29,7 +31,7 @@ impl Duration {
     /// A new `Duration` object representing the time interval in seconds
     pub fn from_seconds(seconds: f64) -> Self {
         Self {
-            usec: (seconds * 1_000_000.0) as i64,
+            usec: crate::time::instant::round_us(seconds * 1_000_000.0),
         }
     }
 
@@ -42,7 +44,7 @@ impl Duration {
     /// A new `Duration` object representing the time interval in minutes
     pub fn from_minutes(minutes: f64) -> Self {
         Self {
-            usec: (minutes * 60_000_000.0) as i64,
+            usec: crate::time::instant::round_us(minutes * 60_000_000.0),
         }
     }
 
@@ -66,7 +68,7 @@ impl Duration {
     /// A new `Duration` object representing the time interval in milliseconds
     pub fn from_milliseconds(milliseconds: f64) -> Self {
         Self {
-            usec: (milliseconds * 1_000.0) as i64,
+            usec: crate::time::instant::round_us(milliseconds * 1_000.0),
         }
     }
 
@@ -79,7 +81,7 @@ impl Duration {
     /// A new `Duration` object representing the time interval in days
     pub fn from_days(days: f64) -> Self {
         Self {
-            usec: (days * 86_400_000_000.0) as i64,
+            usec: crate::time::instant::round_us(days * 86_400_000_000.0),
         }
     }
 
@@ -92,7 +94,7 @@ impl Duration {
     /// A new `Duration` object representing the time interval in hours
     pub fn from_hours(hours: f64) -> Self {
         Self {
-            usec: (hours * 3_600_000_000.0) as i64,
+            usec: crate::time::instant::round_us(hours * 3_600_000_000.0),
         }
     }
 

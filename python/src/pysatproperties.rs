@@ -176,25 +176,32 @@ impl PySatProperties {
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {
         let state = state.as_bytes(py);
         // Self-describing format:
-        //   [0]       version byte (1 or 2)
+        //   [0]       version byte (1, 2 or 3)
         //   [1..9]    craoverm (f64)
         //   [9..17]   cdaoverm (f64)
         //   [17..21]  thrust-arc count (u32 little-endian)
         //   [..]      count * 41-byte arcs: 24 accel, 1 frame tag, 8 start, 8 end
-        // v2 appends:
+        // v2 and v3 append:
         //   [..]      has_ecom (u8); if 1, an ECOM block (see pyecom.rs)
+        // Thrust start/end times: v3 stores the Instant's raw i64
+        // microseconds (exact); v1/v2 (satkit <= 0.23) a TAI MJD as f64,
+        // which lost a microsecond ~1% of the time, still read (rounded).
         const HEADER: usize = 1 + 8 + 8 + 4;
         if state.len() < HEADER {
             bail!("invalid satproperties pickle: truncated header");
         }
         let version = state[0];
-        if version != 1 && version != 2 {
+        if !(1..=3).contains(&version) {
             bail!(
-                "unsupported satproperties pickle version {} (expected 1 or 2)",
+                "unsupported satproperties pickle version {} (expected 1, 2 or 3)",
                 version
             );
         }
         let read_f64 = |at: usize| f64::from_le_bytes(state[at..at + 8].try_into().unwrap());
+        let read_time = |at: usize| match version {
+            1 | 2 => satkit::Instant::from_mjd_with_scale(read_f64(at), satkit::TimeScale::TAI),
+            _ => satkit::Instant::new(i64::from_le_bytes(state[at..at + 8].try_into().unwrap())),
+        };
 
         self.0.craoverm = read_f64(1);
         self.0.cdaoverm = read_f64(9);
@@ -214,11 +221,9 @@ impl PySatProperties {
             offset += 24;
             let frame = crate::pyutils::maneuver_frame_from_u8(state[offset])?;
             offset += 1;
-            let start =
-                satkit::Instant::from_mjd_with_scale(read_f64(offset), satkit::TimeScale::TAI);
+            let start = read_time(offset);
             offset += 8;
-            let end =
-                satkit::Instant::from_mjd_with_scale(read_f64(offset), satkit::TimeScale::TAI);
+            let end = read_time(offset);
             offset += 8;
             self.0.thrust.thrusts.push(
                 satkit::orbitprop::ContinuousThrust::new(
@@ -267,7 +272,7 @@ impl PySatProperties {
         // `to_le_bytes`, so there is no alignment assumption on the buffer.
         let mut raw: Vec<u8> =
             Vec::with_capacity(21 + self.0.thrust.thrusts.len() * 41 + 1 + ECOM_BLOCK_LEN);
-        raw.push(2u8); // version
+        raw.push(3u8); // version
         raw.extend_from_slice(&self.0.craoverm.to_le_bytes());
         raw.extend_from_slice(&self.0.cdaoverm.to_le_bytes());
         raw.extend_from_slice(&(self.0.thrust.thrusts.len() as u32).to_le_bytes());
@@ -276,16 +281,8 @@ impl PySatProperties {
                 raw.extend_from_slice(&v.to_le_bytes());
             }
             raw.push(crate::pyutils::maneuver_frame_to_u8(t.frame)?);
-            raw.extend_from_slice(
-                &t.start
-                    .as_mjd_with_scale(satkit::TimeScale::TAI)
-                    .to_le_bytes(),
-            );
-            raw.extend_from_slice(
-                &t.end
-                    .as_mjd_with_scale(satkit::TimeScale::TAI)
-                    .to_le_bytes(),
-            );
+            raw.extend_from_slice(&t.start.raw.to_le_bytes());
+            raw.extend_from_slice(&t.end.raw.to_le_bytes());
         }
         match &self.0.ecom {
             Some(e) => {
