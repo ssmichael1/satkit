@@ -709,7 +709,7 @@ impl TLE {
     ///    accepted, so `"+1234"` and `"-1234"` are rejected even though
     ///    `str::parse` would otherwise accept the sign.
     ///  * Letter form: a single ASCII letter (`A`-`Z` or `a`-`z`, excluding `I`/`O`;
-    ///    lowercase is accepted on input even though [`int_to_alpha5`] only ever
+    ///    lowercase is accepted on input even though [`Self::int_to_alpha5`] only ever
     ///    writes uppercase) followed by exactly four ASCII digits — no spaces,
     ///    no sign, no extra or missing digits.
     ///
