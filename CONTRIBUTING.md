@@ -75,9 +75,13 @@ Thank you for your interest in contributing to Satkit! This document provides gu
   (mypy's stubtest over every stub, native submodules included); the stub is
   wrong when they disagree, unless the entry in
   `python/stubtest_allowlist.txt` says why not. stubtest compares parameter
-  names, kinds and defaults only, and sees nothing of a binding that parses
-  `*args` / `**kwargs` by hand, so give such a binding a
-  `#[pyo3(text_signature = "...")]`
+  names, kinds and defaults only
+- Give every keyword a real PyO3 signature
+  (`#[pyo3(signature = (pos, *, degree=6, order=None))]`), never a hand-parsed
+  `**kwargs`: Python then rejects a misspelt keyword with `TypeError` and
+  stubtest can check it. A value of the wrong type that needs its own message
+  goes through `#[pyo3(from_py_with = ...)]` (see `arg_extractor!` in
+  `python/src/pyutils.rs`)
 - Include docstrings for all public functions and classes
 - Conversions to another representation are methods named `to_X` (`to_mjd()`,
   `to_datetime()`, `to_rotation_matrix()`), paired with the `from_X` constructor

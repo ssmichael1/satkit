@@ -9,8 +9,8 @@ advertises must be accepted at runtime, positional/keyword kinds must agree,
 defaults must be present on the same parameters, and every required runtime
 parameter must be in the stub. Types are not compared.
 
-Classes whose ``#[new]`` takes bare ``*args`` / ``**kwargs`` have no runtime
-signature to compare with and are skipped.
+Classes whose ``#[new]`` takes only bare ``*args`` (``quaternion``) have no
+runtime signature to compare with and are skipped.
 """
 
 import ast
@@ -69,7 +69,8 @@ CASES = [name for name in sorted(STUB_INITS) if _runtime_signature(name) is not 
 
 
 def test_cases_found():
-    assert len(CASES) >= 4, "expected kepler, satstate, ecomparams and time at least"
+    expected = {"duration", "ecomparams", "itrfcoord", "kepler", "propsettings", "satproperties", "satstate", "time"}
+    assert expected <= set(CASES), f"missing: {sorted(expected - set(CASES))}"
 
 
 def _overload_problems(stub, runtime: inspect.Signature) -> list[str]:

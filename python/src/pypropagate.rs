@@ -2,7 +2,7 @@ use crate::pyduration::PyDuration;
 use crate::pyinstant::PyInstant;
 use crate::pypropresult::{PyPropResult, PyPropResultType};
 use crate::pypropsettings::PyPropSettings;
-use crate::pysatproperties::PySatProperties;
+use crate::pysatproperties::{satproperties_arg, PySatProperties};
 use crate::pyutils::*;
 use pyo3::IntoPyObjectExt;
 
@@ -13,9 +13,26 @@ use satkit::Duration;
 use satkit::Instant;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple};
 
 use anyhow::Result;
+
+crate::arg_extractor!(begin_arg: Option<PyInstant>, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {e}"))
+});
+crate::arg_extractor!(end_arg: Option<PyInstant>, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {e}"))
+});
+crate::arg_extractor!(duration_arg: Option<PyDuration>, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration: {e}"))
+});
+crate::arg_extractor!(duration_secs_arg: Option<f64>, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_secs: {e}"))
+});
+crate::arg_extractor!(duration_days_arg: Option<f64>, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_days: {e}"))
+});
+crate::arg_extractor!(output_phi_arg: bool, |_| invalid_value("output_phi"));
+crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |_| invalid_value("propsettings"));
 
 /// High-precision orbit propagator
 ///
@@ -25,8 +42,8 @@ use anyhow::Result;
 ///
 /// Inputs:
 ///
-///      state0 (npt.ArrayLike[float], optional): 6-element numpy array representing satellite GCRF position & velocity, in meters and meters/second
-///      begin (satkit.time, optional): Begin time of propagation, time of "state0"
+///      state (npt.ArrayLike[float]): 6-element numpy array representing satellite GCRF position & velocity, in meters and meters/second
+///      begin (satkit.time): Begin time of propagation, time of "state"
 ///        end (satkit.time, optional): End time of propagation
 ///
 ///
@@ -48,6 +65,10 @@ use anyhow::Result;
 ///  Other keywords:
 ///
 ///
+///              pos (npt.ArrayLike[float], optional): GCRF position, meters; replaces
+///                   the first three elements of "state" (or stands in for it with "vel")
+///              vel (npt.ArrayLike[float], optional): GCRF velocity, meters/second; replaces
+///                   the last three elements of "state"
 ///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
 ///                   between "begintime" and "endtime"
 ///                   default is False
@@ -68,7 +89,7 @@ use anyhow::Result;
 ///
 ///   RuntimeError: If "pos" or "vel" are not 3-element numpy arrays
 ///   RuntimeError: If neither "end", "duration", "duration_secs", or "duration_days" are set
-///   RuntimeError: If extraneous keyword arguments are passed
+///   TypeError: If an unknown keyword argument is passed, or "state" or "begin" is missing
 ///
 ///
 ///    Notes:
@@ -83,136 +104,83 @@ use anyhow::Result;
 ///        * Dense-output interpolation is controlled by propsettings.enable_interp
 ///          (default True); use propresult.interp to query interpolated states
 ///
-#[pyfunction(signature=(*args, **kwargs))]
+// `state` and `begin` take `None` defaults only so the undocumented
+// `pos=` / `vel=` keywords can replace `state`; a missing `begin` is refused
+// below.
+#[pyfunction(signature=(
+    state=None,
+    begin=None,
+    end=None,
+    *,
+    pos=None,
+    vel=None,
+    duration=None,
+    duration_secs=None,
+    duration_days=None,
+    output_phi=false,
+    propsettings=None,
+    satproperties=None,
+))]
+#[allow(clippy::too_many_arguments)]
 pub fn propagate(
     py: Python,
-    args: &Bound<PyTuple>,
-    mut kwargs: Option<&Bound<'_, PyDict>>,
+    state: Option<&Bound<'_, PyAny>>,
+    #[pyo3(from_py_with = begin_arg)] begin: Option<PyInstant>,
+    #[pyo3(from_py_with = end_arg)] end: Option<PyInstant>,
+    pos: Option<&Bound<'_, PyAny>>,
+    vel: Option<&Bound<'_, PyAny>>,
+    #[pyo3(from_py_with = duration_arg)] duration: Option<PyDuration>,
+    #[pyo3(from_py_with = duration_secs_arg)] duration_secs: Option<f64>,
+    #[pyo3(from_py_with = duration_days_arg)] duration_days: Option<f64>,
+    #[pyo3(from_py_with = output_phi_arg)] output_phi: bool,
+    #[pyo3(from_py_with = propsettings_arg)] propsettings: Option<PyPropSettings>,
+    #[pyo3(from_py_with = satproperties_arg)] satproperties: Option<PySatProperties>,
 ) -> Result<Py<PyAny>> {
-    let pypropsettings: Option<PyPropSettings> = kwargs_or_none(&mut kwargs, "propsettings")?;
-    let propsettings = match pypropsettings {
-        Some(p) => p.0,
-        None => satkit::orbitprop::PropSettings::default(),
+    let propsettings = propsettings.map_or_else(Default::default, |p| p.0);
+    let satproperties: Option<SatPropertiesSimple> = satproperties.map(|p| p.0);
+
+    if state.is_none() && pos.is_none() && vel.is_none() {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "propagate() missing required argument 'state'",
+        )
+        .into());
+    }
+    let Some(PyInstant(begintime)) = begin else {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "propagate() missing required argument 'begin'",
+        )
+        .into());
     };
 
-    let mut state0 = Vector6::zeros();
-    let mut begintime: Instant = Instant::INVALID;
-    let mut endtime: Instant = Instant::INVALID;
-    let mut output_phi: bool = false;
-    let mut satproperties: Option<SatPropertiesSimple> = None;
-
-    if args.len() > 0 {
-        state0 = py_to_smatrix(&args.get_item(0)?)?;
+    let mut state0 = match state {
+        Some(s) => py_to_smatrix(s)?,
+        None => Vector6::zeros(),
+    };
+    // `pos=` / `vel=` overwrite the corresponding half of `state`
+    if let Some(p) = pos {
+        let p = py_to_smatrix::<3, 1>(p)?;
+        state0[0] = p[0];
+        state0[1] = p[1];
+        state0[2] = p[2];
     }
-    if args.len() > 1 {
-        begintime = args
-            .get_item(1)?
-            .extract::<PyInstant>()
-            .map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {}", e))
-            })?
-            .0;
-    }
-    // `end=None` (the stub's default) means "not given"
-    if args.len() > 2 && !args.get_item(2)?.is_none() {
-        endtime = args
-            .get_item(2)?
-            .extract::<PyInstant>()
-            .map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {}", e))
-            })?
-            .0;
+    if let Some(v) = vel {
+        let v = py_to_smatrix::<3, 1>(v)?;
+        state0[3] = v[0];
+        state0[4] = v[1];
+        state0[5] = v[2];
     }
 
-    if let Some(kw) = kwargs {
-        if let Some(kwp) = kw.get_item("pos")? {
-            let pos = py_to_smatrix::<3, 1>(&kwp)?;
-            state0[0] = pos[0];
-            state0[1] = pos[1];
-            state0[2] = pos[2];
-            kw.del_item("pos")?;
-        }
-        if let Some(kwv) = kw.get_item("vel")? {
-            let vel = py_to_smatrix::<3, 1>(&kwv)?;
-            state0[3] = vel[0];
-            state0[4] = vel[1];
-            state0[5] = vel[2];
-            kw.del_item("vel")?;
-        }
-        if let Some(kws) = kw.get_item("begin")? {
-            begintime = kws
-                .extract::<PyInstant>()
-                .map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {}", e))
-                })?
-                .0;
-            kw.del_item("begin")?;
-        }
-        if let Some(kws) = kw.get_item("end")?.filter(|v| !v.is_none()) {
-            endtime = kws
-                .extract::<PyInstant>()
-                .map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {}", e))
-                })?
-                .0;
-        }
-        // Consumed, including an explicit None
-        if kw.contains("end")? {
-            kw.del_item("end")?;
-        }
-        if let Some(kwd) = kw.get_item("duration")?.filter(|v| !v.is_none()) {
-            endtime = begintime
-                + kwd
-                    .extract::<PyDuration>()
-                    .map_err(|e| {
-                        pyo3::exceptions::PyValueError::new_err(format!("Invalid duration: {}", e))
-                    })?
-                    .0;
-        }
-        // Consumed, including an explicit None
-        if kw.contains("duration")? {
-            kw.del_item("duration")?;
-        }
-        if let Some(kwd) = kw.get_item("duration_days")?.filter(|v| !v.is_none()) {
-            endtime = begintime
-                + Duration::from_days(kwd.extract::<f64>().map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_days: {}", e))
-                })?);
-        }
-        // Consumed, including an explicit None
-        if kw.contains("duration_days")? {
-            kw.del_item("duration_days")?;
-        }
-        if let Some(kwd) = kw.get_item("duration_secs")?.filter(|v| !v.is_none()) {
-            endtime = begintime
-                + Duration::from_seconds(kwd.extract::<f64>().map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_secs: {}", e))
-                })?);
-        }
-        // Consumed, including an explicit None
-        if kw.contains("duration_secs")? {
-            kw.del_item("duration_secs")?;
-        }
-        if let Some(kws) = kw.get_item("satproperties")? {
-            // `satproperties=None` is the documented default (no drag/SRP).
-            if !kws.is_none() {
-                satproperties = Some(
-                    kws.extract::<PySatProperties>()
-                        .map_err(|e| {
-                            pyo3::exceptions::PyValueError::new_err(format!(
-                                "Invalid satproperties: {}",
-                                e
-                            ))
-                        })?
-                        .0,
-                );
-            }
-            kw.del_item("satproperties")?;
-        }
-
-        output_phi = kwargs_or_default(&mut kwargs, "output_phi", false)?;
-
-        reject_unused_kwargs(kw)?;
+    // The end time: `end`, overridden by `duration`, then `duration_days`,
+    // then `duration_secs`
+    let mut endtime = end.map_or(Instant::INVALID, |t| t.0);
+    if let Some(d) = duration {
+        endtime = begintime + d.0;
+    }
+    if let Some(d) = duration_days {
+        endtime = begintime + Duration::from_days(d);
+    }
+    if let Some(d) = duration_secs {
+        endtime = begintime + Duration::from_seconds(d);
     }
 
     // Release the GIL during the (potentially long-running) propagation

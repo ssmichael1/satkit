@@ -1,5 +1,4 @@
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 
 use satkit::nrlmsise;
 use satkit::Instant;
@@ -20,46 +19,19 @@ use satkit::Instant;
 ///  (float, float): Tuple of density (kg/m^3) and temperature (K)
 ///
 #[pyfunction]
-// Keywords parsed by hand; `text_signature` publishes them for inspect/stubtest.
-#[pyo3(
-    signature=(alt_km, **option_kwds),
-    text_signature = "(alt_km, *, latitude_deg=0.0, longitude_deg=0.0, time=None, use_spaceweather=True)"
-)]
+#[pyo3(signature=(alt_km, *, latitude_deg=0.0, longitude_deg=0.0, time=None, use_spaceweather=true))]
 pub fn nrlmsise00(
     alt_km: f64,
-    option_kwds: Option<&Bound<'_, PyDict>>,
+    latitude_deg: f64,
+    longitude_deg: f64,
+    time: Option<&Bound<'_, PyAny>>,
+    use_spaceweather: bool,
 ) -> anyhow::Result<(f64, f64)> {
-    let mut lat: Option<f64> = None;
-    let mut lon: Option<f64> = None;
-    let mut tm: Option<Instant> = None;
-    let mut use_spaceweather: bool = true;
-    if let Some(kwds) = option_kwds {
-        if let Some(kw) = kwds.get_item("latitude_deg")? {
-            lat = Some(kw.extract::<f64>()?);
-            kwds.del_item("latitude_deg")?;
-        }
-        if let Some(v) = kwds.get_item("longitude_deg")? {
-            lon = Some(v.extract::<f64>()?);
-            kwds.del_item("longitude_deg")?;
-        }
-        if let Some(v) = kwds.get_item("time")? {
-            // `time=None` is the documented default
-            if !v.is_none() {
-                tm = Some(crate::pyutils::instant_from_pyany(&v)?);
-            }
-            kwds.del_item("time")?;
-        }
-        if let Some(v) = kwds.get_item("use_spaceweather")? {
-            use_spaceweather = v.extract::<bool>()?;
-            kwds.del_item("use_spaceweather")?;
-        }
-        crate::pyutils::reject_unused_kwargs(kwds)?;
-    }
-
+    let tm: Option<Instant> = time.map(crate::pyutils::instant_from_pyany).transpose()?;
     Ok(nrlmsise::nrlmsise(
         alt_km,
-        lat,
-        lon,
+        Some(latitude_deg),
+        Some(longitude_deg),
         tm.as_ref(),
         use_spaceweather,
     ))
