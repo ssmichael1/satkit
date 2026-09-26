@@ -90,6 +90,10 @@ jobs:
   publish_crate:
     name: publish to crates.io
     needs: preflight
+    # Job-level guard: preflight's version checks are step-level `if`s, so on
+    # a wheel* branch push it succeeds without checking anything and this job
+    # would otherwise run `cargo publish` from a branch.
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: crates-io
     steps:

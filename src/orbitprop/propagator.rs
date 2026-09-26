@@ -332,6 +332,44 @@ fn force_model(
     (accel, dadr, dadv)
 }
 
+/// Starting step for the adaptive integrators, derived from the initial state
+/// and the tolerances:
+///
+/// ```text
+/// h0 = 1.5 · |r|/|v| · tol^(1/(p+1)),   tol = rel_error + abs_error / |r|
+/// ```
+///
+/// where `p` is the integrator's order and `tol` is the effective relative
+/// tolerance of the position components (the tightest in the integrator's
+/// error norm). The settled stride of an order-`p` method scales as
+/// `tol^(1/(p+1))`; the constant is fit to LEO strides across RKTS54..RKV98
+/// and tolerances 1e-6..1e-12, where the prediction lands within ~2.5× of
+/// the settled stride (RKV98 at 1e-9: 170 s predicted, 270 s settled), so
+/// the controller is on stride within a step or two. `None` (Gauss-Jackson,
+/// or a degenerate state / tolerance) leaves the integrator's own heuristic
+/// in charge.
+fn default_initial_step<const C: usize>(
+    state: &StateType<C>,
+    settings: &PropSettings,
+) -> Option<f64> {
+    use crate::orbitprop::Integrator;
+    let order = match settings.integrator {
+        Integrator::RKV98 => ode::RKV98::ORDER,
+        Integrator::RKV98NoInterp => ode::RKV98NoInterp::ORDER,
+        Integrator::RKV87 => ode::RKV87::ORDER,
+        Integrator::RKV65 => ode::RKV65::ORDER,
+        Integrator::RKTS54 => ode::RKTS54::ORDER,
+        Integrator::RODAS4 => ode::RODAS4::ORDER,
+        Integrator::GaussJackson8 => return None,
+    };
+    let r: Vector3 = state.block::<3, 1>(0, 0);
+    let v: Vector3 = state.block::<3, 1>(3, 0);
+    let (r, v) = (r.norm(), v.norm());
+    let tol = settings.rel_error + settings.abs_error / r;
+    let h = 1.5 * r / v * tol.powf(1.0 / (order as f64 + 1.0));
+    (h.is_finite() && h > 0.0).then_some(h)
+}
+
 ///
 /// High-precision propagation of a satellite state from a given begin time
 /// to a given end time, with input settings and
@@ -444,46 +482,6 @@ fn force_model(
 ///
 /// println!("results = {:?}", res);
 /// ```
-///
-///
-/// Starting step for the adaptive integrators, derived from the initial state
-/// and the tolerances:
-///
-/// ```text
-/// h0 = 1.5 · |r|/|v| · tol^(1/(p+1)),   tol = rel_error + abs_error / |r|
-/// ```
-///
-/// where `p` is the integrator's order and `tol` is the effective relative
-/// tolerance of the position components (the tightest in the integrator's
-/// error norm). The settled stride of an order-`p` method scales as
-/// `tol^(1/(p+1))`; the constant is fit to LEO strides across RKTS54..RKV98
-/// and tolerances 1e-6..1e-12, where the prediction lands within ~2.5× of
-/// the settled stride (RKV98 at 1e-9: 170 s predicted, 270 s settled), so
-/// the controller is on stride within a step or two. `None` (Gauss-Jackson,
-/// or a degenerate state / tolerance) leaves the integrator's own heuristic
-/// in charge.
-fn default_initial_step<const C: usize>(
-    state: &StateType<C>,
-    settings: &PropSettings,
-) -> Option<f64> {
-    use crate::orbitprop::Integrator;
-    let order = match settings.integrator {
-        Integrator::RKV98 => ode::RKV98::ORDER,
-        Integrator::RKV98NoInterp => ode::RKV98NoInterp::ORDER,
-        Integrator::RKV87 => ode::RKV87::ORDER,
-        Integrator::RKV65 => ode::RKV65::ORDER,
-        Integrator::RKTS54 => ode::RKTS54::ORDER,
-        Integrator::RODAS4 => ode::RODAS4::ORDER,
-        Integrator::GaussJackson8 => return None,
-    };
-    let r: Vector3 = state.block::<3, 1>(0, 0);
-    let v: Vector3 = state.block::<3, 1>(3, 0);
-    let (r, v) = (r.norm(), v.norm());
-    let tol = settings.rel_error + settings.abs_error / r;
-    let h = 1.5 * r / v * tol.powf(1.0 / (order as f64 + 1.0));
-    (h.is_finite() && h > 0.0).then_some(h)
-}
-
 pub fn propagate<const C: usize, T: TimeLike>(
     state: &StateType<C>,
     begin: &T,
