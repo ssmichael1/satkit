@@ -9,8 +9,8 @@ frame transforms and gravity work with no data directory and no network:
 * the public-domain gravity models (EGM96, EGM2008, JGM2, JGM3), truncated
   to degree <= EMBED_MAX_DEGREE; ITU_GRACE16 (CC BY 4.0) is deliberately not
   embedded and is downloaded on first use
-  (the evaluator uses degree <= 40; the extra headroom keeps the files
-  useful if that cap is raised)
+  (EMBED_MAX_DEGREE is 70, the evaluator's cap, so nothing it can use is
+  lost)
 
 Each file is gzip'd (level 9, mtime 0 so the output is reproducible) and
 stored as data/embedded/<name>.gz; the gravity files keep every header line

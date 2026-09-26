@@ -27,9 +27,8 @@
 use std::io::Read;
 
 /// Highest spherical-harmonic degree kept in the embedded gravity files.
-/// The evaluator uses at most [`crate::earthgravity::MAX_GRAVITY_DEGREE`]
-/// (40), so nothing is lost; the headroom is there in case that cap is
-/// raised.
+/// Equal to the evaluator's cap, [`crate::earthgravity::MAX_GRAVITY_DEGREE`]
+/// (70), so nothing the evaluator can use is lost.
 pub const EMBED_MAX_DEGREE: usize = 70;
 
 /// Names of the embedded files (as they would appear in the data directory).
@@ -160,8 +159,8 @@ mod tests {
     }
 
     /// Truncating the gravity files to degree 70 changes nothing the
-    /// evaluator can see: accelerations at the degree-40 cap are bit-identical
-    /// to the full file's. Runs only where a full file is available on disk
+    /// evaluator can see: accelerations at degree 40 are bit-identical to
+    /// the full file's. Runs only where a full file is available on disk
     /// (a provisioned developer machine); the embedded blob is the fallback.
     #[test]
     fn embedded_gravity_matches_full_file_to_degree_40() {

@@ -26,10 +26,13 @@ from ._types import OMMDict
 # aware one uses its own offset (see ``time.from_datetime``).
 #
 # * ``TimeScalar``    — a single time value.
-# * ``TimeArrayLike`` — a list or numpy array of time values.
+# * ``TimeArrayLike`` — a list, or a 1-D numpy object array, of time values
+#   (not any array-like: a tuple, a float array or a string is refused).
 # * ``TimeInput``     — either a scalar or an array of times.
 TimeScalar: TypeAlias = "time | datetime.datetime"
-TimeArrayLike: TypeAlias = "list[time] | list[datetime.datetime] | npt.ArrayLike"
+TimeArrayLike: TypeAlias = (
+    "list[time] | list[datetime.datetime] | list[time | datetime.datetime] | npt.NDArray[np.object_]"
+)
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 
 class TLE:
@@ -649,7 +652,7 @@ class gravmodel:
     egm96: ClassVar[gravmodel]
     """
     The "EGM96" gravity model, Lemoine et al. (1998). Tide-free C20.
-    Compiled in. Default for the orbit propagator.
+    Compiled in (truncated to degree 70).
     """
 
     itugrace16: ClassVar[gravmodel]
@@ -664,7 +667,7 @@ class gravmodel:
     egm2008: ClassVar[gravmodel]
     """
     The "EGM2008" gravity model, Pavlis et al. (2012). Tide-free C20.
-    Compiled in (truncated to degree 70).
+    Compiled in (truncated to degree 70). Default for the orbit propagator.
     """
 
 def nrlmsise00(
@@ -1699,6 +1702,9 @@ class time:
         Args:
             other (duration): duration to add to the current time
 
+        Raises:
+            OverflowError: if the result is beyond about ±292,000 years
+
         Returns:
             Time object representing the input duration added to the current time
 
@@ -1715,7 +1721,8 @@ class time:
 
         Raises:
             ValueError: if ``other`` is NaN or infinite
-            OverflowError: if ``other`` is too large for a duration
+            OverflowError: if ``other`` is too large for a duration, or the
+                result is beyond about ±292,000 years
 
         Returns:
             Time object representing the input number of days added to the current time
@@ -1737,15 +1744,23 @@ class time:
         ...
 
     @typing.overload
-    def __add__(self, other: npt.NDArray[Any]) -> npt.NDArray[Any]:
+    def __add__(
+        self,
+        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float],
+    ) -> npt.NDArray[Any]:
         """
-        Return a numpy array of time objects, with each object representing an element-wise addition of duration to the "self" time object
+        Return a numpy array of time objects, with each object representing an element-wise addition of days to the "self" time object
 
         Args:
-            other (npt.ArrayLike[Any]): array-like structure containing durations to add to the current time
+            other (npt.NDArray[np.floating] | npt.NDArray[np.integer] | list[float]): 1-D array or list of days to add to the current time (integer and float32 arrays are converted to float64)
+
+        Raises:
+            ValueError: if an element is NaN or infinite
+            OverflowError: if an element is too large for a duration, or a
+                result is beyond about ±292,000 years
 
         Returns:
-            Array of time objects representing the element-wise addition of durations to the current time
+            Object array of time objects representing the element-wise addition of days to the current time
 
         """
         ...
@@ -1830,6 +1845,9 @@ class time:
         Args:
             other (duration): duration to subtract from the current time
 
+        Raises:
+            OverflowError: if the result is beyond about ±292,000 years
+
         Returns:
             Time object representing the input duration subtracted from the current time
 
@@ -1860,7 +1878,8 @@ class time:
 
         Raises:
             ValueError: if ``other`` is NaN or infinite
-            OverflowError: if ``other`` is too large for a duration
+            OverflowError: if ``other`` is too large for a duration, or the
+                result is beyond about ±292,000 years
 
         Returns:
             Time object representing the input number of days subtracted from the current time
@@ -1869,12 +1888,15 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: npt.NDArray[np.float64] | list[float]) -> npt.NDArray[Any]:
+    def __sub__(
+        self,
+        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float],
+    ) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise subtraction of days from the "self" time object
 
         Args:
-            other (npt.NDArray[np.float64] | list[float]): days to subtract from the current time
+            other (npt.NDArray[np.floating] | npt.NDArray[np.integer] | list[float]): 1-D array or list of days to subtract from the current time (integer and float32 arrays are converted to float64)
 
         Returns:
             Object array of time objects representing the element-wise subtraction of days from the current time
@@ -1937,7 +1959,10 @@ class duration:
               argument is rounded to the nearest microsecond
             - A NaN or infinite argument raises ``ValueError``, and one too large for
               a duration (beyond about ±292,000 years) raises ``OverflowError``; the
-              same holds for the ``from_*`` constructors
+              same holds for the ``from_*`` constructors, and for arguments that fit
+              one by one but not summed
+            - Adding or subtracting durations and times raises ``OverflowError``
+              when the result is beyond that range (it used to wrap around)
 
         Example:
             ```python
@@ -2029,6 +2054,9 @@ class duration:
         Args:
             other (duration): duration to add to the current duration
 
+        Raises:
+            OverflowError: if the result is beyond about ±292,000 years
+
         Returns:
             Duration object representing the sum, or concatenation, of both durations
 
@@ -2047,6 +2075,9 @@ class duration:
         Args:
             other (time): time to add the current duration to
 
+        Raises:
+            OverflowError: if the result is beyond about ±292,000 years
+
         Returns:
             Time object representing the input time plus the duration
 
@@ -2063,6 +2094,9 @@ class duration:
 
         Args:
             other (duration): duration to subtract from the current duration
+
+        Raises:
+            OverflowError: if the result is beyond about ±292,000 years
 
         Returns:
             Duration object representing the difference between the two durations
@@ -2564,11 +2598,13 @@ class quaternion:
         ...
 
     @typing.overload
-    def __mul__(self, other: npt.ArrayLike) -> npt.NDArray[np.float64]:
+    def __mul__(
+        self, other: npt.NDArray[Any] | Sequence[float] | Sequence[Sequence[float]]
+    ) -> npt.NDArray[np.float64]:
         """Multiply by a vector to rotate the vector
 
         Args:
-            other (npt.ArrayLike): 3-element vector to rotate, or Nx3 array of vectors to rotate (any real numeric array-like; integer arrays and lists are converted to float64)
+            other (npt.NDArray | Sequence[float] | Sequence[Sequence[float]]): 3-element vector to rotate, or Nx3 array of vectors to rotate (any real numeric array, list or tuple; integers are converted to float64). A scalar is not a vector: ``q * 2.0`` raises ``TypeError``
 
         Returns:
             3-element array representing rotated vector or Nx3 array of rotated vectors
@@ -4339,7 +4375,7 @@ class propsettings:
                 in the units of the state (meters for position elements, m/s for velocity elements). Default is 1e-8
             rel_error: Maximum relative error of any element in propagated state following ODE integration, unitless. Default is 1e-8
             gravity_degree: Maximum degree of spherical harmonic gravity model, at most 70 (``ValueError`` above that). Default is 4
-            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 70). Default is same as gravity_degree
+            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 70; ``ValueError`` otherwise). Default is same as gravity_degree
             gravity_model: Gravity model to use. Default is gravmodel.egm2008
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
