@@ -119,8 +119,33 @@ class TestMoon:
         # for the purposes of this test case
         t1 = sk.time.from_mjd(t0.to_mjd(sk.timescale.UTC), sk.timescale.TDB)
         p = sk.moon.pos_gcrf(t1)
+        # Vallado's worked example is in mean-of-date coordinates
         ref_pos = np.array([-134240.626e3, -311571.590e3, -126693.785e3])
-        assert p == pytest.approx(ref_pos)
+        assert p == pytest.approx(sk.frametransform.qmod2gcrf(t1) * ref_pos)
+
+    def test_moonpos_vs_jplephem(self):
+        # pos_gcrf used to return mean-of-date coordinates, off from GCRF by
+        # precession (~1.4 deg / century from J2000)
+        t0 = sk.time(1950, 1, 1)
+        times = [t0 + sk.duration(days=d) for d in np.arange(0.0, 150 * 365.25, 4.37)]
+        lp = sk.moon.pos_gcrf(times)
+        jpl = sk.jplephem.geocentric_pos(sk.solarsystem.Moon, times)
+        # J2000 ecliptic longitude / latitude
+        eps = np.radians(84381.406 / 3600.0)
+        rot = np.array(
+            [[1, 0, 0], [0, np.cos(eps), np.sin(eps)], [0, -np.sin(eps), np.cos(eps)]]
+        )
+
+        def lonlat(p):
+            e = p @ rot.T
+            return np.arctan2(e[:, 1], e[:, 0]), np.arcsin(e[:, 2] / np.linalg.norm(e, axis=1))
+
+        (l1, b1), (l2, b2) = lonlat(lp), lonlat(jpl)
+        dlon = np.degrees(np.angle(np.exp(1j * (l1 - l2))))
+        assert np.max(np.abs(dlon)) < 0.37
+        assert np.max(np.abs(np.degrees(b1 - b2))) < 0.2
+        years = np.arange(len(times)) * 4.37 / 365.25
+        assert abs(np.polyfit(years, dlon, 1)[0]) < 1.0e-4  # deg / year
 
     def test_moon_phase(self):
         # Checked against https://www.timeanddate.com/moon/phases/
@@ -159,6 +184,41 @@ class TestMoon:
         assert phase_last == sk.moon.moonphase.LastQuarter
 
 
+class TestPlanets:
+    @pytest.mark.parametrize(
+        "planet, start, lon_rms, lat_rms",
+        [
+            # JPL's approximate errors (arcsec) for the element set in use
+            (sk.solarsystem.Mercury, 1800, 15, 1),
+            (sk.solarsystem.Mars, 1800, 40, 2),
+            # 2051-2650 uses the 3000 BC - 3000 AD elements plus the extra
+            # mean-anomaly terms, which were applied in the wrong units
+            (sk.solarsystem.Jupiter, 2051, 600, 100),
+            (sk.solarsystem.Saturn, 2051, 1000, 100),
+        ],
+    )
+    def test_heliocentric_pos_vs_jplephem(self, planet, start, lon_rms, lat_rms):
+        t0 = sk.time(start, 1, 2)
+        span = 249 if start == 1800 else 598
+        times = [t0 + sk.duration(days=d) for d in np.arange(0.0, span * 365.25, 11.3)]
+        lp = sk.planets.heliocentric_pos(planet, times)
+        jpl = sk.jplephem.barycentric_pos(planet, times) - sk.jplephem.barycentric_pos(
+            sk.solarsystem.Sun, times
+        )
+        # J2000 ecliptic, the frame of JPL's error table
+        eps = np.radians(23.43928)
+        rot = np.array(
+            [[1, 0, 0], [0, np.cos(eps), np.sin(eps)], [0, -np.sin(eps), np.cos(eps)]]
+        )
+        e1, e2 = lp @ rot.T, jpl @ rot.T
+        dlon = np.angle(np.exp(1j * (np.arctan2(e1[:, 1], e1[:, 0]) - np.arctan2(e2[:, 1], e2[:, 0]))))
+        dlat = np.arcsin(e1[:, 2] / np.linalg.norm(e1, axis=1)) - np.arcsin(
+            e2[:, 2] / np.linalg.norm(e2, axis=1)
+        )
+        assert np.sqrt(np.mean(np.degrees(dlon) ** 2)) * 3600 < lon_rms
+        assert np.sqrt(np.mean(np.degrees(dlat) ** 2)) * 3600 < lat_rms
+
+
 class TestSun:
     def test_sunpos_mod(self):
         """
@@ -194,6 +254,49 @@ class TestSun:
         assert hour == 18
         assert minute == 15
         assert sec == pytest.approx(17.76, 1.0e-3)
+
+    def test_sun_rise_set_utc_date(self):
+        # Any time on 2024-10-14 UTC gives that date's events; the old day
+        # selection returned the next day for about half the inputs
+        greenwich = sk.itrfcoord(latitude_deg=51.48, longitude_deg=0.0)
+        honolulu = sk.itrfcoord(latitude_deg=21.31, longitude_deg=-157.86)
+        for coord, rise_utc, set_utc in [
+            (greenwich, (14, 6), (14, 17)),
+            (honolulu, (14, 16), (15, 4)),
+        ]:
+            ref = sk.sun.rise_set(sk.time(2024, 10, 14), coord)
+            for hour in (0, 6, 12, 18, 23):
+                rs = sk.sun.rise_set(sk.time(2024, 10, 14, hour, 59, 59), coord)
+                assert rs == ref
+            assert ref[0].to_gregorian()[2:4] == rise_utc
+            assert ref[1].to_gregorian()[2:4] == set_utc
+
+    def test_sun_rise_set_local_noon(self):
+        # A timezone-aware datetime at local noon selects that local date
+        import datetime
+
+        for lat, lon, utc_offset in [(21.31, -157.86, -10), (35.68, 139.69, 9)]:
+            tz = datetime.timezone(datetime.timedelta(hours=utc_offset))
+            coord = sk.itrfcoord(latitude_deg=lat, longitude_deg=lon)
+            noon = datetime.datetime(2024, 10, 14, 12, tzinfo=tz)
+            rise, set = sk.sun.rise_set(noon, coord)
+            rise, set = rise.to_datetime().astimezone(tz), set.to_datetime().astimezone(tz)
+            assert rise.date() == set.date() == datetime.date(2024, 10, 14)
+            assert 5 <= rise.hour <= 6 and 17 <= set.hour <= 18
+
+    def test_shadowfunc_annular(self):
+        # Beyond the umbra on the anti-Sun axis the eclipse is annular,
+        # 1 - b^2/a^2; this used to return NaN
+        au = sk.consts.au
+        sun = np.array([au, 0.0, 0.0])
+        for d in (1.5e9, 2.0e9):
+            a = np.arcsin(sk.consts.sun_radius / (au + d))
+            b = np.arcsin(sk.consts.earth_radius / d)
+            f = sk.sun.shadowfunc(sun, np.array([-d, 0.0, 0.0]))
+            assert f == pytest.approx(1.0 - (b / a) ** 2, rel=1e-12)
+        # Inside the Earth: never NaN
+        assert sk.sun.shadowfunc(sun, np.array([-6.0e6, 0.0, 0.0])) == 0.0
+        assert sk.sun.shadowfunc(sun, np.array([6.0e6, 0.0, 0.0])) == 1.0
 
     def test_sun_rise_set_error(self):
         coord = sk.itrfcoord(latitude_deg=85.0, longitude_deg=30.0)
