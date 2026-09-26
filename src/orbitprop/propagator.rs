@@ -122,10 +122,11 @@ fn solar_pressure_accel(
     sat_to_sun * (-shadow * cr_a_over_m * pressure / d2.sqrt())
 }
 
-/// GCRF radius (meters) above which atmospheric density is negligible and
-/// drag is skipped. Comparing `pos.norm_squared()` against the square of this
-/// value lets the force model avoid a square root on every evaluation.
-const DRAG_RADIUS_LIMIT_M: f64 = 700.0e3 + consts::EARTH_RADIUS;
+/// GCRF radius (meters) above which drag is skipped: 1,000 km above the
+/// equatorial radius, the upper limit of NRLMSISE-00's validity. Comparing
+/// `pos.norm_squared()` against the square of this value lets the force model
+/// avoid a square root on every evaluation.
+const DRAG_RADIUS_LIMIT_M: f64 = 1000.0e3 + consts::EARTH_RADIUS;
 
 /// Selects what [`force_model`] computes, so the single physics
 /// implementation can serve every integrator.
@@ -291,7 +292,7 @@ fn force_model(
             }
         }
 
-        // Atmospheric drag below ~700 km altitude. The squared-radius gate
+        // Atmospheric drag below ~1,000 km altitude. The squared-radius gate
         // avoids a square root on every evaluation.
         if pos_gcrf.norm_squared() < DRAG_RADIUS_LIMIT_M * DRAG_RADIUS_LIMIT_M {
             let cd_a_over_m = props.cd_a_over_m(&time, &ss);

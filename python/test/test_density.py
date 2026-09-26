@@ -1,6 +1,9 @@
 """NRLMSISE-00 density bindings: ``satkit.nrlmsise00`` and ``satkit.density.nrlmsise``."""
 
+import datetime
 import math
+
+import pytest
 
 import satkit as sk
 
@@ -65,3 +68,38 @@ def test_density_float_form_takes_radians():
     )
     assert math.isclose(rho_float, rho_coord, rel_tol=1e-6)
     assert math.isclose(temp_float, temp_coord, rel_tol=1e-6)
+
+
+def test_density_accepts_datetime_and_rejects_unknown_time():
+    # density.nrlmsise takes the same single-time types as the rest of the
+    # API; anything else is a TypeError, not a silent "no time" (which runs
+    # the model on its defaults, 8x low in the 2024-05-11 storm).
+    t = sk.time(2024, 5, 11, 12, 0, 0)
+    dt = datetime.datetime(2024, 5, 11, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    coord = sk.itrfcoord(latitude_deg=30.0, longitude_deg=40.0, altitude=400e3)
+    ref = sk.density.nrlmsise(coord, t)
+    assert ref != sk.density.nrlmsise(coord)
+    assert sk.density.nrlmsise(coord, None) == sk.density.nrlmsise(coord)
+    assert sk.density.nrlmsise(coord, dt) == ref
+    lat, lon = math.radians(30.0), math.radians(40.0)
+    assert sk.density.nrlmsise(400e3, lat, lon, dt) == sk.density.nrlmsise(400e3, lat, lon, t)
+    for bad in ("2024-05-11", 12345, object()):
+        with pytest.raises(TypeError):
+            sk.density.nrlmsise(coord, bad)
+        with pytest.raises(TypeError):
+            sk.density.nrlmsise(400e3, lat, lon, bad)
+    with pytest.raises(TypeError):
+        sk.density.nrlmsise(400e3, "north", lon, t)
+    with pytest.raises(TypeError):
+        sk.density.nrlmsise(coord, t, t)
+
+
+def test_density_integer_angles_are_not_dropped():
+    # An int latitude / longitude / altitude is a real number, not "absent".
+    t = sk.time(2023, 3, 1, 12, 0, 0)
+    assert sk.density.nrlmsise(400e3, 1, 2, t) == sk.density.nrlmsise(400e3, 1.0, 2.0, t)
+    assert sk.density.nrlmsise(400000, 1.0, 2.0, t) == sk.density.nrlmsise(400e3, 1.0, 2.0, t)
+    assert sk.density.nrlmsise(400e3, 1, 2, t) != sk.density.nrlmsise(400e3, 0.0, 0.0, t)
+    # The time may follow fewer angles; missing angles are 0.
+    assert sk.density.nrlmsise(400e3, t) == sk.density.nrlmsise(400e3, 0.0, 0.0, t)
+    assert sk.density.nrlmsise(400e3, 1.0, t) == sk.density.nrlmsise(400e3, 1.0, 0.0, t)

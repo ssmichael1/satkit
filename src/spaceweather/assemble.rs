@@ -76,7 +76,10 @@ pub fn assemble(
 /// convention verified to reproduce CelesTrak's published columns exactly
 /// on the same daily values. Between
 /// monthly rows the daily series holds the most recent row's value, which is
-/// also how [`get`](super::get) answers for those days.
+/// also how [`get`](super::get) answers for those days; a `-1` (missing)
+/// value holds the last valid one the same way. Days before the first valid
+/// value (the GFZ record has no F10.7 before 1947) are left out of the
+/// means, and a window with no valid day at all gets `-1`.
 pub fn fill_81day_averages(rows: &mut [SpaceWeatherRecord]) {
     let Some(first) = rows.first() else { return };
     let Some(last) = rows.last() else { return };
@@ -84,47 +87,52 @@ pub fn fill_81day_averages(rows: &mut [SpaceWeatherRecord]) {
     let d1 = last.date.utc_day_number();
     let n = (d1 - d0 + 1) as usize;
 
-    // Day-indexed step-held series, then prefix sums for O(1) window means.
-    let mut obs = vec![0.0_f64; n];
-    let mut adj = vec![0.0_f64; n];
+    // Day-indexed step-held series (`None` until the first valid value),
+    // then prefix sums of values and of valid-day counts for O(1) window
+    // means.
+    let valid = |x: f64| (x >= 0.0).then_some(x);
+    let mut obs: Vec<Option<f64>> = vec![None; n];
+    let mut adj: Vec<Option<f64>> = vec![None; n];
     let mut ri = 0;
-    let mut cur_obs = rows[0].f10p7_obs;
-    let mut cur_adj = rows[0].f10p7_adj;
+    let mut cur_obs = valid(rows[0].f10p7_obs);
+    let mut cur_adj = valid(rows[0].f10p7_adj);
     for (i, day) in (d0..=d1).enumerate() {
         while ri + 1 < rows.len() && rows[ri + 1].date.utc_day_number() <= day {
             ri += 1;
-            if rows[ri].f10p7_obs >= 0.0 {
-                cur_obs = rows[ri].f10p7_obs;
-            }
-            if rows[ri].f10p7_adj >= 0.0 {
-                cur_adj = rows[ri].f10p7_adj;
-            }
+            cur_obs = valid(rows[ri].f10p7_obs).or(cur_obs);
+            cur_adj = valid(rows[ri].f10p7_adj).or(cur_adj);
         }
         obs[i] = cur_obs;
         adj[i] = cur_adj;
     }
-    let prefix = |v: &[f64]| -> Vec<f64> {
+    let prefix = |v: &[Option<f64>]| -> Vec<(f64, usize)> {
         let mut p = Vec::with_capacity(v.len() + 1);
-        p.push(0.0);
+        p.push((0.0, 0));
         for x in v {
-            p.push(p.last().unwrap() + x);
+            let (s, c) = *p.last().unwrap();
+            p.push(match x {
+                Some(x) => (s + x, c + 1),
+                None => (s, c),
+            });
         }
         p
     };
     let pobs = prefix(&obs);
     let padj = prefix(&adj);
-    // Mean over day indices [a, b] inclusive, clipped to the table.
-    let mean = |p: &[f64], a: i64, b: i64| -> f64 {
+    // Mean of the valid days among day indices [a, b] inclusive, clipped to
+    // the table; `None` when there are none.
+    let mean = |p: &[(f64, usize)], a: i64, b: i64| -> Option<f64> {
         let a = a.max(0) as usize;
         let b = (b.min(n as i64 - 1)) as usize;
-        (p[b + 1] - p[a]) / (b + 1 - a) as f64
+        let count = p[b + 1].1 - p[a].1;
+        (count > 0).then(|| (p[b + 1].0 - p[a].0) / count as f64)
     };
 
     // Published to 0.1 sfu, like CelesTrak's columns: on the same daily
     // values the unrounded means never differ from the published ones by
     // more than 0.049, so rounding makes the observed interior reproduce
     // the shared standard exactly.
-    let tenth = |x: f64| (x * 10.0).round() / 10.0;
+    let tenth = |x: Option<f64>| x.map_or(-1.0, |x| (x * 10.0).round() / 10.0);
     for r in rows.iter_mut() {
         let i = r.date.utc_day_number() - d0;
         r.f10p7_obs_c81 = tenth(mean(&pobs, i - 40, i + 40));
@@ -239,5 +247,29 @@ mod tests {
         // trailing mean at the monthly row: 31 days of 100 + 1 day of 200 =
         // 103.125, published to 0.1 sfu
         assert!((rows[1].f10p7_obs_l81 - 103.1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_averages_skip_missing_leading_flux() {
+        use SpaceWeatherDataType::Observed;
+        // 100 days with no F10.7 (-1, like the GFZ record before 1947), then
+        // 100 days at 200 sfu. The -1 days must not enter any average.
+        let mut rows: Vec<_> = (0..200)
+            .map(|i| {
+                let mut r = row(1946, 1, 1, if i < 100 { -1.0 } else { 200.0 }, Observed);
+                r.date += Duration::from_days(i as f64);
+                r
+            })
+            .collect();
+        fill_81day_averages(&mut rows);
+        // Windows reaching into the valid days average those days only.
+        for i in [70, 99, 100, 150] {
+            assert_eq!(rows[i].f10p7_obs_c81, 200.0, "day {i}");
+            assert_eq!(rows[i].f10p7_adj_c81, 200.0, "day {i}");
+        }
+        assert_eq!(rows[120].f10p7_obs_l81, 200.0);
+        // A window with no valid day has no average.
+        assert_eq!(rows[50].f10p7_obs_c81, -1.0);
+        assert_eq!(rows[99].f10p7_obs_l81, -1.0);
     }
 }
