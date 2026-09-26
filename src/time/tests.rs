@@ -207,13 +207,13 @@ fn test_strptime() {
             "%B %d %Y %H:%M:%S.%f",
             (2024, 2, 13, 12, 3, 45.123456),
         ),
-        // More than 6 fractional digits must truncate to microseconds, not
-        // panic (regression: the error path parsed the whole fraction into
-        // i32 and overflowed).
+        // More than 6 fractional digits round to the nearest microsecond,
+        // and must not panic (regression: the error path parsed the whole
+        // fraction into i32 and overflowed).
         (
             "2023-01-01T00:00:00.12345678901",
             "%Y-%m-%dT%H:%M:%S.%f",
-            (2023, 1, 1, 0, 0, 0.123456),
+            (2023, 1, 1, 0, 0, 0.123457),
         ),
         (
             "09-Jun-2023 22:27:19",
@@ -756,4 +756,323 @@ fn test_ut1_across_every_leap_second() {
         checked += 1;
     }
     assert!(checked >= 5, "only {checked} leap seconds checked");
+}
+
+/// UTC label → instant, for the parser regression tests below.
+fn utc_label(y: i32, mo: i32, d: i32, h: i32, mi: i32, s: f64) -> Instant {
+    Instant::from_datetime(y, mo, d, h, mi, s).unwrap()
+}
+
+/// `from_rfc3339` never drops a UTC offset or reads the local label as UTC:
+/// once a zone is present it is applied or the parse fails, and leftover
+/// input is an error. `±HH:MM` (RFC 3339), `±HHMM` and `±HH` (ISO 8601) are
+/// all accepted.
+#[test]
+fn test_rfc3339_offset_never_dropped() {
+    for (s, want) in [
+        (
+            "2024-01-01T12:00:00+0100",
+            utc_label(2024, 1, 1, 11, 0, 0.0),
+        ),
+        (
+            "2024-01-01T12:00:00+01:00",
+            utc_label(2024, 1, 1, 11, 0, 0.0),
+        ),
+        ("2024-01-01T12:00:00+01", utc_label(2024, 1, 1, 11, 0, 0.0)),
+        (
+            "2024-01-01T12:00:00.123+0100",
+            utc_label(2024, 1, 1, 11, 0, 0.123),
+        ),
+        ("2024-01-01T12:00:00-05", utc_label(2024, 1, 1, 17, 0, 0.0)),
+        (
+            "2024-01-01T12:00:00-0530",
+            utc_label(2024, 1, 1, 17, 30, 0.0),
+        ),
+        ("2024-01-01t12:00:00z", utc_label(2024, 1, 1, 12, 0, 0.0)),
+        (" 2024-01-01T12:00:00Z\n", utc_label(2024, 1, 1, 12, 0, 0.0)),
+        // No zone: taken as UTC (lenient; RFC 3339 requires one)
+        ("2024-01-01T12:00:00", utc_label(2024, 1, 1, 12, 0, 0.0)),
+        ("2024-01-01T12:00:00.5", utc_label(2024, 1, 1, 12, 0, 0.5)),
+    ] {
+        assert_eq!(Instant::from_rfc3339(s).unwrap(), want, "{s:?}");
+        assert_eq!(Instant::from_string(s).unwrap(), want, "{s:?}");
+    }
+    for s in [
+        "2024-01-04T13:14:12+01:00x",
+        "2024-01-01T12:00:00Z trailing",
+        "2024-01-01T12:00:00ZZ",
+        "2024-01-01T12:00:00+1",
+        "2024-01-01T12:00:00+013",
+        "2024-01-01T12:00:00+01:0",
+        "2024-01-01T12:00:00+24:00",
+        "2024-01-01T12:00:00+01:60",
+        "2024-01-01T12:00:00.Z",
+        "2024-01-01T12:00Z",
+        "2024-1-01T12:00:00Z",
+        // The offset path rejects these leap seconds (UTC has none at the
+        // local label's UTC time); they must not then be read as UTC
+        "2016-12-31T23:59:60+01:00",
+        "2016-12-31T23:59:60.5-05:00",
+    ] {
+        assert!(Instant::from_rfc3339(s).is_err(), "{s:?} accepted");
+    }
+    assert!(matches!(
+        Instant::from_rfc3339("2016-12-31T23:59:60+01:00"),
+        Err(super::InstantError::InvalidLeapSecond)
+    ));
+}
+/// The free-form parser reads a trailing `±HHMM` / `±HH:MM` / `±HH` as a
+/// UTC offset (not as microseconds), keeps `HH:MM` without seconds, and
+/// rejects numbers it cannot place.
+#[test]
+fn test_from_string_offsets_and_short_times() {
+    for (s, want) in [
+        (
+            "2024-01-04 13:14:12 +0100",
+            utc_label(2024, 1, 4, 12, 14, 12.0),
+        ),
+        (
+            "2024-01-04 13:14:12-05:00",
+            utc_label(2024, 1, 4, 18, 14, 12.0),
+        ),
+        (
+            "2024-01-04 13:14:12.25 -05",
+            utc_label(2024, 1, 4, 18, 14, 12.25),
+        ),
+        ("2024-01-04 13:14", utc_label(2024, 1, 4, 13, 14, 0.0)),
+        (
+            "2024-01-04 13:14 +01:00",
+            utc_label(2024, 1, 4, 12, 14, 0.0),
+        ),
+        ("2024-01-04", utc_label(2024, 1, 4, 0, 0, 0.0)),
+        ("March 4 2024 13:14:12", utc_label(2024, 3, 4, 13, 14, 12.0)),
+        (
+            "2023-03-05 11:03:45.453Z",
+            utc_label(2023, 3, 5, 11, 3, 45.453),
+        ),
+        ("2024.01.04 13:14:12", utc_label(2024, 1, 4, 13, 14, 12.0)),
+    ] {
+        assert_eq!(Instant::from_string(s).unwrap(), want, "{s:?}");
+    }
+    for s in [
+        "2024-01-04 13",
+        "2024-01-04 13:14:12 123",
+        "2024-01-04 13:14:12 +1",
+        "2024-01-04 13:14:12 +99:00",
+        "2024-01-04 13:14:12 +0100 7",
+    ] {
+        assert!(Instant::from_string(s).is_err(), "{s:?} accepted");
+    }
+}
+
+/// `%z` takes `+`, `-` or `Z`/`z` first, exactly two digits per field, and
+/// hours 00–23, minutes 00–59.
+#[test]
+fn test_strptime_z_rejects_malformed_offsets() {
+    let fmt = "%Y-%m-%d %H:%M:%S%z";
+    for z in [
+        "5030", "+-1:30", "+99:99", "x0100", "+24:00", "+01:60", "+1", "+1:30", "+01:3", "",
+    ] {
+        let s = format!("2024-01-01 12:00:00{z}");
+        assert!(Instant::strptime(&s, fmt).is_err(), "{s:?} accepted");
+    }
+    for (z, want) in [
+        ("Z", utc_label(2024, 1, 1, 12, 0, 0.0)),
+        ("z", utc_label(2024, 1, 1, 12, 0, 0.0)),
+        ("+0100", utc_label(2024, 1, 1, 11, 0, 0.0)),
+        ("+01:00", utc_label(2024, 1, 1, 11, 0, 0.0)),
+        ("+01", utc_label(2024, 1, 1, 11, 0, 0.0)),
+        ("-2359", utc_label(2024, 1, 2, 11, 59, 0.0)),
+        ("-00:00", utc_label(2024, 1, 1, 12, 0, 0.0)),
+    ] {
+        let s = format!("2024-01-01 12:00:00{z}");
+        assert_eq!(Instant::strptime(&s, fmt).unwrap(), want, "{s:?}");
+    }
+    // Leftover input and non-digits in numeric fields are errors
+    assert!(Instant::strptime("2024-01-01 12:00:00 x", "%Y-%m-%d %H:%M:%S").is_err());
+    assert!(Instant::strptime("2024-+1-01", "%Y-%m-%d").is_err());
+    assert!(Instant::strptime("2024-01-01%", "%Y-%m-%d%%").is_ok());
+}
+/// The weekday comes from the integer UTC day, so it is right to the last
+/// microsecond of the day (the f64 Julian Date resolves only ~40 µs), and
+/// for dates before MJD 0.
+#[test]
+fn test_day_of_week_end_of_day() {
+    let t = Instant::from_datetime(2024, 1, 1, 23, 59, 59.99998).unwrap();
+    assert_eq!(t.day_of_week(), Weekday::Monday);
+    assert_eq!(
+        t.strftime("%a %A %w %Y-%m-%d").unwrap(),
+        "Mon Monday 1 2024-01-01"
+    );
+    for (y, mo, d, wd) in [
+        (2024, 1, 1, Weekday::Monday),
+        (1858, 11, 17, Weekday::Wednesday), // MJD 0
+        (1858, 11, 16, Weekday::Tuesday),
+        (2000, 1, 1, Weekday::Saturday),
+        (1970, 1, 1, Weekday::Thursday),
+        (2016, 12, 31, Weekday::Saturday), // ends in a leap second
+        (1, 1, 1, Weekday::Monday),        // proleptic Gregorian
+        (-4713, 11, 24, Weekday::Monday),  // JD 0
+    ] {
+        let day = Instant::from_date(y, mo, d).unwrap();
+        let next = day.add_utc_days(1.0);
+        for us in [0, 1, 40, 999_999, 86_399_999_960, 86_399_999_999] {
+            let t = day + Duration::from_microseconds(us);
+            assert!(t < next);
+            assert_eq!(t.day_of_week(), wd, "{t}");
+        }
+        assert_ne!(next.day_of_week(), wd, "{next}");
+    }
+    // Inside the leap second it is still Saturday 2016-12-31
+    let leap = Instant::from_datetime(2016, 12, 31, 23, 59, 60.999999).unwrap();
+    assert_eq!(leap.day_of_week(), Weekday::Saturday);
+}
+
+/// `utc_day_number` (and so `day_of_week`) saturates for extreme instants
+/// instead of overflowing (a debug-build panic).
+#[test]
+fn test_utc_day_number_saturates() {
+    for t in [
+        Instant::from_mjd_utc(1.0e20),
+        Instant::from_mjd_utc(-1.0e20),
+        Instant::INVALID,
+        Instant::new(i64::MAX),
+        Instant::new(i64::MIN + 1),
+    ] {
+        let _ = t.utc_day_number();
+        assert_ne!(t.day_of_week(), Weekday::Invalid);
+    }
+    assert_eq!(
+        Instant::from_mjd_utc(1.0e20).utc_day_number(),
+        i64::MAX.div_euclid(86_400_000_000)
+    );
+}
+/// The calendar is exact (Euclidean division) over the whole i64 range,
+/// including before −4712, where truncating division gave negative days.
+#[test]
+fn test_calendar_far_past() {
+    for (y, mo, d) in [
+        (-4716, 1, 1),
+        (-4713, 11, 24),
+        (-4800, 2, 29),
+        (-10_000, 12, 31),
+        (-200_000, 3, 1),
+        (0, 2, 29),
+        (-1, 12, 31),
+        (200_000, 6, 15),
+    ] {
+        let t = Instant::from_date(y, mo, d).unwrap();
+        assert_eq!(t.as_datetime(), (y, mo, d, 0, 0, 0.0), "{y}-{mo}-{d}");
+    }
+    assert_eq!(
+        Instant::from_date(-4716, 1, 1).unwrap().to_string(),
+        "-4716-01-01T00:00:00.000000Z"
+    );
+    // JD 0 is −4713-11-24 12:00 in the proleptic Gregorian calendar
+    let jd0 = Instant::from_datetime(-4713, 11, 24, 12, 0, 0.0).unwrap();
+    assert_eq!(jd0.as_jd_utc(), 0.0);
+    // Consecutive days across the far past stay consecutive
+    let mut t = Instant::from_date(-5000, 1, 1).unwrap();
+    let mut prev = t.as_datetime();
+    for _ in 0..800 {
+        t = t.add_utc_days(1.0);
+        let cur = t.as_datetime();
+        assert!(
+            (cur.0, cur.1, cur.2) > (prev.0, prev.1, prev.2),
+            "{prev:?} -> {cur:?}"
+        );
+        assert!((1..=12).contains(&cur.1) && (1..=31).contains(&cur.2));
+        prev = cur;
+    }
+    // Even INVALID (i64::MIN) has an in-range label
+    let (_, mo, d, ..) = Instant::INVALID.as_datetime();
+    assert!(
+        (1..=12).contains(&mo) && (1..=31).contains(&d),
+        "{}",
+        Instant::INVALID
+    );
+}
+
+/// `as_rfc3339` writes a 4-digit year (ISO 8601 expanded `±YYYY…` outside
+/// 0000–9999) and `from_rfc3339` reads every one back.
+#[test]
+fn test_rfc3339_year_roundtrip() {
+    for (y, s) in [
+        (999, "0999-01-01T00:00:00.000000Z"),
+        (1, "0001-01-01T00:00:00.000000Z"),
+        (0, "0000-01-01T00:00:00.000000Z"),
+        (-1, "-0001-01-01T00:00:00.000000Z"),
+        (-4716, "-4716-01-01T00:00:00.000000Z"),
+        (10_000, "+10000-01-01T00:00:00.000000Z"),
+    ] {
+        let t = Instant::from_date(y, 1, 1).unwrap();
+        assert_eq!(t.as_rfc3339(), s);
+        assert_eq!(t.to_string(), s);
+        assert_eq!(Instant::from_rfc3339(s).unwrap(), t, "{s}");
+        assert_eq!(
+            Instant::strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ").unwrap(),
+            t,
+            "{s}"
+        );
+    }
+    // A sign needs at least 4 digits; unsigned years are exactly 4
+    assert!(Instant::from_rfc3339("-001-01-01T00:00:00Z").is_err());
+    assert!(Instant::from_rfc3339("999-01-01T00:00:00Z").is_err());
+    assert!(Instant::from_rfc3339("10000-01-01T00:00:00Z").is_err());
+}
+
+/// Fractions beyond 6 digits round to the nearest microsecond and carry,
+/// as `from_datetime` does: into the next minute, into a leap second where
+/// one follows, and from the end of a leap second into the next day.
+#[test]
+fn test_parsed_fraction_rounds_and_carries() {
+    for (s, want) in [
+        (
+            "2024-01-01T12:00:00.1234565Z",
+            utc_label(2024, 1, 1, 12, 0, 0.123457),
+        ),
+        (
+            "2024-01-01T12:00:00.12345649Z",
+            utc_label(2024, 1, 1, 12, 0, 0.123456),
+        ),
+        (
+            "2024-01-01T00:00:00.0002489999Z",
+            utc_label(2024, 1, 1, 0, 0, 0.000249),
+        ),
+        (
+            "2024-01-01T12:00:59.9999995Z",
+            utc_label(2024, 1, 1, 12, 1, 0.0),
+        ),
+        (
+            "2024-12-31T23:59:59.9999999Z",
+            utc_label(2025, 1, 1, 0, 0, 0.0),
+        ),
+        (
+            "2016-12-31T23:59:59.9999999Z",
+            utc_label(2016, 12, 31, 23, 59, 60.0),
+        ),
+        (
+            "2016-12-31T23:59:60.9999996Z",
+            utc_label(2017, 1, 1, 0, 0, 0.0),
+        ),
+        // With an offset: into the UTC leap second, and past a minute
+        (
+            "2017-01-01T00:59:59.9999999+01:00",
+            utc_label(2016, 12, 31, 23, 59, 60.0),
+        ),
+        (
+            "2024-01-01T12:59:59.9999999+01:00",
+            utc_label(2024, 1, 1, 12, 0, 0.0),
+        ),
+    ] {
+        assert_eq!(Instant::from_rfc3339(s).unwrap(), want, "{s}");
+        let spaced = s.replacen('T', " ", 1);
+        assert_eq!(Instant::from_string(&spaced).unwrap(), want, "{spaced}");
+    }
+    assert_eq!(
+        Instant::strptime("2016-12-31 23:59:60.99999951", "%Y-%m-%d %H:%M:%S.%f").unwrap(),
+        utc_label(2017, 1, 1, 0, 0, 0.0)
+    );
+    // Rounding never makes a label valid that is not: no leap second here
+    assert!(Instant::from_rfc3339("2024-12-31T23:59:60.0000001Z").is_err());
 }
