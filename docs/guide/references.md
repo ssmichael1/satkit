@@ -382,6 +382,12 @@ code follows where that is useful.
   (Earth–Moon barycentre) terms of the Earth's longitude, latitude and
   distance in the low-precision Sun position.
 
+<a id="chapront1988"></a>
+- **Chapront-Touzé, M., & Chapront, J. (1988).** "ELP 2000-85: a
+  semi-analytical lunar ephemeris adequate for historical times." *Astronomy
+  and Astrophysics*, 190, 342–352. The lunar theory behind NASA's Besselian
+  elements, compared with DE440 in the Eclipse: Path of Totality tutorial.
+
 ## Data sources
 
 <a id="iers-finals2000a"></a>
