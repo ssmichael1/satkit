@@ -133,7 +133,7 @@ nav:
           - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
           - Eclipse: tutorials/Eclipse.ipynb
           - "Eclipse: Path of Totality": tutorials/Eclipse Path of Totality.ipynb
-          - Sunrise & Sunset: tutorials/riseset.ipynb
+          - Sun & Moon Rise/Set: tutorials/riseset.ipynb
           - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
       - Advanced Topics:
           - "Theory: Lambert's Problem": guide/lambert.md

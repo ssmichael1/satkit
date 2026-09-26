@@ -92,6 +92,9 @@ fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_moon::phase, m)?)?;
     m.add_function(wrap_pyfunction!(pylpephem_moon::phase_name, m)?)?;
     m.add_function(wrap_pyfunction!(pylpephem_moon::illumination, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_moon::rise_set, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_moon::phase_times, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_moon::next_phase, m)?)?;
     m.add_class::<pylpephem_moon::MoonPhase>()?;
     Ok(())
 }
