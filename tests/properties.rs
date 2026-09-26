@@ -454,8 +454,10 @@ fn tle_fuzz_strategy_reaches_field_parsers() {
         field * 10 > total,
         "too few field-parse errors: {field}/{total}"
     );
+    // (A mutated satellite number now fails the line 1 / line 2 match before
+    // the checksum is checked, hence 1 in 40 rather than 1 in 20.)
     assert!(
-        checksum * 20 > total,
+        checksum * 40 > total,
         "too few checksum mismatches: {checksum}/{total}"
     );
     assert!(

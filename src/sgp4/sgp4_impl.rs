@@ -19,7 +19,9 @@ use super::{GravConst, OpsMode, SGP4Source};
 /// output satellite position and velocity at given time
 /// in the "TEME" coordinate system
 ///
-/// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
+/// This is [`sgp4_full`] with the WGS72 gravity model and the AFSPC ops mode,
+/// the same defaults as the Python `satkit.sgp4`. WGS72 is the gravity model
+/// the element sets published by Space-Track and CelesTrak are fitted with.
 ///
 /// A detailed description is in Vallado, Crawford, Hujsak & Kelso,
 /// "Revisiting Spacetrack Report #3", AIAA 2006-6753
@@ -31,8 +33,8 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 /// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
 ///   orbital mean-elements message (OMM) or other source implementing the
-///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
-///   in the source object after first call to avoid re-initialization on subsequent calls
+///   SGP4Source trait.  Note: this is a mutable reference; the SGP4
+///   initialization is cached in the source object (see [`sgp4_full`])
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
 ///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`
@@ -47,7 +49,10 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 /// # Note:
 ///
-/// This is a shortcut to run sgp4_full with the WGS84 gravity model and IMPROVED ops mode
+/// The default gravity model was WGS84 (with the IMPROVED ops mode) before
+/// satkit 0.24; call [`sgp4_full`] to choose it explicitly. Time since epoch
+/// is physical elapsed time; see [`sgp4_full`] for how that treats leap
+/// seconds.
 ///
 /// # Example
 ///
@@ -85,7 +90,7 @@ use super::{GravConst, OpsMode, SGP4Source};
 ///
 #[inline]
 pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> super::Result<SGP4State> {
-    sgp4_full(sgp4source, tm, GravConst::WGS84, OpsMode::IMPROVED)
+    sgp4_full(sgp4source, tm, GravConst::WGS72, OpsMode::AFSPC)
 }
 
 ///
@@ -104,8 +109,11 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> super::R
 ///
 /// * `sgp4source` - The source of SGP4 data, typically a TLE but could be a
 ///   orbital mean-elements message (OMM) or other source implementing the
-///   SGP4Source trait.  Note: this is a mutable reference SGP4 states are cached
-///   in the source object after first call to avoid re-initialization on subsequent calls.
+///   SGP4Source trait.  Note: this is a mutable reference; the SGP4
+///   initialization is cached in the source object, together with the
+///   gravity model, ops mode and element values it was built from. It is
+///   reused only while all of those match, so editing the elements or
+///   changing `gravconst` / `opsmode` re-initializes.
 /// * `tm` -  The time at which to compute position and velocity
 ///   Input as a slice for convenience. `satkit::TimeLike` trait is used for time input,
 ///   can be `satkit::Instant` or if chrono feature is enabled, `chrono::DateTime<Utc>`
@@ -121,6 +129,17 @@ pub fn sgp4<T: TimeLike>(sgp4source: &mut impl SGP4Source, tm: &[T]) -> super::R
 /// position (m) and velocity (m/s) 3xN matrices (where N is the number of input
 /// times in the slice) or an Err value containing
 /// a tuple with error code and error string
+///
+/// # Leap seconds
+///
+/// The time since epoch passed to SGP4 is the physical (SI) time elapsed
+/// between the element-set epoch and `tm`. Across a leap second this is one
+/// second more than the difference of the UTC labels, which is what Vallado's
+/// reference code and python-sgp4 use (they count UTC minutes), so satkit
+/// differs from them by 1 s of along-track motion (~7.6 km at LEO) for each
+/// leap second between epoch and `tm`. This is deliberate: the satellite
+/// really flies 86,401 s over a day with a leap second, and SGP4's mean motion
+/// is per SI day.
 ///
 /// # Example
 ///
@@ -164,26 +183,32 @@ pub fn sgp4_full<T: TimeLike>(
     gravconst: GravConst,
     opsmode: OpsMode,
 ) -> super::Result<SGP4State> {
-    if sgp4source.satrec_mut().is_none() {
-        let args = sgp4source.sgp4_init_args()?;
-
-        *sgp4source.satrec_mut() = Some(
-            sgp4init(
-                gravconst,
-                opsmode,
-                args.jdsatepoch - 2433281.5,
-                args.bstar,
-                args.ndot,
-                args.nddot,
-                args.ecco,
-                args.argpo,
-                args.inclo,
-                args.mo,
-                args.no,
-                args.nodeo,
-            )
-            .map_err(|code| super::Error::SatRecInit(code.into()))?,
-        );
+    // Always rebuild the init arguments (cheap): they are the cache key, and
+    // this re-applies the source's validation (e.g. SGP4-XP rejection) after
+    // its elements were edited.
+    let args = sgp4source.sgp4_init_args()?;
+    let key = super::SatRecKey::new(gravconst, opsmode, args);
+    let cached = matches!(sgp4source.satrec_mut(), Some(s) if s.init_key == Some(key));
+    if !cached {
+        // Drop any stale record first, so a failed init leaves no cache
+        *sgp4source.satrec_mut() = None;
+        let mut satrec = sgp4init(
+            gravconst,
+            opsmode,
+            args.epoch_days_1950,
+            args.bstar,
+            args.ndot,
+            args.nddot,
+            args.ecco,
+            args.argpo,
+            args.inclo,
+            args.mo,
+            args.no,
+            args.nodeo,
+        )
+        .map_err(|code| super::Error::SatRecInit(code.into()))?;
+        satrec.init_key = Some(key);
+        *sgp4source.satrec_mut() = Some(satrec);
     }
 
     let epoch = sgp4source.epoch();
@@ -342,5 +367,122 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    const ISS1: &str = "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9994";
+    const ISS2: &str = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.49815350434159";
+
+    fn pos(src: &mut TLE, t: crate::Instant, gc: GravConst, om: OpsMode) -> [f64; 3] {
+        let s = sgp4_full(src, &[t], gc, om).unwrap();
+        [s.pos[(0, 0)], s.pos[(1, 0)], s.pos[(2, 0)]]
+    }
+
+    fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
+        ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn default_is_wgs72_afspc() {
+        let mut a = TLE::load_2line(ISS1, ISS2).unwrap();
+        let t = a.epoch + crate::Duration::from_days(1.0);
+        let s = sgp4(&mut a, &[t]).unwrap();
+        let p = [s.pos[(0, 0)], s.pos[(1, 0)], s.pos[(2, 0)]];
+        let mut b = TLE::load_2line(ISS1, ISS2).unwrap();
+        assert_eq!(p, pos(&mut b, t, GravConst::WGS72, OpsMode::AFSPC));
+        let mut c = TLE::load_2line(ISS1, ISS2).unwrap();
+        assert!(dist(p, pos(&mut c, t, GravConst::WGS84, OpsMode::IMPROVED)) > 1.0);
+    }
+
+    #[test]
+    fn cache_follows_gravconst_and_opsmode() {
+        let mut a = TLE::load_2line(ISS1, ISS2).unwrap();
+        let t = a.epoch + crate::Duration::from_days(3.0);
+        let p72 = pos(&mut a, t, GravConst::WGS72, OpsMode::AFSPC);
+        // A second call on the same TLE with another gravity model must not
+        // reuse the WGS72 initialization (it did: ~120 m at 3 days)
+        let p84 = pos(&mut a, t, GravConst::WGS84, OpsMode::AFSPC);
+        let mut fresh = TLE::load_2line(ISS1, ISS2).unwrap();
+        assert_eq!(p84, pos(&mut fresh, t, GravConst::WGS84, OpsMode::AFSPC));
+        assert!(dist(p84, p72) > 10.0);
+        // and back
+        assert_eq!(p72, pos(&mut a, t, GravConst::WGS72, OpsMode::AFSPC));
+        assert_eq!(
+            pos(&mut a, t, GravConst::WGS72, OpsMode::IMPROVED),
+            pos(
+                &mut TLE::load_2line(ISS1, ISS2).unwrap(),
+                t,
+                GravConst::WGS72,
+                OpsMode::IMPROVED
+            )
+        );
+    }
+
+    #[test]
+    fn cache_follows_element_edits() {
+        let mut a = TLE::load_2line(ISS1, ISS2).unwrap();
+        let t = a.epoch + crate::Duration::from_minutes(90.0);
+        let before = pos(&mut a, t, GravConst::WGS72, OpsMode::AFSPC);
+        // Editing pub fields after a propagation takes effect (it used to
+        // reuse the stale initialization: ~6000 km)
+        a.inclination = 97.0;
+        a.mean_motion = 14.2;
+        let edited = pos(&mut a, t, GravConst::WGS72, OpsMode::AFSPC);
+        let mut b = TLE::load_2line(ISS1, ISS2).unwrap();
+        b.inclination = 97.0;
+        b.mean_motion = 14.2;
+        assert_eq!(edited, pos(&mut b, t, GravConst::WGS72, OpsMode::AFSPC));
+        assert!(dist(edited, before) > 1.0e5);
+
+        // So does the epoch
+        let mut c = TLE::load_2line(ISS1, ISS2).unwrap();
+        let _ = pos(&mut c, t, GravConst::WGS72, OpsMode::AFSPC);
+        c.epoch += crate::Duration::from_days(1.0);
+        let mut d = TLE::load_2line(ISS1, ISS2).unwrap();
+        d.epoch += crate::Duration::from_days(1.0);
+        assert_eq!(
+            pos(&mut c, t, GravConst::WGS72, OpsMode::AFSPC),
+            pos(&mut d, t, GravConst::WGS72, OpsMode::AFSPC)
+        );
+
+        // An element set edited into SGP4-XP is refused even though it was
+        // propagated (and cached) before
+        a.ephem_type = 4;
+        let err = sgp4(&mut a, &[t]).err().expect("type 4 must be refused");
+        assert!(err.to_string().contains("SGP4-XP"), "{err}");
+        a.ephem_type = 0;
+        assert_eq!(edited, pos(&mut a, t, GravConst::WGS72, OpsMode::AFSPC));
+    }
+
+    #[test]
+    fn epoch_passed_at_full_precision() {
+        // Days since 1950 from the integer-microsecond epoch, not from a
+        // full Julian date in one f64 (which quantizes at ~40 µs and gave
+        // 28002.295599940233 here)
+        let l1 = "1 45608U 20031A   26243.29559994 -.00000360  00000+0  00000+0 0  9996";
+        let l2 = "2 45608  63.1638  56.8572 7115327 266.6524  17.3178  2.00576418 45977";
+        let tle = TLE::load_2line(l1, l2).unwrap();
+        let args = tle.sgp4_init_args().unwrap();
+        assert_eq!(args.epoch_days_1950, 28002.29559994);
+    }
+
+    #[test]
+    fn tsince_is_physical_across_leap_second() {
+        // Epoch 2016-12-31 12:00 UTC; 2017-01-01 12:00 UTC is 1440 UTC
+        // minutes later, but 86,401 s later because of the leap second at
+        // 2016-12-31T23:59:60. satkit propagates by the elapsed SI time,
+        // deliberately 1 s (~7.6 km at LEO) ahead of Vallado / python-sgp4,
+        // which use the UTC-minute difference.
+        let l1 = "1 25544U 98067A   16366.50000000  .00016717  00000-0  10270-3 0  9994";
+        let mut tle = TLE::load_2line(l1, ISS2).unwrap();
+        let t = crate::Instant::from_datetime(2017, 1, 1, 12, 0, 0.0).unwrap();
+        assert_eq!((t - tle.epoch).as_seconds(), 86401.0);
+        let p = pos(&mut tle, t, GravConst::WGS72, OpsMode::AFSPC);
+
+        let satrec = tle.satrec_mut().as_mut().unwrap();
+        let (r_phys, _) = sgp4_lowlevel(satrec, 1440.0 + 1.0 / 60.0).unwrap();
+        let (r_utc, _) = sgp4_lowlevel(satrec, 1440.0).unwrap();
+        let km = |r: [f64; 3]| [r[0] * 1.0e3, r[1] * 1.0e3, r[2] * 1.0e3];
+        assert!(dist(p, km([r_phys[0], r_phys[1], r_phys[2]])) < 1.0e-6);
+        assert!(dist(p, km([r_utc[0], r_utc[1], r_utc[2]])) > 7.0e3);
     }
 }

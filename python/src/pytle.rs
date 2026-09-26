@@ -151,6 +151,7 @@ impl PyTLE {
     #[setter(satnum)]
     fn set_satnum(&mut self, value: i32) {
         self.0.sat_num = value;
+        self.0.reset_cache();
     }
 
     /// International designator (e.g. "98067A": launch year, launch number, piece)
@@ -162,6 +163,7 @@ impl PyTLE {
     #[setter(intl_desig)]
     fn set_intl_desig(&mut self, value: String) {
         self.0.intl_desig = value;
+        self.0.reset_cache();
     }
 
     /// Launch year from the international designator (2-digit, as in the TLE)
@@ -173,6 +175,7 @@ impl PyTLE {
     #[setter(desig_year)]
     fn set_desig_year(&mut self, value: i32) {
         self.0.desig_year = value;
+        self.0.reset_cache();
     }
 
     /// Launch number of the year from the international designator
@@ -184,6 +187,7 @@ impl PyTLE {
     #[setter(desig_launch)]
     fn set_desig_launch(&mut self, value: i32) {
         self.0.desig_launch = value;
+        self.0.reset_cache();
     }
 
     /// Piece of the launch from the international designator (e.g. "A")
@@ -195,6 +199,7 @@ impl PyTLE {
     #[setter(desig_piece)]
     fn set_desig_piece(&mut self, value: String) {
         self.0.desig_piece = value;
+        self.0.reset_cache();
     }
 
     /// Ephemeris type (usually 0)
@@ -206,6 +211,7 @@ impl PyTLE {
     #[setter(ephem_type)]
     fn set_ephem_type(&mut self, value: u8) {
         self.0.ephem_type = value;
+        self.0.reset_cache();
     }
 
     /// Element set number
@@ -217,6 +223,7 @@ impl PyTLE {
     #[setter(element_num)]
     fn set_element_num(&mut self, value: i32) {
         self.0.element_num = value;
+        self.0.reset_cache();
     }
 
     /// Revolution number at epoch
@@ -228,6 +235,7 @@ impl PyTLE {
     #[setter(rev_num)]
     fn set_rev_num(&mut self, value: i32) {
         self.0.rev_num = value;
+        self.0.reset_cache();
     }
 
     /// Orbit eccentricity, unitless, in range [0,1]
@@ -239,6 +247,7 @@ impl PyTLE {
     #[setter(eccen)]
     fn set_eccen(&mut self, value: f64) {
         self.0.eccen = value;
+        self.0.reset_cache();
     }
 
     /// Mean anomaly in degrees
@@ -249,6 +258,7 @@ impl PyTLE {
     #[setter(mean_anomaly)]
     fn set_mean_anomaly(&mut self, value: f64) {
         self.0.mean_anomaly = value;
+        self.0.reset_cache();
     }
 
     /// Mean motion in revs / day
@@ -259,6 +269,7 @@ impl PyTLE {
     #[setter(mean_motion)]
     fn set_mean_motion(&mut self, value: f64) {
         self.0.mean_motion = value;
+        self.0.reset_cache();
     }
 
     /// inclination in degrees
@@ -269,6 +280,7 @@ impl PyTLE {
     #[setter(inclination)]
     fn set_inclination(&mut self, value: f64) {
         self.0.inclination = value;
+        self.0.reset_cache();
     }
 
     /// Epoch time of TLE
@@ -282,6 +294,7 @@ impl PyTLE {
     #[setter(epoch)]
     fn set_epoch(&mut self, value: crate::pyinstant::TimeArg) {
         self.0.epoch = value.0;
+        self.0.reset_cache();
     }
 
     /// argument of perigee, degrees
@@ -292,6 +305,7 @@ impl PyTLE {
     #[setter(arg_of_perigee)]
     fn set_arg_of_perigee(&mut self, value: f64) {
         self.0.arg_of_perigee = value;
+        self.0.reset_cache();
     }
 
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
@@ -302,6 +316,7 @@ impl PyTLE {
     #[setter(mean_motion_dot)]
     fn set_mean_motion_dot(&mut self, value: f64) {
         self.0.mean_motion_dot = value;
+        self.0.reset_cache();
     }
 
     /// One sixth of 2nd derivative of mean motion wrt time, in revs/day^3
@@ -312,6 +327,7 @@ impl PyTLE {
     #[setter(mean_motion_dot_dot)]
     fn set_mean_motion_dot_dot(&mut self, value: f64) {
         self.0.mean_motion_dot_dot = value;
+        self.0.reset_cache();
     }
 
     /// Right Ascension of the Ascending Node, degrees
@@ -322,6 +338,7 @@ impl PyTLE {
     #[setter(raan)]
     fn set_raan(&mut self, value: f64) {
         self.0.raan = value;
+        self.0.reset_cache();
     }
 
     /// Name of satellite
@@ -332,6 +349,7 @@ impl PyTLE {
     #[setter(name)]
     fn set_name(&mut self, value: String) {
         self.0.name = value;
+        self.0.reset_cache();
     }
 
     /// Drag term (B*) of the satellite, in units of 1 / Earth radii
@@ -342,6 +360,7 @@ impl PyTLE {
     #[setter(bstar)]
     fn set_bstar(&mut self, value: f64) {
         self.0.bstar = value;
+        self.0.reset_cache();
     }
 
     fn __str__(&self) -> String {
@@ -352,6 +371,8 @@ impl PyTLE {
         self.__str__()
     }
 
+    // Compares the element sets; the cached SGP4 initialization is ignored,
+    // so a TLE equals its pickle or copy after it has been propagated
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
     }
@@ -396,6 +417,10 @@ impl PyTLE {
     }
 
     /// Output as 2 canonical TLE Lines
+    ///
+    /// The element set number (4 columns) and revolution number (5 columns) are
+    /// written modulo 10,000 and 100,000, so a larger value wraps around the way
+    /// catalog TLEs roll the revolution counter over.
     fn to_2line(&self) -> Result<[String; 2]> {
         Ok(self.0.to_2line()?)
     }
@@ -414,14 +439,27 @@ impl PyTLE {
     ///     times (list[satkit.time]): Times corresponding to the states
     ///     epoch (satkit.time): Epoch time for the TLE. Must be within range of times
     ///
+    /// Keyword Args:
+    ///     gravconst (satkit.sgp4_gravconst): gravity model SGP4 uses in the fit.  Default is gravconst.wgs72
+    ///     opsmode (satkit.sgp4_opsmode): SGP4 ops mode used in the fit.  Default is opsmode.afspc
+    ///
     /// Returns:
     ///     tuple[TLE, dict]: Fitted TLE and fitting results in a dictionary
+    ///
+    /// Note:
+    ///     The fitted TLE reproduces the states when propagated with ``satkit.sgp4`` under
+    ///     the same ``gravconst`` and ``opsmode``; the defaults match ``satkit.sgp4``'s.
+    ///     satkit before 0.24 fitted with WGS84. The GCRF states are rotated to TEME with
+    ///     the full IERS 2010 rotation.
     #[staticmethod]
+    #[pyo3(signature=(states, times, epoch, *, gravconst=crate::pysgp4::GravConst::wgs72, opsmode=crate::pysgp4::OpsMode::afspc))]
     fn fit_from_states(
         py: Python,
         states: Vec<[f64; 6]>,
         times: &Bound<'_, PyAny>,
         epoch: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = crate::pysgp4::gravconst_arg)] gravconst: crate::pysgp4::GravConst,
+        #[pyo3(from_py_with = crate::pysgp4::opsmode_arg)] opsmode: crate::pysgp4::OpsMode,
     ) -> Result<(Self, Py<PyAny>)> {
         let times = times.to_time_vec()?;
         let epoch = epoch.to_time_vec()?;
@@ -429,7 +467,9 @@ impl PyTLE {
             bail!("epoch must be a single time value");
         }
         // Release the GIL during the (potentially long-running) fit
-        let (tle, result) = py.detach(|| TLE::fit_from_states(&states, &times, epoch[0]))?;
+        let (gravconst, opsmode) = (gravconst.into(), opsmode.into());
+        let (tle, result) =
+            py.detach(|| TLE::fit_from_states_full(&states, &times, epoch[0], gravconst, opsmode))?;
 
         let stats = {
             let dict = pyo3::types::PyDict::new(py);
@@ -546,6 +586,7 @@ impl PyTLE {
         self.0.name = read_str(&mut cnt)?;
         self.0.intl_desig = read_str(&mut cnt)?;
         self.0.desig_piece = read_str(&mut cnt)?;
+        self.0.reset_cache();
 
         Ok(())
     }

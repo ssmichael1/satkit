@@ -24,6 +24,10 @@ pub enum PySGP4Error {
     semi_latus_rectum = psgp4::SGP4Error::SGP4ErrorSemiLatusRectum as isize,
     unused = psgp4::SGP4Error::SGP4ErrorUnused as isize,
     orbit_decay = psgp4::SGP4Error::SGP4ErrorOrbitDecay as isize,
+    /// Only in the error array of ``sgp4(..., errflag=True)``: the element
+    /// set cannot be propagated by classic SGP4 at all (an SGP4-XP set, or
+    /// OMM metadata naming another theory, time system, frame or center)
+    unsupported = 7,
 }
 
 crate::enum_pickle!(PySGP4Error, "sgp4_error");
@@ -104,32 +108,56 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
     }
 }
 
-/// Pack a single SGP4 propagation result (position/velocity, and optionally the
-/// error codes) into the Python return tuple. Shared by the TLE-object and
-/// OMM-dict branches of [`sgp4`].
+/// The integer error code reported, at every time, for an element set that
+/// failed to initialize: its SGP4 init code, or `unsupported` when the
+/// source refused it (SGP4-XP, foreign OMM metadata).
+fn init_error_code(e: &psgp4::Error) -> i32 {
+    match e {
+        psgp4::Error::SatRecInit(code) => *code as i32,
+        psgp4::Error::Source(_) => PySGP4Error::unsupported as i32,
+    }
+}
+
+/// One element set's positions and velocities (column-major 3×N, as in
+/// `SGP4State`) and integer error codes at `ntimes` times. A set that failed
+/// to initialize is NaN at every time, with its init error code.
+type Flat = (Vec<f64>, Vec<f64>, Vec<i32>);
+
+fn flatten(res: &std::result::Result<psgp4::SGP4State, psgp4::Error>, ntimes: usize) -> Flat {
+    match res {
+        Ok(states) => (
+            states.pos.as_slice().to_vec(),
+            states.vel.as_slice().to_vec(),
+            states.errcode.iter().map(|&x| x as i32).collect(),
+        ),
+        Err(e) => (
+            vec![f64::NAN; 3 * ntimes],
+            vec![f64::NAN; 3 * ntimes],
+            vec![init_error_code(e); ntimes],
+        ),
+    }
+}
+
+/// Pack positions, velocities and (optionally) error codes, flattened as in
+/// [`flatten`] and concatenated over element sets, into the Python return
+/// tuple, with `dims` the shape of the position and velocity arrays and
+/// `edims` that of the error array.
 fn pack_sgp4_result(
     py: Python,
-    states: &psgp4::SGP4State,
-    output_err: bool,
-    time_scalar: bool,
+    flat: Flat,
+    errflag: bool,
+    dims: Vec<usize>,
+    edims: Vec<usize>,
 ) -> Result<Py<PyAny>> {
-    // (3,) for a single time; (N, 3) for a list / array of N times,
-    // including N = 1
-    let dims = if time_scalar {
-        vec![states.pos.as_slice().len()]
-    } else {
-        vec![states.pos.ncols(), states.pos.nrows()]
-    };
-
-    // ndarray is row-major while numeris/numpy are column-major, hence the
-    // dimension switch above.
-    let pos = PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?;
-    let vel = PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims)?;
-    if !output_err {
+    let (pos, vel, codes) = flat;
+    // ndarray is row-major while numeris/numpy are column-major, so the
+    // column-major 3×N blocks read as (N, 3) rows.
+    let pos = PyArray1::from_vec(py, pos).reshape(dims.clone())?;
+    let vel = PyArray1::from_vec(py, vel).reshape(dims.clone())?;
+    if !errflag {
         Ok((pos, vel).into_py_any(py)?)
     } else {
-        let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
-        Ok((pos, vel, PyArray1::from_slice(py, eint.as_slice())).into_py_any(py)?)
+        Ok((pos, vel, PyArray1::from_vec(py, codes).reshape(edims)?).into_py_any(py)?)
     }
 }
 
@@ -153,9 +181,13 @@ fn snapshot_tle(pytle: &Bound<'_, PyTLE>) -> PyResult<satkit::TLE> {
 /// the TLE on first use, so later calls on the same object skip
 /// re-initialising; the elements themselves are unchanged. It is therefore
 /// best-effort: it is skipped when another thread holds a borrow of the TLE
-/// right now (`try_borrow_mut` fails), or when the TLE no longer equals the
-/// `snapshot` taken before SGP4 ran (another thread modified or propagated it
+/// right now (`try_borrow_mut` fails), or when the TLE's elements no longer
+/// equal the `snapshot` taken before SGP4 ran (another thread modified it
 /// meanwhile), so a concurrent edit is never overwritten with stale elements.
+/// TLE equality ignores the cache, and the cache records the elements,
+/// gravity model and ops mode it was built from, so writing back a cache
+/// built for other settings than a concurrent call's is harmless: SGP4 just
+/// re-initializes next time.
 fn write_back_tle(pytle: &Bound<'_, PyTLE>, snapshot: &satkit::TLE, propagated: satkit::TLE) {
     if let Ok(mut cur) = pytle.try_borrow_mut() {
         if cur.0 == *snapshot {
@@ -164,28 +196,40 @@ fn write_back_tle(pytle: &Bound<'_, PyTLE>, snapshot: &satkit::TLE, propagated: 
     }
 }
 
-/// Run SGP4 on one TLE or OMM at `time` with the GIL released; also returns
-/// whether `time` was a scalar. Shared by the TLE-object and OMM-dict
-/// branches of [`sgp4`].
+/// Run SGP4 on one TLE or OMM at `time` with the GIL released and pack the
+/// result. Shared by the TLE-object and OMM-dict branches of [`sgp4`].
+///
+/// An element set that fails to initialize raises, unless `errflag` is set:
+/// then it is NaN at every time, with its init error code.
 fn sgp4_one(
     py: Python,
     src: &mut (impl psgp4::SGP4Source + Send),
     time: &Bound<'_, PyAny>,
     gravconst: psgp4::GravConst,
     opsmode: psgp4::OpsMode,
-) -> Result<(psgp4::SGP4State, bool)> {
+    errflag: bool,
+) -> Result<Py<PyAny>> {
     let crate::pyinstant::TimeInput {
         times: tmvec,
         scalar: time_scalar,
     } = time.to_time_input()?;
-    let states = py.detach(|| psgp4::sgp4_full(src, tmvec.as_slice(), gravconst, opsmode))?;
-    Ok((states, time_scalar))
+    let res = py.detach(|| psgp4::sgp4_full(src, tmvec.as_slice(), gravconst, opsmode));
+    if !errflag {
+        if let Err(e) = res {
+            return Err(e.into());
+        }
+    }
+    // (3,) for a single time; (N, 3) for a list / array of N times,
+    // including N = 1. The error array is (N,) either way.
+    let n = tmvec.len();
+    let dims = if time_scalar { vec![3] } else { vec![n, 3] };
+    pack_sgp4_result(py, flatten(&res, n), errflag, dims, vec![n])
 }
 
-crate::arg_extractor!(gravconst_arg: GravConst, |e| {
+crate::arg_extractor!(pub(crate) gravconst_arg: GravConst, |e| {
     pyo3::exceptions::PyValueError::new_err(format!("Invalid gravconst: {e}"))
 });
-crate::arg_extractor!(opsmode_arg: OpsMode, |e| {
+crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
     pyo3::exceptions::PyValueError::new_err(format!("Invalid opsmode: {e}"))
 });
 
@@ -220,6 +264,29 @@ crate::arg_extractor!(opsmode_arg: OpsMode, |e| {
 ///     If errflag is True, a third element is returned: an int32 numpy array of error
 ///     codes for each TLE and time (0 = success). The codes are the integer values of
 ///     ``sgp4_error``, so ``err == satkit.sgp4_error.success`` compares elementwise.
+///
+/// Note:
+///     Errors: a time at which propagation fails (e.g. the orbit has decayed) gives a
+///     NaN row, with its code in the error array when errflag is True. An element set
+///     that cannot be initialized at all (e.g. decayed or eccentricity out of range at
+///     epoch, or an SGP4-XP set) raises ``RuntimeError`` when errflag is False; for a
+///     list, the message gives its index. When errflag is True it does not raise: its
+///     rows are NaN at every time and every time carries its init code
+///     (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata SGP4 cannot use),
+///     so one bad element set does not fail a list.
+///
+/// Note:
+///     Leap seconds: the time since epoch is the physical (SI) time elapsed. Across a
+///     leap second this is one second more than the difference of the UTC labels that
+///     Vallado's reference code and python-sgp4 use, so satkit differs from them by 1 s
+///     of along-track motion (~7.6 km at LEO) per leap second between epoch and time.
+///     This is deliberate: the satellite really flies 86,401 s over such a day, and the
+///     SGP4 mean motion is per SI day.
+///
+/// Note:
+///     TEME ("True Equator Mean Equinox") has the true equator and the mean equinox of
+///     date, i.e. of each output time (not of the TLE epoch). Rotate to GCRF with
+///     ``frametransform.rotation(frame.TEME, frame.GCRF, time)``.
 ///
 /// Note:
 ///     Units: the canonical Vallado SGP4 implementation (and most other SGP4 libraries)
@@ -277,9 +344,9 @@ pub fn sgp4(
         // meanwhile; SGP4 runs on a clone.
         let snapshot = snapshot_tle(pytle)?;
         let mut rtle = snapshot.clone();
-        let (states, time_scalar) = sgp4_one(py, &mut rtle, time, gravconst, opsmode)?;
+        let out = sgp4_one(py, &mut rtle, time, gravconst, opsmode, errflag);
         write_back_tle(pytle, &snapshot, rtle);
-        pack_sgp4_result(py, &states, errflag, time_scalar)
+        out
     }
     // Handle input as dict
     else if tle.is_instance_of::<PyDict>() {
@@ -287,8 +354,7 @@ pub fn sgp4(
             pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE dictionary: {}", e))
         })?;
         let mut omm = omm_from_pydict(dict)?;
-        let (states, time_scalar) = sgp4_one(py, &mut omm, time, gravconst, opsmode)?;
-        pack_sgp4_result(py, &states, errflag, time_scalar)
+        sgp4_one(py, &mut omm, time, gravconst, opsmode, errflag)
     } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
         let crate::pyinstant::TimeInput {
@@ -329,22 +395,23 @@ pub fn sgp4(
 
         // Honor the gravconst / opsmode kwargs on the list path too (previously
         // this called the default-config `sgp4`, silently ignoring them).
+        // Each element set's result is kept separately (see `sgp4_one` for
+        // how one that fails to initialize is reported).
         let (gc, om) = (gravconst, opsmode);
-        let results: Vec<psgp4::SGP4State> = tle.py().detach(|| {
-            sources
-                .iter_mut()
-                .map(|src| -> Result<psgp4::SGP4State> {
-                    match src {
+        let results: Vec<std::result::Result<psgp4::SGP4State, psgp4::Error>> =
+            tle.py().detach(|| {
+                sources
+                    .iter_mut()
+                    .map(|src| match src {
                         Sgp4Source::Tle(_, rtle, _) => {
-                            Ok(psgp4::sgp4_full(rtle.as_mut(), tmarray.as_slice(), gc, om)?)
+                            psgp4::sgp4_full(rtle.as_mut(), tmarray.as_slice(), gc, om)
                         }
                         Sgp4Source::Omm(omm) => {
-                            Ok(psgp4::sgp4_full(omm.as_mut(), tmarray.as_slice(), gc, om)?)
+                            psgp4::sgp4_full(omm.as_mut(), tmarray.as_slice(), gc, om)
                         }
-                    }
-                })
-                .collect::<Result<Vec<_>>>()
-        })?;
+                    })
+                    .collect()
+            });
 
         // Write the TLEs back to preserve their cached SGP4 init state
         for src in sources {
@@ -353,19 +420,30 @@ pub fn sgp4(
             }
         }
 
+        if !errflag {
+            if let Some((i, e)) = results
+                .iter()
+                .enumerate()
+                .find_map(|(i, r)| r.as_ref().err().map(|e| (i, e)))
+            {
+                bail!("element set {i} of the list: {e}");
+            }
+        }
+
         let ntimes = tmarray.len();
         // The TLEs actually propagated (the Python list could have been
         // changed by another thread while the GIL was released)
         let ntles = results.len();
-        let mut pos: Vec<f64> = Vec::with_capacity(ntles * ntimes * 3);
-        let mut vel: Vec<f64> = Vec::with_capacity(ntles * ntimes * 3);
-        let mut eint: Vec<i32> = Vec::with_capacity(ntles * ntimes);
-        for states in &results {
-            pos.extend_from_slice(states.pos.as_slice());
-            vel.extend_from_slice(states.vel.as_slice());
-            if errflag {
-                eint.extend(states.errcode.iter().map(|&x| x as i32));
-            }
+        let mut flat: Flat = (
+            Vec::with_capacity(ntles * ntimes * 3),
+            Vec::with_capacity(ntles * ntimes * 3),
+            Vec::with_capacity(ntles * ntimes),
+        );
+        for res in &results {
+            let (p, v, e) = flatten(res, ntimes);
+            flat.0.extend(p);
+            flat.1.extend(v);
+            flat.2.extend(e);
         }
 
         // A list of TLEs always keeps its TLE axis, including a one-element
@@ -376,14 +454,7 @@ pub fn sgp4(
         } else {
             (vec![ntles, ntimes, 3], vec![ntles, ntimes])
         };
-
-        let pos = PyArray1::from_vec(py, pos).reshape(dims.clone())?;
-        let vel = PyArray1::from_vec(py, vel).reshape(dims)?;
-        if !errflag {
-            Ok((pos, vel).into_py_any(py)?)
-        } else {
-            Ok((pos, vel, PyArray1::from_vec(py, eint).reshape(edims)?).into_py_any(py)?)
-        }
+        pack_sgp4_result(py, flat, errflag, dims, edims)
     } else {
         bail!("Invalid input type for argument 1");
     }

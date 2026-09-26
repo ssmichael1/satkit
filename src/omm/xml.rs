@@ -243,7 +243,7 @@ impl TryFrom<OmmXmlMessage> for OMM {
             reference_frame_epoch: metadata.reference_frame_epoch,
             time_system: metadata.time_system,
             mean_element_theory: metadata.mean_element_theory,
-            epoch: crate::Instant::from_rfc3339(mean.epoch.trim())?,
+            epoch: super::parse_epoch(&mean.epoch)?,
             mean_motion: parse_req_field("MEAN_MOTION", mean.mean_motion.as_deref())?,
             eccentricity: parse_req_field("ECCENTRICITY", mean.eccentricity.as_deref())?,
             inclination: parse_req_field("INCLINATION", mean.inclination.as_deref())?,
@@ -434,6 +434,10 @@ mod tests {
         // The same message via the auto-detecting entry point
         let auto = OMM::from_text(xml).unwrap();
         assert_eq!(auto[0].mean_motion, msg[0].mean_motion);
+
+        // The CCSDS day-of-year epoch form reads the same
+        let doy = xml.replace("2026-02-14T05:08:48.534432", "2026-045T05:08:48.534432");
+        assert_eq!(OMM::from_xml_string(&doy).unwrap()[0].epoch, msg[0].epoch);
     }
 
     /// Space-Track XML carries a header COMMENT and a userDefinedParameters

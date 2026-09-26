@@ -36,7 +36,9 @@ pub enum Error {
     /// (`download` feature) failed. `line` is the 1-based
     /// input line the record starts on (its name line, if it has one); `sat`
     /// is its satellite number and/or name when they can be read; `hint`
-    /// flags a line longer than 69 characters, whose columns may be shifted.
+    /// flags a line longer than 69 characters, whose columns may be shifted,
+    /// or a data line read as the satellite name (68 characters, or a
+    /// leading space or byte-order mark).
     #[error(
         "TLE record starting at line {line}{}: {error}{}",
         .sat.as_ref().map(|s| format!(" (sat {s})")).unwrap_or_default(),
@@ -48,6 +50,20 @@ pub enum Error {
         hint: Option<String>,
         error: Box<Self>,
     },
+
+    /// Line 1 and line 2 carry different satellite numbers (columns 3-7), so
+    /// they are not one element set.
+    #[error("Satellite number differs between line 1 ({line1}) and line 2 ({line2})")]
+    SatNumMismatch { line1: String, line2: String },
+
+    /// A line 1 that no line 2 follows: it was followed by another line 1, or
+    /// by the end of the input.
+    #[error("Line 1 without a line 2")]
+    MissingLine2,
+
+    /// A line 2 with no line 1 before it.
+    #[error("Line 2 without a line 1")]
+    MissingLine1,
 
     #[error("Year out of range for TLE: {0}")]
     YearOutOfRange(i32),
@@ -93,6 +109,10 @@ pub enum Error {
     /// running classic SGP4 on it would return a plausible but wrong state.
     #[error("Ephemeris type {0} (SGP4-XP) is not supported: satkit implements classic SGP4 only, and an SGP4-XP element set stores agom and a B term where a classic TLE stores nddot and B*")]
     UnsupportedEphemerisType(u8),
+
+    /// Rotating the input states into TEME failed.
+    #[error(transparent)]
+    Frame(#[from] crate::frametransform::Error),
 
     #[error("Normal equations are singular: {0}")]
     SingularNormalEquations(String),
