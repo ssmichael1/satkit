@@ -46,28 +46,6 @@ pub struct Instant {
     pub raw: i64,
 }
 
-/// For conversion between Julian day and
-/// Gregorian calendar date
-/// See: <https://en.wikipedia.org/wiki/Julian_day>
-/// or Expl. Suppl. Astron. Almanac, P. 619
-#[allow(non_upper_case_globals)]
-mod gregorian_coefficients {
-    pub const y: i64 = 4716;
-    pub const j: i64 = 1401;
-    pub const m: i64 = 2;
-    pub const n: i64 = 12;
-    pub const r: i64 = 4;
-    pub const p: i64 = 1461;
-    pub const v: i64 = 3;
-    pub const u: i64 = 5;
-    pub const s: i64 = 153;
-    pub const t: i64 = 2;
-    pub const w: i64 = 2;
-    pub const A: i64 = 184;
-    pub const B: i64 = 274_277;
-    pub const C: i64 = -38;
-}
-
 /// Leap second table, newest first.
 ///
 /// Each entry is `(t, ls)`:
@@ -259,35 +237,63 @@ fn minute_start_us(day: i64, hour: i32, minute: i32) -> Option<i64> {
         .checked_add(hour as i64 * 3_600_000_000 + minute as i64 * 60_000_000)
 }
 
+/// Days from 0000-03-01 to 1970-01-01 in the proleptic Gregorian calendar.
+const DAYS_0000_03_01_TO_1970: i64 = 719_468;
+
+/// Days in a 400-year Gregorian era.
+const DAYS_PER_ERA: i64 = 146_097;
+
 /// Days from 1970-01-01 to the given proleptic Gregorian date (no range
-/// checks; `month` in 1..=12).
+/// checks; `month` in 1..=12). Year 0 is 1 BC (astronomical numbering).
 ///
-/// See: <https://en.wikipedia.org/wiki/Julian_day>
-/// or Expl. Suppl. Astron. Almanac, P. 619
+/// Howard Hinnant's `days_from_civil`
+/// (<https://howardhinnant.github.io/date_algorithms.html>): years are
+/// counted from March, so the leap day ends the year, and split into
+/// 400-year eras with Euclidean division, so it is exact for every `i32`
+/// year (including before −4712, where truncating division is not).
 fn unix_day_from_civil(year: i32, month: i32, day: i32) -> i64 {
-    use gregorian_coefficients as gc;
-    let h = month as i64 - gc::m;
-    let g = year as i64 + gc::y - (gc::n - h) / gc::n;
-    let f = (h - 1 + gc::n) % gc::n;
-    let e = (gc::p * g) / gc::r + day as i64 - 1 - gc::j;
-    let jdn = e + (gc::s * f + gc::t) / gc::u - (3 * ((g + gc::A) / 100)) / 4 - gc::C;
-    // Julian Day Number of 1970-01-01 is 2440588
-    jdn - 2_440_588
+    let (month, day) = (month as i64, day as i64);
+    let y = year as i64 - i64::from(month <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400; // [0, 399]
+    let mp = (month + 9) % 12; // March = 0 … February = 11
+    let doy = (153 * mp + 2) / 5 + day - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * DAYS_PER_ERA + doe - DAYS_0000_03_01_TO_1970
 }
 
 /// Proleptic Gregorian `(year, month, day)` of the given day since
-/// 1970-01-01 (inverse of [`unix_day_from_civil`]).
+/// 1970-01-01 (inverse of [`unix_day_from_civil`]; Hinnant's
+/// `civil_from_days`). Exact over the whole range of [`Instant`]: every
+/// intermediate is far from overflowing `i64`, and the year of any `i64`
+/// microsecond count (±292,278 years) fits in `i32`.
 fn civil_from_unix_day(unix_day: i64) -> (i32, i32, i32) {
-    use gregorian_coefficients as gc;
-    let jd = unix_day + 2_440_588;
-    let f = jd + gc::j + (((4 * jd + gc::B) / 146097) * 3) / 4 + gc::C;
-    let e = gc::r * f + gc::v;
-    let g = (e % gc::p) / gc::r;
-    let h = gc::u * g + gc::w;
-    let day = ((h % gc::s) / gc::u) + 1;
-    let month = ((h / gc::s + gc::m) % gc::n) + 1;
-    let year = (e / gc::p) - gc::y + (gc::n + gc::m - month) / gc::n;
+    let z = unix_day + DAYS_0000_03_01_TO_1970;
+    let era = z.div_euclid(DAYS_PER_ERA);
+    let doe = z - era * DAYS_PER_ERA; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365; // [0, 399]
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11], March = 0
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
     (year as i32, month as i32, day as i32)
+}
+
+/// A year formatted as in ISO 8601 / RFC 3339: exactly four digits for
+/// 0000–9999, otherwise the ISO 8601 expanded form with an explicit sign and
+/// at least four digits (`-0001`, `-4716`, `+10000`). `%Y` in
+/// [`Instant::strptime`] reads both forms back.
+pub(super) struct IsoYear(pub i32);
+
+impl std::fmt::Display for IsoYear {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if (0..=9999).contains(&self.0) {
+            write!(f, "{:04}", self.0)
+        } else {
+            write!(f, "{:+05}", self.0)
+        }
+    }
 }
 
 /// Range checks shared by the calendar constructors: month 1–12, day
@@ -434,12 +440,15 @@ impl Instant {
     /// Return the day of the week
     /// 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     ///
-    /// See: <https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week>
+    /// The weekday of the UTC calendar date (the one [`Self::as_datetime`]
+    /// returns), computed from the integer UTC day number, so it is exact
+    /// to the last microsecond of the day, inside a leap second, and for
+    /// any date. A floating-point Julian Date, which resolves only ~40 µs,
+    /// would roll over to the next weekday up to ~40 µs early.
     pub fn day_of_week(&self) -> super::Weekday {
-        let jd = self.as_jd_utc();
-        // `(jd + 1.5) mod 7` is always in [0, 7), so the floor is 0..=6 and the
-        // conversion never fails; fall back to `Invalid` defensively.
-        super::Weekday::try_from(((jd + 1.5) % 7.0).floor() as i32)
+        // MJD 0 (1858-11-17) was a Wednesday; `rem_euclid` keeps dates
+        // before it in 0..=6 too, so the conversion never fails
+        super::Weekday::try_from((self.utc_day_number() + 3).rem_euclid(7) as i32)
             .unwrap_or(super::Weekday::Invalid)
     }
 
@@ -462,8 +471,13 @@ impl Instant {
 
     /// UTC calendar day as an integer Modified Julian Day number.
     /// Same leap-second convention as `as_mjd_utc`, but integer arithmetic only.
+    /// Saturating, like `as_mjd_utc`: extreme instants (e.g. a saturated
+    /// `from_mjd_utc(1e20)`) peg at the ends of the range instead of
+    /// overflowing (a panic in debug builds, a wrap in release).
     pub(crate) fn utc_day_number(&self) -> i64 {
-        (self.raw - Self::MJD_EPOCH.raw - microleapseconds(self.raw)).div_euclid(86_400_000_000)
+        self.tai_mjd_us()
+            .saturating_sub(microleapseconds(self.raw))
+            .div_euclid(US_PER_DAY)
     }
 
     /// Create Instant from Modified Julian Date (UTC)
@@ -727,7 +741,11 @@ impl Instant {
     ///
     /// `second` is an exact number of microseconds converted to `f64`, so
     /// passing it back to [`Self::from_datetime`] (which rounds to the
-    /// nearest microsecond) reproduces the instant exactly.
+    /// nearest microsecond) reproduces the instant exactly from 1972 on and
+    /// before 1961. From 1961 to 1971 it is within 1 µs: a pre-1972 UTC
+    /// second is slightly longer than an SI second, so about one TAI
+    /// microsecond in (3–8)×10⁷ has no UTC label of its own and reads back
+    /// as its neighbour (see the `utc_pre1972` module).
     pub fn as_datetime(&self) -> (i32, i32, i32, i32, i32, f64) {
         let (year, month, day, hour, minute, second_us) = self.as_datetime_us();
         (year, month, day, hour, minute, second_us as f64 * 1.0e-6)
@@ -737,7 +755,7 @@ impl Instant {
     /// `(year, month, day, hour, minute, microsecond of the minute)`.
     ///
     /// The microsecond of the minute is in `[0, 60_000_000)`, except inside
-    /// an inserted interval (`23:59:60.x`; up to `61_422_818` for the
+    /// an inserted interval (`23:59:60.x`; up to `61_422_817` for the
     /// 1.422818 s pre-1972 step at 1961-01-01).
     pub(crate) fn as_datetime_us(&self) -> (i32, i32, i32, i32, i32, i64) {
         // UTC-basis (leap-second-free) microseconds since the Unix epoch.
@@ -1070,12 +1088,8 @@ impl Instant {
 
 impl std::fmt::Display for Instant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (year, month, day, hour, minute, second) = self.as_datetime();
-        write!(
-            f,
-            "{:04}-{:02}-{:02}T{:02}:{:02}:{:09.6}Z",
-            year, month, day, hour, minute, second
-        )
+        // Same as `as_rfc3339`
+        f.write_str(&self.as_rfc3339())
     }
 }
 
