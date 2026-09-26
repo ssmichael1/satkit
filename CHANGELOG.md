@@ -41,6 +41,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - Differential tests against ERFA (`pyerfa`, a new test dependency) for the time scales, Earth rotation, precession–nutation, TEME and geodetic conversion; three defects pinned as strict xfails ([#219](https://github.com/ssmichael1/satkit/pull/219))
 - Property tests (proptest, and hypothesis as a new test dependency) for leap seconds, time scales, pickles and frame transforms, plus a weekly 100k-case run; seven defects pinned as ignored / xfail tests ([#221](https://github.com/ssmichael1/satkit/pull/221))
 - Rust time tests slimmed: tuple `as_datetime` asserts, three tests subsumed by exact properties removed, shared EOP instant strategies, `add_utc_days` checked exactly (~215 fewer lines, no coverage lost) ([#232](https://github.com/ssmichael1/satkit/pull/232))
+- Python tests de-duplicated with no coverage lost: fixed-example tests already covered by stricter property or row-by-row tests removed, shared TLE lines and helpers in `python/test/shared.py`, one seeded label generator in the ERFA tests, and dead xfail scaffolding dropped (~350 fewer lines) ([#233](https://github.com/ssmichael1/satkit/pull/233))
 
 ## 0.23.1 - 2026-09-24
 

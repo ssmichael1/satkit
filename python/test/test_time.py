@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-import math as m
 import pickle
 from datetime import datetime, timezone
 
@@ -46,38 +45,6 @@ class TestDateTime:
         g2 = sk.frametransform.gmst(tm2)
         assert g1 == pytest.approx(g2)
 
-
-class TestPickle:
-
-    def test_time_pickle(self):
-        """
-        Test pickling and unpickling of time objects
-        """
-        t1 = sk.time(2021, 9, 30, 12, 45, 13.345)
-        p = pickle.dumps(t1)
-        t2 = pickle.loads(p)
-        assert t1 == t2
-
-    def test_quaternion_pickle(self):
-        """
-        Test pickling and unpickling of quaternion objects
-        """
-        q1 = sk.quaternion.rotz(m.pi / 4)
-        p = pickle.dumps(q1)
-        q2 = pickle.loads(p)
-        assert q1.x == pytest.approx(q2.x)
-        assert q1.y == pytest.approx(q2.y)
-        assert q1.z == pytest.approx(q2.z)
-        assert q1
-
-    def test_duration_pickle(self):
-        """
-        Test pickling and unpickling of duration objects
-        """
-        d1 = sk.duration.from_days(10)
-        p = pickle.dumps(d1)
-        d2 = pickle.loads(p)
-        assert d1 == d2
 
 class TestTime:
 
@@ -219,41 +186,6 @@ class TestTime:
         t = sk.time(2025, 8, 16)
         assert t.day_of_year == 228
 
-    def test_from_gps_week_and_second(self):
-        """
-        Test GPS week and second-of-week conversion
-        """
-        # GPS epoch: January 6, 1980 00:00:00 UTC
-        gps_epoch = sk.time.from_gps_week_and_second(0, 0)
-        g = gps_epoch.to_gregorian()
-        assert g[0] == 1980
-        assert g[1] == 1
-        assert g[2] == 6
-        assert g[3] == 0
-
-        # Week 1 should be 7 days later: January 13, 1980
-        week1 = sk.time.from_gps_week_and_second(1, 0)
-        g = week1.to_gregorian()
-        assert g[0] == 1980
-        assert g[1] == 1
-        assert g[2] == 13
-
-        # Difference between week 0 and week 1 should be exactly 7 days
-        diff = week1 - gps_epoch
-        assert diff.seconds == pytest.approx(604800.0, abs=1e-3)
-
-        # Day 2 of week 0: January 7, 1980
-        day2 = sk.time.from_gps_week_and_second(0, 86400)
-        g = day2.to_gregorian()
-        assert g[0] == 1980
-        assert g[1] == 1
-        assert g[2] == 7
-
-        # Consistency: week * 604800 + sow seconds from GPS epoch
-        t = sk.time.from_gps_week_and_second(2, 43200)
-        expected_sec = 2 * 604800 + 43200
-        assert (t - gps_epoch).seconds == pytest.approx(expected_sec, abs=1e-3)
-
 
 class TestEpochConstants:
     def test_epoch_constants(self):
@@ -326,8 +258,6 @@ class TestLeapSeconds:
         assert (sk.time.UNIX_EPOCH - tai_1970).microseconds == 8_000_082
 
     def test_pre1972_pickle_keeps_the_instant(self):
-        import pickle
-
         t = sk.time(1965, 6, 1, 12, 30, 15.25)
         t2 = pickle.loads(pickle.dumps(t))
         assert t2 == t and str(t2) == "1965-06-01T12:30:15.250000Z"

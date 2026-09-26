@@ -62,8 +62,7 @@ NETWORK = "needs the network"
 
 # Docstring examples that must not run or are known to fail, keyed by the
 # qualified name of the documented object; applies to both the stub and the
-# runtime docstring. Kinds: "skip" (not run), "xfail" (a code bug; must fail),
-# "elsewhere" (a doc bug fixed on another open branch; may pass or fail).
+# runtime docstring. Kinds: "skip" (not run), "xfail" (a code bug; must fail).
 DOCSTRING_MARKS: dict[str, tuple[str, str]] = {
     "satkit.TLE.from_url": ("skip", NETWORK + " (CelesTrak)"),
     "satkit.TLE.from_omm": ("skip", NETWORK + " (CelesTrak via omm_from_url)"),
@@ -120,7 +119,7 @@ class Block:
     filename: str  # for tracebacks
     lineno: int  # 1-based line of the first code line in `filename`
     code: str
-    kind: str = "run"  # run | skip | xfail | elsewhere | setup
+    kind: str = "run"  # run | skip | xfail | setup
     reason: str = ""
 
 
@@ -415,8 +414,6 @@ def _param(b: Block):
         marks.append(pytest.mark.skip(reason=b.reason))
     elif b.kind == "xfail":
         marks.append(pytest.mark.xfail(reason=b.reason, strict=True))
-    elif b.kind == "elsewhere":
-        marks.append(pytest.mark.xfail(reason=b.reason, strict=False))
     return pytest.param(b, marks=marks, id=b.label)
 
 

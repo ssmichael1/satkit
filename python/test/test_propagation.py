@@ -496,50 +496,6 @@ class TestSatState:
             with pytest.raises(Exception):
                 sat.set_pos_uncertainty(np.array([1.0, 1.0, 1.0]), frame=bad)
 
-    def test_satstate_pickle_with_cov(self):
-        """Test that satstate pickle round-trips covariance and maneuvers together"""
-        t0 = sk.time(2024, 1, 1, 12, 0, 0)
-        r = 6378e3 + 500e3
-        v = np.sqrt(sk.consts.mu_earth / r)
-
-        sat = sk.satstate(time=t0, pos=np.array([r, 0, 0]), vel=np.array([0, v, 0]))
-        sat.set_pos_uncertainty(np.array([100.0, 200.0, 50.0]), frame=sk.frame.LVLH)
-        sat.add_maneuver(t0 + sk.duration.from_hours(1), [0, 5, 0], frame=sk.frame.RTN)
-
-        restored = pickle.loads(pickle.dumps(sat))
-
-        assert restored.time == sat.time
-        assert np.allclose(restored.pos, sat.pos)
-        assert np.allclose(restored.vel, sat.vel)
-        assert restored.cov is not None
-        assert np.allclose(restored.cov, sat.cov)
-        assert restored.num_maneuvers == 1
-
-
-class TestPropSettingsPickle:
-    def test_propsettings_pickle(self):
-        """propsettings pickle must round-trip all fields, including enums."""
-        ps = sk.propsettings(
-            abs_error=1e-10,
-            rel_error=1e-9,
-            gravity_degree=8,
-            gravity_order=6,
-            use_spaceweather=False,
-            use_sun_gravity=False,
-            enable_interp=False,
-        )
-        restored = pickle.loads(pickle.dumps(ps))
-        assert restored.abs_error == pytest.approx(1e-10)
-        assert restored.rel_error == pytest.approx(1e-9)
-        assert restored.gravity_degree == 8
-        assert restored.gravity_order == 6
-        assert restored.use_spaceweather is False
-        assert restored.use_sun_gravity is False
-        assert restored.initial_step_secs is None
-        ps.initial_step_secs = 45.0
-        assert pickle.loads(pickle.dumps(ps)).initial_step_secs == pytest.approx(45.0)
-        assert restored.enable_interp is False
-
 
 class TestThrustPickle:
     def test_thrust_pickle_all_frames(self):
@@ -569,13 +525,6 @@ class TestThrustPickle:
 
 
 class TestSatPropertiesPickle:
-    def test_satproperties_pickle_basic(self):
-        """Test that satproperties pickle round-trips drag/SRP coefficients"""
-        props = sk.satproperties(craoverm=0.02, cdaoverm=0.01)
-        restored = pickle.loads(pickle.dumps(props))
-        assert restored.craoverm == pytest.approx(0.02)
-        assert restored.cdaoverm == pytest.approx(0.01)
-
     def test_satproperties_pickle_with_thrust(self):
         """Test that satproperties pickle round-trips thrust arcs"""
         t0 = sk.time(2024, 1, 1)

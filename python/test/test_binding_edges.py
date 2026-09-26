@@ -16,18 +16,10 @@ import numpy as np
 import pytest
 
 import satkit as sk
+from shared import ISS_2024, same
 
 T0 = sk.time(2024, 1, 1, 12, 0, 0)
 DT0 = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
-ISS = [
-    "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9005",
-    "2 25544  51.6400 208.9163 0006317  69.9862  25.2906 15.49560000 00001",
-]
-
-
-def _q(q):
-    return (q.w, q.x, q.y, q.z)
-
 
 # ─────────────────────────── satproperties ───────────────────────────
 
@@ -85,12 +77,6 @@ def _scalar_and_list_cases():
 CASES = _scalar_and_list_cases()
 
 
-def _same(a, b):
-    if isinstance(a, sk.quaternion):
-        return _q(a) == _q(b)
-    return np.array_equal(np.asarray(a), np.asarray(b))
-
-
 class TestOneElementTimeLists:
     @pytest.mark.parametrize("fn", [f for _, f in CASES], ids=[n for n, _ in CASES])
     def test_list_in_list_out(self, fn):
@@ -100,7 +86,7 @@ class TestOneElementTimeLists:
         for arg in ([T0], np.array([T0]), [DT0]):
             out = fn(arg)
             assert isinstance(out, (list, np.ndarray)) and len(out) == 1, (arg, out)
-            assert _same(out[0], scalar)
+            assert same(out[0], scalar)
         two = fn([T0, T0])
         assert len(two) == 2
 
@@ -109,7 +95,7 @@ class TestOneElementTimeLists:
         assert sk.sun.pos_gcrf([T0]).shape == (1, 3)
 
     def test_sgp4(self):
-        tle = sk.TLE.from_lines(ISS)
+        tle = sk.TLE.from_lines(ISS_2024)
         p, v = sk.sgp4(tle, T0)
         assert p.shape == v.shape == (3,)
         p1, v1 = sk.sgp4(tle, [T0])
