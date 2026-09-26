@@ -193,10 +193,14 @@ fn datafiles_exist() -> bool {
     satkit::utils::data_found()
 }
 
-/// Git hash of compiled library
+/// Return git hash of this satkit build
+///
+/// ``"unknown"`` unless satkit was built from a git checkout of satkit
+/// itself (not from an sdist or a copy vendored inside another repository).
+/// Use ``satkit.__version__`` for the release version.
 ///
 /// Returns:
-///     str: Git hash of compiled library
+///     str: Git hash of this satkit build, or ``"unknown"``
 #[pyfunction]
 fn githash() -> String {
     String::from(satkit::utils::githash())
@@ -222,15 +226,6 @@ fn dylib_path() -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("Failed to get dylib path"))
 }
 
-/// Build date of compiled
-///
-/// Returns:
-///     str: Build date of compiled library
-#[pyfunction]
-fn build_date() -> PyResult<String> {
-    Ok(String::from(satkit::utils::build_date()))
-}
-
 /// Astro utility functions
 #[pymodule]
 pub fn utils(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -245,6 +240,5 @@ pub fn utils(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(update_datafiles, m)?)?;
     m.add_function(wrap_pyfunction!(githash, m)?)?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
-    m.add_function(wrap_pyfunction!(build_date, m)?)?;
     Ok(())
 }
