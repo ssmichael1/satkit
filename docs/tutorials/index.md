@@ -12,6 +12,7 @@ Core concepts that underpin the rest of the library.
 | [Quaternions](Quaternions.ipynb) | Constructing, composing, and interpolating 3D rotations |
 | [Coordinate Frames](Coordinate%20Frames.ipynb) | GCRF, ITRF, TEME, and the rotations between them |
 | [Geodetic Coordinates](Geodetic%20Coordinates.ipynb) | The `itrfcoord` data type: geodetic, Cartesian, and local tangent planes |
+| [Theory: Keplerian Elements](../guide/kepler.md) | The classical element set, its conventions and limits, and conversions |
 | [Keplerian Elements](Keplerian%20Elements.ipynb) | Orbital elements, Cartesian conversion, and two-body vs numerical propagation |
 
 ## SGP4 Propagation

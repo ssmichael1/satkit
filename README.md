@@ -174,7 +174,7 @@ The library is validated against:
 - **ICGEM** reference values for gravity field calculations
 - **GPS SP3** precise ephemerides for multi-day numerical propagation
 
-Over 450 Rust tests (on Linux, macOS and Windows) and over 850 Python test cases run on every commit.
+The Rust and Python test suites run in CI on Linux, macOS and Windows.
 
 ### GMAT comparison
 

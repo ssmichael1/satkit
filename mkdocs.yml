@@ -104,6 +104,7 @@ nav:
       - Downloads and Refresh: getting-started/datadownloads.md
       - Data Coverage: getting-started/datacoverage.md
       - Troubleshooting & FAQ: getting-started/troubleshooting.md
+      - Migrating to 0.24: migration.md
   - Learn:
       - tutorials/index.md
       - Foundations:

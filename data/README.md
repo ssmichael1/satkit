@@ -56,7 +56,7 @@ All manifest URLs must be `https://` (validated on load).
 `tier` is informational: `core` = the small files frames and gravity need
 (embedded in the binary since Phase 2, below — which is why their manifest
 entries are `default: false`: pinned and fetchable by name, but pointless to
-download while evaluation is capped at degree 40; ITU_GRACE16 is the one
+download while evaluation is capped at degree 70; ITU_GRACE16 is the one
 `core` file that is not embedded and is fetched on demand), `ephemeris` =
 the large JPL files. The only `default: true` entry — the only file
 `update_datafiles()` downloads besides the daily refreshes — is the DE440
@@ -240,7 +240,7 @@ A file found in a *search directory* always wins over the embedded copy, so a
 full-degree gravity file or an updated IERS table can be dropped in without a
 rebuild; the embedded copy is the silent fallback (a file that exists but
 cannot be parsed still produces a warning, silenced with `SATKIT_QUIET=1`).
-Because the evaluator uses at most degree 40, the truncated files give
+Because the evaluator uses at most degree 70, the truncated files give
 bit-identical results to the full ones.
 
 ### Search vs. write
