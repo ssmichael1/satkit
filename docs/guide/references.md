@@ -53,6 +53,11 @@ code follows where that is useful.
   <https://doi.org/10.1007/978-1-4939-0802-8>. Used for: quaternion and
   local-vertical/local-horizontal frame conventions.
 
+<a id="meeus1989"></a>
+- **Meeus, J. (1989).** *Elements of Solar Eclipses 1951–2200*. Willmann-Bell,
+  Richmond, VA. Used for: Besselian elements and the central line, limits and
+  local circumstances computed from them (Eclipse: Path of Totality tutorial).
+
 ## Standards and conventions
 
 <a id="petit2010"></a>
@@ -106,7 +111,8 @@ code follows where that is useful.
 <a id="urban2013"></a>
 - **Urban, S. E., & Seidelmann, P. K. (eds.) (2013).** *Explanatory
   Supplement to the Astronomical Almanac*, 3rd ed. University Science Books.
-  Used for: the definition of pre-1972 UTC.
+  Used for: the definition of pre-1972 UTC; Besselian elements of solar
+  eclipses (Eclipse: Path of Totality tutorial).
 
 ## Papers and reports
 
@@ -242,6 +248,15 @@ code follows where that is useful.
 - **Marquardt, D. W. (1963).** "An Algorithm for Least-Squares Estimation of
   Nonlinear Parameters." *Journal of the Society for Industrial and Applied
   Mathematics*, 11(2), 431–441. <https://doi.org/10.1137/0111030>.
+
+<a id="espenak"></a>
+- **Espenak, F.** NASA Eclipse Web Site, Goddard Space Flight Center.
+  <https://eclipse.gsfc.nasa.gov/>. Besselian elements and path tables of
+  solar eclipses, e.g. for 2024 April 8:
+  <https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2024Apr08Tbeselm.html>
+  and <https://eclipse.gsfc.nasa.gov/SEpath/SEpath2001/SE2024Apr08Tpath.html>.
+  Used for: the lunar radii (k1, k2) and solar semi-diameter, and as the
+  validation reference of the Eclipse: Path of Totality tutorial.
 
 <a id="nelder1965"></a>
 - **Nelder, J. A., & Mead, R. (1965).** "A Simplex Method for Function

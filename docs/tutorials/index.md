@@ -48,7 +48,8 @@ Common tasks built on top of the core library.
 |----------|-------------|
 | [Plots](Plots.ipynb) | Plotting satellite orbits and ground tracks |
 | [Satellite Ground Contacts](Satellite%20Ground%20Contacts.ipynb) | Computing satellite ground contacts and visibility |
-| [Eclipse](Eclipse.ipynb) | Computing satellite eclipse times |
+| [Eclipse](Eclipse.ipynb) | Centerline and local circumstances of the 2024 total solar eclipse |
+| [Eclipse: Path of Totality](Eclipse%20Path%20of%20Totality.ipynb) | Besselian elements, path of totality and its limits, checked against NASA |
 | [Sunrise & Sunset](riseset.ipynb) | Computing sunrise, sunset, and twilight times |
 | [Optical Observations](Optical%20Observations%20of%20Satellites.ipynb) | Simulating optical satellite observations |
 

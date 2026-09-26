@@ -8,6 +8,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - `sun.rise_set` iterates Algorithm 30 at the event and adds nutation and solar parallax: within 3 s of Skyfield up to 65° latitude (was up to 35 s); clearer polar day/night error; horizon (sea level), dip and UT1 documented ([#268](https://github.com/ssmichael1/satkit/pull/268))
 
+### Docs
+
+- New tutorial "Eclipse: Path of Totality": Besselian elements from the JPL ephemerides, the path of totality with its limits and duration contours for 2024 and 2045, checked against NASA's elements and path table (within 1 km); the Eclipse tutorial's map gets the same Lambert conformal style ([#269](https://github.com/ssmichael1/satkit/pull/269))
+
 ## 0.24.0 - 2026-09-26
 
 Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for what to check and change.
