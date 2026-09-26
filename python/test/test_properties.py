@@ -325,7 +325,7 @@ class TestPickle:
 
     @staticmethod
     def _tle(sat_num, incl, raan, ecc, argp, ma, mm, bstar, epoch, name, rev):
-        tle = sk.TLE.from_lines(ISS_2024)
+        tle = sk.TLE.from_lines(ISS_2024)[0]
         tle.satnum = sat_num
         tle.inclination = incl
         tle.raan = raan
@@ -662,7 +662,7 @@ class TestVectorised:
     @_settings(max(_MAX // 4, 10))
     @given(tl=recent_time_lists)
     def test_sgp4(self, tl):
-        tle = sk.TLE.from_lines(ISS_2024)
+        tle = sk.TLE.from_lines(ISS_2024)[0]
         pos, vel = sk.sgp4(tle, tl)
         assert pos.shape == vel.shape == (len(tl), 3)
         for i, t in enumerate(tl):

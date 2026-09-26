@@ -186,34 +186,68 @@ impl TLE {
     /// let tles = TLE::from_lines(&lines).unwrap();
     ///
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Stops at the first record that fails to parse, returning
+    /// [`Error::Record`], which names the input line the record starts on
+    /// and its satellite. To keep the good records of a file with a few bad
+    /// ones, iterate [`Self::records`] instead.
     pub fn from_lines(lines: &[String]) -> Result<Vec<Self>> {
-        let mut tles: Vec<Self> = Vec::<Self>::new();
-        let mut line0: &str = "";
-        let mut line1: &str = "";
+        Self::records(lines).collect()
+    }
 
-        for line in lines {
-            // Trim trailing whitespace so CRLF-terminated files (trailing `\r`)
-            // don't push line lengths off 69. A TLE data line is >= 69 chars
-            // (extra trailing content is ignored by `load_2line`) with a
-            // `"1 "` / `"2 "` prefix; `starts_with` is byte-safe on non-ASCII.
-            let line = line.trim_end();
-            if line.len() >= 69 && line.starts_with("1 ") {
-                line1 = line;
-            } else if line.len() >= 69 && line.starts_with("2 ") {
-                let line2 = line;
-                if line0.is_empty() {
-                    tles.push(Self::load_2line(line1, line2)?);
-                } else {
-                    tles.push(Self::load_3line(line0, line1, line2)?);
-                }
-                line0 = "";
-                line1 = "";
-            } else if !line.is_empty() {
-                line0 = line;
-            }
+    /// Parse TLE records one at a time from a sequence of lines.
+    ///
+    /// Lines are grouped as in [`Self::from_lines`] (which is this iterator,
+    /// collected): trailing whitespace is trimmed, a line of at least 69
+    /// characters starting with `"1 "` or `"2 "` is a data line, and any
+    /// other non-empty line before a line 2 is the satellite name. Each item
+    /// is one record; a record that fails to parse yields an
+    /// [`Error::Record`] naming the input line it starts on and its
+    /// satellite, and the iterator carries on with the next record.
+    ///
+    /// Checksums are not verified unless requested with
+    /// [`Records::check_checksums`].
+    ///
+    /// # Example
+    ///
+    /// Keep the good records of a file and skip the malformed ones:
+    ///
+    /// ```
+    /// use satkit::TLE;
+    ///
+    /// let lines = [
+    ///     "0 SHINSEI (MS-F2)",
+    ///     "1  5485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992",
+    ///     "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065",
+    ///     "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995",
+    ///     "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085",
+    /// ];
+    ///
+    /// // Skip records that fail to parse
+    /// let tles: Vec<TLE> = TLE::records(lines).filter_map(Result::ok).collect();
+    /// assert_eq!(tles.len(), 2);
+    ///
+    /// // Or report them, with the input line each one starts on
+    /// for rec in TLE::records(lines).check_checksums(true) {
+    ///     if let Err(e) = rec {
+    ///         eprintln!("skipping: {e}");
+    ///     }
+    /// }
+    /// ```
+    pub fn records<I>(lines: I) -> Records<I::IntoIter>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
+        Records {
+            lines: lines.into_iter(),
+            line_no: 0,
+            name: None,
+            line1: None,
+            check_checksums: false,
         }
-
-        Ok(tles)
     }
 
     /// Load TLE(s) from a URL
@@ -231,7 +265,9 @@ impl TLE {
     ///
     /// # Returns
     ///
-    /// A [`Vec`] of [`TLE`] objects parsed from the response
+    /// A [`Vec`] of [`TLE`] objects parsed from the response. As with
+    /// [`Self::from_lines`], a record that fails to parse is an
+    /// [`Error::Record`] naming the line of the response it starts on.
     ///
     /// # Example
     ///
@@ -259,8 +295,7 @@ impl TLE {
                 },
             )?;
         let body = resp.body_mut().read_to_string()?;
-        let lines: Vec<String> = body.lines().map(|l| l.trim_end().to_string()).collect();
-        Self::from_lines(&lines)
+        Self::records(body.lines()).collect()
     }
 
     ///
@@ -812,6 +847,177 @@ impl TLE {
     }
 }
 
+/// Iterator over the TLE records in a sequence of lines, returned by
+/// [`TLE::records`]. Each item is one parsed record, or an
+/// [`Error::Record`] locating the one that failed.
+#[derive(Debug, Clone)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
+pub struct Records<I> {
+    lines: I,
+    /// 1-based number of the last line read
+    line_no: usize,
+    /// Pending name line and its line number
+    name: Option<(usize, String)>,
+    /// Pending line 1 and its line number
+    line1: Option<(usize, String)>,
+    check_checksums: bool,
+}
+
+impl<I> Records<I> {
+    /// Also verify the checksum digit (column 69) of both data lines of
+    /// every record; a mismatch yields [`Error::ChecksumMismatch`] (wrapped
+    /// in [`Error::Record`]) naming the expected and actual digit. Off by
+    /// default: element sets that were hand-edited or generated with a
+    /// stale checksum are common and otherwise parse fine.
+    ///
+    /// ```
+    /// use satkit::TLE;
+    ///
+    /// let lines = [
+    ///     "1 25544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992",
+    ///     "2 25544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487617",
+    /// ];
+    /// // The checksum of line 2 is 5, not 7
+    /// assert!(TLE::records(lines).all(|r| r.is_ok()));
+    /// let err = TLE::records(lines).check_checksums(true).next().unwrap().unwrap_err();
+    /// assert!(err.to_string().contains("checksum"));
+    /// ```
+    pub fn check_checksums(mut self, on: bool) -> Self {
+        self.check_checksums = on;
+        self
+    }
+}
+
+impl<I> Iterator for Records<I>
+where
+    I: Iterator,
+    I::Item: AsRef<str>,
+{
+    type Item = Result<TLE>;
+
+    fn next(&mut self) -> Option<Result<TLE>> {
+        for raw in self.lines.by_ref() {
+            self.line_no += 1;
+            // Trim trailing whitespace so CRLF-terminated files (trailing
+            // `\r`) don't push line lengths off 69. A TLE data line is >= 69
+            // chars (extra trailing content is ignored by `load_2line`) with
+            // a `"1 "` / `"2 "` prefix; `starts_with` is byte-safe on
+            // non-ASCII.
+            let line = raw.as_ref().trim_end();
+            if line.len() >= 69 && line.starts_with("1 ") {
+                self.line1 = Some((self.line_no, line.to_string()));
+            } else if line.len() >= 69 && line.starts_with("2 ") {
+                let name = self.name.take();
+                let line1 = self.line1.take();
+                return Some(parse_record(
+                    name,
+                    line1,
+                    (self.line_no, line),
+                    self.check_checksums,
+                ));
+            } else if !line.is_empty() {
+                self.name = Some((self.line_no, line.to_string()));
+            }
+        }
+        None
+    }
+}
+
+/// Parse one grouped record, wrapping any error in [`Error::Record`].
+fn parse_record(
+    name: Option<(usize, String)>,
+    line1: Option<(usize, String)>,
+    line2: (usize, &str),
+    check_checksums: bool,
+) -> Result<TLE> {
+    let l1 = line1.as_ref().map_or("", |(_, s)| s.as_str());
+    let l2 = line2.1;
+    let parsed = match &name {
+        None => TLE::load_2line(l1, l2),
+        Some((_, n)) => TLE::load_3line(n, l1, l2),
+    }
+    .and_then(|tle| {
+        if check_checksums {
+            verify_checksum(l1, 1)?;
+            verify_checksum(l2, 2)?;
+        }
+        Ok(tle)
+    });
+
+    parsed.map_err(|error| {
+        let data_lines = [line1.as_ref().map(|(n, s)| (*n, s.as_str())), Some(line2)];
+        let start = name
+            .as_ref()
+            .map(|(n, _)| *n)
+            .into_iter()
+            .chain(data_lines.iter().flatten().map(|(n, _)| *n))
+            .min()
+            .unwrap_or(line2.0);
+
+        // Satellite number (as written, possibly alpha5) and name, if readable
+        let num = [l1, l2]
+            .iter()
+            .filter_map(|l| l.get(2..7))
+            .map(str::trim)
+            .find(|s| !s.is_empty());
+        let nm = name
+            .as_ref()
+            .map(|(_, n)| n.strip_prefix("0 ").unwrap_or(n).trim());
+        let sat = match (num, nm) {
+            (Some(n), Some(m)) => Some(format!("{n} \"{m}\"")),
+            (Some(n), None) => Some(n.to_string()),
+            (None, Some(m)) => Some(format!("\"{m}\"")),
+            (None, None) => None,
+        };
+
+        // A line longer than 69 characters is accepted (the extra is
+        // ignored), but when a field then fails to parse, the likely cause
+        // is a field one column too wide shifting the rest of the line.
+        let hint = if matches!(
+            error,
+            Error::ParseField { .. } | Error::ChecksumMismatch { .. }
+        ) {
+            let long: Vec<String> = data_lines
+                .iter()
+                .flatten()
+                .filter(|(_, s)| s.len() > 69)
+                .map(|(n, s)| format!("line {n} is {} characters", s.len()))
+                .collect();
+            (!long.is_empty()).then(|| {
+                format!(
+                    "{}; a TLE line is 69, so its columns may be shifted",
+                    long.join(", ")
+                )
+            })
+        } else {
+            None
+        };
+
+        Error::Record {
+            line: start,
+            sat,
+            hint,
+            error: Box::new(error),
+        }
+    })
+}
+
+/// Check the mod-10 checksum in column 69 of a (parsed, so ASCII and at
+/// least 69 characters long) TLE data line.
+fn verify_checksum(line: &str, which: u8) -> Result<()> {
+    let expected = tle_formatter::tle_checksum(line);
+    let found = line.as_bytes()[68] as char;
+    if found.to_digit(10) == Some(u32::from(expected)) {
+        Ok(())
+    } else {
+        Err(Error::ChecksumMismatch {
+            line: which,
+            expected,
+            found,
+        })
+    }
+}
+
 impl Default for TLE {
     fn default() -> Self {
         Self::new()
@@ -1131,6 +1337,176 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    // Two good records around one whose line 2 has an 8-digit eccentricity,
+    // shifting every later column right by one (70 characters).
+    fn lines_with_shifted_record() -> Vec<String> {
+        [
+            "0 SHINSEI (MS-F2)",
+            "1  5485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992",
+            "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065",
+            "",
+            "0 SHIFTED",
+            "1 58556U 23193D   25003.79555039  .00279397  31144-4  86159-3 0  9996",
+            "2 58556  97.2472  26.1173 00042351 271.4738  88.6051 15.91743157 60937",
+            "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995",
+            "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+    }
+
+    #[test]
+    fn test_records_locates_shifted_line() {
+        let lines = lines_with_shifted_record();
+        let recs: Vec<_> = TLE::records(&lines).collect();
+        assert_eq!(recs.len(), 3);
+        assert_eq!(recs[0].as_ref().unwrap().sat_num, 5485);
+        assert_eq!(recs[2].as_ref().unwrap().sat_num, 45727);
+
+        let err = recs[1].as_ref().unwrap_err();
+        match err {
+            Error::Record {
+                line,
+                sat,
+                hint,
+                error,
+            } => {
+                assert_eq!(*line, 5);
+                assert_eq!(sat.as_deref(), Some("58556 \"SHIFTED\""));
+                assert_eq!(
+                    hint.as_deref(),
+                    Some(
+                        "line 7 is 70 characters; a TLE line is 69, so its columns may be shifted"
+                    )
+                );
+                assert!(matches!(
+                    **error,
+                    Error::ParseField {
+                        field: "mean anomaly",
+                        ..
+                    }
+                ));
+            }
+            other => panic!("expected Error::Record, got {other:?}"),
+        }
+        let msg = err.to_string();
+        assert!(msg.starts_with("TLE record starting at line 5 (sat 58556 \"SHIFTED\"): Could not parse mean anomaly"), "{msg}");
+        assert!(msg.contains("line 7 is 70 characters"), "{msg}");
+
+        // Skipping bad records keeps the good ones
+        let good: Vec<TLE> = TLE::records(&lines).filter_map(|r| r.ok()).collect();
+        assert_eq!(good.len(), 2);
+        assert_eq!(good[0].name, "SHINSEI (MS-F2)");
+        assert_eq!(good[1].name, "none");
+    }
+
+    #[test]
+    fn test_from_lines_strict() {
+        // from_lines stops at the first bad record, with the same located error
+        let err = TLE::from_lines(&lines_with_shifted_record()).unwrap_err();
+        assert!(matches!(err, Error::Record { line: 5, .. }), "{err:?}");
+        assert!(err.to_string().contains("line 7 is 70 characters"));
+    }
+
+    #[test]
+    fn test_record_error_without_name_or_long_line() {
+        // A line 2 with no line 1: located on the line 2 itself, no hint
+        let lines = [
+            "",
+            "",
+            "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085",
+        ];
+        let err = TLE::records(lines).next().unwrap().unwrap_err();
+        match &err {
+            Error::Record {
+                line, sat, hint, ..
+            } => {
+                assert_eq!(*line, 3);
+                assert_eq!(sat.as_deref(), Some("45727"));
+                assert!(hint.is_none());
+            }
+            other => panic!("expected Error::Record, got {other:?}"),
+        }
+        assert!(err.to_string().contains("Line 1 too short"), "{err}");
+    }
+
+    #[test]
+    fn test_checksum_validation() {
+        // Valid checksums (including the 77-character INTELSAT line 2)
+        let good = [
+            "0 INTELSAT 902",
+            "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
+            "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.",
+            "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995",
+            "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085",
+        ];
+        assert_eq!(
+            TLE::records(good)
+                .check_checksums(true)
+                .collect::<super::Result<Vec<_>>>()
+                .unwrap()
+                .len(),
+            2
+        );
+
+        // Known-bad checksums: line 1 sums to 0 (not 2), line 2 to 3 (not 5)
+        let bad = [
+            "0 ISS (ZARYA)",
+            "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992",
+            "2 B5544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615",
+        ];
+        // Off by default, and with `false`
+        assert!(TLE::records(bad).next().unwrap().is_ok());
+        assert!(TLE::records(bad)
+            .check_checksums(false)
+            .next()
+            .unwrap()
+            .is_ok());
+        assert!(TLE::from_lines(&bad.map(String::from)).is_ok());
+
+        let err = TLE::records(bad)
+            .check_checksums(true)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        match &err {
+            Error::Record { line, error, .. } => {
+                assert_eq!(*line, 1);
+                assert!(matches!(
+                    **error,
+                    Error::ChecksumMismatch {
+                        line: 1,
+                        expected: 0,
+                        found: '2'
+                    }
+                ));
+            }
+            other => panic!("expected Error::Record, got {other:?}"),
+        }
+        let msg = err.to_string();
+        assert!(msg.contains("B5544 \"ISS (ZARYA)\""), "{msg}");
+        assert!(
+            msg.contains("column 69 is '2', but the line's checksum is 0"),
+            "{msg}"
+        );
+
+        // Line 1 fixed: the line 2 mismatch is reported
+        let mut bad2 = bad;
+        bad2[1] = "1 B5544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9990";
+        let err = TLE::records(bad2)
+            .check_checksums(true)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert!(
+            err.to_string().contains(
+                "Line 2 checksum mismatch: column 69 is '5', but the line's checksum is 3"
+            ),
+            "{err}"
+        );
     }
 
     #[test]

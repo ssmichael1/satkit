@@ -95,7 +95,7 @@ class TestOneElementTimeLists:
         assert sk.sun.pos_gcrf([T0]).shape == (1, 3)
 
     def test_sgp4(self):
-        tle = sk.TLE.from_lines(ISS_2024)
+        tle = sk.TLE.from_lines(ISS_2024)[0]
         p, v = sk.sgp4(tle, T0)
         assert p.shape == v.shape == (3,)
         p1, v1 = sk.sgp4(tle, [T0])

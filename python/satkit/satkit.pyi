@@ -35,37 +35,53 @@ TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
 
-    Structure representing a Two-Line Element Set (TLE), a satellite
-    ephemeris format from the 1970s that is still somehow in use
-    today and can be used to calculate satellite position and
-    velocity in the "TEME" frame (not-quite GCRF) using the
-    "Simplified General Perturbations-4" (SGP-4) mathematical
-    model that is also included in this package.
+    A Two-Line Element Set is a satellite ephemeris format from the 1970s
+    that is still in wide use. Its mean elements are propagated with the
+    "Simplified General Perturbations-4" (SGP4) model (``satkit.sgp4``),
+    which gives position and velocity in the "TEME" frame (not-quite GCRF).
 
     For details, see: <https://en.wikipedia.org/wiki/Two-line_element_set>
 
-    The TLE format is still commonly used to represent satellite
-    ephemerides, and satellite ephemerides catalogs in this format
-    are publicly available at <https://www.space-track.org> (registration
-    required) and <https://celestrak.org> (no registration needed).
+    Catalogs in this format are publicly available at
+    <https://www.space-track.org> (registration required) and
+    <https://celestrak.org> (no registration needed).
 
-    TLEs sometimes have a "line 0" that includes the name of the satellite
+    TLEs sometimes have a "line 0" that includes the name of the satellite.
+
+    Load TLEs with ``TLE.from_lines``, ``TLE.from_file`` or ``TLE.from_url``;
+    each returns a ``list[TLE]``, even for a single element set.
+
+    Example:
+        ```python
+        tle = satkit.TLE.from_lines([
+            "0 ISS (ZARYA)",
+            "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
+            "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+        ])[0]
+        print(tle.name)
+        # ISS (ZARYA)
+        ```
     """
 
     @staticmethod
-    def from_file(filename: str) -> list[TLE] | TLE:
-        """Load TLEs from input text file
-        Return a list of TLES loaded from input text file.
-
-        If the file contains lines only represent a single TLE, the TLE will
-        be output, rather than a list with a single TLE element
+    def from_file(filename: str, *, check_checksum: bool = False) -> list[TLE]:
+        """Load TLEs from a text file
 
         Args:
-              filename (str): name of text file lines for TLE(s) to load
+            filename (str): name of the text file holding the TLE lines
+                (2-line or 3-line format, any number of element sets)
+            check_checksum (bool, optional): also verify the checksum digit
+                (column 69) of every data line. Default False.
 
         Returns:
-            a list of TLE objects or a single TLE if lines for
-                only 1 are passed in
+            list[TLE]: one TLE per element set in the file, even if there is
+            only one
+
+        Raises:
+            ValueError: if the file holds no TLEs
+            RuntimeError: if a record fails to parse (or, with
+                ``check_checksum``, has a wrong checksum); the message gives
+                the line the record starts on and its satellite
 
         Example:
             ```python
@@ -76,32 +92,25 @@ class TLE:
         """
         ...
 
-    @overload
     @staticmethod
-    def from_lines(lines: tuple[str, str]) -> TLE: ...
-    @overload
-    @staticmethod
-    def from_lines(lines: tuple[str, str, str]) -> TLE: ...
-    @overload
-    @staticmethod
-    def from_lines(lines: Sequence[str]) -> list[TLE] | TLE:
-        """Return a list of TLES loaded from input list of lines
-
-            If the file contains lines only represent a single TLE, the TLE will
-            be output, rather than a list with a single TLE element.
-
-            A fixed-length tuple of 2 or 3 strings (the 2-line or name+2-line
-            form) is statically known to return a single ``TLE``; any other
-            sequence may return either ``TLE`` or ``list[TLE]`` depending on
-            how many TLEs the input contains.
+    def from_lines(lines: Sequence[str], *, check_checksum: bool = False) -> list[TLE]:
+        """Load TLEs from a list of lines
 
         Args:
-            lines (Sequence[str]): sequence of strings with lines for TLE(s) to load
-                (any sequence type is accepted, e.g. list or tuple)
+            lines (Sequence[str]): the TLE lines (2-line or 3-line format,
+                any number of element sets; any sequence type is accepted,
+                e.g. list or tuple)
+            check_checksum (bool, optional): also verify the checksum digit
+                (column 69) of every data line. Default False.
 
         Returns:
-            a list of TLE objects or a single TLE if lines for
-                only 1 are passed in
+            list[TLE]: one TLE per element set, even if there is only one
+
+        Raises:
+            ValueError: if the lines hold no TLEs
+            RuntimeError: if a record fails to parse (or, with
+                ``check_checksum``, has a wrong checksum); the message gives
+                the line the record starts on and its satellite
 
         Example:
             ```python
@@ -110,7 +119,7 @@ class TLE:
                 "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
                 "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
             )
-            tle = satkit.TLE.from_lines(lines)  # statically typed as TLE
+            tle = satkit.TLE.from_lines(lines)[0]
             print(tle.name)
             # ISS (ZARYA)
             ```
@@ -118,21 +127,24 @@ class TLE:
         ...
 
     @staticmethod
-    def from_url(url: str) -> list[TLE] | TLE:
-        """Load TLE(s) from a URL
+    def from_url(url: str) -> list[TLE]:
+        """Load TLEs from a URL
 
         Fetches the content at the given URL and parses it as TLE lines.
-        Works with any URL that returns plain-text TLE data.
+        Works with any URL that returns plain-text TLE data (2-line or 3-line format).
 
         Args:
             url (str): URL to fetch TLE data from
 
         Returns:
-            Single TLE or list of TLEs parsed from the response
+            list[TLE]: one TLE per element set in the response, even if there
+            is only one
 
         Raises:
+            ValueError: if the response holds no TLEs
             RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-                ``satkit.utils.set_offline(True)``); no connection is opened
+                ``satkit.utils.set_offline(True)``; no connection is opened),
+                the request fails, or a record fails to parse
 
         Example:
             ```python
@@ -531,7 +543,7 @@ def sgp4(
             "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981",
         ]
 
-        tle = satkit.TLE.from_lines(lines)  # a single TLE, not a list
+        tle = satkit.TLE.from_lines(lines)[0]  # from_lines always returns a list
         tm = tle.epoch
 
         # Compute TEME position & velocity at epoch
