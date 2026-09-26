@@ -434,13 +434,13 @@ impl PyTLE {
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        // Self-describing format v1 (see `__setstate__` for the layout):
+        // Self-describing format v2 (see `__setstate__` for the layout):
         // a leading version byte, a 101-byte fixed field block, then three
         // length-prefixed UTF-8 strings (name, intl_desig, desig_piece).
         let mut raw: Vec<u8> = Vec::with_capacity(
             108 + self.0.name.len() + self.0.intl_desig.len() + self.0.desig_piece.len(),
         );
-        raw.push(1u8); // version
+        raw.push(2u8); // version
         raw.extend_from_slice(&self.0.sat_num.to_le_bytes());
         raw.extend_from_slice(&self.0.desig_year.to_le_bytes());
         raw.extend_from_slice(&self.0.desig_launch.to_le_bytes());
@@ -453,13 +453,8 @@ impl PyTLE {
         raw.extend_from_slice(&self.0.arg_of_perigee.to_le_bytes());
         raw.extend_from_slice(&self.0.mean_anomaly.to_le_bytes());
         raw.extend_from_slice(&self.0.mean_motion.to_le_bytes());
-        raw.extend_from_slice(
-            &self
-                .0
-                .epoch
-                .as_mjd_with_scale(satkit::TimeScale::TAI)
-                .to_le_bytes(),
-        );
+        // v2: the epoch as the Instant's raw i64 microseconds (exact)
+        raw.extend_from_slice(&self.0.epoch.raw.to_le_bytes());
         raw.extend_from_slice(&self.0.rev_num.to_le_bytes());
         raw.extend_from_slice(&self.0.element_num.to_le_bytes());
         raw.push(self.0.ephem_type);
@@ -482,11 +477,17 @@ impl PyTLE {
         if raw.len() < 102 {
             return Err(bail());
         }
-        if raw[0] != 1 {
+        // Versions differ only in the epoch field at bytes 85..93:
+        //   v1 (satkit 0.20 – 0.23): TAI MJD as f64, which lost a
+        //       microsecond ~1% of the time; still read, rounded to the
+        //       nearest microsecond
+        //   v2: the Instant's raw i64 microseconds, exact
+        let version = raw[0];
+        if version != 1 && version != 2 {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "unsupported TLE pickle version {} (expected 1); pickles from \
+                "unsupported TLE pickle version {} (expected 1 or 2); pickles from \
                  satkit <= 0.19 must be regenerated",
-                raw[0]
+                version
             )));
         }
         let rd_i32 = |at: usize| i32::from_le_bytes(raw[at..at + 4].try_into().unwrap());
@@ -504,7 +505,10 @@ impl PyTLE {
         self.0.arg_of_perigee = rd_f64(61);
         self.0.mean_anomaly = rd_f64(69);
         self.0.mean_motion = rd_f64(77);
-        self.0.epoch = satkit::Instant::from_mjd_with_scale(rd_f64(85), satkit::TimeScale::TAI);
+        self.0.epoch = match version {
+            1 => satkit::Instant::from_mjd_with_scale(rd_f64(85), satkit::TimeScale::TAI),
+            _ => satkit::Instant::new(i64::from_le_bytes(raw[85..93].try_into().unwrap())),
+        };
         self.0.rev_num = rd_i32(93);
         self.0.element_num = rd_i32(97);
         self.0.ephem_type = raw[101];

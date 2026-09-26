@@ -208,13 +208,14 @@ impl Precomputed {
                     let q_cirs2gcrs = slow[si].0.slerp(&slow[si + 1].0, frac);
                     let q_itrf2tirs = slow[si].1.slerp(&slow[si + 1].1, frac);
                     let q = (q_cirs2gcrs * qtirs2cirs(&t) * q_itrf2tirs).conjugate();
-                    let (psun, vsun) = jplephem::geocentric_state(SolarSystem::Sun, &t)?;
-                    let pmoon = jplephem::geocentric_pos(SolarSystem::Moon, &t)?;
+                    // One TDB conversion and three Chebyshev lookups
+                    // for the Sun state and Moon position together
+                    let sm = jplephem::geocentric_sun_state_moon_pos(&t)?;
                     data.push(InterpSample {
                         qgcrf2itrf: q,
-                        sun_pos_gcrf: psun,
-                        moon_pos_gcrf: pmoon,
-                        sun_vel_gcrf: vsun,
+                        sun_pos_gcrf: sm.sun_pos,
+                        moon_pos_gcrf: sm.moon_pos,
+                        sun_vel_gcrf: sm.sun_vel,
                     });
                 }
                 Arc::from(data)
@@ -237,17 +238,14 @@ impl Precomputed {
             return v;
         }
         let q = qgcrf2itrf(&t);
-        match (
-            jplephem::geocentric_state(SolarSystem::Sun, &t),
-            jplephem::geocentric_pos(SolarSystem::Moon, &t),
-        ) {
-            (Ok((psun, vsun)), Ok(pmoon)) => InterpSample {
+        match jplephem::geocentric_sun_state_moon_pos(&t) {
+            Ok(sm) => InterpSample {
                 qgcrf2itrf: q,
-                sun_pos_gcrf: psun,
-                moon_pos_gcrf: pmoon,
-                sun_vel_gcrf: vsun,
+                sun_pos_gcrf: sm.sun_pos,
+                moon_pos_gcrf: sm.moon_pos,
+                sun_vel_gcrf: sm.sun_vel,
             },
-            _ => {
+            Err(_) => {
                 let edge = if t < self.begin {
                     self.data.first()
                 } else {

@@ -30,7 +30,7 @@ use std::string::FromUtf8Error;
 use std::sync::OnceLock;
 
 use crate::mathtypes::*;
-use crate::{Instant, TimeLike, TimeScale};
+use crate::{Instant, TimeLike};
 
 use thiserror::Error;
 
@@ -152,6 +152,33 @@ struct JPLEphem {
     ipt: [[usize; 3]; 15],
     consts: std::collections::HashMap<String, f64>,
     cheby: DMatrix<f64>,
+}
+
+/// The ephemeris argument of one query: TDB as an integer MJD and a
+/// fraction of that day ([`Instant::mjd_tdb_split`]).
+///
+/// Computed once per public query and shared by every body lookup it makes
+/// (a geocentric Sun position reads the Sun, the Earth–Moon barycenter and
+/// the Moon), and once per sample by the propagator's Sun/Moon table. Kept
+/// split so the Chebyshev argument carries full f64 precision; a single-f64
+/// Julian Date resolves only ~40 µs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EphemTime {
+    day: i64,
+    frac: f64,
+}
+
+impl EphemTime {
+    #[inline]
+    pub(crate) fn new(tm: &Instant) -> Self {
+        let (day, frac) = tm.mjd_tdb_split();
+        Self { day, frac }
+    }
+
+    /// TDB Julian Date (for error messages)
+    fn jd(&self) -> f64 {
+        self.day as f64 + self.frac + 2_400_000.5
+    }
 }
 
 /// Pre-computed parameters for Chebyshev polynomial evaluation
@@ -312,21 +339,33 @@ impl JPLEphem {
     }
 
     /// Compute Chebyshev setup parameters for a given body and time
-    fn cheby_setup(&self, body: SolarSystem, tm: &Instant) -> Result<ChebySetup> {
+    #[inline]
+    fn cheby_setup(&self, body: SolarSystem, et: &EphemTime) -> Result<ChebySetup> {
         // The DE ephemerides are tabulated in the JPL ephemeris time scale,
         // T_eph, which is TDB for practical purposes. satkit's TDB is the
         // one-term series (within ~50 µs of the full series), versus up to
         // 1.7 ms if the ephemeris were evaluated at TT.
-        let tdb = tm.as_jd_with_scale(TimeScale::TDB);
-        if self.jd_start > tdb || self.jd_stop < tdb {
-            return Err(Error::InvalidJulianDate(tdb));
+        //
+        // Days since the start of the file, from the split TDB date: the
+        // whole-day part is exact (the file bounds are at midnight), so the
+        // record index and the offset into the record keep full precision.
+        let whole = et.day as f64 - (self.jd_start - 2_400_000.5);
+        let dt = whole + et.frac;
+        if !(0.0..=(self.jd_stop - self.jd_start)).contains(&dt) {
+            return Err(Error::InvalidJulianDate(et.jd()));
         }
 
-        let t_int = (tdb - self.jd_start) / self.jd_step;
-        // tdb == jd_stop passes the range check above but floors to an index
+        // dt == span passes the range check above but floors to an index
         // one past the last record (and likewise for the sub-interval), so
         // clamp both; the endpoint then evaluates at t_seg == 1.0 exactly.
-        let int_num = (t_int.floor() as usize).min(self.cheby.ncols() - 1);
+        // Multiply by the reciprocal (computed independently of the query,
+        // so it overlaps) rather than dividing twice in the dependent chain.
+        // At a record boundary the floor may land one record early; that
+        // record evaluated at its end (t_seg = 1) is the same point.
+        let inv_step = 1.0 / self.jd_step;
+        let int_num = ((dt * inv_step).floor() as usize).min(self.cheby.ncols() - 1);
+        // Days into the record: the integer parts cancel exactly
+        let in_record = (whole - int_num as f64 * self.jd_step) + et.frac;
         let bidx = body as usize;
 
         let ncoeff = self.ipt[bidx][1];
@@ -338,7 +377,7 @@ impl JPLEphem {
             return Err(Error::InvalidBody);
         }
 
-        let t_int_2 = (t_int - int_num as f64) * nsubint as f64;
+        let t_int_2 = in_record * (inv_step * nsubint as f64);
         let sub_int_num = (t_int_2.floor() as usize).min(nsubint - 1);
         let t_seg = 2.0f64.mul_add(t_int_2 - sub_int_num as f64, -1.0);
 
@@ -665,8 +704,8 @@ impl JPLEphem {
     ///  * EMB (2) is the Earth-Moon barycenter
     ///  * The sun position is relative to the solar system barycenter
     ///    (it will be close to origin)
-    fn barycentric_pos(&self, body: SolarSystem, tm: &Instant) -> Result<Vector3> {
-        let setup = self.cheby_setup(body, tm)?;
+    fn barycentric_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
+        let setup = self.cheby_setup(body, et)?;
         dispatch_ncoeff!(self, body_pos_optimized, &setup)
     }
     /// Return the position & velocity the given body in the barycentric coordinate system
@@ -688,8 +727,8 @@ impl JPLEphem {
     ///  * EMB (2) is the Earth-Moon barycenter
     ///  * The sun position is relative to the solar system barycenter
     ///    (it will be close to origin)
-    fn barycentric_state(&self, body: SolarSystem, tm: &Instant) -> Result<(Vector3, Vector3)> {
-        let setup = self.cheby_setup(body, tm)?;
+    fn barycentric_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
+        let setup = self.cheby_setup(body, et)?;
         dispatch_ncoeff!(self, body_state_optimized, &setup)
     }
 
@@ -738,13 +777,13 @@ impl JPLEphem {
     /// # Return
     ///    3-vector of cartesian Geocentric position in meters
     ///
-    fn geocentric_pos(&self, body: SolarSystem, tm: &Instant) -> Result<Vector3> {
+    fn geocentric_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
         if body == SolarSystem::Moon {
-            self.barycentric_pos(body, tm)
+            self.barycentric_pos(body, et)
         } else {
-            let emb: Vector3 = self.barycentric_pos(SolarSystem::EMB, tm)?;
-            let moon: Vector3 = self.barycentric_pos(SolarSystem::Moon, tm)?;
-            let b: Vector3 = self.barycentric_pos(body, tm)?;
+            let emb: Vector3 = self.barycentric_pos(SolarSystem::EMB, et)?;
+            let moon: Vector3 = self.barycentric_pos(SolarSystem::Moon, et)?;
+            let b: Vector3 = self.barycentric_pos(body, et)?;
 
             // Compute the position of the body relative to the Earth-moon
             // barycenter, then "correct" to Earth-center by accounting
@@ -767,13 +806,13 @@ impl JPLEphem {
     ///     * 3-vector of cartesian Geocentric velocity in meters / second
     ///       Note: velocity is relative to Earth
     ///
-    fn geocentric_state(&self, body: SolarSystem, tm: &Instant) -> Result<(Vector3, Vector3)> {
+    fn geocentric_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
         if body == SolarSystem::Moon {
-            self.barycentric_state(body, tm)
+            self.barycentric_state(body, et)
         } else {
-            let emb: (Vector3, Vector3) = self.barycentric_state(SolarSystem::EMB, tm)?;
-            let moon: (Vector3, Vector3) = self.barycentric_state(SolarSystem::Moon, tm)?;
-            let b: (Vector3, Vector3) = self.barycentric_state(body, tm)?;
+            let emb: (Vector3, Vector3) = self.barycentric_state(SolarSystem::EMB, et)?;
+            let moon: (Vector3, Vector3) = self.barycentric_state(SolarSystem::Moon, et)?;
+            let b: (Vector3, Vector3) = self.barycentric_state(body, et)?;
 
             // Compute the position of the body relative to the Earth-moon
             // barycenter, then "correct" to Earth-center by accounting
@@ -784,6 +823,39 @@ impl JPLEphem {
             ))
         }
     }
+}
+
+impl JPLEphem {
+    /// Geocentric Sun state and Moon position at one ephemeris time: the
+    /// three lookups (Sun, EMB, Moon) of the Sun state, with the Moon
+    /// position taken from the Moon lookup it already makes.
+    fn geocentric_sun_state_moon_pos(&self, et: &EphemTime) -> Result<SunMoon> {
+        let emb = self.barycentric_state(SolarSystem::EMB, et)?;
+        let moon = self.barycentric_state(SolarSystem::Moon, et)?;
+        let sun = self.barycentric_state(SolarSystem::Sun, et)?;
+        Ok(SunMoon {
+            sun_pos: sun.0 - emb.0 + moon.0 / (1.0 + self.emrat),
+            sun_vel: sun.1 - emb.1 + moon.1 / (1.0 + self.emrat),
+            moon_pos: moon.0,
+        })
+    }
+}
+
+/// Geocentric Sun position and velocity and Moon position, GCRF, SI units
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SunMoon {
+    pub sun_pos: Vector3,
+    pub sun_vel: Vector3,
+    pub moon_pos: Vector3,
+}
+
+/// Geocentric Sun state and Moon position at one time, sharing a single
+/// TDB conversion and the Moon lookup: what the force model needs for
+/// third-body gravity, SRP and tides. Three Chebyshev evaluations and one
+/// time conversion instead of four and four for [`geocentric_state`]
+/// (Sun) plus [`geocentric_pos`] (Moon), with identical results.
+pub(crate) fn geocentric_sun_state_moon_pos(tm: &Instant) -> Result<SunMoon> {
+    jpl()?.geocentric_sun_state_moon_pos(&EphemTime::new(tm))
 }
 
 pub fn consts(s: &str) -> Option<&f64> {
@@ -809,7 +881,7 @@ pub fn consts(s: &str) -> Option<&f64> {
 ///    (it will be close to origin)
 pub fn barycentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3> {
     let tm = tm.as_instant();
-    jpl()?.barycentric_pos(body, &tm)
+    jpl()?.barycentric_pos(body, &EphemTime::new(&tm))
 }
 
 /// Return the position and velocity of the given body in
@@ -827,7 +899,7 @@ pub fn barycentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3
 ///
 pub fn geocentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vector3, Vector3)> {
     let tm = tm.as_instant();
-    jpl()?.geocentric_state(body, &tm)
+    jpl()?.geocentric_state(body, &EphemTime::new(&tm))
 }
 
 /// Return the position of the given body in
@@ -842,7 +914,7 @@ pub fn geocentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vecto
 ///
 pub fn geocentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3> {
     let tm = tm.as_instant();
-    jpl()?.geocentric_pos(body, &tm)
+    jpl()?.geocentric_pos(body, &EphemTime::new(&tm))
 }
 
 /// Return the position & velocity the given body in the barycentric coordinate system
@@ -866,13 +938,14 @@ pub fn geocentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3>
 ///    (it will be close to origin)
 pub fn barycentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vector3, Vector3)> {
     let tm = tm.as_instant();
-    jpl()?.barycentric_state(body, &tm)
+    jpl()?.barycentric_state(body, &EphemTime::new(&tm))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::utils::test;
+    use crate::TimeScale;
     use std::io::{self, BufRead};
 
     /// A manifest-pinned ephemeris name whose on-disk bytes do not match the
@@ -926,13 +999,19 @@ mod tests {
         // The Instant roundtrip may land a hair above or below jd_stop;
         // either way the call must not panic, and in-range must be Ok.
         if tm.as_jd_with_scale(TimeScale::TDB) <= jpl.jd_stop {
-            assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_ok());
+            assert!(jpl
+                .geocentric_state(SolarSystem::Moon, &EphemTime::new(&tm))
+                .is_ok());
         } else {
-            assert!(jpl.geocentric_state(SolarSystem::Moon, &tm).is_err());
+            assert!(jpl
+                .geocentric_state(SolarSystem::Moon, &EphemTime::new(&tm))
+                .is_err());
         }
         // Just inside the boundary must always succeed
         let tm_in = tm - crate::Duration::from_seconds(1.0);
-        assert!(jpl.geocentric_state(SolarSystem::Moon, &tm_in).is_ok());
+        assert!(jpl
+            .geocentric_state(SolarSystem::Moon, &EphemTime::new(&tm_in))
+            .is_ok());
     }
 
     /// A file that is not a JPL ephemeris must fail with a clear error, not
@@ -950,6 +1029,41 @@ mod tests {
         ));
     }
 
+    /// The combined Sun-state / Moon-position lookup used by the
+    /// propagator's table gives exactly the separate public calls.
+    #[test]
+    fn sun_state_moon_pos_matches_separate_calls() {
+        for tm in [
+            Instant::from_datetime(2024, 1, 1, 0, 0, 0.0).unwrap(),
+            Instant::from_datetime(2031, 7, 17, 13, 45, 12.345678).unwrap(),
+        ] {
+            let sm = geocentric_sun_state_moon_pos(&tm).unwrap();
+            let (ps, vs) = geocentric_state(SolarSystem::Sun, &tm).unwrap();
+            assert_eq!(sm.sun_pos, ps);
+            assert_eq!(sm.sun_vel, vs);
+            assert_eq!(sm.moon_pos, geocentric_pos(SolarSystem::Moon, &tm).unwrap());
+        }
+    }
+
+    /// The split TDB date resolves single microseconds: one microsecond
+    /// moves the Moon by its velocity times 1 µs (~1 mm), where a
+    /// single-f64 Julian Date (~40 µs resolution) would often not move it
+    /// at all.
+    #[test]
+    fn microsecond_resolution() {
+        let t0 = Instant::from_datetime(2024, 5, 1, 3, 0, 0.0).unwrap();
+        let t1 = t0 + crate::Duration::from_microseconds(1);
+        let (p0, v0) = geocentric_state(SolarSystem::Moon, &t0).unwrap();
+        let (p1, _) = geocentric_state(SolarSystem::Moon, &t1).unwrap();
+        let expected = v0 * 1.0e-6;
+        assert!(
+            (p1 - p0 - expected).norm() < 1.0e-2 * expected.norm(),
+            "moved {:?}, expected {:?}",
+            p1 - p0,
+            expected
+        );
+    }
+
     #[test]
     fn load_test() {
         //let tm = &Instant::from_date(2010, 3, 1);
@@ -957,7 +1071,9 @@ mod tests {
 
         let tm = Instant::from_jd_with_scale(2451545.0, TimeScale::TDB);
         //let tm = &Instant::from_jd(2451545.0, Scale::UTC);
-        let (_, _): (Vector3, Vector3) = jpl.geocentric_state(SolarSystem::Moon, &tm).unwrap();
+        let (_, _): (Vector3, Vector3) = jpl
+            .geocentric_state(SolarSystem::Moon, &EphemTime::new(&tm))
+            .unwrap();
         println!("au = {:.20}", jpl._au);
     }
 
@@ -1001,14 +1117,20 @@ mod tests {
             let src: i32 = s[4].parse().unwrap();
             let coord: usize = s[5].parse().unwrap();
             let truth: f64 = s[6].parse().unwrap();
-            // Test-vector epochs are JD in T_eph (TDB)
-            let tm = Instant::from_jd_with_scale(jd, TimeScale::TDB);
+            // Test-vector epochs are JD in T_eph (TDB). Build the ephemeris
+            // argument directly: through an Instant, the µs rounding of
+            // the TDB − TT term alone moves the Moon by ~1e-12 relative.
+            let mjd = jd - 2_400_000.5;
+            let et = EphemTime {
+                day: mjd.floor() as i64,
+                frac: mjd - mjd.floor(),
+            };
             if tar <= 10 && src <= 10 && coord <= 6 {
                 let (mut tpos, mut tvel) = jpl
-                    .geocentric_state(SolarSystem::try_from(tar - 1).unwrap(), &tm)
+                    .geocentric_state(SolarSystem::try_from(tar - 1).unwrap(), &et)
                     .unwrap();
                 let (mut spos, mut svel) = jpl
-                    .geocentric_state(SolarSystem::try_from(src - 1).unwrap(), &tm)
+                    .geocentric_state(SolarSystem::try_from(src - 1).unwrap(), &et)
                     .unwrap();
 
                 // in test vectors, index 3 is not EMB, but rather Earth
@@ -1018,7 +1140,7 @@ mod tests {
                     let (_mpos, mvel): (Vector3, Vector3) = jplephem_singleton()
                         .as_ref()
                         .unwrap()
-                        .geocentric_state(SolarSystem::Moon, &tm)
+                        .geocentric_state(SolarSystem::Moon, &et)
                         .unwrap();
                     // Earth velocity from EMB velocity minus scaled
                     // moon velocity
@@ -1029,7 +1151,7 @@ mod tests {
                     let (_mpos, mvel): (Vector3, Vector3) = jplephem_singleton()
                         .as_ref()
                         .unwrap()
-                        .geocentric_state(SolarSystem::Moon, &tm)
+                        .geocentric_state(SolarSystem::Moon, &et)
                         .unwrap();
                     // Earth velocity from EMB velocity minus scaled
                     // moon velocity

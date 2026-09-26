@@ -4,6 +4,7 @@ use pyo3::types::PyDateTime;
 use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
 use pyo3::types::PyTzInfo;
+use pyo3::types::{PyDelta, PyDeltaAccess};
 use pyo3::IntoPyObjectExt;
 
 use satkit::{Instant, TimeScale, Weekday};
@@ -525,7 +526,8 @@ impl PyInstant {
     /// datetime (no ``tzinfo``) is interpreted in the machine's local time
     /// zone, not UTC; an aware datetime uses its own UTC offset. For UTC,
     /// pass ``tzinfo=datetime.timezone.utc`` or build a ``satkit.time``
-    /// directly.
+    /// directly. The conversion is exact to the microsecond (it does not go
+    /// through the float ``timestamp()``).
     ///
     /// Args:
     ///     datetime (datetime.datetime): datetime object to convert
@@ -549,15 +551,7 @@ impl PyInstant {
     ///
     #[pyo3(signature = (utc=true))]
     fn to_datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let timestamp: f64 = self.to_unixtime();
-            let tz = match utc {
-                false => None,
-                true => Some(PyTzInfo::utc(py)),
-            };
-            let tz = tz.as_ref().map(|r| r.as_ref().unwrap());
-            Ok(PyDateTime::from_timestamp(py, timestamp, tz.map(|v| &**v))?.into())
-        })
+        pyo3::Python::attach(|py| instant_to_datetime(py, &self.0, utc))
     }
 
     /// Convert to Python datetime object
@@ -938,14 +932,67 @@ impl PyInstant {
     }
 }
 
+/// 1970-01-01T00:00:00+00:00 as an aware Python datetime
+fn unix_epoch_utc(py: Python<'_>) -> PyResult<Bound<'_, PyDateTime>> {
+    let utc = PyTzInfo::utc(py)?;
+    PyDateTime::new(py, 1970, 1, 1, 0, 0, 0, 0, Some(&*utc))
+}
+
 /// Convert a Python `datetime` with Python's own convention
 /// (`datetime.timestamp()`): a naive datetime is local time, an aware one
 /// uses its own offset. Shared by every binding that accepts a datetime.
-fn datetime_to_instant(tm: &Bound<PyDateTime>) -> PyResult<Instant> {
-    // datetime.timestamp() can itself raise (e.g. pre-1970 naive datetimes
-    // on Windows, extreme years via mktime); propagate rather than panic
-    let ts: f64 = tm.call_method("timestamp", (), None)?.extract::<f64>()?;
-    Ok(Instant::from_unixtime(ts))
+///
+/// Exact: the datetime's own fields and UTC offset are combined in integer
+/// microseconds (`aware - epoch` is a `timedelta`). Going through the f64
+/// `timestamp()` instead lost a microsecond for ~2% of datetimes.
+pub(crate) fn datetime_to_instant(tm: &Bound<PyDateTime>) -> PyResult<Instant> {
+    let py = tm.py();
+    // A naive datetime (or one whose tzinfo reports no offset, which Python
+    // also treats as naive) is local time; `astimezone()` resolves it,
+    // honouring `fold`, to an aware datetime with the local offset. It can
+    // raise (e.g. years outside the platform's time_t range); propagate.
+    let aware = if tm.call_method0("utcoffset")?.is_none() {
+        tm.call_method0("astimezone")?
+    } else {
+        tm.clone().into_any()
+    };
+    let delta = aware.sub(unix_epoch_utc(py)?)?;
+    let delta = delta.cast::<PyDelta>()?;
+    let us = (delta.get_days() as i64 * 86_400 + delta.get_seconds() as i64) * 1_000_000
+        + delta.get_microseconds() as i64;
+    Ok(Instant::from_unixtime_microseconds(us))
+}
+
+/// Convert an instant to a Python `datetime`, exactly: an aware UTC
+/// datetime (`utc = true`) or a naive local one. Python datetimes cannot
+/// express a leap second, so `23:59:60.x` comes back as `23:59:59.x`, as
+/// with Unix time.
+fn instant_to_datetime(py: Python<'_>, t: &Instant, utc: bool) -> PyResult<Py<PyAny>> {
+    let us = t.as_unixtime_microseconds();
+    let secs = us.div_euclid(1_000_000);
+    let micros = us.rem_euclid(1_000_000) as i32;
+    let overflow =
+        |_| pyo3::exceptions::PyOverflowError::new_err("satkit.time out of range for datetime");
+    if utc {
+        // epoch + timedelta: integer arithmetic, and not limited to the
+        // platform's time_t range the way fromtimestamp() is
+        let delta = PyDelta::new(
+            py,
+            i32::try_from(secs.div_euclid(86_400)).map_err(overflow)?,
+            secs.rem_euclid(86_400) as i32,
+            micros,
+            false,
+        )?;
+        Ok(unix_epoch_utc(py)?.add(delta)?.unbind())
+    } else {
+        // Local time: fromtimestamp() of the whole second (exact for an
+        // integer, and it sets `fold` for the repeated hour at the end of
+        // DST, so the result round-trips), then the microseconds.
+        let dt = PyDateTime::from_timestamp(py, secs as f64, None)?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("microsecond", micros)?;
+        Ok(dt.call_method("replace", (), Some(&kwargs))?.unbind())
+    }
 }
 
 pub trait ToTimeVec {

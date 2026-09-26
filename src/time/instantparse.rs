@@ -195,13 +195,14 @@ impl Instant {
             second = 0;
             microsecond = 0;
         }
-        Self::from_datetime(
+        // Integer microseconds: no float rounding on the way in
+        Self::from_datetime_us(
             year,
             month,
             day,
             hour,
             minute,
-            second as f64 + microsecond as f64 / 1_000_000.0,
+            second as i64 * 1_000_000 + microsecond as i64,
         )
     }
 
@@ -224,7 +225,10 @@ impl Instant {
     /// * %M - Minute as a zero-padded decimal number
     /// * %S - Second as a zero-padded decimal number
     /// * %f - Microsecond as a decimal number, allowing for trailing zeros
-    /// * %z - UTC offset in the form +HHMM or -HHMM or 'Z' for UTC
+    /// * %z - UTC offset in the form +HHMM or -HHMM (or +HH:MM), or 'Z' for UTC.
+    ///   `+HHMM` means local time is ahead of UTC, so `12:00:00+0100` is
+    ///   `11:00:00Z`; the offset shifts the calendar label, so it is exact
+    ///   across a leap second
     ///
     /// # Returns:
     /// Instant: The instant object
@@ -327,18 +331,18 @@ impl Instant {
             }
         }
 
-        let mut instant = Self::from_datetime(
+        // `offset` is local time minus UTC, in minutes. Local label minus
+        // offset is the UTC label (applied to the label, not as elapsed
+        // time, so it is exact across a leap second).
+        Self::from_local_datetime_us(
             year,
             month,
             day,
             hour,
             minute,
-            second as f64 + microsecond as f64 / 1_000_000.0,
-        )?;
-        if offset != 0 {
-            instant += crate::Duration::from_minutes(offset as f64);
-        }
-        Ok(instant)
+            second as i64 * 1_000_000 + microsecond as i64,
+            offset as i64 * 60_000_000,
+        )
     }
 
     /// Parse a string in RFC3339 format
@@ -373,22 +377,12 @@ impl Instant {
                 && (maybe_offset.starts_with('+') || maybe_offset.starts_with('-'))
                 && maybe_offset.chars().nth(3) == Some(':')
             {
-                let sign: f64 = if maybe_offset.starts_with('+') {
-                    1.0
-                } else {
-                    -1.0
-                };
-                if let (Ok(offset_hours), Ok(offset_mins)) = (
-                    maybe_offset[1..3].parse::<f64>(),
-                    maybe_offset[4..6].parse::<f64>(),
-                ) {
-                    let offset_seconds = sign * (offset_hours * 3600.0 + offset_mins * 60.0);
-                    let base = &s[..offset_start];
-                    let r = Self::strptime(base, "%Y-%m-%dT%H:%M:%S.%f")
-                        .or_else(|_| Self::strptime(base, "%Y-%m-%dT%H:%M:%S"));
-                    if let Ok(r) = r {
-                        return Ok(r - crate::Duration::from_seconds(offset_seconds));
-                    }
+                // `%z` takes `+HH:MM` and applies it to the label (exact
+                // across a leap second), so hand the whole string over
+                let r = Self::strptime(s, "%Y-%m-%dT%H:%M:%S.%f%z")
+                    .or_else(|_| Self::strptime(s, "%Y-%m-%dT%H:%M:%S%z"));
+                if let Ok(r) = r {
+                    return Ok(r);
                 }
             }
         }
@@ -454,9 +448,9 @@ impl Instant {
         let mut result = String::new();
         let mut chars = format.chars();
 
-        let (year, month, day, hour, minute, fsecond) = self.as_datetime();
-        let second = fsecond as i32;
-        let microsecond = (fsecond.fract() * 1_000_000.0).round() as u32;
+        let (year, month, day, hour, minute, second_us) = self.as_datetime_us();
+        let second = second_us / 1_000_000;
+        let microsecond = second_us % 1_000_000;
 
         while let Some(c) = chars.next() {
             if c == '%' {

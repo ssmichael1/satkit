@@ -44,9 +44,9 @@ MJD_UNIX = 40587.0  # MJD of 1970-01-01
 R_LEO = 7.0e6  # m, for converting angles to metres in failure messages
 R_GEO = 42.164e6
 
-# Seconds: an f64 MJD near 60000 has an ulp of 0.63 us, and satkit converts
-# MJD to its microsecond count by truncation, so any comparison that goes
-# through `to_mjd` / `from_mjd` carries up to ~1.3 us of rounding.
+# Seconds: an f64 MJD near 60000 has an ulp of 0.63 us (satkit rounds MJD
+# to the nearest microsecond), so any comparison that goes through
+# `to_mjd` / `from_mjd` carries up to ~1 us of rounding.
 TOL_MJD_S = 1.5e-6
 
 
@@ -90,8 +90,8 @@ def erfa_us_from_utc(y, mo, d, h, mi, s):
 
 
 def assert_us(t, expected_us, what, tol_us=1):
-    """Instant equals an expected microsecond count. 1 us of slack: satkit
-    truncates seconds to microseconds (see test_gregorian_seconds_round_to_microsecond)"""
+    """Instant equals an expected microsecond count, to ``tol_us`` (ERFA's
+    two-part JD carries its own sub-microsecond rounding)"""
     got = raw_us(t)
     assert abs(got - expected_us) <= tol_us, f"{what}: satkit - ERFA = {(got - expected_us) * 1e-6:+.6f} s"
 
@@ -299,8 +299,7 @@ class TestLeapSeconds:
 
     def test_random_utc_labels(self):
         """2000 random UTC labels 1973-2035 on 1/64 s steps (exactly
-        representable, so satkit's seconds->microsecond truncation cannot
-        bite) against ERFA dtf2d + utctai. First minute of the 1st of the
+        representable in binary) against ERFA dtf2d + utctai. First minute of the 1st of the
         month is excluded (leap-second boundaries are tested above)."""
         rng = np.random.default_rng(1)
         n = 0
@@ -318,15 +317,9 @@ class TestLeapSeconds:
             n += 1
             assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "NEW: the Gregorian constructor truncates second * 1e6 to integer microseconds "
-            "instead of rounding, so ~0.7% of microsecond-exact inputs land 1 us early "
-            "(src/time/instant.rs from_datetime)"
-        ),
-    )
     def test_gregorian_seconds_round_to_microsecond(self):
+        """Regression: the Gregorian constructor truncated second * 1e6, so
+        ~0.7% of microsecond-exact inputs landed 1 us early."""
         bad = []
         for us in range(0, 1_000_000, 997):
             s = 12.0 + us * 1e-6

@@ -485,29 +485,37 @@ impl PySatState {
 
     fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> PyResult<()> {
         let state = state.extract::<&[u8]>(py)?;
-        // Self-describing format v1:
-        //   [0]      version byte (== 1)
-        //   [1..9]   time (f64 MJD, TAI)
+        // Self-describing format:
+        //   [0]      version byte (1 or 2)
+        //   [1..9]   time: v2 = Instant raw i64 microseconds (exact);
+        //            v1 (satkit 0.20 – 0.23) = TAI MJD as f64, which lost a
+        //            microsecond ~1% of the time, still read (rounded)
         //   [9..57]  position + velocity (6 f64)
         //   [57]     covariance flag (0 = none, 1 = 6x6 PVCov follows)
         //   [..]     if flag == 1: 36 f64 covariance (288 bytes)
         //   [..]     maneuver count (u32 little-endian)
-        //   [..]     count * 33-byte maneuvers: 8 time, 24 delta-v, 1 frame tag
+        //   [..]     count * 33-byte maneuvers: 8 time (as above), 24 delta-v,
+        //            1 frame tag
         const HEADER: usize = 1 + 8 + 48 + 1; // version + time + pv + cov flag
         if state.len() < HEADER {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "invalid satstate pickle: truncated header",
             ));
         }
-        if state[0] != 1 {
+        let version = state[0];
+        if version != 1 && version != 2 {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "unsupported satstate pickle version {} (expected 1)",
-                state[0]
+                "unsupported satstate pickle version {} (expected 1 or 2)",
+                version
             )));
         }
         let read_f64 = |at: usize| f64::from_le_bytes(state[at..at + 8].try_into().unwrap());
+        let read_time = |at: usize| match version {
+            1 => Instant::from_mjd_with_scale(read_f64(at), satkit::TimeScale::TAI),
+            _ => Instant::new(i64::from_le_bytes(state[at..at + 8].try_into().unwrap())),
+        };
 
-        self.0.time = Instant::from_mjd_with_scale(read_f64(1), satkit::TimeScale::TAI);
+        self.0.time = read_time(1);
         let mut pv = [0.0f64; 6];
         for (i, v) in pv.iter_mut().enumerate() {
             *v = read_f64(9 + i * 8);
@@ -551,7 +559,7 @@ impl PySatState {
             ));
         }
         for _ in 0..count {
-            let t = Instant::from_mjd_with_scale(read_f64(offset), satkit::TimeScale::TAI);
+            let t = read_time(offset);
             offset += 8;
             let mut dv = [0.0f64; 3];
             for (i, v) in dv.iter_mut().enumerate() {
@@ -577,14 +585,8 @@ impl PySatState {
         let len = (1 + 8 + 48 + 1) + cov_len + 4 + self.0.maneuvers.len() * 33;
         let mut buffer: Vec<u8> = Vec::with_capacity(len);
 
-        buffer.push(1u8); // version
-        buffer.extend_from_slice(
-            &self
-                .0
-                .time
-                .as_mjd_with_scale(satkit::TimeScale::TAI)
-                .to_le_bytes(),
-        );
+        buffer.push(2u8); // version
+        buffer.extend_from_slice(&self.0.time.raw.to_le_bytes());
         for v in self.0.pv.as_slice() {
             buffer.extend_from_slice(&v.to_le_bytes());
         }
@@ -600,11 +602,7 @@ impl PySatState {
 
         buffer.extend_from_slice(&(self.0.maneuvers.len() as u32).to_le_bytes());
         for m in &self.0.maneuvers {
-            buffer.extend_from_slice(
-                &m.time
-                    .as_mjd_with_scale(satkit::TimeScale::TAI)
-                    .to_le_bytes(),
-            );
+            buffer.extend_from_slice(&m.time.raw.to_le_bytes());
             for v in m.delta_v.as_slice() {
                 buffer.extend_from_slice(&v.to_le_bytes());
             }
