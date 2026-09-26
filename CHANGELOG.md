@@ -49,6 +49,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - `orbitprop::propagate` has its rustdoc again, and the crates.io publish job only runs for `v*` tags ([#226](https://github.com/ssmichael1/satkit/pull/226))
 - `help(satkit.satstate)` shows the class documentation again ([#237](https://github.com/ssmichael1/satkit/pull/237))
 - Alpha-5 satellite numbers with a sign or malformed digits (`"A-123"` became 99877) are rejected, and the ≥ 340000 error points to OMM ([#261](https://github.com/ssmichael1/satkit/pull/261))
+- Speed regressions since 0.23.1 in the EOP, space-weather and UTC conversion hot paths are fixed, with identical results: LEO drag propagation, `gmst`, `qteme2itrf` and NRLMSISE-00 are back to 0.23.1 speed or faster ([#266](https://github.com/ssmichael1/satkit/pull/266))
 
 ### Docs
 

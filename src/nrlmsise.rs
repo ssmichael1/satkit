@@ -2247,7 +2247,7 @@ struct SpaceWeatherInputs {
 }
 
 /// Look up the NRLMSISE-00 indices for `time` (`sec_of_day` UTC seconds into
-/// its day) from a space-weather table. `get` behaves like
+/// its day, which starts at `day0`, 00:00 UTC) from a space-weather table. `get` behaves like
 /// [`spaceweather::get`]: the record for that UTC day, else the most recent
 /// prior one, `None` when there is none.
 ///
@@ -2263,6 +2263,7 @@ struct SpaceWeatherInputs {
 /// * AP_A — the 3-hourly history from [`ap_history`].
 fn spaceweather_inputs(
     time: Instant,
+    day0: Option<Instant>,
     sec_of_day: f64,
     get: impl Fn(&Instant) -> Option<crate::spaceweather::SpaceWeatherRecord>,
 ) -> SpaceWeatherInputs {
@@ -2288,8 +2289,7 @@ fn spaceweather_inputs(
     // recent *prior* record for a missing day, which must not masquerade as
     // that day's 3-hourly values). The current and previous day reuse the
     // records already fetched.
-    let (year, mon, day, _, _, _) = time.as_datetime();
-    let ap_a = Instant::from_date(year, mon, day).ok().and_then(|day0| {
+    let ap_a = day0.and_then(|day0| {
         ap_history(sec_of_day, |n| {
             let d = day0 - Duration::from_days(n as f64);
             let record = match n {
@@ -2364,7 +2364,7 @@ pub fn nrlmsise(
     let mut ap_a: Option<[f64; 7]> = None;
     if let Some(time) = time_option {
         let time = time.as_instant();
-        let (year, _, _, dhour, dmin, dsec) = time.as_datetime();
+        let (year, mon, day, dhour, dmin, dsec) = time.as_datetime();
         let fday: f64 = (time - Instant::from_date(year, 1, 1).unwrap()).as_days() + 1.0;
         day_of_year = fday.floor() as i32;
         sec_of_day = (dhour as f64).mul_add(3600.0, dmin as f64 * 60.0) + dsec;
@@ -2375,7 +2375,8 @@ pub fn nrlmsise(
             // daily Ap of the *current* day, and AP_A the 3-hourly history
             // (used in preference to AP when it can be built). A `-1`
             // sentinel never reaches the model.
-            let sw = spaceweather_inputs(time, sec_of_day, |t| spaceweather::get(t).ok());
+            let day0 = Instant::from_date(year, mon, day).ok();
+            let sw = spaceweather_inputs(time, day0, sec_of_day, |t| spaceweather::get(t).ok());
             spaceweather::warn_model_defaults(&time, sw.f107.is_none(), sw.ap.is_none());
             f107 = sw.f107.unwrap_or(f107);
             f107a = sw.f107a.unwrap_or(f107a);
@@ -2733,6 +2734,12 @@ mod tests {
         }
     }
 
+    /// 00:00 UTC of the day of `tm`, as `nrlmsise` passes it.
+    fn start_of_day(tm: Instant) -> Option<Instant> {
+        let (year, mon, day, _, _, _) = tm.as_datetime();
+        Instant::from_date(year, mon, day).ok()
+    }
+
     /// A missing previous-day F10.7 (GFZ -1, e.g. 2025-02-12) takes the most
     /// recent measured flux and leaves Ap, the ap history and F10.7A alone;
     /// it used to discard the whole space-weather block for the day.
@@ -2740,7 +2747,7 @@ mod tests {
     fn test_missing_previous_day_flux_is_decoupled() {
         let tm = Instant::from_datetime(2025, 2, 13, 12, 0, 0.0).unwrap();
         let table = feb_table(&[12]);
-        let sw = spaceweather_inputs(tm, 43200.0, lookup(&table));
+        let sw = spaceweather_inputs(tm, start_of_day(tm), 43200.0, lookup(&table));
         assert_eq!(sw.f107, Some(111.0)); // 02-11, the most recent measured day
         assert_eq!(sw.f107a, Some(120.0));
         assert_eq!(sw.ap, Some(13.0));
@@ -2750,7 +2757,7 @@ mod tests {
         assert_eq!(ap_a[..5], [13.0; 5]);
 
         // Unchanged on a day whose previous-day flux is present.
-        let clean = spaceweather_inputs(tm, 43200.0, lookup(&feb_table(&[])));
+        let clean = spaceweather_inputs(tm, start_of_day(tm), 43200.0, lookup(&feb_table(&[])));
         assert_eq!(clean.f107, Some(112.0));
         assert_eq!(
             (clean.f107a, clean.ap, clean.ap_a),
@@ -2758,7 +2765,12 @@ mod tests {
         );
 
         // Nothing measured within the lookback: the 81-day average.
-        let sw = spaceweather_inputs(tm, 43200.0, lookup(&feb_table(&[10, 11, 12])));
+        let sw = spaceweather_inputs(
+            tm,
+            start_of_day(tm),
+            43200.0,
+            lookup(&feb_table(&[10, 11, 12])),
+        );
         assert_eq!(
             (sw.f107, sw.f107a, sw.ap),
             (Some(120.0), Some(120.0), Some(13.0))
@@ -2766,13 +2778,13 @@ mod tests {
         // ... and with no average either, F10.7 alone is missing.
         let mut table = feb_table(&[10, 11, 12]);
         table.iter_mut().for_each(|r| r.f10p7_obs_c81 = -1.0);
-        let sw = spaceweather_inputs(tm, 43200.0, lookup(&table));
+        let sw = spaceweather_inputs(tm, start_of_day(tm), 43200.0, lookup(&table));
         assert_eq!((sw.f107, sw.f107a, sw.ap), (None, None, Some(13.0)));
         assert!(sw.ap_a.is_some());
 
         // Before the table: nothing at all.
         let early = Instant::from_datetime(2025, 1, 20, 12, 0, 0.0).unwrap();
-        let sw = spaceweather_inputs(early, 43200.0, lookup(&feb_table(&[])));
+        let sw = spaceweather_inputs(early, start_of_day(early), 43200.0, lookup(&feb_table(&[])));
         assert_eq!(
             sw,
             SpaceWeatherInputs {

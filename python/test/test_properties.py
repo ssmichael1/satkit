@@ -222,7 +222,9 @@ class TestDatetime:
         assert t == label_time(lb), (dt, t)
         back = t.to_datetime()
         assert back.tzinfo is not None
-        assert back == dt, (dt, back)
+        # Compare in UTC: Python's inter-zone == is always False for a
+        # repeated (fold) local hour, e.g. 01:30 on a DST-end day.
+        assert back == dt.astimezone(timezone.utc), (dt, back)
 
     @pytest.mark.skipif(not hasattr(systime, "tzset"), reason="needs time.tzset")
     @pytest.mark.parametrize(

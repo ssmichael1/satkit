@@ -57,10 +57,19 @@ pub fn table(id: IersTableId) -> &'static IERSTable {
     // With the tables compiled in and a corrupt on-disk copy falling back to
     // them (`from_path_or_embedded`), this panic is unreachable short of a
     // build defect in the embedded blobs; the message stays actionable anyway.
-    let cell = instance_for(id);
-    if let Some(t) = cell.get() {
-        return t;
+    match instance_for(id).get() {
+        Some(t) => t,
+        None => load_table(id),
     }
+}
+
+/// First use of [`table`] for `id`. Out of line and cold, so that every
+/// later lookup pays only for the check in [`table`]: inlined, the load
+/// path's stack frame was set up on every call.
+#[cold]
+#[inline(never)]
+fn load_table(id: IersTableId) -> &'static IERSTable {
+    let cell = instance_for(id);
     // A fallback warning is logged once the cell is initialized, not while
     // other threads may be waiting on it (see `utils::diag::deferred`).
     diag::deferred(|| {

@@ -48,10 +48,20 @@ impl<T> RefreshableSingleton<T> {
     /// Warnings the loader emits are logged once the `Once` has completed,
     /// so a logger that blocks (the Python bindings' takes the GIL) never
     /// runs while another thread waits here.
+    #[inline]
     pub fn ensure_default_loaded(&self, loader: impl FnOnce() -> Option<T>) {
-        if self.default_load.is_completed() {
-            return;
+        if !self.default_load.is_completed() {
+            self.load_default(loader);
         }
+    }
+
+    /// The first-read path of [`ensure_default_loaded`](Self::ensure_default_loaded).
+    /// Out of line and cold, so that the check above is all a lookup pays
+    /// for once the load has run: inlined into a lookup, the loader's stack
+    /// frame was set up on every call.
+    #[cold]
+    #[inline(never)]
+    fn load_default(&self, loader: impl FnOnce() -> Option<T>) {
         crate::utils::diag::deferred(|| {
             self.default_load.call_once(|| {
                 let loaded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(loader));

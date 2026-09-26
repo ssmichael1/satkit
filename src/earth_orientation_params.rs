@@ -122,6 +122,9 @@ struct EOPEntry {
     dY: f64,
     /// `true` for an observed (`I`) row, `false` for a predicted (`P`) row.
     observed: bool,
+    /// TAI − UTC at `mjd_utc`, seconds: `tai_minus_utc_at_mjd_utc(mjd_utc)`,
+    /// computed once when the table is built rather than on every lookup.
+    tai_utc: f64,
 }
 
 /// Where a given epoch falls relative to the loaded EOP table.
@@ -346,6 +349,7 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
                 dX: dx,
                 dY: dy,
                 observed,
+                tai_utc: crate::time::tai_minus_utc_at_mjd_utc(mjd_utc),
             },
             lod,
             lineno,
@@ -794,17 +798,34 @@ pub fn update() -> Result<()> {
 /// suppresses them.
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
-    // Warnings are logged after the table's read lock is released.
-    diag::deferred(|| eop_lookup(mjd_utc))
+    ensure_default_loaded();
+    let (eop, warning) = eop_lookup(EOP.read().as_deref(), mjd_utc);
+    // Logged only now that the table's read lock is released: a logger may
+    // block (the Python bindings' takes the GIL), and a thread holding the
+    // GIL could be waiting to replace the table. Deciding under the lock and
+    // logging here costs nothing on the common, warning-free path, unlike a
+    // `diag::deferred` region around every lookup.
+    if let Some(w) = warning {
+        w.log(mjd_utc);
+    }
+    eop
 }
 
-/// [`eop_from_mjd_utc`] under the table lock.
-fn eop_lookup(mjd_utc: f64) -> Option<[f64; 6]> {
-    ensure_default_loaded();
-    let guard = EOP.read();
-    let Some(eop) = guard.as_deref().filter(|e| !e.is_empty()) else {
-        if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            diag::warn!(
+/// A one-time warning a lookup decided to log (its flag already set), with
+/// what the message needs from the table. Logged by [`eop_from_mjd_utc`]
+/// once the table lock is released.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum LookupWarning {
+    NotLoaded,
+    TooEarly { first_mjd: f64 },
+    Extrapolated { last_mjd: f64 },
+    StalePredictions { last_observed: f64, age: f64 },
+}
+
+impl LookupWarning {
+    fn log(self, mjd_utc: f64) {
+        match self {
+            Self::NotLoaded => diag::warn!(
                 "no Earth Orientation Parameters (EOP) table is loaded; polar motion, \
                  UT1-UTC and nutation corrections are being treated as zero, which biases \
                  Earth-fixed frame transforms by up to ~12 arcsec (UT1-UTC up to 0.9 s \
@@ -813,37 +834,19 @@ fn eop_lookup(mjd_utc: f64) -> Option<[f64; 6]> {
                  to download finals2000A.all, or set SATKIT_DATA to a directory containing it.\n\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
                  (Python: `satkit.frametransform.disable_eop_time_warning()`)"
-            );
-        }
-        return None;
-    };
-
-    // Binary search: find first entry with mjd_utc > query (O(log n) vs O(n) linear scan)
-    let idx = eop.partition_point(|x| x.mjd_utc <= mjd_utc);
-
-    if idx == 0 {
-        if !WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            diag::warn!(
+            ),
+            Self::TooEarly { first_mjd } => diag::warn!(
                 "EOP data not available for MJD UTC = {mjd_utc} (too early): the \
                  loaded table starts at {} (MJD {}), and polar motion, UT1-UTC and nutation \
                  corrections are treated as zero (UT1 = UTC) before it.\n\
                  {}\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
                  (Python: `satkit.frametransform.disable_eop_time_warning()`)",
-                Instant::from_mjd_utc(eop[0].mjd_utc),
-                eop[0].mjd_utc,
-                too_early_advice(eop[0].mjd_utc)
-            );
-        }
-        return None;
-    }
-
-    // At or beyond the last row, use the last entry's values. A query at
-    // exactly the last epoch is still inside the table: no warning.
-    if idx >= eop.len() {
-        let last = &eop[eop.len() - 1];
-        if beyond_table(mjd_utc, last) && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            diag::warn!(
+                Instant::from_mjd_utc(first_mjd),
+                first_mjd,
+                too_early_advice(first_mjd)
+            ),
+            Self::Extrapolated { last_mjd } => diag::warn!(
                 "EOP data ends at {} (MJD {}); the request for MJD UTC = {mjd_utc} and \
                  all later epochs use the last entry's values held constant. Polar motion and \
                  UT1-UTC drift by ~0.1 arcsec / ~10 ms over a few months, i.e. metres at LEO.\n\
@@ -851,33 +854,87 @@ fn eop_lookup(mjd_utc: f64) -> Option<[f64; 6]> {
                  to download the most recent Earth orientation file.\n\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
                  (Python: `satkit.frametransform.disable_eop_time_warning()`)",
-                Instant::from_mjd_utc(last.mjd_utc),
-                last.mjd_utc
-            );
+                Instant::from_mjd_utc(last_mjd),
+                last_mjd
+            ),
+            Self::StalePredictions { last_observed, age } => diag::warn!(
+                "EOP for MJD UTC = {mjd_utc} comes from IERS predictions made \
+                 {age:.0} days ago: the loaded table's observed data ends at {} \
+                 (MJD {last_observed}), and the file has not been refreshed since. \
+                 Months-old predictions are off by ~0.3-0.6 arcsec in UT1 \
+                 (10-20 m at LEO).\n\
+                 Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
+                 to download the current Earth orientation file.\n\
+                 To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
+                 (Python: `satkit.frametransform.disable_eop_time_warning()`)",
+                Instant::from_mjd_utc(last_observed)
+            ),
         }
-        return Some([last.dut1, last.xp, last.yp, last.lod, last.dX, last.dY]);
+    }
+}
+
+/// Index of the first row after `mjd_utc` (`partition_point` of
+/// `mjd_utc <= query`). The rows are one day apart, so the day offset from
+/// the first row finds it directly; the binary search is the fallback for
+/// a query outside the table or a table with gaps.
+fn upper_index(eop: &[EOPEntry], mjd_utc: f64) -> usize {
+    let guess = ((mjd_utc - eop[0].mjd_utc).floor() as usize)
+        .saturating_add(1)
+        .min(eop.len());
+    if eop[guess - 1].mjd_utc <= mjd_utc && eop.get(guess).is_none_or(|e| e.mjd_utc > mjd_utc) {
+        guess
+    } else {
+        eop.partition_point(|x| x.mjd_utc <= mjd_utc)
+    }
+}
+
+/// [`eop_from_mjd_utc`] on the locked table, returning the one-time warning
+/// to log (if any) instead of logging it under the lock.
+fn eop_lookup(
+    table: Option<&[EOPEntry]>,
+    mjd_utc: f64,
+) -> (Option<[f64; 6]>, Option<LookupWarning>) {
+    let Some(eop) = table.filter(|e| !e.is_empty()) else {
+        let warn = !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed);
+        return (None, warn.then_some(LookupWarning::NotLoaded));
+    };
+
+    let idx = upper_index(eop, mjd_utc);
+
+    if idx == 0 {
+        let warn = !WARNING_SHOWN.swap(true, Ordering::Relaxed);
+        return (
+            None,
+            warn.then_some(LookupWarning::TooEarly {
+                first_mjd: eop[0].mjd_utc,
+            }),
+        );
+    }
+
+    // At or beyond the last row, use the last entry's values. A query at
+    // exactly the last epoch is still inside the table: no warning.
+    if idx >= eop.len() {
+        let last = &eop[eop.len() - 1];
+        let warn =
+            beyond_table(mjd_utc, last) && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed);
+        return (
+            Some([last.dut1, last.xp, last.yp, last.lod, last.dX, last.dY]),
+            warn.then_some(LookupWarning::Extrapolated {
+                last_mjd: last.mjd_utc,
+            }),
+        );
     }
 
     // Inside the predictions of a file that has not been refreshed for a
     // month or more: the values are old forecasts, not measurements. The
     // wall clock is read only for a query past an observed row, until the
     // warning has been shown.
+    let mut warning = None;
     if !eop[idx].observed && !STALE_PREDICTION_WARNING_SHOWN.load(Ordering::Relaxed) {
         let now = Instant::now().as_mjd_utc();
         if let Some((last_observed, age)) = stale_prediction_age(eop, mjd_utc, now) {
             if !STALE_PREDICTION_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-                diag::warn!(
-                    "EOP for MJD UTC = {mjd_utc} comes from IERS predictions made \
-                     {age:.0} days ago: the loaded table's observed data ends at {} \
-                     (MJD {last_observed}), and the file has not been refreshed since. \
-                     Months-old predictions are off by ~0.3-0.6 arcsec in UT1 \
-                     (10-20 m at LEO).\n\
-                     Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
-                     to download the current Earth orientation file.\n\
-                     To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
-                     (Python: `satkit.frametransform.disable_eop_time_warning()`)",
-                    Instant::from_mjd_utc(last_observed)
-                );
+                warning = Some(LookupWarning::StalePredictions { last_observed, age });
             }
         }
     }
@@ -895,16 +952,19 @@ fn eop_lookup(mjd_utc: f64) -> Option<[f64; 6]> {
     // within a day, the corrections are exactly zero except for the row past
     // a leap second.
     let dat = crate::time::tai_minus_utc_at_mjd_utc(mjd_utc);
-    let dut1_0 = v0.dut1 + (dat - crate::time::tai_minus_utc_at_mjd_utc(v0.mjd_utc));
-    let dut1_1 = v1.dut1 + (dat - crate::time::tai_minus_utc_at_mjd_utc(v1.mjd_utc));
-    Some([
-        g0.mul_add(dut1_0, g1 * dut1_1),
-        g0.mul_add(v0.xp, g1 * v1.xp),
-        g0.mul_add(v0.yp, g1 * v1.yp),
-        g0.mul_add(v0.lod, g1 * v1.lod),
-        g0.mul_add(v0.dX, g1 * v1.dX),
-        g0.mul_add(v0.dY, g1 * v1.dY),
-    ])
+    let dut1_0 = v0.dut1 + (dat - v0.tai_utc);
+    let dut1_1 = v1.dut1 + (dat - v1.tai_utc);
+    (
+        Some([
+            g0.mul_add(dut1_0, g1 * dut1_1),
+            g0.mul_add(v0.xp, g1 * v1.xp),
+            g0.mul_add(v0.yp, g1 * v1.yp),
+            g0.mul_add(v0.lod, g1 * v1.lod),
+            g0.mul_add(v0.dX, g1 * v1.dX),
+            g0.mul_add(v0.dY, g1 * v1.dY),
+        ]),
+        warning,
+    )
 }
 
 ///
@@ -1567,6 +1627,79 @@ mod tests {
         }
     }
 
+    /// The lookup (day-offset index, TAI − UTC of each row computed at load)
+    /// returns bit for bit what the plain binary search with TAI − UTC
+    /// evaluated per lookup returned: on every day of the real table at
+    /// several times of day (the leap-second days among them), on a copy
+    /// with gaps (the binary-search fallback), and before and after the
+    /// table.
+    #[test]
+    fn lookup_matches_reference() {
+        fn reference(eop: &[EOPEntry], mjd: f64) -> Option<[f64; 6]> {
+            let idx = eop.partition_point(|x| x.mjd_utc <= mjd);
+            if idx == 0 {
+                return None;
+            }
+            if idx >= eop.len() {
+                let l = &eop[eop.len() - 1];
+                return Some([l.dut1, l.xp, l.yp, l.lod, l.dX, l.dY]);
+            }
+            let (v0, v1) = (&eop[idx - 1], &eop[idx]);
+            let g1 = (mjd - v0.mjd_utc) / (v1.mjd_utc - v0.mjd_utc);
+            let g0 = 1.0 - g1;
+            let tai_utc = crate::time::tai_minus_utc_at_mjd_utc;
+            let dat = tai_utc(mjd);
+            let d0 = v0.dut1 + (dat - tai_utc(v0.mjd_utc));
+            let d1 = v1.dut1 + (dat - tai_utc(v1.mjd_utc));
+            Some([
+                g0.mul_add(d0, g1 * d1),
+                g0.mul_add(v0.xp, g1 * v1.xp),
+                g0.mul_add(v0.yp, g1 * v1.yp),
+                g0.mul_add(v0.lod, g1 * v1.lod),
+                g0.mul_add(v0.dX, g1 * v1.dX),
+                g0.mul_add(v0.dY, g1 * v1.dY),
+            ])
+        }
+        let bits = |v: Option<[f64; 6]>| v.map(|a| a.map(f64::to_bits));
+        let path = datadir::find_all(FINALS2000A_FILE)
+            .into_iter()
+            .next()
+            .expect("finals2000A.all present in tests");
+        let table = parse_finals2000a(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let gappy: Vec<EOPEntry> = table
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % 7 != 3)
+            .map(|(_, e)| e.clone())
+            .collect();
+        let sample = parse_finals2000a(FINALS_SAMPLE).unwrap();
+        let mut checked = 0;
+        for t in [&table, &gappy, &sample] {
+            let (first, last) = (t[0].mjd_utc, t[t.len() - 1].mjd_utc);
+            let mut day = first - 3.0;
+            while day <= last + 3.0 {
+                for frac in [0.0, 1.0e-9, 0.25, 0.5, 0.999_999] {
+                    let q = day + frac;
+                    assert_eq!(
+                        bits(eop_lookup(Some(t), q).0),
+                        bits(reference(t, q)),
+                        "MJD {q}"
+                    );
+                    checked += 1;
+                }
+                day += if t.len() < 10 { 0.5 } else { 1.0 };
+            }
+            for q in [f64::NAN, f64::NEG_INFINITY, f64::INFINITY, -1e20, 1e20, 0.0] {
+                assert_eq!(
+                    bits(eop_lookup(Some(t), q).0),
+                    bits(reference(t, q)),
+                    "MJD {q}"
+                );
+            }
+        }
+        assert!(checked > 100_000, "{checked}");
+    }
+
     /// The EOP warnings reach an installed logger under this module's
     /// target, at Warn, and only once the table's read lock is released: a
     /// logger may block (the Python bindings' takes the GIL), and a thread
@@ -1605,9 +1738,17 @@ mod tests {
         assert!(eop_from_mjd_utc(60000.0).is_none());
         init_from_bytes(FINALS_SAMPLE.as_bytes()).unwrap();
         assert!(eop_from_mjd_utc(30000.0).is_none());
+        // Observed data ending in 1992: a query in the predictions is stale.
+        let stale = FINALS_SAMPLE.replace("61300.00 I", "61300.00 P");
+        init_from_bytes(stale.as_bytes()).unwrap();
+        assert!(eop_from_mjd_utc(61400.0).is_some());
+        assert!(eop_from_mjd_utc(70000.0).is_some());
+        // Each is shown once.
+        assert!(eop_from_mjd_utc(61401.0).is_some());
+        assert!(eop_from_mjd_utc(70001.0).is_some());
 
         let seen = SEEN.lock().unwrap();
-        assert_eq!(seen.len(), 2, "{seen:?}");
+        assert_eq!(seen.len(), 4, "{seen:?}");
         for (level, target, _, locked) in seen.iter() {
             assert_eq!(*level, log::Level::Warn);
             assert_eq!(target, "satkit::earth_orientation_params");
@@ -1624,5 +1765,15 @@ mod tests {
             "{no_table}"
         );
         assert!(too_early.contains("(too early)"), "{too_early}");
+        let (stale, extrapolated) = (&seen[2].2, &seen[3].2);
+        assert!(
+            stale.starts_with("EOP for MJD UTC = 61400 comes from IERS predictions")
+                && stale.contains("(MJD 48683)"),
+            "{stale}"
+        );
+        assert!(
+            extrapolated.starts_with("EOP data ends at") && extrapolated.contains("MJD 61673"),
+            "{extrapolated}"
+        );
     }
 }
