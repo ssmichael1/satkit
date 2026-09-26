@@ -19,8 +19,8 @@
 #
 # What stubtest cannot see at all (so the doc-example tests and the unit tests
 # have to): return types; parameter types (only names, kinds and defaults are
-# compared); the keywords of a binding that takes `**kwargs`/`*args` without a
-# `text_signature`; and anything about constructors (next block).
+# compared); the arguments of a binding that takes bare `*args`; and anything
+# about constructors (next block).
 
 # --- PyO3 constructors ---------------------------------------------------------
 # A pyclass constructor is `__new__` at runtime (the #[new] signature is the
@@ -32,25 +32,27 @@
 # runtime __text_signature__ instead, where the binding declares one.
 #
 # Declared runtime signature, checked by test_stub_signatures.py:
+satkit\.satkit\.duration\.__init__
+satkit\.satkit\.duration\.__new__
 satkit\.satkit\.ecomparams\.__init__
 satkit\.satkit\.ecomparams\.__new__
 satkit\.satkit\.kepler\.__init__
 satkit\.satkit\.kepler\.__new__
+satkit\.satkit\.propsettings\.__init__
+satkit\.satkit\.propsettings\.__new__
 satkit\.satkit\.satproperties\.__init__
 satkit\.satkit\.satproperties\.__new__
 satkit\.satkit\.satstate\.__init__
 satkit\.satkit\.satstate\.__new__
-# Declared runtime signature `(*py_args, scale=...)`; the stub spells out the
-# accepted forms as positional-only overloads, which stubtest cannot match
-# against `*py_args`.
-satkit\.satkit\.time\.__init__
-satkit\.satkit\.time\.__new__
-# #[new] parses `*args` / `**kwargs` by hand, so the runtime has no signature to
-# compare against (checked by the constructor calls in the doc examples).
-satkit\.satkit\.duration\.__init__
+# Declared runtime signature `(*args, <keywords>)`; the stub spells out the
+# positional forms as positional-only overloads, which stubtest cannot match
+# against `*args` (test_stub_signatures.py checks the keywords).
 satkit\.satkit\.itrfcoord\.__init__
 satkit\.satkit\.itrfcoord\.__new__
-satkit\.satkit\.propsettings\.__init__
+satkit\.satkit\.time\.__init__
+satkit\.satkit\.time\.__new__
+# #[new] takes bare `*args`, so the runtime has no signature to compare
+# against (checked by the constructor calls in the doc examples).
 satkit\.satkit\.quaternion\.__init__
 satkit\.satkit\.quaternion\.__new__
 

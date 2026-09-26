@@ -669,7 +669,7 @@ def gravity(
     *,
     model: gravmodel = ...,
     degree: int = 6,
-    order: int = ...,
+    order: int | None = None,
 ) -> npt.NDArray[np.float64]:
     """Return acceleration due to Earth gravity at the input position
 
@@ -703,7 +703,7 @@ def gravity_and_partials(
     *,
     model: gravmodel = ...,
     degree: int = 6,
-    order: int = ...,
+    order: int | None = None,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Gravity and partial derivatives of gravity with respect to Cartesian coordinates
 
@@ -1816,9 +1816,9 @@ class duration:
     def __init__(
         self,
         *,
-        days: float = 0,
-        hours: float = 0,
-        minutes: float = 0,
+        days: float = 0.0,
+        hours: float = 0.0,
+        minutes: float = 0.0,
         seconds: float = 0.0,
         microseconds: int = 0,
     ) -> None:
@@ -2881,12 +2881,12 @@ class itrfcoord:
     def __init__(
         self,
         *,
-        latitude_deg: float = ...,
-        longitude_deg: float = ...,
-        latitude_rad: float = ...,
-        longitude_rad: float = ...,
-        altitude: float = ...,
-        height: float = ...,
+        latitude_deg: float | None = None,
+        longitude_deg: float | None = None,
+        latitude_rad: float | None = None,
+        longitude_rad: float | None = None,
+        altitude: float | None = None,
+        height: float | None = None,
     ) -> None:
         """Create ITRF coordinate from Cartesian vector or geodetic parameters.
 
@@ -2900,8 +2900,11 @@ class itrfcoord:
             longitude_deg: Longitude in degrees
             latitude_rad: Latitude in radians
             longitude_rad: Longitude in radians
-            altitude: Height above ellipsoid, meters
-            height: Height above ellipsoid, meters (alias for altitude)
+            altitude: Height above ellipsoid, meters. Default is 0
+            height: Height above ellipsoid, meters (alias for altitude; wins if both are given)
+
+        Any geodetic keyword selects the geodetic form. ``latitude_rad`` /
+        ``longitude_rad`` win over ``latitude_deg`` / ``longitude_deg``.
         """
         ...
 
@@ -4190,7 +4193,7 @@ class propsettings:
         abs_error: float = 1e-8,
         rel_error: float = 1e-8,
         gravity_degree: int = 4,
-        gravity_order: int = 4,
+        gravity_order: int | None = None,
         gravity_model: gravmodel = ...,
         use_spaceweather: bool = True,
         use_sun_gravity: bool = True,
@@ -4536,10 +4539,12 @@ def lambert(
     ...
 
 def propagate(
-    state: npt.NDArray[np.float64],
-    begin: time,
+    state: npt.ArrayLike | None = None,
+    begin: time | None = None,
     end: time | None = None,
     *,
+    pos: npt.ArrayLike | None = None,
+    vel: npt.ArrayLike | None = None,
     duration: duration | None = None,
     duration_secs: float | None = None,
     duration_days: float | None = None,
@@ -4552,8 +4557,10 @@ def propagate(
     Propagate orbits with high-precision force modeling via adaptive Runge-Kutta methods (default is order 9/8).
 
     Args:
-        state: 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second
-        begin: Time at which satellite is at input state
+        state: 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second.
+            Required unless ``pos`` and ``vel`` are given
+        begin: Time at which satellite is at input state. Required (``TypeError`` if omitted); its
+            ``None`` default only lets ``state`` be omitted in favour of ``pos`` and ``vel``
 
     Keyword Args:
         end: Time at which new position and velocity will be computed
@@ -4563,6 +4570,9 @@ def propagate(
         output_phi: Output 6x6 state transition matrix between begin and end times. Default is False
         propsettings: Settings for the propagation; if omitted, defaults are used
         satproperties: Drag and radiation pressure susceptibility of satellite
+        pos: GCRF position in meters; replaces the first three elements of ``state``,
+            or stands in for ``state`` together with ``vel``
+        vel: GCRF velocity in meters/second; replaces the last three elements of ``state``
 
     Returns:
         propresult: Propagation result object holding state outputs, statistics,

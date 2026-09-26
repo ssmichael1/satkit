@@ -10,7 +10,6 @@ use numpy::ndarray;
 use numpy::PyArrayMethods;
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use pyo3::IntoPyObject;
 use pyo3::IntoPyObjectExt;
 
@@ -73,55 +72,25 @@ pub fn to_vector3(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vector3> {
     Ok(numeris::vector![a[0], a[1], a[2]])
 }
 
-pub fn kwargs_or_default<'py, T>(
-    kwargs: &mut Option<&Bound<'py, PyDict>>,
-    name: &str,
-    default: T,
-) -> PyResult<T>
-where
-    T: FromPyObjectOwned<'py>,
-{
-    if let Some(kw) = kwargs {
-        match kw.get_item(name)? {
-            None => Ok(default),
-            Some(v) => {
-                kw.del_item(name)?;
-                let value = v.extract::<T>().map_err(|_e| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid value for {}", name))
-                })?;
-                Ok(value)
-            }
-        }
-    } else {
-        Ok(default)
-    }
+/// The `ValueError` a keyword of the wrong type has always raised for the
+/// keywords that were once parsed from `**kwargs` by hand (see
+/// [`arg_extractor!`](crate::arg_extractor))
+pub fn invalid_value(name: &str) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid value for {name}"))
 }
 
-pub fn kwargs_or_none<'py, T>(
-    kwargs: &mut Option<&Bound<'py, PyDict>>,
-    name: &str,
-) -> PyResult<Option<T>>
-where
-    T: FromPyObjectOwned<'py>,
-{
-    if let Some(kw) = kwargs {
-        match kw.get_item(name)? {
-            None => Ok(None),
-            // An explicit `name=None` means the same as leaving it out
-            Some(v) if v.is_none() => {
-                kw.del_item(name)?;
-                Ok(None)
-            }
-            Some(v) => {
-                kw.del_item(name)?;
-                Ok(Some(v.extract::<T>().map_err(|_| {
-                    pyo3::exceptions::PyValueError::new_err(format!("Invalid value for {}", name))
-                })?))
-            }
+/// Define `$vis fn $f(&Bound<PyAny>) -> PyResult<$t>` for
+/// `#[pyo3(from_py_with = $f)]`: it extracts a `$t` and maps a failure
+/// through `$err` (a closure taking the extraction error), so an argument of
+/// the wrong type keeps the exception and message it raised when the bindings
+/// parsed `**kwargs` by hand.
+#[macro_export]
+macro_rules! arg_extractor {
+    ($vis:vis $f:ident: $t:ty, $err:expr) => {
+        $vis fn $f(v: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<$t> {
+            v.extract::<$t>().map_err($err)
         }
-    } else {
-        Ok(None)
-    }
+    };
 }
 
 /// Encode a maneuver / continuous-thrust coordinate frame as a single byte for
@@ -204,19 +173,6 @@ pub fn serde_pickle_from_slice<T: serde::de::DeserializeOwned>(
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("invalid {what} pickle: {e}")))
 }
 
-/// Raise `ValueError` listing any keyword arguments that remain unconsumed
-/// after all expected keywords have been extracted (and deleted) from `kw`
-pub fn reject_unused_kwargs(kw: &Bound<'_, PyDict>) -> PyResult<()> {
-    if kw.is_empty() {
-        return Ok(());
-    }
-    let keys: Vec<String> = kw.iter().map(|(k, _v)| k.to_string()).collect();
-    Err(pyo3::exceptions::PyValueError::new_err(format!(
-        "Invalid keyword arguments: {}",
-        keys.join(", ")
-    )))
-}
-
 /// Pickle support shared by the enum classes (`frame`, `timescale`, ...):
 /// `__reduce__` returns `(satkit.satkit._enum_member, (path, name))`, so
 /// unpickling looks the member up by name. `path` is the class's attribute
@@ -271,35 +227,6 @@ macro_rules! enum_pickle {
             }
         }
     };
-}
-
-/// Raise `TypeError` (Python's own convention for a bad keyword) if `kw`
-/// holds any key not in `allowed`, e.g. a misspelt `degre=`. Unlike
-/// [`reject_unused_kwargs`] it does not need the keywords to be consumed.
-pub fn reject_unknown_kwargs(
-    fname: &str,
-    kw: &Bound<'_, PyDict>,
-    allowed: &[&str],
-) -> PyResult<()> {
-    let unknown: Vec<String> = kw
-        .keys()
-        .iter()
-        .map(|k| k.to_string())
-        .filter(|k| !allowed.contains(&k.as_str()))
-        .collect();
-    if unknown.is_empty() {
-        return Ok(());
-    }
-    Err(pyo3::exceptions::PyTypeError::new_err(format!(
-        "{fname}() got unexpected keyword argument{} {} (accepted: {})",
-        if unknown.len() == 1 { "" } else { "s" },
-        unknown
-            .iter()
-            .map(|k| format!("'{k}'"))
-            .collect::<Vec<_>>()
-            .join(", "),
-        allowed.join(", ")
-    )))
 }
 
 pub fn py_vec3_of_time_result_arr(

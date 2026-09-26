@@ -7,7 +7,6 @@ use numpy as np;
 use satkit::mathtypes::*;
 
 use crate::pyutils::{slice2py2d, vec2py};
-use pyo3::types::PyDict;
 
 use anyhow::{bail, Result};
 
@@ -19,36 +18,25 @@ fn ensure_loaded(model: &GravModel) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{e}"))
 }
 
-/// Parse the arguments shared by `gravity` and `gravity_and_partials`: the
-/// `model` / `degree` / `order` keywords (loading the model's coefficients)
-/// and the ITRF position, an `itrfcoord` or a 3-element numpy array
+crate::arg_extractor!(model_arg: GravModel, |e| {
+    pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to extract gravity model: {e}"))
+});
+crate::arg_extractor!(degree_arg: usize, |e| {
+    pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to extract degree: {e}"))
+});
+crate::arg_extractor!(order_arg: Option<usize>, |e| {
+    pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to extract order: {e}"))
+});
+
+/// Check the arguments shared by `gravity` and `gravity_and_partials`
+/// (loading the model's coefficients) and read the ITRF position, an
+/// `itrfcoord` or a 3-element numpy array
 fn gravity_args(
-    fname: &str,
     pos: &Bound<'_, PyAny>,
-    kwds: Option<&Bound<'_, PyDict>>,
+    model: GravModel,
+    degree: usize,
+    order: Option<usize>,
 ) -> Result<(Vector3, usize, usize, GravityModel)> {
-    let mut degree: usize = 6;
-    let mut order: Option<usize> = None;
-    let mut model: GravModel = GravModel::egm2008;
-    if let Some(kw) = kwds {
-        crate::pyutils::reject_unknown_kwargs(fname, kw, &["model", "degree", "order"])?;
-        if let Some(v) = kw.get_item("model")? {
-            model = v
-                .extract::<GravModel>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract gravity model: {}", e))?;
-        }
-        if let Some(v) = kw.get_item("degree")? {
-            degree = v
-                .extract::<usize>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract degree: {}", e))?;
-        }
-        if let Some(v) = kw.get_item("order")? {
-            order = Some(
-                v.extract::<usize>()
-                    .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?,
-            );
-        }
-    }
     let order = order.unwrap_or(degree);
     if degree > MAX_GRAVITY_DEGREE as usize {
         return Err(pyo3::exceptions::PyValueError::new_err(format!(
@@ -143,18 +131,15 @@ impl From<GravityModel> for GravModel {
 /// Notes:
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 #[pyfunction]
-// The keywords are parsed by hand from `kwds`; `text_signature` publishes
-// them so `inspect.signature` and stubtest see the real parameters.
-#[pyo3(
-    signature=(pos, **kwds),
-    text_signature = "(pos, *, model=..., degree=6, order=...)"
-)]
+#[pyo3(signature=(pos, *, model=GravModel::egm2008, degree=6, order=None))]
 pub fn gravity(
     py: Python,
     pos: &Bound<'_, PyAny>,
-    kwds: Option<&Bound<'_, PyDict>>,
+    #[pyo3(from_py_with = model_arg)] model: GravModel,
+    #[pyo3(from_py_with = degree_arg)] degree: usize,
+    #[pyo3(from_py_with = order_arg)] order: Option<usize>,
 ) -> Result<Py<PyAny>> {
-    let (v, degree, order, model) = gravity_args("gravity", pos, kwds)?;
+    let (v, degree, order, model) = gravity_args(pos, model, degree, order)?;
     Ok(vec2py(py, &accel(&v, degree, order, model))?)
 }
 
@@ -176,18 +161,15 @@ pub fn gravity(
 ///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
 ///
 #[pyfunction]
-// The keywords are parsed by hand from `kwds`; `text_signature` publishes
-// them so `inspect.signature` and stubtest see the real parameters.
-#[pyo3(
-    signature=(pos, **kwds),
-    text_signature = "(pos, *, model=..., degree=6, order=...)"
-)]
+#[pyo3(signature=(pos, *, model=GravModel::egm2008, degree=6, order=None))]
 pub fn gravity_and_partials(
     py: Python,
     pos: &Bound<'_, PyAny>,
-    kwds: Option<&Bound<'_, PyDict>>,
+    #[pyo3(from_py_with = model_arg)] model: GravModel,
+    #[pyo3(from_py_with = degree_arg)] degree: usize,
+    #[pyo3(from_py_with = order_arg)] order: Option<usize>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
-    let (v, degree, order, model) = gravity_args("gravity_and_partials", pos, kwds)?;
+    let (v, degree, order, model) = gravity_args(pos, model, degree, order)?;
     let (g, p) = accel_and_partials(&v, degree, order, model);
     // The partials' column-major storage read as a row-major (C-order) array,
     // as before: the array is `p` transposed (the matrix is symmetric up to
