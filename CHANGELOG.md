@@ -4,12 +4,18 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Added
+
+- Moonrise / moonset (`moon::riseset`, Python `moon.rise_set`: upper limb with refraction, `None` on days without the event) and principal Moon phase times (`moon::phase_times` / `next_phase`), built-in analytic or `use_jpl` ([#270](https://github.com/ssmichael1/satkit/pull/270))
+- `sun.rise_set(..., use_jpl=True)` (Rust `sun::riseset_with`) takes the Sun from the JPL ephemeris, within 0.01 s of Skyfield; the analytic Sun (`sun.pos_mod`, `pos_gcrf`, `rise_set`) adds the largest VSOP87 planetary and lunar terms to Meeus's solar coordinates, 3.6″ from JPL (was 43″), so `rise_set` is within 0.5 s (was 2.8 s) ([#272](https://github.com/ssmichael1/satkit/pull/272))
+
 ### Fixed
 
 - `sun.rise_set` iterates Algorithm 30 at the event and adds nutation and solar parallax: within 3 s of Skyfield up to 65° latitude (was up to 35 s); clearer polar day/night error; horizon (sea level), dip and UT1 documented ([#268](https://github.com/ssmichael1/satkit/pull/268))
 
 ### Docs
 
+- New tutorial "Eclipse: Path of Totality": Besselian elements from the JPL ephemerides, the path of totality with its limits and duration contours for 2024 and 2045, checked against NASA's elements and path table (within 1 km); the Eclipse tutorial's map gets the same Lambert conformal style ([#269](https://github.com/ssmichael1/satkit/pull/269))
 - New Rust section on satkit.dev: quick start (Cargo features, data files, logging, errors) and topic pages built on runnable programs in `examples/`, linked from the docs.rs front page ([#271](https://github.com/ssmichael1/satkit/pull/271))
 
 ## 0.24.0 - 2026-09-26

@@ -14,8 +14,7 @@ code follows where that is useful.
   Used for: SGP4 reference implementation (the C++ code satkit's port follows),
   GMST (Algorithm 15, Eq. 3-45), the approximate (`_approx`) reduction (§3.7, Eqs. 3-88 to
   3-90), TEME (§3.7.3), RSW/NTW frames (§3.3, Eq. 3-31), Kepler's equation
-  (Algorithm 2), Sun position (Algorithm 29, §5.1.1), sunrise/sunset
-  (Algorithm 30, §5.3.1), Moon position (Algorithm 31, §5.2.3), Hohmann
+  (Algorithm 2), sunrise/sunset (Algorithm 30, §5.3.1), Moon position (Algorithm 31, §5.2.3), Hohmann
   transfer (§6.3), Lambert background (Ch. 7), TDB−TT (Eq. 3-50).
 
 <a id="montenbruck2000"></a>
@@ -52,6 +51,18 @@ code follows where that is useful.
   Attitude Determination and Control*. Springer.
   <https://doi.org/10.1007/978-1-4939-0802-8>. Used for: quaternion and
   local-vertical/local-horizontal frame conventions.
+
+<a id="meeus1989"></a>
+- **Meeus, J. (1989).** *Elements of Solar Eclipses 1951–2200*. Willmann-Bell,
+  Richmond, VA. Used for: Besselian elements and the central line, limits and
+  local circumstances computed from them (Eclipse: Path of Totality tutorial).
+
+<a id="meeus1998"></a>
+- **Meeus, J. (1998).** *Astronomical Algorithms*, 2nd ed. Willmann-Bell,
+  Richmond, VA. ISBN 978-0943396613. Used for: the low-precision Sun position
+  (Ch. 25, low-accuracy solar coordinates, with the VSOP87 Earth terms of
+  Appendix III), the mean obliquity (Eq. 22.2) and the four-term nutation
+  (Ch. 22) of `sun.pos_mod` and `sun.rise_set`.
 
 ## Standards and conventions
 
@@ -106,7 +117,8 @@ code follows where that is useful.
 <a id="urban2013"></a>
 - **Urban, S. E., & Seidelmann, P. K. (eds.) (2013).** *Explanatory
   Supplement to the Astronomical Almanac*, 3rd ed. University Science Books.
-  Used for: the definition of pre-1972 UTC.
+  Used for: the definition of pre-1972 UTC; Besselian elements of solar
+  eclipses (Eclipse: Path of Totality tutorial).
 
 ## Papers and reports
 
@@ -243,6 +255,15 @@ code follows where that is useful.
   Nonlinear Parameters." *Journal of the Society for Industrial and Applied
   Mathematics*, 11(2), 431–441. <https://doi.org/10.1137/0111030>.
 
+<a id="espenak"></a>
+- **Espenak, F.** NASA Eclipse Web Site, Goddard Space Flight Center.
+  <https://eclipse.gsfc.nasa.gov/>. Besselian elements and path tables of
+  solar eclipses, e.g. for 2024 April 8:
+  <https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2024Apr08Tbeselm.html>
+  and <https://eclipse.gsfc.nasa.gov/SEpath/SEpath2001/SE2024Apr08Tpath.html>.
+  Used for: the lunar radii (k1, k2) and solar semi-diameter, and as the
+  validation reference of the Eclipse: Path of Totality tutorial.
+
 <a id="nelder1965"></a>
 - **Nelder, J. A., & Mead, R. (1965).** "A Simplex Method for Function
   Minimization." *The Computer Journal*, 7(4), 308–313.
@@ -353,6 +374,13 @@ code follows where that is useful.
 - **Hilla, S. (2016).** *The Extended Standard Product 3 Orbit Format (SP3-d)*.
   International GNSS Service. <https://files.igs.org/pub/data/format/sp3d.pdf>.
   The precise-orbit file format read in the GPS tutorials and tests.
+
+<a id="bretagnon1988"></a>
+- **Bretagnon, P., & Francou, G. (1988).** "Planetary theories in rectangular
+  and spherical variables. VSOP 87 solutions." *Astronomy and Astrophysics*,
+  202, 309–315. Data: VizieR catalogue VI/81. The largest planetary and lunar
+  (Earth–Moon barycentre) terms of the Earth's longitude, latitude and
+  distance in the low-precision Sun position.
 
 ## Data sources
 

@@ -213,6 +213,90 @@ class TestMoon:
         phase_last = sk.moon.phase_name(t_last)
         assert phase_last == sk.moon.moonphase.LastQuarter
 
+    @staticmethod
+    def _jpl_or_skip():
+        try:
+            sk.jplephem.geocentric_pos(sk.solarsystem.Moon, sk.time(2024, 1, 1))
+        except Exception as e:  # no ephemeris file available
+            pytest.skip(f"JPL ephemeris unavailable: {e}")
+
+    def test_moon_rise_set(self):
+        # USNO (rstt/oneday, tz = lon / 15): 2024-03-15 at 35 N 75 W, moonrise
+        # 09:23 local (14:23 UTC) and no moonset that day; 2024-10-17 at
+        # 0 N 0 E, moonset 05:29 and moonrise 17:58 UTC
+        usa = sk.itrfcoord(latitude_deg=35.0, longitude_deg=-75.0)
+        rise, set = sk.moon.rise_set(sk.time(2024, 3, 15), usa)
+        assert isinstance(rise, sk.time) and set is None
+        assert abs((rise - sk.time(2024, 3, 15, 14, 23, 0)).seconds) < 120.0
+        null = sk.itrfcoord(latitude_deg=0.0, longitude_deg=0.0)
+        rise, set = sk.moon.rise_set(sk.time(2024, 10, 17), null)
+        assert abs((rise - sk.time(2024, 10, 17, 17, 58, 0)).seconds) < 120.0
+        assert abs((set - sk.time(2024, 10, 17, 5, 29, 0)).seconds) < 120.0
+        # Circumpolar / never-up: both None
+        polar = sk.itrfcoord(latitude_deg=80.0, longitude_deg=30.0)
+        assert sk.moon.rise_set(sk.time(2024, 6, 21), polar) == (None, None)
+        # Any time type selects the UTC date; the time of day is ignored
+        import datetime
+
+        ref = sk.moon.rise_set(sk.time(2024, 10, 17), null)
+        for t in (
+            sk.time(2024, 10, 17, 23, 59, 59),
+            datetime.datetime(2024, 10, 17, 12, tzinfo=datetime.timezone.utc),
+            np.datetime64("2024-10-17T08:00"),
+        ):
+            assert sk.moon.rise_set(t, null) == ref
+        with pytest.raises(TypeError):
+            sk.moon.rise_set(sk.time(2024, 10, 17), null, True)
+
+    def test_moon_rise_set_jpl(self):
+        self._jpl_or_skip()
+        usa = sk.itrfcoord(latitude_deg=35.0, longitude_deg=-75.0)
+        rise, set = sk.moon.rise_set(sk.time(2024, 3, 15), usa, use_jpl=True)
+        assert set is None
+        assert abs((rise - sk.time(2024, 3, 15, 14, 23, 0)).seconds) < 60.0
+        # The built-in model agrees to a couple of minutes
+        rise_lp, _ = sk.moon.rise_set(sk.time(2024, 3, 15), usa)
+        assert abs((rise - rise_lp).seconds) < 120.0
+
+    def test_moon_phase_times(self):
+        # USNO: full moons of 2024 (UTC)
+        usno_full = [
+            (1, 25, 17, 54), (2, 24, 12, 30), (3, 25, 7, 0), (4, 23, 23, 49),
+            (5, 23, 13, 53), (6, 22, 1, 8), (7, 21, 10, 17), (8, 19, 18, 26),
+            (9, 18, 2, 34), (10, 17, 11, 26), (11, 15, 21, 28), (12, 15, 9, 2),
+        ]  # fmt: skip
+        phases = sk.moon.phase_times(sk.time(2024, 1, 1), sk.time(2025, 1, 1))
+        assert len(phases) == 50
+        assert all(isinstance(p, sk.moon.moonphase) and isinstance(t, sk.time) for p, t in phases)
+        full = [t for p, t in phases if p == sk.moon.moonphase.FullMoon]
+        assert len(full) == 12
+        for t, (mo, d, h, mi) in zip(full, usno_full):
+            # Built-in analytic model: within half an hour
+            assert abs((t - sk.time(2024, mo, d, h, mi, 0)).seconds) < 1800.0
+        # next_phase agrees with phase_times, from datetime / datetime64 too
+        import datetime
+
+        for start in (
+            sk.time(2024, 3, 1),
+            datetime.datetime(2024, 3, 1, tzinfo=datetime.timezone.utc),
+            np.datetime64("2024-03-01"),
+        ):
+            t = sk.moon.next_phase(start, sk.moon.moonphase.FullMoon)
+            assert abs((t - full[2]).seconds) < 0.1
+        assert sk.moon.phase_times(sk.time(2024, 2, 1), sk.time(2024, 1, 1)) == []
+        with pytest.raises(ValueError):
+            sk.moon.next_phase(sk.time(2024, 1, 1), sk.moon.moonphase.WaxingGibbous)
+
+    def test_moon_phase_times_jpl(self):
+        self._jpl_or_skip()
+        # USNO, rounded to the minute: 2024 full moons of January and October
+        phases = sk.moon.phase_times(sk.time(2024, 1, 1), sk.time(2024, 11, 1), use_jpl=True)
+        full = [t for p, t in phases if p == sk.moon.moonphase.FullMoon]
+        assert abs((full[0] - sk.time(2024, 1, 25, 17, 54, 0)).seconds) < 60.0
+        assert abs((full[-1] - sk.time(2024, 10, 17, 11, 26, 0)).seconds) < 60.0
+        t = sk.moon.next_phase(sk.time(2024, 1, 1), sk.moon.moonphase.NewMoon, use_jpl=True)
+        assert abs((t - sk.time(2024, 1, 11, 11, 57, 0)).seconds) < 60.0
+
 
 class TestPlanets:
     @pytest.mark.parametrize(
@@ -338,3 +422,46 @@ class TestSun:
             pass
         else:
             assert 1 == 0
+
+    def test_sun_rise_set_use_jpl(self):
+        # Skyfield 1.55 (DE421, IERS polar motion), sea level, horizon -50':
+        # seconds after 0h UTC; rows of the Rust test table
+        for lat, lon, month, day, rise, set_ in [
+            (45.0, -75.0, 6, 20, 33191.81, 89418.52),
+            (65.0, 139.7, 12, 21, 3114.72, 16000.48),
+            (-35.0, 139.7, 3, 20, -11739.20, 31940.33),
+        ]:
+            coord = sk.itrfcoord(latitude_deg=lat, longitude_deg=lon)
+            t0 = sk.time(2024, month, day)
+            r, s = sk.sun.rise_set(t0, coord, use_jpl=True)
+            assert abs((r - t0).seconds - rise) < 0.05
+            assert abs((s - t0).seconds - set_) < 0.05
+            # The built-in model is within 0.5 s of it
+            ra, sa = sk.sun.rise_set(t0, coord, use_jpl=False)
+            assert abs((ra - r).seconds) < 0.5 and abs((sa - s).seconds) < 0.5
+            assert sk.sun.rise_set(t0, coord) == (ra, sa)
+        # Keyword-only
+        with pytest.raises(TypeError):
+            sk.sun.rise_set(t0, coord, None, True)
+        # Polar day, and no silent fall back outside the ephemeris (DE440
+        # covers 1550-2650)
+        coord = sk.itrfcoord(latitude_deg=66.0, longitude_deg=-75.0)
+        with pytest.raises(RuntimeError, match="polar day"):
+            sk.sun.rise_set(sk.time(2024, 6, 20), coord, use_jpl=True)
+        coord = sk.itrfcoord(latitude_deg=40.0, longitude_deg=-75.0)
+        sk.sun.rise_set(sk.time(2700, 3, 20), coord)
+        with pytest.raises(RuntimeError):
+            sk.sun.rise_set(sk.time(2700, 3, 20), coord, use_jpl=True)
+
+    def test_sun_pos_vs_jpl(self):
+        # pos_gcrf is the apparent direction without nutation: 20.5" of
+        # annual aberration behind the geometric JPL direction, to within the
+        # model's 3.6"; the distance is geometric
+        times = [sk.time(2024, 1, 1) + sk.duration(days=d) for d in range(0, 366, 5)]
+        p = sk.sun.pos_gcrf(times)
+        jpl = sk.jplephem.geocentric_pos(sk.solarsystem.Sun, times)
+        cosang = np.sum(p * jpl, axis=1) / np.linalg.norm(p, axis=1) / np.linalg.norm(jpl, axis=1)
+        ang = np.degrees(np.arccos(np.clip(cosang, -1.0, 1.0))) * 3600.0
+        assert np.all(np.abs(ang - 20.5) < 4.0), ang
+        dr = np.linalg.norm(p, axis=1) - np.linalg.norm(jpl, axis=1)
+        assert np.all(np.abs(dr) < 1.7e6)
