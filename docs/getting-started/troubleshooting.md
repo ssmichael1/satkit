@@ -80,10 +80,13 @@ table.
 **Fix.** For 1962–1972, place a copy of
 [`EOP-All.csv`](https://celestrak.org/SpaceData/EOP-All.csv) in
 `sk.utils.datadir()` (or any search directory) and restart the process. With
-both files present the table starts in 1962: satkit uses the file whose
-observed record runs later and, when that is the IERS file, puts the CSV's
-pre-1973 rows in front of it. satkit has no EOP data before 1962; zeros are
-used there.
+both files present the table starts in 1962: satkit uses `finals2000A.all`
+and puts the CSV's pre-1973 rows in front of it (`eop_source()` still reports
+`"finals2000A"`). satkit has no EOP data before 1962; zeros are used there.
+
+If the warning names a start other than 1973-01-02 or 1962-01-01, the table
+was loaded by hand (`init_from_path` / `init_from_bytes`) or the file is
+truncated; it carries no advice line then.
 
 ### Space-weather warnings
 
@@ -123,14 +126,13 @@ ages from the day it was written.
 
 **Fix.** Run `sk.utils.update_datafiles()` periodically (it is cheap: see
 [below](#update_datafiles-says-no-request-made-how-do-i-force-a-refresh)).
-The fresh files go to `sk.utils.datadir()`. For space weather, when several
-copies of a file exist across the search directories, satkit uses the one whose
-table runs latest, so an old copy elsewhere does not shadow the refreshed one;
-the GFZ / SWPC / MSAFE files are also preferred over an older CelesTrak
-`SW-All.csv`. For Earth orientation, satkit picks between `finals2000A.all` and
-`EOP-All.csv` by whichever has the later observed record, but between two
-copies of `finals2000A.all` it takes the first in search order — delete a stale
-copy in an earlier search directory. See [Data Directories](datadirs.md).
+The fresh files go to `sk.utils.datadir()`. When several copies of one of
+these files exist across the search directories, satkit uses the one whose
+table runs latest (for `finals2000A.all` and `EOP-All.csv`, the latest
+observed row), so an old copy elsewhere does not shadow the refreshed one. The
+GFZ / SWPC / MSAFE files are also preferred over an older CelesTrak
+`SW-All.csv`, and `finals2000A.all` over `EOP-All.csv` (whose 1962–1972 rows
+are kept in front of it). See [Data Directories](datadirs.md).
 
 ## Data files and downloads
 
@@ -141,8 +143,14 @@ Downloads are written to exactly one directory, `sk.utils.datadir()`:
 else the platform user-data directory (`~/Library/Application Support/satkit-data`
 on macOS, `~/.local/share/satkit-data` on Linux, `%LOCALAPPDATA%\satkit-data`
 on Windows). Files are looked up across `sk.utils.data_search_dirs()` and used
-from the first directory that contains them. Nothing is ever written inside
-`site-packages`. Full table: [Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
+from the first directory that contains them — except the Earth-orientation and
+space-weather files, where the copy whose data runs latest is used, so a stale
+copy in an earlier directory (an `add_search_dir()` directory, the `satkit-data`
+bundle) does not shadow a refreshed one in `datadir()`. For Earth orientation,
+`finals2000A.all` is the table whenever it is present, with the 1962–1972 rows
+of an `EOP-All.csv` in front of it; `EOP-All.csv` alone is used only when there
+is no `finals2000A.all`. `sk.frametransform.eop_source()` says which file
+was loaded. Nothing is ever written inside `site-packages`. Full table: [Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
 
 What needs no data directory at all: the IERS nutation tables and the EGM96 /
 EGM2008 / JGM-2 / JGM-3 gravity models are compiled in, so SGP4, time scales,

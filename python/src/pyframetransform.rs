@@ -848,7 +848,10 @@ pub fn eop_coverage() -> Option<(PyInstant, PyInstant, PyInstant)> {
 /// fetched from the USNO and IERS mirrors, observed values from 1973 plus about a
 /// year of predictions) and CelesTrak's ``EOP-All.csv`` (fallback when both mirrors
 /// are unreachable; also read when present, e.g. a hand-provisioned data directory).
-/// When both are present the one whose observed record runs later is used.
+/// When ``finals2000A.all`` is present it is always used, with the CSV's 1962-1972
+/// rows kept in front when both files are there; ``EOP-All.csv`` is the table only
+/// when there is no ``finals2000A.all``. Of several copies of one file across the
+/// data search directories, the one with the latest observed row is read.
 ///
 /// Returns:
 ///     str | None: ``"finals2000A"`` for the IERS file (a table with the CelesTrak

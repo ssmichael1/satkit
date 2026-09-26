@@ -149,53 +149,71 @@ def day_before(y, m):
     return (y - 1, 12, 31) if m == 1 else (y, 6, 30)
 
 
+def _finals_rows(p):
+    """(rows, last observed MJD) of a finals2000A.all file"""
+    rows, last_obs = [], -np.inf
+    with open(p) as f:
+        for line in f:
+            line = line.rstrip()
+            if len(line) < 17 or line[16] not in "IP":
+                continue
+
+            def col(a, n, line=line):
+                return line[a - 1 : a - 1 + n].strip()
+
+            if not col(59, 10):
+                continue
+            rows.append(
+                (
+                    float(col(8, 8)),
+                    float(col(19, 9)),
+                    float(col(38, 9)),
+                    float(col(59, 10)),
+                    float(col(98, 9) or 0.0),
+                    float(col(117, 9) or 0.0),
+                )
+            )
+            if line[16] == "I":
+                last_obs = rows[-1][0]
+    return rows, last_obs
+
+
+def _celestrak_rows(p):
+    """(rows, last observed MJD) of a CelesTrak EOP-All.csv file"""
+    rows, last_obs = [], -np.inf
+    with open(p) as f:
+        next(f)
+        for line in f:
+            v = line.strip().split(",")
+            if len(v) < 12:
+                continue
+            rows.append((float(v[1]), float(v[2]), float(v[3]), float(v[4]), float(v[8]) * 1e3, float(v[9]) * 1e3))
+            if v[11].strip() != "P":
+                last_obs = rows[-1][0]
+    return rows, last_obs
+
+
 def eop_file_rows():
-    """The loaded EOP file's rows as (mjd, xp, yp, dut1, dX, dY), or None"""
-    src = ft.eop_source()
+    """The loaded EOP file's rows as (mjd, xp, yp, dut1, dX, dY), or None.
+
+    The file is the one eop_source() names; of several copies across the
+    search directories satkit reads the one with the latest observed row
+    (ties: search order), and so does this."""
+    name, parse = {
+        "finals2000A": ("finals2000A.all", _finals_rows),
+        "celestrak": ("EOP-All.csv", _celestrak_rows),
+    }.get(ft.eop_source(), (None, None))
+    if name is None:
+        return None
+    best = None
     for d in sk.utils.data_search_dirs():
-        if src == "finals2000A":
-            p = os.path.join(d, "finals2000A.all")
-            if not os.path.isfile(p):
-                continue
-            rows = []
-            with open(p) as f:
-                for line in f:
-                    line = line.rstrip()
-                    if len(line) < 17 or line[16] not in "IP":
-                        continue
-
-                    def col(a, n, line=line):
-                        return line[a - 1 : a - 1 + n].strip()
-
-                    if not col(59, 10):
-                        continue
-                    rows.append(
-                        (
-                            float(col(8, 8)),
-                            float(col(19, 9)),
-                            float(col(38, 9)),
-                            float(col(59, 10)),
-                            float(col(98, 9) or 0.0),
-                            float(col(117, 9) or 0.0),
-                        )
-                    )
-            return np.array(rows)
-        if src == "celestrak":
-            p = os.path.join(d, "EOP-All.csv")
-            if not os.path.isfile(p):
-                continue
-            rows = []
-            with open(p) as f:
-                next(f)
-                for line in f:
-                    v = line.strip().split(",")
-                    if len(v) < 12:
-                        continue
-                    rows.append(
-                        (float(v[1]), float(v[2]), float(v[3]), float(v[4]), float(v[8]) * 1e3, float(v[9]) * 1e3)
-                    )
-            return np.array(rows)
-    return None
+        p = os.path.join(d, name)
+        if not os.path.isfile(p):
+            continue
+        rows, last_obs = parse(p)
+        if rows and (best is None or last_obs > best[1]):
+            best = (rows, last_obs)
+    return None if best is None else np.array(best[0])
 
 
 # ----------------------------------------------------------------------------

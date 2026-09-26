@@ -423,6 +423,12 @@ mod tests {
     /// request is made**: the in-process server sees zero hits.
     #[test]
     fn offline_mode_blocks_fetch_without_network_io() {
+        if !download::in_own_process(
+            module_path!(),
+            "offline_mode_blocks_fetch_without_network_io",
+        ) {
+            return; // ran, and passed, in a child process
+        }
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -458,6 +464,9 @@ mod tests {
     /// setter or the environment variable, not always the variable.
     #[test]
     fn offline_error_reports_the_actual_reason() {
+        if !download::in_own_process(module_path!(), "offline_error_reports_the_actual_reason") {
+            return; // ran, and passed, in a child process
+        }
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -493,6 +502,12 @@ mod tests {
     /// the target directory is not even created.
     #[test]
     fn update_datafiles_offline_fails_before_touching_dir() {
+        if !download::in_own_process(
+            module_path!(),
+            "update_datafiles_offline_fails_before_touching_dir",
+        ) {
+            return; // ran, and passed, in a child process
+        }
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -520,6 +535,9 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn update_datafiles_unwritable_dir_is_named() {
+        if !download::in_own_process(module_path!(), "update_datafiles_unwritable_dir_is_named") {
+            return; // ran, and passed, in a child process
+        }
         use std::os::unix::fs::PermissionsExt;
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
@@ -564,6 +582,9 @@ mod tests {
     /// setter call the environment decides.
     #[test]
     fn offline_setter_overrides_environment() {
+        if !download::in_own_process(module_path!(), "offline_setter_overrides_environment") {
+            return; // ran, and passed, in a child process
+        }
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -901,6 +922,12 @@ mod tests {
     /// current without any request — even when every mirror is down.
     #[test]
     fn eop_refresh_falls_through_mirrors_then_celestrak() {
+        if !download::in_own_process(
+            module_path!(),
+            "eop_refresh_falls_through_mirrors_then_celestrak",
+        ) {
+            return; // ran, and passed, in a child process
+        }
         use crate::earth_orientation_params::{self as eop, EopSource};
         let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::utils::download::clear_offline_override();
@@ -990,7 +1017,7 @@ mod tests {
         drop(server);
 
         // (Which file the loader then picks is covered in
-        // earth_orientation_params::tests::load_from_paths_picks_the_fresher_file.)
+        // earth_orientation_params::tests::load_from_paths_prefers_finals.)
 
         // Offline: no request is made at all, and no cadence shortcut either.
         crate::utils::download::set_offline(true);

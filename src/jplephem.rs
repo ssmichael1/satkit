@@ -953,6 +953,12 @@ mod tests {
     /// error is the typed `CorruptFile` naming the expected hash.
     #[test]
     fn corrupt_pinned_ephemeris_is_refused_offline() {
+        if !crate::utils::download::in_own_process(
+            module_path!(),
+            "corrupt_pinned_ephemeris_is_refused_offline",
+        ) {
+            return; // ran, and passed, in a child process
+        }
         let _guard = crate::utils::manifest::ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());

@@ -75,9 +75,10 @@ ephemeris.
   its compiled file, so satkit does not mirror it. Earth orientation is fetched via the manifest's `eop` list,
   in order: the IERS Bulletin A combined file `finals2000A.all` from the USNO
   mirror, then from the IERS data centre, then CelesTrak's `EOP-All.csv` as
-  the fallback. The loader reads both formats and, when both are on disk,
-  uses the one whose observed record runs later (the CSV's 1962–1972 rows are
-  kept in front of the IERS table, which starts in 1973). See
+  the fallback. The loader reads both formats; when `finals2000A.all` is on
+  disk it is always the table (the CSV's 1962–1972 rows are kept in front of
+  it, since it starts in 1973), and `EOP-All.csv` is the table only when there
+  is no `finals2000A.all`. See
   [Refresh policy](#refresh-policy-celestrak) for how often either is fetched.
 - **`Kp_ap_Ap_SN_F107_since_1932.txt`, `45-day-forecast.txt`,
   `msafe-f10-prd.txt`** — space weather, from its producers rather than a

@@ -225,11 +225,47 @@ pub fn find_file(name: &str) -> Option<PathBuf> {
 
 /// Every copy of `name` in the search directories, in search order.
 pub fn find_all(name: &str) -> Vec<PathBuf> {
-    search_dirs()
-        .into_iter()
+    find_all_in(&search_dirs(), name)
+}
+
+/// Every copy of `name` in `dirs`, in the order given.
+pub(crate) fn find_all_in(dirs: &[PathBuf], name: &str) -> Vec<PathBuf> {
+    dirs.iter()
         .map(|d| d.join(name))
         .filter(|p| p.is_file())
         .collect()
+}
+
+/// Of several copies of one refreshed data file, the one whose content is
+/// freshest by `key` — for the space-weather files the day of the last
+/// row, for the Earth-orientation files the MJD of the last observed row.
+/// Ties keep the earlier copy in `copies`, i.e. search order. Copies that
+/// cannot be read, or for which `key` is `None`, are skipped; if none
+/// qualifies, the first copy is returned so the load reports its error.
+/// With one copy nothing is read.
+///
+/// A read-only copy in a search directory ahead of the write location (an
+/// [`add_search_dir`] directory, `<dylib>/satkit-data`, the `satkit-data`
+/// bundle) would otherwise shadow every later download: [`find_file`] and
+/// [`path_for`] return the first match.
+pub(crate) fn freshest_of<K: PartialOrd>(
+    copies: Vec<PathBuf>,
+    key: impl Fn(&str) -> Option<K>,
+) -> Option<PathBuf> {
+    if copies.len() <= 1 {
+        return copies.into_iter().next();
+    }
+    let mut best: Option<(K, &PathBuf)> = None;
+    for p in &copies {
+        let Some(k) = std::fs::read_to_string(p).ok().and_then(|t| key(&t)) else {
+            continue;
+        };
+        if best.as_ref().is_none_or(|(b, _)| k > *b) {
+            best = Some((k, p));
+        }
+    }
+    best.map(|(_, p)| p.clone())
+        .or_else(|| copies.into_iter().next())
 }
 
 /// The path to use for `name`: where it was found in the search
@@ -374,6 +410,38 @@ pub fn testdirs() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stale copy earlier in the search order must not shadow a fresher
+    /// one later in it; ties and unparseable copies fall back to order.
+    #[test]
+    fn freshest_of_prefers_latest_last_row() {
+        let dir = std::env::temp_dir().join(format!("satkit_freshest_of_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (a, b, c) = (dir.join("a"), dir.join("b"), dir.join("c"));
+        for d in [&a, &b, &c] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        // "File content" is just the last day number in these tests.
+        std::fs::write(a.join("f"), "100").unwrap(); // stale, first in order
+        std::fs::write(b.join("f"), "200").unwrap(); // fresh
+        std::fs::write(c.join("f"), "garbage").unwrap();
+        let parse = |t: &str| t.trim().parse::<i64>().ok();
+        let paths = |ds: &[&std::path::PathBuf]| ds.iter().map(|d| d.join("f")).collect();
+
+        assert_eq!(freshest_of(paths(&[&a, &b]), parse), Some(b.join("f")));
+        assert_eq!(freshest_of(paths(&[&b, &a]), parse), Some(b.join("f")));
+        assert_eq!(freshest_of(paths(&[&c, &a]), parse), Some(a.join("f")));
+        // Single copy: returned as is, even if it would not parse.
+        assert_eq!(freshest_of(paths(&[&c]), parse), Some(c.join("f")));
+        // Nothing parses: first copy, so the load reports the real error.
+        std::fs::write(a.join("f"), "junk").unwrap();
+        assert_eq!(freshest_of(paths(&[&a, &c]), parse), Some(a.join("f")));
+        // Tie: search order wins.
+        std::fs::write(a.join("f"), "200").unwrap();
+        assert_eq!(freshest_of(paths(&[&a, &b]), parse), Some(a.join("f")));
+        assert_eq!(freshest_of(Vec::new(), parse), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn env(os: &'static str) -> Env {
         Env {
