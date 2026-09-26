@@ -38,7 +38,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 | Symbol | Description |
 |--------|-------------|
 | [`sun`](sun.md) | Sun position, sunrise/sunset, shadow function |
-| [`moon`](moon.md) | Moon position, illumination, and phase |
+| [`moon`](moon.md) | Moon position, illumination, phase, rise/set and phase times |
 | [`planets`](planets.md) | Low-precision planetary ephemerides |
 | [`density`](density.md) | NRL MSISE-00 atmospheric density model |
 | [`gravity`](gravity.md) | Earth gravity acceleration |
