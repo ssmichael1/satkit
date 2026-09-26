@@ -143,8 +143,8 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 ### Changelog
 
 - Add **one user-facing line** per pull request under `## Unreleased` in
-  `CHANGELOG.md`, in the matching `Added` / `Changed` / `Fixed` / `CI`
-  section, ending with the PR link, e.g. `([#127](https://github.com/ssmichael1/satkit/pull/127))`.
+  `CHANGELOG.md`, in the matching `Added` / `Changed` / `Deprecated` /
+  `Fixed` / `Docs` / `CI` / `Tests` section, ending with the PR link, e.g. `([#127](https://github.com/ssmichael1/satkit/pull/127))`.
 - Keep it to two lines at most: what changed and, if useful, the one number
   that says why it matters. Implementation detail, measurements and rationale
   belong in the pull-request description — PRs are squash-merged, so that

@@ -1050,10 +1050,10 @@ class time:
     Example:
         ```python
         print(satkit.time(2023, 3, 5, 11, 3, 45.453))
-        # 2023-03-05 11:03:45.453Z
+        # 2023-03-05T11:03:45.453000Z
 
         print(satkit.time(2023, 3, 5))
-        # 2023-03-05 00:00:00.000Z
+        # 2023-03-05T00:00:00.000000Z
         ```
 
     """
@@ -1124,10 +1124,10 @@ class time:
         Example:
             ```python
             print(satkit.time(2023, 3, 5, 11, 3, 45.453))
-            # 2023-03-05 11:03:45.453Z
+            # 2023-03-05T11:03:45.453000Z
 
             print(satkit.time(2023, 3, 5))
-            # 2023-03-05 00:00:00.000Z
+            # 2023-03-05T00:00:00.000000Z
             ```
         """
         ...
@@ -1145,43 +1145,84 @@ class time:
     @staticmethod
     def from_string(string: str) -> time:
         """
-        Create a "time" object from input string
+        Create a "time" object from a string, guessing its format
+
+        RFC 3339 is tried first (see :meth:`from_rfc3339`). Otherwise the
+        numbers in the string are read in year, month, day, hour, minute,
+        second order, so ISO-ordered strings (``"2024-01-04 13:14:12.123"``)
+        and month-name strings (``"March 4 2024"``) work, but locale-ordered
+        dates such as ``MM/DD/YYYY`` are not supported: use :meth:`strptime`
+        for those.
 
         Args:
-            str: String representation of time, in format "YYYY-MM-DD HH:MM:SS.sssZ" or if other will try to intelligently parse, but no guarantees
+            string: String representation of time
 
         Notes:
-            - This is probably not what you want.  Use with caution.
+            - A number after ``.`` following the seconds is the fraction of a
+              second, rounded to the nearest microsecond.
+            - A number after ``+`` or ``-`` following the minutes is a UTC
+              offset (``±HHMM``, ``±HH:MM`` or ``±HH``; hours 00-23, minutes
+              00-59) and is applied: ``"2024-01-04 13:14:12 +0100"`` is
+              ``12:14:12Z``. Any other extra number is an error.
+            - Seconds default to 0 (``"2024-01-04 13:14"``); an hour without
+              minutes is an error, and a date alone is midnight.
+            - Words other than month names (weekday names, ``T``, ``Z``,
+              ``UTC``, ...) are ignored, so a zone *name* is not applied:
+              without a numeric offset the time is UTC.
+            - This is probably not what you want. Use with caution, and prefer
+              :meth:`from_rfc3339` or :meth:`strptime` when the format is known.
 
         Returns:
             Time object representing input string
 
+        Raises:
+            RuntimeError: If the string cannot be parsed
+
         Example:
             ```python
             print(satkit.time.from_string("2023-03-05 11:03:45.453Z"))
-            # 2023-03-05 11:03:45.453Z
+            # 2023-03-05T11:03:45.453000Z
             ```
         """
         ...
 
     @staticmethod
     def from_rfc3339(rfc3339: str) -> time:
-        """Create a "time" object from input RFC 3339 string
+        """Create a "time" object from an RFC 3339 string
 
         Args:
-            rfc (str): RFC 3339 string representation of time
+            rfc3339: RFC 3339 string representation of time
 
         Notes:
-            - RFC 3339 is a subset of ISO 8601
-            - Only allows a subset of the format: "YYYY-MM-DDTHH:MM:SS.sssZ" or "YYYY-MM-DDTHH:MM:SS.ssssssZ"
+            - Format ``YYYY-MM-DDTHH:MM:SS[.fff...][zone]``. ``T`` may be
+              ``t``. The fraction has one or more digits and is rounded to the
+              nearest microsecond beyond six. Surrounding whitespace is
+              ignored; anything else left over is an error.
+            - The zone is ``Z`` / ``z``, or a UTC offset ``±HH:MM`` (RFC 3339),
+              ``±HHMM`` or ``±HH`` (ISO 8601 forms, also accepted), with hours
+              00-23 and minutes 00-59. The offset is applied:
+              ``2024-01-01T12:00:00+01:00`` is ``11:00:00Z``. It shifts the
+              calendar label, so it is exact across a leap second.
+            - Without a zone the time is taken as UTC (RFC 3339 itself
+              requires one).
+            - The year is four digits, or a sign and at least four digits
+              (ISO 8601 expanded years such as ``-0001`` or ``+10000``, as
+              :meth:`to_rfc3339` writes them outside 0000-9999).
 
         Returns:
             Time object representing input RFC 3339 string
 
+        Raises:
+            ValueError: If the string cannot be parsed; the message gives the
+                reason
+
         Example:
             ```python
             print(satkit.time.from_rfc3339("2023-03-05T11:03:45.453Z"))
-            # 2023-03-05 11:03:45.453Z
+            # 2023-03-05T11:03:45.453000Z
+
+            print(satkit.time.from_rfc3339("2023-03-05T12:03:45.453+01:00"))
+            # 2023-03-05T11:03:45.453000Z
             ```
         """
         ...
@@ -1192,34 +1233,45 @@ class time:
         Create a "time" object from input string with given formatting
 
         Args:
-            str (str): string representation of time
-            format (str): format of the string
+            date_string: string representation of time
+            format: format of the string
 
         Notes:
-            - The format string is a subset of the strptime format string in the Python "datetime" module
+            - The format string is a subset of the strptime format string in
+              the Python "datetime" module. Characters other than format codes
+              must match literally, and the whole string must be consumed:
+              leftover input is an error.
             - Format Codes:
-                - %Y - year
-                - %m - month with leading zeros (01-12)
-                - %d - day of month with leading zeros (01-31)
-                - %H - hour with leading zeros (00-23)
-                - %M - minute with leading zeros (00-59)
-                - %S - second with leading zeros (00-59)
-                - %f - microsecond, allowing for trailing zeros
+                - %Y - year: exactly four digits, or a sign and at least four
+                  digits (ISO 8601 expanded years such as ``-0044`` or
+                  ``+10000``, as :meth:`strftime` writes them outside 0000-9999)
+                - %m - month, exactly two digits (01-12)
+                - %d - day of month, exactly two digits (01-31)
+                - %H - hour, exactly two digits (00-23)
+                - %M - minute, exactly two digits (00-59)
+                - %S - second, exactly two digits (00-59, or 60 in a leap second)
+                - %f - fraction of a second: one or more digits (``5`` is
+                  500 ms), rounded to the nearest microsecond beyond six
                 - %b - abbreviated month name (Jan, Feb, ...)
                 - %B - full month name (January, February, ...)
-                - %z - UTC offset ``+HHMM``, ``-HHMM`` or ``+HH:MM``, or ``Z``.
-                  ``+HHMM`` means local time is ahead of UTC, so
-                  ``12:00:00+0100`` is ``11:00:00Z``; the offset shifts the
+                - %z - UTC offset ``±HH:MM``, ``±HHMM`` or ``±HH`` (exactly two
+                  digits per field, hours 00-23, minutes 00-59), or ``Z`` /
+                  ``z`` for UTC. ``+HHMM`` means local time is ahead of UTC,
+                  so ``12:00:00+0100`` is ``11:00:00Z``; the offset shifts the
                   calendar label, so it is exact across a leap second
+                - %% - a literal ``%``
 
         Returns:
             Time object representing input string
 
+        Raises:
+            RuntimeError: If the string does not match the format
+
         Example:
             ```python
-            # Note the microsecond %f actually is represented as milliseconds in the input string
+            # %f reads any number of fraction digits: ".453" is 453 ms
             print(satkit.time.strptime("2023-03-05 11:03:45.453Z", "%Y-%m-%d %H:%M:%S.%fZ"))
-            # 2023-03-05 11:03:45.453Z
+            # 2023-03-05T11:03:45.453000Z
             ```
         """
         ...
@@ -1240,7 +1292,7 @@ class time:
             ```python
             t = satkit.time.from_date(2023, 6, 15)
             print(t)
-            # 2023-06-15 00:00:00.000Z
+            # 2023-06-15T00:00:00.000000Z
             ```
         """
         ...
@@ -1280,7 +1332,7 @@ class time:
             ```python
             t = satkit.time.from_unixtime(1700000000)
             print(t)
-            # 2023-11-14 22:13:20.000Z
+            # 2023-11-14T22:13:20.000000Z
             ```
         """
         ...
@@ -1332,7 +1384,7 @@ class time:
         ...
 
     def to_date(self) -> tuple[int, int, int]:
-        """Return tuple representing as UTC Gegorian date of the time object.
+        """Return tuple representing as UTC Gregorian date of the time object.
 
         Returns:
             Tuple with 3 elements representing the Gregorian year, month, and day of the time object.
@@ -1350,7 +1402,7 @@ class time:
     def to_gregorian(
         self,
     ) -> tuple[int, int, int, int, int, float]:
-        """Return tuple representing as UTC Gegorian date and time of the time object.
+        """Return tuple representing as UTC Gregorian date and time of the time object.
 
         Returns:
             Tuple with 6 elements representing the Gregorian year, month, day, hour, minute, and second of the time object.
@@ -1389,7 +1441,7 @@ class time:
         Example:
             ```python
             print(satkit.time.from_gregorian(2023, 3, 5, 11, 3,45.453))
-            # 2023-03-05 11:03:45.453Z
+            # 2023-03-05T11:03:45.453000Z
             ```
         """
         ...

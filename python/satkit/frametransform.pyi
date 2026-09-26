@@ -590,7 +590,7 @@ def qteme2itrf(
 
 def earth_orientation_params(
     time: time,
-) -> tuple[float, float, float, float, float, float]:
+) -> tuple[float, float, float, float, float, float] | None:
     """Get Earth Orientation Parameters at given instant
 
     Args:

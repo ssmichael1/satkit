@@ -274,16 +274,37 @@ impl PyInstant {
         }
     }
 
-    /// Create satkit.time object from string
+    /// Create satkit.time object from a string, guessing its format
+    ///
+    /// RFC 3339 is tried first (see ``from_rfc3339``). Otherwise the numbers
+    /// in the string are read in year, month, day, hour, minute, second
+    /// order, so ISO-ordered strings (``"2024-01-04 13:14:12.123"``) and
+    /// month-name strings (``"March 4 2024"``) work, but locale-ordered dates
+    /// such as ``MM/DD/YYYY`` are not supported: use ``strptime`` for those.
     ///
     /// Args:
     ///    string (str): String representing time
+    ///
+    /// Notes:
+    ///    - A number after ``.`` following the seconds is the fraction of a
+    ///      second, rounded to the nearest microsecond.
+    ///    - A number after ``+`` or ``-`` following the minutes is a UTC
+    ///      offset (``±HHMM``, ``±HH:MM`` or ``±HH``; hours 00-23, minutes
+    ///      00-59) and is applied: ``"2024-01-04 13:14:12 +0100"`` is
+    ///      ``12:14:12Z``. Any other extra number is an error.
+    ///    - Seconds default to 0 (``"2024-01-04 13:14"``); an hour without
+    ///      minutes is an error, and a date alone is midnight.
+    ///    - Words other than month names (weekday names, ``T``, ``Z``,
+    ///      ``UTC``, ...) are ignored, so a zone *name* is not applied:
+    ///      without a numeric offset the time is UTC.
+    ///    - This is probably not what you want. Use with caution, and prefer
+    ///      ``from_rfc3339`` or ``strptime`` when the format is known.
     ///
     /// Returns:
     ///   satkit.time: Time object representing input time
     ///
     /// Raises:
-    ///   ValueError: If input string cannot be parsed
+    ///   RuntimeError: If input string cannot be parsed
     ///
     #[staticmethod]
     fn from_string(string: &str) -> Result<Self> {
@@ -294,25 +315,35 @@ impl PyInstant {
     ///
     /// Args:
     ///   date_string (str): String representing time
-    ///  format (str): Format string
+    ///   format (str): Format string
     ///
     /// Returns:
-    ///  satkit.time: Time object representing input time
+    ///   satkit.time: Time object representing input time
     ///
     /// Raises:
-    ///  ValueError: If input string cannot be parsed
+    ///   RuntimeError: If the string does not match the format
+    ///
+    /// The format string is a subset of the Python "datetime" strptime
+    /// format. Characters other than format codes must match literally, and
+    /// the whole string must be consumed: leftover input is an error.
     ///
     /// Format Codes:
-    /// %Y: Year with century as a decimal number
-    /// %m: Month as a zero-padded decimal number
-    /// %d: Day of the month as a zero-padded decimal number
-    /// %H: Hour (24-hour clock) as a zero-padded decimal number
-    /// %M: Minute as a zero-padded decimal number
-    /// %S: Second as a zero-padded decimal number
-    /// %f: Microsecond as a decimal number, with possible trailing zeros (1 to 6 digits)
-    /// %z: UTC offset in the form +HHMM or -HHMM
-    /// %b: Month as locale’s abbreviated name
-    /// %B: Month as locale’s full name
+    /// %Y: Year: exactly four digits, or a sign and at least four digits
+    ///     (ISO 8601 expanded years such as -0044 or +10000, as strftime
+    ///     writes them outside 0000-9999)
+    /// %m: Month, exactly two digits (01-12)
+    /// %d: Day of the month, exactly two digits (01-31)
+    /// %H: Hour (24-hour clock), exactly two digits (00-23)
+    /// %M: Minute, exactly two digits (00-59)
+    /// %S: Second, exactly two digits (00-59, or 60 in a leap second)
+    /// %f: Fraction of a second: one or more digits (5 is 500 ms), rounded
+    ///     to the nearest microsecond beyond six
+    /// %z: UTC offset ±HH:MM, ±HHMM or ±HH (exactly two digits per field,
+    ///     hours 00-23, minutes 00-59), or Z / z for UTC. +HHMM means local
+    ///     time is ahead of UTC, so 12:00:00+0100 is 11:00:00Z
+    /// %b: Abbreviated month name (Jan, Feb, ...)
+    /// %B: Full month name (January, February, ...)
+    /// %%: A literal %
     #[staticmethod]
     fn strptime(date_string: &str, format: &str) -> Result<Self> {
         Ok(Instant::strptime(date_string, format).map(Self)?)
@@ -349,12 +380,24 @@ impl PyInstant {
             .map_err(|e| anyhow::anyhow!("Could not format time string: {}", e))
     }
 
-    /// Create satkit.time object from RFC3339 string
+    /// Create satkit.time object from an RFC 3339 string
     ///
     /// Notes:
-    ///   RFC3339 is a standard for representing time in a string format
-    ///   See: https://tools.ietf.org/html/rfc3339
-    ///   This overlaps with ISO 8601
+    ///   - Format ``YYYY-MM-DDTHH:MM:SS[.fff...][zone]``
+    ///     (https://tools.ietf.org/html/rfc3339, which overlaps with
+    ///     ISO 8601). ``T`` may be ``t``. The fraction has one or more digits
+    ///     and is rounded to the nearest microsecond beyond six. Surrounding
+    ///     whitespace is ignored; anything else left over is an error.
+    ///   - The zone is ``Z`` / ``z``, or a UTC offset ``±HH:MM`` (RFC 3339),
+    ///     ``±HHMM`` or ``±HH`` (ISO 8601 forms, also accepted), with hours
+    ///     00-23 and minutes 00-59. The offset is applied:
+    ///     ``2024-01-01T12:00:00+01:00`` is ``11:00:00Z``. It shifts the
+    ///     calendar label, so it is exact across a leap second.
+    ///   - Without a zone the time is taken as UTC (RFC 3339 itself requires
+    ///     one).
+    ///   - The year is four digits, or a sign and at least four digits
+    ///     (ISO 8601 expanded years such as ``-0001`` or ``+10000``, as
+    ///     ``to_rfc3339`` writes them outside 0000-9999).
     ///
     /// Args:
     ///   rfc3339 (str): String representing time
@@ -363,18 +406,14 @@ impl PyInstant {
     ///   satkit.time: Time object representing input time
     ///
     /// Raises:
-    ///   ValueError: If input string cannot be parsed
+    ///   ValueError: If input string cannot be parsed; the message gives the
+    ///       reason
     ///
     #[staticmethod]
     fn from_rfc3339(rfc3339: &str) -> PyResult<Self> {
-        Instant::from_rfc3339(rfc3339).map_or_else(
-            |_| {
-                Err(pyo3::exceptions::PyValueError::new_err(
-                    "Could not parse time string",
-                ))
-            },
-            |v| Ok(Self(v)),
-        )
+        Instant::from_rfc3339(rfc3339).map(Self).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Could not parse time string: {e}"))
+        })
     }
 
     /// Convert satkit.time object to RFC3339 string
@@ -465,7 +504,7 @@ impl PyInstant {
         Self(Instant::from_jd_with_scale(jd, scale.into()))
     }
 
-    /// Convert time object to UTC Gegorian date
+    /// Convert time object to UTC Gregorian date
     ///
     /// Returns:
     ///    (int, int, int): Tuple with 3 elements representing Gregorian year, month, and day
@@ -474,7 +513,7 @@ impl PyInstant {
         (dt.0, dt.1, dt.2)
     }
 
-    /// Convert time object to UTC Gegorian date and time, with fractional seconds
+    /// Convert time object to UTC Gregorian date and time, with fractional seconds
     ///
     /// Returns:
     ///     (int, int, int, int, int, float): Tuple with 6 elements representing Gregorian year, month, day, hour, minute, and second
@@ -494,7 +533,7 @@ impl PyInstant {
         self.0.day_of_year()
     }
 
-    /// Create satkit.time representing input UTC Gegorian date and time
+    /// Create satkit.time representing input UTC Gregorian date and time
     ///
     /// Args:
     ///     year (int): Gregorian year (e.g., 2024)

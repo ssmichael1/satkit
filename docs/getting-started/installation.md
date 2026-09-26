@@ -35,7 +35,7 @@ It behaves exactly like the wheel: the core data is compiled in, the JPL ephemer
 
 ## Build from Source
 
-The package can be downloaded and installed from the Rust source directly. The "pybindings" feature must be enabled. The simplest way to do this is to manually build the wheel package:
+The package can be built and installed from source, which needs a stable Rust toolchain ([rustup](https://rustup.rs)). The simplest way is to build the wheel package:
 
 ```bash
 git clone https://github.com/ssmichael1/satkit

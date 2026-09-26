@@ -52,7 +52,9 @@ EOP). See [EOP coverage](datacoverage.md#eop-coverage).
 
 **Cause.** No `finals2000A.all` is in any search directory
 and the first-use download failed (no network, `SATKIT_OFFLINE=1`, a proxy,
-a read-only data directory).
+a read-only data directory). A data directory copied from satkit 0.23 or
+earlier may hold only CelesTrak's `EOP-All.csv`, which satkit no longer reads;
+it does not count as an EOP file.
 
 **Impact.** Polar motion, $\Delta UT1$ and the celestial-pole offsets are
 treated as zero. $\Delta UT1$ is kept within 0.9 s (up to ~13″ of Earth
@@ -82,7 +84,8 @@ not move the start of the table.
 and UT1 = UTC, as in ERFA when no EOP are supplied.
 
 If the warning names a start other than 1973-01-02, the table was loaded by
-hand (`init_from_path` / `init_from_bytes`) or the file is truncated; it
+hand (Rust `earth_orientation_params::init_from_path` / `init_from_bytes`)
+or the file is truncated; it
 carries no advice line then.
 
 ### Space-weather warnings
@@ -275,18 +278,48 @@ behaves identically, and it also builds for Intel Macs. See
 ### `DeprecationWarning: time.as_mjd() is deprecated since 0.23 ...`
 
 In 0.23 the Python `as_*` conversion methods were renamed `to_*`, to pair with
-the `from_*` constructors. The old names still work but warn, and are
-**removed in 0.25**:
+the `from_*` constructors. The old names still work but warn. The deprecated
+names below that are **removed in 0.25**:
 
 | deprecated | use |
 |---|---|
 | `time.as_date()`, `as_gregorian()`, `as_datetime()`, `as_mjd()`, `as_jd()`, `as_unixtime()`, `as_iso8601()`, `as_rfc3339()` | `to_date()`, `to_gregorian()`, `to_datetime()`, `to_mjd()`, `to_jd()`, `to_unixtime()`, `to_iso8601()`, `to_rfc3339()` |
-| `time.datetime()` | `time.to_datetime()` |
 | `quaternion.as_rotation_matrix()`, `as_euler()` | `to_rotation_matrix()`, `to_euler()` |
-| `kepler.w` (property) | `kepler.argp` (`w` still works, with a warning attributed to your line) |
+| `frametransform.eop_source()` (deprecated in 0.24; the table is always `finals2000A.all`) | `frametransform.eop_coverage()`, which is `None` when no table is loaded |
+
+These warn but have no removal date:
+
+| deprecated | use |
+|---|---|
+| `time.datetime()` | `time.to_datetime()` |
+| `kepler.w` (property) | `kepler.argp` (`w` is kept indefinitely, with a warning attributed to your line) |
 
 Python hides `DeprecationWarning` outside `__main__` by default; run with
 `python -W error::DeprecationWarning` to find every remaining call.
+
+### `TypeError` from `satproperties(...)` or a misspelt keyword
+
+```
+TypeError: satproperties() takes keyword arguments only: cdaoverm=, craoverm=, thrusts=, ecom= (2 positional arguments given; ...)
+TypeError: propsettings.__new__() got an unexpected keyword argument 'gravity_degre'
+```
+
+Since 0.24 `satproperties()` is keyword-only: write
+`sk.satproperties(cdaoverm=..., craoverm=...)`. Through 0.23 two positional
+arguments were bound as `(craoverm, cdaoverm)`, the reverse of the docs, so
+results from old positional calls had drag and radiation pressure swapped and
+are worth re-checking. The keyword arguments of `duration()`, `propsettings()`,
+`itrfcoord()`, `sgp4()`, `propagate()`, `satstate.propagate()`, `gravity()`,
+`gravity_and_partials()` and `nrlmsise00()` are real Python keyword arguments
+too, so a misspelt one raises `TypeError` (it was `ValueError` through 0.23).
+See [Migrating to 0.24](../migration.md).
+
+### `AttributeError: 'list' object has no attribute 'epoch'` after loading a TLE
+
+`TLE.from_lines()`, `TLE.from_file()` and `TLE.from_url()` return a list,
+even for one element set (since 0.24). Take the first one:
+`tle = sk.TLE.from_lines(lines)[0]`. See
+[Loading TLEs](../guide/tle.md#loading-tles).
 
 ### `TypeError: 'float' object is not callable` (or `'int'`, or `'satkit.weekday'`)
 

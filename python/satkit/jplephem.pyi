@@ -21,6 +21,12 @@ sidecar makes later loads skip the hash) and re-downloaded if corrupt — or, un
 offline mode, refused with the expected hash. ``SATKIT_OFFLINE=1``
 or ``satkit.utils.set_offline(True)`` turns a needed download into that same
 error without touching the network.
+
+Time scale
+----------
+The ephemeris is evaluated at TDB (the JPL files' ``T_eph``); a ``satkit.time``
+argument is converted to TDB internally, whatever scale it was built in.
+Releases before 0.24 evaluated it at TT, which moves the Moon by up to ~2 m.
 """
 
 from __future__ import annotations
