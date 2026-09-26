@@ -19,6 +19,20 @@ crate::arg_extractor!(pub(crate) satproperties_arg: Option<PySatProperties>, |e|
     pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {e}"))
 });
 
+/// Satellite properties relevant for drag, radiation pressure, and thrust
+///
+/// This class lets the satellite radiation pressure, drag,
+/// and thrust parameters be set for duration of propagation.
+///
+/// Attributes:
+///     cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
+///     craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
+///     thrusts (list[thrust]): List of continuous thrust arcs
+///     ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
+///         coefficients, added to the cannonball term (use ``craoverm=0``
+///         for a pure ECOM model). See :class:`ecomparams` for the
+///         conventions and the "ECOM Solar Radiation Pressure" tutorial
+///         for a fit against IGS GPS orbits.
 #[pyclass(name = "satproperties", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySatProperties(pub SatPropertiesSimple);

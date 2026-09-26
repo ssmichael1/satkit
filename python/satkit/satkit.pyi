@@ -985,7 +985,7 @@ class frame:
 
     Also known as **RSW** (Vallado) or **RIC** (older NASA / Clohessy-
     Wiltshire literature). The three names refer to the same axes;
-    Python-level aliases ``frame.RSW`` and ``frame.RTN`` resolve to the
+    Python-level aliases ``frame.RSW`` and ``frame.RIC`` resolve to the
     same enum value as ``frame.RTN``, so all three compare equal and can
     be used interchangeably.
 
@@ -3093,7 +3093,7 @@ class itrfcoord:
         ...
 
 class consts:
-    """Some constants that are useful for saetllite dynamics"""
+    """Some constants that are useful for satellite dynamics"""
 
     wgs84_a: ClassVar[float]
     """WGS-84 semiparameter, in meters"""
@@ -3379,7 +3379,7 @@ class satstate:
                 default (matching the Rust API). Supported frames:
 
                 - ``frame.GCRF`` — inertial Cartesian
-                - ``frame.RTN`` — radial / in-track / cross-track (a.k.a. RSW, RTN).
+                - ``frame.RTN`` — radial / in-track / cross-track (a.k.a. RSW, RIC).
                   The I axis is perpendicular to R in the orbit plane — for
                   eccentric orbits this is **not** strictly along velocity.
                 - ``frame.NTW`` — normal-to-velocity / tangent / cross-track.

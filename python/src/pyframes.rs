@@ -2,6 +2,34 @@ use pyo3::prelude::*;
 use satkit::Frame;
 
 #[derive(Clone, PartialEq, Eq)]
+/// Coordinate reference frame
+///
+/// Used to specify the frame for thrust vectors and maneuvers.
+///
+/// Available frames:
+///
+/// - ``GCRF`` - Geocentric Celestial Reference Frame (inertial)
+/// - ``ITRF`` - International Terrestrial Reference Frame (Earth-fixed)
+/// - ``TEME`` - True Equator Mean Equinox (SGP4 output frame)
+/// - ``CIRS`` - Celestial Intermediate Reference System
+/// - ``TIRS`` - Terrestrial Intermediate Reference System
+/// - ``EME2000`` - Earth Mean Equator 2000
+/// - ``ICRF`` - International Celestial Reference Frame
+/// - ``LVLH`` - Local Vertical Local Horizontal: z = -r (nadir), y = -h (opposite angular momentum), x completes right-handed system
+/// - ``RTN`` - Radial / Tangential / Normal (CCSDS OEM convention; also
+///   exposed as ``RSW`` and ``RIC`` aliases for Vallado / older-NASA naming):
+///   R = radial (outward), T = tangential (in-track), N = normal (cross-track)
+/// - ``NTW`` - Normal-to-velocity / Tangent / Cross-track (velocity-aligned):
+///   T = along velocity, N = in-plane perpendicular to v, W = cross-track
+///
+/// Example:
+///
+/// ```python
+/// import satkit as sk
+///
+/// # Use RTN frame for in-track thrust (RSW and RIC are aliases and work too)
+/// t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
+/// ```
 #[pyclass(name = "frame", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyFrame {
     /// International Terrestrial Reference Frame

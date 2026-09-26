@@ -61,6 +61,16 @@ pub enum PyTimeScale {
 crate::enum_pickle!(PyTimeScale, "timescale");
 
 #[derive(Clone, PartialEq, Eq)]
+/// Represent the day of the week
+///
+/// Values:
+/// - `Sunday`
+/// - `Monday`
+/// - `Tuesday`
+/// - `Wednesday`
+/// - `Thursday`
+/// - `Friday`
+/// - `Saturday`
 #[pyclass(name = "weekday", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyWeekday {
     Sunday = 0,
