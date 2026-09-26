@@ -28,11 +28,17 @@ runs:
       # on Windows would put a "\r" into the outputs, and so into the key.
       run: |
         python - <<'EOF'
-        import json, os
+        import hashlib, json, os
         m = json.load(open("data/manifest.json", encoding="utf-8"))
         f = next(f for f in m["files"] if f["name"].endswith(".440") and f.get("default", True))
+        # Key of the small data cache: the manifest and the download script
+        # with line endings normalised, so a CRLF checkout on Windows shares
+        # the Linux/macOS cache (hashFiles would give it a key of its own).
+        h = hashlib.sha256()
+        for p in ("data/manifest.json", "python/test/download_data.py"):
+            h.update(open(p, "rb").read().replace(b"\r\n", b"\n"))
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8", newline="\n") as out:
-            out.write(f"name={f['name']}\nsha={f['sha256'][:16]}\n")
+            out.write(f"name={f['name']}\nsha={f['sha256'][:16]}\nsmall={h.hexdigest()[:32]}\n")
         EOF
 
     - name: Cache the JPL ephemeris
@@ -57,7 +63,7 @@ runs:
         enableCrossOsArchive: true
         # Changing this expression (or the path above) orphans every existing
         # cache and forces a fresh download.
-        key: satkit-data-small-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
+        key: satkit-data-small-${{ steps.ephem.outputs.small }}
         # On a manifest change the exact key misses; seed from the newest
         # older cache so EOP/SW survive an upstream outage (the download
         # step then verifies/updates the manifest files).
@@ -70,8 +76,9 @@ runs:
         restore-keys: satkit-data-small-
 
     # Also verifies a restored ephemeris against the manifest's SHA-256, and
-    # exits non-zero if finals2000A.all is still absent afterwards, so a
-    # cache without EOP is never saved.
+    # exits non-zero if finals2000A.all or the space-weather table is still
+    # absent afterwards (after retrying a failed connection), so a cache
+    # without them is never saved.
     - name: Download satkit data (manifest-verified)
       if: steps.cache-ephem.outputs.cache-hit != 'true' || steps.cache-satkit-data.outputs.cache-hit != 'true'
       shell: bash
