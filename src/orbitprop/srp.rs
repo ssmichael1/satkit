@@ -92,7 +92,7 @@
 //!
 //! # Stability
 //!
-//! **Experimental.** This interface ([`EcomParams`], [`ecom_accel`],
+//! **Experimental.** This interface ([`EcomParams`], [`ecom_accel`](crate::orbitprop::srp::ecom_accel),
 //! `SatProperties::srp_ecom`) is new and may be reshaped in a minor release
 //! (e.g. into a general empirical-acceleration hook); the physics and
 //! conventions are stable.

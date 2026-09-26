@@ -56,6 +56,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - `help()` shows class documentation for `consts`, `frame`, `weekday`, `moon.moonphase`, `satproperties`, `sgp4_error`, `sgp4_gravconst` and `sgp4_opsmode` ([#239](https://github.com/ssmichael1/satkit/pull/239))
 - TLE loader docs de-duplicated: `TLE::records()` / Python `TLE.from_lines()` hold the parsing rules ([#241](https://github.com/ssmichael1/satkit/pull/241))
 - New Migrating to 0.24 page; troubleshooting entries for the 0.24 changes, time-parsing docstrings brought up to date (and `from_rfc3339` errors give the reason), and stale docs facts fixed ([#246](https://github.com/ssmichael1/satkit/pull/246))
+- Rustdoc: broken and ambiguous intra-doc links across the EOP, gravity, frame-transform, lpephem, orbit propagation and Kepler modules fixed so `cargo doc --no-deps -p satkit` (and `--all-features`) builds with no warnings under `RUSTDOCFLAGS="-D warnings"`; the check now runs in CI ([#259](https://github.com/ssmichael1/satkit/pull/259))
 
 ### CI
 

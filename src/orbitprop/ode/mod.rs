@@ -5,7 +5,7 @@
 //! astrodynamics-specific enough that they don't belong in a general
 //! numerical library — currently:
 //!
-//! - [`GaussJackson8`] — 8th-order fixed-step multistep predictor-corrector
+//! - [`GaussJackson8`](crate::orbitprop::ode::GaussJackson8) — 8th-order fixed-step multistep predictor-corrector
 //!   for 2nd-order ODEs, the dominant method for high-precision orbit
 //!   propagation in space surveillance and astrodynamics codes.
 

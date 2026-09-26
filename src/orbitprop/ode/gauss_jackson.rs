@@ -457,7 +457,7 @@ pub struct GJSolution<T: FloatScalar, const D: usize> {
 
 /// 8th-order Gauss-Jackson predictor-corrector for 2nd-order ODEs.
 ///
-/// See the [module documentation](self) for details.
+/// See the [module documentation](crate::orbitprop::ode) for details.
 pub struct GaussJackson8;
 
 impl GaussJackson8 {

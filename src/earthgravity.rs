@@ -68,7 +68,7 @@ const MAX_COEFF_DIM: usize = MAX_GRAVITY_DEGREE as usize + 4;
 
 /// Highest spherical-harmonic degree (and order) the evaluator supports.
 ///
-/// The built-in coefficient tables are capped at [`MAX_COEFF_DIM`] rows and
+/// The built-in coefficient tables are capped at `MAX_COEFF_DIM` rows and
 /// the accelerator dispatches on degree ≤ 70; requests above this are
 /// rejected by [`PropSettings::set_gravity`](crate::orbitprop::PropSettings::set_gravity)
 /// and at [`propagate`](crate::orbitprop::propagate) entry rather than
@@ -965,7 +965,7 @@ impl Gravity {
         (v, w)
     }
 
-    /// Load gravity-model coefficients from a file under [`datadir`] by
+    /// Load gravity-model coefficients from a file under [`datadir()`] by
     /// basename. Auto-downloads via [`download_if_not_exist`] if missing.
     /// Files are at <http://icgem.gfz-potsdam.de/tom_longtime>.
     pub fn from_file(filename: &str) -> Result<Self> {

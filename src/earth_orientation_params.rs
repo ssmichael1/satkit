@@ -16,7 +16,7 @@
 //! throughout (never the Bulletin B columns, which end earlier and would
 //! introduce a splice).
 //!
-//! Before the table's first row there is no EOP: [`get`] returns `None`,
+//! Before the table's first row there is no EOP: [`get`](crate::earth_orientation_params::get) returns `None`,
 //! the frame transforms use zeros (so UT1 = UTC, as in ERFA), and a
 //! one-time warning is printed.
 //!
@@ -29,7 +29,7 @@
 //! The download URLs live in the embedded data manifest
 //! (`data/manifest.json`, `eop` section).
 //!
-//! The file is published once a day, so [`refresh_into`] leaves a copy
+//! The file is published once a day, so [`refresh_into`](crate::earth_orientation_params::refresh_into) leaves a copy
 //! fetched within the last 24 h alone without contacting anyone, and past
 //! that sends a conditional request that costs a `304` when the file has not
 //! changed (see [`refresh_file`](crate::utils::refresh_file)).
@@ -535,7 +535,7 @@ pub struct RefreshOutcome {
 /// Bring `finals2000A.all` in `dir` up to date from the mirrors the
 /// embedded data manifest lists (USNO, then the IERS data centre).
 ///
-/// Each URL goes through [`refresh_file`](crate::utils::refresh_file), so a
+/// Each URL goes through [`refresh_file`], so a
 /// copy fetched within the last 24 h is reported current without a request
 /// and an older one costs a conditional GET (`304` when unchanged); `force`
 /// transfers the file unconditionally. The first mirror that answers is
