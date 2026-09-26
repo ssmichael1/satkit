@@ -15,7 +15,6 @@ use std::io::BufRead;
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
 
-/// Convert a satkit::TLE into a Python PyTLE object
 /// A single TLE, or a list when there is more than one; `what` names the
 /// source in the error when there are none
 fn tle_or_list(py: Python, mut tles: Vec<TLE>, what: &str) -> PyResult<Py<PyAny>> {

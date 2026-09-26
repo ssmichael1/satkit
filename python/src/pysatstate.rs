@@ -20,14 +20,6 @@ use satkit::{Frame, Instant};
 
 use anyhow::{bail, Result};
 
-/// Satellite state: GCRF position, velocity, optional covariance, and maneuvers
-///
-/// Args:
-///     time (satkit.time): Epoch of the state
-///     pos (numpy.ndarray): 3-element GCRF position, meters
-///     vel (numpy.ndarray): 3-element GCRF velocity, m/s
-///     cov (numpy.ndarray, optional): 6x6 GCRF state covariance
-///         (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Default None.
 /// A 3-element 1-sigma uncertainty from a 1-D numpy array; `what` names it
 /// in the error message
 fn sigma3(sigma: &Bound<'_, np::PyArray1<f64>>, what: &str) -> Result<Vector3> {
@@ -49,6 +41,14 @@ fn cov6(cov: &Bound<'_, np::PyArray2<f64>>) -> Result<Matrix6> {
     crate::pyutils::py_to_smatrix::<6, 6>(cov.as_any())
 }
 
+/// Satellite state: GCRF position, velocity, optional covariance, and maneuvers
+///
+/// Args:
+///     time (satkit.time): Epoch of the state
+///     pos (numpy.ndarray): 3-element GCRF position, meters
+///     vel (numpy.ndarray): 3-element GCRF velocity, m/s
+///     cov (numpy.ndarray, optional): 6x6 GCRF state covariance
+///         (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Default None.
 #[pyclass(name = "satstate", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySatState(SatState);
