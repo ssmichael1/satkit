@@ -28,18 +28,8 @@ fn take_while_peek(
 
 /// Full month names
 const MONTH_NAMES: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+    "January", "February", "March", "April", "May", "June", "July", "August", "September",
+    "October", "November", "December",
 ];
 
 /// Abbreviated month names

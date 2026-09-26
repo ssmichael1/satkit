@@ -5,7 +5,7 @@
 /// Duration is represented natively in microseconds. The floating-point
 /// constructors (`from_seconds`, `from_days`, ...) round to the nearest
 /// microsecond.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Duration {
     pub usec: i64,
 }
