@@ -10,7 +10,7 @@
 
 use super::download::{self, refresh_file_async, RefreshOutcome};
 use super::manifest::{self, FetchOutcome};
-use crate::utils::datadir;
+use crate::utils::{datadir, diag};
 use std::path::PathBuf;
 use std::thread::JoinHandle;
 use thiserror::Error;
@@ -123,8 +123,10 @@ struct RefreshSources<'a> {
     feeds: &'a [String],
     /// Mirrors of IERS `finals2000A.all` (the manifest's `eop` section).
     eop: &'a [manifest::RefreshSource],
-    /// Whether to refresh the MSAFE forecast (NASA, month-specific URLs).
-    msafe: bool,
+    /// Base URL of the MSAFE forecast's month-specific files
+    /// (`msafe::NASA_UPLOADS` in production),
+    /// or `None` to skip it.
+    msafe: Option<&'a str>,
 }
 
 /// What [`download_refresh_files`] got: one `(name, url, outcome)` per file
@@ -166,9 +168,11 @@ fn download_refresh_files(
     let eop = std::thread::spawn(move || {
         crate::earth_orientation_params::refresh_into_with_sources(&eop_dir, &eop_sources, force)
     });
-    let msafe = sources.msafe.then(|| {
-        let msafe_dir = dir.to_path_buf();
-        std::thread::spawn(move || crate::spaceweather::msafe::refresh_into(&msafe_dir, force))
+    let msafe = sources.msafe.map(|base| {
+        let (msafe_base, msafe_dir) = (base.to_string(), dir.to_path_buf());
+        std::thread::spawn(move || {
+            crate::spaceweather::msafe::refresh_from(&msafe_base, &msafe_dir, force)
+        })
     });
 
     let mut out = Vec::with_capacity(handles.len() + 2);
@@ -190,16 +194,15 @@ fn download_refresh_files(
     // three, and an observed-only table is still usable.
     if let Some(msafe) = msafe {
         match msafe.join() {
-            Ok(Ok(fetch)) => out.push((
+            // The URL is the month's file that answered (none when the copy
+            // on disk was current and no request was made).
+            Ok(Ok((fetch, url))) => out.push((
                 crate::spaceweather::MSAFE_FILE.to_string(),
-                String::new(),
+                url.unwrap_or_default(),
                 fetch,
             )),
-            Ok(Err(e)) => eprintln!("Warning: MSAFE forecast not refreshed: {e}"),
-            Err(_) => eprintln!(
-                "Warning: MSAFE forecast not refreshed: {}",
-                Error::ThreadPanic
-            ),
+            Ok(Err(e)) => diag::warn!("MSAFE forecast not refreshed: {e}"),
+            Err(_) => diag::warn!("MSAFE forecast not refreshed: {}", Error::ThreadPanic),
         }
     }
     (out, failures)
@@ -240,7 +243,7 @@ fn refresh_and_reload(dir: &std::path::Path, sources: &RefreshSources, force: bo
         || dir.join(crate::spaceweather::CSSI_FILE).is_file()
     {
         if let Err(e) = crate::spaceweather::load_from_dir(dir) {
-            eprintln!("Warning: could not load the refreshed space-weather files: {e}");
+            diag::warn!("could not load the refreshed space-weather files: {e}");
         }
     }
     if eop_refreshed
@@ -249,7 +252,7 @@ fn refresh_and_reload(dir: &std::path::Path, sources: &RefreshSources, force: bo
             .is_file()
     {
         if let Err(e) = crate::earth_orientation_params::load_from_dir(dir) {
-            eprintln!("Warning: could not load downloaded EOP file: {e}");
+            diag::warn!("could not load downloaded EOP file: {e}");
         }
     }
     summarize_failures(failures)
@@ -358,7 +361,7 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
     let sources = RefreshSources {
         feeds: &m.refresh,
         eop: &m.eop,
-        msafe: true,
+        msafe: Some(crate::spaceweather::msafe::NASA_UPLOADS),
     };
     let refresh_result = refresh_and_reload(&downloaddir, &sources, overwrite_if_exists);
     match (static_result, refresh_result) {
@@ -1562,6 +1565,44 @@ mod tests {
         assert!(!msg.contains("bundle"), "{msg}");
     }
 
+    /// The MSAFE refresh reports the URL of the month's file that answered
+    /// (here last month's, the current one being absent), so
+    /// `update_datafiles` prints it. It used to print
+    /// "msafe-f10-prd.txt: downloaded from " with an empty URL.
+    #[test]
+    fn msafe_refresh_reports_its_url() {
+        use crate::spaceweather::{msafe, MSAFE_FILE};
+        const SAMPLE: &str = "\
+    TIME         10.7 CM SOLAR FLUX   (F10.7)      GEOMAGNETIC INDEX   (Ap)
+ 2026.9170   DEC   135.1     117.3     105.8      21.7      15.7      11.7
+ 2027.0003   JAN   132.1     115.5     103.0      22.3      16.0      11.4
+";
+        let _guard = manifest::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _online = online();
+        let (y, m, ..) = crate::Instant::now().as_datetime();
+        let (py, pm) = if m == 1 { (y - 1, 12) } else { (y, m - 1) };
+        let server = TestServer::start(HashMap::from([(
+            msafe::nasa_url("", py, pm),
+            SAMPLE.as_bytes().to_vec(),
+        )]));
+        let base = server.url("");
+        let dir = tmpdir("msafe_url");
+        let sources = RefreshSources {
+            feeds: &[],
+            eop: &[],
+            msafe: Some(&base),
+        };
+        let (out, _) = download_refresh_files(&dir, &sources, true);
+        let (_, url, fetch) = out
+            .iter()
+            .find(|(name, ..)| name == MSAFE_FILE)
+            .expect("MSAFE refreshed");
+        assert_eq!(*fetch, RefreshOutcome::Downloaded);
+        assert_eq!(url, &msafe::nasa_url(&base, py, pm));
+        assert!(dir.join(MSAFE_FILE).is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Sources for [`refresh_and_reload`] from a test server: `feeds` are
     /// paths on it, EOP comes from its `usno/` and `iers/` mirrors, and
     /// MSAFE (NASA, fixed URLs) is left out.
@@ -1572,7 +1613,7 @@ mod tests {
         RefreshSources {
             feeds,
             eop,
-            msafe: false,
+            msafe: None,
         }
     }
 

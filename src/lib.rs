@@ -106,6 +106,17 @@
 //! satkit::utils::update_datafiles(None, false);
 //! ```
 //!
+//! ## Warnings and Logging
+//!
+//! Warnings (stale or missing Earth orientation or space-weather data, data
+//! file fallbacks, download notices) go through the [`log`](https://docs.rs/log)
+//! facade, with the emitting module as target (e.g.
+//! `satkit::earth_orientation_params`). Install any `log` backend
+//! (`env_logger`, `tracing-subscriber`, …) to route and filter them, e.g.
+//! `RUST_LOG=satkit=error`; with no logger installed they are printed to
+//! stderr. The Python bindings forward them to the `logging` module under the
+//! `satkit` logger.
+//!
 //! ## Example Usage
 //!
 //! ```no_run

@@ -1,4 +1,4 @@
-use crate::utils::{datadir, download_if_not_exist};
+use crate::utils::{datadir, diag, download_if_not_exist};
 use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 
@@ -1137,8 +1137,8 @@ impl Gravity {
                     && declared != by_value
                     && std::env::var_os("SATKIT_QUIET").is_none()
                 {
-                    eprintln!(
-                        "Warning: gravity model {name:?} declares tide_system {declared} \
+                    diag::warn!(
+                        "gravity model {name:?} declares tide_system {declared} \
                          but its C20 ({c20:e}) is a {by_value} value; using the header"
                     );
                 }
