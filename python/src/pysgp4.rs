@@ -103,41 +103,47 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
 /// error codes) into the Python return tuple. Shared by the TLE-object and
 /// OMM-dict branches of [`sgp4`].
 fn pack_sgp4_result(
+    py: Python,
     states: &psgp4::SGP4State,
     output_err: bool,
     time_scalar: bool,
 ) -> Result<Py<PyAny>> {
-    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        // (3,) for a single time; (N, 3) for a list / array of N times,
-        // including N = 1
-        let dims = if time_scalar {
-            vec![states.pos.as_slice().len()]
-        } else {
-            vec![states.pos.ncols(), states.pos.nrows()]
-        };
+    // (3,) for a single time; (N, 3) for a list / array of N times,
+    // including N = 1
+    let dims = if time_scalar {
+        vec![states.pos.as_slice().len()]
+    } else {
+        vec![states.pos.ncols(), states.pos.nrows()]
+    };
 
-        // ndarray is row-major while numeris/numpy are column-major, hence the
-        // dimension switch above.
-        if !output_err {
-            Ok((
-                PyArray1::from_slice(py, states.pos.as_slice())
-                    .reshape(dims.clone())?
-                    .into_py_any(py)?,
-                PyArray1::from_slice(py, states.vel.as_slice())
-                    .reshape(dims)?
-                    .into_py_any(py)?,
-            )
-                .into_py_any(py)?)
-        } else {
-            let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
-            Ok((
-                PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?,
-                PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims.clone())?,
-                PyArray1::from_slice(py, eint.as_slice()),
-            )
-                .into_py_any(py)?)
-        }
-    })
+    // ndarray is row-major while numeris/numpy are column-major, hence the
+    // dimension switch above.
+    let pos = PyArray1::from_slice(py, states.pos.as_slice()).reshape(dims.clone())?;
+    let vel = PyArray1::from_slice(py, states.vel.as_slice()).reshape(dims)?;
+    if !output_err {
+        Ok((pos, vel).into_py_any(py)?)
+    } else {
+        let eint: Vec<i32> = states.errcode.iter().map(|x| *x as i32).collect();
+        Ok((pos, vel, PyArray1::from_slice(py, eint.as_slice())).into_py_any(py)?)
+    }
+}
+
+/// Run SGP4 on one TLE or OMM at `time` with the GIL released; also returns
+/// whether `time` was a scalar. Shared by the TLE-object and OMM-dict
+/// branches of [`sgp4`].
+fn sgp4_one(
+    py: Python,
+    src: &mut (impl psgp4::SGP4Source + Send),
+    time: &Bound<'_, PyAny>,
+    gravconst: psgp4::GravConst,
+    opsmode: psgp4::OpsMode,
+) -> Result<(psgp4::SGP4State, bool)> {
+    let crate::pyinstant::TimeInput {
+        times: tmvec,
+        scalar: time_scalar,
+    } = time.to_time_input()?;
+    let states = py.detach(|| psgp4::sgp4_full(src, tmvec.as_slice(), gravconst, opsmode))?;
+    Ok((states, time_scalar))
 }
 
 /// SGP-4 propagator for TLE
@@ -240,25 +246,21 @@ pub fn sgp4(
         crate::pyutils::reject_unused_kwargs(kw)?;
     }
 
+    let py = tle.py();
+    let gravconst: psgp4::GravConst = gravconst.into();
+    let opsmode: psgp4::OpsMode = opsmode.into();
+
     // Handle input as TLE
     if tle.is_instance_of::<PyTLE>() {
         let mut stle: PyRefMut<PyTLE> = tle
             .extract()
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e)))?;
-        // Clone the TLE and run SGP4 with the GIL released, then write the
-        // TLE back so the cached SGP4 init state is preserved
+        // Clone the TLE and run SGP4 on the clone, then write the TLE back
+        // so the cached SGP4 init state is preserved
         let mut rtle = stle.0.clone();
-        let crate::pyinstant::TimeInput {
-            times: tmvec,
-            scalar: time_scalar,
-        } = time.to_time_input()?;
-        let gravconst: psgp4::GravConst = gravconst.into();
-        let opsmode: psgp4::OpsMode = opsmode.into();
-        let states = tle
-            .py()
-            .detach(|| psgp4::sgp4_full(&mut rtle, tmvec.as_slice(), gravconst, opsmode))?;
+        let (states, time_scalar) = sgp4_one(py, &mut rtle, time, gravconst, opsmode)?;
         stle.0 = rtle;
-        pack_sgp4_result(&states, output_err, time_scalar)
+        pack_sgp4_result(py, &states, output_err, time_scalar)
     }
     // Handle input as dict
     else if tle.is_instance_of::<PyDict>() {
@@ -266,18 +268,8 @@ pub fn sgp4(
             pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE dictionary: {}", e))
         })?;
         let mut omm = omm_from_pydict(dict)?;
-
-        // Run SGP4 with the GIL released
-        let crate::pyinstant::TimeInput {
-            times: tmvec,
-            scalar: time_scalar,
-        } = time.to_time_input()?;
-        let gravconst: psgp4::GravConst = gravconst.into();
-        let opsmode: psgp4::OpsMode = opsmode.into();
-        let states = tle
-            .py()
-            .detach(|| psgp4::sgp4_full(&mut omm, tmvec.as_slice(), gravconst, opsmode))?;
-        pack_sgp4_result(&states, output_err, time_scalar)
+        let (states, time_scalar) = sgp4_one(py, &mut omm, time, gravconst, opsmode)?;
+        pack_sgp4_result(py, &states, output_err, time_scalar)
     } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
         let crate::pyinstant::TimeInput {
@@ -326,8 +318,7 @@ pub fn sgp4(
 
         // Honor the gravconst / opsmode kwargs on the list path too (previously
         // this called the default-config `sgp4`, silently ignoring them).
-        let gc: psgp4::GravConst = gravconst.into();
-        let om: psgp4::OpsMode = opsmode.into();
+        let (gc, om) = (gravconst, opsmode);
         let results: Vec<psgp4::SGP4State> = tle.py().detach(|| {
             sources
                 .iter_mut()
@@ -347,86 +338,44 @@ pub fn sgp4(
         // Write the TLEs back to preserve their cached SGP4 init state
         for src in &sources {
             if let Sgp4Source::Tle(pytle, rtle) = src {
-                pytle.borrow_mut(tle.py()).0 = rtle.as_ref().clone();
+                pytle.borrow_mut(py).0 = rtle.as_ref().clone();
             }
         }
 
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            let n = plist.len() * tmarray.len() * 3;
-
-            let parr = PyArray1::zeros(py, [n], false);
-            let varr = PyArray1::zeros(py, [n], false);
-            let ntimes = tmarray.len();
-
-            // I'd prefer to create this uninitialized, which would probably be a bit faster,
-            // but I can't figure out how...
-            /*
-            let mut earr = ndarray::Array::from_elem(
-                (tles.len(), tmarray.len()),
-                PySGP4Error::success.into_py(py),
-            );
-            */
-            let mut eint = vec![0; ntimes * plist.len()];
-
-            results.iter().enumerate().for_each(|(idx, states)| {
-                unsafe {
-                    let pdata: *mut f64 = parr.data();
-
-                    std::ptr::copy_nonoverlapping(
-                        states.pos.as_slice().as_ptr(),
-                        pdata.add(idx * ntimes * 3),
-                        ntimes * 3,
-                    );
-                    let vdata: *mut f64 = varr.data();
-                    std::ptr::copy_nonoverlapping(
-                        states.vel.as_slice().as_ptr(),
-                        vdata.add(idx * ntimes * 3),
-                        ntimes * 3,
-                    );
-                    if output_err {
-                        let evals = states
-                            .errcode
-                            .iter()
-                            .map(|&x| x as i32)
-                            .collect::<Vec<i32>>();
-                        std::ptr::copy_nonoverlapping(
-                            evals.as_ptr(),
-                            eint.as_mut_ptr().add(idx * ntimes),
-                            ntimes,
-                        )
-                    }
-                }
-
-                //earr.slice_mut(ndarray::s![idx, ..]).assign(&e1);
-            });
-
-            // Set dimensions of output to remove singleton dimensions
-            let dims = match (plist.len() > 1, !time_scalar) {
-                (true, true) => vec![plist.len(), ntimes, 3],
-                (true, false) => vec![plist.len(), 3],
-                (false, true) => vec![ntimes, 3],
-                (false, false) => vec![3],
-            };
-            // Dims for error output
-
-            let edims = match (plist.len() > 1, !time_scalar) {
-                (true, true) => vec![plist.len(), ntimes],
-                (true, false) => vec![plist.len()],
-                (false, true) => vec![ntimes],
-                (false, false) => vec![1],
-            };
-
-            if !output_err {
-                Ok((parr.reshape(dims.clone())?, varr.reshape(dims)?).into_py_any(py)?)
-            } else {
-                Ok((
-                    parr.reshape(dims.clone())?,
-                    varr.reshape(dims)?,
-                    PyArray1::from_slice(py, eint.as_slice()).reshape(edims)?,
-                )
-                    .into_py_any(py)?)
+        let ntimes = tmarray.len();
+        let mut pos: Vec<f64> = Vec::with_capacity(plist.len() * ntimes * 3);
+        let mut vel: Vec<f64> = Vec::with_capacity(plist.len() * ntimes * 3);
+        let mut eint: Vec<i32> = Vec::with_capacity(plist.len() * ntimes);
+        for states in &results {
+            pos.extend_from_slice(states.pos.as_slice());
+            vel.extend_from_slice(states.vel.as_slice());
+            if output_err {
+                eint.extend(states.errcode.iter().map(|&x| x as i32));
             }
-        })
+        }
+
+        // Set dimensions of output to remove singleton dimensions
+        let dims = match (plist.len() > 1, !time_scalar) {
+            (true, true) => vec![plist.len(), ntimes, 3],
+            (true, false) => vec![plist.len(), 3],
+            (false, true) => vec![ntimes, 3],
+            (false, false) => vec![3],
+        };
+        // Dims for error output
+        let edims = match (plist.len() > 1, !time_scalar) {
+            (true, true) => vec![plist.len(), ntimes],
+            (true, false) => vec![plist.len()],
+            (false, true) => vec![ntimes],
+            (false, false) => vec![1],
+        };
+
+        let pos = PyArray1::from_vec(py, pos).reshape(dims.clone())?;
+        let vel = PyArray1::from_vec(py, vel).reshape(dims)?;
+        if !output_err {
+            Ok((pos, vel).into_py_any(py)?)
+        } else {
+            Ok((pos, vel, PyArray1::from_vec(py, eint).reshape(edims)?).into_py_any(py)?)
+        }
     } else {
         bail!("Invalid input type for argument 1");
     }

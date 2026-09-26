@@ -39,6 +39,7 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 #[pyfunction]
 #[pyo3(signature = (r1, r2, tof, mu=None, prograde=None))]
 pub fn lambert(
+    py: Python,
     r1: &Bound<'_, PyArray1<f64>>,
     r2: &Bound<'_, PyArray1<f64>>,
     tof: f64,
@@ -56,11 +57,8 @@ pub fn lambert(
         ));
     }
 
-    let r1_slice = unsafe { r1.as_slice()? };
-    let r2_slice = unsafe { r2.as_slice()? };
-
-    let r1_vec = Vector3::from_slice(r1_slice);
-    let r2_vec = Vector3::from_slice(r2_slice);
+    let r1_vec = Vector3::from_slice(r1.readonly().as_slice()?);
+    let r2_vec = Vector3::from_slice(r2.readonly().as_slice()?);
 
     let mu_val = mu.unwrap_or(satkit::consts::MU_EARTH);
     let prograde_val = prograde.unwrap_or(true);
@@ -68,15 +66,13 @@ pub fn lambert(
     let solutions = satkit::lambert::lambert(&r1_vec, &r2_vec, tof, mu_val, prograde_val)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
-    Python::attach(|py| {
-        let result: Vec<LambertSolution> = solutions
-            .iter()
-            .map(|(v1, v2)| {
-                let v1_arr = PyArray1::from_slice(py, v1.as_slice()).unbind();
-                let v2_arr = PyArray1::from_slice(py, v2.as_slice()).unbind();
-                (v1_arr, v2_arr)
-            })
-            .collect();
-        Ok(result)
-    })
+    Ok(solutions
+        .iter()
+        .map(|(v1, v2)| {
+            (
+                PyArray1::from_slice(py, v1.as_slice()).unbind(),
+                PyArray1::from_slice(py, v2.as_slice()).unbind(),
+            )
+        })
+        .collect())
 }

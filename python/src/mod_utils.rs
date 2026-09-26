@@ -83,15 +83,13 @@ fn update_datafiles(overwrite: bool, dir: Option<PathBuf>) -> Result<()> {
 ///     str: Directory downloads are written to (created on first use), or
 ///     None if none could be determined
 #[pyfunction]
-fn datadir() -> PyResult<Py<PyAny>> {
-    pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-        match satkit::utils::datadir() {
-            // to_string_lossy: a non-UTF-8 path (settable via SATKIT_DATA)
-            // must not panic
-            Ok(v) => v.to_string_lossy().into_py_any(py),
-            Err(_) => pyo3::types::PyNone::get(py).into_py_any(py),
-        }
-    })
+fn datadir(py: Python) -> PyResult<Py<PyAny>> {
+    match satkit::utils::datadir() {
+        // to_string_lossy: a non-UTF-8 path (settable via SATKIT_DATA)
+        // must not panic
+        Ok(v) => v.to_string_lossy().into_py_any(py),
+        Err(_) => Ok(py.None()),
+    }
 }
 
 /// Directories searched for data files, in order
@@ -238,21 +236,17 @@ fn build_date() -> PyResult<String> {
 /// Astro utility functions
 #[pymodule]
 pub fn utils(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(datadir, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(set_datadir, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(data_search_dirs, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(add_search_dir, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(set_offline, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(is_offline, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(datafiles_exist, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(dylib_path, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(update_datafiles, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(githash, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(version, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(build_date, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(datadir, m)?)?;
+    m.add_function(wrap_pyfunction!(set_datadir, m)?)?;
+    m.add_function(wrap_pyfunction!(data_search_dirs, m)?)?;
+    m.add_function(wrap_pyfunction!(add_search_dir, m)?)?;
+    m.add_function(wrap_pyfunction!(set_offline, m)?)?;
+    m.add_function(wrap_pyfunction!(is_offline, m)?)?;
+    m.add_function(wrap_pyfunction!(datafiles_exist, m)?)?;
+    m.add_function(wrap_pyfunction!(dylib_path, m)?)?;
+    m.add_function(wrap_pyfunction!(update_datafiles, m)?)?;
+    m.add_function(wrap_pyfunction!(githash, m)?)?;
+    m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_function(wrap_pyfunction!(build_date, m)?)?;
     Ok(())
 }

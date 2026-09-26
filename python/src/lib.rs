@@ -49,8 +49,7 @@ use pysatstate::PySatState;
 /// Space Weather Sub-Module
 #[pymodule]
 fn spaceweather(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(pyspaceweather::get, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pyspaceweather::get, m)?)?;
     m.add_function(wrap_pyfunction!(pyspaceweather::coverage, m)?)?;
     m.add_function(wrap_pyfunction!(pyspaceweather::status, m)?)?;
     m.add_function(wrap_pyfunction!(
@@ -59,24 +58,18 @@ fn spaceweather(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(pyspaceweather::init_from_path, m)?)?;
     m.add_function(wrap_pyfunction!(pyspaceweather::init_from_bytes, m)?)?;
-    m.add_function(wrap_pyfunction!(pyspaceweather::update, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pyspaceweather::update, m)?)?;
     Ok(())
 }
 
 /// JPL Ephemeris Sub-Module
 #[pymodule]
 fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(pyjplephem::geocentric_pos, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyjplephem::geocentric_state, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyjplephem::barycentric_pos, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyjplephem::barycentric_state, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyjplephem::consts, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pyjplephem::geocentric_pos, m)?)?;
+    m.add_function(wrap_pyfunction!(pyjplephem::geocentric_state, m)?)?;
+    m.add_function(wrap_pyfunction!(pyjplephem::barycentric_pos, m)?)?;
+    m.add_function(wrap_pyfunction!(pyjplephem::barycentric_state, m)?)?;
+    m.add_function(wrap_pyfunction!(pyjplephem::consts, m)?)?;
 
     Ok(())
 }
@@ -84,28 +77,20 @@ fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Solar calculations
 #[pymodule]
 fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(pylpephem_sun::pos_gcrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pylpephem_sun::pos_mod, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pylpephem_sun::rise_set, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pylpephem_sun::shadowfunc, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pylpephem_sun::pos_gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_sun::pos_mod, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_sun::rise_set, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_sun::shadowfunc, m)?)?;
     Ok(())
 }
 
 /// Lunar calculations
 #[pymodule]
 fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(pylpephem_moon::pos_gcrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pylpephem_moon::phase, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pylpephem_moon::phase_name, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pylpephem_moon::illumination, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pylpephem_moon::pos_gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_moon::phase, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_moon::phase_name, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_moon::illumination, m)?)?;
     m.add_class::<pylpephem_moon::MoonPhase>()?;
     Ok(())
 }
@@ -113,71 +98,44 @@ fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Low-precision planetary ephemerides
 #[pymodule]
 fn planets(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(pylpephem_planets::heliocentric_pos, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pylpephem_planets::heliocentric_pos, m)?)?;
     Ok(())
 }
 
 /// Frame transform module: transform between varias coordinate frames
 #[pymodule]
 fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(pyft::earth_rotation_angle, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::gast, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(pyft::gmst, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(pyft::eqeq, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qitrf2tirs, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qtirs2cirs, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qitrf2gcrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qgcrf2itrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qitrf2gcrf_approx, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qgcrf2itrf_approx, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qteme2itrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qcirs2gcrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qteme2gcrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::pyeop, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(pyft::disable_eop_time_warning, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::eop_coverage, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::eop_source, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::eop_status, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::to_gcrf, m)?).unwrap();
-    m.add_function(wrap_pyfunction!(pyft::from_gcrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::itrf_to_gcrf_state, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::gcrf_to_itrf_state, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::itrf_to_gcrf_state_approx, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::gcrf_to_itrf_state_approx, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qmod2gcrf, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::qtod2mod_approx, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::rotation, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::rotation_with_state, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::rotation_approx, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::transform_state, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyft::transform_state_approx, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pyft::earth_rotation_angle, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::gast, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::gmst, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::eqeq, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qitrf2tirs, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qtirs2cirs, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qitrf2gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qgcrf2itrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qitrf2gcrf_approx, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qgcrf2itrf_approx, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qteme2itrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qcirs2gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qteme2gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::pyeop, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::disable_eop_time_warning, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::eop_coverage, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::eop_source, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::eop_status, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::to_gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::from_gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::itrf_to_gcrf_state, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::gcrf_to_itrf_state, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::itrf_to_gcrf_state_approx, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::gcrf_to_itrf_state_approx, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qmod2gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::qtod2mod_approx, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::rotation, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::rotation_with_state, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::rotation_approx, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::transform_state, m)?)?;
+    m.add_function(wrap_pyfunction!(pyft::transform_state_approx, m)?)?;
 
     Ok(())
 }
@@ -192,20 +150,17 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pyinstant::PyWeekday>()?;
     m.add_class::<PyQuaternion>()?;
     m.add_class::<pyframes::PyFrame>()?;
-    m.add_function(wrap_pyfunction!(pysgp4::sgp4, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(pysgp4::sgp4, m)?)?;
 
     m.add_class::<pygravity::GravModel>()?;
     m.add_class::<pysgp4::GravConst>()?;
     m.add_class::<pysgp4::OpsMode>()?;
     m.add_class::<pysgp4::PySGP4Error>()?;
 
-    m.add_function(wrap_pyfunction!(pygravity::gravity, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pygravity::gravity_and_partials, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pygravity::gravity, m)?)?;
+    m.add_function(wrap_pyfunction!(pygravity::gravity_and_partials, m)?)?;
 
-    m.add_function(wrap_pyfunction!(pynrlmsise::nrlmsise00, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pynrlmsise::nrlmsise00, m)?)?;
 
     m.add_class::<pyconsts::Consts>()?;
     m.add_class::<SolarSystem>()?;
@@ -226,16 +181,11 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pythrust::PyThrust>()?;
     m.add_class::<pypropresult::PyPropResult>()?;
     m.add_class::<pypropresult::PyPropStats>()?;
-    m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pylambert::lambert, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyomm::omm_from_url, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyomm::omm_from_file, m)?)
-        .unwrap();
-    m.add_function(wrap_pyfunction!(pyomm::omm_from_text, m)?)
-        .unwrap();
+    m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)?;
+    m.add_function(wrap_pyfunction!(pylambert::lambert, m)?)?;
+    m.add_function(wrap_pyfunction!(pyomm::omm_from_url, m)?)?;
+    m.add_function(wrap_pyfunction!(pyomm::omm_from_file, m)?)?;
+    m.add_function(wrap_pyfunction!(pyomm::omm_from_text, m)?)?;
 
     m.add_wrapped(wrap_pymodule!(frametransform))?;
     m.add_wrapped(wrap_pymodule!(jplephem))?;

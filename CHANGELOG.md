@@ -10,6 +10,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - **Breaking (experimental ECOM):** ECOM coefficients are referred to 1 AU and the acceleration scales by `(AU / d)²` like the cannonball term, so fitted coefficients no longer drift ±3.4 % with the season; unscaled coefficients convert by `(d / AU)²` at their epoch ([#213](https://github.com/ssmichael1/satkit/pull/213), [#210](https://github.com/ssmichael1/satkit/issues/210))
 - **Behaviour change:** UTC before 1972 follows the USNO / ERFA "rubber second" model from 1961 (TAI − UTC stays 0 before 1961), so pre-1972 labels convert correctly (up to 9.9 s different, ERFA to 1 µs); a stored pre-1972 instant (e.g. a pickle) prints a label up to ~10 s different ([#223](https://github.com/ssmichael1/satkit/pull/223))
 - Internal (no behaviour change): `rustfmt.toml` packs short numeric array elements (NRLMSISE-00 and planet coefficient tables), unused NRLMSISE-00 code and redundant tests removed, `Instant`/`Duration` comparisons derived (~3,200 fewer lines) ([#227](https://github.com/ssmichael1/satkit/pull/227))
+- Internal (no behaviour change): Python bindings simplified: shared helpers replace duplicated argument parsing, pickling and `time` arithmetic, every `unsafe` numpy copy is replaced by a safe reshape, and needless GIL re-acquisition is gone (~590 fewer lines) ([#230](https://github.com/ssmichael1/satkit/pull/230))
 
 ### Fixed
 

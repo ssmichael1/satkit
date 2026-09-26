@@ -4,12 +4,10 @@ use satkit::earthgravity::{accel, accel_and_partials, GravityModel, MAX_GRAVITY_
 
 use crate::pyitrfcoord::PyITRFCoord;
 use numpy as np;
-use numpy::PyArrayMethods;
-use satkit::itrfcoord::ITRFCoord;
 use satkit::mathtypes::*;
 
+use crate::pyutils::{slice2py2d, vec2py};
 use pyo3::types::PyDict;
-use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
@@ -19,6 +17,65 @@ fn ensure_loaded(model: &GravModel) -> Result<()> {
     satkit::earthgravity::ensure_loaded(model.clone().into())
         .map(|_| ())
         .map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+/// Parse the arguments shared by `gravity` and `gravity_and_partials`: the
+/// `model` / `degree` / `order` keywords (loading the model's coefficients)
+/// and the ITRF position, an `itrfcoord` or a 3-element numpy array
+fn gravity_args(
+    fname: &str,
+    pos: &Bound<'_, PyAny>,
+    kwds: Option<&Bound<'_, PyDict>>,
+) -> Result<(Vector3, usize, usize, GravityModel)> {
+    let mut degree: usize = 6;
+    let mut order: Option<usize> = None;
+    let mut model: GravModel = GravModel::egm2008;
+    if let Some(kw) = kwds {
+        crate::pyutils::reject_unknown_kwargs(fname, kw, &["model", "degree", "order"])?;
+        if let Some(v) = kw.get_item("model")? {
+            model = v
+                .extract::<GravModel>()
+                .map_err(|e| anyhow::anyhow!("Failed to extract gravity model: {}", e))?;
+        }
+        if let Some(v) = kw.get_item("degree")? {
+            degree = v
+                .extract::<usize>()
+                .map_err(|e| anyhow::anyhow!("Failed to extract degree: {}", e))?;
+        }
+        if let Some(v) = kw.get_item("order")? {
+            order = Some(
+                v.extract::<usize>()
+                    .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?,
+            );
+        }
+    }
+    let order = order.unwrap_or(degree);
+    if degree > MAX_GRAVITY_DEGREE as usize {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "gravity degree {degree} exceeds the maximum supported value ({MAX_GRAVITY_DEGREE})"
+        ))
+        .into());
+    }
+    ensure_loaded(&model)?;
+
+    let v: Vector3 = if pos.is_instance_of::<PyITRFCoord>() {
+        let pyitrf: PyRef<PyITRFCoord> = pos
+            .extract()
+            .map_err(|e| anyhow::anyhow!("Failed to extract itrfcoord: {}", e))?;
+        pyitrf.0.itrf
+    } else if pos.is_instance_of::<np::PyArray1<f64>>() {
+        let vpy = pos
+            .extract::<np::PyReadonlyArray1<f64>>()
+            .map_err(|e| anyhow::anyhow!("Failed to extract position array: {}", e))?;
+        let varr = vpy.as_array();
+        if varr.len() != 3 {
+            bail!("Input must have 3 elements");
+        }
+        Vector3::from_slice(&[varr[0], varr[1], varr[2]])
+    } else {
+        bail!("Input must be 3-element numpy or itrfcoord");
+    };
+    Ok((v, degree, order, model.into()))
 }
 
 ///
@@ -92,65 +149,13 @@ impl From<GravityModel> for GravModel {
     signature=(pos, **kwds),
     text_signature = "(pos, *, model=..., degree=6, order=...)"
 )]
-pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Result<Py<PyAny>> {
-    let mut degree: usize = 6;
-    let mut order: Option<usize> = None;
-    let mut model: GravModel = GravModel::egm2008;
-    if let Some(kw) = kwds {
-        crate::pyutils::reject_unknown_kwargs("gravity", kw, &["model", "degree", "order"])?;
-        if let Some(v) = kw.get_item("model")? {
-            model = v
-                .extract::<GravModel>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract gravity model: {}", e))?;
-        }
-        if let Some(v) = kw.get_item("degree")? {
-            degree = v
-                .extract::<usize>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract degree: {}", e))?;
-        }
-        if let Some(v) = kw.get_item("order")? {
-            order = Some(
-                v.extract::<usize>()
-                    .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?,
-            );
-        }
-    }
-    let order = order.unwrap_or(degree);
-    if degree > MAX_GRAVITY_DEGREE as usize {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "gravity degree {degree} exceeds the maximum supported value ({MAX_GRAVITY_DEGREE})"
-        ))
-        .into());
-    }
-    ensure_loaded(&model)?;
-
-    if pos.is_instance_of::<PyITRFCoord>() {
-        let pyitrf: PyRef<PyITRFCoord> = pos
-            .extract()
-            .map_err(|e| anyhow::anyhow!("Failed to extract itrfcoord: {}", e))?;
-        let itrf: ITRFCoord = pyitrf.0;
-        let v = accel(&itrf.itrf, degree, order, model.into());
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            let vpy = np::PyArray1::<f64>::from_slice(py, v.as_slice());
-            Ok(vpy.into_py_any(py)?)
-        })
-    } else if pos.is_instance_of::<np::PyArray1<f64>>() {
-        let vpy = pos
-            .extract::<np::PyReadonlyArray1<f64>>()
-            .map_err(|e| anyhow::anyhow!("Failed to extract position array: {}", e))?;
-        let varr = vpy.as_array();
-        if varr.len() != 3 {
-            bail!("Input must have 3 elements");
-        }
-        let v: Vector3 = Vector3::from_slice(&[varr[0], varr[1], varr[2]]);
-        let a = accel(&v, degree, order, model.into());
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            let vpy = np::PyArray1::<f64>::from_slice(py, a.as_slice());
-            Ok(vpy.into_py_any(py)?)
-        })
-    } else {
-        bail!("Input must be 3-element numpy or itrfcoord");
-    }
+pub fn gravity(
+    py: Python,
+    pos: &Bound<'_, PyAny>,
+    kwds: Option<&Bound<'_, PyDict>>,
+) -> Result<Py<PyAny>> {
+    let (v, degree, order, model) = gravity_args("gravity", pos, kwds)?;
+    Ok(vec2py(py, &accel(&v, degree, order, model))?)
 }
 
 /// Acceleration vector due to Earth gravity and partials with respect to position
@@ -178,85 +183,14 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
     text_signature = "(pos, *, model=..., degree=6, order=...)"
 )]
 pub fn gravity_and_partials(
+    py: Python,
     pos: &Bound<'_, PyAny>,
     kwds: Option<&Bound<'_, PyDict>>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
-    let mut degree: usize = 6;
-    let mut order: Option<usize> = None;
-    let mut model: GravModel = GravModel::egm2008;
-    if let Some(kw) = kwds {
-        crate::pyutils::reject_unknown_kwargs(
-            "gravity_and_partials",
-            kw,
-            &["model", "degree", "order"],
-        )?;
-        if let Some(v) = kw.get_item("model")? {
-            model = v
-                .extract::<GravModel>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract gravity model: {}", e))?;
-        }
-        if let Some(v) = kw.get_item("degree")? {
-            degree = v
-                .extract::<usize>()
-                .map_err(|e| anyhow::anyhow!("Failed to extract degree: {}", e))?;
-        }
-        if let Some(v) = kw.get_item("order")? {
-            order = Some(
-                v.extract::<usize>()
-                    .map_err(|e| anyhow::anyhow!("Failed to extract order: {}", e))?,
-            );
-        }
-    }
-    let order = order.unwrap_or(degree);
-    if degree > MAX_GRAVITY_DEGREE as usize {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "gravity degree {degree} exceeds the maximum supported value ({MAX_GRAVITY_DEGREE})"
-        ))
-        .into());
-    }
-    ensure_loaded(&model)?;
-
-    if pos.is_instance_of::<PyITRFCoord>() {
-        let pyitrf: PyRef<PyITRFCoord> = pos
-            .extract()
-            .map_err(|e| anyhow::anyhow!("Failed to extract itrfcoord: {}", e))?;
-        let itrf: ITRFCoord = pyitrf.0;
-        let (g, p) = accel_and_partials(&itrf.itrf, degree, order, model.into());
-        pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-            let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
-            let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    p.as_slice().as_ptr(),
-                    ppy.as_raw_array_mut().as_mut_ptr(),
-                    9,
-                );
-            }
-            Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
-        })
-    } else if pos.is_instance_of::<np::PyArray1<f64>>() {
-        let vpy = pos
-            .extract::<np::PyReadonlyArray1<f64>>()
-            .map_err(|e| anyhow::anyhow!("Failed to extract position array: {}", e))?;
-        let varr = vpy.as_array();
-        if varr.len() != 3 {
-            bail!("Input must have 3 elements");
-        }
-        let v: Vector3 = Vector3::from_slice(&[varr[0], varr[1], varr[2]]);
-        let (g, p) = accel_and_partials(&v, degree, order, model.into());
-        pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-            let gpy = np::PyArray1::<f64>::from_slice(py, g.as_slice());
-            let ppy = unsafe { np::PyArray2::<f64>::new(py, [3, 3], false) };
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    p.as_slice().as_ptr(),
-                    ppy.as_raw_array_mut().as_mut_ptr(),
-                    9,
-                );
-            }
-            Ok((gpy.into_py_any(py)?, ppy.into_py_any(py)?))
-        })
-    } else {
-        bail!("Input must be 3-element numpy or itrfcoord");
-    }
+    let (v, degree, order, model) = gravity_args("gravity_and_partials", pos, kwds)?;
+    let (g, p) = accel_and_partials(&v, degree, order, model);
+    // The partials' column-major storage read as a row-major (C-order) array,
+    // as before: the array is `p` transposed (the matrix is symmetric up to
+    // rounding, so this only affects the last bits)
+    Ok((vec2py(py, &g)?, slice2py2d(py, p.as_slice(), 3, 3)?))
 }

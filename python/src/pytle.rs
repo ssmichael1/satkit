@@ -16,8 +16,20 @@ use std::io::BufRead;
 pub struct PyTLE(pub TLE);
 
 /// Convert a satkit::TLE into a Python PyTLE object
-pub fn tle_into_py(tle: TLE, py: Python<'_>) -> Py<PyAny> {
-    PyTLE(tle).into_py_any(py).unwrap()
+/// A single TLE, or a list when there is more than one; `what` names the
+/// source in the error when there are none
+fn tle_or_list(py: Python, mut tles: Vec<TLE>, what: &str) -> PyResult<Py<PyAny>> {
+    match tles.len() {
+        0 => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "No valid TLEs found in {what}"
+        ))),
+        1 => PyTLE(tles.remove(0)).into_py_any(py),
+        _ => tles
+            .into_iter()
+            .map(PyTLE)
+            .collect::<Vec<_>>()
+            .into_py_any(py),
+    }
 }
 
 #[pymethods]
@@ -36,14 +48,14 @@ impl PyTLE {
     /// * `tle` - a list of TLE objects or a single TLE if lines for
     ///           only 1 are passed in
     #[staticmethod]
-    fn from_file(filename: String) -> Result<Py<PyAny>> {
+    fn from_file(py: Python, filename: String) -> Result<Py<PyAny>> {
         let file = File::open(std::path::PathBuf::from(filename))?;
 
         let lines: Vec<String> = io::BufReader::new(file)
             .lines()
             .collect::<std::result::Result<_, _>>()?;
 
-        Self::from_lines(lines)
+        Self::from_lines(py, lines)
     }
 
     #[new]
@@ -65,24 +77,8 @@ impl PyTLE {
     /// * `tle` - a list of TLE objects or a single TLE if lines for
     ///           only 1 are passed in
     #[staticmethod]
-    fn from_lines(lines: Vec<String>) -> Result<Py<PyAny>> {
-        let v = TLE::from_lines(&lines)?;
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            if v.len() > 1 {
-                v.into_iter()
-                    .map(|t| tle_into_py(t, py))
-                    .collect::<Vec<_>>()
-                    .into_py_any(py)
-            } else {
-                match v.into_iter().next() {
-                    Some(t) => Ok(tle_into_py(t, py)),
-                    None => Err(pyo3::exceptions::PyValueError::new_err(
-                        "No valid TLEs found in input",
-                    )),
-                }
-            }
-        })
-        .map_err(|e| e.into())
+    fn from_lines(py: Python, lines: Vec<String>) -> Result<Py<PyAny>> {
+        Ok(tle_or_list(py, TLE::from_lines(&lines)?, "input")?)
     }
 
     /// Load TLE(s) from a URL
@@ -105,24 +101,8 @@ impl PyTLE {
     ///     tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
     ///     ```
     #[staticmethod]
-    fn from_url(url: String) -> Result<Py<PyAny>> {
-        let tles = TLE::from_url(&url)?;
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            if tles.len() > 1 {
-                tles.into_iter()
-                    .map(|t| tle_into_py(t, py))
-                    .collect::<Vec<_>>()
-                    .into_py_any(py)
-            } else {
-                match tles.into_iter().next() {
-                    Some(t) => Ok(tle_into_py(t, py)),
-                    None => Err(pyo3::exceptions::PyValueError::new_err(
-                        "No valid TLEs found in response",
-                    )),
-                }
-            }
-        })
-        .map_err(|e| e.into())
+    fn from_url(py: Python, url: String) -> Result<Py<PyAny>> {
+        Ok(tle_or_list(py, TLE::from_url(&url)?, "response")?)
     }
 
     /// Satellite NORAD Catalog Number
@@ -256,8 +236,8 @@ impl PyTLE {
 
     /// Epoch time of TLE
     #[getter(epoch)]
-    fn get_epoch(&self, py: Python) -> PyResult<Py<PyAny>> {
-        Ok(crate::pyinstant::instant_into_py(self.0.epoch, py))
+    fn get_epoch(&self) -> crate::pyinstant::PyInstant {
+        crate::pyinstant::PyInstant(self.0.epoch)
     }
     #[setter(epoch)]
     fn set_epoch(&mut self, value: &Bound<'_, PyAny>) -> Result<()> {
@@ -339,10 +319,6 @@ impl PyTLE {
 
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.0 != other.0
     }
 
     /// Build a TLE from an OMM (Orbital Mean-Element Message) dictionary

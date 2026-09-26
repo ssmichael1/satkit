@@ -49,27 +49,26 @@ use satkit::spaceweather;
 pub fn get(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
     let tm = instant_from_pyany(time)?;
     let rec = spaceweather::get(&tm)?;
-    pyo3::Python::attach(|py| -> anyhow::Result<Py<PyAny>> {
-        let d = PyDict::new(py);
-        d.set_item("date", crate::pyinstant::PyInstant(rec.date))?;
-        d.set_item("kp", rec.kp.to_vec())?;
-        d.set_item("kp_sum", rec.kp_sum)?;
-        d.set_item("ap", rec.ap.to_vec())?;
-        d.set_item("ap_avg", rec.ap_avg)?;
-        d.set_item("f10p7_obs", rec.f10p7_obs)?;
-        d.set_item("f10p7_adj", rec.f10p7_adj)?;
-        d.set_item("f10p7_obs_c81", rec.f10p7_obs_c81)?;
-        d.set_item("f10p7_obs_l81", rec.f10p7_obs_l81)?;
-        d.set_item("f10p7_adj_c81", rec.f10p7_adj_c81)?;
-        d.set_item("f10p7_adj_l81", rec.f10p7_adj_l81)?;
-        d.set_item("isn", rec.isn)?;
-        d.set_item("cp", rec.cp)?;
-        d.set_item("c9", rec.c9)?;
-        d.set_item("bsrn", rec.bsrn)?;
-        d.set_item("nd", rec.nd)?;
-        d.set_item("data_type", rec.data_type.as_str())?;
-        Ok(d.into_py_any(py)?)
-    })
+    let py = time.py();
+    let d = PyDict::new(py);
+    d.set_item("date", crate::pyinstant::PyInstant(rec.date))?;
+    d.set_item("kp", rec.kp.to_vec())?;
+    d.set_item("kp_sum", rec.kp_sum)?;
+    d.set_item("ap", rec.ap.to_vec())?;
+    d.set_item("ap_avg", rec.ap_avg)?;
+    d.set_item("f10p7_obs", rec.f10p7_obs)?;
+    d.set_item("f10p7_adj", rec.f10p7_adj)?;
+    d.set_item("f10p7_obs_c81", rec.f10p7_obs_c81)?;
+    d.set_item("f10p7_obs_l81", rec.f10p7_obs_l81)?;
+    d.set_item("f10p7_adj_c81", rec.f10p7_adj_c81)?;
+    d.set_item("f10p7_adj_l81", rec.f10p7_adj_l81)?;
+    d.set_item("isn", rec.isn)?;
+    d.set_item("cp", rec.cp)?;
+    d.set_item("c9", rec.c9)?;
+    d.set_item("bsrn", rec.bsrn)?;
+    d.set_item("nd", rec.nd)?;
+    d.set_item("data_type", rec.data_type.as_str())?;
+    Ok(d.into_py_any(py)?)
 }
 
 /// Refresh the space-weather files and reload the in-memory table
