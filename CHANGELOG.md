@@ -12,7 +12,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - **Breaking:** `duration()`, `propsettings()`, `itrfcoord()`, `sgp4()`, `propagate()`, `satstate.propagate()`, `gravity()`, `gravity_and_partials()` and `nrlmsise00()` raise `TypeError` (was `ValueError`) for an unknown keyword ([#236](https://github.com/ssmichael1/satkit/pull/236))
 - **Breaking:** Python `TLE.from_lines()` / `from_file()` / `from_url()` always return `list[TLE]` (zero TLEs: `ValueError`); parse errors name the input line and satellite; new Rust `TLE::records()` and optional checksum checks ([#240](https://github.com/ssmichael1/satkit/pull/240))
 - **Breaking:** `sgp4([tle], t)` keeps the TLE axis (`(1, 3)`, was `(3,)`); bad inputs raise specific exceptions instead of `RuntimeError` or a meaningless value; `sgp4` is thread-safe on a shared TLE ([#245](https://github.com/ssmichael1/satkit/pull/245))
-- **Breaking:** EOP comes only from IERS `finals2000A.all` (not CelesTrak `EOP-All.csv`), so there is none before 1973-01-02 (UT1 = UTC); Rust `EopSource`, `source()`, `CELESTRAK_FILE` and the `InvalidEntry` / `ParseFloat` errors are removed ([#235](https://github.com/ssmichael1/satkit/pull/235))
+- **Breaking:** EOP comes only from IERS `finals2000A.all` (not CelesTrak `EOP-All.csv`), so there is none before 1973-01-02 (UT1 = UTC); Rust `EopSource`, `source()`, `CELESTRAK_FILE` and the `InvalidEntry` / `ParseFloat` errors are removed; Python `frametransform.eop_source()` is deprecated (use `eop_coverage()`; removed in 0.25) ([#235](https://github.com/ssmichael1/satkit/pull/235))
 - **Breaking:** the optional PyPI `satkit-data` bundle (`satkit[data]`) is dropped; `require_eop_coverage` also refuses spans before the table (Rust `Error::EopCoverage` gains `span_start` / `table_start`); an EOP parser panic and six smaller data-layer defects fixed ([#242](https://github.com/ssmichael1/satkit/pull/242))
 - **Breaking:** `time.strptime()`, `time.from_string()` and `time(<str>)` raise `ValueError` (was `RuntimeError`) for a string they cannot parse, like `from_rfc3339` ([#247](https://github.com/ssmichael1/satkit/pull/247))
 - **Breaking (Rust):** `DataDirReadOnly` is `DataDirReadOnly { path, reason }` in the EOP, space-weather and `update_data` errors; `update_datafiles()` rejects unknown keywords, and offline, read-only-directory and data warnings say why and where ([#218](https://github.com/ssmichael1/satkit/pull/218))
@@ -24,7 +24,6 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 
 ### Deprecated
 
-- Python `frametransform.eop_source()`: the EOP table is always `finals2000A.all`; use `eop_coverage()`. Removed in 0.25 ([#235](https://github.com/ssmichael1/satkit/pull/235))
 - Reminder: the Python `as_*` conversions on `time` and `quaternion`, deprecated in 0.23, are removed in 0.25; use `to_*` ([#200](https://github.com/ssmichael1/satkit/pull/200))
 
 ### Fixed
@@ -48,9 +47,11 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 ### CI
 
 - Release `preflight` job (version strings + a green Build on the tagged commit) gates the PyPI publish; Build drops its duplicate release build and uses cargo-deny; Dependabot updates the Actions pins ([#211](https://github.com/ssmichael1/satkit/pull/211))
+- Dependabot: cibuildwheel 4.2.0 → 4.2.1 ([#212](https://github.com/ssmichael1/satkit/pull/212))
 - stubtest checks all eleven stub modules, and the Python examples in the docs and docstrings run in CI ([#220](https://github.com/ssmichael1/satkit/pull/220))
 - CI data cache: the cache key includes the download script ([#224](https://github.com/ssmichael1/satkit/pull/224))
 - Notebooks that raise fail the docs build, docs-only PRs get a docs-check job, the Python tests also run on 3.10 / 3.14, macOS and Windows, the release workflow is hardened, and the caches are split and pinned ([#244](https://github.com/ssmichael1/satkit/pull/244))
+- Release: `cargo publish --dry-run` in the preflight and in Build, PyPI publishes only after crates.io succeeds, and a re-run skips files PyPI already has; migration-page and docs corrections ([#248](https://github.com/ssmichael1/satkit/pull/248))
 
 ### Tests
 

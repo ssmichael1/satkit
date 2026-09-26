@@ -18,8 +18,9 @@ jobs:
     # version strings match and that the Build workflow passed on this exact
     # commit, so a release never re-runs the test suite here (Build already
     # did, on three platforms) and never publishes from an untested or
-    # mis-versioned commit. On a wheel* branch both checks are skipped and
-    # the job is a no-op gate.
+    # mis-versioned commit. On a wheel* branch those checks are skipped. On
+    # both, `cargo publish --dry-run` packages and builds the crate, so a
+    # packaging failure is caught before anything is published.
     name: preflight (version + green Build)
     runs-on: ubuntu-latest
     permissions:
@@ -72,6 +73,14 @@ jobs:
             exit 1
           fi
           echo "$GITHUB_SHA is on main"
+
+      # Package and verify-build the crate exactly as `cargo publish` will,
+      # without uploading, so a packaging failure (a file missing from the
+      # package, a manifest crates.io rejects) stops the release here, before
+      # either registry is touched. Runs on wheel* branches too.
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Dry-run the crates.io publish
+        run: cargo publish --dry-run --locked
 
       - name: Require a green Build run on this commit
         if: startsWith(github.ref, 'refs/tags/v')
@@ -243,7 +252,14 @@ jobs:
 
   publish_pypi:
     name: publish to PyPI
-    needs: [preflight, build_wheels]
+    # Runs only after crates.io accepted the crate, so a crates.io failure
+    # stops the release before PyPI instead of leaving a PyPI-only release.
+    # crates.io goes first because it is one all-or-nothing upload; the
+    # PyPI upload (every wheel plus the sdist) can fail part-way, and
+    # skip-existing below lets "Re-run failed jobs" finish it without
+    # touching crates.io again.
+    # Order: preflight -> build_wheels -> publish_crate -> publish_pypi.
+    needs: [preflight, build_wheels, publish_crate]
     runs-on: ubuntu-latest
     environment: PyPiPublish
     if: startsWith(github.ref, 'refs/tags/v')
@@ -264,3 +280,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
+          # For re-running a partially failed upload: files PyPI already
+          # has are skipped instead of failing the job.
+          skip-existing: true

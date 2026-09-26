@@ -204,6 +204,14 @@ jobs:
         if: matrix.os == 'ubuntu'
         run: cargo doc --no-deps
 
+      # Package the crate and build it from the package, as `cargo publish`
+      # does, so a file missing from the crates.io package fails the PR
+      # rather than the release (release.yml's preflight repeats this on the
+      # tagged commit).
+      - name: Package the crate (cargo publish --dry-run)
+        if: matrix.os == 'ubuntu'
+        run: cargo publish --dry-run --locked
+
   python:
     name: python bindings test (${{ matrix.os }} ${{ matrix.python }})
     strategy:
