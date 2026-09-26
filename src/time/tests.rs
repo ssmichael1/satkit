@@ -21,100 +21,55 @@ fn test_weekday_try_from() {
     assert!(Weekday::try_from(-1).is_err());
 }
 
+// `as_datetime()` seconds are `µs as f64 * 1e-6`, so they equal a decimal
+// literal exactly unless that product rounds differently (55.816 → 55.815999…);
+// those cases compare the integer-µs `as_datetime_us()` instead.
+
 #[test]
 fn test_j2000() {
-    let g = Instant::J2000.as_datetime();
-    assert!(g.0 == 2000);
-    assert!(g.1 == 1);
-    assert!(g.2 == 1);
-    assert!(g.3 == 11);
-    assert!(g.4 == 58);
     // J2000 is 2000-01-01 12:00:00 TT = 11:58:55.816 UTC
-    assert!((g.5 - 55.816).abs() < 1.0e-7);
+    assert_eq!(
+        Instant::J2000.as_datetime_us(),
+        (2000, 1, 1, 11, 58, 55_816_000)
+    );
 }
 
 #[test]
 fn test_fromstring() {
     let time = Instant::from_string("March 4 2024").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 3);
-    assert!(g.2 == 4);
+    assert_eq!(time.as_datetime(), (2024, 3, 4, 0, 0, 0.0));
 
     let time = Instant::from_string("2024-01-04 13:14:12.123000").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 1);
-    assert!(g.2 == 4);
-    assert!(g.3 == 13);
-    assert!(g.4 == 14);
-    assert!((g.5 - 12.123).abs() < 1.0e-7);
+    assert_eq!(time.as_datetime(), (2024, 1, 4, 13, 14, 12.123));
 }
 
 #[test]
 fn test_unixtime() {
     let time = Instant::from_unixtime(1732939013.0);
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 11);
-    assert!(g.2 == 30);
-    assert!(g.3 == 3);
-    assert!(g.4 == 56);
-    assert!(g.5 == 53.0);
+    assert_eq!(time.as_datetime(), (2024, 11, 30, 3, 56, 53.0));
 
     let time = Instant::from_datetime(2016, 12, 31, 23, 59, 40.0).unwrap();
-    assert!(time.as_unixtime() == 1483228780.0);
-
-    let g = time.as_datetime();
-    assert!(g.0 == 2016);
-    assert!(g.1 == 12);
-    assert!(g.2 == 31);
-    assert!(g.3 == 23);
-    assert!(g.4 == 59);
-    assert!(g.5 == 40.0);
+    assert_eq!(time.as_unixtime(), 1483228780.0);
+    assert_eq!(time.as_datetime(), (2016, 12, 31, 23, 59, 40.0));
 }
 
 #[test]
 fn test_leapsecond() {
     // Beginning of leap second
     let mut t = Instant::new(1483228836000000);
-    let g = t.as_datetime();
-    assert!(g.0 == 2016);
-    assert!(g.1 == 12);
-    assert!(g.2 == 31);
-    assert!(g.3 == 23);
-    assert!(g.4 == 59);
-    assert!(g.5 == 60.0);
+    assert_eq!(t.as_datetime(), (2016, 12, 31, 23, 59, 60.0));
 
     // Middle of a leap second
     let t2 = t + Duration::from_microseconds(100);
-    let g = t2.as_datetime();
-    assert!(g.0 == 2016);
-    assert!(g.1 == 12);
-    assert!(g.2 == 31);
-    assert!(g.3 == 23);
-    assert!(g.4 == 59);
-    assert!((g.5 - 60.0001).abs() < 1.0e-7);
+    assert_eq!(t2.as_datetime_us(), (2016, 12, 31, 23, 59, 60_000_100));
 
     // Just prior to leap second
     t -= Duration::from_seconds(1.0);
-    let g = t.as_datetime();
-    assert!(g.0 == 2016);
-    assert!(g.1 == 12);
-    assert!(g.2 == 31);
-    assert!(g.3 == 23);
-    assert!(g.4 == 59);
-    assert!(g.5 == 59.0);
+    assert_eq!(t.as_datetime(), (2016, 12, 31, 23, 59, 59.0));
 
     // Just after leap second
     t += Duration::from_seconds(2.0);
-    let g = t.as_datetime();
-    assert!(g.0 == 2017);
-    assert!(g.1 == 1);
-    assert!(g.2 == 1);
-    assert!(g.3 == 0);
-    assert!(g.4 == 0);
-    assert!(g.5 == 0.0);
+    assert_eq!(t.as_datetime(), (2017, 1, 1, 0, 0, 0.0));
 }
 
 #[test]
@@ -166,13 +121,7 @@ fn test_ops() {
     assert!(dt.as_microseconds() == 60_000_000);
 
     let t3 = t2 + Duration::from_days(1.0);
-    let g = t3.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 11);
-    assert!(g.2 == 14);
-    assert!(g.3 == 8);
-    assert!(g.4 == 1);
-    assert!(g.5 == 3.0);
+    assert_eq!(t3.as_datetime(), (2024, 11, 14, 8, 1, 3.0));
 
     let d1 = Duration::from_seconds(4.0);
     let d2 = Duration::from_seconds(5.0);
@@ -186,13 +135,15 @@ fn test_ops() {
 
 #[test]
 fn test_gps() {
-    let g = Instant::GPS_EPOCH.as_datetime();
-    assert!(g.0 == 1980);
-    assert!(g.1 == 1);
-    assert!(g.2 == 6);
-    assert!(g.3 == 0);
-    assert!(g.4 == 0);
-    assert!(g.5 == 0.0);
+    assert_eq!(Instant::GPS_EPOCH.as_datetime(), (1980, 1, 6, 0, 0, 0.0));
+    assert_eq!(
+        Instant::from_gps_week_and_second(0, 0.0),
+        Instant::GPS_EPOCH
+    );
+    assert_eq!(
+        Instant::GPS_EPOCH.as_mjd_with_scale(TimeScale::GPS),
+        44244.0
+    );
 }
 
 #[test]
@@ -204,33 +155,14 @@ fn test_jd() {
 
 #[test]
 fn test_rfc3339() {
-    let time = Instant::from_rfc3339("2024-11-24T12:03:45.123456Z").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 11);
-    assert!(g.2 == 24);
-    assert!(g.3 == 12);
-    assert!(g.4 == 3);
-    assert!(g.5 == 45.123456);
-
-    let time = Instant::from_rfc3339("2024-11-24T12:03:45Z").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 11);
-    assert!(g.2 == 24);
-    assert!(g.3 == 12);
-    assert!(g.4 == 3);
-    assert!(g.5 == 45.0);
-
-    // Test with milliseconds
-    let time = Instant::from_rfc3339("2024-11-24T12:03:45.123Z").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 11);
-    assert!(g.2 == 24);
-    assert!(g.3 == 12);
-    assert!(g.4 == 3);
-    assert!(g.5 == 45.123);
+    for (s, sec) in [
+        ("2024-11-24T12:03:45.123456Z", 45.123456),
+        ("2024-11-24T12:03:45Z", 45.0),
+        ("2024-11-24T12:03:45.123Z", 45.123), // milliseconds
+    ] {
+        let time = Instant::from_rfc3339(s).unwrap();
+        assert_eq!(time.as_datetime(), (2024, 11, 24, 12, 3, sec), "{s}");
+    }
 }
 
 #[test]
@@ -258,157 +190,65 @@ fn test_bounds() {
 
 #[test]
 fn test_strptime() {
-    let time = Instant::strptime("2024-11-24T12:03:45.123456", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 11);
-    assert!(g.2 == 24);
-    assert!(g.3 == 12);
-    assert!(g.4 == 3);
-    assert!(g.5 == 45.123456);
-
-    // Test with milliseconds
-    let time = Instant::strptime("2024-11-24T12:03:45.123", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 11);
-    assert!(g.2 == 24);
-    assert!(g.3 == 12);
-    assert!(g.4 == 3);
-    assert!(g.5 == 45.123);
-
-    let time =
-        Instant::strptime("February 13 2024 12:03:45.123456", "%B %d %Y %H:%M:%S.%f").unwrap();
-
-    let g = time.as_datetime();
-    assert!(g.0 == 2024);
-    assert!(g.1 == 2);
-    assert!(g.2 == 13);
-    assert!(g.3 == 12);
-    assert!(g.4 == 3);
-    assert!(g.5 == 45.123456);
-
-    // More than 6 fractional digits must truncate to microseconds, not panic
-    // (regression: the error path parsed the whole fraction into i32 and
-    // overflowed).
-    let time =
-        Instant::strptime("2023-01-01T00:00:00.12345678901", "%Y-%m-%dT%H:%M:%S.%f").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2023 && g.1 == 1 && g.2 == 1);
-    assert!((g.5 - 0.123456).abs() < 1.0e-9);
-
-    let time = Instant::strptime("09-Jun-2023 22:27:19", "%d-%b-%Y %H:%M:%S").unwrap();
-    let g = time.as_datetime();
-    assert!(g.0 == 2023);
-    assert!(g.1 == 6);
-    assert!(g.2 == 9);
-    assert!(g.3 == 22);
-    assert!(g.4 == 27);
-    assert!(g.5 == 19.0);
-}
-
-#[test]
-fn test_from_gps_week_and_second() {
-    // GPS epoch: January 6, 1980 00:00:00 UTC
-    let gps_epoch = Instant::from_gps_week_and_second(0, 0.0);
-    let g = gps_epoch.as_datetime();
-    assert_eq!(g.0, 1980);
-    assert_eq!(g.1, 1);
-    assert_eq!(g.2, 6);
-    assert_eq!(g.3, 0);
-    assert_eq!(g.4, 0);
-    assert!((g.5 - 0.0).abs() < 1.0e-6);
-
-    // Week 1 should be 7 days later: January 13, 1980
-    let week1 = Instant::from_gps_week_and_second(1, 0.0);
-    let g = week1.as_datetime();
-    assert_eq!(g.0, 1980);
-    assert_eq!(g.1, 1);
-    assert_eq!(g.2, 13);
-
-    // Difference between week 0 and week 1 should be exactly 7 days
-    let diff = week1 - gps_epoch;
-    assert!((diff.as_seconds() - 604800.0).abs() < 1.0e-6);
-
-    // Week 0, second 86400 should be January 7, 1980
-    let day2 = Instant::from_gps_week_and_second(0, 86400.0);
-    let g = day2.as_datetime();
-    assert_eq!(g.0, 1980);
-    assert_eq!(g.1, 1);
-    assert_eq!(g.2, 7);
-
-    // Verify consistency: from_gps_week_and_second(0, N) should equal
-    // GPS epoch + N seconds
-    let gps_epoch = Instant::from_gps_week_and_second(0, 0.0);
-    let t_100k = Instant::from_gps_week_and_second(0, 100000.0);
-    assert!((t_100k - gps_epoch).as_seconds() - 100000.0 < 1.0e-6);
-
-    // Week 2, second 43200 = 14 days + 12 hours from GPS epoch
-    let t_2w = Instant::from_gps_week_and_second(2, 43200.0);
-    let expected_seconds = 2.0 * 604800.0 + 43200.0;
-    assert!((t_2w - gps_epoch).as_seconds() - expected_seconds < 1.0e-6);
-
-    // GPS MJD at GPS epoch should be 44244.0 (same as UTC MJD at that time)
-    let gps_mjd = gps_epoch.as_mjd_with_scale(crate::TimeScale::GPS);
-    assert!(
-        (gps_mjd - 44244.0).abs() < 1.0e-6,
-        "GPS MJD at GPS epoch: expected 44244.0, got {}",
-        gps_mjd
-    );
-
-    // GPS MJD round-trip: from_mjd(GPS) -> as_mjd(GPS) should be identity
-    let t = Instant::from_mjd_with_scale(60000.0, crate::TimeScale::GPS);
-    let mjd_back = t.as_mjd_with_scale(crate::TimeScale::GPS);
-    assert!(
-        (mjd_back - 60000.0).abs() < 1.0e-6,
-        "GPS MJD round-trip: expected 60000.0, got {}",
-        mjd_back
-    );
-
-    // GPS MJD should differ from UTC MJD by accumulated leap seconds
-    // At a modern time, TAI-UTC = 37s, so GPS-UTC = 37-19 = 18s
-    let t_modern = Instant::from_datetime(2024, 6, 15, 12, 0, 0.0).unwrap();
-    let utc_mjd = t_modern.as_mjd_with_scale(crate::TimeScale::UTC);
-    let gps_mjd = t_modern.as_mjd_with_scale(crate::TimeScale::GPS);
-    let diff_seconds = (gps_mjd - utc_mjd) * 86400.0;
-    assert!(
-        (diff_seconds - 18.0).abs() < 1.0e-3,
-        "GPS-UTC offset: expected 18s, got {}s",
-        diff_seconds
-    );
+    for (s, fmt, dt) in [
+        (
+            "2024-11-24T12:03:45.123456",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            (2024, 11, 24, 12, 3, 45.123456),
+        ),
+        // Milliseconds
+        (
+            "2024-11-24T12:03:45.123",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            (2024, 11, 24, 12, 3, 45.123),
+        ),
+        (
+            "February 13 2024 12:03:45.123456",
+            "%B %d %Y %H:%M:%S.%f",
+            (2024, 2, 13, 12, 3, 45.123456),
+        ),
+        // More than 6 fractional digits must truncate to microseconds, not
+        // panic (regression: the error path parsed the whole fraction into
+        // i32 and overflowed).
+        (
+            "2023-01-01T00:00:00.12345678901",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            (2023, 1, 1, 0, 0, 0.123456),
+        ),
+        (
+            "09-Jun-2023 22:27:19",
+            "%d-%b-%Y %H:%M:%S",
+            (2023, 6, 9, 22, 27, 19.0),
+        ),
+    ] {
+        let time = Instant::strptime(s, fmt).unwrap();
+        assert_eq!(time.as_datetime(), dt, "{s}");
+    }
 }
 
 #[test]
 fn test_rfc3339_with_timezone_offset() {
     // UTC (Z suffix)
     let t_z = Instant::from_rfc3339("2024-01-01T12:00:00Z").unwrap();
-    let g = t_z.as_datetime();
-    assert_eq!(g.0, 2024);
-    assert_eq!(g.3, 12);
+    assert_eq!(t_z.as_datetime(), (2024, 1, 1, 12, 0, 0.0));
 
     // +00:00 should be same as Z
     let t_plus0 = Instant::from_rfc3339("2024-01-01T12:00:00+00:00").unwrap();
-    assert!((t_z - t_plus0).as_seconds().abs() < 1.0e-6);
+    assert_eq!(t_z, t_plus0);
 
-    // -05:00 means local time is 5 hours behind UTC
-    // So 00:00:00-05:00 = 05:00:00 UTC
-    let t_minus5 = Instant::from_rfc3339("2024-01-01T00:00:00-05:00").unwrap();
-    let g = t_minus5.as_datetime();
-    assert_eq!(g.3, 5);
-    assert_eq!(g.4, 0);
-
-    // +05:30 means local time is 5.5 hours ahead of UTC
-    // So 12:00:00+05:30 = 06:30:00 UTC
-    let t_plus530 = Instant::from_rfc3339("2024-01-01T12:00:00+05:30").unwrap();
-    let g = t_plus530.as_datetime();
-    assert_eq!(g.3, 6);
-    assert_eq!(g.4, 30);
-
-    // With fractional seconds and offset
-    let t_frac = Instant::from_rfc3339("2024-06-15T12:30:00.123456-03:00").unwrap();
-    let g = t_frac.as_datetime();
-    assert_eq!(g.3, 15);
-    assert_eq!(g.4, 30);
+    for (s, dt) in [
+        // -05:00: local time is 5 hours behind UTC
+        ("2024-01-01T00:00:00-05:00", (2024, 1, 1, 5, 0, 0.0)),
+        // +05:30: local time is 5.5 hours ahead of UTC
+        ("2024-01-01T12:00:00+05:30", (2024, 1, 1, 6, 30, 0.0)),
+        // With fractional seconds and offset
+        (
+            "2024-06-15T12:30:00.123456-03:00",
+            (2024, 6, 15, 15, 30, 0.123456),
+        ),
+    ] {
+        assert_eq!(Instant::from_rfc3339(s).unwrap().as_datetime(), dt, "{s}");
+    }
 }
 
 #[test]
@@ -452,9 +292,11 @@ fn test_rfc3339_non_ascii_errors_not_panics() {
     let _ = Instant::from_string("2024-01-01T12:00:00+05:0é");
 }
 
-/// TDB − TT has a one-year period and ~1.66 ms amplitude (Vallado Eq. 3-50;
-/// the series argument is in radians). Reference values from ERFA `dtdb`
-/// at the geocenter; the one-term series is within ~50 µs of it.
+/// TDB − TT against reference values from ERFA `dtdb` at the geocenter
+/// (Vallado Eq. 3-50; the series argument is in radians); the one-term
+/// series is within ~50 µs of it. The annual period and amplitude are
+/// `tdb_minus_tt_bounded_and_annual`, and the TDB inverse `tdb_inverse`, in
+/// `tests/properties.rs`.
 #[test]
 fn test_tdb_minus_tt() {
     let tdb_minus_tt = |mjd_tt: f64| {
@@ -470,24 +312,6 @@ fn test_tdb_minus_tt() {
     ] {
         let d = tdb_minus_tt(mjd);
         assert!((d - erfa).abs() < 60.0e-6, "MJD {mjd}: {d} vs ERFA {erfa}");
-    }
-    // Annual period: the extremes over any one year reach the amplitude,
-    // and a year later the value repeats
-    let (mut lo, mut hi) = (f64::MAX, f64::MIN);
-    for day in 0..366 {
-        let d = tdb_minus_tt(60310.0 + day as f64);
-        lo = lo.min(d);
-        hi = hi.max(d);
-        let d_next_year = tdb_minus_tt(60310.0 + day as f64 + 365.25);
-        assert!((d - d_next_year).abs() < 2.0e-6);
-    }
-    assert!(hi > 1.6e-3 && lo < -1.6e-3, "range [{lo}, {hi}]");
-
-    // TDB -> Instant -> TDB round trip (to the microsecond resolution)
-    for mjd in [51544.5, 57754.25, 60400.0, 60482.7] {
-        let t = Instant::from_mjd_with_scale(mjd, TimeScale::TDB);
-        let back = t.as_mjd_with_scale(TimeScale::TDB);
-        assert!(((back - mjd) * 86400.0).abs() < 2.0e-6, "{mjd} -> {back}");
     }
 }
 
@@ -524,11 +348,9 @@ fn test_midnight_after_leap_second() {
         let (py, pm, pd) = if m == 1 { (y - 1, 12, 31) } else { (y, 6, 30) };
         let before = Instant::from_datetime(py, pm, pd, 23, 59, 59.0).unwrap();
         assert_eq!((after - before).as_microseconds(), 2_000_000, "{y}-{m}");
-        let g = after.as_datetime();
-        assert_eq!((g.0, g.1, g.2, g.3, g.4, g.5), (y, m, 1, 0, 0, 0.0));
+        assert_eq!(after.as_datetime(), (y, m, 1, 0, 0, 0.0));
         let leap = before + Duration::from_seconds(1.0);
-        let g = leap.as_datetime();
-        assert_eq!((g.0, g.1, g.2, g.3, g.4, g.5), (py, pm, pd, 23, 59, 60.0));
+        assert_eq!(leap.as_datetime(), (py, pm, pd, 23, 59, 60.0));
     }
 }
 
@@ -592,11 +414,8 @@ fn test_1972_step() {
         let back = Instant::from_datetime(g.0, g.1, g.2, g.3, g.4, g.5).unwrap();
         assert!((back.raw - inst.raw).abs() <= 1, "{inst:?}");
         if let Some(p) = prev {
-            assert!(
-                (g.0, g.1, g.2, g.3, g.4) > (p.0, p.1, p.2, p.3, p.4)
-                    || ((g.0, g.1, g.2, g.3, g.4) == (p.0, p.1, p.2, p.3, p.4) && g.5 > p.5),
-                "{p:?} -> {g:?}"
-            );
+            // Tuples compare lexicographically
+            assert!(g > p, "{p:?} -> {g:?}");
         }
         prev = Some(g);
     }
@@ -623,8 +442,7 @@ fn test_1972_step() {
 #[test]
 fn test_pre_1970_datetime() {
     let t = Instant::from_datetime(1960, 1, 1, 12, 0, 0.0).unwrap();
-    let g = t.as_datetime();
-    assert_eq!((g.0, g.1, g.2, g.3, g.4, g.5), (1960, 1, 1, 12, 0, 0.0));
+    assert_eq!(t.as_datetime(), (1960, 1, 1, 12, 0, 0.0));
     assert_eq!(t.to_string(), "1960-01-01T12:00:00.000000Z");
     assert_eq!(t.as_rfc3339(), "1960-01-01T12:00:00.000000Z");
 
