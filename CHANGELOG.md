@@ -10,6 +10,8 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 
 - `TLE` keeps its classification letter (line 1, column 8: `U`/`C`/`S`), round-tripped by `to_2line()` and `OMM`; Python `TLE.classification` property ([#264](https://github.com/ssmichael1/satkit/pull/264))
 - Python `moon.pos_mod` (mean-of-date Moon position), mirroring `sun.pos_mod` ([#254](https://github.com/ssmichael1/satkit/pull/254))
+- Warnings go through the Rust `log` facade and, in Python, the `logging` module (`satkit.*` loggers); with no logger installed Rust still prints them to stderr ([#262](https://github.com/ssmichael1/satkit/pull/262))
+- Every Python function that takes times accepts `numpy.datetime64` scalars and 1-D arrays of any unit, read as UTC; `quaternion * Nx3` and `sgp4` no longer copy their output arrays ([#263](https://github.com/ssmichael1/satkit/pull/263))
 
 ### Changed
 
@@ -45,7 +47,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - Of several copies of `finals2000A.all` across the search directories, the freshest is read ([#229](https://github.com/ssmichael1/satkit/pull/229))
 - `orbitprop::propagate` has its rustdoc again, and the crates.io publish job only runs for `v*` tags ([#226](https://github.com/ssmichael1/satkit/pull/226))
 - `help(satkit.satstate)` shows the class documentation again ([#237](https://github.com/ssmichael1/satkit/pull/237))
-- `TLE::alpha5_to_int` rejected only some malformed input: a sign after a letter (`"A-123"` silently became 99877) or a leading `+`/`-` in the numeric form passed straight to `str::parse`; both forms now require plain ASCII digits, and the letter form requires exactly four of them. The `>= 340000` error from `int_to_alpha5` / `to_2line` now says to use OMM instead ([#261](https://github.com/ssmichael1/satkit/pull/261))
+- Alpha-5 satellite numbers with a sign or malformed digits (`"A-123"` became 99877) are rejected, and the ≥ 340000 error points to OMM ([#261](https://github.com/ssmichael1/satkit/pull/261))
 
 ### Docs
 

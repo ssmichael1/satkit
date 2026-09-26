@@ -63,6 +63,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -885,6 +894,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pyo3-log"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f64083bd3a16a353d9d62335808e8e13d0552d2a2b83fdb084496192dcfa9fcd"
+dependencies = [
+ "arc-swap",
+ "log",
+ "pyo3",
+]
+
+[[package]]
 name = "pyo3-macros"
 version = "0.29.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1200,6 +1220,7 @@ dependencies = [
  "chrono",
  "criterion",
  "flate2",
+ "log",
  "numeris",
  "process_path",
  "proptest",
@@ -1218,11 +1239,13 @@ name = "satkit-python"
 version = "0.23.1"
 dependencies = [
  "anyhow",
+ "log",
  "numeris",
  "numpy",
  "process_path",
  "pyo3",
  "pyo3-build-config",
+ "pyo3-log",
  "satkit",
  "serde",
  "serde-pickle",

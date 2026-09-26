@@ -118,14 +118,19 @@ impl Forecast {
     }
 }
 
-/// NASA's URL for the forecast issued in a given month.
+/// Where NASA publishes the monthly forecasts.
 #[cfg(feature = "download")]
-fn nasa_url(year: i32, month: i32) -> String {
+pub(crate) const NASA_UPLOADS: &str = "https://www.nasa.gov/wp-content/uploads/";
+
+/// The URL, under `base` ([`NASA_UPLOADS`] in production), of the forecast
+/// issued in a given month.
+#[cfg(feature = "download")]
+pub(crate) fn nasa_url(base: &str, year: i32, month: i32) -> String {
     const MON: [&str; 12] = [
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     ];
     format!(
-        "https://www.nasa.gov/wp-content/uploads/{year}/{month:02}/{}{year}f10-prd.txt",
+        "{base}{year}/{month:02}/{}{year}f10-prd.txt",
         MON[(month - 1) as usize]
     )
 }
@@ -142,6 +147,18 @@ fn nasa_url(year: i32, month: i32) -> String {
 /// Without the `download` feature this is [`Error::FeatureDisabled`](download::Error::FeatureDisabled).
 #[cfg(feature = "download")]
 pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome> {
+    refresh_from(NASA_UPLOADS, dir, force).map(|(outcome, _)| outcome)
+}
+
+/// [`refresh_into`] from the monthly files under `base` ([`NASA_UPLOADS`]
+/// in production), also returning the URL of the file downloaded (`None`
+/// when the copy on disk was current and no request was made).
+#[cfg(feature = "download")]
+pub(crate) fn refresh_from(
+    base: &str,
+    dir: &Path,
+    force: bool,
+) -> download::Result<(RefreshOutcome, Option<String>)> {
     use download::{read_refresh_marker, write_refresh_marker};
     let dest = dir.join(super::MSAFE_FILE);
     if !force && dest.is_file() {
@@ -152,7 +169,7 @@ pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome>
                 .unwrap_or(0)
                 .saturating_sub(checked_at);
             if age < download::refresh_min_age_secs(super::MSAFE_FILE) {
-                return Ok(RefreshOutcome::Fresh { age_secs: age });
+                return Ok((RefreshOutcome::Fresh { age_secs: age }, None));
             }
         }
     }
@@ -160,7 +177,7 @@ pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome>
     let (mut y, mut m, ..) = Instant::now().as_datetime();
     let mut attempts = Vec::new();
     for _ in 0..6 {
-        let url = nasa_url(y, m);
+        let url = nasa_url(base, y, m);
         match download::download_to_string(&url) {
             Ok(text) => {
                 // Validate before it replaces a good file.
@@ -169,7 +186,7 @@ pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome>
                 } else {
                     download::write_atomic(&mut std::io::Cursor::new(text), &dest, &url)?;
                     write_refresh_marker(&dest, None);
-                    return Ok(RefreshOutcome::Downloaded);
+                    return Ok((RefreshOutcome::Downloaded, Some(url)));
                 }
             }
             Err(e) => attempts.push(format!("{url}: {e}")),

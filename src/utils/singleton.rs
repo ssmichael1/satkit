@@ -44,12 +44,21 @@ impl<T> RefreshableSingleton<T> {
     /// data" branch instead of panicking with "Once instance has previously
     /// been poisoned" in every data-dependent call for the rest of the
     /// process.
+    ///
+    /// Warnings the loader emits are logged once the `Once` has completed,
+    /// so a logger that blocks (the Python bindings' takes the GIL) never
+    /// runs while another thread waits here.
     pub fn ensure_default_loaded(&self, loader: impl FnOnce() -> Option<T>) {
-        self.default_load.call_once(|| {
-            let loaded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(loader));
-            if let Ok(Some(v)) = loaded {
-                *self.data.write().unwrap_or_else(|e| e.into_inner()) = Some(v);
-            }
+        if self.default_load.is_completed() {
+            return;
+        }
+        crate::utils::diag::deferred(|| {
+            self.default_load.call_once(|| {
+                let loaded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(loader));
+                if let Ok(Some(v)) = loaded {
+                    *self.data.write().unwrap_or_else(|e| e.into_inner()) = Some(v);
+                }
+            })
         });
     }
 
@@ -63,6 +72,13 @@ impl<T> RefreshableSingleton<T> {
     /// Acquire a read guard on the current contents (`None` if unloaded).
     pub fn read(&self) -> RwLockReadGuard<'_, Option<T>> {
         self.data.read().unwrap()
+    }
+
+    /// Whether any thread holds the lock (test helper: warnings must be
+    /// logged after it is released).
+    #[cfg(test)]
+    pub(crate) fn is_locked(&self) -> bool {
+        self.data.try_write().is_err()
     }
 }
 

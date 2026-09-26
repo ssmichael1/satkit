@@ -1,9 +1,11 @@
 import pytest
 import numpy as np
 import pickle
+import warnings
 from datetime import datetime, timezone
 
 import satkit as sk
+from shared import ISS_2024
 
 
 class TestDateTime:
@@ -468,3 +470,171 @@ class TestDatetimeTimeZone:
             else:
                 os.environ["TZ"] = old_tz
             systime.tzset()
+
+
+def _as_time(t):
+    """The satkit.time a scalar time argument names (satstate stores it)"""
+    return sk.satstate(t, np.zeros(3), np.zeros(3)).time
+
+
+def _qs(qs):
+    return [(q.w, q.x, q.y, q.z) for q in qs]
+
+
+class TestDatetime64:
+    """numpy datetime64 times, arrays and scalars, are UTC labels: the same
+    instants as the equivalent satkit.time / aware-UTC datetime"""
+
+    LABELS = [
+        "2024-01-01T12:00:00.000000",
+        "2024-01-01T12:07:18.123456",
+        "2024-02-29T23:59:59.999999",
+        "2016-12-31T23:59:59.500000",  # just before a leap second
+        "2017-01-01T00:00:00.000000",  # just after it
+        "2031-07-04T04:05:06.000001",
+    ]
+
+    def times(self):
+        return [sk.time.from_rfc3339(s + "Z") for s in self.LABELS]
+
+    def array(self, unit="us"):
+        return np.array(self.LABELS, dtype=f"datetime64[{unit}]")
+
+    def test_same_results_as_satkit_time(self):
+        tl, ta = self.times(), self.array()
+        tle = sk.TLE.from_lines(ISS_2024)[0]
+        for a, b in zip(sk.sgp4(tle, ta), sk.sgp4(tle, tl)):
+            assert np.array_equal(a, b)
+        ft = sk.frametransform
+        assert _qs(ft.qitrf2gcrf(ta)) == _qs(ft.qitrf2gcrf(tl))
+        assert _qs(ft.rotation(sk.frame.ITRF, sk.frame.GCRF, ta)) == _qs(
+            ft.rotation(sk.frame.ITRF, sk.frame.GCRF, tl)
+        )
+        assert np.array_equal(sk.sun.pos_gcrf(ta), sk.sun.pos_gcrf(tl))
+        assert np.array_equal(sk.moon.pos_gcrf(ta), sk.moon.pos_gcrf(tl))
+        assert ft.gmst(ta) == ft.gmst(tl)
+        # A datetime64 array keeps its time axis, like a list
+        assert sk.sgp4(tle, ta[:1])[0].shape == (1, 3)
+        try:
+            jpl = sk.jplephem.geocentric_pos(sk.solarsystem.Moon, tl)
+        except Exception:
+            pytest.skip("JPL ephemeris not available")
+        assert np.array_equal(sk.jplephem.geocentric_pos(sk.solarsystem.Moon, ta), jpl)
+
+    @pytest.mark.parametrize("unit", ["Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns"])
+    def test_units(self, unit):
+        """Every unit gives the instant of its UTC label, including before
+        1972 (calendar units through the calendar, not a fixed length)"""
+        src = [
+            "1965-06-01T12:30:15.250000",
+            "2024-02-29T13:45:12.123456",
+            "1969-12-31T23:59:59.999999",
+        ]
+        arr = np.array(src, dtype=f"datetime64[{unit}]")
+        # numpy's own (exact) conversion to microseconds names the label
+        expect = [sk.time.from_rfc3339(str(x) + "Z") for x in arr.astype("datetime64[us]")]
+        assert sk.frametransform.gmst(arr) == sk.frametransform.gmst(expect)
+        assert [_as_time(x) for x in arr] == expect
+
+    def test_unit_multiplier(self):
+        """A unit with a multiplier (datetime64[15m]) counts that many units"""
+        assert _as_time(np.array([7], dtype="datetime64[15m]")[0]) == sk.time(1970, 1, 1, 1, 45, 0)
+        assert _as_time(np.array([3], dtype="datetime64[5M]")[0]) == sk.time(1971, 4, 1)
+        assert _as_time(np.array([151], dtype="datetime64[10ns]")[0]) == sk.time(
+            1970, 1, 1
+        ) + sk.duration(microseconds=2)
+
+    @pytest.mark.parametrize("day", ["2024-01-01", "1970-01-01", "1969-06-01"])
+    @pytest.mark.parametrize(
+        "ns, us",
+        [(0, 0), (499, 0), (500, 1), (1_499, 1), (1_500, 2), (-499, 0), (-500, 0), (-501, -1), (-1_500, -1)],
+    )
+    def test_sub_microsecond_rounds_to_nearest(self, day, ns, us):
+        """Finer than a microsecond rounds to the nearest microsecond, halves
+        to the later one on either side of 1970, as the calendar constructor
+        and the string parser round the seconds: the value names the same
+        time as its ISO string"""
+        t64 = np.datetime64(day + "T00:00:00", "ns") + np.timedelta64(ns, "ns")
+        expect = sk.time(day + "T00:00:00Z") + sk.duration(microseconds=us)
+        assert _as_time(t64) == expect
+        assert sk.time(str(t64) + "Z") == expect
+        assert sk.frametransform.gmst(np.array([t64])) == sk.frametransform.gmst([expect])
+
+    @pytest.mark.parametrize("unit, count", [("ps", 1_500_000), ("fs", 1_500_000_000), ("as", 1_500_000_000_000)])
+    def test_finer_units_round(self, unit, count):
+        # 1.5 us after the Unix epoch rounds to 2 us; 1.5 us before, to 1 us before
+        t64 = np.array([count, -count], dtype=f"datetime64[{unit}]")
+        assert _as_time(t64[0]) == sk.time.UNIX_EPOCH + sk.duration(microseconds=2)
+        assert _as_time(t64[1]) == sk.time.UNIX_EPOCH - sk.duration(microseconds=1)
+
+    def test_strided_and_byte_swapped(self):
+        tl, ta = self.times(), self.array()
+        gmst = sk.frametransform.gmst
+        assert gmst(ta[::2]) == gmst(tl[::2])
+        assert gmst(ta[::-1]) == gmst(tl[::-1])
+        swapped = ta.astype(ta.dtype.newbyteorder("S"))
+        assert not swapped.dtype.isnative
+        assert gmst(swapped) == gmst(tl)
+        assert gmst(swapped[::2]) == gmst(tl[::2])
+        assert gmst(np.array([], dtype="datetime64[us]")) == []
+
+    def test_nat_raises_value_error(self):
+        arr = self.array()
+        arr[2] = np.datetime64("NaT", "us")
+        with pytest.raises(ValueError, match="index 2 is NaT"):
+            sk.frametransform.gmst(arr)
+        with pytest.raises(ValueError, match="NaT"):
+            sk.frametransform.gmst(np.datetime64("NaT", "s"))
+        # numpy deprecates the generic unit, which can only hold NaT
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            generic = np.array(["NaT", "NaT"], dtype="datetime64")
+        with pytest.raises(ValueError, match="index 0 is NaT"):
+            sk.frametransform.gmst(generic)
+
+    def test_out_of_range_raises_overflow_error(self):
+        for arr in (
+            np.array([0, 2**62], dtype="datetime64[s]"),
+            np.array([0, -(2**62)], dtype="datetime64[s]"),
+            np.array([0, 10**12], dtype="datetime64[Y]"),
+            np.array([0, 2**62], dtype="datetime64[W]"),
+        ):
+            with pytest.raises(OverflowError, match="index 1"):
+                sk.frametransform.gmst(arr)
+        with pytest.raises(OverflowError):
+            sk.frametransform.gmst(np.datetime64(2**62, "s"))
+
+    def test_multidimensional_array_refused(self):
+        with pytest.raises(ValueError, match="1-D"):
+            sk.frametransform.gmst(self.array().reshape(2, 3))
+
+    def test_scalar_accepted_where_times_are(self):
+        t = sk.time(2024, 6, 15, 16, 30, 0.25)
+        d64 = np.datetime64("2024-06-15T16:30:00.250")
+        assert _as_time(d64) == t
+        assert sk.frametransform.gmst(d64) == sk.frametransform.gmst(t)
+        # a scalar (or 0-d array) gives scalar output, as for satkit.time
+        assert sk.sun.pos_gcrf(d64).shape == (3,)
+        assert np.array_equal(sk.sun.pos_gcrf(np.asarray(d64)), sk.sun.pos_gcrf(t))
+        tle = sk.TLE.from_lines(ISS_2024)[0]
+        assert np.array_equal(sk.sgp4(tle, d64)[0], sk.sgp4(tle, t)[0])
+        coord = sk.itrfcoord(latitude_deg=42.0, longitude_deg=-71.0, altitude=0)
+        noon = np.datetime64("2024-06-15T16:00")
+        assert sk.sun.rise_set(noon, coord) == sk.sun.rise_set(sk.time(2024, 6, 15, 16, 0, 0), coord)
+        assert sk.density.nrlmsise(coord, d64) == sk.density.nrlmsise(coord, t)
+        assert sk.density.nrlmsise(400e3, d64) == sk.density.nrlmsise(400e3, t)
+        # lists and object arrays of datetime64 scalars
+        assert sk.frametransform.gmst([d64, t]) == sk.frametransform.gmst([t, t])
+        obj = np.array([d64, d64], dtype=object)
+        assert sk.frametransform.gmst(obj) == sk.frametransform.gmst([t, t])
+        # an OMM dict's EPOCH
+        omm = tle.to_omm()
+        omm64 = {**omm, "EPOCH": np.datetime64(omm["EPOCH"].rstrip("Z"), "us")}
+        assert np.array_equal(sk.sgp4(omm64, t)[0], sk.sgp4(omm, t)[0])
+
+    def test_pre1972_matches_datetime(self):
+        """Pre-1972 labels go through the same UTC model as datetime"""
+        d64 = np.datetime64("1965-06-01T12:30:15.250000")
+        dt = datetime(1965, 6, 1, 12, 30, 15, 250000, tzinfo=timezone.utc)
+        assert _as_time(d64) == sk.time.from_datetime(dt) == sk.time(1965, 6, 1, 12, 30, 15.25)
+        assert str(_as_time(np.datetime64("1960-01-01T12:00"))) == "1960-01-01T12:00:00.000000Z"

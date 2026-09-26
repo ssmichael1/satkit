@@ -1013,9 +1013,24 @@ fn instant_to_datetime(py: Python<'_>, t: &Instant, utc: bool) -> PyResult<Py<Py
     }
 }
 
-/// A single time argument: `satkit.time` or `datetime.datetime` (the stubs'
-/// `TimeScalar`). Use as a `#[pyfunction]` parameter type in place of
-/// `PyInstant` wherever the stub accepts either.
+/// The `numpy.datetime64` scalar type, imported once
+fn datetime64_type(py: Python<'_>) -> PyResult<&Bound<'_, pyo3::types::PyType>> {
+    static DATETIME64: pyo3::sync::PyOnceLock<Py<pyo3::types::PyType>> =
+        pyo3::sync::PyOnceLock::new();
+    DATETIME64.import(py, "numpy", "datetime64")
+}
+
+/// Whether `obj` is a single time: `satkit.time`, `datetime.datetime` or a
+/// `numpy.datetime64` scalar (the stubs' `TimeScalar`)
+pub(crate) fn is_time_scalar(obj: &Bound<'_, PyAny>) -> bool {
+    obj.is_instance_of::<PyInstant>()
+        || obj.is_instance_of::<PyDateTime>()
+        || datetime64_type(obj.py()).is_ok_and(|t| obj.is_instance(t).unwrap_or(false))
+}
+
+/// A single time argument: `satkit.time`, `datetime.datetime` or
+/// `numpy.datetime64` (the stubs' `TimeScalar`). Use as a `#[pyfunction]`
+/// parameter type in place of `PyInstant` wherever the stub accepts either.
 #[derive(Clone, Copy, Debug)]
 pub struct TimeArg(pub Instant);
 
@@ -1029,11 +1044,189 @@ impl<'a, 'py> FromPyObject<'a, 'py> for TimeArg {
         if let Ok(dt) = obj.cast::<PyDateTime>() {
             return Ok(Self(datetime_to_instant(&dt)?));
         }
+        if obj.is_instance(datetime64_type(obj.py())?)? {
+            // A 1-element array of the scalar's own unit
+            let arr = obj.call_method1("reshape", (1,))?;
+            let arr = arr.cast::<numpy::PyUntypedArray>()?;
+            return Ok(Self(datetime64_array_to_vec(arr, true)?[0]));
+        }
         Err(pyo3::exceptions::PyTypeError::new_err(format!(
-            "expected satkit.time or datetime.datetime, got {}",
+            "expected satkit.time, datetime.datetime or numpy.datetime64, got {}",
             obj.get_type()
         )))
     }
+}
+
+/// How a `datetime64` count converts to UTC microseconds since 1970
+#[derive(Clone, Copy)]
+enum Datetime64Unit {
+    /// Calendar months (units `Y` and `M`): this many per count
+    Months(i128),
+    /// Fixed-length units: microseconds = count × `num` / `den`, rounded
+    Fixed { num: i128, den: i128 },
+}
+
+/// The unit of a `datetime64` dtype, from `numpy.datetime_data` (which also
+/// gives the multiplier of a unit such as `datetime64[10ns]`)
+fn datetime64_unit(dtype: &Bound<'_, numpy::PyArrayDescr>) -> PyResult<Datetime64Unit> {
+    static DATETIME_DATA: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
+    let py = dtype.py();
+    let datetime_data = DATETIME_DATA.get_or_try_init(py, || {
+        py.import("numpy")?
+            .getattr("datetime_data")
+            .map(Bound::unbind)
+    })?;
+    let (unit, count): (String, i64) = datetime_data.bind(py).call1((dtype,))?.extract()?;
+    // |count| < 2^63, so none of these products overflows i128
+    let count = count as i128;
+    let fixed = |us: i128| Datetime64Unit::Fixed {
+        num: us * count,
+        den: 1,
+    };
+    let sub_us = |den: i128| Datetime64Unit::Fixed { num: count, den };
+    Ok(match unit.as_str() {
+        "Y" => Datetime64Unit::Months(12 * count),
+        "M" => Datetime64Unit::Months(count),
+        "W" => fixed(7 * 86_400_000_000),
+        "D" => fixed(86_400_000_000),
+        "h" => fixed(3_600_000_000),
+        "m" => fixed(60_000_000),
+        "s" => fixed(1_000_000),
+        "ms" => fixed(1_000),
+        "us" => fixed(1),
+        "ns" => sub_us(1_000),
+        "ps" => sub_us(1_000_000),
+        "fs" => sub_us(1_000_000_000),
+        "as" => sub_us(1_000_000_000_000),
+        // A generic-unit array can only hold NaT, which is refused below
+        "generic" => fixed(0),
+        other => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unsupported numpy.datetime64 unit: {other}"
+            )))
+        }
+    })
+}
+
+/// Largest |UTC microseconds| accepted from a `datetime64`: the `Instant`
+/// range less a day, so adding TAI − UTC cannot saturate (about ±292,000
+/// years)
+const DATETIME64_MAX_US: i128 = i64::MAX as i128 - 86_400_000_000;
+
+/// Why a `datetime64` element was refused
+enum Datetime64Error {
+    NaT(usize),
+    OutOfRange(usize),
+}
+
+/// Convert raw `datetime64` counts, as UTC labels, to instants: exact for
+/// whole microseconds, finer units rounded to the nearest microsecond
+/// (halves to the later one, as the seconds of a calendar time or a time
+/// string round), calendar units through the Gregorian calendar. Pure Rust,
+/// so it runs without the GIL.
+fn datetime64_counts_to_instants(
+    counts: &[i64],
+    unit: Datetime64Unit,
+) -> std::result::Result<Vec<Instant>, Datetime64Error> {
+    counts
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            // numpy's NaT is the most negative int64
+            if v == i64::MIN {
+                return Err(Datetime64Error::NaT(i));
+            }
+            let v = v as i128;
+            match unit {
+                Datetime64Unit::Months(per) => {
+                    let months = v.checked_mul(per).ok_or(Datetime64Error::OutOfRange(i))?;
+                    let year = i32::try_from(1970 + months.div_euclid(12))
+                        .map_err(|_| Datetime64Error::OutOfRange(i))?;
+                    let month = months.rem_euclid(12) as i32 + 1;
+                    Instant::from_date(year, month, 1).map_err(|_| Datetime64Error::OutOfRange(i))
+                }
+                Datetime64Unit::Fixed { num, den } => {
+                    // Checked: a unit multiplier (`datetime64[1000000W]`)
+                    // can make even i128 overflow
+                    let x = v.checked_mul(num).ok_or(Datetime64Error::OutOfRange(i))?;
+                    // floor(x / den + 1/2): halves go to the later
+                    // microsecond, before 1970 too
+                    let us = x
+                        .checked_mul(2)
+                        .and_then(|x2| x2.checked_add(den))
+                        .ok_or(Datetime64Error::OutOfRange(i))?
+                        .div_euclid(2 * den);
+                    if us.abs() > DATETIME64_MAX_US {
+                        return Err(Datetime64Error::OutOfRange(i));
+                    }
+                    Ok(Instant::from_unixtime_microseconds(us as i64))
+                }
+            }
+        })
+        .collect()
+}
+
+/// Times from a 1-D numpy `datetime64` array of any unit, read as UTC labels
+/// (numpy's datetime64 has no time zone and no leap seconds). The int64
+/// counts are read through a view, not element by element; a non-native
+/// byte order is first converted by numpy. `scalar` only changes the
+/// wording of errors.
+///
+/// Raises `ValueError` for `NaT` and `OverflowError` for a time beyond
+/// satkit's range.
+fn datetime64_array_to_vec(
+    arr: &Bound<'_, numpy::PyUntypedArray>,
+    scalar: bool,
+) -> PyResult<Vec<Instant>> {
+    use numpy::{PyArrayDescrMethods, PyUntypedArrayMethods};
+    let py = arr.py();
+    if arr.ndim() != 1 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "numpy.datetime64 time arrays must be 1-D, got {} dimensions",
+            arr.ndim()
+        )));
+    }
+    let dtype = arr.dtype();
+    let unit = datetime64_unit(&dtype)?;
+    // A byte-swapped array is converted to native order (a copy; rare)
+    let native = if dtype.is_native_byteorder() == Some(false) {
+        arr.call_method1("astype", (dtype.call_method1("newbyteorder", ("=",))?,))?
+    } else {
+        arr.clone().into_any()
+    };
+    let ints = native.call_method1("view", ("i8",))?;
+    let ints = ints.extract::<numpy::PyReadonlyArray1<i64>>()?;
+    // Copied out (strided or not) so the conversion can release the GIL
+    // without another thread changing the array underneath it
+    let counts = ints.as_array().to_vec();
+    drop(ints);
+    py.detach(|| datetime64_counts_to_instants(&counts, unit))
+        .map_err(|e| {
+            let what = |i: usize| {
+                if scalar {
+                    "numpy.datetime64 value".to_string()
+                } else {
+                    format!("numpy.datetime64 value at index {i}")
+                }
+            };
+            match e {
+                Datetime64Error::NaT(i) => pyo3::exceptions::PyValueError::new_err(format!(
+                    "{} is NaT (not a time)",
+                    what(i)
+                )),
+                Datetime64Error::OutOfRange(i) => crate::pyduration::arithmetic_overflow(&what(i)),
+            }
+        })
+}
+
+/// A numpy array of dtype `datetime64` (of any shape), if `obj` is one
+fn as_datetime64_array<'a, 'py>(
+    obj: &'a Bound<'py, PyAny>,
+) -> Option<&'a Bound<'py, numpy::PyUntypedArray>> {
+    use numpy::{PyArrayDescrMethods, PyUntypedArrayMethods};
+    obj.cast::<numpy::PyUntypedArray>()
+        .ok()
+        .filter(|a| a.dtype().kind() == b'M')
 }
 
 /// Times extracted from a Python time argument, remembering whether the
@@ -1059,11 +1252,26 @@ impl ToTimeVec for &Bound<'_, PyAny> {
 
     fn to_time_input(&self) -> PyResult<TimeInput> {
         // "Scalar" time input case
-        if self.is_instance_of::<PyInstant>() || self.is_instance_of::<PyDateTime>() {
+        if is_time_scalar(self) {
             let t: TimeArg = self.extract()?;
             return Ok(TimeInput {
                 times: vec![t.0],
                 scalar: true,
+            });
+        }
+        // numpy datetime64 array; a 0-d one is a scalar
+        if let Some(arr) = as_datetime64_array(self) {
+            use numpy::PyUntypedArrayMethods;
+            if arr.ndim() == 0 {
+                let arr = self.call_method1("reshape", (1,))?;
+                return Ok(TimeInput {
+                    times: datetime64_array_to_vec(arr.cast()?, true)?,
+                    scalar: true,
+                });
+            }
+            return Ok(TimeInput {
+                times: datetime64_array_to_vec(arr, false)?,
+                scalar: false,
             });
         }
         Ok(TimeInput {
@@ -1074,7 +1282,8 @@ impl ToTimeVec for &Bound<'_, PyAny> {
 }
 
 /// Times from a list or 1-D numpy object array of `satkit.time` /
-/// `datetime.datetime`
+/// `datetime.datetime` / `numpy.datetime64` (a `datetime64` array is read by
+/// `datetime64_array_to_vec`)
 fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
     if let Ok(list) = obj.cast::<pyo3::types::PyList>() {
         list.iter()
@@ -1082,7 +1291,7 @@ fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
             .collect::<PyResult<Vec<_>>>()
             .map_err(|e| {
                 pyo3::exceptions::PyTypeError::new_err(format!(
-                    "Not a list of satkit.time or datetime.datetime: {e}"
+                    "Not a list of satkit.time, datetime.datetime or numpy.datetime64: {e}"
                 ))
             })
     } else if obj.is_instance_of::<numpy::PyArray1<Py<PyAny>>>() {
@@ -1090,7 +1299,7 @@ fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
             .extract::<numpy::PyReadonlyArray1<Py<PyAny>>>()
             .map_err(|e| {
                 pyo3::exceptions::PyRuntimeError::new_err(format!(
-                    "Invalid satkit.time or datetime.datetime input: {e}"
+                    "Invalid satkit.time, datetime.datetime or numpy.datetime64 input: {e}"
                 ))
             })?;
         let py = obj.py();
@@ -1100,13 +1309,13 @@ fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
             .collect::<PyResult<Vec<_>>>()
             .map_err(|_| {
                 pyo3::exceptions::PyRuntimeError::new_err(
-                    "Invalid satkit.time input: numpy array must contain satkit.time \
-                     or datetime.datetime elements",
+                    "Invalid satkit.time input: numpy array must have dtype datetime64, \
+                     or contain satkit.time, datetime.datetime or numpy.datetime64 elements",
                 )
             })
     } else {
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Invalid satkit.time or datetime.datetime input",
+            "Invalid satkit.time, datetime.datetime or numpy.datetime64 input",
         ))
     }
 }

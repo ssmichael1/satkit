@@ -245,6 +245,26 @@ class TestDatetime:
             assert local == naive, (tzname, local, naive)
             assert sk.time.from_datetime(local) == t
 
+    @_settings()
+    @given(st.lists(st.tuples(non_leap_labels, st.integers(0, 999)), min_size=1, max_size=8))
+    def test_datetime64_is_its_utc_label(self, items):
+        """A numpy datetime64[ns] value is a UTC label, rounded to the
+        nearest microsecond (halves to the later one): the instant of the
+        aware-UTC datetime of the rounded label, before 1972 too. An array
+        gives the same instants as the list. (Not always that of its ISO
+        string: the parser rounds 23:59:59.9999995 on a day with a leap
+        second to 23:59:60, which a datetime64 cannot name.)"""
+        t64 = np.array(
+            [np.datetime64(label_iso(lb)[:-1], "ns") + np.timedelta64(ns, "ns") for lb, ns in items]
+        )
+        expect = [
+            sk.time.from_datetime(label_datetime(lb) + timedelta(microseconds=int(ns >= 500)))
+            for lb, ns in items
+        ]
+        z = np.zeros(3)
+        assert [sk.satstate(x, z, z).time for x in t64] == expect
+        assert same(sk.sun.pos_mod(t64), sk.sun.pos_mod(expect))
+
 
 # ───────────────────────── strings ─────────────────────────
 

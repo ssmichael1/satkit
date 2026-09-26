@@ -1,8 +1,8 @@
 use anyhow::Context;
 use numpy as np;
+use numpy::IntoPyArray;
 use numpy::PyArrayMethods;
 use numpy::PyUntypedArrayMethods;
-use numpy::ToPyArray;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
 use pyo3::IntoPyObjectExt;
@@ -436,7 +436,7 @@ impl PyQuaternion {
                 let a2 = a
                     .into_dimensionality::<np::ndarray::Ix2>()
                     .context("Invalid rhs")?;
-                Ok(a2.dot(&rt).to_pyarray(other.py()).into_py_any(other.py())?)
+                Ok(a2.dot(&rt).into_pyarray(other.py()).into_py_any(other.py())?)
             }
             shape => Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Invalid rhs.  Expected a quaternion, a 3-element vector or an Nx3 array, got shape {:?}",

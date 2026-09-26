@@ -608,7 +608,7 @@ def earth_orientation_params(
     Notes:
         - Returns None if the time is before the range of available EOP data, or if no EOP table is loaded
         - For times after the last available EOP data, the last entry's values are returned (constant
-          extrapolation) and a one-time warning is printed; use :func:`eop_status` / :func:`eop_coverage` to check
+          extrapolation) and a one-time warning is logged; use :func:`eop_status` / :func:`eop_coverage` to check
         - EOP data is available from 1973-01-02 (IERS ``finals2000A.all``) to current, with
           predictions up to a year ahead; refresh with ``satkit.utils.update_datafiles()``
         - See: <https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html>
@@ -890,12 +890,15 @@ def from_gcrf(
     ...
 
 def disable_eop_time_warning() -> None:
-    """Disable the warnings printed to stderr about Earth Orientation Parameters (EOP) availability.
+    """Disable the warnings about Earth Orientation Parameters (EOP) availability.
 
     Notes:
-        - Three one-time warnings exist: epoch before the EOP table, epoch after the table end
-          (last values held constant), and no EOP table loaded at all (zeros used).
+        - Four one-time warnings exist: epoch before the EOP table, epoch after the table end
+          (last values held constant), epoch in the predictions of a table not refreshed for
+          over 30 days, and no EOP table loaded at all (zeros used).
         - Each is shown at most once per process; this call suppresses all of them.
+        - They are logged to the ``satkit.earth_orientation_params`` logger; silencing that
+          logger (or ``satkit``) with :mod:`logging` works too.
     """
     ...
 
