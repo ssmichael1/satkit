@@ -41,40 +41,13 @@ use std::f64::consts::PI;
 *                   6 - satellite has decayed
 *
 *  locals        :
-*    cnodm  , snodm  , cosim  , sinim  , cosomm , sinomm
-*    cc1sq  , cc2    , cc3
-*    coef   , coef1
-*    cosio4      -
-*    day         -
-*    dndt        -
 *    em          - eccentricity
 *    emsq        - eccentricity squared
-*    eeta        -
-*    etasq       -
-*    gam         -
 *    argpm       - argument of perigee
-*    nodem       -
 *    inclm       - inclination
 *    mm          - mean anomaly
 *    nm          - mean motion
 *    perige      - perigee
-*    pinvsq      -
-*    psisq       -
-*    qzms24      -
-*    rtemsq      -
-*    s1, s2, s3, s4, s5, s6, s7          -
-*    sfour       -
-*    ss1, ss2, ss3, ss4, ss5, ss6, ss7         -
-*    sz1, sz2, sz3
-*    sz11, sz12, sz13, sz21, sz22, sz23, sz31, sz32, sz33        -
-*    tc          -
-*    temp        -
-*    temp1, temp2, temp3       -
-*    tsi         -
-*    xpidot      -
-*    xhdot1      -
-*    z1, z2, z3          -
-*    z11, z12, z13, z21, z22, z23, z31, z32, z33         -
 *
 *  coupling      :
 *    getgravconst-

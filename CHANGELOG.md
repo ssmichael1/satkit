@@ -27,6 +27,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - The Time Systems page is rewritten as the single reference for time in satkit: scales, storage, leap seconds, UT1 / EOP coverage and TDB, with runnable examples ([#215](https://github.com/ssmichael1/satkit/pull/215))
 - New Troubleshooting & FAQ page under Getting Started, organised by symptom ([#216](https://github.com/ssmichael1/satkit/pull/216))
 - De-duplicated docs, README, CONTRIBUTING, crate docs and CHANGELOG (pages link to the canonical data pages instead of retelling them); CI data downloads moved into one composite action, and the test-vector cache is keyed on its file list ([#228](https://github.com/ssmichael1/satkit/pull/228))
+- `jplephem::barycentric_pos` / `barycentric_state` docs say the result is barycentric, not "Heliocentric"; internal (no behaviour change): duplicate private-method docs and the empty Vallado "locals" lists in the SGP4 source comments are removed (~200 fewer comment lines) ([#231](https://github.com/ssmichael1/satkit/pull/231))
 
 ### CI
 
