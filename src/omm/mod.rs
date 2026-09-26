@@ -33,7 +33,7 @@ mod xml;
 
 use crate::sgp4::{SGP4InitArgs, SGP4Source, SatRec};
 use crate::tle::TLE;
-use crate::{Instant, TimeScale};
+use crate::Instant;
 
 // ---------------------------------------------------------------------------
 // Field parsing shared by the JSON (serde) and XML paths
@@ -116,7 +116,54 @@ where
 {
     use serde::de::Error as _;
     let s = String::deserialize(deserializer)?;
-    Instant::from_rfc3339(s.trim()).map_err(|e| D::Error::custom(format!("EPOCH {s:?}: {e}")))
+    parse_epoch(&s).map_err(|e| D::Error::custom(format!("EPOCH {s:?}: {e}")))
+}
+
+/// Parse an OMM `EPOCH`: RFC 3339 / ISO 8601 calendar form
+/// (`YYYY-MM-DDThh:mm:ss[.f][Z]`), or the CCSDS day-of-year form
+/// `YYYY-DDDThh:mm:ss[.f][Z]` (CCSDS 502.0-B-3), day 001 being
+/// 1 January.
+pub(crate) fn parse_epoch(text: &str) -> std::result::Result<Instant, crate::time::InstantError> {
+    let s = text.trim();
+    let b = s.as_bytes();
+    let is_doy = b.len() > 8
+        && b[4] == b'-'
+        && b[5..8].iter().all(u8::is_ascii_digit)
+        && matches!(b[8], b'T' | b't');
+    if !is_doy {
+        return Instant::from_rfc3339(s);
+    }
+    // Rewrite the date as a calendar date and let the RFC 3339 parser
+    // handle the time of day, fraction, zone and leap seconds.
+    let year: i32 = s[..4].parse()?;
+    let doy: i32 = s[5..8].parse()?;
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let month_days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut day = doy;
+    for (month, &n) in month_days.iter().enumerate() {
+        if day >= 1 && day <= n {
+            return Instant::from_rfc3339(&format!(
+                "{year:04}-{:02}-{day:02}{}",
+                month + 1,
+                &s[8..]
+            ));
+        }
+        day -= n;
+    }
+    Err(crate::time::InstantError::InvalidDay(doy))
 }
 
 fn unknown() -> String {
@@ -151,10 +198,12 @@ where
 /// # Propagation
 ///
 /// `OMM` implements [`SGP4Source`]. The SGP4 initialization is cached in the
-/// struct after the first propagation; if you change any element afterwards,
-/// call [`reset_cache`](Self::reset_cache) so the next propagation reinitializes.
+/// struct after the first propagation and rebuilt automatically when the
+/// epoch, an element, the gravity model or the ops mode changes.
 /// Propagation refuses a message whose `MEAN_ELEMENT_THEORY` is not SGP4,
-/// whose `TIME_SYSTEM` is not UTC, or whose `EPHEMERIS_TYPE` is 4 (SGP4-XP).
+/// whose `TIME_SYSTEM` is not UTC, whose `REF_FRAME` is not TEME, whose
+/// `CENTER_NAME` is not EARTH, or whose `EPHEMERIS_TYPE` is 4 (SGP4-XP).
+/// Each of those fields is checked only when present.
 ///
 /// # Example
 ///
@@ -207,10 +256,10 @@ pub struct OMM {
     /// in the standard; `UNKNOWN` when absent.
     #[serde(rename = "OBJECT_ID", default = "unknown")]
     pub object_id: String,
-    /// `CENTER_NAME`, expected `EARTH`
+    /// `CENTER_NAME`; propagation requires `EARTH` when present
     #[serde(rename = "CENTER_NAME", skip_serializing_if = "Option::is_none")]
     pub center_name: Option<String>,
-    /// `REF_FRAME`, expected `TEME` for SGP4 elements
+    /// `REF_FRAME`; propagation requires `TEME` (SGP4's frame) when present
     #[serde(rename = "REF_FRAME", skip_serializing_if = "Option::is_none")]
     pub reference_frame: Option<String>,
     /// `REF_FRAME_EPOCH`
@@ -225,7 +274,8 @@ pub struct OMM {
         skip_serializing_if = "Option::is_none"
     )]
     pub mean_element_theory: Option<String>,
-    /// `EPOCH` (mandatory), UTC. Read from and written as an RFC 3339 string.
+    /// `EPOCH` (mandatory), UTC. Read from an RFC 3339 string or the CCSDS
+    /// day-of-year form `YYYY-DDDThh:mm:ss[.f]`; written as RFC 3339.
     #[serde(
         rename = "EPOCH",
         deserialize_with = "de_epoch",
@@ -495,7 +545,9 @@ impl OMM {
     /// that has no TLE column (`ORIGINATOR`, `COMMENT`, `extra_fields`, ...)
     /// is dropped. The result is a plain element set: it does not check
     /// `EPHEMERIS_TYPE` or `MEAN_ELEMENT_THEORY`, so an SGP4-XP message
-    /// converts, and the resulting TLE keeps its ephemeris type 4.
+    /// converts, and the resulting TLE keeps its ephemeris type 4. The epoch
+    /// is copied as is and taken to be UTC, as a TLE epoch is; `TIME_SYSTEM`
+    /// is not checked either (propagating the OMM itself does check it).
     pub fn to_tle(&self) -> TLE {
         let mut tle = TLE::new();
         tle.name = self.object_name.clone();
@@ -535,9 +587,10 @@ impl OMM {
 
     /// Discards the cached SGP4 initialization.
     ///
-    /// Call this after editing `epoch` or any mean element of a message that
-    /// has already been propagated; otherwise the next propagation reuses the
-    /// initialization computed from the old values.
+    /// Never required for correctness: SGP4 re-initializes on its own when
+    /// the epoch, an element, the gravity model or the ops mode differ from
+    /// those the cache was built with (before satkit 0.24, edits needed this
+    /// call). This only frees the cached state.
     pub fn reset_cache(&mut self) {
         self.satrec = None;
     }
@@ -774,6 +827,23 @@ impl SGP4Source for OMM {
             }
         }
 
+        // SGP4 elements are Earth-centered TEME elements; anything else would
+        // propagate as if it were
+        if let Some(frame) = &self.reference_frame {
+            if !frame.trim().eq_ignore_ascii_case("TEME") {
+                return Err(crate::sgp4::Error::source(Error::UnsupportedRefFrame(
+                    frame.clone(),
+                )));
+            }
+        }
+        if let Some(center) = &self.center_name {
+            if !center.trim().eq_ignore_ascii_case("EARTH") {
+                return Err(crate::sgp4::Error::source(Error::UnsupportedCenter(
+                    center.clone(),
+                )));
+            }
+        }
+
         // Space-Track distributes SGP4-XP element sets with EPHEMERIS_TYPE 4
         // and MEAN_ELEMENT_THEORY still "SGP4"; classic SGP4 produces garbage
         // from them, so refuse rather than propagate silently.
@@ -784,7 +854,7 @@ impl SGP4Source for OMM {
         }
 
         Ok(SGP4InitArgs::from_mean_elements(
-            self.epoch.as_jd_with_scale(TimeScale::UTC),
+            self.epoch,
             self.bstar.unwrap_or(0.0),
             self.mean_motion,
             self.mean_motion_dot.unwrap_or(0.0),
@@ -1012,11 +1082,26 @@ mod tests {
         omm.mean_element_theory = Some(" sgp4 ".into()); // trimmed, case-insensitive
         propagate(&mut omm, &times);
 
-        // Validation happens at initialization, which is now cached
+        // Validation runs on every propagation, not only the first (the
+        // cached initialization does not bypass it)
         omm.time_system = Some("TAI".into());
-        propagate(&mut omm, &times);
-        omm.reset_cache();
         assert!(sgp4_full(&mut omm, &times, GravConst::WGS72, OpsMode::AFSPC).is_err());
+        omm.time_system = Some("utc".into());
+
+        // Non-TEME frames and non-Earth centers are refused, like TIME_SYSTEM
+        omm.reference_frame = Some("GCRF".into());
+        let err = sgp4_full(&mut omm, &times, GravConst::WGS72, OpsMode::AFSPC)
+            .err()
+            .unwrap();
+        assert!(err.to_string().contains("REF_FRAME"), "{err}");
+        omm.reference_frame = Some(" teme ".into());
+        omm.center_name = Some("MOON".into());
+        let err = sgp4_full(&mut omm, &times, GravConst::WGS72, OpsMode::AFSPC)
+            .err()
+            .unwrap();
+        assert!(err.to_string().contains("CENTER_NAME"), "{err}");
+        omm.center_name = Some("EARTH".into());
+        propagate(&mut omm, &times);
     }
 
     #[test]
@@ -1100,12 +1185,40 @@ mod tests {
         let times = vec![omm.epoch + Duration::from_minutes(30.0)];
         let a = col3(&propagate(&mut omm, &times).pos, 0);
 
-        // Editing an element after a propagation takes effect once the cache is reset
+        // Editing an element after a propagation takes effect at once: the
+        // cached initialization is keyed on the elements
         omm.mean_anomaly += 10.0;
-        let stale = col3(&propagate(&mut omm, &times).pos, 0);
-        assert_eq!(stale, a);
+        let edited = col3(&propagate(&mut omm, &times).pos, 0);
+        assert!(dist(edited, a) > 1e3);
         omm.reset_cache();
         let fresh = col3(&propagate(&mut omm, &times).pos, 0);
-        assert!(dist(fresh, a) > 1e3);
+        assert_eq!(fresh, edited);
+    }
+
+    #[test]
+    fn test_day_of_year_epoch() {
+        // CCSDS allows YYYY-DDDThh:mm:ss; 2026-045 is 14 February
+        let calendar = OMM::from_json_string(iss_json()).unwrap().remove(0);
+        for doy in ["2026-045T05:08:48.534432", " 2026-045T05:08:48.534432Z "] {
+            let json = iss_json().replace("2026-02-14T05:08:48.534432", doy);
+            let omm = OMM::from_json_string(&json).unwrap().remove(0);
+            assert_eq!(omm.epoch, calendar.epoch, "{doy}");
+        }
+        // Leap years and the last day of the year
+        assert_eq!(
+            parse_epoch("2024-366T12:00:00").unwrap(),
+            Instant::from_rfc3339("2024-12-31T12:00:00Z").unwrap()
+        );
+        assert_eq!(
+            parse_epoch("2024-060T00:00:00").unwrap(),
+            Instant::from_rfc3339("2024-02-29T00:00:00Z").unwrap()
+        );
+        assert_eq!(
+            parse_epoch("2016-366T23:59:60.5").unwrap(),
+            Instant::from_rfc3339("2016-12-31T23:59:60.5Z").unwrap()
+        );
+        for bad in ["2025-366T00:00:00", "2026-000T00:00:00", "2026-45T05:08:48"] {
+            assert!(parse_epoch(bad).is_err(), "{bad}");
+        }
     }
 }

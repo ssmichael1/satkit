@@ -654,8 +654,22 @@ class TestVectorised:
 
     @pytest.mark.parametrize(
         "fn",
-        [sk.sun.pos_gcrf, sk.sun.pos_mod, sk.moon.pos_gcrf, sk.moon.illumination, sk.moon.phase],
-        ids=["sun.pos_gcrf", "sun.pos_mod", "moon.pos_gcrf", "moon.illumination", "moon.phase"],
+        [
+            sk.sun.pos_gcrf,
+            sk.sun.pos_mod,
+            sk.moon.pos_gcrf,
+            sk.moon.pos_mod,
+            sk.moon.illumination,
+            sk.moon.phase,
+        ],
+        ids=[
+            "sun.pos_gcrf",
+            "sun.pos_mod",
+            "moon.pos_gcrf",
+            "moon.pos_mod",
+            "moon.illumination",
+            "moon.phase",
+        ],
     )
     @_settings(max(_MAX // 4, 10))
     @given(tl=time_lists)

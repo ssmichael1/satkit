@@ -1,5 +1,6 @@
 use super::{Error, Result, TLE};
 
+use crate::sgp4::{GravConst, OpsMode};
 use crate::Instant;
 
 use numeris::{Matrix, Vector};
@@ -137,9 +138,11 @@ fn residuals(
     times: &[Instant],
     states_teme: &[[f64; 6]],
     epoch: Instant,
+    model: (GravConst, OpsMode),
 ) -> Result<Vec<f64>> {
     let mut tle = tle_from_params(params, epoch);
-    let out = crate::sgp4::sgp4(&mut tle, times).map_err(|e| Error::Sgp4(format!("{e:?}")))?;
+    let out = crate::sgp4::sgp4_full(&mut tle, times, model.0, model.1)
+        .map_err(|e| Error::Sgp4(format!("{e:?}")))?;
     // Reject any trial step whose propagation failed at one or more times (e.g.
     // a decayed orbit): those columns are NaN, and folding them into the
     // residuals would silently corrupt the least-squares step.
@@ -190,7 +193,15 @@ impl TLE {
     ///
     /// * The fitting process is performed in the TEME frame, with SGP4 used to
     ///   generate the states from the TLE. The input GCRF states are rotated
-    ///   into the TEME frame by this function.
+    ///   into the TEME frame by this function, with the full IERS 2010
+    ///   rotation (`frametransform::rotation(Frame::GCRF, Frame::TEME, t)`).
+    ///
+    /// * SGP4 runs with the WGS72 gravity model and the AFSPC ops mode, the
+    ///   defaults of [`sgp4`](crate::sgp4::sgp4) and of catalog element sets,
+    ///   so propagate the fitted TLE with those. Use
+    ///   [`fit_from_states_full`](Self::fit_from_states_full) to fit for
+    ///   another gravity model or ops mode (satkit before 0.24 fitted with
+    ///   WGS84).
     ///
     /// * First and second derivatives of mean motion are ignored, as they are
     ///   not used by SGP4.
@@ -270,6 +281,21 @@ impl TLE {
         times: &[Instant],
         epoch: Instant,
     ) -> Result<(Self, TleFitResult)> {
+        Self::fit_from_states_full(states_gcrf, times, epoch, GravConst::WGS72, OpsMode::AFSPC)
+    }
+
+    /// [`fit_from_states`](Self::fit_from_states) with an explicit SGP4
+    /// gravity model and ops mode; the fitted TLE reproduces the states when
+    /// propagated with [`sgp4_full`](crate::sgp4::sgp4_full) under the same
+    /// two.
+    pub fn fit_from_states_full(
+        states_gcrf: &[[f64; 6]],
+        times: &[Instant],
+        epoch: Instant,
+        gravconst: GravConst,
+        opsmode: OpsMode,
+    ) -> Result<(Self, TleFitResult)> {
+        let model = (gravconst, opsmode);
         // Make sure lengths are identical
         if states_gcrf.len() != times.len() {
             return Err(Error::StatesTimesLengthMismatch);
@@ -302,19 +328,21 @@ impl TLE {
         }
 
         // Rotate states to the TEME frame from GCRF
-        // (TLEs represent state in TEME)
+        // (TLEs represent state in TEME). The full rotation, not the
+        // approximate `qteme2gcrf` (0.3", ~10-20 m at LEO).
         let states_teme = times
             .iter()
             .enumerate()
-            .map(|(i, time)| {
-                let q = crate::frametransform::qteme2gcrf(time).conjugate();
+            .map(|(i, time)| -> Result<[f64; 6]> {
+                let q =
+                    crate::frametransform::rotation(crate::Frame::GCRF, crate::Frame::TEME, time)?;
                 let p =
                     q * numeris::vector![states_gcrf[i][0], states_gcrf[i][1], states_gcrf[i][2],];
                 let v =
                     q * numeris::vector![states_gcrf[i][3], states_gcrf[i][4], states_gcrf[i][5],];
-                [p[0], p[1], p[2], v[0], v[1], v[2]]
+                Ok([p[0], p[1], p[2], v[0], v[1], v[2]])
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         // Get the state
         let closest_state = states_teme[closest_index];
@@ -362,7 +390,7 @@ impl TLE {
         let mu_max = 1e12_f64;
         let sqrt_eps = f64::EPSILON.sqrt();
 
-        let mut r = residuals(&params, times, &states_teme, epoch)?;
+        let mut r = residuals(&params, times, &states_teme, epoch, model)?;
         let mut n_res_evals: usize = 1;
         let orig_norm = norm_sq(&r).sqrt();
         let mut cost = 0.5 * norm_sq(&r);
@@ -385,7 +413,7 @@ impl TLE {
                 let col = {
                     let mut pert = params;
                     pert[k] += h;
-                    match residuals(&pert, times, &states_teme, epoch) {
+                    match residuals(&pert, times, &states_teme, epoch, model) {
                         Ok(rp) => {
                             n_res_evals += 1;
                             rp.iter()
@@ -397,7 +425,7 @@ impl TLE {
                             // Try a backward difference instead.
                             let mut pert = params;
                             pert[k] -= h;
-                            let rp = residuals(&pert, times, &states_teme, epoch)?;
+                            let rp = residuals(&pert, times, &states_teme, epoch, model)?;
                             n_res_evals += 1;
                             rp.iter()
                                 .zip(r.iter())
@@ -472,7 +500,7 @@ impl TLE {
                     trial[k] += delta[k];
                 }
                 // Treat SGP4 failures on trial parameters as a rejected step.
-                let r_new = match residuals(&trial, times, &states_teme, epoch) {
+                let r_new = match residuals(&trial, times, &states_teme, epoch, model) {
                     Ok(rn) => {
                         n_res_evals += 1;
                         rn
@@ -737,5 +765,53 @@ mod tests {
             ..tle
         };
         assert!(tle.to_2line().is_ok());
+    }
+
+    /// GCRF states of `tle` from SGP4 under `gc` at `n` times 10 min apart,
+    /// rotated from TEME with the full rotation.
+    fn sgp4_states_gcrf(tle: &TLE, n: usize, gc: GravConst) -> (Vec<[f64; 6]>, Vec<Instant>) {
+        let times: Vec<Instant> = (0..n)
+            .map(|i| tle.epoch + crate::Duration::from_minutes(10.0 * i as f64))
+            .collect();
+        let mut src = tle.clone();
+        let out = crate::sgp4::sgp4_full(&mut src, &times, gc, OpsMode::AFSPC).unwrap();
+        let states = times
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let q = crate::frametransform::rotation(crate::Frame::TEME, crate::Frame::GCRF, t)
+                    .unwrap();
+                let p = q * numeris::vector![out.pos[(0, i)], out.pos[(1, i)], out.pos[(2, i)]];
+                let v = q * numeris::vector![out.vel[(0, i)], out.vel[(1, i)], out.vel[(2, i)]];
+                [p[0], p[1], p[2], v[0], v[1], v[2]]
+            })
+            .collect();
+        (states, times)
+    }
+
+    /// States generated by SGP4 are reproduced by the fitted TLE only when
+    /// the fit uses the same gravity model and the exact TEME rotation.
+    /// Before 0.24 the fit used WGS84 and the approximate `qteme2gcrf`, so a
+    /// WGS72 element set (the catalog default) came back tens of metres off.
+    #[test]
+    fn test_fit_recovers_sgp4_states() -> Result<()> {
+        let tle = TLE::load_2line(
+            "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9994",
+            "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.49815350434159",
+        )?;
+        let n = 145; // one day
+        for gc in [GravConst::WGS72, GravConst::WGS84] {
+            let (states, times) = sgp4_states_gcrf(&tle, n, gc);
+            let (fit, result) = if gc == GravConst::WGS72 {
+                TLE::fit_from_states(&states, &times, tle.epoch)?
+            } else {
+                TLE::fit_from_states_full(&states, &times, tle.epoch, gc, OpsMode::AFSPC)?
+            };
+            let rms = result.best_norm / ((3 * n) as f64).sqrt();
+            assert!(rms < 0.01, "{gc:?}: fit RMS {rms} m");
+            assert!((fit.inclination - tle.inclination).abs() < 1e-6, "{gc:?}");
+            assert!((fit.mean_motion - tle.mean_motion).abs() < 1e-9, "{gc:?}");
+        }
+        Ok(())
     }
 }

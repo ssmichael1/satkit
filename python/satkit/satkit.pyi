@@ -374,6 +374,10 @@ class TLE:
         """
         Output as 2 canonical TLE Lines
 
+        The element set number (4 columns) and revolution number (5 columns) are
+        written modulo 10,000 and 100,000, so a larger value wraps around the way
+        catalog TLEs roll the revolution counter over.
+
         Returns:
             2 canonical TLE Lines
 
@@ -409,6 +413,9 @@ class TLE:
         states: list[np.ndarray],
         times: TimeArrayLike,
         epoch: TimeScalar,
+        *,
+        gravconst: sgp4_gravconst = ...,
+        opsmode: sgp4_opsmode = ...,
     ) -> tuple[TLE, dict]:
         """
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
@@ -418,12 +425,20 @@ class TLE:
             times: List of times corresponding to the states
             epoch: Epoch time for the TLE. Must be within range of times.
 
+        Keyword Args:
+            gravconst: gravity model SGP4 uses in the fit.  Default is gravconst.wgs72
+            opsmode: SGP4 ops mode used in the fit.  Default is opsmode.afspc
+
         Returns:
             Fitted TLE and fitting results in a dictionary
 
         Notes:
-            SGP4 propagator is used to match TLE to the states.
-            Input GCRF states are rotated into TEME frame used by SGP4.
+            SGP4 propagator is used to match TLE to the states. The fitted TLE
+            reproduces the states when propagated with :func:`sgp4` under the same
+            ``gravconst`` and ``opsmode``; the defaults match :func:`sgp4`'s.
+            satkit before 0.24 fitted with WGS84.
+            Input GCRF states are rotated into TEME frame used by SGP4, with the
+            full IERS 2010 rotation.
             First and second derivatives of mean motion are ignored, as they are not used by SGP4.
 
             Non-linear Levenberg-Marquardt optimization is performed to fit
@@ -516,12 +531,27 @@ def sgp4(
           :func:`omm_from_text`, from ``json.load`` on a CelesTrak or Space-Track response
           (numbers may be strings), or from ``xmltodict`` on the XML form (the nested
           ``meanElements`` / ``tleParameters`` groups are understood). ``EPOCH`` may be an
-          RFC 3339 string, a ``satkit.time`` or a ``datetime`` (naive = local time). Other keys are ignored,
+          RFC 3339 string, a CCSDS day-of-year string (``YYYY-DDDThh:mm:ss``), a ``satkit.time`` or a
+          ``datetime`` (naive = local time). Other keys are ignored,
           except that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be
-          ``UTC`` and ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
+          ``UTC``, ``REF_FRAME`` must be ``TEME``, ``CENTER_NAME`` must be ``EARTH`` and
+          ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
         - The "TEME" frame of the SGP4 state vectors is not a truly inertial frame.  It is a "True Equator Mean Equinox"
-          frame, which is a non-rotating frame with respect to the mean equator and mean equinox of the epoch of the TLE.
-          It is close to a true inertial frame, but can be offset by small amounts due to precession and nutation.
+          frame: its axes are the true equator and the mean equinox of date, i.e. of each output time (not of the
+          TLE epoch), so the frame itself moves with precession and nutation. Rotate to GCRF with
+          ``frametransform.rotation(frame.TEME, frame.GCRF, time)``.
+        - **Errors:** a time at which propagation fails (e.g. the orbit has decayed) gives a NaN row,
+          with its code in the error array when ``errflag`` is True. An element set that cannot be
+          initialized at all (e.g. decayed or eccentricity out of range at epoch, or an SGP4-XP set)
+          raises ``RuntimeError`` when ``errflag`` is False; for a list, the message gives its index.
+          When ``errflag`` is True it does not raise: its rows are NaN at every time and every time
+          carries its init code (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata SGP4
+          cannot use), so one bad element set does not fail a list.
+        - **Leap seconds:** the time since epoch is the physical (SI) time elapsed. Across a leap second
+          this is one second more than the difference of the UTC labels that Vallado's reference code
+          and python-sgp4 use, so satkit differs from them by 1 s of along-track motion (~7.6 km at
+          LEO) per leap second between epoch and time. This is deliberate: the satellite really flies
+          86,401 s over such a day, and the SGP4 mean motion is per SI day.
 
     Example:
         ```python
@@ -787,6 +817,11 @@ class sgp4_error:
 
     orbit_decay: ClassVar[sgp4_error]
     """Orbit decayed"""
+
+    unsupported: ClassVar[sgp4_error]
+    """Only in the error array of ``sgp4(..., errflag=True)``: the element set cannot be
+    propagated by classic SGP4 at all (an SGP4-XP set, or OMM metadata naming another theory,
+    time system, frame or center)"""
 
 class weekday:
     """

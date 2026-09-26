@@ -17,7 +17,8 @@ pub enum Error {
         message: String,
     },
 
-    /// Raised when the `EPOCH` string cannot be parsed as RFC 3339.
+    /// Raised when the `EPOCH` string cannot be parsed as RFC 3339 or the
+    /// CCSDS day-of-year form.
     #[error(transparent)]
     InvalidEpoch(#[from] crate::time::InstantError),
 
@@ -28,6 +29,14 @@ pub enum Error {
     /// `TIME_SYSTEM` is something other than UTC.
     #[error("Unsupported TIME_SYSTEM for SGP4: {0}")]
     UnsupportedTimeSystem(String),
+
+    /// `REF_FRAME` is something other than TEME, the frame of SGP4 elements.
+    #[error("Unsupported REF_FRAME for SGP4: {0} (SGP4 elements are TEME)")]
+    UnsupportedRefFrame(String),
+
+    /// `CENTER_NAME` is something other than EARTH.
+    #[error("Unsupported CENTER_NAME for SGP4: {0} (SGP4 elements are Earth-centered)")]
+    UnsupportedCenter(String),
 
     /// `EPHEMERIS_TYPE` denotes elements that classic SGP4 cannot propagate
     /// (currently type 4, SGP4-XP).
