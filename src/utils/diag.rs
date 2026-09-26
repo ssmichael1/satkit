@@ -28,6 +28,8 @@ macro_rules! diag_warn {
 
 /// Log an informational notice through [`emit`] with the calling module as
 /// the target.
+// The only callers are behind the `download` feature.
+#[cfg_attr(not(feature = "download"), allow(unused_macros))]
 macro_rules! diag_info {
     ($($arg:tt)+) => {
         $crate::utils::diag::emit(::log::Level::Info, module_path!(), format_args!($($arg)+))
@@ -36,7 +38,9 @@ macro_rules! diag_info {
 
 // Re-exported under short names; a `macro_rules! warn` could not be
 // imported (it clashes with the built-in `#[warn]` attribute).
-pub(crate) use {diag_info as info, diag_warn as warn};
+#[cfg_attr(not(feature = "download"), allow(unused_imports))]
+pub(crate) use diag_info as info;
+pub(crate) use diag_warn as warn;
 
 /// A record held back by [`deferred`].
 struct Pending {
