@@ -159,12 +159,10 @@ See [Data Files](datafiles.md).
 
 ### The first `propagate()` or ephemeris query takes a long time
 
-The first call that needs the JPL ephemeris downloads it: DE440, 102 MB,
-verified against a SHA-256 compiled into satkit. That happens once; later
-loads read the file from `datadir()`. To take the hit up front (a container
-build, a CI cache), run `sk.utils.update_datafiles()`; to use the 14 MB DE421
-(1900–2053) instead, set `SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421`. See
-[Selecting a JPL ephemeris file](datadirs.md#selecting-a-jpl-ephemeris-file).
+The first call that needs the JPL ephemeris downloads it (DE440, 102 MB,
+SHA-256 verified), once. Run `sk.utils.update_datafiles()` to take the hit up
+front, or set `SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421` for the 14 MB DE421
+(1900–2053). See [Selecting a JPL ephemeris file](datadirs.md#selecting-a-jpl-ephemeris-file).
 
 ### `update_datafiles()` says "no request made" — how do I force a refresh?
 
@@ -172,23 +170,15 @@ build, a CI cache), run `sk.utils.update_datafiles()`; to use the 14 MB DE421
   finals2000A.all: current (2.3 h old); no request made
 ```
 
-This is intended. The Earth-orientation and space-weather files are only
-re-requested once their publication cadence has passed (3 h for the GFZ
-record, 24 h for the SWPC forecast and the EOP file, a week for MSAFE), and
-then with a conditional request that costs a `304` if nothing changed. Calling
-`update_datafiles()` at the top of every script is therefore fine.
-
-To force a transfer anyway:
-
-- `sk.utils.update_datafiles(overwrite=True)` re-downloads **everything**,
-  including the 102 MB ephemeris;
-- deleting a file's `<name>.http-cache` sidecar in `datadir()` forces a full
-  fetch of just that file on the next `update_datafiles()`.
-
-`overwrite` and `dir` are keyword-only; anything else is rejected
+This is intended: the Earth-orientation and space-weather files are only
+re-requested once their publication cadence has passed, and then
+conditionally, so calling `update_datafiles()` at the top of every script is
+fine. `update_datafiles(overwrite=True)` forces a transfer of **everything**
+(including the 102 MB ephemeris); deleting a file's `<name>.http-cache`
+sidecar in `datadir()` forces just that file. `overwrite` and `dir` are
+keyword-only; anything else is rejected
 (`TypeError: update_datafiles() got an unexpected keyword argument 'force'`).
-See
-[How often EOP and space weather are refreshed](datadownloads.md#how-often-eop-and-space-weather-are-refreshed).
+See [How often EOP and space weather are refreshed](datadownloads.md#how-often-eop-and-space-weather-are-refreshed).
 
 ### "No writeable data directory" or "Read-only file system" (containers, shared installs)
 
@@ -197,16 +187,12 @@ RuntimeError: No writeable data directory: /data/satkit could not be created or 
 RuntimeError: Data directory /data/satkit is not writable (Read-only file system (os error 30)). Pass a writable directory (Python: update_datafiles(dir=...)), or set the environment variable SATKIT_DATA to one and restart
 ```
 
-satkit only writes to `datadir()`. In a container with a read-only root
-filesystem, a service account with no home directory, or a shared install,
-point `SATKIT_DATA` at a writable volume (or call `sk.utils.set_datadir(path)`
-with an existing directory before the first data access; `SATKIT_DATA`
-takes precedence over it). Read-only directories are fine as **search**
-locations: provision the files once (below) and they are read from there.
-`update_datafiles(dir=...)` uses the directory as given, and a refresh into a
-directory that cannot be written (read-only filesystem, no permission, owned
-by another user) fails with the `Data directory … is not writable` error above,
-naming the directory and the operating system's reason.
+satkit only writes to `datadir()`. Point `SATKIT_DATA` at a writable volume,
+or call `sk.utils.set_datadir(path)` with an existing directory before the
+first data access (`SATKIT_DATA` takes precedence). Read-only directories are
+fine as **search** locations: [provision the files once](datadirs.md#provisioning-up-front)
+and they are read from there. See
+[Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
 
 ### Downloads fail with `invalid peer certificate: UnknownIssuer`
 
@@ -214,30 +200,21 @@ naming the directory and the operating system's reason.
 RuntimeError: could not fetch https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt: io: invalid peer certificate: UnknownIssuer
 ```
 
-**Cause.** Something between you and the server re-signed the TLS connection,
-typically a corporate TLS-inspecting proxy whose private CA is not in the trust
-store satkit is using. satkit verifies against the **operating system's**
-trust store (macOS keychain, Windows certificate store, `/etc/ssl` on Unix),
-and ignores `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`.
-
-**Fix.** Install the proxy's CA system-wide, or set
-`SATKIT_CA_BUNDLE=/path/bundle.pem` to a PEM file containing that CA
-**together with** the public roots (the file replaces the trust store). In a
-minimal container with no system trust store, `SATKIT_CA_BUNDLE=webpki` uses
-the Mozilla roots compiled into satkit. There is no "skip verification"
-switch. See [Downloads behind a TLS-inspecting proxy](datadownloads.md#downloads-behind-a-tls-inspecting-proxy).
+Typically a corporate TLS-inspecting proxy re-signed the connection with a
+private CA that is not in the operating system's trust store, which is what
+satkit verifies against (`SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are
+ignored). Install the CA system-wide, or set `SATKIT_CA_BUNDLE` to a PEM file
+holding it **together with** the public roots; `SATKIT_CA_BUNDLE=webpki` covers
+a container with no trust store. See
+[Downloads behind a TLS-inspecting proxy](datadownloads.md#downloads-behind-a-tls-inspecting-proxy).
 
 ### Downloads have to go through an HTTP proxy
 
 The standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY`
-environment variables are honoured for every download. Where outbound access
-is blocked entirely, `SATKIT_DATA_URL` can name an internal mirror for the
-hash-pinned files (the JPL ephemeris, ITU_GRACE16): it is tried first, plain
-`http://` is accepted, and the files are still verified. The mirror is not
-consulted for the Earth-orientation and space-weather files, which always come
-from their producers; on such a network, provision those by copying a data
-directory ([below](#running-offline-or-air-gapped)). See
-[Environment variables and API](datadirs.md#environment-variables-and-api).
+variables are honoured for every download. Where outbound access is blocked,
+`SATKIT_DATA_URL` can name an internal mirror for the hash-pinned files, but
+not for Earth orientation and space weather: [copy a data directory](#running-offline-or-air-gapped)
+instead. See [Environment variables and API](datadirs.md#environment-variables-and-api).
 
 ### HTTP 503 (or 403) from CelesTrak
 
@@ -260,26 +237,13 @@ cadence.
 
 ### Running offline or air-gapped
 
-Everything compiled in works with no network. What needs files is the JPL
-ephemeris (the `jplephem` module and the numerical propagator; the
-low-precision analytic `sun`, `moon` and `planets` modules do not use it), the EOP table
-(exact Earth-fixed frames; required by `propagate`), the space-weather table
-(drag), and the ITU_GRACE16 gravity model if you select it. To provision a
-machine that will be offline:
-
-1. On a connected machine, fill a directory:
-   `SATKIT_DATA=/path/to/satkit-data python -c "import satkit; satkit.utils.update_datafiles()"`.
-2. Copy that directory to the target and set `SATKIT_DATA` to it there (or
-   copy it to the platform user-data directory, or to `/usr/share/satkit-data`
-   as a read-only system-wide location).
-3. Optionally set `SATKIT_OFFLINE=1` there (or call `sk.utils.set_offline(True)`)
-   so that a missing file raises immediately instead of attempting a connection.
-
-The Earth-orientation and space-weather files still age on an offline
-machine: repeat the copy periodically, and check `eop_coverage()` against the
-epochs you work with. `pip install satkit[data]` is an alternative for the
-ephemeris. See [Offline and air-gapped use](installation.md#offline-and-air-gapped-use)
-and [Provisioning up front](datadirs.md#provisioning-up-front).
+Everything compiled in works with no network. The JPL ephemeris, the EOP and
+space-weather tables, and ITU_GRACE16 (if selected) are files: fill a data
+directory with `update_datafiles()` on a connected machine, copy it across and
+point `SATKIT_DATA` at it, optionally with `SATKIT_OFFLINE=1` so a missing
+file fails fast. The steps are in [Provisioning up front](datadirs.md#provisioning-up-front).
+The EOP and space-weather files still age offline: repeat the copy
+periodically.
 
 ### "… is not present and cannot be downloaded (SATKIT_OFFLINE is set)" (or "offline mode was turned on …")
 
@@ -287,15 +251,12 @@ and [Provisioning up front](datadirs.md#provisioning-up-front).
 RuntimeError: ... linux_p1550p2650.440 is not present and cannot be downloaded (SATKIT_OFFLINE is set). Provide it in the data directory (SATKIT_DATA) or install the `satkit-data` bundle; sources: https://github.com/ssmichael1/satkit-data/releases/download/data-v1/linux_p1550p2650.440, ...
 ```
 
-Downloads are forbidden and the file is in none of the search directories. The
-parenthesis says why: `SATKIT_OFFLINE is set`, or `offline mode was turned on
-with satkit.utils.set_offline(True) in Python or satkit::utils::set_offline(true) in Rust`. The message lists the URLs the file can be fetched from by hand;
-put it in `datadir()` or any search directory. Check `sk.utils.is_offline()`
-if you did not expect offline mode: a leftover `SATKIT_OFFLINE` in a CI
-environment is a common cause.
-
-`update_datafiles()` checks for offline mode before doing anything, and fails
-without printing a download banner or creating a directory:
+Downloads are forbidden and the file is in none of the search directories; the
+parenthesis says whether `SATKIT_OFFLINE` or `set_offline(True)` is the cause.
+Put the file (the message lists its URLs) in `datadir()` or any search
+directory, or check `sk.utils.is_offline()`: a leftover `SATKIT_OFFLINE` in a
+CI environment is a common cause. `update_datafiles()` checks first and fails
+without downloading anything or creating a directory:
 
 ```
 RuntimeError: update_datafiles cannot run: downloads are forbidden (SATKIT_OFFLINE is set); nothing was fetched
@@ -307,26 +268,16 @@ RuntimeError: update_datafiles cannot run: downloads are forbidden (SATKIT_OFFLI
 
 Pre-built wheels exist for CPython 3.10–3.14 on Linux x86_64 and aarch64
 (glibc), macOS on Apple silicon (arm64), and Windows x86_64. Anywhere else pip
-falls back to the source distribution, which needs a stable Rust toolchain
-([rustup](https://rustup.rs)). In particular:
-
-- **Intel Macs** have had no wheel since 0.22. Install from conda-forge, which
-  builds `osx-64`, or from source with `pip install --no-binary satkit satkit`.
-- **Alpine and other musl-based Linux images** have no wheel; build from source
-  or use a glibc-based image.
-- **Python 3.9 and older** are not supported (`requires-python >= 3.10`).
-
-See [Installation](installation.md).
+builds the source distribution, which needs a stable Rust toolchain
+([rustup](https://rustup.rs)): Intel Macs (use conda-forge, or
+`pip install --no-binary satkit satkit`), Alpine and other musl images, and
+Python 3.9 or older, which is not supported. See [Installation](installation.md).
 
 ### Should I use pip or conda?
 
-Either. The conda-forge package (`conda install -c conda-forge satkit`) is
-built from the same source distribution and behaves identically: core data
-compiled in, ephemeris downloaded on first use, the same environment
-variables. Differences: conda-forge also builds for Intel Macs, and there is
-no conda counterpart of the optional `satkit-data` bundle — offline conda
-users provision a directory with `update_datafiles()` and set `SATKIT_DATA`
-(above). See [Conda](installation.md#conda).
+Either: the conda-forge package is built from the same source distribution and
+behaves identically. It also builds for Intel Macs, but has no counterpart of
+the optional `satkit-data` bundle. See [Conda](installation.md#conda).
 
 ## API changes that look like errors
 

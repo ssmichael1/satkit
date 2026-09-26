@@ -462,20 +462,12 @@ impl PyPropSettings {
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
         // The `precomputed` cache is intentionally skipped (see PropSettings);
         // a restored settings object recomputes it lazily.
-        let bytes =
-            serde_pickle::to_vec(&self.0, serde_pickle::SerOptions::default()).map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(format!(
-                    "failed to serialize propsettings: {e}"
-                ))
-            })?;
+        let bytes = crate::pyutils::serde_pickle_to_vec(&self.0, "propsettings")?;
         PyBytes::new(py, &bytes).into_py_any(py)
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        let s = state.as_bytes(py);
-        self.0 = serde_pickle::from_slice(s, serde_pickle::DeOptions::default()).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("invalid propsettings pickle: {e}"))
-        })?;
+        self.0 = crate::pyutils::serde_pickle_from_slice(state.as_bytes(py), "propsettings")?;
         Ok(())
     }
 

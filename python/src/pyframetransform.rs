@@ -298,6 +298,7 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
 ///         qteme2gcrf, ...).
 #[pyfunction]
 pub fn to_gcrf(
+    py: Python,
     frame: crate::pyframes::PyFrame,
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
@@ -306,15 +307,11 @@ pub fn to_gcrf(
     let vel_vec: Vector3 = py_to_smatrix(vel)?;
     let rust_frame: satkit::Frame = frame.into();
     let dcm = ft::to_gcrf(rust_frame, &pos_vec, &vel_vec)?;
-    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        // numeris matrices are column-major while numpy's reshape is
-        // row-major; flatten the transpose so the numpy array has the same
-        // element layout as the Rust matrix (previously this returned the
-        // transposed, i.e. inverse, rotation).
-        let dcmt = dcm.transpose();
-        let arr = np::PyArray1::from_slice(py, dcmt.as_slice());
-        Ok(arr.reshape(vec![3, 3])?.into_py_any(py)?)
-    })
+    // numeris matrices are column-major while numpy's reshape is
+    // row-major; flatten the transpose so the numpy array has the same
+    // element layout as the Rust matrix (previously this returned the
+    // transposed, i.e. inverse, rotation).
+    Ok(slice2py2d(py, dcm.transpose().as_slice(), 3, 3)?)
 }
 
 /// Return the DCM that transforms a 3-vector from GCRF into the given
@@ -335,6 +332,7 @@ pub fn to_gcrf(
 ///     RuntimeError: if the frame is not a satellite-local orbital frame.
 #[pyfunction]
 pub fn from_gcrf(
+    py: Python,
     frame: crate::pyframes::PyFrame,
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
@@ -343,12 +341,8 @@ pub fn from_gcrf(
     let vel_vec: Vector3 = py_to_smatrix(vel)?;
     let rust_frame: satkit::Frame = frame.into();
     let dcm = ft::from_gcrf(rust_frame, &pos_vec, &vel_vec)?;
-    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        // Column-major -> row-major via transpose; see `to_gcrf`.
-        let dcmt = dcm.transpose();
-        let arr = np::PyArray1::from_slice(py, dcmt.as_slice());
-        Ok(arr.reshape(vec![3, 3])?.into_py_any(py)?)
-    })
+    // Column-major -> row-major via transpose; see `to_gcrf`.
+    Ok(slice2py2d(py, dcm.transpose().as_slice(), 3, 3)?)
 }
 
 /// Rotation from the Mean-of-Date frame (MOD) to the Geocentric Celestial
@@ -561,40 +555,32 @@ fn state_transform_batch(
         }
         let pa = parr.as_array();
         let va = varr.as_array();
-        return pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-            let pout = np::PyArray2::<f64>::zeros(py, (n, 3), false);
-            let vout = np::PyArray2::<f64>::zeros(py, (n, 3), false);
-            for i in 0..n {
-                let p = Vector3::from_array([pa[(i, 0)], pa[(i, 1)], pa[(i, 2)]]);
-                let v = Vector3::from_array([va[(i, 0)], va[(i, 1)], va[(i, 2)]]);
-                let (po, vo) = cfunc(&p, &v, &tm[i]);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        po.as_slice().as_ptr(),
-                        pout.as_raw_array_mut().as_mut_ptr().offset(i as isize * 3),
-                        3,
-                    );
-                    std::ptr::copy_nonoverlapping(
-                        vo.as_slice().as_ptr(),
-                        vout.as_raw_array_mut().as_mut_ptr().offset(i as isize * 3),
-                        3,
-                    );
-                }
-            }
-            Ok((pout.into_py_any(py)?, vout.into_py_any(py)?))
-        });
+        let mut pout = Vec::with_capacity(n * 3);
+        let mut vout = Vec::with_capacity(n * 3);
+        for i in 0..n {
+            let p = Vector3::from_array([pa[(i, 0)], pa[(i, 1)], pa[(i, 2)]]);
+            let v = Vector3::from_array([va[(i, 0)], va[(i, 1)], va[(i, 2)]]);
+            let (po, vo) = cfunc(&p, &v, &tm[i]);
+            pout.extend_from_slice(po.as_slice());
+            vout.extend_from_slice(vo.as_slice());
+        }
+        let py = pos.py();
+        return Ok((
+            np::PyArray1::from_vec(py, pout)
+                .reshape([n, 3])?
+                .into_py_any(py)?,
+            np::PyArray1::from_vec(py, vout)
+                .reshape([n, 3])?
+                .into_py_any(py)?,
+        ));
     }
 
     let p: Vector3 = py_to_smatrix(pos)?;
     let v: Vector3 = py_to_smatrix(vel)?;
     let t = instant_from_pyany(time)?;
     let (po, vo) = cfunc(&p, &v, &t);
-    pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-        Ok((
-            np::PyArray1::from_slice(py, po.as_slice()).into_py_any(py)?,
-            np::PyArray1::from_slice(py, vo.as_slice()).into_py_any(py)?,
-        ))
-    })
+    let py = time.py();
+    Ok((vec2py(py, &po)?, vec2py(py, &vo)?))
 }
 
 // ───── Frame-enum dispatch (new in 0.17.0) ─────────────────────────────
@@ -656,10 +642,9 @@ pub fn rotation_approx(
     rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ true)
 }
 
-/// Shared scalar/batch dispatch for [`rotation`] / [`rotation_approx`].
-/// Returns a single quaternion for a scalar time, or a list of
-/// quaternions for an array time — mirroring the existing
-/// `py_quat_from_time_arr` shape used by the per-pair helpers.
+/// Shared scalar/batch dispatch for [`rotation`] / [`rotation_approx`]:
+/// a single quaternion for a scalar time, or a list of quaternions for an
+/// array time, as the per-pair helpers return.
 fn rotation_dispatch_batch(
     from_frame: crate::pyframes::PyFrame,
     to_frame: crate::pyframes::PyFrame,
@@ -668,31 +653,16 @@ fn rotation_dispatch_batch(
 ) -> Result<Py<PyAny>> {
     let from: satkit::Frame = from_frame.into();
     let to: satkit::Frame = to_frame.into();
-    let crate::pyinstant::TimeInput {
-        times: tvec,
-        scalar,
-    } = tm.to_time_input()?;
-    let py = tm.py();
-    let cfunc = move |t: &Instant| -> Result<Quaternion> {
-        if approx {
-            Ok(ft::rotation_approx(from, to, t)?)
-        } else {
-            Ok(ft::rotation(from, to, t)?)
-        }
-    };
-    match scalar {
-        true => {
-            let q = cfunc(&tvec[0])?;
-            Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
-        }
-        false => {
-            let qs: Result<Vec<crate::pyquaternion::PyQuaternion>> = tvec
-                .iter()
-                .map(|t| cfunc(t).map(crate::pyquaternion::PyQuaternion))
-                .collect();
-            Ok(qs?.into_py_any(py)?)
-        }
-    }
+    py_quat_from_time_result_arr(
+        |t: &Instant| -> Result<Quaternion> {
+            if approx {
+                Ok(ft::rotation_approx(from, to, t)?)
+            } else {
+                Ok(ft::rotation(from, to, t)?)
+            }
+        },
+        tm,
+    )
 }
 
 /// State (position + velocity) transform from ``from_frame`` to ``to_frame``
@@ -725,12 +695,8 @@ pub fn transform_state(
     let p: Vector3 = py_to_smatrix(pos)?;
     let v: Vector3 = py_to_smatrix(vel)?;
     let (po, vo) = ft::transform_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
-    pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-        Ok((
-            np::PyArray1::from_slice(py, po.as_slice()).into_py_any(py)?,
-            np::PyArray1::from_slice(py, vo.as_slice()).into_py_any(py)?,
-        ))
-    })
+    let py = tm.py();
+    Ok((vec2py(py, &po)?, vec2py(py, &vo)?))
 }
 
 /// State transform using the approximate reduction of :func:`rotation_approx`.
@@ -759,12 +725,8 @@ pub fn transform_state_approx(
     let p: Vector3 = py_to_smatrix(pos)?;
     let v: Vector3 = py_to_smatrix(vel)?;
     let (po, vo) = ft::transform_state_approx(from_frame.into(), to_frame.into(), &t, &p, &v)?;
-    pyo3::Python::attach(|py| -> Result<(Py<PyAny>, Py<PyAny>)> {
-        Ok((
-            np::PyArray1::from_slice(py, po.as_slice()).into_py_any(py)?,
-            np::PyArray1::from_slice(py, vo.as_slice()).into_py_any(py)?,
-        ))
-    })
+    let py = tm.py();
+    Ok((vec2py(py, &po)?, vec2py(py, &vo)?))
 }
 
 /// Quaternion rotating a vector from ``from_frame`` to ``to_frame`` — the
@@ -802,9 +764,7 @@ pub fn rotation_with_state(
     let p: Vector3 = py_to_smatrix(pos)?;
     let v: Vector3 = py_to_smatrix(vel)?;
     let q = ft::rotation_with_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
-    pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(py)?)
-    })
+    Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(tm.py())?)
 }
 
 /// Disable the warning about out-of-range Earth Orientation Parameters (EOP).

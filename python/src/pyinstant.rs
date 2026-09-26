@@ -161,11 +161,6 @@ impl From<PyTimeScale> for TimeScale {
 #[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyInstant(pub Instant);
 
-/// Convert a satkit::Instant into a Python PyInstant object
-pub fn instant_into_py(instant: Instant, py: Python<'_>) -> Py<PyAny> {
-    PyInstant(instant).into_py_any(py).unwrap()
-}
-
 // The Python API names conversions `to_*` (paired with `from_*`); PyInstant is
 // Copy, so clippy would rather those took `self` by value. PyO3 methods take
 // `&self`, and the name is fixed by the Python API, so the lint is silenced here.
@@ -235,27 +230,14 @@ impl PyInstant {
     fn py_new(py_args: &Bound<'_, PyTuple>, scale: &PyTimeScale) -> Result<Self> {
         if py_args.is_empty() {
             Ok(Self(Instant::now()))
-        } else if py_args.len() == 3 {
-            let year = py_args.get_item(0)?.extract::<i32>()?;
-            let month = py_args.get_item(1)?.extract::<i32>()?;
-            let day = py_args.get_item(2)?.extract::<i32>()?;
-            Ok(Self(Instant::from_datetime_with_scale(
-                year,
-                month,
-                day,
-                0,
-                0,
-                0.0,
-                scale.into(),
-            )?))
-        } else if py_args.len() == 6 {
-            let year = py_args.get_item(0)?.extract::<i32>()?;
-            let month = py_args.get_item(1)?.extract::<i32>()?;
-            let day = py_args.get_item(2)?.extract::<i32>()?;
-            let hour = py_args.get_item(3)?.extract::<i32>()?;
-            let min = py_args.get_item(4)?.extract::<i32>()?;
-            let sec = py_args.get_item(5)?.extract::<f64>()?;
-
+        } else if py_args.len() == 3 || py_args.len() == 6 {
+            let int = |i: usize| py_args.get_item(i)?.extract::<i32>();
+            let (year, month, day) = (int(0)?, int(1)?, int(2)?);
+            let (hour, min, sec) = if py_args.len() == 6 {
+                (int(3)?, int(4)?, py_args.get_item(5)?.extract::<f64>()?)
+            } else {
+                (0, 0, 0.0)
+            };
             Ok(Self(Instant::from_datetime_with_scale(
                 year,
                 month,
@@ -558,8 +540,8 @@ impl PyInstant {
     ///     datetime.datetime:  datetime object matching the input satkit.time
     ///
     #[pyo3(signature = (utc=true))]
-    fn to_datetime(&self, utc: bool) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| instant_to_datetime(py, &self.0, utc))
+    fn to_datetime(&self, py: Python<'_>, utc: bool) -> PyResult<Py<PyAny>> {
+        instant_to_datetime(py, &self.0, utc)
     }
 
     /// Convert to Python datetime object
@@ -578,7 +560,7 @@ impl PyInstant {
             py,
             c"satkit.time.datetime() is deprecated; use satkit.time.to_datetime() instead.",
         )?;
-        self.to_datetime(utc)
+        self.to_datetime(py, utc)
     }
 
     /// Convert to Modified Julian date
@@ -657,7 +639,7 @@ impl PyInstant {
             py,
             c"time.as_datetime() is deprecated since 0.23 and will be removed in 0.25; use time.to_datetime()",
         )?;
-        self.to_datetime(utc)
+        self.to_datetime(py, utc)
     }
 
     /// Deprecated since 0.23, removed in 0.25. Use ``to_mjd()``.
@@ -720,72 +702,7 @@ impl PyInstant {
     /// Returns:
     ///     satkit.time|numpy.ndarray: New time object or numpy array of time objects representing input time plus input duration(s)
     fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        // Numpy array of floats
-        if other.is_instance_of::<np::PyArray1<f64>>() {
-            let parr = other.extract::<np::PyReadonlyArray1<f64>>()?;
-            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let objarr = parr
-                    .as_array()
-                    .map(|x| {
-                        Self(self.0 + satkit::Duration::from_days(*x))
-                            .into_py_any(py)
-                            .unwrap()
-                    })
-                    .into_iter();
-                let parr = np::PyArray1::<Py<PyAny>>::from_iter(py, objarr);
-                parr.into_py_any(py)
-            })
-        }
-        // list of floats or duration
-        else if other.is_instance_of::<pyo3::types::PyList>() {
-            other.extract::<Vec<f64>>().map_or_else(
-                |_| {
-                    other.extract::<Vec<PyDuration>>().map_or_else(
-                        |_| {
-                            Err(pyo3::exceptions::PyTypeError::new_err(
-                                "Invalid types in list",
-                            ))
-                        },
-                        |v| {
-                            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                                let objarr = v.into_iter().map(|x| {
-                                    let pyobj = Self(self.0 + x.0);
-                                    pyobj.into_py_any(py).unwrap()
-                                });
-
-                                let parr = np::PyArray1::<Py<PyAny>>::from_iter(py, objarr);
-                                parr.into_py_any(py)
-                            })
-                        },
-                    )
-                },
-                |v| {
-                    pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                        let objarr = v.iter().map(|x| {
-                            let pyobj = Self(self.0 + satkit::Duration::from_days(*x));
-                            pyobj.into_py_any(py).unwrap()
-                        });
-                        let parr = np::PyArray1::<Py<PyAny>>::from_iter(py, objarr);
-                        parr.into_py_any(py)
-                    })
-                },
-            )
-        }
-        // Constant number
-        else if other.is_instance_of::<pyo3::types::PyFloat>()
-            || other.is_instance_of::<pyo3::types::PyInt>()
-        {
-            // A Python int too large for f64 raises OverflowError in extract
-            let dt: f64 = other.extract::<f64>()?;
-            Self(self.0 + satkit::Duration::from_days(dt)).into_py_any(other.py())
-        } else if other.is_instance_of::<PyDuration>() {
-            let dur: PyDuration = other.extract::<PyDuration>().unwrap();
-            Self(self.0 + dur.0).into_py_any(other.py())
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid type for rhs",
-            ))
-        }
+        self.shift(other, |t, d| t + d)
     }
 
     /// Subtract duration or take difference in times
@@ -797,67 +714,10 @@ impl PyInstant {
     /// Returns:
     ///     satkit.time|numpy.ndarray|satkit.duration: New time object or numpy array of time objects representing input time minus input duration(s), or duration object representing difference between two time objects
     fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        // Numpy array of floats
-        if other.is_instance_of::<np::PyArray1<f64>>() {
-            let parr: np::PyReadonlyArray1<f64> = other.extract().unwrap();
-            let objarr = parr.as_array().into_iter().map(|x| -> Py<PyAny> {
-                let obj = Self(self.0 - satkit::Duration::from_days(*x));
-                obj.into_py_any(other.py()).unwrap()
-            });
-            let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
-            parr.into_py_any(other.py())
+        if let Ok(tm2) = other.cast::<Self>() {
+            return PyDuration(self.0 - tm2.borrow().0).into_py_any(other.py());
         }
-        // list of floats
-        else if other.is_instance_of::<pyo3::types::PyList>() {
-            other.extract::<Vec<f64>>().map_or_else(
-                |_| {
-                    other.extract::<Vec<PyDuration>>().map_or_else(
-                        |_| {
-                            Err(pyo3::exceptions::PyTypeError::new_err(
-                                "Invalid types in list",
-                            ))
-                        },
-                        |v| {
-                            let objarr = v.into_iter().map(|x| {
-                                let pyobj = Self(self.0 - x.0);
-                                pyobj.into_py_any(other.py()).unwrap()
-                            });
-
-                            let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
-                            parr.into_py_any(other.py())
-                        },
-                    )
-                },
-                |v| {
-                    let objarr = v.into_iter().map(|x| {
-                        let pyobj = Self(self.0 - satkit::Duration::from_days(x));
-                        pyobj.into_py_any(other.py()).unwrap()
-                    });
-                    let parr = np::PyArray1::<Py<PyAny>>::from_iter(other.py(), objarr);
-                    parr.into_py_any(other.py())
-                },
-            )
-        }
-        // Constant number
-        else if other.is_instance_of::<pyo3::types::PyFloat>()
-            || other.is_instance_of::<pyo3::types::PyInt>()
-        {
-            // A Python int too large for f64 raises OverflowError in extract
-            let dt: f64 = other.extract::<f64>()?;
-            pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                Self(self.0 - satkit::Duration::from_days(dt)).into_py_any(py)
-            })
-        } else if other.is_instance_of::<PyDuration>() {
-            let dur: PyDuration = other.extract::<PyDuration>().unwrap();
-            Self(self.0 - dur.0).into_py_any(other.py())
-        } else if other.is_instance_of::<Self>() {
-            let tm2 = other.extract::<Self>().unwrap();
-            PyDuration(self.0 - tm2.0).into_py_any(other.py())
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid type for rhs",
-            ))
-        }
+        self.shift(other, |t, d| t - d)
     }
 
     // Comparison operators are below
@@ -880,10 +740,6 @@ impl PyInstant {
 
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.0 != other.0
     }
 
     // Backed by an exact microsecond count, so hashing the raw integer is
@@ -937,6 +793,49 @@ impl PyInstant {
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         Ok(PyBytes::new(py, &i64::to_le_bytes(self.0.raw)).into())
+    }
+}
+
+impl PyInstant {
+    /// `self (op) other` for a number of days, a duration, or a list / 1-D
+    /// float array of either (element-wise, returning an object array)
+    fn shift(
+        &self,
+        other: &Bound<'_, PyAny>,
+        op: fn(Instant, satkit::Duration) -> Instant,
+    ) -> PyResult<Py<PyAny>> {
+        let py = other.py();
+        let days = satkit::Duration::from_days;
+        let durs: Vec<satkit::Duration> = if other.is_instance_of::<np::PyArray1<f64>>() {
+            let arr = other.extract::<np::PyReadonlyArray1<f64>>()?;
+            arr.as_array().iter().map(|x| days(*x)).collect()
+        } else if other.is_instance_of::<pyo3::types::PyList>() {
+            if let Ok(v) = other.extract::<Vec<f64>>() {
+                v.into_iter().map(days).collect()
+            } else if let Ok(v) = other.extract::<Vec<PyDuration>>() {
+                v.into_iter().map(|d| d.0).collect()
+            } else {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "Invalid types in list",
+                ));
+            }
+        } else if other.is_instance_of::<pyo3::types::PyFloat>()
+            || other.is_instance_of::<pyo3::types::PyInt>()
+        {
+            // A Python int too large for f64 raises OverflowError in extract
+            return Self(op(self.0, days(other.extract::<f64>()?))).into_py_any(py);
+        } else if let Ok(d) = other.cast::<PyDuration>() {
+            return Self(op(self.0, d.borrow().0)).into_py_any(py);
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid type for rhs",
+            ));
+        };
+        let objs = durs
+            .into_iter()
+            .map(|d| Self(op(self.0, d)).into_py_any(py))
+            .collect::<PyResult<Vec<_>>>()?;
+        np::PyArray1::<Py<PyAny>>::from_vec(py, objs).into_py_any(py)
     }
 }
 

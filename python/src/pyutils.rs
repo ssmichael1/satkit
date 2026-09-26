@@ -186,6 +186,24 @@ pub fn unpack_f64s<const N: usize>(
     Ok(out)
 }
 
+/// Serialize with `serde_pickle` for pickling; `what` names the type in the
+/// `RuntimeError` on failure
+pub fn serde_pickle_to_vec<T: serde::Serialize>(v: &T, what: &str) -> PyResult<Vec<u8>> {
+    serde_pickle::to_vec(v, serde_pickle::SerOptions::default()).map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("failed to serialize {what}: {e}"))
+    })
+}
+
+/// Inverse of [`serde_pickle_to_vec`]; `what` names the type in the
+/// `ValueError` for invalid bytes
+pub fn serde_pickle_from_slice<T: serde::de::DeserializeOwned>(
+    state: &[u8],
+    what: &str,
+) -> PyResult<T> {
+    serde_pickle::from_slice(state, serde_pickle::DeOptions::default())
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("invalid {what} pickle: {e}")))
+}
+
 /// Raise `ValueError` listing any keyword arguments that remain unconsumed
 /// after all expected keywords have been extracted (and deleted) from `kw`
 pub fn reject_unused_kwargs(kw: &Bound<'_, PyDict>) -> PyResult<()> {
@@ -284,33 +302,6 @@ pub fn reject_unknown_kwargs(
     )))
 }
 
-pub fn py_vec3_of_time_arr(
-    cfunc: &(dyn Fn(&Instant) -> Vector3 + Sync),
-    tmarr: &Bound<'_, PyAny>,
-) -> Result<Py<PyAny>> {
-    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
-    let py = tmarr.py();
-    match (scalar, tm.len()) {
-        (true, _) => {
-            let v: Vector3 = cfunc(&tm[0]);
-            Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?)
-        }
-        (false, n) => {
-            // Release the GIL for the computation over the full time array
-            let vals: Vec<f64> = py.detach(|| {
-                let mut vals = Vec::with_capacity(n * 3);
-                for time in tm.iter() {
-                    vals.extend_from_slice(cfunc(time).as_slice());
-                }
-                vals
-            });
-            Ok(np::PyArray1::from_vec(py, vals)
-                .reshape([n, 3])?
-                .into_py_any(py)?)
-        }
-    }
-}
-
 pub fn py_vec3_of_time_result_arr(
     cfunc: &(dyn Fn(&Instant) -> Result<Vector3> + Sync),
     tmarr: &Bound<'_, PyAny>,
@@ -335,21 +326,6 @@ pub fn py_vec3_of_time_result_arr(
                 .reshape([n, 3])?
                 .into_py_any(py)?)
         }
-    }
-}
-
-#[allow(dead_code)]
-pub fn smatrix_to_py<const M: usize, const N: usize>(m: &Matrix<M, N>) -> Result<Py<PyAny>> {
-    if N == 1 {
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            Ok(PyArray1::from_slice(py, m.as_slice()).into_py_any(py)?)
-        })
-    } else {
-        pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-            Ok(PyArray1::from_slice(py, m.as_slice())
-                .reshape([M, N])?
-                .into_py_any(py)?)
-        })
     }
 }
 
@@ -431,14 +407,26 @@ pub fn py_quat_from_time_arr(
     cfunc: fn(&Instant) -> Quaternion,
     tmarr: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
+    py_quat_from_time_result_arr(|t| Ok(cfunc(t)), tmarr)
+}
+
+/// A quaternion for a scalar time, or a list of them for a time array (the
+/// GIL is released over the array); the first error is returned
+pub fn py_quat_from_time_result_arr<F>(cfunc: F, tmarr: &Bound<'_, PyAny>) -> Result<Py<PyAny>>
+where
+    F: Fn(&Instant) -> Result<Quaternion> + Sync,
+{
     let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
     let py = tmarr.py();
     match scalar {
-        true => Ok(PyQuaternion(cfunc(&tm[0])).into_py_any(py)?),
+        true => Ok(PyQuaternion(cfunc(&tm[0])?).into_py_any(py)?),
         false => {
             // Release the GIL for the computation over the full time array
-            let quats: Vec<PyQuaternion> =
-                py.detach(|| tm.iter().map(|x| PyQuaternion(cfunc(x))).collect());
+            let quats: Vec<PyQuaternion> = py.detach(|| {
+                tm.iter()
+                    .map(|x| cfunc(x).map(PyQuaternion))
+                    .collect::<Result<_>>()
+            })?;
             Ok(quats.into_py_any(py)?)
         }
     }
@@ -454,24 +442,9 @@ pub fn slice2py1d(py: Python, s: &[f64]) -> PyResult<Py<PyAny>> {
 }
 
 pub fn slice2py2d(py: Python, s: &[f64], rows: usize, cols: usize) -> PyResult<Py<PyAny>> {
-    let arr = PyArray1::from_slice(py, s);
-    match arr.reshape([rows, cols]) {
-        Ok(a) => a.into_py_any(py),
-        Err(e) => Err(e),
-    }
-}
-
-#[allow(dead_code)]
-pub fn mat2py<const M: usize, const N: usize>(py: Python, m: &Matrix<M, N>) -> Py<PyAny> {
-    let p = unsafe { PyArray2::<f64>::new(py, [M, N], true) };
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            m.as_slice().as_ptr(),
-            p.as_raw_array_mut().as_mut_ptr(),
-            M * N,
-        );
-    }
-    p.into_py_any(py).unwrap()
+    PyArray1::from_slice(py, s)
+        .reshape([rows, cols])?
+        .into_py_any(py)
 }
 
 #[inline]
@@ -520,7 +493,6 @@ where
     }
 }
 
-#[allow(dead_code)]
 /// Extract a single `satkit::Instant` from a Python object.
 ///
 /// Accepts `satkit.time` (PyInstant) or `datetime.datetime` (a naive datetime

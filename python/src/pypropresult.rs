@@ -6,14 +6,21 @@ use crate::pyutils::*;
 use pyo3::types::{PyBytes, PyDict, PyTuple};
 use pyo3::IntoPyObjectExt;
 
-use numpy::PyArrayMethods;
-use numpy::{self as np, ToPyArray};
-
 use satkit::mathtypes::*;
 use satkit::orbitprop::PropagationResult;
 use satkit::Instant;
 
 use serde::{Deserialize, Serialize};
+
+/// Evaluate `$body` with `$r` bound to the inner result, whichever variant
+macro_rules! each {
+    ($e:expr, $r:ident => $body:expr) => {
+        match $e {
+            PyPropResultType::R1($r) => $body,
+            PyPropResultType::R7($r) => $body,
+        }
+    };
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PyPropResultType {
@@ -136,28 +143,19 @@ impl PyPropResult {
     /// Get the begin time (time at which state_begin is valid)
     #[getter]
     fn time_begin(&self) -> PyInstant {
-        PyInstant(match &self.0 {
-            PyPropResultType::R1(r) => r.time_begin,
-            PyPropResultType::R7(r) => r.time_begin,
-        })
+        PyInstant(each!(&self.0, r => r.time_begin))
     }
 
     /// Get the end time
     #[getter]
     fn time(&self) -> PyInstant {
-        PyInstant(match &self.0 {
-            PyPropResultType::R1(r) => r.time_end,
-            PyPropResultType::R7(r) => r.time_end,
-        })
+        self.time_end()
     }
 
     /// Get the end time
     #[getter]
     fn time_end(&self) -> PyInstant {
-        PyInstant(match &self.0 {
-            PyPropResultType::R1(r) => r.time_end,
-            PyPropResultType::R7(r) => r.time_end,
-        })
+        PyInstant(each!(&self.0, r => r.time_end))
     }
 
     /// Statistics of the propagation
@@ -166,18 +164,11 @@ impl PyPropResult {
     ///     satkit.propstats: function-evaluation and step counts
     #[getter]
     fn stats(&self) -> PyPropStats {
-        match &self.0 {
-            PyPropResultType::R1(r) => PyPropStats {
-                num_eval: r.num_eval,
-                num_accept: r.accepted_steps,
-                num_reject: r.rejected_steps,
-            },
-            PyPropResultType::R7(r) => PyPropStats {
-                num_eval: r.num_eval,
-                num_accept: r.accepted_steps,
-                num_reject: r.rejected_steps,
-            },
-        }
+        each!(&self.0, r => PyPropStats {
+            num_eval: r.num_eval,
+            num_accept: r.accepted_steps,
+            num_reject: r.rejected_steps,
+        })
     }
 
     /// Step the integrator would take next, seconds: its working stride at
@@ -191,10 +182,7 @@ impl PyPropResult {
     ///     float: next integrator step, seconds
     #[getter]
     fn next_step_secs(&self) -> f64 {
-        match &self.0 {
-            PyPropResultType::R1(r) => r.next_step_secs,
-            PyPropResultType::R7(r) => r.next_step_secs,
-        }
+        each!(&self.0, r => r.next_step_secs)
     }
 
     /// GCRF position of satellite at end of propagation
@@ -202,17 +190,8 @@ impl PyPropResult {
     /// Returns:
     ///     numpy.ndarray: 3-element GCRF position, meters
     #[getter]
-    fn pos(&self) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            match &self.0 {
-                PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..3])
-                    .to_pyarray(py)
-                    .into_py_any(py),
-                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..3])
-                    .to_pyarray(py)
-                    .into_py_any(py),
-            }
-        })
+    fn pos(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, &self.end6()[0..3])
     }
 
     /// GCRF velocity of satellite at end of propagation
@@ -220,20 +199,8 @@ impl PyPropResult {
     /// Returns:
     ///     numpy.ndarray: 3-element GCRF velocity, meters/second
     #[getter]
-    fn vel(&self) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            match &self.0 {
-                PyPropResultType::R1(r) => np::ndarray::arr1(&r.state_end.as_slice()[3..6])
-                    .to_pyarray(py)
-                    .into_py_any(py),
-                PyPropResultType::R7(r) => {
-                    let col0 = r.state_end.col(0);
-                    np::ndarray::arr1(&col0.as_slice()[3..6])
-                        .to_pyarray(py)
-                        .into_py_any(py)
-                }
-            }
-        })
+    fn vel(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, &self.end6()[3..6])
     }
 
     /// 6-element GCRF state (pos + vel) at end of propagation (same as state_end)
@@ -241,17 +208,8 @@ impl PyPropResult {
     /// Returns:
     ///     numpy.ndarray: [x, y, z, vx, vy, vz] in meters and meters/second
     #[getter]
-    fn state(&self) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            match &self.0 {
-                PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
-                    .to_pyarray(py)
-                    .into_py_any(py),
-                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
-                    .to_pyarray(py)
-                    .into_py_any(py),
-            }
-        })
+    fn state(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, self.end6())
     }
 
     /// 6-element GCRF state (pos + vel) at end of propagation
@@ -259,17 +217,8 @@ impl PyPropResult {
     /// Returns:
     ///     numpy.ndarray: [x, y, z, vx, vy, vz] in meters and meters/second
     #[getter]
-    fn state_end(&self) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            match &self.0 {
-                PyPropResultType::R1(r) => np::ndarray::arr1(r.state_end.as_slice())
-                    .to_pyarray(py)
-                    .into_py_any(py),
-                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_end.as_slice()[0..6])
-                    .to_pyarray(py)
-                    .into_py_any(py),
-            }
-        })
+    fn state_end(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, self.end6())
     }
 
     /// 6-element GCRF state (pos + vel) at begin of propagation
@@ -277,17 +226,8 @@ impl PyPropResult {
     /// Returns:
     ///     numpy.ndarray: [x, y, z, vx, vy, vz] in meters and meters/second
     #[getter]
-    fn state_begin(&self) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            match &self.0 {
-                PyPropResultType::R1(r) => np::ndarray::arr1(r.state_begin.as_slice())
-                    .to_pyarray(py)
-                    .into_py_any(py),
-                PyPropResultType::R7(r) => np::ndarray::arr1(&r.state_begin.as_slice()[0..6])
-                    .to_pyarray(py)
-                    .into_py_any(py),
-            }
-        })
+    fn state_begin(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, each!(&self.0, r => &r.state_begin.as_slice()[0..6]))
     }
 
     /// State transition matrix between begin and end times
@@ -297,24 +237,16 @@ impl PyPropResult {
     ///     Maps a perturbation of the begin state (meters, m/s) to the end state
     ///     (meters, m/s), so blocks are unitless, seconds, 1/seconds, unitless.
     #[getter]
-    fn phi(&self) -> PyResult<Py<PyAny>> {
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            match &self.0 {
-                PyPropResultType::R1(_r) => Ok(py.None()),
-                PyPropResultType::R7(r) => {
-                    let phi = unsafe { np::PyArray2::<f64>::new(py, [6, 6], false) };
-                    let rsphi = r.state_end.block::<6, 6>(0, 1).transpose();
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(
-                            rsphi.as_slice().as_ptr(),
-                            phi.as_raw_array_mut().as_mut_ptr(),
-                            36,
-                        );
-                    }
-                    phi.into_py_any(py)
-                }
-            }
-        })
+    fn phi(&self, py: Python) -> PyResult<Py<PyAny>> {
+        match &self.0 {
+            PyPropResultType::R1(_) => Ok(py.None()),
+            PyPropResultType::R7(r) => slice2py2d(
+                py,
+                r.state_end.block::<6, 6>(0, 1).transpose().as_slice(),
+                6,
+                6,
+            ),
+        }
     }
 
     fn __str__(&self) -> String {
@@ -327,10 +259,7 @@ impl PyPropResult {
     /// Whether this result supports interpolation (dense output is available)
     #[getter]
     const fn can_interp(&self) -> bool {
-        match &self.0 {
-            PyPropResultType::R1(r) => r.odesol.is_some() || r.gj_dense.is_some(),
-            PyPropResultType::R7(r) => r.odesol.is_some() || r.gj_dense.is_some(),
-        }
+        each!(&self.0, r => r.odesol.is_some() || r.gj_dense.is_some())
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
@@ -340,20 +269,12 @@ impl PyPropResult {
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        let s = state.as_bytes(py);
-        self.0 = serde_pickle::from_slice(s, serde_pickle::DeOptions::default()).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("invalid propresult pickle: {e}"))
-        })?;
+        self.0 = serde_pickle_from_slice(state.as_bytes(py), "propresult")?;
         Ok(())
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        let p =
-            serde_pickle::to_vec(&self.0, serde_pickle::SerOptions::default()).map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(format!(
-                    "failed to serialize propresult: {e}"
-                ))
-            })?;
+        let p = serde_pickle_to_vec(&self.0, "propresult")?;
         PyBytes::new(py, p.as_slice()).into_py_any(py)
     }
 
@@ -368,7 +289,7 @@ impl PyPropResult {
     ///     (a list of them for a list of times); with output_phi=True, (state, phi)
     ///     tuples where phi is the 6x6 state transition matrix
     #[pyo3(signature=(time, output_phi=false))]
-    fn interp(&self, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
+    fn interp(&self, py: Python, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
         let is_list = time.is_instance_of::<pyo3::types::PyList>()
             || time.is_instance_of::<numpy::PyArray1<Py<PyAny>>>();
 
@@ -376,73 +297,51 @@ impl PyPropResult {
 
         if is_list && !output_phi {
             // Batch interpolation — returns Nx6 numpy array
-            match &self.0 {
-                PyPropResultType::R1(r) => {
-                    let results = r
-                        .interp_batch(&times)
-                        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-                    pyo3::Python::attach(|py| {
-                        let n = results.len();
-                        let flat: Vec<f64> = results
-                            .iter()
-                            .flat_map(|r| r.as_slice().iter().copied().take(6))
-                            .collect();
-                        slice2py2d(py, &flat, n, 6)
-                    })
-                }
-                PyPropResultType::R7(r) => {
-                    let results = r
-                        .interp_batch(&times)
-                        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-                    pyo3::Python::attach(|py| {
-                        let n = results.len();
-                        let flat: Vec<f64> = results
-                            .iter()
-                            .flat_map(|r| r.as_slice().iter().copied().take(6))
-                            .collect();
-                        slice2py2d(py, &flat, n, 6)
-                    })
-                }
-            }
+            let (flat, n): (Vec<f64>, usize) = each!(&self.0, r => {
+                let results = r
+                    .interp_batch(&times)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                let flat = results
+                    .iter()
+                    .flat_map(|r| r.as_slice().iter().copied().take(6))
+                    .collect();
+                (flat, results.len())
+            });
+            slice2py2d(py, &flat, n, 6)
         } else if is_list {
             // Fallback for output_phi=true — need per-element processing
-            let results: PyResult<Vec<Py<PyAny>>> = times
+            times
                 .iter()
-                .map(|t| self.interp_at(t, output_phi))
-                .collect();
-            pyo3::Python::attach(|py| results?.into_py_any(py))
+                .map(|t| self.interp_at(py, t, output_phi))
+                .collect::<PyResult<Vec<_>>>()?
+                .into_py_any(py)
         } else {
-            self.interp_at(&times[0], output_phi)
+            self.interp_at(py, &times[0], output_phi)
         }
     }
 }
 
 impl PyPropResult {
-    fn interp_at(&self, time: &Instant, output_phi: bool) -> PyResult<Py<PyAny>> {
+    /// End state, position and velocity (the first column for a result
+    /// propagated with the state transition matrix)
+    fn end6(&self) -> &[f64] {
+        each!(&self.0, r => &r.state_end.as_slice()[0..6])
+    }
+
+    fn interp_at(&self, py: Python, time: &Instant, output_phi: bool) -> PyResult<Py<PyAny>> {
+        let err =
+            |e: satkit::orbitprop::Error| pyo3::exceptions::PyValueError::new_err(e.to_string());
         match &self.0 {
-            PyPropResultType::R1(r) => match r.interp(time) {
-                Ok(res) => pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> { vec2py(py, &res) }),
-                Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e.to_string())),
-            },
-            PyPropResultType::R7(r) => match r.interp(time) {
-                Ok(res) => {
-                    if !output_phi {
-                        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                            slice2py1d(py, &res.as_slice()[0..6])
-                        })
-                    } else {
-                        let rsphi = res.block::<6, 6>(0, 1).transpose();
-                        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                            (
-                                slice2py1d(py, &res.as_slice()[0..6])?,
-                                slice2py2d(py, rsphi.as_slice(), 6, 6)?,
-                            )
-                                .into_py_any(py)
-                        })
-                    }
+            PyPropResultType::R1(r) => vec2py(py, &r.interp(time).map_err(err)?),
+            PyPropResultType::R7(r) => {
+                let res = r.interp(time).map_err(err)?;
+                let state = slice2py1d(py, &res.as_slice()[0..6])?;
+                if !output_phi {
+                    return Ok(state);
                 }
-                Err(e) => Err(pyo3::exceptions::PyValueError::new_err(e.to_string())),
-            },
+                let phi = res.block::<6, 6>(0, 1).transpose();
+                (state, slice2py2d(py, phi.as_slice(), 6, 6)?).into_py_any(py)
+            }
         }
     }
 }

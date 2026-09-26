@@ -3,6 +3,7 @@ use crate::pyinstant::{PyInstant, TimeArg};
 use crate::pypropsettings::PyPropSettings;
 use crate::pyquaternion::PyQuaternion;
 use crate::pysatproperties::PySatProperties;
+use crate::pyutils::{slice2py1d, slice2py2d};
 use crate::PyDuration;
 
 use numpy as np;
@@ -10,7 +11,7 @@ use numpy::PyArrayMethods;
 use numpy::PyUntypedArrayMethods;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyNone, PyTuple};
+use pyo3::types::{PyDict, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
@@ -27,6 +28,27 @@ use anyhow::{bail, Result};
 ///     vel (numpy.ndarray): 3-element GCRF velocity, m/s
 ///     cov (numpy.ndarray, optional): 6x6 GCRF state covariance
 ///         (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Default None.
+/// A 3-element 1-sigma uncertainty from a 1-D numpy array; `what` names it
+/// in the error message
+fn sigma3(sigma: &Bound<'_, np::PyArray1<f64>>, what: &str) -> Result<Vector3> {
+    if sigma.len() != 3 {
+        bail!("{what} uncertainty must be 1-d numpy array with length 3");
+    }
+    let s = sigma.readonly();
+    let s = s.as_array();
+    Ok(Vector3::from_slice(&[s[0], s[1], s[2]]))
+}
+
+/// A 6x6 state covariance from a numpy array (element by element, so
+/// non-contiguous input such as Fortran-order arrays and views works)
+fn cov6(cov: &Bound<'_, np::PyArray2<f64>>) -> Result<Matrix6> {
+    let dims = cov.dims();
+    if dims[0] != 6 || dims[1] != 6 {
+        bail!("Covariance must be 6x6 numpy array");
+    }
+    crate::pyutils::py_to_smatrix::<6, 6>(cov.as_any())
+}
+
 #[pyclass(name = "satstate", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySatState(SatState);
@@ -60,21 +82,7 @@ impl PySatState {
         );
 
         if let Some(cov) = cov {
-            let dims = cov.dims();
-            if dims[0] != 6 || dims[1] != 6 {
-                bail!("Covariance must be 6x6 numpy array");
-            }
-            // Element-by-element: handles non-contiguous input (Fortran-order,
-            // views), which as_slice() would fail on
-            let rcov = cov.readonly();
-            let rcov = rcov.as_array();
-            let mut nacov = Matrix6::zeros();
-            for r in 0..6 {
-                for c in 0..6 {
-                    nacov[(r, c)] = rcov[(r, c)];
-                }
-            }
-            state.set_cov(StateCov::PVCov(nacov));
+            state.set_cov(StateCov::PVCov(cov6(cov)?));
         }
 
         Ok(Self(state))
@@ -121,14 +129,8 @@ impl PySatState {
         sigma: &Bound<'_, np::PyArray1<f64>>,
         frame: PyFrame,
     ) -> Result<()> {
-        if sigma.len() != 3 {
-            bail!("Position uncertainty must be 1-d numpy array with length 3");
-        }
-        let s = sigma.readonly();
-        let s = s.as_array();
-        let na_sigma = Vector3::from_slice(&[s[0], s[1], s[2]]);
-        let rust_frame: Frame = frame.into();
-        self.0.set_pos_uncertainty(&na_sigma, rust_frame)?;
+        let sigma = sigma3(sigma, "Position")?;
+        self.0.set_pos_uncertainty(&sigma, frame.into())?;
         Ok(())
     }
 
@@ -153,14 +155,8 @@ impl PySatState {
         sigma: &Bound<'_, np::PyArray1<f64>>,
         frame: PyFrame,
     ) -> Result<()> {
-        if sigma.len() != 3 {
-            bail!("Velocity uncertainty must be 1-d numpy array with length 3");
-        }
-        let s = sigma.readonly();
-        let s = s.as_array();
-        let na_sigma = Vector3::from_slice(&[s[0], s[1], s[2]]);
-        let rust_frame: Frame = frame.into();
-        self.0.set_vel_uncertainty(&na_sigma, rust_frame)?;
+        let sigma = sigma3(sigma, "Velocity")?;
+        self.0.set_vel_uncertainty(&sigma, frame.into())?;
         Ok(())
     }
 
@@ -174,22 +170,9 @@ impl PySatState {
     ///     None
     #[setter]
     fn set_cov(&mut self, cov: &Bound<'_, np::PyArray2<f64>>) -> PyResult<()> {
-        if cov.readonly().shape()[0] != 6 || cov.readonly().shape()[1] != 6 {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Covariance must be 6x6 numpy array",
-            ));
-        }
-        // Element-by-element: handles non-contiguous input (Fortran-order,
-        // views), which as_slice() would fail on
-        let rcov = cov.readonly();
-        let rcov = rcov.as_array();
-        let mut na_cov = Matrix6::zeros();
-        for r in 0..6 {
-            for c in 0..6 {
-                na_cov[(r, c)] = rcov[(r, c)];
-            }
-        }
-        self.0.cov = StateCov::PVCov(na_cov);
+        let cov =
+            cov6(cov).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        self.0.cov = StateCov::PVCov(cov);
         Ok(())
     }
 
@@ -207,12 +190,8 @@ impl PySatState {
     /// Returns:
     ///     numpy.ndarray: 3-element GCRF position, meters
     #[getter]
-    fn get_pos_gcrf(&self) -> Py<PyAny> {
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[0..3])
-                .into_py_any(py)
-                .unwrap()
-        })
+    fn get_pos_gcrf(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, &self.0.pv.as_slice()[0..3])
     }
 
     /// GCRF velocity of the satellite
@@ -220,12 +199,8 @@ impl PySatState {
     /// Returns:
     ///     numpy.ndarray: 3-element GCRF velocity, m/s
     #[getter]
-    fn get_vel_gcrf(&self) -> Py<PyAny> {
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            np::PyArray1::from_slice(py, &self.0.pv.as_slice()[3..6])
-                .into_py_any(py)
-                .unwrap()
-        })
+    fn get_vel_gcrf(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, &self.0.pv.as_slice()[3..6])
     }
 
     /// Get full 6x6 state covariance matrix
@@ -234,20 +209,13 @@ impl PySatState {
     ///     numpy.ndarray: 6x6 numpy array with GCRF state covariance for position (meters) and velocity (m/s):
     ///     position block m^2, velocity block (m/s)^2, cross blocks m^2/s. None if not set
     #[getter]
-    fn get_cov(&self) -> Py<PyAny> {
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            match self.0.cov {
-                StateCov::None => PyNone::get(py).into_py_any(py).unwrap(),
-                StateCov::PVCov(cov) => {
-                    let dims = vec![6, 6];
-                    np::PyArray1::from_slice(py, cov.as_slice())
-                        .reshape(dims)
-                        .unwrap()
-                        .into_py_any(py)
-                        .unwrap()
-                }
-            }
-        })
+    fn get_cov(&self, py: Python) -> PyResult<Py<PyAny>> {
+        match self.0.cov {
+            StateCov::None => Ok(py.None()),
+            // The column-major storage read row-major, as before (the
+            // covariance is symmetric)
+            StateCov::PVCov(cov) => slice2py2d(py, cov.as_slice(), 6, 6),
+        }
     }
 
     /// Quaternion to go from gcrf (Geocentric Celestial Reference Frame) to lvlh (Local-Vertical, Local-Horizontal) frame
@@ -267,14 +235,14 @@ impl PySatState {
 
     /// Alias for pos_gcrf: 3-element GCRF position, meters
     #[getter]
-    fn get_pos(&self) -> Py<PyAny> {
-        self.get_pos_gcrf()
+    fn get_pos(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.get_pos_gcrf(py)
     }
 
     /// Alias for vel_gcrf: 3-element GCRF velocity, m/s
     #[getter]
-    fn get_vel(&self) -> Py<PyAny> {
-        self.get_vel_gcrf()
+    fn get_vel(&self, py: Python) -> PyResult<Py<PyAny>> {
+        self.get_vel_gcrf(py)
     }
 
     /// Add an impulsive maneuver (instantaneous delta-v) to the state

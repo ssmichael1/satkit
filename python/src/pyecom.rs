@@ -366,20 +366,11 @@ impl PyEcomParams {
     }
 
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
-        // Format v1: version byte, 13 little-endian f64, 1 byte sun_relative.
-        let mut raw: Vec<u8> = Vec::with_capacity(1 + 13 * 8 + 1);
-        raw.push(1u8);
-        for v in self.values() {
-            raw.extend_from_slice(&v.to_le_bytes());
-        }
-        raw.push(u8::from(self.0.sun_relative));
-        PyBytes::new(py, &raw).into_py_any(py)
+        PyBytes::new(py, &encode_ecom_block(&self.0)).into_py_any(py)
     }
 
     fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> Result<()> {
-        let bytes = state.as_bytes(py);
-        let (values, sun_relative) = decode_ecom_block(bytes)?;
-        *self = Self::from_values(values, sun_relative);
+        self.0 = ecom_from_block(state.as_bytes(py))?;
         Ok(())
     }
 }

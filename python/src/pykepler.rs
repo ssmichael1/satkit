@@ -2,7 +2,6 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::PyDict;
 use pyo3::types::PyTuple;
-use pyo3::IntoPyObjectExt;
 
 use satkit::kepler::{Anomaly, Kepler};
 
@@ -231,14 +230,12 @@ impl PyKepler {
 
     /// Convert Keplerian elements to Cartesian
     /// position (meters) and velocity (meters/second)
-    fn to_pv(&self) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+    fn to_pv(&self, py: Python) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
         let (r, v) = self.0.to_pv();
-        pyo3::Python::attach(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
-            Ok((
-                numpy::PyArray::from_slice(py, r.as_slice()).into_py_any(py)?,
-                numpy::PyArray::from_slice(py, v.as_slice()).into_py_any(py)?,
-            ))
-        })
+        Ok((
+            crate::pyutils::vec2py(py, &r)?,
+            crate::pyutils::vec2py(py, &v)?,
+        ))
     }
 
     /// Convert Cartesian elements to kepler
@@ -425,10 +422,6 @@ impl PyKepler {
 
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        !self.__eq__(other)
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {

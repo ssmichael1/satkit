@@ -90,10 +90,7 @@ impl PyThrust {
     /// `__reduce__`; not part of the public API.
     #[staticmethod]
     fn _from_pickle(state: &[u8]) -> PyResult<Self> {
-        let ct: ContinuousThrust =
-            serde_pickle::from_slice(state, Default::default()).map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("invalid thrust pickle: {e}"))
-            })?;
+        let ct: ContinuousThrust = crate::pyutils::serde_pickle_from_slice(state, "thrust")?;
         // serde deserializes the Frame field without the construction-time
         // validation in ContinuousThrust::new; reject unsupported frames here
         // so a doctored pickle can't smuggle in an Earth frame that would
@@ -108,9 +105,7 @@ impl PyThrust {
     /// wrapper types.
     fn __reduce__(&self, py: Python) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
         use pyo3::IntoPyObjectExt;
-        let bytes = serde_pickle::to_vec(&self.0, Default::default()).map_err(|e| {
-            pyo3::exceptions::PyRuntimeError::new_err(format!("failed to serialize thrust: {e}"))
-        })?;
+        let bytes = crate::pyutils::serde_pickle_to_vec(&self.0, "thrust")?;
         let ctor = py.get_type::<Self>().getattr("_from_pickle")?;
         let args = (pyo3::types::PyBytes::new(py, &bytes),).into_py_any(py)?;
         Ok((ctor.into_py_any(py)?, args))

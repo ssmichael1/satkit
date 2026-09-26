@@ -82,6 +82,6 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
 
 #[pymodule]
 pub fn density(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(pynrlmsise, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(pynrlmsise, m)?)?;
     Ok(())
 }

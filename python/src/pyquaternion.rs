@@ -8,7 +8,7 @@ use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
 
-use crate::pyutils::{to_f64_ndarray, to_vector3, warn_deprecated};
+use crate::pyutils::{slice2py2d, to_f64_ndarray, to_vector3, vec2py, warn_deprecated};
 
 use anyhow::{bail, Result};
 
@@ -194,20 +194,10 @@ impl PyQuaternion {
     ///
     /// Returns:
     ///     numpy.ndarray: 3x3 numpy array representing rotation matrix
-    fn to_rotation_matrix(&self) -> Py<PyAny> {
+    fn to_rotation_matrix(&self, py: Python) -> PyResult<Py<PyAny>> {
+        // numeris storage is column-major: the transpose's is row-major
         let rot = self.0.to_rotation_matrix();
-
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            let phi = unsafe { np::PyArray2::<f64>::new(py, [3, 3], true) };
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    rot.as_slice().as_ptr(),
-                    phi.as_raw_array_mut().as_mut_ptr(),
-                    9,
-                );
-            }
-            phi.into_py_any(py).unwrap()
-        })
+        slice2py2d(py, rot.transpose().as_slice(), 3, 3)
     }
 
     ///Return rotation represented as "roll", "pitch", "yaw" euler angles in radians.
@@ -224,7 +214,7 @@ impl PyQuaternion {
             py,
             c"quaternion.as_rotation_matrix() is deprecated since 0.23 and will be removed in 0.25; use quaternion.to_rotation_matrix()",
         )?;
-        Ok(self.to_rotation_matrix())
+        self.to_rotation_matrix(py)
     }
 
     /// Deprecated since 0.23, removed in 0.25. Use ``to_euler()``.
@@ -341,7 +331,7 @@ impl PyQuaternion {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array representing axis of rotation
     #[getter]
-    fn axis(&self) -> PyResult<Py<PyAny>> {
+    fn axis(&self, py: Python) -> PyResult<Py<PyAny>> {
         let (ax, _) = self.0.to_axis_angle();
         let n = ax.norm();
         let a = if n < 1.0e-9 {
@@ -349,11 +339,7 @@ impl PyQuaternion {
         } else {
             ax * (1.0 / n)
         };
-        pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-            numpy::ndarray::arr1(a.as_slice())
-                .to_pyarray(py)
-                .into_py_any(py)
-        })
+        vec2py(py, &a)
     }
 
     /// Quaternion conjugate, which for a unit (rotation) quaternion
@@ -412,9 +398,7 @@ impl PyQuaternion {
             let q: PyRef<Self> = other
                 .extract()
                 .map_err(|e| anyhow::anyhow!("Failed to extract quaternion: {}", e))?;
-            return Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                Self(self.0 * q.0).into_py_any(py)
-            })?);
+            return Ok(Self(self.0 * q.0).into_py_any(other.py())?);
         }
         // Rotate a 3-vector or an Nx3 array of vectors: any real numeric
         // array-like (integer arrays, lists) is converted to float64 first
@@ -424,10 +408,7 @@ impl PyQuaternion {
         match a.shape() {
             [3] => {
                 let vout = self.0 * numeris::vector![a[[0]], a[[1]], a[[2]]];
-                Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                    np::PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]])
-                        .into_py_any(py)
-                })?)
+                Ok(vec2py(other.py(), &vout)?)
             }
             [_, 3] => {
                 // Row i of the result is (R v_i)^T, i.e. V · Rᵀ. Built by
@@ -439,9 +420,7 @@ impl PyQuaternion {
                 let a2 = a
                     .into_dimensionality::<np::ndarray::Ix2>()
                     .context("Invalid rhs")?;
-                Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                    a2.dot(&rt).to_pyarray(py).into_py_any(py)
-                })?)
+                Ok(a2.dot(&rt).to_pyarray(other.py()).into_py_any(other.py())?)
             }
             shape => Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Invalid rhs.  Expected a quaternion, a 3-element vector or an Nx3 array, got shape {:?}",

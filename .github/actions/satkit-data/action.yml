@@ -1,0 +1,70 @@
+name: satkit data and test vectors
+description: >-
+  Restore (or download and cache) the satkit data directory `astro-data`
+  and, optionally, the test vectors in `satkit-testvecs`, both relative to
+  the workspace root.
+
+inputs:
+  testvecs:
+    description: Also restore or download the test vectors.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache satkit data
+      id: cache-satkit-data
+      uses: actions/cache@v6
+      with:
+        path: astro-data
+        enableCrossOsArchive: true
+        # Changing this expression (or the path above) orphans every existing
+        # cache and forces a fresh download, CelesTrak included.
+        key: satkit-data-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
+        # On a manifest change the exact key misses; seed from the newest
+        # older cache so EOP/SW survive a CelesTrak outage (the download
+        # step then verifies/updates the manifest files).
+        #
+        # There is deliberately no per-run EOP/SW refresh here: every test
+        # that touches the EOP table works from the table's own bounds
+        # (python/test/test_eop.py), so a cached copy stays valid however
+        # old it is. Only the docs workflow refreshes, rate-limited, because
+        # it renders "now".
+        restore-keys: satkit-data-
+
+    - name: Download satkit data (manifest-verified)
+      if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        python -m pip install requests
+        python python/test/download_data.py astro-data --all-eop-sources
+
+    # files.json lists every test vector, so hashing it gives a key that
+    # changes when a vector is added or replaced (the old fixed key never
+    # did); the restore-keys prefix then seeds from the previous cache and
+    # the download script fetches only what is missing.
+    - name: Key the test-vector cache on its file list
+      id: testvecs-key
+      if: inputs.testvecs == 'true'
+      shell: bash
+      run: |
+        hash=$(curl -fsSL --retry 3 --max-time 60 https://storage.googleapis.com/satkit-testvecs/files.json \
+          | python -c "import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])")
+        echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+    - name: Cache satkit test vectors
+      id: cache-satkit-testvecs
+      if: inputs.testvecs == 'true'
+      uses: actions/cache@v6
+      with:
+        path: satkit-testvecs
+        enableCrossOsArchive: true
+        key: satkit-testvecs-${{ steps.testvecs-key.outputs.hash }}-${{ hashFiles('python/test/download_testvecs.py', 'python/test/download_from_json.py') }}
+        restore-keys: satkit-testvecs-
+
+    - name: Download satkit test vectors
+      if: inputs.testvecs == 'true' && steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        python -m pip install requests
+        python python/test/download_testvecs.py satkit-testvecs

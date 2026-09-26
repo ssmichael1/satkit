@@ -1,10 +1,10 @@
 name: Scheduled Audit
 
 # RustSec advisories are published on their own schedule, not ours — a quiet
-# repo can accumulate advisories with no push to trigger the build-time audit
-# gate. This weekly run catches those. (Push/PR-time auditing lives in
-# build.yml's `audit` job.) The same weekly run also exercises the property
-# tests at a high case count (`deep-proptest` below).
+# repo can accumulate advisories with no push to trigger the build-time
+# check. This weekly run catches those. (Push/PR-time advisory checks are the
+# cargo-deny `deny` job in build.yml.) The same weekly run also exercises the
+# property tests at a high case count (`deep-proptest` below).
 on:
   schedule:
     - cron: "17 6 * * 1" # Mondays 06:17 UTC

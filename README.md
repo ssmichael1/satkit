@@ -18,19 +18,7 @@
 
 Satkit is a high-performance orbital mechanics library written in Rust with complete Python bindings via PyO3. It handles coordinate transforms, orbit propagation, time systems, gravity models, atmospheric density, and JPL ephemerides -- everything needed for satellite astrodynamics work.
 
-**[Documentation and tutorials](https://satkit.dev/)** (Python examples, but the concepts and API apply equally to Rust) | **[Rust API reference](https://docs.rs/satkit/)**
-
-## What's new in 0.23
-
-- **Space weather from its producers, not [CelesTrak](https://celestrak.org).** The NRLMSISE-00 inputs come from GFZ Potsdam's observed record (CC BY 4.0), the NOAA/SWPC 45-day forecast and NASA's MSAFE monthly forecast, assembled into one table. MSAFE carries a climatological Ap, so long-horizon drag runs no longer fall back silently to a quiet-time Ap = 4 past the 45-day forecast. `satkit.spaceweather.coverage()` / `status(t)` say which regime an epoch is in, mirroring the EOP API.
-- **EGM2008 is the default gravity model** (was EGM96), and the degree/order cap is raised from 40 to 70. The default expansion is unchanged at 4×4, so default-settings propagations shift only by the model change, a few metres per day at LEO; pass `gravity_model=gravmodel.egm96` to reproduce earlier results. Solid tides are tide-system aware.
-- **IERS `finals2000A.all` is the primary Earth-orientation source**, with CelesTrak's `EOP-All.csv` as the fallback: a year of predictions instead of six months. The dX/dY celestial-pole offsets from the CSV were read 1000× too small (~1 cm at LEO); fixed.
-- **Plain MIT / Apache-2.0 packages.** ITU_GRACE16 (CC BY 4.0) is no longer compiled in; it is downloaded on first use of `gravmodel.itugrace16`. This simplifies satkit licensing.
-- **Polite refreshes.** EOP and space-weather files are re-fetched only past their publication cadence, with conditional requests, so `update_datafiles()` at the top of every script is fine.
-- **Python: consistent naming.** `as_*` conversions are renamed `to_*` (`time.to_datetime()`, `quaternion.to_rotation_matrix()`, …) to pair with the `from_*` constructors; the old names work with a `DeprecationWarning` until 0.25. This continues the property-versus-method rule adopted in 0.22.1: zero-argument nouns are properties, verbs and conversions are methods. `spaceweather.predicted_f107()` is removed.
-
-Full details, including the smaller breaking changes for Rust users, are in the [changelog](CHANGELOG.md).
-
+**[Documentation and tutorials](https://satkit.dev/)** (Python examples, but the concepts and API apply equally to Rust) | **[Rust API reference](https://docs.rs/satkit/)** | **[Changelog](CHANGELOG.md)**
 
 ## Installation
 
@@ -46,15 +34,7 @@ pip install satkit
 
 Pre-built wheels are available for Linux (x86_64, aarch64), macOS (Apple silicon), and Windows (x86_64) on Python 3.10--3.14; Intel Macs build from source (`pip install --no-binary satkit satkit`) or use conda-forge.
 
-The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris (~100 MB) downloads on first use (SHA-256 verified) into the user data directory; Earth orientation and space weather are fetched on first use and should be refreshed periodically:
-
-<!-- skip-test: needs the network (downloads the data files) -->
-```python
-import satkit as sk
-sk.utils.update_datafiles()  # provisions everything up front; re-run periodically for fresh EOP/space weather
-```
-
-Set `SATKIT_OFFLINE=1` to forbid downloads, or `pip install satkit[data]` for the optional offline data bundle.
+The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris downloads on first use, and Earth orientation and space weather are fetched on first use and refreshed with `satkit.utils.update_datafiles()`. See [Data Files](https://satkit.dev/getting-started/datafiles/) for directories, offline use and the optional `satkit[data]` bundle.
 
 ## Quick Examples
 
@@ -184,18 +164,6 @@ numeris = { version = "0.5.18", features = ["nalgebra"] }
 | `download` | yes | Data-file downloader (`update_datafiles`) via `ureq` |
 | `chrono` | no | `TimeLike` impl for `chrono::DateTime` |
 
-## Data Files
-
-Three tiers, handled differently by size and how often they change:
-
-**Compiled in (no files needed):** IERS 2010 nutation tables and the EGM96 / EGM2008 / JGM2 / JGM3 gravity models to degree 70 (~300 KB gzip'd). Frames, gravity, SGP4, time scales, Kepler and Lambert work offline out of the box.
-
-**Downloaded once, on first use:** the JPL DE440 ephemeris (~100 MB; DE421 at 14 MB via `SATKIT_JPLEPHEM_FILE`) and, only if selected, the ITU_GRACE16 gravity model (1.8 MB, CC BY 4.0), SHA-256 verified against the manifest compiled into satkit (`data/manifest.json`), fetched from the GitHub release asset, the origin server (JPL / ICGEM), or a `SATKIT_DATA_URL` mirror.
-
-**Refreshed periodically:** Earth orientation parameters (polar motion, UT1−UTC) from the [IERS](https://maia.usno.navy.mil/ser7/) Bulletin A file `finals2000A.all` (CelesTrak's `EOP-All.csv` as fallback) and space weather from its producers — the observed record from [GFZ Potsdam](https://kp.gfz.de/) (CC BY 4.0), the 45-day forecast from [NOAA/SWPC](https://www.swpc.noaa.gov/) and the monthly forecast from [NASA MSFC](https://www.nasa.gov/solar-cycle-progression-and-forecast/) — by `update_datafiles()`.
-
-Downloads go to the platform user-data directory (`satkit.utils.datadir()`: `~/Library/Application Support/satkit-data`, `$XDG_DATA_HOME/satkit-data`, or `%LOCALAPPDATA%\satkit-data`) unless `SATKIT_DATA` is set; files are also looked up in an installed `satkit-data` package and `/usr/share/satkit-data`. `SATKIT_OFFLINE=1` turns any needed download into an error. Details: [Data Files](https://satkit.dev/getting-started/datafiles/).
-
 ## Testing and Validation
 
 The library is validated against:
@@ -206,40 +174,13 @@ The library is validated against:
 - **ICGEM** reference values for gravity field calculations
 - **GPS SP3** precise ephemerides for multi-day numerical propagation
 
-Around 300 Rust tests and 150 Python tests run on every commit across Linux, macOS, and Windows.
+Over 450 Rust tests (on Linux, macOS and Windows) and over 850 Python test cases run on every commit.
 
 ### GMAT comparison
 
-The numerical propagator is regression-tested against NASA's General Mission Analysis Tool (GMAT R2026A). The corpus in `tests/gmat/` holds 25 reference trajectories: 17 seven-day gravity/third-body cases -- ISS-like LEO, sun-synchronous, GPS MEO, Molniya, GEO, the lunar-resonant TESS orbit, and a 300,000 km cislunar orbit -- each with a low-degree gravity model, a 36×36 EGM96 + solid tides model, and (for three orbits) relativity; plus 8 three-day atmospheric-drag cases (ISS altitude, 300 km, 550 km sun-synchronous, GTO with a 250 km perigee), each run with fixed space-weather indices and file-driven (CelesTrak's file on the GMAT side, satkit's GFZ-based table on its side; identical across the corpus window). GMAT cannot run in CI, so the trajectories are generated offline (`tests/gmat/generate.py`, SPICE DE440, `EarthICRF`) and committed; `tests/gmat_regression.rs` and `python/test/test_gmat.py` replay them hour by hour and gate on the worst residual.
+The numerical propagator is regression-tested against 25 reference trajectories from NASA's General Mission Analysis Tool (GMAT R2026A), checked in under `tests/gmat/`: seven-day gravity / third-body / tides / relativity cases from LEO to cislunar distance, and three-day drag cases. With matched force models the two agree to 2–13 cm over 7 days (LEO to GEO), and with drag to 1–2 × 10⁻⁴ of the drag-induced displacement. Details and tolerances: the [GMAT validation page](https://satkit.dev/guide/gmat_validation/) and `tests/gmat/README.md`.
 
-With matched force models the two agree to 3 cm (ISS), 2 cm (SSO), 8 cm (GPS), and 13 cm (GEO, Molniya) over 7 days. At 200,000 km and beyond the residual is ~1 m, which is GMAT's own integration floor (its point-mass runs differ from the analytic Kepler solution by the same amount). The remaining differences with tides and relativity enabled are documented with the tolerances in `tests/gmat/README.md`: GMAT omits the anelastic phase lag in its solid-tide Love numbers that satkit includes, while the relativity cases sit at the same floors (both tools apply the full IERS 2010 Eq. 10.12 correction).
-
-With drag the two agree to 1–2 × 10⁻⁴ of the drag-induced displacement when the space-weather indices are fixed (26 m against 152 km of drag decay over 3 days at ISS altitude; the two NRLMSISE-00 implementations agree to 0.06 % rms in density) and to 1–2 × 10⁻³ when both are file-driven (198 m at ISS altitude), the residual being the F10.7 timing convention -- GMAT interpolates between 20:00 UT nodes, satkit steps at 00:00 UT. Building the drag corpus found and fixed a radians-for-degrees error in satkit's NRLMSISE-00 inputs (8 km over 3 days at ISS altitude) and moved the space-weather feed to the observed F10.7 and the 3-hourly ap history (0.21.1); details on the [GMAT validation page](https://satkit.dev/guide/gmat_validation/).
-
-### Running Tests Locally
-
-Tests require two sets of external data: the **astro-data** files (gravity models, ephemerides, etc.) and the **test vectors** (reference outputs for validation). Download both before running:
-
-```bash
-# Install the download helper
-pip install requests
-
-# Download data files and test vectors into the current directory
-python python/test/download_data.py astro-data
-python python/test/download_testvecs.py satkit-testvecs
-```
-
-Then run tests with the environment variables pointing to the downloaded directories:
-
-```bash
-# Rust tests
-SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs cargo test
-
-# Python tests (after `pip install -e ".[test]"`)
-SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs pytest python/test/
-```
-
-The GMAT regression tests need only the data files; their reference trajectories are checked in.
+To run the tests locally (data and test-vector downloads, environment variables), see [CONTRIBUTING.md](CONTRIBUTING.md#running-tests).
 
 ## Documentation
 
@@ -257,12 +198,12 @@ Licensed under either of
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
+at your option.
+
 The gravity models and IERS tables compiled into the library are third-party
 data (US Government works and IERS tables, all freely redistributable) — see
 [THIRDPARTY-DATA.md](THIRDPARTY-DATA.md). The optional ITU_GRACE16 model
 (CC BY 4.0) is not part of the library; it is downloaded only when selected.
-
-at your option.
 
 ### Contribution
 

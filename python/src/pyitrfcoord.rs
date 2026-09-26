@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::types::{PyBytes, PyList, PyTuple};
-use pyo3::IntoPyObjectExt;
 
 use numpy::{PyArray1, PyReadonlyArray1};
 
@@ -252,12 +251,8 @@ impl PyITRFCoord {
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array of floats representing ITRF Cartesian location in meters
     #[getter]
-    fn get_vector(&self) -> Py<PyAny> {
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            numpy::PyArray::from_slice(py, self.0.itrf.as_slice())
-                .into_py_any(py)
-                .unwrap()
-        })
+    fn get_vector(&self, py: Python) -> PyResult<Py<PyAny>> {
+        vec2py(py, &self.0.itrf)
     }
 
     fn __str__(&self) -> String {
@@ -276,10 +271,6 @@ impl PyITRFCoord {
 
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.0 != other.0
     }
 
     /// Quaternion representing rotation from North-East-Down (NED) coordinate frame to International Terrestrial Reference Frame
@@ -322,13 +313,11 @@ impl PyITRFCoord {
     ///     >>> satellite = satkit.itrfcoord(latitude_deg=42.466, longitude_deg=-71.1516, altitude=400_000)
     ///     >>> satellite.to_enu(station)  # satellite is overhead → Up ≈ +400_000
     ///     array([0., 0., 400000.])
-    fn to_enu(&self, origin: &Self) -> Py<PyAny> {
-        let v = origin.0.q_enu2itrf().conjugate() * (self.0.itrf - origin.0.itrf);
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            numpy::PyArray::from_slice(py, v.as_slice())
-                .into_py_any(py)
-                .unwrap()
-        })
+    fn to_enu(&self, py: Python, origin: &Self) -> PyResult<Py<PyAny>> {
+        vec2py(
+            py,
+            &(origin.0.q_enu2itrf().conjugate() * (self.0.itrf - origin.0.itrf)),
+        )
     }
 
     /// North-East-Down (NED) vector from ``origin`` to ``self``, in ``origin``'s local-tangent frame.
@@ -344,13 +333,11 @@ impl PyITRFCoord {
     /// Returns:
     ///     numpy.ndarray: 3-element ``[N, E, D]`` vector from ``origin`` to
     ///     ``self``, in meters.
-    fn to_ned(&self, origin: &Self) -> Py<PyAny> {
-        let v = origin.0.q_ned2itrf().conjugate() * (self.0.itrf - origin.0.itrf);
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            numpy::PyArray::from_slice(py, v.as_slice())
-                .into_py_any(py)
-                .unwrap()
-        })
+    fn to_ned(&self, py: Python, origin: &Self) -> PyResult<Py<PyAny>> {
+        vec2py(
+            py,
+            &(origin.0.q_ned2itrf().conjugate() * (self.0.itrf - origin.0.itrf)),
+        )
     }
 
     /// Compute geodesic distance:
@@ -427,11 +414,7 @@ impl PyITRFCoord {
 
     /// 3-vector representing cartesian distance between this
     /// and other point, in meters
-    fn __sub__(&self, other: &Self) -> Py<PyAny> {
-        let vout = self.0 - other.0;
-        pyo3::Python::attach(|py| -> Py<PyAny> {
-            let vnd = PyArray1::<f64>::from_vec(py, vec![vout[0], vout[1], vout[2]]);
-            vnd.into_py_any(py).unwrap()
-        })
+    fn __sub__(&self, py: Python, other: &Self) -> PyResult<Py<PyAny>> {
+        vec2py(py, &(self.0 - other.0))
     }
 }
