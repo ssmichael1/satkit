@@ -816,16 +816,18 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     let v1 = &eop[idx];
     let g1 = (mjd_utc - v0.mjd_utc) / (v1.mjd_utc - v0.mjd_utc);
     let g0 = 1.0 - g1;
-    // UT1 − UTC jumps by the leap second at 00:00 UTC of the row after it
-    // (v1), i.e. at the end of this interval. Interpolate the continuous
-    // UT1 − TAI instead by taking the step out of v1: the whole interval
-    // [v0, v1) still carries v0's TAI − UTC. The step is taken from the data
-    // (a jump of about a second; the daily UT1 drift is milliseconds) so the
-    // pre-1972 fractional UTC steps in EOP-All.csv are left alone.
-    let jump = v1.dut1 - v0.dut1;
-    let leap_step = if jump.abs() > 0.5 { jump.round() } else { 0.0 };
+    // UT1 − UTC jumps wherever TAI − UTC does: by a leap second at 00:00 UTC
+    // of a row, and before 1972 also by the fractional UTC steps and the
+    // daily drift of TAI − UTC. Interpolate the continuous UT1 − TAI instead,
+    // i.e. re-reference both rows to the TAI − UTC at the query:
+    // UT1 − UTC = UT1 − TAI (interpolated) + TAI − UTC (query). After 1972,
+    // within a day, the corrections are exactly zero except for the row past
+    // a leap second.
+    let dat = crate::time::tai_minus_utc_at_mjd_utc(mjd_utc);
+    let dut1_0 = v0.dut1 + (dat - crate::time::tai_minus_utc_at_mjd_utc(v0.mjd_utc));
+    let dut1_1 = v1.dut1 + (dat - crate::time::tai_minus_utc_at_mjd_utc(v1.mjd_utc));
     Some([
-        g0.mul_add(v0.dut1, g1 * (v1.dut1 - leap_step)),
+        g0.mul_add(dut1_0, g1 * dut1_1),
         g0.mul_add(v0.xp, g1 * v1.xp),
         g0.mul_add(v0.yp, g1 * v1.yp),
         g0.mul_add(v0.lod, g1 * v1.lod),

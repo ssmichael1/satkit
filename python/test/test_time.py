@@ -311,10 +311,26 @@ class TestLeapSeconds:
             sk.time.from_rfc3339("2024-12-31T23:59:60Z")
 
     def test_1972_step(self):
-        # TAI - UTC is 0 before 1972 and 10 s from 1972-01-01 00:00:00 UTC
+        # Pre-1972 TAI - UTC drifts to 9.892242 s at 1972-01-01 00:00:00 UTC
+        # and steps to 10 s there: a 0.107758 s inserted interval labelled
+        # 1971-12-31T23:59:60.0 .. 23:59:60.107757
         t = sk.time(1972, 1, 1)
         assert str(t) == "1972-01-01T00:00:00.000000Z"
-        assert (t - sk.time(1971, 12, 31, 23, 59, 59)).seconds == pytest.approx(11.0)
+        assert (t - sk.time(1971, 12, 31, 23, 59, 59)).microseconds == 1_107_758
+        assert str(sk.time(1971, 12, 31, 23, 59, 60.1)) == "1971-12-31T23:59:60.100000Z"
+        with pytest.raises(Exception):
+            sk.time(1971, 12, 31, 23, 59, 60.2)
+        # 1970-01-01 00:00:00 UTC is 8.000082 s of TAI after 1970-01-01 TAI
+        assert sk.time.UNIX_EPOCH == sk.time(1970, 1, 1)
+        tai_1970 = sk.time.from_mjd(40587.0, sk.timescale.TAI)
+        assert (sk.time.UNIX_EPOCH - tai_1970).microseconds == 8_000_082
+
+    def test_pre1972_pickle_keeps_the_instant(self):
+        import pickle
+
+        t = sk.time(1965, 6, 1, 12, 30, 15.25)
+        t2 = pickle.loads(pickle.dumps(t))
+        assert t2 == t and str(t2) == "1965-06-01T12:30:15.250000Z"
 
 
 class TestPre1970:

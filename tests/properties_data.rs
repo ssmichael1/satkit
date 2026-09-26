@@ -9,8 +9,8 @@
 //! `tests/earth_orientation_params_init.rs` does. No test here triggers a
 //! download.
 //!
-//! Every epoch is drawn inside the loaded table's *observed* range (from 1972
-//! on), so the properties do not depend on how fresh the file is.
+//! Every epoch is drawn inside the loaded table's *observed* range, so the
+//! properties do not depend on how fresh the file is.
 //!
 //! # Case counts
 //!
@@ -54,15 +54,13 @@ fn eop_range() -> Option<(Instant, Instant)> {
             return None;
         }
         let cov = eop::coverage()?;
-        // satkit takes TAI − UTC = 0 before 1972 (rubber-second UTC is not
-        // modelled), so UT1 is only continuous from 1972 on. finals2000A.all
-        // starts in 1973, but a data directory may also hold CelesTrak's
-        // EOP-All.csv, which goes back to 1962.
-        let start = Label::new(1972, 1, 3, 0, 0, 0).instant();
+        // finals2000A.all starts in 1973, but a data directory may also hold
+        // CelesTrak's EOP-All.csv, which goes back to 1962 (rubber-second
+        // UTC, whose steps UT1 must also be continuous across).
         // Keep two days of margin at both ends: interpolation needs a row
         // either side, and we evaluate up to a few hours past the sample.
         Some((
-            (cov.first + Duration::from_days(2.0)).max(start),
+            cov.first + Duration::from_days(2.0),
             cov.last_observed - Duration::from_days(2.0),
         ))
     })
@@ -75,15 +73,10 @@ fn in_range(frac: f64) -> Option<Instant> {
 }
 
 /// Whether leap day `i` (and a day either side) lies inside the table.
-/// Never true for 1971-12-31: satkit's 10 s step there is a modelling
-/// convention with no counterpart in UT1 − UTC (see `LEAP_DAYS`).
 fn leap_day_covered(i: usize) -> bool {
     let Some((a, b)) = eop_range() else {
         return false;
     };
-    if i == 0 {
-        return false;
-    }
     let (y, m, d, _) = LEAP_DAYS[i];
     let day = Label::new(y, m, d, 0, 0, 0).instant();
     day >= a && day + Duration::from_days(2.0) <= b
@@ -122,12 +115,12 @@ fn ut1_one_second_steps_at_every_leap_second() {
         return;
     }
     let mut checked = 0;
-    for (i, &(y, mo, d, ins)) in LEAP_DAYS.iter().enumerate() {
+    for (i, &(y, mo, d, ins_us)) in LEAP_DAYS.iter().enumerate() {
         if !leap_day_covered(i) {
             continue;
         }
         let start = Label::new(y, mo, d, 23, 59, 57 * US).instant();
-        for k in 0..=(4 * (ins + 6)) {
+        for k in 0..=(4 * (ins_us + 6 * US) / US) {
             let t = start + Duration::from_microseconds(k * US / 4);
             let step = ut1(&(t + Duration::from_seconds(1.0))) - ut1(&t);
             assert!(
