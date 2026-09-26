@@ -32,8 +32,8 @@ pub enum Error {
     ChecksumMismatch { line: u8, expected: u8, found: char },
 
     /// A record read by [`TLE::records`](crate::TLE::records),
-    /// [`TLE::from_lines`](crate::TLE::from_lines) or
-    /// [`TLE::from_url`](crate::TLE::from_url) failed. `line` is the 1-based
+    /// [`TLE::from_lines`](crate::TLE::from_lines) or `TLE::from_url`
+    /// (`download` feature) failed. `line` is the 1-based
     /// input line the record starts on (its name line, if it has one); `sat`
     /// is its satellite number and/or name when they can be read; `hint`
     /// flags a line longer than 69 characters, whose columns may be shifted.
