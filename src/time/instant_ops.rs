@@ -73,26 +73,6 @@ impl std::ops::SubAssign<Duration> for Instant {
     }
 }
 
-impl std::cmp::PartialEq for Instant {
-    fn eq(&self, other: &Self) -> bool {
-        self.raw == other.raw
-    }
-}
-
-impl std::cmp::PartialOrd for Instant {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Eq for Instant {}
-
-impl std::cmp::Ord for Instant {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.raw.cmp(&other.raw)
-    }
-}
-
 /// Add two durations together
 impl std::ops::Add<Self> for Duration {
     type Output = Self;
@@ -113,26 +93,6 @@ impl std::ops::AddAssign<Self> for Duration {
 impl std::ops::SubAssign<Self> for Duration {
     fn sub_assign(&mut self, other: Self) {
         self.usec -= other.usec;
-    }
-}
-
-impl std::cmp::PartialEq for Duration {
-    fn eq(&self, other: &Self) -> bool {
-        self.usec == other.usec
-    }
-}
-
-impl std::cmp::PartialOrd for Duration {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Eq for Duration {}
-
-impl std::cmp::Ord for Duration {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.usec.cmp(&other.usec)
     }
 }
 

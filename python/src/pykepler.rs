@@ -435,13 +435,7 @@ impl PyKepler {
         crate::pyutils::pack_f64s(
             py,
             &[
-                self.0.a,
-                self.0.eccen,
-                self.0.incl,
-                self.0.raan,
-                self.0.argp,
-                self.0.nu,
-                self.0.mu,
+                self.0.a, self.0.eccen, self.0.incl, self.0.raan, self.0.argp, self.0.nu, self.0.mu,
             ],
         )
     }

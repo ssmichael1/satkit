@@ -21,7 +21,7 @@ const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 /// handle different time scales such as UTC, TAI, TT, UT1, GPS, etc.
 /// This is necessary for high-precision coordinate transforms and orbit propagation.
 ///
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Instant {
     /// TAI microseconds since 1970-01-01 00:00:00 TAI (the TAI MJD is
     /// `40587 + raw / 86400e6`). This is not Unix time: 1970-01-01 00:00:00
