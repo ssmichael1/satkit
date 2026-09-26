@@ -12,6 +12,8 @@ include data/manifest.json
 recursive-include data/embedded *.gz *.json
 recursive-include src *.rs
 recursive-include benches *.rs
+# Cargo.toml declares [[example]] entries (required-features), so the files must ship.
+recursive-include examples *.rs
 recursive-include python/src *.rs
 include python/Cargo.toml
 include python/build.rs

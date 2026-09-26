@@ -9,7 +9,7 @@
 [![docs.rs](https://img.shields.io/docsrs/satkit)](https://docs.rs/satkit)
 ![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)
 
-📚 **API documentation:** [**Python**](api/index.md) on this site · [**Rust**](https://docs.rs/satkit) on docs.rs.
+📚 **API documentation:** [**Python**](api/index.md) on this site · [**Rust**](https://docs.rs/satkit) on docs.rs, with a [Rust guide](rust/index.md) on this site.
 
 SatKit is a high-performance orbital mechanics library written in Rust with complete Python bindings via PyO3. It handles coordinate transforms, orbit propagation, time systems, gravity models, atmospheric density, and JPL ephemerides -- everything needed for satellite astrodynamics work.
 
@@ -20,6 +20,8 @@ Pre-built wheels are available for **Linux** (x86_64, aarch64), **macOS** (Apple
 ```bash
 pip install satkit        # or: conda install -c conda-forge satkit
 ```
+
+For Rust, `cargo add satkit`; the [Rust section](rust/index.md) covers the Cargo features and has an example program per topic.
 
 Frames, gravity, SGP4 and time scales work straight away: the IERS nutation tables and gravity models are compiled into the package. The JPL ephemeris, Earth orientation and space weather are downloaded on first use — see [Data Files](getting-started/datafiles.md).
 
@@ -53,6 +55,7 @@ pos, vel = sk.sgp4(tle, sk.time(2024, 1, 2))
 | **[Learn](tutorials/index.md)** | Tutorials and theory — from basics to advanced topics |
 | **[API Reference](api/index.md)** | Full Python API documentation |
 | **[References](guide/references.md)** | Sources for every model and algorithm |
+| **[Rust](rust/index.md)** | Using the Rust crate: features, data, logging, and runnable examples |
 | **[Rust API (docs.rs)](https://docs.rs/satkit/)** | Rust API reference |
 | **[GitHub](https://github.com/ssmichael1/satkit)** | Source code and issue tracker |
 

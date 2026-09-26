@@ -221,6 +221,8 @@ combinations directly in every case.
     # Ok::<(), satkit::kepler::Error>(())
     ```
 
+    A complete program, with Lambert targeting: [Kepler and Lambert](../rust/kepler-lambert.md).
+
 ## References
 
 - [Vallado, D. A. (2013)](references.md#vallado2013), *Fundamentals of Astrodynamics and Applications*, 4th ed., Microcosm Press. Algorithm 2 (Kepler's equation), Algorithm 9 (RV2COE), Algorithm 10 (COE2RV); §2.2–2.5.

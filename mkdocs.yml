@@ -51,6 +51,11 @@ markdown_extensions:
   - md_in_html
   - toc:
       permalink: true
+  # `--8<-- "examples/<name>.rs"` in the Rust pages includes the example
+  # programs from the repository root; a missing file fails the build.
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
 
 extra_css:
   - stylesheets/extra.css
@@ -164,3 +169,12 @@ nav:
       - Lambert: api/lambert.md
       - Constants: api/consts.md
       - Utilities: api/utils.md
+  - Rust:
+      - rust/index.md
+      - Time and Time Scales: rust/time.md
+      - Coordinate Frames: rust/frames.md
+      - SGP4, TLEs and OMMs: rust/sgp4.md
+      - Numerical Propagation: rust/propagation.md
+      - Sun, Moon and Ephemerides: rust/ephemerides.md
+      - Kepler and Lambert: rust/kepler-lambert.md
+      - API Reference (docs.rs): rust/api.md

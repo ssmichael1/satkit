@@ -6,6 +6,23 @@
 //! and memory safety, it offers complete Python bindings for all functionality, making advanced orbital
 //! mechanics accessible to both systems programmers and data scientists.
 //!
+//! ## Guides and Examples
+//!
+//! The [Rust section](https://satkit.dev/rust/) of the satkit website
+//! covers Cargo features, data files, logging and errors, with a page per
+//! topic built around a complete program from the repository's
+//! [`examples/`](https://github.com/ssmichael1/satkit/tree/main/examples)
+//! directory (`cargo run --example <name>`):
+//!
+//! - [Time and Time Scales](https://satkit.dev/rust/time/)
+//! - [Coordinate Frames](https://satkit.dev/rust/frames/)
+//! - [SGP4, TLEs and OMMs](https://satkit.dev/rust/sgp4/)
+//! - [Numerical Propagation](https://satkit.dev/rust/propagation/)
+//! - [Sun, Moon and Ephemerides](https://satkit.dev/rust/ephemerides/)
+//! - [Kepler and Lambert](https://satkit.dev/rust/kepler-lambert/)
+//!
+//! The theory guides and tutorials on the same site apply to both languages.
+//!
 //! ## Core Features
 //!
 //! ### Time Systems
@@ -82,13 +99,18 @@
 //! feature on `numeris` for zero-cost `From`/`Into` conversions:
 //!
 //! ```toml
-//! numeris = { version = "0.5.18", features = ["nalgebra"] }
+//! numeris = { version = "0.6", features = ["nalgebra"] }
 //! ```
 //!
 //! ## Optional Features
 //!
+//! - **download** (default): downloads data files on first use, and
+//!   provides `utils::update_datafiles`, `TLE::from_url` and `OMM::from_url`.
+//! - **omm-xml** (default): parses OMM XML.
 //! - **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
 //!   Activate with Cargo feature `chrono`.
+//!
+//! See [Cargo features](https://satkit.dev/rust/#cargo-features).
 //!
 //! ## Data Files
 //!
@@ -115,7 +137,9 @@
 //! (`env_logger`, `tracing-subscriber`, …) to route and filter them, e.g.
 //! `RUST_LOG=satkit=error`; with no logger installed they are printed to
 //! stderr. The Python bindings forward them to the `logging` module under the
-//! `satkit` logger.
+//! `satkit` logger. `env_logger` shows only errors unless `RUST_LOG` is set,
+//! so give it a default filter such as `satkit=warn`; see
+//! [Warnings and logging](https://satkit.dev/rust/#warnings-and-logging).
 //!
 //! ## Example Usage
 //!

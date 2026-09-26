@@ -48,6 +48,11 @@ proptest = "1"
 name = "hotpaths"
 harness = false
 
+# The other examples in examples/ are discovered automatically.
+[[example]]
+name = "chrono_interop"
+required-features = ["chrono"]
+
 [features]
 default = ["omm-xml", "download"]
 omm-xml = ["dep:quick-xml"]
