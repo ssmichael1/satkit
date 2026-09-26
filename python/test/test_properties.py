@@ -36,6 +36,7 @@ from hypothesis import HealthCheck, example, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
 import satkit as sk  # noqa: E402
+from shared import ISS_2024, qtuple, same  # noqa: E402
 
 _MAX = int(os.environ.get("HYPOTHESIS_MAX_EXAMPLES", "100"))
 
@@ -202,28 +203,20 @@ def local_tz(name):
 
 class TestDatetime:
     @_settings()
+    @example(lb=(2039, 4, 6, 11, 5, 6_748_275), tz=timezone.utc)
     @given(non_leap_labels, st.sampled_from(ZONES))
     def test_aware_datetime_roundtrip(self, lb, tz):
         """Aware datetime -> satkit.time -> to_datetime() names the same
         instant, exactly, in any time zone, and matches the calendar route
-        (the datetime's UTC label)."""
+        (the datetime's UTC label). Regression (the example): from_datetime
+        went through the f64 timestamp() and lost a microsecond ~2% of the
+        time."""
         dt = label_datetime(lb, tz)
         t = sk.time.from_datetime(dt)
         assert t == label_time(lb), (dt, t)
         back = t.to_datetime()
         assert back.tzinfo is not None
         assert back == dt, (dt, back)
-
-    @_settings()
-    @example(lb=(2039, 4, 6, 11, 5, 6_748_275))
-    @given(non_leap_labels)
-    def test_aware_datetime_roundtrip_exact(self, lb):
-        """Regression: from_datetime went through the f64 timestamp() and
-        lost a microsecond ~2% of the time."""
-        dt = label_datetime(lb)
-        t = sk.time.from_datetime(dt)
-        assert t == label_time(lb)
-        assert t.to_datetime() == dt
 
     @pytest.mark.skipif(not hasattr(systime, "tzset"), reason="needs time.tzset")
     @pytest.mark.parametrize(
@@ -252,11 +245,13 @@ class TestDatetime:
 
 class TestStrings:
     @_settings()
+    @example(lb=(2024, 1, 1, 0, 0, 249))
     @given(labels)
     def test_str_roundtrip_and_fields(self, lb):
         """str(t) is exactly the label (leap seconds and pre-1970 included),
-        to_rfc3339() matches it, satkit.time(str(t)) re-parses to t, and the
-        Gregorian fields are in range."""
+        to_rfc3339() matches it, satkit.time(str(t)) re-parses to exactly t,
+        and the Gregorian fields are in range. Regression (the example):
+        '...00.000249Z' parsed as 248 us (truncation)."""
         t = label_time(lb)
         iso = label_iso(lb)
         assert str(t) == iso
@@ -268,14 +263,6 @@ class TestStrings:
         assert 0 <= h < 24 and 0 <= mi < 60
         s_max = 60 + INSERTED_US.get((y, mo, d), 0) * 1e-6 if (h, mi) == (23, 59) else 60
         assert 0 <= s < s_max
-
-    @_settings()
-    @example(lb=(2024, 1, 1, 0, 0, 249))
-    @given(labels)
-    def test_str_roundtrip_exact(self, lb):
-        """Regression: '...00.000249Z' parsed as 248 us (truncation)."""
-        t = label_time(lb)
-        assert sk.time(str(t)) == t
 
     @_settings()
     @given(st.lists(labels, min_size=2, max_size=6))
@@ -311,8 +298,7 @@ class TestPickle:
     @given(finite, finite, finite, finite)
     def test_quaternion(self, w, x, y, z):
         q = sk.quaternion(w, x, y, z)
-        q2 = roundtrip(q)
-        assert (q2.w, q2.x, q2.y, q2.z) == (q.w, q.x, q.y, q.z)
+        assert qtuple(roundtrip(q)) == qtuple(q)
 
     @_settings()
     @given(st.floats(-1e8, 1e8), st.floats(-1e8, 1e8), st.floats(-1e8, 1e8))
@@ -333,17 +319,13 @@ class TestPickle:
     def test_kepler(self, a, e, i, raan, argp, nu, mu):
         k = sk.kepler(a, e, i, raan, argp, nu, mu=mu)
         k2 = roundtrip(k)
+        assert k2 == k
         for f in ("a", "eccen", "inclination", "raan", "argp", "nu", "mu"):
             assert getattr(k2, f) == getattr(k, f), f
 
     @staticmethod
     def _tle(sat_num, incl, raan, ecc, argp, ma, mm, bstar, epoch, name, rev):
-        tle = sk.TLE.from_lines(
-            [
-                "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9005",
-                "2 25544  51.6400 208.9163 0006317  69.9862  25.2906 15.49560000 00001",
-            ]
-        )
+        tle = sk.TLE.from_lines(ISS_2024)
         tle.satnum = sat_num
         tle.inclination = incl
         tle.raan = raan
@@ -521,6 +503,7 @@ class TestPickle:
             assert p2.ecom is None
         else:
             assert [getattr(p2.ecom, f) for f in self.ecom_fields] == [getattr(e, f) for f in self.ecom_fields]
+            assert p2.ecom == e
 
     @_settings()
     @example(cd=0.0, cr=1.0)
@@ -605,15 +588,9 @@ class TestPickle:
 # ───────────────────────── vectorised vs scalar ─────────────────────────
 
 # One-element lists included: list input always gives list / array output
-# (see test_length_one_array_keeps_shape).
+# (see test_binding_edges.py::TestOneElementTimeLists).
 time_lists = st.lists(times, min_size=1, max_size=6)
 recent_time_lists = st.lists(labels.filter(lambda lb: 1990 <= lb[0] <= 2030).map(label_time), min_size=1, max_size=6)
-
-
-def _same(a, b):
-    if isinstance(a, sk.quaternion):
-        return (a.w, a.x, a.y, a.z) == (b.w, b.x, b.y, b.z)
-    return np.array_equal(np.asarray(a), np.asarray(b))
 
 
 class TestVectorised:
@@ -652,20 +629,6 @@ class TestVectorised:
         np.testing.assert_allclose(out, rows, rtol=0, atol=1e-9)
         np.testing.assert_allclose(out, V @ q.to_rotation_matrix().T, rtol=0, atol=1e-9)
 
-    @pytest.mark.parametrize(
-        "fn",
-        [sk.frametransform.gmst, sk.frametransform.qitrf2gcrf, sk.sun.pos_gcrf],
-        ids=["gmst", "qitrf2gcrf", "sun.pos_gcrf"],
-    )
-    def test_length_one_array_keeps_shape(self, fn):
-        """A one-element list / array of times gives a one-element sequence,
-        not a scalar (as the stubs promise); a scalar time gives a scalar."""
-        t = sk.time(2024, 1, 1)
-        for arg in ([t], np.array([t])):
-            out = fn(arg)
-            assert isinstance(out, (list, np.ndarray)) and len(out) == 1, out
-            assert _same(out[0], fn(t))
-
     FT = [
         "gmst", "gast", "eqeq", "earth_rotation_angle", "qitrf2gcrf", "qgcrf2itrf",
         "qitrf2gcrf_approx", "qgcrf2itrf_approx", "qteme2gcrf", "qteme2itrf",
@@ -681,7 +644,7 @@ class TestVectorised:
             vec = f(arg)
             assert len(vec) == len(tl)
             for t, v in zip(tl, vec):
-                assert _same(v, f(t)), (fname, t)
+                assert same(v, f(t)), (fname, t)
 
     @pytest.mark.parametrize(
         "fn",
@@ -694,17 +657,12 @@ class TestVectorised:
         vec = np.asarray(fn(tl))
         assert vec.shape[0] == len(tl)
         for t, v in zip(tl, vec):
-            assert _same(v, fn(t)), t
+            assert same(v, fn(t)), t
 
     @_settings(max(_MAX // 4, 10))
     @given(tl=recent_time_lists)
     def test_sgp4(self, tl):
-        tle = sk.TLE.from_lines(
-            [
-                "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9005",
-                "2 25544  51.6400 208.9163 0006317  69.9862  25.2906 15.49560000 00001",
-            ]
-        )
+        tle = sk.TLE.from_lines(ISS_2024)
         pos, vel = sk.sgp4(tle, tl)
         assert pos.shape == vel.shape == (len(tl), 3)
         for i, t in enumerate(tl):

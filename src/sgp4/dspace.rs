@@ -51,18 +51,6 @@ use std::f64::consts::PI;
 *    dndt        -
 *    nm          - mean motion
 *
-*  locals        :
-*    delt        -
-*    ft          -
-*    theta       -
-*    x2li        -
-*    x2omi       -
-*    xl          -
-*    xldot       -
-*    xnddt       -
-*    xndt        -
-*    xomi        -
-*
 *  coupling      :
 *    none        -
 *

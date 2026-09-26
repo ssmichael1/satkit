@@ -77,6 +77,46 @@ fn leap_day_covered(i: usize) -> bool {
     day >= a && day + Duration::from_days(2.0) <= b
 }
 
+// Instant strategies. Each yields `None` when no EOP file is available, and
+// every test starts with `let Some(t) = t else { return Ok(()) }`: a
+// `prop_filter` / `prop_assume` skip would exhaust proptest's reject budget.
+// With data, a leap second outside the table is filtered out (resampled).
+
+/// Within seconds of (or inside) a leap second covered by the table.
+fn near_leap() -> impl Strategy<Value = Option<Instant>> {
+    leap_offset()
+        .prop_filter("leap second outside the EOP table", |&(i, _)| {
+            eop_range().is_none() || leap_day_covered(i)
+        })
+        .prop_map(|(i, off)| eop_range().map(|_| leap_label(i, off).instant()))
+}
+
+/// Anywhere on a covered leap-second day, or up to 6 h before it.
+fn leap_day() -> impl Strategy<Value = Option<Instant>> {
+    (0..LEAP_DAYS.len(), 0.0..1.0f64)
+        .prop_filter("leap second outside the EOP table", |&(i, _)| {
+            eop_range().is_none() || leap_day_covered(i)
+        })
+        .prop_map(|(i, day_frac)| {
+            eop_range()?;
+            let (y, m, d, _) = LEAP_DAYS[i];
+            Some(
+                Label::new(y, m, d, 0, 0, 0).instant()
+                    + Duration::from_seconds(day_frac * (86_400.0 + 21_600.0) - 21_600.0),
+            )
+        })
+}
+
+/// Uniform over the table's observed range.
+fn uniform() -> impl Strategy<Value = Option<Instant>> {
+    (0.0..1.0f64).prop_map(in_range)
+}
+
+/// Near a leap second or uniform over the table, equally often.
+fn eop_instant() -> impl Strategy<Value = Option<Instant>> {
+    prop_oneof![near_leap(), uniform()]
+}
+
 /// UT1 in seconds (MJD × 86400).
 fn ut1(t: &Instant) -> f64 {
     t.as_mjd_with_scale(TimeScale::UT1) * 86_400.0
@@ -140,31 +180,8 @@ proptest! {
     /// the +1 s leap-second step over the preceding day (a rate error of
     /// 1 s/day, i.e. 0.25 s over 6 h against a 1.25 ms tolerance).
     #[test]
-    fn ut1_rate_matches_si_rate(
-        (i, off) in leap_offset(),
-        frac in 0.0..1.0f64,
-        day_frac in 0.0..1.0f64,
-        which in 0..3u8,
-    ) {
-        if eop_range().is_none() {
-            return Ok(()); // no EOP data: skip (see eop_range)
-        }
-        let t = match which {
-            // Within seconds of a leap second (incl. inside it)
-            0 => {
-                prop_assume!(leap_day_covered(i));
-                leap_label(i, off).instant()
-            }
-            // Anywhere on a leap-second day, or up to 6 h before it
-            1 => {
-                prop_assume!(leap_day_covered(i));
-                let (y, m, d, _) = LEAP_DAYS[i];
-                Label::new(y, m, d, 0, 0, 0).instant()
-                    + Duration::from_seconds(day_frac * (86_400.0 + 21_600.0) - 21_600.0)
-            }
-            // Uniform over the table
-            _ => in_range(frac).unwrap(),
-        };
+    fn ut1_rate_matches_si_rate(t in prop_oneof![near_leap(), leap_day(), uniform()]) {
+        let Some(t) = t else { return Ok(()) }; // no EOP data: skip
         for span in [1.0, 21_600.0] {
             let got = ut1(&(t + Duration::from_seconds(span))) - ut1(&t);
             let tol = span * LOD_MAX / 86_400.0 + 2e-6;
@@ -178,16 +195,8 @@ proptest! {
     /// `from_mjd_with_scale(UT1)` inverts `as_mjd_with_scale(UT1)`, near
     /// and inside leap seconds and anywhere in the table.
     #[test]
-    fn ut1_inverse((i, off) in leap_offset(), frac in 0.0..1.0f64, near_leap in any::<bool>()) {
-        if eop_range().is_none() {
-            return Ok(()); // no EOP data: skip (see eop_range)
-        }
-        let t = if near_leap {
-            prop_assume!(leap_day_covered(i));
-            leap_label(i, off).instant()
-        } else {
-            in_range(frac).unwrap()
-        };
+    fn ut1_inverse(t in eop_instant()) {
+        let Some(t) = t else { return Ok(()) }; // no EOP data: skip
         let m = t.as_mjd_with_scale(TimeScale::UT1);
         let back = Instant::from_mjd_with_scale(m, TimeScale::UT1);
         let err = (back - t).as_microseconds().abs();
@@ -205,16 +214,8 @@ proptest! {
     /// ITRF→TIRS→CIRS→GCRF composes to ITRF→GCRF; TEME→GCRF equals
     /// TEME→ITRF→GCRF and TEME→CIRS→GCRF; TEME↔GCRF round-trips.
     #[test]
-    fn frame_routes_agree(frac in 0.0..1.0f64, (i, off) in leap_offset(), near_leap in any::<bool>()) {
-        if eop_range().is_none() {
-            return Ok(()); // no EOP data: skip (see eop_range)
-        }
-        let t = if near_leap {
-            prop_assume!(leap_day_covered(i));
-            leap_label(i, off).instant()
-        } else {
-            in_range(frac).unwrap()
-        };
+    fn frame_routes_agree(t in eop_instant()) {
+        let Some(t) = t else { return Ok(()) }; // no EOP data: skip
         let tol = 1e-12;
         let i2g = qitrf2gcrf(&t);
         prop_assert!(angle(&(qgcrf2itrf(&t) * i2g)) < tol);
@@ -239,20 +240,8 @@ proptest! {
     /// to within 2e-8 rad (≈ 0.3 ms of UT1), across UTC midnights and leap
     /// seconds. A 1 s UT1 jump would show up as a 7.3e-5 rad error.
     #[test]
-    fn earth_rotation_continuous_across_leap_seconds(
-        (i, off) in leap_offset(),
-        frac in 0.0..1.0f64,
-        near_leap in any::<bool>(),
-    ) {
-        if eop_range().is_none() {
-            return Ok(()); // no EOP data: skip (see eop_range)
-        }
-        let t = if near_leap {
-            prop_assume!(leap_day_covered(i));
-            leap_label(i, off).instant()
-        } else {
-            in_range(frac).unwrap()
-        };
+    fn earth_rotation_continuous_across_leap_seconds(t in eop_instant()) {
+        let Some(t) = t else { return Ok(()) }; // no EOP data: skip
         let t2 = t + Duration::from_seconds(1.0);
         let omega = std::f64::consts::TAU * 1.002_737_811_911_354_5 / 86_400.0;
         for (name, a, b) in [
@@ -278,11 +267,8 @@ proptest! {
     /// approximate chain applied to PEF (TEME rotated by GMST82 alone).
     /// `qgcrf2itrf_approx` is the inverse of `qitrf2gcrf_approx`.
     #[test]
-    fn approx_transforms_within_documented_accuracy(frac in 0.0..1.0f64) {
-        if eop_range().is_none() {
-            return Ok(()); // no EOP data: skip (see eop_range)
-        }
-        let t = in_range(frac).unwrap();
+    fn approx_transforms_within_documented_accuracy(t in uniform()) {
+        let Some(t) = t else { return Ok(()) }; // no EOP data: skip
         let full = qitrf2gcrf(&t);
         let approx = qitrf2gcrf_approx(&t);
         let err = angle_between(&full, &approx) / ASEC;

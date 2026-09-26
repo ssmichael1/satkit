@@ -6,6 +6,7 @@ import json
 import pickle
 
 import satkit as sk
+from shared import ISS_2021, ISS_NAME, STARLINK_3118
 
 
 class TestTLE:
@@ -13,11 +14,7 @@ class TestTLE:
         """
         Test setting TLE parameters
         """
-        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
-        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
-        tle = sk.TLE.from_lines([line1, line2])
-        if isinstance(tle, list):
-            tle = tle[0]
+        tle = sk.TLE.from_lines(ISS_2021)
         assert tle.inclination == pytest.approx(51.6432, rel=1e-7)
         assert tle.raan == pytest.approx(351.4697, rel=1e-7)
         assert tle.eccen == pytest.approx(0.0007417, rel=1e-7)
@@ -43,12 +40,7 @@ class TestTLE:
 
     def test_tle_pickle(self):
         """TLE pickle must round-trip every serialized field."""
-        line0 = "0 ISS (ZARYA)"
-        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
-        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
-        tle = sk.TLE.from_lines([line0, line1, line2])
-        if isinstance(tle, list):
-            tle = tle[0]
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])
 
         restored = pickle.loads(pickle.dumps(tle))
 
@@ -106,50 +98,13 @@ class TestTLEFitting:
 
 
 class TestSGP4:
-    def test_sgp4_multiple(self):
-        """
-        Check propagating multiple TLEs at once
-        """
-
-        lines = [
-            "0 STARLINK-3118",
-            "1 49140U 21082L   24030.39663557  .00000076  00000-0  14180-4 0  9995",
-            "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
-            "0 STARLINK-3093",
-            "1 49141U 21082M   24030.50141584 -.00000431  00000-0 -28322-4 0  9990",
-            "2 49141  70.0000  73.8654 0002647 256.8611 103.2253 14.98324813131968",
-            "0 STARLINK-3042",
-            "1 49142U 21082N   24030.19218442  .00000448  00000-0  45331-4 0  9999",
-            "2 49142  70.0005  34.6319 0002749 265.6056  94.4790 14.98327526131704",
-            "0 STARLINK-3109",
-            "1 49143U 21082P   24030.20076173 -.00000320  00000-0 -19071-4 0  9998",
-            "2 49143  70.0002  54.6139 0002526 255.5608 104.5271 14.98327699131201",
-        ]
-        tles = sk.TLE.from_lines(lines)
-        print(tles)
-        tm = [
-            sk.time(2024, 1, 15) + sk.duration.from_seconds(x * 10) for x in range(100)
-        ]
-        [p, v] = sk.sgp4(tles, tm)
-        [p2, v2] = sk.sgp4(tles[2], tm)  # type: ignore
-        # Verify that propagating multiple TLEs matches propagation of a single TLE
-        assert p2 == pytest.approx(np.squeeze(p[2, :, :]))
-        assert v2 == pytest.approx(np.squeeze(v[2, :, :]))
-
     def test_to_lines(self):
         """
         Test converting TLE to lines
         """
 
-        lines = [
-            "STARLINK-3118",
-            "1 49140U 21082L   24030.39663557  .00000076  00000-0  14180-4 0  9995",
-            "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
-        ]
+        lines = ["STARLINK-3118", *STARLINK_3118]
         tle = sk.TLE.from_lines(lines)
-
-        if isinstance(tle, list):
-            tle = tle[0]
 
         lines2 = tle.to_2line()
         assert lines[1:] == lines2
@@ -318,10 +273,7 @@ class TestSGP4:
         """
         TLE.to_omm / TLE.from_omm round-trip and agree with sgp4 on both
         """
-        line0 = "0 ISS (ZARYA)"
-        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
-        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
-        tle = sk.TLE.from_lines([line0, line1, line2])
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])
 
         omm = tle.to_omm()
         assert omm["OBJECT_NAME"] == "ISS (ZARYA)"
@@ -410,12 +362,7 @@ class TestSGP4:
 class TestTLEMetadata:
     def test_tle_metadata_getters(self):
         """The catalog-identity fields must be readable (and settable)."""
-        line0 = "0 ISS (ZARYA)"
-        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
-        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
-        tle = sk.TLE.from_lines([line0, line1, line2])
-        if isinstance(tle, list):
-            tle = tle[0]
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])
         assert tle.intl_desig == "98067A"
         assert tle.desig_year == 98
         assert tle.desig_launch == 67
@@ -432,13 +379,8 @@ class TestSGP4ListKwargs:
         """The list path must honor gravconst/opsmode kwargs (previously
         silently ignored): list results must match per-TLE results computed
         with the same non-default settings."""
-        line1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003"
-        line2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357"
-        def one(tles):
-            return tles[0] if isinstance(tles, list) else tles
-
-        tle_a = one(sk.TLE.from_lines([line1, line2]))
-        tle_b = one(sk.TLE.from_lines([line1, line2]))
+        tle_a = sk.TLE.from_lines(ISS_2021)
+        tle_b = sk.TLE.from_lines(ISS_2021)
         t = tle_a.epoch + sk.duration.from_hours(6)
 
         p_single, v_single = sk.sgp4(tle_a, t, gravconst=sk.sgp4_gravconst.wgs84)
@@ -447,7 +389,7 @@ class TestSGP4ListKwargs:
         assert np.allclose(np.asarray(v_list).squeeze(), v_single)
 
         # And wgs84 must actually differ from the default wgs72
-        p_72, _ = sk.sgp4(one(sk.TLE.from_lines([line1, line2])), t)
+        p_72, _ = sk.sgp4(sk.TLE.from_lines(ISS_2021), t)
         assert not np.allclose(p_72, p_single, rtol=0, atol=1e-3)
 
 
@@ -457,8 +399,6 @@ class TestSGP4XP:
         line1 = "1 00011U 59001A   23060.12028874 +.00002871  89876-2  73526-1 4 00010"
         line2 = "2 00011  32.8652 309.4507 1466152  63.9843 312.2337 11.85947359392148"
         tle = sk.TLE.from_lines([line1, line2])
-        if isinstance(tle, list):
-            tle = tle[0]
         assert tle.ephem_type == 4
         with pytest.raises(RuntimeError, match="SGP4-XP"):
             sk.sgp4(tle, tle.epoch)

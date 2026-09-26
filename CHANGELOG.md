@@ -12,7 +12,8 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - Internal (no behaviour change): `rustfmt.toml` packs short numeric array elements (NRLMSISE-00 and planet coefficient tables), unused NRLMSISE-00 code and redundant tests removed, `Instant`/`Duration` comparisons derived (~3,200 fewer lines) ([#227](https://github.com/ssmichael1/satkit/pull/227))
 - Internal (no behaviour change): Python bindings simplified: shared helpers replace duplicated argument parsing, pickling and `time` arithmetic, every `unsafe` numpy copy is replaced by a safe reshape, and needless GIL re-acquisition is gone (~590 fewer lines) ([#230](https://github.com/ssmichael1/satkit/pull/230))
 - **Behaviour change:** Earth orientation uses IERS `finals2000A.all` whenever it is present (CelesTrak `EOP-All.csv` then only supplies its 1962–1972 rows in front; alone it is used only when there is no `finals2000A.all`), instead of whichever file's observed record ran later, which picked CelesTrak whenever both were fresh; of several copies of one EOP file across the search directories the one with the latest observed row is read, so a stale bundle or `add_search_dir` copy no longer shadows a fresh download; the "too early" warning gives the `EOP-All.csv` advice only for a table that starts at `finals2000A.all`'s first row; the tests that toggle offline mode run in their own process ([#229](https://github.com/ssmichael1/satkit/pull/229))
-- **Breaking:** Earth orientation comes only from IERS `finals2000A.all`: CelesTrak's `EOP-All.csv` is no longer downloaded or read, so there is no EOP for 1962–1972 and UT1 = UTC before 1973-01-02; with only an `EOP-All.csv` on disk, run `update_datafiles()` (Python `eop_source()` is deprecated, Rust `EopSource` / `source()` removed) ([#PRNUM](https://github.com/ssmichael1/satkit/pull/PRNUM))
+- Internal (no behaviour change): Rust core de-duplicated: shared calendar, day/microsecond and date-parsing helpers in `Instant`, one download file-name helper, a shared writable-data-dir check, one feed-content parse check and forecast-row constructor for space weather (~100 fewer lines) ([#234](https://github.com/ssmichael1/satkit/pull/234))
+- **Breaking:** Earth orientation comes only from IERS `finals2000A.all`: CelesTrak's `EOP-All.csv` is no longer downloaded or read, so there is no EOP for 1962–1972 and UT1 = UTC before 1973-01-02; with only an `EOP-All.csv` on disk, run `update_datafiles()` (Python `eop_source()` is deprecated, Rust `EopSource` / `source()` removed) ([#235](https://github.com/ssmichael1/satkit/pull/235))
 
 ### Fixed
 
@@ -28,6 +29,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - The Time Systems page is rewritten as the single reference for time in satkit: scales, storage, leap seconds, UT1 / EOP coverage and TDB, with runnable examples ([#215](https://github.com/ssmichael1/satkit/pull/215))
 - New Troubleshooting & FAQ page under Getting Started, organised by symptom ([#216](https://github.com/ssmichael1/satkit/pull/216))
 - De-duplicated docs, README, CONTRIBUTING, crate docs and CHANGELOG (pages link to the canonical data pages instead of retelling them); CI data downloads moved into one composite action, and the test-vector cache is keyed on its file list ([#228](https://github.com/ssmichael1/satkit/pull/228))
+- `jplephem::barycentric_pos` / `barycentric_state` docs say the result is barycentric, not "Heliocentric"; internal (no behaviour change): duplicate private-method docs and the empty Vallado "locals" lists in the SGP4 source comments are removed (~200 fewer comment lines) ([#231](https://github.com/ssmichael1/satkit/pull/231))
 
 ### CI
 
@@ -39,6 +41,8 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - Differential tests against ERFA (`pyerfa`, a new test dependency) for the time scales, Earth rotation, precession–nutation, TEME and geodetic conversion; three defects pinned as strict xfails ([#219](https://github.com/ssmichael1/satkit/pull/219))
 - Property tests (proptest, and hypothesis as a new test dependency) for leap seconds, time scales, pickles and frame transforms, plus a weekly 100k-case run; seven defects pinned as ignored / xfail tests ([#221](https://github.com/ssmichael1/satkit/pull/221))
+- Rust time tests slimmed: tuple `as_datetime` asserts, three tests subsumed by exact properties removed, shared EOP instant strategies, `add_utc_days` checked exactly (~215 fewer lines, no coverage lost) ([#232](https://github.com/ssmichael1/satkit/pull/232))
+- Python tests de-duplicated with no coverage lost: fixed-example tests already covered by stricter property or row-by-row tests removed, shared TLE lines and helpers in `python/test/shared.py`, one seeded label generator in the ERFA tests, and dead xfail scaffolding dropped (~350 fewer lines) ([#233](https://github.com/ssmichael1/satkit/pull/233))
 
 ## 0.23.1 - 2026-09-24
 

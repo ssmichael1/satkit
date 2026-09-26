@@ -562,16 +562,7 @@ pub fn status<T: TimeLike>(tm: &T) -> EopStatus {
 /// load it.
 pub fn update() -> Result<()> {
     let d = datadir::datadir()?;
-    if let Err(e) = datadir::ensure_writable(&d) {
-        return Err(if datadir::is_not_writable_error(&e) {
-            Error::DataDirReadOnly {
-                path: d.display().to_string(),
-                reason: e.to_string(),
-            }
-        } else {
-            e.into()
-        });
-    }
+    datadir::check_writable(&d, |path, reason| Error::DataDirReadOnly { path, reason })?;
     refresh_into(&d, false)?;
     load_from_dir(&d)
 }

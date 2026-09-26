@@ -190,16 +190,6 @@ pub fn parse(text: &str) -> Result<Vec<SpaceWeatherRecord>> {
     Ok(out)
 }
 
-/// Check that the file at `path` is a parsable GFZ table, without touching
-/// the loaded records — the downloader's guard against a proxy notice page.
-pub(crate) fn validate_file(path: &std::path::Path) -> std::result::Result<(), String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    match parse(&text) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("not a parsable GFZ Kp/ap table ({e})")),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

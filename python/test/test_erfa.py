@@ -149,6 +149,26 @@ def day_before(y, m):
     return (y - 1, 12, 31) if m == 1 else (y, 6, 30)
 
 
+def random_labels(n, seed, y0, y1, day0=1, us=False, skip=None):
+    """n random (y, mo, d, h, mi, s) labels, y0 <= y < y1, day day0 .. 28.
+    Seconds are on 1/64 s steps (exactly representable in binary), or whole
+    microseconds with ``us``. Labels for which ``skip`` is true are redrawn."""
+    rng = np.random.default_rng(seed)
+    out = []
+    while len(out) < n:
+        c = (
+            int(rng.integers(y0, y1)),
+            int(rng.integers(1, 13)),
+            int(rng.integers(day0, 29)),
+            int(rng.integers(0, 24)),
+            int(rng.integers(0, 60)),
+            float(rng.integers(0, 60_000_000)) * 1e-6 if us else float(rng.integers(0, 60 * 64)) / 64.0,
+        )
+        if skip is None or not skip(c):
+            out.append(c)
+    return out
+
+
 def _finals_rows(p):
     """(rows, last observed MJD) of a finals2000A.all file"""
     rows, last_obs = [], -np.inf
@@ -240,24 +260,17 @@ class TestLeapSeconds:
             sec = ihmsf["s"][k] + ihmsf["f"][k] * 1e-6
             assert g[:5] == exp and g[5] == pytest.approx(sec, abs=1e-7), (int(r - r0), g, exp, sec)
 
-    def test_midnight_after_leap_second_gregorian(self):
-        for y, m in LEAPS:
-            t = sk.time(y, m, 1, 0, 0, 0.0)
-            assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
+    MIDNIGHT_ROUTES = {
+        "gregorian": lambda y, m: sk.time(y, m, 1, 0, 0, 0.0),
+        "from_mjd": lambda y, m: sk.time.from_mjd(erfa.cal2jd(y, m, 1)[1]),
+        "from_unixtime": lambda y, m: sk.time.from_unixtime(float(calendar.timegm((y, m, 1, 0, 0, 0)))),
+        "add_utc_days": lambda y, m: sk.time(*day_before(y, m), 12, 0, 0.0).add_utc_days(0.5),
+    }
 
-    def test_midnight_after_leap_second_from_mjd(self):
+    @pytest.mark.parametrize("route", MIDNIGHT_ROUTES)
+    def test_midnight_after_leap_second(self, route):
         for y, m in LEAPS:
-            t = sk.time.from_mjd(erfa.cal2jd(y, m, 1)[1])
-            assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
-
-    def test_midnight_after_leap_second_from_unixtime(self):
-        for y, m in LEAPS:
-            t = sk.time.from_unixtime(float(calendar.timegm((y, m, 1, 0, 0, 0))))
-            assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
-
-    def test_midnight_after_leap_second_add_utc_days(self):
-        for y, m in LEAPS:
-            t = sk.time(*day_before(y, m), 12, 0, 0.0).add_utc_days(0.5)
+            t = self.MIDNIGHT_ROUTES[route](y, m)
             assert_us(t, erfa_us_from_utc(y, m, 1, 0, 0, 0.0), (y, m))
 
     def test_enter_leap_second_label(self):
@@ -271,13 +284,11 @@ class TestLeapSeconds:
             t = sk.time.from_rfc3339(f"{py:04d}-{pm:02d}-{pd:02d}T23:59:60.5Z")
             assert_us(t, erfa_us_from_utc(py, pm, pd, 23, 59, 60.5), "rfc3339")
 
-    def test_first_seconds_of_1972(self):
-        for s in (0.0, 0.5, 5.0, 9.0):
-            c = (1972, 1, 1, 0, 0, s)
-            assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
-
-    def test_1972_after_first_ten_seconds(self):
-        for c in [(1972, 1, 1, 0, 0, 10.0), (1972, 1, 1, 6, 0, 0.0), (1972, 3, 1, 0, 0, 0.0)]:
+    def test_early_1972(self):
+        for c in [(1972, 1, 1, 0, 0, s) for s in (0.0, 0.5, 5.0, 9.0, 10.0)] + [
+            (1972, 1, 1, 6, 0, 0.0),
+            (1972, 3, 1, 0, 0, 0.0),
+        ]:
             assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
     def test_pre1961_utc_is_treated_as_tai(self):
@@ -301,20 +312,7 @@ class TestLeapSeconds:
         """2000 random UTC labels 1973-2035 on 1/64 s steps (exactly
         representable in binary) against ERFA dtf2d + utctai. First minute of the 1st of the
         month is excluded (leap-second boundaries are tested above)."""
-        rng = np.random.default_rng(1)
-        n = 0
-        while n < 2000:
-            c = (
-                int(rng.integers(1973, 2036)),
-                int(rng.integers(1, 13)),
-                int(rng.integers(1, 29)),
-                int(rng.integers(0, 24)),
-                int(rng.integers(0, 60)),
-                float(rng.integers(0, 60 * 64)) / 64.0,
-            )
-            if c[2] == 1 and c[3] == 0 and c[4] == 0:
-                continue
-            n += 1
+        for c in random_labels(2000, 1, 1973, 2036, skip=lambda c: c[2:5] == (1, 0, 0)):
             assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
     def test_gregorian_seconds_round_to_microsecond(self):
@@ -390,23 +388,6 @@ def assert_label_matches_erfa(r, g, iy, im, iday, ihmsf):
     assert g[:5] == exp and g[5] == pytest.approx(sec, abs=1.5e-6), (int(r), g, exp, sec)
 
 
-def random_pre72_labels(n, seed):
-    """Random microsecond UTC labels 1961-01-01 .. 1971-12-31"""
-    rng = np.random.default_rng(seed)
-    out = []
-    while len(out) < n:
-        c = (
-            int(rng.integers(1961, 1972)),
-            int(rng.integers(1, 13)),
-            int(rng.integers(1, 29)),
-            int(rng.integers(0, 24)),
-            int(rng.integers(0, 60)),
-            float(rng.integers(0, 60_000_000)) * 1e-6,
-        )
-        out.append(c)
-    return out
-
-
 class TestPre1972UTC:
     def test_steps(self):
         """The steps of ERFA's table (and so of satkit's): +-0.05/0.1 s,
@@ -445,7 +426,7 @@ class TestPre1972UTC:
 
     def test_random_labels(self):
         """3000 random microsecond labels against ERFA dtf2d + utctai"""
-        for c in random_pre72_labels(3000, 11):
+        for c in random_labels(3000, 11, 1961, 1972, us=True):
             assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
     @pytest.mark.parametrize("ym", PRE72_BOUNDARIES, ids=[f"{y}-{m:02d}" for y, m in PRE72_BOUNDARIES])
@@ -530,7 +511,7 @@ class TestPre1972UTC:
 
     def test_tt_gps_tdb_of_labels(self):
         """TT / GPS of pre-1972 UTC labels (TDB follows TT)"""
-        for c in random_pre72_labels(300, 14):
+        for c in random_labels(300, 14, 1961, 1972, us=True):
             a1, a2 = erfa.utctai(*erfa.dtf2d("UTC", *c))
             t = sk.time(*c)
             tt1, tt2 = erfa.taitt(a1, a2)
@@ -544,7 +525,7 @@ class TestPre1972UTC:
         assert sk.time.UNIX_EPOCH == sk.time(1970, 1, 1)
         assert raw_us(sk.time.UNIX_EPOCH) == erfa_us_from_utc(1970, 1, 1, 0, 0, 0.0) == 8_000_082
         assert sk.time.UNIX_EPOCH.to_unixtime() == 0.0
-        for c in random_pre72_labels(300, 15):
+        for c in random_labels(300, 15, 1961, 1972, us=True):
             ut = calendar.timegm((*c[:5], 0)) + c[5]
             t = sk.time.from_unixtime(ut)
             assert_us(t, erfa_us_from_utc(*c), c)
@@ -606,16 +587,7 @@ class TestScales:
 
     def test_constructors_with_scale(self):
         """time(y, m, d, h, mi, s, scale=...) for TAI / TT / GPS"""
-        rng = np.random.default_rng(4)
-        for i in range(300):
-            c = (
-                int(rng.integers(1975, 2035)),
-                int(rng.integers(1, 13)),
-                int(rng.integers(1, 29)),
-                int(rng.integers(0, 24)),
-                int(rng.integers(0, 60)),
-                float(rng.integers(0, 60 * 64)) / 64.0,
-            )
+        for c in random_labels(300, 4, 1975, 2035):
             exp = {
                 "TAI": erfa.dtf2d("TAI", *c),
                 "TT": erfa.tttai(*erfa.dtf2d("TT", *c)),
@@ -637,14 +609,23 @@ class TestScales:
 
     def test_from_unixtime(self):
         """Unix time counts UTC days of 86400 s (away from leap-second midnights)"""
-        rng = np.random.default_rng(5)
-        for i in range(500):
-            c = (int(rng.integers(1973, 2035)), int(rng.integers(1, 13)), int(rng.integers(2, 29)),
-                 int(rng.integers(0, 24)), int(rng.integers(0, 60)), float(rng.integers(0, 60 * 64)) / 64.0)
+        for c in random_labels(500, 5, 1973, 2035, day0=2):
             ut = calendar.timegm((*c[:5], 0)) + c[5]
             t = sk.time.from_unixtime(ut)
             assert_us(t, erfa_us_from_utc(*c), c)
             assert t.to_unixtime() == pytest.approx(ut, abs=1e-6)
+
+
+@pytest.fixture(scope="module")
+def tdb_sample():
+    """2000 random TT epochs 1901-2099 as (ERFA two-part TT JD, the one-term
+    TDB - TT series, satkit's TDB - TT), in seconds"""
+    t1, t2 = erfa.taitt(*tai_pair(_random_raws(2000, 6, 1901, 2099)))
+    T = ((t1 - 2451545.0) + t2) / 36525.0
+    series = 0.001657 * np.sin(628.3076 * T + 6.2401)
+    times = [sk.time.from_mjd(m, TS.TT) for m in (t1 - 2400000.5) + t2]
+    got = np.array([(t.to_mjd(TS.TDB) - t.to_mjd(TS.TT)) * 86400.0 for t in times])
+    return t1, t2, series, got
 
 
 class TestTDB:
@@ -656,40 +637,23 @@ class TestTDB:
 
     TOL_ONE_TERM_VS_DTDB = 60e-6
 
-    @staticmethod
-    def _tt_pairs(n=2000):
-        a1, a2 = tai_pair(_random_raws(n, 6, 1901, 2099))
-        return erfa.taitt(a1, a2)
-
-    def test_one_term_series_accuracy(self):
+    def test_one_term_series_accuracy(self, tdb_sample):
         """Pure ERFA check that justifies the tolerance above"""
-        t1, t2 = self._tt_pairs()
-        T = ((t1 - 2451545.0) + t2) / 36525.0
-        d = 0.001657 * np.sin(628.3076 * T + 6.2401) - erfa.dtdb(t1, t2, 0.0, 0.0, 0.0, 0.0)
+        t1, t2, series, _ = tdb_sample
+        d = series - erfa.dtdb(t1, t2, 0.0, 0.0, 0.0, 0.0)
         assert np.max(np.abs(d)) < self.TOL_ONE_TERM_VS_DTDB
         assert np.sqrt(np.mean(d**2)) < 25e-6
 
-    def test_tdb_minus_tt_is_the_one_term_series(self):
-        t1, t2 = self._tt_pairs()
-        T = ((t1 - 2451545.0) + t2) / 36525.0
-        expected = 0.001657 * np.sin(628.3076 * T + 6.2401)
-        mjd_tt = (t1 - 2400000.5) + t2
-        times = [sk.time.from_mjd(m, TS.TT) for m in mjd_tt]
-        got = np.array([(t.to_mjd(TS.TDB) - t.to_mjd(TS.TT)) * 86400.0 for t in times])
-        assert np.max(np.abs(got - expected)) < 2 * TOL_MJD_S
+    def test_tdb_minus_tt_is_the_one_term_series(self, tdb_sample):
+        _, _, series, got = tdb_sample
+        assert np.max(np.abs(got - series)) < 2 * TOL_MJD_S
 
-    def test_tdb_vs_erfa_dtdb(self):
-        t1, t2 = self._tt_pairs()
-        mjd_tt = (t1 - 2400000.5) + t2
-        times = [sk.time.from_mjd(m, TS.TT) for m in mjd_tt]
-        got = np.array([(t.to_mjd(TS.TDB) - t.to_mjd(TS.TT)) * 86400.0 for t in times])
+    def test_tdb_vs_erfa_dtdb(self, tdb_sample):
+        t1, t2, _, got = tdb_sample
         assert np.max(np.abs(got - erfa.dtdb(t1, t2, 0.0, 0.0, 0.0, 0.0))) < self.TOL_ONE_TERM_VS_DTDB
 
     def test_tdb_constructor(self):
-        rng = np.random.default_rng(7)
-        for i in range(200):
-            c = (int(rng.integers(1975, 2035)), int(rng.integers(1, 13)), int(rng.integers(1, 29)),
-                 int(rng.integers(0, 24)), int(rng.integers(0, 60)), float(rng.integers(0, 60 * 64)) / 64.0)
+        for c in random_labels(200, 7, 1975, 2035):
             b1, b2 = erfa.dtf2d("TDB", *c)
             tt1, tt2 = erfa.tdbtt(b1, b2, erfa.dtdb(b1, b2, 0.0, 0.0, 0.0, 0.0))
             exp = float(pair_to_tai_seconds(*erfa.tttai(tt1, tt2)))

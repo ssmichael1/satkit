@@ -123,26 +123,6 @@ class TestKepler:
             de = (k.eccentric_anomaly - e0 + m.pi) % (2 * m.pi) - m.pi
             assert abs(de) < 1e-12
 
-    def test_kepler_pickle_roundtrip(self):
-        import pickle
-
-        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7, mu=sk.consts.mu_moon)
-        k2 = pickle.loads(pickle.dumps(k))
-        assert k2 == k
-        assert (k2.a, k2.eccen, k2.inclination, k2.raan, k2.argp, k2.nu, k2.mu) == (
-            k.a,
-            k.eccen,
-            k.inclination,
-            k.raan,
-            k.argp,
-            k.nu,
-            k.mu,
-        )
-        # mu is part of the state: a different central body is a different set
-        k_earth = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
-        assert k_earth != k
-        assert k_earth.mu == sk.consts.mu_earth
-
     def test_kepler_validation_raises_value_error(self):
         good = dict(a=7000e3, eccen=0.1, incl=0.5, raan=1.0, argp=0.3, nu=0.7)
         sk.kepler(**good)
@@ -235,8 +215,9 @@ class TestKepler:
         assert abs(sk.kepler.from_pv(r, v).a - k_moon.a) / k_moon.a > 0.1
         with pytest.raises(ValueError):
             sk.kepler.from_pv(r, v, mu=0.0)
-        # propagate keeps mu, and the mu setter works
+        # propagate keeps mu, and the mu setter works; mu is part of equality
         assert k_moon.propagate(10.0).mu == sk.consts.mu_moon
+        assert k != k_moon
         k.mu = sk.consts.mu_moon
         assert k == k_moon
 

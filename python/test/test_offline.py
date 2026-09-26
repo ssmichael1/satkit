@@ -90,7 +90,6 @@ def test_sgp4():
             "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537",
         ]
     )
-    tle = tle[0] if isinstance(tle, list) else tle
     p, v = sk.sgp4(tle, tle.epoch + sk.duration.from_hours(1.0))
     assert abs(np.linalg.norm(p) - 6.78e6) < 5e4
     assert abs(np.linalg.norm(v) - 7.66e3) < 1e2
