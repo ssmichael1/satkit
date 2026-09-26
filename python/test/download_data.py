@@ -15,6 +15,12 @@ before the Rust build. Mirrors ``satkit.utils.update_datafiles()``:
   manifest's ``eop`` sources that answers (the IERS ``finals2000A.all``
   mirrors, then CelesTrak's ``EOP-All.csv``); a failed refresh keeps the
   existing copy and prints a warning instead of failing the run.
+  ``--all-eop-sources`` (CI uses it) keeps the primary source refreshed as
+  above and also fetches the *other* sources, but only when they are missing:
+  CelesTrak's CSV is wanted for its 1962-1972 rows, which satkit puts in front
+  of the IERS table and which never change, so an existing copy is never
+  re-requested. CI therefore contacts CelesTrak once per new data cache, not
+  per run.
 
 The refresh follows `CelesTrak's usage policy
 <https://celestrak.org/usage-policy.php>`_, which asks clients to download
@@ -27,7 +33,8 @@ applies to the IERS mirrors. The freshness state lives in a
 two agree about a shared data directory.
 
 Usage: ``python python/test/download_data.py [dest_dir] [--refresh-only]
-[--max-age-hours N] [--force-refresh]`` (default ``astro-data``).
+[--max-age-hours N] [--force-refresh] [--all-eop-sources]`` (default
+``astro-data``).
 ``--refresh-only`` skips the manifest files and only re-fetches EOP / space
 weather; ``--force-refresh`` ignores the cadence and the sidecar.
 """
@@ -256,6 +263,32 @@ def fetch_eop(sources: list, dest_dir: Path, max_age: int = None, force: bool = 
     return "WARNING: EOP refresh failed (" + "; ".join(attempts) + f"); {kept}"
 
 
+def fetch_all_eop(sources: list, dest_dir: Path, max_age: int = None, force: bool = False) -> list:
+    """Refresh the primary Earth orientation source, and fetch the others only if missing.
+
+    The first source is kept current exactly as ``fetch_eop`` does. The other
+    sources (CelesTrak's ``EOP-All.csv``) are wanted only for their historical
+    rows, so an existing copy is left alone with no request at all, even with
+    ``--force-refresh``.
+    """
+    lines = [fetch_eop(sources[:1], dest_dir, max_age=max_age, force=force)]
+    for source in sources[1:]:
+        dest = dest_dir / source["name"]
+        if dest.exists():
+            lines.append(f"{source['name']}: present; history only, not re-requested")
+            continue
+        attempts = []
+        for url in source["urls"]:
+            try:
+                lines.append(f"{source['name']}: {_refresh(url, dest, force=True)}")
+                break
+            except Exception as exc:  # noqa: BLE001 - try the next mirror
+                attempts.append(f"{url}: {exc}")
+        else:
+            lines.append(f"WARNING: {source['name']} download failed (" + "; ".join(attempts) + "); no copy present")
+    return lines
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("dest_dir", nargs="?", default="astro-data")
@@ -271,6 +304,12 @@ def main() -> None:
         metavar="N",
         help="treat a refreshed file younger than N hours as current "
         "(default: CelesTrak's cadence, 3 h for space weather, 24 h for EOP)",
+    )
+    ap.add_argument(
+        "--all-eop-sources",
+        action="store_true",
+        help="fetch every EOP source (IERS finals2000A.all and CelesTrak EOP-All.csv), "
+        "not just the first that answers",
     )
     ap.add_argument(
         "--force-refresh",
@@ -294,7 +333,11 @@ def main() -> None:
         print(f"  {url.rsplit('/', 1)[-1]}: {outcome}")
     refresh_msafe(dest_dir, max_age if max_age is not None else REFRESH_MIN_AGE[MSAFE_LOCAL], ns.force_refresh)
     if manifest.get("eop"):
-        print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
+        if ns.all_eop_sources:
+            for line in fetch_all_eop(manifest["eop"], dest_dir, max_age=max_age, force=ns.force_refresh):
+                print(f"  {line}")
+        else:
+            print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
 
 
 if __name__ == "__main__":
