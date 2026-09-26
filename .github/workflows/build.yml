@@ -225,13 +225,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Wheels ship for CPython 3.10-3.14 on Linux, macOS arm64 and
+        # Wheels ship for CPython 3.11-3.15 on Linux, macOS arm64 and
         # Windows. The full leg (stubtest included) is Linux 3.13; the others
         # cover the oldest and newest CPython and the other two platforms.
         include:
           - { os: ubuntu, python: "3.13", full: true }
-          - { os: ubuntu, python: "3.10" }
+          - { os: ubuntu, python: "3.11" }
           - { os: ubuntu, python: "3.14" }
+          - { os: ubuntu, python: "3.15" }
           - { os: macos, python: "3.13" }
           - { os: windows, python: "3.13" }
 
@@ -253,6 +254,8 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
+          # 3.15 is a release candidate until October 2026.
+          allow-prereleases: true
 
       - name: Satkit data and test vectors
         uses: ./.github/actions/satkit-data

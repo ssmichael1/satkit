@@ -260,7 +260,7 @@ RuntimeError: update_datafiles cannot run: downloads are forbidden (SATKIT_OFFLI
 
 ### `pip install satkit` tries to compile, or fails asking for Rust
 
-Pre-built wheels exist for CPython 3.10–3.14 on Linux x86_64 and aarch64
+Pre-built wheels exist for CPython 3.11–3.15 on Linux x86_64 and aarch64
 (glibc), macOS on Apple silicon (arm64), and Windows x86_64. Anywhere else pip
 builds the source distribution, which needs a stable Rust toolchain
 ([rustup](https://rustup.rs)): Intel Macs (use conda-forge, or
