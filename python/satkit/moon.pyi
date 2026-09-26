@@ -99,6 +99,69 @@ def pos_gcrf(
     ...
 
 @typing.overload
+def pos_mod(time: TimeScalar) -> npt.NDArray[np.float64]:
+    """
+    Approximate Moon position in the Mean-of-Date (MOD) Frame
+
+    Algorithm 31 from Vallado for the moon in Mean of Date (MOD)
+
+    ``pos_gcrf(t) = satkit.frametransform.qmod2gcrf(t) * pos_mod(t)``
+
+    Args:
+        time (satkit.time): time at which to compute position
+
+    Returns:
+        npt.NDArray[np.float64]: 3-element numpy array representing moon position in MOD frame
+        at given time.  Units are meters
+
+    Notes:
+        Accurate to about 0.3 degree in ecliptic longitude (0.36 degree worst case
+        against JPL DE440 over 1950-2100), 0.2 degree in ecliptic latitude,
+        and 1275 km in range
+
+        Useful when comparing with Vallado's worked examples, which are given in
+        MOD coordinates
+
+    Example:
+        ```python
+        import numpy as np
+        t = satkit.time(2024, 1, 1)
+        moon = satkit.moon.pos_mod(t)
+        print(f"Moon distance: {np.linalg.norm(moon)/1e3:.0f} km")
+        ```
+    """
+    ...
+
+@typing.overload
+def pos_mod(
+    time: TimeArrayLike,
+) -> npt.NDArray[np.float64]:
+    """
+    Approximate Moon position in the Mean-of-Date (MOD) Frame
+
+    Algorithm 31 from Vallado for the moon in Mean of Date (MOD)
+
+    ``pos_gcrf(t) = satkit.frametransform.qmod2gcrf(t) * pos_mod(t)``
+
+    Args:
+        time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time
+            for which to compute position
+
+    Returns:
+        npt.NDArray[np.float64]: Nx3 numpy array representing moon position in MOD frame
+        at given times.  Units are meters
+
+    Notes:
+        Accurate to about 0.3 degree in ecliptic longitude (0.36 degree worst case
+        against JPL DE440 over 1950-2100), 0.2 degree in ecliptic latitude,
+        and 1275 km in range
+
+        Useful when comparing with Vallado's worked examples, which are given in
+        MOD coordinates
+    """
+    ...
+
+@typing.overload
 def illumination(time: TimeScalar) -> float:
     """
     Fractional illumination of moon

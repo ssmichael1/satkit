@@ -68,6 +68,24 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
     pyutils::py_vec3_of_time_result_arr(&|t| Ok(moon::pos_gcrf(t)), time)
 }
 
+/// Approximate Moon position in the Mean-of-Date (MOD) Frame
+///
+/// Notes:
+///   * Algorithm 31 from Vallado for the moon in Mean of Date (MOD)
+///   * `pos_gcrf(t) = frametransform.qmod2gcrf(t) * pos_mod(t)`
+///   * Valid with accuracy of about 0.3 degree in ecliptic longitude (0.36 degree worst case against JPL DE440 over 1950-2100), 0.2 degree in ecliptic latitude, and 1275 km in range
+///   * Useful when comparing with Vallado's worked examples, which are given in MOD coordinates
+///
+/// Args:
+///     time (satkit.time|numpy.ndarray|list): time[s] at which to compute position
+///
+/// Returns:
+///     numpy.ndarray: 3-element numpy array or Nx3 numpy array representing moon position in MOD frame at input time[s].  Units are meters
+#[pyfunction]
+pub fn pos_mod(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
+    pyutils::py_vec3_of_time_result_arr(&|t| Ok(moon::pos_mod(t)), time)
+}
+
 /// Approximate Moon phase angle
 ///
 /// Args:

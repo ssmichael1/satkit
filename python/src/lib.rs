@@ -88,6 +88,7 @@ fn sun(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pymodule]
 fn moon(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pylpephem_moon::pos_gcrf, m)?)?;
+    m.add_function(wrap_pyfunction!(pylpephem_moon::pos_mod, m)?)?;
     m.add_function(wrap_pyfunction!(pylpephem_moon::phase, m)?)?;
     m.add_function(wrap_pyfunction!(pylpephem_moon::phase_name, m)?)?;
     m.add_function(wrap_pyfunction!(pylpephem_moon::illumination, m)?)?;

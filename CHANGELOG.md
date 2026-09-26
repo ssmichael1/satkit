@@ -6,6 +6,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for what to check and change.
 
+### Added
+
+- Python `moon.pos_mod`, exposing Rust `lpephem::moon::pos_mod` (mean-of-date moon position), mirroring `sun.pos_mod` ([#254](https://github.com/ssmichael1/satkit/pull/254))
+
 ### Changed
 
 - **Breaking:** `satproperties()` is keyword-only (positional calls swapped drag and SRP: re-check them); one-element time lists give one-element results. **Wrong results:** `quaternion * Nx3` applied the inverse rotation in 0.14.1–0.23.1 ([#222](https://github.com/ssmichael1/satkit/pull/222))
