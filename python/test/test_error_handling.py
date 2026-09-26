@@ -122,6 +122,17 @@ class TestNonContiguousInput:
             sk.propsettings(gravity_degree=360, gravity_order=360)
         assert (s.gravity_degree, s.gravity_order) == (70, 70)
 
+    def test_gravity_order_above_degree_rejected(self):
+        # The constructor used to clamp the order to the degree silently,
+        # while the setter raised.
+        with pytest.raises(ValueError, match="gravity_order"):
+            sk.propsettings(gravity_degree=4, gravity_order=10)
+        s = sk.propsettings(gravity_degree=10, gravity_order=4)
+        assert (s.gravity_degree, s.gravity_order) == (10, 4)
+        assert sk.propsettings(gravity_degree=8).gravity_order == 8
+        with pytest.raises(ValueError, match="gravity_order"):
+            s.gravity_order = 11
+
     def test_precompute_table_size_cap(self):
         # A tiny step would need billions of entries; must raise, not OOM.
         s = sk.propsettings()

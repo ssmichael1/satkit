@@ -8,7 +8,7 @@
     "SATKIT_DATA_URL, if set, is a base URL tried before all of these.",
     "Regenerate with tools/make_manifest.py; see data/README.md.",
     "Deliberately excluded: msis21.parm (NRLMSIS 2.1 licence is academic/non-commercial), finals2000A.all (changes daily; fetched from the IERS mirrors under `eop`); space weather is fetched at runtime from its producers — GFZ Potsdam (`refresh`, CC BY 4.0), NOAA/SWPC (`refresh`, public domain) and NASA MSFC MSAFE (month-walked by the library, public domain) — each rate-limited to its publication cadence; CelesTrak's merged space-weather file is no longer fetched, sw19571001.txt (orphan), leap-seconds.list (nothing reads it; the runtime leap-second table is compiled into src/time/instant.rs). See data/README.md.",
-    "default: false = pinned and fetchable by name, but skipped by update_datafiles: the IERS tables are embedded byte-identical, the full gravity files add nothing while evaluation is capped at degree 40 (the embedded copies carry degree 70), and ITU_GRACE16 (CC BY 4.0, not embedded) is fetched only when that model is selected."
+    "default: false = pinned and fetchable by name, but skipped by update_datafiles: the IERS tables are embedded byte-identical, the full gravity files add nothing because evaluation is capped at degree 70, the degree the embedded copies carry, and ITU_GRACE16 (CC BY 4.0, not embedded) is fetched only when that model is selected."
   ],
   "files": [
     {

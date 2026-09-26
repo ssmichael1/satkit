@@ -114,13 +114,13 @@ pub enum GravityModel {
     /// Joint Gravity Model 2 (Nerem et al. 1994). Tide-free. Compiled in.
     JGM2,
     /// Earth Gravitational Model 1996 (Lemoine et al. 1998). Tide-free.
-    /// Compiled in. The default for the orbit propagator.
+    /// Compiled in. (The orbit propagator's default is [`EGM2008`](Self::EGM2008).)
     EGM96,
     /// ITU_GRACE16 (Akyilmaz et al. 2016), a GRACE-only satellite solution.
     /// Zero-tide. Downloaded on first use (CC BY 4.0).
     ITUGrace16,
     /// Earth Gravitational Model 2008 (Pavlis et al. 2012). Tide-free.
-    /// Compiled in.
+    /// Compiled in. The default for the orbit propagator.
     EGM2008,
 }
 
@@ -178,8 +178,9 @@ impl GravityModel {
 /// instead of double-counting it. The coefficients themselves are never
 /// modified, so with tides off every model propagates exactly as published.
 ///
-/// Read from the ICGEM `tide_system` header when present; otherwise
-/// classified from the C̄20 value (see [`TideSystem::classify_c20`]).
+/// Read from the ICGEM `tide_system` header when present and recognised;
+/// otherwise classified from the C̄20 value (see
+/// [`TideSystem::classify_c20`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TideSystem {
     /// Permanent tide removed from C̄20 (ICGEM `tide_free`).
@@ -189,9 +190,9 @@ pub enum TideSystem {
     /// Permanent deformation and direct permanent potential retained
     /// (ICGEM `mean_tide`). Not appropriate for orbit propagation.
     MeanTide,
-    /// No header and a C̄20 that is not Earth-like (a custom or non-Earth
-    /// model): treated as tide-free, i.e. the tide correction is applied
-    /// as published.
+    /// No recognised header and a C̄20 that is not Earth-like (a custom or
+    /// non-Earth model): treated as tide-free, i.e. the tide correction is
+    /// applied as published.
     Unknown,
 }
 
@@ -405,10 +406,11 @@ pub fn init_from_path(model: GravityModel, path: &std::path::Path) -> Result<()>
 /// * `pos` - 3-vector representing ITRF position in meters
 ///
 /// * `degree` - The maximum degree of the gravity model to use.
-///   Maximum is 40
+///   Maximum is 70 ([`MAX_GRAVITY_DEGREE`]); a larger degree is evaluated
+///   at 70 (the propagator rejects it instead).
 ///
 /// * `order` - The maximum order of the gravity model to use.
-///   Must be ≤ `degree`.
+///   Should be ≤ `degree`; a larger order is evaluated at `degree`.
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
@@ -438,10 +440,11 @@ pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityMode
 /// * `pos` - 3-vector representing ITRF position in meters
 ///
 /// * `degree` - The maximum degree of the gravity model to use.
-///   Maximum is 40
+///   Maximum is 70 ([`MAX_GRAVITY_DEGREE`]); a larger degree is evaluated
+///   at 70 (the propagator rejects it instead).
 ///
 /// * `order` - The maximum order of the gravity model to use.
-///   Must be ≤ `degree`.
+///   Should be ≤ `degree`; a larger order is evaluated at `degree`.
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
@@ -999,18 +1002,25 @@ impl Gravity {
     /// Parse gravity-model coefficients from an ICGEM `.gfc` text string.
     ///
     /// Reads the `modelname`, `earth_gravity_constant`, `radius`,
-    /// `max_degree` and `tide_system` header keywords, then the `gfc`
+    /// `max_degree`, `norm` and `tide_system` header keywords, then the `gfc`
     /// coefficient rows (and `gfct` rows, the static part of an ICGEM 2.0
     /// time-variable model, taken at their reference epoch; the `trnd`,
     /// `asin`, `acos` and `dot` rows describing the time variation are
     /// skipped). Numbers may use Fortran `D` exponents (`1.0d0`). Any other
     /// row keyword after `end_of_head` is an [`Error::InvalidLine`].
+    ///
+    /// `norm` is `fully_normalized` (the default when absent) or
+    /// `unnormalized`, whose coefficients are used as they are; any other
+    /// value is an [`Error::InvalidLine`], as is a header without a positive
+    /// `earth_gravity_constant` or `radius`. A `tide_system` value that is
+    /// not recognised is treated like a missing one (classified from C̄20).
     pub fn parse(text: &str) -> Result<Self> {
         let mut name = String::new();
         let mut gravity_constant: f64 = 0.0;
         let mut radius: f64 = 0.0;
         let mut max_degree: usize = 0;
         let mut tide_system: Option<TideSystem> = None;
+        let mut normalized = true;
 
         let mut lines = text.lines();
 
@@ -1037,12 +1047,29 @@ impl Gravity {
                 max_degree = s[1].parse::<usize>()?;
             } else if s[0] == "tide_system" {
                 tide_system = Some(TideSystem::from_header(&s[1..].join(" ")));
+            } else if s[0] == "norm" {
+                normalized = match s[1] {
+                    "fully_normalized" => true,
+                    "unnormalized" => false,
+                    _ => return Err(Error::InvalidLine(line.to_string())),
+                };
             } else if s[0] == "end_of_head" {
                 break;
             }
         }
         if max_degree == 0 {
             return Err(Error::MissingMaxDegree);
+        }
+        // Without these the field is zero (GM) or NaN (radius) everywhere.
+        for (value, keyword) in [
+            (gravity_constant, "earth_gravity_constant"),
+            (radius, "radius"),
+        ] {
+            if !(value.is_finite() && value > 0.0) {
+                return Err(Error::InvalidLine(format!(
+                    "header {keyword} is missing or not a positive number ({value})"
+                )));
+            }
         }
 
         // Create matrix with lookup values. Cap the stored table at the
@@ -1091,17 +1118,21 @@ impl Gravity {
             }
         }
 
-        // Tide system: the header wins; a file without one (JGM2, JGM3) is
-        // classified from its fully-normalized C̄20, read here before the
-        // denormalization below. A header that contradicts an Earth-like
-        // C̄20 is reported, since the propagator's tide handling depends on
-        // it (silenced with SATKIT_QUIET=1).
-        let c20 = if table_dim > 2 { cs[(2, 0)] } else { f64::NAN };
+        // Tide system: the header wins; a file without one (JGM2, JGM3), or
+        // with a value that is not recognised, is classified from its
+        // fully-normalized C̄20, read here before the denormalization below
+        // (an unnormalized file's C20 is √5 C̄20). A header that contradicts
+        // an Earth-like C̄20 is reported, since the propagator's tide
+        // handling depends on it (silenced with SATKIT_QUIET=1).
+        let c20 = match (table_dim > 2, normalized) {
+            (false, _) => f64::NAN,
+            (true, true) => cs[(2, 0)],
+            (true, false) => cs[(2, 0)] / 5.0f64.sqrt(),
+        };
         let by_value = TideSystem::classify_c20(c20);
         let tide_system = match tide_system {
-            Some(declared) => {
-                if declared != TideSystem::Unknown
-                    && by_value != TideSystem::Unknown
+            Some(declared) if declared != TideSystem::Unknown => {
+                if by_value != TideSystem::Unknown
                     && declared != TideSystem::MeanTide
                     && declared != by_value
                     && std::env::var_os("SATKIT_QUIET").is_none()
@@ -1113,11 +1144,12 @@ impl Gravity {
                 }
                 declared
             }
-            None => by_value,
+            _ => by_value,
         };
 
-        // Convert from normalized coefficients to actual coefficients
-        for n in 0..table_dim {
+        // Convert from normalized coefficients to actual coefficients (an
+        // unnormalized file already holds them)
+        for n in (0..table_dim).filter(|_| normalized) {
             for m in 0..(n + 1) {
                 let mut scale: f64 = 1.0;
                 for k in (n - m + 1)..(n + m + 1) {
@@ -1254,6 +1286,98 @@ gfc 2 2 2.439383e-6 -1.400273e-6
             TideSystem::classify_c20(-4.84169548456e-4),
             TideSystem::ZeroTide
         );
+    }
+
+    /// A `tide_system` header value that is not recognised is treated like
+    /// no header: the model is classified from C̄20 (it used to stay
+    /// `Unknown`, skipping the permanent-tide handling of a zero-tide model).
+    #[test]
+    fn unrecognised_tide_header_falls_back_to_c20() {
+        let with = |v: &str, c20: &str| {
+            TINY_MODEL
+                .replacen(
+                    "max_degree 4\n",
+                    &format!("max_degree 4\ntide_system {v}\n"),
+                    1,
+                )
+                .replace("-4.841653e-4", c20)
+        };
+        for v in ["unknown", "conventional", "zero-ish"] {
+            assert_eq!(
+                Gravity::parse(&with(v, "-4.841653e-4"))
+                    .unwrap()
+                    .tide_system,
+                TideSystem::TideFree,
+                "{v}"
+            );
+            assert_eq!(
+                Gravity::parse(&with(v, "-4.841695e-4"))
+                    .unwrap()
+                    .tide_system,
+                TideSystem::ZeroTide,
+                "{v}"
+            );
+            assert_eq!(
+                Gravity::parse(&with(v, "-2.0e-4")).unwrap().tide_system,
+                TideSystem::Unknown,
+                "{v}"
+            );
+        }
+    }
+
+    /// An ICGEM `norm unnormalized` file holds the coefficients as used and
+    /// is not de-normalized a second time (it used to be, scaling C22 by
+    /// ~0.26); an unknown `norm` value is refused.
+    #[test]
+    fn unnormalized_header_is_honoured() {
+        let g = Gravity::parse(TINY_MODEL).unwrap();
+        let unnorm = format!(
+            "modelname test\nearth_gravity_constant 3.986004415e14\nradius 6378136.3\n\
+             max_degree 4\nnorm unnormalized\nend_of_head\n\
+             gfc 0 0 {:e} 0.0\ngfc 2 0 {:e} 0.0\ngfc 2 2 {:e} {:e}\n",
+            g.coeffs[(0, 0)],
+            g.coeffs[(2, 0)],
+            g.coeffs[(2, 2)],
+            g.coeffs[(1, 2)],
+        );
+        let u = Gravity::parse(&unnorm).unwrap();
+        for (n, m) in [(0, 0), (2, 0), (2, 2), (1, 2)] {
+            assert_relative_eq!(u.coeffs[(n, m)], g.coeffs[(n, m)], max_relative = 1e-14);
+        }
+        // Classified from the normalized C̄20 it corresponds to.
+        assert_eq!(u.tide_system, g.tide_system);
+        let pos = numeris::vector![7.0e6, 1.0e6, 2.0e6];
+        let (au, ag) = (u.accel(&pos, 4, 4), g.accel(&pos, 4, 4));
+        assert!((au - ag).norm() / ag.norm() < 1e-13);
+
+        let explicit =
+            TINY_MODEL.replacen("max_degree 4\n", "max_degree 4\nnorm fully_normalized\n", 1);
+        assert_eq!(Gravity::parse(&explicit).unwrap().coeffs, g.coeffs);
+        let bogus = TINY_MODEL.replacen("max_degree 4\n", "max_degree 4\nnorm geodesy\n", 1);
+        assert!(matches!(Gravity::parse(&bogus), Err(Error::InvalidLine(_))));
+    }
+
+    /// A header without a positive GM or radius is refused at parse time
+    /// (a missing radius used to give NaN accelerations, a missing GM a
+    /// zero field).
+    #[test]
+    fn missing_gm_or_radius_is_an_error() {
+        for (from, to) in [
+            ("earth_gravity_constant 3.986004415e14\n", ""),
+            ("radius 6378136.3\n", ""),
+            (
+                "earth_gravity_constant 3.986004415e14",
+                "earth_gravity_constant 0.0",
+            ),
+            ("radius 6378136.3", "radius -6378136.3"),
+        ] {
+            let txt = TINY_MODEL.replacen(from, to, 1);
+            assert_ne!(txt, TINY_MODEL);
+            assert!(
+                matches!(Gravity::parse(&txt), Err(Error::InvalidLine(_))),
+                "{from:?} -> {to:?}"
+            );
+        }
     }
 
     #[test]

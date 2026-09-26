@@ -43,9 +43,12 @@ pub enum Error {
     /// A refresh of a periodically republished data file (the Earth
     /// orientation table, `finals2000A.all`) was requested while downloads
     /// are forbidden (`reason` says why). No network I/O is attempted.
-    /// `existing` is the copy that stays in use, or `None` when there is no
-    /// copy at all; `urls` are the sources the refresh would have used, for
-    /// fetching the file by hand.
+    /// `existing` is a copy on disk that is left unchanged (the one in the
+    /// refresh's target directory, else the first in the search
+    /// directories), or `None` when there is no copy at all. It is not
+    /// necessarily the copy the loaded table came from: the default load
+    /// reads the freshest copy across the search directories. `urls` are the
+    /// sources the refresh would have used, for fetching the file by hand.
     #[error(
         "{}",
         refresh_offline_message(name, reason, existing.as_deref(), urls)
@@ -327,7 +330,7 @@ pub(crate) fn offline_error(name: &str, reason: &'static str) -> Error {
 }
 
 /// Text of [`Error::RefreshOffline`]: "cannot be refreshed" when a copy
-/// exists (it stays in use), "not present" only when there is none.
+/// exists (nothing changes on disk), "not present" only when there is none.
 fn refresh_offline_message(
     name: &str,
     reason: &str,
@@ -341,9 +344,10 @@ fn refresh_offline_message(
     };
     match existing {
         Some(path) => format!(
-            "{name} cannot be refreshed while offline ({reason}); the existing copy \
-             {path} is kept and still used. To refresh it, allow downloads and run \
-             update_datafiles(), or replace it by hand from: {sources}"
+            "{name} cannot be refreshed while offline ({reason}); nothing was changed, \
+             so the copies already on disk (such as {path}) stay as they are. To refresh, \
+             allow downloads and run update_datafiles(), or replace the file by hand \
+             from: {sources}"
         ),
         None => format!(
             "{name} is not present and cannot be downloaded ({reason}). Place a copy in \
@@ -1277,9 +1281,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// One real `finals2000A.all` row.
-    const EOP_FINALS: &str =
-        "26 917 61300.00 I  0.190054 0.000090  0.329163 0.000090  I-0.0086337 0.0000267\n";
+    /// Two real `finals2000A.all` rows: the last observed one and the first
+    /// prediction (a file without predictions is a truncated one).
+    const EOP_FINALS: &str = "\
+26 917 61300.00 I  0.190054 0.000090  0.329163 0.000090  I-0.0086337 0.0000267
+26 918 61301.00 P  0.189180 0.000600  0.329137 0.000401  P-0.0091919 0.0001080
+";
 
     #[test]
     fn a_proxy_notice_page_never_replaces_a_good_data_file() {

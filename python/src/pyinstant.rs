@@ -15,6 +15,7 @@ use crate::pyutils::warn_deprecated;
 use anyhow::{bail, Result};
 
 use numpy as np;
+use numpy::PyArrayMethods;
 
 /// Specify time scale used to represent or convert between the "satkit.time"
 /// representation of time
@@ -748,12 +749,15 @@ impl PyInstant {
     ///
     /// Args:
     ///     other (duration|list|numpy.ndarray|float): Duration or list of durations to add.
-    ///         If type is float, units are days
+    ///         If type is float (or a list or real numeric 1-D numpy array of them), units are days
     ///
     /// Returns:
     ///     satkit.time|numpy.ndarray: New time object or numpy array of time objects representing input time plus input duration(s)
+    ///
+    /// Raises:
+    ///     OverflowError: if a result is beyond about ±292,000 years
     fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        self.shift(other, |t, d| t + d)
+        self.shift(other, |t, d| t.checked_add(d))
     }
 
     /// Subtract duration or take difference in times
@@ -765,10 +769,13 @@ impl PyInstant {
     /// Returns:
     ///     satkit.time|numpy.ndarray|satkit.duration: New time object or numpy array of time objects representing input time minus input duration(s), or duration object representing difference between two time objects
     ///     (a numpy array of duration objects for a list of time objects)
+    ///
+    /// Raises:
+    ///     OverflowError: if a result is beyond about ±292,000 years
     fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = other.py();
         if let Ok(tm2) = other.cast::<Self>() {
-            return PyDuration(self.0 - tm2.borrow().0).into_py_any(py);
+            return PyDuration(time_difference(&self.0, &tm2.borrow().0)?).into_py_any(py);
         }
         // A non-empty list of times: element-wise differences, as an object
         // array of durations (an empty list is handled by `shift`, giving an
@@ -779,13 +786,13 @@ impl PyInstant {
                     .iter()
                     .map(|x| {
                         let t: PyRef<Self> = x.extract()?;
-                        PyDuration(self.0 - t.0).into_py_any(py)
+                        PyDuration(time_difference(&self.0, &t.0)?).into_py_any(py)
                     })
                     .collect::<PyResult<Vec<_>>>()?;
                 return np::PyArray1::<Py<PyAny>>::from_vec(py, objs).into_py_any(py);
             }
         }
-        self.shift(other, |t, d| t - d)
+        self.shift(other, |t, d| t.checked_sub(d))
     }
 
     // Comparison operators are below
@@ -866,20 +873,31 @@ impl PyInstant {
 
 impl PyInstant {
     /// `self (op) other` for a number of days, a duration, or a list / 1-D
-    /// float array of either (element-wise, returning an object array)
+    /// float array of either (element-wise, returning an object array).
+    /// `op` is a checked operation: a result out of range is `OverflowError`
     fn shift(
         &self,
         other: &Bound<'_, PyAny>,
-        op: fn(Instant, satkit::Duration) -> Instant,
+        op: fn(Instant, satkit::Duration) -> Option<Instant>,
     ) -> PyResult<Py<PyAny>> {
         let py = other.py();
+        let op = |t: Instant, d: satkit::Duration| {
+            op(t, d).ok_or_else(|| crate::pyduration::arithmetic_overflow("time"))
+        };
         let days = finite_days;
-        let durs: Vec<satkit::Duration> = if other.is_instance_of::<np::PyArray1<f64>>() {
-            let arr = other.extract::<np::PyReadonlyArray1<f64>>()?;
-            arr.as_array()
-                .iter()
-                .map(|x| days(*x))
-                .collect::<PyResult<_>>()?
+        let durs: Vec<satkit::Duration> = if other.is_instance_of::<np::PyUntypedArray>() {
+            // Any real numeric 1-D array, as days: float32 and integer
+            // arrays are converted (they used to raise TypeError)
+            let arr = crate::pyutils::to_f64_ndarray(other)?;
+            let ro = arr.readonly();
+            let a = ro.as_array();
+            if a.ndim() != 1 {
+                return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                    "expected a 1-D array of days, got {} dimensions",
+                    a.ndim()
+                )));
+            }
+            a.iter().map(|x| days(*x)).collect::<PyResult<_>>()?
         } else if other.is_instance_of::<pyo3::types::PyList>() {
             if let Ok(v) = other.extract::<Vec<f64>>() {
                 v.into_iter().map(days).collect::<PyResult<_>>()?
@@ -894,9 +912,9 @@ impl PyInstant {
             || other.is_instance_of::<pyo3::types::PyInt>()
         {
             // A Python int too large for f64 raises OverflowError in extract
-            return Self(op(self.0, days(other.extract::<f64>()?)?)).into_py_any(py);
+            return Self(op(self.0, days(other.extract::<f64>()?)?)?).into_py_any(py);
         } else if let Ok(d) = other.cast::<PyDuration>() {
-            return Self(op(self.0, d.borrow().0)).into_py_any(py);
+            return Self(op(self.0, d.borrow().0)?).into_py_any(py);
         } else {
             return Err(pyo3::exceptions::PyTypeError::new_err(
                 "Invalid type for rhs",
@@ -904,10 +922,17 @@ impl PyInstant {
         };
         let objs = durs
             .into_iter()
-            .map(|d| Self(op(self.0, d)).into_py_any(py))
+            .map(|d| Self(op(self.0, d)?).into_py_any(py))
             .collect::<PyResult<Vec<_>>>()?;
         np::PyArray1::<Py<PyAny>>::from_vec(py, objs).into_py_any(py)
     }
+}
+
+/// `a - b` as a duration, `OverflowError` if it does not fit (only for
+/// times near the ends of the range)
+fn time_difference(a: &Instant, b: &Instant) -> PyResult<satkit::Duration> {
+    a.checked_duration_since(*b)
+        .ok_or_else(|| crate::pyduration::arithmetic_overflow("time difference"))
 }
 
 /// A time-string parse failure as a Python `ValueError` carrying the

@@ -183,7 +183,15 @@ fn cols(line: &str, start: usize, len: usize) -> &str {
 /// motion flag 17 (`I` observed, `P` predicted), x 19–27 and y 38–46
 /// (arcsec); UT1−UTC flag 58, value 59–68 (s); LOD 80–86 (ms, not always
 /// filled); nutation flag 96, dX 98–106 and dY 117–125 (mas, not always
-/// filled). Rows whose flag is blank (the tail of the file) end the table.
+/// filled). Rows whose flag is blank (the tail of the file) carry only a
+/// date and are not table rows.
+///
+/// A line cut short — the last line of a truncated transfer — is an error,
+/// not a shorter table: a row with an `I`/`P` flag must hold the whole
+/// UT1−UTC field (at least 68 columns, with its decimal point in column
+/// 61), a row with a nutation flag must hold dX and dY, no line may end
+/// inside a numeric field that is read, and a line without a flag must be a
+/// complete date and nothing else.
 ///
 /// Rows are sorted by date. A date that appears more than once (a repeated
 /// line, two copies of the file concatenated) keeps a single row: the
@@ -201,10 +209,35 @@ fn cols(line: &str, start: usize, len: usize) -> &str {
 /// CelesTrak's `EOP-All.csv` (recognised by its `DATE,` header) is rejected
 /// with [`Error::UnsupportedCsv`].
 fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
-    if text.trim_start_matches('\u{feff}').starts_with("DATE,") {
+    // A UTF-8 byte-order mark (a Windows editor) is not part of the data.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    if text.starts_with("DATE,") {
         return Err(Error::UnsupportedCsv);
     }
     let invalid = |line: usize, reason: String| Error::InvalidFinalsLine { line, reason };
+    // Numbers are right-justified in their fields and trailing blanks are
+    // trimmed, so a line that ends strictly inside a field has lost the end
+    // of that number (a truncated transfer: "-0.1478001" cut to "-0.").
+    fn field<'a>(
+        line: &'a str,
+        lineno: usize,
+        start: usize,
+        len: usize,
+        what: &str,
+    ) -> Result<&'a str> {
+        let n = line.len();
+        if n > start - 1 && n < start - 1 + len {
+            return Err(Error::InvalidFinalsLine {
+                line: lineno,
+                reason: format!(
+                    "line ends at column {n}, inside the {what} field (columns {start}-{}): \
+                     the file is truncated",
+                    start + len - 1
+                ),
+            });
+        }
+        Ok(cols(line, start, len))
+    }
     // Rust's float parser also accepts "NaN", "inf" and exponents; none of
     // them is a finals2000A.all value, and a non-finite number would reach
     // the sort and the time conversions.
@@ -248,8 +281,21 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
         let observed = match cols(line, 17, 1) {
             "I" => true,
             "P" => false,
-            // The file ends with rows that carry a date but no values.
-            " " | "" => continue,
+            // The file ends with rows that carry a complete date (columns
+            // 1-15) and nothing else; anything shorter is a cut line.
+            " " | "" => {
+                if line.len() < 15 {
+                    return Err(invalid(
+                        lineno,
+                        format!("line ends at column {}: the file is truncated", line.len()),
+                    ));
+                }
+                if line.len() > 16 {
+                    return Err(invalid(lineno, "values without an I/P flag".into()));
+                }
+                num(lineno, cols(line, 8, 8), "MJD")?;
+                continue;
+            }
             other => return Err(invalid(lineno, format!("polar motion flag {other:?}"))),
         };
         let mjd_utc = num(lineno, cols(line, 8, 8), "MJD")?;
@@ -258,17 +304,37 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
         if !(0.0..=100_000.0).contains(&mjd_utc) {
             return Err(invalid(lineno, format!("MJD {mjd_utc} out of range")));
         }
+        // Every data row carries UT1−UTC (F10.7, |UT1−UTC| < 0.9 s, so the
+        // decimal point is always in column 61). A row that stops before its
+        // end, or has it misplaced, is truncated or not this format.
+        if line.len() < 68 || cols(line, 61, 1) != "." {
+            return Err(invalid(
+                lineno,
+                format!(
+                    "no complete UT1-UTC value in columns 59-68 (line has {} columns): \
+                     truncated or misaligned",
+                    line.len()
+                ),
+            ));
+        }
         let xp = num(lineno, cols(line, 19, 9), "x pole")?;
         let yp = num(lineno, cols(line, 38, 9), "y pole")?;
-        // Polar motion without UT1−UTC would leave a row that cannot be
-        // used; it has not happened in the file's history, but the flag is
-        // separate, so treat such a row as the end of usable data.
-        let Some(dut1) = opt(lineno, cols(line, 59, 10), "UT1-UTC")? else {
-            continue;
-        };
-        let lod = opt(lineno, cols(line, 80, 7), "LOD")?.map(|ms| ms * 1.0e-3);
-        let dx = opt(lineno, cols(line, 98, 9), "dX")?.unwrap_or(0.0);
-        let dy = opt(lineno, cols(line, 117, 9), "dY")?.unwrap_or(0.0);
+        let dut1 = num(lineno, cols(line, 59, 10), "UT1-UTC")?;
+        // A nutation flag promises both dX and dY; a line that stops before
+        // them lost them.
+        if cols(line, 96, 1).trim() != "" && line.len() < 125 {
+            return Err(invalid(
+                lineno,
+                format!(
+                    "nutation flag set but the line ends at column {}, before dX/dY \
+                     (columns 98-125): the file is truncated",
+                    line.len()
+                ),
+            ));
+        }
+        let lod = opt(lineno, field(line, lineno, 80, 7, "LOD")?, "LOD")?.map(|ms| ms * 1.0e-3);
+        let dx = opt(lineno, field(line, lineno, 98, 9, "dX")?, "dX")?.unwrap_or(0.0);
+        let dy = opt(lineno, field(line, lineno, 117, 9, "dY")?, "dY")?.unwrap_or(0.0);
         rows.push(Parsed {
             entry: EOPEntry {
                 mjd_utc,
@@ -336,7 +402,14 @@ fn lod_from_neighbours(table: &[EOPEntry], i: usize) -> f64 {
 /// claims to be — a proxy notice page served with `200 OK`, or a truncated
 /// transfer — before it replaces a good table on disk. The check is the real
 /// parser, so anything that would later fail to load fails here instead,
-/// while the previous file is still in place.
+/// while the previous file is still in place; on top of that the table must
+/// end in predicted rows, as every published `finals2000A.all` does.
+///
+/// A transfer cut inside a line is rejected by the parser (see
+/// [`parse_finals2000a`]); one cut at a line boundary in the observed part
+/// has no predicted rows and is rejected here. A cut at a line boundary in
+/// the predicted part is not detected: every row read is complete, the
+/// predictions just end earlier.
 ///
 /// A parser panic (a bug; malformed input is an error) is reported as a
 /// rejection rather than unwinding through the refresh thread, which would
@@ -345,6 +418,10 @@ pub(crate) fn validate_file(path: &Path) -> std::result::Result<(), String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     match std::panic::catch_unwind(|| parse_finals2000a(&text)) {
         Ok(Ok(t)) if t.is_empty() => Err("the file holds no EOP rows".to_string()),
+        Ok(Ok(t)) if t.last().is_some_and(|e| e.observed) => Err(
+            "the file has no predicted rows after the last observed one: it is truncated"
+                .to_string(),
+        ),
         Ok(Ok(_)) => Ok(()),
         Ok(Err(e)) => Err(format!("not a parsable EOP file ({e})")),
         Err(_) => Err("the EOP parser failed on this file".to_string()),
@@ -460,12 +537,14 @@ pub struct RefreshOutcome {
 /// copy fetched within the last 24 h is reported current without a request
 /// and an older one costs a conditional GET (`304` when unchanged); `force`
 /// transfers the file unconditionally. The first mirror that answers is
-/// kept (an HTML notice page or a truncated transfer is rejected and the
-/// next URL tried). Does not change the loaded table — call
+/// kept (an HTML notice page, or a transfer cut inside a line or before the
+/// predicted rows, is rejected and the next URL tried; a cut exactly at a
+/// line boundary inside the predictions cannot be seen, but leaves only
+/// complete rows). Does not change the loaded table — call
 /// [`load_from_dir`] or [`update`] for that.
 ///
 /// Fails with [`download::Error::RefreshOffline`] under offline mode without
-/// any network I/O (it says whether a copy exists, which then stays in use,
+/// any network I/O (it says whether a copy exists, which is left as it is,
 /// and lists the mirrors for fetching the file by hand), and with [`download::Error::AllSourcesFailed`] listing every
 /// URL and its error when nothing could be fetched.
 pub fn refresh_into(dir: &Path, force: bool) -> download::Result<RefreshOutcome> {
@@ -486,7 +565,8 @@ pub(crate) fn refresh_into_with_sources(
         .collect();
     if let Some(reason) = download::offline_reason() {
         // The copy a refresh would replace, else whichever copy the search
-        // directories hold: either way the message says it stays in use.
+        // directories hold: the message names it as left unchanged, not as
+        // the one in use (the default load picks the freshest copy).
         let copy = existing(dir.join(FINALS2000A_FILE))
             .or_else(|| datadir::find_all(FINALS2000A_FILE).into_iter().next());
         return Err(download::Error::RefreshOffline {
@@ -1149,6 +1229,96 @@ mod tests {
         }
         assert!(stale_prediction_age(&t, now, now).is_none());
         assert!(stale_prediction_age(&[], now, now).is_none());
+    }
+
+    /// A truncated transfer of the real file is rejected by the download
+    /// validator wherever it is cut in an observed row, and the parser
+    /// never turns the cut line into a row with a partial value. (A cut
+    /// inside the UT1-UTC field used to parse "-0." as 0.0, and a cut line
+    /// that lost its flag was skipped, both leaving a table without
+    /// predictions that replaced the good file on disk.)
+    #[test]
+    fn truncated_file_is_rejected() {
+        let path = datadir::find_all(FINALS2000A_FILE)
+            .into_iter()
+            .next()
+            .expect("finals2000A.all present in tests");
+        let text = std::fs::read_to_string(path).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        let row = |mjd: &str| lines.iter().position(|l| cols(l, 8, 8) == mjd).unwrap();
+        let dir = std::env::temp_dir().join(format!("satkit_eop_trunc_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join(FINALS2000A_FILE);
+        let prefix = |upto: usize, cut: &str| -> String {
+            let mut t = lines[..upto].join("\n");
+            t.push('\n');
+            t.push_str(cut);
+            t
+        };
+
+        // The whole file is fine, with or without a byte-order mark.
+        std::fs::write(&file, &text).unwrap();
+        assert_eq!(validate_file(&file), Ok(()));
+        let reference = parse_finals2000a(&text).unwrap();
+        assert_eq!(
+            parse_finals2000a(&format!("\u{feff}{text}")).unwrap(),
+            reference
+        );
+
+        // Observed row of MJD 60000, cut at every column: the parser either
+        // rejects the line or reads only complete values, and the validator
+        // always rejects the file (no predictions after the cut).
+        let idx = row("60000.00");
+        let line = lines[idx].trim_end();
+        let full = parse_finals2000a(line).unwrap();
+        for cut in 0..line.len() {
+            let piece = &line[..cut];
+            if let Ok(t) = parse_finals2000a(&format!("{}\n{piece}", lines[idx - 1])) {
+                if let Some(r) = t.iter().find(|r| r.mjd_utc == 60000.0) {
+                    let f = &full[0];
+                    assert_eq!((r.xp, r.yp, r.dut1), (f.xp, f.yp, f.dut1), "cut {cut}");
+                    assert!(r.dX == f.dX || r.dX == 0.0, "cut {cut}");
+                    assert!(r.dY == f.dY || r.dY == 0.0, "cut {cut}");
+                }
+            }
+        }
+        for cut in [
+            0, 5, 12, 15, 16, 20, 30, 59, 61, 62, 63, 67, 68, 70, 83, 100, 120,
+        ] {
+            std::fs::write(&file, prefix(idx, &line[..cut])).unwrap();
+            assert!(validate_file(&file).is_err(), "cut at column {cut}");
+        }
+        // Where the cut line is incomplete, the parser itself says so.
+        for cut in [5, 12, 20, 30, 59, 61, 62, 63, 67, 83, 100, 120] {
+            let err = parse_finals2000a(&prefix(idx, &line[..cut])).unwrap_err();
+            assert!(
+                matches!(err, Error::InvalidFinalsLine { line, .. } if line == idx + 1),
+                "cut at column {cut}: {err}"
+            );
+        }
+
+        // A predicted row cut inside a value is an error too; cut at a line
+        // boundary inside the predictions, the file is accepted (every row
+        // read is complete, the predictions just end earlier).
+        let idx = lines.iter().rposition(|l| cols(l, 17, 1) == "P").unwrap() - 100;
+        let line = lines[idx].trim_end();
+        for cut in [30, 62, 66] {
+            std::fs::write(&file, prefix(idx, &line[..cut])).unwrap();
+            assert!(validate_file(&file).is_err(), "predicted row cut at {cut}");
+        }
+        std::fs::write(&file, prefix(idx, "")).unwrap();
+        assert_eq!(validate_file(&file), Ok(()));
+
+        // The date-only rows at the end of the file are accepted; a cut one,
+        // or one carrying values without a flag, is not.
+        let tail = lines.iter().rposition(|l| cols(l, 17, 1) == " ").unwrap();
+        assert_eq!(validate_file(&file), Ok(()));
+        let date_only = lines[tail].trim_end();
+        assert_eq!(date_only.len(), 15);
+        assert_eq!(parse_finals2000a(date_only).unwrap(), vec![]);
+        assert!(parse_finals2000a(&date_only[..12]).is_err());
+        assert!(parse_finals2000a(&format!("{date_only}    0.123456")).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// CelesTrak's `EOP-All.csv` is refused with an error that names

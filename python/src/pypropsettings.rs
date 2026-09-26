@@ -105,7 +105,7 @@ impl From<TideModel> for PyTideModel {
 ///         units of the state (meters for position elements, m/s for velocity elements). Default 1e-8
 ///     rel_error (float): Maximum relative error of any element in the propagated state, unitless. Default 1e-8
 ///     gravity_degree (int): Maximum degree of spherical harmonic gravity model (at most 70). Default 4
-///     gravity_order (int): Maximum order of spherical harmonic gravity model. Default same as gravity_degree
+///     gravity_order (int): Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (``ValueError`` otherwise). Default same as gravity_degree
 ///     gravity_model (satkit.gravmodel): Gravity model. Default gravmodel.egm2008
 ///     use_spaceweather (bool): Use space weather data for atmospheric density. Default True
 ///     use_sun_gravity (bool): Include sun third-body gravity. Default True
@@ -198,8 +198,18 @@ impl PyPropSettings {
         ps.abs_error = abs_error;
         ps.rel_error = rel_error;
         ps.gravity_degree = check_gravity_degree(gravity_degree)?;
-        // The order defaults to the degree and is clamped to it
-        ps.gravity_order = gravity_order.map_or(ps.gravity_degree, |o| o.min(ps.gravity_degree));
+        // The order defaults to the degree; a larger one is refused, as by
+        // the setter (it used to be clamped silently)
+        ps.gravity_order = match gravity_order {
+            None => ps.gravity_degree,
+            Some(o) if o > ps.gravity_degree => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "gravity_order ({o}) must be <= gravity_degree ({})",
+                    ps.gravity_degree
+                )))
+            }
+            Some(o) => o,
+        };
         ps.gravity_model = gravity_model.into();
         ps.use_spaceweather = use_spaceweather;
         ps.use_sun_gravity = use_sun_gravity;
