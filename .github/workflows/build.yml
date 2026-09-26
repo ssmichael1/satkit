@@ -2,8 +2,15 @@ name: Build
 
 # One run per change: pull requests build on the PR event only (no
 # duplicate run for the branch push), main builds on the squash commit,
-# and a new push to a PR cancels the superseded run.
+# and a new push to a PR cancels the superseded run. Docs-only changes are
+# checked by docs-check.yml instead.
+#
+# workflow_dispatch: the release preflight requires a green push or
+# workflow_dispatch run of Build on main for the tagged commit. When the
+# main run was cancelled (back-to-back merges cancel each other), re-run it,
+# or dispatch Build on main while main is at that commit.
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -34,6 +41,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  # Property tests are derandomized here, so a PR's result does not depend on
+  # the draw: proptest from a fixed seed, hypothesis through the "ci" profile
+  # (python/test/conftest.py). The weekly audit.yml run is random and deep.
+  PROPTEST_RNG_SEED: "20260926"
+  HYPOTHESIS_PROFILE: ci
+
 jobs:
   lint:
     name: rustfmt
@@ -54,16 +68,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # One cache per job and OS, keyed on the rustc version and Cargo.lock
+      # (a toolchain bump re-saves instead of restoring stale artifacts), with
+      # the workspace's own crates pruned before saving. Saved from main only:
+      # a PR's cache is scoped to its ref and nobody else can restore it.
       - name: Cargo Cache
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-clippy-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Clippy (deny warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -103,16 +115,14 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+      # One cache per job and OS, keyed on the rustc version and Cargo.lock
+      # (a toolchain bump re-saves instead of restoring stale artifacts), with
+      # the workspace's own crates pruned before saving. Saved from main only:
+      # a PR's cache is scoped to its ref and nobody else can restore it.
       - name: Cargo Cache
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-sdist-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-sdist-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build sdist
         run: |
           pip install build
@@ -144,20 +154,37 @@ jobs:
       - name: Satkit data and test vectors
         uses: ./.github/actions/satkit-data
 
+      # One cache per job and OS, keyed on the rustc version and Cargo.lock
+      # (a toolchain bump re-saves instead of restoring stale artifacts), with
+      # the workspace's own crates pruned before saving. Saved from main only:
+      # a PR's cache is scoped to its ref and nobody else can restore it.
       - name: Cargo Cache
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Test
         run: cargo test --features chrono
+
+      # The build without the default features (no downloader, no OMM XML)
+      # must pass its own unit tests, not just compile.
+      - name: Test (no default features)
+        run: cargo test --no-default-features --lib
+
+      # DE421 exercises the second JPL file layout. Its files are not in the
+      # test-vector bucket yet, so the test is #[ignore]d; this step runs it
+      # as soon as the restored vectors carry them, and until then says so
+      # on the run summary instead of skipping silently.
+      - name: DE421 end-to-end test (when its vectors are present)
+        if: matrix.os == 'ubuntu'
+        shell: bash
+        run: |
+          d="$SATKIT_TESTVEC_ROOT/jplephem"
+          if [ -f "$d/lnxp1900p2053.421" ] && [ -f "$d/testpo.421" ]; then
+            cargo test --features chrono --test jplephem_de421_testpo -- --ignored
+          else
+            echo "::warning title=DE421 test not run::jplephem/lnxp1900p2053.421 and jplephem/testpo.421 are not in the test-vector bucket; tests/jplephem_de421_testpo.rs stays ignored until they are uploaded and listed in files.json."
+          fi
 
       # What works with NO data directory and NO network: the compiled-in
       # IERS tables and gravity models, SGP4, time, Kepler, Lambert — and a
@@ -171,7 +198,6 @@ jobs:
           mkdir -p "$SATKIT_DATA"
           cargo test --features chrono --lib offline_
           cargo test --features chrono --test offline_smoke
-          cargo build --no-default-features
 
       - name: Doc
         # Identical output on every OS; once is enough.
@@ -179,12 +205,29 @@ jobs:
         run: cargo doc --no-deps
 
   python:
-    name: python bindings test
-    runs-on: ubuntu-latest
+    name: python bindings test (${{ matrix.os }} ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Wheels ship for CPython 3.10-3.14 on Linux, macOS arm64 and
+        # Windows. The full leg (stubtest included) is Linux 3.13; the others
+        # cover the oldest and newest CPython and the other two platforms.
+        include:
+          - { os: ubuntu, python: "3.13", full: true }
+          - { os: ubuntu, python: "3.10" }
+          - { os: ubuntu, python: "3.14" }
+          - { os: macos, python: "3.13" }
+          - { os: windows, python: "3.13" }
+
+    runs-on: ${{ format('{0}-latest', matrix.os) }}
 
     env:
       SATKIT_DATA: astro-data
       SATKIT_TESTVEC_ROOT: satkit-testvecs
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v7
@@ -193,20 +236,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python }}
 
       - name: Satkit data and test vectors
         uses: ./.github/actions/satkit-data
 
       - name: Cargo Cache
-        uses: actions/cache@v6
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-python-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-python-
+          # The extension is built against this leg's Python. Shared by
+          # name so docs-check.yml can restore the Linux 3.13 cache.
+          shared-key: python-${{ matrix.python }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install satkit
         run: pip install -e ".[test]"
@@ -233,4 +274,5 @@ jobs:
       # --ignore-disjoint-bases, which switch off two whole PyO3-idiom
       # categories; the rest is handled by python/stubtest_allowlist.txt.
       - name: Check type stubs match bindings (stubtest)
+        if: matrix.full
         run: python python/run_stubtest.py

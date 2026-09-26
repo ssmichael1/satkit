@@ -215,17 +215,253 @@ proptest! {
         prop_assert!((tle2.epoch - tle.epoch).as_seconds().abs() < 1e-2);
     }
 
-    /// The TLE parser never panics on arbitrary (printable or not) input
-    /// lines — it must return Ok or Err, not abort. This is the cheap
-    /// in-process cousin of a fuzz target.
+    /// The TLE parser never panics — it must return Ok or Err, not abort.
+    /// This is the cheap in-process cousin of a fuzz target.
+    ///
+    /// Arbitrary strings almost never get past the length and ASCII checks
+    /// (the previous `.{0,90}` strategy reached the field parsers in 0 of
+    /// 100k cases), so the inputs here are printable-ASCII lines of data-line
+    /// length and, mostly, real element sets with a few edits applied
+    /// (`tle_line_pair`), which is what reaches the field parsers, the
+    /// checksum check and the located-error paths of `TLE::records`.
     #[test]
-    fn tle_parser_never_panics(
-        l1 in ".{0,90}",
-        l2 in ".{0,90}",
-    ) {
-        let _ = TLE::load_2line(&l1, &l2);
-        let _ = TLE::from_lines(&[l1, l2]);
+    fn tle_parser_never_panics((l1, l2) in tle_line_pair()) {
+        exercise_tle_parsers(&l1, &l2);
     }
+}
+
+/// Real element sets (valid checksums) the mutation strategy starts from:
+/// a 5-digit and a space-padded catalogue number, a line 2 with trailing
+/// content past column 69, an alpha-5 number and a negative-exponent
+/// B*.
+const SEED_TLES: &[(&str, &str)] = &[
+    (
+        "1 25544U 98067A   24356.58519896  .00014389  00000-0  25222-3 0  9992",
+        "2 25544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615",
+    ),
+    (
+        "1  5485U 71080A   24324.43728894  .00000099  00000-0  13784-3 0  9992",
+        "2  5485  32.0564  70.0187 0639723 198.9447 158.6281 12.74214074476065",
+    ),
+    (
+        "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290",
+        "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.",
+    ),
+    (
+        "1 A0000U 20037E   24323.73967089 -.00003818  12345-5 -31595-3 0  9993",
+        "2 A0000  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239080",
+    ),
+];
+
+/// One edit to a TLE line. Positions are taken modulo the line length.
+#[derive(Clone, Debug)]
+enum Edit {
+    /// Overwrite one character
+    Replace(usize, char),
+    /// Insert a character (shifts the rest of the line right one column)
+    Insert(usize, char),
+    /// Delete a character (shifts the rest of the line left one column)
+    Delete(usize),
+    /// Swap two adjacent characters
+    Swap(usize),
+    /// Replace a digit with a different digit (a plausible typo that keeps
+    /// the field parseable but breaks the checksum)
+    Digit(usize, u8),
+    /// Shift the line from here by n columns (spaces in, or characters out)
+    Shift(usize, i8),
+    /// Cut the line at this column
+    Truncate(usize),
+}
+
+/// Characters an edit writes: the ones that carry meaning in a TLE field,
+/// plus any printable ASCII and the occasional non-ASCII character.
+fn tle_char() -> impl Strategy<Value = char> {
+    prop_oneof![
+        6 => prop::sample::select(
+            "0123456789 +-.UCS".chars().collect::<Vec<_>>()
+        ),
+        3 => (0x20u8..0x7f).prop_map(char::from),
+        1 => any::<char>(),
+    ]
+}
+
+fn edit() -> impl Strategy<Value = Edit> {
+    let pos = 0usize..90;
+    prop_oneof![
+        3 => (pos.clone(), tle_char()).prop_map(|(p, c)| Edit::Replace(p, c)),
+        2 => (pos.clone(), tle_char()).prop_map(|(p, c)| Edit::Insert(p, c)),
+        2 => pos.clone().prop_map(Edit::Delete),
+        2 => pos.clone().prop_map(Edit::Swap),
+        4 => (pos.clone(), 0u8..10).prop_map(|(p, d)| Edit::Digit(p, d)),
+        1 => (pos.clone(), -3i8..=3).prop_map(|(p, n)| Edit::Shift(p, n)),
+        1 => (60usize..75).prop_map(Edit::Truncate),
+    ]
+}
+
+fn apply_edit(line: &str, e: &Edit) -> String {
+    let mut c: Vec<char> = line.chars().collect();
+    if c.is_empty() {
+        return String::new();
+    }
+    let n = c.len();
+    match *e {
+        Edit::Replace(p, ch) => c[p % n] = ch,
+        Edit::Insert(p, ch) => c.insert(p % (n + 1), ch),
+        Edit::Delete(p) => {
+            c.remove(p % n);
+        }
+        Edit::Swap(p) => {
+            let p = p % n;
+            if p + 1 < n {
+                c.swap(p, p + 1);
+            }
+        }
+        Edit::Digit(p, d) => {
+            // The first digit at or after p (wrapping), so the edit lands in
+            // a numeric field.
+            if let Some(i) = (0..n).map(|k| (p + k) % n).find(|&i| c[i].is_ascii_digit()) {
+                let old = c[i].to_digit(10).unwrap() as u8;
+                let new = if d == old { (d + 1) % 10 } else { d };
+                c[i] = char::from(b'0' + new);
+            }
+        }
+        Edit::Shift(p, k) => {
+            let p = p % n;
+            if k > 0 {
+                for _ in 0..k {
+                    c.insert(p, ' ');
+                }
+            } else {
+                for _ in 0..(-k) {
+                    if p < c.len() {
+                        c.remove(p);
+                    }
+                }
+            }
+        }
+        Edit::Truncate(p) => c.truncate(p),
+    }
+    c.into_iter().collect()
+}
+
+/// A real TLE with 1–4 edits spread over its two lines.
+fn mutated_tle() -> impl Strategy<Value = (String, String)> {
+    (
+        prop::sample::select(SEED_TLES),
+        prop::collection::vec((any::<bool>(), edit()), 1..=4),
+    )
+        .prop_map(|((l1, l2), edits)| {
+            let (mut l1, mut l2) = (l1.to_string(), l2.to_string());
+            for (first, e) in &edits {
+                if *first {
+                    l1 = apply_edit(&l1, e);
+                } else {
+                    l2 = apply_edit(&l2, e);
+                }
+            }
+            (l1, l2)
+        })
+}
+
+/// Pairs of candidate TLE lines: mostly mutated real element sets, plus
+/// random printable-ASCII lines of data-line length (with and without the
+/// `"1 "` / `"2 "` prefix `TLE::records` groups on).
+fn tle_line_pair() -> impl Strategy<Value = (String, String)> {
+    prop_oneof![
+        8 => mutated_tle(),
+        1 => ("[ -~]{69,80}", "[ -~]{69,80}"),
+        1 => ("1 [ -~]{67,78}", "2 [ -~]{67,78}"),
+    ]
+}
+
+/// Run every TLE entry point over one candidate pair of lines; the callers
+/// only care that none of them panics.
+fn exercise_tle_parsers(l1: &str, l2: &str) -> Vec<satkit::tle::Result<TLE>> {
+    let mut out = vec![TLE::load_2line(l1, l2), TLE::load_3line("0 FUZZ", l1, l2)];
+    // The record reader: two-line, three-line (name line first) and with
+    // checksum verification, whose located errors format the input.
+    let lines = [l1, l2];
+    let named = ["0 FUZZ", l1, l2, l1, l2];
+    for rec in TLE::records(lines)
+        .chain(TLE::records(named))
+        .chain(TLE::records(named).check_checksums(true))
+    {
+        if let Err(e) = &rec {
+            let _ = e.to_string();
+        }
+        out.push(rec);
+    }
+    let _ = TLE::from_lines(&[l1.to_string(), l2.to_string()]);
+    for tle in out.iter().flatten() {
+        // A TLE that parsed must also re-encode without panicking.
+        let _ = tle.to_2line();
+    }
+    out
+}
+
+/// Guards the strategy itself: `tle_parser_never_panics` is only worth
+/// running if its inputs reach past the length and ASCII checks. The
+/// original `.{0,90}` strategy passed every run while never calling a field
+/// parser. With a fixed seed, check that the generated pairs produce
+/// successful parses, field-parse errors and checksum mismatches.
+#[test]
+fn tle_fuzz_strategy_reaches_field_parsers() {
+    use proptest::strategy::ValueTree;
+    use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
+    use satkit::tle::Error;
+
+    // The seeds themselves are valid, checksums included.
+    for (l1, l2) in SEED_TLES {
+        for r in TLE::records([*l1, *l2]).check_checksums(true) {
+            r.unwrap_or_else(|e| panic!("seed TLE does not parse: {e}\n{l1}\n{l2}"));
+        }
+    }
+
+    let mut runner = TestRunner::new_with_rng(
+        Config::default(),
+        TestRng::from_seed(RngAlgorithm::ChaCha, &[7; 32]),
+    );
+    let strat = tle_line_pair();
+    let (mut ok, mut field, mut checksum, mut shape) = (0, 0, 0, 0);
+    let n = 2000;
+    for _ in 0..n {
+        let (l1, l2) = strat.new_tree(&mut runner).unwrap().current();
+        for r in exercise_tle_parsers(&l1, &l2) {
+            let mut e = match r {
+                Ok(_) => {
+                    ok += 1;
+                    continue;
+                }
+                Err(e) => e,
+            };
+            while let Error::Record { error, .. } = e {
+                e = *error;
+            }
+            match e {
+                Error::ChecksumMismatch { .. } => checksum += 1,
+                Error::LineTooShort { .. }
+                | Error::InvalidLineLengths { .. }
+                | Error::NonAscii { .. } => shape += 1,
+                _ => field += 1,
+            }
+        }
+    }
+    let total = ok + field + checksum + shape;
+    eprintln!("TLE fuzz outcomes over {n} pairs: ok {ok}, field errors {field}, checksum {checksum}, length/ASCII {shape}");
+    // Most results must come from past the up-front length/ASCII checks.
+    assert!(ok * 10 > total, "too few successful parses: {ok}/{total}");
+    assert!(
+        field * 10 > total,
+        "too few field-parse errors: {field}/{total}"
+    );
+    assert!(
+        checksum * 20 > total,
+        "too few checksum mismatches: {checksum}/{total}"
+    );
+    assert!(
+        shape * 2 < total,
+        "mostly rejected by the length/ASCII checks: {shape}/{total}"
+    );
 }
 
 // ───────────────────────── Quaternion ─────────────────────────

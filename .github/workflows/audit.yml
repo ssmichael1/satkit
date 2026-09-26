@@ -22,18 +22,65 @@ jobs:
       - name: Audit dependencies (RustSec advisories)
         run: cargo audit
 
-  # Deep property-test run. `cargo test` runs the proptest suites at a
-  # few hundred cases per property so every push stays fast; once a week,
-  # run the data-independent suite (tests/properties.rs) at a much larger
-  # count to hunt for rarer counterexamples. A failure here prints a
-  # minimal counterexample: pin it as a named `regression_*` test.
+  # Deep property-test runs. On pushes and PRs the property suites run a
+  # few hundred cases per property from a fixed seed (build.yml), so a PR's
+  # result never depends on the draw. Once a week they run here, randomly
+  # seeded and far deeper, to hunt for rarer counterexamples. A failure
+  # prints the minimal counterexample (proptest) or a reproduce blob
+  # (hypothesis): pin it as a named `regression_*` test in the Rust suite, or
+  # an `@example` on the hypothesis property, with the fix.
   deep-proptest:
-    name: property tests (deep, scheduled)
+    name: Rust property tests (deep, scheduled)
     runs-on: ubuntu-latest
+    env:
+      SATKIT_DATA: astro-data
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - name: Property tests, 100000 cases each
+      - name: Cargo Cache
+        uses: Swatinem/rust-cache@v2
+      # For tests/properties_data.rs (EOP); without it every test there skips.
+      - name: Satkit data
+        uses: ./.github/actions/satkit-data
+        with:
+          testvecs: "false"
+      # About a minute: the TLE parser fuzz and the time properties dominate.
+      - name: Data-independent properties, 1,000,000 cases each
         env:
-          PROPTEST_CASES: "100000"
+          PROPTEST_CASES: "1000000"
         run: cargo test --test properties
+      # The full IERS 2010 reduction is ~1000x costlier per case.
+      - name: EOP and frame properties, 20,000 cases each
+        env:
+          PROPTEST_CASES: "20000"
+        run: cargo test --test properties_data
+
+  deep-hypothesis:
+    name: Python property tests (deep, scheduled)
+    runs-on: ubuntu-latest
+    env:
+      SATKIT_DATA: astro-data
+      SATKIT_TESTVEC_ROOT: satkit-testvecs
+      # Random draws (the "ci" profile used on PRs is derandomized)
+      HYPOTHESIS_PROFILE: deep
+      HYPOTHESIS_MAX_EXAMPLES: "5000"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Satkit data
+        uses: ./.github/actions/satkit-data
+        with:
+          testvecs: "false"
+      - name: Cargo Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: python-3.13
+          save-if: false
+      - name: Install satkit
+        run: pip install -e ".[test]"
+      - name: Hypothesis properties, 5000 examples each
+        run: pytest python/test/test_properties.py

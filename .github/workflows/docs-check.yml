@@ -1,0 +1,101 @@
+name: Docs check
+
+# Build.yml ignores docs-only changes, yet test_doc_examples.py executes the
+# Python examples in docs/**/*.md and README.md, and the docs build executes
+# every tutorial notebook. This workflow runs both on pull requests that
+# touch the docs, before merge rather than on the post-merge deploy
+# (docs.yml). One job, one run per change: PR events only, and a new push
+# cancels the superseded run.
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - "docs/**"
+      - "**/*.md"
+      - "mkdocs.yml"
+      - ".github/workflows/docs-check.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: doc examples + docs build (notebooks executed)
+    runs-on: ubuntu-latest
+
+    env:
+      SATKIT_DATA: ${{ github.workspace }}/astro-data
+      SATKIT_QUIET: "1"
+      HYPOTHESIS_PROFILE: ci
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          # The cache Build's Linux 3.13 python leg saves on main (same
+          # extension build); nothing is saved from here.
+          shared-key: python-3.13
+          save-if: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Satkit data
+        uses: ./.github/actions/satkit-data
+        with:
+          testvecs: "false"
+
+      # As in docs.yml: the notebooks render "now", so the EOP table must
+      # cover today (the request is skipped inside a week of the last one).
+      - name: Refresh EOP and space weather (if the cached copy is over a week old)
+        run: |
+          pip install requests
+          python python/test/download_data.py astro-data --refresh-only --max-age-hours 168
+
+      - name: Install system dependencies for cartopy
+        run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data
+
+      - name: Install satkit and docs dependencies
+        run: |
+          pip install -e ".[test]"
+          pip install -r docs/requirements.txt
+
+      - name: Run the documentation examples
+        run: pytest python/test/test_doc_examples.py
+
+      - name: Generate static plots
+        run: python docs/examples/gen_plots.py
+
+      # mkdocs.yml sets allow_errors: false, so a raising notebook fails the
+      # build. `--strict` is not used yet only because of the griffe and
+      # autorefs warnings about docstrings in python/satkit/satkit.pyi
+      # (parameter lists, one cross-reference); those are reported as
+      # annotations and every other WARNING or ERROR fails the job. Switch to
+      # `mkdocs build --strict` once the stubs are clean.
+      - name: Build docs (fail on any warning but the known stub ones)
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdocs build 2>&1 | tee mkdocs.log
+          stub='^WARNING +- +(griffe: python/satkit/satkit\.pyi|mkdocs_autorefs: .* from .*python/satkit/satkit\.pyi)'
+          sed -E 's/\x1b\[[0-9;]*m//g' mkdocs.log | grep -E '^(WARNING|ERROR) ' > problems.log || true
+          grep -E "$stub" problems.log | sed -E 's/^WARNING +- +/::warning title=stub docstring::/' || true
+          if grep -vE "$stub" problems.log; then
+            echo "::error::the docs build logged the warnings/errors above"
+            exit 1
+          fi

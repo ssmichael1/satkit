@@ -7,9 +7,25 @@
 //! This test loads DE421 via [`init_from_path`] and checks predicted
 //! positions against JPL's own `testpo.421` truth values.
 //!
-//! Skipped silently when the DE421 binary or test-vector file aren't
-//! present in the testvecs directory (since they aren't part of the
-//! default `satkit-testvecs` bundle).
+//! It is also the check that the public API evaluates the ephemeris at
+//! TDB on a second file (`tests/jplephem_tdb.rs` covers DE440 without test
+//! vectors).
+//!
+//! # Running it
+//!
+//! The DE421 binary (`lnxp1900p2053.421`) and `testpo.421` are not yet in
+//! the test-vector bucket, so the test is `#[ignore]`d: `cargo test` lists
+//! it as ignored rather than passing it silently. Run it with
+//!
+//! ```text
+//! cargo test --test jplephem_de421_testpo -- --ignored
+//! ```
+//!
+//! and it FAILS if either file is missing under
+//! `$SATKIT_TESTVEC_ROOT/jplephem/`. CI runs it that way as soon as both
+//! files are in the restored test vectors, and otherwise posts a warning
+//! annotation on the run (the "DE421" step of the rust job in
+//! `.github/workflows/build.yml`).
 
 use satkit::jplephem;
 use satkit::{Instant, SolarSystem, TimeScale};
@@ -17,31 +33,35 @@ use satkit::{Instant, SolarSystem, TimeScale};
 /// Locate the testvecs root the same way the in-source `testvecs` test
 /// does: `SATKIT_TESTVEC_ROOT` if set, else `satkit-testvecs/` beside the
 /// crate root.
-fn testvec_root() -> Option<std::path::PathBuf> {
-    if let Ok(v) = std::env::var("SATKIT_TESTVEC_ROOT") {
-        return Some(std::path::PathBuf::from(v));
+fn testvec_root() -> std::path::PathBuf {
+    match std::env::var("SATKIT_TESTVEC_ROOT") {
+        Ok(v) => std::path::PathBuf::from(v),
+        Err(_) => std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("satkit-testvecs"),
     }
-    Some(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("satkit-testvecs"))
 }
 
 /// IAU 2012 definition; matches the value JPL bakes into the testpo files.
 const AU_M: f64 = 149_597_870_700.0;
 
 #[test]
+#[ignore = "needs jplephem/lnxp1900p2053.421 and jplephem/testpo.421 under SATKIT_TESTVEC_ROOT \
+            (not yet in the test-vector bucket); run with --ignored"]
 fn de421_loads_and_matches_testpo_positions() {
-    let Some(testdir) = testvec_root() else {
-        eprintln!("skipping: SATKIT_TESTVEC_ROOT unset and no satkit-testvecs/ alongside");
-        return;
-    };
+    let testdir = testvec_root();
     let bin = testdir.join("jplephem").join("lnxp1900p2053.421");
     let testpo = testdir.join("jplephem").join("testpo.421");
-    if !bin.is_file() || !testpo.is_file() {
-        eprintln!(
-            "skipping: DE421 binary or testpo.421 not present at {}",
-            testdir.join("jplephem").display()
-        );
-        return;
-    }
+    let missing: Vec<String> = [&bin, &testpo]
+        .iter()
+        .filter(|p| !p.is_file())
+        .map(|p| p.display().to_string())
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "DE421 test requested but its files are missing: {}. Fetch them from \
+         https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de421/ into \
+         $SATKIT_TESTVEC_ROOT/jplephem/ (the test-vector bucket does not carry them yet).",
+        missing.join(", ")
+    );
 
     jplephem::init_from_path(&bin).expect("DE421 should load via init_from_path");
 

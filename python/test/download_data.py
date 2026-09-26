@@ -14,7 +14,8 @@ before the Rust build. Mirrors ``satkit.utils.update_datafiles()``:
   the manifest's ``refresh`` URLs, Earth orientation (IERS
   ``finals2000A.all``) from the first of the manifest's ``eop`` mirrors that
   answers; a failed refresh keeps the existing copy and prints a warning
-  instead of failing the run.
+  instead of failing the run, except that the run fails (exit status 1) if
+  no ``finals2000A.all`` is present afterwards.
 
 Each refreshed file is downloaded once per update: a local copy younger than
 its cadence (3 h for space weather, 24 h for EOP; ``--max-age-hours``
@@ -290,6 +291,15 @@ def main() -> None:
     refresh_msafe(dest_dir, max_age if max_age is not None else REFRESH_MIN_AGE[MSAFE_LOCAL], ns.force_refresh)
     if manifest.get("eop"):
         print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
+        # A failed refresh of an existing copy is only a warning (the copy
+        # stays valid), but no copy at all must fail the run: CI saves the
+        # directory as its data cache, and a cache without EOP would be
+        # restored on every later run.
+        if not (dest_dir / "finals2000A.all").is_file():
+            raise SystemExit(
+                f"error: {dest_dir / 'finals2000A.all'} is absent after the refresh "
+                "(every EOP mirror failed); refusing to leave a data directory without EOP"
+            )
 
 
 if __name__ == "__main__":
