@@ -483,7 +483,8 @@ class TestPre1972UTC:
     def test_instants_to_labels_around_step(self, ym):
         """TAI instants within +/-2.5 s of each boundary, and every microsecond
         near both ends of a step, against ERFA (see assert_label_matches_erfa),
-        and strictly increasing labels"""
+        and increasing labels (adjacent microseconds may share a label: a
+        pre-1972 UTC microsecond is slightly longer than an SI one)"""
         y, m = ym
         r0 = erfa_us_from_utc(y, m, 1, 0, 0, 0.0)
         step_us = round(erfa_step(y, m) * 1e6)
@@ -497,9 +498,10 @@ class TestPre1972UTC:
         for k, r in enumerate(raws):
             g = from_raw(r).to_gregorian()
             assert_label_matches_erfa(r, g, iy[k], im[k], iday[k], ihmsf[k])
+            lab = (g[:5], g[5])
             if prev is not None:
-                assert (g[:5], g[5]) > prev, (int(r - r0), prev, g)
-            prev = (g[:5], g[5])
+                assert lab > prev[0] or (r - prev[1] == 1 and lab == prev[0]), (int(r - r0), prev, g)
+            prev = (lab, r)
 
     def test_random_instants_to_labels(self):
         """2000 random TAI instants 1961-1971 against ERFA taiutc + d2dtf"""
@@ -760,25 +762,47 @@ class TestUT1:
             t2 = sk.time.from_mjd(t.to_mjd(TS.UT1), TS.UT1)
             assert abs(raw_us(t2) - raw_us(t)) <= 2, m
 
-    def test_ut1_across_pre72_steps(self, eop_span):
-        """UT1 is continuous through the fractional pre-1972 UTC steps (UT1 -
-        UTC is interpolated as UT1 - TAI) and matches ERFA. Needs an EOP table
-        reaching before 1972 (CelesTrak's EOP-All.csv next to finals2000A.all)."""
-        bounds = [(y, m) for (y, m) in PRE72_BOUNDARIES if erfa.cal2jd(y, m, 1)[1] - 1 > eop_span[0]]
-        if not bounds:
-            pytest.skip("EOP table starts after 1972; add EOP-All.csv for 1962-1972")
-        for y, m in bounds:
+    def test_ut1_across_every_step(self, eop_span):
+        """Across every UTC step inside the EOP table (the pre-1972 steps and
+        rate changes, 1972-01-01's 0.107758 s, every leap second), UT1 - TAI
+        is continuous to f64 MJD resolution (UT1 - UTC is interpolated as UT1
+        - TAI), UT1 is monotonic and invertible, and it matches ERFA. The
+        pre-1972 steps need an EOP table reaching before 1972 (CelesTrak's
+        EOP-All.csv next to finals2000A.all)."""
+        steps = [
+            (y, m)
+            for (y, m) in PRE72_BOUNDARIES + LEAPS
+            if eop_span[0] < erfa.cal2jd(y, m, 1)[1] - 1 and erfa.cal2jd(y, m, 1)[1] + 1 < eop_span[1]
+        ]
+        assert steps
+        for y, m in steps:
             r0 = erfa_us_from_utc(y, m, 1, 0, 0, 0.0)
-            # every 0.25 s, plus inside a 0.1 s inserted interval
-            offsets = list(range(-2_000_000, 2_000_001, 250_000)) + [-50_000, -1]
-            times = [from_raw(r0 + o) for o in sorted(offsets)]
+            # every 50 ms over +/-2 s, plus inside a 0.1 s inserted interval
+            offsets = sorted(set(range(-2_000_000, 2_000_001, 50_000)) | {-50_000, -1, 1})
+            times = [from_raw(r0 + o) for o in offsets]
             ut1 = np.array([t.to_mjd(TS.UT1) for t in times])
-            ut1_minus_tai = (ut1 - np.array([t.to_mjd(TS.TAI) for t in times])) * 86400.0
-            # UT1 - TAI changes by ~3 ms/day, i.e. < 0.2 us over these 4 s
-            assert np.ptp(ut1_minus_tai) < 5e-6, (y, m, np.ptp(ut1_minus_tai))
+            d = (ut1 - np.array([t.to_mjd(TS.TAI) for t in times])) * 86400.0
+            # UT1 - TAI changes by < 5 ms/day, i.e. < 0.25 us over these 4 s;
+            # an f64 MJD resolves ~0.6 us
+            assert np.ptp(d) < 2e-6, (y, m, np.ptp(d))
+            assert np.all(np.diff(ut1) > 0), (y, m)
+            for t, u in zip(times, ut1):
+                assert abs(raw_us(sk.time.from_mjd(u, TS.UT1)) - raw_us(t)) <= 2, (y, m, str(t))
             e1, e2 = _erfa_ut1(times)
             err = mjd_minus_pair_seconds(ut1, e1, e2)
             assert np.max(np.abs(err)) < TOL_MJD_S, (y, m, np.max(np.abs(err)))
+
+    def test_ut1_is_utc_without_eop(self, eop_span):
+        """Documented fallback: before the EOP table (or with none), UT1 - UTC
+        is 0, so UT1 is the UTC MJD and repeats UTC's steps (as erfa.utcut1
+        with dut1 = 0). Checked at the steps before the loaded table."""
+        steps = [(y, m) for (y, m) in [(1961, 1)] + PRE72_BOUNDARIES + LEAPS if erfa.cal2jd(y, m, 1)[1] + 1 < eop_span[0]]
+        if not steps:
+            pytest.skip("EOP table covers every step")
+        for y, m in steps:
+            for c in [(*prev_day(y, m), 23, 59, 59.5), (y, m, 1, 0, 0, 0.5)]:
+                t = sk.time(*c)
+                assert t.to_mjd(TS.UT1) == t.to_mjd(TS.UTC), c
 
     def test_ut1_inside_leap_second(self, eop_span):
         times = []

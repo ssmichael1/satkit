@@ -690,3 +690,67 @@ fn test_ut1_across_leap_second() {
         );
     }
 }
+
+/// Across every leap second inside the EOP table, UT1 − TAI is continuous
+/// (the EOP lookup interpolates UT1 − TAI), UT1 is monotonic, and UT1 ->
+/// Instant inverts it. Before the table (or with none) UT1 − UTC is 0, so UT1
+/// is the UTC MJD.
+#[test]
+fn test_ut1_across_every_leap_second() {
+    let Some(cov) = crate::earth_orientation_params::coverage() else {
+        return;
+    };
+    let (first, last) = (cov.first.as_mjd_utc(), cov.last_observed.as_mjd_utc());
+    let mut checked = 0;
+    for (y, m) in [
+        (1972, 1),
+        (1972, 7),
+        (1973, 1),
+        (1974, 1),
+        (1981, 7),
+        (1990, 1),
+        (1999, 1),
+        (2009, 1),
+        (2017, 1),
+    ] {
+        let midnight = Instant::from_date(y, m, 1).unwrap();
+        let mjd = midnight.as_mjd_utc();
+        let times: Vec<Instant> = (-40..=40)
+            .map(|k| midnight + Duration::from_microseconds(k * 50_000))
+            .collect();
+        if mjd - 1.0 <= first || mjd + 1.0 >= last {
+            // Before the table: UT1 = UTC
+            if mjd + 1.0 < first {
+                for t in [midnight + Duration::from_seconds(0.5), times[0]] {
+                    assert_eq!(
+                        t.as_mjd_with_scale(TimeScale::UT1),
+                        t.as_mjd_with_scale(TimeScale::UTC)
+                    );
+                }
+            }
+            continue;
+        }
+        let ut1: Vec<f64> = times
+            .iter()
+            .map(|t| t.as_mjd_with_scale(TimeScale::UT1))
+            .collect();
+        let d: Vec<f64> = times
+            .iter()
+            .zip(&ut1)
+            .map(|(t, u)| (u - t.as_mjd_with_scale(TimeScale::TAI)) * 86_400.0)
+            .collect();
+        let (lo, hi) = d
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
+        assert!(hi - lo < 2.0e-6, "{y}-{m}: UT1 − TAI spans {} s", hi - lo);
+        for (w, t) in ut1.windows(2).zip(&times) {
+            assert!(w[1] > w[0], "UT1 not increasing at {t}");
+        }
+        for (t, u) in times.iter().zip(&ut1) {
+            let back = Instant::from_mjd_with_scale(*u, TimeScale::UT1);
+            assert!((back - *t).as_microseconds().abs() <= 2, "{t} -> {back}");
+        }
+        checked += 1;
+    }
+    assert!(checked >= 5, "only {checked} leap seconds checked");
+}

@@ -8,11 +8,13 @@
 //! uniform sampling with:
 //!
 //! * labels within a few seconds of every leap second, including the
-//!   inserted `23:59:60.x` itself (and `23:59:60`–`23:59:69.x` for the 10 s
-//!   step satkit models at 1972-01-01);
-//! * exact edge values (1970-01-01, 1972-01-01, J2000, the last leap second,
-//!   the Unix-epoch neighbourhood);
-//! * pre-1970 dates back to 1900.
+//!   inserted `23:59:60.x` itself, and of the positive pre-1972 UTC steps
+//!   (0.1 s, 0.107758 s at 1972-01-01, and satkit's 1.422818 s at
+//!   1961-01-01, labelled `23:59:60.x` the same way);
+//! * exact edge values (1961-01-01, the pre-1972 steps, 1970-01-01,
+//!   1972-01-01, J2000, the last leap second, the Unix-epoch neighbourhood);
+//! * pre-1970 dates back to 1900, including the pre-1972 "rubber second"
+//!   era (1961–1971), where TAI − UTC drifts.
 //!
 //! The calendar arithmetic here (`days_from_civil` / `civil_from_days`) is
 //! deliberately independent of satkit's own Gregorian code, so properties
@@ -30,44 +32,76 @@ pub const US_MIN: i64 = 60 * US;
 pub const US_DAY: i64 = 86_400 * US;
 
 /// Every UTC day that ends with inserted time, as `(year, month, day,
-/// inserted seconds)`, oldest first.
+/// inserted microseconds)`, oldest first.
 ///
-/// Hard-coded from IERS Bulletin C (not read back from satkit, so a defect
-/// in satkit's table cannot hide itself). The first row is satkit's
-/// modelling convention rather than a real leap second: TAI − UTC is taken
-/// as 0 before 1972 and the 10 s offset UTC started with is represented as
-/// a single 10 s inserted interval labelled `1971-12-31T23:59:60` …
-/// `23:59:69.999999` (see `LEAP_SECOND_TABLE` in `src/time/instant.rs`).
-/// TAI − UTC after row `k` is `10 + k` seconds.
-pub const LEAP_DAYS: [(i32, i32, i32, i64); 28] = [
-    (1971, 12, 31, 10),
-    (1972, 6, 30, 1),
-    (1972, 12, 31, 1),
-    (1973, 12, 31, 1),
-    (1974, 12, 31, 1),
-    (1975, 12, 31, 1),
-    (1976, 12, 31, 1),
-    (1977, 12, 31, 1),
-    (1978, 12, 31, 1),
-    (1979, 12, 31, 1),
-    (1981, 6, 30, 1),
-    (1982, 6, 30, 1),
-    (1983, 6, 30, 1),
-    (1985, 6, 30, 1),
-    (1987, 12, 31, 1),
-    (1989, 12, 31, 1),
-    (1990, 12, 31, 1),
-    (1992, 6, 30, 1),
-    (1993, 6, 30, 1),
-    (1994, 6, 30, 1),
-    (1995, 12, 31, 1),
-    (1997, 6, 30, 1),
-    (1998, 12, 31, 1),
-    (2005, 12, 31, 1),
-    (2008, 12, 31, 1),
-    (2012, 6, 30, 1),
-    (2015, 6, 30, 1),
-    (2016, 12, 31, 1),
+/// Hard-coded from IERS Bulletin C (1972 on) and USNO `tai-utc.dat`
+/// (before 1972), not read back from satkit, so a defect in satkit's tables
+/// cannot hide itself. Before 1972 the rows are the positive steps of
+/// rubber-second UTC, from the old segment's TAI − UTC at midnight to the
+/// new one's; the first row is satkit's convention for the start of its UTC
+/// model (TAI − UTC = 0 before 1961-01-01, 1.422818 s from it). Each step is
+/// labelled `23:59:60.x` on the day it ends.
+pub const LEAP_DAYS: [(i32, i32, i32, i64); 36] = [
+    (1960, 12, 31, 1_422_818),
+    (1963, 10, 31, 100_000),
+    (1964, 3, 31, 100_000),
+    (1964, 8, 31, 100_000),
+    (1964, 12, 31, 100_000),
+    (1965, 2, 28, 100_000),
+    (1965, 6, 30, 100_000),
+    (1965, 8, 31, 100_000),
+    (1971, 12, 31, 107_758),
+    (1972, 6, 30, US),
+    (1972, 12, 31, US),
+    (1973, 12, 31, US),
+    (1974, 12, 31, US),
+    (1975, 12, 31, US),
+    (1976, 12, 31, US),
+    (1977, 12, 31, US),
+    (1978, 12, 31, US),
+    (1979, 12, 31, US),
+    (1981, 6, 30, US),
+    (1982, 6, 30, US),
+    (1983, 6, 30, US),
+    (1985, 6, 30, US),
+    (1987, 12, 31, US),
+    (1989, 12, 31, US),
+    (1990, 12, 31, US),
+    (1992, 6, 30, US),
+    (1993, 6, 30, US),
+    (1994, 6, 30, US),
+    (1995, 12, 31, US),
+    (1997, 6, 30, US),
+    (1998, 12, 31, US),
+    (2005, 12, 31, US),
+    (2008, 12, 31, US),
+    (2012, 6, 30, US),
+    (2015, 6, 30, US),
+    (2016, 12, 31, US),
+];
+
+/// The UTC days that end in a negative pre-1972 step, as `(year, month,
+/// day, removed microseconds)`: the last `removed` µs of labels on these
+/// days never occurred (USNO `tai-utc.dat`).
+pub const REMOVED_DAYS: [(i32, i32, i32, i64); 2] = [(1961, 7, 31, 50_000), (1968, 1, 31, 100_000)];
+
+/// Pre-1972 TAI − UTC from USNO `tai-utc.dat`, as `(year, month, A [µs],
+/// MJD₀, rate [1e-7 s/day])`: from 00:00 UTC on the 1st of the month,
+/// TAI − UTC = A + (MJD_UTC − MJD₀) × rate.
+pub const TAI_UTC_PRE1972: [(i32, i32, i64, i64, i64); 13] = [
+    (1961, 1, 1_422_818, 37_300, 12_960),
+    (1961, 8, 1_372_818, 37_300, 12_960),
+    (1962, 1, 1_845_858, 37_665, 11_232),
+    (1963, 11, 1_945_858, 37_665, 11_232),
+    (1964, 1, 3_240_130, 38_761, 12_960),
+    (1964, 4, 3_340_130, 38_761, 12_960),
+    (1964, 9, 3_440_130, 38_761, 12_960),
+    (1965, 1, 3_540_130, 38_761, 12_960),
+    (1965, 3, 3_640_130, 38_761, 12_960),
+    (1965, 7, 3_740_130, 38_761, 12_960),
+    (1965, 9, 3_840_130, 38_761, 12_960),
+    (1966, 1, 4_313_170, 39_126, 25_920),
+    (1968, 2, 4_213_170, 39_126, 25_920),
 ];
 
 /// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
@@ -96,32 +130,68 @@ pub fn civil_from_days(z: i64) -> (i32, i32, i32) {
     ((y + i64::from(m <= 2)) as i32, m as i32, d as i32)
 }
 
-/// Inserted seconds at the end of the UTC day `days` (since 1970-01-01).
-pub fn inserted_seconds(days: i64) -> i64 {
+/// Inserted microseconds at the end of the UTC day `days` (since
+/// 1970-01-01).
+pub fn inserted_us(days: i64) -> i64 {
     LEAP_DAYS
         .iter()
         .find(|(y, m, d, _)| days_from_civil(*y, *m, *d) == days)
         .map_or(0, |e| e.3)
 }
 
-/// TAI − UTC, in seconds, on the UTC day `days`, from the hard-coded table
-/// (the offset that applies from 00:00:00 of that day).
-pub fn tai_minus_utc_on_day(days: i64) -> i64 {
-    let passed = LEAP_DAYS
-        .iter()
-        .filter(|(y, m, d, _)| days > days_from_civil(*y, *m, *d))
-        .count() as i64;
-    if passed == 0 {
-        0
+/// Whether the UTC day `days` ends in inserted or removed time.
+pub fn ends_in_step(days: i64) -> bool {
+    inserted_us(days) != 0
+        || REMOVED_DAYS
+            .iter()
+            .any(|(y, m, d, _)| days_from_civil(*y, *m, *d) == days)
+}
+
+/// Whether the UTC day `days` is in the rubber-second era
+/// (1961-01-01 .. 1971-12-31), where a UTC second is not an SI second.
+pub fn in_rubber_era(days: i64) -> bool {
+    (days_from_civil(1961, 1, 1)..days_from_civil(1972, 1, 1)).contains(&days)
+}
+
+/// `n / d` rounded to the nearest integer, halves away from zero (`d > 0`).
+fn div_round(n: i128, d: i128) -> i64 {
+    (if n >= 0 {
+        (n + d / 2) / d
     } else {
-        9 + passed
+        -((-n + d / 2) / d)
+    }) as i64
+}
+
+/// TAI − UTC, in microseconds (rounded), at the UTC-basis count `basis`
+/// (microseconds since the label 1970-01-01T00:00:00, 86400 s per day), from
+/// the hard-coded tables: 0 before 1961, `TAI_UTC_PRE1972` to 1971, then
+/// 10 s plus the leap seconds so far. A step applies from 00:00:00 of the
+/// day after it.
+pub fn tai_minus_utc_us(basis: i64) -> i64 {
+    let days = basis.div_euclid(US_DAY);
+    if days >= days_from_civil(1972, 1, 1) {
+        let passed = LEAP_DAYS
+            .iter()
+            .filter(|(y, m, d, _)| *y >= 1972 && days > days_from_civil(*y, *m, *d))
+            .count() as i64;
+        return (10 + passed) * US;
     }
+    TAI_UTC_PRE1972
+        .iter()
+        .rev()
+        .find(|(y, m, ..)| days >= days_from_civil(*y, *m, 1))
+        .map_or(0, |&(_, _, a, mjd0, rate)| {
+            // µs since MJD₀ (MJD 40587 is 1970-01-01); rate × 1e-7 s/day is
+            // rate / 864e9 µs per µs
+            let span = basis as i128 - (mjd0 - 40_587) as i128 * US_DAY as i128;
+            a + div_round(span * rate as i128, 864_000_000_000)
+        })
 }
 
 /// A UTC calendar label with microsecond resolution.
 ///
 /// `us` counts microseconds into the minute, so `us ≥ 60 s` is a
-/// leap-second label `23:59:60.x` (up to `23:59:69.x` on 1971-12-31).
+/// leap-second label `23:59:60.x` (up to `23:59:61.422817` on 1960-12-31).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Label {
     pub y: i32,
@@ -197,8 +267,22 @@ impl Label {
     /// The instant for this label, built without any float rounding: whole
     /// seconds through `from_datetime` (exact in `f64`) plus the fraction as
     /// an integer [`Duration`]. Inside a single second there is no leap
-    /// boundary, so this is exact.
+    /// boundary, so this is exact, except in the rubber-second era, where a
+    /// UTC second is 1 + (1.3 … 3.0)e-8 SI seconds: there (outside an
+    /// inserted interval) the seconds go through `from_datetime` as `f64`,
+    /// which rounds to the microsecond.
     pub fn instant(&self) -> Instant {
+        if in_rubber_era(self.days()) && !self.is_leap() {
+            return Instant::from_datetime(
+                self.y,
+                self.mo,
+                self.d,
+                self.h,
+                self.mi,
+                self.seconds_f64(),
+            )
+            .unwrap_or_else(|e| panic!("from_datetime rejected {self:?}: {e}"));
+        }
         let (s, f) = self.sec_frac();
         Instant::from_datetime(self.y, self.mo, self.d, self.h, self.mi, s as f64)
             .unwrap_or_else(|e| panic!("from_datetime rejected {self:?}: {e}"))
@@ -219,8 +303,7 @@ pub fn uniform_label(y0: i32, y1: i32) -> impl Strategy<Value = Label> {
 /// `LEAP_DAYS[idx]` (negative: before it; `0 ≤ offset < inserted`: inside
 /// it, i.e. `23:59:60.x`; beyond: after the following midnight).
 pub fn leap_label(idx: usize, offset_us: i64) -> Label {
-    let (y, mo, d, ins) = LEAP_DAYS[idx];
-    let ins_us = ins * US;
+    let (y, mo, d, ins_us) = LEAP_DAYS[idx];
     if offset_us < ins_us {
         // 23:59:(60 + offset). Offsets are within a minute of the boundary.
         assert!(offset_us >= -US_MIN);
@@ -234,7 +317,7 @@ pub fn leap_label(idx: usize, offset_us: i64) -> Label {
 /// ±3 s of the inserted interval, plus the exact boundary microseconds.
 pub fn leap_offset() -> impl Strategy<Value = (usize, i64)> {
     (0..LEAP_DAYS.len()).prop_flat_map(|i| {
-        let ins = LEAP_DAYS[i].3 * US;
+        let ins = LEAP_DAYS[i].3;
         (
             Just(i),
             prop_oneof![
@@ -256,12 +339,18 @@ pub fn fixed_edge_labels() -> Vec<Label> {
         Label::new(1900, 1, 1, 0, 0, 0),
         Label::new(1900, 3, 1, 0, 0, 0),
         Label::new(1960, 2, 29, 12, 0, 0),
+        Label::new(1960, 12, 31, 23, 59, 61_422_817),
+        Label::new(1961, 1, 1, 0, 0, 0),
+        Label::new(1961, 8, 1, 0, 0, 0),
+        Label::new(1963, 10, 31, 23, 59, 60_050_000),
+        Label::new(1968, 1, 31, 23, 59, 59_899_999),
+        Label::new(1968, 2, 1, 0, 0, 0),
         Label::new(1969, 12, 31, 23, 59, 59_999_999),
         Label::new(1970, 1, 1, 0, 0, 0),
         Label::new(1970, 1, 1, 0, 0, 1),
         Label::new(1971, 12, 31, 23, 59, 59_999_999),
         Label::new(1971, 12, 31, 23, 59, 60_000_000),
-        Label::new(1971, 12, 31, 23, 59, 69_999_999),
+        Label::new(1971, 12, 31, 23, 59, 60_107_757),
         Label::new(1972, 1, 1, 0, 0, 0),
         // J2000 = 2000-01-01T12:00:00 TT = 11:58:55.816 UTC
         Label::new(2000, 1, 1, 11, 58, 55_816_000),

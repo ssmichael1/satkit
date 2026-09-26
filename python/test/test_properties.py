@@ -7,8 +7,9 @@ pickling of every picklable public type, and vectorised (array-of-times)
 calls against scalar calls.
 
 Generators are edge-biased the same way as the Rust ones: times near every
-leap second (including ``23:59:60.x``), pre-1970 dates back to 1900, and a
-few fixed edges, mixed with uniform sampling.
+leap second and positive pre-1972 UTC step (including ``23:59:60.x``),
+pre-1970 dates back to 1900 (with the 1961-1971 rubber-second era), and a few
+fixed edges, mixed with uniform sampling.
 
 Properties that exposed a defect are kept, marked ``xfail(strict=True)``
 with the root cause, and carry the minimal counterexample as an
@@ -49,22 +50,26 @@ def _settings(n=_MAX):
 
 # ───────────────────────── generators ─────────────────────────
 
-# Every UTC day that ends with inserted time: (year, month, day, inserted s).
-# Hard-coded from IERS Bulletin C, not read back from satkit. 1971-12-31 is
-# satkit's convention for the 10 s TAI - UTC offset UTC started with in 1972
-# (one 10 s inserted interval labelled 23:59:60 ... 23:59:69.999999).
-LEAP_DAYS = [
-    (1971, 12, 31, 10),
-    (1972, 6, 30, 1), (1972, 12, 31, 1), (1973, 12, 31, 1), (1974, 12, 31, 1),
-    (1975, 12, 31, 1), (1976, 12, 31, 1), (1977, 12, 31, 1), (1978, 12, 31, 1),
-    (1979, 12, 31, 1), (1981, 6, 30, 1), (1982, 6, 30, 1), (1983, 6, 30, 1),
-    (1985, 6, 30, 1), (1987, 12, 31, 1), (1989, 12, 31, 1), (1990, 12, 31, 1),
-    (1992, 6, 30, 1), (1993, 6, 30, 1), (1994, 6, 30, 1), (1995, 12, 31, 1),
-    (1997, 6, 30, 1), (1998, 12, 31, 1), (2005, 12, 31, 1), (2008, 12, 31, 1),
-    (2012, 6, 30, 1), (2015, 6, 30, 1), (2016, 12, 31, 1),
-]  # fmt: skip
-
 US = 1_000_000
+
+# Every UTC day that ends with inserted time: (year, month, day, inserted us).
+# Hard-coded from IERS Bulletin C (1972 on) and USNO tai-utc.dat (the positive
+# pre-1972 steps), not read back from satkit. 1960-12-31 is satkit's
+# convention for the start of its UTC model (TAI - UTC = 0 before 1961-01-01,
+# 1.422818 s from it). Each step is labelled 23:59:60.x on the day it ends.
+LEAP_DAYS = [
+    (1960, 12, 31, 1_422_818), (1963, 10, 31, 100_000), (1964, 3, 31, 100_000),
+    (1964, 8, 31, 100_000), (1964, 12, 31, 100_000), (1965, 2, 28, 100_000),
+    (1965, 6, 30, 100_000), (1965, 8, 31, 100_000), (1971, 12, 31, 107_758),
+    (1972, 6, 30, US), (1972, 12, 31, US), (1973, 12, 31, US), (1974, 12, 31, US),
+    (1975, 12, 31, US), (1976, 12, 31, US), (1977, 12, 31, US), (1978, 12, 31, US),
+    (1979, 12, 31, US), (1981, 6, 30, US), (1982, 6, 30, US), (1983, 6, 30, US),
+    (1985, 6, 30, US), (1987, 12, 31, US), (1989, 12, 31, US), (1990, 12, 31, US),
+    (1992, 6, 30, US), (1993, 6, 30, US), (1994, 6, 30, US), (1995, 12, 31, US),
+    (1997, 6, 30, US), (1998, 12, 31, US), (2005, 12, 31, US), (2008, 12, 31, US),
+    (2012, 6, 30, US), (2015, 6, 30, US), (2016, 12, 31, US),
+]  # fmt: skip
+INSERTED_US = {lb[:3]: lb[3] for lb in LEAP_DAYS}
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
@@ -72,16 +77,16 @@ def _label_from_offset(idx, off_us):
     """UTC label (y, mo, d, h, mi, us-into-minute) at ``off_us`` from the start
     of the inserted interval of ``LEAP_DAYS[idx]``."""
     y, mo, d, ins = LEAP_DAYS[idx]
-    if off_us < ins * US:
+    if off_us < ins:
         return (y, mo, d, 23, 59, 60 * US + off_us)
-    nxt = datetime(y, mo, d) + timedelta(days=1, microseconds=off_us - ins * US)
+    nxt = datetime(y, mo, d) + timedelta(days=1, microseconds=off_us - ins)
     return (nxt.year, nxt.month, nxt.day, nxt.hour, nxt.minute, nxt.second * US + nxt.microsecond)
 
 
 @st.composite
 def leap_edge_labels(draw):
     idx = draw(st.integers(0, len(LEAP_DAYS) - 1))
-    ins = LEAP_DAYS[idx][3] * US
+    ins = LEAP_DAYS[idx][3]
     off = draw(
         st.one_of(
             st.integers(-3 * US, ins + 3 * US - 1),
@@ -99,10 +104,15 @@ def uniform_labels(draw, y0=1900, y1=2045):
 
 FIXED_LABELS = [
     (1900, 1, 1, 0, 0, 0),
+    (1960, 12, 31, 23, 59, 61_422_817),
+    (1961, 1, 1, 0, 0, 0),
+    (1963, 10, 31, 23, 59, 60_050_000),
+    (1968, 1, 31, 23, 59, 59_899_999),
+    (1968, 2, 1, 0, 0, 0),
     (1969, 12, 31, 23, 59, 59_999_999),
     (1970, 1, 1, 0, 0, 0),
     (1971, 12, 31, 23, 59, 60_000_000),
-    (1971, 12, 31, 23, 59, 69_999_999),
+    (1971, 12, 31, 23, 59, 60_107_757),
     (1972, 1, 1, 0, 0, 0),
     (2000, 1, 1, 11, 58, 55_816_000),  # J2000 in UTC
     (2016, 12, 31, 23, 59, 60_000_000),
@@ -118,10 +128,20 @@ labels = st.one_of(
 non_leap_labels = labels.filter(lambda lb: lb[5] < 60 * US)
 
 
+def in_rubber_era(y):
+    """1961-1971: pre-1972 UTC, whose second is 1 + (1.3 ... 3.0)e-8 SI s"""
+    return 1961 <= y < 1972
+
+
 def label_time(lb):
     """satkit.time for a label, without float rounding: whole seconds
-    through the calendar constructor plus an integer-microsecond duration."""
+    through the calendar constructor plus an integer-microsecond duration.
+    In the rubber-second era (outside an inserted interval) a UTC second is
+    not an SI second, so the seconds go through the constructor as a float,
+    which rounds to the microsecond."""
     y, mo, d, h, mi, us = lb
+    if in_rubber_era(y) and us < 60 * US:
+        return sk.time(y, mo, d, h, mi, us * 1e-6)
     return sk.time(y, mo, d, h, mi, float(us // US)) + sk.duration(microseconds=us % US)
 
 
@@ -193,13 +213,6 @@ class TestDatetime:
         assert back.tzinfo is not None
         assert abs(back - dt) <= timedelta(microseconds=1), (dt, back)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NEW BUG: time.from_datetime goes through datetime.timestamp() (f64 "
-        "seconds) and Instant::from_unixtime truncates unixtime * 1e6 "
-        "(python/src/pyinstant.rs:947, src/time/instant.rs:246), so ~2% of "
-        "microsecond-resolution datetimes come back 1 us early",
-    )
     @_settings()
     @example(lb=(2039, 4, 6, 11, 5, 6_748_275))
     @given(non_leap_labels)
@@ -249,14 +262,9 @@ class TestStrings:
         y, mo, d, h, mi, s = t.to_gregorian()
         assert (y, mo, d, h, mi) == lb[:5]
         assert 0 <= h < 24 and 0 <= mi < 60
-        s_max = 70 if (y, mo, d) == (1971, 12, 31) else 61
+        s_max = 60 + INSERTED_US.get((y, mo, d), 0) * 1e-6 if (h, mi) == (23, 59) else 60
         assert 0 <= s < s_max
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NEW BUG: from_datetime truncates second * 1e6 "
-        "(src/time/instant.rs:780); '...00.000249Z' parses as 248 us",
-    )
     @_settings()
     @example(lb=(2024, 1, 1, 0, 0, 249))
     @given(labels)

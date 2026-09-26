@@ -32,7 +32,7 @@ From 1961-01-01 to 1972-01-01, UTC ran on "rubber seconds": TAI − UTC drifted 
 
 On the days that end in a step, labels follow ERFA `dtf2d`/`utctai`. ERFA's `d2dtf` treats only steps over 0.5 s as leap seconds and prints labels up to the step size off on those days, and ERFA's quasi-JD stretches the day's fraction, while `to_mjd(timescale.UTC)` keeps 86,400 s days as it does for leap seconds.
 
-`time.UNIX_EPOCH` is the UTC label 1970-01-01T00:00:00, and Unix time (`from_unixtime`, `to_unixtime`, `datetime` conversion) stays UTC-based. UT1 − UTC from the Earth orientation table is interpolated as UT1 − TAI, so the pre-1972 steps and drift do not leak into UT1.
+`time.UNIX_EPOCH` is the UTC label 1970-01-01T00:00:00, and Unix time (`from_unixtime`, `to_unixtime`, `datetime` conversion) stays UTC-based. UT1 − UTC from the Earth orientation table is interpolated as UT1 − TAI, so the pre-1972 steps and drift, and leap seconds, do not leak into UT1: UT1 is continuous, monotonic and invertible across every step inside the table. The table starts at 1973-01-02 (`finals2000A.all`) or 1962-01-01 (with CelesTrak's `EOP-All.csv`). Before it, or with no table loaded, UT1 − UTC is taken as 0, so UT1 equals UTC and repeats its steps, stepping back at 00:00 after each leap second or positive pre-1972 step (as ERFA `utcut1` with `dut1 = 0`).
 
 ::: satkit.timescale
 

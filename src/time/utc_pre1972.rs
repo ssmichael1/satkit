@@ -447,19 +447,25 @@ mod tests {
         assert!(Instant::from_datetime(1968, 1, 31, 23, 59, 60.0).is_err());
     }
 
-    /// Label -> raw -> label round trips, and raw -> label is strictly
-    /// increasing: every microsecond within 20 ms of each step (both ends of
-    /// an inserted interval), a stride through the 1.5 s before each step,
-    /// and a coarse sweep across 1960–1973
+    /// Label -> raw -> label round trips, and raw -> label is monotonic:
+    /// every microsecond within 20 ms of each step (both ends of an inserted
+    /// interval), a stride through the 1.5 s before each step, and a coarse
+    /// sweep across 1960–1973. Labels of instants 2 µs or more apart are
+    /// strictly increasing; adjacent microseconds may share a label (a UTC
+    /// microsecond is slightly longer than an SI one), so there only
+    /// non-decreasing is required.
     #[test]
     fn round_trip_and_monotonic() {
         let label = |raw: i64| {
             let g = Instant::new(raw).as_datetime();
             (g.0, g.1, g.2, g.3, g.4, (g.5 * 1.0e6).round() as i64)
         };
-        let check = |raw: i64, prev: &mut (i32, i32, i32, i32, i32, i64)| {
+        let check = |raw: i64, step: usize, prev: &mut (i32, i32, i32, i32, i32, i64)| {
             let l = label(raw);
-            assert!(l > *prev, "{raw}: {prev:?} -> {l:?}");
+            assert!(
+                l > *prev || (step == 1 && l == *prev),
+                "{raw}: {prev:?} -> {l:?}"
+            );
             *prev = l;
             let back =
                 Instant::from_datetime(l.0, l.1, l.2, l.3, l.4, l.5 as f64 * 1.0e-6).unwrap();
@@ -484,7 +490,7 @@ mod tests {
             for (a, b, step) in windows {
                 let mut prev = label(a - 1);
                 for raw in (a..b).step_by(step) {
-                    check(raw, &mut prev);
+                    check(raw, step, &mut prev);
                 }
             }
         }
@@ -492,7 +498,7 @@ mod tests {
         let end = Instant::from_date(1973, 1, 1).unwrap().raw;
         let mut prev = label(raw - 1);
         while raw < end {
-            check(raw, &mut prev);
+            check(raw, 2, &mut prev);
             // Away from inserted intervals the UTC MJD maps back too (an f64
             // MJD near 40000 resolves ~0.6 us)
             if prev.5 < 60_000_000 {

@@ -434,7 +434,9 @@ impl Instant {
             }
             TimeScale::UT1 => {
                 // Go through UT1 − TAI, which is continuous across leap
-                // seconds (UT1 − UTC is not). The EOP table is indexed by UTC,
+                // seconds and the pre-1972 UTC steps (UT1 − UTC is not; the
+                // EOP lookup interpolates UT1 − TAI and adds back the
+                // TAI − UTC of the query). The EOP table is indexed by UTC,
                 // so it is evaluated at the UT1 value itself; |UT1 − UTC| < 0.9 s
                 // and UT1 − TAI changes by ~ns over that span, so the
                 // approximation is exact for practical purposes, including
@@ -547,11 +549,18 @@ impl Instant {
             }
             TimeScale::UT1 => {
                 // UT1 = UTC + (UT1 − UTC), except that inside a leap second
-                // the UTC MJD repeats the last second of the day while UT1
-                // keeps running. Using the TAI − UTC of the UTC *day*
-                // (rather than of `raw`) makes this UT1 = TAI + (UT1 − TAI),
-                // continuous through the leap second; elsewhere it is the
+                // (or a positive pre-1972 step) the UTC MJD repeats the last
+                // second(s) of the day while UT1 keeps running. Using the
+                // TAI − UTC of the UTC *day* (rather than of `raw`) makes this
+                // UT1 = TAI + (UT1 − TAI), continuous through the step, since
+                // the EOP lookup interpolates UT1 − TAI; elsewhere it is the
                 // plain UTC MJD plus UT1 − UTC.
+                //
+                // Without an EOP value (no table, or before its first row)
+                // UT1 − UTC is taken as 0, so UT1 is UTC and repeats UTC's
+                // steps: it steps back at 00:00 after each leap second or
+                // positive pre-1972 step and is not invertible inside the
+                // inserted interval (as ERFA `utcut1` with dut1 = 0).
                 let mjd_utc = self.as_mjd_utc();
                 let dut1 = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd_utc)[0];
                 let utc = self.raw.saturating_sub(microleapseconds(self.raw));
