@@ -146,6 +146,13 @@ fn sgp4_one(
     Ok((states, time_scalar))
 }
 
+crate::arg_extractor!(gravconst_arg: GravConst, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid gravconst: {e}"))
+});
+crate::arg_extractor!(opsmode_arg: OpsMode, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid opsmode: {e}"))
+});
+
 /// SGP-4 propagator for TLE
 ///
 /// Note:
@@ -213,39 +220,14 @@ fn sgp4_one(
 /// >>> print(coord)
 /// ITRFCoord(lat:  -0.0362 deg, lon:  62.0172 deg, hae: 35799.52 km)
 #[pyfunction]
-#[pyo3(signature=(tle, time, **kwds))]
+#[pyo3(signature=(tle, time, *, gravconst=GravConst::wgs72, opsmode=OpsMode::afspc, errflag=false))]
 pub fn sgp4(
     tle: &Bound<'_, PyAny>,
     time: &Bound<'_, PyAny>,
-    kwds: Option<&Bound<'_, PyDict>>,
+    #[pyo3(from_py_with = gravconst_arg)] gravconst: GravConst,
+    #[pyo3(from_py_with = opsmode_arg)] opsmode: OpsMode,
+    errflag: bool,
 ) -> Result<Py<PyAny>> {
-    let mut output_err = false;
-    let mut opsmode: OpsMode = OpsMode::afspc;
-    let mut gravconst: GravConst = GravConst::wgs72;
-
-    // Get keywords for the mode, gravconst, and errflag
-    if let Some(kw) = kwds {
-        if let Some(v) = kw.get_item("errflag")? {
-            output_err = v.extract::<bool>()?;
-            kw.del_item("errflag")?;
-        }
-        if let Some(v) = kw.get_item("opsmode")? {
-            opsmode = v.extract::<OpsMode>().map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("Invalid opsmode: {}", e))
-            })?;
-            kw.del_item("opsmode")?;
-        }
-        if let Some(v) = kw.get_item("gravconst")? {
-            gravconst = v.extract::<GravConst>().map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("Invalid gravconst: {}", e))
-            })?;
-            kw.del_item("gravconst")?;
-        }
-        // Any keyword left over is a typo (e.g. `gravconstt=`) — reject it
-        // rather than silently ignore it.
-        crate::pyutils::reject_unused_kwargs(kw)?;
-    }
-
     let py = tle.py();
     let gravconst: psgp4::GravConst = gravconst.into();
     let opsmode: psgp4::OpsMode = opsmode.into();
@@ -260,7 +242,7 @@ pub fn sgp4(
         let mut rtle = stle.0.clone();
         let (states, time_scalar) = sgp4_one(py, &mut rtle, time, gravconst, opsmode)?;
         stle.0 = rtle;
-        pack_sgp4_result(py, &states, output_err, time_scalar)
+        pack_sgp4_result(py, &states, errflag, time_scalar)
     }
     // Handle input as dict
     else if tle.is_instance_of::<PyDict>() {
@@ -269,7 +251,7 @@ pub fn sgp4(
         })?;
         let mut omm = omm_from_pydict(dict)?;
         let (states, time_scalar) = sgp4_one(py, &mut omm, time, gravconst, opsmode)?;
-        pack_sgp4_result(py, &states, output_err, time_scalar)
+        pack_sgp4_result(py, &states, errflag, time_scalar)
     } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
         let crate::pyinstant::TimeInput {
@@ -349,7 +331,7 @@ pub fn sgp4(
         for states in &results {
             pos.extend_from_slice(states.pos.as_slice());
             vel.extend_from_slice(states.vel.as_slice());
-            if output_err {
+            if errflag {
                 eint.extend(states.errcode.iter().map(|&x| x as i32));
             }
         }
@@ -371,7 +353,7 @@ pub fn sgp4(
 
         let pos = PyArray1::from_vec(py, pos).reshape(dims.clone())?;
         let vel = PyArray1::from_vec(py, vel).reshape(dims)?;
-        if !output_err {
+        if !errflag {
             Ok((pos, vel).into_py_any(py)?)
         } else {
             Ok((pos, vel, PyArray1::from_vec(py, eint).reshape(edims)?).into_py_any(py)?)

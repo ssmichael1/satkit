@@ -2,12 +2,22 @@ use satkit::orbitprop::SatPropertiesSimple;
 
 use crate::pyecom::{ecom_from_block, encode_ecom_block, PyEcomParams, ECOM_BLOCK_LEN};
 use crate::pythrust::{py_thrusts_to_profile, PyThrust};
-use crate::pyutils::{kwargs_or_default, reject_unused_kwargs};
+use crate::pyutils::invalid_value;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyTuple};
+use pyo3::types::{PyBytes, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
+
+crate::arg_extractor!(cdaoverm_arg: f64, |_| invalid_value("cdaoverm"));
+crate::arg_extractor!(craoverm_arg: f64, |_| invalid_value("craoverm"));
+crate::arg_extractor!(ecom_arg: Option<PyEcomParams>, |e| {
+    pyo3::exceptions::PyRuntimeError::new_err(format!("ecom must be a satkit.ecomparams: {e}"))
+});
+// `satproperties=` of `propagate` and `satstate.propagate`
+crate::arg_extractor!(pub(crate) satproperties_arg: Option<PySatProperties>, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {e}"))
+});
 
 #[pyclass(name = "satproperties", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
@@ -38,11 +48,19 @@ impl PySatProperties {
     ///         refused rather than reinterpreted.)
     ///
     #[new]
+    // `*args` only catches positional calls to refuse them with the message
+    // below; `text_signature` hides it.
     #[pyo3(
-        signature=(*args, **kwargs),
+        signature=(*args, cdaoverm=0.0, craoverm=0.0, thrusts=None, ecom=None),
         text_signature = "(*, cdaoverm=0.0, craoverm=0.0, thrusts=None, ecom=None)"
     )]
-    fn new(args: &Bound<PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> Result<Self> {
+    fn new(
+        args: &Bound<PyTuple>,
+        #[pyo3(from_py_with = cdaoverm_arg)] cdaoverm: f64,
+        #[pyo3(from_py_with = craoverm_arg)] craoverm: f64,
+        thrusts: Option<Vec<PyThrust>>,
+        #[pyo3(from_py_with = ecom_arg)] ecom: Option<PyEcomParams>,
+    ) -> PyResult<Self> {
         if !args.is_empty() {
             return Err(pyo3::exceptions::PyTypeError::new_err(format!(
                 "satproperties() takes keyword arguments only: cdaoverm=, craoverm=, \
@@ -51,42 +69,15 @@ impl PySatProperties {
                  the documented order)",
                 args.len(),
                 if args.len() == 1 { "" } else { "s" }
-            ))
-            .into());
+            )));
         }
-
-        let mut craoverm: f64 = 0.0;
-        let mut cdaoverm: f64 = 0.0;
-        if kwargs.is_some() {
-            craoverm = kwargs_or_default(&mut kwargs, "craoverm", craoverm)?;
-            cdaoverm = kwargs_or_default(&mut kwargs, "cdaoverm", cdaoverm)?;
-        }
-
         let mut props = SatPropertiesSimple::new(cdaoverm, craoverm);
-
-        // `thrusts` and `ecom` also accept an explicit None (the default)
-        if let Some(kw) = kwargs {
-            if let Some(thrusts_obj) = kw.get_item("thrusts")? {
-                if !thrusts_obj.is_none() {
-                    let thrusts: Vec<PyThrust> = thrusts_obj.extract()?;
-                    props = props.with_thrust(py_thrusts_to_profile(thrusts));
-                }
-                kw.del_item("thrusts")?;
-            }
-            if let Some(ecom_obj) = kw.get_item("ecom")? {
-                if !ecom_obj.is_none() {
-                    let ecom = ecom_obj
-                        .cast::<PyEcomParams>()
-                        .map_err(|e| anyhow::anyhow!("ecom must be a satkit.ecomparams: {e}"))?
-                        .borrow()
-                        .0;
-                    props = props.with_ecom(ecom);
-                }
-                kw.del_item("ecom")?;
-            }
-            reject_unused_kwargs(kw)?;
+        if let Some(thrusts) = thrusts {
+            props = props.with_thrust(py_thrusts_to_profile(thrusts));
         }
-
+        if let Some(ecom) = ecom {
+            props = props.with_ecom(ecom.0);
+        }
         Ok(Self(props))
     }
 

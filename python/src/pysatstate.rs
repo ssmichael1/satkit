@@ -2,7 +2,7 @@ use crate::pyframes::PyFrame;
 use crate::pyinstant::{PyInstant, TimeArg};
 use crate::pypropsettings::PyPropSettings;
 use crate::pyquaternion::PyQuaternion;
-use crate::pysatproperties::PySatProperties;
+use crate::pysatproperties::{satproperties_arg, PySatProperties};
 use crate::pyutils::{slice2py1d, slice2py2d};
 use crate::PyDuration;
 
@@ -15,7 +15,7 @@ use pyo3::types::{PyDict, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
-use satkit::orbitprop::{ImpulsiveManeuver, PropSettings, SatState, StateCov};
+use satkit::orbitprop::{ImpulsiveManeuver, SatState, StateCov};
 use satkit::{Frame, Instant};
 
 use anyhow::{bail, Result};
@@ -48,6 +48,10 @@ fn cov6(cov: &Bound<'_, np::PyArray2<f64>>) -> Result<Matrix6> {
     }
     crate::pyutils::py_to_smatrix::<6, 6>(cov.as_any())
 }
+
+crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |e| {
+    pyo3::exceptions::PyValueError::new_err(format!("Invalid propsettings: {e}"))
+});
 
 #[pyclass(name = "satstate", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
@@ -378,15 +382,12 @@ impl PySatState {
     ///
     /// Returns:
     ///     satkit.satstate: New state at input time
-    // Keywords parsed by hand; `text_signature` publishes them for inspect/stubtest.
-    #[pyo3(
-        signature=(timedur, **kwargs),
-        text_signature = "($self, timedur, *, propsettings=None, satproperties=None)"
-    )]
+    #[pyo3(signature=(timedur, *, propsettings=None, satproperties=None))]
     fn propagate(
         &self,
         timedur: &Bound<'_, PyAny>,
-        kwargs: Option<&Bound<'_, PyDict>>,
+        #[pyo3(from_py_with = propsettings_arg)] propsettings: Option<PyPropSettings>,
+        #[pyo3(from_py_with = satproperties_arg)] satproperties: Option<PySatProperties>,
     ) -> Result<Self> {
         let time: Instant = {
             if let Ok(dur) = timedur.cast::<PyDuration>() {
@@ -401,43 +402,9 @@ impl PySatState {
                 .into());
             }
         };
+        let propsettings = propsettings.map(|p| p.0);
 
-        let mut propsettings: Option<PropSettings> = None;
-        let mut satprops_obj: Option<PySatProperties> = None;
-
-        // An explicit `propsettings=None` / `satproperties=None` is the default
-        if let Some(kw) = kwargs {
-            if let Some(v) = kw.get_item("propsettings")? {
-                if !v.is_none() {
-                    propsettings = Some(
-                        v.extract::<PyPropSettings>()
-                            .map_err(|e| {
-                                pyo3::exceptions::PyValueError::new_err(format!(
-                                    "Invalid propsettings: {}",
-                                    e
-                                ))
-                            })?
-                            .0,
-                    );
-                }
-                kw.del_item("propsettings")?;
-            }
-            if let Some(v) = kw.get_item("satproperties")? {
-                if !v.is_none() {
-                    satprops_obj = Some(v.extract::<PySatProperties>().map_err(|e| {
-                        pyo3::exceptions::PyValueError::new_err(format!(
-                            "Invalid satproperties: {}",
-                            e
-                        ))
-                    })?);
-                }
-                kw.del_item("satproperties")?;
-            }
-            // Reject typo'd keywords rather than silently ignoring them.
-            crate::pyutils::reject_unused_kwargs(kw)?;
-        }
-
-        let satprops_ref = satprops_obj
+        let satprops_ref = satproperties
             .as_ref()
             .map(|s| &s.0 as &dyn satkit::orbitprop::SatProperties);
 

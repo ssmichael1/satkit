@@ -67,6 +67,13 @@ impl PyGeodet {
     }
 }
 
+crate::arg_extractor!(latitude_deg_arg: Option<f64>, |_| invalid_value("latitude_deg"));
+crate::arg_extractor!(longitude_deg_arg: Option<f64>, |_| invalid_value("longitude_deg"));
+crate::arg_extractor!(latitude_rad_arg: Option<f64>, |_| invalid_value("latitude_rad"));
+crate::arg_extractor!(longitude_rad_arg: Option<f64>, |_| invalid_value("longitude_rad"));
+crate::arg_extractor!(altitude_arg: Option<f64>, |_| invalid_value("altitude"));
+crate::arg_extractor!(height_arg: Option<f64>, |_| invalid_value("height"));
+
 ///
 /// Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 ///
@@ -115,34 +122,47 @@ pub struct PyITRFCoord(pub ITRFCoord);
 #[pymethods]
 impl PyITRFCoord {
     #[new]
-    #[pyo3(signature=(*args, **kwargs))]
-    fn new(args: &Bound<'_, PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
-        // If kwargs are set, we get input from them
-        if kwargs.is_some() {
-            let mut latitude_deg: Option<f64> = kwargs_or_none(&mut kwargs, "latitude_deg")?;
-            latitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "latitude_rad")?)
-                .map_or(latitude_deg, |v| Some(v.to_degrees()));
-            let mut longitude_deg: Option<f64> = kwargs_or_none(&mut kwargs, "longitude_deg")?;
-            longitude_deg = (kwargs_or_none::<f64>(&mut kwargs, "longitude_rad")?)
-                .map_or(longitude_deg, |v| Some(v.to_degrees()));
-            let mut altitude: f64 = kwargs_or_default(&mut kwargs, "altitude", 0.0)?;
-            altitude = (kwargs_or_none(&mut kwargs, "height")?).unwrap_or(altitude);
-
-            // Reject typos like `alttiude=` that would otherwise be silently
-            // ignored and leave the ground-station altitude at its 0.0 default.
-            if let Some(kw) = kwargs {
-                crate::pyutils::reject_unused_kwargs(kw)?;
-            }
-
-            if latitude_deg.is_none() || longitude_deg.is_none() {
+    #[pyo3(signature=(
+        *args,
+        latitude_deg=None,
+        longitude_deg=None,
+        latitude_rad=None,
+        longitude_rad=None,
+        altitude=None,
+        height=None,
+    ))]
+    fn new(
+        args: &Bound<'_, PyTuple>,
+        #[pyo3(from_py_with = latitude_deg_arg)] latitude_deg: Option<f64>,
+        #[pyo3(from_py_with = longitude_deg_arg)] longitude_deg: Option<f64>,
+        #[pyo3(from_py_with = latitude_rad_arg)] latitude_rad: Option<f64>,
+        #[pyo3(from_py_with = longitude_rad_arg)] longitude_rad: Option<f64>,
+        #[pyo3(from_py_with = altitude_arg)] altitude: Option<f64>,
+        #[pyo3(from_py_with = height_arg)] height: Option<f64>,
+    ) -> PyResult<Self> {
+        // Any geodetic keyword selects the geodetic form (the positional
+        // arguments are then ignored); `*_rad` wins over `*_deg`, and
+        // `height` over `altitude`
+        let geodetic = [
+            latitude_deg,
+            longitude_deg,
+            latitude_rad,
+            longitude_rad,
+            altitude,
+            height,
+        ];
+        if geodetic.iter().any(Option::is_some) {
+            let latitude_deg = latitude_rad.map_or(latitude_deg, |v| Some(v.to_degrees()));
+            let longitude_deg = longitude_rad.map_or(longitude_deg, |v| Some(v.to_degrees()));
+            let (Some(latitude_deg), Some(longitude_deg)) = (latitude_deg, longitude_deg) else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "Must set latitude, longitude",
                 ));
-            }
+            };
             Ok(Self(ITRFCoord::from_geodetic_deg(
-                latitude_deg.unwrap(),
-                longitude_deg.unwrap(),
-                altitude,
+                latitude_deg,
+                longitude_deg,
+                height.or(altitude).unwrap_or(0.0),
             )))
         } else if args.len() == 3 {
             let x = args.get_item(0)?.extract::<f64>()?;

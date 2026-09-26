@@ -137,104 +137,81 @@ fn check_gravity_degree(val: u16) -> PyResult<u16> {
     Ok(val)
 }
 
+crate::arg_extractor!(gravity_model_arg: GravModel, |_| {
+    pyo3::exceptions::PyValueError::new_err(
+        "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.egm96)",
+    )
+});
+crate::arg_extractor!(integrator_arg: PyIntegrator, |_| {
+    pyo3::exceptions::PyValueError::new_err(
+        "integrator must be a satkit.integrator enum value (e.g. satkit.integrator.rkv98)",
+    )
+});
+crate::arg_extractor!(tide_model_arg: PyTideModel, |_| {
+    pyo3::exceptions::PyValueError::new_err(
+        "tide_model must be a satkit.tidemodel enum value (e.g. satkit.tidemodel.solid_step1)",
+    )
+});
+
 #[pymethods]
 impl PyPropSettings {
     #[new]
-    #[pyo3(signature=(**kwargs))]
-    fn py_new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+    #[pyo3(signature=(
+        *,
+        abs_error=1e-8,
+        rel_error=1e-8,
+        gravity_degree=4,
+        gravity_order=None,
+        gravity_model=GravModel::egm2008,
+        use_spaceweather=true,
+        use_sun_gravity=true,
+        use_moon_gravity=true,
+        tide_model=PyTideModel::solid_step1,
+        use_relativistic_correction=true,
+        enable_interp=true,
+        integrator=PyIntegrator::rkv98,
+        gj_step_seconds=60.0,
+        max_steps=1_000_000,
+        require_eop_coverage=false,
+        initial_step_secs=None,
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn py_new(
+        abs_error: f64,
+        rel_error: f64,
+        gravity_degree: u16,
+        gravity_order: Option<u16>,
+        #[pyo3(from_py_with = gravity_model_arg)] gravity_model: GravModel,
+        use_spaceweather: bool,
+        use_sun_gravity: bool,
+        use_moon_gravity: bool,
+        #[pyo3(from_py_with = tide_model_arg)] tide_model: PyTideModel,
+        use_relativistic_correction: bool,
+        enable_interp: bool,
+        #[pyo3(from_py_with = integrator_arg)] integrator: PyIntegrator,
+        gj_step_seconds: f64,
+        max_steps: usize,
+        require_eop_coverage: bool,
+        initial_step_secs: Option<f64>,
+    ) -> PyResult<Self> {
         let mut ps = PropSettings::default();
-        let mut order_explicitly_set = false;
-        if let Some(kw) = kwargs {
-            if let Some(abserr) = kw.get_item("abs_error")? {
-                ps.abs_error = abserr.extract::<f64>()?;
-                kw.del_item("abs_error")?;
-            }
-            if let Some(relerr) = kw.get_item("rel_error")? {
-                ps.rel_error = relerr.extract::<f64>()?;
-                kw.del_item("rel_error")?;
-            }
-            if let Some(gravdegree) = kw.get_item("gravity_degree")? {
-                ps.gravity_degree = check_gravity_degree(gravdegree.extract::<u16>()?)?;
-                kw.del_item("gravity_degree")?;
-            }
-            if let Some(gravorder) = kw.get_item("gravity_order")? {
-                ps.gravity_order = gravorder.extract::<u16>()?;
-                order_explicitly_set = true;
-                kw.del_item("gravity_order")?;
-            }
-            if let Some(interp) = kw.get_item("enable_interp")? {
-                ps.enable_interp = interp.extract::<bool>()?;
-                kw.del_item("enable_interp")?;
-            }
-            if let Some(sw) = kw.get_item("use_spaceweather")? {
-                ps.use_spaceweather = sw.extract::<bool>()?;
-                kw.del_item("use_spaceweather")?;
-            }
-            if let Some(sun) = kw.get_item("use_sun_gravity")? {
-                ps.use_sun_gravity = sun.extract::<bool>()?;
-                kw.del_item("use_sun_gravity")?;
-            }
-            if let Some(moon) = kw.get_item("use_moon_gravity")? {
-                ps.use_moon_gravity = moon.extract::<bool>()?;
-                kw.del_item("use_moon_gravity")?;
-            }
-            if let Some(gm) = kw.get_item("gravity_model")? {
-                let model: GravModel = gm.extract::<GravModel>()
-                    .map_err(|_| pyo3::exceptions::PyValueError::new_err(
-                        "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.egm96)"
-                    ))?;
-                ps.gravity_model = model.into();
-                kw.del_item("gravity_model")?;
-            }
-            if let Some(integ) = kw.get_item("integrator")? {
-                let integrator: PyIntegrator = integ.extract::<PyIntegrator>()
-                    .map_err(|_| pyo3::exceptions::PyValueError::new_err(
-                        "integrator must be a satkit.integrator enum value (e.g. satkit.integrator.rkv98)"
-                    ))?;
-                ps.integrator = integrator.into();
-                kw.del_item("integrator")?;
-            }
-            if let Some(gjstep) = kw.get_item("gj_step_seconds")? {
-                ps.gj_step_seconds = gjstep.extract::<f64>()?;
-                kw.del_item("gj_step_seconds")?;
-            }
-            if let Some(maxsteps) = kw.get_item("max_steps")? {
-                ps.max_steps = maxsteps.extract::<usize>()?;
-                kw.del_item("max_steps")?;
-            }
-            if let Some(tm) = kw.get_item("tide_model")? {
-                let tide: PyTideModel = tm.extract::<PyTideModel>().map_err(|_| {
-                    pyo3::exceptions::PyValueError::new_err(
-                        "tide_model must be a satkit.tidemodel enum value (e.g. satkit.tidemodel.solid_step1)",
-                    )
-                })?;
-                ps.tide_model = tide.into();
-                kw.del_item("tide_model")?;
-            }
-            if let Some(gr) = kw.get_item("use_relativistic_correction")? {
-                ps.use_relativistic_correction = gr.extract::<bool>()?;
-                kw.del_item("use_relativistic_correction")?;
-            }
-            if let Some(req) = kw.get_item("require_eop_coverage")? {
-                ps.require_eop_coverage = req.extract::<bool>()?;
-                kw.del_item("require_eop_coverage")?;
-            }
-            if let Some(h0) = kw.get_item("initial_step_secs")? {
-                ps.initial_step_secs = h0.extract::<Option<f64>>()?;
-                kw.del_item("initial_step_secs")?;
-            }
-            crate::pyutils::reject_unused_kwargs(kw)?;
-            if order_explicitly_set {
-                // Clamp order to degree
-                if ps.gravity_order > ps.gravity_degree {
-                    ps.gravity_order = ps.gravity_degree;
-                }
-            } else {
-                // Default order to degree when not explicitly provided
-                ps.gravity_order = ps.gravity_degree;
-            }
-        }
-
+        ps.abs_error = abs_error;
+        ps.rel_error = rel_error;
+        ps.gravity_degree = check_gravity_degree(gravity_degree)?;
+        // The order defaults to the degree and is clamped to it
+        ps.gravity_order = gravity_order.map_or(ps.gravity_degree, |o| o.min(ps.gravity_degree));
+        ps.gravity_model = gravity_model.into();
+        ps.use_spaceweather = use_spaceweather;
+        ps.use_sun_gravity = use_sun_gravity;
+        ps.use_moon_gravity = use_moon_gravity;
+        ps.tide_model = tide_model.into();
+        ps.use_relativistic_correction = use_relativistic_correction;
+        ps.enable_interp = enable_interp;
+        ps.integrator = integrator.into();
+        ps.gj_step_seconds = gj_step_seconds;
+        ps.max_steps = max_steps;
+        ps.require_eop_coverage = require_eop_coverage;
+        ps.initial_step_secs = initial_step_secs;
         Ok(Self(ps))
     }
 

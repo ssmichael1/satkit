@@ -4,8 +4,8 @@ accept (or reject with a clear error).
 Covers the keyword-only ``satproperties`` constructor, list-in / list-out for
 one-element time lists, real numeric array-likes for quaternion rotation,
 explicit ``None`` for optional keywords, ``datetime`` wherever a scalar time is
-accepted, offline mode for the element-set URL fetches, misspelt ``gravity``
-keywords, enum pickling and ``duration`` arithmetic.
+accepted, offline mode for the element-set URL fetches, misspelt keywords, enum
+pickling and ``duration`` arithmetic.
 """
 
 import copy
@@ -41,7 +41,7 @@ class TestSatPropertiesKeywordOnly:
         assert p.thrusts == [] and p.ecom is None
 
     def test_unknown_keyword_rejected(self):
-        with pytest.raises(ValueError, match="cdaovrm"):
+        with pytest.raises(TypeError, match="cdaovrm"):
             sk.satproperties(cdaovrm=0.01)
 
     def test_signature_is_keyword_only(self):
@@ -262,7 +262,44 @@ class TestOfflineUrlFetches:
             sk.omm_from_url(self.URL + "json")
 
 
-# ─────────────────────── gravity keywords ───────────────────────
+# ─────────────────────── misspelt keywords ───────────────────────
+
+_POS = np.array([7000e3, 0.0, 0.0])
+_STATE = np.array([7000e3, 0.0, 0.0, 0.0, 7.5e3, 0.0])
+
+# Each binding whose keywords are real keyword-only parameters, called with
+# one misspelt keyword: Python's own TypeError, naming the keyword.
+MISSPELT_KEYWORD_CALLS = {
+    "duration": lambda: sk.duration(day=1),
+    "propsettings": lambda: sk.propsettings(gravity_degre=8),
+    "satproperties": lambda: sk.satproperties(cdaovrm=0.01),
+    "itrfcoord": lambda: sk.itrfcoord(latitude_deg=1.0, longitude_deg=2.0, alttiude=3.0),
+    "sgp4": lambda: sk.sgp4(ISS_2024, T0, gravconstt=sk.sgp4_gravconst.wgs84),
+    "nrlmsise00": lambda: sk.nrlmsise00(400.0, latitude=10.0),
+    "propagate": lambda: sk.propagate(_STATE, T0, duration_secs=60.0, propsetings=None),
+    "satstate.propagate": lambda: sk.satstate(T0, _POS, _STATE[3:]).propagate(T0, propsetings=None),
+}
+
+
+@pytest.mark.parametrize("call", MISSPELT_KEYWORD_CALLS.values(), ids=MISSPELT_KEYWORD_CALLS.keys())
+def test_misspelt_keyword_raises_typeerror(call):
+    with pytest.raises(TypeError, match="unexpected keyword argument '(day|gravity_degre|cdaovrm|alttiude|gravconstt|latitude|propsetings)'"):
+        call()
+
+
+@pytest.mark.parametrize(
+    "fn",
+    [sk.duration, sk.propsettings, sk.itrfcoord, sk.sgp4, sk.nrlmsise00, sk.propagate, sk.satstate.propagate,
+     sk.gravity, sk.gravity_and_partials],
+    ids=lambda f: f.__qualname__,
+)  # fmt: skip
+def test_signature_has_no_var_keyword(fn):
+    import inspect
+
+    kinds = [p.kind for p in inspect.signature(fn).parameters.values()]
+    assert inspect.Parameter.VAR_KEYWORD not in kinds
+
+
 
 
 class TestGravityKeywords:
@@ -272,7 +309,7 @@ class TestGravityKeywords:
     def test_misspelt_keyword(self, fn):
         with pytest.raises(TypeError, match="'degre'"):
             fn(self.pos, degre=8)
-        with pytest.raises(TypeError, match="'odrer', 'modle'"):
+        with pytest.raises(TypeError, match="'odrer'"):
             fn(self.pos, odrer=4, modle=sk.gravmodel.jgm3)
 
     def test_valid_keywords(self):
