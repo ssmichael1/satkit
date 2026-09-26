@@ -18,7 +18,7 @@ use satkit::lpephem::sun;
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in GCRF frame at input time[s].  Units are meters
 #[pyfunction]
 pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    pyutils::py_vec3_of_time_arr(&sun::pos_gcrf, time)
+    pyutils::py_vec3_of_time_result_arr(&|t| Ok(sun::pos_gcrf(t)), time)
 }
 
 /// Sun position in the Mean-of-Date Frame
@@ -33,7 +33,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s].  Units are meters
 #[pyfunction]
 pub fn pos_mod(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    pyutils::py_vec3_of_time_arr(&sun::pos_mod, time)
+    pyutils::py_vec3_of_time_result_arr(&|t| Ok(sun::pos_mod(t)), time)
 }
 
 /// Sunrise and sunset times on the day given by input time and at the given location.  
@@ -59,16 +59,10 @@ pub fn rise_set(
     time: &PyInstant,
     coord: &PyITRFCoord,
     sigma: Option<f64>,
-) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
-    match sun::riseset(&time.0, &coord.0, sigma) {
-        Ok((rise, set)) => pyo3::Python::attach(|py| {
-            Ok((
-                crate::pyinstant::instant_into_py(rise, py),
-                crate::pyinstant::instant_into_py(set, py),
-            ))
-        }),
-        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
-    }
+) -> PyResult<(PyInstant, PyInstant)> {
+    let (rise, set) = sun::riseset(&time.0, &coord.0, sigma)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    Ok((PyInstant(rise), PyInstant(set)))
 }
 
 /// Is satellite in Earth shadow given sun position

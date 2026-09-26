@@ -158,21 +158,17 @@ impl PyDuration {
             let dur = other
                 .extract::<Self>()
                 .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
-            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                Self(self.0 + dur.0).into_py_any(py)
-            })?)
+            Ok(Self(self.0 + dur.0).into_py_any(other.py())?)
         } else if other.is_instance_of::<PyInstant>() {
             let tm = other
                 .extract::<PyInstant>()
                 .map_err(|e| anyhow::anyhow!("Invalid time object: {}", e))?;
-            Ok(pyo3::Python::attach(|py| -> PyResult<Py<PyAny>> {
-                PyInstant(tm.0 + self.0).into_py_any(py)
-            })?)
+            Ok(PyInstant(tm.0 + self.0).into_py_any(other.py())?)
         } else {
             // Not a supported operand: let Python raise its standard
             // `TypeError: unsupported operand type(s)`. A bare number is
             // deliberately not accepted (its unit would be ambiguous).
-            Ok(pyo3::Python::attach(|py| py.NotImplemented()))
+            Ok(other.py().NotImplemented())
         }
     }
 
@@ -211,14 +207,12 @@ impl PyDuration {
             let dur = other
                 .extract::<Self>()
                 .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
-            pyo3::Python::attach(|py| (self.0.as_seconds() / dur.0.as_seconds()).into_py_any(py))
+            (self.0.as_seconds() / dur.0.as_seconds()).into_py_any(other.py())
         } else if let Ok(scalar) = other.extract::<f64>() {
             // Any real number: Python float or int, or a numpy scalar
-            pyo3::Python::attach(|py| {
-                PyDuration(Duration::from_seconds(self.0.as_seconds() / scalar)).into_py_any(py)
-            })
+            PyDuration(Duration::from_seconds(self.0.as_seconds() / scalar)).into_py_any(other.py())
         } else {
-            Ok(pyo3::Python::attach(|py| py.NotImplemented()))
+            Ok(other.py().NotImplemented())
         }
     }
 
@@ -231,10 +225,6 @@ impl PyDuration {
     // Comparison methods for duration objects
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.0 != other.0
     }
 
     fn __lt__(&self, other: &Self) -> bool {
