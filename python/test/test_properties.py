@@ -367,7 +367,7 @@ class TestPickle:
                 "satnum", "name", "intl_desig", "desig_year", "desig_launch", "desig_piece",
                 "inclination", "raan", "eccen", "arg_of_perigee", "mean_anomaly", "mean_motion",
                 "mean_motion_dot", "mean_motion_dot_dot", "bstar", "rev_num", "element_num",
-                "ephem_type",
+                "ephem_type", "classification",
             )
         ]  # fmt: skip
 
@@ -419,9 +419,13 @@ class TestPickle:
 
         tle = self._tle(25544, 51.6, 10.0, 0.001, 30.0, 40.0, 15.5, 1e-4, t, "X", 1)
         new = tle.__getstate__()
-        assert new[0] == 2
-        old = load(tle, patch(new, 1, [(85, t)]))
+        assert new[0] == 3
+        # v1/v2 have no classification byte (v3 adds one right after
+        # ephem_type, at offset 102)
+        legacy = bytes(new[:102]) + bytes(new[103:])
+        old = load(tle, patch(legacy, 1, [(85, t)]))
         assert old.epoch == t
+        assert old.classification == "U"
         assert self._tle_fields(old) == self._tle_fields(tle)
 
         s = sk.satstate(t, np.array([7e6, 0, 0.0]), np.array([0, 7.5e3, 0.0]))
