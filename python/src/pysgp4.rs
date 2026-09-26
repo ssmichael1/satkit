@@ -131,6 +131,37 @@ fn pack_sgp4_result(
     }
 }
 
+/// Copy of a Python TLE's contents, taken under a short shared borrow.
+///
+/// `try_borrow` rather than `borrow`: a TLE that another thread is modifying
+/// at this instant raises `RuntimeError` instead of panicking (a panic
+/// surfaces as `PanicException`, which `except Exception` does not catch).
+fn snapshot_tle(pytle: &Bound<'_, PyTLE>) -> PyResult<satkit::TLE> {
+    let tle = pytle.try_borrow().map_err(|_| {
+        pyo3::exceptions::PyRuntimeError::new_err(
+            "TLE is being modified by another thread; retry the call",
+        )
+    })?;
+    Ok(tle.0.clone())
+}
+
+/// Store the propagated copy of a TLE back in its Python object.
+///
+/// The write-back only carries the SGP4 initialisation that SGP4 caches in
+/// the TLE on first use, so later calls on the same object skip
+/// re-initialising; the elements themselves are unchanged. It is therefore
+/// best-effort: it is skipped when another thread holds a borrow of the TLE
+/// right now (`try_borrow_mut` fails), or when the TLE no longer equals the
+/// `snapshot` taken before SGP4 ran (another thread modified or propagated it
+/// meanwhile), so a concurrent edit is never overwritten with stale elements.
+fn write_back_tle(pytle: &Bound<'_, PyTLE>, snapshot: &satkit::TLE, propagated: satkit::TLE) {
+    if let Ok(mut cur) = pytle.try_borrow_mut() {
+        if cur.0 == *snapshot {
+            cur.0 = propagated;
+        }
+    }
+}
+
 /// Run SGP4 on one TLE or OMM at `time` with the GIL released; also returns
 /// whether `time` was a scalar. Shared by the TLE-object and OMM-dict
 /// branches of [`sgp4`].
@@ -182,6 +213,8 @@ crate::arg_extractor!(opsmode_arg: OpsMode, |e| {
 ///     "Ntime" input times and each of the "Ntle" tles. Shape is (3,) for a single TLE and
 ///     single time, (Ntime, 3) for a single TLE and multiple times, (Ntle, 3) for a list of
 ///     TLEs and a single time, and (Ntle, Ntime, 3) for a list of TLEs and multiple times.
+///     A list of TLEs keeps its TLE axis even with one element, and a list of times its
+///     time axis ("list in, list out"); empty lists give empty arrays, e.g. (Ntle, 0, 3).
 ///     If errflag is True, a third element is returned: an int32 numpy array of error
 ///     codes for each TLE and time (0 = success). The codes are the integer values of
 ///     ``sgp4_error``, so ``err == satkit.sgp4_error.success`` compares elementwise.
@@ -236,15 +269,14 @@ pub fn sgp4(
     let opsmode: psgp4::OpsMode = opsmode.into();
 
     // Handle input as TLE
-    if tle.is_instance_of::<PyTLE>() {
-        let mut stle: PyRefMut<PyTLE> = tle
-            .extract()
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e)))?;
-        // Clone the TLE and run SGP4 on the clone, then write the TLE back
-        // so the cached SGP4 init state is preserved
-        let mut rtle = stle.0.clone();
+    if let Ok(pytle) = tle.cast::<PyTLE>() {
+        // No borrow of the Python object is held while the GIL is released,
+        // so other threads can read, modify or propagate the same TLE
+        // meanwhile; SGP4 runs on a clone.
+        let snapshot = snapshot_tle(pytle)?;
+        let mut rtle = snapshot.clone();
         let (states, time_scalar) = sgp4_one(py, &mut rtle, time, gravconst, opsmode)?;
-        stle.0 = rtle;
+        write_back_tle(pytle, &snapshot, rtle);
         pack_sgp4_result(py, &states, errflag, time_scalar)
     }
     // Handle input as dict
@@ -261,32 +293,24 @@ pub fn sgp4(
             times: tmarray,
             scalar: time_scalar,
         } = time.to_time_input()?;
-        // The output reshape below cannot represent zero-length inputs
-        if plist.is_empty() {
-            bail!("TLE list must not be empty");
-        }
-        if tmarray.is_empty() {
-            bail!("Time array must not be empty");
-        }
 
         // Sources for the SGP4 computation, extracted with the GIL held;
         // the computation itself runs below with the GIL released.
-        // TLE sources keep a handle to the originating Python object so the
-        // cached SGP4 init state can be written back afterward.
+        // TLE sources keep a handle to the originating Python object and
+        // the snapshot the copy was made from, so the cached SGP4 init state
+        // can be written back afterward (see `write_back_tle`).
         enum Sgp4Source {
-            Tle(Py<PyTLE>, Box<satkit::TLE>),
+            Tle(Py<PyTLE>, Box<satkit::TLE>, Box<satkit::TLE>),
             Omm(Box<satkit::omm::OMM>),
         }
 
         let mut sources: Vec<Sgp4Source> = plist
             .iter()
             .map(|item| -> Result<Sgp4Source> {
-                if item.is_instance_of::<PyTLE>() {
-                    let pytle: Py<PyTLE> = item.extract().map_err(|e| {
-                        pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE: {}", e))
-                    })?;
-                    let rtle = Box::new(pytle.borrow(item.py()).0.clone());
-                    Ok(Sgp4Source::Tle(pytle, rtle))
+                if let Ok(pytle) = item.cast::<PyTLE>() {
+                    let snapshot = Box::new(snapshot_tle(pytle)?);
+                    let rtle = snapshot.clone();
+                    Ok(Sgp4Source::Tle(pytle.clone().unbind(), rtle, snapshot))
                 } else if item.is_instance_of::<PyDict>() {
                     let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
                         pyo3::exceptions::PyValueError::new_err(format!(
@@ -309,7 +333,7 @@ pub fn sgp4(
                 .iter_mut()
                 .map(|src| -> Result<psgp4::SGP4State> {
                     match src {
-                        Sgp4Source::Tle(_, rtle) => {
+                        Sgp4Source::Tle(_, rtle, _) => {
                             Ok(psgp4::sgp4_full(rtle.as_mut(), tmarray.as_slice(), gc, om)?)
                         }
                         Sgp4Source::Omm(omm) => {
@@ -321,16 +345,19 @@ pub fn sgp4(
         })?;
 
         // Write the TLEs back to preserve their cached SGP4 init state
-        for src in &sources {
-            if let Sgp4Source::Tle(pytle, rtle) = src {
-                pytle.borrow_mut(py).0 = rtle.as_ref().clone();
+        for src in sources {
+            if let Sgp4Source::Tle(pytle, rtle, snapshot) = src {
+                write_back_tle(pytle.bind(py), &snapshot, *rtle);
             }
         }
 
         let ntimes = tmarray.len();
-        let mut pos: Vec<f64> = Vec::with_capacity(plist.len() * ntimes * 3);
-        let mut vel: Vec<f64> = Vec::with_capacity(plist.len() * ntimes * 3);
-        let mut eint: Vec<i32> = Vec::with_capacity(plist.len() * ntimes);
+        // The TLEs actually propagated (the Python list could have been
+        // changed by another thread while the GIL was released)
+        let ntles = results.len();
+        let mut pos: Vec<f64> = Vec::with_capacity(ntles * ntimes * 3);
+        let mut vel: Vec<f64> = Vec::with_capacity(ntles * ntimes * 3);
+        let mut eint: Vec<i32> = Vec::with_capacity(ntles * ntimes);
         for states in &results {
             pos.extend_from_slice(states.pos.as_slice());
             vel.extend_from_slice(states.vel.as_slice());
@@ -339,19 +366,13 @@ pub fn sgp4(
             }
         }
 
-        // Set dimensions of output to remove singleton dimensions
-        let dims = match (plist.len() > 1, !time_scalar) {
-            (true, true) => vec![plist.len(), ntimes, 3],
-            (true, false) => vec![plist.len(), 3],
-            (false, true) => vec![ntimes, 3],
-            (false, false) => vec![3],
-        };
-        // Dims for error output
-        let edims = match (plist.len() > 1, !time_scalar) {
-            (true, true) => vec![plist.len(), ntimes],
-            (true, false) => vec![plist.len()],
-            (false, true) => vec![ntimes],
-            (false, false) => vec![1],
+        // A list of TLEs always keeps its TLE axis, including a one-element
+        // or empty list ("list in, list out", as for the time axis); only a
+        // scalar time drops the time axis. Empty inputs give empty arrays.
+        let (dims, edims) = if time_scalar {
+            (vec![ntles, 3], vec![ntles])
+        } else {
+            (vec![ntles, ntimes, 3], vec![ntles, ntimes])
         };
 
         let pos = PyArray1::from_vec(py, pos).reshape(dims.clone())?;

@@ -940,6 +940,7 @@ def eop_status(tm: time) -> str:
 
 # ── Frame-enum dispatch (new in 0.17.0) ─────────────────────────────────
 
+@typing.overload
 def rotation(
     from_frame: frame,
     to_frame: frame,
@@ -963,6 +964,22 @@ def rotation(
 
     Raises:
         RuntimeError: if the pair involves LVLH / RTN / NTW.
+    """
+    ...
+
+@typing.overload
+def rotation(
+    from_frame: frame,
+    to_frame: frame,
+    tm: TimeArrayLike,
+) -> list[quaternion]:
+    """Quaternions rotating a vector from ``from_frame`` to ``to_frame`` at
+    each of the times ``tm``. Full IERS 2010 reduction; see the scalar
+    overload.
+
+    Returns:
+        One rotation per input time (a one-element list for a one-element
+        input).
     """
     ...
 
@@ -999,6 +1016,7 @@ def rotation_with_state(
     """
     ...
 
+@typing.overload
 def rotation_approx(
     from_frame: frame,
     to_frame: frame,
@@ -1016,6 +1034,21 @@ def rotation_approx(
     Raises:
         RuntimeError: if either frame is ``TIRS`` / ``CIRS``, or if the pair
             involves orbit-dependent frames.
+    """
+    ...
+
+@typing.overload
+def rotation_approx(
+    from_frame: frame,
+    to_frame: frame,
+    tm: TimeArrayLike,
+) -> list[quaternion]:
+    """Approximate rotations from ``from_frame`` to ``to_frame`` at each of
+    the times ``tm``; see the scalar overload.
+
+    Returns:
+        One rotation per input time (a one-element list for a one-element
+        input).
     """
     ...
 

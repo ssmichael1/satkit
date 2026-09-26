@@ -27,7 +27,7 @@ class TestInvalidInputRaises:
             sk.kepler("7000e3", 0, 0, 0, 0, 0)
 
     def test_gravity_wrong_size(self):
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.gravity(np.zeros(2))
 
     def test_quaternion_axis_angle_wrong_size(self):
@@ -49,8 +49,9 @@ class TestInvalidInputRaises:
             sk.TLE.from_lines([line1, line2])
 
     def test_sgp4_empty_list(self):
-        with pytest.raises(RuntimeError):
-            sk.sgp4([], sk.time(2015, 3, 20))
+        # An empty TLE list gives empty arrays, not an error
+        p, v = sk.sgp4([], sk.time(2015, 3, 20))
+        assert p.shape == v.shape == (0, 3)
 
     def test_heliocentric_pos_invalid_body(self):
         # Sun/Moon have no heliocentric position; must raise, not panic
@@ -74,10 +75,10 @@ class TestInvalidInputRaises:
             sk.time.now() - 10**400
 
     def test_sgp4_wrong_size_state(self):
-        # propagate with an empty time list must raise cleanly
+        # An empty time list gives empty arrays, as sgp4(tle, []) does
         tle = sk.TLE.from_lines(ISS_2021)[0]
-        with pytest.raises(RuntimeError):
-            sk.sgp4([tle], [])
+        p, v = sk.sgp4([tle], [])
+        assert p.shape == v.shape == (1, 0, 3)
 
 
 class TestNonContiguousInput:

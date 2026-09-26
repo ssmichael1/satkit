@@ -62,6 +62,25 @@ impl PyPropStats {
         format!("Propagation Statistics:\n  Function Evals: {}\n  Accepted Steps: {}\n  Rejected Steps: {}",
     self.num_eval, self.num_accept, self.num_reject)
     }
+
+    /// Rebuild the statistics from their three counts. Used internally by
+    /// `__reduce__`; not part of the public API.
+    #[staticmethod]
+    const fn _from_pickle(num_eval: u32, num_accept: u32, num_reject: u32) -> Self {
+        Self {
+            num_eval,
+            num_accept,
+            num_reject,
+        }
+    }
+
+    /// Pickle (and `copy.deepcopy`) support. `propstats` has no `__new__`,
+    /// so it is rebuilt through the private `_from_pickle` staticmethod from
+    /// all three counts.
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, (u32, u32, u32))> {
+        let ctor = py.get_type::<Self>().getattr("_from_pickle")?;
+        Ok((ctor, (self.num_eval, self.num_accept, self.num_reject)))
+    }
 }
 
 /// Propagation result
@@ -286,10 +305,25 @@ impl PyPropResult {
     ///
     /// Returns:
     ///     numpy.ndarray: 6-element state [x, y, z, vx, vy, vz] in meters and m/s
-    ///     (a list of them for a list of times); with output_phi=True, (state, phi)
-    ///     tuples where phi is the 6x6 state transition matrix
+    ///     for a single time; for a list / array of N times, one (N, 6) array
+    ///     ((0, 6) for an empty list). With output_phi=True, a (state, phi) tuple,
+    ///     where phi is the 6x6 state transition matrix, or a list of them for a
+    ///     list of times
+    ///
+    /// Raises:
+    ///     ValueError: if output_phi is True but the propagation did not compute
+    ///         the state transition matrix (``propagate(..., output_phi=True)``),
+    ///         or a time is outside the interpolation range
     #[pyo3(signature=(time, output_phi=false))]
     fn interp(&self, py: Python, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
+        // Without the STM there is no phi to return; this used to hand back
+        // the bare state instead of the promised (state, phi) tuple
+        if output_phi && matches!(self.0, PyPropResultType::R1(_)) {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "output_phi=True needs the state transition matrix, which this result \
+                 does not have: propagate with output_phi=True",
+            ));
+        }
         let is_list = time.is_instance_of::<pyo3::types::PyList>()
             || time.is_instance_of::<numpy::PyArray1<Py<PyAny>>>();
 

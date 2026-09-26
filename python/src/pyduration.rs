@@ -8,11 +8,38 @@ use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
+const US_PER_SECOND: f64 = 1.0e6;
+const US_PER_MINUTE: f64 = 60.0e6;
+const US_PER_HOUR: f64 = 3_600.0e6;
+const US_PER_DAY: f64 = 86_400.0e6;
+
 crate::arg_extractor!(days_arg: f64, |_| invalid_value("days"));
 crate::arg_extractor!(seconds_arg: f64, |_| invalid_value("seconds"));
 crate::arg_extractor!(minutes_arg: f64, |_| invalid_value("minutes"));
 crate::arg_extractor!(hours_arg: f64, |_| invalid_value("hours"));
 crate::arg_extractor!(microseconds_arg: i64, |_| invalid_value("microseconds"));
+
+/// Refuse a NaN or infinite count of `what` with `ValueError`, and one too
+/// large for a duration (beyond ±2^63 microseconds, about ±292,000 years)
+/// with `OverflowError`; `us_per_unit` converts the count to microseconds.
+///
+/// The core `Duration` constructors map NaN to zero and saturate the rest,
+/// so without this `duration(days=nan)` was a zero duration and
+/// `time + inf` a garbage date.
+pub(crate) fn check_duration_value(value: f64, us_per_unit: f64, what: &str) -> PyResult<()> {
+    if !value.is_finite() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{what} must be finite, got {value}"
+        )));
+    }
+    // 2^63 is exact in f64; i64::MAX as f64 rounds up to it
+    if (value * us_per_unit).abs() >= 9_223_372_036_854_775_808.0 {
+        return Err(pyo3::exceptions::PyOverflowError::new_err(format!(
+            "{what} out of range for a duration: {value}"
+        )));
+    }
+    Ok(())
+}
 
 /// Class representing durations of times, allowing for representation
 /// via common measures of duration (years, days, hours, minutes, seconds)
@@ -78,14 +105,18 @@ impl PyDuration {
         #[pyo3(from_py_with = minutes_arg)] minutes: f64,
         #[pyo3(from_py_with = seconds_arg)] seconds: f64,
         #[pyo3(from_py_with = microseconds_arg)] microseconds: i64,
-    ) -> Self {
-        Self(
+    ) -> PyResult<Self> {
+        check_duration_value(days, US_PER_DAY, "days")?;
+        check_duration_value(hours, US_PER_HOUR, "hours")?;
+        check_duration_value(minutes, US_PER_MINUTE, "minutes")?;
+        check_duration_value(seconds, US_PER_SECOND, "seconds")?;
+        Ok(Self(
             Duration::from_seconds(seconds)
                 + Duration::from_days(days)
                 + Duration::from_minutes(minutes)
                 + Duration::from_hours(hours)
                 + Duration::from_microseconds(microseconds),
-        )
+        ))
     }
 
     /// Create new duration object from the number of days
@@ -96,8 +127,9 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_days(d: f64) -> Self {
-        Self(Duration::from_days(d))
+    fn from_days(d: f64) -> PyResult<Self> {
+        check_duration_value(d, US_PER_DAY, "days")?;
+        Ok(Self(Duration::from_days(d)))
     }
 
     /// Create new duration object from the number of seconds
@@ -108,8 +140,9 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_seconds(seconds: f64) -> Self {
-        Self(Duration::from_seconds(seconds))
+    fn from_seconds(seconds: f64) -> PyResult<Self> {
+        check_duration_value(seconds, US_PER_SECOND, "seconds")?;
+        Ok(Self(Duration::from_seconds(seconds)))
     }
 
     /// Create new duration object from the number of minutes
@@ -120,8 +153,9 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_minutes(minutes: f64) -> Self {
-        Self(Duration::from_minutes(minutes))
+    fn from_minutes(minutes: f64) -> PyResult<Self> {
+        check_duration_value(minutes, US_PER_MINUTE, "minutes")?;
+        Ok(Self(Duration::from_minutes(minutes)))
     }
 
     /// Create new duration object from number of hours
@@ -132,8 +166,9 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_hours(hours: f64) -> Self {
-        Self(Duration::from_hours(hours))
+    fn from_hours(hours: f64) -> PyResult<Self> {
+        check_duration_value(hours, US_PER_HOUR, "hours")?;
+        Ok(Self(Duration::from_hours(hours)))
     }
 
     /// Create new duration object from the number of milliseconds
@@ -144,8 +179,9 @@ impl PyDuration {
     /// Returns:
     ///     duration: New duration object
     #[staticmethod]
-    fn from_milliseconds(d: f64) -> Self {
-        Self(Duration::from_milliseconds(d))
+    fn from_milliseconds(d: f64) -> PyResult<Self> {
+        check_duration_value(d, 1_000.0, "milliseconds")?;
+        Ok(Self(Duration::from_milliseconds(d)))
     }
 
     /// Add durations or add duration to satkit.time
@@ -192,8 +228,10 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration: New duration object representing the scaled duration
-    fn __mul__(&self, other: f64) -> Self {
-        Self(Duration::from_seconds(self.0.as_seconds() * other))
+    fn __mul__(&self, other: f64) -> PyResult<Self> {
+        let secs = self.0.as_seconds() * other;
+        check_duration_value(secs, US_PER_SECOND, "scaled duration (seconds)")?;
+        Ok(Self(Duration::from_seconds(secs)))
     }
 
     /// Divide a duration by a real number (scale it) or by another duration
@@ -209,10 +247,22 @@ impl PyDuration {
             let dur = other
                 .extract::<Self>()
                 .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
+            if dur.0.as_microseconds() == 0 {
+                return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                    "division by a zero duration",
+                ));
+            }
             (self.0.as_seconds() / dur.0.as_seconds()).into_py_any(other.py())
         } else if let Ok(scalar) = other.extract::<f64>() {
             // Any real number: Python float or int, or a numpy scalar
-            PyDuration(Duration::from_seconds(self.0.as_seconds() / scalar)).into_py_any(other.py())
+            if scalar == 0.0 {
+                return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                    "duration division by zero",
+                ));
+            }
+            let secs = self.0.as_seconds() / scalar;
+            check_duration_value(secs, US_PER_SECOND, "scaled duration (seconds)")?;
+            PyDuration(Duration::from_seconds(secs)).into_py_any(other.py())
         } else {
             Ok(other.py().NotImplemented())
         }

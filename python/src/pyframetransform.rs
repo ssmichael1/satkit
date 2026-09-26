@@ -520,13 +520,35 @@ fn state_transform_batch(
     time: &Bound<'_, PyAny>,
     cfunc: fn(&Vector3, &Vector3, &Instant) -> (Vector3, Vector3),
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
-    if pos.is_instance_of::<np::PyArray2<f64>>() {
-        let parr = pos.extract::<np::PyReadonlyArray2<f64>>().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid pos array: {}", e))
-        })?;
-        let varr = vel.extract::<np::PyReadonlyArray2<f64>>().map_err(|e| {
+    // Batch input is any real numeric (N, 3) array-like (an integer array,
+    // a list of lists), converted to float64 as the stub's `ArrayLike`
+    // promises; anything else takes the single-state path below.
+    let batch = match to_f64_ndarray(pos) {
+        Ok(a) if a.ndim() == 2 => Some(a),
+        _ => None,
+    };
+    if let Some(parr) = batch {
+        let invalid_vel = |e: String| {
             pyo3::exceptions::PyValueError::new_err(format!("Invalid vel array: {}", e))
-        })?;
+        };
+        let varr = to_f64_ndarray(vel).map_err(|e| invalid_vel(e.to_string()))?;
+        if varr.ndim() != 2 {
+            return Err(invalid_vel(format!(
+                "expected shape (N, 3) like pos, got {:?}",
+                varr.shape()
+            ))
+            .into());
+        }
+        let pro = parr.readonly();
+        let vro = varr.readonly();
+        let parr = pro
+            .as_array()
+            .into_dimensionality::<np::ndarray::Ix2>()
+            .map_err(|e| anyhow::anyhow!("Invalid pos array: {e}"))?;
+        let varr = vro
+            .as_array()
+            .into_dimensionality::<np::ndarray::Ix2>()
+            .map_err(|e| anyhow::anyhow!("Invalid vel array: {e}"))?;
         let pshape = parr.shape();
         let vshape = varr.shape();
         let n = pshape[0];
@@ -553,8 +575,7 @@ fn state_transform_batch(
                 n
             );
         }
-        let pa = parr.as_array();
-        let va = varr.as_array();
+        let (pa, va) = (parr, varr);
         let mut pout = Vec::with_capacity(n * 3);
         let mut vout = Vec::with_capacity(n * 3);
         for i in 0..n {
@@ -596,10 +617,11 @@ fn state_transform_batch(
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
+///     tm (satkit.time|datetime.datetime|list): Epoch, or a list / numpy array of epochs
 ///
 /// Returns:
-///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``tm``
+///     (a list of them for a list / array of epochs, including a one-element one).
 ///
 /// Raises:
 ///     RuntimeError: if the pair involves LVLH / RTN / NTW.
@@ -625,10 +647,11 @@ pub fn rotation(
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
+///     tm (satkit.time|datetime.datetime|list): Epoch, or a list / numpy array of epochs
 ///
 /// Returns:
-///     satkit.quaternion: Approximate rotation from ``from_frame`` to ``to_frame``.
+///     satkit.quaternion: Approximate rotation from ``from_frame`` to ``to_frame``
+///     (a list of them for a list / array of epochs, including a one-element one).
 ///
 /// Raises:
 ///     RuntimeError: if either frame is TIRS / CIRS, or if the pair involves

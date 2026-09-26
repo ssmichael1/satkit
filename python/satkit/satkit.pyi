@@ -490,6 +490,10 @@ def sgp4(
             Shape is (3,) for a single TLE and single time, (Ntime, 3) for a single TLE
             and multiple times, (Ntle, 3) for a list of TLEs and a single time, and
             (Ntle, Ntime, 3) for a list of TLEs and multiple times.
+            A list keeps its axis even with one element ("list in, list out"):
+            ``sgp4([tle], t)`` is (1, 3) and ``sgp4([tle], [t])`` is (1, 1, 3).
+            Empty lists give empty arrays of the matching shape, e.g.
+            ``sgp4(tle, [])`` is (0, 3) and ``sgp4([tle], [])`` is (1, 0, 3).
             If errflag is True, a third element is returned: an ``int32`` numpy
             array of error codes, one per TLE and time — shape ``(1,)`` for a single
             TLE and time, ``(Ntime,)``, ``(Ntle,)`` or ``(Ntle, Ntime)`` otherwise.
@@ -695,7 +699,7 @@ def gravity(
     ...
 
 def gravity_and_partials(
-    pos: itrfcoord | npt.NDArray[np.float64],
+    pos: itrfcoord | npt.ArrayLike,
     *,
     model: gravmodel = ...,
     degree: int = 6,
@@ -1617,6 +1621,10 @@ class time:
         Args:
             other (float): number of days to add to the current time
 
+        Raises:
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if ``other`` is too large for a duration
+
         Returns:
             Time object representing the input number of days added to the current time
 
@@ -1758,6 +1766,10 @@ class time:
         Args:
             other (float): number of days to subtract from the current time
 
+        Raises:
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if ``other`` is too large for a duration
+
         Returns:
             Time object representing the input number of days subtracted from the current time
 
@@ -1765,15 +1777,15 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    def __sub__(self, other: npt.NDArray[np.float64] | list[float]) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise subtraction of days from the "self" time object
 
         Args:
-            other (npt.ArrayLike[float]): array-like structure containing days to subtract from the current time
+            other (npt.NDArray[np.float64] | list[float]): days to subtract from the current time
 
         Returns:
-            Array of time objects representing the element-wise subtraction of days from the current time
+            Object array of time objects representing the element-wise subtraction of days from the current time
 
         """
         ...
@@ -1797,10 +1809,10 @@ class time:
         Return a numpy array of duration objects, with each object representing an element-wise subtraction of time from the "self" time object
 
         Args:
-            other (list[time]): array-like structure containing times to subtract from the current time
+            other (list[time]): times to subtract from the current time
 
         Returns:
-            Array of duration objects representing the element-wise subtraction of times from the current time
+            Object array of duration objects, ``self - other[i]`` for each element
         """
         ...
 
@@ -1831,6 +1843,9 @@ class duration:
             - If no arguments are passed in, the created object represents a duration of 0 seconds
             - A duration is an integer number of microseconds; each floating-point
               argument is rounded to the nearest microsecond
+            - A NaN or infinite argument raises ``ValueError``, and one too large for
+              a duration (beyond about ±292,000 years) raises ``OverflowError``; the
+              same holds for the ``from_*`` constructors
 
         Example:
             ```python
@@ -1995,6 +2010,10 @@ class duration:
         Returns:
             Duration object representing the input duration divided by the input value
 
+        Raises:
+            ZeroDivisionError: if ``other`` is zero
+            ValueError: if ``other`` is NaN
+
         Example:
             ```python
             print(satkit.duration.from_days(1) / 2)
@@ -2012,6 +2031,9 @@ class duration:
 
         Returns:
             Dimensionless ratio of the two durations
+
+        Raises:
+            ZeroDivisionError: if ``other`` is a zero duration
 
         Example:
             ```python
@@ -3686,6 +3708,10 @@ class propresult:
         Returns:
             tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: (state, phi) where state is a 6-element
                 vector [x, y, z, vx, vy, vz] in meters and m/s, and phi is a 6x6 state transition matrix
+
+        Raises:
+            ValueError: if the propagation did not compute the state transition matrix
+                (propagate with ``output_phi=True``)
         """
         ...
 
@@ -3694,7 +3720,7 @@ class propresult:
         self,
         time: list[_Time | datetime.datetime],
         output_phi: typing.Literal[False] = False,
-    ) -> list[npt.NDArray[np.float64]]:
+    ) -> npt.NDArray[np.float64]:
         """Interpolate state at multiple times
 
         Args:
@@ -3702,7 +3728,8 @@ class propresult:
             output_phi: Must be False (default)
 
         Returns:
-            list[npt.NDArray[np.float64]]: List of 6-element state vectors [x, y, z, vx, vy, vz] in meters and m/s
+            npt.NDArray[np.float64]: (N, 6) array, one row [x, y, z, vx, vy, vz] in meters and m/s
+                per input time ((0, 6) for an empty list)
         """
         ...
 
@@ -3721,6 +3748,10 @@ class propresult:
         Returns:
             list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]: List of (state, phi) tuples;
                 each state is a 6-element vector in meters and m/s, each phi a 6x6 state transition matrix
+
+        Raises:
+            ValueError: if the propagation did not compute the state transition matrix
+                (propagate with ``output_phi=True``)
         """
         ...
 
@@ -4593,7 +4624,9 @@ def propagate(
         - Radiation pressure
         - Atmospheric drag: NRL-MSISE 2000 density model, with option to include space weather effects
 
-        End time must be set by keyword argument, either explicitly or by duration.
+        An end time is required: pass ``end`` or one of ``duration``, ``duration_secs``,
+        ``duration_days`` (``TypeError`` if none is given; ``ValueError`` for a NaN or
+        infinite ``duration_secs`` / ``duration_days``).
 
         For future propagation (beyond available data files):
 

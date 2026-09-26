@@ -65,6 +65,25 @@ impl PyGeodet {
     fn __repr__(&self) -> String {
         self.__str__()
     }
+
+    /// Rebuild a geodetic from its three fields. Used internally by
+    /// `__reduce__`; not part of the public API.
+    #[staticmethod]
+    const fn _from_pickle(latitude_rad: f64, longitude_rad: f64, height_m: f64) -> Self {
+        Self {
+            latitude_rad,
+            longitude_rad,
+            height_m,
+        }
+    }
+
+    /// Pickle (and `copy.deepcopy`) support. `geodetic` has no `__new__`,
+    /// so it is rebuilt through the private `_from_pickle` staticmethod from
+    /// all three fields (Python floats pickle exactly).
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, (f64, f64, f64))> {
+        let ctor = py.get_type::<Self>().getattr("_from_pickle")?;
+        Ok((ctor, (self.latitude_rad, self.longitude_rad, self.height_m)))
+    }
 }
 
 crate::arg_extractor!(latitude_deg_arg: Option<f64>, |_| invalid_value("latitude_deg"));
