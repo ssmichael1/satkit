@@ -663,7 +663,9 @@ impl OMM {
     ///
     /// Works with CelesTrak and Space-Track API endpoints.
     ///
-    /// Requires the `download` Cargo feature.
+    /// Requires the `download` Cargo feature. Returns [`Error::Offline`] without
+    /// opening a connection when offline mode is on ([`crate::utils::set_offline`]
+    /// or `SATKIT_OFFLINE`).
     ///
     /// # Example
     ///
@@ -675,6 +677,13 @@ impl OMM {
     /// ```
     #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
+        // The same offline check (and reason) as the data downloads
+        if let Some(reason) = crate::utils::download::offline_reason() {
+            return Err(Error::Offline {
+                url: url.to_string(),
+                reason,
+            });
+        }
         let agent = crate::utils::download::http_agent();
         let mut resp =
             agent.get(url).call().map_err(

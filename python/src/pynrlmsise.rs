@@ -43,7 +43,10 @@ pub fn nrlmsise00(
             kwds.del_item("longitude_deg")?;
         }
         if let Some(v) = kwds.get_item("time")? {
-            tm = Some(crate::pyutils::instant_from_pyany(&v)?);
+            // `time=None` is the documented default
+            if !v.is_none() {
+                tm = Some(crate::pyutils::instant_from_pyany(&v)?);
+            }
             kwds.del_item("time")?;
         }
         if let Some(v) = kwds.get_item("use_spaceweather")? {

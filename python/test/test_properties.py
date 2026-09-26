@@ -463,20 +463,19 @@ class TestPickle:
         else:
             assert [getattr(p2.ecom, f) for f in self.ecom_fields] == [getattr(e, f) for f in self.ecom_fields]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NEW BUG: satproperties takes positional arguments as (craoverm, "
-        "cdaoverm) (python/src/pysatproperties.rs:42-47), but the stub "
-        "(python/satkit/satkit.pyi, satproperties.__init__) and the Rust "
-        "SatPropertiesSimple::new document (cdaoverm, craoverm)",
-    )
     @_settings()
     @example(cd=0.0, cr=1.0)
     @given(st.floats(0, 1), st.floats(0, 1))
-    def test_satproperties_positional_order(self, cd, cr):
-        """Found by the pickle property: positional arguments follow the
-        documented order."""
-        p = sk.satproperties(cd, cr)
+    def test_satproperties_positional_rejected(self, cd, cr):
+        """Found by the pickle property: positional arguments used to bind as
+        (craoverm, cdaoverm), the reverse of the documented order. The
+        constructor is now keyword-only, so a positional call raises rather
+        than silently swapping drag and radiation pressure."""
+        with pytest.raises(TypeError, match="keyword arguments only: cdaoverm=, craoverm="):
+            sk.satproperties(cd, cr)
+        with pytest.raises(TypeError, match="keyword arguments only"):
+            sk.satproperties(cd)
+        p = sk.satproperties(cdaoverm=cd, craoverm=cr)
         assert (p.cdaoverm, p.craoverm) == (cd, cr)
 
     @_settings()
@@ -546,10 +545,10 @@ class TestPickle:
 
 # ───────────────────────── vectorised vs scalar ─────────────────────────
 
-# At least two times: a one-element list collapses to a scalar result (see
-# test_length_one_array_keeps_shape).
-time_lists = st.lists(times, min_size=2, max_size=6)
-recent_time_lists = st.lists(labels.filter(lambda lb: 1990 <= lb[0] <= 2030).map(label_time), min_size=2, max_size=6)
+# One-element lists included: list input always gives list / array output
+# (see test_length_one_array_keeps_shape).
+time_lists = st.lists(times, min_size=1, max_size=6)
+recent_time_lists = st.lists(labels.filter(lambda lb: 1990 <= lb[0] <= 2030).map(label_time), min_size=1, max_size=6)
 
 
 def _same(a, b):
@@ -562,24 +561,51 @@ class TestVectorised:
     """Array-of-times calls give element-wise exactly the scalar results,
     for a list and for a numpy array of times."""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NEW BUG: a one-element list/array of times returns a scalar "
-        "(float / quaternion / shape-(3,) array) instead of a one-element "
-        "sequence, because to_time_vec() forgets whether the input was a "
-        "scalar (python/src/pyutils.rs:156, :283, :299); the stubs promise "
-        "list[...] for array input",
+    @_settings()
+    @given(
+        axis=st.tuples(*[st.floats(-1, 1, allow_nan=False)] * 3).filter(
+            lambda a: sum(x * x for x in a) > 1e-6
+        ),
+        angle=st.floats(-2 * math.pi, 2 * math.pi, allow_nan=False),
+        n=st.integers(1, 20),
+        seed=st.integers(0, 2**32 - 1),
+        layout=st.sampled_from(["C", "F", "strided", "list"]),
     )
+    def test_quaternion_times_array_is_rowwise(self, axis, angle, n, seed, layout):
+        """q * V (Nx3) equals stacking q * v for each row, and V @ R.T, for
+        any memory layout of V. The Nx3 path applied the inverse rotation in
+        0.14.1-0.23.1 (a column-major matrix read as row-major)."""
+        q = sk.quaternion.from_axis_angle(np.array(axis), angle)
+        base = np.random.default_rng(seed).normal(size=(n, 6)) * 1e3
+        V = base[:, :3].copy()
+        rows = np.array([q * v for v in V])
+        if layout == "F":
+            arg = np.asfortranarray(V)
+        elif layout == "strided":
+            arg = base[:, ::2]  # non-contiguous view
+            V = arg.copy()
+            rows = np.array([q * v for v in V])
+        elif layout == "list":
+            arg = V.tolist()
+        else:
+            arg = V
+        out = q * arg
+        np.testing.assert_allclose(out, rows, rtol=0, atol=1e-9)
+        np.testing.assert_allclose(out, V @ q.to_rotation_matrix().T, rtol=0, atol=1e-9)
+
     @pytest.mark.parametrize(
         "fn",
         [sk.frametransform.gmst, sk.frametransform.qitrf2gcrf, sk.sun.pos_gcrf],
         ids=["gmst", "qitrf2gcrf", "sun.pos_gcrf"],
     )
     def test_length_one_array_keeps_shape(self, fn):
+        """A one-element list / array of times gives a one-element sequence,
+        not a scalar (as the stubs promise); a scalar time gives a scalar."""
         t = sk.time(2024, 1, 1)
         for arg in ([t], np.array([t])):
             out = fn(arg)
             assert isinstance(out, (list, np.ndarray)) and len(out) == 1, out
+            assert _same(out[0], fn(t))
 
     FT = [
         "gmst", "gast", "eqeq", "earth_rotation_angle", "qitrf2gcrf", "qgcrf2itrf",
@@ -621,8 +647,7 @@ class TestVectorised:
             ]
         )
         pos, vel = sk.sgp4(tle, tl)
-        pos, vel = np.atleast_2d(pos), np.atleast_2d(vel)
-        assert pos.shape == (len(tl), 3)
+        assert pos.shape == vel.shape == (len(tl), 3)
         for i, t in enumerate(tl):
             p, v = sk.sgp4(tle, t)
             np.testing.assert_array_equal(pos[i], p)
@@ -636,6 +661,7 @@ class TestVectorised:
         except Exception as e:  # no ephemeris file available
             pytest.skip(f"JPL ephemeris unavailable: {e}")
         for body in (sk.solarsystem.Moon, sk.solarsystem.Sun, sk.solarsystem.Mars):
-            vec = np.atleast_2d(sk.jplephem.geocentric_pos(body, tl))
+            vec = sk.jplephem.geocentric_pos(body, tl)
+            assert vec.shape == (len(tl), 3)
             for t, v in zip(tl, vec):
                 np.testing.assert_array_equal(v, sk.jplephem.geocentric_pos(body, t))

@@ -37,9 +37,9 @@ pub enum Error {
     /// [`rotation_approx`](super::rotation_approx) is only valid between
     /// ITRF and the inertial cluster (GCRF, EME2000, ICRF, TEME). The
     /// intermediate frames [`Frame::TIRS`] and [`Frame::CIRS`] are defined
-    /// by the IERS 2010 reduction and have no FK5 analogue.
+    /// by the IERS 2010 reduction and have no analogue in the approximate chain.
     #[error(
-        "rotation_approx: frame {frame} has no FK5 approximate-reduction \
+        "rotation_approx: frame {frame} has no approximate-reduction \
          analogue; use rotation() for full IERS 2010"
     )]
     ApproxNotSupportedForFrame { frame: Frame },

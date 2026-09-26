@@ -25,6 +25,8 @@ pub enum PySGP4Error {
     orbit_decay = psgp4::SGP4Error::SGP4ErrorOrbitDecay as isize,
 }
 
+crate::enum_pickle!(PySGP4Error, "sgp4_error");
+
 #[allow(non_camel_case_types)]
 #[pyclass(name = "sgp4_gravconst", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
@@ -33,6 +35,8 @@ pub enum GravConst {
     wgs72old = psgp4::GravConst::WGS72OLD as isize,
     wgs84 = psgp4::GravConst::WGS84 as isize,
 }
+
+crate::enum_pickle!(GravConst, "sgp4_gravconst");
 
 impl From<GravConst> for psgp4::GravConst {
     fn from(f: GravConst) -> Self {
@@ -51,6 +55,8 @@ pub enum OpsMode {
     afspc = psgp4::OpsMode::AFSPC as isize,
     improved = psgp4::OpsMode::IMPROVED as isize,
 }
+
+crate::enum_pickle!(OpsMode, "sgp4_opsmode");
 
 impl From<OpsMode> for psgp4::OpsMode {
     fn from(f: OpsMode) -> Self {
@@ -100,12 +106,18 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
 /// Pack a single SGP4 propagation result (position/velocity, and optionally the
 /// error codes) into the Python return tuple. Shared by the TLE-object and
 /// OMM-dict branches of [`sgp4`].
-fn pack_sgp4_result(states: &psgp4::SGP4State, output_err: bool) -> Result<Py<PyAny>> {
+fn pack_sgp4_result(
+    states: &psgp4::SGP4State,
+    output_err: bool,
+    time_scalar: bool,
+) -> Result<Py<PyAny>> {
     pyo3::Python::attach(|py| -> Result<Py<PyAny>> {
-        let dims = if states.pos.nrows() > 1 && states.pos.ncols() > 1 {
-            vec![states.pos.ncols(), states.pos.nrows()]
-        } else {
+        // (3,) for a single time; (N, 3) for a list / array of N times,
+        // including N = 1
+        let dims = if time_scalar {
             vec![states.pos.as_slice().len()]
+        } else {
+            vec![states.pos.ncols(), states.pos.nrows()]
         };
 
         // ndarray is row-major while numeris/numpy are column-major, hence the
@@ -240,14 +252,17 @@ pub fn sgp4(
         // Clone the TLE and run SGP4 with the GIL released, then write the
         // TLE back so the cached SGP4 init state is preserved
         let mut rtle = stle.0.clone();
-        let tmvec = time.to_time_vec()?;
+        let crate::pyinstant::TimeInput {
+            times: tmvec,
+            scalar: time_scalar,
+        } = time.to_time_input()?;
         let gravconst: psgp4::GravConst = gravconst.into();
         let opsmode: psgp4::OpsMode = opsmode.into();
         let states = tle
             .py()
             .detach(|| psgp4::sgp4_full(&mut rtle, tmvec.as_slice(), gravconst, opsmode))?;
         stle.0 = rtle;
-        pack_sgp4_result(&states, output_err)
+        pack_sgp4_result(&states, output_err, time_scalar)
     }
     // Handle input as dict
     else if tle.is_instance_of::<PyDict>() {
@@ -257,16 +272,22 @@ pub fn sgp4(
         let mut omm = omm_from_pydict(dict)?;
 
         // Run SGP4 with the GIL released
-        let tmvec = time.to_time_vec()?;
+        let crate::pyinstant::TimeInput {
+            times: tmvec,
+            scalar: time_scalar,
+        } = time.to_time_input()?;
         let gravconst: psgp4::GravConst = gravconst.into();
         let opsmode: psgp4::OpsMode = opsmode.into();
         let states = tle
             .py()
             .detach(|| psgp4::sgp4_full(&mut omm, tmvec.as_slice(), gravconst, opsmode))?;
-        pack_sgp4_result(&states, output_err)
+        pack_sgp4_result(&states, output_err, time_scalar)
     } else if tle.is_instance_of::<PyList>() {
         let plist = tle.cast::<PyList>().unwrap();
-        let tmarray = time.to_time_vec()?;
+        let crate::pyinstant::TimeInput {
+            times: tmarray,
+            scalar: time_scalar,
+        } = time.to_time_input()?;
         // The output reshape below cannot represent zero-length inputs
         if plist.is_empty() {
             bail!("TLE list must not be empty");
@@ -384,7 +405,7 @@ pub fn sgp4(
             });
 
             // Set dimensions of output to remove singleton dimensions
-            let dims = match (plist.len() > 1, ntimes > 1) {
+            let dims = match (plist.len() > 1, !time_scalar) {
                 (true, true) => vec![plist.len(), ntimes, 3],
                 (true, false) => vec![plist.len(), 3],
                 (false, true) => vec![ntimes, 3],
@@ -392,7 +413,7 @@ pub fn sgp4(
             };
             // Dims for error output
 
-            let edims = match (plist.len() > 1, ntimes > 1) {
+            let edims = match (plist.len() > 1, !time_scalar) {
                 (true, true) => vec![plist.len(), ntimes],
                 (true, false) => vec![plist.len()],
                 (false, true) => vec![ntimes],

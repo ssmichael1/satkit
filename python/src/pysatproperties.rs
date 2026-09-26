@@ -20,32 +20,43 @@ impl PySatProperties {
     /// setting satellite susceptibility to
     /// drag & radiation pressure
     ///
-    /// With Cr A / m (m^2/kg),  radiation pressure
-    /// and Cd A / m (m^2/kg), drag pressure
-    /// passed in as arguments in that order, or set explicitly
-    /// via the "craoverm" and "cdaoverm" keyword arguments
+    /// All arguments are keyword-only:
     ///
-    /// Optionally, set continuous thrust arcs via the "thrusts"
-    /// keyword argument, which takes a list of satkit.thrust objects,
-    /// and ECOM empirical solar-radiation-pressure coefficients via the
-    /// "ecom" keyword argument (a satkit.ecomparams, added to the
-    /// cannonball term; use craoverm=0 for a pure ECOM model)
+    /// Keyword Args:
+    ///     cdaoverm (float): Cd A / m (m^2/kg), susceptibility to drag. Default 0
+    ///     craoverm (float): Cr A / m (m^2/kg), susceptibility to radiation
+    ///         pressure. Default 0
+    ///     thrusts (list[satkit.thrust] | None): continuous thrust arcs. Default None
+    ///     ecom (satkit.ecomparams | None): ECOM empirical solar-radiation-pressure
+    ///         coefficients, added to the cannonball term (use craoverm=0 for a
+    ///         pure ECOM model). Default None
     ///
-    /// If these are not set, default is 0
+    /// Raises:
+    ///     TypeError: if any argument is passed positionally. (Releases before
+    ///         this change read positional arguments as (craoverm, cdaoverm),
+    ///         the reverse of the documented order, so positional calls are
+    ///         refused rather than reinterpreted.)
     ///
     #[new]
-    #[pyo3(signature=(*args, **kwargs))]
+    #[pyo3(
+        signature=(*args, **kwargs),
+        text_signature = "(*, cdaoverm=0.0, craoverm=0.0, thrusts=None, ecom=None)"
+    )]
     fn new(args: &Bound<PyTuple>, mut kwargs: Option<&Bound<'_, PyDict>>) -> Result<Self> {
+        if !args.is_empty() {
+            return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "satproperties() takes keyword arguments only: cdaoverm=, craoverm=, \
+                 thrusts=, ecom= ({} positional argument{} given; earlier releases \
+                 read positional arguments as (craoverm, cdaoverm), the reverse of \
+                 the documented order)",
+                args.len(),
+                if args.len() == 1 { "" } else { "s" }
+            ))
+            .into());
+        }
+
         let mut craoverm: f64 = 0.0;
         let mut cdaoverm: f64 = 0.0;
-
-        if args.len() > 0 {
-            craoverm = args.get_item(0)?.extract::<f64>()?;
-        }
-        if args.len() > 1 {
-            cdaoverm = args.get_item(1)?.extract::<f64>()?;
-        }
-
         if kwargs.is_some() {
             craoverm = kwargs_or_default(&mut kwargs, "craoverm", craoverm)?;
             cdaoverm = kwargs_or_default(&mut kwargs, "cdaoverm", cdaoverm)?;
@@ -53,11 +64,13 @@ impl PySatProperties {
 
         let mut props = SatPropertiesSimple::new(cdaoverm, craoverm);
 
-        // Handle thrusts keyword
+        // `thrusts` and `ecom` also accept an explicit None (the default)
         if let Some(kw) = kwargs {
             if let Some(thrusts_obj) = kw.get_item("thrusts")? {
-                let thrusts: Vec<PyThrust> = thrusts_obj.extract()?;
-                props = props.with_thrust(py_thrusts_to_profile(thrusts));
+                if !thrusts_obj.is_none() {
+                    let thrusts: Vec<PyThrust> = thrusts_obj.extract()?;
+                    props = props.with_thrust(py_thrusts_to_profile(thrusts));
+                }
                 kw.del_item("thrusts")?;
             }
             if let Some(ecom_obj) = kw.get_item("ecom")? {
