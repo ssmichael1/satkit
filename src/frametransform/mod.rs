@@ -175,9 +175,8 @@ pub fn earth_rotation_angle<T: TimeLike>(tm: &T) -> f64 {
 ///
 /// This function uses the Earth orientation parameters (EOP). For epochs
 /// after the end of the loaded EOP table the last row's values are held
-/// constant; before its first row (1973-01-02 for `finals2000A.all`, 1962
-/// with `EOP-All.csv`), or when no table is loaded at all, zeros are
-/// used. Each case prints a one-time warning to stderr; use
+/// constant; before its first row (1973-01-02 for `finals2000A.all`), or
+/// when no table is loaded at all, zeros are used. Each case prints a one-time warning to stderr; use
 /// [`earth_orientation_params::status`] / [`earth_orientation_params::coverage`]
 /// to check explicitly.
 ///
@@ -485,9 +484,8 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// * This function uses the Earth orientation parameters (EOP). For epochs
 ///   after the end of the loaded EOP table the last row's values are held
-///   constant; before its first row (1973-01-02 for `finals2000A.all`,
-///   1962 with `EOP-All.csv`), or when no table is loaded at all, zeros are
-///   used. Each case prints a one-time warning to stderr; use
+///   constant; before its first row (1973-01-02 for `finals2000A.all`),
+///   or when no table is loaded at all, zeros are used. Each case prints a one-time warning to stderr; use
 ///   [`earth_orientation_params::status`] /
 ///   [`earth_orientation_params::coverage`] to check explicitly.
 ///

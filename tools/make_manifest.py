@@ -18,7 +18,7 @@ the GitHub release tag changes.
 
 Only files already listed in the manifest are touched; unknown files in the
 data directory are ignored (the refresh files — the GFZ and SWPC space-weather feeds under ``refresh``,
-finals2000A.all / EOP-All.csv under ``eop`` — are never pinned).
+finals2000A.all under ``eop`` — are never pinned).
 """
 
 import argparse

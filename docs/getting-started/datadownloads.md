@@ -30,7 +30,7 @@ What each file is, with its citation and licence, is listed under
 
 ## How often EOP and space weather are refreshed
 
-`finals2000A.all` (or its fallback `EOP-All.csv`), the GFZ space-weather
+`finals2000A.all`, the GFZ space-weather
 record (1932 to the present, several MB) and the two forecasts are the only
 files satkit fetches more than once. satkit makes the smallest request that
 keeps each local copy current, from every source alike:
@@ -81,7 +81,7 @@ really is untrusted and the download should not be forced through. satkit has no
 "skip verification" switch.
 
 A proxy that answers with a notice page instead of blocking outright cannot
-corrupt the data either: `finals2000A.all`, `EOP-All.csv` and each of the three
+corrupt the data either: `finals2000A.all` and each of the three
 space-weather files are parsed before they replace the copy on disk, and any
 download that opens with an HTML document is
 rejected. The partial file is discarded and the existing one left in place, so a
@@ -100,5 +100,4 @@ trust store guaranteed to fail on an intercepting network.
 | an ephemeris already on disk under a pinned name is corrupt or truncated | detected on first load (the file is hashed once, ~0.2 s for DE440, and a `<name>.sha256-verified` marker records the result so later loads only compare size and mtime); re-downloaded if downloads are allowed, otherwise `RuntimeError` naming the expected hash. Files not in the manifest (a user-supplied ephemeris) are trusted as-is |
 | no writable location (`SATKIT_DATA` unset and no home / `%LOCALAPPDATA%`; a read-only directory) | `RuntimeError` listing the directories consulted and asking for `SATKIT_DATA`; never the current directory or a temp dir |
 | an existing file cannot be replaced (Windows: another process has it open) | the rename is retried a few times, then `RuntimeError` naming the file |
-| both IERS mirrors are unreachable for the Earth-orientation refresh | CelesTrak's `EOP-All.csv` is fetched instead and a warning names the URLs that failed; the loader uses it only while there is no `finals2000A.all` on disk; an existing `finals2000A.all` stays the table (the CSV adds its 1962–1972 rows in front) |
 | every source fails (no network, all mirrors down) | `RuntimeError` listing each URL and why it failed |

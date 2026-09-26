@@ -258,8 +258,8 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     * 5 : dY wrt IAU-2000A nutation, milli-arcsecs
 ///
 ///     Or None if the time is outside the range of available Earth Orientation Parameters (EOP)
-///    (EOP are available from 1973-01-02 with the default finals2000A.all, or from 1962 with
-///    CelesTrak's EOP-All.csv in a data directory, to current, with predictions up to a year ahead)
+///    (EOP are available from 1973-01-02 (IERS finals2000A.all) to current, with predictions
+///    up to a year ahead)
 ///
 #[pyfunction(name = "earth_orientation_params")]
 pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
@@ -802,28 +802,19 @@ pub fn eop_coverage() -> Option<(PyInstant, PyInstant, PyInstant)> {
     })
 }
 
-/// Which file the loaded Earth Orientation Parameters (EOP) table came from.
-///
-/// satkit reads the IERS Bulletin A combined file ``finals2000A.all`` (primary;
-/// fetched from the USNO and IERS mirrors, observed values from 1973 plus about a
-/// year of predictions) and CelesTrak's ``EOP-All.csv`` (fallback when both mirrors
-/// are unreachable; also read when present, e.g. a hand-provisioned data directory).
-/// When ``finals2000A.all`` is present it is always used, with the CSV's 1962-1972
-/// rows kept in front when both files are there; ``EOP-All.csv`` is the table only
-/// when there is no ``finals2000A.all``. Of several copies of one file across the
-/// data search directories, the one with the latest observed row is read.
+/// Deprecated since 0.24, removed in 0.25: the EOP table is always IERS
+/// ``finals2000A.all``. Use :func:`eop_coverage` to check whether a table is loaded.
 ///
 /// Returns:
-///     str | None: ``"finals2000A"`` for the IERS file (a table with the CelesTrak
-///     file's pre-1973 rows in front of it reports this too), ``"celestrak"`` for
-///     ``EOP-All.csv``, ``None`` if no table is loaded.
+///     str | None: ``"finals2000A"`` when a table is loaded, ``None`` otherwise.
 #[pyfunction(name = "eop_source")]
-pub fn eop_source() -> Option<&'static str> {
-    use satkit::earth_orientation_params::EopSource;
-    satkit::earth_orientation_params::source().map(|s| match s {
-        EopSource::IersFinals2000A => "finals2000A",
-        EopSource::CelesTrak => "celestrak",
-    })
+pub fn eop_source(py: Python<'_>) -> PyResult<Option<&'static str>> {
+    crate::pyutils::warn_deprecated(
+        py,
+        c"satkit.frametransform.eop_source() is deprecated: the EOP table is always \
+          finals2000A.all; use eop_coverage() to check that one is loaded.",
+    )?;
+    Ok(satkit::earth_orientation_params::coverage().map(|_| "finals2000A"))
 }
 
 /// Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.
@@ -839,8 +830,8 @@ pub fn eop_source() -> Option<&'static str> {
 ///     * ``"extrapolated"`` — after the table end: the last row is held constant
 ///       (accuracy degrades by ~0.1 arcsec / ~10 ms per few months — refresh the
 ///       data files)
-///     * ``"before_table"`` — before the table's first row (1973-01-02 for the default
-///       ``finals2000A.all``, 1962 with ``EOP-All.csv``): no EOP, zeros are used
+///     * ``"before_table"`` — before the table's first row (1973-01-02 for
+///       ``finals2000A.all``): no EOP, zeros are used (UT1 = UTC)
 ///     * ``"not_loaded"`` — no EOP table loaded at all: zeros are used
 #[pyfunction(name = "eop_status")]
 pub fn eop_status(tm: &PyInstant) -> &'static str {

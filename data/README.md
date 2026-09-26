@@ -70,16 +70,10 @@ ephemeris.
   reads it (the NRLMSIS 2 port is on an unmerged branch); if that feature
   ships it must be an opt-in download with its own notice, not part of the
   default bundle.
-- **`finals2000A.all`, `EOP-All.csv`** — Earth orientation. It changes daily,
-  so it is never pinned, and CelesTrak grants no redistribution licence for
-  its compiled file, so satkit does not mirror it. Earth orientation is fetched via the manifest's `eop` list,
-  in order: the IERS Bulletin A combined file `finals2000A.all` from the USNO
-  mirror, then from the IERS data centre, then CelesTrak's `EOP-All.csv` as
-  the fallback. The loader reads both formats; when `finals2000A.all` is on
-  disk it is always the table (the CSV's 1962–1972 rows are kept in front of
-  it, since it starts in 1973), and `EOP-All.csv` is the table only when there
-  is no `finals2000A.all`. See
-  [Refresh policy](#refresh-policy-celestrak) for how often either is fetched.
+- **`finals2000A.all`** — Earth orientation, the IERS Bulletin A combined
+  file. It changes daily, so it is never pinned; it is fetched via the
+  manifest's `eop` list, from the USNO mirror, then from the IERS data
+  centre. See [Refresh policy](#refresh-policy) for how often it is fetched.
 - **`Kp_ap_Ap_SN_F107_since_1932.txt`, `45-day-forecast.txt`,
   `msafe-f10-prd.txt`** — space weather, from its producers rather than a
   redistributor. The observed record is GFZ Potsdam's (CC BY 4.0; cite
@@ -98,24 +92,18 @@ ephemeris.
 
 ## Refresh policy
 
-`finals2000A.all` (or its CelesTrak fallback `EOP-All.csv`), the GFZ
-space-weather record and the two space-weather forecasts are the only files
-satkit fetches repeatedly, and the first two are whole-history tables (1932 or
-1973 to the present, several MB); the CelesTrak fallback is served by one
-person's site. The policy below was written to [CelesTrak's usage
-policy](https://celestrak.org/usage-policy.php), which asks clients to "only download
-the data you need, when you are going to use it, and only download data once
-per update", publishes space weather every 3 hours and EOP once a day, and
-warns that machine-to-machine clients ignoring non-200 responses get
-firewalled. Satkit follows it in four places, and applies the same cadence gate
-and conditional request to the IERS mirrors:
+`finals2000A.all`, the GFZ space-weather record and the two space-weather
+forecasts are the only files satkit fetches repeatedly, and the first two are
+whole-history tables (1932 or 1973 to the present, several MB). satkit
+downloads each one only when it is going to be used, and only once per update
+(space weather is published every 3 hours, EOP once a day), in four places:
 
 | | |
 |---|---|
-| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for the GFZ record, 24 h for the SWPC forecast, `EOP-All.csv` and `finals2000A.all`, a week for MSAFE). `update_datafiles(overwrite=True)` (Rust: `overwrite_if_exists = true`) forces a fetch anyway |
+| **cadence gate** | `utils::refresh_file` makes **no request at all** while the local copy is younger than the file's publication cadence (`refresh_min_age_secs`: 3 h for the GFZ record, 24 h for the SWPC forecast and `finals2000A.all`, a week for MSAFE). `update_datafiles(overwrite=True)` (Rust: `overwrite_if_exists = true`) forces a fetch anyway |
 | **conditional GET** | past the cadence the request carries `If-Modified-Since`, echoing the server's own `Last-Modified`, so an unchanged file costs a `304` and no body. State lives in a `<name>.http-cache` sidecar, which also records the file's size and whole-second mtime and is ignored once those stop matching, so a copy swapped in by hand is re-fetched rather than reported current by a `304`; delete it (or the file) to force a full fetch |
 | **identification** | every request sends `User-Agent: satkit/<version> (+https://github.com/ssmichael1/satkit)` (`download::USER_AGENT`) rather than `ureq/3.x`, so a misbehaving client is traceable to the project |
-| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `finals2000A.all` / `EOP-All.csv` and the three space-weather files are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
+| **empty-body guard** | `check_content` rejects a zero-byte response before it can replace a good file: `finals2000A.all` and the three space-weather files are additionally parsed, but a feed added later would have nothing else between a broken server and a truncated table |
 | **no retry loop** | an HTTP error is returned to the caller, with `celestrak_throttle_hint` explaining 403/503 and telling the user to cache rather than retry |
 
 CI is the other half of the problem: a data-cache hit used to be followed by an
@@ -237,7 +225,7 @@ handled in three tiers:
 | **embedded** | `tab5.2a/b/d.txt`; `EGM96/EGM2008/JGM2/JGM3.gfc` truncated to degree 70 | gzip'd into `data/embedded/*.gz` (295 KB total) and compiled in with `include_bytes!` (`src/utils/embedded.rs`), inflated on first use. Frames and gravity need **no data directory and no network** |
 | **ephemeris** | `linux_p1550p2650.440` (DE440, 102 MB) or `lnxp1900p2053.421` (DE421, 14 MB) | downloaded on first use through the verified manifest fetch, into the write location |
 | **on demand** | `ITU_GRACE16.gfc` (1.8 MB, CC BY 4.0) | same verified fetch, on first use of `GravityModel::ITUGrace16`; not embedded so the licence does not attach to the library |
-| **refreshed** | `finals2000A.all` (IERS; `EOP-All.csv` from CelesTrak as fallback); `Kp_ap_Ap_SN_F107_since_1932.txt` (GFZ), `45-day-forecast.txt` (SWPC), `msafe-f10-prd.txt` (NASA MSFC) | fetched on first use; `update_datafiles()` refreshes them, rate-limited (below) |
+| **refreshed** | `finals2000A.all` (IERS); `Kp_ap_Ap_SN_F107_since_1932.txt` (GFZ), `45-day-forecast.txt` (SWPC), `msafe-f10-prd.txt` (NASA MSFC) | fetched on first use; `update_datafiles()` refreshes them, rate-limited (below) |
 
 `tools/embed_data.py` regenerates the blobs from a data directory whose files
 match `manifest.json` (it checks the source hashes) and records provenance in

@@ -363,12 +363,7 @@ code follows where that is useful.
   format in <https://maia.usno.navy.mil/ser7/readme.finals2000A>. The
   Bulletin A combined file of Earth orientation parameters (polar motion,
   UT1−UTC, LOD, IAU 2000A celestial-pole offsets): observed values from 1973
-  and about a year of predictions, updated daily. satkit's primary EOP source.
-<a id="celestrak-spacedata"></a>
-- **CelesTrak Space Data** — <https://celestrak.org/SpaceData/>. Daily
-  `EOP-All.csv` (Earth orientation parameters repackaged from the IERS
-  series, from 1962; satkit's fallback EOP source). Its merged space-weather
-  file is no longer used: satkit reads the producers directly (below).
+  and about a year of predictions, updated daily. satkit's EOP source.
 <a id="gfz-kp"></a>
 - **GFZ Potsdam Kp index service** — <https://kp.gfz.de/>; the file satkit
   reads is

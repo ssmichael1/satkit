@@ -11,30 +11,21 @@ before the Rust build. Mirrors ``satkit.utils.update_datafiles()``:
   legacy bucket), and is only kept when its size and SHA-256 match;
 * a file already present with the right hash is skipped;
 * the regularly refreshed files are fetched unverified: space weather from
-  the manifest's ``refresh`` URLs, Earth orientation from the first of the
-  manifest's ``eop`` sources that answers (the IERS ``finals2000A.all``
-  mirrors, then CelesTrak's ``EOP-All.csv``); a failed refresh keeps the
-  existing copy and prints a warning instead of failing the run.
-  ``--all-eop-sources`` (CI uses it) keeps the primary source refreshed as
-  above and also fetches the *other* sources, but only when they are missing:
-  CelesTrak's CSV is wanted for its 1962-1972 rows, which satkit puts in front
-  of the IERS table and which never change, so an existing copy is never
-  re-requested. CI therefore contacts CelesTrak once per new data cache, not
-  per run.
+  the manifest's ``refresh`` URLs, Earth orientation (IERS
+  ``finals2000A.all``) from the first of the manifest's ``eop`` mirrors that
+  answers; a failed refresh keeps the existing copy and prints a warning
+  instead of failing the run.
 
-The refresh follows `CelesTrak's usage policy
-<https://celestrak.org/usage-policy.php>`_, which asks clients to download
-each file once per update: a local copy younger than its cadence (3 h for
-space weather, 24 h for EOP; ``--max-age-hours`` overrides) is left alone with
-**no request at all**, and otherwise the request carries ``If-Modified-Since``
-so an unchanged file costs a ``304`` rather than several MB. The same gate
-applies to the IERS mirrors. The freshness state lives in a
-``<name>.http-cache`` sidecar, the same format the Rust client writes, so the
-two agree about a shared data directory.
+Each refreshed file is downloaded once per update: a local copy younger than
+its cadence (3 h for space weather, 24 h for EOP; ``--max-age-hours``
+overrides) is left alone with **no request at all**, and otherwise the
+request carries ``If-Modified-Since`` so an unchanged file costs a ``304``
+rather than several MB. The freshness state lives in a ``<name>.http-cache``
+sidecar, the same format the Rust client writes, so the two agree about a
+shared data directory.
 
 Usage: ``python python/test/download_data.py [dest_dir] [--refresh-only]
-[--max-age-hours N] [--force-refresh] [--all-eop-sources]`` (default
-``astro-data``).
+[--max-age-hours N] [--force-refresh]`` (default ``astro-data``).
 ``--refresh-only`` skips the manifest files and only re-fetches EOP / space
 weather; ``--force-refresh`` ignores the cadence and the sidecar.
 """
@@ -51,20 +42,18 @@ import requests
 REPO = Path(__file__).resolve().parents[2]
 MANIFEST = REPO / "data" / "manifest.json"
 
-# Identify the client. CelesTrak asks callers to be identifiable so it can
-# reach a project whose automation misbehaves, and an anonymous default
+# Identify the client, so a data provider can reach a project whose
+# automation misbehaves; an anonymous default
 # (``python-requests/x.y``) is shared with every other script on the internet,
 # which makes any throttling decision land on ours.
 USER_AGENT = "satkit-ci (+https://github.com/ssmichael1/satkit)"
 SESSION = requests.Session()
 SESSION.headers["User-Agent"] = USER_AGENT
 
-# Publication cadence per file, in seconds (CelesTrak's for its feeds; the
-# IERS finals file is likewise updated daily); the default covers any feed
+# Publication cadence per file, in seconds; the default covers any feed
 # added to the manifest later.
 REFRESH_MIN_AGE = {
     "finals2000A.all": 24 * 3600,
-    "EOP-All.csv": 24 * 3600,
     "Kp_ap_Ap_SN_F107_since_1932.txt": 3 * 3600,
     "45-day-forecast.txt": 24 * 3600,
     "msafe-f10-prd.txt": 7 * 24 * 3600,
@@ -245,48 +234,21 @@ def fetch_refresh(url: str, dest_dir: Path, max_age: int = None, force: bool = F
 
 
 def fetch_eop(sources: list, dest_dir: Path, max_age: int = None, force: bool = False) -> str:
-    """Bring the Earth orientation file up to date from the first source that answers.
+    """Bring ``finals2000A.all`` up to date from the first mirror that answers.
 
-    A copy of the primary file inside its cadence is reported current without
-    any request, exactly as the Rust client does.
+    A copy inside its cadence is reported current without any request,
+    exactly as the Rust client does.
     """
+    name = "finals2000A.all"
+    dest = dest_dir / name
     attempts = []
-    for source in sources:
-        dest = dest_dir / source["name"]
-        for url in source["urls"]:
-            try:
-                return f"{source['name']}: {_refresh(url, dest, max_age=max_age, force=force)}"
-            except Exception as exc:  # noqa: BLE001 - try the next source
-                attempts.append(f"{url}: {exc}")
-    present = [s["name"] for s in sources if (dest_dir / s["name"]).exists()]
-    kept = f"keeping existing {', '.join(present)}" if present else "no EOP file present"
+    for url in (u for s in sources if s["name"] == name for u in s["urls"]):
+        try:
+            return f"{name}: {_refresh(url, dest, max_age=max_age, force=force)}"
+        except Exception as exc:  # noqa: BLE001 - try the next mirror
+            attempts.append(f"{url}: {exc}")
+    kept = f"keeping existing {name}" if dest.exists() else "no EOP file present"
     return "WARNING: EOP refresh failed (" + "; ".join(attempts) + f"); {kept}"
-
-
-def fetch_all_eop(sources: list, dest_dir: Path, max_age: int = None, force: bool = False) -> list:
-    """Refresh the primary Earth orientation source, and fetch the others only if missing.
-
-    The first source is kept current exactly as ``fetch_eop`` does. The other
-    sources (CelesTrak's ``EOP-All.csv``) are wanted only for their historical
-    rows, so an existing copy is left alone with no request at all, even with
-    ``--force-refresh``.
-    """
-    lines = [fetch_eop(sources[:1], dest_dir, max_age=max_age, force=force)]
-    for source in sources[1:]:
-        dest = dest_dir / source["name"]
-        if dest.exists():
-            lines.append(f"{source['name']}: present; history only, not re-requested")
-            continue
-        attempts = []
-        for url in source["urls"]:
-            try:
-                lines.append(f"{source['name']}: {_refresh(url, dest, force=True)}")
-                break
-            except Exception as exc:  # noqa: BLE001 - try the next mirror
-                attempts.append(f"{url}: {exc}")
-        else:
-            lines.append(f"WARNING: {source['name']} download failed (" + "; ".join(attempts) + "); no copy present")
-    return lines
 
 
 def main() -> None:
@@ -303,13 +265,7 @@ def main() -> None:
         default=None,
         metavar="N",
         help="treat a refreshed file younger than N hours as current "
-        "(default: CelesTrak's cadence, 3 h for space weather, 24 h for EOP)",
-    )
-    ap.add_argument(
-        "--all-eop-sources",
-        action="store_true",
-        help="fetch every EOP source (IERS finals2000A.all and CelesTrak EOP-All.csv), "
-        "not just the first that answers",
+        "(default: the publication cadence, 3 h for space weather, 24 h for EOP)",
     )
     ap.add_argument(
         "--force-refresh",
@@ -333,11 +289,7 @@ def main() -> None:
         print(f"  {url.rsplit('/', 1)[-1]}: {outcome}")
     refresh_msafe(dest_dir, max_age if max_age is not None else REFRESH_MIN_AGE[MSAFE_LOCAL], ns.force_refresh)
     if manifest.get("eop"):
-        if ns.all_eop_sources:
-            for line in fetch_all_eop(manifest["eop"], dest_dir, max_age=max_age, force=ns.force_refresh):
-                print(f"  {line}")
-        else:
-            print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
+        print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
 
 
 if __name__ == "__main__":

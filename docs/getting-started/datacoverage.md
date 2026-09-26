@@ -15,13 +15,13 @@ Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Ear
 
 | `satkit.frametransform.eop_status(t)` | meaning | what satkit does |
 |---|---|---|
-| `"observed"` | on or before the last observed (`O`) row | interpolates measured values |
-| `"predicted"` | after the last observed row, inside the table | interpolates IERS predictions (~6 months ahead) |
+| `"observed"` | on or before the last observed row | interpolates measured values |
+| `"predicted"` | after the last observed row, inside the table | interpolates IERS predictions (~1 year ahead) |
 | `"extrapolated"` | after the last row | holds the last row constant and prints a **one-time warning**. Polar motion drifts ~0.1″ and $\Delta UT1$ ~10 ms over a few months — metres of position error at LEO |
-| `"before_table"` | before the table's first row: 1973-01-02 for the default `finals2000A.all`, 1962-01-01 when CelesTrak's `EOP-All.csv` is also in a data directory (its pre-1973 rows are kept in front) | zeros, one-time warning. Refreshing does not move the start; for 1962–1972 add `EOP-All.csv`, and nothing covers earlier epochs |
+| `"before_table"` | before the table's first row, 1973-01-02 for `finals2000A.all` | zeros (so UT1 = UTC), one-time warning. Refreshing does not move the start |
 | `"not_loaded"` | no table at all (first use offline, or the fetch failed) | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
 
-`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded; `satkit.frametransform.eop_source()` reports which file the table came from: `"finals2000A"` whenever `finals2000A.all` is in a data directory (also when an `EOP-All.csv` supplies the 1962–1972 rows in front of it), `"celestrak"` only when `EOP-All.csv` is the sole Earth-orientation file. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
+`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
 
 ```python
 import satkit as sk

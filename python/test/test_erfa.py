@@ -178,39 +178,19 @@ def _finals_rows(p):
     return rows, last_obs
 
 
-def _celestrak_rows(p):
-    """(rows, last observed MJD) of a CelesTrak EOP-All.csv file"""
-    rows, last_obs = [], -np.inf
-    with open(p) as f:
-        next(f)
-        for line in f:
-            v = line.strip().split(",")
-            if len(v) < 12:
-                continue
-            rows.append((float(v[1]), float(v[2]), float(v[3]), float(v[4]), float(v[8]) * 1e3, float(v[9]) * 1e3))
-            if v[11].strip() != "P":
-                last_obs = rows[-1][0]
-    return rows, last_obs
-
-
 def eop_file_rows():
-    """The loaded EOP file's rows as (mjd, xp, yp, dut1, dX, dY), or None.
+    """The loaded finals2000A.all's rows as (mjd, xp, yp, dut1, dX, dY), or None.
 
-    The file is the one eop_source() names; of several copies across the
-    search directories satkit reads the one with the latest observed row
-    (ties: search order), and so does this."""
-    name, parse = {
-        "finals2000A": ("finals2000A.all", _finals_rows),
-        "celestrak": ("EOP-All.csv", _celestrak_rows),
-    }.get(ft.eop_source(), (None, None))
-    if name is None:
+    Of several copies across the search directories satkit reads the one
+    with the latest observed row (ties: search order), and so does this."""
+    if ft.eop_coverage() is None:
         return None
     best = None
     for d in sk.utils.data_search_dirs():
-        p = os.path.join(d, name)
+        p = os.path.join(d, "finals2000A.all")
         if not os.path.isfile(p):
             continue
-        rows, last_obs = parse(p)
+        rows, last_obs = _finals_rows(p)
         if rows and (best is None or last_obs > best[1]):
             best = (rows, last_obs)
     return None if best is None else np.array(best[0])
@@ -782,12 +762,11 @@ class TestUT1:
             assert abs(raw_us(t2) - raw_us(t)) <= 2, m
 
     def test_ut1_across_every_step(self, eop_span):
-        """Across every UTC step inside the EOP table (the pre-1972 steps and
-        rate changes, 1972-01-01's 0.107758 s, every leap second), UT1 - TAI
-        is continuous to f64 MJD resolution (UT1 - UTC is interpolated as UT1
-        - TAI), UT1 is monotonic and invertible, and it matches ERFA. The
-        pre-1972 steps need an EOP table reaching before 1972 (CelesTrak's
-        EOP-All.csv next to finals2000A.all)."""
+        """Across every UTC step inside the EOP table (every leap second from
+        1973), UT1 - TAI is continuous to f64 MJD resolution (UT1 - UTC is
+        interpolated as UT1 - TAI), UT1 is monotonic and invertible, and it
+        matches ERFA. The table starts in 1973, so the pre-1972 steps are
+        covered by test_ut1_is_utc_without_eop."""
         steps = [
             (y, m)
             for (y, m) in PRE72_BOUNDARIES + LEAPS

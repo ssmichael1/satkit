@@ -8,7 +8,7 @@ contract for the compiled-in core data (IERS nutation tables, gravity models
 to degree 70).
 
 Not offline-capable, by design: the JPL ephemeris (downloaded on first use)
-and the Earth-orientation / space-weather files (refreshed from CelesTrak).
+and the Earth-orientation / space-weather files (refreshed from IERS, GFZ, SWPC).
 ``test_missing_ephemeris_is_typed_error`` checks that asking for the
 ephemeris in that state is a clean ``RuntimeError``, not a hang or a crash.
 """

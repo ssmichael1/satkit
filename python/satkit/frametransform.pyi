@@ -14,6 +14,7 @@ import typing
 import numpy.typing as npt
 import numpy as np
 import datetime
+from typing_extensions import deprecated
 
 from .satkit import time, quaternion, frame, TimeScalar, TimeArrayLike, TimeInput
 
@@ -608,9 +609,8 @@ def earth_orientation_params(
         - Returns None if the time is before the range of available EOP data, or if no EOP table is loaded
         - For times after the last available EOP data, the last entry's values are returned (constant
           extrapolation) and a one-time warning is printed; use :func:`eop_status` / :func:`eop_coverage` to check
-        - EOP data is available from 1973-01-02 (the default ``finals2000A.all``; from 1962 with
-          CelesTrak's ``EOP-All.csv`` also in a data directory) to current, with predictions up to
-          a year ahead; refresh with ``satkit.utils.update_datafiles()``
+        - EOP data is available from 1973-01-02 (IERS ``finals2000A.all``) to current, with
+          predictions up to a year ahead; refresh with ``satkit.utils.update_datafiles()``
         - See: <https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html>
 
     Example:
@@ -913,22 +913,13 @@ def eop_coverage() -> tuple[time, time, time] | None:
     """
     ...
 
+@deprecated("the EOP table is always finals2000A.all; use eop_coverage()")
 def eop_source() -> str | None:
-    """Which file the loaded Earth Orientation Parameters (EOP) table came from.
-
-    satkit reads the IERS Bulletin A combined file ``finals2000A.all`` (primary; fetched
-    from the USNO and IERS mirrors, observed values from 1973 plus about a year of
-    predictions) and CelesTrak's ``EOP-All.csv`` (fallback when both mirrors are
-    unreachable; also read when present, e.g. a hand-provisioned data directory). When
-    ``finals2000A.all`` is present it is always used, with the CSV's 1962-1972 rows kept
-    in front when both files are there; ``EOP-All.csv`` is the table only when there is
-    no ``finals2000A.all``. Of several copies of one file across the data search
-    directories, the one with the latest observed row is read.
+    """Deprecated since 0.24, removed in 0.25: the EOP table is always IERS
+    ``finals2000A.all``. Use :func:`eop_coverage` to check whether a table is loaded.
 
     Returns:
-        str | None: ``"finals2000A"`` for the IERS file (a table with the CelesTrak file's
-        pre-1973 rows in front of it reports this too), ``"celestrak"`` for ``EOP-All.csv``,
-        ``None`` if no table is loaded.
+        str | None: ``"finals2000A"`` when a table is loaded, ``None`` otherwise.
     """
 
 def eop_status(tm: time) -> str:
@@ -941,8 +932,8 @@ def eop_status(tm: time) -> str:
         str: one of ``"observed"`` (inside the table, on or before the last observed row),
         ``"predicted"`` (inside the table, IERS prediction), ``"extrapolated"`` (after the table
         end — the last row is held constant; accuracy degrades by ~0.1 arcsec / ~10 ms per few
-        months, refresh the data files), ``"before_table"`` (before the table's first row — 1973-01-02 for the default
-        ``finals2000A.all``, 1962 with ``EOP-All.csv`` — zeros used), or
+        months, refresh the data files), ``"before_table"`` (before the table's first row — 1973-01-02 for
+        ``finals2000A.all`` — zeros used, so UT1 = UTC), or
         ``"not_loaded"`` (no EOP table loaded; zeros used).
     """
     ...

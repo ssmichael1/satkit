@@ -472,8 +472,8 @@ pub(crate) fn request_error(url: &str, source: ureq::Error) -> Error {
 /// For an HTTP error from a CelesTrak GP (element-set) query, an actionable
 /// message explaining CelesTrak's throttling of repeated identical GP
 /// queries (HTTP 503, sometimes 403). `None` for any other host, any other
-/// CelesTrak file (the `EOP-All.csv` fallback, where caching TLE text is not
-/// the remedy), or any other error.
+/// CelesTrak file (a `SpaceData` file, where caching TLE text is not the
+/// remedy), or any other error.
 #[cfg(feature = "download")]
 pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<String> {
     let status = match err {
@@ -623,7 +623,9 @@ fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
         reject_html(path)?;
     }
     match name {
-        "EOP-All.csv" | "finals2000A.all" => crate::earth_orientation_params::validate_file(path),
+        crate::earth_orientation_params::FINALS2000A_FILE => {
+            crate::earth_orientation_params::validate_file(path)
+        }
         "SW-All.csv" => crate::spaceweather::cssi::validate_file(path),
         crate::spaceweather::GFZ_FILE => crate::spaceweather::gfz::validate_file(path),
         crate::spaceweather::SWPC_FILE => crate::spaceweather::swpc::validate_file(path),
@@ -639,7 +641,7 @@ fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
 ///
 /// The completed `.part` file is passed through [`check_content`] before the
 /// rename: these downloads carry no hash to verify, and replacing a good
-/// `EOP-All.csv` with a proxy's notice page would turn a failed download into
+/// `finals2000A.all` with a proxy's notice page would turn a failed download into
 /// a silently wrong table days later. `url` only names the source in
 /// [`Error::ContentRejected`].
 #[cfg(feature = "download")]
@@ -885,7 +887,7 @@ pub enum RefreshOutcome {
 /// costs a `304` rather than the whole file.
 pub fn refresh_min_age_secs(name: &str) -> u64 {
     match name {
-        "EOP-All.csv" | "finals2000A.all" => 24 * 3600,
+        crate::earth_orientation_params::FINALS2000A_FILE => 24 * 3600,
         // SWPC issues the 45-day forecast once a day; MSAFE is monthly, and a
         // weekly check catches a new issue soon enough.
         crate::spaceweather::SWPC_FILE => 24 * 3600,
@@ -984,9 +986,8 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
 }
 
 /// Refresh one of the periodically updated feeds (the GFZ and SWPC
-/// space-weather files, `finals2000A.all` from the IERS mirrors,
-/// `EOP-All.csv` from CelesTrak) into `downloaddir`, respecting the
-/// publication cadence.
+/// space-weather files, `finals2000A.all` from the IERS mirrors) into
+/// `downloaddir`, respecting the publication cadence.
 ///
 /// Unlike [`download_file`], which transfers the whole file on every call,
 /// this makes the smallest request that can still keep the local copy
@@ -1223,41 +1224,41 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// One header line and one row, in the columns `parse_csv` reads.
-    const EOP_CSV: &str = "DATE,MJD,X,Y,UT1-UTC,LOD,dPSI,dEPS,DX,DY,DAT,DATA_TYPE\n\
-                           2026-08-30,61282,0.10,0.20,0.30,0.0004,0,0,0.0001,0.0002,37,O\n";
+    /// One real `finals2000A.all` row.
+    const EOP_FINALS: &str =
+        "26 917 61300.00 I  0.190054 0.000090  0.329163 0.000090  I-0.0086337 0.0000267\n";
 
     #[test]
     fn a_proxy_notice_page_never_replaces_a_good_data_file() {
         let dir = std::env::temp_dir().join(format!("satkit_notice_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("EOP-All.csv");
+        let path = dir.join("finals2000A.all");
 
         // A good table on disk, as a machine that has been online would have.
-        write_atomic(&mut Cursor::new(EOP_CSV.as_bytes()), &path, "test").unwrap();
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+        write_atomic(&mut Cursor::new(EOP_FINALS.as_bytes()), &path, "test").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_FINALS);
 
         // The daily refresh comes back as a proxy interstitial with HTTP 200.
         let page = b"<!DOCTYPE html>\n<html><body>Review Usage Policy</body></html>";
         let err = write_atomic(
             &mut Cursor::new(&page[..]),
             &path,
-            "https://celestrak.org/SpaceData/EOP-All.csv",
+            "https://maia.usno.navy.mil/ser7/finals2000A.all",
         )
         .unwrap_err();
         assert!(
-            matches!(err, Error::ContentRejected { ref name, .. } if name == "EOP-All.csv"),
+            matches!(err, Error::ContentRejected { ref name, .. } if name == "finals2000A.all"),
             "{err}"
         );
         assert!(err.to_string().contains("HTML page"), "{err}");
         // The table that was there is still there, and nothing is left over.
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_FINALS);
         assert!(!part_path(&path).exists());
 
         // A body that is not HTML but does not parse is rejected just as well.
         let err = write_atomic(&mut Cursor::new(&b"1,2,3\n"[..]), &path, "test").unwrap_err();
         assert!(matches!(err, Error::ContentRejected { .. }), "{err}");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_CSV);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EOP_FINALS);
 
         // A file with no content check of its own only has to not be a page.
         let other = dir.join("notes.txt");
@@ -1468,12 +1469,12 @@ nqylLCIo7Z6QSP2wB/zARZQB9OLch0Fp5N3QsmtQpj+MQ3z9QYhySjE/ABNz8XHG\n\
             celestrak_throttle_hint("https://example.org/x", &ureq::Error::StatusCode(503))
                 .is_none()
         );
-        // Not a GP query: the EOP fallback download gets no TLE advice,
-        // and neither does its wrapped request error.
-        let eop = "https://celestrak.org/SpaceData/EOP-All.csv";
-        assert!(celestrak_throttle_hint(eop, &ureq::Error::StatusCode(503)).is_none());
+        // Not a GP query: a SpaceData download gets no TLE advice, and
+        // neither does its wrapped request error.
+        let other = "https://celestrak.org/SpaceData/SW-All.csv";
+        assert!(celestrak_throttle_hint(other, &ureq::Error::StatusCode(503)).is_none());
         assert!(matches!(
-            request_error(eop, ureq::Error::StatusCode(503)),
+            request_error(other, ureq::Error::StatusCode(503)),
             Error::Request { hint: None, .. }
         ));
         assert!(celestrak_throttle_hint(

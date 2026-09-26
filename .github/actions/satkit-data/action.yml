@@ -19,10 +19,10 @@ runs:
         path: astro-data
         enableCrossOsArchive: true
         # Changing this expression (or the path above) orphans every existing
-        # cache and forces a fresh download, CelesTrak included.
+        # cache and forces a fresh download.
         key: satkit-data-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
         # On a manifest change the exact key misses; seed from the newest
-        # older cache so EOP/SW survive a CelesTrak outage (the download
+        # older cache so EOP/SW survive an upstream outage (the download
         # step then verifies/updates the manifest files).
         #
         # There is deliberately no per-run EOP/SW refresh here: every test
@@ -37,7 +37,7 @@ runs:
       shell: bash
       run: |
         python -m pip install requests
-        python python/test/download_data.py astro-data --all-eop-sources
+        python python/test/download_data.py astro-data
 
     # files.json lists every test vector, so hashing it gives a key that
     # changes when a vector is added or replaced (the old fixed key never

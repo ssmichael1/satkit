@@ -126,11 +126,11 @@ pub enum Error {
     /// then run with zero polar motion / UT1−UTC / nutation corrections and
     /// be silently wrong by metres, so it is refused. Run
     /// `satkit::utils::update_datafiles()` or point `SATKIT_DATA` at a
-    /// directory containing `finals2000A.all` (or CelesTrak's `EOP-All.csv`).
+    /// directory containing `finals2000A.all`.
     #[error(
         "no Earth Orientation Parameters (EOP) table is loaded; run \
          satkit.utils.update_datafiles() (Rust: satkit::utils::update_datafiles()) \
-         or set SATKIT_DATA to a directory containing finals2000A.all (or EOP-All.csv)"
+         or set SATKIT_DATA to a directory containing finals2000A.all"
     )]
     EopUnavailable,
 

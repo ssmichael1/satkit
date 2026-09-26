@@ -50,12 +50,11 @@ jobs:
       # request inside that window and a conditional GET outside it): the
       # IERS EOP file, finals2000A.all, carries about a year of predictions,
       # so a week-old table still covers "now" without an extrapolation
-      # warning. With --all-eop-sources the CelesTrak CSV, kept only for its
-      # historical rows, is fetched only if missing.
+      # warning.
       - name: Refresh EOP and space weather (if the cached copy is over a week old)
         run: |
           pip install requests
-          python python/test/download_data.py astro-data --refresh-only --max-age-hours 168 --all-eop-sources
+          python python/test/download_data.py astro-data --refresh-only --max-age-hours 168
 
       - name: Install system dependencies for cartopy
         run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data
