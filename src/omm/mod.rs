@@ -510,8 +510,8 @@ impl OMM {
     /// directly (both types use the same units). The TLE's two-digit
     /// international designator (`98067A`) becomes the CCSDS `OBJECT_ID`
     /// (`1998-067A`); an empty designator becomes `UNKNOWN`, as does an empty
-    /// or placeholder (`none`) name. TLEs do not carry the classification
-    /// letter, so `classification_type` is `None`.
+    /// or placeholder (`none`) name. The TLE's classification letter (line 1,
+    /// column 8) becomes `CLASSIFICATION_TYPE`.
     pub fn from_tle(tle: &TLE) -> Self {
         let mut omm = Self::from_mean_elements(
             tle.epoch,
@@ -531,8 +531,9 @@ impl OMM {
         omm.bstar = Some(tle.bstar);
         omm.mean_motion_dot = Some(tle.mean_motion_dot);
         omm.mean_motion_ddot = Some(tle.mean_motion_dot_dot);
-        // TLE::new() leaves the field as b'U'; only a real digit is meaningful.
+        // Only a real digit (0-9) is a meaningful ephemeris type.
         omm.ephemeris_type = (tle.ephem_type <= 9).then_some(tle.ephem_type);
+        omm.classification_type = Some(tle.classification.to_string());
         omm.norad_cat_id = u32::try_from(tle.sat_num).ok();
         omm.element_set_no = u32::try_from(tle.element_num).ok();
         omm.rev_at_epoch = u32::try_from(tle.rev_num).ok();
@@ -543,8 +544,10 @@ impl OMM {
     ///
     /// Inverse of [`from_tle`](Self::from_tle). `OBJECT_ID` in `YYYY-NNNP`
     /// form becomes the TLE international designator; any other form leaves
-    /// the designator empty. Absent optional fields become zero. Metadata
-    /// that has no TLE column (`ORIGINATOR`, `COMMENT`, `extra_fields`, ...)
+    /// the designator empty. Absent optional fields become zero;
+    /// `CLASSIFICATION_TYPE` becomes `U` if it is absent or is not a single
+    /// ASCII letter. Metadata that has no TLE column (`ORIGINATOR`,
+    /// `COMMENT`, `extra_fields`, ...)
     /// is dropped. The result is a plain element set: it does not check
     /// `EPHEMERIS_TYPE` or `MEAN_ELEMENT_THEORY`, so an SGP4-XP message
     /// converts, and the resulting TLE keeps its ephemeris type 4. The epoch
@@ -570,6 +573,17 @@ impl OMM {
         tle.mean_motion_dot_dot = self.mean_motion_ddot.unwrap_or(0.0);
         tle.bstar = self.bstar.unwrap_or(0.0);
         tle.ephem_type = self.ephemeris_type.unwrap_or(0);
+        // A single ASCII letter is meaningful; anything else (absent,
+        // multi-character, non-letter) falls back to the TLE default `U`.
+        tle.classification = self
+            .classification_type
+            .as_deref()
+            .and_then(|s| {
+                let mut chars = s.chars();
+                let c = chars.next()?;
+                (chars.next().is_none() && c.is_ascii_alphabetic()).then_some(c)
+            })
+            .unwrap_or('U');
         tle.element_num = self
             .element_set_no
             .and_then(|n| i32::try_from(n).ok())
@@ -1170,6 +1184,42 @@ mod tests {
             intl_desig_from_object_id("2023-146X"),
             Some(("23146X".to_string(), 23, 146, "X".to_string()))
         );
+    }
+
+    #[test]
+    fn test_classification_round_trips_through_omm() {
+        let l1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003";
+        let l2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357";
+        let mut bytes = l1.as_bytes().to_vec();
+        bytes[7] = b'C';
+        let l1c = String::from_utf8(bytes).unwrap();
+        let tle = TLE::load_2line(&l1c, l2).unwrap();
+        assert_eq!(tle.classification, 'C');
+
+        let omm = OMM::from_tle(&tle);
+        assert_eq!(omm.classification_type.as_deref(), Some("C"));
+
+        let back = omm.to_tle();
+        assert_eq!(back.classification, 'C');
+    }
+
+    #[test]
+    fn test_omm_without_classification_type_defaults_to_u() {
+        let json = r#"{
+            "OBJECT_NAME": "ISS (ZARYA)",
+            "OBJECT_ID": "1998-067A",
+            "EPOCH": "2026-02-14T05:08:48.534432",
+            "MEAN_MOTION": 15.4859353,
+            "ECCENTRICITY": 0.00110623,
+            "INCLINATION": 51.6315,
+            "RA_OF_ASC_NODE": 188.3997,
+            "ARG_OF_PERICENTER": 96.9141,
+            "MEAN_ANOMALY": 263.3106,
+            "NORAD_CAT_ID": 25544
+        }"#;
+        let omm = OMM::from_json_string(json).unwrap().pop().unwrap();
+        assert!(omm.classification_type.is_none());
+        assert_eq!(omm.to_tle().classification, 'U');
     }
 
     #[test]

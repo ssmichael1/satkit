@@ -202,6 +202,30 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
+    /// Classification (line 1, column 8): "U", "C" or "S" in practice, but
+    /// any single ASCII letter round-trips
+    #[getter(classification)]
+    fn get_classification(&self) -> String {
+        self.0.classification.to_string()
+    }
+
+    #[setter(classification)]
+    fn set_classification(&mut self, value: &str) -> PyResult<()> {
+        let mut chars = value.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) if c.is_ascii_alphabetic() => {
+                self.0.classification = c;
+                // Does not affect SGP4, but reset for consistency with the
+                // other setters.
+                self.0.reset_cache();
+                Ok(())
+            }
+            _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "classification must be a single ASCII letter, got {value:?}"
+            ))),
+        }
+    }
+
     /// Ephemeris type (usually 0)
     #[getter(ephem_type)]
     const fn get_ephem_type(&self) -> u8 {
@@ -407,8 +431,8 @@ impl PyTLE {
     /// ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
     /// revolutions per day, and can be passed back to ``satkit.sgp4`` or
     /// serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
-    /// international designator (``98067A`` becomes ``1998-067A``). The TLE
-    /// carries no classification letter, so ``CLASSIFICATION_TYPE`` is absent.
+    /// international designator (``98067A`` becomes ``1998-067A``), and
+    /// ``CLASSIFICATION_TYPE`` is the TLE's classification letter.
     ///
     /// Returns:
     ///     dict: OMM dictionary
@@ -500,13 +524,14 @@ impl PyTLE {
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        // Self-describing format v2 (see `__setstate__` for the layout):
-        // a leading version byte, a 101-byte fixed field block, then three
+        // Self-describing format v3 (see `__setstate__` for the layout):
+        // a leading version byte, a 102-byte fixed field block (v2's
+        // 101 bytes plus the classification letter), then three
         // length-prefixed UTF-8 strings (name, intl_desig, desig_piece).
         let mut raw: Vec<u8> = Vec::with_capacity(
-            108 + self.0.name.len() + self.0.intl_desig.len() + self.0.desig_piece.len(),
+            109 + self.0.name.len() + self.0.intl_desig.len() + self.0.desig_piece.len(),
         );
-        raw.push(2u8); // version
+        raw.push(3u8); // version
         raw.extend_from_slice(&self.0.sat_num.to_le_bytes());
         raw.extend_from_slice(&self.0.desig_year.to_le_bytes());
         raw.extend_from_slice(&self.0.desig_launch.to_le_bytes());
@@ -524,6 +549,7 @@ impl PyTLE {
         raw.extend_from_slice(&self.0.rev_num.to_le_bytes());
         raw.extend_from_slice(&self.0.element_num.to_le_bytes());
         raw.push(self.0.ephem_type);
+        raw.push(self.0.classification as u8);
 
         for s in [&self.0.name, &self.0.intl_desig, &self.0.desig_piece] {
             raw.extend_from_slice(&(s.len() as u16).to_le_bytes());
@@ -539,19 +565,23 @@ impl PyTLE {
             pyo3::exceptions::PyValueError::new_err("invalid TLE pickle: truncated or malformed")
         };
 
-        // Version byte + 101-byte fixed field block (see __getstate__).
+        // Version byte + at least the 101-byte v1/v2 fixed field block (see
+        // __getstate__); v3 additionally has a classification byte at 102.
         if raw.len() < 102 {
             return Err(bail());
         }
-        // Versions differ only in the epoch field at bytes 85..93:
+        // Versions differ only in the epoch field at bytes 85..93, and v3
+        // adds a classification byte at 102:
         //   v1 (satkit 0.20 – 0.23): TAI MJD as f64, which lost a
         //       microsecond ~1% of the time; still read, rounded to the
         //       nearest microsecond
-        //   v2: the Instant's raw i64 microseconds, exact
+        //   v2 (satkit 0.24-dev): the Instant's raw i64 microseconds, exact
+        //   v3: v2, plus the classification letter; a v1/v2 pickle (no
+        //       classification byte) loads with 'U'
         let version = raw[0];
-        if version != 1 && version != 2 {
+        if version != 1 && version != 2 && version != 3 {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "unsupported TLE pickle version {} (expected 1 or 2); pickles from \
+                "unsupported TLE pickle version {} (expected 1, 2 or 3); pickles from \
                  satkit <= 0.19 must be regenerated",
                 version
             )));
@@ -579,8 +609,25 @@ impl PyTLE {
         self.0.element_num = rd_i32(97);
         self.0.ephem_type = raw[101];
 
-        // Three length-prefixed UTF-8 strings: name, intl_desig, desig_piece.
+        // v3 has a classification byte right after the v1/v2 block; a
+        // v1/v2 pickle carries no classification, so it loads as 'U'.
         let mut cnt = 102;
+        self.0.classification = if version == 3 {
+            if raw.len() < 103 {
+                return Err(bail());
+            }
+            let c = raw[102];
+            cnt = 103;
+            if c.is_ascii_alphabetic() {
+                c as char
+            } else {
+                return Err(bail());
+            }
+        } else {
+            'U'
+        };
+
+        // Three length-prefixed UTF-8 strings: name, intl_desig, desig_piece.
         let read_str = |cnt: &mut usize| -> PyResult<String> {
             if *cnt + 2 > raw.len() {
                 return Err(bail());

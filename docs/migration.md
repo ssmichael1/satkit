@@ -389,6 +389,10 @@ nested lists.
   every `TLE::from_lines` / `from_url` error is wrapped in `Record` with its
   line number and satellite. `omm::Error` gains `UnsupportedRefFrame`,
   `UnsupportedCenter` and `Offline`. Both enums are `#[non_exhaustive]`.
+- **`TLE` has a new public `classification: char` field** (line 1, column 8;
+  defaults to `'U'`), so a `TLE` struct literal must set it. It is parsed by
+  `load_2line` / `load_3line`, written back by `to_2line`, and carried
+  through `OMM::from_tle` / `OMM::to_tle` as `CLASSIFICATION_TYPE`.
 - **`Gravity::parse` honours the ICGEM `norm` header** (an `unnormalized`
   file was de-normalized twice), and rejects a header without a positive
   `earth_gravity_constant` or `radius` (`Error::InvalidLine`); an unrecognised

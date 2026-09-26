@@ -93,6 +93,10 @@ pub struct TLE {
     pub mean_motion_dot_dot: f64,
     /// Starred ballistic coefficient, in units of inverse Earth radii
     pub bstar: f64,
+    /// Classification (line 1, column 8): `U` (unclassified), `C` or `S` in
+    /// practice, but any single ASCII letter parses and is kept as-is.
+    /// Defaults to `U`.
+    pub classification: char,
     /// Ephemeris type (line 1, column 63). Usually 0. A value of 4 marks
     /// an SGP4-XP element set, which [`sgp4`](crate::sgp4::sgp4) rejects:
     /// its line 1 stores agom and a B term where a classic TLE stores
@@ -307,7 +311,8 @@ impl TLE {
             mean_motion_dot: 0.0,
             mean_motion_dot_dot: 0.0,
             bstar: 0.0,
-            ephem_type: b'U',
+            classification: 'U',
+            ephem_type: 0,
             element_num: 0,
             inclination: 0.0,
             raan: 0.0,
@@ -435,6 +440,22 @@ impl TLE {
             }
         }
 
+        // Column 8: the classification letter. `U`/`C`/`S` in practice, but
+        // any single ASCII letter is accepted and kept as-is (lenient,
+        // since the letter has no effect on propagation); anything else
+        // (a digit, punctuation, or a space) is rejected.
+        fn parse_classification(line1: &str) -> Result<char> {
+            let c = line1[7..8].chars().next().unwrap();
+            if c.is_ascii_alphabetic() {
+                Ok(c)
+            } else {
+                Err(Error::ParseField {
+                    field: "classification",
+                    message: format!("column 8 is {c:?}, expected an ASCII letter"),
+                })
+            }
+        }
+
         let mut year: u32 = {
             let mut mstr: String = "1".to_owned();
             mstr.push_str(&line1[18..20]);
@@ -519,6 +540,7 @@ impl TLE {
                 }
                 m
             },
+            classification: parse_classification(line1)?,
             ephem_type: { line1[62..63].trim().parse().unwrap_or_default() },
             element_num: parse_field(line1[64..68].trim(), "element number")?,
 
@@ -604,7 +626,10 @@ impl TLE {
                                                                            // Wrap to the column width (see the doc comment)
         let elem_no = format!("{:>4}", self.element_num.max(0) % 10_000); // cols 65-68
 
-        let mut l1 = format!("1 {sat5}U {desig} {epoch} {ndot} {nddot} {bstar} {et} {elem_no}");
+        let mut l1 = format!(
+            "1 {sat5}{} {desig} {epoch} {ndot} {nddot} {bstar} {et} {elem_no}",
+            self.classification
+        );
 
         let cksum1 = tle_formatter::tle_checksum(&l1);
         l1.push(char::from(b'0' + cksum1));
@@ -2076,5 +2101,61 @@ mod tests {
         assert_eq!(back.element_num, 2345);
         assert_eq!(back.rev_num, 23456);
         assert_eq!(back.mean_motion, tle.mean_motion);
+    }
+
+    /// `ISS1` with column 8 (the classification letter) replaced by `c`.
+    fn iss1_with_classification(c: char) -> String {
+        let mut bytes = ISS1.as_bytes().to_vec();
+        bytes[7] = c as u8;
+        String::from_utf8(bytes).unwrap()
+    }
+
+    #[test]
+    fn test_classification_parses_u_c_s() {
+        for c in ['U', 'C', 'S'] {
+            let l1 = iss1_with_classification(c);
+            let tle = TLE::load_2line(&l1, ISS2).unwrap();
+            assert_eq!(tle.classification, c);
+        }
+    }
+
+    #[test]
+    fn test_classification_rejects_non_letter() {
+        let l1 = iss1_with_classification('9');
+        let err = TLE::load_2line(&l1, ISS2).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::ParseField {
+                    field: "classification",
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn test_classification_round_trips_through_to_2line() {
+        for c in ['U', 'C', 'S'] {
+            let mut tle = TLE::load_2line(ISS1, ISS2).unwrap();
+            tle.classification = c;
+            let [back1, _] = tle.to_2line().unwrap();
+            assert_eq!(back1.as_bytes()[7] as char, c);
+        }
+    }
+
+    #[test]
+    fn test_default_ephem_type_is_a_digit_not_the_classification_letter() {
+        // Regression: TLE::new() used to store b'U' (85) in `ephem_type`,
+        // apparently copy-pasted from the classification default; its only
+        // meaningful values are the digits 0-9 (see `to_2line`'s '0'..'9'
+        // fallback and `OMM::from_tle`'s `<= 9` check, both of which masked
+        // the wrong default).
+        let tle = TLE::new();
+        assert_eq!(tle.ephem_type, 0);
+        assert_eq!(tle.classification, 'U');
+        let [l1, _] = tle.to_2line().unwrap();
+        assert_eq!(&l1[62..63], "0");
     }
 }

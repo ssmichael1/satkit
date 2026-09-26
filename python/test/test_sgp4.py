@@ -336,7 +336,7 @@ class TestSGP4:
         assert omm["MEAN_MOTION"] == tle.mean_motion
         assert omm["BSTAR"] == tle.bstar
         assert sk.time(omm["EPOCH"]) == tle.epoch
-        assert "CLASSIFICATION_TYPE" not in omm
+        assert omm["CLASSIFICATION_TYPE"] == tle.classification == "U"
         json.dumps(omm)  # plain JSON-serializable values only
 
         back = sk.TLE.from_omm(omm)
@@ -420,8 +420,28 @@ class TestTLEMetadata:
         assert tle.element_num == 900
         assert tle.rev_num == 29935
         assert tle.ephem_type == 0
+        assert tle.classification == "U"
         tle.element_num = 901
         assert tle.element_num == 901
+
+    def test_classification_setter_validates(self):
+        """The setter accepts any single ASCII letter and rejects the rest."""
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])[0]
+        tle.classification = "C"
+        assert tle.classification == "C"
+        tle.classification = "s"
+        assert tle.classification == "s"
+        for bad in ("", "US", "1", "-"):
+            with pytest.raises(ValueError):
+                tle.classification = bad
+
+    def test_classification_round_trips_to_2line_and_pickle(self):
+        tle = sk.TLE.from_lines([ISS_NAME, *ISS_2021])[0]
+        tle.classification = "C"
+        l1, _l2 = tle.to_2line()
+        assert l1[7] == "C"
+        restored = pickle.loads(pickle.dumps(tle))
+        assert restored.classification == "C"
 
 
 class TestSGP4ListKwargs:

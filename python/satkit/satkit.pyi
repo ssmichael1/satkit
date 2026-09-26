@@ -184,6 +184,16 @@ class TLE:
     @desig_piece.setter
     def desig_piece(self, value: str) -> None: ...
     @property
+    def classification(self) -> str:
+        """Classification (line 1, column 8): "U", "C" or "S" in practice, but any single ASCII letter round-trips"""
+        ...
+
+    @classification.setter
+    def classification(self, value: str) -> None:
+        """Set the classification; must be a single ASCII letter, or raises ValueError"""
+        ...
+
+    @property
     def ephem_type(self) -> int:
         """Ephemeris type (usually 0). A value of 4 marks an SGP4-XP element set, which ``sgp4`` rejects: satkit implements classic SGP4 only."""
         ...
@@ -367,8 +377,8 @@ class TLE:
         ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
         revolutions per day, and can be passed back to :func:`sgp4` or
         serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
-        international designator (``98067A`` becomes ``1998-067A``). The TLE
-        carries no classification letter, so ``CLASSIFICATION_TYPE`` is absent.
+        international designator (``98067A`` becomes ``1998-067A``), and
+        ``CLASSIFICATION_TYPE`` is the TLE's classification letter.
 
         Returns:
             OMMDict: OMM dictionary
