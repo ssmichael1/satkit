@@ -238,8 +238,8 @@ fn resolve_default_path() -> Result<std::path::PathBuf> {
         return Ok(crate::utils::datadir::path_for(&v)?);
     }
 
-    // Autodetect across every search directory (an installed `satkit-data`
-    // package, a system-wide dir, the user data dir, ...): the highest DE
+    // Autodetect across every search directory (an `add_search_dir`
+    // directory, a system-wide dir, the user data dir, ...): the highest DE
     // version wins; on a tie the earlier search directory wins.
     let mut best: Option<(u32, PathBuf)> = None;
     for dd in crate::utils::data_search_dirs() {

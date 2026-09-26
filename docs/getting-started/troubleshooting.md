@@ -45,7 +45,8 @@ sk.utils.update_datafiles()
 
 Check an epoch before relying on it with `sk.frametransform.eop_status(t)`,
 and pass `sk.propsettings(require_eop_coverage=True)` to make `propagate`
-raise instead of extrapolating. See [EOP coverage](datacoverage.md#eop-coverage).
+raise instead of extrapolating (or, before 1973-01-02, instead of using zero
+EOP). See [EOP coverage](datacoverage.md#eop-coverage).
 
 ### "Warning: no Earth Orientation Parameters (EOP) table is loaded"
 
@@ -54,7 +55,10 @@ and the first-use download failed (no network, `SATKIT_OFFLINE=1`, a proxy,
 a read-only data directory).
 
 **Impact.** Polar motion, $\Delta UT1$ and the celestial-pole offsets are
-treated as zero, and frame transforms are off by up to ~0.5″ (metres at LEO).
+treated as zero. $\Delta UT1$ is kept within 0.9 s (up to ~13″ of Earth
+rotation) and polar motion is up to ~0.5″, so Earth-fixed frame transforms are
+off by up to ~12″ over the file's history (~10″ since 2000, typically ~3″),
+i.e. hundreds of metres at LEO.
 `propagate()` refuses to run rather than integrate with a mis-oriented
 gravity field (`RuntimeError: no Earth Orientation Parameters (EOP) table is loaded ...`).
 
@@ -114,7 +118,7 @@ Silencing a warning does not change the result: prefer refreshing the data, or c
 **Cause.** satkit downloads these files on first use only when no copy exists
 in *any* search directory, and never refreshes them on its own. A copy that
 is already there — from an earlier run, a legacy `~/.satkit-data`, a directory
-copied from another machine, or an offline bundle — is used as it is, and it
+copied from another machine — is used as it is, and it
 ages from the day it was written.
 
 **Fix.** Run `sk.utils.update_datafiles()` periodically (it is cheap: see
@@ -137,8 +141,8 @@ on macOS, `~/.local/share/satkit-data` on Linux, `%LOCALAPPDATA%\satkit-data`
 on Windows). Files are looked up across `sk.utils.data_search_dirs()` and used
 from the first directory that contains them — except the Earth-orientation and
 space-weather files, where the copy whose data runs latest is used, so a stale
-copy in an earlier directory (an `add_search_dir()` directory, the `satkit-data`
-bundle) does not shadow a refreshed one in `datadir()`. Nothing is ever written inside `site-packages`. Full table: [Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
+copy in an earlier directory (an `add_search_dir()` directory, say) does not
+shadow a refreshed one in `datadir()`. Nothing is ever written inside `site-packages`. Full table: [Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
 
 What needs no data directory at all: the IERS nutation tables and the EGM96 /
 EGM2008 / JGM-2 / JGM-3 gravity models are compiled in, so SGP4, time scales,
@@ -235,7 +239,7 @@ periodically.
 ### "… is not present and cannot be downloaded (SATKIT_OFFLINE is set)" (or "offline mode was turned on …")
 
 ```
-RuntimeError: ... linux_p1550p2650.440 is not present and cannot be downloaded (SATKIT_OFFLINE is set). Provide it in the data directory (SATKIT_DATA) or install the `satkit-data` bundle; sources: https://github.com/ssmichael1/satkit-data/releases/download/data-v1/linux_p1550p2650.440, ...
+RuntimeError: ... linux_p1550p2650.440 is not present and cannot be downloaded (SATKIT_OFFLINE is set). Provide it in the data directory (SATKIT_DATA); sources: https://github.com/ssmichael1/satkit-data/releases/download/data-v1/linux_p1550p2650.440, ...
 ```
 
 Downloads are forbidden and the file is in none of the search directories; the
@@ -263,8 +267,8 @@ Python 3.9 or older, which is not supported. See [Installation](installation.md)
 ### Should I use pip or conda?
 
 Either: the conda-forge package is built from the same source distribution and
-behaves identically. It also builds for Intel Macs, but has no counterpart of
-the optional `satkit-data` bundle. See [Conda](installation.md#conda).
+behaves identically, and it also builds for Intel Macs. See
+[Conda](installation.md#conda).
 
 ## API changes that look like errors
 

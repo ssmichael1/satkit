@@ -569,9 +569,11 @@ pub fn propagate<const C: usize, T: TimeLike>(
     if settings.require_eop_coverage {
         let cov = crate::earth_orientation_params::coverage()
             .ok_or(crate::orbitprop::Error::EopUnavailable)?;
-        if required_max > cov.last {
+        if required_min < cov.first || required_max > cov.last {
             return Err(crate::orbitprop::Error::EopCoverage {
+                span_start: required_min,
                 span_end: required_max,
+                table_start: cov.first,
                 table_end: cov.last,
             });
         }
@@ -967,8 +969,9 @@ mod tests {
         }
     }
 
-    /// `require_eop_coverage` turns a span past the EOP table end into an
-    /// error; the default keeps the (warned) constant extrapolation.
+    /// `require_eop_coverage` turns a span past the EOP table end, or before
+    /// its start, into an error; the default keeps the (warned) constant
+    /// extrapolation and zero EOP.
     #[test]
     fn test_require_eop_coverage() -> Result<()> {
         let cov = crate::earth_orientation_params::coverage().expect("EOP loaded in tests");
@@ -985,12 +988,44 @@ mod tests {
             Err(Error::EopCoverage {
                 span_end,
                 table_end,
+                ..
             }) => {
                 assert_eq!(table_end, cov.last);
                 assert!(span_end >= end);
             }
             other => panic!("expected EopCoverage, got {other:?}"),
         }
+        // Before the start of the table (1973-01-02) too: zero EOP there
+        // used to pass the check silently.
+        let early = Instant::from_rfc3339("1970-06-01T00:00:00Z").unwrap();
+        match propagate(
+            &state,
+            &early,
+            &(early + Duration::from_seconds(600.0)),
+            &strict,
+            None,
+        ) {
+            Err(e @ Error::EopCoverage { .. }) => {
+                let Error::EopCoverage {
+                    span_start,
+                    table_start,
+                    ..
+                } = &e
+                else {
+                    unreachable!()
+                };
+                assert_eq!(*table_start, cov.first);
+                assert!(*span_start <= early);
+                assert!(e.to_string().contains("before"), "{e}");
+            }
+            other => panic!("expected EopCoverage, got {other:?}"),
+        }
+        // A span ending exactly at the first row is still before it.
+        let before_first = cov.first - Duration::from_seconds(600.0);
+        assert!(matches!(
+            propagate(&state, &before_first, &cov.first, &strict, None),
+            Err(Error::EopCoverage { .. })
+        ));
         // Inside coverage the flag is inert.
         let inside = cov.last - Duration::from_days(30.0);
         propagate(

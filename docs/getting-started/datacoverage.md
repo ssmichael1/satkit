@@ -21,7 +21,7 @@ Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Ear
 | `"before_table"` | before the table's first row, 1973-01-02 for `finals2000A.all` | zeros (so UT1 = UTC), one-time warning. Refreshing does not move the start |
 | `"not_loaded"` | no table at all (first use offline, or the fetch failed) | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
 
-`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table, and the fix is simply to refresh the file:
+`satkit.frametransform.eop_coverage()` returns `(first, last_observed, last)` as `satkit.time` values, or `None` if nothing is loaded. For precision work, propagate with `satkit.propsettings(require_eop_coverage=True)`: the propagator then raises instead of extrapolating past the table (or of using zero EOP before its 1973-01-02 start), and past the end the fix is simply to refresh the file:
 
 ```python
 import satkit as sk

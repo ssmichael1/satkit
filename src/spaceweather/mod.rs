@@ -324,7 +324,7 @@ fn freshest_path_for(
 /// more than one search directory the copy with the latest last row is
 /// used, so a stale read-only copy cannot shadow a fresh download. A
 /// `SW-All.csv` already in a search directory with no GFZ file anywhere is
-/// read instead, so an existing cache or an offline bundle keeps working.
+/// read instead, so an existing cache or a provisioned copy keeps working.
 fn load_default() -> Result<Vec<SpaceWeatherRecord>> {
     use crate::utils::datadir::path_for;
     let gfz_path = freshest_path_for(GFZ_FILE, |t| last_row_day(&gfz::parse(t).ok()?))?;

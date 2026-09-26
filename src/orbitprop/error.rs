@@ -124,7 +124,7 @@ pub enum Error {
     /// No Earth Orientation Parameters table is loaded (file missing and
     /// download failed, or an empty table installed). A propagation would
     /// then run with zero polar motion / UT1−UTC / nutation corrections and
-    /// be silently wrong by metres, so it is refused. Run
+    /// be silently wrong by hundreds of metres at LEO, so it is refused. Run
     /// `satkit::utils::update_datafiles()` or point `SATKIT_DATA` at a
     /// directory containing `finals2000A.all`.
     #[error(
@@ -136,18 +136,24 @@ pub enum Error {
 
     /// Returned by [`propagate`](crate::orbitprop::propagate) when
     /// [`PropSettings::require_eop_coverage`](crate::orbitprop::PropSettings::require_eop_coverage)
-    /// is set and the propagation span (plus integrator padding) extends
-    /// past the end of the loaded EOP table. Without the flag the last EOP
-    /// row is held constant and a one-time warning is printed instead.
+    /// is set and the propagation span (plus integrator padding) is not
+    /// inside the loaded EOP table: it starts before the table's first row
+    /// (1973-01-02 for `finals2000A.all`) or ends after its last row.
+    /// Without the flag, zeros are used before the table (UT1 = UTC) and the
+    /// last row is held constant after it, each with a one-time warning.
     #[error(
-        "propagation span extends to {span_end} but EOP data ends at {table_end} \
-         (require_eop_coverage is set in the propagation settings); refresh the data \
-         files with satkit.utils.update_datafiles() (Rust: satkit::utils::update_datafiles()), \
-         or set require_eop_coverage=False (Rust: PropSettings::require_eop_coverage = false) \
-         to hold the last EOP row constant instead"
+        "propagation span {span_start} to {span_end} is not inside the EOP table \
+         ({table_start} to {table_end}; require_eop_coverage is set in the propagation \
+         settings). Past the end of the table, refresh the data files with \
+         satkit.utils.update_datafiles() (Rust: satkit::utils::update_datafiles()); before \
+         its start there is no EOP data to get. Set require_eop_coverage=False \
+         (Rust: PropSettings::require_eop_coverage = false) to use zero EOP before the \
+         table and hold the last row constant after it instead"
     )]
     EopCoverage {
+        span_start: Instant,
         span_end: Instant,
+        table_start: Instant,
         table_end: Instant,
     },
 

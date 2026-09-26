@@ -4236,9 +4236,10 @@ class propsettings:
                 a max-steps error. Applies to all integrators (adaptive Runge-Kutta, Rosenbrock,
                 and Gauss-Jackson 8). Default is 1_000_000, which covers very long propagation
                 arcs with plenty of headroom. Lower for a tighter runaway-propagation safeguard.
-            require_eop_coverage: Raise ``RuntimeError`` if the propagation span extends past
-                the end of the loaded Earth-orientation-parameter (EOP) table, instead of
-                holding the last EOP row constant with a one-time warning. Default is False.
+            require_eop_coverage: Raise ``RuntimeError`` if the propagation span is not inside
+                the loaded Earth-orientation-parameter (EOP) table: past its end (instead of
+                holding the last EOP row constant) or before its start, 1973-01-02 (instead of
+                using zero EOP), each otherwise with a one-time warning. Default is False.
                 See ``satkit.frametransform.eop_coverage`` / ``eop_status``.
             initial_step_secs: First step (seconds) the adaptive integrators attempt. Default
                 None: derived from the initial state, the tolerances and the integrator order
@@ -4384,13 +4385,16 @@ class propsettings:
     def use_relativistic_correction(self, value: bool) -> None: ...
     @property
     def require_eop_coverage(self) -> bool:
-        """Raise ``RuntimeError`` from ``propagate`` if the span extends past the end
-        of the loaded Earth-orientation-parameter (EOP) table, instead of holding the
-        last EOP row constant with a one-time warning. Default False.
+        """Raise ``RuntimeError`` from ``propagate`` if the span is not inside the
+        loaded Earth-orientation-parameter (EOP) table: past its end (instead of
+        holding the last EOP row constant) or before its start, 1973-01-02 (instead
+        of using zero EOP, UT1 = UTC), each otherwise with a one-time warning.
+        Default False.
 
         Polar motion and UT1−UTC drift by ~0.1 arcsec / ~10 ms over a few months —
-        metres at LEO — so set this for precision work and refresh the data files
-        with ``satkit.utils.update_datafiles()`` when it trips. See
+        metres at LEO — and zero EOP is off by up to ~12 arcsec (hundreds of metres
+        at LEO), so set this for precision work and refresh the data files with
+        ``satkit.utils.update_datafiles()`` when it trips past the end. See
         ``satkit.frametransform.eop_coverage`` and ``eop_status``.
         """
         ...

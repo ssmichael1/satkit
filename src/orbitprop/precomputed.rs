@@ -174,7 +174,7 @@ impl Precomputed {
                 // error here rather than a panic inside the force model, and
                 // refuse to build a table with no EOP at all — zero polar
                 // motion / UT1-UTC would silently bias the propagation by
-                // metres. A span past the *end* of the EOP table is allowed
+                // hundreds of metres. A span past the *end* of the EOP table is allowed
                 // (the last row is held constant; `earth_orientation_params`
                 // warns once), and `PropSettings::require_eop_coverage`
                 // turns that into an error at `propagate()`.

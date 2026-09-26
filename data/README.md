@@ -11,8 +11,8 @@ maintained without re-deriving it.
 Before this, the files lived on a Google Cloud Storage bucket and were
 fetched by name with no integrity check: a satkit release did not determine
 which data bytes a user got, a file could change under a fixed URL (it did —
-`msis21.parm`, Feb 2026), and four hand-maintained copies (bucket, PyPI
-`satkit-data` wheel, conda recipe, CI cache) drifted independently.
+`msis21.parm`, Feb 2026), and four hand-maintained copies (bucket, a PyPI
+data wheel, conda recipe, CI cache) drifted independently.
 
 With the manifest:
 
@@ -68,8 +68,8 @@ ephemeris.
   academic / non-commercial and covers derived data products, which is
   incompatible with satkit's MIT / Apache-2.0 distribution. Nothing on `main`
   reads it (the NRLMSIS 2 port is on an unmerged branch); if that feature
-  ships it must be an opt-in download with its own notice, not part of the
-  default bundle.
+  ships it must be an opt-in download with its own notice, not one of the
+  default files.
 - **`finals2000A.all`** — Earth orientation, the IERS Bulletin A combined
   file. It changes daily, so it is never pinned; it is fetched via the
   manifest's `eop` list, from the USNO mirror, then from the IERS data
@@ -176,8 +176,8 @@ python tools/make_manifest.py --data-dir "$D" --data-version data-v2   # new rel
 - **Retiring GCS**: once a release or two have shipped with the release-asset
   URLs first, drop the `storage.googleapis.com` entries from `urls` and
   delete the bucket. No client change is needed.
-- **conda**: there is deliberately no `satkit-data` conda package. The
-  conda-forge `satkit` package (built in
+- **conda**: there is no separate data package. The conda-forge `satkit`
+  package (built in
   [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock))
   relies on the embedded core data plus the on-demand, verified ephemeris
   download like the wheels do; offline conda users populate a directory with
@@ -215,7 +215,7 @@ python tools/make_manifest.py --data-dir "$D" --data-version data-v2   # new rel
 | proxies | ureq's default agent reads `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` and `NO_PROXY` |
 
 
-## Phase 2: embedded core data, lazy ephemeris, optional bundle
+## Phase 2: embedded core data, lazy ephemeris
 
 The manifest made downloads *safe*; Phase 2 makes them *rare*. Data is
 handled in three tiers:
@@ -255,8 +255,7 @@ with per-platform unit tests):
 
 - **Search** (`utils::data_search_dirs()`, in order): `SATKIT_DATA`;
   `set_datadir()`; directories added with `add_search_dir()`; `<dylib dir>/satkit-data`;
-  `<site-packages>/satkit_data/data` (the optional bundle); the platform user
-  data dir; `~/.satkit-data` (legacy); `/usr/share/satkit-data`; macOS
+  the platform user data dir; `~/.satkit-data` (legacy); `/usr/share/satkit-data`; macOS
   `/Library/Application Support/satkit-data`. Any of these may be read-only.
 - **Write** (`utils::datadir()`, exactly one): `SATKIT_DATA` if set, else the
   `set_datadir()` directory, else the platform user data dir — macOS
@@ -283,9 +282,11 @@ empty `SATKIT_DATA` and `SATKIT_OFFLINE=1` to keep this true.
 
 ### Python packaging
 
-`satkit` no longer depends on `satkit-data`; `pip install satkit[data]`
-installs it as an optional offline bundle, which the search order picks up
-automatically (read-only, wherever it is installed — `satkit/__init__.py`
-registers it with `add_search_dir`). This removes the 105 MB hard dependency
-that sat 133 KB under PyPI's file-size cap and made every release re-upload
-the ephemeris to refresh 5 MB of stale EOP/SW.
+`satkit` has no data dependency: the core tables are compiled in and the
+ephemeris is downloaded (verified) on first use. This removed a 105 MB data
+wheel that sat 133 KB under PyPI's file-size cap and made every release
+re-upload the ephemeris to refresh 5 MB of stale EOP/SW. (It lingered as an
+optional extra until 0.24, which dropped it: it carried no
+`finals2000A.all`, and a pip-installed snapshot of daily files goes stale.)
+For an offline machine, provision a directory with `update_datafiles()` and
+point `SATKIT_DATA` or `add_search_dir()` at it.
