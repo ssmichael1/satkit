@@ -828,16 +828,27 @@ class TestUT1:
             assert (dut1, xp, yp, dx, dy) == pytest.approx((r[3], r[1], r[2], r[4], r[5]), abs=1e-12), r[0]
 
     def test_eop_linear_between_rows(self, eop_rows, eop_span):
-        """Linear interpolation between adjacent rows, away from leap seconds"""
+        """Linear interpolation between adjacent rows. UT1 - UTC is interpolated
+        as UT1 - TAI, so every Delta-AT step between two rows (leap seconds and
+        the pre-1972 fractional steps) and the pre-1972 daily drift are removed
+        exactly; Delta-AT here comes independently from erfa.dat."""
+
+        def dat_at(mjd):
+            iy, im, iday, fd = erfa.jd2cal(2400000.5, mjd)
+            return erfa.dat(iy, im, iday, fd)
+
         for i in range(0, len(eop_rows) - 1, 7):
             r0, r1 = eop_rows[i], eop_rows[i + 1]
-            if abs(r1[3] - r0[3]) > 0.5 or not (eop_span[0] <= r0[0] and r1[0] <= eop_span[1]):
+            if not (eop_span[0] <= r0[0] and r1[0] <= eop_span[1]):
                 continue
+            d0, d1 = dat_at(r0[0]), dat_at(r1[0])
             for g in (0.25, 0.5, 0.9):
                 v = ft.earth_orientation_params(sk.time.from_mjd(r0[0] + g))
                 exp = (1 - g) * r0 + g * r1
-                assert (v[0], v[1], v[2], v[4], v[5]) == pytest.approx(
-                    (exp[3], exp[1], exp[2], exp[4], exp[5]), abs=1e-9
+                exp_dut1 = (1 - g) * (r0[3] - d0) + g * (r1[3] - d1) + dat_at(r0[0] + g)
+                assert v[0] == pytest.approx(exp_dut1, abs=2e-6), r0[0] + g
+                assert (v[1], v[2], v[4], v[5]) == pytest.approx(
+                    (exp[1], exp[2], exp[4], exp[5]), abs=1e-9
                 ), r0[0] + g
 
     def test_eop_interpolation_across_leap_second(self, eop_rows):
