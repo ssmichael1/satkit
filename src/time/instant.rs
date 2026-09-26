@@ -209,6 +209,88 @@ fn tdb_minus_tt_arg(ttc: f64) -> f64 {
     628.3076f64.mul_add(ttc, 6.2401)
 }
 
+/// TDB − TT, in seconds, at `ttc` Julian centuries of TT from J2000
+/// (Vallado Eq. 3-50: 0.001657 s · sin(628.3076 T + 6.2401), the argument
+/// in radians — annual period, mean anomaly of the Earth).
+#[inline]
+fn tdb_minus_tt_seconds(ttc: f64) -> f64 {
+    0.001657 * tdb_minus_tt_arg(ttc).sin()
+}
+
+/// MJD of the J2000 epoch (2000-01-01 12:00), in the scale at hand.
+const MJD_J2000: f64 = 51_544.5;
+
+/// Round a floating-point number of microseconds to the nearest integer
+/// microsecond (halves away from zero).
+///
+/// Every float → `Instant` / `Duration` conversion goes through this.
+/// Truncating instead (`as i64` alone) loses a microsecond whenever the
+/// product lands just below the integer, which is common: `0.000249 * 1e6`
+/// is `248.99999999999997`. Out-of-range values saturate at the `i64`
+/// bounds and NaN maps to 0, as with a plain `as` cast.
+#[inline]
+pub(crate) fn round_us(us: f64) -> i64 {
+    us.round() as i64
+}
+
+/// Days from 1970-01-01 to the given proleptic Gregorian date (no range
+/// checks; `month` in 1..=12).
+///
+/// See: <https://en.wikipedia.org/wiki/Julian_day>
+/// or Expl. Suppl. Astron. Almanac, P. 619
+fn unix_day_from_civil(year: i32, month: i32, day: i32) -> i64 {
+    use gregorian_coefficients as gc;
+    let h = month as i64 - gc::m;
+    let g = year as i64 + gc::y - (gc::n - h) / gc::n;
+    let f = (h - 1 + gc::n) % gc::n;
+    let e = (gc::p * g) / gc::r + day as i64 - 1 - gc::j;
+    let jdn = e + (gc::s * f + gc::t) / gc::u - (3 * ((g + gc::A) / 100)) / 4 - gc::C;
+    // Julian Day Number of 1970-01-01 is 2440588
+    jdn - 2_440_588
+}
+
+/// Proleptic Gregorian `(year, month, day)` of the given day since
+/// 1970-01-01 (inverse of [`unix_day_from_civil`]).
+fn civil_from_unix_day(unix_day: i64) -> (i32, i32, i32) {
+    use gregorian_coefficients as gc;
+    let jd = unix_day + 2_440_588;
+    let f = jd + gc::j + (((4 * jd + gc::B) / 146097) * 3) / 4 + gc::C;
+    let e = gc::r * f + gc::v;
+    let g = (e % gc::p) / gc::r;
+    let h = gc::u * g + gc::w;
+    let day = ((h % gc::s) / gc::u) + 1;
+    let month = ((h / gc::s + gc::m) % gc::n) + 1;
+    let year = (e / gc::p) - gc::y + (gc::n + gc::m - month) / gc::n;
+    (year as i32, month as i32, day as i32)
+}
+
+/// Range checks shared by the calendar constructors: month 1–12, day
+/// within the month (leap-year aware), hour 0–23, minute 0–59.
+fn check_date_hour_minute(year: i32, month: i32, day: i32, hour: i32, minute: i32) -> Result<()> {
+    if !(1..=12).contains(&month) {
+        return Err(InstantError::InvalidMonth(month));
+    }
+    let max_day = if month == 2 {
+        if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+            29
+        } else {
+            28
+        }
+    } else {
+        MDAYS[(month - 1) as usize]
+    };
+    if day < 1 || day > max_day as i32 {
+        return Err(InstantError::InvalidDay(day));
+    }
+    if !(0..=23).contains(&hour) {
+        return Err(InstantError::InvalidHour(hour));
+    }
+    if !(0..=59).contains(&minute) {
+        return Err(InstantError::InvalidMinute(minute));
+    }
+    Ok(())
+}
+
 impl Instant {
     /// Construct a new Instant from raw microseconds
     ///
@@ -243,7 +325,7 @@ impl Instant {
         // (which would panic in debug builds and wrap in release)
         let raw = (week as i64)
             .saturating_mul(604_800_000_000)
-            .saturating_add((sow * 1.0e6) as i64)
+            .saturating_add(round_us(sow * 1.0e6))
             .saturating_add(Self::GPS_EPOCH.raw);
         Self { raw }
     }
@@ -259,12 +341,37 @@ impl Instant {
     /// # Note:
     /// Unixtime is the number of non-leap seconds since Jan 1 1970 00:00:00 UTC
     /// (Leap seconds are ignored!!)
+    ///
+    /// The value is rounded to the nearest microsecond.
     pub fn from_unixtime(unixtime: f64) -> Self {
-        // unixtime is the UTC-basis count (it ignores leap seconds and the
+        Self::from_unixtime_microseconds(round_us(unixtime * 1.0e6))
+    }
+
+    /// Construct an Instant from Unix time in integer microseconds (exact)
+    ///
+    /// # Arguments
+    /// * `us` - Non-leap microseconds since 1970-01-01 00:00:00 UTC
+    ///
+    /// # Note
+    /// Like [`Self::from_unixtime`], leap seconds are not counted, so a
+    /// leap second itself (`23:59:60.x`) has no Unix-time representation.
+    pub fn from_unixtime_microseconds(us: i64) -> Self {
+        // Unix time is the UTC-basis count (it ignores leap seconds and the
         // pre-1972 offsets); fold TAI − UTC in.
         Self {
-            raw: add_leapseconds((unixtime * 1.0e6).round() as i64),
+            raw: add_leapseconds(us),
         }
+    }
+
+    /// Unix time in integer microseconds (exact)
+    ///
+    /// Non-leap microseconds since 1970-01-01 00:00:00 UTC; inside a leap
+    /// second this repeats the last second of the day (`23:59:59.x`), like
+    /// [`Self::as_unixtime`]. Inverse of [`Self::from_unixtime_microseconds`]
+    /// everywhere else.
+    pub fn as_unixtime_microseconds(&self) -> i64 {
+        // Subtract TAI − UTC since unixtime ignores it
+        self.raw.saturating_sub(microleapseconds(self.raw))
     }
 
     /// Convert Instant to Unix time
@@ -412,26 +519,26 @@ impl Instant {
     /// # Returns
     /// A new Instant object representing the given MJD at given time scale
     pub fn from_mjd_with_scale(mjd: f64, scale: TimeScale) -> Self {
-        // The float-to-i64 cast saturates for out-of-range MJD values; the
-        // subsequent epoch-offset additions must saturate as well or they
-        // overflow (debug panic / release wrap) at the i64 boundaries.
-        match scale {
-            TimeScale::UTC => {
-                let raw = ((mjd * 86_400_000_000.0) as i64).saturating_add(Self::MJD_EPOCH.raw);
-                Self {
-                    raw: add_leapseconds(raw),
-                }
-            }
-            TimeScale::TAI => {
-                let raw = ((mjd * 86_400_000_000.0) as i64).saturating_add(Self::MJD_EPOCH.raw);
-                Self { raw }
-            }
-            TimeScale::TT => {
-                let raw = ((mjd * 86_400_000_000.0) as i64)
-                    .saturating_add(Self::MJD_EPOCH.raw)
-                    .saturating_sub(32_184_000);
-                Self { raw }
-            }
+        // Rounded to the nearest microsecond. The float-to-i64 conversion
+        // saturates for out-of-range MJD values, and the epoch-offset
+        // additions below saturate as well.
+        Self::from_mjd_us_with_scale(round_us(mjd * 86_400_000_000.0), scale)
+    }
+
+    /// The instant whose Modified Julian Date in `scale` is `mjd_us`
+    /// microseconds past MJD 0 (1858-11-17 00:00:00 in that scale).
+    ///
+    /// Exact for the uniform scales (TAI, TT, GPS) and UTC; for UT1 and TDB
+    /// the scale offset is evaluated in floating point and rounded to the
+    /// nearest microsecond.
+    pub(crate) fn from_mjd_us_with_scale(mjd_us: i64, scale: TimeScale) -> Self {
+        let base = mjd_us.saturating_add(Self::MJD_EPOCH.raw);
+        let raw = match scale {
+            TimeScale::UTC => add_leapseconds(base),
+            TimeScale::TAI => base,
+            TimeScale::TT => base.saturating_sub(32_184_000),
+            // GPS = TAI - 19 seconds
+            TimeScale::GPS => base.saturating_add(19_000_000),
             TimeScale::UT1 => {
                 // Go through UT1 − TAI, which is continuous across leap
                 // seconds and the pre-1972 UTC steps (UT1 − UTC is not; the
@@ -441,28 +548,22 @@ impl Instant {
                 // and UT1 − TAI changes by ~ns over that span, so the
                 // approximation is exact for practical purposes, including
                 // inside a leap second.
+                let mjd = mjd_us as f64 / 86_400_000_000.0;
                 let dut1 = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd)[0];
                 let ut1_minus_tai = dut1 - tai_minus_utc_at_mjd_utc(mjd);
-                Self::from_mjd_with_scale(mjd - ut1_minus_tai / 86_400.0, TimeScale::TAI)
+                base.saturating_sub(round_us(ut1_minus_tai * 1.0e6))
             }
-            TimeScale::GPS => {
-                // GPS = TAI - 19 seconds
-                let raw = ((mjd * 86_400_000_000.0) as i64)
-                    .saturating_add(Self::MJD_EPOCH.raw)
-                    .saturating_add(19_000_000);
-                Self { raw }
-            }
-            TimeScale::Invalid => Self::INVALID,
             TimeScale::TDB => {
                 // Inverse of the TT -> TDB series in `as_mjd_with_scale`.
                 // The periodic term is evaluated at TDB instead of TT; the
                 // two differ by < 2 ms, which moves the term by ~1e-13 s.
-                let ttc: f64 = (mjd - (2451545.0 - 2400000.5)) / 36525.0;
-                let mjd = (0.001657f64 / 86400.0f64).mul_add(-tdb_minus_tt_arg(ttc).sin(), mjd)
-                    - 32.184 / 86400.0;
-                Self::from_mjd_with_scale(mjd, TimeScale::TAI)
+                let ttc = (mjd_us as f64 / 86_400_000_000.0 - MJD_J2000) / 36525.0;
+                base.saturating_sub(32_184_000)
+                    .saturating_sub(round_us(tdb_minus_tt_seconds(ttc) * 1.0e6))
             }
-        }
+            TimeScale::Invalid => return Self::INVALID,
+        };
+        Self { raw }
     }
 
     /// As Julian Date (UTC)
@@ -514,9 +615,12 @@ impl Instant {
     /// A new Instant object representing the new time
     ///
     pub fn add_utc_days(&self, days: f64) -> Self {
-        let mut utc = self.as_mjd_with_scale(TimeScale::UTC);
-        utc += days;
-        Self::from_mjd_with_scale(utc, TimeScale::UTC)
+        // On the UTC (leap-second-free) basis, in integer microseconds; the
+        // day count is rounded to the nearest microsecond.
+        let utc = self.raw.saturating_sub(microleapseconds(self.raw));
+        Self {
+            raw: add_leapseconds(utc.saturating_add(round_us(days * 86_400_000_000.0))),
+        }
     }
 
     /// As Modified Julian Date with given time scale
@@ -584,12 +688,8 @@ impl Instant {
                     / 86_400_000_000.0
             }
             TimeScale::TDB => {
-                let tt: f64 = self.as_mjd_with_scale(TimeScale::TT);
-                let ttc: f64 = (tt - (2451545.0f64 - 2400000.5f64)) / 36525.0;
-                // Vallado Eq. 3-50: TDB − TT ≈ 0.001657 s · sin(628.3076 T + 6.2401),
-                // T in Julian centuries of TT; the argument is in radians
-                // (annual period, mean anomaly of the Earth).
-                (0.001657f64 / 86400.0f64).mul_add(tdb_minus_tt_arg(ttc).sin(), tt)
+                let (day, frac) = self.mjd_tdb_split();
+                day as f64 + frac
             }
             // Return NaN rather than 0.0 (a perfectly valid MJD, 1858-11-17) so
             // that using an Invalid time scale visibly poisons downstream math
@@ -598,11 +698,51 @@ impl Instant {
         }
     }
 
+    /// TDB as an integer Modified Julian Day and a fraction of that day.
+    ///
+    /// `day as f64 + frac` is [`Self::as_mjd_with_scale`] with
+    /// [`TimeScale::TDB`]; kept apart, the fraction carries the full f64
+    /// precision (sub-nanosecond), where a single-f64 MJD resolves ~1 µs and
+    /// a Julian Date ~40 µs. `frac` is in [0, 1) up to the ±1.7 ms TDB − TT
+    /// term, which can push it just outside.
+    #[inline]
+    pub(crate) fn mjd_tdb_split(&self) -> (i64, f64) {
+        const US_PER_DAY: i64 = 86_400_000_000;
+        let tt_us = self
+            .raw
+            .saturating_sub(Self::MJD_EPOCH.raw)
+            .saturating_add(32_184_000);
+        let day = tt_us.div_euclid(US_PER_DAY);
+        // Reciprocal multiplies rather than divides: this runs for every
+        // ephemeris query, and the chained divisions cost more than the sine
+        let frac_tt = (tt_us - day * US_PER_DAY) as f64 * (1.0 / US_PER_DAY as f64);
+        let ttc = ((day as f64 - MJD_J2000) + frac_tt) * (1.0 / 36525.0);
+        (
+            day,
+            (0.001657 / 86_400.0f64).mul_add(tdb_minus_tt_arg(ttc).sin(), frac_tt),
+        )
+    }
+
     /// Return the Gregorian date and time
     ///
     /// # Returns
     /// (year, month, day, hour, minute, second), UTC
+    ///
+    /// `second` is an exact number of microseconds converted to `f64`, so
+    /// passing it back to [`Self::from_datetime`] (which rounds to the
+    /// nearest microsecond) reproduces the instant exactly.
     pub fn as_datetime(&self) -> (i32, i32, i32, i32, i32, f64) {
+        let (year, month, day, hour, minute, second_us) = self.as_datetime_us();
+        (year, month, day, hour, minute, second_us as f64 * 1.0e-6)
+    }
+
+    /// Gregorian UTC date and time with the seconds as integer microseconds:
+    /// `(year, month, day, hour, minute, microsecond of the minute)`.
+    ///
+    /// The microsecond of the minute is in `[0, 60_000_000)`, except inside
+    /// an inserted interval (`23:59:60.x`; up to `61_422_818` for the
+    /// 1.422818 s pre-1972 step at 1961-01-01).
+    pub(crate) fn as_datetime_us(&self) -> (i32, i32, i32, i32, i32, i64) {
         // UTC-basis (leap-second-free) microseconds since the Unix epoch.
         // Inside a leap second this repeats 23:59:59.x of the same day; the
         // label is patched to 23:59:60.x below. Euclidean division keeps the
@@ -613,7 +753,7 @@ impl Instant {
 
         let mut hour = utc_usec_of_day / 3_600_000_000;
         let mut minute = (utc_usec_of_day % 3_600_000_000) / 60_000_000;
-        let mut second = (utc_usec_of_day % 60_000_000) as f64 * 1.0e-6;
+        let mut second_us = utc_usec_of_day % 60_000_000;
 
         // Inside an inserted interval: label as 23:59:60.x (up to
         // 23:59:61.422817 for the 1.422818 s step at 1961-01-01; see
@@ -621,30 +761,11 @@ impl Instant {
         if let Some(offset) = leap_interval_offset(self.raw) {
             hour = 23;
             minute = 59;
-            second = 60.0 + offset as f64 * 1.0e-6;
+            second_us = 60_000_000 + offset;
         }
 
-        /// See: https://en.wikipedia.org/wiki/Julian_day
-        /// or Expl. Suppl. Astron. Almanac, P. 619
-        use gregorian_coefficients as gc;
-        // Julian Day Number of the UTC calendar day (1970-01-01 is JDN 2440588)
-        let jd = unix_day + 2_440_588;
-        let f = jd + gc::j + (((4 * jd + gc::B) / 146097) * 3) / 4 + gc::C;
-        let e = gc::r * f + gc::v;
-        let g = (e % gc::p) / gc::r;
-        let h = gc::u * g + gc::w;
-        let day = ((h % gc::s) / gc::u) + 1;
-        let month = ((h / gc::s + gc::m) % gc::n) + 1;
-        let year = (e / gc::p) - gc::y + (gc::n + gc::m - month) / gc::n;
-
-        (
-            year as i32,
-            month as i32,
-            day as i32,
-            hour as i32,
-            minute as i32,
-            second,
-        )
+        let (year, month, day) = civil_from_unix_day(unix_day);
+        (year, month, day, hour as i32, minute as i32, second_us)
     }
 
     /// Construct an instant from a given UTC date
@@ -727,7 +848,7 @@ impl Instant {
     /// * `day` - The day
     /// * `hour` - The hour
     /// * `minute` - The minute
-    /// * `second` - The second
+    /// * `second` - The second, rounded to the nearest microsecond
     ///
     /// # Returns
     /// A new Instant object representing the given date and time, or error if invalid
@@ -748,6 +869,13 @@ impl Instant {
     /// never occurred; they are accepted and, as in ERFA, land on the same
     /// instants as the first 0.05 s / 0.1 s of the next day. Before 1961,
     /// TAI − UTC is taken as 0.
+    ///
+    /// # Rounding
+    /// `second` is rounded to the nearest microsecond. A `second` that rounds
+    /// up to the end of its minute (e.g. `59.9999997`) is the start of the
+    /// next minute, or the start of the inserted interval where one follows;
+    /// one that rounds up to the end of an inserted interval is the next
+    /// day's 00:00:00.
     pub fn from_datetime(
         year: i32,
         month: i32,
@@ -756,71 +884,61 @@ impl Instant {
         minute: i32,
         second: f64,
     ) -> Result<Self> {
-        let mut check_leapsecond: bool = false;
-
-        // Bounds checking on input
-        if !(1..=12).contains(&month) {
-            return Err(InstantError::InvalidMonth(month));
+        // Ordinary leap seconds allow [60, 61); the longest inserted
+        // interval, the 1.422818 s step at 1961-01-01, allows up to
+        // 61.422818. `from_datetime_us` checks which.
+        if !(0.0..62.0).contains(&second) {
+            return Err(InstantError::InvalidSecondF(second));
         }
-        let max_day = if month == 2 {
-            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
-                29
-            } else {
-                28
-            }
-        } else {
-            MDAYS[(month - 1) as usize]
-        };
-        if day < 1 || day > max_day as i32 {
-            return Err(InstantError::InvalidDay(day));
-        }
-        if !(0..=23).contains(&hour) {
-            return Err(InstantError::InvalidHour(hour));
-        }
-        if !(0..=59).contains(&minute) {
-            return Err(InstantError::InvalidMinute(minute));
-        }
-        if !(0.0..60.0).contains(&second) {
-            // Check for rare case of leap second. Ordinary leap seconds allow
-            // [60, 61); the longest inserted interval, the 1.422818 s step at
-            // 1961-01-01, allows up to 61.422818 (checked exactly below).
-            if (60.0..62.0).contains(&second) {
-                check_leapsecond = true;
-            } else {
-                return Err(InstantError::InvalidSecondF(second));
+        let second_us = round_us(second * 1.0e6);
+        let r = Self::from_datetime_us(year, month, day, hour, minute, second_us);
+        if r.is_err() && second_us as f64 > second * 1.0e6 {
+            // Rounding up carried a valid label past the end of its minute
+            // (or of its leap second), e.g. 59.9999997 on a minute with no
+            // leap second: the result is 1 µs after the rounded-down label.
+            if let Ok(t) = Self::from_datetime_us(year, month, day, hour, minute, second_us - 1) {
+                return Ok(t + super::Duration::from_microseconds(1));
             }
         }
+        r
+    }
 
-        use gregorian_coefficients as gc;
-        let h = month as i64 - gc::m;
-        let g = year as i64 + gc::y - (gc::n - h) / gc::n;
-        let f = (h - 1 + gc::n) % gc::n;
-        let e = (gc::p * g) / gc::r + day as i64 - 1 - gc::j;
-        let mut jd = e + (gc::s * f + gc::t) / gc::u;
-        jd = jd - (3 * ((g + gc::A) / 100)) / 4 - gc::C;
-
-        // Note, JD is the given julian day at noon on given date,
-        // so we subtract an additional 0.5 to get midnight
-        let jd = jd as f64 - 0.5;
-        let mjd = jd - 2400000.5;
+    /// Construct an instant from a Gregorian UTC date and time with the
+    /// seconds given as integer microseconds of the minute (exact).
+    ///
+    /// `second_us` of `60_000_000` or more is accepted only as the label of
+    /// an inserted interval: a UTC leap second or a positive pre-1972 step
+    /// (see [`Self::from_datetime`]).
+    pub(crate) fn from_datetime_us(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second_us: i64,
+    ) -> Result<Self> {
+        check_date_hour_minute(year, month, day, hour, minute)?;
+        if !(0..62_000_000).contains(&second_us) {
+            return Err(InstantError::InvalidSecondF(second_us as f64 * 1.0e-6));
+        }
 
         // A leap-second label 23:59:60.x is built as the start of the next
         // minute (i.e. 00:00:00 of the next day, on the UTC basis) plus an
         // offset into the inserted interval; everything else directly.
-        let (minute_second, leap_offset) = if check_leapsecond {
-            (60.0, ((second - 60.0) * 1_000_000.0).round() as i64)
+        let check_leapsecond = second_us >= 60_000_000;
+        let (minute_us, leap_offset) = if check_leapsecond {
+            (60_000_000, second_us - 60_000_000)
         } else {
-            (second, 0)
+            (second_us, 0)
         };
 
         // Checked: an extreme year overflows the i64 microsecond count
         // (panicking in debug builds, silently wrapping in release)
-        let utc = (mjd as i64)
+        let utc = unix_day_from_civil(year, month, day)
             .checked_mul(86_400_000_000)
             .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000))
             .and_then(|v| v.checked_add(minute as i64 * 60_000_000))
-            .and_then(|v| v.checked_add((minute_second * 1_000_000.0).round() as i64))
-            .and_then(|v| v.checked_add(Self::MJD_EPOCH.raw))
+            .and_then(|v| v.checked_add(minute_us))
             .ok_or(InstantError::InvalidYear(year))?;
 
         if check_leapsecond {
@@ -838,6 +956,64 @@ impl Instant {
         Ok(Self { raw })
     }
 
+    /// Construct an instant from a local Gregorian date and time `offset_us`
+    /// microseconds ahead of UTC (the `+HH:MM` of RFC 3339 / ISO 8601),
+    /// with the seconds as integer microseconds of the minute.
+    ///
+    /// The offset shifts the *label*: `2017-01-01T00:30:00+01:00` is
+    /// `2016-12-31T23:30:00Z` although a leap second lies between the two
+    /// labels. Applying it as an elapsed-time `Duration` instead would be
+    /// 1 s off across a leap second. A leap-second label in local time
+    /// (`00:59:60+01:00`) maps to the UTC leap second.
+    pub(crate) fn from_local_datetime_us(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second_us: i64,
+        offset_us: i64,
+    ) -> Result<Self> {
+        if offset_us == 0 {
+            return Self::from_datetime_us(year, month, day, hour, minute, second_us);
+        }
+        check_date_hour_minute(year, month, day, hour, minute)?;
+        if !(0..62_000_000).contains(&second_us) {
+            return Err(InstantError::InvalidSecondF(second_us as f64 * 1.0e-6));
+        }
+        // Start of the local minute, shifted to UTC on the label basis
+        let minute_start = unix_day_from_civil(year, month, day)
+            .checked_mul(86_400_000_000)
+            .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000 + minute as i64 * 60_000_000))
+            .and_then(|v| v.checked_sub(offset_us))
+            .ok_or(InstantError::InvalidYear(year))?;
+        if second_us < 60_000_000 {
+            // An ordinary label: the UTC label is on the leap-second-free
+            // (Unix) basis, which `add_leapseconds` maps to the instant.
+            return minute_start
+                .checked_add(second_us)
+                .map(Self::from_unixtime_microseconds)
+                .ok_or(InstantError::InvalidYear(year));
+        }
+        // A leap-second label (`00:59:60.x+01:00`): rebuild the UTC minute
+        // and keep the seconds, which `from_datetime_us` validates against
+        // the leap-second table. Only whole-minute offsets can land there.
+        if minute_start.rem_euclid(60_000_000) != 0 {
+            return Err(InstantError::InvalidLeapSecond);
+        }
+        let unix_day = minute_start.div_euclid(86_400_000_000);
+        let min_of_day = minute_start.rem_euclid(86_400_000_000) / 60_000_000;
+        let (y, mo, d) = civil_from_unix_day(unix_day);
+        Self::from_datetime_us(
+            y,
+            mo,
+            d,
+            (min_of_day / 60) as i32,
+            (min_of_day % 60) as i32,
+            second_us,
+        )
+    }
+
     /// Construct an instant from a given Gregorian date and time interpreted
     /// in the specified time scale
     ///
@@ -851,7 +1027,7 @@ impl Instant {
     /// * `day` - The day
     /// * `hour` - The hour
     /// * `minute` - The minute
-    /// * `second` - The second
+    /// * `second` - The second, rounded to the nearest microsecond
     /// * `scale` - The time scale in which the components are expressed
     ///
     /// # Returns
@@ -872,45 +1048,22 @@ impl Instant {
 
         // Bounds checking on input.  Uniform time scales have no leap seconds,
         // so the second must be in [0, 60).
-        if !(1..=12).contains(&month) {
-            return Err(InstantError::InvalidMonth(month));
-        }
-        let max_day = if month == 2 {
-            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
-                29
-            } else {
-                28
-            }
-        } else {
-            MDAYS[(month - 1) as usize]
-        };
-        if day < 1 || day > max_day as i32 {
-            return Err(InstantError::InvalidDay(day));
-        }
-        if !(0..=23).contains(&hour) {
-            return Err(InstantError::InvalidHour(hour));
-        }
-        if !(0..=59).contains(&minute) {
-            return Err(InstantError::InvalidMinute(minute));
-        }
+        check_date_hour_minute(year, month, day, hour, minute)?;
         if !(0.0..60.0).contains(&second) {
             return Err(InstantError::InvalidSecondF(second));
         }
 
-        use gregorian_coefficients as gc;
-        let h = month as i64 - gc::m;
-        let g = year as i64 + gc::y - (gc::n - h) / gc::n;
-        let f = (h - 1 + gc::n) % gc::n;
-        let e = (gc::p * g) / gc::r + day as i64 - 1 - gc::j;
-        let mut jd = e + (gc::s * f + gc::t) / gc::u;
-        jd = jd - (3 * ((g + gc::A) / 100)) / 4 - gc::C;
+        // Microseconds of the label past MJD 0 in `scale`, in integers so
+        // that TAI / TT / GPS labels are exact (a single-f64 MJD resolves
+        // only ~1 µs). 1970-01-01 is MJD 40587.
+        let mjd_us = (unix_day_from_civil(year, month, day) + 40_587)
+            .checked_mul(86_400_000_000)
+            .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000))
+            .and_then(|v| v.checked_add(minute as i64 * 60_000_000))
+            .and_then(|v| v.checked_add(round_us(second * 1.0e6)))
+            .ok_or(InstantError::InvalidYear(year))?;
 
-        // Note, JD is the given julian day at noon on given date,
-        // so we subtract an additional 0.5 to get midnight
-        let jd = jd as f64 - 0.5;
-        let mjd = jd - 2400000.5 + (hour as f64 * 3600.0 + minute as f64 * 60.0 + second) / 86400.0;
-
-        Ok(Self::from_mjd_with_scale(mjd, scale))
+        Ok(Self::from_mjd_us_with_scale(mjd_us, scale))
     }
 
     /// Current time

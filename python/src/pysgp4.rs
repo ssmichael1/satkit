@@ -91,13 +91,9 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
         satkit::Instant::from_rfc3339(&s)
             .map_err(|e| anyhow::anyhow!("Invalid epoch string: {}", e))
     } else if val.is_instance_of::<PyDateTime>() {
-        let tm: Py<PyDateTime> = val.extract().unwrap();
-        pyo3::Python::attach(|py| {
-            let ts: f64 = tm
-                .call_method(py, "timestamp", (), None)?
-                .extract::<f64>(py)?;
-            Ok(satkit::Instant::from_unixtime(ts))
-        })
+        // Exact, with the same naive-is-local convention as satkit.time
+        let tm = val.cast::<PyDateTime>().map_err(PyErr::from)?;
+        Ok(crate::pyinstant::datetime_to_instant(tm)?)
     } else {
         bail!("Invalid epoch type");
     }

@@ -5,19 +5,46 @@ use chrono::TimeZone;
 
 use crate::Instant;
 
+/// Exact conversion (to the nearest microsecond) through integer Unix
+/// microseconds rather than an f64 Unix time, which resolves only ~0.2 µs
+/// today and loses a microsecond to truncation about 1% of the time.
+///
+/// The fraction of a second is part of the label (Unix time), not elapsed
+/// time: before 1972 a UTC second was not an SI second. `timestamp()` is the
+/// floor and the nanoseconds are non-negative, also before 1970. chrono
+/// writes a leap second as `23:59:59` with a nanosecond field of 1e9 or
+/// more; that part is elapsed time into the leap second.
 #[inline]
-fn datetime_to_unixtime<Tz>(dt: &chrono::DateTime<Tz>) -> f64
+fn datetime_to_instant<Tz>(dt: &chrono::DateTime<Tz>) -> Instant
 where
     Tz: chrono::TimeZone,
 {
-    dt.timestamp() as f64 + dt.timestamp_subsec_nanos() as f64 * 1.0e-9
+    let whole = dt.timestamp().saturating_mul(1_000_000);
+    let us = (dt.timestamp_subsec_nanos() as i64 + 500) / 1000;
+    if us < 1_000_000 {
+        Instant::from_unixtime_microseconds(whole.saturating_add(us))
+    } else {
+        // A leap second, or a fraction that rounded up to the next second
+        // (which is 23:59:60.000000 where a leap second follows): elapsed
+        // time from the last microsecond of the label's second
+        Instant::from_unixtime_microseconds(whole.saturating_add(999_999))
+            + crate::Duration::from_microseconds(us - 999_999)
+    }
 }
 
+/// Exact conversion from integer Unix microseconds, split with Euclidean
+/// division so that instants before 1970 keep their (non-negative)
+/// fraction of a second. (Splitting an f64 Unix time with `trunc()` /
+/// `fract()` gave a negative fraction there, which saturated to zero:
+/// `1969-12-31T23:59:59.5` became `1970-01-01T00:00:00`.)
+///
+/// Inside a leap second the Unix time repeats `23:59:59.x`, and so does
+/// the result, as with the Python bindings' `time.to_datetime()`.
 #[inline]
 fn instant_to_datetime(inst: &Instant) -> chrono::DateTime<chrono::Utc> {
-    let unixtime = inst.as_unixtime();
-    let secs = unixtime.trunc() as i64;
-    let nsecs = ((unixtime.fract()) * 1.0e9) as u32;
+    let us = inst.as_unixtime_microseconds();
+    let secs = us.div_euclid(1_000_000);
+    let nsecs = (us.rem_euclid(1_000_000) * 1000) as u32;
     // chrono can only represent years within about +/- 262,000; `From`
     // cannot fail, so saturate instants outside that range rather than
     // panicking on the unwrap.
@@ -48,7 +75,7 @@ where
     TZ: chrono::TimeZone,
 {
     fn from(dt: chrono::DateTime<TZ>) -> Self {
-        Self::from_unixtime(datetime_to_unixtime(&dt))
+        datetime_to_instant(&dt)
     }
 }
 
@@ -57,12 +84,12 @@ where
     TZ: chrono::TimeZone,
 {
     fn from(dt: &chrono::DateTime<TZ>) -> Self {
-        Self::from_unixtime(datetime_to_unixtime(dt))
+        datetime_to_instant(dt)
     }
 }
 
 mod chrono_impls {
-    use super::datetime_to_unixtime;
+    use super::datetime_to_instant;
     use crate::{Instant, TimeLike, TimeScale};
 
     impl<Tz> TimeLike for chrono::DateTime<Tz>
@@ -71,19 +98,17 @@ mod chrono_impls {
     {
         #[inline]
         fn as_mjd_with_scale(&self, scale: TimeScale) -> f64 {
-            let unixtime = datetime_to_unixtime(self);
-            Instant::from_unixtime(unixtime).as_mjd_with_scale(scale)
+            datetime_to_instant(self).as_mjd_with_scale(scale)
         }
 
         #[inline]
         fn as_jd_with_scale(&self, scale: TimeScale) -> f64 {
-            let unixtime = datetime_to_unixtime(self);
-            Instant::from_unixtime(unixtime).as_jd_with_scale(scale)
+            datetime_to_instant(self).as_jd_with_scale(scale)
         }
 
         #[inline]
         fn as_instant(&self) -> Instant {
-            Instant::from_unixtime(datetime_to_unixtime(self))
+            datetime_to_instant(self)
         }
     }
 }
@@ -102,6 +127,100 @@ mod tests {
         assert_eq!(dt, chrono::DateTime::<chrono::Utc>::MAX_UTC);
         let dt: chrono::DateTime<chrono::Utc> = Instant::new(i64::MIN + 1).into();
         assert_eq!(dt, chrono::DateTime::<chrono::Utc>::MIN_UTC);
+    }
+
+    fn utc(
+        y: i32,
+        mo: u32,
+        d: u32,
+        h: u32,
+        mi: u32,
+        s: u32,
+        us: u32,
+    ) -> chrono::DateTime<chrono::Utc> {
+        chrono::Utc
+            .with_ymd_and_hms(y, mo, d, h, mi, s)
+            .unwrap()
+            .checked_add_signed(chrono::TimeDelta::microseconds(us as i64))
+            .unwrap()
+    }
+
+    /// Conversions both ways are exact to the microsecond (no f64 Unix
+    /// time), including fractional seconds before 1970.
+    #[test]
+    fn test_chrono_exact() {
+        let base = Instant::from_datetime(2039, 2, 25, 21, 42, 35.0).unwrap();
+        for us in [0, 1, 249, 990_070, 999_999] {
+            let t = base + crate::Duration::from_microseconds(us);
+            let dt: chrono::DateTime<chrono::Utc> = t.into();
+            assert_eq!(dt, utc(2039, 2, 25, 21, 42, 35, us as u32));
+            assert_eq!(Instant::from(dt), t);
+        }
+        // Before 1970 the f64 fraction was negative and saturated to zero
+        for (t, dt) in [
+            (
+                Instant::from_datetime(1969, 12, 31, 23, 59, 59.5).unwrap(),
+                utc(1969, 12, 31, 23, 59, 59, 500_000),
+            ),
+            (
+                Instant::from_datetime(1960, 6, 1, 12, 0, 0.75).unwrap(),
+                utc(1960, 6, 1, 12, 0, 0, 750_000),
+            ),
+            (
+                Instant::from_datetime(1969, 12, 31, 23, 59, 59.999999).unwrap(),
+                utc(1969, 12, 31, 23, 59, 59, 999_999),
+            ),
+            (
+                Instant::from_datetime(1900, 1, 1, 0, 0, 0.000001).unwrap(),
+                utc(1900, 1, 1, 0, 0, 0, 1),
+            ),
+        ] {
+            let got: chrono::DateTime<chrono::Utc> = t.into();
+            assert_eq!(got, dt, "{t}");
+            assert_eq!(Instant::from(dt), t, "{dt}");
+            assert_eq!(dt.as_instant(), t, "{dt}");
+        }
+    }
+
+    /// A leap second comes back as `23:59:59.x` (Unix-time convention, as
+    /// the Python `to_datetime()`); chrono's own leap-second form
+    /// (nanos >= 1e9) converts into the leap second.
+    #[test]
+    fn test_chrono_leap_second() {
+        let leap = Instant::from_datetime(2016, 12, 31, 23, 59, 60.5).unwrap();
+        let dt: chrono::DateTime<chrono::Utc> = leap.into();
+        assert_eq!(dt, utc(2016, 12, 31, 23, 59, 59, 500_000));
+        let before = Instant::from_datetime(2016, 12, 31, 23, 59, 59.5).unwrap();
+        assert_eq!(Instant::from(dt), before);
+        let chrono_leap = chrono::NaiveDate::from_ymd_opt(2016, 12, 31)
+            .unwrap()
+            .and_hms_micro_opt(23, 59, 59, 1_500_000)
+            .unwrap()
+            .and_utc();
+        assert_eq!(Instant::from(chrono_leap), leap);
+        let after = Instant::from_date(2017, 1, 1).unwrap();
+        let dt: chrono::DateTime<chrono::Utc> = after.into();
+        assert_eq!(dt, utc(2017, 1, 1, 0, 0, 0, 0));
+    }
+
+    /// Random round trip, 1900–2100, microsecond resolution
+    #[test]
+    fn test_chrono_random_roundtrip() {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let lo = Instant::from_date(1900, 1, 1)
+            .unwrap()
+            .as_unixtime_microseconds();
+        let hi = Instant::from_date(2100, 1, 1)
+            .unwrap()
+            .as_unixtime_microseconds();
+        for _ in 0..20_000 {
+            let us = rng.random_range(lo..hi);
+            let t = Instant::from_unixtime_microseconds(us);
+            let dt: chrono::DateTime<chrono::Utc> = t.into();
+            assert_eq!(dt.timestamp_micros(), us);
+            assert_eq!(Instant::from(dt), t);
+        }
     }
 
     #[test]

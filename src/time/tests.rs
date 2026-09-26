@@ -691,6 +691,191 @@ fn test_ut1_across_leap_second() {
     }
 }
 
+/// Float seconds, days and Unix times round to the nearest microsecond
+/// rather than truncating (`0.000249 * 1e6` is `248.99999999999997`).
+#[test]
+fn test_float_to_microseconds_rounds() {
+    let midnight = Instant::from_date(2024, 1, 1).unwrap();
+    let us = |t: Instant| (t - midnight).as_microseconds();
+    assert_eq!(
+        us(Instant::from_datetime(2024, 1, 1, 0, 0, 0.000249).unwrap()),
+        249
+    );
+    assert_eq!(
+        us(Instant::from_datetime(2024, 1, 1, 0, 0, 1.0000004).unwrap()),
+        1_000_000
+    );
+    assert_eq!(
+        us(Instant::from_datetime(2024, 1, 1, 0, 0, 1.0000006).unwrap()),
+        1_000_001
+    );
+    assert_eq!(
+        us(Instant::from_datetime_with_scale(2024, 1, 1, 0, 0, 0.000249, TimeScale::UTC).unwrap()),
+        249
+    );
+
+    // Uniform scales are built in integers: exact, not via a float MJD
+    let tt =
+        Instant::from_datetime_with_scale(2039, 2, 25, 21, 42, 35.990_07, TimeScale::TT).unwrap();
+    let tt0 = Instant::from_datetime_with_scale(2039, 2, 25, 21, 42, 0.0, TimeScale::TT).unwrap();
+    assert_eq!((tt - tt0).as_microseconds(), 35_990_070);
+
+    for (d, us) in [
+        (Duration::from_seconds(0.000249), 249),
+        (Duration::from_seconds(-0.000249), -249),
+        (Duration::from_milliseconds(0.249), 249),
+        (Duration::from_minutes(0.000249 / 60.0), 249),
+        (Duration::from_hours(1.0e-6 / 3600.0), 1),
+        (Duration::from_days(1.0e-6 / 86400.0), 1),
+        (Duration::from_seconds(0.4e-6), 0),
+        (Duration::from_seconds(-0.6e-6), -1),
+    ] {
+        assert_eq!(d.as_microseconds(), us, "{d:?}");
+    }
+
+    let u = Instant::from_unixtime(1_700_000_000.000249);
+    assert_eq!(u.as_unixtime_microseconds(), 1_700_000_000_000_249);
+    assert_eq!(
+        Instant::from_unixtime_microseconds(1_700_000_000_000_249),
+        u
+    );
+    assert_eq!(
+        Instant::from_gps_week_and_second(2300, 0.000249)
+            - Instant::from_gps_week_and_second(2300, 0.0),
+        Duration::from_microseconds(249)
+    );
+    let t = midnight + Duration::from_microseconds(990_070);
+    assert_eq!(
+        Instant::from_mjd_with_scale(t.as_mjd_with_scale(TimeScale::TAI), TimeScale::TAI),
+        t
+    );
+    assert_eq!(
+        midnight.add_utc_days(0.000249 / 86400.0),
+        midnight + Duration::from_microseconds(249)
+    );
+}
+
+/// A second that rounds up to the end of its minute carries into the next
+/// minute — or into the leap second where one follows — and one that rounds
+/// up to the end of a leap second is the next day's 00:00:00.
+#[test]
+fn test_rounding_up_at_end_of_minute() {
+    // Ordinary minute
+    assert_eq!(
+        Instant::from_datetime(2024, 1, 1, 12, 0, 59.9999997).unwrap(),
+        Instant::from_datetime(2024, 1, 1, 12, 1, 0.0).unwrap()
+    );
+    // End of a day without a leap second
+    assert_eq!(
+        Instant::from_datetime(2016, 6, 30, 23, 59, 59.9999997).unwrap(),
+        Instant::from_date(2016, 7, 1).unwrap()
+    );
+    // Before a leap second: 23:59:60.000000
+    let leap = Instant::from_datetime(2016, 12, 31, 23, 59, 60.0).unwrap();
+    assert_eq!(
+        Instant::from_datetime(2016, 12, 31, 23, 59, 59.9999997).unwrap(),
+        leap
+    );
+    // End of the leap second
+    assert_eq!(
+        Instant::from_datetime(2016, 12, 31, 23, 59, 60.9999997).unwrap(),
+        Instant::from_date(2017, 1, 1).unwrap()
+    );
+    assert_eq!(
+        Instant::from_datetime(2016, 12, 31, 23, 59, 60.9999997).unwrap() - leap,
+        Duration::from_seconds(1.0)
+    );
+    // Leap-second offsets round too
+    assert_eq!(
+        Instant::from_datetime(2016, 12, 31, 23, 59, 60.000249).unwrap() - leap,
+        Duration::from_microseconds(249)
+    );
+    // Still an error: no leap second at this minute
+    assert!(Instant::from_datetime(2016, 6, 30, 23, 59, 60.0000004).is_err());
+    assert!(Instant::from_datetime(2016, 12, 31, 23, 59, 61.0).is_err());
+}
+
+/// `as_datetime()` seconds feed back through `from_datetime` exactly, and
+/// the formatted microseconds are the stored ones.
+#[test]
+fn test_as_datetime_roundtrip_exact() {
+    let base = Instant::from_datetime(1972, 1, 1, 5, 30, 0.0).unwrap();
+    for us in (0..60_000_000i64)
+        .step_by(7_919)
+        .chain([45_773_591, 59_999_999])
+    {
+        let t = base + Duration::from_microseconds(us);
+        let (y, mo, d, h, mi, s) = t.as_datetime();
+        assert_eq!(
+            Instant::from_datetime(y, mo, d, h, mi, s).unwrap(),
+            t,
+            "{us}"
+        );
+        assert_eq!(Instant::from_rfc3339(&t.to_string()).unwrap(), t, "{us}");
+    }
+}
+
+/// UTC offsets act on the calendar label (RFC 3339): exact across a leap
+/// second, with the sign of `%z` meaning local minus UTC.
+#[test]
+fn test_utc_offset_applies_to_label() {
+    let utc = |y, mo, d, h, mi, s| Instant::from_datetime(y, mo, d, h, mi, s).unwrap();
+    assert_eq!(
+        Instant::strptime("2024-01-01T12:00:00+0100", "%Y-%m-%dT%H:%M:%S%z").unwrap(),
+        utc(2024, 1, 1, 11, 0, 0.0)
+    );
+    assert_eq!(
+        Instant::strptime("2024-01-01T12:00:00-01:30", "%Y-%m-%dT%H:%M:%S%z").unwrap(),
+        utc(2024, 1, 1, 13, 30, 0.0)
+    );
+    assert_eq!(
+        Instant::from_rfc3339("2017-01-01T00:30:00+01:00").unwrap(),
+        utc(2016, 12, 31, 23, 30, 0.0)
+    );
+    assert_eq!(
+        Instant::from_rfc3339("2016-12-31T18:59:59.5-05:00").unwrap(),
+        utc(2016, 12, 31, 23, 59, 59.5)
+    );
+    // A leap second written in local time
+    assert_eq!(
+        Instant::from_rfc3339("2017-01-01T00:59:60.25+01:00").unwrap(),
+        utc(2016, 12, 31, 23, 59, 60.25)
+    );
+    assert_eq!(
+        Instant::strptime("2016-12-31 18:59:60.5-0500", "%Y-%m-%d %H:%M:%S.%f%z").unwrap(),
+        utc(2016, 12, 31, 23, 59, 60.5)
+    );
+    // ... but not where UTC has none
+    assert!(Instant::from_rfc3339("2017-01-01T01:59:60+01:00").is_err());
+    // Local calendar fields are still validated
+    assert!(Instant::from_rfc3339("2024-02-30T12:00:00+01:00").is_err());
+    // Before 1972 too (where a model of the drifting pre-1972 UTC − TAI
+    // makes an elapsed-time offset wrong by up to milliseconds)
+    assert_eq!(
+        Instant::from_rfc3339("1965-06-01T02:30:00.25+14:00").unwrap(),
+        utc(1965, 5, 31, 12, 30, 0.25)
+    );
+    assert_eq!(
+        Instant::from_rfc3339("1965-05-31T00:30:00-12:00").unwrap(),
+        utc(1965, 5, 31, 12, 30, 0.0)
+    );
+}
+
+/// The split TDB date matches the single-f64 MJD and resolves far below a
+/// microsecond.
+#[test]
+fn test_mjd_tdb_split() {
+    let t = Instant::from_datetime(2024, 3, 1, 6, 0, 0.0).unwrap();
+    let (day, frac) = t.mjd_tdb_split();
+    let mjd = t.as_mjd_with_scale(TimeScale::TDB);
+    assert_eq!(day as f64 + frac, mjd);
+    assert!((0.0..1.0).contains(&frac));
+    let (day2, frac2) = (t + Duration::from_microseconds(1)).mjd_tdb_split();
+    assert_eq!(day2, day);
+    let dt_us = (frac2 - frac) * 86_400.0e6;
+    assert!((dt_us - 1.0).abs() < 1.0e-6, "{dt_us}");
+}
+
 /// Across every leap second inside the EOP table, UT1 − TAI is continuous
 /// (the EOP lookup interpolates UT1 − TAI), UT1 is monotonic, and UT1 ->
 /// Instant inverts it. Before the table (or with none) UT1 − UTC is 0, so UT1
