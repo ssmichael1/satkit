@@ -14,6 +14,7 @@ pub mod update_data;
 #[cfg(feature = "download")]
 pub use update_data::update_datafiles;
 
+pub(crate) mod diag;
 pub mod singleton;
 pub use singleton::RefreshableSingleton;
 

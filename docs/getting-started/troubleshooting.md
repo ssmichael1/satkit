@@ -20,10 +20,10 @@ print(sk.spaceweather.coverage())       # (first, last_observed, last_daily, las
 
 ## Warnings about Earth orientation and space weather
 
-### "Warning: EOP data ends at … held constant"
+### "EOP data ends at … held constant"
 
 ```
-Warning: EOP data ends at 2027-10-02T00:00:00.000000Z (MJD 61680); the request for MJD UTC = 62502 and all later epochs use the last entry's values held constant. ...
+EOP data ends at 2027-10-02T00:00:00.000000Z (MJD 61680); the request for MJD UTC = 62502 and all later epochs use the last entry's values held constant. ...
 ```
 
 **Cause.** An Earth-fixed frame transform (or a propagation, or `gmst`/`gast`)
@@ -48,7 +48,7 @@ and pass `sk.propsettings(require_eop_coverage=True)` to make `propagate`
 raise instead of extrapolating (or, before 1973-01-02, instead of using zero
 EOP). See [EOP coverage](datacoverage.md#eop-coverage).
 
-### "Warning: no Earth Orientation Parameters (EOP) table is loaded"
+### "no Earth Orientation Parameters (EOP) table is loaded"
 
 **Cause.** No `finals2000A.all` is in any search directory
 and the first-use download failed (no network, `SATKIT_OFFLINE=1`, a proxy,
@@ -69,10 +69,10 @@ or point `SATKIT_DATA` at a directory that holds the file. If the download
 itself fails, the entries under [Data files and downloads](#data-files-and-downloads)
 below cover the usual reasons.
 
-### "Warning: EOP data not available for MJD UTC = … (too early)"
+### "EOP data not available for MJD UTC = … (too early)"
 
 ```
-Warning: EOP data not available for MJD UTC = 40000 (too early): the loaded table starts at 1973-01-02T00:00:00.000000Z (MJD 41684), and polar motion, UT1-UTC and nutation corrections are treated as zero (UT1 = UTC) before it.
+EOP data not available for MJD UTC = 40000 (too early): the loaded table starts at 1973-01-02T00:00:00.000000Z (MJD 41684), and polar motion, UT1-UTC and nutation corrections are treated as zero (UT1 = UTC) before it.
 finals2000A.all has no EOP data before 1973-01-02; refreshing the data files does not change this.
 ```
 
@@ -92,29 +92,60 @@ carries no advice line then.
 
 | message begins | cause | fix |
 |---|---|---|
-| `Warning: no space-weather table is loaded` | no space-weather files on disk and the first-use download failed. NRLMSISE-00 runs on $F_{10.7} = F_{10.7A} = 150$, $A_p = 4$, which can be wrong by a factor of two in density | `sk.utils.update_datafiles()` with network access, or `SATKIT_DATA` pointing at a directory with the files |
-| `Warning: the space-weather table ends at …` | the epoch is past the last row; that row's values are used unchanged | the warning says which case applies. *"The table ends in the past, so it is out of date"*: an old file or a table loaded by hand — refresh with `sk.utils.update_datafiles()`. *"The table already reaches past today to the end of its long-range forecast"*: the epoch is beyond the NASA MSAFE forecast (about 15 years ahead) and no refresh can help |
-| `Warning: the space-weather record for … is a monthly prediction` | the record carries $F_{10.7}$ but no $K_p$/$a_p$ (a CelesTrak `SW-All.csv` left in a data directory by satkit 0.22 or earlier, or loaded by hand), so NRLMSISE-00 uses a quiet-time $A_p = 4$ | `sk.utils.update_datafiles()` fetches the GFZ / SWPC / MSAFE files, whose monthly rows do carry $A_p$ |
+| `no space-weather table is loaded` | no space-weather files on disk and the first-use download failed. NRLMSISE-00 runs on $F_{10.7} = F_{10.7A} = 150$, $A_p = 4$, which can be wrong by a factor of two in density | `sk.utils.update_datafiles()` with network access, or `SATKIT_DATA` pointing at a directory with the files |
+| `the space-weather table ends at …` | the epoch is past the last row; that row's values are used unchanged | the warning says which case applies. *"The table ends in the past, so it is out of date"*: an old file or a table loaded by hand — refresh with `sk.utils.update_datafiles()`. *"The table already reaches past today to the end of its long-range forecast"*: the epoch is beyond the NASA MSAFE forecast (about 15 years ahead) and no refresh can help |
+| `the space-weather record for … is a monthly prediction` | the record carries $F_{10.7}$ but no $K_p$/$a_p$ (a CelesTrak `SW-All.csv` left in a data directory by satkit 0.22 or earlier, or loaded by hand), so NRLMSISE-00 uses a quiet-time $A_p = 4$ | `sk.utils.update_datafiles()` fetches the GFZ / SWPC / MSAFE files, whose monthly rows do carry $A_p$ |
 
 `sk.spaceweather.get(t)` itself raises `RuntimeError: No space weather record found for date`
 when no table is loaded. See [Space weather coverage](datacoverage.md#space-weather-coverage)
 for `sk.spaceweather.status(t)` and what each block of the table can tell the density model.
 
-### How do I silence these warnings?
+### Warnings and logging: how do I silence or redirect these warnings?
 
-They are printed directly to **stderr** by the Rust library, once per process
-each, not through Python's `warnings` module — so `warnings.filterwarnings(...)`
-and `python -W ignore` have no effect, and in Jupyter they appear as a stderr
-block under the cell. Turn them off with:
+satkit's warnings (these, and the ones about data files, downloads and
+`SATKIT_CA_BUNDLE`) go through the standard logging system of each language,
+under the module that raised them: `satkit.earth_orientation_params`,
+`satkit.spaceweather`, `satkit.utils.download`, and so on. Most are shown once
+per process. They are not Python `warnings`, so `warnings.filterwarnings(...)`
+and `python -W ignore` have no effect.
+
+**Python.** The records go to the `logging` module, as children of the
+`satkit` logger. With logging not configured, WARNING records reach stderr
+through `logging`'s last-resort handler (the message alone; in Jupyter a
+stderr block under the cell), as they did before 0.24. To silence them all, or
+only those of one module:
+
+```python
+import logging
+
+logging.getLogger("satkit").setLevel(logging.ERROR)
+logging.getLogger("satkit.spaceweather").setLevel(logging.ERROR)
+```
+
+To send them elsewhere, configure logging as usual, e.g.
+`logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")` or a
+handler on the `satkit` logger. Informational notices (such as the one
+announcing the first-use JPL ephemeris download) are logged at INFO, so they
+appear only when logging is configured at that level:
+`logging.basicConfig(level=logging.INFO)`.
+
+**Rust.** The records go through the [`log`](https://docs.rs/log) facade with
+the module path as target. With no logger installed they are printed to
+stderr (`Warning: …`, or `satkit: …` for a notice). Install any `log` backend
+(`env_logger`, `tracing-subscriber` with its `log` bridge, …) to take them
+over, and filter by target, e.g. `RUST_LOG=satkit=error` with `env_logger`.
+
+**Either language.** The EOP and space-weather warnings can also be turned
+off at the source (each warning's "To disable" line names the function):
 
 ```python
 sk.frametransform.disable_eop_time_warning()
 sk.spaceweather.disable_space_weather_time_warning()
 ```
 
-Each warning's "To disable" line names both the Rust and the Python function.
-Silencing a warning does not change the result: prefer refreshing the data, or checking
-`eop_status(t)` / `spaceweather.status(t)` explicitly.
+and `SATKIT_QUIET=1` still suppresses the gravity-model and IERS-table
+warnings. Silencing a warning does not change the result: prefer refreshing
+the data, or checking `eop_status(t)` / `spaceweather.status(t)` explicitly.
 
 ### The Earth-orientation or space-weather data is old, although I have network access
 
@@ -158,6 +189,8 @@ The first call that needs the JPL ephemeris downloads it (DE440, 102 MB,
 SHA-256 verified), once. Run `sk.utils.update_datafiles()` to take the hit up
 front, or set `SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421` for the 14 MB DE421
 (1900–2053). See [Selecting a JPL ephemeris file](datadirs.md#selecting-a-jpl-ephemeris-file).
+In Python the download is announced at INFO level, so it is shown only with
+logging configured for it (see [Warnings and logging](#warnings-and-logging-how-do-i-silence-or-redirect-these-warnings)).
 
 ### `update_datafiles()` says "no request made" — how do I force a refresh?
 

@@ -127,6 +127,8 @@ def disable_space_weather_time_warning() -> None:
     epoch past the end of the table, no table loaded at all, and an index
     NRLMSISE-00 has to take its default for (an epoch before the table starts,
     or F10.7 before 1947). Each is shown at most once per process; this
-    suppresses all of them.
+    suppresses all of them. They are logged to the ``satkit.spaceweather``
+    logger; silencing that logger (or ``satkit``) with :mod:`logging` works
+    too.
     """
     ...

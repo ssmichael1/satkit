@@ -790,10 +790,15 @@ pub fn rotation_with_state(
     Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(tm.py())?)
 }
 
-/// Disable the warning about out-of-range Earth Orientation Parameters (EOP).
+/// Disable the warnings about Earth Orientation Parameters (EOP) availability.
 ///
-/// The warning is shown only once by default; call this function to suppress
-/// it entirely.
+/// Notes:
+///     - Four one-time warnings exist: epoch before the EOP table, epoch after the table end
+///       (last values held constant), epoch in the predictions of a table not refreshed for
+///       over 30 days, and no EOP table loaded at all (zeros used).
+///     - Each is shown at most once per process; this call suppresses all of them.
+///     - They are logged to the ``satkit.earth_orientation_params`` logger; silencing that
+///       logger (or ``satkit``) with :mod:`logging` works too.
 ///
 /// Example:
 ///     >>> import satkit

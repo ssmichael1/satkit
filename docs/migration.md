@@ -262,8 +262,15 @@ nested lists.
   download without predictions is rejected, keeping the file on disk.
   **Do this:** re-copy or refresh a file that now fails to load.
 - **Stale predictions warn.** A lookup past the last observed row of a file
-  whose observed data ended more than 30 days ago prints a one-time warning.
+  whose observed data ended more than 30 days ago logs a one-time warning.
   **Do this:** refresh with `update_datafiles()`.
+- **Warnings go through Python `logging` / Rust `log`.** Unconfigured Python
+  still shows them on stderr, as the bare message (no `Warning:` prefix);
+  Rust with no logger installed prints them as before. **Do this:** silence
+  them with `logging.getLogger("satkit").setLevel(logging.ERROR)` (Rust:
+  filter the `satkit` target), or route them with your logging setup; the
+  `disable_*_warning()` functions and `SATKIT_QUIET=1` still work. See
+  [Warnings and logging](getting-started/troubleshooting.md#warnings-and-logging-how-do-i-silence-or-redirect-these-warnings).
 
 ## Pickles
 

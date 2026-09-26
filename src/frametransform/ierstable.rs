@@ -1,4 +1,4 @@
-use crate::utils::{self, download_if_not_exist};
+use crate::utils::{self, diag, download_if_not_exist};
 
 use super::{Error, Result};
 
@@ -57,15 +57,23 @@ pub fn table(id: IersTableId) -> &'static IERSTable {
     // With the tables compiled in and a corrupt on-disk copy falling back to
     // them (`from_path_or_embedded`), this panic is unreachable short of a
     // build defect in the embedded blobs; the message stays actionable anyway.
-    instance_for(id).get_or_init(|| {
-        let fname = id.default_filename();
-        IERSTable::from_file(fname).unwrap_or_else(|e| {
-            panic!(
-                "Failed to load IERS table \"{fname}\": {e}. Ensure the data \
-                 files are present (set the SATKIT_DATA environment variable to \
-                 your data directory, or run satkit::utils::update_datafiles to \
-                 download them)."
-            )
+    let cell = instance_for(id);
+    if let Some(t) = cell.get() {
+        return t;
+    }
+    // A fallback warning is logged once the cell is initialized, not while
+    // other threads may be waiting on it (see `utils::diag::deferred`).
+    diag::deferred(|| {
+        cell.get_or_init(|| {
+            let fname = id.default_filename();
+            IERSTable::from_file(fname).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to load IERS table \"{fname}\": {e}. Ensure the data \
+                     files are present (set the SATKIT_DATA environment variable to \
+                     your data directory, or run satkit::utils::update_datafiles to \
+                     download them)."
+                )
+            })
         })
     })
 }
@@ -158,8 +166,8 @@ impl IERSTable {
             return Err(err);
         };
         if std::env::var_os("SATKIT_QUIET").is_none() {
-            eprintln!(
-                "Warning: IERS table {} could not be loaded ({err}); using the compiled-in \
+            diag::warn!(
+                "IERS table {} could not be loaded ({err}); using the compiled-in \
                  copy of {fname} instead. Delete or replace the file to silence this.",
                 path.display()
             );
