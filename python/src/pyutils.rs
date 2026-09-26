@@ -1,4 +1,4 @@
-use crate::pyinstant::ToTimeVec;
+use crate::pyinstant::{TimeInput, ToTimeVec};
 use crate::pyquaternion::PyQuaternion;
 
 use satkit::mathtypes::*;
@@ -24,6 +24,53 @@ use anyhow::Result;
 pub fn warn_deprecated(py: Python<'_>, msg: &std::ffi::CStr) -> PyResult<()> {
     let warning_type = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
     PyErr::warn(py, warning_type.as_any(), msg, 1)
+}
+
+/// Convert any real numeric array-like (a numpy array of any integer or
+/// floating dtype, a numpy scalar, or a nested list / tuple of numbers) to a
+/// float64 numpy array, as `numpy.asarray(obj, dtype=float)` would.
+///
+/// A float64 array is passed through without a copy. Anything that is not
+/// real-numeric (complex, bool, string or object dtype) raises `TypeError`,
+/// so, for example, the imaginary part of a complex array is never silently
+/// dropped.
+pub fn to_f64_ndarray<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, np::PyArrayDyn<f64>>> {
+    if let Ok(a) = obj.cast::<np::PyArrayDyn<f64>>() {
+        return Ok(a.clone());
+    }
+    let numpy = obj.py().import("numpy")?;
+    let arr = numpy.call_method1("asarray", (obj,)).map_err(|e| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "expected a real numeric array-like, got {}: {e}",
+            obj.get_type()
+        ))
+    })?;
+    let kind: String = arr.getattr("dtype")?.getattr("kind")?.extract()?;
+    if !matches!(kind.as_str(), "i" | "u" | "f") {
+        return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "expected a real numeric array-like, got {} with dtype {}",
+            obj.get_type(),
+            arr.getattr("dtype")?
+        )));
+    }
+    Ok(arr
+        .call_method1("astype", (numpy.getattr("float64")?,))?
+        .cast_into::<np::PyArrayDyn<f64>>()?)
+}
+
+/// A real 3-vector from any numeric array-like of length 3 (see
+/// [`to_f64_ndarray`]); `what` names the argument in the error message.
+pub fn to_vector3(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vector3> {
+    let arr = to_f64_ndarray(obj)?;
+    let ro = arr.readonly();
+    let a = ro.as_array();
+    if a.ndim() != 1 || a.len() != 3 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{what} must be a 3-element vector, got shape {:?}",
+            a.shape()
+        )));
+    }
+    Ok(numeris::vector![a[0], a[1], a[2]])
 }
 
 pub fn kwargs_or_default<'py, T>(
@@ -60,6 +107,11 @@ where
     if let Some(kw) = kwargs {
         match kw.get_item(name)? {
             None => Ok(None),
+            // An explicit `name=None` means the same as leaving it out
+            Some(v) if v.is_none() => {
+                kw.del_item(name)?;
+                Ok(None)
+            }
             Some(v) => {
                 kw.del_item(name)?;
                 Ok(Some(v.extract::<T>().map_err(|_| {
@@ -147,18 +199,103 @@ pub fn reject_unused_kwargs(kw: &Bound<'_, PyDict>) -> PyResult<()> {
     )))
 }
 
+/// Pickle support shared by the enum classes (`frame`, `timescale`, ...):
+/// `__reduce__` returns `(satkit.satkit._enum_member, (path, name))`, so
+/// unpickling looks the member up by name. `path` is the class's attribute
+/// path from the `satkit.satkit` extension module (`"frame"`,
+/// `"moon.moonphase"`), which works for classes that live in a native
+/// submodule too (those are not importable, so pickle could not find the
+/// class itself by reference).
+pub fn enum_reduce<'py>(
+    slf: &Bound<'py, PyAny>,
+    path: &'static str,
+) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
+    let cls = slf.get_type();
+    for attr in cls.dir()?.iter() {
+        let name: String = attr.extract()?;
+        if name.starts_with('_') {
+            continue;
+        }
+        let v = cls.getattr(name.as_str())?;
+        if v.get_type().is(&cls) && v.eq(slf)? {
+            let f = slf.py().import("satkit.satkit")?.getattr("_enum_member")?;
+            return Ok((f, (path, name)));
+        }
+    }
+    Err(pyo3::exceptions::PyTypeError::new_err(format!(
+        "cannot pickle {}: member not found on its class",
+        slf.repr()?
+    )))
+}
+
+/// Unpickling half of [`enum_reduce`]: `satkit.satkit.<path>.<name>`
+#[pyfunction]
+#[pyo3(name = "_enum_member")]
+pub fn enum_member<'py>(py: Python<'py>, path: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    let mut obj = py.import("satkit.satkit")?.into_any();
+    for part in path.split('.') {
+        obj = obj.getattr(part)?;
+    }
+    obj.getattr(name)
+}
+
+/// `__reduce__` for an enum pyclass that has no other `#[pymethods]` block
+/// (see [`enum_reduce`]).
+#[macro_export]
+macro_rules! enum_pickle {
+    ($ty:ty, $path:literal) => {
+        #[pyo3::pymethods]
+        impl $ty {
+            fn __reduce__<'py>(
+                slf: &pyo3::Bound<'py, Self>,
+            ) -> pyo3::PyResult<(pyo3::Bound<'py, pyo3::PyAny>, (&'static str, String))> {
+                $crate::pyutils::enum_reduce(slf.as_any(), $path)
+            }
+        }
+    };
+}
+
+/// Raise `TypeError` (Python's own convention for a bad keyword) if `kw`
+/// holds any key not in `allowed`, e.g. a misspelt `degre=`. Unlike
+/// [`reject_unused_kwargs`] it does not need the keywords to be consumed.
+pub fn reject_unknown_kwargs(
+    fname: &str,
+    kw: &Bound<'_, PyDict>,
+    allowed: &[&str],
+) -> PyResult<()> {
+    let unknown: Vec<String> = kw
+        .keys()
+        .iter()
+        .map(|k| k.to_string())
+        .filter(|k| !allowed.contains(&k.as_str()))
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    Err(pyo3::exceptions::PyTypeError::new_err(format!(
+        "{fname}() got unexpected keyword argument{} {} (accepted: {})",
+        if unknown.len() == 1 { "" } else { "s" },
+        unknown
+            .iter()
+            .map(|k| format!("'{k}'"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        allowed.join(", ")
+    )))
+}
+
 pub fn py_vec3_of_time_arr(
     cfunc: &(dyn Fn(&Instant) -> Vector3 + Sync),
     tmarr: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let tm = tmarr.to_time_vec()?;
+    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
     let py = tmarr.py();
-    match tm.len() {
-        1 => {
+    match (scalar, tm.len()) {
+        (true, _) => {
             let v: Vector3 = cfunc(&tm[0]);
             Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?)
         }
-        n => {
+        (false, n) => {
             // Release the GIL for the computation over the full time array
             let vals: Vec<f64> = py.detach(|| {
                 let mut vals = Vec::with_capacity(n * 3);
@@ -178,14 +315,14 @@ pub fn py_vec3_of_time_result_arr(
     cfunc: &(dyn Fn(&Instant) -> Result<Vector3> + Sync),
     tmarr: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let tm = tmarr.to_time_vec()?;
+    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
     let py = tmarr.py();
-    match tm.len() {
-        1 => {
+    match (scalar, tm.len()) {
+        (true, _) => {
             let v = cfunc(&tm[0])?;
             Ok(np::PyArray1::from_slice(py, v.as_slice()).into_py_any(py)?)
         }
-        n => {
+        (false, n) => {
             // Release the GIL for the computation over the full time array
             let vals: Result<Vec<f64>> = py.detach(|| {
                 let mut vals = Vec::with_capacity(n * 3);
@@ -276,12 +413,12 @@ pub fn py_func_of_time_arr<'a, T: IntoPyObject<'a> + Send>(
     cfunc: fn(&Instant) -> T,
     tmarr: &Bound<'a, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let tm = tmarr.to_time_vec()?;
+    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
     let py = tmarr.py();
 
-    match tm.len() {
-        1 => Ok(cfunc(&tm[0]).into_py_any(py)?),
-        _ => {
+    match scalar {
+        true => Ok(cfunc(&tm[0]).into_py_any(py)?),
+        false => {
             // Release the GIL for the computation over the full time array
             let tvec: Vec<T> = py.detach(|| tm.iter().map(cfunc).collect());
             Ok(tvec.into_py_any(py)?)
@@ -294,11 +431,11 @@ pub fn py_quat_from_time_arr(
     cfunc: fn(&Instant) -> Quaternion,
     tmarr: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let tm = tmarr.to_time_vec()?;
+    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
     let py = tmarr.py();
-    match tm.len() {
-        1 => Ok(PyQuaternion(cfunc(&tm[0])).into_py_any(py)?),
-        _ => {
+    match scalar {
+        true => Ok(PyQuaternion(cfunc(&tm[0])).into_py_any(py)?),
+        false => {
             // Release the GIL for the computation over the full time array
             let quats: Vec<PyQuaternion> =
                 py.detach(|| tm.iter().map(|x| PyQuaternion(cfunc(x))).collect());
@@ -342,10 +479,10 @@ pub fn tuple_func_of_time_arr<F>(cfunc: F, tmarr: &Bound<'_, PyAny>) -> PyResult
 where
     F: Fn(&Instant) -> Result<(Vector3, Vector3)> + Sync,
 {
-    let tm = tmarr.to_time_vec()?;
+    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
     let py = tmarr.py();
-    match tm.len() {
-        1 => match cfunc(&tm[0]) {
+    match scalar {
+        true => match cfunc(&tm[0]) {
             Ok(r) => (
                 PyArray1::from_slice(py, r.0.as_slice()),
                 PyArray1::from_slice(py, r.1.as_slice()),
@@ -353,7 +490,7 @@ where
                 .into_py_any(py),
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
         },
-        _ => {
+        false => {
             // Release the GIL for the computation over the full time array
             let arrs = py.detach(|| -> PyResult<_> {
                 let mut pout = ndarray::Array2::<f64>::zeros([tm.len(), 3]);

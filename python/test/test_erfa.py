@@ -905,13 +905,12 @@ def _assert_rot(sk_mats, erfa_mats, tol_rad, what):
     )
 
 
-# Earth rotation angle: satkit forms JD(UT1) = MJD + 2400000.5 as a single
-# f64 (ulp 40 us of UT1), which costs up to 0.30 mas (1.1 cm at LEO, 6.4 cm at
-# GEO). That precision loss is the largest term in the full reduction, so the
-# tolerance for every ERA-dependent rotation below is 0.5 mas.
-TOL_ERA_GUARD = 0.5 * MAS2RAD
-# What the ERA should be good to: UT1 as an f64 MJD (<= 0.6 us here) is
-# < 10 us of arc; 20 us of arc leaves margin.
+# Earth rotation angle, evaluated like ERFA era00 from the two-part date
+# (2400000.5, MJD(UT1)): UT1 as an f64 MJD (<= 0.6 us here) is < 10 us of arc
+# (measured 8.9 uas max; 0.3 mm at LEO). Before the two-part evaluation,
+# JD(UT1) = MJD + 2400000.5 as one f64 (ulp 40 us) cost up to 0.30 mas. ERA
+# precision is the largest term in the full reduction, so 20 uas is also the
+# tolerance for every ERA-dependent rotation below.
 TOL_ERA = 20 * UAS2RAD
 # CIP X, Y (Tables 5.2a/b) against ERFA's xy06 of the same series: measured
 # 3.3 uas over 1973-2026 (ERFA's own xy06 and xys06a differ by 1.5 uas).
@@ -920,18 +919,6 @@ TOL_CIP = 10 * UAS2RAD
 
 
 class TestEarthRotation:
-    def test_era_guard(self, ref):
-        got = np.array(ft.earth_rotation_angle(ref["times"]))
-        assert np.max(np.abs(wrap(got - ref["era"]))) < TOL_ERA_GUARD
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "NEW: earth_rotation_angle builds JD(UT1) = MJD + 2400000.5 in one f64 and loses "
-            "up to 20 us of UT1 (0.30 mas; 1 cm LEO / 6 cm GEO) "
-            "(src/frametransform/mod.rs earth_rotation_angle)"
-        ),
-    )
     def test_era_vs_era00(self, ref):
         got = np.array(ft.earth_rotation_angle(ref["times"]))
         assert np.max(np.abs(wrap(got - ref["era"]))) < TOL_ERA
@@ -946,11 +933,13 @@ class TestEarthRotation:
         """satkit's eqeq is the two-term approximation (dPsi = -17.2" sin Omega
         - 1.3" sin 2L, times cos eps). Against the IAU 1994 equation of the
         equinoxes (full 1980 nutation) it is good to 0.56" (37 ms of time)
-        over the sample; the tolerance is 0.6"."""
+        over this sample and 0.65" (43 ms) over a dense 1950-2100 sample (the
+        figure the docstrings quote); the tolerance is 0.7", since the sample
+        moves with the end of the EOP table."""
         got = np.array(ft.eqeq(ref["times"]))
-        assert np.max(np.abs(got - erfa.eqeq94(*ref["tt"]))) < 0.6 * AS2RAD
+        assert np.max(np.abs(got - erfa.eqeq94(*ref["tt"]))) < 0.7 * AS2RAD
         gast = np.array(ft.gast(ref["times"]))
-        assert np.max(np.abs(wrap(gast - erfa.gst94(*ref["ut1"])))) < 0.6 * AS2RAD
+        assert np.max(np.abs(wrap(gast - erfa.gst94(*ref["ut1"])))) < 0.7 * AS2RAD
 
 
 class TestPrecessionNutation:
@@ -986,9 +975,9 @@ class TestPrecessionNutation:
         _assert_rot(w, ref["pom"], 1e-3 * UAS2RAD, "polar motion")
 
     def test_full_reduction(self, ref):
-        _assert_rot(matrices(ft.qgcrf2itrf(ref["times"])), ref["c2t"], TOL_ERA_GUARD, "qgcrf2itrf")
+        _assert_rot(matrices(ft.qgcrf2itrf(ref["times"])), ref["c2t"], TOL_ERA, "qgcrf2itrf")
         _assert_rot(
-            matrices(ft.rotation(sk.frame.GCRF, sk.frame.ITRF, ref["times"])), ref["c2t"], TOL_ERA_GUARD,
+            matrices(ft.rotation(sk.frame.GCRF, sk.frame.ITRF, ref["times"])), ref["c2t"], TOL_ERA,
             "rotation(GCRF, ITRF)",
         )
 
@@ -998,7 +987,7 @@ class TestPrecessionNutation:
         eye = np.broadcast_to(np.eye(3), (n, 3, 3))
         _assert_rot(matrices(ft.rotation(F.GCRF, F.CIRS, ref["times"])), ref["c2i"], TOL_CIP, "GCRF->CIRS")
         _assert_rot(
-            matrices(ft.rotation(F.CIRS, F.TIRS, ref["times"])), erfa.rz(ref["era"], eye), TOL_ERA_GUARD, "CIRS->TIRS"
+            matrices(ft.rotation(F.CIRS, F.TIRS, ref["times"])), erfa.rz(ref["era"], eye), TOL_ERA, "CIRS->TIRS"
         )
         _assert_rot(matrices(ft.rotation(F.TIRS, F.ITRF, ref["times"])), ref["pom"], 1e-3 * UAS2RAD, "TIRS->ITRF")
         _assert_rot(matrices(ft.rotation(F.GCRF, F.ICRF, ref["times"])), eye, 1e-15, "GCRF->ICRF")
@@ -1020,20 +1009,27 @@ class TestPrecessionNutation:
         assert np.all(np.abs(rot_angle(m, rbp) / MAS2RAD - 23.1) < 0.2)
 
     def test_tod2mod_approx(self, ref):
-        """Two-term nutation (code comment: 'accurate to ~1 arcsec'); measured
-        0.68" max against IAU 2006/2000A nutation"""
+        """Two-term nutation (documented as ~0.9"); measured 0.80" max on this
+        sample and 0.88" over a dense 1950-2100 sample against IAU 2006/2000A
+        nutation"""
         tod2mod = matrices(ft.qtod2mod_approx(ref["times"]))
         mod2tod = erfa.numat(erfa.obl06(*ref["tt"]), *erfa.nut06a(*ref["tt"]))
         _assert_rot(tod2mod.transpose(0, 2, 1), mod2tod, 1.0 * AS2RAD, "TOD->MOD approx")
 
 
 class TestApproxReduction:
-    """The IAU-76/FK5 '_approx' reduction is documented as ~1 arcsec. Against
-    the full ERFA reduction it measures 0.98" max (34 m at LEO, 200 m at GEO)
-    over 1973-2026, of which up to 0.6" is polar motion, which the approx chain
-    neglects. Tolerance 1.05"."""
+    """The '_approx' reduction (IAU 2006 precession + two-term nutation +
+    two-term equation of the equinoxes) is documented as ~1 arcsec. Against
+    the full ERFA reduction GCRF <-> ITRF measures 0.98" max (34 m at LEO,
+    200 m at GEO) over 1973-2026, of which up to 0.6" is polar motion, which
+    the approx chain neglects. Tolerance 1.05".
+
+    TEME -> GCRF involves no polar motion, so the same chain applied to PEF
+    (TEME rotated by GMST82 alone) is better: 0.55" max (the nutation
+    approximations); tolerance 0.6"."""
 
     TOL = 1.05 * AS2RAD
+    TOL_TEME = 0.6 * AS2RAD
 
     def test_gcrf_itrf_approx(self, ref):
         _assert_rot(matrices(ft.qgcrf2itrf_approx(ref["times"])), ref["c2t"], self.TOL, "qgcrf2itrf_approx")
@@ -1044,25 +1040,24 @@ class TestApproxReduction:
 
     def test_teme_gcrf_approx(self, ref):
         teme2gcrf = ref["c2t"].transpose(0, 2, 1) @ ref["teme2itrf"]
-        _assert_rot(matrices(ft.qteme2gcrf(ref["times"])), teme2gcrf, self.TOL, "qteme2gcrf")
+        F = sk.frame
+        _assert_rot(matrices(ft.qteme2gcrf(ref["times"])), teme2gcrf, self.TOL_TEME, "qteme2gcrf")
+        for to, pre in ((F.GCRF, None), (F.ICRF, None), (F.EME2000, erfa.bp06(*ref["tt"])[0])):
+            got = matrices(ft.rotation_approx(F.TEME, to, ref["times"]))
+            _assert_rot(got, teme2gcrf if pre is None else pre @ teme2gcrf, self.TOL_TEME, f"rotation_approx(TEME, {to})")
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "NEW: qteme2gcrf = qitrf2gcrf_approx * qteme2itrf. qteme2itrf applies polar motion "
-            "(PEF->ITRF) but the approx ITRF->GCRF does not undo it, so TEME->GCRF carries a "
-            "stray 0.3-0.6\" polar-motion rotation (also rotation_approx(TEME, GCRF/EME2000/ICRF)); "
-            "src/frametransform/mod.rs qteme2gcrf, dispatch.rs canonical_rotation_approx"
-        ),
-    )
     def test_teme_gcrf_approx_has_no_polar_motion(self, ref):
         """TEME -> GCRF involves no polar motion. Against the same approx chain
-        applied to PEF (= ITRF without polar motion), qteme2gcrf should agree
-        to rounding."""
+        applied to PEF (= ITRF without polar motion), qteme2gcrf and
+        rotation_approx(TEME, GCRF) agree to rounding."""
         n = len(ref["times"])
         pef2teme = erfa.rz(-np.array(ft.gmst(ref["times"])), np.broadcast_to(np.eye(3), (n, 3, 3)))
         expected = matrices(ft.qitrf2gcrf_approx(ref["times"])) @ pef2teme.transpose(0, 2, 1)
         _assert_rot(matrices(ft.qteme2gcrf(ref["times"])), expected, 1 * UAS2RAD, "qteme2gcrf vs PM-free chain")
+        _assert_rot(
+            matrices(ft.rotation_approx(sk.frame.TEME, sk.frame.GCRF, ref["times"])), expected, 1 * UAS2RAD,
+            "rotation_approx(TEME, GCRF) vs PM-free chain",
+        )
 
 
 class TestTEME:
@@ -1079,12 +1074,12 @@ class TestTEME:
     def test_teme_gcrf_full(self, ref):
         teme2gcrf = ref["c2t"].transpose(0, 2, 1) @ ref["teme2itrf"]
         _assert_rot(
-            matrices(ft.rotation(sk.frame.TEME, sk.frame.GCRF, ref["times"])), teme2gcrf, TOL_ERA_GUARD,
+            matrices(ft.rotation(sk.frame.TEME, sk.frame.GCRF, ref["times"])), teme2gcrf, TOL_ERA,
             "rotation(TEME, GCRF)",
         )
         rb, _, _ = erfa.bp06(*ref["tt"])
         _assert_rot(
-            matrices(ft.rotation(sk.frame.TEME, sk.frame.EME2000, ref["times"])), rb @ teme2gcrf, TOL_ERA_GUARD,
+            matrices(ft.rotation(sk.frame.TEME, sk.frame.EME2000, ref["times"])), rb @ teme2gcrf, TOL_ERA,
             "rotation(TEME, EME2000)",
         )
 
@@ -1106,7 +1101,8 @@ class TestStateTransform:
         """Velocity against the numerical derivative of ERFA's full matrix.
         satkit keeps only omega x r (omega = 7.292115e-5 rad/s, no LOD) and
         treats precession-nutation as static: 50"/yr x 7000 km = 5e-5 m/s.
-        Tolerance 1e-4 m/s; position to 2 cm (ERA precision, above)."""
+        Tolerance 1e-4 m/s; position to 1 mm (ERA precision, above: 20 uas
+        is 0.7 mm at this radius)."""
         r = np.array([4066.8e3, 4337.9e3, 3253.4e3])
         v = np.array([-2000.0, 5000.0, 4000.0])
         for i, t in enumerate(ref["times"][:60]):
@@ -1116,7 +1112,7 @@ class TestStateTransform:
             ts = [t - sk.duration(seconds=h), t + sk.duration(seconds=h)]
             e = _erfa_c2t_at(ts)
             v_exp = m @ v + (e[1].T - e[0].T) @ r / (2 * h)
-            assert np.linalg.norm(pos - m @ r) < 0.02
+            assert np.linalg.norm(pos - m @ r) < 1e-3
             assert np.linalg.norm(vel - v_exp) < 1e-4
 
 
@@ -1124,9 +1120,10 @@ class TestStateTransform:
         """TEME -> ITRF state against Vallado et al. (2006) built from ERFA:
         r = W R3(gmst82) r_teme, v = W (R3(gmst82) v_teme - w x R3(gmst82) r_teme),
         w = 7.292115146706979e-5 (1 - LOD / 86400) rad/s. satkit uses the
-        nominal 7.292115e-5 rad/s and no LOD (1.7e-5 m/s at LEO) and routes
-        through GCRF (precession-nutation rate, 5e-5 m/s). Tolerance 1e-4 m/s;
-        position to 1 mm (GMST82 precision, 30 uas = 1 mm at LEO)."""
+        nominal 7.292115e-5 rad/s and no LOD (1.7e-5 m/s at LEO), and goes
+        TEME -> PEF -> ITRF directly (no GCRF leg), identically in the full and
+        approximate modes. Tolerance 1e-4 m/s; position to 1 mm (GMST82
+        precision, 30 uas = 1 mm at LEO)."""
         r = np.array([4066.8e3, 4337.9e3, 3253.4e3])
         v = np.array([-2000.0, 5000.0, 4000.0])
         eye = np.eye(3)
@@ -1141,9 +1138,10 @@ class TestStateTransform:
                 fn = ft.transform_state_approx if approx else ft.transform_state
                 pos, vel = fn(sk.frame.TEME, sk.frame.ITRF, t, r, v)
                 assert np.linalg.norm(pos - r_exp) < 1e-3, (i, approx)
-                # the approx chain evaluates w x r in ITRF instead of TIRS:
-                # polar motion (0.6") x 7.5 km/s = 2.2 cm/s
-                assert np.linalg.norm(vel - v_exp) < (0.03 if approx else 1e-4), (i, approx)
+                assert np.linalg.norm(vel - v_exp) < 1e-4, (i, approx)
+                # and back
+                pos2, vel2 = fn(sk.frame.ITRF, sk.frame.TEME, t, pos, vel)
+                assert np.linalg.norm(pos2 - r) < 1e-6 and np.linalg.norm(vel2 - v) < 1e-9, (i, approx)
 
 
 def _erfa_c2t_at(times):

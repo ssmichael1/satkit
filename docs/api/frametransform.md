@@ -6,7 +6,8 @@ coordinate frames, and multiple versions of "Earth-fixed" coordinate frames.
 
 Some notes:
 
-- The IAU-76/FK5 (`_approx`) reduction, GMST (Algorithm 15, Eq. 3-45), the MOD and TEME rotations (Eqs. 3-88 to 3-90) follow [Vallado (2013)](../guide/references.md#vallado2013).
+- The approximate (`_approx`) reduction, GMST (Algorithm 15, Eq. 3-45), the MOD and TEME rotations (Eqs. 3-88 to 3-90) follow [Vallado (2013)](../guide/references.md#vallado2013). The approximate chain is GAST (IAU 1982 GMST plus a two-term equation of the equinoxes), a two-term nutation and the IAU 2006 precession without frame bias; it is often called "IAU-76/FK5", but it is neither the IAU 1976 precession nor the full IAU 1980 nutation. It neglects polar motion and is good to 1.0″ for GCRF ↔ ITRF.
+- TEME is quasi-inertial (true equator, mean equinox of date). `qteme2itrf` is GMST82 followed by polar motion, exact to the model, and the same in `rotation` and `rotation_approx`. `qteme2gcrf` is the *approximate* TEME → GCRF (= `rotation_approx(TEME, GCRF)`; GMST82 to PEF then the approximate chain, no polar motion; 0.55″ max, ~19 m at LEO); `rotation(TEME, GCRF)` is the full reduction.
 - The frame transforms are defined as arbitrary rotations in a 3-dimensional space. The rotations are a function of time, and are represented as quaternions.
 - The full ITRF↔GCRF reduction is the CIO-based procedure of the IERS Conventions (2010), Chapter 5 ([Petit & Luzum 2010](../guide/references.md#petit2010)): polar motion (Eq. 5.3), the Earth rotation angle (Eq. 5.15), the IAU 2006/2000A CIP coordinates $X$, $Y$ and CIO locator $s$ (Tables 5.2a/5.2b/5.2d), and the frame bias to EME2000 (§5.5.4, Eq. 5.36), with Earth orientation parameters from the IERS.
 
@@ -31,7 +32,7 @@ q = sk.frametransform.rotation(
     from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, tm=t,
 )
 
-# IAU-76/FK5 approximation (~1 arcsec), inertial cluster + ITRF only
+# Approximate reduction (~1 arcsec), inertial cluster + ITRF only
 q_approx = sk.frametransform.rotation_approx(
     from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, tm=t,
 )
@@ -61,8 +62,8 @@ There are three related quaternion entry points; pick by what your frames need:
 | [`rotation_with_state`](#satkit.frametransform.rotation_with_state) | **All** frames (Earth *and* orbit) | `pos`, `vel` (GCRF) | `quaternion` |
 
 Use [`rotation_with_state`](#satkit.frametransform.rotation_with_state) when a
-pair mixes an Earth frame and an orbit frame — e.g. going straight from `TEME`
-to `RTN` — without manually composing two transforms through GCRF. Note that
+pair mixes a time-dependent frame (Earth-fixed or celestial) and an orbit frame
+— e.g. going straight from the quasi-inertial `TEME` to `RTN` — without manually composing two transforms through GCRF. Note that
 the solution does **not** always go through GCRF: a purely Earth-frame pair
 delegates to [`rotation`](#satkit.frametransform.rotation), which picks the
 shortest path through the frame graph (e.g. `ITRF`↔`TIRS` is a single

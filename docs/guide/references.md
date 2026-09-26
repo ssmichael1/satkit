@@ -12,7 +12,7 @@ code follows where that is useful.
   4th ed. Microcosm Press, Hawthorne, CA. ISBN 978-1881883180. Companion
   software and errata: <https://celestrak.org/software/vallado-sw.php>.
   Used for: SGP4 reference implementation (the C++ code satkit's port follows),
-  GMST (Algorithm 15, Eq. 3-45), IAU-76/FK5 reduction (§3.7, Eqs. 3-88 to
+  GMST (Algorithm 15, Eq. 3-45), the approximate (`_approx`) reduction (§3.7, Eqs. 3-88 to
   3-90), TEME (§3.7.3), RSW/NTW frames (§3.3, Eq. 3-31), Kepler's equation
   (Algorithm 2), Sun position (Algorithm 29, §5.1.1), sunrise/sunset
   (Algorithm 30, §5.3.1), Moon position (Algorithm 31, §5.2.3), Hohmann
@@ -268,8 +268,9 @@ code follows where that is useful.
 <a id="seidelmann1982"></a>
 - **Seidelmann, P. K. (1982).** "1980 IAU Theory of Nutation: The final report
   of the IAU Working Group on Nutation." *Celestial Mechanics*, 27, 79–106.
-  <https://doi.org/10.1007/BF01228952>. The nutation series used by the
-  IAU-76/FK5 (`_approx`) reduction and by TEME.
+  <https://doi.org/10.1007/BF01228952>. The IAU 1980 nutation theory: the
+  two-term nutation and equation of the equinoxes of the `_approx` reduction
+  are its leading terms, and the classical definition of TEME uses it.
 
 <a id="charlot2020"></a>
 - **Charlot, P., et al. (2020).** "The third realization of the International

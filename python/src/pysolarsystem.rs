@@ -30,6 +30,8 @@ pub enum SolarSystem {
     Sun = SS::Sun as isize,
 }
 
+crate::enum_pickle!(SolarSystem, "solarsystem");
+
 impl From<&SolarSystem> for SS {
     fn from(s: &SolarSystem) -> Self {
         match s {

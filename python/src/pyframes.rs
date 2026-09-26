@@ -52,6 +52,12 @@ pub enum PyFrame {
 
 #[pymethods]
 impl PyFrame {
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
+        crate::pyutils::enum_reduce(slf.as_any(), "frame")
+    }
+
     /// Python-level alias for ``frame.RTN`` — Vallado's name for the
     /// same Radial / S=(W×R) / W=(R×V) orbital frame. Resolves to the
     /// same enum value as ``frame.RTN``, so ``frame.RSW == frame.RTN``

@@ -191,7 +191,9 @@ static OFFLINE_OVERRIDE: std::sync::atomic::AtomicU8 = std::sync::atomic::Atomic
 /// Offline mode blocks **downloads only** — the explicit
 /// [`update_datafiles`](crate::utils::update_datafiles) and every lazy
 /// first-use fetch (ephemeris, EOP / space-weather refresh, non-embedded
-/// files). It does not change where files are searched, and the compiled-in
+/// files) — and the element-set fetches [`TLE::from_url`](crate::TLE::from_url) /
+/// [`OMM::from_url`](crate::omm::OMM::from_url), which return their own
+/// `Offline` error. It does not change where files are searched, and the compiled-in
 /// core data is unaffected. The error returned is the same typed
 /// [`Error::Offline`] a build without the `download` feature returns.
 pub fn set_offline(offline: bool) {

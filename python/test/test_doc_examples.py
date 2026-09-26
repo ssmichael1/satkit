@@ -69,10 +69,6 @@ PRESEED = "import numpy as np\nimport satkit\nimport satkit as sk\n"
 TIMEOUT_S = 900
 
 NETWORK = "needs the network"
-INT_ARRAYS = (
-    "code bug: quaternion rotation of an integer numpy array raises "
-    "(TypeError/RuntimeError) instead of converting it to float, unlike frametransform"
-)
 
 # Docstring examples that must not run or are known to fail, keyed by the
 # qualified name of the documented object; applies to both the stub and the
@@ -80,21 +76,12 @@ INT_ARRAYS = (
 # "elsewhere" (a doc bug fixed on another open branch; may pass or fail).
 DOCSTRING_MARKS: dict[str, tuple[str, str]] = {
     "satkit.TLE.from_url": ("skip", NETWORK + " (CelesTrak)"),
+    "satkit.TLE.from_omm": ("skip", NETWORK + " (CelesTrak via omm_from_url)"),
     "satkit.omm_from_url": ("skip", NETWORK + " (CelesTrak)"),
     "satkit.omm_from_text": ("skip", NETWORK + " (CelesTrak via requests)"),
     "satkit.omm_from_file": ("skip", "needs a gp.xml saved from Space-Track or CelesTrak"),
     "satkit.utils.update_datafiles": ("skip", NETWORK + " (downloads the data files)"),
-    "satkit.quaternion.rotation_between": ("xfail", INT_ARRAYS),
-    "satkit.quaternion.__mul__": ("xfail", INT_ARRAYS),
-    "satkit.duration.__add__#2": (
-        "xfail",
-        "stub overload `duration + float` (days) is not implemented by the binding; "
-        "implement it or drop the overload",
-    ),
-    "satkit.duration.__truediv__#1": (
-        "xfail",
-        "code bug: duration / int raises; __truediv__ only accepts a Python float",
-    ),
+    "satkit.sgp4#2": ("skip", NETWORK + " (CelesTrak via omm_from_url)"),
 }
 
 _ISS = """tle = satkit.TLE.from_lines([

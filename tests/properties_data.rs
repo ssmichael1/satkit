@@ -273,12 +273,14 @@ proptest! {
         }
     }
 
-    /// The approximate IAU-76/FK5 reduction agrees with the full IERS 2010
-    /// one to the documented "~1 arcsec" (src/frametransform/mod.rs module
-    /// table; docs/api/frametransform.md). Measured worst case over
-    /// 1973–2026 is ≈ 1.0 arcsec; the bound is 1.5 arcsec. `qteme2gcrf`
-    /// (documented ~1 arcsec, built on the approximate reduction) agrees
-    /// with the full TEME→GCRF dispatch to the same bound, and
+    /// The approximate reduction agrees with the full IERS 2010 one to the
+    /// documented "~1 arcsec" (src/frametransform/mod.rs module table;
+    /// docs/api/frametransform.md). Measured worst case over 1973–2026 is
+    /// ≈ 1.0 arcsec (up to 0.6″ of it polar motion, which the approximate
+    /// chain neglects); the bound is 1.5 arcsec. `qteme2gcrf` involves no
+    /// polar motion and is documented to 0.55″ (measured 0.545″): bound
+    /// 0.6″ against the full TEME→GCRF dispatch, and it is exactly the
+    /// approximate chain applied to PEF (TEME rotated by GMST82 alone).
     /// `qgcrf2itrf_approx` is the inverse of `qitrf2gcrf_approx`.
     #[test]
     fn approx_transforms_within_documented_accuracy(frac in 0.0..1.0f64) {
@@ -293,6 +295,9 @@ proptest! {
         prop_assert!(angle(&(qgcrf2itrf_approx(&t) * approx)) < 1e-12);
 
         let err = angle_between(&qteme2gcrf(&t), &rotation(Frame::TEME, Frame::GCRF, &t).unwrap()) / ASEC;
-        prop_assert!(err < 1.5, "qteme2gcrf vs full TEME→GCRF: {err} arcsec at {t}");
+        prop_assert!(err < 0.6, "qteme2gcrf vs full TEME→GCRF: {err} arcsec at {t}");
+        let pm_free = approx * Quaternion::rotz(-satkit::frametransform::gmst(&t));
+        prop_assert!(angle_between(&qteme2gcrf(&t), &pm_free) < 1e-12);
+        prop_assert!(angle_between(&rotation_approx(Frame::TEME, Frame::GCRF, &t).unwrap(), &pm_free) < 1e-12);
     }
 }

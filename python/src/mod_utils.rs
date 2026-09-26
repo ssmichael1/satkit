@@ -137,7 +137,8 @@ fn add_search_dir(path: String) {
 ///
 /// Offline mode blocks *downloads only*: the explicit ``update_datafiles()``
 /// and every lazy first-use fetch (the JPL ephemeris, the Earth-orientation
-/// and space-weather refresh, any non-embedded file). It does not change
+/// and space-weather refresh, any non-embedded file), and the element-set
+/// fetches ``TLE.from_url`` / ``omm_from_url``. It does not change
 /// where files are searched, and the compiled-in core data (IERS nutation
 /// tables, gravity models) is unaffected. A blocked download raises
 /// ``RuntimeError`` naming the file and its sources — the same error a

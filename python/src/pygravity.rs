@@ -43,6 +43,8 @@ pub enum GravModel {
     egm2008 = GravityModel::EGM2008 as isize,
 }
 
+crate::enum_pickle!(GravModel, "gravmodel");
+
 impl From<GravModel> for GravityModel {
     fn from(g: GravModel) -> Self {
         match g {
@@ -95,6 +97,7 @@ pub fn gravity(pos: &Bound<'_, PyAny>, kwds: Option<&Bound<'_, PyDict>>) -> Resu
     let mut order: Option<usize> = None;
     let mut model: GravModel = GravModel::egm2008;
     if let Some(kw) = kwds {
+        crate::pyutils::reject_unknown_kwargs("gravity", kw, &["model", "degree", "order"])?;
         if let Some(v) = kw.get_item("model")? {
             model = v
                 .extract::<GravModel>()
@@ -182,6 +185,11 @@ pub fn gravity_and_partials(
     let mut order: Option<usize> = None;
     let mut model: GravModel = GravModel::egm2008;
     if let Some(kw) = kwds {
+        crate::pyutils::reject_unknown_kwargs(
+            "gravity_and_partials",
+            kw,
+            &["model", "degree", "order"],
+        )?;
         if let Some(v) = kw.get_item("model")? {
             model = v
                 .extract::<GravModel>()

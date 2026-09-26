@@ -169,7 +169,10 @@ impl PyDuration {
                 PyInstant(tm.0 + self.0).into_py_any(py)
             })?)
         } else {
-            bail!("Invalid right-hand side")
+            // Not a supported operand: let Python raise its standard
+            // `TypeError: unsupported operand type(s)`. A bare number is
+            // deliberately not accepted (its unit would be ambiguous).
+            Ok(pyo3::Python::attach(|py| py.NotImplemented()))
         }
     }
 
@@ -195,21 +198,27 @@ impl PyDuration {
         Self(Duration::from_seconds(self.0.as_seconds() * other))
     }
 
+    /// Divide a duration by a real number (scale it) or by another duration
+    ///
+    /// Args:
+    ///     other (float|int|duration): Scalar divisor, or a duration
+    ///
+    /// Returns:
+    ///     duration|float: The scaled duration, or the dimensionless ratio
+    ///     for a duration divisor
     fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         if other.is_instance_of::<Self>() {
             let dur = other
                 .extract::<Self>()
                 .map_err(|e| anyhow::anyhow!("Invalid duration: {}", e))?;
             pyo3::Python::attach(|py| (self.0.as_seconds() / dur.0.as_seconds()).into_py_any(py))
-        } else if other.is_instance_of::<pyo3::types::PyFloat>() {
-            let scalar = other
-                .extract::<f64>()
-                .map_err(|e| anyhow::anyhow!("Invalid scalar: {}", e))?;
+        } else if let Ok(scalar) = other.extract::<f64>() {
+            // Any real number: Python float or int, or a numpy scalar
             pyo3::Python::attach(|py| {
                 PyDuration(Duration::from_seconds(self.0.as_seconds() / scalar)).into_py_any(py)
             })
         } else {
-            Err(anyhow::anyhow!("Invalid right-hand side").into())
+            Ok(pyo3::Python::attach(|py| py.NotImplemented()))
         }
     }
 
