@@ -3093,7 +3093,7 @@ class itrfcoord:
         ...
 
 class consts:
-    """Some constants that are useful for saetllite dynamics"""
+    """Some constants that are useful for satellite dynamics"""
 
     wgs84_a: ClassVar[float]
     """WGS-84 semiparameter, in meters"""

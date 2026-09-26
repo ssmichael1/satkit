@@ -13,6 +13,7 @@ use anyhow::{bail, Result};
 
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
+/// Represent errors from SGP-4 propagation of two-line element sets (TLEs)
 #[pyclass(name = "sgp4_error", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PySGP4Error {
@@ -28,6 +29,7 @@ pub enum PySGP4Error {
 crate::enum_pickle!(PySGP4Error, "sgp4_error");
 
 #[allow(non_camel_case_types)]
+/// Gravity constant to use for SGP4 propagation
 #[pyclass(name = "sgp4_gravconst", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum GravConst {
@@ -49,6 +51,7 @@ impl From<GravConst> for psgp4::GravConst {
 }
 
 #[allow(non_camel_case_types)]
+/// Ops Mode for SGP4 Propagation
 #[pyclass(name = "sgp4_opsmode", eq, eq_int, from_py_object)]
 #[derive(Clone, Eq, PartialEq)]
 pub enum OpsMode {

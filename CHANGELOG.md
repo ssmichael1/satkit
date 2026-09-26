@@ -32,6 +32,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - New Troubleshooting & FAQ page under Getting Started, organised by symptom ([#216](https://github.com/ssmichael1/satkit/pull/216))
 - De-duplicated docs, README, CONTRIBUTING, crate docs and CHANGELOG (pages link to the canonical data pages instead of retelling them); CI data downloads moved into one composite action, and the test-vector cache is keyed on its file list ([#228](https://github.com/ssmichael1/satkit/pull/228))
 - `jplephem::barycentric_pos` / `barycentric_state` docs say the result is barycentric, not "Heliocentric"; internal (no behaviour change): duplicate private-method docs and the empty Vallado "locals" lists in the SGP4 source comments are removed (~200 fewer comment lines) ([#231](https://github.com/ssmichael1/satkit/pull/231))
+- `help()` shows class documentation for `consts`, `frame`, `weekday`, `moon.moonphase`, `satproperties`, `sgp4_error`, `sgp4_gravconst` and `sgp4_opsmode` (runtime docstrings matching the stubs) ([#239](https://github.com/ssmichael1/satkit/pull/239))
 
 ### CI
 

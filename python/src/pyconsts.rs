@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 
 use satkit::consts as cconsts;
 
+/// Some constants that are useful for satellite dynamics
 #[pyclass(name = "consts")]
 pub struct Consts {}
 
