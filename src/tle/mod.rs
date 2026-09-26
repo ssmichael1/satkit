@@ -153,21 +153,9 @@ impl SGP4Source for TLE {
 }
 
 impl TLE {
-    /// Load a vector of strings representing Two-Line Element Set (TLE) lines into a vector of
-    /// TLE structures.
-    /// This function will call [`Self::load_2line`] respectively [`Self::load_3line`] as required
-    /// for each TLE entry it encounters in the input lines.
-    ///
-    /// Those TLEs can then be used to compute satellite position and
-    /// velocity as a function of time.
-    ///
-    /// For details, see [here](https://en.wikipedia.org/wiki/Two-line_element_set)
-    ///
-    /// # Arguments:
-    ///   * `lines` - a reference to a [`Vec`] of [`String`] representing TLE lines
-    ///
-    /// # Returns:
-    ///  * A [`Vec`] of [`TLE`] objects or string indicating error condition
+    /// Parse every TLE record in `lines`: [`Self::records`], collected.
+    /// See [`Self::records`] for how lines are grouped into 2-line and
+    /// 3-line records.
     ///
     /// # Example
     ///
@@ -184,14 +172,12 @@ impl TLE {
     /// ];
     ///
     /// let tles = TLE::from_lines(&lines).unwrap();
-    ///
     /// ```
     ///
     /// # Errors
     ///
-    /// Stops at the first record that fails to parse, returning
-    /// [`Error::Record`], which names the input line the record starts on
-    /// and its satellite. To keep the good records of a file with a few bad
+    /// Stops at the first record that fails to parse, returning its
+    /// [`Error::Record`]. To keep the good records of a file with a few bad
     /// ones, iterate [`Self::records`] instead.
     pub fn from_lines(lines: &[String]) -> Result<Vec<Self>> {
         Self::records(lines).collect()
@@ -199,13 +185,13 @@ impl TLE {
 
     /// Parse TLE records one at a time from a sequence of lines.
     ///
-    /// Lines are grouped as in [`Self::from_lines`] (which is this iterator,
-    /// collected): trailing whitespace is trimmed, a line of at least 69
-    /// characters starting with `"1 "` or `"2 "` is a data line, and any
-    /// other non-empty line before a line 2 is the satellite name. Each item
-    /// is one record; a record that fails to parse yields an
-    /// [`Error::Record`] naming the input line it starts on and its
-    /// satellite, and the iterator carries on with the next record.
+    /// [`Self::from_lines`] (and `from_url`) collect this iterator, so what
+    /// follows applies to them too. Trailing whitespace is trimmed, a
+    /// line of at least 69 characters starting with `"1 "` or `"2 "` is a
+    /// data line, and any other non-empty line before a line 2 is the
+    /// satellite name. Each item is one record; a record that fails to
+    /// parse yields an [`Error::Record`] naming the input line it starts on
+    /// and its satellite, and the iterator carries on with the next record.
     ///
     /// Checksums are not verified unless requested with
     /// [`Records::check_checksums`].
@@ -252,22 +238,13 @@ impl TLE {
 
     /// Load TLE(s) from a URL
     ///
-    /// Fetches the content at the given URL and parses it as TLE lines.
-    /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
+    /// Fetches `url` and parses the plain-text response as
+    /// [`Self::from_lines`] does; an [`Error::Record`]'s line number counts
+    /// lines of the response.
     ///
     /// Requires the `download` Cargo feature. Returns [`Error::Offline`] without
     /// opening a connection when offline mode is on ([`crate::utils::set_offline`]
     /// or `SATKIT_OFFLINE`).
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - URL to fetch TLE data from
-    ///
-    /// # Returns
-    ///
-    /// A [`Vec`] of [`TLE`] objects parsed from the response. As with
-    /// [`Self::from_lines`], a record that fails to parse is an
-    /// [`Error::Record`] naming the line of the response it starts on.
     ///
     /// # Example
     ///
@@ -326,13 +303,7 @@ impl TLE {
         }
     }
 
-    /// Load 3 lines as string into a structure representing
-    /// a Two-Line Element Set  (TLE)
-    ///
-    /// The TLE can then be used to compute satellite position and
-    /// velocity as a function of time.
-    ///
-    /// For details, see [here](https://en.wikipedia.org/wiki/Two-line_element_set)
+    /// Parse one TLE from a name line and its two data lines
     ///
     /// # Arguments:
     ///
@@ -341,14 +312,9 @@ impl TLE {
     ///   * `line1` - the 1st line of TLE
     ///   * `line2` - the 2nd line of the TLE
     ///
-    /// # Returns:
-    ///
-    ///  * A TLE object or string indicating error condition
-    ///
     /// # Example
     ///
     /// ```
-    ///
     /// use satkit::TLE;
     /// let line0: &str = "0 INTELSAT 902";
     /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
@@ -380,27 +346,11 @@ impl TLE {
         }
     }
 
-    /// Load 2 lines as strings into a structure representing
-    /// a Two-Line Element Set  (TLE)
-    ///
-    /// The TLE can then be used to compute satellite position and
-    /// velocity as a function of time.
-    ///
-    /// For details, see [here](https://en.wikipedia.org/wiki/Two-line_element_set)
-    ///
-    /// # Arguments:
-    ///
-    ///   * `line1` - the 1st line of TLE
-    ///   * `line2` - the 2nd line of the TLE
-    ///
-    /// # Returns:
-    ///
-    ///  * A TLE object or string indicating error condition
+    /// Parse one TLE from its two data lines (its name is set to `"none"`)
     ///
     /// # Example
     ///
     /// ```
-    ///
     /// use satkit::TLE;
     /// let line1: &str = "1 26900U 01039A   06106.74503247  .00000045  00000-0  10000-3 0  8290";
     /// let line2: &str = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300.";

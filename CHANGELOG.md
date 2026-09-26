@@ -35,6 +35,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - `jplephem::barycentric_pos` / `barycentric_state` docs say the result is barycentric, not "Heliocentric"; internal (no behaviour change): duplicate private-method docs and the empty Vallado "locals" lists in the SGP4 source comments are removed (~200 fewer comment lines) ([#231](https://github.com/ssmichael1/satkit/pull/231))
 - ECOM Solar Radiation Pressure tutorial re-executed against current main (1 AU-referenced coefficients: D0 ≈ −102 nm/s², 30-day error ~95 m, 24 h median ~6 cm) with the prose numbers updated to match ([#238](https://github.com/ssmichael1/satkit/pull/238))
 - `help()` shows class documentation for `consts`, `frame`, `weekday`, `moon.moonphase`, `satproperties`, `sgp4_error`, `sgp4_gravconst` and `sgp4_opsmode` (runtime docstrings matching the stubs) ([#239](https://github.com/ssmichael1/satkit/pull/239))
+- TLE loader docs de-duplicated: `TLE::records()` / Python `TLE.from_lines()` hold the parsing rules and the other loaders link to them, and a duplicate example is dropped ([#241](https://github.com/ssmichael1/satkit/pull/241))
 
 ### CI
 

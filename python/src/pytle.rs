@@ -63,23 +63,18 @@ fn parse_lines(lines: &[String], check_checksum: bool) -> satkit::tle::Result<Ve
 
 #[pymethods]
 impl PyTLE {
-    /// Load TLEs from a text file
+    /// Load TLEs from a text file, parsed as ``TLE.from_lines`` does
     ///
     /// Args:
     ///     filename (str): name of the text file holding the TLE lines
-    ///         (2-line or 3-line format, any number of element sets)
-    ///     check_checksum (bool, optional): also verify the checksum digit
-    ///         (column 69) of every data line. Default False.
+    ///     check_checksum (bool, optional): as in ``TLE.from_lines``
     ///
     /// Returns:
-    ///     list[TLE]: one TLE per element set in the file, even if there is
-    ///     only one
+    ///     list[TLE]: one TLE per element set in the file
     ///
     /// Raises:
     ///     ValueError: if the file holds no TLEs
-    ///     RuntimeError: if a record fails to parse (or, with
-    ///         ``check_checksum``, has a wrong checksum); the message gives
-    ///         the line the record starts on and its satellite
+    ///     RuntimeError: if a record fails to parse; see ``TLE.from_lines``
     #[staticmethod]
     #[pyo3(signature = (filename, *, check_checksum=false))]
     fn from_file(filename: String, check_checksum: bool) -> Result<Vec<Self>> {
@@ -98,6 +93,8 @@ impl PyTLE {
     }
 
     /// Load TLEs from a list of lines
+    ///
+    /// ``TLE.from_file`` and ``TLE.from_url`` parse their text the same way.
     ///
     /// Args:
     ///     lines (Sequence[str]): the TLE lines (2-line or 3-line format,
@@ -119,17 +116,15 @@ impl PyTLE {
         Ok(tle_list(parse_lines(&lines, check_checksum)?, "input")?)
     }
 
-    /// Load TLEs from a URL
+    /// Load TLEs from a URL, parsing the response as ``TLE.from_lines`` does
     ///
-    /// Fetches the content at the given URL and parses it as TLE lines.
-    /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
+    /// Works with any URL that returns plain-text TLE data.
     ///
     /// Args:
     ///     url (str): URL to fetch TLE data from
     ///
     /// Returns:
-    ///     list[TLE]: one TLE per element set in the response, even if there
-    ///     is only one
+    ///     list[TLE]: one TLE per element set in the response
     ///
     /// Raises:
     ///     ValueError: if the response holds no TLEs
