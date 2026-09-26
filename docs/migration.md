@@ -66,6 +66,7 @@ they used to return a meaningless value:
 | `satstate.propagate(<not a time or duration>)` | `RuntimeError` | `TypeError` |
 | `gravity(<wrong length>)` / `gravity(<non-numeric>)` | `RuntimeError` | `ValueError` / `TypeError` |
 | `propagate(state, begin)` with no end time | `RuntimeError` | `TypeError` |
+| `time.strptime()`, `time.from_string()`, `time(<str>)` with an unparseable string | `RuntimeError` | `ValueError` |
 | `duration / 0`, `duration / duration(0)` | saturated duration or `inf` | `ZeroDivisionError` |
 | `duration(days=nan)`, `duration.from_seconds(inf)`, ... | 0 or saturated | `ValueError` |
 | `time + nan`, `time - inf` (scalar, list or array) | `t` or a garbage label | `ValueError` |
@@ -94,8 +95,10 @@ integer arrays or nested lists.
     out-of-range offset, an empty fraction (`12:00:00.Z`), and an extra number
     or a lone hour in `from_string`.
   - **Do this:** check string inputs that carry offsets or extra text, and
-    catch the new errors. `from_rfc3339` raises `ValueError`, now with the
-    reason; `strptime` and `from_string` raise `RuntimeError`.
+    catch the new errors. Every time-string parser (`from_rfc3339`,
+    `strptime`, `from_string` and `time(<str>)`) raises `ValueError` with the
+    reason; `strptime`, `from_string` and `time(<str>)` raised `RuntimeError`
+    in 0.23.1.
 - **Fractional seconds round to the nearest microsecond** instead of
   truncating, both in parsed strings with more than six digits and in float
   conversions (calendar seconds, Unix time, MJD/JD, GPS seconds of week,

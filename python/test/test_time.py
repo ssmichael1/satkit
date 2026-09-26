@@ -187,6 +187,56 @@ class TestTime:
         assert t.day_of_year == 228
 
 
+class TestParseErrors:
+    """Every time-string parser raises ValueError for a string it cannot
+    parse (strptime, from_string and time(str) raised RuntimeError in 0.23)"""
+
+    GOOD = sk.time(2024, 1, 4, 13, 14, 12.5)
+
+    def test_good_strings_parse(self):
+        assert sk.time.from_rfc3339("2024-01-04T13:14:12.5Z") == self.GOOD
+        assert sk.time.from_string("2024-01-04 13:14:12.5") == self.GOOD
+        assert sk.time("2024-01-04T13:14:12.5Z") == self.GOOD
+        assert sk.time("2024-01-04 13:14:12.5") == self.GOOD
+        assert (
+            sk.time.strptime("2024-01-04 13:14:12.5", "%Y-%m-%d %H:%M:%S.%f")
+            == self.GOOD
+        )
+
+    @pytest.mark.parametrize(
+        "parse",
+        [
+            sk.time.from_rfc3339,
+            sk.time.from_string,
+            sk.time,
+            lambda s: sk.time.strptime(s, "%Y"),
+            lambda s: sk.time.strptime(s, "%Y-%m-%d %H:%M:%S"),
+        ],
+        ids=["from_rfc3339", "from_string", "time", "strptime_Y", "strptime_full"],
+    )
+    @pytest.mark.parametrize(
+        "bad",
+        ["garbage", "", "2024-13-45 99:99:99", "2024-01-04 13:14:12 trailing 7"],
+    )
+    def test_bad_strings_raise_value_error(self, parse, bad):
+        with pytest.raises(ValueError) as ei:
+            parse(bad)
+        # The parser's reason is in the message
+        assert str(ei.value)
+
+    def test_strptime_trailing_input(self):
+        with pytest.raises(ValueError):
+            sk.time.strptime("2024-01-04x", "%Y-%m-%d")
+
+    def test_non_string_errors_keep_their_types(self):
+        with pytest.raises(TypeError):
+            sk.time.from_string(2024)
+        with pytest.raises(TypeError):
+            sk.time.strptime("2024", 4)
+        with pytest.raises(TypeError):
+            sk.time(2024.5)
+
+
 class TestEpochConstants:
     def test_epoch_constants(self):
         # J2000: 2000-01-01 12:00:00 TT
