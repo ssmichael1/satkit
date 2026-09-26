@@ -37,6 +37,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 
 ### Fixed
 
+- `satkit.utils.version()` returns the release version, like `satkit.__version__`; it returned the `git describe` tag, which was `"unknown"` in the published wheels ([#256](https://github.com/ssmichael1/satkit/pull/256))
 - **Wrong results, values change:** `lambert` returned wrong velocities for long-way (> 180°) and retrograde transfers and for hyperbolic and near-parabolic ones; `kepler.from_pv` was wrong at inclination π. Non-finite inputs and `r1 == r2` now raise (Rust `lambert::Error` is `#[non_exhaustive]`, with `NonFinite` / `CoincidentPositions`) ([#250](https://github.com/ssmichael1/satkit/pull/250))
 - Time scales: TDB − TT had a ~57-year instead of a one-year period (up to 1.7 ms), the JPL ephemerides are evaluated at TDB instead of TT (Moon ~2 m), and several leap-second edge cases are fixed ([#217](https://github.com/ssmichael1/satkit/pull/217))
 - `orbitprop::propagate` has its rustdoc again, and the crates.io publish job only runs for `v*` tags ([#226](https://github.com/ssmichael1/satkit/pull/226))

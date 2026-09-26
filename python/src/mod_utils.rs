@@ -208,11 +208,13 @@ fn githash() -> String {
 
 /// Version of satkit
 ///
+/// The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.0"``).
+///
 /// Returns:
 ///    str: Version of satkit
 #[pyfunction]
 fn version() -> String {
-    String::from(satkit::utils::gittag())
+    String::from(env!("CARGO_PKG_VERSION"))
 }
 
 /// Location of the compiled library

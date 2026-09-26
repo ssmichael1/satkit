@@ -216,9 +216,11 @@ def githash() -> str:
     ...
 
 def version() -> str:
-    """Return version of this satkit library as a string
+    """Version of satkit
+
+    The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.0"``).
 
     Returns:
-        str: Version of this satkit library
+        str: Version of satkit
     """
     ...
