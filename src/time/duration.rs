@@ -81,7 +81,7 @@ impl Duration {
     /// A new `Duration` object representing the time interval in days
     pub fn from_days(days: f64) -> Self {
         Self {
-            usec: crate::time::instant::round_us(days * 86_400_000_000.0),
+            usec: crate::time::instant::days_to_us(days),
         }
     }
 
@@ -110,7 +110,7 @@ impl Duration {
     /// # Returns
     /// The duration in days
     pub fn as_days(&self) -> f64 {
-        self.usec as f64 / 86_400_000_000.0
+        crate::time::instant::us_to_days(self.usec)
     }
 
     /// Represent duration as seconds

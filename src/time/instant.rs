@@ -8,6 +8,23 @@ type Result<T> = std::result::Result<T, InstantError>;
 // Days in the month, neglecting leap years
 const MDAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
+/// Microseconds in an 86,400 s day.
+const US_PER_DAY: i64 = 86_400_000_000;
+
+/// Proleptic Gregorian leap year.
+const fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+/// Days in `month` (1–12) of `year`, leap-year aware.
+fn days_in_month(year: i32, month: i32) -> i32 {
+    if month == 2 && is_leap_year(year) {
+        29
+    } else {
+        MDAYS[(month - 1) as usize] as i32
+    }
+}
+
 /// A module for handling time and date conversions.  Time is stored natively as
 /// a continuous count of TAI microseconds since 1970-01-01 00:00:00 TAI, so
 /// leap seconds (and the pre-1972 UTC offsets) are accounted for.
@@ -33,28 +50,18 @@ pub struct Instant {
 /// Gregorian calendar date
 /// See: <https://en.wikipedia.org/wiki/Julian_day>
 /// or Expl. Suppl. Astron. Almanac, P. 619
+#[allow(non_upper_case_globals)]
 mod gregorian_coefficients {
-    #[allow(non_upper_case_globals)]
     pub const y: i64 = 4716;
-    #[allow(non_upper_case_globals)]
     pub const j: i64 = 1401;
-    #[allow(non_upper_case_globals)]
     pub const m: i64 = 2;
-    #[allow(non_upper_case_globals)]
     pub const n: i64 = 12;
-    #[allow(non_upper_case_globals)]
     pub const r: i64 = 4;
-    #[allow(non_upper_case_globals)]
     pub const p: i64 = 1461;
-    #[allow(non_upper_case_globals)]
     pub const v: i64 = 3;
-    #[allow(non_upper_case_globals)]
     pub const u: i64 = 5;
-    #[allow(non_upper_case_globals)]
     pub const s: i64 = 153;
-    #[allow(non_upper_case_globals)]
     pub const t: i64 = 2;
-    #[allow(non_upper_case_globals)]
     pub const w: i64 = 2;
     pub const A: i64 = 184;
     pub const B: i64 = 274_277;
@@ -193,7 +200,7 @@ pub(crate) fn tai_minus_utc_at_mjd_utc(mjd_utc: f64) -> f64 {
     // Compare in MJD (as the EOP table lookup does) rather than rounding the
     // query to microseconds, so both switch at exactly the same value.
     for (t, ls, ls_prev) in leap_entries() {
-        let boundary = (t - ls_prev - Instant::MJD_EPOCH.raw) as f64 / 86_400_000_000.0;
+        let boundary = us_to_days(t - ls_prev - Instant::MJD_EPOCH.raw);
         if mjd_utc >= boundary {
             return ls as f64 * 1.0e-6;
         }
@@ -233,6 +240,25 @@ pub(crate) fn round_us(us: f64) -> i64 {
     us.round() as i64
 }
 
+/// Microseconds as (fractional) 86,400 s days.
+#[inline]
+pub(crate) fn us_to_days(us: i64) -> f64 {
+    us as f64 / 86_400_000_000.0
+}
+
+/// Days of 86,400 s as microseconds, rounded to the nearest microsecond.
+#[inline]
+pub(crate) fn days_to_us(days: f64) -> i64 {
+    round_us(days * 86_400_000_000.0)
+}
+
+/// Microseconds from 1970-01-01 00:00 to `hour:minute` of the given day
+/// since then; `None` on overflow.
+fn minute_start_us(day: i64, hour: i32, minute: i32) -> Option<i64> {
+    day.checked_mul(US_PER_DAY)?
+        .checked_add(hour as i64 * 3_600_000_000 + minute as i64 * 60_000_000)
+}
+
 /// Days from 1970-01-01 to the given proleptic Gregorian date (no range
 /// checks; `month` in 1..=12).
 ///
@@ -270,16 +296,7 @@ fn check_date_hour_minute(year: i32, month: i32, day: i32, hour: i32, minute: i3
     if !(1..=12).contains(&month) {
         return Err(InstantError::InvalidMonth(month));
     }
-    let max_day = if month == 2 {
-        if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
-            29
-        } else {
-            28
-        }
-    } else {
-        MDAYS[(month - 1) as usize]
-    };
-    if day < 1 || day > max_day as i32 {
+    if day < 1 || day > days_in_month(year, month) {
         return Err(InstantError::InvalidDay(day));
     }
     if !(0..=23).contains(&hour) {
@@ -522,7 +539,7 @@ impl Instant {
         // Rounded to the nearest microsecond. The float-to-i64 conversion
         // saturates for out-of-range MJD values, and the epoch-offset
         // additions below saturate as well.
-        Self::from_mjd_us_with_scale(round_us(mjd * 86_400_000_000.0), scale)
+        Self::from_mjd_us_with_scale(days_to_us(mjd), scale)
     }
 
     /// The instant whose Modified Julian Date in `scale` is `mjd_us`
@@ -548,7 +565,7 @@ impl Instant {
                 // and UT1 − TAI changes by ~ns over that span, so the
                 // approximation is exact for practical purposes, including
                 // inside a leap second.
-                let mjd = mjd_us as f64 / 86_400_000_000.0;
+                let mjd = us_to_days(mjd_us);
                 let dut1 = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd)[0];
                 let ut1_minus_tai = dut1 - tai_minus_utc_at_mjd_utc(mjd);
                 base.saturating_sub(round_us(ut1_minus_tai * 1.0e6))
@@ -557,7 +574,7 @@ impl Instant {
                 // Inverse of the TT -> TDB series in `as_mjd_with_scale`.
                 // The periodic term is evaluated at TDB instead of TT; the
                 // two differ by < 2 ms, which moves the term by ~1e-13 s.
-                let ttc = (mjd_us as f64 / 86_400_000_000.0 - MJD_J2000) / 36525.0;
+                let ttc = (us_to_days(mjd_us) - MJD_J2000) / 36525.0;
                 base.saturating_sub(32_184_000)
                     .saturating_sub(round_us(tdb_minus_tt_seconds(ttc) * 1.0e6))
             }
@@ -619,7 +636,7 @@ impl Instant {
         // day count is rounded to the nearest microsecond.
         let utc = self.raw.saturating_sub(microleapseconds(self.raw));
         Self {
-            raw: add_leapseconds(utc.saturating_add(round_us(days * 86_400_000_000.0))),
+            raw: add_leapseconds(utc.saturating_add(days_to_us(days))),
         }
     }
 
@@ -633,24 +650,11 @@ impl Instant {
     /// The Modified Julian Date in the given time scale
     ///
     pub fn as_mjd_with_scale(&self, scale: TimeScale) -> f64 {
-        // Saturating: raw values near the i64 boundaries (e.g. saturated
-        // extreme constructions, Instant::INVALID) would overflow the plain
-        // epoch-offset subtraction, which panics in debug builds
         match scale {
             TimeScale::UTC => {
-                (self
-                    .raw
-                    .saturating_sub(Self::MJD_EPOCH.raw)
-                    .saturating_sub(microleapseconds(self.raw))) as f64
-                    / 86_400_000_000.0
+                us_to_days(self.tai_mjd_us().saturating_sub(microleapseconds(self.raw)))
             }
-            TimeScale::TT => {
-                (self
-                    .raw
-                    .saturating_sub(Self::MJD_EPOCH.raw)
-                    .saturating_add(32_184_000)) as f64
-                    / 86_400_000_000.0
-            }
+            TimeScale::TT => us_to_days(self.tai_mjd_us().saturating_add(32_184_000)),
             TimeScale::UT1 => {
                 // UT1 = UTC + (UT1 − UTC), except that inside a leap second
                 // (or a positive pre-1972 step) the UTC MJD repeats the last
@@ -668,25 +672,13 @@ impl Instant {
                 let mjd_utc = self.as_mjd_utc();
                 let dut1 = crate::earth_orientation_params::eop_from_mjd_utc_or_zero(mjd_utc)[0];
                 let utc = self.raw.saturating_sub(microleapseconds(self.raw));
-                let mjd_utc_day_basis = (self
-                    .raw
-                    .saturating_sub(Self::MJD_EPOCH.raw)
-                    .saturating_sub(utc_microleapseconds(utc)))
-                    as f64
-                    / 86_400_000_000.0;
+                let mjd_utc_day_basis =
+                    us_to_days(self.tai_mjd_us().saturating_sub(utc_microleapseconds(utc)));
                 mjd_utc_day_basis + dut1 / 86_400.0
             }
-            TimeScale::TAI => {
-                self.raw.saturating_sub(Self::MJD_EPOCH.raw) as f64 / 86_400_000_000.0
-            }
-            TimeScale::GPS => {
-                // GPS = TAI - 19 seconds
-                (self
-                    .raw
-                    .saturating_sub(Self::MJD_EPOCH.raw)
-                    .saturating_sub(19_000_000)) as f64
-                    / 86_400_000_000.0
-            }
+            TimeScale::TAI => us_to_days(self.tai_mjd_us()),
+            // GPS = TAI - 19 seconds
+            TimeScale::GPS => us_to_days(self.tai_mjd_us().saturating_sub(19_000_000)),
             TimeScale::TDB => {
                 let (day, frac) = self.mjd_tdb_split();
                 day as f64 + frac
@@ -698,6 +690,15 @@ impl Instant {
         }
     }
 
+    /// TAI microseconds past MJD 0 (1858-11-17 00:00:00 TAI). Saturating:
+    /// raw values near the i64 boundaries (e.g. saturated extreme
+    /// constructions, [`Self::INVALID`]) would overflow a plain subtraction,
+    /// which panics in debug builds.
+    #[inline]
+    fn tai_mjd_us(&self) -> i64 {
+        self.raw.saturating_sub(Self::MJD_EPOCH.raw)
+    }
+
     /// TDB as an integer Modified Julian Day and a fraction of that day.
     ///
     /// `day as f64 + frac` is [`Self::as_mjd_with_scale`] with
@@ -707,11 +708,7 @@ impl Instant {
     /// term, which can push it just outside.
     #[inline]
     pub(crate) fn mjd_tdb_split(&self) -> (i64, f64) {
-        const US_PER_DAY: i64 = 86_400_000_000;
-        let tt_us = self
-            .raw
-            .saturating_sub(Self::MJD_EPOCH.raw)
-            .saturating_add(32_184_000);
+        let tt_us = self.tai_mjd_us().saturating_add(32_184_000);
         let day = tt_us.div_euclid(US_PER_DAY);
         // Reciprocal multiplies rather than divides: this runs for every
         // ephemeris query, and the chained divisions cost more than the sine
@@ -803,16 +800,7 @@ impl Instant {
     /// ```
     pub fn day_of_year(&self) -> u32 {
         let (y, m, d, _, _, _) = self.as_datetime();
-        let leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
-        let mut doy = d;
-        for mm in 1..m {
-            doy += if mm == 2 && leap {
-                29i32
-            } else {
-                MDAYS[(mm - 1) as usize] as i32
-            };
-        }
-        doy as u32
+        (d + (1..m).map(|mm| days_in_month(y, mm)).sum::<i32>()) as u32
     }
 
     /// Convenience alias for `from_datetime`
@@ -934,10 +922,7 @@ impl Instant {
 
         // Checked: an extreme year overflows the i64 microsecond count
         // (panicking in debug builds, silently wrapping in release)
-        let utc = unix_day_from_civil(year, month, day)
-            .checked_mul(86_400_000_000)
-            .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000))
-            .and_then(|v| v.checked_add(minute as i64 * 60_000_000))
+        let utc = minute_start_us(unix_day_from_civil(year, month, day), hour, minute)
             .and_then(|v| v.checked_add(minute_us))
             .ok_or(InstantError::InvalidYear(year))?;
 
@@ -982,9 +967,7 @@ impl Instant {
             return Err(InstantError::InvalidSecondF(second_us as f64 * 1.0e-6));
         }
         // Start of the local minute, shifted to UTC on the label basis
-        let minute_start = unix_day_from_civil(year, month, day)
-            .checked_mul(86_400_000_000)
-            .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000 + minute as i64 * 60_000_000))
+        let minute_start = minute_start_us(unix_day_from_civil(year, month, day), hour, minute)
             .and_then(|v| v.checked_sub(offset_us))
             .ok_or(InstantError::InvalidYear(year))?;
         if second_us < 60_000_000 {
@@ -1056,10 +1039,7 @@ impl Instant {
         // Microseconds of the label past MJD 0 in `scale`, in integers so
         // that TAI / TT / GPS labels are exact (a single-f64 MJD resolves
         // only ~1 µs). 1970-01-01 is MJD 40587.
-        let mjd_us = (unix_day_from_civil(year, month, day) + 40_587)
-            .checked_mul(86_400_000_000)
-            .and_then(|v| v.checked_add(hour as i64 * 3_600_000_000))
-            .and_then(|v| v.checked_add(minute as i64 * 60_000_000))
+        let mjd_us = minute_start_us(unix_day_from_civil(year, month, day) + 40_587, hour, minute)
             .and_then(|v| v.checked_add(round_us(second * 1.0e6)))
             .ok_or(InstantError::InvalidYear(year))?;
 

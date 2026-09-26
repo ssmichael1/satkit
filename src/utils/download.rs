@@ -506,6 +506,16 @@ pub(crate) fn celestrak_throttle_hint(url: &str, err: &ureq::Error) -> Option<St
     ))
 }
 
+/// The last component of `path` (a file path or URL) as UTF-8: the local
+/// file name of a download.
+fn file_name(path: &Path) -> Result<&str> {
+    path.file_name()
+        .and_then(|f| f.to_str())
+        .ok_or_else(|| Error::InvalidFileName {
+            path: path.display().to_string(),
+        })
+}
+
 pub(crate) fn check_online(name: &str) -> Result<()> {
     match offline_reason() {
         Some(reason) => Err(offline_error(name, reason)),
@@ -622,14 +632,33 @@ fn check_content(name: &str, path: &Path) -> std::result::Result<(), String> {
     if !is_html_file {
         reject_html(path)?;
     }
+    use crate::spaceweather::{cssi, gfz, msafe, swpc};
     match name {
         "EOP-All.csv" | "finals2000A.all" => crate::earth_orientation_params::validate_file(path),
-        "SW-All.csv" => crate::spaceweather::cssi::validate_file(path),
-        crate::spaceweather::GFZ_FILE => crate::spaceweather::gfz::validate_file(path),
-        crate::spaceweather::SWPC_FILE => crate::spaceweather::swpc::validate_file(path),
-        crate::spaceweather::MSAFE_FILE => crate::spaceweather::msafe::validate_file(path),
+        "SW-All.csv" => match parses_as(path, "SW-All.csv", cssi::parse_csv)?.is_empty() {
+            true => Err("the file holds no space-weather rows".to_string()),
+            false => Ok(()),
+        },
+        crate::spaceweather::GFZ_FILE => parses_as(path, "GFZ Kp/ap table", gfz::parse).map(drop),
+        crate::spaceweather::SWPC_FILE => {
+            parses_as(path, "SWPC 45-day forecast", swpc::parse).map(drop)
+        }
+        crate::spaceweather::MSAFE_FILE => parses_as(path, "MSAFE table", msafe::parse).map(drop),
         _ => Ok(()),
     }
+}
+
+/// Parse the file at `path` with the same parser that will later load it,
+/// without touching the loaded tables: "not a parsable {what} (…)" if it
+/// fails.
+#[cfg(feature = "download")]
+pub(crate) fn parses_as<T, E: std::fmt::Display>(
+    path: &Path,
+    what: &str,
+    parse: impl FnOnce(&str) -> std::result::Result<T, E>,
+) -> std::result::Result<T, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    parse(&text).map_err(|e| format!("not a parsable {what} ({e})"))
 }
 
 /// Stream `reader` to `final_path` atomically: write to a sibling `.part` file
@@ -760,13 +789,7 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
     if fname.is_file() {
         return Ok(());
     }
-    let basename =
-        fname
-            .file_name()
-            .and_then(|f| f.to_str())
-            .ok_or_else(|| Error::InvalidFileName {
-                path: fname.display().to_string(),
-            })?;
+    let basename = file_name(fname)?;
     check_online(basename)?;
     if seturl.is_none() {
         if let Some(entry) = crate::utils::manifest::embedded().entry(basename) {
@@ -797,10 +820,7 @@ pub fn download_if_not_exist(fname: &Path, _seturl: Option<&str>) -> Result<()> 
     if fname.is_file() {
         return Ok(());
     }
-    let name = fname
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("<unnamed>");
+    let name = file_name(fname).unwrap_or("<unnamed>");
     Err(offline_error(
         name,
         "satkit was built without the `download` feature",
@@ -814,12 +834,7 @@ pub fn download_if_not_exist(fname: &Path, _seturl: Option<&str>) -> Result<()> 
 /// `overwrite_if_exists` is false.
 #[cfg(feature = "download")]
 pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -> Result<bool> {
-    let fname = std::path::Path::new(url)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .ok_or_else(|| Error::InvalidFileName {
-            path: url.to_string(),
-        })?;
+    let fname = file_name(Path::new(url))?;
     let fullpath = downloaddir.join(fname);
     if fullpath.exists() && !overwrite_if_exists {
         println!("File {} exists; skipping download", fname);
@@ -840,25 +855,14 @@ pub fn download_file(_url: &str, _downloaddir: &Path, _overwrite_if_exists: bool
     Err(Error::FeatureDisabled)
 }
 
-#[cfg(feature = "download")]
+/// [`download_file`] on a worker thread.
 pub fn download_file_async(
     url: String,
     downloaddir: &Path,
     overwrite_if_exists: bool,
 ) -> std::thread::JoinHandle<Result<bool>> {
-    let dclone = downloaddir.to_path_buf();
-    let urlclone = url;
-    let overwriteclone = overwrite_if_exists;
-    std::thread::spawn(move || download_file(urlclone.as_str(), &dclone, overwriteclone))
-}
-
-#[cfg(not(feature = "download"))]
-pub fn download_file_async(
-    _url: String,
-    _downloaddir: &Path,
-    _overwrite_if_exists: bool,
-) -> std::thread::JoinHandle<Result<bool>> {
-    std::thread::spawn(|| Err(Error::FeatureDisabled))
+    let dir = downloaddir.to_path_buf();
+    std::thread::spawn(move || download_file(url.as_str(), &dir, overwrite_if_exists))
 }
 
 /// Outcome of a [`refresh_file`] call.
@@ -1010,12 +1014,7 @@ pub(crate) fn write_refresh_marker(path: &Path, last_modified: Option<&str>) {
 /// restores a full fetch.
 #[cfg(feature = "download")]
 pub fn refresh_file(url: &str, downloaddir: &Path, force: bool) -> Result<RefreshOutcome> {
-    let fname = Path::new(url)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .ok_or_else(|| Error::InvalidFileName {
-            path: url.to_string(),
-        })?;
+    let fname = file_name(Path::new(url))?;
     let fullpath = downloaddir.join(fname);
     // A marker without the file it describes is meaningless: a deleted or
     // never-downloaded file must be fetched in full.
@@ -1077,10 +1076,7 @@ pub fn refresh_file(url: &str, downloaddir: &Path, force: bool) -> Result<Refres
 
 #[cfg(not(feature = "download"))]
 pub fn refresh_file(url: &str, _downloaddir: &Path, _force: bool) -> Result<RefreshOutcome> {
-    let name = Path::new(url)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("<unnamed>");
+    let name = file_name(Path::new(url)).unwrap_or("<unnamed>");
     Err(offline_error(
         name,
         "satkit was built without the `download` feature",

@@ -4,6 +4,7 @@
 
 use crate::time::InstantError;
 use crate::Instant;
+use std::fmt::Write;
 
 /// Local result alias used by [`Instant`] string parsers.
 type Result<T> = std::result::Result<T, InstantError>;
@@ -24,6 +25,29 @@ fn take_while_peek(
         chars.next();
     }
     out
+}
+
+/// Microseconds from the digits after a decimal point. Trailing zeros may
+/// be omitted, so the digit count sets the scale; more than 6 digits carry
+/// sub-microsecond precision that is not stored and are truncated (rather
+/// than overflowing i32). No digits is 0.
+fn parse_fraction_us(digits: &str) -> Result<i32> {
+    if digits.is_empty() {
+        return Ok(0);
+    }
+    // The digits are ASCII, so the byte slice is safe
+    let n = digits.len().min(6);
+    Ok(digits[..n].parse::<i32>()? * 10i32.pow((6 - n) as u32))
+}
+
+/// Name of month `month` (1–12) from `names`, or "Invalid" out of range
+/// (`as_datetime` can return one for extreme or INVALID instants).
+fn month_name(names: &[&'static str; 12], month: i32) -> &'static str {
+    if (1..=12).contains(&month) {
+        names[(month - 1) as usize]
+    } else {
+        "Invalid"
+    }
 }
 
 /// Full month names
@@ -91,21 +115,9 @@ impl Instant {
         while let Some(c) = chars.peek() {
             if c.is_ascii_digit() {
                 let cstr = take_while_peek(&mut chars, |c| c.is_ascii_digit());
-                // If following a period, allow for trailing zeros up to 6 digits
+                // Following a period: a fraction of a second, in microseconds
                 let val = match isperiod {
-                    true => match cstr.len() {
-                        1 => cstr.parse::<i32>()? * 100_000,
-                        2 => cstr.parse::<i32>()? * 10_000,
-                        3 => cstr.parse::<i32>()? * 1_000,
-                        4 => cstr.parse::<i32>()? * 100,
-                        5 => cstr.parse::<i32>()? * 10,
-                        6 => cstr.parse::<i32>()?,
-                        // More than 6 fractional digits carry sub-microsecond
-                        // precision we don't store; truncate rather than
-                        // overflowing i32 (the digits are all ASCII, so the
-                        // byte slice is safe).
-                        _ => cstr[..6].parse::<i32>()?,
-                    },
+                    true => parse_fraction_us(&cstr)?,
                     false => cstr.parse::<i32>()?,
                 };
                 thelist.push(ParseVal::Num(val));
@@ -240,21 +252,18 @@ impl Instant {
                 '%' => match chars.next() {
                     Some('Y') => year = s_chars.by_ref().take(4).collect::<String>().parse()?,
                     Some('m') => month = s_chars.by_ref().take(2).collect::<String>().parse()?,
-                    Some('B') => {
-                        let month_name = take_while_peek(&mut s_chars, |c| c.is_alphabetic());
-                        month = MONTH_NAMES
+                    Some(code @ ('B' | 'b')) => {
+                        let names = if code == 'B' {
+                            &MONTH_NAMES
+                        } else {
+                            &MONTH_ABBRS
+                        };
+                        let name = take_while_peek(&mut s_chars, |c| c.is_alphabetic());
+                        month = names
                             .iter()
-                            .position(|&m| m == month_name)
+                            .position(|&m| m == name)
                             .map(|m| m as i32 + 1)
-                            .ok_or(InstantError::InvalidMonthString(month_name))?;
-                    }
-                    Some('b') => {
-                        let month_abbr = take_while_peek(&mut s_chars, |c| c.is_alphabetic());
-                        month = MONTH_ABBRS
-                            .iter()
-                            .position(|&m| m == month_abbr)
-                            .map(|m| m as i32 + 1)
-                            .ok_or(InstantError::InvalidMonthString(month_abbr))?;
+                            .ok_or(InstantError::InvalidMonthString(name))?;
                     }
                     Some('d') => day = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('H') => hour = s_chars.by_ref().take(2).collect::<String>().parse()?,
@@ -262,22 +271,7 @@ impl Instant {
                     Some('S') => second = s_chars.by_ref().take(2).collect::<String>().parse()?,
                     Some('f') => {
                         let smicro = take_while_peek(&mut s_chars, |c| c.is_ascii_digit());
-                        // This is a little strange ... formating convention allows
-                        // for trailing zeros to be omitted.  So we need to determine
-                        // the number of digits and multiply by the appropriate factor
-                        microsecond = match smicro.len() {
-                            0 => 0,
-                            1 => smicro.parse::<i32>()? * 100_000,
-                            2 => smicro.parse::<i32>()? * 10_000,
-                            3 => smicro.parse::<i32>()? * 1_000,
-                            4 => smicro.parse::<i32>()? * 100,
-                            5 => smicro.parse::<i32>()? * 10,
-                            6 => smicro.parse::<i32>()?,
-                            // More than 6 fractional digits carry sub-microsecond
-                            // precision we don't store; truncate rather than
-                            // overflowing i32 (digits are ASCII, slice is safe).
-                            _ => smicro[..6].parse::<i32>()?,
-                        }
+                        microsecond = parse_fraction_us(&smicro)?;
                     }
                     Some('z') => {
                         let z = s_chars.by_ref().take(1).collect::<String>();
@@ -406,7 +400,7 @@ impl Instant {
     /// # Notes:
     /// * This is the same as RFC3339 format
     pub fn as_iso8601(&self) -> String {
-        self.strftime("%Y-%m-%dT%H:%M:%S.%fZ").unwrap()
+        self.as_rfc3339()
     }
 
     /// Format the Instant object as a string
@@ -443,73 +437,41 @@ impl Instant {
         let microsecond = second_us % 1_000_000;
 
         while let Some(c) = chars.next() {
-            if c == '%' {
-                match chars.next() {
-                    Some('Y') => {
-                        result.push_str(&year.to_string());
-                    }
-                    Some('m') => {
-                        result.push_str(&format!("{:02}", month));
-                    }
-                    Some('d') => {
-                        result.push_str(&format!("{:02}", day));
-                    }
-                    Some('H') => {
-                        result.push_str(&format!("{:02}", hour));
-                    }
-                    Some('M') => {
-                        result.push_str(&format!("{:02}", minute));
-                    }
-                    Some('S') => {
-                        result.push_str(&format!("{:02}", second));
-                    }
-                    Some('f') => {
-                        result.push_str(&format!("{:06}", microsecond));
-                    }
-                    Some('B') => {
-                        // as_datetime can return an out-of-range month for
-                        // extreme (e.g. pre-4713 BC or INVALID) instants
-                        if (1..=12).contains(&month) {
-                            result.push_str(MONTH_NAMES[(month - 1) as usize]);
-                        } else {
-                            result.push_str("Invalid");
-                        }
-                    }
-                    Some('b') => {
-                        if (1..=12).contains(&month) {
-                            result.push_str(MONTH_ABBRS[(month - 1) as usize]);
-                        } else {
-                            result.push_str("Invalid");
-                        }
-                    }
-                    Some('A') => {
-                        let weekday = self.day_of_week();
-                        result.push_str(&weekday.to_string());
-                    }
-                    Some('a') => {
-                        let idx = self.day_of_week() as i32;
-                        if (0..7).contains(&idx) {
-                            result.push_str(WEEKDAY_ABBRS[idx as usize]);
-                        } else {
-                            result.push_str("Invalid");
-                        }
-                    }
-                    Some('w') => {
-                        let weekday = self.day_of_week();
-                        result.push_str(&format!("{:02}", weekday as i32));
-                    }
-                    Some(c) => {
-                        return Err(InstantError::InvalidFormat(c));
-                    }
-                    None => {
-                        return Err(InstantError::InvalidString(
-                            "Expected a format character".to_string(),
-                        ));
-                    }
-                }
-            } else {
+            if c != '%' {
                 result.push(c);
+                continue;
             }
+            // Writing to a String cannot fail
+            let _ = match chars.next() {
+                Some('Y') => write!(result, "{year}"),
+                Some('m') => write!(result, "{month:02}"),
+                Some('d') => write!(result, "{day:02}"),
+                Some('H') => write!(result, "{hour:02}"),
+                Some('M') => write!(result, "{minute:02}"),
+                Some('S') => write!(result, "{second:02}"),
+                Some('f') => write!(result, "{microsecond:06}"),
+                Some('B') => write!(result, "{}", month_name(&MONTH_NAMES, month)),
+                Some('b') => write!(result, "{}", month_name(&MONTH_ABBRS, month)),
+                Some('A') => write!(result, "{}", self.day_of_week()),
+                Some('a') => {
+                    let idx = self.day_of_week() as i32;
+                    let abbr = if (0..7).contains(&idx) {
+                        WEEKDAY_ABBRS[idx as usize]
+                    } else {
+                        "Invalid"
+                    };
+                    write!(result, "{abbr}")
+                }
+                Some('w') => write!(result, "{:02}", self.day_of_week() as i32),
+                Some(c) => {
+                    return Err(InstantError::InvalidFormat(c));
+                }
+                None => {
+                    return Err(InstantError::InvalidString(
+                        "Expected a format character".to_string(),
+                    ));
+                }
+            };
         }
         Ok(result)
     }

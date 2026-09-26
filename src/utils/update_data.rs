@@ -102,7 +102,8 @@ fn download_refresh_files(
     force: bool,
 ) -> Result<Vec<(String, String, RefreshOutcome)>> {
     let m = manifest::embedded();
-    let handles: Vec<(String, JoinHandle<download::Result<RefreshOutcome>>)> = m
+    type Handle = (String, String, JoinHandle<download::Result<RefreshOutcome>>);
+    let handles: Vec<Handle> = m
         .refresh
         .iter()
         .map(|url| -> Result<_> {
@@ -110,7 +111,11 @@ fn download_refresh_files(
                 return Err(Error::InsecureManifestUrl { url: url.clone() });
             }
             let name = url.rsplit('/').next().unwrap_or(url).to_string();
-            Ok((name, refresh_file_async(url.clone(), dir, force)))
+            Ok((
+                name,
+                url.clone(),
+                refresh_file_async(url.clone(), dir, force),
+            ))
         })
         .collect::<Result<Vec<_>>>()?;
     let eop_dir = dir.to_path_buf();
@@ -120,13 +125,8 @@ fn download_refresh_files(
     let msafe =
         std::thread::spawn(move || crate::spaceweather::msafe::refresh_into(&msafe_dir, force));
     let mut out = Vec::with_capacity(handles.len() + 1);
-    for (name, jh) in handles {
-        let url = m.refresh.iter().find(|u| u.ends_with(&name)).cloned();
-        out.push((
-            name,
-            url.unwrap_or_default(),
-            jh.join().map_err(|_| Error::ThreadPanic)??,
-        ));
+    for (name, url, jh) in handles {
+        out.push((name, url, jh.join().map_err(|_| Error::ThreadPanic)??));
     }
     let eop = eop.join().map_err(|_| Error::ThreadPanic)??;
     out.push((eop.source.file_name().to_string(), eop.url, eop.fetch));
@@ -200,16 +200,10 @@ pub fn update_datafiles(dir: Option<PathBuf>, overwrite_if_exists: bool) -> Resu
     };
     // Probe with a real file rather than the mode bits, which say nothing
     // about a read-only filesystem or a directory owned by another user.
-    if let Err(e) = datadir::ensure_writable(&downloaddir) {
-        return Err(if datadir::is_not_writable_error(&e) {
-            Error::DataDirReadOnly {
-                path: downloaddir.display().to_string(),
-                reason: e.to_string(),
-            }
-        } else {
-            e.into()
-        });
-    }
+    datadir::check_writable(&downloaddir, |path, reason| Error::DataDirReadOnly {
+        path,
+        reason,
+    })?;
 
     let m = manifest::embedded();
     println!(
