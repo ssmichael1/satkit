@@ -88,7 +88,8 @@ crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |_| invalid_valu
 /// Raises:
 ///
 ///   RuntimeError: If "pos" or "vel" are not 3-element numpy arrays
-///   RuntimeError: If neither "end", "duration", "duration_secs", or "duration_days" are set
+///   TypeError: If none of "end", "duration", "duration_secs" or "duration_days" is set
+///   ValueError: If "duration_secs" or "duration_days" is NaN or infinite
 ///   TypeError: If an unknown keyword argument is passed, or "state" or "begin" is missing
 ///
 ///
@@ -170,6 +171,16 @@ pub fn propagate(
         state0[5] = v[2];
     }
 
+    // Without any of these the end time used to be `Instant::INVALID`, which
+    // surfaced as an obscure "Precomputed table would need N entries" error
+    if end.is_none() && duration.is_none() && duration_secs.is_none() && duration_days.is_none() {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "propagate() requires an end time: pass `end` or one of `duration`, \
+             `duration_secs`, `duration_days`",
+        )
+        .into());
+    }
+
     // The end time: `end`, overridden by `duration`, then `duration_days`,
     // then `duration_secs`
     let mut endtime = end.map_or(Instant::INVALID, |t| t.0);
@@ -177,9 +188,11 @@ pub fn propagate(
         endtime = begintime + d.0;
     }
     if let Some(d) = duration_days {
+        crate::pyduration::check_duration_value(d, 86_400.0e6, "duration_days")?;
         endtime = begintime + Duration::from_days(d);
     }
     if let Some(d) = duration_secs {
+        crate::pyduration::check_duration_value(d, 1.0e6, "duration_secs")?;
         endtime = begintime + Duration::from_seconds(d);
     }
 

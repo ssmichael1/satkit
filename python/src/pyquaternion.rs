@@ -1,6 +1,7 @@
 use anyhow::Context;
 use numpy as np;
 use numpy::PyArrayMethods;
+use numpy::PyUntypedArrayMethods;
 use numpy::ToPyArray;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
@@ -401,8 +402,23 @@ impl PyQuaternion {
             return Ok(Self(self.0 * q.0).into_py_any(other.py())?);
         }
         // Rotate a 3-vector or an Nx3 array of vectors: any real numeric
-        // array-like (integer arrays, lists) is converted to float64 first
-        let arr = to_f64_ndarray(other)?;
+        // array-like (integer arrays, lists) is converted to float64 first.
+        //
+        // A scalar (`q * 2.0`) or a non-numeric operand (`q * "abc"`) is not
+        // a vector: return NotImplemented so Python raises its standard
+        // `TypeError: unsupported operand type(s)`. A numpy array keeps the
+        // errors below (`ValueError` for a wrong shape, `TypeError` for a
+        // non-real dtype): returning NotImplemented for one would hand the
+        // operation to ndarray.__rmul__, which broadcasts element by element.
+        let is_ndarray = other.is_instance_of::<np::PyUntypedArray>();
+        let arr = match to_f64_ndarray(other) {
+            Ok(a) => a,
+            Err(_) if !is_ndarray => return Ok(other.py().NotImplemented()),
+            Err(e) => return Err(e.into()),
+        };
+        if arr.ndim() == 0 && !is_ndarray {
+            return Ok(other.py().NotImplemented());
+        }
         let ro = arr.readonly();
         let a = ro.as_array();
         match a.shape() {

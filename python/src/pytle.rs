@@ -276,14 +276,12 @@ impl PyTLE {
     fn get_epoch(&self) -> crate::pyinstant::PyInstant {
         crate::pyinstant::PyInstant(self.0.epoch)
     }
+    // A single satkit.time or datetime.datetime; anything else, including a
+    // list of times (which used to set the first element silently), raises
+    // TypeError
     #[setter(epoch)]
-    fn set_epoch(&mut self, value: &Bound<'_, PyAny>) -> Result<()> {
-        let epoch = value.to_time_vec()?;
-        if epoch.is_empty() {
-            bail!("epoch must be a single time value");
-        }
-        self.0.epoch = epoch[0];
-        Ok(())
+    fn set_epoch(&mut self, value: crate::pyinstant::TimeArg) {
+        self.0.epoch = value.0;
     }
 
     /// argument of perigee, degrees

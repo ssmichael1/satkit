@@ -723,9 +723,26 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time|numpy.ndarray|satkit.duration: New time object or numpy array of time objects representing input time minus input duration(s), or duration object representing difference between two time objects
+    ///     (a numpy array of duration objects for a list of time objects)
     fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let py = other.py();
         if let Ok(tm2) = other.cast::<Self>() {
-            return PyDuration(self.0 - tm2.borrow().0).into_py_any(other.py());
+            return PyDuration(self.0 - tm2.borrow().0).into_py_any(py);
+        }
+        // A non-empty list of times: element-wise differences, as an object
+        // array of durations (an empty list is handled by `shift`, giving an
+        // empty array like every other list operand)
+        if let Ok(list) = other.cast::<pyo3::types::PyList>() {
+            if !list.is_empty() && list.iter().all(|x| x.is_instance_of::<Self>()) {
+                let objs = list
+                    .iter()
+                    .map(|x| {
+                        let t: PyRef<Self> = x.extract()?;
+                        PyDuration(self.0 - t.0).into_py_any(py)
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                return np::PyArray1::<Py<PyAny>>::from_vec(py, objs).into_py_any(py);
+            }
         }
         self.shift(other, |t, d| t - d)
     }
@@ -815,13 +832,16 @@ impl PyInstant {
         op: fn(Instant, satkit::Duration) -> Instant,
     ) -> PyResult<Py<PyAny>> {
         let py = other.py();
-        let days = satkit::Duration::from_days;
+        let days = finite_days;
         let durs: Vec<satkit::Duration> = if other.is_instance_of::<np::PyArray1<f64>>() {
             let arr = other.extract::<np::PyReadonlyArray1<f64>>()?;
-            arr.as_array().iter().map(|x| days(*x)).collect()
+            arr.as_array()
+                .iter()
+                .map(|x| days(*x))
+                .collect::<PyResult<_>>()?
         } else if other.is_instance_of::<pyo3::types::PyList>() {
             if let Ok(v) = other.extract::<Vec<f64>>() {
-                v.into_iter().map(days).collect()
+                v.into_iter().map(days).collect::<PyResult<_>>()?
             } else if let Ok(v) = other.extract::<Vec<PyDuration>>() {
                 v.into_iter().map(|d| d.0).collect()
             } else {
@@ -833,7 +853,7 @@ impl PyInstant {
             || other.is_instance_of::<pyo3::types::PyInt>()
         {
             // A Python int too large for f64 raises OverflowError in extract
-            return Self(op(self.0, days(other.extract::<f64>()?))).into_py_any(py);
+            return Self(op(self.0, days(other.extract::<f64>()?)?)).into_py_any(py);
         } else if let Ok(d) = other.cast::<PyDuration>() {
             return Self(op(self.0, d.borrow().0)).into_py_any(py);
         } else {
@@ -847,6 +867,14 @@ impl PyInstant {
             .collect::<PyResult<Vec<_>>>()?;
         np::PyArray1::<Py<PyAny>>::from_vec(py, objs).into_py_any(py)
     }
+}
+
+/// A duration of `days` days, refusing NaN and infinities with `ValueError`
+/// and out-of-range values with `OverflowError` (`Duration::from_days` maps
+/// NaN to zero and saturates the rest, so `t + nan` silently returned `t`)
+fn finite_days(days: f64) -> PyResult<satkit::Duration> {
+    crate::pyduration::check_duration_value(days, 86_400.0e6, "number of days")?;
+    Ok(satkit::Duration::from_days(days))
 }
 
 /// 1970-01-01T00:00:00+00:00 as an aware Python datetime

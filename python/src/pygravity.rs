@@ -3,12 +3,11 @@ use pyo3::prelude::*;
 use satkit::earthgravity::{accel, accel_and_partials, GravityModel, MAX_GRAVITY_DEGREE};
 
 use crate::pyitrfcoord::PyITRFCoord;
-use numpy as np;
 use satkit::mathtypes::*;
 
-use crate::pyutils::{slice2py2d, vec2py};
+use crate::pyutils::{slice2py2d, to_vector3, vec2py};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 /// Load the model's coefficients (a download, for itugrace16) before the
 /// evaluator's infallible `get()` would panic on a missing file.
@@ -30,7 +29,7 @@ crate::arg_extractor!(order_arg: Option<usize>, |e| {
 
 /// Check the arguments shared by `gravity` and `gravity_and_partials`
 /// (loading the model's coefficients) and read the ITRF position, an
-/// `itrfcoord` or a 3-element numpy array
+/// `itrfcoord` or any real numeric 3-element array-like
 fn gravity_args(
     pos: &Bound<'_, PyAny>,
     model: GravModel,
@@ -51,17 +50,11 @@ fn gravity_args(
             .extract()
             .map_err(|e| anyhow::anyhow!("Failed to extract itrfcoord: {}", e))?;
         pyitrf.0.itrf
-    } else if pos.is_instance_of::<np::PyArray1<f64>>() {
-        let vpy = pos
-            .extract::<np::PyReadonlyArray1<f64>>()
-            .map_err(|e| anyhow::anyhow!("Failed to extract position array: {}", e))?;
-        let varr = vpy.as_array();
-        if varr.len() != 3 {
-            bail!("Input must have 3 elements");
-        }
-        Vector3::from_slice(&[varr[0], varr[1], varr[2]])
     } else {
-        bail!("Input must be 3-element numpy or itrfcoord");
+        // Any real numeric 3-element array-like (list, tuple, integer
+        // array), as the stub promises: `TypeError` for a non-numeric
+        // input, `ValueError` for the wrong length
+        to_vector3(pos, "pos")?
     };
     Ok((v, degree, order, model.into()))
 }
@@ -118,7 +111,7 @@ impl From<GravityModel> for GravModel {
 ///
 ///
 /// Args:
-///     pos (numpy.ndarray|satkit.itrfcoord): position at which to compute acceleration.  itrfcoord or 3-element numpy array with Cartesian ITRF position in meters
+///     pos (satkit.itrfcoord|array-like): position at which to compute acceleration.  itrfcoord, or 3-element Cartesian ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 ///
 /// Returns:
 ///     numpy.ndarray: 3-element numpy array representing acceleration due to Earth gravity at input position.  Units are m/s^2
@@ -147,7 +140,7 @@ pub fn gravity(
 ///
 ///
 /// Args:
-///     pos (numpy.ndarray|satkit.itrfcoord): position at which to compute acceleration.  itrfcoord or 3-element numpy array with Cartesian ITRF position in meters
+///     pos (satkit.itrfcoord|array-like): position at which to compute acceleration.  itrfcoord, or 3-element Cartesian ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 ///
 /// Returns:
 ///     (numpy.ndarray, numpy.ndarray): tuple of 3-element numpy array representing acceleration due to Earth gravity at input position and 3x3 numpy array of partials of acceleration with respect to position.  Units are m/s^2 for gravity and m/s^2/m for partials

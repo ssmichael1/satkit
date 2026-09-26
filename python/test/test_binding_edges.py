@@ -169,7 +169,7 @@ class TestQuaternionArrayLikes:
     @pytest.mark.parametrize(
         "bad, exc",
         [(np.array([1j, 0, 0]), TypeError), (["a", "b", "c"], TypeError), ([1, 2], ValueError),
-         (np.zeros((2, 2)), ValueError), (2, ValueError)],
+         (np.zeros((2, 2)), ValueError), (2, TypeError)],
         ids=["complex", "strings", "len2", "Nx2", "scalar"],
     )
     def test_rejects(self, bad, exc):
