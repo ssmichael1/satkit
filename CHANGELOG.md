@@ -8,28 +8,28 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 
 ### Added
 
-- Python `moon.pos_mod`, exposing Rust `lpephem::moon::pos_mod` (mean-of-date moon position), mirroring `sun.pos_mod` ([#254](https://github.com/ssmichael1/satkit/pull/254))
+- Python `moon.pos_mod` (mean-of-date Moon position), mirroring `sun.pos_mod` ([#254](https://github.com/ssmichael1/satkit/pull/254))
 
 ### Changed
 
-- **Breaking:** `satproperties()` is keyword-only (positional calls swapped drag and SRP: re-check them); one-element time lists give one-element results. **Wrong results:** `quaternion * Nx3` applied the inverse rotation in 0.14.1–0.23.1 ([#222](https://github.com/ssmichael1/satkit/pull/222))
-- **Breaking:** `duration()`, `propsettings()`, `itrfcoord()`, `sgp4()`, `propagate()`, `satstate.propagate()`, `gravity()`, `gravity_and_partials()` and `nrlmsise00()` raise `TypeError` (was `ValueError`) for an unknown keyword ([#236](https://github.com/ssmichael1/satkit/pull/236))
-- **Breaking:** Python `TLE.from_lines()` / `from_file()` / `from_url()` always return `list[TLE]` (zero TLEs: `ValueError`); parse errors name the input line and satellite; new Rust `TLE::records()` and optional checksum checks ([#240](https://github.com/ssmichael1/satkit/pull/240))
-- **Breaking:** `sgp4([tle], t)` keeps the TLE axis (`(1, 3)`, was `(3,)`); bad inputs raise specific exceptions instead of `RuntimeError` or a meaningless value; `sgp4` is thread-safe on a shared TLE ([#245](https://github.com/ssmichael1/satkit/pull/245))
-- **Breaking:** EOP comes only from IERS `finals2000A.all` (not CelesTrak `EOP-All.csv`), so there is none before 1973-01-02 (UT1 = UTC); Rust `EopSource`, `source()`, `CELESTRAK_FILE` and the `InvalidEntry` / `ParseFloat` errors are removed; Python `frametransform.eop_source()` is deprecated (use `eop_coverage()`; removed in 0.25) ([#235](https://github.com/ssmichael1/satkit/pull/235))
-- **Breaking:** the optional PyPI `satkit-data` bundle (`satkit[data]`) is dropped; `require_eop_coverage` also refuses spans before the table (Rust `Error::EopCoverage` gains `span_start` / `table_start`); an EOP parser panic and six smaller data-layer defects fixed ([#242](https://github.com/ssmichael1/satkit/pull/242))
-- **Breaking:** `time.strptime()`, `time.from_string()` and `time(<str>)` raise `ValueError` (was `RuntimeError`) for a string they cannot parse, like `from_rfc3339` ([#247](https://github.com/ssmichael1/satkit/pull/247))
-- **Breaking:** drag applies up to 1,000 km altitude (was 700 km), NRLMSISE-00's validity limit; a day whose previous-day F10.7 is missing no longer drops its Ap and F10.7A (density 35–39 % low); `density.nrlmsise()` accepts `datetime` and integer angles and raises `TypeError` for an unknown time; a non-ASCII SWPC forecast no longer panics ([#249](https://github.com/ssmichael1/satkit/pull/249))
-- **Breaking:** time and duration `+` / `-` beyond about ±292,000 years raise `OverflowError` in Python (they wrapped around) and saturate in Rust, with new `checked_add` / `checked_sub` / `checked_duration_since`; `propsettings(gravity_order > gravity_degree)` raises `ValueError` like the setter (it clamped) ([#252](https://github.com/ssmichael1/satkit/pull/252))
-- **Breaking:** `moon.pos_gcrf` returns GCRF (it returned mean-of-date coordinates, ~1° off by 2050; Rust `moon::pos_mod` keeps them), and `planets.heliocentric_pos` rotates with the J2000 obliquity and applies the Jupiter–Pluto extra terms in degrees (outer planets were tens of degrees off outside 1800–2050) ([#251](https://github.com/ssmichael1/satkit/pull/251))
-- **Breaking:** `utils.build_date()` is removed from Rust and Python so builds are reproducible; `githash()` / `gittag()` are `"unknown"` unless built from satkit's own git checkout (a copy vendored in another repository reported that repository's hash) ([#255](https://github.com/ssmichael1/satkit/pull/255))
-- **Breaking:** SGP4 defaults to WGS72 everywhere (Rust `sgp4()` was WGS84 / IMPROVED; `TLE.fit_from_states` fitted with WGS84, now also takes `gravconst` / `opsmode`); the cached SGP4 initialization is rebuilt when elements, `gravconst` or `opsmode` change (ignored through 0.23); `sgp4(..., errflag=True)` reports an element set that cannot be initialized as NaN rows plus its code instead of raising; mismatched or orphan TLE lines and non-TEME / non-Earth OMMs are errors; Rust `SGP4InitArgs::jdsatepoch` is `epoch_days_1950` ([#253](https://github.com/ssmichael1/satkit/pull/253))
-- **Breaking (Rust):** `DataDirReadOnly` is `DataDirReadOnly { path, reason }` in the EOP, space-weather and `update_data` errors; `update_datafiles()` rejects unknown keywords, and offline, read-only-directory and data warnings say why and where ([#218](https://github.com/ssmichael1/satkit/pull/218))
-- **Breaking (experimental ECOM):** coefficients are referred to 1 AU and scale by `(AU / d)²`; old coefficients convert by `(d / AU)²` at their epoch ([#213](https://github.com/ssmichael1/satkit/pull/213), [#210](https://github.com/ssmichael1/satkit/issues/210))
-- **Behaviour change:** UTC before 1972 follows the USNO / ERFA "rubber second" model from 1961, so pre-1972 labels convert up to 9.9 s differently; Rust `Instant::UNIX_EPOCH.raw` is 8,000,082 (was 0) ([#223](https://github.com/ssmichael1/satkit/pull/223))
-- **Behaviour change:** float → microsecond conversions round instead of truncating, the `strptime` `%z` sign is fixed, and `datetime` / chrono interop and pickles are exact; pickles written by 0.24 do not load in 0.23 ([#225](https://github.com/ssmichael1/satkit/pull/225))
-- **Behaviour change:** time parsing applies the UTC offsets `from_rfc3339` / `from_string` dropped or misread, rejects trailing input and malformed offsets, and rounds fractions beyond 6 digits; exact `day_of_week` and dates before −4712 ([#243](https://github.com/ssmichael1/satkit/pull/243))
-- Of several copies of `finals2000A.all` across the search directories, the one with the latest observed row is read ([#229](https://github.com/ssmichael1/satkit/pull/229))
+- **Breaking, wrong results:** `quaternion * Nx3` applied the inverse rotation (0.14.1–0.23.1); `satproperties()` is keyword-only, since positional calls swapped drag and SRP; one-element time lists give one-element results ([#222](https://github.com/ssmichael1/satkit/pull/222))
+- **Breaking, wrong results:** `lambert` was wrong for long-way, retrograde, hyperbolic and near-parabolic transfers, and `kepler.from_pv` at inclination π; non-finite input and `r1 == r2` raise ([#250](https://github.com/ssmichael1/satkit/pull/250))
+- **Breaking, wrong results:** `moon.pos_gcrf` returns GCRF (it returned mean of date), `planets.heliocentric_pos` uses the J2000 obliquity and correctly scaled outer-planet terms, and `sun.rise_set` returns the input's UTC date ([#251](https://github.com/ssmichael1/satkit/pull/251))
+- **Breaking, wrong results:** SGP4 defaults to WGS72 everywhere (Rust `sgp4()` and TLE fitting used WGS84), and its cached initialization follows element and setting changes; mismatched TLE lines and non-TEME / non-Earth OMMs are errors ([#253](https://github.com/ssmichael1/satkit/pull/253))
+- **Breaking, wrong results:** drag applies up to 1,000 km (was 700 km); a missing previous-day F10.7 no longer drops the day's space weather (density 35–39 % low); `density.nrlmsise()` uses a `datetime` time ([#249](https://github.com/ssmichael1/satkit/pull/249))
+- **Breaking:** unknown keywords raise `TypeError` (was `ValueError`) in `duration()`, `propsettings()`, `sgp4()`, `propagate()`, `gravity()` and the other keyword bindings ([#236](https://github.com/ssmichael1/satkit/pull/236))
+- **Breaking:** Python `TLE.from_lines()` / `from_file()` / `from_url()` always return `list[TLE]`; parse errors name the line and satellite; new Rust `TLE::records()` and optional checksum checks ([#240](https://github.com/ssmichael1/satkit/pull/240))
+- **Breaking:** EOP comes only from IERS `finals2000A.all`, so there is none before 1973-01-02; Rust `EopSource` / `source()` are removed and Python `eop_source()` is deprecated ([#235](https://github.com/ssmichael1/satkit/pull/235))
+- **Breaking:** the optional `satkit[data]` bundle is dropped, `require_eop_coverage` also checks the table start, and an EOP parser panic is fixed ([#242](https://github.com/ssmichael1/satkit/pull/242))
+- **Breaking:** `sgp4([tle], t)` keeps the TLE axis, bad binding inputs raise specific exceptions, and `sgp4` is thread-safe on a shared TLE ([#245](https://github.com/ssmichael1/satkit/pull/245))
+- **Breaking:** `time.strptime()`, `from_string()` and `time(<str>)` raise `ValueError` (was `RuntimeError`) for an unparseable string ([#247](https://github.com/ssmichael1/satkit/pull/247))
+- **Breaking:** time arithmetic beyond ±292,000 years raises `OverflowError` in Python (it wrapped) and saturates in Rust; `propsettings(gravity_order > gravity_degree)` raises; truncated `finals2000A.all` files are rejected ([#252](https://github.com/ssmichael1/satkit/pull/252))
+- **Breaking:** `utils.build_date()` is removed so builds are reproducible; `githash()` / `gittag()` are `"unknown"` outside satkit's own checkout ([#255](https://github.com/ssmichael1/satkit/pull/255))
+- **Breaking (Rust):** `DataDirReadOnly` is `DataDirReadOnly { path, reason }`; `update_datafiles()` rejects unknown keywords and fails up front when offline ([#218](https://github.com/ssmichael1/satkit/pull/218))
+- **Breaking (experimental ECOM):** coefficients are referred to 1 AU and scale by `(AU / d)²` ([#213](https://github.com/ssmichael1/satkit/pull/213), [#210](https://github.com/ssmichael1/satkit/issues/210))
+- **Behaviour change, wrong results:** time parsing applies the UTC offsets `from_rfc3339` / `from_string` dropped or misread, and rejects trailing input and malformed offsets ([#243](https://github.com/ssmichael1/satkit/pull/243))
+- **Behaviour change:** float → microsecond conversions round instead of truncating, and the `strptime` `%z` sign is fixed; 0.24 pickles do not load in 0.23 ([#225](https://github.com/ssmichael1/satkit/pull/225))
+- **Behaviour change:** UTC before 1972 follows the 1961–1971 "rubber second" model, so pre-1972 labels move by up to 9.9 s ([#223](https://github.com/ssmichael1/satkit/pull/223))
 
 ### Deprecated
 
@@ -37,49 +37,48 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 
 ### Fixed
 
-- `satkit.utils.version()` returns the release version, like `satkit.__version__`; it returned the `git describe` tag, which was `"unknown"` in the published wheels ([#256](https://github.com/ssmichael1/satkit/pull/256))
-- **Wrong results, values change:** `lambert` returned wrong velocities for long-way (> 180°) and retrograde transfers and for hyperbolic and near-parabolic ones; `kepler.from_pv` was wrong at inclination π. Non-finite inputs and `r1 == r2` now raise (Rust `lambert::Error` is `#[non_exhaustive]`, with `NonFinite` / `CoincidentPositions`) ([#250](https://github.com/ssmichael1/satkit/pull/250))
-- Time scales: TDB − TT had a ~57-year instead of a one-year period (up to 1.7 ms), the JPL ephemerides are evaluated at TDB instead of TT (Moon ~2 m), and several leap-second edge cases are fixed ([#217](https://github.com/ssmichael1/satkit/pull/217))
+- **Wrong results:** TDB − TT had a ~57-year period (up to 3.3 ms off), the JPL ephemerides are evaluated at TDB (was TT), and leap-second edge cases are fixed ([#217](https://github.com/ssmichael1/satkit/pull/217))
+- `utils.version()` returns the release version, like `satkit.__version__` (it returned the `git describe` tag, `"unknown"` in the wheels) ([#256](https://github.com/ssmichael1/satkit/pull/256))
+- Of several copies of `finals2000A.all` across the search directories, the freshest is read ([#229](https://github.com/ssmichael1/satkit/pull/229))
 - `orbitprop::propagate` has its rustdoc again, and the crates.io publish job only runs for `v*` tags ([#226](https://github.com/ssmichael1/satkit/pull/226))
-- `help(satkit.satstate)` shows the class documentation again, and a stray doc line is removed from the TLE bindings ([#237](https://github.com/ssmichael1/satkit/pull/237))
-- A truncated `finals2000A.all` download is rejected instead of replacing the good file; a failed EOP refresh no longer reloads an older copy; `from_string` keeps a negative year's sign; custom gravity files honour `norm unnormalized` and reject a missing GM or radius; `time + <int array>` works; stale degree-40 and EGM96-default docs ([#252](https://github.com/ssmichael1/satkit/pull/252))
-- `sun.rise_set` returns the events of the input's UTC date (it gave the next day for about half the inputs) and accepts a `datetime`; `sun.shadowfunc` handles annular eclipses beyond ~1.4 million km and points inside the Earth (it returned NaN); `planets.heliocentric_pos` no longer hangs at a mean anomaly of exactly zero, and its docs list the valid bodies ([#251](https://github.com/ssmichael1/satkit/pull/251))
+- `help(satkit.satstate)` shows the class documentation again ([#237](https://github.com/ssmichael1/satkit/pull/237))
 
 ### Docs
 
-- Covariance docs use RTN instead of LVLH, the Covariance Propagation tutorial compares RTN and NTW on an eccentric orbit, and the Coordinate Frames tutorial opens with frame tables ([#214](https://github.com/ssmichael1/satkit/pull/214))
-- The Time Systems page is rewritten as the single reference for time in satkit: scales, storage, leap seconds, UT1 / EOP coverage and TDB ([#215](https://github.com/ssmichael1/satkit/pull/215))
-- New Troubleshooting & FAQ page under Getting Started, organised by symptom ([#216](https://github.com/ssmichael1/satkit/pull/216))
-- De-duplicated docs, README, CONTRIBUTING, crate docs and CHANGELOG, and one CI data-download composite action ([#228](https://github.com/ssmichael1/satkit/pull/228))
-- `jplephem::barycentric_pos` / `barycentric_state` docs say barycentric, not "Heliocentric" ([#231](https://github.com/ssmichael1/satkit/pull/231))
-- ECOM Solar Radiation Pressure tutorial re-executed against current main, with the prose numbers updated to match ([#238](https://github.com/ssmichael1/satkit/pull/238))
-- `help()` shows class documentation for `consts`, `frame`, `weekday`, `moon.moonphase`, `satproperties`, `sgp4_error`, `sgp4_gravconst` and `sgp4_opsmode` ([#239](https://github.com/ssmichael1/satkit/pull/239))
-- TLE loader docs de-duplicated: `TLE::records()` / Python `TLE.from_lines()` hold the parsing rules ([#241](https://github.com/ssmichael1/satkit/pull/241))
-- New Migrating to 0.24 page; troubleshooting entries for the 0.24 changes, time-parsing docstrings brought up to date (and `from_rfc3339` errors give the reason), and stale docs facts fixed ([#246](https://github.com/ssmichael1/satkit/pull/246))
+- Covariance docs use RTN instead of LVLH, and the Coordinate Frames tutorial opens with frame tables ([#214](https://github.com/ssmichael1/satkit/pull/214))
+- The Time Systems page is the single reference for time in satkit ([#215](https://github.com/ssmichael1/satkit/pull/215))
+- New Troubleshooting & FAQ page ([#216](https://github.com/ssmichael1/satkit/pull/216))
+- De-duplicated docs, README, CONTRIBUTING, crate docs and CHANGELOG ([#228](https://github.com/ssmichael1/satkit/pull/228))
+- `jplephem::barycentric_pos` / `barycentric_state` docs say barycentric, not heliocentric ([#231](https://github.com/ssmichael1/satkit/pull/231))
+- ECOM Solar Radiation Pressure tutorial re-executed against current main ([#238](https://github.com/ssmichael1/satkit/pull/238))
+- `help()` shows class documentation for the previously undocumented Python classes ([#239](https://github.com/ssmichael1/satkit/pull/239))
+- TLE loader docs de-duplicated ([#241](https://github.com/ssmichael1/satkit/pull/241))
+- New Migrating to 0.24 page, and time-parsing docstrings brought up to date ([#246](https://github.com/ssmichael1/satkit/pull/246))
+- Migration page and CHANGELOG edited for the release: one-line "check old results" list, merged duplicate entries ([#258](https://github.com/ssmichael1/satkit/pull/258))
 - Rustdoc: broken and ambiguous intra-doc links across the EOP, gravity, frame-transform, lpephem, orbit propagation and Kepler modules fixed so `cargo doc --no-deps -p satkit` (and `--all-features`) builds with no warnings under `RUSTDOCFLAGS="-D warnings"`; the check now runs in CI ([#259](https://github.com/ssmichael1/satkit/pull/259))
 
 ### CI
 
-- Release `preflight` job (version strings + a green Build on the tagged commit) gates the PyPI publish; Build drops its duplicate release build and uses cargo-deny; Dependabot updates the Actions pins ([#211](https://github.com/ssmichael1/satkit/pull/211))
+- Releases are gated on a green Build; Build uses cargo-deny, and Dependabot updates the Actions pins ([#211](https://github.com/ssmichael1/satkit/pull/211))
 - Dependabot: cibuildwheel 4.2.0 → 4.2.1 ([#212](https://github.com/ssmichael1/satkit/pull/212))
-- stubtest checks all eleven stub modules, and the Python examples in the docs and docstrings run in CI ([#220](https://github.com/ssmichael1/satkit/pull/220))
-- CI data cache: the cache key includes the download script ([#224](https://github.com/ssmichael1/satkit/pull/224))
-- Notebooks that raise fail the docs build, docs-only PRs get a docs-check job, the Python tests also run on 3.10 / 3.14, macOS and Windows, the release workflow is hardened, and the caches are split and pinned ([#244](https://github.com/ssmichael1/satkit/pull/244))
-- Release: `cargo publish --dry-run` in the preflight and in Build, PyPI publishes only after crates.io succeeds, and a re-run skips files PyPI already has; migration-page and docs corrections ([#248](https://github.com/ssmichael1/satkit/pull/248))
+- stubtest checks every stub module, and the docs and docstring examples run in CI ([#220](https://github.com/ssmichael1/satkit/pull/220))
+- The data cache key includes the download script ([#224](https://github.com/ssmichael1/satkit/pull/224))
+- Raising notebooks fail the docs build, docs-only PRs get a docs check, and the Python tests run on more versions and platforms ([#244](https://github.com/ssmichael1/satkit/pull/244))
+- Release: `cargo publish --dry-run` before publishing, and PyPI publishes only after crates.io succeeds ([#248](https://github.com/ssmichael1/satkit/pull/248))
 
 ### Tests
 
-- Differential tests against ERFA (`pyerfa`, a new test dependency) for the time scales, Earth rotation, precession–nutation, TEME and geodetic conversion ([#219](https://github.com/ssmichael1/satkit/pull/219))
-- Property tests (proptest, and hypothesis as a new test dependency) for leap seconds, time scales, pickles and frame transforms, plus a weekly 100k-case run ([#221](https://github.com/ssmichael1/satkit/pull/221))
-- Rust time tests slimmed with no coverage lost (~215 fewer lines) ([#232](https://github.com/ssmichael1/satkit/pull/232))
-- Python tests de-duplicated with no coverage lost (~350 fewer lines) ([#233](https://github.com/ssmichael1/satkit/pull/233))
+- Differential tests against ERFA for time scales and frames (new test dependency `pyerfa`) ([#219](https://github.com/ssmichael1/satkit/pull/219))
+- Property tests for time, UT1, frames and the Python bindings (new test dependency `hypothesis`) ([#221](https://github.com/ssmichael1/satkit/pull/221))
+- Rust time tests slimmed with no coverage lost ([#232](https://github.com/ssmichael1/satkit/pull/232))
+- Python tests de-duplicated with no coverage lost ([#233](https://github.com/ssmichael1/satkit/pull/233))
 
 ### Internal
 
-- No behaviour change: `rustfmt.toml` packs numeric tables, unused NRLMSISE-00 code removed, `Instant` / `Duration` ordering derived (~3,200 fewer lines) ([#227](https://github.com/ssmichael1/satkit/pull/227))
-- No behaviour change: Python bindings simplified with shared helpers and safe numpy reshapes (~590 fewer lines) ([#230](https://github.com/ssmichael1/satkit/pull/230))
-- No behaviour change: Rust core de-duplicated (~100 fewer lines) ([#234](https://github.com/ssmichael1/satkit/pull/234))
-- Builds without default features (no `download` / `omm-xml`) are warning-free, and CI checks it ([#257](https://github.com/ssmichael1/satkit/pull/257))
+- No behaviour change: `rustfmt.toml` packs numeric tables, unused NRLMSISE-00 code removed ([#227](https://github.com/ssmichael1/satkit/pull/227))
+- No behaviour change: Python bindings simplified ([#230](https://github.com/ssmichael1/satkit/pull/230))
+- No behaviour change: Rust core de-duplicated ([#234](https://github.com/ssmichael1/satkit/pull/234))
+- No behaviour change: builds without default features are warning-free, and CI checks it ([#257](https://github.com/ssmichael1/satkit/pull/257))
 
 ## 0.23.1 - 2026-09-24
 
