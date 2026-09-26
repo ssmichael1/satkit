@@ -18,20 +18,10 @@ Pre-built wheels are available for **Linux** (x86_64, aarch64), **macOS** (Apple
 ## Quick Start
 
 ```bash
-pip install satkit
+pip install satkit        # or: conda install -c conda-forge satkit
 ```
 
-The IERS nutation tables and gravity models are compiled into the package, so frames, gravity and SGP4 work with no data files at all. The JPL ephemeris (~100 MB, SHA-256 verified) is downloaded on first use into the user data directory; Earth orientation is fetched from the IERS and space weather from GFZ Potsdam, NOAA/SWPC and NASA on first use. To provision everything up front, or to refresh the daily files, run:
-
-<!-- skip-test: needs the network (downloads the data files) -->
-```python
-import satkit as sk
-sk.utils.update_datafiles()
-```
-
-## Quick Examples
-
-### SGP4 propagation
+Frames, gravity, SGP4 and time scales work straight away: the IERS nutation tables and gravity models are compiled into the package. The JPL ephemeris, Earth orientation and space weather are downloaded on first use — see [Data Files](getting-started/datafiles.md).
 
 ```python
 import satkit as sk
@@ -45,84 +35,14 @@ tle = sk.TLE.from_lines([
 pos, vel = sk.sgp4(tle, sk.time(2024, 1, 2))
 ```
 
-### High-precision propagation
-
-```python
-import satkit as sk
-import numpy as np
-
-r0 = 6378e3 + 500e3  # 500 km altitude
-v0 = np.sqrt(sk.consts.mu_earth / r0)
-
-settings = sk.propsettings(
-    gravity_model=sk.gravmodel.jgm3,
-    gravity_degree=8,
-)
-
-result = sk.propagate(
-    np.array([r0, 0, 0, 0, v0, 0]),
-    sk.time(2024, 1, 1),
-    end=sk.time(2024, 1, 1) + sk.duration.from_days(1),
-    propsettings=settings,
-)
-
-state = result.interp(sk.time(2024, 1, 1) + sk.duration.from_hours(6))
-```
-
-### Coordinate transforms
-
-```python
-import satkit as sk
-
-time = sk.time(2024, 1, 1, 12, 0, 0)
-coord = sk.itrfcoord(latitude_deg=42.0, longitude_deg=-71.0, altitude=100.0)
-
-q = sk.frametransform.rotation(from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, tm=time)
-gcrf_pos = q * coord.vector
-```
-
 ## Features
 
-### Coordinate Frames
-
-Full IERS 2010 Conventions reduction ([Petit & Luzum 2010](guide/references.md#petit2010), Ch. 5: IAU 2006/2000A precession-nutation) with Earth orientation parameters:
-
-| Frame | Description |
-|-------|-------------|
-| ITRF | International Terrestrial Reference Frame (Earth-fixed) |
-| GCRF | Geocentric Celestial Reference Frame (inertial) |
-| TEME | True Equator Mean Equinox (SGP4 output frame) |
-| CIRS | Celestial Intermediate Reference System |
-| TIRS | Terrestrial Intermediate Reference System |
-| Geodetic | Latitude / longitude / altitude (WGS-84) |
-
-Plus ENU, NED, and geodesic distance ([Vincenty 1975](guide/references.md#vincenty1975)) utilities.
-
-### Orbit Propagation
-
-- **Numerical** -- Adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4); [Verner 2010](guide/references.md#verner2010), [Tsitouras 2011](guide/references.md#tsitouras2011)), RODAS4 and Gauss-Jackson 8 ([Berry & Healy 2004](guide/references.md#berry2004)), with dense output, state transition matrix, configurable force models, and a state-derived starting step with warm-start handoff between arcs ([ODE Integrators](guide/integrators.md#starting-step-and-warm-start))
-- **SGP4** -- Standard TLE/OMM propagator ([Vallado et al. 2006](guide/references.md#vallado2006)) with TLE fitting from precision states
-- **Keplerian** -- Analytical two-body propagation
-- **Lambert** -- Multi-revolution Lambert targeting for orbit transfer design ([Izzo 2015](guide/references.md#izzo2015))
-
-### Force Models
-
-- **Earth gravity**: EGM96, EGM2008, JGM2, JGM3, ITU GRACE16 (spherical harmonics up to degree/order 70; [Montenbruck & Gill 2000](guide/references.md#montenbruck2000), §3.2), with tide-system-aware solid tides
-- **Third-body gravity**: Sun and Moon via JPL DE440/441 ephemerides ([Park et al. 2021](guide/references.md#park2021))
-- **Atmospheric drag**: NRLMSISE-00 ([Picone et al. 2002](guide/references.md#picone2002); pure Rust) with automatic space weather data
-- **Solar radiation pressure**: Cannonball model with shadow function and inverse-square Sun-distance scaling
-- **Solid Earth tides**: IERS 2010 §6.2.1 Step 1 (frequency-independent Love-number response; [Petit & Luzum 2010](guide/references.md#petit2010))
-- **General relativity**: IERS 2010 §10.3 Eq. 10.12 — Schwarzschild, geodesic (de Sitter) precession, and Lense–Thirring
-
-### Time Systems
-
-Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with full leap-second handling.
-
-### Solar System
-
-- JPL DE440/DE441 ephemerides for all planets, Sun, Moon, and barycenters
-- Fast analytical Sun/Moon models for lower-precision work
-- Sunrise/sunset and Moon phase calculations
+- **Coordinate frames** — the full IERS 2010 reduction (IAU 2006/2000A) between ITRF, GCRF, TEME, CIRS, TIRS and geodetic coordinates, with Earth orientation parameters, plus ENU / NED and geodesic distance: [Coordinate Frames](tutorials/Coordinate%20Frames.ipynb)
+- **Numerical propagation** — adaptive Runge-Kutta, RODAS4 and Gauss-Jackson 8 integrators with dense output and the state transition matrix: [ODE Integrators](guide/integrators.md), [State Vectors, STM & Covariance](guide/satstate.md)
+- **Force models** — EGM2008 / EGM96 / JGM gravity to degree 70 with solid tides, Sun and Moon from JPL DE440, NRLMSISE-00 drag with automatic space weather, solar radiation pressure and relativity: [Force Model](guide/forces.md), validated against [GMAT](guide/gmat_validation.md)
+- **SGP4, Kepler and Lambert** — TLE / OMM propagation and TLE fitting, two-body propagation, multi-revolution Lambert targeting: [TLEs, SGP4 & OMMs](guide/tle.md), [Keplerian Elements](guide/kepler.md), [Lambert's Problem](guide/lambert.md)
+- **Time systems** — UTC, TAI, TT, TDB, UT1 and GPS with full leap-second handling: [Time Systems](tutorials/Time%20Systems.ipynb)
+- **Solar system** — JPL DE440/441 ephemerides, fast analytic Sun / Moon models, sunrise / sunset and Moon phase: [Planetary Ephemerides](tutorials/Planetary%20Ephemerides.ipynb)
 
 ## Quick Links
 

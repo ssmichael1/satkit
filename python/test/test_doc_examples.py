@@ -51,16 +51,6 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 STUB_DIR = ROOT / "python" / "satkit"
-NATIVE_SUBMODULES = (
-    "density",
-    "frametransform",
-    "jplephem",
-    "moon",
-    "planets",
-    "spaceweather",
-    "sun",
-    "utils",
-)
 PY_LANGS = {"python", "py", "python3", "pycon"}
 FENCE_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})[ \t]*\{?\.?(?P<lang>[\w+-]*)")
 MARK_RE = re.compile(r"<!--\s*(?P<kind>skip-test|xfail-test)\s*(?::\s*(?P<reason>.*?))?\s*-->")
@@ -334,7 +324,8 @@ def _runtime_blocks(stub_code: set[str]) -> list[Block]:
     import satkit.satkit as ext
 
     modules = {"satkit": ext}
-    modules.update({f"satkit.{n}": getattr(ext, n) for n in NATIVE_SUBMODULES})
+    # The native submodules (sun, utils, ...) are module attributes of the extension.
+    modules.update({f"satkit.{n}": m for n, m in sorted(vars(ext).items()) if isinstance(m, type(ext))})
     blocks = []
     for modname, module in modules.items():
         group = f"runtime:{modname}"

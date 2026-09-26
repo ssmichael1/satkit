@@ -1,9 +1,10 @@
-# Keeps the GitHub Actions pins in .github/workflows current. One grouped PR a
-# month; the workflows pin major tags, so this mostly catches major bumps.
+# Keeps the GitHub Actions pins in .github/workflows and the composite actions
+# in .github/actions current. One grouped PR a month; the workflows pin major
+# tags, so this mostly catches major bumps.
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: monthly
     groups:

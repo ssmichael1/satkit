@@ -25,19 +25,8 @@ hash is never re-downloaded. The manifest is therefore what makes a given
 satkit release reproducible: the same version always resolves to the same
 data bytes.
 
-Sources and attribution: DE440 / DE421 — JPL (Park et al. 2021; Folkner et al.
-2009), US Government work; `tab5.2a/b/d.txt` — IERS Conventions (2010), TN 36;
-EGM96, EGM2008, JGM-2, JGM-3 — NASA GSFC / NGA (US Government work), via ICGEM;
-ITU_GRACE16 — Akyilmaz et al. 2016, GFZ Data Services, CC BY 4.0 (downloaded on
-demand, not compiled in). The
-Earth-orientation file is fetched from the IERS mirrors (CelesTrak's copy as
-the fallback). Space weather comes from its producers: the observed record
-from GFZ Potsdam (CC BY 4.0, Matzka et al. 2021 — cite the index in derived
-work), the 45-day forecast from NOAA/SWPC and the monthly forecast from NASA
-MSFC (both US Government work). None of these is pinned (they change daily to
-monthly). See [How often they are
-refreshed](#how-often-eop-and-space-weather-are-refreshed). The full table,
-with licences, is in `data/README.md`.
+What each file is, with its citation and licence, is listed under
+[The files](datafiles.md#the-files); the full table is in `data/README.md`.
 
 ## How often EOP and space weather are refreshed
 
@@ -68,12 +57,6 @@ Every request satkit makes also identifies itself as
 `satkit/<version> (+https://github.com/ssmichael1/satkit)`, and an HTTP error
 is returned to you with an explanation rather than retried in a loop —
 repeated retries are what gets a client firewalled.
-
-The IERS tables and gravity models are **not** downloaded — they are compiled
-in (the tables byte-identical, gravity to degree 70 — the evaluation cap, so
-results are identical). The full-degree `.gfc` files remain pinned in the
-manifest and hosted on the `data-v1` release; drop one into a search
-directory and it takes precedence over the compiled-in copy.
 
 ## Downloads behind a TLS-inspecting proxy
 

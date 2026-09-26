@@ -141,44 +141,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Satkit Data
-        id: cache-satkit-data
-        uses: actions/cache@v6
-        with:
-          path: astro-data
-          enableCrossOsArchive: true
-          key: satkit-data-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
-          # On a manifest change the exact key misses; seed from the newest
-          # older cache so EOP/SW survive a CelesTrak outage (the download
-          # step then verifies/updates the manifest files).
-          #
-          # There is deliberately no per-run EOP/SW refresh here: every test
-          # that touches the EOP table works from the table's own bounds
-          # (python/test/test_eop.py), so a cached copy stays valid however
-          # old it is, while refreshing it on each job meant ~12 full-file
-          # downloads from CelesTrak per push. The docs and release workflows
-          # do refresh, rate-limited, because they render "now".
-          restore-keys: satkit-data-
-
-      - name: Download Satkit Data
-        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
-        run: |
-          python -m pip install requests
-          python python/test/download_data.py astro-data --all-eop-sources
-
-      - name: Cache Satkit Test Vectors
-        id: cache-satkit-testvecs
-        uses: actions/cache@v6
-        with:
-          path: satkit-testvecs
-          enableCrossOsArchive: true
-          key: satkit-testvecs-cache
-
-      - name: Download Satkit Test Vectors
-        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
-        run: |
-          python -m pip install requests
-          python python/test/download_testvecs.py satkit-testvecs
+      - name: Satkit data and test vectors
+        uses: ./.github/actions/satkit-data
 
       - name: Cargo Cache
         uses: actions/cache@v6
@@ -192,10 +156,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-
       - name: Test
         run: cargo test --features chrono
-
 
       # What works with NO data directory and NO network: the compiled-in
       # IERS tables and gravity models, SGP4, time, Kepler, Lambert — and a
@@ -210,11 +172,6 @@ jobs:
           cargo test --features chrono --lib offline_
           cargo test --features chrono --test offline_smoke
           cargo build --no-default-features
-
-      # Already covered by `cargo test` above; re-run with --nocapture so the
-      # per-case max residual vs GMAT (tests/gmat/README.md) is visible in the log.
-      - name: GMAT regression residuals
-        run: cargo test --test gmat_regression -- --nocapture
 
       - name: Doc
         # Identical output on every OS; once is enough.
@@ -238,44 +195,8 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Cache Satkit Data
-        id: cache-satkit-data
-        uses: actions/cache@v6
-        with:
-          path: astro-data
-          enableCrossOsArchive: true
-          key: satkit-data-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
-          # On a manifest change the exact key misses; seed from the newest
-          # older cache so EOP/SW survive a CelesTrak outage (the download
-          # step then verifies/updates the manifest files).
-          #
-          # There is deliberately no per-run EOP/SW refresh here: every test
-          # that touches the EOP table works from the table's own bounds
-          # (python/test/test_eop.py), so a cached copy stays valid however
-          # old it is, while refreshing it on each job meant ~12 full-file
-          # downloads from CelesTrak per push. The docs and release workflows
-          # do refresh, rate-limited, because they render "now".
-          restore-keys: satkit-data-
-
-      - name: Download Satkit Data
-        if: steps.cache-satkit-data.outputs.cache-hit != 'true'
-        run: |
-          pip install requests
-          python python/test/download_data.py astro-data --all-eop-sources
-
-      - name: Cache Satkit Test Vectors
-        id: cache-satkit-testvecs
-        uses: actions/cache@v6
-        with:
-          path: satkit-testvecs
-          enableCrossOsArchive: true
-          key: satkit-testvecs-cache
-
-      - name: Download Satkit Test Vectors
-        if: steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
-        run: |
-          pip install requests
-          python python/test/download_testvecs.py satkit-testvecs
+      - name: Satkit data and test vectors
+        uses: ./.github/actions/satkit-data
 
       - name: Cargo Cache
         uses: actions/cache@v6
@@ -305,10 +226,6 @@ jobs:
         run: |
           mkdir -p "$SATKIT_DATA"
           pytest python/test/test_offline.py -v
-
-      # Already covered above; listed per case for visibility (see tests/gmat/README.md).
-      - name: GMAT regression (Python)
-        run: pytest python/test/test_gmat.py -v
 
       # Verify the hand-written .pyi stubs still match the compiled bindings.
       # The wrapper registers the native submodules (satkit.sun, ...) so their
