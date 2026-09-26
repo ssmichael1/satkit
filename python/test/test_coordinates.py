@@ -261,6 +261,35 @@ class TestKepler:
         with pytest.raises(TypeError):
             k.propagate("600")
 
+    def test_kepler_propagate_rejects_nonfinite(self):
+        # NaN used to be a silent no-op and inf a saturated propagation
+        k = sk.kepler(7000e3, 0.1, 0.5, 1.0, 0.3, 0.7)
+        for bad in (m.nan, m.inf, -m.inf):
+            with pytest.raises(ValueError, match="dt"):
+                k.propagate(bad)
+        with pytest.raises(OverflowError):
+            k.propagate(1e300)
+
+    def test_kepler_from_pv_rejects_nonfinite(self):
+        r = np.array([7000e3, 0.0, 0.0])
+        v = np.array([0.0, 7500.0, 0.0])
+        with pytest.raises(ValueError, match="finite"):
+            sk.kepler.from_pv(np.array([m.nan, 0.0, 0.0]), v)
+        with pytest.raises(ValueError, match="finite"):
+            sk.kepler.from_pv(r, np.array([0.0, m.inf, 0.0]))
+
+    def test_kepler_retrograde_equatorial_roundtrip(self):
+        """i = pi exactly: the equatorial fallbacks must run clockwise."""
+        for eccen in (0.0, 0.1):
+            for argp in (0.0, 2.0):
+                for nu in (0.7, 5.0):
+                    k = sk.kepler(9000e3, eccen, m.pi, 0.0, argp, nu)
+                    r, v = k.to_pv()
+                    k2 = sk.kepler.from_pv(r, v)
+                    r2, v2 = k2.to_pv()
+                    assert np.linalg.norm(r - r2) / np.linalg.norm(r) < 1e-9
+                    assert np.linalg.norm(v - v2) / np.linalg.norm(v) < 1e-9
+
     def test_kepler_from_pv_tiny_inclination(self):
         """from_pv keeps precision for e up to 0.999 and i down to 1e-9 rad."""
         for eccen in (0.0, 0.5, 0.99, 0.999):

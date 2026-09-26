@@ -135,7 +135,9 @@ for a circular one. `from_pv` follows the conventions of
 inclined orbit `argp` is 0 and `nu` holds the argument of latitude; for an
 elliptical equatorial orbit `raan` is 0 and `argp` holds the true longitude of
 perigee; for a circular equatorial orbit both are 0 and `nu` holds the true
-longitude. In each case `to_pv` reproduces the input state. The
+longitude. For a retrograde equatorial orbit ($i = \pi$) those longitudes are
+measured clockwise from the $x$ axis, in the direction of motion. In each case
+`to_pv` reproduces the input state. The
 `argument_of_latitude` and `true_longitude` properties give the well-defined
 combinations directly in every case.
 
@@ -150,7 +152,8 @@ combinations directly in every case.
   precision; the round trip state → elements → state is accurate to better
   than $10^{-6}$ relative for $e \le 0.999$.
 - **`propagate(dt)`** is pure two-body motion: only the mean anomaly advances,
-  by $n\,\Delta t$. No perturbation is applied. For anything beyond a quick
+  by $n\,\Delta t$. No perturbation is applied. In Python a NaN or infinite
+  number of seconds raises `ValueError`. For anything beyond a quick
   look, use the numerical propagator ([Force Model](forces.md)).
 
 ## Examples

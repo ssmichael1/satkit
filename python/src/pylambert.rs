@@ -15,8 +15,9 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 ///     r2 (numpy.ndarray): Final position vector, 3-element array (meters)
 ///     tof (float): Time of flight in seconds (must be positive)
 ///     mu (float, optional): Gravitational parameter in m³/s² (default: Earth μ)
-///     prograde (bool, optional): If True (default), use prograde transfer;
-///         if False, use retrograde transfer.
+///     prograde (bool, optional): If True (default), use prograde transfer
+///         (angular momentum h_z >= 0); if False, use retrograde transfer
+///         (h_z <= 0). This picks the short or long way around.
 ///
 /// Returns:
 ///     list[tuple[numpy.ndarray, numpy.ndarray]]: List of (v1, v2) solution pairs.
@@ -25,8 +26,9 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 ///         zero-revolution solution.
 ///
 /// Raises:
-///     ValueError: If inputs are invalid (negative tof, zero position, etc.)
-///     RuntimeError: If the solver fails to converge
+///     ValueError: If inputs are invalid (non-finite values, tof or mu not
+///         positive, zero position, r1 == r2), or if the solver fails to
+///         converge
 ///
 /// Example:
 ///     >>> import satkit

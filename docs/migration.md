@@ -16,6 +16,14 @@ each change to its pull request, where the details are.
   were read as `(craoverm, cdaoverm)`, the reverse of the documented order, so
   drag and radiation pressure were exchanged. **Do this:** re-check results
   from any script that called `satproperties(a, b)` positionally.
+- **`lambert` results before 0.24 were wrong** for long-way (transfer angle
+  over 180°) and retrograde transfers, which left `r1` in the wrong direction,
+  and for hyperbolic and near-parabolic transfers, whose time of flight was
+  miscomputed. **Do this:** re-run Lambert targeting, delta-v budgets and
+  pork-chop plots.
+- **`kepler.from_pv` was wrong for a retrograde equatorial orbit** (inclination
+  exactly π): its elements described a different state. **Do this:** recompute
+  elements of such orbits.
 
 ## Python API
 
@@ -75,6 +83,10 @@ they used to return a meaningless value:
 | `propagate(..., duration_secs=nan)` | ran to an invalid end | `ValueError` |
 | `propresult.interp(..., output_phi=True)` without the STM | the state alone | `ValueError` |
 | `TLE.epoch = [t1, t2]` | used `t1` | `TypeError` |
+| `lambert(r1, r1, tof)` | NaN velocities | `ValueError` |
+| `lambert(...)` with a NaN or infinite input | "convergence failure" `ValueError` or NaN | `ValueError` naming the input |
+| `kepler.from_pv(<NaN or inf>)` | NaN elements | `ValueError` |
+| `kepler.propagate(nan)`, `kepler.propagate(inf)` | unchanged or a garbage anomaly | `ValueError` |
 
 Some calls that raised now work: `gravity([7e6, 0, 0])` and integer arrays,
 `time - [t1, t2]` (an array of `duration`), and batch state transforms given

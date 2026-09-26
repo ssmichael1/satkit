@@ -896,6 +896,96 @@ class TestLambert:
         with pytest.raises(ValueError):
             sk.lambert(np.array([0.0, 0.0, 0.0]), r2, 3600.0)  # zero position
 
+        # r1 == r2 used to return NaN velocities; NaN inputs a misleading
+        # convergence failure
+        with pytest.raises(ValueError, match="coincide"):
+            sk.lambert(r1, r1.copy(), 3600.0)
+        with pytest.raises(ValueError, match="tof must be finite"):
+            sk.lambert(r1, r2, float("nan"))
+        with pytest.raises(ValueError, match="mu must be finite"):
+            sk.lambert(r1, r2, 3600.0, mu=float("inf"))
+        with pytest.raises(ValueError, match="r2 must be finite"):
+            sk.lambert(r1, np.array([0.0, np.nan, 0.0]), 3600.0)
+
+    @staticmethod
+    def _propagate(r0, v0, dt, mu=sk.consts.mu_earth):
+        """Independent two-body propagation with universal variables
+        (Curtis, Algorithms 3.3/3.4); valid for any conic."""
+
+        def stumpff(z):
+            if z > 1e-8:
+                s = m.sqrt(z)
+                return (1 - m.cos(s)) / z, (s - m.sin(s)) / s**3
+            if z < -1e-8:
+                s = m.sqrt(-z)
+                return (m.cosh(s) - 1) / -z, (m.sinh(s) - s) / s**3
+            return 0.5 - z / 24, 1 / 6 - z / 120
+
+        r0n = np.linalg.norm(r0)
+        vr0 = np.dot(r0, v0) / r0n
+        alpha = 2 / r0n - np.dot(v0, v0) / mu
+        smu = m.sqrt(mu)
+
+        def kepler_uv(chi):
+            c, s = stumpff(alpha * chi * chi)
+            return (
+                r0n * vr0 / smu * chi**2 * c
+                + (1 - alpha * r0n) * chi**3 * s
+                + r0n * chi
+                - smu * dt
+            )
+
+        # F is increasing in chi with F(0) < 0: bracket, then bisect
+        lo, hi = 0.0, smu * dt / r0n
+        while kepler_uv(hi) < 0:
+            lo, hi = hi, 2 * hi
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            if kepler_uv(mid) < 0:
+                lo = mid
+            else:
+                hi = mid
+        chi = 0.5 * (lo + hi)
+        c, s = stumpff(alpha * chi * chi)
+        f = 1 - chi**2 / r0n * c
+        g = dt - chi**3 / smu * s
+        return f * r0 + g * v0
+
+    def _check_reaches_r2(self, r1, r2, tof, prograde=True):
+        sols = sk.lambert(r1, r2, tof, prograde=prograde)
+        assert len(sols) >= 1
+        for v1, _ in sols:
+            r = self._propagate(r1, v1, tof)
+            assert np.linalg.norm(r - r2) < 1e-7 * np.linalg.norm(r2)
+            hz = np.cross(r1, v1)[2]
+            assert hz > 0 if prograde else hz < 0
+
+    def test_solutions_reach_r2(self):
+        """Every solution, propagated for tof, arrives at r2 moving in the
+        requested direction. Long-way (> 180 deg) and retrograde transfers
+        used to leave r1 in the wrong direction and miss r2 by ~2r, and
+        short hyperbolic transfers missed by kilometres."""
+        r = 7000e3
+        period = 2 * np.pi * np.sqrt(r**3 / sk.consts.mu_earth)
+        r1 = np.array([r, 0.0, 0.0])
+        # Long way, prograde and retrograde
+        for deg in (240.0, 300.0):
+            th = np.radians(deg)
+            r2 = 1.3 * r * np.array([np.cos(th), np.sin(th), 0.0])
+            self._check_reaches_r2(r1, r2, 0.75 * period)
+            self._check_reaches_r2(r1, r2 * [1, -1, 1], 0.75 * period, prograde=False)
+        # Retrograde to +90 deg is the long way round, with multi-rev
+        self._check_reaches_r2(r1, np.array([0.0, r, 0.0]), 0.75 * period, prograde=False)
+        self._check_reaches_r2(r1, np.array([0.0, r, 0.0]), 3.3 * period, prograde=False)
+        # Inclined long way
+        r2 = np.array([-5000e3, -3000e3, 4000e3])
+        self._check_reaches_r2(r1, r2, 4000.0)
+        # Near-0 deg, strongly hyperbolic
+        th = np.radians(1.0)
+        r2 = 1.01 * r * np.array([np.cos(th), np.sin(th), 0.0])
+        for tof in (10.0, 100.0):
+            self._check_reaches_r2(r1, r2, tof)
+
 
 class TestManeuverInspection:
     def test_maneuvers_getter(self):

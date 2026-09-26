@@ -2699,6 +2699,11 @@ class kepler:
             # ... or by ten minutes
             k3 = k.propagate(satkit.duration.from_minutes(10))
             ```
+
+        Raises:
+            TypeError: if ``dt`` is neither a duration nor a number.
+            ValueError: if ``dt`` is a NaN or infinite number of seconds.
+            OverflowError: if ``dt`` is too large for a duration.
         """
         ...
 
@@ -2894,8 +2899,9 @@ class kepler:
 
         Raises:
             ValueError: if the state is hyperbolic/parabolic (eccen >= 1) or
-                rectilinear (zero angular momentum), or if ``mu`` is not
-                positive and finite.
+                rectilinear (zero angular momentum), if ``pos`` or ``vel``
+                holds a NaN or infinity, or if ``mu`` is not positive and
+                finite.
             RuntimeError: if the inputs are not 3-element vectors.
         """
         ...
@@ -4603,7 +4609,9 @@ def lambert(
         r2: 3-element numpy array — arrival position (meters)
         tof: Time of flight in seconds (must be positive)
         mu: Gravitational parameter in m³/s² (default: Earth µ = 3.986e14)
-        prograde: If True (default), prograde transfer; if False, retrograde
+        prograde: If True (default), prograde transfer (angular momentum
+            h_z >= 0); if False, retrograde (h_z <= 0). This picks the short
+            or long way around.
 
     Returns:
         List of (v1, v2) tuples. Each v1 and v2 is a 3-element numpy array
@@ -4611,7 +4619,9 @@ def lambert(
         elements are multi-revolution solutions if they exist.
 
     Raises:
-        ValueError: If inputs are invalid (negative tof, zero position, etc.)
+        ValueError: If inputs are invalid (non-finite values, tof or mu not
+            positive, zero position, r1 == r2), or if the solver fails to
+            converge
 
     Example:
         ```python
