@@ -9,7 +9,7 @@
 //!
 //! Not offline-capable, by design: the JPL ephemeris (downloaded on first
 //! use, SHA-256 verified) and the Earth-orientation / space-weather files
-//! (refreshed from CelesTrak). `offline_missing_ephemeris_is_typed_error`
+//! (refreshed from IERS, GFZ, SWPC). `offline_missing_ephemeris_is_typed_error`
 //! checks that asking for the ephemeris in that state is a clean error, not
 //! a hang or a panic.
 

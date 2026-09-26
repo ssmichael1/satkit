@@ -3,8 +3,8 @@
 //!
 //! Companion to `tests/properties.rs` (data-independent; see its header for
 //! the edge-biased generators and the "different routes" philosophy). Each
-//! test here skips, with a note on stderr, when neither `finals2000A.all`
-//! nor `EOP-All.csv` is in the data directory (set `SATKIT_DATA`, or run
+//! test here skips, with a note on stderr, when `finals2000A.all` is not
+//! in the data directory (set `SATKIT_DATA`, or run
 //! `python -m satkit.utils.update_datafiles`), the same way
 //! `tests/earth_orientation_params_init.rs` does. No test here triggers a
 //! download.
@@ -44,19 +44,14 @@ const ASEC: f64 = std::f64::consts::PI / 180.0 / 3600.0;
 fn eop_range() -> Option<(Instant, Instant)> {
     static RANGE: OnceLock<Option<(Instant, Instant)>> = OnceLock::new();
     *RANGE.get_or_init(|| {
-        let found = satkit::utils::find_data_file(eop::FINALS2000A_FILE)
-            .or_else(|| satkit::utils::find_data_file(eop::CELESTRAK_FILE));
-        if found.is_none() {
+        if satkit::utils::find_data_file(eop::FINALS2000A_FILE).is_none() {
             eprintln!(
-                "skipping EOP properties: no finals2000A.all / EOP-All.csv in the data \
+                "skipping EOP properties: no finals2000A.all in the data \
                  directories; set SATKIT_DATA or run `python -m satkit.utils.update_datafiles`"
             );
             return None;
         }
         let cov = eop::coverage()?;
-        // finals2000A.all starts in 1973, but a data directory may also hold
-        // CelesTrak's EOP-All.csv, which goes back to 1962 (rubber-second
-        // UTC, whose steps UT1 must also be continuous across).
         // Keep two days of margin at both ends: interpolation needs a row
         // either side, and we evaluate up to a few hours past the sample.
         Some((

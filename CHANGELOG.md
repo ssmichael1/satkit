@@ -11,8 +11,9 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - **Behaviour change:** UTC before 1972 follows the USNO / ERFA "rubber second" model from 1961 (TAI − UTC stays 0 before 1961), so pre-1972 labels convert correctly (up to 9.9 s different, ERFA to 1 µs); a stored pre-1972 instant (e.g. a pickle) prints a label up to ~10 s different ([#223](https://github.com/ssmichael1/satkit/pull/223))
 - Internal (no behaviour change): `rustfmt.toml` packs short numeric array elements (NRLMSISE-00 and planet coefficient tables), unused NRLMSISE-00 code and redundant tests removed, `Instant`/`Duration` comparisons derived (~3,200 fewer lines) ([#227](https://github.com/ssmichael1/satkit/pull/227))
 - Internal (no behaviour change): Python bindings simplified: shared helpers replace duplicated argument parsing, pickling and `time` arithmetic, every `unsafe` numpy copy is replaced by a safe reshape, and needless GIL re-acquisition is gone (~590 fewer lines) ([#230](https://github.com/ssmichael1/satkit/pull/230))
-- **Behaviour change:** Earth orientation uses IERS `finals2000A.all` whenever it is present (CelesTrak `EOP-All.csv` then only supplies its 1962–1972 rows in front; alone it is used only when there is no `finals2000A.all`), instead of whichever file's observed record ran later, which picked CelesTrak whenever both were fresh; of several copies of one EOP file across the search directories the one with the latest observed row is read, so a stale bundle or `add_search_dir` copy no longer shadows a fresh download; the "too early" warning gives the `EOP-All.csv` advice only for a table that starts at `finals2000A.all`'s first row; the tests that toggle offline mode run in their own process ([#229](https://github.com/ssmichael1/satkit/pull/229))
+- Of several copies of `finals2000A.all` across the search directories the one with the latest observed row is read, so a stale bundle or `add_search_dir` copy no longer shadows a fresh download; the tests that toggle offline mode run in their own process ([#229](https://github.com/ssmichael1/satkit/pull/229))
 - Internal (no behaviour change): Rust core de-duplicated: shared calendar, day/microsecond and date-parsing helpers in `Instant`, one download file-name helper, a shared writable-data-dir check, one feed-content parse check and forecast-row constructor for space weather (~100 fewer lines) ([#234](https://github.com/ssmichael1/satkit/pull/234))
+- **Breaking:** Earth orientation comes only from IERS `finals2000A.all`: CelesTrak's `EOP-All.csv` is no longer downloaded or read, so there is no EOP for 1962–1972 and UT1 = UTC before 1973-01-02; with only an `EOP-All.csv` on disk, run `update_datafiles()` (Python `eop_source()` is deprecated, Rust `EopSource` / `source()` removed) ([#235](https://github.com/ssmichael1/satkit/pull/235))
 
 ### Fixed
 
@@ -34,7 +35,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - Release `preflight` job (version strings + a green Build on the tagged commit) replaces the pre-release test job and gates the PyPI publish; Build drops its duplicate release build, runs `cargo doc` once, caches the sdist compile and uses cargo-deny (`deny.toml`) instead of cargo-audit; Dependabot updates the Actions pins ([#211](https://github.com/ssmichael1/satkit/pull/211))
 - stubtest checks all eleven stub modules against a commented allowlist, and the Python examples in the docs and docstrings run in CI ([#220](https://github.com/ssmichael1/satkit/pull/220))
-- CI data cache: `download_data.py --all-eop-sources` keeps `finals2000A.all` current and fetches CelesTrak `EOP-All.csv` only when missing; the cache key includes the download script ([#224](https://github.com/ssmichael1/satkit/pull/224))
+- CI data cache: the cache key includes the download script, so a change to it regenerates the cache ([#224](https://github.com/ssmichael1/satkit/pull/224))
 
 ### Tests
 

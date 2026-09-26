@@ -42,10 +42,9 @@
 //! An existing file whose hash matches is never re-downloaded.
 //!
 //! The regularly refreshed files are *not* pinned — they change daily.
-//! Space weather (the GFZ table and the SWPC forecast) is listed under `refresh` as plain URLs
-//! (celestrak); the Earth orientation sources are listed under `eop` in
-//! order of preference (IERS `finals2000A.all` mirrors, then CelesTrak's
-//! `EOP-All.csv`).
+//! Space weather (the GFZ table and the SWPC forecast) is listed under `refresh` as plain URLs;
+//! the Earth orientation file (IERS `finals2000A.all`) is listed under `eop`
+//! with its mirrors in order of preference.
 
 use serde::Deserialize;
 use std::io::Read;
@@ -80,9 +79,8 @@ pub struct Manifest {
     /// 45-day forecast): plain URLs, never pinned.
     #[serde(default)]
     pub refresh: Vec<String>,
-    /// Earth orientation sources in order of preference: the first entry is
-    /// the primary (`finals2000A.all`, with its mirrors), later entries are
-    /// fallbacks (CelesTrak's `EOP-All.csv`). Never pinned. See
+    /// Earth orientation source: `finals2000A.all` with its mirrors in
+    /// order of preference. Never pinned. See
     /// [`earth_orientation_params::refresh_into`](crate::earth_orientation_params::refresh_into).
     #[serde(default)]
     pub eop: Vec<RefreshSource>,
@@ -202,10 +200,11 @@ impl Manifest {
             }
         }
         for s in &self.eop {
-            if crate::earth_orientation_params::EopSource::from_file_name(&s.name).is_none() {
+            if s.name != crate::earth_orientation_params::FINALS2000A_FILE {
                 return Err(invalid(format!(
-                    "eop source {:?} is not a known EOP file",
-                    s.name
+                    "eop source {:?} is not {}",
+                    s.name,
+                    crate::earth_orientation_params::FINALS2000A_FILE
                 )));
             }
             if s.urls.is_empty() {
@@ -522,7 +521,7 @@ mod tests {
             "nothing reads it; the runtime leap-second table is compiled in"
         );
         // Refresh files must not be pinned.
-        assert!(m.entry("EOP-All.csv").is_none());
+        assert!(m.entry("finals2000A.all").is_none());
         assert!(m.entry("SW-All.csv").is_none());
         assert!(!m.refresh.iter().any(|u| u.ends_with("SW-All.csv")));
         assert!(m
@@ -533,12 +532,10 @@ mod tests {
             .refresh
             .iter()
             .any(|u| u.ends_with(crate::spaceweather::SWPC_FILE)));
-        assert!(!m.refresh.iter().any(|u| u.ends_with("EOP-All.csv")));
-        // EOP: the IERS file (two mirrors) first, CelesTrak as the fallback.
+        // EOP: the IERS file only, from its two mirrors.
         let names: Vec<&str> = m.eop.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, ["finals2000A.all", "EOP-All.csv"]);
+        assert_eq!(names, ["finals2000A.all"]);
         assert_eq!(m.eop[0].urls.len(), 2);
-        assert!(m.eop[1].urls[0].starts_with("https://celestrak.org/"));
         // Every entry: GitHub release asset first.
         for e in &m.files {
             assert!(

@@ -39,8 +39,7 @@ def update_datafiles(
     Notes:
         - Files downloaded:
             - ``linux_p1550p2650.440`` : JPL Ephemeris version 440 (~ 100 MB)
-            - ``finals2000A.all`` : Earth orientation parameters (IERS Bulletin A), updated daily;
-              CelesTrak's ``EOP-All.csv`` is fetched instead when both IERS mirrors are unreachable
+            - ``finals2000A.all`` : Earth orientation parameters (IERS Bulletin A), updated daily
             - ``Kp_ap_Ap_SN_F107_since_1932.txt``, ``45-day-forecast.txt``, ``msafe-f10-prd.txt`` : Space weather (GFZ observed record, SWPC and MSAFE forecasts)
 
         - The IERS nutation tables (``tab5.2a/b/d.txt``) and the gravity
@@ -50,9 +49,8 @@ def update_datafiles(
           gravity file or an updated IERS table placed in the data directory
           still takes precedence over the compiled-in copy.
 
-        - The space weather and Earth-orientation files follow `CelesTrak's
-          usage policy <https://celestrak.org/usage-policy.php>`_ rather than
-          transferring the whole 1932-to-present table on every call: no
+        - The space weather and Earth-orientation files are downloaded once
+          per update rather than transferring the whole table on every call: no
           request is made while the local copy is inside its publication
           cadence (3 h for the GFZ record, 24 h for the SWPC forecast and the Earth-orientation file, a week for MSAFE), and past
           that the request carries ``If-Modified-Since``, so an unchanged file

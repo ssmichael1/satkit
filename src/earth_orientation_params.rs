@@ -7,34 +7,28 @@
 //! The EOP data includes parameters such as polar motion, UT1-UTC, and length of day (LOD),
 //! which are crucial for precise calculations in satellite tracking and navigation.
 //!
-//! # Sources
+//! # Source
 //!
-//! Two on-disk formats are read. When `finals2000A.all` is present in the
-//! data directories it is always the table; `EOP-All.csv` is the table only
-//! when there is no `finals2000A.all`:
+//! The table is the IERS Rapid Service / Prediction Centre's Bulletin A
+//! combined file, **`finals2000A.all`**: observed values from 1973-01-02
+//! plus about a year of predictions, updated daily. The refresh fetches it
+//! from the USNO and IERS mirrors. The Bulletin A columns are used
+//! throughout (never the Bulletin B columns, which end earlier and would
+//! introduce a splice).
 //!
-//! * **`finals2000A.all`** — the IERS Rapid Service / Prediction Centre's
-//!   Bulletin A combined file: observed values from 1973 plus about a year of
-//!   predictions, updated daily. This is the primary source; the refresh
-//!   fetches it from the USNO and IERS mirrors. The Bulletin A columns are
-//!   used throughout (never the Bulletin B columns, which end earlier and
-//!   would introduce a splice).
-//! * **`EOP-All.csv`** — CelesTrak's repackaging of the IERS series, which
-//!   reaches back to 1962 and carries about six months of predictions. It is
-//!   the fallback when both IERS mirrors are unreachable, and it is still read
-//!   when present (a hand-provisioned data directory, the `satkit-data`
-//!   bundle). Next to a `finals2000A.all` only its rows before 1973 are used,
-//!   in front of the IERS table, so 1962–1972 coverage is not lost.
+//! Before the table's first row there is no EOP: [`get`] returns `None`,
+//! the frame transforms use zeros (so UT1 = UTC, as in ERFA), and a
+//! one-time warning is printed.
 //!
-//! When a file has copies in more than one search directory, the copy with
-//! the latest last observed row is read, so a stale copy in an earlier
+//! When the file has copies in more than one search directory, the copy
+//! with the latest last observed row is read, so a stale copy in an earlier
 //! directory (an `add_search_dir` directory, the `satkit-data` bundle) does
 //! not shadow a fresh download in the write location.
 //!
-//! The source order lives in the embedded data manifest (`data/manifest.json`,
-//! `eop` section); [`source`] reports which file the loaded table came from.
+//! The download URLs live in the embedded data manifest
+//! (`data/manifest.json`, `eop` section).
 //!
-//! Both files are published once a day, so [`refresh_into`] leaves a copy
+//! The file is published once a day, so [`refresh_into`] leaves a copy
 //! fetched within the last 24 h alone without contacting anyone, and past
 //! that sends a conditional request that costs a `304` when the file has not
 //! changed (see [`refresh_file`](crate::utils::refresh_file)).
@@ -51,35 +45,35 @@ use crate::utils::download::{self, refresh_file};
 use crate::utils::manifest::RefreshSource;
 use crate::utils::RefreshableSingleton;
 use crate::{Instant, TimeLike, TimeScale};
-use std::num::ParseFloatError;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 
-/// File name of the IERS Bulletin A combined file (the primary source).
+/// File name of the IERS Bulletin A combined file, the EOP table.
 pub const FINALS2000A_FILE: &str = "finals2000A.all";
-/// File name of the CelesTrak EOP file (fallback source, legacy on-disk format).
-pub const CELESTRAK_FILE: &str = "EOP-All.csv";
 
 /// Errors produced by the
 /// [`earth_orientation_params`](crate::earth_orientation_params) module.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// A line in the EOP CSV file has fewer than the expected 12 fields.
-    #[error("Invalid entry in EOP file")]
-    InvalidEntry,
-
     /// A `finals2000A.all` line could not be parsed (a flag other than `I`/`P`,
     /// or a numeric column that is neither blank nor a number).
     #[error("Invalid finals2000A.all line {line}: {reason}")]
     InvalidFinalsLine { line: usize, reason: String },
 
-    /// Neither `finals2000A.all` nor `EOP-All.csv` could be read from the
-    /// data directory (after a refresh that reported success, or when
-    /// loading a directory explicitly).
+    /// The data given is CelesTrak's `EOP-All.csv`, which is not read:
+    /// the EOP table is IERS `finals2000A.all`.
     #[error(
-        "No Earth orientation file ({FINALS2000A_FILE} or {CELESTRAK_FILE}) readable in {dir}"
+        "CelesTrak EOP-All.csv is not supported: Earth orientation is read from IERS \
+         {FINALS2000A_FILE} only. Run `satkit::utils::update_datafiles()` \
+         (Python: `satkit.utils.update_datafiles()`) to download it"
     )]
+    UnsupportedCsv,
+
+    /// `finals2000A.all` could not be read from the data directory (after a
+    /// refresh that reported success, or when loading a directory
+    /// explicitly).
+    #[error("No Earth orientation file ({FINALS2000A_FILE}) readable in {dir}")]
     NoEopFile { dir: String },
 
     /// The data directory cannot receive an updated EOP file: read-only
@@ -91,16 +85,13 @@ pub enum Error {
     )]
     DataDirReadOnly { path: String, reason: String },
 
-    /// Bytes passed to [`init_from_bytes`] were not valid UTF-8 — both EOP
-    /// file formats are text.
+    /// Bytes passed to [`init_from_bytes`] were not valid UTF-8 — the EOP
+    /// file is text.
     #[error("EOP byte buffer is not valid UTF-8: {0}")]
     Utf8(#[from] std::str::Utf8Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    ParseFloat(#[from] ParseFloatError),
 
     #[error(transparent)]
     Datadir(#[from] crate::utils::datadir::Error),
@@ -112,43 +103,6 @@ pub enum Error {
 /// Convenient type alias used throughout the
 /// `earth_orientation_params` module.
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// Which file the loaded EOP table came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EopSource {
-    /// IERS Bulletin A combined file `finals2000A.all` (Bulletin A columns).
-    IersFinals2000A,
-    /// CelesTrak `EOP-All.csv`.
-    CelesTrak,
-}
-
-impl EopSource {
-    /// The on-disk file name this source is read from.
-    pub const fn file_name(self) -> &'static str {
-        match self {
-            Self::IersFinals2000A => FINALS2000A_FILE,
-            Self::CelesTrak => CELESTRAK_FILE,
-        }
-    }
-
-    /// The source read from a file of this name, if it is one of the two.
-    pub fn from_file_name(name: &str) -> Option<Self> {
-        match name {
-            FINALS2000A_FILE => Some(Self::IersFinals2000A),
-            CELESTRAK_FILE => Some(Self::CelesTrak),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for EopSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::IersFinals2000A => write!(f, "IERS finals2000A.all"),
-            Self::CelesTrak => write!(f, "CelesTrak EOP-All.csv"),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 #[allow(non_snake_case)]
@@ -164,16 +118,8 @@ struct EOPEntry {
     /// Celestial pole offsets wrt IAU 2000A, milliarcsec.
     dX: f64,
     dY: f64,
-    /// `true` for an observed row (`I` flag in `finals2000A.all`, `O` in
-    /// `EOP-All.csv`), `false` for a predicted (`P`) row.
+    /// `true` for an observed (`I`) row, `false` for a predicted (`P`) row.
     observed: bool,
-}
-
-/// The loaded table: entries sorted by MJD, plus where they came from.
-#[derive(Debug)]
-struct EopTable {
-    entries: Vec<EOPEntry>,
-    source: EopSource,
 }
 
 /// Where a given epoch falls relative to the loaded EOP table.
@@ -191,9 +137,9 @@ pub enum EopStatus {
     /// months) — refresh the data with
     /// [`update`] / `satkit::utils::update_datafiles()`.
     Extrapolated,
-    /// Before the first row of the table (1973 for `finals2000A.all`, 1962
-    /// for `EOP-All.csv`): no EOP available, [`get`] returns `None` and the
-    /// frame transforms use zeros.
+    /// Before the first row of the table (1973-01-02 for
+    /// `finals2000A.all`): no EOP available, [`get`] returns `None` and the
+    /// frame transforms use zeros (UT1 = UTC).
     BeforeTable,
     /// No EOP table is loaded at all (file missing and download failed,
     /// or an empty table was installed): [`get`] returns `None` and the
@@ -212,33 +158,6 @@ pub struct EopCoverage {
     /// Epoch of the last row (observed or predicted). Queries after it
     /// return this row's values unchanged.
     pub last: Instant,
-}
-
-/// Parse an `EOP-All.csv` text buffer into EOP entries.
-///
-/// CelesTrak's `DX`/`DY` columns are in arcsec; they are stored in
-/// milliarcsec, the unit the nutation correction takes.
-fn parse_csv(text: &str) -> Result<Vec<EOPEntry>> {
-    text.lines()
-        .skip(1)
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| -> Result<EOPEntry> {
-            let lvals: Vec<&str> = line.split(",").collect();
-            if lvals.len() < 12 {
-                return Err(Error::InvalidEntry);
-            }
-            Ok(EOPEntry {
-                mjd_utc: lvals[1].parse()?,
-                xp: lvals[2].parse()?,
-                yp: lvals[3].parse()?,
-                dut1: lvals[4].parse()?,
-                lod: lvals[5].parse()?,
-                dX: lvals[8].parse::<f64>()? * 1.0e3,
-                dY: lvals[9].parse::<f64>()? * 1.0e3,
-                observed: lvals[11].trim() != "P",
-            })
-        })
-        .collect()
 }
 
 /// The 1-based fixed-width column range `[start, start + len)` of `line`,
@@ -263,10 +182,15 @@ fn cols(line: &str, start: usize, len: usize) -> &str {
 /// filled). Rows whose flag is blank (the tail of the file) end the table.
 ///
 /// A blank LOD is filled by the finite difference of UT1−UTC across the
-/// following day (the excess length of day is −d(UT1−UTC)/dt), which is
-/// what the prediction rows carry in the CelesTrak file; a blank dX/dY is
-/// zero (no correction to the IAU 2000A model).
+/// following day (the excess length of day is −d(UT1−UTC)/dt); a blank
+/// dX/dY is zero (no correction to the IAU 2000A model).
+///
+/// CelesTrak's `EOP-All.csv` (recognised by its `DATE,` header) is rejected
+/// with [`Error::UnsupportedCsv`].
 fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
+    if text.trim_start_matches('\u{feff}').starts_with("DATE,") {
+        return Err(Error::UnsupportedCsv);
+    }
     let invalid = |line: usize, reason: String| Error::InvalidFinalsLine { line, reason };
     let num = |line: usize, s: &str, what: &str| -> Result<f64> {
         s.trim()
@@ -348,28 +272,8 @@ fn parse_finals2000a(text: &str) -> Result<Vec<EOPEntry>> {
     Ok(rows)
 }
 
-/// The format of an EOP text buffer, from its first line: CelesTrak's CSV
-/// starts with its header, anything else is taken as `finals2000A.all`.
-fn detect_source(text: &str) -> EopSource {
-    if text.trim_start_matches('\u{feff}').starts_with("DATE,") {
-        EopSource::CelesTrak
-    } else {
-        EopSource::IersFinals2000A
-    }
-}
-
-/// Parse either EOP format, detected from the content.
-fn parse_any(text: &str) -> Result<EopTable> {
-    let source = detect_source(text);
-    let entries = match source {
-        EopSource::CelesTrak => parse_csv(text)?,
-        EopSource::IersFinals2000A => parse_finals2000a(text)?,
-    };
-    Ok(EopTable { entries, source })
-}
-
-/// Check that the file at `path` is a parsable EOP file (either format),
-/// without touching the loaded table.
+/// Check that the file at `path` is a parsable `finals2000A.all`, without
+/// touching the loaded table.
 ///
 /// Used by the downloader to reject a response that is not the file it
 /// claims to be — a proxy notice page served with `200 OK`, or a truncated
@@ -378,8 +282,8 @@ fn parse_any(text: &str) -> Result<EopTable> {
 /// while the previous file is still in place.
 pub(crate) fn validate_file(path: &Path) -> std::result::Result<(), String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    match parse_any(&text) {
-        Ok(t) if t.entries.is_empty() => Err("the file holds no EOP rows".to_string()),
+    match parse_finals2000a(&text) {
+        Ok(t) if t.is_empty() => Err("the file holds no EOP rows".to_string()),
         Ok(_) => Ok(()),
         Err(e) => Err(format!("not a parsable EOP file ({e})")),
     }
@@ -393,51 +297,15 @@ fn last_observed_mjd(rows: &[EOPEntry]) -> f64 {
         .map_or(f64::NEG_INFINITY, |e| e.mjd_utc)
 }
 
-/// Assemble the table from the two files that may be on disk. A non-empty
-/// IERS `finals2000A.all` is always the table, with the CelesTrak rows before
-/// its first row (1962–1972) kept in front when an `EOP-All.csv` is also
-/// present; the CelesTrak table is used on its own only when there is no
-/// IERS table.
-///
-/// The IERS file wins even when the CSV's observed record runs a day
-/// longer (CelesTrak flags one more day as observed): it carries about a
-/// year of predictions to CelesTrak's six months, and a truly stale file is
-/// reported by the "EOP data ends at …" warning.
-fn select_table(finals: Option<Vec<EOPEntry>>, csv: Option<Vec<EOPEntry>>) -> Option<EopTable> {
-    let finals = finals.filter(|r| !r.is_empty());
-    let csv = csv.filter(|r| !r.is_empty());
-    match (finals, csv) {
-        (None, None) => None,
-        (Some(entries), None) => Some(EopTable {
-            entries,
-            source: EopSource::IersFinals2000A,
-        }),
-        (None, Some(entries)) => Some(EopTable {
-            entries,
-            source: EopSource::CelesTrak,
-        }),
-        (Some(finals), Some(csv)) => {
-            let first = finals[0].mjd_utc;
-            let mut entries: Vec<EOPEntry> =
-                csv.into_iter().filter(|e| e.mjd_utc < first).collect();
-            entries.extend(finals);
-            Some(EopTable {
-                entries,
-                source: EopSource::IersFinals2000A,
-            })
-        }
-    }
-}
-
-/// Parse the file at `path`, or `None` (with a warning) if it is unreadable
-/// or holds no rows — a corrupt copy of one file must not hide the other.
+/// Parse the file at `path`, or `None` (with a warning) if it is absent,
+/// unreadable or holds no rows.
 fn read_table(path: Option<&Path>) -> Option<Vec<EOPEntry>> {
     let p = path?;
     let parsed = std::fs::read_to_string(p)
         .map_err(Error::from)
-        .and_then(|t| parse_any(&t));
+        .and_then(|t| parse_finals2000a(&t));
     match parsed {
-        Ok(t) if !t.entries.is_empty() => Some(t.entries),
+        Ok(t) if !t.is_empty() => Some(t),
         Ok(_) => {
             eprintln!("Warning: {} holds no EOP rows; ignoring it", p.display());
             None
@@ -453,86 +321,72 @@ fn existing(path: PathBuf) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-/// The table assembled from the two files at the given paths (either may be
-/// absent), per [`select_table`]. Does not touch the loaded table.
-fn load_from_paths(finals: Option<PathBuf>, csv: Option<PathBuf>) -> Option<EopTable> {
-    select_table(read_table(finals.as_deref()), read_table(csv.as_deref()))
-}
-
-/// Load the EOP table from the files in `dir` (`finals2000A.all` and/or
-/// `EOP-All.csv`), replacing any loaded table. Used after a refresh into
-/// an explicit directory; the lazy default load searches all data
-/// directories instead.
+/// Load the EOP table from `finals2000A.all` in `dir`, replacing any loaded
+/// table. Used after a refresh into an explicit directory; the lazy default
+/// load searches all data directories instead.
 pub fn load_from_dir(dir: &Path) -> Result<()> {
-    let table = load_from_paths(
-        existing(dir.join(FINALS2000A_FILE)),
-        existing(dir.join(CELESTRAK_FILE)),
-    )
-    .ok_or_else(|| Error::NoEopFile {
-        dir: dir.display().to_string(),
+    let table = read_table(existing(dir.join(FINALS2000A_FILE)).as_deref()).ok_or_else(|| {
+        Error::NoEopFile {
+            dir: dir.display().to_string(),
+        }
     })?;
     EOP.set(table);
     Ok(())
 }
 
-/// The freshest copy of the EOP file `name` in `dirs`: the one whose last
+/// The freshest copy of `finals2000A.all` in `dirs`: the one whose last
 /// observed row is latest (ties keep search order; see
 /// [`datadir::freshest_of`]).
-fn freshest_copy(dirs: &[PathBuf], name: &str) -> Option<PathBuf> {
-    datadir::freshest_of(datadir::find_all_in(dirs, name), |text| {
-        parse_any(text)
+fn freshest_copy(dirs: &[PathBuf]) -> Option<PathBuf> {
+    datadir::freshest_of(datadir::find_all_in(dirs, FINALS2000A_FILE), |text| {
+        parse_finals2000a(text)
             .ok()
-            .filter(|t| !t.entries.is_empty())
-            .map(|t| last_observed_mjd(&t.entries))
+            .filter(|t| !t.is_empty())
+            .map(|t| last_observed_mjd(&t))
     })
 }
 
-/// Lazy default load: the freshest copy of each of the two files across the
-/// data search directories; when neither exists, refresh into the write
+/// Lazy default load: the freshest copy of `finals2000A.all` across the
+/// data search directories; when there is none, refresh into the write
 /// location first.
-fn load_default() -> Result<EopTable> {
-    let dirs = datadir::search_dirs();
-    let mut finals = freshest_copy(&dirs, FINALS2000A_FILE);
-    let mut csv = freshest_copy(&dirs, CELESTRAK_FILE);
-    if finals.is_none() && csv.is_none() {
-        let dir = datadir::datadir()?;
-        refresh_into(&dir, false)?;
-        finals = existing(dir.join(FINALS2000A_FILE));
-        csv = existing(dir.join(CELESTRAK_FILE));
-    }
-    load_from_paths(finals.clone(), csv.clone()).ok_or_else(|| Error::NoEopFile {
-        dir: finals
-            .or(csv)
-            .and_then(|p| p.parent().map(|d| d.display().to_string()))
-            .unwrap_or_else(|| "the data directories".to_string()),
+fn load_default() -> Result<Vec<EOPEntry>> {
+    let finals = match freshest_copy(&datadir::search_dirs()) {
+        Some(p) => p,
+        None => {
+            let dir = datadir::datadir()?;
+            refresh_into(&dir, false)?;
+            dir.join(FINALS2000A_FILE)
+        }
+    };
+    read_table(existing(finals.clone()).as_deref()).ok_or_else(|| Error::NoEopFile {
+        dir: finals.parent().map_or_else(
+            || "the data directories".to_string(),
+            |d| d.display().to_string(),
+        ),
     })
 }
 
-/// What a refresh settled on: which source, the URL it was checked against,
-/// and whether that cost a transfer.
+/// What a refresh settled on: the URL it was checked against, and whether
+/// that cost a transfer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshOutcome {
-    /// The file that is now current on disk.
-    pub source: EopSource,
-    /// The URL it was fetched from, or would have been: for a copy still
-    /// inside its publication cadence no request was made.
+    /// The URL `finals2000A.all` was fetched from, or would have been: for
+    /// a copy still inside its publication cadence no request was made.
     pub url: String,
     /// Whether the file was transferred, answered `304`, or not requested.
     pub fetch: download::RefreshOutcome,
 }
 
-/// Bring the EOP file in `dir` up to date, trying the sources in the order
-/// the embedded data manifest lists them: `finals2000A.all` from the USNO
-/// and IERS mirrors, then CelesTrak's `EOP-All.csv`.
+/// Bring `finals2000A.all` in `dir` up to date from the mirrors the
+/// embedded data manifest lists (USNO, then the IERS data centre).
 ///
 /// Each URL goes through [`refresh_file`](crate::utils::refresh_file), so a
 /// copy fetched within the last 24 h is reported current without a request
 /// and an older one costs a conditional GET (`304` when unchanged); `force`
-/// transfers the file unconditionally. The first source that answers is
+/// transfers the file unconditionally. The first mirror that answers is
 /// kept (an HTML notice page or a truncated transfer is rejected and the
-/// next URL tried); a fallback past the primary source is reported on
-/// stderr. Does not change the loaded table — call [`load_from_dir`] or
-/// [`update`] for that.
+/// next URL tried). Does not change the loaded table — call
+/// [`load_from_dir`] or [`update`] for that.
 ///
 /// Fails with [`download::Error::Offline`] under offline mode without any
 /// network I/O, and with [`download::Error::AllSourcesFailed`] listing every
@@ -550,28 +404,19 @@ pub(crate) fn refresh_into_with_sources(
 ) -> download::Result<RefreshOutcome> {
     download::check_online("Earth orientation parameters")?;
     let mut attempts: Vec<String> = Vec::new();
-    for (rank, src) in sources.iter().enumerate() {
-        let Some(source) = EopSource::from_file_name(&src.name) else {
-            continue;
-        };
-        for url in &src.urls {
-            match refresh_file(url, dir, force) {
-                Ok(fetch) => {
-                    if rank > 0 && fetch == download::RefreshOutcome::Downloaded {
-                        eprintln!(
-                            "Warning: the primary Earth orientation source was unreachable; \
-                             using {source} from {url} instead.\n  {}",
-                            attempts.join("\n  ")
-                        );
-                    }
-                    return Ok(RefreshOutcome {
-                        source,
-                        url: url.clone(),
-                        fetch,
-                    });
-                }
-                Err(e) => attempts.push(format!("{url}: {e}")),
+    let urls = sources
+        .iter()
+        .filter(|s| s.name == FINALS2000A_FILE)
+        .flat_map(|s| &s.urls);
+    for url in urls {
+        match refresh_file(url, dir, force) {
+            Ok(fetch) => {
+                return Ok(RefreshOutcome {
+                    url: url.clone(),
+                    fetch,
+                })
             }
+            Err(e) => attempts.push(format!("{url}: {e}")),
         }
     }
     Err(download::Error::AllSourcesFailed {
@@ -583,28 +428,18 @@ pub(crate) fn refresh_into_with_sources(
 
 /// MJD of the first row of `finals2000A.all` (1973-01-02).
 const FINALS_FIRST_MJD: f64 = 41684.0;
-/// MJD of the first row of CelesTrak's `EOP-All.csv` (1962-01-01), the
-/// start of the IERS EOP series.
-const SERIES_FIRST_MJD: f64 = 37665.0;
 
 /// The advice line (with its newline, or empty) of the "too early" warning
-/// for a table of `source` starting at `first_mjd`.
+/// for a table starting at `first_mjd`.
 ///
-/// Only a table that starts exactly where the default file does — a
-/// `finals2000A.all` with no CelesTrak rows in front — gets the advice to
-/// add `EOP-All.csv`; a table starting at the beginning of the series gets
-/// the note that nothing earlier exists; any other start (a table loaded
-/// with [`init_from_path`] / [`init_from_bytes`], a truncated file) gets no
+/// A table that starts where `finals2000A.all` does gets the note that there
+/// is no EOP data before it; any other start (a table loaded with
+/// [`init_from_path`] / [`init_from_bytes`], a truncated file) gets no
 /// advice, since the warning already says where the loaded table starts.
-fn too_early_advice(source: Option<EopSource>, first_mjd: f64) -> &'static str {
-    if source == Some(EopSource::IersFinals2000A) && first_mjd == FINALS_FIRST_MJD {
-        "Refreshing the data files does not help: finals2000A.all (the default) starts \
-         at 1973-01-02. For 1962-1972, put CelesTrak's EOP-All.csv \
-         (https://celestrak.org/SpaceData/EOP-All.csv) in the data directory; its \
-         pre-1973 rows are used in front of finals2000A.all. There is no EOP series \
-         before 1962.\n"
-    } else if first_mjd <= SERIES_FIRST_MJD {
-        "There is no EOP series before 1962.\n"
+fn too_early_advice(first_mjd: f64) -> &'static str {
+    if first_mjd == FINALS_FIRST_MJD {
+        "finals2000A.all has no EOP data before 1973-01-02; refreshing the data files does \
+         not change this.\n"
     } else {
         ""
     }
@@ -623,7 +458,7 @@ static NOT_LOADED_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 /// Module-scope refreshable singleton. The lazy default load (best-effort,
 /// silent on failure) runs at most once; [`init_from_bytes`] /
 /// [`init_from_path`] / [`update`] replace any current contents.
-static EOP: RefreshableSingleton<EopTable> = RefreshableSingleton::new();
+static EOP: RefreshableSingleton<Vec<EOPEntry>> = RefreshableSingleton::new();
 
 /// Best-effort default load on first read. Failures are silent — if EOP
 /// can't be loaded, the singleton stays empty and queries fall through
@@ -634,20 +469,20 @@ fn ensure_default_loaded() {
 
 /// Initialize the EOP singleton from an in-memory byte buffer.
 ///
-/// The bytes must be a valid `finals2000A.all` or CelesTrak `EOP-All.csv`
-/// text file (UTF-8); the format is detected from the content. Always
-/// succeeds and replaces any previously loaded data — IERS publishes new
-/// EOP daily and refresh-in-place is the intended model.
+/// The bytes must be the text of an IERS `finals2000A.all` file (UTF-8);
+/// CelesTrak's `EOP-All.csv` is rejected with [`Error::UnsupportedCsv`].
+/// Replaces any previously loaded data — IERS publishes new EOP daily and
+/// refresh-in-place is the intended model.
 pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
-    EOP.set(parse_any(std::str::from_utf8(bytes)?)?);
+    EOP.set(parse_finals2000a(std::str::from_utf8(bytes)?)?);
     Ok(())
 }
 
-/// Initialize the EOP singleton from a file at `path` (either format).
+/// Initialize the EOP singleton from a `finals2000A.all` file at `path`.
 ///
 /// Same semantics as [`init_from_bytes`]; always replaces.
 pub fn init_from_path(path: &Path) -> Result<()> {
-    EOP.set(parse_any(&std::fs::read_to_string(path)?)?);
+    EOP.set(parse_finals2000a(&std::fs::read_to_string(path)?)?);
     Ok(())
 }
 
@@ -684,7 +519,7 @@ pub fn disable_eop_time_warning() {
 pub fn coverage() -> Option<EopCoverage> {
     ensure_default_loaded();
     let guard = EOP.read();
-    let eop = &guard.as_ref()?.entries;
+    let eop = guard.as_ref()?;
     let first = eop.first()?;
     let last = eop.last()?;
     let last_observed = eop.iter().rev().find(|e| e.observed).unwrap_or(first);
@@ -693,24 +528,6 @@ pub fn coverage() -> Option<EopCoverage> {
         last_observed: Instant::from_mjd_utc(last_observed.mjd_utc),
         last: Instant::from_mjd_utc(last.mjd_utc),
     })
-}
-
-/// Which file the loaded EOP table came from, or `None` if no table is
-/// loaded.
-///
-/// For the default load this is [`EopSource::IersFinals2000A`] whenever a
-/// `finals2000A.all` is in the data directories — including a table
-/// assembled from both files (IERS rows with the CelesTrak file's pre-1973
-/// history in front) — and [`EopSource::CelesTrak`] only when `EOP-All.csv`
-/// is the sole EOP file. After [`init_from_bytes`] / [`init_from_path`] it is
-/// the format of the data given.
-pub fn source() -> Option<EopSource> {
-    ensure_default_loaded();
-    let guard = EOP.read();
-    guard
-        .as_ref()
-        .filter(|t| !t.entries.is_empty())
-        .map(|t| t.source)
 }
 
 /// Classify an epoch against the loaded EOP table — see [`EopStatus`].
@@ -723,11 +540,7 @@ pub fn status<T: TimeLike>(tm: &T) -> EopStatus {
     let mjd_utc = tm.as_mjd_with_scale(TimeScale::UTC);
     ensure_default_loaded();
     let guard = EOP.read();
-    let Some(eop) = guard
-        .as_ref()
-        .map(|t| t.entries.as_slice())
-        .filter(|e| !e.is_empty())
-    else {
+    let Some(eop) = guard.as_deref().filter(|e| !e.is_empty()) else {
         return EopStatus::NotLoaded;
     };
     if mjd_utc < eop[0].mjd_utc {
@@ -744,21 +557,12 @@ pub fn status<T: TimeLike>(tm: &T) -> EopStatus {
 }
 
 /// Bring the Earth Orientation Parameters file in the data directory up to
-/// date (see [`refresh_into`] for the source order and the once-a-day
+/// date (see [`refresh_into`] for the mirrors and the once-a-day
 /// cadence; a copy fetched within the last 24 h is not re-requested), and
 /// load it.
 pub fn update() -> Result<()> {
     let d = datadir::datadir()?;
-    if let Err(e) = datadir::ensure_writable(&d) {
-        return Err(if datadir::is_not_writable_error(&e) {
-            Error::DataDirReadOnly {
-                path: d.display().to_string(),
-                reason: e.to_string(),
-            }
-        } else {
-            e.into()
-        });
-    }
+    datadir::check_writable(&d, |path, reason| Error::DataDirReadOnly { path, reason })?;
     refresh_into(&d, false)?;
     load_from_dir(&d)
 }
@@ -794,19 +598,14 @@ pub fn update() -> Result<()> {
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     ensure_default_loaded();
     let guard = EOP.read();
-    let Some(eop) = guard
-        .as_ref()
-        .map(|t| t.entries.as_slice())
-        .filter(|e| !e.is_empty())
-    else {
+    let Some(eop) = guard.as_deref().filter(|e| !e.is_empty()) else {
         if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
             eprintln!(
                 "Warning: no Earth Orientation Parameters (EOP) table is loaded; polar motion, \
                  UT1-UTC and nutation corrections are being treated as zero, which biases \
                  Earth-fixed frame transforms and orbit propagation by metres.\n\
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
-                 to download finals2000A.all, or set SATKIT_DATA to a directory containing it \
-                 (or a CelesTrak EOP-All.csv).\n\
+                 to download finals2000A.all, or set SATKIT_DATA to a directory containing it.\n\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
                  (Python: `satkit.frametransform.disable_eop_time_warning()`)"
             );
@@ -819,17 +618,16 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 
     if idx == 0 {
         if !WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            let source = guard.as_ref().map(|t| t.source);
             eprintln!(
                 "Warning: EOP data not available for MJD UTC = {mjd_utc} (too early): the \
                  loaded table starts at {} (MJD {}), and polar motion, UT1-UTC and nutation \
-                 corrections are treated as zero before it.\n\
+                 corrections are treated as zero (UT1 = UTC) before it.\n\
                  {}\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
                  (Python: `satkit.frametransform.disable_eop_time_warning()`)",
                 Instant::from_mjd_utc(eop[0].mjd_utc),
                 eop[0].mjd_utc,
-                too_early_advice(source, eop[0].mjd_utc)
+                too_early_advice(eop[0].mjd_utc)
             );
         }
         return None;
@@ -943,12 +741,9 @@ mod tests {
 27 926 61674.00
 ";
 
+    /// The first lines of a CelesTrak `EOP-All.csv`, which is not read.
     const CSV_SAMPLE: &str = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE\n\
-        1962-01-01,37665,-0.012700,0.213000,0.0326338,0.0017230,0.064261,0.006067,0.000000,0.000000,2,O\n\
-        1972-12-31,41682,0.125800,0.125100,0.8135920,0.0026960,0.046960,0.003620,0.000000,0.000000,11,O\n\
-        1973-01-02,41684,0.123500,0.123000,0.8078584,0.0027100,0.046923,0.003514,0.000000,0.000000,12,O\n\
-        2021-09-07,59464,0.241182,0.317273,-0.1145667,-0.0002255,-0.118552,-0.009274,-0.000102,-0.000150,37,O\n\
-        2026-09-18,61301,0.187672,0.328316,-0.0073956,0.0000148,-0.124590,-0.011105,0.000295,-0.000027,37,P\n";
+        1962-01-01,37665,-0.012700,0.213000,0.0326338,0.0017230,0.064261,0.006067,0.000000,0.000000,2,O\n";
 
     /// Check that data is loaded
     #[test]
@@ -958,7 +753,7 @@ mod tests {
         let eop = guard
             .as_ref()
             .expect("default EOP load should succeed in tests");
-        assert!(eop.entries[0].mjd_utc >= 0.0);
+        assert!(eop[0].mjd_utc >= 0.0);
     }
 
     #[test]
@@ -1020,116 +815,54 @@ mod tests {
         let with_blanks = format!("\n\n{FINALS_SAMPLE}\n\n");
         assert_eq!(parse_finals2000a(&with_blanks).unwrap().len(), 5);
         assert!(parse_finals2000a("").unwrap().is_empty());
+        // An HTML notice page is not an EOP file.
+        assert!(parse_finals2000a("<!DOCTYPE html><html></html>").is_err());
     }
 
+    /// CelesTrak's `EOP-All.csv` is refused with an error that names
+    /// `finals2000A.all` and `update_datafiles()`, from bytes, from a path
+    /// and by the download validator.
     #[test]
-    fn format_is_detected_from_content() {
-        assert_eq!(detect_source(CSV_SAMPLE), EopSource::CelesTrak);
-        assert_eq!(detect_source("\u{feff}DATE,MJD"), EopSource::CelesTrak);
-        assert_eq!(detect_source(FINALS_SAMPLE), EopSource::IersFinals2000A);
-        let t = parse_any(CSV_SAMPLE).unwrap();
-        assert_eq!(t.source, EopSource::CelesTrak);
-        assert_eq!(t.entries.len(), 5);
-        let t = parse_any(FINALS_SAMPLE).unwrap();
-        assert_eq!(t.source, EopSource::IersFinals2000A);
-        assert_eq!(t.entries.len(), 5);
-        // An HTML notice page is neither.
-        assert!(parse_any("<!DOCTYPE html><html></html>").is_err());
+    fn celestrak_csv_is_rejected_with_a_clear_error() {
+        for text in [CSV_SAMPLE.to_string(), format!("\u{feff}{CSV_SAMPLE}")] {
+            let err = parse_finals2000a(&text).unwrap_err();
+            assert!(matches!(err, Error::UnsupportedCsv), "{err}");
+            let msg = err.to_string();
+            assert!(msg.contains("finals2000A.all"), "{msg}");
+            assert!(msg.contains("update_datafiles()"), "{msg}");
+        }
+        let dir = std::env::temp_dir().join(format!("satkit_eop_csv_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("EOP-All.csv");
+        std::fs::write(&csv, CSV_SAMPLE).unwrap();
+        assert!(validate_file(&csv).unwrap_err().contains("EOP-All.csv"));
+        // `init_from_path` fails before touching the loaded table.
+        assert!(matches!(init_from_path(&csv), Err(Error::UnsupportedCsv)));
+        assert!(coverage().is_some());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The CSV's DX/DY are arcsec; the table (and the nutation correction)
-    /// use milliarcsec, matching the finals2000A.all columns.
+    /// The directory loader reads `finals2000A.all`; a directory holding
+    /// only a CelesTrak `EOP-All.csv` has no EOP file, and a corrupt file is
+    /// skipped with a warning. Nothing here replaces the loaded table.
     #[test]
-    fn csv_pole_offsets_are_converted_to_mas() {
-        let rows = parse_csv(CSV_SAMPLE).unwrap();
-        let r = &rows[3];
-        assert_eq!(r.mjd_utc, 59464.0);
-        assert!((r.dX - -0.102).abs() < 1e-9);
-        assert!((r.dY - -0.150).abs() < 1e-9);
-        assert!(rows[0].observed);
-        assert!(!rows[4].observed);
-    }
-
-    #[test]
-    fn finals_always_wins_and_history_is_kept() {
-        let finals = parse_finals2000a(FINALS_SAMPLE).unwrap();
-        let csv = parse_csv(CSV_SAMPLE).unwrap();
-
-        // Finals observed through 61300, CSV through 59464: finals win, with
-        // the CSV rows before 1973-01-02 in front and nothing after.
-        let t = select_table(Some(finals.clone()), Some(csv.clone())).unwrap();
-        assert_eq!(t.source, EopSource::IersFinals2000A);
-        let mjds: Vec<f64> = t.entries.iter().map(|e| e.mjd_utc).collect();
-        assert_eq!(
-            mjds,
-            vec![37665.0, 41682.0, 41684.0, 48683.0, 61300.0, 61301.0, 61673.0]
-        );
-        assert!(mjds.windows(2).all(|w| w[0] < w[1]));
-
-        // A CSV observed later than the finals file (CelesTrak flags one
-        // more day observed) still only contributes its pre-1973 rows.
-        let mut newer = csv.clone();
-        newer.push(EOPEntry {
-            mjd_utc: 61400.0,
-            observed: true,
-            ..csv[4].clone()
-        });
-        let t = select_table(Some(finals.clone()), Some(newer)).unwrap();
-        assert_eq!(t.source, EopSource::IersFinals2000A);
-        assert_eq!(t.entries.len(), 7);
-        assert_eq!(t.entries.last().unwrap().mjd_utc, 61673.0);
-
-        // Only one file present.
-        assert_eq!(
-            select_table(Some(finals.clone()), None).unwrap().source,
-            EopSource::IersFinals2000A
-        );
-        assert_eq!(
-            select_table(None, Some(csv.clone())).unwrap().source,
-            EopSource::CelesTrak
-        );
-        // Empty tables count as absent.
-        assert!(select_table(Some(vec![]), None).is_none());
-        assert_eq!(
-            select_table(Some(vec![]), Some(csv)).unwrap().source,
-            EopSource::CelesTrak
-        );
-        assert!(select_table(None, None).is_none());
-    }
-
-    /// The on-disk loader: both files present uses finals2000A.all (with
-    /// the CSV's early rows kept), one file present uses it, a corrupt file
-    /// is skipped with a warning, and an empty directory is a typed error.
-    /// Nothing here touches the loaded table.
-    #[test]
-    fn load_from_paths_prefers_finals() {
+    fn read_table_uses_finals_only() {
         let dir = std::env::temp_dir().join(format!("satkit_eop_load_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let finals = dir.join(FINALS2000A_FILE);
-        let csv = dir.join(CELESTRAK_FILE);
+        std::fs::write(dir.join("EOP-All.csv"), CSV_SAMPLE).unwrap();
+        assert!(read_table(existing(finals.clone()).as_deref()).is_none());
+        assert!(matches!(load_from_dir(&dir), Err(Error::NoEopFile { .. })));
+        assert!(freshest_copy(std::slice::from_ref(&dir)).is_none());
+
         std::fs::write(&finals, FINALS_SAMPLE).unwrap();
-        std::fs::write(&csv, CSV_SAMPLE).unwrap();
+        let t = read_table(existing(finals.clone()).as_deref()).unwrap();
+        assert_eq!(t.len(), 5);
+        assert_eq!(t[0].mjd_utc, FINALS_FIRST_MJD);
 
-        let t = load_from_paths(existing(finals.clone()), existing(csv.clone())).unwrap();
-        assert_eq!(t.source, EopSource::IersFinals2000A);
-        assert_eq!(t.entries.first().unwrap().mjd_utc, 37665.0);
-        assert_eq!(t.entries.last().unwrap().mjd_utc, 61673.0);
-
-        let t = load_from_paths(None, existing(csv.clone())).unwrap();
-        assert_eq!(t.source, EopSource::CelesTrak);
-        let t = load_from_paths(existing(finals.clone()), None).unwrap();
-        assert_eq!(t.source, EopSource::IersFinals2000A);
-        assert_eq!(t.entries.len(), 5);
-
-        // A corrupt IERS file does not hide the CSV.
         std::fs::write(&finals, "73 1 2 41684.00 X garbage\n").unwrap();
-        let t = load_from_paths(existing(finals.clone()), existing(csv.clone())).unwrap();
-        assert_eq!(t.source, EopSource::CelesTrak);
-
-        std::fs::remove_file(&finals).unwrap();
-        std::fs::remove_file(&csv).unwrap();
-        assert!(load_from_paths(existing(finals), existing(csv)).is_none());
+        assert!(read_table(existing(finals.clone()).as_deref()).is_none());
         assert!(matches!(load_from_dir(&dir), Err(Error::NoEopFile { .. })));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1137,7 +870,7 @@ mod tests {
     /// A stale copy of `finals2000A.all` in an earlier search directory (an
     /// `add_search_dir` directory, the `satkit-data` bundle) must not shadow
     /// the fresh copy in a later one (the write location): the default load
-    /// reads the copy with the latest observed row. Same for `EOP-All.csv`.
+    /// reads the copy with the latest observed row.
     #[test]
     fn stale_copy_in_earlier_search_dir_does_not_shadow_fresh_one() {
         let root = std::env::temp_dir().join(format!("satkit_eop_shadow_{}", std::process::id()));
@@ -1153,13 +886,6 @@ mod tests {
             .collect();
         std::fs::write(early.join(FINALS2000A_FILE), &stale).unwrap();
         std::fs::write(late.join(FINALS2000A_FILE), FINALS_SAMPLE).unwrap();
-        let stale_csv: String = CSV_SAMPLE
-            .lines()
-            .take(3)
-            .map(|l| format!("{l}\n"))
-            .collect();
-        std::fs::write(early.join(CELESTRAK_FILE), &stale_csv).unwrap();
-        std::fs::write(late.join(CELESTRAK_FILE), CSV_SAMPLE).unwrap();
         let dirs = vec![early.clone(), late.clone()];
 
         // First-match lookup (the old behaviour) would read the stale copy.
@@ -1167,60 +893,38 @@ mod tests {
             datadir::find_all_in(&dirs, FINALS2000A_FILE)[0],
             early.join(FINALS2000A_FILE)
         );
-        let finals = freshest_copy(&dirs, FINALS2000A_FILE);
+        let finals = freshest_copy(&dirs);
         assert_eq!(
             finals.as_deref(),
             Some(late.join(FINALS2000A_FILE).as_path())
         );
-        let csv = freshest_copy(&dirs, CELESTRAK_FILE);
-        assert_eq!(csv.as_deref(), Some(late.join(CELESTRAK_FILE).as_path()));
-        let t = load_from_paths(finals, csv).unwrap();
-        assert_eq!(t.source, EopSource::IersFinals2000A);
-        assert_eq!(last_observed_mjd(&t.entries), 61300.0);
-        assert_eq!(t.entries.first().unwrap().mjd_utc, 37665.0);
+        let t = read_table(finals.as_deref()).unwrap();
+        assert_eq!(last_observed_mjd(&t), 61300.0);
 
         // Reversed search order: the fresh copy still wins.
         let dirs = vec![late.clone(), early.clone()];
         assert_eq!(
-            freshest_copy(&dirs, FINALS2000A_FILE).as_deref(),
+            freshest_copy(&dirs).as_deref(),
             Some(late.join(FINALS2000A_FILE).as_path())
         );
         // A corrupt copy is passed over for a readable one.
         std::fs::write(early.join(FINALS2000A_FILE), "73 1 2 41684.00 X garbage\n").unwrap();
         let dirs = vec![early.clone(), late.clone()];
         assert_eq!(
-            freshest_copy(&dirs, FINALS2000A_FILE).as_deref(),
+            freshest_copy(&dirs).as_deref(),
             Some(late.join(FINALS2000A_FILE).as_path())
         );
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    /// The "too early" warning advises adding `EOP-All.csv` only for a table
-    /// that starts where the default `finals2000A.all` does; a custom or
-    /// truncated table just gets its start (in the main message).
+    /// The "too early" warning says there is no earlier data only for a
+    /// table that starts where `finals2000A.all` does; a custom or truncated
+    /// table just gets its start (in the main message).
     #[test]
     fn too_early_advice_only_for_the_default_file() {
-        let fin = Some(EopSource::IersFinals2000A);
-        let csv = Some(EopSource::CelesTrak);
-        assert!(too_early_advice(fin, FINALS_FIRST_MJD).contains("EOP-All.csv"));
-        assert!(!too_early_advice(csv, FINALS_FIRST_MJD).contains("EOP-All.csv"));
-        assert!(!too_early_advice(fin, 50000.0).contains("EOP-All.csv"));
-        assert_eq!(too_early_advice(fin, 50000.0), "");
-        assert_eq!(too_early_advice(csv, 59000.0), "");
-        for s in [fin, csv] {
-            assert_eq!(
-                too_early_advice(s, SERIES_FIRST_MJD),
-                "There is no EOP series before 1962.\n"
-            );
-        }
-    }
-
-    #[test]
-    fn source_names_round_trip() {
-        for s in [EopSource::IersFinals2000A, EopSource::CelesTrak] {
-            assert_eq!(EopSource::from_file_name(s.file_name()), Some(s));
-        }
-        assert_eq!(EopSource::from_file_name("SW-All.csv"), None);
+        assert!(too_early_advice(FINALS_FIRST_MJD).contains("no EOP data before 1973-01-02"));
+        assert_eq!(too_early_advice(50000.0), "");
+        assert_eq!(too_early_advice(37665.0), "");
     }
 
     #[test]
@@ -1241,7 +945,6 @@ mod tests {
         let c = coverage().expect("EOP table loaded in tests");
         assert!(c.first < c.last_observed);
         assert!(c.last_observed <= c.last);
-        assert!(source().is_some());
 
         // A well-observed historical epoch.
         let t = crate::Instant::from_rfc3339("2006-04-16T17:52:50.805408Z").unwrap();
@@ -1257,9 +960,26 @@ mod tests {
             let mid = c.last_observed + crate::Duration::from_days(1.0);
             assert_eq!(status(&mid), EopStatus::Predicted);
         }
-        // Before 1962.
         let early = crate::Instant::from_rfc3339("1950-04-16T00:00:00Z").unwrap();
         assert_eq!(status(&early), EopStatus::BeforeTable);
+    }
+
+    /// The default table is `finals2000A.all`, which starts on 1973-01-02;
+    /// before that there is no EOP, so UT1 = UTC and the frame transforms
+    /// use zeros.
+    #[test]
+    fn table_starts_1973_and_ut1_is_utc_before() {
+        let c = coverage().expect("EOP table loaded in tests");
+        assert_eq!(c.first.as_mjd_utc(), FINALS_FIRST_MJD);
+        let t = crate::Instant::from_rfc3339("1972-06-01T12:00:00Z").unwrap();
+        assert_eq!(status(&t), EopStatus::BeforeTable);
+        assert!(get(&t).is_none());
+        assert_eq!(get_or_zero(&t), [0.0; 6]);
+        let ut1 = t.as_mjd_with_scale(TimeScale::UT1);
+        let utc = t.as_mjd_with_scale(TimeScale::UTC);
+        assert!((ut1 - utc).abs() * 86400.0 < 1.0e-6, "{ut1} vs {utc}");
+        // The first row is inside the table.
+        assert!(get(&c.first).is_some());
     }
 
     /// The last row of the table is inside the table: a query at exactly its
@@ -1267,30 +987,17 @@ mod tests {
     /// warning); anything later is.
     #[test]
     fn last_row_epoch_is_inside_table() {
-        let csv = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE\n\
-                   2024-01-01,60310,0.1,0.2,0.01,0.001,0,0,0.3,0.4,37,O\n\
-                   2024-01-02,60311,0.5,0.6,0.02,0.002,0,0,0.7,0.8,37,P\n";
-        let table = parse_csv(csv).unwrap();
-        let last = &table[1];
+        let table = parse_finals2000a(FINALS_SAMPLE).unwrap();
+        let last = table.last().unwrap();
         assert!(!beyond_table(last.mjd_utc, last));
         assert!(!beyond_table(last.mjd_utc - 0.5, last));
         assert!(beyond_table(last.mjd_utc + 1e-9, last));
     }
 
-    #[test]
-    fn parse_retains_data_type() {
-        let text = "DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE\n\
-                    2024-01-10,60319,0.119289,0.206294,0.0074355,-0.0004170,-0.112002,-0.006175,0.000248,-0.000168,37,O\n\
-                    2024-01-11,60320,0.118000,0.207000,0.0075000,-0.0004000,-0.112000,-0.006100,0.000240,-0.000160,37,P\n";
-        let rows = parse_csv(text).unwrap();
-        assert!(rows[0].observed);
-        assert!(!rows[1].observed);
-    }
-
-    /// Check value against the IERS/CelesTrak values for 2021-09-07. The two
-    /// sources differ at the few-µs / 0.1 mas level (Bulletin A rapid vs the
-    /// final series), so the tolerances accept either; LOD differs more
-    /// between them (rapid vs final analysis) and is checked loosely.
+    /// Check values against the IERS values for 2021-09-07. The tolerances
+    /// accept the Bulletin A rapid values as well as the final series (they
+    /// differ at the few-µs / 0.1 mas level); LOD differs more between them
+    /// and is checked loosely.
     #[test]
     fn checkval() {
         let tm = crate::Instant::from_rfc3339("2006-04-16T17:52:50.805408Z").unwrap();

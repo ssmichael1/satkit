@@ -13,18 +13,26 @@ import satkit as sk
 
 def test_eop_coverage_bounds():
     cov = sk.frametransform.eop_coverage()
-    assert cov is not None, "an EOP file (finals2000A.all or EOP-All.csv) must be available for the test suite"
+    assert cov is not None, "an EOP file (finals2000A.all) must be available for the test suite"
     first, last_observed, last = cov
     assert isinstance(first, sk.time)
     assert first < last_observed <= last
-    # The table starts in 1973 (finals2000A.all) or 1962 (EOP-All.csv) and
-    # must cover a well-observed historical epoch.
-    assert first < sk.time(1974, 1, 1)
+    # finals2000A.all starts on 1973-01-02 and must cover a well-observed
+    # historical epoch.
+    assert first == sk.time(1973, 1, 2)
     assert last_observed > sk.time(2020, 1, 1)
 
 
-def test_eop_source():
-    assert sk.frametransform.eop_source() in ("finals2000A", "celestrak")
+def test_eop_source_is_deprecated():
+    with pytest.warns(DeprecationWarning):
+        assert sk.frametransform.eop_source() == "finals2000A"
+
+
+def test_ut1_is_utc_before_1973():
+    t = sk.time(1972, 6, 1, 12, 0, 0)
+    assert sk.frametransform.eop_status(t) == "before_table"
+    assert sk.frametransform.earth_orientation_params(t) is None
+    assert t.to_mjd(sk.timescale.UT1) == t.to_mjd(sk.timescale.UTC)
 
 
 def test_eop_status_values():

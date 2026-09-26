@@ -14,7 +14,6 @@ print(sk.__version__)
 print(sk.utils.datadir())               # where downloads are written
 print(sk.utils.data_search_dirs())      # where files are looked up, in order
 print(sk.utils.is_offline())            # downloads forbidden?
-print(sk.frametransform.eop_source())   # "finals2000A", "celestrak" or None
 print(sk.frametransform.eop_coverage()) # (first, last_observed, last) or None
 print(sk.spaceweather.coverage())       # (first, last_observed, last_daily, last) or None
 ```
@@ -50,7 +49,7 @@ raise instead of extrapolating. See [EOP coverage](datacoverage.md#eop-coverage)
 
 ### "Warning: no Earth Orientation Parameters (EOP) table is loaded"
 
-**Cause.** No `finals2000A.all` or `EOP-All.csv` is in any search directory
+**Cause.** No `finals2000A.all` is in any search directory
 and the first-use download failed (no network, `SATKIT_OFFLINE=1`, a proxy,
 a read-only data directory).
 
@@ -67,26 +66,20 @@ below cover the usual reasons.
 ### "Warning: EOP data not available for MJD UTC = … (too early)"
 
 ```
-Warning: EOP data not available for MJD UTC = 40000 (too early): the loaded table starts at 1973-01-02T00:00:00.000000Z (MJD 41684), and polar motion, UT1-UTC and nutation corrections are treated as zero before it.
-Refreshing the data files does not help: finals2000A.all (the default) starts at 1973-01-02. For 1962-1972, put CelesTrak's EOP-All.csv (https://celestrak.org/SpaceData/EOP-All.csv) in the data directory; ...
+Warning: EOP data not available for MJD UTC = 40000 (too early): the loaded table starts at 1973-01-02T00:00:00.000000Z (MJD 41684), and polar motion, UT1-UTC and nutation corrections are treated as zero (UT1 = UTC) before it.
+finals2000A.all has no EOP data before 1973-01-02; refreshing the data files does not change this.
 ```
 
 **Cause.** The epoch is before the start of the loaded EOP table. The IERS
-`finals2000A.all` file satkit downloads begins in **1973**; CelesTrak's
-`EOP-All.csv` reaches back to 1962, but it is only downloaded when both IERS
-mirrors are unreachable, so refreshing the data does not move the start of the
-table.
+`finals2000A.all` file begins on **1973-01-02**, so refreshing the data does
+not move the start of the table.
 
-**Fix.** For 1962–1972, place a copy of
-[`EOP-All.csv`](https://celestrak.org/SpaceData/EOP-All.csv) in
-`sk.utils.datadir()` (or any search directory) and restart the process. With
-both files present the table starts in 1962: satkit uses `finals2000A.all`
-and puts the CSV's pre-1973 rows in front of it (`eop_source()` still reports
-`"finals2000A"`). satkit has no EOP data before 1962; zeros are used there.
+**Impact.** Before 1973 polar motion and the celestial-pole offsets are zero
+and UT1 = UTC, as in ERFA when no EOP are supplied.
 
-If the warning names a start other than 1973-01-02 or 1962-01-01, the table
-was loaded by hand (`init_from_path` / `init_from_bytes`) or the file is
-truncated; it carries no advice line then.
+If the warning names a start other than 1973-01-02, the table was loaded by
+hand (`init_from_path` / `init_from_bytes`) or the file is truncated; it
+carries no advice line then.
 
 ### Space-weather warnings
 
@@ -128,11 +121,10 @@ ages from the day it was written.
 [below](#update_datafiles-says-no-request-made-how-do-i-force-a-refresh)).
 The fresh files go to `sk.utils.datadir()`. When several copies of one of
 these files exist across the search directories, satkit uses the one whose
-table runs latest (for `finals2000A.all` and `EOP-All.csv`, the latest
-observed row), so an old copy elsewhere does not shadow the refreshed one. The
-GFZ / SWPC / MSAFE files are also preferred over an older CelesTrak
-`SW-All.csv`, and `finals2000A.all` over `EOP-All.csv` (whose 1962–1972 rows
-are kept in front of it). See [Data Directories](datadirs.md).
+table runs latest (for `finals2000A.all`, the latest observed row), so an old
+copy elsewhere does not shadow the refreshed one. The GFZ / SWPC / MSAFE files
+are also preferred over an older CelesTrak `SW-All.csv`. See
+[Data Directories](datadirs.md).
 
 ## Data files and downloads
 
@@ -146,11 +138,7 @@ on Windows). Files are looked up across `sk.utils.data_search_dirs()` and used
 from the first directory that contains them — except the Earth-orientation and
 space-weather files, where the copy whose data runs latest is used, so a stale
 copy in an earlier directory (an `add_search_dir()` directory, the `satkit-data`
-bundle) does not shadow a refreshed one in `datadir()`. For Earth orientation,
-`finals2000A.all` is the table whenever it is present, with the 1962–1972 rows
-of an `EOP-All.csv` in front of it; `EOP-All.csv` alone is used only when there
-is no `finals2000A.all`. `sk.frametransform.eop_source()` says which file
-was loaded. Nothing is ever written inside `site-packages`. Full table: [Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
+bundle) does not shadow a refreshed one in `datadir()`. Nothing is ever written inside `site-packages`. Full table: [Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
 
 What needs no data directory at all: the IERS nutation tables and the EGM96 /
 EGM2008 / JGM-2 / JGM-3 gravity models are compiled in, so SGP4, time scales,
@@ -231,9 +219,8 @@ object every ~2 hours. A 403 can also come from a filtering proxy.
 saved copy with `sk.TLE.from_file(...)` / `sk.TLE.from_lines(...)` or
 `sk.omm_from_file(...)` / `sk.omm_from_text(...)`, re-fetching only when you
 need newer elements. satkit's own data refreshes do not contribute to this:
-they go to the IERS, GFZ, NOAA and NASA servers (CelesTrak only as the
-Earth-orientation fallback) and are rate-limited to each file's publication
-cadence.
+they go to the IERS, GFZ, NOAA and NASA servers and are rate-limited to each
+file's publication cadence.
 
 ### Running offline or air-gapped
 

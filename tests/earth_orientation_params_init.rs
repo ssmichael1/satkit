@@ -5,20 +5,16 @@
 use satkit::earth_orientation_params as eop;
 use satkit::utils::datadir;
 
-/// Either EOP file from the data directory (the IERS file first, as the
-/// loader prefers it).
+/// `finals2000A.all` from the data directory.
 fn eop_bytes() -> Option<Vec<u8>> {
-    let dir = datadir().ok()?;
-    [eop::FINALS2000A_FILE, eop::CELESTRAK_FILE]
-        .iter()
-        .find_map(|name| std::fs::read(dir.join(name)).ok())
+    std::fs::read(datadir().ok()?.join(eop::FINALS2000A_FILE)).ok()
 }
 
 #[test]
 fn init_from_bytes_replaces_and_query_works() {
     let Some(bytes) = eop_bytes() else {
         eprintln!(
-            "skipping: no EOP file (finals2000A.all / EOP-All.csv) in datadir(); \
+            "skipping: no EOP file (finals2000A.all) in datadir(); \
              run `python -m satkit.utils.update_datafiles` or set SATKIT_DATA"
         );
         return;
@@ -28,9 +24,7 @@ fn init_from_bytes_replaces_and_query_works() {
     eop::init_from_bytes(&bytes).expect("init_from_bytes should succeed on first call");
 
     // 2. Query against the just-installed records (known truth value from
-    //    the in-source test; the IERS and CelesTrak files agree to well
-    //    within the tolerance on UT1-UTC and polar motion, LOD less so).
-    assert!(eop::source().is_some());
+    //    the in-source test).
     let v = eop::eop_from_mjd_utc(59464.00).expect("EOP for MJD 59464");
     let truth: [f64; 3] = [-0.1145667, 0.241155, 0.317274];
     for (a, b) in v.iter().zip(truth.iter()) {
@@ -57,11 +51,10 @@ fn init_from_bytes_replaces_and_query_works() {
         eop::EopStatus::Extrapolated
     );
 
-    // 5. An empty table (header only) counts as *not loaded*: no coverage,
+    // 5. An empty table (no rows) counts as *not loaded*: no coverage,
     //    queries return None, and the propagator refuses to build its
     //    ephemeris table rather than run with zero EOP.
-    let header = b"DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE\n";
-    eop::init_from_bytes(header).expect("header-only init parses");
+    eop::init_from_bytes(b"\n").expect("an empty file parses");
     assert!(eop::coverage().is_none());
     assert_eq!(eop::status(&cov.first), eop::EopStatus::NotLoaded);
     assert!(eop::eop_from_mjd_utc(59464.00).is_none());
