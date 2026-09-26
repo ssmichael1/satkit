@@ -168,6 +168,6 @@ CASES = [
     _d("leo_300", "sw",    7.0e3, 8.0, gmat_accuracy=1e-13),  # 2.28 km / 2.64  1697 km  1.3e-3 (F10.7 timing; final 2.07 km)
     _d("sso_550", "const", 100.0, 0.12),   # 34.2 m   / 3.7e-2       19.2 km     1.8e-3 (LST, see README)
     _d("sso_550", "sw",    110.0, 0.12),   # 37.0 m   / 4.0e-2       28.0 km     1.3e-3 (F10.7 timing; final 18 m)
-    _d("gto_250", "const",  30.0, 2.5e-2), # 9.9 m    / 7.5e-3       106 km      5.5e-5 (final 5.9 m)
-    _d("gto_250", "sw",    1.0e3, 0.7),    # 307 m    / 0.23         132 km      2.3e-3 (F10.7 timing; final 113 m)
+    _d("gto_250", "const",  30.0, 2.5e-2), # 13.0 m   / 9.9e-3       106 km      7.3e-5 (final 7.7 m)
+    _d("gto_250", "sw",    1.0e3, 0.7),    # 274 m    / 0.21         132 km      2.1e-3 (F10.7 timing; final 93 m)
 ]

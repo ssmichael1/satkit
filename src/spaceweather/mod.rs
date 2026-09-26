@@ -434,6 +434,47 @@ static SPACE_WEATHER: RefreshableSingleton<Vec<SpaceWeatherRecord>> = Refreshabl
 static MONTHLY_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 static EXTRAP_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
 static NOT_LOADED_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+static DEFAULTS_WARNING_SHOWN: AtomicBool = AtomicBool::new(false);
+
+/// One-time warning that NRLMSISE-00 is running on its default F10.7
+/// (`f107`) and/or Ap (`ap`) at `tm` because the loaded table cannot supply
+/// it: before the table starts, or before 1947 in the GFZ record, which has
+/// Ap but no F10.7. Silent when no table is loaded at all, and for an Ap
+/// missing from a row that exists (a monthly predicted row): [`get`] has
+/// already reported both.
+pub(crate) fn warn_model_defaults(tm: &Instant, f107: bool, ap: bool) {
+    use std::sync::atomic::Ordering;
+    if !(f107 || ap) || DEFAULTS_WARNING_SHOWN.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(c) = coverage() else {
+        return;
+    };
+    let before = status_in(&c, *tm) == SpaceWeatherStatus::BeforeTable;
+    if !(f107 || before) || DEFAULTS_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let what = match (f107, ap) {
+        (true, true) => "F10.7 or Ap",
+        (true, false) => "F10.7",
+        _ => "Ap",
+    };
+    let reason = if before {
+        format!(
+            "the epoch is before the first row of the table, {}",
+            c.first
+        )
+    } else {
+        "the table has no measured F10.7 within three days of it and no 81-day average".to_string()
+    };
+    eprintln!(
+        "Warning: no {what} for {tm} in the space-weather table ({reason}); NRLMSISE-00 \
+         uses its default for it (F10.7 = F10.7A = 150, Ap = 4), which can be wrong by a \
+         factor of two in atmospheric density.\n\
+         To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
+         (Python: `satkit.spaceweather.disable_space_weather_time_warning()`)"
+    );
+}
 
 /// Initialize the space-weather singleton from an in-memory byte buffer.
 ///
@@ -482,10 +523,12 @@ fn ensure_default_loaded() {
 
 /// Disable the warnings about out-of-range or missing space-weather data.
 ///
-/// Three one-time warnings exist: an epoch past the daily predictions (only
+/// Four one-time warnings exist: an epoch past the daily predictions (only
 /// monthly F10.7, no geomagnetic data), an epoch past the end of the table,
-/// and no table loaded at all. Each is shown at most once per process; call
-/// this to suppress all of them.
+/// no table loaded at all, and an index NRLMSISE-00 has to take its default
+/// for (an epoch before the table starts, or before 1947, when F10.7 was not
+/// yet measured). Each is shown at most once per process; call this to
+/// suppress all of them.
 ///
 /// # Example
 ///
@@ -497,6 +540,7 @@ pub fn disable_space_weather_time_warning() {
     MONTHLY_WARNING_SHOWN.store(true, Ordering::Relaxed);
     EXTRAP_WARNING_SHOWN.store(true, Ordering::Relaxed);
     NOT_LOADED_WARNING_SHOWN.store(true, Ordering::Relaxed);
+    DEFAULTS_WARNING_SHOWN.store(true, Ordering::Relaxed);
 }
 
 /// Time bounds of the loaded space-weather table, or `None` if no table is

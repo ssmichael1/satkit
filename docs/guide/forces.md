@@ -21,7 +21,7 @@ The force model follows the treatment in [Montenbruck & Gill (2000)](references.
 | Earth gravity (spherical harmonics) | on | `gravity_degree`, `gravity_order`, `gravity_model` | $10^0$ m/s² |
 | Sun third-body | on | `use_sun_gravity` | $10^{-6}$ m/s² |
 | Moon third-body | on | `use_moon_gravity` | $10^{-6}$ m/s² |
-| Atmospheric drag (NRLMSISE-00) | when alt < 700 km | `use_spaceweather`, [`satproperties.cd_a_over_m`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
+| Atmospheric drag (NRLMSISE-00) | when alt < 1,000 km | `use_spaceweather`, [`satproperties.cd_a_over_m`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
 | Solar radiation pressure (cannonball) | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
 | Solar radiation pressure (ECOM, experimental — see [Empirical SRP: ECOM](ecom.md)) | when `ecom` is set | [`satproperties.ecom`](../api/satprop.md) | $10^{-7}$ m/s² (D0), $10^{-9}$ (Y, B) |
 | Solid Earth tides (IERS 2010 §6.2.1 Step 1) | on | `tide_model` | $10^{-7}$ m/s² |
@@ -83,7 +83,7 @@ Set with `tide_model`:
 
 ## Atmospheric Drag
 
-At altitudes below 700 km the residual atmosphere imposes a drag force:
+At altitudes below 1,000 km the residual atmosphere imposes a drag force:
 
 $$
 \vec{a}_\text{drag}~=~-\frac{1}{2}\,C_d\frac{A}{m}\,\rho\,|\vec{v}_r|\vec{v}_r
@@ -91,9 +91,9 @@ $$
 
 with $C_d$ the drag coefficient (typically 1.5–3; [Montenbruck & Gill 2000](references.md#montenbruck2000), §3.5), $A/m$ the area-to-mass ratio, $\rho$ the atmospheric density, and $\vec{v}_r$ the satellite velocity relative to the co-rotating atmosphere (assumed at rest in the Earth-fixed frame).
 
-Density comes from the [NRLMSISE-00](https://ccmc.gsfc.nasa.gov/models/NRLMSIS~00/) thermosphere model ([Picone et al. 2002](references.md#picone2002); a pure-Rust port of Dominik Brodowski's C implementation), which reads the space-weather indices from satkit's table (the GFZ Potsdam observed record, then the NOAA/SWPC 45-day and NASA MSAFE monthly forecasts — see [Data coverage](../getting-started/datacoverage.md#space-weather-coverage)) automatically, following the model's own interface: the observed F10.7 of the previous UTC day, the observed 81-day centred average F10.7A of the current day, and the 7-element 3-hourly geomagnetic history (the current day's daily Ap, the current 3-hourly ap and the three before it, and the 12–33 h and 36–57 h means — NRLMSISE-00 switch 9 = −1), which lets the density respond to a geomagnetic storm within hours rather than at the next UTC midnight. When that history cannot be assembled (a day missing from the table, or a monthly forecast row, whose single climatological Ap has no 3-hourly structure) the model falls back to the current day's daily Ap. Disable space-weather lookup with `use_spaceweather=False` to fall back to fixed nominal indices (F10.7 = F10.7A = 150, Ap = 4).
+Density comes from the [NRLMSISE-00](https://ccmc.gsfc.nasa.gov/models/NRLMSIS~00/) thermosphere model ([Picone et al. 2002](references.md#picone2002); a pure-Rust port of Dominik Brodowski's C implementation), which reads the space-weather indices from satkit's table (the GFZ Potsdam observed record, then the NOAA/SWPC 45-day and NASA MSAFE monthly forecasts — see [Data coverage](../getting-started/datacoverage.md#space-weather-coverage)) automatically, following the model's own interface: the observed F10.7 of the previous UTC day, the observed 81-day centred average F10.7A of the current day, and the 7-element 3-hourly geomagnetic history (the current day's daily Ap, the current 3-hourly ap and the three before it, and the 12–33 h and 36–57 h means — NRLMSISE-00 switch 9 = −1), which lets the density respond to a geomagnetic storm within hours rather than at the next UTC midnight. When that history cannot be assembled (a day missing from the table, or a monthly forecast row, whose single climatological Ap has no 3-hourly structure) the model falls back to the current day's daily Ap. Each index stands on its own: a day missing its F10.7 in the observed record takes the most recent measured flux up to three days back (else the 81-day average) and keeps its Ap; only an index the table cannot supply at all — before the table starts, or F10.7 before 1947 — takes the nominal value below, with a one-time warning. Disable space-weather lookup with `use_spaceweather=False` to fall back to fixed nominal indices (F10.7 = F10.7A = 150, Ap = 4).
 
-Drag is skipped above 700 km regardless of settings.
+Drag is skipped more than 1,000 km above the equatorial radius — the upper limit of NRLMSISE-00's validity — regardless of settings. (Before 0.24 the cutoff was 700 km.)
 
 ## Solar Radiation Pressure
 

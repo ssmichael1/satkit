@@ -87,6 +87,7 @@ they used to return a meaningless value:
 | `lambert(...)` with a NaN or infinite input | "convergence failure" `ValueError` or NaN | `ValueError` naming the input |
 | `kepler.from_pv(<NaN or inf>)` | NaN elements | `ValueError` |
 | `kepler.propagate(nan)`, `kepler.propagate(inf)` | unchanged or a garbage anomaly | `ValueError` |
+| `density.nrlmsise(..., <not a time>)` (a `str`, a number, ...) | ignored: ran on the default indices | `TypeError` |
 
 Some calls that raised now work: `gravity([7e6, 0, 0])` and integer arrays,
 `time - [t1, t2]` (an array of `duration`), and batch state transforms given
@@ -177,6 +178,22 @@ integer arrays or nested lists.
   `rotation_approx`) no longer includes a stray 0.3–0.6″ polar-motion
   rotation (~19 m at LEO). **Do this:** expect small differences from 0.23
   results.
+
+- **Drag is applied up to 1,000 km altitude** (above the equatorial
+  radius), the upper limit of NRLMSISE-00; through 0.23 it stopped at 700 km.
+  Orbits that reach 700–1,000 km (high LEO, the perigee passes of GTO and
+  Molniya orbits) now feel drag there too. **Do this:** expect different
+  results for those orbits.
+- **Density on the day after a missing F10.7 is no longer on the quiet-time
+  defaults.** The observed record has a few days without a measured flux
+  (e.g. 2025-02-12, 2025-02-17, 2026-05-09); on the following day 0.23
+  dropped the whole space-weather input (F10.7 = F10.7A = 150, Ap = 4, up to
+  39 % low in density). The flux now comes from the nearest earlier measured
+  day and the measured Ap is kept. Before 1947, when there is Ap but no F10.7,
+  the measured Ap is now used too.
+- **`density.nrlmsise()` uses a `datetime.datetime` time and integer
+  angles.** Through 0.23 a `datetime` was silently ignored (defaults, up to
+  8× low in a storm) and an `int` latitude or longitude was read as 0.
 
 ## Rust API
 

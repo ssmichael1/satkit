@@ -34,12 +34,14 @@ def get(time: TimeScalar) -> dict:
             * ``f10p7_adj`` (float) — F10.7 adjusted to 1 AU, sfu
             * ``f10p7_obs_c81`` / ``f10p7_obs_l81`` (float) — 81-day centered / last-81-day observed averages, sfu
             * ``f10p7_adj_c81`` / ``f10p7_adj_l81`` (float) — 81-day centered / last-81-day adjusted averages, sfu
-            * ``isn`` (int) — international sunspot number
+            * ``isn`` (int) — international sunspot number; ``-1`` throughout the
+              default table (GFZ's sunspot number is CC BY-NC and not ingested)
             * ``cp`` (float) — planetary daily character figure
             * ``c9`` (int) — Cp scaled to [0, 9]
             * ``bsrn`` (int) — Bartels solar rotation number
             * ``nd`` (int) — day within the Bartels rotation
-            * ``data_type`` (str) — provenance: ``"OBS"`` measured, ``"INT"``
+            * ``data_type`` (str) — provenance: ``"OBS"`` measured and
+              definitive, ``"OBS-P"`` measured but still preliminary, ``"INT"``
               interpolated, ``"PRD"`` daily prediction, ``"PRM"`` monthly
               prediction, ``""`` unknown
 
@@ -121,8 +123,10 @@ def status(time: TimeScalar) -> str:
 def disable_space_weather_time_warning() -> None:
     """Disable the warnings about out-of-range or missing space-weather data
 
-    Three one-time warnings exist: an epoch past the daily predictions, an
-    epoch past the end of the table, and no table loaded at all. Each is shown
-    at most once per process; this suppresses all of them.
+    Four one-time warnings exist: an epoch past the daily predictions, an
+    epoch past the end of the table, no table loaded at all, and an index
+    NRLMSISE-00 has to take its default for (an epoch before the table starts,
+    or F10.7 before 1947). Each is shown at most once per process; this
+    suppresses all of them.
     """
     ...

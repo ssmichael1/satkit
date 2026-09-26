@@ -14,7 +14,9 @@ use std::collections::BTreeMap;
 
 /// `24Sep26` → 2026-09-24.
 fn parse_date(s: &str) -> Option<Instant> {
-    if s.len() != 7 {
+    // Byte slicing below needs ASCII: a multi-byte character would put a
+    // slice boundary inside it and panic.
+    if s.len() != 7 || !s.is_ascii() {
         return None;
     }
     let day: i32 = s[0..2].parse().ok()?;
@@ -127,5 +129,9 @@ FORECASTER:  AUTOMATED - SWPC Forecasting System
         assert_eq!(parse_date("24Sep26"), Instant::from_date(2026, 9, 24).ok());
         assert_eq!(parse_date("01Jan27"), Instant::from_date(2027, 1, 1).ok());
         assert_eq!(parse_date("bogus"), None);
+        // Seven bytes with a multi-byte character across a slice boundary.
+        assert_eq!(parse_date("1\u{e9}Sep2"), None);
+        assert_eq!(parse_date("26Se\u{e9}6"), None);
+        assert!(parse("45-DAY AP FORECAST\n26Sep26 012 26Se\u{e9}6 012\n").is_err());
     }
 }
