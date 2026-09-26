@@ -263,52 +263,20 @@ impl PartialOrd<Instant> for SpaceWeatherRecord {
     }
 }
 
-/// Of several copies of one space-weather file, the one whose last record
-/// is latest (ties keep the earlier copy in `copies`, i.e. search order).
-/// Copies that cannot be read or parsed are skipped; if none can, the first
-/// copy is returned so the load reports its error. With one copy nothing is
-/// parsed.
-///
-/// A read-only copy in a search directory ahead of the write location (an
-/// `add_search_dir` directory, `<dylib>/satkit-data`, the `satkit-data`
-/// bundle) would otherwise shadow every later download: [`path_for`]
-/// returns the first match. The Earth-orientation loader makes the same
-/// choice between its two files by their last observed row.
-///
-/// [`path_for`]: crate::utils::datadir::path_for
-fn freshest_of(
-    copies: Vec<std::path::PathBuf>,
-    last_day: impl Fn(&str) -> Option<i64>,
-) -> Option<std::path::PathBuf> {
-    if copies.len() <= 1 {
-        return copies.into_iter().next();
-    }
-    let mut best: Option<(i64, &std::path::PathBuf)> = None;
-    for p in &copies {
-        let Some(day) = std::fs::read_to_string(p).ok().and_then(|t| last_day(&t)) else {
-            continue;
-        };
-        if best.is_none_or(|(d, _)| day > d) {
-            best = Some((day, p));
-        }
-    }
-    best.map(|(_, p)| p.clone())
-        .or_else(|| copies.into_iter().next())
-}
-
-/// UTC day number of the last row of a parsed file, for [`freshest_of`].
+/// UTC day number of the last row of a parsed file, for
+/// [`datadir::freshest_of`].
 fn last_row_day(rows: &[SpaceWeatherRecord]) -> Option<i64> {
     rows.last().map(|r| r.date.utc_day_number())
 }
 
 /// The path to read `name` from — the freshest copy across the search
-/// directories (see [`freshest_of`]) — or, when there is none, where it
+/// directories (see [`datadir::freshest_of`]) — or, when there is none, where it
 /// would be written.
 fn freshest_path_for(
     name: &str,
     last_day: impl Fn(&str) -> Option<i64>,
 ) -> Result<std::path::PathBuf> {
-    match freshest_of(datadir::find_all(name), last_day) {
+    match datadir::freshest_of(datadir::find_all(name), last_day) {
         Some(p) => Ok(p),
         None => Ok(datadir()?.join(name)),
     }
@@ -724,38 +692,6 @@ pub fn update() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A stale copy earlier in the search order must not shadow a fresher
-    /// one later in it; ties and unparseable copies fall back to order.
-    #[test]
-    fn freshest_of_prefers_latest_last_row() {
-        let dir = std::env::temp_dir().join(format!("satkit_sw_fresh_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let (a, b, c) = (dir.join("a"), dir.join("b"), dir.join("c"));
-        for d in [&a, &b, &c] {
-            std::fs::create_dir_all(d).unwrap();
-        }
-        // "File content" is just the last day number in these tests.
-        std::fs::write(a.join("f"), "100").unwrap(); // stale, first in order
-        std::fs::write(b.join("f"), "200").unwrap(); // fresh
-        std::fs::write(c.join("f"), "garbage").unwrap();
-        let parse = |t: &str| t.trim().parse::<i64>().ok();
-        let paths = |ds: &[&std::path::PathBuf]| ds.iter().map(|d| d.join("f")).collect();
-
-        assert_eq!(freshest_of(paths(&[&a, &b]), parse), Some(b.join("f")));
-        assert_eq!(freshest_of(paths(&[&b, &a]), parse), Some(b.join("f")));
-        assert_eq!(freshest_of(paths(&[&c, &a]), parse), Some(a.join("f")));
-        // Single copy: returned as is, even if it would not parse.
-        assert_eq!(freshest_of(paths(&[&c]), parse), Some(c.join("f")));
-        // Nothing parses: first copy, so the load reports the real error.
-        std::fs::write(a.join("f"), "junk").unwrap();
-        assert_eq!(freshest_of(paths(&[&a, &c]), parse), Some(a.join("f")));
-        // Tie: search order wins.
-        std::fs::write(a.join("f"), "200").unwrap();
-        assert_eq!(freshest_of(paths(&[&a, &b]), parse), Some(a.join("f")));
-        assert_eq!(freshest_of(Vec::new(), parse), None);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 
     #[test]
     fn test_load() {

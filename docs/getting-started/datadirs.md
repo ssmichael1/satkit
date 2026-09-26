@@ -20,7 +20,7 @@ Two separate questions. Files are **looked up** across an ordered list of direct
 | 8 | `/usr/share/satkit-data` (system-wide, read only) | ✓ | ✓ | — |
 | 9 | `/Library/Application Support/satkit-data` (system-wide, read only) | ✓ | — | — |
 
-A file is used from the first directory that contains it. The ephemeris is also auto-detected across all of them (highest DE version wins). satkit never creates a directory next to its own shared library or inside `site-packages` — such a directory is often not writable and is wiped on reinstall.
+A file is used from the first directory that contains it, except the refreshed Earth-orientation and space-weather files: of several copies of one of those, satkit reads the copy whose data runs latest (for `finals2000A.all` and `EOP-All.csv`, the latest *observed* row), so a stale copy in an earlier directory — an `add_search_dir()` directory or the `satkit-data` bundle — cannot shadow a fresh download in the write location. Between the two Earth-orientation files, `finals2000A.all` is always the table when it is present anywhere, with the 1962–1972 rows of an `EOP-All.csv` kept in front of it; `EOP-All.csv` alone is the table only when there is no `finals2000A.all` (`satkit.frametransform.eop_source()` says which). The ephemeris is also auto-detected across all of them (highest DE version wins). satkit never creates a directory next to its own shared library or inside `site-packages` — such a directory is often not writable and is wiped on reinstall.
 
 ## Environment variables and API
 

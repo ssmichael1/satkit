@@ -239,6 +239,59 @@ pub(crate) fn clear_offline_override() {
     OFFLINE_OVERRIDE.store(0, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Run the calling test in a child process of the test binary (test
+/// helper). Returns `true` in the child, where the test body should run, and
+/// `false` in the parent once the child has passed (it panics if the child
+/// fails), so a test starts with
+///
+/// ```ignore
+/// if !download::in_own_process(module_path!(), "this_test_name") {
+///     return;
+/// }
+/// ```
+///
+/// For the tests that flip process-global offline state ([`set_offline`],
+/// [`clear_offline_override`], [`OFFLINE_ENV`]). A lock shared between those
+/// tests only orders them against each other; any other test that lazily
+/// loads a data singleton (EOP, space weather, the ephemeris) in the same
+/// process could still observe a transient offline or online state, and
+/// fail or download. In a child process the toggles cannot leak.
+///
+/// The parent re-runs the binary filtered to exactly this test with a
+/// marker variable set; the child sees the marker.
+#[cfg(test)]
+pub(crate) fn in_own_process(module: &str, test: &str) -> bool {
+    const CHILD_ENV: &str = "SATKIT_TEST_IN_OWN_PROCESS";
+    // libtest names omit the crate: "utils::update_data::tests::name".
+    let name = match module.split_once("::") {
+        Some((_, rest)) => format!("{rest}::{test}"),
+        None => test.to_string(),
+    };
+    if std::env::var(CHILD_ENV).as_deref() == Ok(name.as_str()) {
+        return true;
+    }
+    // Hold the environment lock while spawning and waiting: the child
+    // inherits this process's environment, and another test may hold a
+    // variable such as SATKIT_DATA_URL or SATKIT_OFFLINE set temporarily.
+    let _env = crate::utils::manifest::ENV_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let exe = std::env::current_exe().expect("path of the test binary");
+    let out = std::process::Command::new(exe)
+        .args([name.as_str(), "--exact", "--test-threads=1", "--nocapture"])
+        .env(CHILD_ENV, &name)
+        .output()
+        .expect("re-run the test binary");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && stdout.contains(" 1 passed"),
+        "{name} failed in its own process ({})\n--- stdout\n{stdout}\n--- stderr\n{stderr}",
+        out.status
+    );
+    false
+}
+
 /// The manifest URLs for `name`, for error messages (empty if not pinned).
 fn manifest_urls(name: &str) -> Vec<String> {
     crate::utils::manifest::embedded()

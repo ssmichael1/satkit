@@ -9,8 +9,9 @@
 //!
 //! # Sources
 //!
-//! Two on-disk formats are read, and the loader uses whichever is fresher
-//! (later last *observed* row) when both are present in the data directories:
+//! Two on-disk formats are read. When `finals2000A.all` is present in the
+//! data directories it is always the table; `EOP-All.csv` is the table only
+//! when there is no `finals2000A.all`:
 //!
 //! * **`finals2000A.all`** — the IERS Rapid Service / Prediction Centre's
 //!   Bulletin A combined file: observed values from 1973 plus about a year of
@@ -22,9 +23,13 @@
 //!   reaches back to 1962 and carries about six months of predictions. It is
 //!   the fallback when both IERS mirrors are unreachable, and it is still read
 //!   when present (a hand-provisioned data directory, the `satkit-data`
-//!   bundle). When `finals2000A.all` is the fresher table and an `EOP-All.csv`
-//!   is also present, the CSV's rows before 1973 are kept so 1962–1972
-//!   coverage is not lost.
+//!   bundle). Next to a `finals2000A.all` only its rows before 1973 are used,
+//!   in front of the IERS table, so 1962–1972 coverage is not lost.
+//!
+//! When a file has copies in more than one search directory, the copy with
+//! the latest last observed row is read, so a stale copy in an earlier
+//! directory (an `add_search_dir` directory, the `satkit-data` bundle) does
+//! not shadow a fresh download in the write location.
 //!
 //! The source order lives in the embedded data manifest (`data/manifest.json`,
 //! `eop` section); [`source`] reports which file the loaded table came from.
@@ -388,10 +393,16 @@ fn last_observed_mjd(rows: &[EOPEntry]) -> f64 {
         .map_or(f64::NEG_INFINITY, |e| e.mjd_utc)
 }
 
-/// Choose between the two tables that may be on disk: the one whose
-/// observed record runs later wins (ties go to the IERS file). When the IERS
-/// file wins and a CelesTrak table is also present, the CelesTrak rows
-/// before the IERS file's first row (1962–1972) are kept in front of it.
+/// Assemble the table from the two files that may be on disk. A non-empty
+/// IERS `finals2000A.all` is always the table, with the CelesTrak rows before
+/// its first row (1962–1972) kept in front when an `EOP-All.csv` is also
+/// present; the CelesTrak table is used on its own only when there is no
+/// IERS table.
+///
+/// The IERS file wins even when the CSV's observed record runs a day
+/// longer (CelesTrak flags one more day as observed): it carries about a
+/// year of predictions to CelesTrak's six months, and a truly stale file is
+/// reported by the "EOP data ends at …" warning.
 fn select_table(finals: Option<Vec<EOPEntry>>, csv: Option<Vec<EOPEntry>>) -> Option<EopTable> {
     let finals = finals.filter(|r| !r.is_empty());
     let csv = csv.filter(|r| !r.is_empty());
@@ -406,12 +417,6 @@ fn select_table(finals: Option<Vec<EOPEntry>>, csv: Option<Vec<EOPEntry>>) -> Op
             source: EopSource::CelesTrak,
         }),
         (Some(finals), Some(csv)) => {
-            if last_observed_mjd(&csv) > last_observed_mjd(&finals) {
-                return Some(EopTable {
-                    entries: csv,
-                    source: EopSource::CelesTrak,
-                });
-            }
             let first = finals[0].mjd_utc;
             let mut entries: Vec<EOPEntry> =
                 csv.into_iter().filter(|e| e.mjd_utc < first).collect();
@@ -470,11 +475,25 @@ pub fn load_from_dir(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Lazy default load: the two files as found in the data search
-/// directories; when neither exists, refresh into the write location first.
+/// The freshest copy of the EOP file `name` in `dirs`: the one whose last
+/// observed row is latest (ties keep search order; see
+/// [`datadir::freshest_of`]).
+fn freshest_copy(dirs: &[PathBuf], name: &str) -> Option<PathBuf> {
+    datadir::freshest_of(datadir::find_all_in(dirs, name), |text| {
+        parse_any(text)
+            .ok()
+            .filter(|t| !t.entries.is_empty())
+            .map(|t| last_observed_mjd(&t.entries))
+    })
+}
+
+/// Lazy default load: the freshest copy of each of the two files across the
+/// data search directories; when neither exists, refresh into the write
+/// location first.
 fn load_default() -> Result<EopTable> {
-    let mut finals = datadir::find_file(FINALS2000A_FILE);
-    let mut csv = datadir::find_file(CELESTRAK_FILE);
+    let dirs = datadir::search_dirs();
+    let mut finals = freshest_copy(&dirs, FINALS2000A_FILE);
+    let mut csv = freshest_copy(&dirs, CELESTRAK_FILE);
     if finals.is_none() && csv.is_none() {
         let dir = datadir::datadir()?;
         refresh_into(&dir, false)?;
@@ -560,6 +579,35 @@ pub(crate) fn refresh_into_with_sources(
         attempts,
         hint: None,
     })
+}
+
+/// MJD of the first row of `finals2000A.all` (1973-01-02).
+const FINALS_FIRST_MJD: f64 = 41684.0;
+/// MJD of the first row of CelesTrak's `EOP-All.csv` (1962-01-01), the
+/// start of the IERS EOP series.
+const SERIES_FIRST_MJD: f64 = 37665.0;
+
+/// The advice line (with its newline, or empty) of the "too early" warning
+/// for a table of `source` starting at `first_mjd`.
+///
+/// Only a table that starts exactly where the default file does — a
+/// `finals2000A.all` with no CelesTrak rows in front — gets the advice to
+/// add `EOP-All.csv`; a table starting at the beginning of the series gets
+/// the note that nothing earlier exists; any other start (a table loaded
+/// with [`init_from_path`] / [`init_from_bytes`], a truncated file) gets no
+/// advice, since the warning already says where the loaded table starts.
+fn too_early_advice(source: Option<EopSource>, first_mjd: f64) -> &'static str {
+    if source == Some(EopSource::IersFinals2000A) && first_mjd == FINALS_FIRST_MJD {
+        "Refreshing the data files does not help: finals2000A.all (the default) starts \
+         at 1973-01-02. For 1962-1972, put CelesTrak's EOP-All.csv \
+         (https://celestrak.org/SpaceData/EOP-All.csv) in the data directory; its \
+         pre-1973 rows are used in front of finals2000A.all. There is no EOP series \
+         before 1962.\n"
+    } else if first_mjd <= SERIES_FIRST_MJD {
+        "There is no EOP series before 1962.\n"
+    } else {
+        ""
+    }
 }
 
 /// `true` when `mjd_utc` lies strictly after the last table row; a query at
@@ -648,9 +696,14 @@ pub fn coverage() -> Option<EopCoverage> {
 }
 
 /// Which file the loaded EOP table came from, or `None` if no table is
-/// loaded. A table assembled from both files (IERS rows with the
-/// CelesTrak file's pre-1973 history in front) reports
-/// [`EopSource::IersFinals2000A`].
+/// loaded.
+///
+/// For the default load this is [`EopSource::IersFinals2000A`] whenever a
+/// `finals2000A.all` is in the data directories — including a table
+/// assembled from both files (IERS rows with the CelesTrak file's pre-1973
+/// history in front) — and [`EopSource::CelesTrak`] only when `EOP-All.csv`
+/// is the sole EOP file. After [`init_from_bytes`] / [`init_from_path`] it is
+/// the format of the data given.
 pub fn source() -> Option<EopSource> {
     ensure_default_loaded();
     let guard = EOP.read();
@@ -766,26 +819,17 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 
     if idx == 0 {
         if !WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            // finals2000A.all starts at 1973-01-02 (MJD 41684); only
-            // CelesTrak's EOP-All.csv reaches back to 1962.
-            let advice = if eop[0].mjd_utc >= 41684.0 {
-                "Refreshing the data files does not help: finals2000A.all (the default) starts \
-                 at 1973-01-02. For 1962-1972, put CelesTrak's EOP-All.csv \
-                 (https://celestrak.org/SpaceData/EOP-All.csv) in the data directory; its \
-                 pre-1973 rows are used in front of finals2000A.all. There is no EOP series \
-                 before 1962."
-            } else {
-                "There is no EOP series before 1962."
-            };
+            let source = guard.as_ref().map(|t| t.source);
             eprintln!(
                 "Warning: EOP data not available for MJD UTC = {mjd_utc} (too early): the \
                  loaded table starts at {} (MJD {}), and polar motion, UT1-UTC and nutation \
                  corrections are treated as zero before it.\n\
-                 {advice}\n\
+                 {}\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
                  (Python: `satkit.frametransform.disable_eop_time_warning()`)",
                 Instant::from_mjd_utc(eop[0].mjd_utc),
-                eop[0].mjd_utc
+                eop[0].mjd_utc,
+                too_early_advice(source, eop[0].mjd_utc)
             );
         }
         return None;
@@ -1007,7 +1051,7 @@ mod tests {
     }
 
     #[test]
-    fn fresher_table_wins_and_history_is_kept() {
+    fn finals_always_wins_and_history_is_kept() {
         let finals = parse_finals2000a(FINALS_SAMPLE).unwrap();
         let csv = parse_csv(CSV_SAMPLE).unwrap();
 
@@ -1022,7 +1066,8 @@ mod tests {
         );
         assert!(mjds.windows(2).all(|w| w[0] < w[1]));
 
-        // A CSV observed later than the finals file wins outright.
+        // A CSV observed later than the finals file (CelesTrak flags one
+        // more day observed) still only contributes its pre-1973 rows.
         let mut newer = csv.clone();
         newer.push(EOPEntry {
             mjd_utc: 61400.0,
@@ -1030,8 +1075,9 @@ mod tests {
             ..csv[4].clone()
         });
         let t = select_table(Some(finals.clone()), Some(newer)).unwrap();
-        assert_eq!(t.source, EopSource::CelesTrak);
-        assert_eq!(t.entries.len(), 6);
+        assert_eq!(t.source, EopSource::IersFinals2000A);
+        assert_eq!(t.entries.len(), 7);
+        assert_eq!(t.entries.last().unwrap().mjd_utc, 61673.0);
 
         // Only one file present.
         assert_eq!(
@@ -1051,12 +1097,12 @@ mod tests {
         assert!(select_table(None, None).is_none());
     }
 
-    /// The on-disk loader: both files present picks the fresher observed
-    /// record (with the CSV's early rows kept), one file present uses it, a
-    /// corrupt file is skipped with a warning, and an empty directory is a
-    /// typed error. Nothing here touches the loaded table.
+    /// The on-disk loader: both files present uses finals2000A.all (with
+    /// the CSV's early rows kept), one file present uses it, a corrupt file
+    /// is skipped with a warning, and an empty directory is a typed error.
+    /// Nothing here touches the loaded table.
     #[test]
-    fn load_from_paths_picks_the_fresher_file() {
+    fn load_from_paths_prefers_finals() {
         let dir = std::env::temp_dir().join(format!("satkit_eop_load_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -1086,6 +1132,87 @@ mod tests {
         assert!(load_from_paths(existing(finals), existing(csv)).is_none());
         assert!(matches!(load_from_dir(&dir), Err(Error::NoEopFile { .. })));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A stale copy of `finals2000A.all` in an earlier search directory (an
+    /// `add_search_dir` directory, the `satkit-data` bundle) must not shadow
+    /// the fresh copy in a later one (the write location): the default load
+    /// reads the copy with the latest observed row. Same for `EOP-All.csv`.
+    #[test]
+    fn stale_copy_in_earlier_search_dir_does_not_shadow_fresh_one() {
+        let root = std::env::temp_dir().join(format!("satkit_eop_shadow_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (early, late) = (root.join("bundle"), root.join("write"));
+        std::fs::create_dir_all(&early).unwrap();
+        std::fs::create_dir_all(&late).unwrap();
+        // Stale: the file truncated after its 1992 row.
+        let stale: String = FINALS_SAMPLE
+            .lines()
+            .take(2)
+            .map(|l| format!("{l}\n"))
+            .collect();
+        std::fs::write(early.join(FINALS2000A_FILE), &stale).unwrap();
+        std::fs::write(late.join(FINALS2000A_FILE), FINALS_SAMPLE).unwrap();
+        let stale_csv: String = CSV_SAMPLE
+            .lines()
+            .take(3)
+            .map(|l| format!("{l}\n"))
+            .collect();
+        std::fs::write(early.join(CELESTRAK_FILE), &stale_csv).unwrap();
+        std::fs::write(late.join(CELESTRAK_FILE), CSV_SAMPLE).unwrap();
+        let dirs = vec![early.clone(), late.clone()];
+
+        // First-match lookup (the old behaviour) would read the stale copy.
+        assert_eq!(
+            datadir::find_all_in(&dirs, FINALS2000A_FILE)[0],
+            early.join(FINALS2000A_FILE)
+        );
+        let finals = freshest_copy(&dirs, FINALS2000A_FILE);
+        assert_eq!(
+            finals.as_deref(),
+            Some(late.join(FINALS2000A_FILE).as_path())
+        );
+        let csv = freshest_copy(&dirs, CELESTRAK_FILE);
+        assert_eq!(csv.as_deref(), Some(late.join(CELESTRAK_FILE).as_path()));
+        let t = load_from_paths(finals, csv).unwrap();
+        assert_eq!(t.source, EopSource::IersFinals2000A);
+        assert_eq!(last_observed_mjd(&t.entries), 61300.0);
+        assert_eq!(t.entries.first().unwrap().mjd_utc, 37665.0);
+
+        // Reversed search order: the fresh copy still wins.
+        let dirs = vec![late.clone(), early.clone()];
+        assert_eq!(
+            freshest_copy(&dirs, FINALS2000A_FILE).as_deref(),
+            Some(late.join(FINALS2000A_FILE).as_path())
+        );
+        // A corrupt copy is passed over for a readable one.
+        std::fs::write(early.join(FINALS2000A_FILE), "73 1 2 41684.00 X garbage\n").unwrap();
+        let dirs = vec![early.clone(), late.clone()];
+        assert_eq!(
+            freshest_copy(&dirs, FINALS2000A_FILE).as_deref(),
+            Some(late.join(FINALS2000A_FILE).as_path())
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The "too early" warning advises adding `EOP-All.csv` only for a table
+    /// that starts where the default `finals2000A.all` does; a custom or
+    /// truncated table just gets its start (in the main message).
+    #[test]
+    fn too_early_advice_only_for_the_default_file() {
+        let fin = Some(EopSource::IersFinals2000A);
+        let csv = Some(EopSource::CelesTrak);
+        assert!(too_early_advice(fin, FINALS_FIRST_MJD).contains("EOP-All.csv"));
+        assert!(!too_early_advice(csv, FINALS_FIRST_MJD).contains("EOP-All.csv"));
+        assert!(!too_early_advice(fin, 50000.0).contains("EOP-All.csv"));
+        assert_eq!(too_early_advice(fin, 50000.0), "");
+        assert_eq!(too_early_advice(csv, 59000.0), "");
+        for s in [fin, csv] {
+            assert_eq!(
+                too_early_advice(s, SERIES_FIRST_MJD),
+                "There is no EOP series before 1962.\n"
+            );
+        }
     }
 
     #[test]
