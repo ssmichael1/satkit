@@ -450,7 +450,9 @@ impl JPLEphem {
         }
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if let Some(entry) = crate::utils::manifest::embedded().entry(name) {
-            diag::info!(
+            // A warning, not info: the download is large and the first query
+            // otherwise pauses with no explanation in unconfigured Python.
+            diag::warn!(
                 "downloading the JPL ephemeris {name} ({:.0} MB) to {} \
                  (SHA-256 verified). Set SATKIT_JPLEPHEM_FILE to use another file, \
                  SATKIT_DATA_URL to fetch from a mirror, or SATKIT_OFFLINE=1 to forbid downloads.",

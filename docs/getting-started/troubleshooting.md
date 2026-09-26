@@ -124,10 +124,10 @@ logging.getLogger("satkit.spaceweather").setLevel(logging.ERROR)
 
 To send them elsewhere, configure logging as usual, e.g.
 `logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")` or a
-handler on the `satkit` logger. Informational notices (such as the one
-announcing the first-use JPL ephemeris download) are logged at INFO, so they
-appear only when logging is configured at that level:
-`logging.basicConfig(level=logging.INFO)`.
+handler on the `satkit` logger. The first-use JPL ephemeris download is
+announced as a warning, so it shows by default; the per-file "Downloading …"
+notices from `utils.download_file` are logged at INFO and appear only when
+logging is configured at that level: `logging.basicConfig(level=logging.INFO)`.
 
 **Rust.** The records go through the [`log`](https://docs.rs/log) facade with
 the module path as target. With no logger installed they are printed to
@@ -189,8 +189,8 @@ The first call that needs the JPL ephemeris downloads it (DE440, 102 MB,
 SHA-256 verified), once. Run `sk.utils.update_datafiles()` to take the hit up
 front, or set `SATKIT_JPLEPHEM_FILE=lnxp1900p2053.421` for the 14 MB DE421
 (1900–2053). See [Selecting a JPL ephemeris file](datadirs.md#selecting-a-jpl-ephemeris-file).
-In Python the download is announced at INFO level, so it is shown only with
-logging configured for it (see [Warnings and logging](#warnings-and-logging-how-do-i-silence-or-redirect-these-warnings)).
+The download is announced with a warning on the `satkit.jplephem` logger, so it
+is shown by default (see [Warnings and logging](#warnings-and-logging-how-do-i-silence-or-redirect-these-warnings)).
 
 ### `update_datafiles()` says "no request made" — how do I force a refresh?
 
