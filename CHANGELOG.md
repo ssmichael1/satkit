@@ -10,6 +10,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 
 - Python `moon.pos_mod` (mean-of-date Moon position), mirroring `sun.pos_mod` ([#254](https://github.com/ssmichael1/satkit/pull/254))
 - Warnings go through the Rust `log` facade and, in Python, the `logging` module (`satkit.*` loggers); with no logger installed Rust still prints them to stderr ([#262](https://github.com/ssmichael1/satkit/pull/262))
+- The first-use JPL ephemeris download is announced as a warning, so it shows by default in Python ([#265](https://github.com/ssmichael1/satkit/pull/265))
 - Every Python function that takes times accepts `numpy.datetime64` scalars and 1-D arrays of any unit, read as UTC; `quaternion * Nx3` and `sgp4` no longer copy their output arrays ([#263](https://github.com/ssmichael1/satkit/pull/263))
 
 ### Changed
