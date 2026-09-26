@@ -13,8 +13,8 @@ use thiserror::Error;
 
 /// Errors produced by the [`lpephem`](crate::lpephem) module.
 ///
-/// Shared across the [`sun`] and `planets` submodules; [`moon`] does
-/// not currently surface fallible operations.
+/// Shared across the [`sun`] and `planets` submodules; [`moon`] has its
+/// own [`moon::Error`].
 #[derive(Debug, Error)]
 pub enum Error {
     /// Returned by [`sun::riseset`] when the sun does not rise or set on

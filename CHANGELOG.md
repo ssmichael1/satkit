@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Added
+
+- Moonrise / moonset (`moon::riseset`, Python `moon.rise_set`: upper limb with refraction, `None` on days without the event) and principal Moon phase times (`moon::phase_times` / `next_phase`), built-in analytic or `use_jpl` ([#270](https://github.com/ssmichael1/satkit/pull/270))
+
 ### Fixed
 
 - `sun.rise_set` iterates Algorithm 30 at the event and adds nutation and solar parallax: within 3 s of Skyfield up to 65° latitude (was up to 35 s); clearer polar day/night error; horizon (sea level), dip and UT1 documented ([#268](https://github.com/ssmichael1/satkit/pull/268))
