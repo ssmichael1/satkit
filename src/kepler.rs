@@ -20,7 +20,9 @@ pub enum Error {
 
     /// Returned by [`Kepler::try_new`] and [`Kepler::validate`] for an
     /// element outside its domain: a non-finite value, `a <= 0`, `eccen`
-    /// outside `[0, 1)`, `incl` outside `[0, π]`, or `mu <= 0`.
+    /// outside `[0, 1)`, `incl` outside `[0, π]`, or `mu <= 0`; and by
+    /// [`Kepler::from_pv`] for a non-finite position (`name` = `"r"`) or
+    /// velocity (`"v"`), or a non-finite or non-positive `mu`.
     #[error("invalid Keplerian element {name} = {value}: {reason}")]
     #[non_exhaustive]
     InvalidElement {
@@ -129,6 +131,17 @@ fn check(name: &'static str, value: f64, ok: bool, reason: &'static str) -> Resu
         });
     }
     Ok(())
+}
+
+/// Reduce an angle to `[0, 2π)`. `rem_euclid` alone returns exactly 2π for
+/// tiny negative inputs, where `x + 2π` rounds up to 2π.
+fn wrap_2pi(x: f64) -> f64 {
+    let w = x.rem_euclid(std::f64::consts::TAU);
+    if w == std::f64::consts::TAU {
+        0.0
+    } else {
+        w
+    }
 }
 
 // Convert mean to eccentric anomaly
@@ -420,14 +433,14 @@ impl Kepler {
     /// Argument of latitude `u = ω + ν`, radians, reduced to `[0, 2π)`.
     /// Well defined for circular orbits, where ω and ν separately are not.
     pub fn argument_of_latitude(&self) -> f64 {
-        (self.argp + self.nu).rem_euclid(std::f64::consts::TAU)
+        wrap_2pi(self.argp + self.nu)
     }
 
     /// True longitude `λ = Ω + ω + ν`, radians, reduced to `[0, 2π)`.
     /// Well defined for circular equatorial orbits, where Ω, ω and ν
     /// separately are not.
     pub fn true_longitude(&self) -> f64 {
-        (self.raan + self.argp + self.nu).rem_euclid(std::f64::consts::TAU)
+        wrap_2pi(self.raan + self.argp + self.nu)
     }
 
     /// Convert Cartesian coordinates to Keplerian orbital elements about
@@ -456,9 +469,21 @@ impl Kepler {
     /// # Errors
     ///
     /// [`Error::Degenerate`] for (near-)zero angular momentum,
-    /// [`Error::EccenOutOfBound`] for an open (parabolic/hyperbolic) state.
+    /// [`Error::EccenOutOfBound`] for an open (parabolic/hyperbolic) state,
+    /// [`Error::InvalidElement`] for a non-finite input or `mu <= 0`.
     pub fn from_pv_with_mu(r: Vector3, v: Vector3, mu: f64) -> Result<Self> {
-        use std::f64::consts::TAU;
+        for x in r.iter() {
+            check("r", *x, true, "")?;
+        }
+        for x in v.iter() {
+            check("v", *x, true, "")?;
+        }
+        check(
+            "mu",
+            mu,
+            mu > 0.0,
+            "gravitational parameter must be positive",
+        )?;
         let rmag = r.norm();
 
         let h = r.cross(&v);
@@ -490,7 +515,7 @@ impl Kepler {
         // ĥ·(p × q) = |p||q| sin∠(p,q). Quadrant conventions are the same as
         // Vallado's Algorithm 9; results are reduced to [0, 2π).
         let hhat = h / hmag;
-        let wrap = |x: f64| x.rem_euclid(TAU);
+        let wrap = wrap_2pi;
         // Below these tolerances the eccentricity / node vectors are
         // numerically zero and their directions are meaningless. Fall back
         // to the standard Vallado special cases. The node test uses
@@ -500,10 +525,16 @@ impl Kepler {
         let circular = eccen < TOL;
         let equatorial = nmag / hmag < TOL;
 
+        // In the equatorial fallbacks the angles are measured from the x
+        // axis in the direction of motion, which is clockwise for a
+        // retrograde orbit (i ≈ π): `to_pv` rotates by i = π about x, which
+        // negates y. (Vallado's rv2coe subtracts from 2π when h_z < 0.)
+        let ysign = if h.z() < 0.0 { -1.0 } else { 1.0 };
+
         let (raan, w, nu) = if circular && equatorial {
             // Circular equatorial: RAAN and argument of perigee undefined;
             // report the true longitude in `nu`.
-            (0.0, 0.0, wrap(f64::atan2(r.y(), r.x())))
+            (0.0, 0.0, wrap(f64::atan2(ysign * r.y(), r.x())))
         } else if circular {
             // Circular inclined: argument of perigee undefined; report the
             // argument of latitude in `nu`.
@@ -513,7 +544,7 @@ impl Kepler {
         } else if equatorial {
             // Elliptical equatorial: RAAN undefined; report the true longitude
             // of periapsis in `w`.
-            let w_true = wrap(f64::atan2(e.y(), e.x()));
+            let w_true = wrap(f64::atan2(ysign * e.y(), e.x()));
             let nu = wrap(f64::atan2(hhat.dot(&e.cross(&r)), e.dot(&r)));
             (0.0, w_true, nu)
         } else {
@@ -621,6 +652,64 @@ mod tests {
         let (r2, v2) = k2.to_pv();
         assert!((r - r2).norm() / r.norm() < 1.0e-9);
         assert!((v - v2).norm() / v.norm() < 1.0e-9);
+    }
+
+    #[test]
+    fn test_retrograde_equatorial_orbit() {
+        // i = π exactly takes the equatorial fallbacks, where the longitude
+        // angles must run clockwise. They used to be measured
+        // counterclockwise, so the round trip missed by up to ~2a.
+        use std::f64::consts::PI;
+        for e in [0.0, 0.1] {
+            for argp in [0.0, 0.5, 2.0, 4.0] {
+                for nu in [0.0, 0.7, 2.5, 5.0] {
+                    let k = Kepler::new(9000.0e3, e, PI, 0.0, argp, Anomaly::True(nu));
+                    let (r, v) = k.to_pv();
+                    let k2 = Kepler::from_pv(r, v).unwrap();
+                    assert!((k2.incl - PI).abs() < 1.0e-9, "incl = {}", k2.incl);
+                    let (r2, v2) = k2.to_pv();
+                    let dr = (r - r2).norm() / r.norm();
+                    let dv = (v - v2).norm() / v.norm();
+                    assert!(
+                        dr < 1.0e-9 && dv < 1.0e-9,
+                        "e={e} argp={argp} nu={nu}: dr={dr:e} dv={dv:e}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_pv_rejects_nonfinite() {
+        let r = numeris::vector![7000.0e3, 0.0, 0.0];
+        let v = numeris::vector![0.0, 7500.0, 0.0];
+        let nan = numeris::vector![f64::NAN, 0.0, 0.0];
+        let inf = numeris::vector![0.0, f64::INFINITY, 0.0];
+        for (rr, vv, which) in [(nan, v, "r"), (inf, v, "r"), (r, nan, "v"), (r, inf, "v")] {
+            match Kepler::from_pv(rr, vv) {
+                Err(Error::InvalidElement { name, .. }) => assert_eq!(name, which),
+                other => panic!("expected InvalidElement({which}), got {other:?}"),
+            }
+        }
+        for mu in [f64::NAN, 0.0, -1.0] {
+            assert!(matches!(
+                Kepler::from_pv_with_mu(r, v, mu),
+                Err(Error::InvalidElement { name: "mu", .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn test_angles_wrap_below_2pi() {
+        use std::f64::consts::TAU;
+        // -1e-20 + 2π rounds to exactly 2π; the reduced angle must be 0.
+        assert_eq!((-1.0e-20_f64).rem_euclid(TAU), TAU);
+        assert_eq!(wrap_2pi(-1.0e-20), 0.0);
+        assert_eq!(wrap_2pi(TAU), 0.0);
+        assert!(wrap_2pi(f64::NAN).is_nan());
+        let k = Kepler::new(7000.0e3, 0.1, 0.5, 0.0, -1.0e-20, Anomaly::True(0.0));
+        assert_eq!(k.argument_of_latitude(), 0.0);
+        assert_eq!(k.true_longitude(), 0.0);
     }
 
     #[test]
@@ -746,6 +835,7 @@ mod tests {
             PI / 2.0,
             PI - 1.0e-3,
             PI - 1.0e-9,
+            PI,
         ];
         let nus = [
             0.0,

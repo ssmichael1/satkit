@@ -250,7 +250,8 @@ impl PyKepler {
     ///
     /// Raises:
     ///     ValueError: open (eccen >= 1) or rectilinear (zero angular
-    ///         momentum) state, or ``mu`` not positive and finite
+    ///         momentum) state, a NaN or infinity in ``pos`` or ``vel``,
+    ///         or ``mu`` not positive and finite
     ///     RuntimeError: inputs that are not 3-element vectors
     #[staticmethod]
     #[pyo3(signature = (pos, vel, *, mu=None))]
@@ -276,6 +277,11 @@ impl PyKepler {
     ///
     /// Returns:
     ///     kepler: new element set
+    ///
+    /// Raises:
+    ///     TypeError: ``dt`` is neither a duration nor a number
+    ///     ValueError: ``dt`` is a NaN or infinite number of seconds
+    ///     OverflowError: ``dt`` is too large for a duration
     fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(dt) = dt.extract::<PyDuration>() {
             Ok(Self(self.0.propagate(&dt.0)))
@@ -285,6 +291,10 @@ impl PyKepler {
                     "dt must be a satkit.duration or a number of seconds",
                 )
             })?;
+            // Duration::from_seconds maps NaN to zero and saturates
+            // infinities, which silently made this a no-op or a garbage
+            // propagation.
+            crate::pyduration::check_duration_value(secs, 1.0e6, "dt")?;
             Ok(Self(
                 self.0.propagate(&satkit::Duration::from_seconds(secs)),
             ))

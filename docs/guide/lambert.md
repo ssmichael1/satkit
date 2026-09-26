@@ -15,14 +15,16 @@ Find the velocity vectors $\vec{v}_1$ and $\vec{v}_2$ such that a Keplerian orbi
 
 ## Transfer Geometry
 
-The transfer angle $\Delta\theta$ between the two position vectors determines the geometry of the transfer. An important special case is the **180-degree transfer** (e.g., Hohmann transfer), where $\vec{r}_1$ and $\vec{r}_2$ are anti-parallel and the orbit plane is not uniquely defined by the two positions alone. In this case, the `prograde` parameter determines the orbit plane.
+The transfer angle $\Delta\theta$ between the two position vectors determines the geometry of the transfer. An important special case is the **180-degree transfer** (e.g., Hohmann transfer), where $\vec{r}_1$ and $\vec{r}_2$ are anti-parallel and the orbit plane is not uniquely defined by the two positions alone. The solver then picks a plane containing $\vec{r}_1$ and the $x$ axis (the $y$ axis if $\vec{r}_1$ lies near the $x$ axis), and the `prograde` flag sets the direction of motion in it. For an equatorial $\vec{r}_1$ this is the equatorial plane; otherwise pass two positions that are not exactly anti-parallel to choose the plane yourself.
 
 ### Prograde vs. Retrograde
 
 The `prograde` flag resolves the short-way / long-way ambiguity:
 
-- **Prograde** (`prograde=True`): the satellite moves counterclockwise when viewed from above the orbital plane (positive angular momentum in the $z$-direction). This is the standard direction for most Earth-orbiting satellites.
-- **Retrograde** (`prograde=False`): the satellite moves clockwise.
+- **Prograde** (`prograde=True`): the satellite moves counterclockwise when viewed from above the $x$-$y$ plane (angular momentum $h_z \ge 0$). This is the standard direction for most Earth-orbiting satellites.
+- **Retrograde** (`prograde=False`): the satellite moves clockwise ($h_z \le 0$).
+
+Whichever of the short way ($\Delta\theta < 180°$) and the long way ($\Delta\theta > 180°$) runs in the requested direction is returned. For example, from $\vec{r}_1$ on the $+x$ axis to $\vec{r}_2$ on the $+y$ axis, `prograde=True` is a 90° transfer and `prograde=False` a 270° one.
 
 ## Algorithm
 
@@ -50,7 +52,7 @@ $$
 T(x) = \frac{\psi + M\pi}{\sqrt{|1-x^2|}} \cdot \frac{1}{1-x^2} + \frac{\lambda y - x}{1-x^2}
 $$
 
-where $\psi = \cos^{-1}(xy + \lambda(1-x^2))$ for elliptic orbits and $M$ is the number of complete revolutions. Near the parabolic boundary ($x \approx 1$), a hypergeometric series due to [Battin (1999)](references.md#battin1999) avoids the numerical singularity.
+where $\psi = \cos^{-1}(xy + \lambda(1-x^2))$ for elliptic orbits and $M$ is the number of complete revolutions. For hyperbolic transfers ($x > 1$) the first term becomes $\psi_h / \sqrt{x^2-1}$ with $\psi_h = \cosh^{-1}(xy - \lambda(x^2-1))$. Near the parabolic boundary ($x \approx 1$), a hypergeometric series due to [Battin (1999)](references.md#battin1999) avoids the numerical singularity.
 
 ### Householder Iteration
 
@@ -142,6 +144,8 @@ print(f"Total delta-v:        {dv1 + dv2:.1f} m/s")
 ### Return Value
 
 A list of `(v1, v2)` tuples, where `v1` and `v2` are 3-element numpy arrays representing the departure and arrival velocity vectors in m/s. The zero-revolution solution comes first, followed by every valid multi-revolution solution (up to two for each $M \geq 1$, as described above).
+
+`ValueError` is raised for a NaN or infinite input, a non-positive `tof` or `mu`, a zero position, `r1 == r2` (the transfer is undefined), or if the zero-revolution iteration does not converge. In Rust these are the variants of `lambert::Error`.
 
 ## Applications
 
