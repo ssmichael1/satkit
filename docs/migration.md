@@ -67,7 +67,8 @@ they used to return a meaningless value:
 | `gravity(<wrong length>)` / `gravity(<non-numeric>)` | `RuntimeError` | `ValueError` / `TypeError` |
 | `propagate(state, begin)` with no end time | `RuntimeError` | `TypeError` |
 | `time.strptime()`, `time.from_string()`, `time(<str>)` with an unparseable string | `RuntimeError` | `ValueError` |
-| `duration / 0`, `duration / duration(0)` | saturated duration or `inf` | `ZeroDivisionError` |
+| `duration / 0` | `RuntimeError` | `ZeroDivisionError` |
+| `duration / 0.0`, `duration / duration(0)` | saturated duration or `inf` | `ZeroDivisionError` |
 | `duration(days=nan)`, `duration.from_seconds(inf)`, ... | 0 or saturated | `ValueError` |
 | `time + nan`, `time - inf` (scalar, list or array) | `t` or a garbage label | `ValueError` |
 | `duration(days=1e300)`, `time + 1e300` | saturated or a garbage label | `OverflowError` |
@@ -91,9 +92,11 @@ integer arrays or nested lists.
   - `time.strptime()` requires the whole string to match; `%z` requires `+`,
     `-`, `Z` or `z` and two-digit fields in range; `%m %d %H %M %S` take
     exactly two digits; `%%` is supported.
-  - Errors that used to be silent mis-parses: trailing input, a malformed or
-    out-of-range offset, an empty fraction (`12:00:00.Z`), and an extra number
-    or a lone hour in `from_string`.
+  - Errors that used to be silent mis-parses: trailing input in
+    `from_rfc3339` and `strptime`, a malformed or out-of-range offset, an
+    empty fraction (`12:00:00.Z`), and an extra number or a lone hour in
+    `from_string`. `from_string` still ignores trailing words, zone names
+    included: `"2024-01-04 13:14:12 EST"` is 13:14:12 UTC.
   - **Do this:** check string inputs that carry offsets or extra text, and
     catch the new errors. Every time-string parser (`from_rfc3339`,
     `strptime`, `from_string` and `time(<str>)`) raises `ValueError` with the

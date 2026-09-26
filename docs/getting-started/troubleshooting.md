@@ -58,7 +58,7 @@ it does not count as an EOP file.
 
 **Impact.** Polar motion, $\Delta UT1$ and the celestial-pole offsets are
 treated as zero. $\Delta UT1$ is kept within 0.9 s (up to ~13″ of Earth
-rotation) and polar motion is up to ~0.5″, so Earth-fixed frame transforms are
+rotation) and polar motion is up to ~0.6″, so Earth-fixed frame transforms are
 off by up to ~12″ over the file's history (~10″ since 2000, typically ~3″),
 i.e. hundreds of metres at LEO.
 `propagate()` refuses to run rather than integrate with a mis-oriented
@@ -399,8 +399,8 @@ in GCRF):
 import numpy as np
 
 tle = sk.TLE.from_lines([
-    "1 25544U 98067A   24001.50000000  .00016717  00000-0  30306-3 0  9993",
-    "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.49815367432047",
+    "1 25544U 98067A   24001.50000000  .00016717  00000-0  30306-3 0  9999",
+    "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.49815367432041",
 ])[0]
 p_teme, v_teme = sk.sgp4(tle, tle.epoch)
 q = sk.frametransform.qteme2gcrf(tle.epoch)
