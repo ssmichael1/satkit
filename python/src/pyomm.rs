@@ -218,6 +218,10 @@ fn omms_to_pylist(py: Python<'_>, omms: &[OMM]) -> PyResult<Py<PyAny>> {
 /// Returns:
 ///     list[dict]: One dict per message, see ``satkit.OMMDict``
 ///
+/// Raises:
+///     RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
+///         ``satkit.utils.set_offline(True)``); no connection is opened
+///
 /// Example:
 ///     ```python
 ///     omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json")

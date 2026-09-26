@@ -221,7 +221,9 @@ impl TLE {
     /// Fetches the content at the given URL and parses it as TLE lines.
     /// Works with any URL that returns plain-text TLE data (2-line or 3-line format).
     ///
-    /// Requires the `download` Cargo feature.
+    /// Requires the `download` Cargo feature. Returns [`Error::Offline`] without
+    /// opening a connection when offline mode is on ([`crate::utils::set_offline`]
+    /// or `SATKIT_OFFLINE`).
     ///
     /// # Arguments
     ///
@@ -241,6 +243,13 @@ impl TLE {
     /// ```
     #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
+        // The same offline check (and reason) as the data downloads
+        if let Some(reason) = crate::utils::download::offline_reason() {
+            return Err(Error::Offline {
+                url: url.to_string(),
+                reason,
+            });
+        }
         let agent = crate::utils::download::http_agent();
         let mut resp =
             agent.get(url).call().map_err(

@@ -473,9 +473,10 @@ proptest! {
     /// `as_iso8601`, `as_rfc3339`) is exactly the label and re-parses to the
     /// instant.
     ///
-    /// Range: `0 ≤ h < 24`, `0 ≤ m < 60`, `0 ≤ s < 60` except `s < 61`
-    /// during a leap second and `s < 70` on 1971-12-31 23:59 (the 10 s step
-    /// satkit models at 1972-01-01).
+    /// Range: `0 ≤ h < 24`, `0 ≤ m < 60`, `0 ≤ s < 60` except
+    /// `s < 60 + inserted` in the last minute of a day that ends in inserted
+    /// time: 61 for a leap second, 60.1 / 60.107758 for the pre-1972 steps,
+    /// 61.422818 on 1960-12-31.
     #[test]
     fn calendar_roundtrip_and_format(l in any_label()) {
         let t = l.instant();
@@ -484,10 +485,9 @@ proptest! {
         prop_assert_eq!((s * 1.0e6).round() as i64, l.us, "seconds field for {}", l.iso());
 
         prop_assert!((0..24).contains(&h) && (0..60).contains(&mi), "{h}:{mi}");
-        let s_max = if (y, mo, d, h, mi) == (1971, 12, 31, 23, 59) {
-            70.0
-        } else if inserted_seconds(l.days()) > 0 && (h, mi) == (23, 59) {
-            61.0
+        let ins = inserted_us(l.days());
+        let s_max = if ins > 0 && (h, mi) == (23, 59) {
+            60.0 + ins as f64 * 1.0e-6
         } else {
             60.0
         };
@@ -512,28 +512,41 @@ proptest! {
         b in any_instant(),
         dt_us in 1..20_000_000i64,
     ) {
+        // In the rubber-second era a UTC microsecond is 1 + (1.3 … 3.0)e-8
+        // SI microseconds, so about one TAI microsecond in 3e7 shares its
+        // neighbour's label: equal labels are allowed 1 µs apart only
         let a2 = a + Duration::from_microseconds(dt_us);
-        prop_assert!(a.to_string() < a2.to_string(), "{a} !< {a2} (dt {dt_us} µs)");
-        prop_assert_eq!(a.cmp(&b), a.to_string().cmp(&b.to_string()), "{} vs {}", a, b);
+        let (s, s2) = (a.to_string(), a2.to_string());
+        prop_assert!(s < s2 || (dt_us == 1 && s == s2), "{a} !< {a2} (dt {dt_us} µs)");
+        let (sa, sb) = (a.to_string(), b.to_string());
+        if sa == sb {
+            prop_assert!(diff_us(&a, &b) <= 1, "{} vs {}", a, b);
+        } else {
+            prop_assert_eq!(a.cmp(&b), sa.cmp(&sb), "{} vs {}", a, b);
+        }
     }
 }
 
-/// Deterministic sweep of *every* leap second: from 3 s before the inserted
-/// interval to 3 s after it, in 250 ms steps plus the microseconds either
-/// side of each boundary, the formatted label is exactly the independently
-/// computed one and strictly increasing.
+/// Deterministic sweep of *every* leap second and positive pre-1972 step:
+/// from 3 s before the inserted interval to 3 s after it, in 250 ms steps
+/// plus the microseconds either side of each boundary, the formatted label
+/// is exactly the independently computed one and strictly increasing.
+///
+/// Offsets are SI microseconds from the start of the inserted interval. In
+/// the rubber-second era the labels either side advance by 1 − (1.3 … 3.0)e-8
+/// UTC seconds per SI second, i.e. < 0.1 µs over 3 s, below the label's
+/// rounding.
 #[test]
 fn iso_label_monotonic_at_every_leap_second() {
-    for (i, &(y, mo, d, ins)) in LEAP_DAYS.iter().enumerate() {
-        let ins_us = ins * US;
-        let start = Label::new(y, mo, d, 23, 59, 57 * US).instant();
-        let mut offsets: Vec<i64> = (-12..=(ins * 4 + 12)).map(|k| k * US / 4).collect();
+    for (i, &(y, mo, d, ins_us)) in LEAP_DAYS.iter().enumerate() {
+        let start = leap_label(i, 0).instant();
+        let mut offsets: Vec<i64> = (-12..=(4 * ins_us / US + 12)).map(|k| k * US / 4).collect();
         offsets.extend([-1, 0, 1, ins_us - 1, ins_us, ins_us + 1]);
         offsets.sort_unstable();
         offsets.dedup();
         let mut prev = String::new();
         for off in offsets {
-            let t = start + Duration::from_microseconds(off + 3 * US);
+            let t = start + Duration::from_microseconds(off);
             let s = t.to_string();
             assert_eq!(
                 s,
@@ -549,10 +562,13 @@ fn iso_label_monotonic_at_every_leap_second() {
 // ─────────────── Time: physical invariants ───────────────
 
 /// UTC day length, exhaustively for 1900–2050: `00:00` of the next day
-/// minus `00:00` of this day is 86400 s, plus the inserted seconds on the
-/// 27 leap-second days (86401 s) and on 1971-12-31 (86410 s, satkit's 10 s
-/// step). The expected lengths come from IERS Bulletin C, not from satkit.
-/// `add_utc_days(1.0)` agrees with the calendar route.
+/// minus `00:00` of this day is 86400 s plus the change in TAI − UTC: the
+/// inserted second on the 27 leap-second days (86401 s), and before 1972
+/// the day's drift (1.1–2.6 ms) plus any step (+0.1 s, −0.05 s, −0.1 s,
+/// +0.107758 s on 1971-12-31, and satkit's +1.422818 s on 1960-12-31). The
+/// expected lengths come from IERS Bulletin C and USNO `tai-utc.dat`
+/// (`tai_minus_utc_us`), not from satkit. `add_utc_days(1.0)` agrees with
+/// the calendar route.
 #[test]
 fn utc_day_length() {
     let first = days_from_civil(1900, 1, 1);
@@ -561,7 +577,8 @@ fn utc_day_length() {
     for day in first..last {
         let t1 = Label::from_day_tod(day + 1, 0).instant();
         let (y, m, d) = civil_from_days(day);
-        let expected = US_DAY + inserted_seconds(day) * US;
+        let expected =
+            US_DAY + tai_minus_utc_us((day + 1) * US_DAY) - tai_minus_utc_us(day * US_DAY);
         assert_eq!(
             (t1 - t0).as_microseconds(),
             expected,
@@ -599,14 +616,38 @@ proptest! {
     /// contiguous with the minute before and the day after. Catches both a
     /// midnight that lands on the start of the leap second instead of its
     /// end and a table entry keyed to the wrong second.
+    ///
+    /// Before 1972 the minute's drift of TAI − UTC (≤ 1.8 µs) is added from
+    /// the independent table, and 1 µs is allowed for the rounding of TAI −
+    /// UTC and of the fraction (added as an SI `Duration` to a UTC second).
     #[test]
     fn elapsed_time_across_leap_second((i, off) in leap_offset()) {
-        let (y, mo, d, _) = LEAP_DAYS[i];
-        let base = Label::new(y, mo, d, 23, 59, 0).instant();
+        let (y, mo, d, ins) = LEAP_DAYS[i];
+        let base_label = Label::new(y, mo, d, 23, 59, 0);
+        let base = base_label.instant();
         let l = leap_label(i, off);
         let t = Instant::from_datetime(l.y, l.mo, l.d, l.h, l.mi, (l.us / US) as f64).unwrap()
             + Duration::from_microseconds(l.us % US);
-        prop_assert_eq!((t - base).as_microseconds(), US_MIN + off, "label {}", l.iso());
+        // Independent TAI count of a label (relative to the label axis): the
+        // UTC-basis count plus TAI − UTC, and inside the inserted interval
+        // the old offset carried to midnight plus the offset into it
+        let tai = |l: &Label| {
+            if l.is_leap() {
+                let midnight = (l.days() + 1) * US_DAY;
+                midnight + tai_minus_utc_us(midnight) - ins + (l.us - US_MIN)
+            } else {
+                l.utc_basis_us() + tai_minus_utc_us(l.utc_basis_us())
+            }
+        };
+        let expected = tai(&l) - tai(&base_label);
+        let tol = if in_rubber_era(base_label.days()) { 1 } else { 0 };
+        prop_assert!(
+            ((t - base).as_microseconds() - expected).abs() <= tol,
+            "label {}: {} µs, expected {expected}", l.iso(), (t - base).as_microseconds()
+        );
+        if tol == 0 {
+            prop_assert_eq!(expected, US_MIN + off);
+        }
     }
 
     /// TT − TAI = 32.184 s and TAI − GPS = 19 s exactly, for every instant
@@ -642,29 +683,42 @@ proptest! {
         prop_assert!(diff_us(&m, &direct) <= 1, "GPS MJD {mjd}: {m} vs {direct}");
     }
 
-    /// TAI − UTC matches IERS Bulletin C: 0 before 1972, then an integer
-    /// number of seconds equal to 10 + the number of leap seconds so far.
-    /// Read two ways: raw count minus unixtime (integer µs), and the TAI
-    /// and UTC MJDs (f64). Labels inside a leap second are excluded (UTC
-    /// MJD / unixtime cannot name them).
+    /// TAI − UTC matches IERS Bulletin C and USNO `tai-utc.dat`: 0 before
+    /// 1961 (satkit's convention), the drifting rubber-second value to 1971,
+    /// then an integer number of seconds equal to 10 + the number of leap
+    /// seconds so far. Read two ways: TAI count minus unixtime (integer µs),
+    /// and the TAI and UTC MJDs (f64). Labels inside a leap second are
+    /// excluded (UTC MJD / unixtime cannot name them).
     #[test]
     fn tai_minus_utc_matches_table(l in any_non_leap_label()) {
         let t = l.instant();
-        let expected = tai_minus_utc_on_day(l.days());
-        let raw_minus_unix = (t - Instant::UNIX_EPOCH).as_microseconds()
+        let expected = tai_minus_utc_us(l.utc_basis_us());
+        let tai_1970 = Instant::from_mjd_with_scale(40_587.0, TimeScale::TAI);
+        let raw_minus_unix = (t - tai_1970).as_microseconds()
             - (t.as_unixtime() * 1.0e6).round() as i64;
-        prop_assert_eq!(raw_minus_unix, expected * US, "{}", l.iso());
+        prop_assert_eq!(raw_minus_unix, expected, "{}", l.iso());
         let via_mjd =
             (t.as_mjd_with_scale(TimeScale::TAI) - t.as_mjd_with_scale(TimeScale::UTC)) * 86_400.0;
-        prop_assert!((via_mjd - expected as f64).abs() < 2e-6, "{}: {via_mjd}", l.iso());
+        prop_assert!((via_mjd - expected as f64 * 1.0e-6).abs() < 2e-6, "{}: {via_mjd}", l.iso());
     }
 
-    /// TAI − UTC never decreases (UTC never repeats a label).
+    /// TAI − UTC never decreases (UTC never repeats a label), except at the
+    /// two negative pre-1972 steps, where it drops by the removed time.
     #[test]
     fn tai_minus_utc_nondecreasing(a in any_instant(), b in any_instant()) {
         let (a, b) = if a <= b { (a, b) } else { (b, a) };
-        let off = |t: Instant| (t - Instant::UNIX_EPOCH).as_seconds() - t.as_unixtime();
-        prop_assert!(off(a) <= off(b) + 1e-6, "{a}: {} > {b}: {}", off(a), off(b));
+        let tai_1970 = Instant::from_mjd_with_scale(40_587.0, TimeScale::TAI);
+        let off = |t: Instant| (t - tai_1970).as_seconds() - t.as_unixtime();
+        let day = |t: Instant| t.as_unixtime().div_euclid(86_400.0) as i64;
+        let removed: i64 = REMOVED_DAYS
+            .iter()
+            .filter(|(y, m, d, _)| (day(a)..day(b)).contains(&days_from_civil(*y, *m, *d)))
+            .map(|e| e.3)
+            .sum();
+        prop_assert!(
+            off(a) <= off(b) + removed as f64 * 1.0e-6 + 1e-6,
+            "{a}: {} > {b}: {}", off(a), off(b)
+        );
     }
 
     /// Instant ± Duration is exact at microsecond resolution across leap

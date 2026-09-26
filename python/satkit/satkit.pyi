@@ -130,6 +130,10 @@ class TLE:
         Returns:
             Single TLE or list of TLEs parsed from the response
 
+        Raises:
+            RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
+                ``satkit.utils.set_offline(True)``); no connection is opened
+
         Example:
             ```python
             tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
@@ -1037,6 +1041,11 @@ class time:
         - If no arguments are passed in, the created object represents the current time
         - If year is passed in, month and day must also be passed in
         - If hour is passed in, minute and second must also be passed in
+        - UTC before 1972 follows the "rubber second" model of USNO
+          ``tai-utc.dat`` / ERFA ``dat`` from 1961-01-01: TAI - UTC drifts
+          linearly and steps by fractions of a second (positive steps are
+          labelled ``23:59:60.x``). Before 1961, UTC is taken to equal TAI
+          (unlike ERFA, which also models 1960).
 
     Example:
         ```python
@@ -1103,9 +1112,11 @@ class time:
             hour: Hour of day, in range [0,23]
             min: Minute of hour, in range [0,59]
             sec: Floating point second of minute, in range [0,60); up to 61
-                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31).
-                Rounded to the nearest microsecond, so the seconds from
-                ``to_gregorian()`` round-trip exactly
+                within a UTC leap second (e.g. ``23:59:60.5`` on 2016-12-31),
+                and within a pre-1972 positive UTC step (e.g. ``23:59:60.05``
+                on 1963-10-31, up to 61.422818 on 1960-12-31). Rounded to the
+                nearest microsecond, so the seconds from ``to_gregorian()``
+                round-trip exactly
             scale: Time scale in which the Gregorian components are
                 interpreted, default is satkit.timescale.UTC. Ignored for the
                 string and no-argument forms.
@@ -1927,24 +1938,6 @@ class duration:
         ...
 
     @typing.overload
-    def __add__(self, other: float) -> duration:
-        """Add a number of days to the current duration
-
-        Args:
-            other (float): number of days to add to the current duration
-
-        Returns:
-            Duration object representing the input number of days added to the current duration
-
-        Example:
-            ```python
-            print(satkit.duration.from_days(1) + 2.5)
-            # Duration: 3 days, 0 hours, 0 minutes, 0.000 seconds
-            ```
-        """
-        ...
-
-    @typing.overload
     def __add__(self, other: time) -> time:
         """Add a duration to a time
 
@@ -2192,7 +2185,7 @@ class quaternion:
         ...
 
     @staticmethod
-    def from_axis_angle(axis: npt.NDArray[np.float64], angle: float) -> quaternion:
+    def from_axis_angle(axis: npt.ArrayLike, angle: float) -> quaternion:
         """Quaternion representing right-handed rotation of vector by "angle" radians about the given axis
 
         Args:
@@ -2206,7 +2199,7 @@ class quaternion:
 
     @staticmethod
     def from_rotation_matrix(
-        dcm: npt.NDArray[np.float64],
+        dcm: npt.ArrayLike,
     ) -> quaternion:
         """Return quaternion representing identical rotation to input 3x3 rotation matrix
 
@@ -2275,13 +2268,13 @@ class quaternion:
 
     @staticmethod
     def rotation_between(
-        v1: npt.NDArray[np.float64], v2: npt.NDArray[np.float64]
+        v1: npt.ArrayLike, v2: npt.ArrayLike
     ) -> quaternion:
         """Quaternion representation rotation between two input vectors
 
         Args:
-            v1 (npt.ArrayLike[np.float64]): vector rotating from
-            v2 (npt.ArrayLike[np.float64]): vector rotating to
+            v1 (npt.ArrayLike): 3-element vector rotating from (any real numeric array-like)
+            v2 (npt.ArrayLike): 3-element vector rotating to (any real numeric array-like)
 
         Returns:
             Quaternion that rotates from v1 to v2
@@ -2461,11 +2454,11 @@ class quaternion:
         ...
 
     @typing.overload
-    def __mul__(self, other: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    def __mul__(self, other: npt.ArrayLike) -> npt.NDArray[np.float64]:
         """Multiply by a vector to rotate the vector
 
         Args:
-            other (npt.ArrayLike[np.float64]): 3-element array representing vector to rotate or Nx3 array of vectors to rotate
+            other (npt.ArrayLike): 3-element vector to rotate, or Nx3 array of vectors to rotate (any real numeric array-like; integer arrays and lists are converted to float64)
 
         Returns:
             3-element array representing rotated vector or Nx3 array of rotated vectors
@@ -3202,7 +3195,7 @@ class satstate:
 
     def __init__(
         self,
-        time: _Time,
+        time: TimeScalar,
         pos: npt.NDArray[np.float64],
         vel: npt.NDArray[np.float64],
         cov: npt.NDArray[np.float64] | None = None,
@@ -3227,7 +3220,7 @@ class satstate:
         ...
 
     @staticmethod
-    def from_kepler(time: _Time, kepler: kepler) -> satstate:
+    def from_kepler(time: TimeScalar, kepler: kepler) -> satstate:
         """Create a state from Keplerian elements
 
         The two-body position (meters) and velocity (m/s) of the elements
@@ -3370,7 +3363,7 @@ class satstate:
 
     def add_maneuver(
         self,
-        time: _Time,
+        time: TimeScalar,
         delta_v: npt.ArrayLike,
         frame: frame,
     ) -> None:
@@ -3412,7 +3405,7 @@ class satstate:
         """
         ...
 
-    def add_prograde(self, time: _Time, dv_mps: float) -> None:
+    def add_prograde(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a prograde impulsive burn (NTW +T, along velocity).
 
         A positive ``dv_mps`` adds energy (raises semi-major axis). The burn
@@ -3429,7 +3422,7 @@ class satstate:
         """
         ...
 
-    def add_retrograde(self, time: _Time, dv_mps: float) -> None:
+    def add_retrograde(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a retrograde impulsive burn (NTW -T, opposite velocity).
 
         Equivalent to ``add_prograde`` with a negated magnitude. ``dv_mps``
@@ -3441,7 +3434,7 @@ class satstate:
         """
         ...
 
-    def add_radial(self, time: _Time, dv_mps: float) -> None:
+    def add_radial(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a radial-outward impulsive burn (NTW +N axis).
 
         For circular orbits this is the outward radial direction. For
@@ -3454,7 +3447,7 @@ class satstate:
         """
         ...
 
-    def add_normal(self, time: _Time, dv_mps: float) -> None:
+    def add_normal(self, time: TimeScalar, dv_mps: float) -> None:
         """Add a cross-track ("normal") impulsive burn (NTW +W axis).
 
         Positive values push in the +angular-momentum direction. Changes
@@ -3484,7 +3477,7 @@ class satstate:
 
     def propagate(
         self,
-        timedur: _Time | duration,
+        timedur: TimeScalar | duration,
         *,
         propsettings: propsettings | None = None,
         satproperties: satproperties | None = None,
@@ -3497,7 +3490,7 @@ class satstate:
         Maneuvers are preserved on the returned state.
 
         Args:
-            timedur (satkit.time|satkit.duration): Target time, or duration from current time
+            timedur (satkit.time|datetime.datetime|satkit.duration): Target time, or duration from current time
             propsettings (satkit.propsettings, optional): Propagation settings
             satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
 
@@ -3982,15 +3975,20 @@ class satproperties:
 
     def __init__(
         self,
+        *,
         cdaoverm: float = 0,
         craoverm: float = 0,
-        *,
         thrusts: list[thrust] | None = None,
         ecom: ecomparams | None = None,
     ) -> None:
         """Create a satproperties object
 
-        Args:
+        All arguments are keyword-only; a positional call raises ``TypeError``.
+        (Earlier releases read positional arguments as ``(craoverm, cdaoverm)``,
+        the reverse of the documented order, so scripts that passed them
+        positionally had drag and radiation pressure swapped.)
+
+        Keyword Args:
             cdaoverm (float, optional): Coefficient of drag times area over mass in m^2/kg
             craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
             thrusts (list[thrust], optional): List of continuous thrust arcs
@@ -4626,6 +4624,10 @@ def omm_from_url(url: str) -> list[OMMDict]:
     Returns:
         list[OMMDict]: one dictionary per message, with every CCSDS field the
             source provided plus its extra keys (see :class:`OMMDict`)
+
+    Raises:
+        RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
+            ``satkit.utils.set_offline(True)``); no connection is opened
 
     Example:
         ```python

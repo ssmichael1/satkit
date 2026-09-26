@@ -15,9 +15,11 @@ Cases marked ``xfail(strict=True)`` are confirmed satkit defects; being
 strict, they fail once the defect is fixed, so remove the marker with the fix.
 
 Instants are read and built through the internal microsecond count, which is
-TAI (``raw / 86400e6 + 40587`` is the TAI MJD), via the public duration API:
-``(t - time.UNIX_EPOCH).microseconds`` and ``time.UNIX_EPOCH +
-duration(microseconds=raw)``. Both are exact.
+TAI (``raw / 86400e6 + 40587`` is the TAI MJD), via the public duration API
+relative to 1970-01-01 00:00:00 TAI (``TAI_1970`` below):
+``(t - TAI_1970).microseconds`` and ``TAI_1970 + duration(microseconds=raw)``.
+Both are exact. (``time.UNIX_EPOCH`` is the UTC label 1970-01-01T00:00:00,
+8.000082 s of TAI later.)
 """
 
 import calendar
@@ -56,13 +58,18 @@ TOL_MJD_S = 1.5e-6
 # ----------------------------------------------------------------------------
 
 
+# 1970-01-01 00:00:00 TAI, where satkit's microsecond count is zero (TAI MJD
+# 40587 is exact in f64, so this is exact)
+TAI_1970 = sk.time.from_mjd(MJD_UNIX, TS.TAI)
+
+
 def raw_us(t):
     """satkit's internal microsecond count (TAI since 1970-01-01 00:00:00 TAI)"""
-    return (t - sk.time.UNIX_EPOCH).microseconds
+    return (t - TAI_1970).microseconds
 
 
 def from_raw(raw):
-    return sk.time.UNIX_EPOCH + sk.duration(microseconds=int(raw))
+    return TAI_1970 + sk.duration(microseconds=int(raw))
 
 
 def tai_pair(raw):
@@ -275,22 +282,17 @@ class TestLeapSeconds:
         for c in [(1972, 1, 1, 0, 0, 10.0), (1972, 1, 1, 6, 0, 0.0), (1972, 3, 1, 0, 0, 0.0)]:
             assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
-    def test_pre1972_utc_is_treated_as_tai(self):
-        """Convention, not a bug: satkit does not model pre-1972 ("rubber
-        second") UTC and sets TAI - UTC = 0 before 1972. ERFA's dat gives
-        1.42 s (1961) rising to 9.89 s (end of 1971), so pre-1972 TAI / TT /
-        GPS / TDB built from a UTC label differ from ERFA by that much. UT1 is
-        UTC label + UT1 - UTC and is unaffected."""
-        for y in (1950, 1961, 1965, 1969, 1971):
-            c = (y, 6, 1, 12, 0, 0.0)
-            assert_us(sk.time(*c), pair_to_us(*erfa.dtf2d("TAI", *c)), c)
-        assert 1.4 < erfa.dat(1961, 6, 1, 0.5) < 10.0 and 9.8 < erfa.dat(1971, 12, 31, 0.99) < 9.9
+    def test_pre1961_utc_is_treated_as_tai(self):
+        """Convention: satkit models UTC from 1961-01-01 (the first line of
+        USNO tai-utc.dat) and takes TAI - UTC = 0 before it. ERFA's dat also
+        has a 1960 entry (1.42 s), so 1960 labels deliberately differ from
+        ERFA; see TestPre1972UTC for 1961 on."""
+        for c in [(1950, 6, 1, 12, 0, 0.0), (1960, 6, 1, 12, 0, 0.0), (1960, 12, 31, 23, 59, 59.0)]:
+            assert_us(sk.time(*c), pair_to_us(*erfa.dtf2d("TAI", *c)), c, tol_us=0)
 
     def test_pre1970_construction(self):
-        """Construction before 1970 is right (under the pre-1972 convention);
-        only the printing is broken (see next test)"""
         c = (1965, 6, 1, 12, 30, 15.25)
-        assert_us(sk.time(*c), pair_to_us(*erfa.dtf2d("TAI", *c)), c)
+        assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
 
     def test_pre1970_gregorian_fields(self):
         for c in [(1969, 12, 31, 23, 0, 0.0), (1965, 6, 1, 12, 30, 15.25), (1901, 3, 1, 1, 2, 3.5)]:
@@ -327,6 +329,241 @@ class TestLeapSeconds:
             if got != us:
                 bad.append((us, got))
         assert not bad, f"{len(bad)} inputs truncated, e.g. {bad[:3]}"
+
+
+# ----------------------------------------------------------------------------
+# Pre-1972 ("rubber second") UTC, 1961-01-01 .. 1972-01-01
+# ----------------------------------------------------------------------------
+
+# 1st-of-month 00:00 UTC at which a pre-1972 segment of ERFA's dat starts
+# (1961-01-01 excluded: satkit starts its model there, see
+# test_pre1961_utc_is_treated_as_tai), plus 1972-01-01
+PRE72_BOUNDARIES = [
+    (1961, 8), (1962, 1), (1963, 11), (1964, 1), (1964, 4), (1964, 9), (1965, 1),
+    (1965, 3), (1965, 7), (1965, 9), (1966, 1), (1968, 2), (1972, 1),
+]  # fmt: skip
+
+
+def prev_day(y, m, d=1):
+    iy, im, iday, _ = erfa.jd2cal(2400000.5, erfa.cal2jd(y, m, d)[1] - 1.0)
+    return int(iy), int(im), int(iday)
+
+
+def erfa_step(y, m):
+    """ERFA's TAI - UTC step (s) at 00:00 UTC on the 1st of (y, m): the new
+    value less the preceding day's linear TAI - UTC carried to midnight"""
+    pd = prev_day(y, m)
+    end_of_prev = 2.0 * erfa.dat(*pd, 0.5) - erfa.dat(*pd, 0.0)
+    return erfa.dat(y, m, 1, 0.0) - end_of_prev
+
+
+def is_pre72_step_day(mjd_utc_day):
+    """True for the UTC day that ends in a nonzero pre-1972 step"""
+    for y, m in PRE72_BOUNDARIES:
+        if abs(erfa_step(y, m)) > 1e-9 and erfa.cal2jd(y, m, 1)[1] - 1 == mjd_utc_day:
+            return True
+    return False
+
+
+PRE72_STEP_DAYS = None
+
+
+def pre72_step_days():
+    """(y, m, d) of the days that end in a nonzero pre-1972 step"""
+    global PRE72_STEP_DAYS
+    if PRE72_STEP_DAYS is None:
+        PRE72_STEP_DAYS = {prev_day(y, m) for y, m in PRE72_BOUNDARIES if abs(erfa_step(y, m)) > 1e-9}
+    return PRE72_STEP_DAYS
+
+
+def assert_label_matches_erfa(r, g, iy, im, iday, ihmsf):
+    """satkit's label g of TAI microsecond count r against ERFA.
+
+    ERFA's d2dtf only treats a day as a leap-second day when its step
+    exceeds 0.5 s, so on the days that end in a fractional pre-1972 step it
+    prints the quasi-JD fraction times 86400 (off by up to the step) rather
+    than the label its own dtf2d + utctai map to that instant. satkit follows
+    dtf2d + utctai; there the label must map back to r through ERFA."""
+    if g[:3] in pre72_step_days():
+        assert abs(erfa_us_from_utc(*g) - r) <= 1, (int(r), g)
+        return
+    exp = (int(iy), int(im), int(iday), int(ihmsf["h"]), int(ihmsf["m"]))
+    sec = ihmsf["s"] + ihmsf["f"] * 1e-6
+    assert g[:5] == exp and g[5] == pytest.approx(sec, abs=1.5e-6), (int(r), g, exp, sec)
+
+
+def random_pre72_labels(n, seed):
+    """Random microsecond UTC labels 1961-01-01 .. 1971-12-31"""
+    rng = np.random.default_rng(seed)
+    out = []
+    while len(out) < n:
+        c = (
+            int(rng.integers(1961, 1972)),
+            int(rng.integers(1, 13)),
+            int(rng.integers(1, 29)),
+            int(rng.integers(0, 24)),
+            int(rng.integers(0, 60)),
+            float(rng.integers(0, 60_000_000)) * 1e-6,
+        )
+        out.append(c)
+    return out
+
+
+class TestPre1972UTC:
+    def test_steps(self):
+        """The steps of ERFA's table (and so of satkit's): +-0.05/0.1 s,
+        zero where only the rate changes, +0.107758 s at 1972-01-01"""
+        steps = {ym: round(erfa_step(*ym), 7) for ym in PRE72_BOUNDARIES}
+        assert steps == {
+            (1961, 8): -0.05, (1962, 1): 0.0, (1963, 11): 0.1, (1964, 1): 0.0, (1964, 4): 0.1,
+            (1964, 9): 0.1, (1965, 1): 0.1, (1965, 3): 0.1, (1965, 7): 0.1, (1965, 9): 0.1,
+            (1966, 1): 0.0, (1968, 2): -0.1, (1972, 1): 0.107758,
+        }  # fmt: skip
+        # satkit's step: elapsed TAI over the last UTC second of the day,
+        # less that second's length (1 s plus its drift)
+        for y, m in PRE72_BOUNDARIES:
+            pd = prev_day(y, m)
+            if steps[(y, m)] < 0:
+                continue  # 23:59:59 + 1 s lands in the next day; covered below
+            dt = (sk.time(y, m, 1) - sk.time(*pd, 23, 59, 59.0)).microseconds
+            drift = erfa.dat(*pd, 1.0) - erfa.dat(*pd, 1.0 - 1.0 / 86400.0)
+            assert abs(dt - 1e6 * (1.0 + drift + steps[(y, m)])) <= 1, (y, m, dt)
+
+    def test_dat_every_day(self):
+        """TAI - UTC at 00:00, 12:00 and 23:59:59 of every day 1961-1971
+        against erfa.dat"""
+        d0 = erfa.cal2jd(1961, 1, 1)[1]
+        d1 = erfa.cal2jd(1972, 1, 1)[1]
+        worst = 0
+        for mjd in np.arange(d0, d1):
+            y, m, d, _ = erfa.jd2cal(2400000.5, mjd)
+            y, m, d = int(y), int(m), int(d)
+            for h, mi, s, fd in ((0, 0, 0.0, 0.0), (12, 0, 0.0, 0.5), (23, 59, 59.0, 86399.0 / 86400.0)):
+                got = raw_us(sk.time(y, m, d, h, mi, s)) - pair_to_us(*erfa.dtf2d("TAI", y, m, d, h, mi, s))
+                err = got - erfa.dat(y, m, d, fd) * 1e6
+                worst = max(worst, abs(err))
+                assert abs(err) <= 0.5 + 1e-6, ((y, m, d, h, mi, s), err)
+        assert worst <= 0.5 + 1e-6
+
+    def test_random_labels(self):
+        """3000 random microsecond labels against ERFA dtf2d + utctai"""
+        for c in random_pre72_labels(3000, 11):
+            assert_us(sk.time(*c), erfa_us_from_utc(*c), c)
+
+    @pytest.mark.parametrize("ym", PRE72_BOUNDARIES, ids=[f"{y}-{m:02d}" for y, m in PRE72_BOUNDARIES])
+    def test_labels_around_step(self, ym):
+        """Labels across each boundary, including 23:59:60.x inside a positive
+        step and the never-occurring labels of a negative step, which both
+        satkit and ERFA put on the first |step| of the next day"""
+        y, m = ym
+        pd = prev_day(y, m)
+        step = round(erfa_step(y, m), 7)
+        labels = [(*pd, 23, 59, s) for s in (58.0, 58.5, 59.0, 59.5, 59.85, 59.899999, 59.9, 59.94, 59.96, 59.999999)]
+        if step > 0:
+            labels += [(*pd, 23, 59, 60.0 + f * step) for f in (0.0, 0.5)]
+            labels.append((*pd, 23, 59, round(60.0 + step - 1e-6, 6)))
+        labels += [(y, m, 1, 0, 0, s) for s in (0.0, 0.000001, 0.02, 0.05, 0.1, 0.5, 1.0)]
+        for c in labels:
+            t = sk.time(*c)
+            assert_us(t, erfa_us_from_utc(*c), c)
+            g = t.to_gregorian()
+            missing = step < 0 and c[:3] == pd and c[5] >= 60.0 + step
+            if missing:
+                # ... and reads back as the next day's label
+                assert g[:5] == (y, m, 1, 0, 0) and g[5] == pytest.approx(c[5] - 60.0 - step, abs=1.5e-6), (c, g)
+            else:
+                assert g[:5] == c[:5] and g[5] == pytest.approx(c[5], abs=1e-7), (c, g)
+        if step <= 0:
+            with pytest.raises(Exception):
+                sk.time(*pd, 23, 59, 60.0)
+        else:
+            with pytest.raises(Exception):
+                sk.time(*pd, 23, 59, 60.0 + step + 1e-6)
+
+    @pytest.mark.parametrize("ym", PRE72_BOUNDARIES, ids=[f"{y}-{m:02d}" for y, m in PRE72_BOUNDARIES])
+    def test_instants_to_labels_around_step(self, ym):
+        """TAI instants within +/-2.5 s of each boundary, and every microsecond
+        near both ends of a step, against ERFA (see assert_label_matches_erfa),
+        and increasing labels (adjacent microseconds may share a label: a
+        pre-1972 UTC microsecond is slightly longer than an SI one)"""
+        y, m = ym
+        r0 = erfa_us_from_utc(y, m, 1, 0, 0, 0.0)
+        step_us = round(erfa_step(y, m) * 1e6)
+        offsets = list(range(-2_500_000, 2_500_001, 125_000))
+        for edge in {0, -step_us}:
+            offsets += [edge + k for k in range(-3, 4)]
+        raws = np.array(sorted({r0 + o for o in offsets}), dtype=np.int64)
+        u1, u2 = erfa.taiutc(*tai_pair(raws))
+        iy, im, iday, ihmsf = erfa.d2dtf("UTC", 6, u1, u2)
+        prev = None
+        for k, r in enumerate(raws):
+            g = from_raw(r).to_gregorian()
+            assert_label_matches_erfa(r, g, iy[k], im[k], iday[k], ihmsf[k])
+            lab = (g[:5], g[5])
+            if prev is not None:
+                assert lab > prev[0] or (r - prev[1] == 1 and lab == prev[0]), (int(r - r0), prev, g)
+            prev = (lab, r)
+
+    def test_random_instants_to_labels(self):
+        """2000 random TAI instants 1961-1971 against ERFA taiutc + d2dtf"""
+        lo = erfa_us_from_utc(1961, 1, 1, 0, 0, 0.0)
+        hi = erfa_us_from_utc(1972, 1, 1, 0, 0, 0.0)
+        raws = np.random.default_rng(12).integers(lo, hi, 2000)
+        u1, u2 = erfa.taiutc(*tai_pair(raws))
+        iy, im, iday, ihmsf = erfa.d2dtf("UTC", 6, u1, u2)
+        for k, r in enumerate(raws):
+            assert_label_matches_erfa(r, from_raw(r).to_gregorian(), iy[k], im[k], iday[k], ihmsf[k])
+
+    def test_to_mjd_utc_off_step_days(self):
+        """UTC MJD against ERFA's quasi-JD, except on the days that end in a
+        step (ERFA stretches or shrinks those days' fraction; satkit keeps
+        86400 s, as for leap seconds)"""
+        lo = erfa_us_from_utc(1961, 1, 1, 0, 0, 0.0)
+        hi = erfa_us_from_utc(1972, 1, 1, 0, 0, 0.0)
+        raws = np.random.default_rng(13).integers(lo, hi, 2000)
+        u1, u2 = erfa.taiutc(*tai_pair(raws))
+        keep = np.array([not is_pre72_step_day(np.floor((a - 2400000.5) + b)) for a, b in zip(u1, u2)])
+        got = np.array([from_raw(r).to_mjd(TS.UTC) for r in raws])
+        err = mjd_minus_pair_seconds(got, u1, u2)[keep]
+        assert np.max(np.abs(err)) < TOL_MJD_S
+        # and from_mjd inverts it
+        for r, mjd in zip(raws[keep][:300], got[keep][:300]):
+            assert abs(raw_us(sk.time.from_mjd(mjd)) - r) <= 2
+
+    def test_tt_gps_tdb_of_labels(self):
+        """TT / GPS of pre-1972 UTC labels (TDB follows TT)"""
+        for c in random_pre72_labels(300, 14):
+            a1, a2 = erfa.utctai(*erfa.dtf2d("UTC", *c))
+            t = sk.time(*c)
+            tt1, tt2 = erfa.taitt(a1, a2)
+            assert mjd_minus_pair_seconds(t.to_mjd(TS.TT), tt1, tt2) == pytest.approx(0.0, abs=TOL_MJD_S), c
+            gps = mjd_minus_pair_seconds(t.to_mjd(TS.GPS), a1, a2 - 19.0 / 86400.0)
+            assert gps == pytest.approx(0.0, abs=TOL_MJD_S), c
+
+    def test_unix_epoch_and_unixtime(self):
+        """UNIX_EPOCH is the UTC label 1970-01-01T00:00:00 (TAI - UTC =
+        8.000082 s), and Unix time stays UTC-based before 1972"""
+        assert sk.time.UNIX_EPOCH == sk.time(1970, 1, 1)
+        assert raw_us(sk.time.UNIX_EPOCH) == erfa_us_from_utc(1970, 1, 1, 0, 0, 0.0) == 8_000_082
+        assert sk.time.UNIX_EPOCH.to_unixtime() == 0.0
+        for c in random_pre72_labels(300, 15):
+            ut = calendar.timegm((*c[:5], 0)) + c[5]
+            t = sk.time.from_unixtime(ut)
+            assert_us(t, erfa_us_from_utc(*c), c)
+            assert t.to_unixtime() == pytest.approx(ut, abs=1e-6)
+
+    def test_1961_step(self):
+        """satkit's own 1.422818 s step from TAI-aligned labels to the 1961
+        segment: an inserted interval 1960-12-31T23:59:60 .. 23:59:61.422817"""
+        t = sk.time(1961, 1, 1)
+        assert raw_us(t) == erfa_us_from_utc(1961, 1, 1, 0, 0, 0.0)
+        assert (t - sk.time(1960, 12, 31, 23, 59, 59.0)).microseconds == 2_422_818
+        t = sk.time(1960, 12, 31, 23, 59, 61.25)
+        assert str(t) == "1960-12-31T23:59:61.250000Z"
+        assert sk.time.from_rfc3339(str(t)) == t
+        assert str(from_raw(raw_us(sk.time(1961, 1, 1)) - 1)) == "1960-12-31T23:59:61.422817Z"
+        with pytest.raises(Exception):
+            sk.time(1960, 12, 31, 23, 59, 61.422818)
 
 
 # ----------------------------------------------------------------------------
@@ -484,21 +721,32 @@ def eop_rows():
 
 
 def _erfa_ut1(times):
-    """ERFA UT1 two-part JD from satkit's TAI, with satkit's UT1 - UTC"""
+    """ERFA UT1 two-part JD from satkit's TAI, with satkit's UT1 - UTC.
+
+    Before 1972 erfa.utcut1 forms UT1 - TAI with TAI - UTC at 0h of the day,
+    so it drops that day's drift of TAI - UTC (up to 2.6 ms by 24h) and is
+    not UT1 = UTC + (UT1 - UTC). There UT1 = TAI + (UT1 - UTC) - (TAI - UTC)
+    is formed with erfa.taiut1 and erfa.dat at the instant instead."""
     raws = np.array([raw_us(t) for t in times], dtype=np.int64)
-    u1, u2 = erfa.taiutc(*tai_pair(raws))
+    a1, a2 = tai_pair(raws)
+    u1, u2 = erfa.taiutc(a1, a2)
     dut1 = np.array([ft.earth_orientation_params(t)[0] for t in times])
-    return erfa.utcut1(u1, u2, dut1)
+    e1, e2 = erfa.utcut1(u1, u2, dut1)
+    for k in np.nonzero((u1 - 2400000.5) + u2 < 41317.0)[0]:
+        iy, im, iday, fd = erfa.jd2cal(u1[k], u2[k])
+        if fd > 1.0 - 1e-12:
+            # taiutc can return 00:00 of a step day as 1e-14 d before it
+            iy, im, iday, _ = erfa.jd2cal(u1[k], u2[k] + 1e-9)
+            fd = 0.0
+        e1[k], e2[k] = erfa.taiut1(a1[k], a2[k], dut1[k] - erfa.dat(iy, im, iday, fd))
+    return e1, e2
 
 
 class TestUT1:
     def test_ut1_vs_erfa_utcut1(self, eop_span):
         """UT1 = UTC + (UT1 - UTC) with satkit's own UT1 - UTC fed to ERFA"""
         rng = np.random.default_rng(8)
-        # from 1972-01-01: ERFA models pre-1972 rubber-second UTC (TAI - UTC up
-        # to 9.87 s), satkit uses TAI - UTC = 0 there by convention
-        first = max(eop_span[0], 41317.0)
-        times = [sk.time.from_mjd(m) for m in rng.uniform(first + 1, eop_span[1] - 1, 1000)]
+        times = [sk.time.from_mjd(m) for m in rng.uniform(eop_span[0] + 1, eop_span[1] - 1, 1000)]
         e1, e2 = _erfa_ut1(times)
         err = mjd_minus_pair_seconds([t.to_mjd(TS.UT1) for t in times], e1, e2)
         assert np.max(np.abs(err)) < TOL_MJD_S
@@ -514,6 +762,48 @@ class TestUT1:
             t = sk.time.from_mjd(m)
             t2 = sk.time.from_mjd(t.to_mjd(TS.UT1), TS.UT1)
             assert abs(raw_us(t2) - raw_us(t)) <= 2, m
+
+    def test_ut1_across_every_step(self, eop_span):
+        """Across every UTC step inside the EOP table (the pre-1972 steps and
+        rate changes, 1972-01-01's 0.107758 s, every leap second), UT1 - TAI
+        is continuous to f64 MJD resolution (UT1 - UTC is interpolated as UT1
+        - TAI), UT1 is monotonic and invertible, and it matches ERFA. The
+        pre-1972 steps need an EOP table reaching before 1972 (CelesTrak's
+        EOP-All.csv next to finals2000A.all)."""
+        steps = [
+            (y, m)
+            for (y, m) in PRE72_BOUNDARIES + LEAPS
+            if eop_span[0] < erfa.cal2jd(y, m, 1)[1] - 1 and erfa.cal2jd(y, m, 1)[1] + 1 < eop_span[1]
+        ]
+        assert steps
+        for y, m in steps:
+            r0 = erfa_us_from_utc(y, m, 1, 0, 0, 0.0)
+            # every 50 ms over +/-2 s, plus inside a 0.1 s inserted interval
+            offsets = sorted(set(range(-2_000_000, 2_000_001, 50_000)) | {-50_000, -1, 1})
+            times = [from_raw(r0 + o) for o in offsets]
+            ut1 = np.array([t.to_mjd(TS.UT1) for t in times])
+            d = (ut1 - np.array([t.to_mjd(TS.TAI) for t in times])) * 86400.0
+            # UT1 - TAI changes by < 5 ms/day, i.e. < 0.25 us over these 4 s;
+            # an f64 MJD resolves ~0.6 us
+            assert np.ptp(d) < 2e-6, (y, m, np.ptp(d))
+            assert np.all(np.diff(ut1) > 0), (y, m)
+            for t, u in zip(times, ut1):
+                assert abs(raw_us(sk.time.from_mjd(u, TS.UT1)) - raw_us(t)) <= 2, (y, m, str(t))
+            e1, e2 = _erfa_ut1(times)
+            err = mjd_minus_pair_seconds(ut1, e1, e2)
+            assert np.max(np.abs(err)) < TOL_MJD_S, (y, m, np.max(np.abs(err)))
+
+    def test_ut1_is_utc_without_eop(self, eop_span):
+        """Documented fallback: before the EOP table (or with none), UT1 - UTC
+        is 0, so UT1 is the UTC MJD and repeats UTC's steps (as erfa.utcut1
+        with dut1 = 0). Checked at the steps before the loaded table."""
+        steps = [(y, m) for (y, m) in [(1961, 1)] + PRE72_BOUNDARIES + LEAPS if erfa.cal2jd(y, m, 1)[1] + 1 < eop_span[0]]
+        if not steps:
+            pytest.skip("EOP table covers every step")
+        for y, m in steps:
+            for c in [(*prev_day(y, m), 23, 59, 59.5), (y, m, 1, 0, 0, 0.5)]:
+                t = sk.time(*c)
+                assert t.to_mjd(TS.UT1) == t.to_mjd(TS.UTC), c
 
     def test_ut1_inside_leap_second(self, eop_span):
         times = []
@@ -539,16 +829,27 @@ class TestUT1:
             assert (dut1, xp, yp, dx, dy) == pytest.approx((r[3], r[1], r[2], r[4], r[5]), abs=1e-12), r[0]
 
     def test_eop_linear_between_rows(self, eop_rows, eop_span):
-        """Linear interpolation between adjacent rows, away from leap seconds"""
+        """Linear interpolation between adjacent rows. UT1 - UTC is interpolated
+        as UT1 - TAI, so every Delta-AT step between two rows (leap seconds and
+        the pre-1972 fractional steps) and the pre-1972 daily drift are removed
+        exactly; Delta-AT here comes independently from erfa.dat."""
+
+        def dat_at(mjd):
+            iy, im, iday, fd = erfa.jd2cal(2400000.5, mjd)
+            return erfa.dat(iy, im, iday, fd)
+
         for i in range(0, len(eop_rows) - 1, 7):
             r0, r1 = eop_rows[i], eop_rows[i + 1]
-            if abs(r1[3] - r0[3]) > 0.5 or not (eop_span[0] <= r0[0] and r1[0] <= eop_span[1]):
+            if not (eop_span[0] <= r0[0] and r1[0] <= eop_span[1]):
                 continue
+            d0, d1 = dat_at(r0[0]), dat_at(r1[0])
             for g in (0.25, 0.5, 0.9):
                 v = ft.earth_orientation_params(sk.time.from_mjd(r0[0] + g))
                 exp = (1 - g) * r0 + g * r1
-                assert (v[0], v[1], v[2], v[4], v[5]) == pytest.approx(
-                    (exp[3], exp[1], exp[2], exp[4], exp[5]), abs=1e-9
+                exp_dut1 = (1 - g) * (r0[3] - d0) + g * (r1[3] - d1) + dat_at(r0[0] + g)
+                assert v[0] == pytest.approx(exp_dut1, abs=2e-6), r0[0] + g
+                assert (v[1], v[2], v[4], v[5]) == pytest.approx(
+                    (exp[1], exp[2], exp[4], exp[5]), abs=1e-9
                 ), r0[0] + g
 
     def test_eop_interpolation_across_leap_second(self, eop_rows):
@@ -605,13 +906,12 @@ def _assert_rot(sk_mats, erfa_mats, tol_rad, what):
     )
 
 
-# Earth rotation angle: satkit forms JD(UT1) = MJD + 2400000.5 as a single
-# f64 (ulp 40 us of UT1), which costs up to 0.30 mas (1.1 cm at LEO, 6.4 cm at
-# GEO). That precision loss is the largest term in the full reduction, so the
-# tolerance for every ERA-dependent rotation below is 0.5 mas.
-TOL_ERA_GUARD = 0.5 * MAS2RAD
-# What the ERA should be good to: UT1 as an f64 MJD (<= 0.6 us here) is
-# < 10 us of arc; 20 us of arc leaves margin.
+# Earth rotation angle, evaluated like ERFA era00 from the two-part date
+# (2400000.5, MJD(UT1)): UT1 as an f64 MJD (<= 0.6 us here) is < 10 us of arc
+# (measured 8.9 uas max; 0.3 mm at LEO). Before the two-part evaluation,
+# JD(UT1) = MJD + 2400000.5 as one f64 (ulp 40 us) cost up to 0.30 mas. ERA
+# precision is the largest term in the full reduction, so 20 uas is also the
+# tolerance for every ERA-dependent rotation below.
 TOL_ERA = 20 * UAS2RAD
 # CIP X, Y (Tables 5.2a/b) against ERFA's xy06 of the same series: measured
 # 3.3 uas over 1973-2026 (ERFA's own xy06 and xys06a differ by 1.5 uas).
@@ -620,18 +920,6 @@ TOL_CIP = 10 * UAS2RAD
 
 
 class TestEarthRotation:
-    def test_era_guard(self, ref):
-        got = np.array(ft.earth_rotation_angle(ref["times"]))
-        assert np.max(np.abs(wrap(got - ref["era"]))) < TOL_ERA_GUARD
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "NEW: earth_rotation_angle builds JD(UT1) = MJD + 2400000.5 in one f64 and loses "
-            "up to 20 us of UT1 (0.30 mas; 1 cm LEO / 6 cm GEO) "
-            "(src/frametransform/mod.rs earth_rotation_angle)"
-        ),
-    )
     def test_era_vs_era00(self, ref):
         got = np.array(ft.earth_rotation_angle(ref["times"]))
         assert np.max(np.abs(wrap(got - ref["era"]))) < TOL_ERA
@@ -646,11 +934,13 @@ class TestEarthRotation:
         """satkit's eqeq is the two-term approximation (dPsi = -17.2" sin Omega
         - 1.3" sin 2L, times cos eps). Against the IAU 1994 equation of the
         equinoxes (full 1980 nutation) it is good to 0.56" (37 ms of time)
-        over the sample; the tolerance is 0.6"."""
+        over this sample and 0.65" (43 ms) over a dense 1950-2100 sample (the
+        figure the docstrings quote); the tolerance is 0.7", since the sample
+        moves with the end of the EOP table."""
         got = np.array(ft.eqeq(ref["times"]))
-        assert np.max(np.abs(got - erfa.eqeq94(*ref["tt"]))) < 0.6 * AS2RAD
+        assert np.max(np.abs(got - erfa.eqeq94(*ref["tt"]))) < 0.7 * AS2RAD
         gast = np.array(ft.gast(ref["times"]))
-        assert np.max(np.abs(wrap(gast - erfa.gst94(*ref["ut1"])))) < 0.6 * AS2RAD
+        assert np.max(np.abs(wrap(gast - erfa.gst94(*ref["ut1"])))) < 0.7 * AS2RAD
 
 
 class TestPrecessionNutation:
@@ -686,9 +976,9 @@ class TestPrecessionNutation:
         _assert_rot(w, ref["pom"], 1e-3 * UAS2RAD, "polar motion")
 
     def test_full_reduction(self, ref):
-        _assert_rot(matrices(ft.qgcrf2itrf(ref["times"])), ref["c2t"], TOL_ERA_GUARD, "qgcrf2itrf")
+        _assert_rot(matrices(ft.qgcrf2itrf(ref["times"])), ref["c2t"], TOL_ERA, "qgcrf2itrf")
         _assert_rot(
-            matrices(ft.rotation(sk.frame.GCRF, sk.frame.ITRF, ref["times"])), ref["c2t"], TOL_ERA_GUARD,
+            matrices(ft.rotation(sk.frame.GCRF, sk.frame.ITRF, ref["times"])), ref["c2t"], TOL_ERA,
             "rotation(GCRF, ITRF)",
         )
 
@@ -698,7 +988,7 @@ class TestPrecessionNutation:
         eye = np.broadcast_to(np.eye(3), (n, 3, 3))
         _assert_rot(matrices(ft.rotation(F.GCRF, F.CIRS, ref["times"])), ref["c2i"], TOL_CIP, "GCRF->CIRS")
         _assert_rot(
-            matrices(ft.rotation(F.CIRS, F.TIRS, ref["times"])), erfa.rz(ref["era"], eye), TOL_ERA_GUARD, "CIRS->TIRS"
+            matrices(ft.rotation(F.CIRS, F.TIRS, ref["times"])), erfa.rz(ref["era"], eye), TOL_ERA, "CIRS->TIRS"
         )
         _assert_rot(matrices(ft.rotation(F.TIRS, F.ITRF, ref["times"])), ref["pom"], 1e-3 * UAS2RAD, "TIRS->ITRF")
         _assert_rot(matrices(ft.rotation(F.GCRF, F.ICRF, ref["times"])), eye, 1e-15, "GCRF->ICRF")
@@ -720,20 +1010,27 @@ class TestPrecessionNutation:
         assert np.all(np.abs(rot_angle(m, rbp) / MAS2RAD - 23.1) < 0.2)
 
     def test_tod2mod_approx(self, ref):
-        """Two-term nutation (code comment: 'accurate to ~1 arcsec'); measured
-        0.68" max against IAU 2006/2000A nutation"""
+        """Two-term nutation (documented as ~0.9"); measured 0.80" max on this
+        sample and 0.88" over a dense 1950-2100 sample against IAU 2006/2000A
+        nutation"""
         tod2mod = matrices(ft.qtod2mod_approx(ref["times"]))
         mod2tod = erfa.numat(erfa.obl06(*ref["tt"]), *erfa.nut06a(*ref["tt"]))
         _assert_rot(tod2mod.transpose(0, 2, 1), mod2tod, 1.0 * AS2RAD, "TOD->MOD approx")
 
 
 class TestApproxReduction:
-    """The IAU-76/FK5 '_approx' reduction is documented as ~1 arcsec. Against
-    the full ERFA reduction it measures 0.98" max (34 m at LEO, 200 m at GEO)
-    over 1973-2026, of which up to 0.6" is polar motion, which the approx chain
-    neglects. Tolerance 1.05"."""
+    """The '_approx' reduction (IAU 2006 precession + two-term nutation +
+    two-term equation of the equinoxes) is documented as ~1 arcsec. Against
+    the full ERFA reduction GCRF <-> ITRF measures 0.98" max (34 m at LEO,
+    200 m at GEO) over 1973-2026, of which up to 0.6" is polar motion, which
+    the approx chain neglects. Tolerance 1.05".
+
+    TEME -> GCRF involves no polar motion, so the same chain applied to PEF
+    (TEME rotated by GMST82 alone) is better: 0.55" max (the nutation
+    approximations); tolerance 0.6"."""
 
     TOL = 1.05 * AS2RAD
+    TOL_TEME = 0.6 * AS2RAD
 
     def test_gcrf_itrf_approx(self, ref):
         _assert_rot(matrices(ft.qgcrf2itrf_approx(ref["times"])), ref["c2t"], self.TOL, "qgcrf2itrf_approx")
@@ -744,25 +1041,24 @@ class TestApproxReduction:
 
     def test_teme_gcrf_approx(self, ref):
         teme2gcrf = ref["c2t"].transpose(0, 2, 1) @ ref["teme2itrf"]
-        _assert_rot(matrices(ft.qteme2gcrf(ref["times"])), teme2gcrf, self.TOL, "qteme2gcrf")
+        F = sk.frame
+        _assert_rot(matrices(ft.qteme2gcrf(ref["times"])), teme2gcrf, self.TOL_TEME, "qteme2gcrf")
+        for to, pre in ((F.GCRF, None), (F.ICRF, None), (F.EME2000, erfa.bp06(*ref["tt"])[0])):
+            got = matrices(ft.rotation_approx(F.TEME, to, ref["times"]))
+            _assert_rot(got, teme2gcrf if pre is None else pre @ teme2gcrf, self.TOL_TEME, f"rotation_approx(TEME, {to})")
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "NEW: qteme2gcrf = qitrf2gcrf_approx * qteme2itrf. qteme2itrf applies polar motion "
-            "(PEF->ITRF) but the approx ITRF->GCRF does not undo it, so TEME->GCRF carries a "
-            "stray 0.3-0.6\" polar-motion rotation (also rotation_approx(TEME, GCRF/EME2000/ICRF)); "
-            "src/frametransform/mod.rs qteme2gcrf, dispatch.rs canonical_rotation_approx"
-        ),
-    )
     def test_teme_gcrf_approx_has_no_polar_motion(self, ref):
         """TEME -> GCRF involves no polar motion. Against the same approx chain
-        applied to PEF (= ITRF without polar motion), qteme2gcrf should agree
-        to rounding."""
+        applied to PEF (= ITRF without polar motion), qteme2gcrf and
+        rotation_approx(TEME, GCRF) agree to rounding."""
         n = len(ref["times"])
         pef2teme = erfa.rz(-np.array(ft.gmst(ref["times"])), np.broadcast_to(np.eye(3), (n, 3, 3)))
         expected = matrices(ft.qitrf2gcrf_approx(ref["times"])) @ pef2teme.transpose(0, 2, 1)
         _assert_rot(matrices(ft.qteme2gcrf(ref["times"])), expected, 1 * UAS2RAD, "qteme2gcrf vs PM-free chain")
+        _assert_rot(
+            matrices(ft.rotation_approx(sk.frame.TEME, sk.frame.GCRF, ref["times"])), expected, 1 * UAS2RAD,
+            "rotation_approx(TEME, GCRF) vs PM-free chain",
+        )
 
 
 class TestTEME:
@@ -779,12 +1075,12 @@ class TestTEME:
     def test_teme_gcrf_full(self, ref):
         teme2gcrf = ref["c2t"].transpose(0, 2, 1) @ ref["teme2itrf"]
         _assert_rot(
-            matrices(ft.rotation(sk.frame.TEME, sk.frame.GCRF, ref["times"])), teme2gcrf, TOL_ERA_GUARD,
+            matrices(ft.rotation(sk.frame.TEME, sk.frame.GCRF, ref["times"])), teme2gcrf, TOL_ERA,
             "rotation(TEME, GCRF)",
         )
         rb, _, _ = erfa.bp06(*ref["tt"])
         _assert_rot(
-            matrices(ft.rotation(sk.frame.TEME, sk.frame.EME2000, ref["times"])), rb @ teme2gcrf, TOL_ERA_GUARD,
+            matrices(ft.rotation(sk.frame.TEME, sk.frame.EME2000, ref["times"])), rb @ teme2gcrf, TOL_ERA,
             "rotation(TEME, EME2000)",
         )
 
@@ -806,7 +1102,8 @@ class TestStateTransform:
         """Velocity against the numerical derivative of ERFA's full matrix.
         satkit keeps only omega x r (omega = 7.292115e-5 rad/s, no LOD) and
         treats precession-nutation as static: 50"/yr x 7000 km = 5e-5 m/s.
-        Tolerance 1e-4 m/s; position to 2 cm (ERA precision, above)."""
+        Tolerance 1e-4 m/s; position to 1 mm (ERA precision, above: 20 uas
+        is 0.7 mm at this radius)."""
         r = np.array([4066.8e3, 4337.9e3, 3253.4e3])
         v = np.array([-2000.0, 5000.0, 4000.0])
         for i, t in enumerate(ref["times"][:60]):
@@ -816,7 +1113,7 @@ class TestStateTransform:
             ts = [t - sk.duration(seconds=h), t + sk.duration(seconds=h)]
             e = _erfa_c2t_at(ts)
             v_exp = m @ v + (e[1].T - e[0].T) @ r / (2 * h)
-            assert np.linalg.norm(pos - m @ r) < 0.02
+            assert np.linalg.norm(pos - m @ r) < 1e-3
             assert np.linalg.norm(vel - v_exp) < 1e-4
 
 
@@ -824,9 +1121,10 @@ class TestStateTransform:
         """TEME -> ITRF state against Vallado et al. (2006) built from ERFA:
         r = W R3(gmst82) r_teme, v = W (R3(gmst82) v_teme - w x R3(gmst82) r_teme),
         w = 7.292115146706979e-5 (1 - LOD / 86400) rad/s. satkit uses the
-        nominal 7.292115e-5 rad/s and no LOD (1.7e-5 m/s at LEO) and routes
-        through GCRF (precession-nutation rate, 5e-5 m/s). Tolerance 1e-4 m/s;
-        position to 1 mm (GMST82 precision, 30 uas = 1 mm at LEO)."""
+        nominal 7.292115e-5 rad/s and no LOD (1.7e-5 m/s at LEO), and goes
+        TEME -> PEF -> ITRF directly (no GCRF leg), identically in the full and
+        approximate modes. Tolerance 1e-4 m/s; position to 1 mm (GMST82
+        precision, 30 uas = 1 mm at LEO)."""
         r = np.array([4066.8e3, 4337.9e3, 3253.4e3])
         v = np.array([-2000.0, 5000.0, 4000.0])
         eye = np.eye(3)
@@ -841,9 +1139,10 @@ class TestStateTransform:
                 fn = ft.transform_state_approx if approx else ft.transform_state
                 pos, vel = fn(sk.frame.TEME, sk.frame.ITRF, t, r, v)
                 assert np.linalg.norm(pos - r_exp) < 1e-3, (i, approx)
-                # the approx chain evaluates w x r in ITRF instead of TIRS:
-                # polar motion (0.6") x 7.5 km/s = 2.2 cm/s
-                assert np.linalg.norm(vel - v_exp) < (0.03 if approx else 1e-4), (i, approx)
+                assert np.linalg.norm(vel - v_exp) < 1e-4, (i, approx)
+                # and back
+                pos2, vel2 = fn(sk.frame.ITRF, sk.frame.TEME, t, pos, vel)
+                assert np.linalg.norm(pos2 - r) < 1e-6 and np.linalg.norm(vel2 - v) < 1e-9, (i, approx)
 
 
 def _erfa_c2t_at(times):

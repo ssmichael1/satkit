@@ -27,7 +27,7 @@ sk.utils.update_datafiles()   # ephemeris (verified) + EOP + space weather
 
 ### Offline and air-gapped use
 
-- `SATKIT_OFFLINE=1` forbids all network access: anything that would need a download raises `RuntimeError` naming the missing file and its sources instead of connecting.
+- `SATKIT_OFFLINE=1` forbids all network access: anything that would need a download raises `RuntimeError` naming the missing file and its sources instead of connecting, and `TLE.from_url` / `omm_from_url` raise `RuntimeError` naming the URL.
 - `SATKIT_DATA_URL=https://mirror.example/satkit-data` makes satkit fetch the manifest-pinned files (the JPL ephemeris, ITU_GRACE16) from a mirror first (plain `http://` is accepted for an internal mirror; downloads are still verified). It does not cover the Earth-orientation and space-weather files, which are always refreshed from their producers; copy those into `SATKIT_DATA` on an air-gapped machine.
 - `pip install satkit[data]` installs the optional **`satkit-data`** bundle (the ephemeris and full-degree gravity files, ~110 MB) into `site-packages`; satkit finds it automatically as a read-only source. Use it where a first-use download is unwelcome.
 - `SATKIT_DATA=/path` names a directory that is both searched first and written to.

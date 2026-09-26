@@ -9,21 +9,35 @@
 //! |---|---|---|---|---|
 //! | [`qitrf2gcrf`] | ITRF | GCRF | Full IERS 2010 | Computationally expensive; requires EOP |
 //! | [`qgcrf2itrf`] | GCRF | ITRF | Full IERS 2010 | Conjugate of `qitrf2gcrf` |
-//! | [`qitrf2gcrf_approx`] | ITRF | GCRF | ~1 arcsec | IAU-76/FK5 approximation; fast |
+//! | [`qitrf2gcrf_approx`] | ITRF | GCRF | ~1 arcsec | Approximate chain (see below); no polar motion; fast |
 //! | [`qgcrf2itrf_approx`] | GCRF | ITRF | ~1 arcsec | Conjugate of `qitrf2gcrf_approx` |
-//! | [`qteme2itrf`] | TEME | ITRF | Exact | For SGP4 output; Vallado Eq. 3-90 |
-//! | [`qteme2gcrf`] | TEME | GCRF | ~1 arcsec | Composes TEME→ITRF via `qitrf2gcrf_approx` |
-//! | [`qmod2gcrf`] | MOD | GCRF | Full | Vallado Eqs. 3-88, 3-89 |
+//! | [`qteme2itrf`] | TEME | ITRF | Exact | For SGP4 output: GMST82 then polar motion; Vallado Eq. 3-90 |
+//! | [`qteme2gcrf`] | TEME | GCRF | 0.55 arcsec | Approximate: GMST82 to PEF, then the approximate chain (no polar motion); `rotation(TEME, GCRF)` is the full one |
+//! | [`qmod2gcrf`] | MOD | EME2000 | Precession only | IAU 2006 precession, no frame bias (23 mas from GCRF); Vallado Eqs. 3-88, 3-89 |
+//! | [`qtod2mod_approx`] | TOD | MOD | 0.9 arcsec | Two-term nutation |
 //! | [`qtirs2cirs`] | TIRS | CIRS | Full | Earth rotation angle only |
 //!
 //! # Frame Descriptions
 //!
 //! - **GCRF** (Geocentric Celestial Reference Frame): Inertial frame, IERS 2010
 //! - **ITRF** (International Terrestrial Reference Frame): Earth-fixed frame
-//! - **TEME** (True Equator Mean Equinox): Frame used by SGP4 propagator
+//! - **TEME** (True Equator Mean Equinox): quasi-inertial frame used by the SGP4 propagator
 //! - **TIRS** (Terrestrial Intermediate Reference System): IERS 2010 intermediate frame
 //! - **CIRS** (Celestial Intermediate Reference System): IERS 2010 intermediate frame
 //! - **MOD** (Mean of Date): Precession-only frame
+//!
+//! # The approximate reduction
+//!
+//! The `_approx` functions ([`qitrf2gcrf_approx`], [`qgcrf2itrf_approx`],
+//! [`qteme2gcrf`], [`rotation_approx`], ...) chain GAST ([`gmst`] (IAU 1982)
+//! plus the two-term [`eqeq`]), the two-term nutation of
+//! [`qtod2mod_approx`] and the IAU 2006 precession of [`qmod2gcrf`] (no frame
+//! bias), after Vallado (2013) §3.7.3. The chain is often labelled
+//! "IAU-76/FK5", but it is neither the IAU 1976 precession nor the 106-term
+//! IAU 1980 nutation series. It neglects polar motion. Against the full IERS
+//! 2010 reduction (ERFA) it is good to 1.0 arcsec for GCRF ↔ ITRF (up to
+//! 0.6 arcsec of that is polar motion) and 0.55 arcsec for TEME → GCRF,
+//! which involves no polar motion.
 
 mod dispatch;
 mod error;
@@ -57,7 +71,7 @@ pub use qcirs2gcrs::qcirs2gcrs_dxdy;
 ///
 /// Vallado algorithm 15:
 ///
-/// GMST = 67310.5481 + (876600h + 8640184.812866) * tᵤₜ₁ * (0.093104 + tᵤₜ₁ * −6.2e−6)
+/// GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 ///
 ///
 /// # Arguments
@@ -82,8 +96,12 @@ pub fn gmst<T: TimeLike>(tm: &T) -> f64 {
     gmst
 }
 
-/// Equation of Equinoxes
-/// Equation of the equinoxes
+/// Equation of the equinoxes (GAST − GMST), radians
+///
+/// Two-term approximation Δψ cos ε with Δψ = −17.2″ sin Ω − 1.3″ sin 2L
+/// (Vallado 2013 §3.7.3). Against the IAU 1994 equation of the equinoxes
+/// with the full IAU 1980 nutation (ERFA `eqeq94`) it is good to about
+/// 0.6″ (0.65″ max, 43 ms of time, over 1950–2100).
 pub fn eqeq<T: TimeLike>(tm: &T) -> f64 {
     let d: f64 = tm.as_mjd_with_scale(TimeScale::TT) - 51544.5;
     let omega = PI / 180.0 * 0.052954f64.mul_add(-d, 125.04);
@@ -94,7 +112,10 @@ pub fn eqeq<T: TimeLike>(tm: &T) -> f64 {
     d_psi * f64::cos(epsilon)
 }
 
-/// Greenwich Apparent Sidereal Time
+/// Greenwich Apparent Sidereal Time, radians
+///
+/// [`gmst`] (IAU 1982) plus the two-term [`eqeq`], so good to about 0.6″
+/// (0.65″ max, 43 ms of time, over 1950–2100) against ERFA `gst94`.
 pub fn gast<T: TimeLike>(tm: &T) -> f64 {
     gmst(tm) + eqeq(tm)
 }
@@ -118,15 +139,25 @@ pub fn gast<T: TimeLike>(tm: &T) -> f64 {
 ///
 /// # Calculation Details
 ///
-/// * Let t be UT1 Julian date
+/// * Let t be the UT1 Julian date
 /// * let f be fractional component of t (fraction of day)
 /// * ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t − 2451545.0))
 ///
+/// As in ERFA `era00`, the Julian date is used as the two-part date
+/// (2400000.5, MJD) and never formed as one `f64`: a UT1 Julian date near
+/// 2.46e6 has a 40 µs ulp, which would cost up to 0.3 mas of rotation
+/// (1 cm at LEO, 6 cm at GEO). The MJD keeps ~0.6 µs, i.e. < 10 µas.
 ///
 pub fn earth_rotation_angle<T: TimeLike>(tm: &T) -> f64 {
-    let t = tm.as_jd_with_scale(TimeScale::UT1);
-    let f = t % 1.0;
-    2.0 * PI * (0.00273781191135448f64.mul_add(t - 2451545.0, 0.7790572732640 + f) % 1.0)
+    let mjd = tm.as_mjd_with_scale(TimeScale::UT1);
+    // Days since J2000.0 (JD 2451545.0 = MJD 51544.5)
+    let t = mjd - 51544.5;
+    // Fraction of the Julian day: JD = 2400000.5 + MJD
+    let f = 0.5 + mjd.rem_euclid(1.0);
+    2.0 * PI
+        * 0.00273781191135448f64
+            .mul_add(t, 0.7790572732640 + f)
+            .rem_euclid(1.0)
 }
 
 ///
@@ -186,10 +217,13 @@ fn qitrf2tirs_with_eop<T: TimeLike>(eop: &[f64; 6], tm: &T) -> Quaternion {
 ///
 /// * The TEME frame is the default frame output by the
 ///   SGP4 propagator
-/// * This is Equation 3-90 in Vallado
+/// * This is Equation 3-90 in Vallado: the GMST82 rotation TEME → PEF
+///   followed by polar motion PEF → ITRF. No precession-nutation is
+///   involved, so it is exact to the model in both [`rotation`] and
+///   [`rotation_approx`].
 ///
 pub fn qteme2itrf<T: TimeLike>(tm: &T) -> Quaternion {
-    qitrf2tirs(tm).conjugate() * Quaternion::rotz(-gmst(tm))
+    qitrf2tirs(tm).conjugate() * qteme2pef(tm)
 }
 
 ///
@@ -206,17 +240,34 @@ pub fn qteme2itrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Accuracy
 ///
-/// **Approximate**: accurate to within ~1 arcsec (~30 m at Earth's surface).
-/// Uses the approximate IAU-76/FK5 reduction internally via
-/// [`qitrf2gcrf_approx`] composed with [`qteme2itrf`].
+/// **Approximate**: this is `rotation_approx(TEME, GCRF)`, not
+/// `rotation(TEME, GCRF)`. TEME is rotated to PEF by GMST82 alone and then to
+/// GCRF by the approximate chain of [`qitrf2gcrf_approx`]; no polar motion is
+/// involved. Accurate to 0.55 arcsec max against the full IERS 2010
+/// reduction over 1973–2026 (~19 m at LEO, ~110 m at GEO). For the full
+/// reduction use [`rotation`]`(Frame::TEME, Frame::GCRF, t)` (GMST82, polar
+/// motion, then the IERS 2010 ITRF → GCRF chain).
 ///
 /// # Notes
 ///
 /// * The TEME frame is the default frame output by the
-///   SGP4 propagator
+///   SGP4 propagator. It is quasi-inertial (true equator, mean equinox of
+///   date), not Earth-fixed.
 ///
 pub fn qteme2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
-    qitrf2gcrf_approx(tm) * qteme2itrf(tm)
+    // The approximate reduction neglects polar motion, so the Earth-fixed
+    // frame of `qitrf2gcrf_approx` is really PEF: compose it with
+    // TEME -> PEF, not with TEME -> ITRF, or the polar motion applied by
+    // `qteme2itrf` is never undone and TEME -> GCRF carries a stray
+    // 0.3-0.6" rotation.
+    qitrf2gcrf_approx(tm) * qteme2pef(tm)
+}
+
+/// TEME → PEF (pseudo-Earth-fixed; satkit's TIRS): the GMST82 rotation
+/// alone, Vallado et al. (2006). [`qteme2itrf`] is this followed by polar
+/// motion.
+pub(crate) fn qteme2pef<T: TimeLike>(tm: &T) -> Quaternion {
+    Quaternion::rotz(-gmst(tm))
 }
 
 ///
@@ -234,6 +285,11 @@ pub fn qteme2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 /// # Notes
 ///
 /// * Equations 3-88 and 3-89 in Vallado
+/// * Precession only, with the IAU 2006 angles ζ_A, z_A, θ_A (Capitaine
+///   et al. 2003), not the IAU 1976 precession; it matches the precession
+///   matrix of ERFA `bp06` to 0.1 µas
+/// * No frame bias: the target is really the J2000 mean equator and
+///   equinox (EME2000), 23 mas from GCRF
 ///
 pub fn qmod2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
     const ASEC2RAD: f64 = PI / 180.0 / 3600.0;
@@ -288,10 +344,13 @@ pub fn qmod2gcrf<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Notes
 ///
-/// * Accurate to approx. 1 arcsec
+/// * Accurate to about 1 arcsec (1.0 arcsec max against the full IERS 2010
+///   reduction, 1973–2026), of which up to 0.6 arcsec is polar motion,
+///   which this chain neglects
 ///
-/// * This uses an approximation of the IAU-76/FK5 Reduction
-///   See Vallado section 3.7.3
+/// * The approximate reduction described in the module docs (GAST, two-term
+///   nutation, IAU 2006 precession without frame bias); see Vallado
+///   section 3.7.3
 ///
 /// * For a reference, see "Explanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
@@ -328,10 +387,13 @@ pub fn qgcrf2itrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
 ///
 /// # Notes
 ///
-/// * Accurate to approx. 1 arcsec
+/// * Accurate to about 1 arcsec (1.0 arcsec max against the full IERS 2010
+///   reduction, 1973–2026), of which up to 0.6 arcsec is polar motion,
+///   which this chain neglects
 ///
-/// * This uses an approximation of the IAU-76/FK5 Reduction
-///   See Vallado section 3.7.3
+/// * The approximate reduction described in the module docs (GAST, two-term
+///   nutation, IAU 2006 precession without frame bias); see Vallado
+///   section 3.7.3
 ///
 /// * For a reference, see "Explanatory Supplement to the
 ///   Astronomical Almanac", 2013, Ch. 6
@@ -353,7 +415,9 @@ pub fn qitrf2gcrf_approx<T: TimeLike>(tm: &T) -> Quaternion {
 /// True of Date to Mean of Date
 /// coordinate frame
 ///
-/// See Vallado section 3.7.3
+/// See Vallado section 3.7.3. Two-term nutation (the 18.6-year and
+/// semi-annual terms): good to 0.9 arcsec (0.88″ max over 1950–2100)
+/// against the IAU 2006/2000A nutation, and equally against IAU 1980.
 ///
 pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
     let d = tm.as_mjd_with_scale(TimeScale::TT) - 51544.5;
@@ -361,7 +425,7 @@ pub fn qtod2mod_approx<T: TimeLike>(tm: &T) -> Quaternion {
 
     const DEG2RAD: f64 = PI / 180.0;
 
-    // Compute nutation rotation (accurate to ~ 1 arcsec)
+    // Compute nutation rotation (two-term; accurate to ~0.9 arcsec)
     // This is where the approximation comes in
     let delta_psi = DEG2RAD
         * (-0.0048f64).mul_add(
@@ -740,8 +804,8 @@ pub fn itrf_to_gcrf_state<T: TimeLike>(
     (pos_gcrf, vel_gcrf)
 }
 
-/// Approximate version of [`itrf_to_gcrf_state`] using the IAU-76/FK5
-/// reduction (accurate to ~1 arcsec for position).
+/// Approximate version of [`itrf_to_gcrf_state`] using the approximate
+/// reduction of [`qitrf2gcrf_approx`] (accurate to ~1 arcsec for position).
 ///
 /// Neglects polar motion, so ITRF ≡ TIRS for the purposes of this
 /// transform and the Earth-rotation sweep term `omega_earth x r` is
@@ -808,8 +872,8 @@ pub fn gcrf_to_itrf_state<T: TimeLike>(
     (pos_itrf, vel_itrf)
 }
 
-/// Approximate version of [`gcrf_to_itrf_state`] using the IAU-76/FK5
-/// reduction (accurate to ~1 arcsec for position). Inverse of
+/// Approximate version of [`gcrf_to_itrf_state`] using the approximate
+/// reduction of [`qgcrf2itrf_approx`] (accurate to ~1 arcsec for position). Inverse of
 /// [`itrf_to_gcrf_state_approx`]; sweep term subtracted in ITRF
 /// (polar motion neglected).
 pub fn gcrf_to_itrf_state_approx<T: TimeLike>(
@@ -1165,7 +1229,7 @@ mod tests {
     /// Approximate transform should agree with the full IERS 2010 reduction
     /// to about an arcsecond on position (~30 m at LEO) and a small
     /// fraction of a m/s on velocity. This is the advertised accuracy of
-    /// the IAU-76/FK5 approximation.
+    /// the approximate reduction.
     #[test]
     fn test_itrf_gcrf_state_approx_vs_full() {
         let t = crate::Instant::from_datetime(2024, 3, 15, 12, 34, 56.0).unwrap();

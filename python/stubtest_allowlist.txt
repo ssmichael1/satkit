@@ -36,6 +36,8 @@ satkit\.satkit\.ecomparams\.__init__
 satkit\.satkit\.ecomparams\.__new__
 satkit\.satkit\.kepler\.__init__
 satkit\.satkit\.kepler\.__new__
+satkit\.satkit\.satproperties\.__init__
+satkit\.satkit\.satproperties\.__new__
 satkit\.satkit\.satstate\.__init__
 satkit\.satkit\.satstate\.__new__
 # Declared runtime signature `(*py_args, scale=...)`; the stub spells out the
@@ -51,8 +53,6 @@ satkit\.satkit\.itrfcoord\.__new__
 satkit\.satkit\.propsettings\.__init__
 satkit\.satkit\.quaternion\.__init__
 satkit\.satkit\.quaternion\.__new__
-satkit\.satkit\.satproperties\.__init__
-satkit\.satkit\.satproperties\.__new__
 
 # --- PyO3 pickle support -------------------------------------------------------
 # Emitted for pickling; not user-facing API.
@@ -62,6 +62,8 @@ satkit\.satkit\.propresult\.__getnewargs_ex__
 satkit\.satkit\.propsettings\.__getnewargs_ex__
 satkit\.satkit\.satstate\.__getnewargs_ex__
 satkit\.satkit\.time\.__getnewargs_ex__
+# Unpickling helper named by the enum classes' __reduce__ (private).
+satkit\.satkit\._enum_member
 
 # --- Native submodules ---------------------------------------------------------
 # Attributes of the compiled extension, each documented in its own top-level

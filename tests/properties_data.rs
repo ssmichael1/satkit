@@ -9,8 +9,8 @@
 //! `tests/earth_orientation_params_init.rs` does. No test here triggers a
 //! download.
 //!
-//! Every epoch is drawn inside the loaded table's *observed* range (from 1972
-//! on), so the properties do not depend on how fresh the file is.
+//! Every epoch is drawn inside the loaded table's *observed* range, so the
+//! properties do not depend on how fresh the file is.
 //!
 //! # Case counts
 //!
@@ -54,15 +54,13 @@ fn eop_range() -> Option<(Instant, Instant)> {
             return None;
         }
         let cov = eop::coverage()?;
-        // satkit takes TAI − UTC = 0 before 1972 (rubber-second UTC is not
-        // modelled), so UT1 is only continuous from 1972 on. finals2000A.all
-        // starts in 1973, but a data directory may also hold CelesTrak's
-        // EOP-All.csv, which goes back to 1962.
-        let start = Label::new(1972, 1, 3, 0, 0, 0).instant();
+        // finals2000A.all starts in 1973, but a data directory may also hold
+        // CelesTrak's EOP-All.csv, which goes back to 1962 (rubber-second
+        // UTC, whose steps UT1 must also be continuous across).
         // Keep two days of margin at both ends: interpolation needs a row
         // either side, and we evaluate up to a few hours past the sample.
         Some((
-            (cov.first + Duration::from_days(2.0)).max(start),
+            cov.first + Duration::from_days(2.0),
             cov.last_observed - Duration::from_days(2.0),
         ))
     })
@@ -75,15 +73,10 @@ fn in_range(frac: f64) -> Option<Instant> {
 }
 
 /// Whether leap day `i` (and a day either side) lies inside the table.
-/// Never true for 1971-12-31: satkit's 10 s step there is a modelling
-/// convention with no counterpart in UT1 − UTC (see `LEAP_DAYS`).
 fn leap_day_covered(i: usize) -> bool {
     let Some((a, b)) = eop_range() else {
         return false;
     };
-    if i == 0 {
-        return false;
-    }
     let (y, m, d, _) = LEAP_DAYS[i];
     let day = Label::new(y, m, d, 0, 0, 0).instant();
     day >= a && day + Duration::from_days(2.0) <= b
@@ -122,12 +115,12 @@ fn ut1_one_second_steps_at_every_leap_second() {
         return;
     }
     let mut checked = 0;
-    for (i, &(y, mo, d, ins)) in LEAP_DAYS.iter().enumerate() {
+    for (i, &(y, mo, d, ins_us)) in LEAP_DAYS.iter().enumerate() {
         if !leap_day_covered(i) {
             continue;
         }
         let start = Label::new(y, mo, d, 23, 59, 57 * US).instant();
-        for k in 0..=(4 * (ins + 6)) {
+        for k in 0..=(4 * (ins_us + 6 * US) / US) {
             let t = start + Duration::from_microseconds(k * US / 4);
             let step = ut1(&(t + Duration::from_seconds(1.0))) - ut1(&t);
             assert!(
@@ -280,12 +273,14 @@ proptest! {
         }
     }
 
-    /// The approximate IAU-76/FK5 reduction agrees with the full IERS 2010
-    /// one to the documented "~1 arcsec" (src/frametransform/mod.rs module
-    /// table; docs/api/frametransform.md). Measured worst case over
-    /// 1973–2026 is ≈ 1.0 arcsec; the bound is 1.5 arcsec. `qteme2gcrf`
-    /// (documented ~1 arcsec, built on the approximate reduction) agrees
-    /// with the full TEME→GCRF dispatch to the same bound, and
+    /// The approximate reduction agrees with the full IERS 2010 one to the
+    /// documented "~1 arcsec" (src/frametransform/mod.rs module table;
+    /// docs/api/frametransform.md). Measured worst case over 1973–2026 is
+    /// ≈ 1.0 arcsec (up to 0.6″ of it polar motion, which the approximate
+    /// chain neglects); the bound is 1.5 arcsec. `qteme2gcrf` involves no
+    /// polar motion and is documented to 0.55″ (measured 0.545″): bound
+    /// 0.6″ against the full TEME→GCRF dispatch, and it is exactly the
+    /// approximate chain applied to PEF (TEME rotated by GMST82 alone).
     /// `qgcrf2itrf_approx` is the inverse of `qitrf2gcrf_approx`.
     #[test]
     fn approx_transforms_within_documented_accuracy(frac in 0.0..1.0f64) {
@@ -300,6 +295,9 @@ proptest! {
         prop_assert!(angle(&(qgcrf2itrf_approx(&t) * approx)) < 1e-12);
 
         let err = angle_between(&qteme2gcrf(&t), &rotation(Frame::TEME, Frame::GCRF, &t).unwrap()) / ASEC;
-        prop_assert!(err < 1.5, "qteme2gcrf vs full TEME→GCRF: {err} arcsec at {t}");
+        prop_assert!(err < 0.6, "qteme2gcrf vs full TEME→GCRF: {err} arcsec at {t}");
+        let pm_free = approx * Quaternion::rotz(-satkit::frametransform::gmst(&t));
+        prop_assert!(angle_between(&qteme2gcrf(&t), &pm_free) < 1e-12);
+        prop_assert!(angle_between(&rotation_approx(Frame::TEME, Frame::GCRF, &t).unwrap(), &pm_free) < 1e-12);
     }
 }

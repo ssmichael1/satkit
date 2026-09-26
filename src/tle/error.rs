@@ -101,6 +101,16 @@ pub enum Error {
     #[cfg(feature = "download")]
     #[error("{0}")]
     HttpThrottled(String),
+
+    /// Offline mode (`SATKIT_OFFLINE` or
+    /// [`set_offline(true)`](crate::utils::set_offline)) forbids network
+    /// access, so the URL was not fetched. No connection is opened.
+    #[error(
+        "{url} was not fetched: network access is forbidden ({reason}); load saved \
+         element sets from text or a file instead, or turn offline mode off"
+    )]
+    #[non_exhaustive]
+    Offline { url: String, reason: &'static str },
 }
 
 /// Convenient type alias used throughout the `tle` module.

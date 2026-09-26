@@ -566,26 +566,31 @@ fn test_leap_second_label_roundtrip() {
     assert!(Instant::from_datetime(2016, 12, 31, 23, 59, 61.0).is_err());
 }
 
-/// The 10 s TAI − UTC step at 1972-01-01 00:00:00 UTC.
+/// The +0.107758 s TAI − UTC step at 1972-01-01 00:00:00 UTC, from the
+/// pre-1972 drifting offset (9.892242 s) to the 10 s of the leap-second table.
 #[test]
 fn test_1972_step() {
     let t = Instant::from_date(1972, 1, 1).unwrap();
     assert_eq!(t.raw, 63072010000000);
     let before = Instant::from_datetime(1971, 12, 31, 23, 59, 59.0).unwrap();
-    assert_eq!(before.raw, 63071999000000);
+    // TAI − UTC one second before midnight: 9.892242 s less 1 s of drift
+    // (0.002592 s/day), rounded to the microsecond
+    assert_eq!(before.raw, 63071999000000 + 9_892_242);
+    // The day is 86,400 UTC seconds, each 1 + 0.002592/86400 SI seconds,
+    // plus the 0.107758 s step
     assert_eq!(
         (t - Instant::from_date(1971, 12, 31).unwrap()).as_microseconds(),
-        86_410_000_000
+        86_400_000_000 + 2_592 + 107_758
     );
 
-    // Every whole second across the step has a distinct, increasing label
-    // that constructs back to the same instant
+    // Every 10 ms across the step has a distinct, increasing label that
+    // constructs back to the same instant
     let mut prev: Option<(i32, i32, i32, i32, i32, f64)> = None;
-    for s in 63071990..63072020i64 {
-        let inst = Instant::new(s * 1_000_000);
+    for s in 6307200897..6307201002i64 {
+        let inst = Instant::new(s * 10_000);
         let g = inst.as_datetime();
         let back = Instant::from_datetime(g.0, g.1, g.2, g.3, g.4, g.5).unwrap();
-        assert_eq!(back.raw, inst.raw, "{inst:?}");
+        assert!((back.raw - inst.raw).abs() <= 1, "{inst:?}");
         if let Some(p) = prev {
             assert!(
                 (g.0, g.1, g.2, g.3, g.4) > (p.0, p.1, p.2, p.3, p.4)
@@ -596,18 +601,21 @@ fn test_1972_step() {
         prev = Some(g);
     }
     assert_eq!(
-        Instant::new(63072000000000).to_string(),
+        Instant::new(63072009892242).to_string(),
         "1971-12-31T23:59:60.000000Z"
     );
     assert_eq!(
-        Instant::new(63072009000000).to_string(),
-        "1971-12-31T23:59:69.000000Z"
+        Instant::new(63072009999999).to_string(),
+        "1971-12-31T23:59:60.107757Z"
     );
     assert_eq!(t.to_string(), "1972-01-01T00:00:00.000000Z");
-    // Labels past the step's 10 s are rejected
-    assert!(Instant::from_datetime(1971, 12, 31, 23, 59, 70.0).is_err());
+    // Labels past the step's 0.107758 s are rejected
+    assert!(Instant::from_datetime(1971, 12, 31, 23, 59, 60.107758).is_err());
+    assert!(Instant::from_datetime(1971, 12, 31, 23, 59, 61.0).is_err());
     // A later one-second leap second does not accept 23:59:61
     assert!(Instant::from_datetime(1972, 6, 30, 23, 59, 61.0).is_err());
+    // Nothing accepts 62 s or more
+    assert!(Instant::from_datetime(1960, 12, 31, 23, 59, 62.0).is_err());
 }
 
 /// Times of day before 1970 (negative raw counts) break down with
@@ -621,11 +629,19 @@ fn test_pre_1970_datetime() {
     assert_eq!(t.as_rfc3339(), "1960-01-01T12:00:00.000000Z");
 
     let t = Instant::from_datetime(1969, 12, 31, 23, 59, 59.5).unwrap();
-    assert_eq!(t.raw, -500_000);
+    // TAI − UTC was 8.000082 s at 1970-01-01 (pre-1972 UTC)
+    assert_eq!(t.raw, -500_000 + 8_000_082);
     assert_eq!(t.to_string(), "1969-12-31T23:59:59.500000Z");
+    assert_eq!(Instant::UNIX_EPOCH, Instant::from_date(1970, 1, 1).unwrap());
+    assert_eq!(Instant::UNIX_EPOCH.as_unixtime(), 0.0);
+    assert_eq!(
+        Instant::MJD_EPOCH,
+        Instant::from_date(1858, 11, 17).unwrap()
+    );
 
     // Whole-second sweep 1900..2030 (step not a multiple of a day): the
-    // breakdown constructs back to the same instant
+    // breakdown constructs back to the same instant (to 1 us in 1961-1971,
+    // where about one TAI microsecond in 7e7 has no UTC label of its own)
     let mut raw = Instant::from_date(1900, 1, 1).unwrap().raw;
     let end = Instant::from_date(2030, 1, 1).unwrap().raw;
     while raw < end {
@@ -633,7 +649,7 @@ fn test_pre_1970_datetime() {
         let g = inst.as_datetime();
         assert!((0..24).contains(&g.3) && (0..60).contains(&g.4) && g.5 >= 0.0);
         let back = Instant::from_datetime(g.0, g.1, g.2, g.3, g.4, g.5).unwrap();
-        assert_eq!(back.raw, raw, "{g:?}");
+        assert!((back.raw - raw).abs() <= 1, "{g:?}");
         raw += 7_919_377 * 1_000_000;
     }
 }
@@ -858,4 +874,68 @@ fn test_mjd_tdb_split() {
     assert_eq!(day2, day);
     let dt_us = (frac2 - frac) * 86_400.0e6;
     assert!((dt_us - 1.0).abs() < 1.0e-6, "{dt_us}");
+}
+
+/// Across every leap second inside the EOP table, UT1 − TAI is continuous
+/// (the EOP lookup interpolates UT1 − TAI), UT1 is monotonic, and UT1 ->
+/// Instant inverts it. Before the table (or with none) UT1 − UTC is 0, so UT1
+/// is the UTC MJD.
+#[test]
+fn test_ut1_across_every_leap_second() {
+    let Some(cov) = crate::earth_orientation_params::coverage() else {
+        return;
+    };
+    let (first, last) = (cov.first.as_mjd_utc(), cov.last_observed.as_mjd_utc());
+    let mut checked = 0;
+    for (y, m) in [
+        (1972, 1),
+        (1972, 7),
+        (1973, 1),
+        (1974, 1),
+        (1981, 7),
+        (1990, 1),
+        (1999, 1),
+        (2009, 1),
+        (2017, 1),
+    ] {
+        let midnight = Instant::from_date(y, m, 1).unwrap();
+        let mjd = midnight.as_mjd_utc();
+        let times: Vec<Instant> = (-40..=40)
+            .map(|k| midnight + Duration::from_microseconds(k * 50_000))
+            .collect();
+        if mjd - 1.0 <= first || mjd + 1.0 >= last {
+            // Before the table: UT1 = UTC
+            if mjd + 1.0 < first {
+                for t in [midnight + Duration::from_seconds(0.5), times[0]] {
+                    assert_eq!(
+                        t.as_mjd_with_scale(TimeScale::UT1),
+                        t.as_mjd_with_scale(TimeScale::UTC)
+                    );
+                }
+            }
+            continue;
+        }
+        let ut1: Vec<f64> = times
+            .iter()
+            .map(|t| t.as_mjd_with_scale(TimeScale::UT1))
+            .collect();
+        let d: Vec<f64> = times
+            .iter()
+            .zip(&ut1)
+            .map(|(t, u)| (u - t.as_mjd_with_scale(TimeScale::TAI)) * 86_400.0)
+            .collect();
+        let (lo, hi) = d
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
+        assert!(hi - lo < 2.0e-6, "{y}-{m}: UT1 − TAI spans {} s", hi - lo);
+        for (w, t) in ut1.windows(2).zip(&times) {
+            assert!(w[1] > w[0], "UT1 not increasing at {t}");
+        }
+        for (t, u) in times.iter().zip(&ut1) {
+            let back = Instant::from_mjd_with_scale(*u, TimeScale::UT1);
+            assert!((back - *t).as_microseconds().abs() <= 2, "{t} -> {back}");
+        }
+        checked += 1;
+    }
+    assert!(checked >= 5, "only {checked} leap seconds checked");
 }

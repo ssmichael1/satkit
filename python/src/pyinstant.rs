@@ -58,6 +58,8 @@ pub enum PyTimeScale {
     TDB = TimeScale::TDB as isize,
 }
 
+crate::enum_pickle!(PyTimeScale, "timescale");
+
 #[derive(Clone, PartialEq, Eq)]
 #[pyclass(name = "weekday", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyWeekday {
@@ -70,6 +72,8 @@ pub enum PyWeekday {
     Saturday = 6,
     Invalid = -1,
 }
+
+crate::enum_pickle!(PyWeekday, "weekday");
 
 impl From<&PyWeekday> for Weekday {
     fn from(w: &PyWeekday) -> Self {
@@ -137,6 +141,10 @@ impl From<PyTimeScale> for TimeScale {
 /// conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
 ///
 /// Note: If no arguments are passed in, the created object represents the current time
+///
+/// Note: UTC before 1972 follows the "rubber second" model of USNO
+/// ``tai-utc.dat`` / ERFA ``dat`` from 1961-01-01 (TAI - UTC drifts and steps
+/// by fractions of a second); before 1961, UTC is taken to equal TAI.
 ///
 /// Args:
 ///     year (int): Gregorian year (e.g., 2024) (optional)
@@ -995,71 +1003,100 @@ fn instant_to_datetime(py: Python<'_>, t: &Instant, utc: bool) -> PyResult<Py<Py
     }
 }
 
+/// A single time argument: `satkit.time` or `datetime.datetime` (the stubs'
+/// `TimeScalar`). Use as a `#[pyfunction]` parameter type in place of
+/// `PyInstant` wherever the stub accepts either.
+#[derive(Clone, Copy, Debug)]
+pub struct TimeArg(pub Instant);
+
+impl<'a, 'py> FromPyObject<'a, 'py> for TimeArg {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        if let Ok(t) = obj.cast::<PyInstant>() {
+            return Ok(Self(t.borrow().0));
+        }
+        if let Ok(dt) = obj.cast::<PyDateTime>() {
+            return Ok(Self(datetime_to_instant(&dt)?));
+        }
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "expected satkit.time or datetime.datetime, got {}",
+            obj.get_type()
+        )))
+    }
+}
+
+/// Times extracted from a Python time argument, remembering whether the
+/// argument was a single time (`scalar`) or a list / array of times, so a
+/// vectorised function returns a scalar only for scalar input: a one-element
+/// list gives a one-element list (or a (1, ...) array), as the stubs promise.
+pub struct TimeInput {
+    pub times: Vec<Instant>,
+    pub scalar: bool,
+}
+
 pub trait ToTimeVec {
+    /// The times, whether the input was a single time or a list / array
     fn to_time_vec(&self) -> PyResult<Vec<Instant>>;
+    /// The times, plus whether the input was a single time
+    fn to_time_input(&self) -> PyResult<TimeInput>;
 }
 
 impl ToTimeVec for &Bound<'_, PyAny> {
     fn to_time_vec(&self) -> PyResult<Vec<Instant>> {
+        Ok(self.to_time_input()?.times)
+    }
+
+    fn to_time_input(&self) -> PyResult<TimeInput> {
         // "Scalar" time input case
-        if self.is_instance_of::<PyInstant>() {
-            let tm: PyInstant = self.extract().unwrap();
-            Ok(vec![tm.0])
-        } else if self.is_instance_of::<PyDateTime>() {
-            let dt: Py<PyDateTime> = self.extract().unwrap();
-            pyo3::Python::attach(|py| Ok(vec![datetime_to_instant(dt.bind(py))?]))
+        if self.is_instance_of::<PyInstant>() || self.is_instance_of::<PyDateTime>() {
+            let t: TimeArg = self.extract()?;
+            return Ok(TimeInput {
+                times: vec![t.0],
+                scalar: true,
+            });
         }
-        // List case
-        else if self.is_instance_of::<pyo3::types::PyList>() {
-            match self.extract::<Vec<PyInstant>>() {
-                Ok(v) => Ok(v.iter().map(|x| x.0).collect::<Vec<_>>()),
-                Err(_e) => match self.extract::<Vec<Py<PyDateTime>>>() {
-                    Ok(v) => pyo3::Python::attach(|py| {
-                        v.iter()
-                            .map(|x| datetime_to_instant(x.bind(py)))
-                            .collect::<PyResult<Vec<_>>>()
-                    }),
-                    Err(e) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
-                        "Not a list of satkit.time or datetime.datetime: {e}"
-                    ))),
-                },
-            }
-        }
-        // numpy array case
-        else if self.is_instance_of::<numpy::PyArray1<Py<PyAny>>>() {
-            match self.extract::<numpy::PyReadonlyArray1<Py<PyAny>>>() {
-                Ok(v) => pyo3::Python::attach(|py| -> PyResult<Vec<Instant>> {
-                    // Extract times from numpya array of objects
-                    let tmarray: Result<Vec<Instant>, _> = v
-                        .as_array()
-                        .into_iter()
-                        .map(|p| -> Result<Instant, _> {
-                            p.extract::<PyInstant>(py).map_or_else(|_| p.extract::<Py<PyDateTime>>(py).map_or_else(|_| Err(pyo3::exceptions::PyTypeError::new_err(
-                                        "Input numpy array must contain satkit.time elements or datetime.datetime elements".to_string()
-                                    )), |v3| pyo3::Python::attach(|py| {
-                                        datetime_to_instant(v3.bind(py))
-                                    })), |v2| Ok(v2.0))
-                        })
-                        .collect();
+        Ok(TimeInput {
+            times: time_array_to_vec(self)?,
+            scalar: false,
+        })
+    }
+}
 
-                    tmarray.map_or_else(
-                        |_| {
-                            Err(pyo3::exceptions::PyRuntimeError::new_err(
-                                "Invalid satkit.time input",
-                            ))
-                        },
-                        Ok,
-                    )
-                }),
-
-                Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+/// Times from a list or 1-D numpy object array of `satkit.time` /
+/// `datetime.datetime`
+fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
+    if let Ok(list) = obj.cast::<pyo3::types::PyList>() {
+        list.iter()
+            .map(|item| item.extract::<TimeArg>().map(|t| t.0))
+            .collect::<PyResult<Vec<_>>>()
+            .map_err(|e| {
+                pyo3::exceptions::PyTypeError::new_err(format!(
+                    "Not a list of satkit.time or datetime.datetime: {e}"
+                ))
+            })
+    } else if obj.is_instance_of::<numpy::PyArray1<Py<PyAny>>>() {
+        let v = obj
+            .extract::<numpy::PyReadonlyArray1<Py<PyAny>>>()
+            .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!(
                     "Invalid satkit.time or datetime.datetime input: {e}"
-                ))),
-            }
-        } else {
-            Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Invalid satkit.time or datetime.datetime input",
-            ))
-        }
+                ))
+            })?;
+        let py = obj.py();
+        v.as_array()
+            .iter()
+            .map(|p| p.bind(py).extract::<TimeArg>().map(|t| t.0))
+            .collect::<PyResult<Vec<_>>>()
+            .map_err(|_| {
+                pyo3::exceptions::PyRuntimeError::new_err(
+                    "Invalid satkit.time input: numpy array must contain satkit.time \
+                     or datetime.datetime elements",
+                )
+            })
+    } else {
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Invalid satkit.time or datetime.datetime input",
+        ))
     }
 }

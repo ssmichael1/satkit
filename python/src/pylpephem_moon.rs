@@ -16,6 +16,8 @@ pub enum MoonPhase {
     WaningCrescent = moon::MoonPhase::WaningCrescent as isize,
 }
 
+crate::enum_pickle!(MoonPhase, "moon.moonphase");
+
 impl From<&MoonPhase> for moon::MoonPhase {
     fn from(p: &MoonPhase) -> Self {
         match p {

@@ -31,6 +31,8 @@ pub enum PyIntegrator {
     gauss_jackson8 = 6,
 }
 
+crate::enum_pickle!(PyIntegrator, "integrator");
+
 impl From<PyIntegrator> for Integrator {
     fn from(i: PyIntegrator) -> Self {
         match i {
@@ -73,6 +75,8 @@ pub enum PyTideModel {
     /// implemented; currently falls back to Step 1.
     solid_full = 2,
 }
+
+crate::enum_pickle!(PyTideModel, "tidemodel");
 
 impl From<PyTideModel> for TideModel {
     fn from(t: PyTideModel) -> Self {

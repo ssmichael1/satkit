@@ -7,8 +7,9 @@ pickling of every picklable public type, and vectorised (array-of-times)
 calls against scalar calls.
 
 Generators are edge-biased the same way as the Rust ones: times near every
-leap second (including ``23:59:60.x``), pre-1970 dates back to 1900, and a
-few fixed edges, mixed with uniform sampling.
+leap second and positive pre-1972 UTC step (including ``23:59:60.x``),
+pre-1970 dates back to 1900 (with the 1961-1971 rubber-second era), and a few
+fixed edges, mixed with uniform sampling.
 
 Properties that exposed a defect are kept, marked ``xfail(strict=True)``
 with the root cause until it is fixed, and carry the minimal
@@ -50,22 +51,26 @@ def _settings(n=_MAX):
 
 # ───────────────────────── generators ─────────────────────────
 
-# Every UTC day that ends with inserted time: (year, month, day, inserted s).
-# Hard-coded from IERS Bulletin C, not read back from satkit. 1971-12-31 is
-# satkit's convention for the 10 s TAI - UTC offset UTC started with in 1972
-# (one 10 s inserted interval labelled 23:59:60 ... 23:59:69.999999).
-LEAP_DAYS = [
-    (1971, 12, 31, 10),
-    (1972, 6, 30, 1), (1972, 12, 31, 1), (1973, 12, 31, 1), (1974, 12, 31, 1),
-    (1975, 12, 31, 1), (1976, 12, 31, 1), (1977, 12, 31, 1), (1978, 12, 31, 1),
-    (1979, 12, 31, 1), (1981, 6, 30, 1), (1982, 6, 30, 1), (1983, 6, 30, 1),
-    (1985, 6, 30, 1), (1987, 12, 31, 1), (1989, 12, 31, 1), (1990, 12, 31, 1),
-    (1992, 6, 30, 1), (1993, 6, 30, 1), (1994, 6, 30, 1), (1995, 12, 31, 1),
-    (1997, 6, 30, 1), (1998, 12, 31, 1), (2005, 12, 31, 1), (2008, 12, 31, 1),
-    (2012, 6, 30, 1), (2015, 6, 30, 1), (2016, 12, 31, 1),
-]  # fmt: skip
-
 US = 1_000_000
+
+# Every UTC day that ends with inserted time: (year, month, day, inserted us).
+# Hard-coded from IERS Bulletin C (1972 on) and USNO tai-utc.dat (the positive
+# pre-1972 steps), not read back from satkit. 1960-12-31 is satkit's
+# convention for the start of its UTC model (TAI - UTC = 0 before 1961-01-01,
+# 1.422818 s from it). Each step is labelled 23:59:60.x on the day it ends.
+LEAP_DAYS = [
+    (1960, 12, 31, 1_422_818), (1963, 10, 31, 100_000), (1964, 3, 31, 100_000),
+    (1964, 8, 31, 100_000), (1964, 12, 31, 100_000), (1965, 2, 28, 100_000),
+    (1965, 6, 30, 100_000), (1965, 8, 31, 100_000), (1971, 12, 31, 107_758),
+    (1972, 6, 30, US), (1972, 12, 31, US), (1973, 12, 31, US), (1974, 12, 31, US),
+    (1975, 12, 31, US), (1976, 12, 31, US), (1977, 12, 31, US), (1978, 12, 31, US),
+    (1979, 12, 31, US), (1981, 6, 30, US), (1982, 6, 30, US), (1983, 6, 30, US),
+    (1985, 6, 30, US), (1987, 12, 31, US), (1989, 12, 31, US), (1990, 12, 31, US),
+    (1992, 6, 30, US), (1993, 6, 30, US), (1994, 6, 30, US), (1995, 12, 31, US),
+    (1997, 6, 30, US), (1998, 12, 31, US), (2005, 12, 31, US), (2008, 12, 31, US),
+    (2012, 6, 30, US), (2015, 6, 30, US), (2016, 12, 31, US),
+]  # fmt: skip
+INSERTED_US = {lb[:3]: lb[3] for lb in LEAP_DAYS}
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
@@ -73,16 +78,16 @@ def _label_from_offset(idx, off_us):
     """UTC label (y, mo, d, h, mi, us-into-minute) at ``off_us`` from the start
     of the inserted interval of ``LEAP_DAYS[idx]``."""
     y, mo, d, ins = LEAP_DAYS[idx]
-    if off_us < ins * US:
+    if off_us < ins:
         return (y, mo, d, 23, 59, 60 * US + off_us)
-    nxt = datetime(y, mo, d) + timedelta(days=1, microseconds=off_us - ins * US)
+    nxt = datetime(y, mo, d) + timedelta(days=1, microseconds=off_us - ins)
     return (nxt.year, nxt.month, nxt.day, nxt.hour, nxt.minute, nxt.second * US + nxt.microsecond)
 
 
 @st.composite
 def leap_edge_labels(draw):
     idx = draw(st.integers(0, len(LEAP_DAYS) - 1))
-    ins = LEAP_DAYS[idx][3] * US
+    ins = LEAP_DAYS[idx][3]
     off = draw(
         st.one_of(
             st.integers(-3 * US, ins + 3 * US - 1),
@@ -100,10 +105,15 @@ def uniform_labels(draw, y0=1900, y1=2045):
 
 FIXED_LABELS = [
     (1900, 1, 1, 0, 0, 0),
+    (1960, 12, 31, 23, 59, 61_422_817),
+    (1961, 1, 1, 0, 0, 0),
+    (1963, 10, 31, 23, 59, 60_050_000),
+    (1968, 1, 31, 23, 59, 59_899_999),
+    (1968, 2, 1, 0, 0, 0),
     (1969, 12, 31, 23, 59, 59_999_999),
     (1970, 1, 1, 0, 0, 0),
     (1971, 12, 31, 23, 59, 60_000_000),
-    (1971, 12, 31, 23, 59, 69_999_999),
+    (1971, 12, 31, 23, 59, 60_107_757),
     (1972, 1, 1, 0, 0, 0),
     (2000, 1, 1, 11, 58, 55_816_000),  # J2000 in UTC
     (2016, 12, 31, 23, 59, 60_000_000),
@@ -119,10 +129,20 @@ labels = st.one_of(
 non_leap_labels = labels.filter(lambda lb: lb[5] < 60 * US)
 
 
+def in_rubber_era(y):
+    """1961-1971: pre-1972 UTC, whose second is 1 + (1.3 ... 3.0)e-8 SI s"""
+    return 1961 <= y < 1972
+
+
 def label_time(lb):
     """satkit.time for a label, without float rounding: whole seconds
-    through the calendar constructor plus an integer-microsecond duration."""
+    through the calendar constructor plus an integer-microsecond duration.
+    In the rubber-second era (outside an inserted interval) a UTC second is
+    not an SI second, so the seconds go through the constructor as a float,
+    which rounds to the microsecond."""
     y, mo, d, h, mi, us = lb
+    if in_rubber_era(y) and us < 60 * US:
+        return sk.time(y, mo, d, h, mi, us * 1e-6)
     return sk.time(y, mo, d, h, mi, float(us // US)) + sk.duration(microseconds=us % US)
 
 
@@ -246,7 +266,7 @@ class TestStrings:
         y, mo, d, h, mi, s = t.to_gregorian()
         assert (y, mo, d, h, mi) == lb[:5]
         assert 0 <= h < 24 and 0 <= mi < 60
-        s_max = 70 if (y, mo, d) == (1971, 12, 31) else 61
+        s_max = 60 + INSERTED_US.get((y, mo, d), 0) * 1e-6 if (h, mi) == (23, 59) else 60
         assert 0 <= s < s_max
 
     @_settings()
@@ -502,20 +522,19 @@ class TestPickle:
         else:
             assert [getattr(p2.ecom, f) for f in self.ecom_fields] == [getattr(e, f) for f in self.ecom_fields]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NEW BUG: satproperties takes positional arguments as (craoverm, "
-        "cdaoverm) (python/src/pysatproperties.rs:42-47), but the stub "
-        "(python/satkit/satkit.pyi, satproperties.__init__) and the Rust "
-        "SatPropertiesSimple::new document (cdaoverm, craoverm)",
-    )
     @_settings()
     @example(cd=0.0, cr=1.0)
     @given(st.floats(0, 1), st.floats(0, 1))
-    def test_satproperties_positional_order(self, cd, cr):
-        """Found by the pickle property: positional arguments follow the
-        documented order."""
-        p = sk.satproperties(cd, cr)
+    def test_satproperties_positional_rejected(self, cd, cr):
+        """Found by the pickle property: positional arguments used to bind as
+        (craoverm, cdaoverm), the reverse of the documented order. The
+        constructor is now keyword-only, so a positional call raises rather
+        than silently swapping drag and radiation pressure."""
+        with pytest.raises(TypeError, match="keyword arguments only: cdaoverm=, craoverm="):
+            sk.satproperties(cd, cr)
+        with pytest.raises(TypeError, match="keyword arguments only"):
+            sk.satproperties(cd)
+        p = sk.satproperties(cdaoverm=cd, craoverm=cr)
         assert (p.cdaoverm, p.craoverm) == (cd, cr)
 
     @_settings()
@@ -585,10 +604,10 @@ class TestPickle:
 
 # ───────────────────────── vectorised vs scalar ─────────────────────────
 
-# At least two times: a one-element list collapses to a scalar result (see
-# test_length_one_array_keeps_shape).
-time_lists = st.lists(times, min_size=2, max_size=6)
-recent_time_lists = st.lists(labels.filter(lambda lb: 1990 <= lb[0] <= 2030).map(label_time), min_size=2, max_size=6)
+# One-element lists included: list input always gives list / array output
+# (see test_length_one_array_keeps_shape).
+time_lists = st.lists(times, min_size=1, max_size=6)
+recent_time_lists = st.lists(labels.filter(lambda lb: 1990 <= lb[0] <= 2030).map(label_time), min_size=1, max_size=6)
 
 
 def _same(a, b):
@@ -601,24 +620,51 @@ class TestVectorised:
     """Array-of-times calls give element-wise exactly the scalar results,
     for a list and for a numpy array of times."""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NEW BUG: a one-element list/array of times returns a scalar "
-        "(float / quaternion / shape-(3,) array) instead of a one-element "
-        "sequence, because to_time_vec() forgets whether the input was a "
-        "scalar (python/src/pyutils.rs:156, :283, :299); the stubs promise "
-        "list[...] for array input",
+    @_settings()
+    @given(
+        axis=st.tuples(*[st.floats(-1, 1, allow_nan=False)] * 3).filter(
+            lambda a: sum(x * x for x in a) > 1e-6
+        ),
+        angle=st.floats(-2 * math.pi, 2 * math.pi, allow_nan=False),
+        n=st.integers(1, 20),
+        seed=st.integers(0, 2**32 - 1),
+        layout=st.sampled_from(["C", "F", "strided", "list"]),
     )
+    def test_quaternion_times_array_is_rowwise(self, axis, angle, n, seed, layout):
+        """q * V (Nx3) equals stacking q * v for each row, and V @ R.T, for
+        any memory layout of V. The Nx3 path applied the inverse rotation in
+        0.14.1-0.23.1 (a column-major matrix read as row-major)."""
+        q = sk.quaternion.from_axis_angle(np.array(axis), angle)
+        base = np.random.default_rng(seed).normal(size=(n, 6)) * 1e3
+        V = base[:, :3].copy()
+        rows = np.array([q * v for v in V])
+        if layout == "F":
+            arg = np.asfortranarray(V)
+        elif layout == "strided":
+            arg = base[:, ::2]  # non-contiguous view
+            V = arg.copy()
+            rows = np.array([q * v for v in V])
+        elif layout == "list":
+            arg = V.tolist()
+        else:
+            arg = V
+        out = q * arg
+        np.testing.assert_allclose(out, rows, rtol=0, atol=1e-9)
+        np.testing.assert_allclose(out, V @ q.to_rotation_matrix().T, rtol=0, atol=1e-9)
+
     @pytest.mark.parametrize(
         "fn",
         [sk.frametransform.gmst, sk.frametransform.qitrf2gcrf, sk.sun.pos_gcrf],
         ids=["gmst", "qitrf2gcrf", "sun.pos_gcrf"],
     )
     def test_length_one_array_keeps_shape(self, fn):
+        """A one-element list / array of times gives a one-element sequence,
+        not a scalar (as the stubs promise); a scalar time gives a scalar."""
         t = sk.time(2024, 1, 1)
         for arg in ([t], np.array([t])):
             out = fn(arg)
             assert isinstance(out, (list, np.ndarray)) and len(out) == 1, out
+            assert _same(out[0], fn(t))
 
     FT = [
         "gmst", "gast", "eqeq", "earth_rotation_angle", "qitrf2gcrf", "qgcrf2itrf",
@@ -660,8 +706,7 @@ class TestVectorised:
             ]
         )
         pos, vel = sk.sgp4(tle, tl)
-        pos, vel = np.atleast_2d(pos), np.atleast_2d(vel)
-        assert pos.shape == (len(tl), 3)
+        assert pos.shape == vel.shape == (len(tl), 3)
         for i, t in enumerate(tl):
             p, v = sk.sgp4(tle, t)
             np.testing.assert_array_equal(pos[i], p)
@@ -675,6 +720,7 @@ class TestVectorised:
         except Exception as e:  # no ephemeris file available
             pytest.skip(f"JPL ephemeris unavailable: {e}")
         for body in (sk.solarsystem.Moon, sk.solarsystem.Sun, sk.solarsystem.Mars):
-            vec = np.atleast_2d(sk.jplephem.geocentric_pos(body, tl))
+            vec = sk.jplephem.geocentric_pos(body, tl)
+            assert vec.shape == (len(tl), 3)
             for t, v in zip(tl, vec):
                 np.testing.assert_array_equal(v, sk.jplephem.geocentric_pos(body, t))

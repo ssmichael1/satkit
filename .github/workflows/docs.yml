@@ -46,7 +46,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: astro-data
-          key: satkit-data-${{ hashFiles('data/manifest.json') }}
+          key: satkit-data-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
           # Seed from the newest older cache on a manifest change, so EOP/SW
           # survive a CelesTrak outage.
           restore-keys: satkit-data-
@@ -55,7 +55,7 @@ jobs:
         if: steps.cache-astro-data.outputs.cache-hit != 'true'
         run: |
           pip install requests
-          python python/test/download_data.py astro-data
+          python python/test/download_data.py astro-data --all-eop-sources
 
       # Only when the cached copy is genuinely old: EOP-All.csv carries about
       # six months of IERS predictions, so a week-old table still covers
@@ -66,7 +66,7 @@ jobs:
       - name: Refresh EOP and space weather (if the cached copy is over a week old)
         run: |
           pip install requests
-          python python/test/download_data.py astro-data --refresh-only --max-age-hours 168
+          python python/test/download_data.py astro-data --refresh-only --max-age-hours 168 --all-eop-sources
 
       - name: Install system dependencies for cartopy
         run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data
