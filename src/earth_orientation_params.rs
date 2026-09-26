@@ -414,6 +414,8 @@ fn lod_from_neighbours(table: &[EOPEntry], i: usize) -> f64 {
 /// A parser panic (a bug; malformed input is an error) is reported as a
 /// rejection rather than unwinding through the refresh thread, which would
 /// leave the partial download behind.
+// Called by the downloader; the parser tests use it in every feature set.
+#[cfg_attr(not(feature = "download"), allow(dead_code))]
 pub(crate) fn validate_file(path: &Path) -> std::result::Result<(), String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     match std::panic::catch_unwind(|| parse_finals2000a(&text)) {
