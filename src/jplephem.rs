@@ -21,7 +21,7 @@
 
 use crate::solarsystem::SolarSystem;
 
-use crate::utils::{datadir, download_if_not_exist};
+use crate::utils::{datadir, diag, download_if_not_exist};
 
 use std::array::TryFromSliceError;
 use std::num::{ParseFloatError, ParseIntError};
@@ -278,17 +278,30 @@ fn resolve_default_path() -> Result<std::path::PathBuf> {
 static JPL_INSTANCE: OnceLock<Result<JPLEphem>> = OnceLock::new();
 
 fn jplephem_singleton() -> &'static Result<JPLEphem> {
-    JPL_INSTANCE.get_or_init(|| {
-        let path = match resolve_default_path() {
-            Ok(p) => p,
-            Err(e) => return Err(Error::LoadFailed(e.to_string())),
-        };
-        JPLEphem::from_path(&path).map_err(|e| {
-            let via = match std::env::var("SATKIT_JPLEPHEM_FILE") {
-                Ok(v) => format!(" (selected by SATKIT_JPLEPHEM_FILE={v:?})"),
-                Err(_) => String::new(),
+    if let Some(r) = JPL_INSTANCE.get() {
+        return r;
+    }
+    // Logging may block (the Python bindings' logger takes the GIL), so
+    // nothing is logged while other threads may be waiting on the cell: the
+    // download notice goes out before it is locked, and anything the load
+    // itself logs once it is initialized.
+    let path = resolve_default_path();
+    if let Ok(p) = &path {
+        JPLEphem::announce_download(p);
+    }
+    diag::deferred(|| {
+        JPL_INSTANCE.get_or_init(|| {
+            let path = match path {
+                Ok(p) => p,
+                Err(e) => return Err(Error::LoadFailed(e.to_string())),
             };
-            Error::LoadFailed(format!("{}{via}: {e}", path.display()))
+            JPLEphem::load_path(&path).map_err(|e| {
+                let via = match std::env::var("SATKIT_JPLEPHEM_FILE") {
+                    Ok(v) => format!(" (selected by SATKIT_JPLEPHEM_FILE={v:?})"),
+                    Err(_) => String::new(),
+                };
+                Error::LoadFailed(format!("{}{via}: {e}", path.display()))
+            })
         })
     })
 }
@@ -423,6 +436,32 @@ impl JPLEphem {
     /// ```
     ///
     fn from_path(path: &std::path::Path) -> Result<Self> {
+        Self::announce_download(path);
+        Self::load_path(path)
+    }
+
+    /// Log a notice when loading `path` will download it: a manifest-pinned
+    /// ephemeris that is not on disk, with downloads allowed. Offline (or
+    /// without the `download` feature) the load goes straight to a typed
+    /// error, so nothing is announced.
+    fn announce_download(path: &std::path::Path) {
+        if path.is_file() || !cfg!(feature = "download") || crate::utils::is_offline() {
+            return;
+        }
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if let Some(entry) = crate::utils::manifest::embedded().entry(name) {
+            diag::info!(
+                "downloading the JPL ephemeris {name} ({:.0} MB) to {} \
+                 (SHA-256 verified). Set SATKIT_JPLEPHEM_FILE to use another file, \
+                 SATKIT_DATA_URL to fetch from a mirror, or SATKIT_OFFLINE=1 to forbid downloads.",
+                entry.size as f64 / 1e6,
+                path.parent().unwrap_or(std::path::Path::new(".")).display()
+            );
+        }
+    }
+
+    /// [`from_path`](Self::from_path) without the download notice.
+    fn load_path(path: &std::path::Path) -> Result<Self> {
         // The ephemeris is the one data file that is neither compiled in nor
         // refreshed daily, so it is fetched lazily on first use — but only
         // for names the data manifest pins (DE440 by default, DE421 as the
@@ -432,19 +471,7 @@ impl JPLEphem {
         // error naming the manifest URLs instead of touching the network.
         if !path.is_file() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if let Some(entry) = crate::utils::manifest::embedded().entry(name) {
-                // Announce only a download that will happen: offline (or
-                // without the `download` feature) `download_if_not_exist`
-                // goes straight to the typed error below.
-                if cfg!(feature = "download") && !crate::utils::is_offline() {
-                    eprintln!(
-                        "satkit: downloading the JPL ephemeris {name} ({:.0} MB) to {} \
-                         (SHA-256 verified). Set SATKIT_JPLEPHEM_FILE to use another file, \
-                         SATKIT_DATA_URL to fetch from a mirror, or SATKIT_OFFLINE=1 to forbid downloads.",
-                        entry.size as f64 / 1e6,
-                        path.parent().unwrap_or(std::path::Path::new(".")).display()
-                    );
-                }
+            if crate::utils::manifest::embedded().entry(name).is_some() {
                 download_if_not_exist(path, None)?;
             }
         } else if let Some(entry) = path
@@ -465,7 +492,7 @@ impl JPLEphem {
                     if crate::utils::is_offline() {
                         return Err(e.into());
                     }
-                    eprintln!("satkit: {e}; re-downloading");
+                    diag::warn!("{e}; re-downloading");
                     let dir = path.parent().unwrap_or(std::path::Path::new("."));
                     crate::utils::manifest::fetch_static_file(entry, dir, true)?;
                 }

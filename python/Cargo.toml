@@ -15,6 +15,9 @@ doc = false
 [dependencies]
 satkit = { path = "..", features = ["download"] }
 pyo3 = { version = "0.29", features = ["extension-module", "anyhow"] }
+# Forwards satkit's `log` records to Python's `logging` (0.13 supports pyo3 0.26-0.29).
+pyo3-log = "0.13"
+log = "0.4"
 numpy = "0.29"
 numeris = { version = "0.6.0", features = ["serde", "ode"] }
 anyhow = "1"

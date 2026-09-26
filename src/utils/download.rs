@@ -281,6 +281,14 @@ pub(crate) fn clear_offline_override() {
 /// marker variable set; the child sees the marker.
 #[cfg(test)]
 pub(crate) fn in_own_process(module: &str, test: &str) -> bool {
+    own_process_output(module, test).is_none()
+}
+
+/// As [`in_own_process`], for a test that checks what the child printed:
+/// `None` in the child, and in the parent the child's output once it has
+/// passed.
+#[cfg(test)]
+pub(crate) fn own_process_output(module: &str, test: &str) -> Option<std::process::Output> {
     const CHILD_ENV: &str = "SATKIT_TEST_IN_OWN_PROCESS";
     // libtest names omit the crate: "utils::update_data::tests::name".
     let name = match module.split_once("::") {
@@ -288,7 +296,7 @@ pub(crate) fn in_own_process(module: &str, test: &str) -> bool {
         None => test.to_string(),
     };
     if std::env::var(CHILD_ENV).as_deref() == Ok(name.as_str()) {
-        return true;
+        return None;
     }
     // Hold the environment lock while spawning and waiting: the child
     // inherits this process's environment, and another test may hold a
@@ -309,7 +317,7 @@ pub(crate) fn in_own_process(module: &str, test: &str) -> bool {
         "{name} failed in its own process ({})\n--- stdout\n{stdout}\n--- stderr\n{stderr}",
         out.status
     );
-    false
+    Some(out)
 }
 
 /// The manifest URLs for `name`, for error messages (empty if not pinned).
@@ -426,8 +434,8 @@ fn root_certs() -> ureq::tls::RootCerts {
     match load_ca_bundle(&path) {
         Ok(roots) => roots,
         Err(reason) => {
-            eprintln!(
-                "Warning: ignoring {CA_BUNDLE_ENV}={}: {reason}; \
+            crate::utils::diag::warn!(
+                "ignoring {CA_BUNDLE_ENV}={}: {reason}; \
                  verifying against the platform trust store instead",
                 path.display()
             );
@@ -850,8 +858,8 @@ pub fn download_if_not_exist(fname: &Path, seturl: Option<&str>) -> Result<()> {
             crate::utils::manifest::fetch_static_file(entry, dir, false)?;
             return Ok(());
         }
-        eprintln!(
-            "Warning: {basename} is not in satkit's data manifest; downloading it unverified"
+        crate::utils::diag::warn!(
+            "{basename} is not in satkit's data manifest; downloading it unverified"
         );
     }
     let baseurl = seturl.unwrap_or("https://storage.googleapis.com/astrokit-astro-data/");
@@ -890,7 +898,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
     let fname = file_name(Path::new(url))?;
     let fullpath = downloaddir.join(fname);
     if fullpath.exists() && !overwrite_if_exists {
-        println!("File {} exists; skipping download", fname);
+        crate::utils::diag::info!("File {} exists; skipping download", fname);
         return Ok(false);
     }
     check_online(fname)?;
@@ -898,7 +906,7 @@ pub fn download_file(url: &str, downloaddir: &Path, overwrite_if_exists: bool) -
     let agent = http_agent();
     let mut resp = agent.get(url).call().map_err(|e| request_error(url, e))?;
 
-    println!("Downloading {}", fname);
+    crate::utils::diag::info!("Downloading {}", fname);
     write_atomic(&mut resp.body_mut().as_reader(), &fullpath, url)?;
     Ok(true)
 }

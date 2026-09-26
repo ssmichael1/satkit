@@ -33,7 +33,7 @@ fn refresh_base(file: &str) -> Option<String> {
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 
-use crate::utils::{datadir, download_if_not_exist, RefreshableSingleton};
+use crate::utils::{datadir, diag, download_if_not_exist, RefreshableSingleton};
 use crate::Instant;
 use crate::TimeLike;
 use thiserror::Error;
@@ -467,8 +467,8 @@ pub(crate) fn warn_model_defaults(tm: &Instant, f107: bool, ap: bool) {
     } else {
         "the table has no measured F10.7 within three days of it and no 81-day average".to_string()
     };
-    eprintln!(
-        "Warning: no {what} for {tm} in the space-weather table ({reason}); NRLMSISE-00 \
+    diag::warn!(
+        "no {what} for {tm} in the space-weather table ({reason}); NRLMSISE-00 \
          uses its default for it (F10.7 = F10.7A = 150, Ap = 4), which can be wrong by a \
          factor of two in atmospheric density.\n\
          To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
@@ -643,8 +643,14 @@ fn status_in(c: &SpaceWeatherCoverage, tm: Instant) -> SpaceWeatherStatus {
 ///   [`SWPC_FILE`] and [`MSAFE_FILE`], refreshed by [`update`] or
 ///   [`update_datafiles`](crate::utils::update_datafiles).
 pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
-    use std::sync::atomic::Ordering;
     let tm = tm.as_instant();
+    // Warnings are logged after the table's read lock is released.
+    diag::deferred(|| get_locked(tm))
+}
+
+/// [`get`] under the table lock.
+fn get_locked(tm: Instant) -> Result<SpaceWeatherRecord> {
+    use std::sync::atomic::Ordering;
     let mut guard = SPACE_WEATHER.read();
     if guard.is_none() {
         drop(guard);
@@ -653,8 +659,8 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     }
     let Some(sw) = guard.as_ref().filter(|s| !s.is_empty()) else {
         if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            eprintln!(
-                "Warning: no space-weather table is loaded; NRLMSISE-00 is running on its \
+            diag::warn!(
+                "no space-weather table is loaded; NRLMSISE-00 is running on its \
                  defaults (F10.7 = F10.7A = 150, Ap = 4), which can be wrong by a factor of \
                  two in atmospheric density.\n\
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
@@ -687,8 +693,8 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
              (the default NASA MSAFE forecast runs about 15 years ahead); refreshing the data \
              files will not move that end."
         };
-        eprintln!(
-            "Warning: the space-weather table ends at {}; the request for {tm} and all later \
+        diag::warn!(
+            "the space-weather table ends at {}; the request for {tm} and all later \
              epochs return that row's values unchanged.\n\
              {advice}\n\
              To disable: `satkit::spaceweather::disable_space_weather_time_warning()` \
@@ -715,8 +721,8 @@ pub fn get<T: TimeLike>(tm: &T) -> Result<SpaceWeatherRecord> {
     // A monthly-predicted row carries no geomagnetic data at all: every
     // kp/ap field is -1, so NRLMSISE-00 falls back to a quiet-time Ap = 4.
     if !rec.has_geomagnetic() && !MONTHLY_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-        eprintln!(
-            "Warning: the space-weather record for {tm} is a monthly prediction ({}); it \
+        diag::warn!(
+            "the space-weather record for {tm} is a monthly prediction ({}); it \
              carries F10.7 but no Kp/ap, so NRLMSISE-00 runs on a quiet-time Ap = 4 with no \
              storm information. Density can be wrong by a factor of two during a geomagnetic \
              storm (measured 1.9x at 400 km for the 2024-05-11 event).\n\

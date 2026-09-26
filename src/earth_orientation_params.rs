@@ -18,7 +18,7 @@
 //!
 //! Before the table's first row there is no EOP: [`get`](crate::earth_orientation_params::get) returns `None`,
 //! the frame transforms use zeros (so UT1 = UTC, as in ERFA), and a
-//! one-time warning is printed.
+//! one-time warning is logged.
 //!
 //! When the file has copies in more than one search directory, the copy
 //! with the latest last observed row is read, so a stale copy in an earlier
@@ -42,6 +42,7 @@
 //!
 
 use crate::utils::datadir;
+use crate::utils::diag;
 use crate::utils::download::{self, refresh_file};
 use crate::utils::manifest::RefreshSource;
 use crate::utils::RefreshableSingleton;
@@ -448,11 +449,11 @@ fn read_table(path: Option<&Path>) -> Option<Vec<EOPEntry>> {
     match parsed {
         Ok(t) if !t.is_empty() => Some(t),
         Ok(_) => {
-            eprintln!("Warning: {} holds no EOP rows; ignoring it", p.display());
+            diag::warn!("{} holds no EOP rows; ignoring it", p.display());
             None
         }
         Err(e) => {
-            eprintln!("Warning: could not read {}: {e}; ignoring it", p.display());
+            diag::warn!("could not read {}: {e}; ignoring it", p.display());
             None
         }
     }
@@ -779,26 +780,35 @@ pub fn update() -> Result<()> {
 ///     * 4 : dX wrt IAU 2000A nutation, milli-arcsecs
 ///     * 5 : dY wrt IAU 2000A nutation, milli-arcsecs
 ///
-/// * If time is before range of file, returns None and prints warning to stderr
+/// * If time is before range of file, returns None and logs a warning
 ///   (but only once per library load)
 /// * If time is after range of file, returns the last entry's values (constant
-///   extrapolation) and prints a warning to stderr the first time this happens
-/// * If no table is loaded at all, returns None and prints a warning to stderr
-///   the first time this happens
+///   extrapolation) and logs a warning the first time this happens
+/// * If no table is loaded at all, returns None and logs a warning the first
+///   time this happens
 ///
-/// Use [`status`] / [`coverage`] to check which regime an epoch is in without
-/// relying on the warnings; [`disable_eop_time_warning`] suppresses them.
+/// The warnings go through the `log` facade under the
+/// `satkit::earth_orientation_params` target, or to stderr when no logger is
+/// installed. Use [`status`] / [`coverage`] to check which regime an epoch is
+/// in without relying on the warnings; [`disable_eop_time_warning`]
+/// suppresses them.
 ///
 pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
+    // Warnings are logged after the table's read lock is released.
+    diag::deferred(|| eop_lookup(mjd_utc))
+}
+
+/// [`eop_from_mjd_utc`] under the table lock.
+fn eop_lookup(mjd_utc: f64) -> Option<[f64; 6]> {
     ensure_default_loaded();
     let guard = EOP.read();
     let Some(eop) = guard.as_deref().filter(|e| !e.is_empty()) else {
         if !NOT_LOADED_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            eprintln!(
-                "Warning: no Earth Orientation Parameters (EOP) table is loaded; polar motion, \
+            diag::warn!(
+                "no Earth Orientation Parameters (EOP) table is loaded; polar motion, \
                  UT1-UTC and nutation corrections are being treated as zero, which biases \
                  Earth-fixed frame transforms by up to ~12 arcsec (UT1-UTC up to 0.9 s \
-                 plus polar motion up to ~0.5 arcsec), i.e. hundreds of metres at LEO.\n\
+                 plus polar motion up to ~0.6 arcsec), i.e. hundreds of metres at LEO.\n\
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
                  to download finals2000A.all, or set SATKIT_DATA to a directory containing it.\n\
                  To disable: `satkit::earth_orientation_params::disable_eop_time_warning()` \
@@ -813,8 +823,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
 
     if idx == 0 {
         if !WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            eprintln!(
-                "Warning: EOP data not available for MJD UTC = {mjd_utc} (too early): the \
+            diag::warn!(
+                "EOP data not available for MJD UTC = {mjd_utc} (too early): the \
                  loaded table starts at {} (MJD {}), and polar motion, UT1-UTC and nutation \
                  corrections are treated as zero (UT1 = UTC) before it.\n\
                  {}\
@@ -833,8 +843,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
     if idx >= eop.len() {
         let last = &eop[eop.len() - 1];
         if beyond_table(mjd_utc, last) && !EXTRAP_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-            eprintln!(
-                "Warning: EOP data ends at {} (MJD {}); the request for MJD UTC = {mjd_utc} and \
+            diag::warn!(
+                "EOP data ends at {} (MJD {}); the request for MJD UTC = {mjd_utc} and \
                  all later epochs use the last entry's values held constant. Polar motion and \
                  UT1-UTC drift by ~0.1 arcsec / ~10 ms over a few months, i.e. metres at LEO.\n\
                  Run `satkit::utils::update_datafiles()` (Python: `satkit.utils.update_datafiles()`) \
@@ -856,8 +866,8 @@ pub fn eop_from_mjd_utc(mjd_utc: f64) -> Option<[f64; 6]> {
         let now = Instant::now().as_mjd_utc();
         if let Some((last_observed, age)) = stale_prediction_age(eop, mjd_utc, now) {
             if !STALE_PREDICTION_WARNING_SHOWN.swap(true, Ordering::Relaxed) {
-                eprintln!(
-                    "Warning: EOP for MJD UTC = {mjd_utc} comes from IERS predictions made \
+                diag::warn!(
+                    "EOP for MJD UTC = {mjd_utc} comes from IERS predictions made \
                      {age:.0} days ago: the loaded table's observed data ends at {} \
                      (MJD {last_observed}), and the file has not been refreshed since. \
                      Months-old predictions are off by ~0.3-0.6 arcsec in UT1 \
@@ -1555,5 +1565,64 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The EOP warnings reach an installed logger under this module's
+    /// target, at Warn, and only once the table's read lock is released: a
+    /// logger may block (the Python bindings' takes the GIL), and a thread
+    /// holding the GIL could be waiting to replace the table. Runs in its
+    /// own process, for its own logger, fresh one-time flags and a table it
+    /// can empty.
+    #[test]
+    fn warnings_are_logged_outside_the_table_lock() {
+        use std::sync::Mutex;
+        if !download::in_own_process(module_path!(), "warnings_are_logged_outside_the_table_lock") {
+            return;
+        }
+        type Seen = (log::Level, String, String, bool);
+        static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
+        struct Probe;
+        impl log::Log for Probe {
+            fn enabled(&self, m: &log::Metadata) -> bool {
+                m.target().starts_with("satkit")
+            }
+            fn log(&self, r: &log::Record) {
+                if self.enabled(r.metadata()) {
+                    SEEN.lock().unwrap().push((
+                        r.level(),
+                        r.target().to_string(),
+                        r.args().to_string(),
+                        EOP.is_locked(),
+                    ));
+                }
+            }
+            fn flush(&self) {}
+        }
+        log::set_logger(&Probe).unwrap();
+        log::set_max_level(log::LevelFilter::Info);
+
+        EOP.set(Vec::new());
+        assert!(eop_from_mjd_utc(60000.0).is_none());
+        init_from_bytes(FINALS_SAMPLE.as_bytes()).unwrap();
+        assert!(eop_from_mjd_utc(30000.0).is_none());
+
+        let seen = SEEN.lock().unwrap();
+        assert_eq!(seen.len(), 2, "{seen:?}");
+        for (level, target, _, locked) in seen.iter() {
+            assert_eq!(*level, log::Level::Warn);
+            assert_eq!(target, "satkit::earth_orientation_params");
+            assert!(!locked, "logged while the EOP table was locked");
+        }
+        let (no_table, too_early) = (&seen[0].2, &seen[1].2);
+        assert!(
+            no_table.starts_with("no Earth Orientation Parameters"),
+            "{no_table}"
+        );
+        // The largest observed total polar motion is 0.600 arcsec.
+        assert!(
+            no_table.contains("polar motion up to ~0.6 arcsec"),
+            "{no_table}"
+        );
+        assert!(too_early.contains("(too early)"), "{too_early}");
     }
 }

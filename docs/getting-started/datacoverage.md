@@ -17,7 +17,7 @@ Every Earth-fixed frame transform, every UT1-based quantity (`gmst`, `gast`, Ear
 |---|---|---|
 | `"observed"` | on or before the last observed row | interpolates measured values |
 | `"predicted"` | after the last observed row, inside the table | interpolates IERS predictions (~1 year ahead) |
-| `"extrapolated"` | after the last row | holds the last row constant and prints a **one-time warning**. Polar motion drifts ~0.1″ and $\Delta UT1$ ~10 ms over a few months — metres of position error at LEO |
+| `"extrapolated"` | after the last row | holds the last row constant and logs a **one-time warning**. Polar motion drifts ~0.1″ and $\Delta UT1$ ~10 ms over a few months — metres of position error at LEO |
 | `"before_table"` | before the table's first row, 1973-01-02 for `finals2000A.all` | zeros (so UT1 = UTC), one-time warning. Refreshing does not move the start |
 | `"not_loaded"` | no table at all (first use offline, or the fetch failed) | zeros, one-time warning; **`propagate` refuses to run** (`RuntimeError`) |
 

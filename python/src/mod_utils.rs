@@ -53,10 +53,13 @@ use anyhow::Result;
 ///
 #[pyfunction]
 #[pyo3(signature=(*, overwrite=false, dir=None))]
-fn update_datafiles(overwrite: bool, dir: Option<PathBuf>) -> Result<()> {
+fn update_datafiles(py: Python, overwrite: bool, dir: Option<PathBuf>) -> Result<()> {
     // Keyword-only parameters: an unknown keyword (e.g. `force=True`) is a
     // `TypeError` from PyO3's argument parsing instead of being ignored.
-    satkit::utils::update_datafiles(dir, overwrite)?;
+    //
+    // The GIL is released while the download threads run and are joined: a
+    // warning they log goes to Python's `logging`, which needs the GIL.
+    py.detach(|| satkit::utils::update_datafiles(dir, overwrite))?;
     Ok(())
 }
 

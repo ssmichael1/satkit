@@ -9,6 +9,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 ### Added
 
 - Python `moon.pos_mod` (mean-of-date Moon position), mirroring `sun.pos_mod` ([#254](https://github.com/ssmichael1/satkit/pull/254))
+- Warnings go through the Rust `log` facade and, in Python, the `logging` module (`satkit.*` loggers); with no logger installed Rust still prints them to stderr ([#262](https://github.com/ssmichael1/satkit/pull/262))
 
 ### Changed
 

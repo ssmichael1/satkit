@@ -424,8 +424,8 @@ pub fn fetch_static_file(
     if !force && dest.is_file() {
         match entry.ensure_verified(&dest) {
             Ok(_) => return Ok(FetchOutcome::AlreadyPresent),
-            Err(Error::CorruptFile { .. }) => eprintln!(
-                "Warning: {} exists but does not match the manifest (size/sha256); re-downloading",
+            Err(Error::CorruptFile { .. }) => super::diag::warn!(
+                "{} exists but does not match the manifest (size/sha256); re-downloading",
                 dest.display()
             ),
             Err(e) => return Err(e),
