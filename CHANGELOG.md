@@ -27,6 +27,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - The Time Systems page is rewritten as the single reference for time in satkit: scales, storage, leap seconds, UT1 / EOP coverage and TDB, with runnable examples ([#215](https://github.com/ssmichael1/satkit/pull/215))
 - New Troubleshooting & FAQ page under Getting Started, organised by symptom ([#216](https://github.com/ssmichael1/satkit/pull/216))
 - De-duplicated docs, README, CONTRIBUTING, crate docs and CHANGELOG (pages link to the canonical data pages instead of retelling them); CI data downloads moved into one composite action, and the test-vector cache is keyed on its file list ([#228](https://github.com/ssmichael1/satkit/pull/228))
+- `jplephem::barycentric_pos` / `barycentric_state` docs say the result is barycentric, not "Heliocentric"; internal (no behaviour change): duplicate private-method docs and the empty Vallado "locals" lists in the SGP4 source comments are removed (~200 fewer comment lines) ([#231](https://github.com/ssmichael1/satkit/pull/231))
 
 ### CI
 
@@ -38,6 +39,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - Differential tests against ERFA (`pyerfa`, a new test dependency) for the time scales, Earth rotation, precession–nutation, TEME and geodetic conversion; three defects pinned as strict xfails ([#219](https://github.com/ssmichael1/satkit/pull/219))
 - Property tests (proptest, and hypothesis as a new test dependency) for leap seconds, time scales, pickles and frame transforms, plus a weekly 100k-case run; seven defects pinned as ignored / xfail tests ([#221](https://github.com/ssmichael1/satkit/pull/221))
+- Rust time tests slimmed: tuple `as_datetime` asserts, three tests subsumed by exact properties removed, shared EOP instant strategies, `add_utc_days` checked exactly (~215 fewer lines, no coverage lost) ([#232](https://github.com/ssmichael1/satkit/pull/232))
 - Python tests de-duplicated with no coverage lost: fixed-example tests already covered by stricter property or row-by-row tests removed, shared TLE lines and helpers in `python/test/shared.py`, one seeded label generator in the ERFA tests, and dead xfail scaffolding dropped (~350 fewer lines) ([#233](https://github.com/ssmichael1/satkit/pull/233))
 
 ## 0.23.1 - 2026-09-24

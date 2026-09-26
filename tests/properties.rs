@@ -163,27 +163,6 @@ proptest! {
             prop_assert!(err_us < 5.0, "{scale} round-trip error {err_us} µs at mjd {mjd}");
         }
     }
-
-    /// Unixtime ↔ Instant round-trips (unixtime ignores leap seconds; the
-    /// mapping must still be self-consistent).
-    #[test]
-    fn unixtime_roundtrip(ut in 0.0..2.4e9f64) {
-        let t = Instant::from_unixtime(ut);
-        prop_assert!((t.as_unixtime() - ut).abs() < 5e-6,
-            "unixtime round-trip error {:e}", (t.as_unixtime() - ut).abs());
-    }
-
-    /// Instant ± Duration arithmetic is exact at microsecond granularity.
-    #[test]
-    fn instant_duration_arithmetic(
-        mjd in 50000.0..60000.0f64,
-        dt_us in -1_000_000_000_000i64..1_000_000_000_000i64, // ±11.5 days
-    ) {
-        let t = Instant::from_mjd_with_scale(mjd, TimeScale::TAI);
-        let d = Duration::from_seconds(dt_us as f64 * 1e-6);
-        let t2 = t + d - d;
-        prop_assert!(((t2 - t).as_seconds()).abs() < 1e-6);
-    }
 }
 
 // ───────────────────────── TLE ─────────────────────────
@@ -330,6 +309,17 @@ fn spaced(l: &Label) -> String {
     )
 }
 
+/// The local label `offset_min` minutes ahead of UTC label `l` (on the
+/// 86400-s-per-day label axis, as RFC 3339 defines offsets), and its zone
+/// suffix `±HH{sep}MM`.
+fn offset_label(l: &Label, offset_min: i64, sep: &str) -> (Label, String) {
+    let local = l.utc_basis_us() + offset_min * US_MIN;
+    let ll = Label::from_day_tod(local.div_euclid(US_DAY), local.rem_euclid(US_DAY));
+    let sign = if offset_min < 0 { '-' } else { '+' };
+    let (h, m) = (offset_min.abs() / 60, offset_min.abs() % 60);
+    (ll, format!("{sign}{h:02}{sep}{m:02}"))
+}
+
 /// `|a − b|` in microseconds.
 fn diff_us(a: &Instant, b: &Instant) -> i64 {
     (*a - *b).as_microseconds().abs()
@@ -350,7 +340,9 @@ proptest! {
     /// Tolerance: the reference is [`Label::instant`] (integer µs). The
     /// calendar and string routes are exact (float seconds are rounded to
     /// the nearest µs); the MJD / unixtime routes are allowed 1 µs, as an
-    /// f64 MJD after 2038 resolves only ~1.3 µs.
+    /// f64 MJD after 2038 resolves only ~1.3 µs, and from 2038 an f64 Unix
+    /// time (≥ 2^31 s) resolves only ~0.5 µs, so from ~2041 (2^51 µs) about
+    /// 10% of µs values come back 1 µs off.
     #[test]
     fn construction_paths_agree(l in any_label()) {
         let t = l.instant();
@@ -404,16 +396,8 @@ proptest! {
         l in any_non_leap_label(),
         offset_min in -14 * 60..=14 * 60i64,
     ) {
-        let local = l.utc_basis_us() + offset_min * US_MIN;
-        let ll = Label::from_day_tod(local.div_euclid(US_DAY), local.rem_euclid(US_DAY));
-        let sign = if offset_min < 0 { '-' } else { '+' };
-        let s = format!(
-            "{}{}{:02}:{:02}",
-            &ll.iso()[..ll.iso().len() - 1],
-            sign,
-            offset_min.abs() / 60,
-            offset_min.abs() % 60
-        );
+        let (ll, z) = offset_label(&l, offset_min, ":");
+        let s = format!("{}{z}", ll.iso().trim_end_matches('Z'));
         let p = Instant::from_rfc3339(&s);
         prop_assert!(p.is_ok(), "rejected {s:?}: {:?}", p.err());
         let p = p.unwrap();
@@ -429,16 +413,8 @@ proptest! {
         offset_min in -14 * 60..=14 * 60i64,
     ) {
         prop_assume!(offset_min != 0);
-        let local = l.utc_basis_us() + offset_min * US_MIN;
-        let ll = Label::from_day_tod(local.div_euclid(US_DAY), local.rem_euclid(US_DAY));
-        let sign = if offset_min < 0 { '-' } else { '+' };
-        let s = format!(
-            "{}{}{:02}{:02}",
-            spaced(&ll),
-            sign,
-            offset_min.abs() / 60,
-            offset_min.abs() % 60
-        );
+        let (ll, z) = offset_label(&l, offset_min, "");
+        let s = format!("{}{z}", spaced(&ll));
         let p = Instant::strptime(&s, "%Y-%m-%d %H:%M:%S.%f%z");
         prop_assert!(p.is_ok(), "rejected {s:?}: {:?}", p.err());
         let p = p.unwrap();
@@ -597,7 +573,8 @@ proptest! {
     #![proptest_config(cases(TIME_CASES))]
 
     /// `add_utc_days(n)` keeps the time-of-day label and moves the date by
-    /// `n` calendar days, whatever leap seconds lie in between.
+    /// `n` calendar days, whatever leap seconds lie in between. Exact: a
+    /// whole number of days is an integer count of µs on the UTC basis.
     #[test]
     fn add_utc_days_keeps_label(
         l in any_non_leap_label(),
@@ -605,9 +582,9 @@ proptest! {
     ) {
         let expected = Label::from_day_tod(l.days() + n, l.utc_basis_us().rem_euclid(US_DAY));
         let got = l.instant().add_utc_days(n as f64);
-        prop_assert!(
-            diff_us(&got, &expected.instant()) <= 2,
-            "{} + {n} d → {got}, expected {}", l.iso(), expected.iso()
+        prop_assert_eq!(
+            got, expected.instant(),
+            "{} + {} d → {}, expected {}", l.iso(), n, got, expected.iso()
         );
     }
 
@@ -723,6 +700,9 @@ proptest! {
 
     /// Instant ± Duration is exact at microsecond resolution across leap
     /// seconds and before 1970: `(t + d) − t == d` and `t + d − d == t`.
+    /// `Duration::from_seconds` of the same span in `f64` seconds is exactly
+    /// `d`: it rounds to the nearest µs, and below 2^31 s (here ≤ 1.5e9 s)
+    /// the f64 seconds and their µs product are both within 0.125 µs.
     #[test]
     fn duration_arithmetic_exact_across_leap_seconds(
         t in any_instant(),
@@ -735,6 +715,7 @@ proptest! {
         let d = Duration::from_microseconds(d_us);
         prop_assert_eq!(((t + d) - t).as_microseconds(), d_us);
         prop_assert_eq!(t + d - d, t);
+        prop_assert_eq!(Duration::from_seconds(d_us as f64 * 1e-6), d);
     }
 }
 

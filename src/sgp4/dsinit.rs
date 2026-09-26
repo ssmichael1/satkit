@@ -58,19 +58,6 @@ use std::f64::consts::PI;
 *    xli         -
 *    xni
 *
-*  locals        :
-*    ainv2       -
-*    aonv        -
-*    cosisq      -
-*    eoc         -
-*    f220, f221, f311, f321, f322, f330, f441, f442, f522, f523, f542, f543  -
-*    g200, g201, g211, g300, g310, g322, g410, g422, g520, g521, g532, g533  -
-*    sini2       -
-*    temp        -
-*    temp1       -
-*    theta       -
-*    xno2        -
-*
 *  coupling      :
 *    getgravconst- no longer used
 *

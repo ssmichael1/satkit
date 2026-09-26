@@ -130,7 +130,7 @@ impl TryFrom<i32> for SolarSystem {
 /// Included ephemerides and solar system constants loaded from the
 /// JPL ephemerides file.
 ///
-/// Also includes functions to compute heliocentric and geocentric
+/// Also includes functions to compute barycentric and geocentric
 /// positions and velocities of solar system bodies as a function
 /// of time
 #[derive(Debug)]
@@ -685,48 +685,12 @@ impl JPLEphem {
         Ok(pos * 1.0e3)
     }
 
-    /// Return the position of the given body in the Barycentric
-    /// coordinate system (origin is solarsystem barycenter)
-    ///
-    /// # Inputs
-    ///
-    ///  * `body` - the solar system body for which to return position
-    ///  * `tm` - The time at which to return position
-    ///
-    /// # Return
-    ///
-    ///  * 3-vector of cartesian Heliocentric position in meters
-    ///
-    ///
-    /// # Notes:
-    ///  * Positions for all bodies are natively relative to solar system barycenter,
-    ///    with exception of moon, which is computed in Geocentric system
-    ///  * EMB (2) is the Earth-Moon barycenter
-    ///  * The sun position is relative to the solar system barycenter
-    ///    (it will be close to origin)
+    /// Barycentric position; see the public [`barycentric_pos`].
     fn barycentric_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
         let setup = self.cheby_setup(body, et)?;
         dispatch_ncoeff!(self, body_pos_optimized, &setup)
     }
-    /// Return the position & velocity the given body in the barycentric coordinate system
-    /// (origin is solar system barycenter)
-    ///
-    /// # Arguments
-    ///  * `body` - the solar system body for which to return position
-    ///  * `tm` - The time at which to return position
-    ///
-    /// # Return
-    ///  * 2-element tuple with following values:
-    ///    * 3-vector of cartesian Heliocentric position in meters
-    ///    * 3-vector of cartesian Heliocentric velocity in meters / second
-    ///
-    ///
-    /// # Notes:
-    ///  * Positions for all bodies are natively relative to solar system barycenter,
-    ///    with exception of moon, which is computed in Geocentric system
-    ///  * EMB (2) is the Earth-Moon barycenter
-    ///  * The sun position is relative to the solar system barycenter
-    ///    (it will be close to origin)
+    /// Barycentric position and velocity; see the public [`barycentric_state`].
     fn barycentric_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
         let setup = self.cheby_setup(body, et)?;
         dispatch_ncoeff!(self, body_state_optimized, &setup)
@@ -767,16 +731,7 @@ impl JPLEphem {
         ))
     }
 
-    /// Return the position of the given body in
-    /// Geocentric coordinate system
-    ///
-    /// # Arguments
-    ///  * body - the solar system body for which to return position
-    ///  * tm - The time at which to return position
-    ///
-    /// # Return
-    ///    3-vector of cartesian Geocentric position in meters
-    ///
+    /// Geocentric position; see the public [`geocentric_pos`].
     fn geocentric_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
         if body == SolarSystem::Moon {
             self.barycentric_pos(body, et)
@@ -792,20 +747,7 @@ impl JPLEphem {
         }
     }
 
-    /// Return the position and velocity of the given body in
-    ///  Geocentric coordinate system
-    ///
-    /// # Arguments
-    ///
-    ///  * `body` - the solar system body for which to return position
-    ///  * `tm` - The time at which to return position
-    ///
-    /// # Return
-    ///   * 2-element tuple with following elements:
-    ///     * 3-vector of cartesian Geocentric position in meters
-    ///     * 3-vector of cartesian Geocentric velocity in meters / second
-    ///       Note: velocity is relative to Earth
-    ///
+    /// Geocentric position and velocity; see the public [`geocentric_state`].
     fn geocentric_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
         if body == SolarSystem::Moon {
             self.barycentric_state(body, et)
@@ -870,7 +812,7 @@ pub fn consts(s: &str) -> Option<&f64> {
 ///  * `tm` - The time at which to return position
 ///
 /// # Returns
-///    3-vector of cartesian Heliocentric position in meters
+///    3-vector of cartesian barycentric position in meters
 ///
 ///
 /// # Notes:
@@ -926,8 +868,8 @@ pub fn geocentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3>
 ///
 /// # Returns
 ///  * two-element tuple with following values:
-///    * 3-vector of cartesian Heliocentric position in meters
-///    * 3-vector of cartesian Heliocentric velocity in meters / second
+///    * 3-vector of cartesian barycentric position in meters
+///    * 3-vector of cartesian barycentric velocity in meters / second
 ///
 ///
 /// # Notes:
