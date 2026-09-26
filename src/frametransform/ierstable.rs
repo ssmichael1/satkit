@@ -26,7 +26,7 @@ pub enum IersTableId {
 }
 
 impl IersTableId {
-    /// Default filename under [`datadir`](crate::utils::datadir) used by
+    /// Default filename under [`datadir`](crate::utils::datadir()) used by
     /// the lazy default-resolver.
     pub const fn default_filename(self) -> &'static str {
         match self {
@@ -50,7 +50,7 @@ fn instance_for(id: IersTableId) -> &'static OnceLock<IERSTable> {
 }
 
 /// Return the IERS table singleton for `id`, loading from
-/// [`datadir`](crate::utils::datadir) on first access.
+/// [`datadir`](crate::utils::datadir()) on first access.
 pub fn table(id: IersTableId) -> &'static IERSTable {
     // This backs the per-transform IERS reduction and cannot return a `Result`
     // without threading it through every `q*2*` frame-transform signature.
@@ -122,7 +122,7 @@ pub fn init_from_path(id: IersTableId, path: &std::path::Path) -> Result<()> {
 ///
 impl IERSTable {
     /// Load an IERS table from a file under
-    /// [`datadir`](crate::utils::datadir) by basename. Auto-downloads via
+    /// [`datadir`](crate::utils::datadir()) by basename. Auto-downloads via
     /// [`download_if_not_exist`] if missing.
     pub fn from_file(fname: &str) -> Result<Self> {
         // Precedence: a copy in the data directory wins (so an updated table

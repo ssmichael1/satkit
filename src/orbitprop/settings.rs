@@ -88,7 +88,7 @@ impl std::fmt::Display for Integrator {
 /// * `initial_step_secs` - first step (seconds) the adaptive integrators
 ///   attempt. Default `None`: derived from the initial state, the tolerances
 ///   and the integrator order (about 170 s for RKV98 at 1e-9 in LEO). Set it
-///   to warm-start from a previous arc's [`PropagationResult::next_step_secs`].
+///   to warm-start from a previous arc's [`PropagationResult::next_step_secs`](crate::orbitprop::PropagationResult::next_step_secs).
 ///
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PropSettings {
@@ -102,7 +102,7 @@ pub struct PropSettings {
     pub use_moon_gravity: bool,
     pub tide_model: TideModel,
     pub use_relativistic_correction: bool,
-    /// Store dense output so [`PropagationResult::interp`] works between
+    /// Store dense output so [`PropagationResult::interp`](crate::orbitprop::PropagationResult::interp) works between
     /// the begin and end times. Default `true`. When `false`, no dense
     /// output is stored and [`Integrator::RKV98`] runs its 16-stage
     /// no-interpolant tableau (same order and error control, 24% fewer
@@ -147,7 +147,7 @@ pub struct PropSettings {
     /// tolerance) growing into it.
     ///
     /// Set it explicitly to warm-start a follow-on arc from the previous
-    /// arc's [`PropagationResult::next_step_secs`], which continues at full
+    /// arc's [`PropagationResult::next_step_secs`](crate::orbitprop::PropagationResult::next_step_secs), which continues at full
     /// stride, or to override the state-derived default. It is a magnitude:
     /// backward propagation applies the sign, and a value longer than the
     /// arc is clamped to it. Ignored by [`Integrator::GaussJackson8`] (fixed

@@ -13,7 +13,7 @@ use thiserror::Error;
 
 /// Errors produced by the [`lpephem`](crate::lpephem) module.
 ///
-/// Shared across the [`sun`] and [`planets`] submodules; [`moon`] does
+/// Shared across the [`sun`] and `planets` submodules; [`moon`] does
 /// not currently surface fallible operations.
 #[derive(Debug, Error)]
 pub enum Error {
