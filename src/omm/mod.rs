@@ -36,11 +36,12 @@ use crate::tle::TLE;
 use crate::Instant;
 
 // ---------------------------------------------------------------------------
-// Field parsing shared by the JSON (serde) and XML paths
+// Field parsing for the XML path
 // ---------------------------------------------------------------------------
 
 /// Parse an optional textual field. `None`, empty, and whitespace-only text
 /// all read as "absent".
+#[cfg(feature = "omm-xml")]
 pub(crate) fn parse_opt_field<T>(field: &'static str, text: Option<&str>) -> Result<Option<T>>
 where
     T: FromStr,
@@ -56,6 +57,7 @@ where
 }
 
 /// Parse a mandatory textual field; absent or empty text is an error.
+#[cfg(feature = "omm-xml")]
 pub(crate) fn parse_req_field<T>(field: &'static str, text: Option<&str>) -> Result<T>
 where
     T: FromStr,

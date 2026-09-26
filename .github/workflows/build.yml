@@ -78,6 +78,10 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Clippy (deny warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # A dependent that turns off the default features (download, omm-xml)
+      # must still build warning-free.
+      - name: Clippy without default features
+        run: cargo clippy -p satkit --no-default-features --all-targets -- -D warnings
 
   deny:
     # cargo-deny covers the RustSec advisories the cargo-audit job used to

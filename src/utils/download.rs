@@ -364,6 +364,7 @@ fn refresh_offline_message(
 /// shared with every other ureq user, which makes throttling decisions land
 /// on satkit's requests. A descriptive, versioned agent also lets data
 /// providers reach the project if a client misbehaves.
+#[cfg(feature = "download")]
 pub(crate) const USER_AGENT: &str = concat!(
     "satkit/",
     env!("CARGO_PKG_VERSION"),
@@ -563,6 +564,7 @@ fn file_name(path: &Path) -> Result<&str> {
 
 /// Return [`Error::Offline`] if downloads are forbidden (checked before any
 /// network I/O by every download helper).
+#[cfg(feature = "download")]
 pub(crate) fn check_online(name: &str) -> Result<()> {
     match offline_reason() {
         Some(reason) => Err(offline_error(name, reason)),
@@ -572,6 +574,7 @@ pub(crate) fn check_online(name: &str) -> Result<()> {
 
 /// Sequence number so every in-flight download in this process gets its own
 /// temporary file (see [`part_path`]).
+#[cfg(feature = "download")]
 static PART_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Path of the temporary file a download is streamed into before the atomic
@@ -594,6 +597,7 @@ fn part_path(final_path: &Path) -> std::path::PathBuf {
 /// retry can help). Everything else — notably the Windows sharing-violation
 /// (`PermissionDenied`) raised when renaming over a file another process has
 /// open, or a transient EBUSY — is retried.
+#[cfg(feature = "download")]
 pub(crate) fn retry_io<F: FnMut() -> std::io::Result<()>>(
     attempts: u32,
     delay: std::time::Duration,

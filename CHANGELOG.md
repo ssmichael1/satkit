@@ -78,6 +78,7 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - No behaviour change: `rustfmt.toml` packs numeric tables, unused NRLMSISE-00 code removed, `Instant` / `Duration` ordering derived (~3,200 fewer lines) ([#227](https://github.com/ssmichael1/satkit/pull/227))
 - No behaviour change: Python bindings simplified with shared helpers and safe numpy reshapes (~590 fewer lines) ([#230](https://github.com/ssmichael1/satkit/pull/230))
 - No behaviour change: Rust core de-duplicated (~100 fewer lines) ([#234](https://github.com/ssmichael1/satkit/pull/234))
+- Builds without default features (no `download` / `omm-xml`) are warning-free, and CI checks it ([#257](https://github.com/ssmichael1/satkit/pull/257))
 
 ## 0.23.1 - 2026-09-24
 
