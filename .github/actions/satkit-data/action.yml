@@ -9,18 +9,61 @@ inputs:
     description: Also restore or download the test vectors.
     default: "true"
 
+# Three caches, each shared by every OS (enableCrossOsArchive):
+#
+# * the JPL ephemeris (~100 MB), keyed on its SHA-256 pinned in
+#   data/manifest.json, so it is saved once per ephemeris version and not
+#   again whenever a script or the rest of the manifest changes;
+# * the rest of astro-data (EOP, space weather and their .http-cache
+#   sidecars; a few MB), keyed as before on the manifest and the script;
+# * the test vectors, keyed on the bucket's own size + MD5 of every listed
+#   file, so a replaced vector changes the key.
 runs:
   using: composite
   steps:
-    - name: Cache satkit data
+    - name: Read the pinned ephemeris from the manifest
+      id: ephem
+      shell: bash
+      # Written from Python with explicit "\n" line ends: a text-mode print
+      # on Windows would put a "\r" into the outputs, and so into the key.
+      run: |
+        python - <<'EOF'
+        import hashlib, json, os
+        m = json.load(open("data/manifest.json", encoding="utf-8"))
+        f = next(f for f in m["files"] if f["name"].endswith(".440") and f.get("default", True))
+        # Key of the small data cache: the manifest and the download script
+        # with line endings normalised, so a CRLF checkout on Windows shares
+        # the Linux/macOS cache (hashFiles would give it a key of its own).
+        h = hashlib.sha256()
+        for p in ("data/manifest.json", "python/test/download_data.py"):
+            h.update(open(p, "rb").read().replace(b"\r\n", b"\n"))
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8", newline="\n") as out:
+            out.write(f"name={f['name']}\nsha={f['sha256'][:16]}\nsmall={h.hexdigest()[:32]}\n")
+        EOF
+
+    - name: Cache the JPL ephemeris
+      id: cache-ephem
+      uses: actions/cache@v6
+      with:
+        path: astro-data/${{ steps.ephem.outputs.name }}
+        enableCrossOsArchive: true
+        key: satkit-ephem-${{ steps.ephem.outputs.sha }}
+
+    - name: Cache the rest of the satkit data
       id: cache-satkit-data
       uses: actions/cache@v6
       with:
-        path: astro-data
+        # Every top-level entry except the ephemeris, which has its own
+        # cache above. (A bare `astro-data` would archive the whole
+        # directory, ephemeris included: the exclusion only filters paths
+        # the include pattern itself matched.)
+        path: |
+          astro-data/*
+          !astro-data/${{ steps.ephem.outputs.name }}
         enableCrossOsArchive: true
         # Changing this expression (or the path above) orphans every existing
         # cache and forces a fresh download.
-        key: satkit-data-${{ hashFiles('data/manifest.json', 'python/test/download_data.py') }}
+        key: satkit-data-small-${{ steps.ephem.outputs.small }}
         # On a manifest change the exact key misses; seed from the newest
         # older cache so EOP/SW survive an upstream outage (the download
         # step then verifies/updates the manifest files).
@@ -30,41 +73,58 @@ runs:
         # (python/test/test_eop.py), so a cached copy stays valid however
         # old it is. Only the docs workflow refreshes, rate-limited, because
         # it renders "now".
-        restore-keys: satkit-data-
+        restore-keys: satkit-data-small-
 
+    # Also verifies a restored ephemeris against the manifest's SHA-256, and
+    # exits non-zero if finals2000A.all or the space-weather table is still
+    # absent afterwards (after retrying a failed connection), so a cache
+    # without them is never saved.
     - name: Download satkit data (manifest-verified)
-      if: steps.cache-satkit-data.outputs.cache-hit != 'true'
+      if: steps.cache-ephem.outputs.cache-hit != 'true' || steps.cache-satkit-data.outputs.cache-hit != 'true'
       shell: bash
       run: |
         python -m pip install requests
         python python/test/download_data.py astro-data
 
-    # files.json lists every test vector, so hashing it gives a key that
-    # changes when a vector is added or replaced (the old fixed key never
-    # did); the restore-keys prefix then seeds from the previous cache and
-    # the download script fetches only what is missing.
-    - name: Key the test-vector cache on its file list
+    # The key hashes each listed file's size and MD5 from the bucket's object
+    # listing, so it changes when a vector is added or replaced. When the
+    # bucket cannot be reached the key is empty: the newest older cache is
+    # restored through the prefix, the downloader keeps it with a warning,
+    # and nothing is saved.
+    - name: Key the test-vector cache on the bucket's file hashes
       id: testvecs-key
       if: inputs.testvecs == 'true'
       shell: bash
       run: |
-        hash=$(curl -fsSL --retry 3 --max-time 60 https://storage.googleapis.com/satkit-testvecs/files.json \
-          | python -c "import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])")
-        echo "hash=$hash" >> "$GITHUB_OUTPUT"
+        # (tr: no "\r" from a Windows print in the key; pipefail is on)
+        if hash=$(python python/test/download_testvecs.py --print-key | tr -d '\r'); then
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::test-vector bucket unreachable; restoring the newest cached vectors without refreshing them"
+        fi
 
-    - name: Cache satkit test vectors
+    - name: Restore satkit test vectors
       id: cache-satkit-testvecs
       if: inputs.testvecs == 'true'
-      uses: actions/cache@v6
+      uses: actions/cache/restore@v6
       with:
         path: satkit-testvecs
         enableCrossOsArchive: true
-        key: satkit-testvecs-${{ steps.testvecs-key.outputs.hash }}-${{ hashFiles('python/test/download_testvecs.py', 'python/test/download_from_json.py') }}
+        key: satkit-testvecs-${{ steps.testvecs-key.outputs.hash || 'unreachable' }}
         restore-keys: satkit-testvecs-
 
-    - name: Download satkit test vectors
+    - name: Download satkit test vectors (size + MD5 verified)
       if: inputs.testvecs == 'true' && steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
       shell: bash
-      run: |
-        python -m pip install requests
-        python python/test/download_testvecs.py satkit-testvecs
+      run: python python/test/download_testvecs.py satkit-testvecs
+
+    - name: Save satkit test vectors
+      if: >-
+        inputs.testvecs == 'true'
+        && steps.testvecs-key.outputs.hash != ''
+        && steps.cache-satkit-testvecs.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: satkit-testvecs
+        enableCrossOsArchive: true
+        key: satkit-testvecs-${{ steps.testvecs-key.outputs.hash }}

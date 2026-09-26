@@ -8,6 +8,10 @@ on:
       - wheel*
   workflow_dispatch:
 
+# Least privilege by default; jobs that need more ask for it.
+permissions:
+  contents: read
+
 jobs:
   preflight:
     # Runs for tags and for wheel* branches. On a tag it checks that the
@@ -18,8 +22,14 @@ jobs:
     # the job is a no-op gate.
     name: preflight (version + green Build)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # gh run list
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, so the tagged commit can be checked against main
+          fetch-depth: 0
 
       - name: Verify tag matches Cargo.toml, pyproject.toml, and python/Cargo.toml
         if: startsWith(github.ref, 'refs/tags/v')
@@ -54,6 +64,15 @@ jobs:
           fi
           echo "All version strings match tag ($TAG_VERSION)"
 
+      - name: Require the tagged commit to be on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not on main; release only commits that were merged to main."
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main"
+
       - name: Require a green Build run on this commit
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -61,13 +80,17 @@ jobs:
         run: |
           # Build runs on every push to main. Wait for its run on the tagged
           # commit (it may still be going if the tag followed the merge
-          # quickly) and require it to have succeeded.
+          # quickly) and require it to have succeeded. Only a run on main
+          # counts, from a push or a manual dispatch: a pull_request run of
+          # the same commit ran from the PR branch's workflow files and
+          # merge ref, not from main.
           id=""; status=""; conclusion=""
           for attempt in $(seq 1 80); do
             out=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml \
-                    --commit "$GITHUB_SHA" --limit 1 \
-                    --json databaseId,status,conclusion \
-                    -q 'if length == 0 then empty else .[0] | "\(.databaseId) \(.status) \(.conclusion // "-")" end' || true)
+                    --commit "$GITHUB_SHA" --branch main --limit 20 \
+                    --json databaseId,status,conclusion,event \
+                    -q '[.[] | select(.event == "push" or .event == "workflow_dispatch")]
+                        | if length == 0 then empty else .[0] | "\(.databaseId) \(.status) \(.conclusion // "-")" end' || true)
             if [ -n "$out" ]; then
               id=${out%% *}; rest=${out#* }; status=${rest%% *}; conclusion=${rest#* }
               [ "$status" = "completed" ] && break
@@ -78,7 +101,7 @@ jobs:
             sleep 15
           done
           if [ -z "$id" ]; then
-            echo "::error::No Build workflow run found for $GITHUB_SHA. Tag a commit that is on main and has been built, or run Build via workflow_dispatch first."
+            echo "::error::No push or workflow_dispatch Build run on main found for $GITHUB_SHA. Re-run the cancelled main run, or run Build on main via workflow_dispatch (gh workflow run build.yml --ref main) while main is at this commit."
             exit 1
           fi
           if [ "$conclusion" != "success" ]; then
@@ -89,7 +112,9 @@ jobs:
 
   publish_crate:
     name: publish to crates.io
-    needs: preflight
+    # Also waits for the wheels, so a wheel build failure stops both
+    # registries rather than leaving a crates.io-only release.
+    needs: [preflight, build_wheels]
     # Job-level guard: preflight's version checks are step-level `if`s, so on
     # a wheel* branch push it succeeds without checking anything and this job
     # would otherwise run `cargo publish` from a branch.
@@ -161,10 +186,20 @@ jobs:
       # version that speaks the GHA cache service v2 (ACTIONS_RESULTS_URL);
       # older sccache only knows the retired v1 (ACTIONS_CACHE_URL) and
       # aborts with "environment variable not found" on current runners.
+      #
+      # The tarball is checked against SHA-256 sums pinned here (the values
+      # of the release's own .sha256 files for v0.15.0); bump them with the
+      # version.
       CIBW_BEFORE_ALL_LINUX: >-
-        curl -fsSL
-        https://github.com/mozilla/sccache/releases/download/v0.15.0/sccache-v0.15.0-$(uname -m)-unknown-linux-musl.tar.gz
-        | tar -xz -C /tmp &&
+        case "$(uname -m)" in
+        x86_64) sum=782d2b5dd7ae0a55ebe368ab258114d0928d019ac2d949ab85d5d02f3926709e ;;
+        aarch64) sum=3a6a3712b49da3d263bf2d30d702de4302793016019e800bfb81c0c69401d8f8 ;;
+        *) echo "no pinned sccache checksum for $(uname -m)"; exit 1 ;;
+        esac &&
+        curl -fsSL -o /tmp/sccache.tar.gz
+        https://github.com/mozilla/sccache/releases/download/v0.15.0/sccache-v0.15.0-$(uname -m)-unknown-linux-musl.tar.gz &&
+        echo "$sum  /tmp/sccache.tar.gz" | sha256sum -c - &&
+        tar -xzf /tmp/sccache.tar.gz -C /tmp &&
         install -m 755 /tmp/sccache-v0.15.0-$(uname -m)-unknown-linux-musl/sccache /usr/local/bin/sccache
 
     steps:
@@ -224,7 +259,8 @@ jobs:
           pattern: cibw-wheels-*
           merge-multiple: true
 
+      # Pinned to a commit: this job holds id-token: write.
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/

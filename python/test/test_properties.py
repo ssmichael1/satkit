@@ -11,13 +11,19 @@ leap second and positive pre-1972 UTC step (including ``23:59:60.x``),
 pre-1970 dates back to 1900 (with the 1961-1971 rubber-second era), and a few
 fixed edges, mixed with uniform sampling.
 
-Properties that exposed a defect are kept, marked ``xfail(strict=True)``
-with the root cause until it is fixed, and carry the minimal
-counterexample as an ``@example`` so they fail deterministically (a strict
-xfail that passed by luck would fail the run).
+Properties that exposed a defect (all since fixed) carry the minimal
+counterexample as an ``@example``, so it replays on every run whatever the
+random draw. A newly found defect is marked ``xfail(strict=True)`` with the
+root cause until it is fixed; being strict, the marker then fails the run and
+is removed with the fix. No property is currently marked.
 
 Case counts: hypothesis's default 100 examples per test (fewer for the
 expensive ones); set ``HYPOTHESIS_MAX_EXAMPLES`` for a deeper run.
+
+Seeding: ``conftest.py`` loads the hypothesis profile named by
+``HYPOTHESIS_PROFILE``. Pull-request CI selects ``ci`` (derandomized, so a
+PR's result does not depend on the draw); the weekly scheduled job selects
+``deep`` (random, with a large ``HYPOTHESIS_MAX_EXAMPLES``).
 """
 
 import math

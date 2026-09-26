@@ -14,7 +14,9 @@ before the Rust build. Mirrors ``satkit.utils.update_datafiles()``:
   the manifest's ``refresh`` URLs, Earth orientation (IERS
   ``finals2000A.all``) from the first of the manifest's ``eop`` mirrors that
   answers; a failed refresh keeps the existing copy and prints a warning
-  instead of failing the run.
+  instead of failing the run, except that the run fails (exit status 1) if
+  ``finals2000A.all`` or a ``refresh`` file is absent afterwards (a request
+  that fails to connect is retried twice first).
 
 Each refreshed file is downloaded once per update: a local copy younger than
 its cadence (3 h for space weather, 24 h for EOP; ``--max-age-hours``
@@ -222,11 +224,27 @@ def _refresh(url: str, dest: Path, max_age: int = None, force: bool = False) -> 
         raise
 
 
+# Waits (s) before each retry of a request that failed to connect or timed
+# out; an HTTP error status is not retried.
+RETRY_DELAYS = (5, 20)
+
+
+def _refresh_retrying(url: str, dest: Path, max_age: int = None, force: bool = False) -> str:
+    for delay in RETRY_DELAYS + (None,):
+        try:
+            return _refresh(url, dest, max_age=max_age, force=force)
+        except (requests.ConnectionError, requests.Timeout):
+            if delay is None:
+                raise
+            print(f"  {dest.name}: connection to {url} failed; retrying in {delay} s")
+            time.sleep(delay)
+
+
 def fetch_refresh(url: str, dest_dir: Path, max_age: int = None, force: bool = False) -> str:
     """Re-fetch a regularly updated file; on failure keep the existing copy."""
     dest = dest_dir / url.rsplit("/", 1)[-1]
     try:
-        return _refresh(url, dest, max_age=max_age, force=force)
+        return _refresh_retrying(url, dest, max_age=max_age, force=force)
     except Exception as exc:  # noqa: BLE001 - any failure keeps the old file
         if dest.exists():
             return f"WARNING: refresh failed ({exc}); keeping existing copy"
@@ -244,7 +262,7 @@ def fetch_eop(sources: list, dest_dir: Path, max_age: int = None, force: bool = 
     attempts = []
     for url in (u for s in sources if s["name"] == name for u in s["urls"]):
         try:
-            return f"{name}: {_refresh(url, dest, max_age=max_age, force=force)}"
+            return f"{name}: {_refresh_retrying(url, dest, max_age=max_age, force=force)}"
         except Exception as exc:  # noqa: BLE001 - try the next mirror
             attempts.append(f"{url}: {exc}")
     kept = f"keeping existing {name}" if dest.exists() else "no EOP file present"
@@ -290,6 +308,20 @@ def main() -> None:
     refresh_msafe(dest_dir, max_age if max_age is not None else REFRESH_MIN_AGE[MSAFE_LOCAL], ns.force_refresh)
     if manifest.get("eop"):
         print(f"  {fetch_eop(manifest['eop'], dest_dir, max_age=max_age, force=ns.force_refresh)}")
+    # A failed refresh of an existing copy is only a warning (the copy stays
+    # valid), but a required file that is not there at all must fail the run:
+    # CI saves the directory as its data cache, and a cache without EOP or
+    # the space-weather table would be restored on every later run. (The
+    # MSAFE forecast is optional: the library falls back without it.)
+    required = [url.rsplit("/", 1)[-1] for url in manifest.get("refresh", [])]
+    if manifest.get("eop"):
+        required.append("finals2000A.all")
+    missing = [n for n in required if not (dest_dir / n).is_file()]
+    if missing:
+        raise SystemExit(
+            f"error: {', '.join(missing)} absent from {dest_dir} after the refresh "
+            "(every source failed); refusing to leave an incomplete data directory"
+        )
 
 
 if __name__ == "__main__":

@@ -11,8 +11,10 @@ model (the ``_approx`` reduction, the one-term TDB - TT series, the
 two-term equation of the equinoxes) the test checks the documented accuracy,
 and the tolerance comment says where the number comes from.
 
-Cases marked ``xfail(strict=True)`` are confirmed satkit defects; being
-strict, they fail once the defect is fixed, so remove the marker with the fix.
+No case is currently marked ``xfail``: the defects this file found have been
+fixed. A newly confirmed defect is marked ``xfail(strict=True)`` with its root
+cause; being strict, it fails once the defect is fixed, so the marker is
+removed with the fix.
 
 Instants are read and built through the internal microsecond count, which is
 TAI (``raw / 86400e6 + 40587`` is the TAI MJD), via the public duration API
@@ -113,13 +115,30 @@ def matrices(quats):
 
 
 def rot_angle(a, b):
-    """Angle (rad) of the small rotation a @ b.T, stable to ~1e-16 rad"""
+    """Angle (rad, in [0, pi]) of the rotation a @ b.T
+
+    The antisymmetric part alone gives |sin theta|, which is well conditioned
+    near 0 but reads a 180-degree error as 0; the trace gives cos theta, which
+    tells the two apart. ``atan2(|sin|, cos)`` keeps the ~1e-16 rad accuracy of
+    the first near 0 and is correct over the whole range.
+    """
     d = np.asarray(a) @ np.swapaxes(np.asarray(b), -1, -2)
     v = 0.5 * np.stack(
         [d[..., 2, 1] - d[..., 1, 2], d[..., 0, 2] - d[..., 2, 0], d[..., 1, 0] - d[..., 0, 1]],
         axis=-1,
     )
-    return np.linalg.norm(v, axis=-1)
+    cos = 0.5 * (np.trace(d, axis1=-2, axis2=-1) - 1.0)
+    return np.arctan2(np.linalg.norm(v, axis=-1), cos)
+
+
+def test_rot_angle_helper():
+    """The helper itself: small angles to full precision, and 90/180 degrees
+    not folded back towards zero"""
+    for theta in (1e-9, 1e-3, 0.5 * np.pi, 0.75 * np.pi, np.pi):
+        q = sk.quaternion.rotz(theta)
+        m = q.to_rotation_matrix()
+        got = rot_angle(m, np.eye(3))
+        assert abs(got - theta) < 1e-15 + 1e-12 * theta, (theta, got)
 
 
 def wrap(a):

@@ -77,7 +77,15 @@ plugins:
             show_root_full_path: false
             heading_level: 2
   - mkdocs-jupyter:
+      # Notebooks only: the plugin's default also converts *.py, which ran
+      # docs/examples/gen_plots.py (a build script, not a page) as a
+      # notebook, where `__file__` is undefined.
+      include: ["*.ipynb"]
       execute: true
+      # mkdocs-jupyter defaults to True, which publishes a raising notebook
+      # with its traceback and lets the build pass. Fail the build instead
+      # (the docs-check workflow runs it on PRs that touch the docs).
+      allow_errors: false
       kernel_name: python3
       include_source: true
       include_requirejs: false

@@ -45,6 +45,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - Release `preflight` job (version strings + a green Build on the tagged commit) replaces the pre-release test job and gates the PyPI publish; Build drops its duplicate release build, runs `cargo doc` once, caches the sdist compile and uses cargo-deny (`deny.toml`) instead of cargo-audit; Dependabot updates the Actions pins ([#211](https://github.com/ssmichael1/satkit/pull/211))
 - stubtest checks all eleven stub modules against a commented allowlist, and the Python examples in the docs and docstrings run in CI ([#220](https://github.com/ssmichael1/satkit/pull/220))
 - CI data cache: the cache key includes the download script, so a change to it regenerates the cache ([#224](https://github.com/ssmichael1/satkit/pull/224))
+- CI review fixes: notebooks that raise fail the docs build (the Plots tutorial's polar-motion cell did, and `gen_plots.py` was run as a page), docs-only PRs get a docs-check job, the Python tests run on 3.10/3.14 and on macOS/Windows, release preflight requires a green main push run and crates.io waits for the wheels, PyPI action and sccache are pinned, split data/ephemeris caches and `rust-cache`, hash-verified test vectors, derandomized PR property tests with a deeper weekly run, a TLE fuzz that reaches the field parsers, and an always-on TDB ephemeris check ([#244](https://github.com/ssmichael1/satkit/pull/244))
 
 ### Tests
 
