@@ -18,11 +18,11 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     /// Returned by [`sun::riseset`] when the sun does not rise or set on
-    /// the given date at the supplied location (e.g. polar regions in
-    /// summer or winter).
+    /// the given date at the supplied location: it stays above the
+    /// threshold all day (polar day) or below it all day (polar night).
     #[error(
-        "Invalid position.  Sun doesn't rise/set on this day at this location \
-         (e.g., Alaska in summer)"
+        "No sunrise or sunset on this day at this location: the Sun stays above \
+         the threshold all day (polar day) or below it all day (polar night)"
     )]
     NoSunriseOrSunset,
 
