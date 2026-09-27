@@ -46,5 +46,5 @@ AU in the DE440 header: 149597870.7 km
 
 ## See also
 
-- [Planetary Ephemerides](../tutorials/Planetary%20Ephemerides.ipynb), [Sunrise & Sunset](../tutorials/riseset.ipynb) and [Eclipse](../tutorials/Eclipse.ipynb).
+- [Planetary Ephemerides](../tutorials/Planetary%20Ephemerides.ipynb), [Sunrise & Sunset](../tutorials/riseset.ipynb) and [Solar Eclipse Predictions](../tutorials/Solar%20Eclipse%20Predictions.ipynb).
 - [`jplephem`](https://docs.rs/satkit/latest/satkit/jplephem/) and [`lpephem`](https://docs.rs/satkit/latest/satkit/lpephem/) on docs.rs.
