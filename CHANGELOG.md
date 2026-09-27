@@ -17,7 +17,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 - New tutorial "Eclipse: Path of Totality": Besselian elements from the JPL ephemerides, the path of totality with its limits and duration contours for 2024 and 2045, checked against NASA's elements and path table (within 1 km); the Eclipse tutorial's map gets the same Lambert conformal style ([#269](https://github.com/ssmichael1/satkit/pull/269))
 - New Rust section on satkit.dev: quick start (Cargo features, data files, logging, errors) and topic pages built on runnable programs in `examples/`, linked from the docs.rs front page ([#271](https://github.com/ssmichael1/satkit/pull/271))
-- "Eclipse: Path of Totality" explains the algorithm step by step: inputs and time scales, the fundamental plane, each Besselian element, the fit, observer coordinates, the central line, limits and duration, with four diagrams, convergence checks and a limitations section ([#273](https://github.com/ssmichael1/satkit/pull/273))
+- "Eclipse: Path of Totality" explains the algorithm step by step: inputs and time scales, the fundamental plane, each Besselian element, the fit, observer coordinates, the central line, limits and duration, and local circumstances for eleven cities, with four diagrams, convergence checks and a limitations section ([#273](https://github.com/ssmichael1/satkit/pull/273))
 
 ## 0.24.0 - 2026-09-26
 
