@@ -55,7 +55,7 @@ code follows where that is useful.
 <a id="meeus1989"></a>
 - **Meeus, J. (1989).** *Elements of Solar Eclipses 1951–2200*. Willmann-Bell,
   Richmond, VA. Used for: Besselian elements and the central line, limits and
-  local circumstances computed from them (Eclipse: Path of Totality tutorial).
+  local circumstances computed from them (Solar Eclipse Predictions tutorial).
 
 <a id="meeus1998"></a>
 - **Meeus, J. (1998).** *Astronomical Algorithms*, 2nd ed. Willmann-Bell,
@@ -118,7 +118,7 @@ code follows where that is useful.
 - **Urban, S. E., & Seidelmann, P. K. (eds.) (2013).** *Explanatory
   Supplement to the Astronomical Almanac*, 3rd ed. University Science Books.
   Used for: the definition of pre-1972 UTC; Besselian elements of solar
-  eclipses (Eclipse: Path of Totality tutorial).
+  eclipses (Solar Eclipse Predictions tutorial).
 
 ## Papers and reports
 
@@ -262,7 +262,7 @@ code follows where that is useful.
   <https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2024Apr08Tbeselm.html>
   and <https://eclipse.gsfc.nasa.gov/SEpath/SEpath2001/SE2024Apr08Tpath.html>.
   Used for: the lunar radii (k1, k2) and solar semi-diameter, and as the
-  validation reference of the Eclipse: Path of Totality tutorial.
+  validation reference of the Solar Eclipse Predictions tutorial.
 
 <a id="nelder1965"></a>
 - **Nelder, J. A., & Mead, R. (1965).** "A Simplex Method for Function
@@ -386,7 +386,7 @@ code follows where that is useful.
 - **Chapront-Touzé, M., & Chapront, J. (1988).** "ELP 2000-85: a
   semi-analytical lunar ephemeris adequate for historical times." *Astronomy
   and Astrophysics*, 190, 342–352. The lunar theory behind NASA's Besselian
-  elements, compared with DE440 in the Eclipse: Path of Totality tutorial.
+  elements, compared with DE440 in the Solar Eclipse Predictions tutorial.
 
 ## Data sources
 

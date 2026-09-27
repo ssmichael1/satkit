@@ -136,8 +136,7 @@ nav:
       - Applications:
           - Plots: tutorials/Plots.ipynb
           - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
-          - Eclipse: tutorials/Eclipse.ipynb
-          - "Eclipse: Path of Totality": tutorials/Eclipse Path of Totality.ipynb
+          - Solar Eclipse Predictions: tutorials/Solar Eclipse Predictions.ipynb
           - Sun & Moon Rise/Set: tutorials/riseset.ipynb
           - Optical Observations: tutorials/Optical Observations of Satellites.ipynb
       - Advanced Topics:
