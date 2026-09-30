@@ -1,22 +1,39 @@
 use crate::mathtypes::*;
 
-// Equation 3.37 in Montenbruck & Gill
+// Third-body acceleration, Equation 3.37 in Montenbruck & Gill:
+//
+//   a = -mu (d/|d|^3 + s/|s|^3),   d = r - s
+//
+// For a distant attractor the direct and indirect terms nearly cancel, losing
+// about log10(|s| / 2|r|) digits (4 for the Sun in LEO). Battin's form
+// (Battin, "An Introduction to the Mathematics and Methods of Astrodynamics",
+// Encke's method) computes the difference without subtracting them:
+//
+//   a = -mu/|d|^3 (r + f(q) s),   q = r.(r - 2s) / s.s,
+//   f(q) = (1+q)^(3/2) - 1 = q (3 + 3q + q^2) / (1 + (1+q)^(3/2))
+//
+// Returns the acceleration and d = r - s, |d|^2, |d|^3 for the partials.
+#[inline]
+fn battin_accel(r: &Vector3, s: &Vector3, mu: f64) -> (Vector3, Vector3, f64, f64) {
+    let rs = r - s;
+    let rsnorm2 = rs.norm_squared();
+    let rsnorm3 = rsnorm2 * rsnorm2.sqrt();
+    let q = r.dot(&(r - 2.0 * s)) / s.norm_squared();
+    let f = q * (3.0 + 3.0 * q + q * q) / (1.0 + (1.0 + q) * (1.0 + q).sqrt());
+    (-mu / rsnorm3 * (r + f * s), rs, rsnorm2, rsnorm3)
+}
+
 pub fn point_gravity(
     r: &Vector3, // object
     s: &Vector3, // distant attractor
     mu: f64,
 ) -> Vector3 {
-    let sr = s - r;
-    let srnorm2 = sr.norm_squared();
-    let srnorm = srnorm2.sqrt();
-    let snorm2 = s.norm_squared();
-    let snorm = snorm2.sqrt();
-    mu * (sr / (srnorm * srnorm2) - s / (snorm * snorm2))
+    battin_accel(r, s, mu).0
 }
 
 // Return tuple with point gravity force and
 // point gravity partial (da/dr)
-// Equation 3.37 in Montenbruck & Gill for point gravity
+// Battin's form of Equation 3.37 in Montenbruck & Gill for point gravity
 // Equation 7.75 in Montenbruck & Gill for partials
 
 pub fn point_gravity_and_partials(
@@ -24,14 +41,9 @@ pub fn point_gravity_and_partials(
     s: &Vector3, // distant attractor
     mu: f64,
 ) -> (Vector3, Matrix3) {
-    let rs = r - s;
-    let rsnorm2 = rs.norm_squared();
-    let rsnorm = rsnorm2.sqrt();
-    let snorm2 = s.norm_squared();
-    let snorm = snorm2.sqrt();
-    let rsnorm3 = rsnorm2 * rsnorm;
+    let (accel, rs, rsnorm2, rsnorm3) = battin_accel(r, s, mu);
     (
-        -mu * (rs / rsnorm3 + s / (snorm * snorm2)),
+        accel,
         -mu * (Matrix3::eye() / rsnorm3 - 3.0 * rs * rs.transpose() / (rsnorm2 * rsnorm3)),
     )
 }
@@ -55,6 +67,41 @@ mod tests {
             "Lunar perturbation at GEO = {:.3e}, expected ~1e-6",
             mag
         );
+    }
+
+    #[test]
+    fn test_point_gravity_precision() {
+        // Reference values from 50-digit decimal arithmetic of Eq. 3.37. The
+        // direct-minus-indirect form is good to only 1.5e-12 (Sun) and
+        // 1.5e-14 (Moon) here; Battin's form is at machine precision.
+        let r = numeris::vector![5.1e6, 4.2e6, 2.3e6];
+        let cases = [
+            (
+                numeris::vector![1.2e11, -8.1e10, -3.5e10],
+                1.32712440018e20,
+                numeris::vector![
+                    -8.017300151724125e-08,
+                    -2.528135504540415e-07,
+                    -1.287259378922576e-07
+                ],
+            ),
+            (
+                numeris::vector![3.1e8, -2.0e8, -9.0e7],
+                4.9028e12,
+                numeris::vector![
+                    -1.6466721096055815e-07,
+                    -5.715870008073985e-07,
+                    -2.943163980383449e-07
+                ],
+            ),
+        ];
+        for (s, mu, expected) in cases {
+            let accel = point_gravity(&r, &s, mu);
+            let err = (accel - expected).norm() / expected.norm();
+            assert!(err < 1.0e-15, "relative error {err:.3e}");
+            let (accel_p, _) = point_gravity_and_partials(&r, &s, mu);
+            assert_eq!(accel, accel_p);
+        }
     }
 
     #[test]
