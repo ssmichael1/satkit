@@ -488,13 +488,32 @@ class TLE:
         """
         ...
 
+@overload
 def sgp4(
     tle: TLE | OMMDict | list[TLE | OMMDict],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
     opsmode: sgp4_opsmode = ...,
-    errflag: bool = False,
+    errflag: typing.Literal[True],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]: ...
+@overload
+def sgp4(
+    tle: TLE | OMMDict | list[TLE | OMMDict],
+    time: TimeInput,
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: typing.Literal[False] = False,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+@overload
+def sgp4(
+    tle: TLE | OMMDict | list[TLE | OMMDict],
+    time: TimeInput,
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: bool,
 ) -> (
     tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
     | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]
