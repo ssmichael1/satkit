@@ -36,7 +36,7 @@ from ._types import OMMDict
 # * ``TimeInput``     — either a scalar or an array of times.
 TimeScalar: TypeAlias = "time | datetime.datetime | np.datetime64"
 TimeArrayLike: TypeAlias = (
-    "list[time] | list[datetime.datetime] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
+    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 
@@ -3349,6 +3349,11 @@ class consts:
 
 # Alias so `time` resolves to the class inside bodies that define a `time` member
 _Time = time
+# Times propresult.interp treats as a batch: a list or a 1-D object array.
+# (A datetime64 array is not batched by the binding, so it is left out.)
+_InterpTimes: TypeAlias = (
+    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_]"
+)
 
 class satstate:
     """Satellite state: position, velocity, optional covariance, and maneuvers
@@ -3872,7 +3877,7 @@ class propresult:
     def interp(
         self,
         time: TimeScalar,
-        output_phi: typing.Literal[True] = ...,
+        output_phi: typing.Literal[True],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """Interpolate state and state transition matrix at a single time
 
@@ -3893,7 +3898,7 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: list[_Time | datetime.datetime],
+        time: _InterpTimes,
         output_phi: typing.Literal[False] = False,
     ) -> npt.NDArray[np.float64]:
         """Interpolate state at multiple times
@@ -3911,8 +3916,8 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: list[_Time | datetime.datetime],
-        output_phi: typing.Literal[True] = ...,
+        time: _InterpTimes,
+        output_phi: typing.Literal[True],
     ) -> list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         """Interpolate state and state transition matrix at multiple times
 
