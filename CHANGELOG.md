@@ -2,7 +2,9 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.24.1 - 2026-09-30
+
+Results that change from 0.24.0 are marked "0.24.1" in [Migrating to 0.24](https://satkit.dev/migration/).
 
 ### Added
 
@@ -159,31 +161,3 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 - README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))
 - satkit is on conda-forge (`conda install -c conda-forge satkit`, [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock)); the installation docs say so and the in-repo recipe copy is removed ([#184](https://github.com/ssmichael1/satkit/pull/184))
 - `THIRDPARTY-DATA.md` states the source, citation, licence and truncation of every compiled-in dataset; it ships in the sdist and wheels and is linked from the README ([#182](https://github.com/ssmichael1/satkit/pull/182))
-
-## 0.22.0 - 2026-09-12
-
-### Added
-
-- `propsettings.initial_step_secs` / `propresult.next_step_secs`: the first adaptive step is derived from the state, tolerances and integrator order instead of numeris' scale-sensitive heuristic, and a follow-on arc can warm-start; `rkv98` with `enable_interp=False` runs the 16-stage `rkv98_nointerp` tableau (24% fewer force evaluations). Requires numeris 0.6 ([#178](https://github.com/ssmichael1/satkit/pull/178))
-
-### Distribution
-
-- **Breaking (Python packaging):** macOS wheels are arm64 only (deployment target 11.0); Intel Macs install from source (`pip install --no-binary satkit satkit`) or from conda-forge's `osx-64` build ([#172](https://github.com/ssmichael1/satkit/pull/172))
-
-### Changed
-
-- **Breaking:** Kepler: `w` is renamed `argp` (Python `w` still works with a `DeprecationWarning`), elements carry their own `mu`, the constructor and setters raise `ValueError` for out-of-domain values, `kepler::Error` is `#[non_exhaustive]`; adds derived quantities (`periapsis`, `apoapsis`, …) and `SatState::from_kepler` ([#168](https://github.com/ssmichael1/satkit/pull/168))
-- OMM overhaul: `omm_from_url` returns every field the source provided, new `omm_from_file` / `omm_from_text` (JSON or XML), `TLE.from_omm` / `to_omm`, and `sgp4` dict inputs share the Rust parser. **Breaking (Rust):** `OMM.epoch` is an `Instant`, `omm::Error` is `#[non_exhaustive]`, `Default` is removed ([#173](https://github.com/ssmichael1/satkit/pull/173))
-- Propagation steps ~3x faster (LEO, 40x40 field, drag, rkv98): FMA gravity kernels on x86-64, fewer NRLMSISE-00 recomputations, a single Bowring geodetic refinement, degree-limited gravity parsing (contributed by @scottshambaugh, [#175](https://github.com/ssmichael1/satkit/pull/175))
-- `update_datafiles()` no longer downloads files compiled into the library (the IERS tables and gravity models are `default: false` in the manifest), and the unused `leap-seconds.list` is removed from the manifest ([#163](https://github.com/ssmichael1/satkit/pull/163))
-
-### Fixed
-
-- Space-weather records are indexed by UTC calendar day; since `Instant` counts leap seconds, the last 37 s of each UTC day read the next day's record (contributed by @scottshambaugh, [#176](https://github.com/ssmichael1/satkit/pull/176))
-- `sgp4()` rejects SGP4-XP element sets (TLE ephemeris type 4, OMM `EPHEMERIS_TYPE` 4) instead of running classic SGP4 on the wrong inputs ([#174](https://github.com/ssmichael1/satkit/pull/174))
-- `density.nrlmsise(altitude_m, latitude_rad, longitude_rad, time)` converts radians to the degrees the model takes (60° N was evaluated at 1.05° N) ([#171](https://github.com/ssmichael1/satkit/pull/171))
-- A corrupt or truncated `tab5.2*.txt` no longer panics the first frame transform: satkit warns and uses the compiled-in copy, and the parser rejects text with no header or too few rows ([#166](https://github.com/ssmichael1/satkit/pull/166))
-
-### Docs
-
-- Every Python docstring states units for dimensioned arguments, returns and attributes (SI, radians unless the name ends in `_deg`); `sgp4` outputs are metres and m/s in TEME, not km ([#169](https://github.com/ssmichael1/satkit/pull/169))
