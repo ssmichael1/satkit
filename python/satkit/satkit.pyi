@@ -3940,10 +3940,25 @@ class propresult:
         | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
         | list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]
     ):
-        """Interpolate state, with ``output_phi`` known only at run time
+        """Interpolate the GCRF state at one or more times between the begin and end times
 
-        See the overloads above for the result for each combination of time
-        input and ``output_phi``.
+        Args:
+            time: time(s) at which to interpolate: a single time, or a list or
+                1-D array of times
+            output_phi: also return the 6x6 state transition matrix. Default False
+
+        Returns:
+            npt.NDArray[np.float64] | tuple | list[tuple]: 6-element state
+                [x, y, z, vx, vy, vz] in meters and m/s for a single time; for a
+                list or array of N times, one (N, 6) array ((0, 6) for an empty
+                list). With ``output_phi=True``, a (state, phi) tuple, where phi
+                is the 6x6 state transition matrix, or a list of them for a list
+                of times
+
+        Raises:
+            ValueError: if ``output_phi`` is True but the propagation did not
+                compute the state transition matrix (propagate with
+                ``output_phi=True``), or a time is outside the interpolation range
         """
         ...
 

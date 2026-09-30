@@ -74,6 +74,10 @@ plugins:
           paths: [python]
           options:
             allow_inspection: false
+            # Stub functions defined only by @overload (sgp4, frametransform.*, ...)
+            extensions:
+              - tools/griffe_overloads.py:OverloadOnlyFunctions
+            overloads_only: true
             show_source: false
             show_bases: false
             members_order: source
