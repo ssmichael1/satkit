@@ -431,7 +431,7 @@ class TLE:
 
     @staticmethod
     def fit_from_states(
-        states: list[np.ndarray],
+        states: npt.ArrayLike,
         times: TimeArrayLike,
         epoch: TimeScalar,
         *,
@@ -442,7 +442,7 @@ class TLE:
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
 
         Args:
-            states: List of GCRF states to fit to. Each state is a 6-element vector. The first 3 values are positions in meters. The last 3 values are velocities in meters / second.
+            states: GCRF states to fit to: an Nx6 array, or a list of 6-element vectors. The first 3 values are positions in meters. The last 3 values are velocities in meters / second.
             times: List of times corresponding to the states
             epoch: Epoch time for the TLE. Must be within range of times.
 
@@ -1787,7 +1787,7 @@ class time:
     @typing.overload
     def __add__(
         self,
-        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float],
+        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float] | list[int],
     ) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise addition of days to the "self" time object
@@ -1931,7 +1931,7 @@ class time:
     @typing.overload
     def __sub__(
         self,
-        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float],
+        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float] | list[int],
     ) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise subtraction of days from the "self" time object
@@ -3067,7 +3067,7 @@ class itrfcoord:
     """
 
     @overload
-    def __init__(self, vec: npt.NDArray[np.float64] | list[float], /) -> None: ...
+    def __init__(self, vec: npt.NDArray[np.float64] | list[float] | list[int], /) -> None: ...
     @overload
     def __init__(self, x: float, y: float, z: float, /) -> None: ...
     @overload
@@ -3349,11 +3349,6 @@ class consts:
 
 # Alias so `time` resolves to the class inside bodies that define a `time` member
 _Time = time
-# Times propresult.interp treats as a batch: a list or a 1-D object array.
-# (A datetime64 array is not batched by the binding, so it is left out.)
-_InterpTimes: TypeAlias = (
-    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_]"
-)
 
 class satstate:
     """Satellite state: position, velocity, optional covariance, and maneuvers
@@ -3898,13 +3893,13 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: _InterpTimes,
+        time: TimeArrayLike,
         output_phi: typing.Literal[False] = False,
     ) -> npt.NDArray[np.float64]:
         """Interpolate state at multiple times
 
         Args:
-            time: List of times at which to interpolate state
+            time: List or 1-D array of times at which to interpolate state
             output_phi: Must be False (default)
 
         Returns:
@@ -3916,13 +3911,13 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: _InterpTimes,
+        time: TimeArrayLike,
         output_phi: typing.Literal[True],
     ) -> list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         """Interpolate state and state transition matrix at multiple times
 
         Args:
-            time: List of times at which to interpolate state
+            time: List or 1-D array of times at which to interpolate state
             output_phi: Must be True
 
         Returns:
@@ -3932,6 +3927,23 @@ class propresult:
         Raises:
             ValueError: if the propagation did not compute the state transition matrix
                 (propagate with ``output_phi=True``)
+        """
+        ...
+
+    @typing.overload
+    def interp(
+        self,
+        time: TimeInput,
+        output_phi: bool,
+    ) -> (
+        npt.NDArray[np.float64]
+        | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+        | list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]
+    ):
+        """Interpolate state, with ``output_phi`` known only at run time
+
+        See the overloads above for the result for each combination of time
+        input and ``output_phi``.
         """
         ...
 
