@@ -15,6 +15,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Fixed
 
+- `propresult.interp` interpolates every time in a `numpy.datetime64` array (0.24.0 used only the first); type stubs: `sgp4` returns a 2- or 3-tuple by `errflag`, and `list[TLE]`, `list[np.datetime64]`, `list[int]` days, array-like `fit_from_states` states and a run-time `output_phi` bool type-check; the API docs list the overloaded functions (`sgp4`, `frametransform`, `sun`/`moon` positions, `propresult.interp`, `time` operators), which were missing ([#274](https://github.com/ssmichael1/satkit/pull/274))
 - `sun.rise_set` iterates Algorithm 30 at the event and adds nutation and solar parallax: within 3 s of Skyfield up to 65° latitude (was up to 35 s); clearer polar day/night error; horizon (sea level), dip and UT1 documented ([#268](https://github.com/ssmichael1/satkit/pull/268))
 
 ### Docs

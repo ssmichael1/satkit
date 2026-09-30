@@ -36,7 +36,7 @@ from ._types import OMMDict
 # * ``TimeInput``     — either a scalar or an array of times.
 TimeScalar: TypeAlias = "time | datetime.datetime | np.datetime64"
 TimeArrayLike: TypeAlias = (
-    "list[time] | list[datetime.datetime] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
+    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 
@@ -431,7 +431,7 @@ class TLE:
 
     @staticmethod
     def fit_from_states(
-        states: list[np.ndarray],
+        states: npt.ArrayLike,
         times: TimeArrayLike,
         epoch: TimeScalar,
         *,
@@ -442,7 +442,7 @@ class TLE:
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
 
         Args:
-            states: List of GCRF states to fit to. Each state is a 6-element vector. The first 3 values are positions in meters. The last 3 values are velocities in meters / second.
+            states: GCRF states to fit to: an Nx6 array, or a list of 6-element vectors. The first 3 values are positions in meters. The last 3 values are velocities in meters / second.
             times: List of times corresponding to the states
             epoch: Epoch time for the TLE. Must be within range of times.
 
@@ -488,13 +488,32 @@ class TLE:
         """
         ...
 
+@overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE | OMMDict],
+    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
     opsmode: sgp4_opsmode = ...,
-    errflag: bool = False,
+    errflag: typing.Literal[True],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]: ...
+@overload
+def sgp4(
+    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    time: TimeInput,
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: typing.Literal[False] = False,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+@overload
+def sgp4(
+    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    time: TimeInput,
+    *,
+    gravconst: sgp4_gravconst = ...,
+    opsmode: sgp4_opsmode = ...,
+    errflag: bool,
 ) -> (
     tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
     | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]
@@ -512,7 +531,8 @@ def sgp4(
 
     Args:
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
-            ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list mixing both
+            ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list of either
+            (or mixing both). Must be a ``list``; tuples and other sequences are not accepted
         time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity.
             A naive ``datetime`` is local time, not UTC (see :meth:`time.from_datetime`)
 
@@ -1767,7 +1787,7 @@ class time:
     @typing.overload
     def __add__(
         self,
-        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float],
+        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float] | list[int],
     ) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise addition of days to the "self" time object
@@ -1911,7 +1931,7 @@ class time:
     @typing.overload
     def __sub__(
         self,
-        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float],
+        other: npt.NDArray[np.floating[Any]] | npt.NDArray[np.integer[Any]] | list[float] | list[int],
     ) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise subtraction of days from the "self" time object
@@ -3047,7 +3067,7 @@ class itrfcoord:
     """
 
     @overload
-    def __init__(self, vec: npt.NDArray[np.float64] | list[float], /) -> None: ...
+    def __init__(self, vec: npt.NDArray[np.float64] | list[float] | list[int], /) -> None: ...
     @overload
     def __init__(self, x: float, y: float, z: float, /) -> None: ...
     @overload
@@ -3852,7 +3872,7 @@ class propresult:
     def interp(
         self,
         time: TimeScalar,
-        output_phi: typing.Literal[True] = ...,
+        output_phi: typing.Literal[True],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """Interpolate state and state transition matrix at a single time
 
@@ -3873,13 +3893,13 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: list[_Time | datetime.datetime],
+        time: TimeArrayLike,
         output_phi: typing.Literal[False] = False,
     ) -> npt.NDArray[np.float64]:
         """Interpolate state at multiple times
 
         Args:
-            time: List of times at which to interpolate state
+            time: List or 1-D array of times at which to interpolate state
             output_phi: Must be False (default)
 
         Returns:
@@ -3891,13 +3911,13 @@ class propresult:
     @typing.overload
     def interp(
         self,
-        time: list[_Time | datetime.datetime],
-        output_phi: typing.Literal[True] = ...,
+        time: TimeArrayLike,
+        output_phi: typing.Literal[True],
     ) -> list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         """Interpolate state and state transition matrix at multiple times
 
         Args:
-            time: List of times at which to interpolate state
+            time: List or 1-D array of times at which to interpolate state
             output_phi: Must be True
 
         Returns:
@@ -3907,6 +3927,38 @@ class propresult:
         Raises:
             ValueError: if the propagation did not compute the state transition matrix
                 (propagate with ``output_phi=True``)
+        """
+        ...
+
+    @typing.overload
+    def interp(
+        self,
+        time: TimeInput,
+        output_phi: bool,
+    ) -> (
+        npt.NDArray[np.float64]
+        | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+        | list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]
+    ):
+        """Interpolate the GCRF state at one or more times between the begin and end times
+
+        Args:
+            time: time(s) at which to interpolate: a single time, or a list or
+                1-D array of times
+            output_phi: also return the 6x6 state transition matrix. Default False
+
+        Returns:
+            npt.NDArray[np.float64] | tuple | list[tuple]: 6-element state
+                [x, y, z, vx, vy, vz] in meters and m/s for a single time; for a
+                list or array of N times, one (N, 6) array ((0, 6) for an empty
+                list). With ``output_phi=True``, a (state, phi) tuple, where phi
+                is the 6x6 state transition matrix, or a list of them for a list
+                of times
+
+        Raises:
+            ValueError: if ``output_phi`` is True but the propagation did not
+                compute the state transition matrix (propagate with
+                ``output_phi=True``), or a time is outside the interpolation range
         """
         ...
 

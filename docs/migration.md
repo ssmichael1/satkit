@@ -102,6 +102,10 @@ the details.
 - **A one-element list or array of times gives a one-element result**, not a
   scalar, in every vectorised function: `sgp4(tle, [t])` is `(1, 3)` (was
   `(3,)`). **Do this:** pass a scalar time, or index `[0]`.
+- **0.24.1: `propresult.interp` interpolates every time in a
+  `numpy.datetime64` array**, returning an `(N, 6)` array. 0.24.0 read such an
+  array as one time and returned the state at its first element. **Do this:**
+  re-run code that passed `datetime64` arrays to `interp`.
 - **A one-element list of TLEs keeps its axis in `sgp4`**: `sgp4([tle], t)` is
   `(1, 3)` (was `(3,)`), and `sgp4([tle], [t])` is `(1, 1, 3)`. Empty lists
   give empty arrays: `sgp4([], t)` is `(0, 3)` and `sgp4([tle], [])` is

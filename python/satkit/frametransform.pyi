@@ -150,7 +150,7 @@ def earth_rotation_angle(
             - ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0))
 
     Args:
-        tm (satkit.time|datetime.datetime: Time[s] at which to calculate Earth Rotation Angle
+        tm (satkit.time|datetime.datetime): Time[s] at which to calculate Earth Rotation Angle
 
     Returns:
         float: Earth Rotation Angle at input time[s] in radians

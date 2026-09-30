@@ -112,6 +112,19 @@ class TestStubRuntimeAgreement:
         np.testing.assert_array_equal(out[1], r.interp(T0 + 0.002))
         assert r.interp([]).shape == (0, 6)
 
+    def test_interp_datetime64_array_is_batched(self):
+        # A datetime64 array used to be read as one time: only its first
+        # element was interpolated, returning a single (6,) state
+        r = sk.propagate(STATE, T0, duration_secs=600.0)
+        times = [sk.time(2024, 1, 1, 12, 1, 0), sk.time(2024, 1, 1, 12, 2, 0)]
+        d64 = np.array(["2024-01-01T12:01:00", "2024-01-01T12:02:00"], dtype="datetime64[s]")
+        out = r.interp(d64)
+        assert out.shape == (2, 6)
+        np.testing.assert_array_equal(out, r.interp(times))
+        s = r.interp(d64[1])
+        assert s.shape == (6,)
+        np.testing.assert_array_equal(s, out[1])
+
     def test_interp_output_phi_without_stm_raises(self):
         r = sk.propagate(STATE, T0, duration_secs=600.0)
         with pytest.raises(ValueError, match="state transition matrix"):

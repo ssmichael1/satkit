@@ -300,7 +300,7 @@ impl PyPropResult {
     /// Interpolate the GCRF state at one or more times between the begin and end times
     ///
     /// Args:
-    ///     time (satkit.time | datetime.datetime | list): time(s) at which to interpolate
+    ///     time (satkit.time | datetime.datetime | numpy.datetime64 | list | numpy.ndarray): time(s) at which to interpolate
     ///     output_phi (bool): also return the 6x6 state transition matrix. Default False
     ///
     /// Returns:
@@ -324,12 +324,14 @@ impl PyPropResult {
                  does not have: propagate with output_phi=True",
             ));
         }
-        let is_list = time.is_instance_of::<pyo3::types::PyList>()
-            || time.is_instance_of::<numpy::PyArray1<Py<PyAny>>>();
+        // A list or array of times (including a datetime64 array, which
+        // used to be read as a single time) gives one result per time
+        let input = (&time).to_time_input()?;
+        let times = input.times;
 
-        let times = (&time).to_time_vec()?;
-
-        if is_list && !output_phi {
+        if input.scalar {
+            self.interp_at(py, &times[0], output_phi)
+        } else if !output_phi {
             // Batch interpolation — returns Nx6 numpy array
             let (flat, n): (Vec<f64>, usize) = each!(&self.0, r => {
                 let results = r
@@ -342,15 +344,13 @@ impl PyPropResult {
                 (flat, results.len())
             });
             slice2py2d(py, &flat, n, 6)
-        } else if is_list {
+        } else {
             // Fallback for output_phi=true — need per-element processing
             times
                 .iter()
                 .map(|t| self.interp_at(py, t, output_phi))
                 .collect::<PyResult<Vec<_>>>()?
                 .into_py_any(py)
-        } else {
-            self.interp_at(py, &times[0], output_phi)
         }
     }
 }
