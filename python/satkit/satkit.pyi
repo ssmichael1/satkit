@@ -490,7 +490,7 @@ class TLE:
 
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE | OMMDict],
+    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -499,7 +499,7 @@ def sgp4(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]: ...
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE | OMMDict],
+    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -508,7 +508,7 @@ def sgp4(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE | OMMDict],
+    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -531,7 +531,8 @@ def sgp4(
 
     Args:
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
-            ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list mixing both
+            ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list of either
+            (or mixing both). Must be a ``list``; tuples and other sequences are not accepted
         time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity.
             A naive ``datetime`` is local time, not UTC (see :meth:`time.from_datetime`)
 
