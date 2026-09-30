@@ -4,8 +4,9 @@ name: Docs check
 # Python examples in docs/**/*.md and README.md, and the docs build executes
 # every tutorial notebook. This workflow runs both on pull requests that
 # touch the docs, before merge rather than on the post-merge deploy
-# (docs.yml). One job, one run per change: PR events only, and a new push
-# cancels the superseded run.
+# (docs.yml). The API pages are built from the type stubs (through
+# tools/griffe_overloads.py), so stub changes run it too. One job, one run
+# per change: PR events only, and a new push cancels the superseded run.
 on:
   pull_request:
     types:
@@ -16,6 +17,8 @@ on:
       - "docs/**"
       - "**/*.md"
       - "mkdocs.yml"
+      - "python/satkit/*.pyi"
+      - "tools/griffe_overloads.py"
       - ".github/workflows/docs-check.yml"
   workflow_dispatch:
 

@@ -24,6 +24,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - New Rust section on satkit.dev: quick start (Cargo features, data files, logging, errors) and topic pages built on runnable programs in `examples/`, linked from the docs.rs front page ([#271](https://github.com/ssmichael1/satkit/pull/271))
 - The eclipse tutorial is renamed "Solar Eclipse Predictions", explains the algorithm step by step with four diagrams, and adds local circumstances for eleven cities; it replaces the older "Eclipse" tutorial, whose averaged Moon distance made totality too short ([#273](https://github.com/ssmichael1/satkit/pull/273))
 
+### CI
+
+- The docs check also runs on pull requests that change the type stubs or the griffe overload extension, which the API pages are built from ([#277](https://github.com/ssmichael1/satkit/pull/277))
+
 ## 0.24.0 - 2026-09-26
 
 Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for what to check and change.
