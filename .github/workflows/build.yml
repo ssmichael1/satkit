@@ -172,7 +172,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Test
-        run: cargo test --features chrono
+        run: cargo test --features chrono,hifitime
 
       # The build without the default features (no downloader, no OMM XML)
       # must pass its own unit tests, not just compile.

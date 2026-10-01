@@ -6,7 +6,7 @@
 
 `TimeScale` has `UTC`, `TAI`, `TT`, `GPS`, `UT1` and `TDB`. Calendar constructors take UTC unless they say otherwise (`from_datetime_with_scale`), and the scale of a Julian date is always explicit: `as_mjd_with_scale`, `as_jd_with_scale`, `from_mjd_with_scale`, `from_jd_with_scale`, and the `_utc` shortcuts (`as_mjd_utc`, `from_jd_utc`, ...). UT1 uses the Earth orientation table (UT1 = UTC with a warning when it is not available).
 
-Every function in the crate that takes a time is generic over the `TimeLike` trait, implemented by `Instant` and, with the `chrono` feature, by `chrono::DateTime`.
+Every function in the crate that takes a time is generic over the `TimeLike` trait, implemented by `Instant` and, with the `chrono` and `hifitime` features, by `chrono::DateTime` and `hifitime::Epoch`.
 
 ## Parsing and formatting
 
@@ -56,6 +56,28 @@ from chrono: 2024-06-15T12:00:00.000000Z
 to chrono:   2024-06-15 13:30:00 UTC
 MJD (TT) = 60476.500801, Sun distance = 1.5196e11 m
 2016-12-31T23:59:60.500000Z -> 2016-12-31 23:59:59.500 UTC
+```
+
+## hifitime interoperability
+
+With the `hifitime` feature, `Instant` and `hifitime::Epoch` convert both ways with `From` / `Into`, and a `hifitime::Epoch` can be passed directly to any function that takes a time. Conversions go through TAI, so the physical instant is kept exactly (to the nearest microsecond from hifitime's nanoseconds), leap seconds included, and `TimeLike` uses satkit's UT1 and TDB rather than hifitime's.
+
+The two crates label some instants differently:
+
+- **Before 1972** hifitime's UTC is TAI (it counts IERS leap seconds only), while satkit models the 1961–1971 rubber-second UTC, so the same instant has UTC labels up to 9.89 s apart. From 1972 on they agree.
+- **TDB** in hifitime differs from satkit's by up to about 50 µs over 1900–2100.
+- **Inside a leap second**, keep the `Epoch` in TAI, as converted: moved to hifitime's UTC scale it reads `23:59:59.x` and converts back a second early.
+
+```rust
+--8<-- "examples/hifitime_interop.rs"
+```
+
+```text
+$ cargo run --example hifitime_interop --features hifitime
+from hifitime: 2024-06-15T12:00:00.000000Z
+to hifitime:   2024-06-15T13:30:37 TAI = 2024-06-15T13:30:00 UTC
+MJD (TT) = 60476.500801, Sun distance = 1.5196e11 m
+2016-12-31T23:59:60.500000Z -> 2017-01-01T00:00:36.500000000 TAI -> 2016-12-31T23:59:60.500000Z
 ```
 
 ## See also

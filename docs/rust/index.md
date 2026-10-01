@@ -24,6 +24,7 @@ satkit builds on stable Rust. Its linear-algebra types (`Vector3`, `Matrix3`, `Q
 | `download` | on | HTTP(S) downloads through `ureq`: fetching data files on first use, `utils::update_datafiles`, `TLE::from_url` and `OMM::from_url`. Without it, data files must already be on disk ([Provisioning up front](../getting-started/datadirs.md#provisioning-up-front)) and the URL loaders are not compiled |
 | `omm-xml` | on | Parsing OMM XML (`OMM::from_xml_string`, `from_xml_file`, and XML in `OMM::from_text` / `from_file`) through `quick-xml`. OMM JSON needs no feature |
 | `chrono` | off | Interoperability with [chrono](https://crates.io/crates/chrono): `From` conversions between `Instant` and `chrono::DateTime`, and `TimeLike` for `chrono::DateTime`, so chrono times can be passed to every satkit function that takes a time |
+| `hifitime` | off | Interoperability with [hifitime](https://crates.io/crates/hifitime): `From` conversions between `Instant` and `hifitime::Epoch` (through TAI, so leap seconds are kept), and `TimeLike` for `hifitime::Epoch` |
 
 To leave out the downloader, for a build without an HTTP client:
 
@@ -98,7 +99,7 @@ Every program on these pages is a file in [`examples/`](https://github.com/ssmic
 | Page | Example | Needs |
 |---|---|---|
 | this page | `quickstart` | EOP for the TEME → ITRF rotation |
-| [Time and Time Scales](time.md) | `time_scales`, `chrono_interop` | EOP for UT1 only; `chrono_interop` needs `--features chrono` |
+| [Time and Time Scales](time.md) | `time_scales`, `chrono_interop`, `hifitime_interop` | EOP for UT1 only; `chrono_interop` and `hifitime_interop` need `--features chrono` / `--features hifitime` |
 | [Coordinate Frames](frames.md) | `frames` | EOP for exact ITRF rotations |
 | [SGP4, TLEs and OMMs](sgp4.md) | `sgp4_tle` | EOP for the TEME → ITRF / GCRF rotations |
 | [Numerical Propagation](propagation.md) | `propagate_leo` | JPL ephemeris, EOP, space weather |

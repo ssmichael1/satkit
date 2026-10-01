@@ -40,7 +40,7 @@ Thank you for your interest in contributing to Satkit! This document provides gu
 
 3. **Test your changes**:
    ```bash
-   cargo test --features chrono
+   cargo test --features chrono,hifitime
    cargo clippy --workspace --all-targets -- -D warnings
    cargo fmt --all -- --check
    ```
@@ -216,7 +216,7 @@ export SATKIT_DATA=astro-data SATKIT_TESTVEC_ROOT=satkit-testvecs
 ```
 
 ```bash
-cargo test --features chrono         # the full Rust suite, as CI runs it
+cargo test --features chrono,hifitime # the full Rust suite, as CI runs it
 cargo test --test gmat_regression    # one integration-test file
 cargo test <name> -- --nocapture     # tests whose name contains <name>, with output
 

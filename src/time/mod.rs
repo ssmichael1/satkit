@@ -19,6 +19,9 @@ pub use weekday::{InvalidWeekday, Weekday};
 #[cfg(feature = "chrono")]
 mod chrono;
 
+#[cfg(feature = "hifitime")]
+mod hifitime;
+
 /// Put all tests in a separate module
 #[cfg(test)]
 mod tests;
