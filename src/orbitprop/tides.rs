@@ -103,7 +103,7 @@ const N22: f64 = 0.6454972243679028; // sqrt(5/12)
 const N30: f64 = 2.6457513110645907; // sqrt(7)
 const N31: f64 = 1.0801234497346434; // sqrt(7/6)
 const N32: f64 = 0.3415650255319866; // sqrt(7/60)
-const N33: f64 = 0.13943375672974065; // sqrt(7/360)
+const N33: f64 = 0.13944333775567927; // sqrt(7/360)
 const N40: f64 = 3.0; // sqrt(9)
 const N41: f64 = 0.9486832980505138; // sqrt(9/10)
 const N42: f64 = 0.22360679774997896; // sqrt(1/20)
@@ -437,6 +437,34 @@ mod tests {
             "tide accel at GEO = {:e}, expected ~1e-9 to 1e-7",
             mag
         );
+    }
+
+    #[test]
+    fn normalization_constants_match_formula() {
+        // N_nm = sqrt((2 - δ_0m)(2n+1)(n-m)!/(n+m)!)
+        fn fact(k: usize) -> f64 {
+            (1..=k).map(|i| i as f64).product()
+        }
+        let table = [
+            (2, 0, N20),
+            (2, 1, N21),
+            (2, 2, N22),
+            (3, 0, N30),
+            (3, 1, N31),
+            (3, 2, N32),
+            (3, 3, N33),
+            (4, 0, N40),
+            (4, 1, N41),
+            (4, 2, N42),
+        ];
+        for (n, m, val) in table {
+            let d = if m == 0 { 1.0 } else { 2.0 };
+            let expected = (d * (2 * n + 1) as f64 * fact(n - m) / fact(n + m)).sqrt();
+            assert!(
+                ((val - expected) / expected).abs() < 1e-15,
+                "N{n}{m} = {val}, expected {expected}"
+            );
+        }
     }
 
     #[test]

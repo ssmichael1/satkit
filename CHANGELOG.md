@@ -2,6 +2,12 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
+## Unreleased
+
+### Fixed
+
+- Solid Earth tides: the degree-3 order-3 normalization factor was mistyped (0.1394338 instead of sqrt(7/360) = 0.1394433, 7e-5 relative), scaling the smallest tide term; a unit test now checks every normalization factor against its formula
+
 ## 0.24.1 - 2026-09-30
 
 Results that change from 0.24.0 are marked "0.24.1" in [Migrating to 0.24](https://satkit.dev/migration/).
