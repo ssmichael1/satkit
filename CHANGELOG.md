@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Changed
+
+- PyO3 0.30 (and numpy 0.30); `pyo3-log`, which does not support PyO3 0.30 yet, is replaced by a small in-tree bridge with the same behaviour: satkit's `Info`-and-above records go to the `satkit.<module>` Python loggers, and records logged while the interpreter is shutting down are dropped instead of panicking ([#279](https://github.com/ssmichael1/satkit/pull/279))
+
 ### Fixed
 
 - Solid Earth tides: the degree-3 order-3 normalization factor was mistyped (0.1394338 instead of sqrt(7/360) = 0.1394433, 7e-5 relative), scaling the smallest tide term; a unit test now checks every normalization factor against its formula

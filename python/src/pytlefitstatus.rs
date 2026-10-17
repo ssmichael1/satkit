@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 /// [`satkit.TLE.fit_from_states`].
 ///
 #[derive(PartialEq, Eq, Clone, Copy)]
-#[pyclass(name = "tlefitstatus", eq, eq_int, skip_from_py_object)]
+#[pyclass(name = "tlefitstatus", eq, eq_int)]
 pub enum PyTleFitStatus {
     GradientConverged = 0,
     StepConverged = 1,
