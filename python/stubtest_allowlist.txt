@@ -67,6 +67,17 @@ satkit\.satkit\.time\.__getnewargs_ex__
 # Unpickling helper named by the enum classes' __reduce__ (private).
 satkit\.satkit\._enum_member
 
+# --- PyO3 reflected operator slots ---------------------------------------------
+# PyO3 fills the whole numeric slot for each binary operator, so a class with
+# __add__/__sub__/__mul__/__truediv__ also exposes the reflected wrapper. Only
+# the forward forms are API: the reflected ones return NotImplemented for any
+# other operand type (e.g. `2 * duration` raises TypeError). mypy >= 2.4 reports
+# them.
+satkit\.satkit\.duration\.__r(add|sub|mul|truediv)__
+satkit\.satkit\.itrfcoord\.__rsub__
+satkit\.satkit\.quaternion\.__rmul__
+satkit\.satkit\.time\.__r(add|sub)__
+
 # --- Native submodules ---------------------------------------------------------
 # Attributes of the compiled extension, each documented in its own top-level
 # .pyi, which satkit.pyi therefore doesn't redeclare.

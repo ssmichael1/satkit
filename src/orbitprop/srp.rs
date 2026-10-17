@@ -9,12 +9,11 @@
 //! supply (from CODE products, your own fit, or a box-wing residual).
 //!
 //! Attach coefficients with [`SatPropertiesSimple::with_ecom`](crate::orbitprop::SatPropertiesSimple::with_ecom)
-//! (constant over a propagation) or by implementing
-//! [`SatProperties::srp_ecom`](crate::orbitprop::SatProperties::srp_ecom)
-//! (time-varying). [`propagate`](crate::orbitprop::propagate) adds the ECOM
-//! acceleration to the cannonball term `−ν·P☉·C_R A/m·ê_D`, so set
-//! `craoverm = 0` for a pure ECOM model. The model contributes no partials
-//! to the state transition matrix (like the cannonball). For a worked fit
+//! (constant over a propagation) or by implementing [`SatProperties::srp_ecom`]
+//! (time-varying). [`propagate`] adds the ECOM acceleration to the
+//! cannonball term `−ν·P☉·C_R A/m·ê_D`, so set `craoverm = 0` for a pure
+//! ECOM model. The model contributes no partials to the state transition
+//! matrix (like the cannonball). For a worked fit
 //! against IGS GPS orbits see the *ECOM Solar Radiation Pressure* tutorial
 //! in the documentation.
 //!
