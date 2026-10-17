@@ -6,11 +6,15 @@
 #
 #   python python/run_stubtest.py
 #
-# The wrapper passes two CLI flags that switch off whole PyO3-idiom check
-# categories globally (cleaner than listing every object path):
+# The wrapper passes one CLI flag that switches off a whole PyO3-idiom check
+# category globally (cleaner than listing every object path):
 #
 #   --ignore-positional-only   operator dunders are positional-only at runtime
-#   --ignore-disjoint-bases    every pyclass is a PEP 800 disjoint base
+#
+# Every pyclass is final at runtime (not subclassable), and each stub class is
+# marked @final, so stubtest checks that instead of needing entries for it. A
+# @final class is implicitly a PEP 800 disjoint base (stubtest rejects adding
+# @disjoint_base to one), so no --ignore-disjoint-bases flag is needed either.
 #
 # Every entry below is an exact object path with a reason. Real stub/runtime
 # drift is fixed in the .pyi; the only drift listed here is owned by another
@@ -84,37 +88,6 @@ satkit\.satkit\.time\.__r(add|sub)__
 satkit\.satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)
 # PyO3 gives each submodule an `__all__`; the stubs list names explicitly.
 satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)\.__all__
-
-# --- Final classes -------------------------------------------------------------
-# Every pyclass is final at runtime; we never subclass in stubs. (Alternative:
-# mark each class @final in the stub and drop this block.)
-satkit\.satkit\.TLE
-satkit\.satkit\.consts
-satkit\.satkit\.duration
-satkit\.satkit\.ecomparams
-satkit\.satkit\.frame
-satkit\.satkit\.geodetic
-satkit\.satkit\.gravmodel
-satkit\.satkit\.integrator
-satkit\.satkit\.itrfcoord
-satkit\.satkit\.kepler
-satkit\.satkit\.propresult
-satkit\.satkit\.propsettings
-satkit\.satkit\.propstats
-satkit\.satkit\.quaternion
-satkit\.satkit\.satproperties
-satkit\.satkit\.satstate
-satkit\.satkit\.sgp4_error
-satkit\.satkit\.sgp4_gravconst
-satkit\.satkit\.sgp4_opsmode
-satkit\.satkit\.solarsystem
-satkit\.satkit\.thrust
-satkit\.satkit\.tidemodel
-satkit\.satkit\.time
-satkit\.satkit\.timescale
-satkit\.satkit\.tlefitstatus
-satkit\.satkit\.weekday
-satkit\.moon\.moonphase
 
 # --- Stub-only type aliases ----------------------------------------------------
 # TypeAliases used across the stubs; intentionally have no runtime object.

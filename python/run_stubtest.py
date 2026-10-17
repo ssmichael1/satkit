@@ -41,8 +41,6 @@ def main() -> int:
         str(ALLOWLIST),
         # Operator dunders are positional-only at runtime but not in the stubs.
         "--ignore-positional-only",
-        # Every pyclass is a PEP 800 disjoint base.
-        "--ignore-disjoint-bases",
         *sys.argv[1:],
     ]
     return stubtest.test_stubs(stubtest.parse_options(args))

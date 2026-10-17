@@ -11,7 +11,7 @@ import numpy as np
 import datetime
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Optional, TypeAlias, Union, overload
+from typing import Any, ClassVar, Optional, TypeAlias, Union, final, overload
 from typing_extensions import deprecated
 
 from ._types import OMMDict
@@ -40,6 +40,7 @@ TimeArrayLike: TypeAlias = (
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 
+@final
 class TLE:
     """Two-Line Element Set (TLE) representing a satellite ephemeris
 
@@ -642,6 +643,7 @@ def sgp4(
     """
     ...
 
+@final
 class sgp4_gravconst:
     """Gravity constant to use for SGP4 propagation"""
 
@@ -654,6 +656,7 @@ class sgp4_gravconst:
     wgs84: ClassVar[sgp4_gravconst]
     """WGS-84"""
 
+@final
 class sgp4_opsmode:
     """Ops Mode for SGP4 Propagation"""
 
@@ -663,6 +666,7 @@ class sgp4_opsmode:
     improved: ClassVar[int]
     """improved"""
 
+@final
 class gravmodel:
     """
     Earth gravity models available for use
@@ -799,6 +803,7 @@ def gravity_and_partials(
     """
     ...
 
+@final
 class solarsystem:
     """Solar system bodies for which high-precision ephemeris can be computed"""
 
@@ -835,6 +840,7 @@ class solarsystem:
     Sun: ClassVar[solarsystem]
     """Sun"""
 
+@final
 class sgp4_error:
     """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""
 
@@ -864,6 +870,7 @@ class sgp4_error:
     propagated by classic SGP4 at all (an SGP4-XP set, or OMM metadata naming another theory,
     time system, frame or center)"""
 
+@final
 class weekday:
     """
 
@@ -903,6 +910,7 @@ class weekday:
     Invalid: ClassVar[weekday]
     """Invalid weekday"""
 
+@final
 class tlefitstatus:
     """
     Termination status of the TLE non-linear least-squares fit performed by
@@ -937,6 +945,7 @@ class tlefitstatus:
         """True if the fit converged successfully."""
         ...
 
+@final
 class timescale:
     """
     Specify time scale used to represent or convert between the "satkit.time"
@@ -985,6 +994,7 @@ class timescale:
     TDB: ClassVar[timescale]
     """Barycentric Dynamical Time"""
 
+@final
 class frame:
     """Coordinate reference frame
 
@@ -1108,6 +1118,7 @@ class frame:
     of magnitude Δv adds *exactly* Δv to |v|, regardless of orbit eccentricity.
     """
 
+@final
 class time:
     """Representation of an instant in time
 
@@ -1971,6 +1982,7 @@ class time:
         """
         ...
 
+@final
 class duration:
     """
     Representation of a duration, or interval of time
@@ -2321,6 +2333,7 @@ class duration:
         """
         ...
 
+@final
 class quaternion:
     """Quaternion representing rotation of 3D Cartesian axes
 
@@ -2682,6 +2695,7 @@ class quaternion:
         """
         ...
 
+@final
 class kepler:
     """Represent Keplerian element sets and convert between cartesian
 
@@ -3018,6 +3032,7 @@ class kepler:
         """
         ...
 
+@final
 class geodetic:
     """Geodetic coordinates with named fields
 
@@ -3044,6 +3059,7 @@ class geodetic:
         ...
 
 
+@final
 class itrfcoord:
     """Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
 
@@ -3285,6 +3301,7 @@ class itrfcoord:
         """
         ...
 
+@final
 class consts:
     """Some constants that are useful for satellite dynamics"""
 
@@ -3350,6 +3367,7 @@ class consts:
 # Alias so `time` resolves to the class inside bodies that define a `time` member
 _Time = time
 
+@final
 class satstate:
     """Satellite state: position, velocity, optional covariance, and maneuvers
 
@@ -3702,6 +3720,7 @@ class satstate:
         """
         ...
 
+@final
 class propstats:
     """Statistics of a satellite propagation"""
 
@@ -3720,6 +3739,7 @@ class propstats:
         """Number of rejected steps in adaptive RK integrator"""
         ...
 
+@final
 class propresult:
     """Results of a satellite propagation
 
@@ -3962,6 +3982,7 @@ class propresult:
         """
         ...
 
+@final
 class thrust:
     """Continuous thrust acceleration for orbit maneuvers
 
@@ -4036,6 +4057,7 @@ class thrust:
         """End time of thrust arc"""
         ...
 
+@final
 class ecomparams:
     """Empirical CODE Orbit Model (ECOM) solar-radiation-pressure coefficients
 
@@ -4192,6 +4214,7 @@ class ecomparams:
     def __repr__(self) -> str: ...
     def __str__(self) -> str: ...
 
+@final
 class satproperties:
     """Satellite properties relevant for drag, radiation pressure, and thrust
 
@@ -4289,6 +4312,7 @@ class satproperties:
     @ecom.setter
     def ecom(self, value: ecomparams | None) -> None: ...
 
+@final
 class integrator:
     """Choice of ODE integrator for orbit propagation
 
@@ -4364,6 +4388,7 @@ class integrator:
     discontinuities (eclipse boundaries, impulsive maneuvers).
     """
 
+@final
 class tidemodel:
     """Solid Earth tide model fidelity for high-precision orbit propagation.
 
@@ -4397,6 +4422,7 @@ class tidemodel:
     Step 2 is not yet implemented; currently behaves as
     ``solid_step1``."""
 
+@final
 class propsettings:
     """This class contains settings used in the high-precision orbit propagator part of the "satkit" python toolbox
 
