@@ -6,6 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Changed
 
+- Type stubs mark every satkit class `@final`, matching the runtime, so type checkers reject subclassing them ([#280](https://github.com/ssmichael1/satkit/pull/280))
 - PyO3 0.30 (and numpy 0.30); `pyo3-log`, which does not support PyO3 0.30 yet, is replaced by a small in-tree bridge with the same behaviour: satkit's `Info`-and-above records go to the `satkit.<module>` Python loggers, and records logged while the interpreter is shutting down are dropped instead of panicking ([#279](https://github.com/ssmichael1/satkit/pull/279))
 
 ### Fixed

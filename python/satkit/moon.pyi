@@ -6,11 +6,12 @@ from __future__ import annotations
 import typing
 import numpy.typing as npt
 import numpy as np
-from typing import ClassVar
+from typing import ClassVar, final
 
 import satkit
 from .satkit import TimeScalar, TimeArrayLike, TimeInput
 
+@final
 class moonphase:
     """
     Enum representing moon phases
