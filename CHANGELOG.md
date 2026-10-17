@@ -7,7 +7,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Fixed
 
 - Solid Earth tides: the degree-3 order-3 normalization factor was mistyped (0.1394338 instead of sqrt(7/360) = 0.1394433, 7e-5 relative), scaling the smallest tide term; a unit test now checks every normalization factor against its formula
-- CI: rustdoc on Rust 1.99 rejected two redundant intra-doc link targets in `orbitprop::srp`; stubtest on mypy 2.4 reports PyO3's auto-generated reflected operator slots, now allowlisted (test extra requires `mypy>=2.4`) ([#278](https://github.com/ssmichael1/satkit/pull/278))
+- CI: rustdoc on Rust 1.99 rejected two redundant intra-doc link targets in `orbitprop::srp`; stubtest on mypy 2.4 reports PyO3's auto-generated reflected operator slots, now allowlisted (test extra requires `mypy>=2.4`); rustls 0.23.46 for RUSTSEC-2026-0346/0347/0348 ([#278](https://github.com/ssmichael1/satkit/pull/278))
 
 ## 0.24.1 - 2026-09-30
 
