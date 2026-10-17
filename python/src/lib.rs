@@ -27,6 +27,7 @@ mod pytle;
 mod pytlefitstatus;
 
 mod pylambert;
+mod pylogging;
 mod pypropagate;
 mod pypropsettings;
 mod pysatproperties;
@@ -144,29 +145,11 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-/// Forward satkit's warnings and notices (Rust `log` records) to Python's
-/// `logging`, as loggers `satkit.<module>` (e.g.
-/// `satkit.earth_orientation_params`).
-///
-/// Only satkit's own records are forwarded: every forwarded record takes
-/// the GIL, and the HTTP/TLS crates log at debug level on every request,
-/// from `update_datafiles` worker threads among others. Levels are not
-/// cached (`Caching::Loggers`): satkit logs rarely, and this way
-/// `logging.getLogger("satkit").setLevel(...)` takes effect whenever it is
-/// called, not only before the first record.
-fn init_logging(py: Python) -> PyResult<()> {
-    let logger = pyo3_log::Logger::new(py, pyo3_log::Caching::Loggers)?
-        .filter(log::LevelFilter::Off)
-        .filter_target("satkit".to_owned(), log::LevelFilter::Info);
-    // Fails only if a logger is already installed (the module initialized
-    // twice in one process); the first one keeps working.
-    let _ = logger.install();
-    Ok(())
-}
-
 #[pymodule]
-pub fn satkit(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    init_logging(py)?;
+pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Forward satkit's warnings and notices (Rust `log` records) to
+    // Python's `logging`, as loggers `satkit.<module>`.
+    pylogging::init();
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(pyutils::enum_member, m)?)?;
     m.add_class::<PyInstant>()?;
