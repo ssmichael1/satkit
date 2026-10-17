@@ -36,7 +36,7 @@ classifiers = [
     "Programming Language :: Python :: 3.15",
 ]
 [project.optional-dependencies]
-test = ["pytest", "mypy", "scipy", "pyerfa", "hypothesis"]
+test = ["pytest", "mypy>=2.4", "scipy", "pyerfa", "hypothesis"]
 
 [tool.setuptools]
 license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRDPARTY-DATA.md"]
