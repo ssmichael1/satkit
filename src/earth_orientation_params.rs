@@ -29,6 +29,14 @@
 //! The download URLs live in the embedded data manifest
 //! (`data/manifest.json`, `eop` section).
 //!
+//! A table can also be given by value, as a slice of
+//! [`EopRecord`](crate::earth_orientation_params::EopRecord) rows, with
+//! [`set_table`](crate::earth_orientation_params::set_table): for EOP from
+//! another provider or format, a subset or a smoothed version of the IERS
+//! table, or a synthetic table in a test.
+//! [`reset`](crate::earth_orientation_params::reset) discards whatever table
+//! is loaded and loads the data-directory one again.
+//!
 //! The file is published once a day, so [`refresh_into`](crate::earth_orientation_params::refresh_into) leaves a copy
 //! fetched within the last 24 h alone without contacting anyone, and past
 //! that sends a conditional request that costs a `304` when the file has not
@@ -56,7 +64,11 @@ pub const FINALS2000A_FILE: &str = "finals2000A.all";
 
 /// Errors produced by the
 /// [`earth_orientation_params`](crate::earth_orientation_params) module.
+///
+/// Non-exhaustive: a variant may be added in a minor release, so a match
+/// outside the crate needs a wildcard arm.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// A `finals2000A.all` line could not be parsed (a flag other than `I`/`P`,
     /// or a numeric column that is neither blank nor a number).
@@ -91,6 +103,12 @@ pub enum Error {
     /// file is text.
     #[error("EOP byte buffer is not valid UTF-8: {0}")]
     Utf8(#[from] std::str::Utf8Error),
+
+    /// The rows given to [`set_table`] do not form a table: empty, a
+    /// non-finite value, an MJD outside 0–100000, dates not strictly
+    /// increasing, or an observed row after a predicted one.
+    #[error("Invalid EOP table: {0}")]
+    InvalidTable(String),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -127,6 +145,108 @@ struct EOPEntry {
     tai_utc: f64,
 }
 
+/// One row of an EOP table given by value — see [`set_table`].
+///
+/// The units are those [`get`] returns: `dut1` in seconds, `xp`/`yp` in
+/// arcsec, `lod` in seconds per day (`finals2000A.all` prints it in ms),
+/// `dx`/`dy` in milliarcsec. `dut1` is UT1 − UTC, not UT1 − TAI; the
+/// lookup re-references it through TAI − UTC itself, so rows on both sides
+/// of a leap second interpolate correctly.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EopRecord {
+    /// Epoch of the row, Modified Julian Date (UTC).
+    pub mjd_utc: f64,
+    /// UT1 − UTC, seconds.
+    pub dut1: f64,
+    /// Polar motion x, arcsec.
+    pub xp: f64,
+    /// Polar motion y, arcsec.
+    pub yp: f64,
+    /// Excess length of day, −d(UT1 − UTC)/dt, seconds per day.
+    pub lod: f64,
+    /// Celestial pole offset dX wrt IAU 2000A, milliarcsec.
+    pub dx: f64,
+    /// Celestial pole offset dY wrt IAU 2000A, milliarcsec.
+    pub dy: f64,
+    /// `true` for a measured row, `false` for a prediction. All observed
+    /// rows must come before the predicted ones, as in the IERS file.
+    pub observed: bool,
+}
+
+impl EopRecord {
+    fn into_entry(self) -> EOPEntry {
+        EOPEntry {
+            mjd_utc: self.mjd_utc,
+            xp: self.xp,
+            yp: self.yp,
+            dut1: self.dut1,
+            lod: self.lod,
+            dX: self.dx,
+            dY: self.dy,
+            observed: self.observed,
+            tai_utc: crate::time::tai_minus_utc_at_mjd_utc(self.mjd_utc),
+        }
+    }
+}
+
+/// The table [`set_table`] installs for `rows`, or why it cannot.
+///
+/// The rules the parser guarantees for a file are required of the rows:
+/// at least one, every value finite, MJD within 0–100000, dates strictly
+/// increasing, observed rows before predicted ones (the lookup finds the
+/// observed/predicted boundary by binary search). Nothing is sorted,
+/// de-duplicated or filled in: a caller building rows has the facts the
+/// parser has to infer.
+fn table_from_records(rows: &[EopRecord]) -> Result<Vec<EOPEntry>> {
+    let invalid = |reason: String| Error::InvalidTable(reason);
+    if rows.is_empty() {
+        return Err(invalid("no rows".into()));
+    }
+    let mut table = Vec::with_capacity(rows.len());
+    let mut predicted_seen = false;
+    for (i, r) in rows.iter().enumerate() {
+        let fields = [
+            ("mjd_utc", r.mjd_utc),
+            ("dut1", r.dut1),
+            ("xp", r.xp),
+            ("yp", r.yp),
+            ("lod", r.lod),
+            ("dx", r.dx),
+            ("dy", r.dy),
+        ];
+        if let Some((name, v)) = fields.iter().find(|(_, v)| !v.is_finite()) {
+            return Err(invalid(format!("row {i}: {name} = {v} is not finite")));
+        }
+        if !(0.0..=100_000.0).contains(&r.mjd_utc) {
+            return Err(invalid(format!(
+                "row {i}: MJD {} is outside 0-100000",
+                r.mjd_utc
+            )));
+        }
+        if let Some(prev) = i.checked_sub(1).map(|j| &rows[j]) {
+            if r.mjd_utc <= prev.mjd_utc {
+                return Err(invalid(format!(
+                    "row {i} (MJD {}) does not follow row {} (MJD {}): dates must be \
+                     strictly increasing",
+                    r.mjd_utc,
+                    i - 1,
+                    prev.mjd_utc
+                )));
+            }
+        }
+        if r.observed && predicted_seen {
+            return Err(invalid(format!(
+                "row {i} (MJD {}) is observed but follows a predicted row: the observed \
+                 rows must come first",
+                r.mjd_utc
+            )));
+        }
+        predicted_seen |= !r.observed;
+        table.push(r.into_entry());
+    }
+    Ok(table)
+}
+
 /// Where a given epoch falls relative to the loaded EOP table.
 ///
 /// Returned by [`status`]; see [`coverage`] for the table bounds.
@@ -150,8 +270,9 @@ pub enum EopStatus {
     /// frame transforms use zeros (UT1 = UTC).
     BeforeTable,
     /// No EOP table is loaded at all (file missing and download failed,
-    /// or an empty table was installed): [`get`] returns `None` and the
-    /// frame transforms use zeros.
+    /// an empty table was installed, or [`reset`] could not load the
+    /// default table): [`get`] returns `None` and the frame transforms use
+    /// zeros.
     NotLoaded,
 }
 
@@ -610,8 +731,9 @@ const FINALS_FIRST_MJD: f64 = 41684.0;
 ///
 /// A table that starts where `finals2000A.all` does gets the note that there
 /// is no EOP data before it; any other start (a table loaded with
-/// [`init_from_path`] / [`init_from_bytes`], a truncated file) gets no
-/// advice, since the warning already says where the loaded table starts.
+/// [`init_from_path`] / [`init_from_bytes`] / [`set_table`], a truncated
+/// file) gets no advice, since the warning already says where the loaded
+/// table starts.
 fn too_early_advice(first_mjd: f64) -> &'static str {
     if first_mjd == FINALS_FIRST_MJD {
         "finals2000A.all has no EOP data before 1973-01-02; refreshing the data files does \
@@ -654,7 +776,8 @@ fn stale_prediction_age(eop: &[EOPEntry], mjd_utc: f64, now_mjd: f64) -> Option<
 
 /// Module-scope refreshable singleton. The lazy default load (best-effort,
 /// silent on failure) runs at most once; [`init_from_bytes`] /
-/// [`init_from_path`] / [`update`] replace any current contents.
+/// [`init_from_path`] / [`set_table`] / [`update`] / [`reset`] replace any
+/// current contents.
 static EOP: RefreshableSingleton<Vec<EOPEntry>> = RefreshableSingleton::new();
 
 /// Best-effort default load on first read. Failures are silent — if EOP
@@ -681,6 +804,80 @@ pub fn init_from_bytes(bytes: &[u8]) -> Result<()> {
 pub fn init_from_path(path: &Path) -> Result<()> {
     EOP.set(parse_finals2000a(&std::fs::read_to_string(path)?)?);
     Ok(())
+}
+
+/// Install an EOP table given by value, replacing any loaded table.
+///
+/// For EOP that does not come from `finals2000A.all`: another provider or
+/// format, a subset or a smoothed version of the IERS table, or a synthetic
+/// table in a test. From the next call on, everything that reads EOP — the
+/// ITRF frame transforms, UT1 conversions, the propagators — in every
+/// thread uses this table, and the lazy default load never runs; [`reset`]
+/// goes back to the data-directory table.
+///
+/// The rows must be in strictly increasing date order, with the observed
+/// rows before the predicted ones, every value finite and the MJDs within
+/// 0–100000; otherwise [`Error::InvalidTable`] is returned and the loaded
+/// table is unchanged. Rows need not be a day apart: a lookup interpolates
+/// linearly between the two bracketing rows, as for the file. Values are
+/// used as given — in particular `lod` is not derived from `dut1` the way
+/// the parser fills a blank LOD column.
+///
+/// The one-time warnings (epoch before or after the table, stale
+/// predictions, no table) are not re-armed by a new table: a warning shown
+/// for the previous table is not shown again for this one, and
+/// [`disable_eop_time_warning`] stays in effect.
+///
+/// Rust only; there is no Python binding.
+///
+/// # Example
+///
+/// ```rust
+/// use satkit::earth_orientation_params::{self as eop, EopRecord};
+///
+/// let row = |mjd_utc, dut1, observed| EopRecord {
+///     mjd_utc, dut1, xp: 0.0563, yp: 0.3522, lod: 0.0007, dx: 0.0, dy: 0.0, observed,
+/// };
+/// eop::set_table(&[
+///     row(60000.0, -0.0174, true),
+///     row(60001.0, -0.0181, true),
+///     row(60002.0, -0.0188, false),
+/// ])?;
+/// let v = eop::eop_from_mjd_utc(60000.5).unwrap();
+/// assert!((v[0] - -0.01775).abs() < 1e-12);
+/// # Ok::<(), eop::Error>(())
+/// ```
+pub fn set_table(rows: &[EopRecord]) -> Result<()> {
+    EOP.set(table_from_records(rows)?);
+    Ok(())
+}
+
+/// Discard the loaded table and load the default one again: the freshest
+/// `finals2000A.all` across the data search directories, downloaded into
+/// the write location when there is no copy at all, exactly as the first
+/// use of EOP does. Undoes [`set_table`], [`init_from_bytes`] and
+/// [`init_from_path`]; before any load it is simply an eager default load.
+///
+/// The loaded table stays in use until the new one is ready, so other
+/// threads never see an empty table while a download runs. When the default
+/// table cannot be loaded (no file and no network, or a copy that does not
+/// parse), the error is returned and **no table is loaded**, the state a
+/// process whose default load failed is in: [`get`] returns `None` with the
+/// one-time "not loaded" warning and [`status`] is [`EopStatus::NotLoaded`].
+/// The table that was installed before is gone either way.
+///
+/// Rust only; there is no Python binding.
+pub fn reset() -> Result<()> {
+    match load_default() {
+        Ok(table) => {
+            EOP.set(table);
+            Ok(())
+        }
+        Err(e) => {
+            EOP.set(Vec::new());
+            Err(e)
+        }
+    }
 }
 
 ///
@@ -1775,5 +1972,122 @@ mod tests {
             extrapolated.starts_with("EOP data ends at") && extrapolated.contains("MJD 61673"),
             "{extrapolated}"
         );
+    }
+
+    /// Rows for `table_from_records` tests: two observed, one predicted.
+    fn records() -> [EopRecord; 3] {
+        let r0 = EopRecord {
+            mjd_utc: 60000.0,
+            dut1: -0.0174,
+            xp: 0.0563,
+            yp: 0.3522,
+            lod: 0.0007,
+            dx: 0.2,
+            dy: -0.1,
+            observed: true,
+        };
+        let r1 = EopRecord {
+            mjd_utc: 60002.0,
+            dut1: -0.0188,
+            observed: true,
+            ..r0
+        };
+        let r2 = EopRecord {
+            mjd_utc: 60003.0,
+            observed: false,
+            ..r1
+        };
+        [r0, r1, r2]
+    }
+
+    /// A by-value table keeps the values as given (LOD included), fills
+    /// TAI − UTC, and is looked up like a parsed one: interpolated inside,
+    /// `None` before, held constant after.
+    #[test]
+    fn set_table_rows_become_entries_and_look_up() {
+        let rows = records();
+        let table = table_from_records(&rows).unwrap();
+        assert_eq!(table.len(), 3);
+        for (e, r) in table.iter().zip(rows) {
+            assert_eq!(
+                (e.mjd_utc, e.dut1, e.xp, e.yp, e.lod, e.dX, e.dY, e.observed),
+                (r.mjd_utc, r.dut1, r.xp, r.yp, r.lod, r.dx, r.dy, r.observed)
+            );
+            assert_eq!(e.tai_utc, 37.0);
+        }
+        // Rows two days apart: linear interpolation between them.
+        let (v, _) = eop_lookup(Some(&table), 60001.0);
+        let v = v.unwrap();
+        let expect = [-0.0181, 0.0563, 0.3522, 0.0007, 0.2, -0.1];
+        for (a, b) in v.iter().zip(expect) {
+            assert!((a - b).abs() < 1e-12, "{v:?}");
+        }
+        assert!(eop_lookup(Some(&table), 59999.9).0.is_none());
+        let (after, _) = eop_lookup(Some(&table), 60010.0);
+        assert_eq!(after.unwrap()[0], -0.0188);
+        assert_eq!(last_observed_mjd(&table), 60002.0);
+        assert_eq!(
+            stale_prediction_age(&table, 60002.5, 60100.0).map(|a| a.0),
+            Some(60002.0)
+        );
+    }
+
+    /// Rows on both sides of the 2016-12-31 leap second: `dut1` is
+    /// UT1 − UTC, so it jumps by a second between the rows while UT1 − TAI
+    /// is continuous, and the lookup interpolates the latter.
+    #[test]
+    fn set_table_interpolates_across_leap_second() {
+        let [r0, ..] = records();
+        let before = EopRecord {
+            mjd_utc: 57753.0,
+            dut1: -0.4,
+            ..r0
+        };
+        let after = EopRecord {
+            mjd_utc: 57754.0,
+            dut1: 0.6,
+            ..r0
+        };
+        let table = table_from_records(&[before, after]).unwrap();
+        assert_eq!((table[0].tai_utc, table[1].tai_utc), (36.0, 37.0));
+        let (v, _) = eop_lookup(Some(&table), 57753.5);
+        assert!((v.unwrap()[0] - -0.4).abs() < 1e-12, "{v:?}");
+        let (v, _) = eop_lookup(Some(&table), 57754.0);
+        assert!((v.unwrap()[0] - 0.6).abs() < 1e-12, "{v:?}");
+    }
+
+    #[test]
+    fn set_table_rejects_tables_the_lookup_cannot_use() {
+        let [r0, r1, r2] = records();
+        let err = |rows: &[EopRecord]| match table_from_records(rows) {
+            Err(Error::InvalidTable(reason)) => reason,
+            other => panic!("expected InvalidTable, got {other:?}"),
+        };
+        assert_eq!(err(&[]), "no rows");
+        assert!(err(&[r1, r0]).contains("strictly increasing"));
+        assert!(err(&[r0, r0]).contains("strictly increasing"));
+        let predicted_first = [
+            EopRecord {
+                observed: false,
+                ..r0
+            },
+            r1,
+        ];
+        assert!(err(&predicted_first).contains("observed rows must come first"));
+        let nan = EopRecord { dy: f64::NAN, ..r2 };
+        assert!(err(&[r0, r1, nan]).contains("dy = NaN is not finite"));
+        let inf = EopRecord {
+            dut1: f64::INFINITY,
+            ..r0
+        };
+        assert!(err(&[inf]).contains("dut1 = inf is not finite"));
+        let far = EopRecord {
+            mjd_utc: 100_001.0,
+            ..r2
+        };
+        assert!(err(&[r0, r1, far]).contains("outside 0-100000"));
+        // One observed row, and a table of predictions only, are tables.
+        assert_eq!(table_from_records(&[r0]).unwrap().len(), 1);
+        assert_eq!(table_from_records(&[r2]).unwrap().len(), 1);
     }
 }

@@ -4,8 +4,13 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Added
+
+- `earth_orientation_params::set_table` installs an EOP table given by value, a slice of the new `EopRecord` rows (another provider, a subset or smoothed IERS table, a synthetic table in a test; rows need not be a day apart), and `reset` discards it and loads the data-directory `finals2000A.all` again; Rust only ([#281](https://github.com/ssmichael1/satkit/pull/281))
+
 ### Changed
 
+- **Breaking (Rust):** `earth_orientation_params::Error` is `#[non_exhaustive]` and gains `InvalidTable` (rows rejected by `set_table`); an exhaustive match outside satkit needs a wildcard arm ([#281](https://github.com/ssmichael1/satkit/pull/281))
 - Type stubs mark every satkit class `@final`, matching the runtime, so type checkers reject subclassing them ([#280](https://github.com/ssmichael1/satkit/pull/280))
 - PyO3 0.30 (and numpy 0.30); `pyo3-log`, which does not support PyO3 0.30 yet, is replaced by a small in-tree bridge with the same behaviour: satkit's `Info`-and-above records go to the `satkit.<module>` Python loggers, and records logged while the interpreter is shutting down are dropped instead of panicking ([#279](https://github.com/ssmichael1/satkit/pull/279))
 

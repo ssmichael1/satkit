@@ -364,7 +364,8 @@ nested lists.
   and update exhaustive matches.
 - **`DataDirReadOnly` is now `DataDirReadOnly { path, reason }`** in
   `earth_orientation_params::Error`, `spaceweather::Error` and
-  `utils::update_data::Error`. These enums are not `#[non_exhaustive]`.
+  `utils::update_data::Error`. These enums are not `#[non_exhaustive]` in
+  0.24 (`earth_orientation_params::Error` becomes so in 0.25).
   **Do this:** match `Error::DataDirReadOnly { .. }`.
 - **`orbitprop::Error::EopCoverage` has new `span_start` and `table_start`
   fields.** **Do this:** use `EopCoverage { .. }` in patterns.
