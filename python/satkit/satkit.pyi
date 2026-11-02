@@ -467,6 +467,8 @@ class TLE:
             inclination, eccentricity, RAAN, argument of perigee, mean anomaly,
             mean motion, and drag (bstar) to the provided states. The solver
             is built on top of the ``numeris`` linear algebra crate.
+            The fit is parameterized in equinoctial elements, which are not
+            singular for circular or equatorial (e.g. geostationary) orbits.
 
             The results dictionary includes the following keys:
             ``status`` (a :class:`tlefitstatus`), ``converged`` (bool),

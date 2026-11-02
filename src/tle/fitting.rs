@@ -61,34 +61,69 @@ fn wrap_deg(x: f64) -> f64 {
     v
 }
 
-/// Map a raw parameter vector onto the equivalent orbit with a non-negative
-/// eccentricity. A negative eccentricity describes the same ellipse with the
-/// perigee direction reversed, so `(-e, ω, M)` is the orbit `(e, ω + 180°,
-/// M − 180°)`. Reflecting (rather than clamping at zero) lets the optimizer
-/// cross e = 0 freely instead of stalling against a bound.
-fn canonicalize(p: &mut [f64; NPARAM]) {
-    if p[1] < 0.0 {
-        p[1] = -p[1];
-        p[3] += 180.0;
-        p[5] -= 180.0;
+/// Equinoctial fit parameters for `tle` with retrograde factor `fr`.
+///
+/// The fit is done in equinoctial elements, which are non-singular at
+/// e = 0 and i = 0. Parameters:
+///   - 0: h = e·cos(ϖ)
+///   - 1: k = e·sin(ϖ)
+///   - 2: p = tan(i/2)·sin(Ω)  (tan((180° − i)/2) for a retrograde fit)
+///   - 3: q = tan(i/2)·cos(Ω)  (likewise)
+///   - 4: mean motion (revolutions per day)
+///   - 5: mean longitude λ = M + ϖ (degrees)
+///   - 6: BSTAR drag term
+///
+/// where ϖ = ω + f·Ω and the retrograde factor f is +1, or −1 for an
+/// orbit with i > 90°, which moves the singularity of `p`, `q` from
+/// i = 180° to i = 0°, well away from the orbit being fit.
+///
+/// With the classical (e, i, Ω, ω, M) parameters a near-equatorial orbit
+/// cannot be fit: Ω is undetermined at i = 0, and the residuals depend on a
+/// node rotation only in proportion to i, so a fit seeded with the wrong
+/// node collapses the inclination to zero instead (a GEO arc came back
+/// kilometres off with i ≈ 1e-10°). Near e = 0 the ω and M columns are
+/// likewise collinear.
+fn params_from_tle(tle: &TLE, fr: f64) -> [f64; NPARAM] {
+    let half = if fr > 0.0 {
+        tle.inclination
+    } else {
+        180.0 - tle.inclination
     }
-    p[0] = wrap_deg(p[0]);
-    p[2] = wrap_deg(p[2]);
-    p[3] = wrap_deg(p[3]);
-    p[5] = wrap_deg(p[5]);
+    .to_radians()
+        / 2.0;
+    let t = half.tan();
+    let lp = tle.arg_of_perigee + fr * tle.raan;
+    [
+        tle.eccen * lp.to_radians().cos(),
+        tle.eccen * lp.to_radians().sin(),
+        t * tle.raan.to_radians().sin(),
+        t * tle.raan.to_radians().cos(),
+        tle.mean_motion,
+        wrap_deg(tle.mean_anomaly + lp),
+        tle.bstar,
+    ]
 }
 
-fn tle_from_params(p: &[f64; NPARAM], epoch: Instant) -> TLE {
-    let mut p = *p;
-    canonicalize(&mut p);
+/// Convert equinoctial fit parameters (see [`params_from_tle`]) with
+/// retrograde factor `fr` to a TLE at `epoch`.
+fn tle_from_params(p: &[f64; NPARAM], fr: f64, epoch: Instant) -> TLE {
+    let eccen = p[0].hypot(p[1]);
+    let lp = p[1].atan2(p[0]).to_degrees();
+    let half = p[2].hypot(p[3]).atan().to_degrees();
+    let inclination = if fr > 0.0 {
+        2.0 * half
+    } else {
+        180.0 - 2.0 * half
+    };
+    let raan = p[2].atan2(p[3]).to_degrees();
     TLE {
         epoch,
-        inclination: p[0],
-        eccen: p[1],
-        raan: p[2],
-        arg_of_perigee: p[3],
+        inclination,
+        eccen,
+        raan: wrap_deg(raan),
+        arg_of_perigee: wrap_deg(lp - fr * raan),
         mean_motion: p[4],
-        mean_anomaly: p[5],
+        mean_anomaly: wrap_deg(p[5] - lp),
         bstar: p[6],
         ..Default::default()
     }
@@ -135,12 +170,13 @@ fn validate_fit(tle: &TLE) -> Result<()> {
 /// `sgp4_pos[i] - target_pos[i]`.
 fn residuals(
     params: &[f64; NPARAM],
+    fr: f64,
     times: &[Instant],
     states_teme: &[[f64; 6]],
     epoch: Instant,
     model: (GravConst, OpsMode),
 ) -> Result<Vec<f64>> {
-    let mut tle = tle_from_params(params, epoch);
+    let mut tle = tle_from_params(params, fr, epoch);
     let out = crate::sgp4::sgp4_full(&mut tle, times, model.0, model.1)
         .map_err(|e| Error::Sgp4(format!("{e:?}")))?;
     // Reject any trial step whose propagation failed at one or more times (e.g.
@@ -208,21 +244,17 @@ impl TLE {
     ///
     /// * The damping is Marquardt-scaled (`μ·diag(JᵀJ)`), so it is
     ///   effective regardless of the residual count or the units of the
-    ///   parameters. A trial step that drives the eccentricity negative is
-    ///   mapped onto the equivalent orbit with `e ≥ 0` (perigee direction
-    ///   reversed), so the returned TLE always has a non-negative
-    ///   eccentricity; the fit fails with
-    ///   [`Error::FitElementOutOfRange`] if it terminates outside the
-    ///   domain a TLE can represent.
+    ///   parameters. The fit fails with [`Error::FitElementOutOfRange`]
+    ///   if it terminates outside the domain a TLE can represent.
     ///
-    /// * Parameters in the TLE that are fit:
-    ///   - 0: Inclination (degrees)
-    ///   - 1: Eccentricity
-    ///   - 2: Right Ascension of Ascending Node (RAAN) (degrees)
-    ///   - 3: Argument of Perigee (degrees)
-    ///   - 4: Mean Motion (revolutions per day)
-    ///   - 5: Mean Anomaly (degrees)
-    ///   - 6: BSTAR drag term
+    /// * The fit is parameterized in equinoctial elements
+    ///   (`h, k = e·(cos, sin)(ω+Ω)`, `p, q = tan(i/2)·(sin, cos)Ω`, mean
+    ///   longitude `λ = M+ω+Ω`, with the retrograde form for `i > 90°`),
+    ///   plus mean motion and BSTAR, and converted to the classical TLE
+    ///   elements at the end. Unlike the classical elements these are not
+    ///   singular for circular or equatorial orbits, so near-circular and
+    ///   near-equatorial (e.g. geostationary) arcs fit as well as any other.
+    ///   The returned eccentricity is always non-negative.
     ///
     /// # Example:
     ///
@@ -357,23 +389,23 @@ impl TLE {
             kepler = kepler.propagate(&(epoch - closest_time));
         }
 
-        // Create initial guess of parameters from 2-body Kepler. At e = 0 the
-        // (e, ω, M) parameterization is singular: ω is arbitrary, and if the
-        // gradient points toward negative e the reflection in
-        // `canonicalize` turns every step uphill, so the fit stalls on its
-        // first iteration. Whether that happens hinges on the sign of
-        // round-off in an exactly circular input, so start from a small
-        // positive eccentricity where the ellipse can rotate smoothly.
-        const MIN_ECCEN_GUESS: f64 = 1.0e-4;
-        let mut params: [f64; NPARAM] = [
-            kepler.incl.to_degrees(),
-            kepler.eccen.max(MIN_ECCEN_GUESS),
-            kepler.raan.to_degrees(),
-            kepler.argp.to_degrees(),
-            kepler.mean_motion() * 60.0 * 60.0 * 24.0 / (2.0 * std::f64::consts::PI),
-            kepler.mean_anomaly().to_degrees(),
-            0.0,
-        ];
+        // Initial guess of parameters from 2-body Kepler, in equinoctial
+        // elements (prograde unless the orbit is retrograde).
+        let incl_deg = kepler.incl.to_degrees();
+        let fr = if incl_deg > 90.0 { -1.0 } else { 1.0 };
+        let mut params = params_from_tle(
+            &Self {
+                inclination: incl_deg,
+                eccen: kepler.eccen,
+                raan: kepler.raan.to_degrees(),
+                arg_of_perigee: kepler.argp.to_degrees(),
+                mean_motion: kepler.mean_motion() * 60.0 * 60.0 * 24.0
+                    / (2.0 * std::f64::consts::PI),
+                mean_anomaly: kepler.mean_anomaly().to_degrees(),
+                ..Default::default()
+            },
+            fr,
+        );
 
         // --- Levenberg-Marquardt loop -------------------------------------
         let grad_tol = 1e-8_f64;
@@ -390,7 +422,7 @@ impl TLE {
         let mu_max = 1e12_f64;
         let sqrt_eps = f64::EPSILON.sqrt();
 
-        let mut r = residuals(&params, times, &states_teme, epoch, model)?;
+        let mut r = residuals(&params, fr, times, &states_teme, epoch, model)?;
         let mut n_res_evals: usize = 1;
         let orig_norm = norm_sq(&r).sqrt();
         let mut cost = 0.5 * norm_sq(&r);
@@ -413,7 +445,7 @@ impl TLE {
                 let col = {
                     let mut pert = params;
                     pert[k] += h;
-                    match residuals(&pert, times, &states_teme, epoch, model) {
+                    match residuals(&pert, fr, times, &states_teme, epoch, model) {
                         Ok(rp) => {
                             n_res_evals += 1;
                             rp.iter()
@@ -425,7 +457,7 @@ impl TLE {
                             // Try a backward difference instead.
                             let mut pert = params;
                             pert[k] -= h;
-                            let rp = residuals(&pert, times, &states_teme, epoch, model)?;
+                            let rp = residuals(&pert, fr, times, &states_teme, epoch, model)?;
                             n_res_evals += 1;
                             rp.iter()
                                 .zip(r.iter())
@@ -500,7 +532,7 @@ impl TLE {
                     trial[k] += delta[k];
                 }
                 // Treat SGP4 failures on trial parameters as a rejected step.
-                let r_new = match residuals(&trial, times, &states_teme, epoch, model) {
+                let r_new = match residuals(&trial, fr, times, &states_teme, epoch, model) {
                     Ok(rn) => {
                         n_res_evals += 1;
                         rn
@@ -525,10 +557,9 @@ impl TLE {
                 let actual = cost - cost_new;
 
                 if predicted > 0.0 && actual > 0.0 {
-                    // Accept step, keeping the parameters canonical (e ≥ 0,
-                    // angles wrapped) so the next Jacobian is taken there.
+                    // Accept step, keeping the mean longitude wrapped.
                     params = trial;
-                    canonicalize(&mut params);
+                    params[5] = wrap_deg(params[5]);
                     r = r_new;
                     cost = cost_new;
                     mu = (mu * 0.1).max(mu_min);
@@ -557,7 +588,7 @@ impl TLE {
             }
         }
 
-        let final_tle = tle_from_params(&params, epoch);
+        let final_tle = tle_from_params(&params, fr, epoch);
         validate_fit(&final_tle)?;
         Ok((
             final_tle,
@@ -731,9 +762,9 @@ mod tests {
             assert!((back.eccen - tle.eccen).abs() < 1e-7);
             assert!(back.eccen >= 0.0);
         }
-        // A circular geosynchronous arc. Seeded at e = 0 exactly this used to
-        // stall at ~7 km RMS against the e = 0 singularity (it looked like a
-        // deep-space model floor); from the positive-e seed it fits to
+        // A circular geosynchronous arc. With classical elements seeded at
+        // e = 0 this used to stall at ~7 km RMS against the e = 0
+        // singularity (it looked like a deep-space model floor); it fits to
         // ~650 m.
         let (tle, _result, rms) = fit_hifi_arc(crate::consts::GEO_R, 15.0, 0.0, 24.0, None)?;
         assert!(tle.eccen >= 0.0, "negative eccentricity: {}", tle.eccen);
@@ -812,6 +843,43 @@ mod tests {
             assert!((fit.inclination - tle.inclination).abs() < 1e-6, "{gc:?}");
             assert!((fit.mean_motion - tle.mean_motion).abs() < 1e-9, "{gc:?}");
         }
+        Ok(())
+    }
+
+    /// Near-equatorial geostationary element sets (GOES-19, and the same
+    /// orbit at other near-equatorial and retrograde inclinations). With
+    /// classical elements the fit collapsed the inclination to ~1e-10° with
+    /// the node stuck at its two-body seed, and came back ~3 km off.
+    #[test]
+    fn test_fit_recovers_equatorial_geo() -> Result<()> {
+        let line1 = "1 60133U 24119A   26306.21003205 -.00000256  00000-0  00000+0 0  9993";
+        let base = TLE::load_2line(
+            line1,
+            "2 60133   0.0418  80.4472 0000999 203.8933 117.6064  1.00271484  8345",
+        )?;
+        // At exactly i = 0 SGP4 still depends on the (meaningless) node: its
+        // lunisolar inclination periodic tilts the plane about it, ~80 m per
+        // degree of Ω. That element set is only reached as the limit
+        // i → 0 at fixed Ω, so the fit stops at ~1 m.
+        for (inc, tol) in [(0.0418, 0.01), (1.0e-3, 0.01), (179.95, 0.01), (0.0, 5.0)] {
+            let tle = TLE {
+                inclination: inc,
+                ..base.clone()
+            };
+            let n = 145; // one day
+            let (states, times) = sgp4_states_gcrf(&tle, n, GravConst::WGS72);
+            let (fit, result) = TLE::fit_from_states(&states, &times, tle.epoch)?;
+            let rms = result.best_norm / ((3 * n) as f64).sqrt();
+            assert!(rms < tol, "i = {inc}: fit RMS {rms} m");
+            assert!((fit.inclination - inc).abs() < 1e-4, "i = {inc}: {fit}");
+            assert!(
+                (fit.mean_motion - tle.mean_motion).abs() < 1e-9,
+                "i = {inc}"
+            );
+        }
+        // A geostationary arc from the high-fidelity propagator.
+        let (tle, _result, rms) = fit_hifi_arc(crate::consts::GEO_R, 0.05, 0.0, 24.0, None)?;
+        assert!(rms < 1500.0, "GEO fit RMS {rms} m too large: {tle}");
         Ok(())
     }
 }
