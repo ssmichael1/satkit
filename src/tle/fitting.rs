@@ -8,6 +8,18 @@ use numeris::{Matrix, Vector};
 /// Number of parameters being fit in the non-linear least-squares fit.
 const NPARAM: usize = 7;
 
+/// Floor on the magnitude each parameter is taken to have when choosing its
+/// finite-difference step `sqrt(ε)·max(|x|, FD_SCALE)`. Mean motion
+/// (rev/day), mean longitude (degrees) and B* are of order one or smaller
+/// and take the usual floor of 1. The dimensionless (h, k) and (p, q) pairs
+/// need a smaller one: near a singular element (e ≈ 0 or i ≈ 0) they are
+/// themselves tiny, and a step of 1.5e-8 swung the node or perigee direction
+/// by tens of degrees, so the Jacobian was a secant across the singularity
+/// and the fit crawled (an exactly equatorial arc ran out of iterations at
+/// ~1 m). With 1e-3 the step is 1.5e-11, which still moves the position by
+/// ~1 mm at GEO, well above round-off.
+const FD_SCALE: [f64; NPARAM] = [1e-3, 1e-3, 1e-3, 1e-3, 1.0, 1.0, 1.0];
+
 /// Termination status of TLE fitting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TleFitStatus {
@@ -65,8 +77,8 @@ fn wrap_deg(x: f64) -> f64 {
 ///
 /// The fit is done in equinoctial elements, which are non-singular at
 /// e = 0 and i = 0. Parameters:
-///   - 0: h = e·cos(ϖ)
-///   - 1: k = e·sin(ϖ)
+///   - 0: k = e·cos(ϖ)
+///   - 1: h = e·sin(ϖ)
 ///   - 2: p = tan(i/2)·sin(Ω)  (tan((180° − i)/2) for a retrograde fit)
 ///   - 3: q = tan(i/2)·cos(Ω)  (likewise)
 ///   - 4: mean motion (revolutions per day)
@@ -247,13 +259,14 @@ impl TLE {
     ///   parameters. The fit fails with [`Error::FitElementOutOfRange`]
     ///   if it terminates outside the domain a TLE can represent.
     ///
-    /// * The fit is parameterized in equinoctial elements
-    ///   (`h, k = e·(cos, sin)(ω+Ω)`, `p, q = tan(i/2)·(sin, cos)Ω`, mean
-    ///   longitude `λ = M+ω+Ω`, with the retrograde form for `i > 90°`),
-    ///   plus mean motion and BSTAR, and converted to the classical TLE
-    ///   elements at the end. Unlike the classical elements these are not
-    ///   singular for circular or equatorial orbits, so near-circular and
-    ///   near-equatorial (e.g. geostationary) arcs fit as well as any other.
+    /// * The fit is parameterized in equinoctial elements (Broucke and
+    ///   Cefola: `h = e·sin(ω+Ω)`, `k = e·cos(ω+Ω)`, `p = tan(i/2)·sin Ω`,
+    ///   `q = tan(i/2)·cos Ω`, mean longitude `λ = M+ω+Ω`, with the
+    ///   retrograde form for `i > 90°`), plus mean motion and BSTAR, and
+    ///   converted to the classical TLE elements at the end. Unlike the
+    ///   classical elements these are not singular for circular or
+    ///   equatorial orbits, so near-circular and near-equatorial (e.g.
+    ///   geostationary) arcs fit as well as any other.
     ///   The returned eccentricity is always non-negative.
     ///
     /// # Example:
@@ -441,7 +454,7 @@ impl TLE {
             // difference with the opposite sign.
             let mut cols: Vec<Vec<f64>> = Vec::with_capacity(NPARAM);
             for k in 0..NPARAM {
-                let h = sqrt_eps * params[k].abs().max(1.0);
+                let h = sqrt_eps * params[k].abs().max(FD_SCALE[k]);
                 let col = {
                     let mut pert = params;
                     pert[k] += h;
@@ -859,9 +872,11 @@ mod tests {
         )?;
         // At exactly i = 0 SGP4 still depends on the (meaningless) node: its
         // lunisolar inclination periodic tilts the plane about it, ~80 m per
-        // degree of Ω. That element set is only reached as the limit
-        // i → 0 at fixed Ω, so the fit stops at ~1 m.
-        for (inc, tol) in [(0.0418, 0.01), (1.0e-3, 0.01), (179.95, 0.01), (0.0, 5.0)] {
+        // degree of Ω. In equinoctial elements that element set is only
+        // reached as the limit i → 0 along Ω, so the fit converges at ~8 cm
+        // (and ran out of iterations at ~1 m before the finite-difference
+        // step was scaled down with p and q; see `FD_SCALE`).
+        for (inc, tol) in [(0.0418, 0.01), (1.0e-3, 0.01), (179.95, 0.01), (0.0, 0.5)] {
             let tle = TLE {
                 inclination: inc,
                 ..base.clone()
@@ -871,6 +886,17 @@ mod tests {
             let (fit, result) = TLE::fit_from_states(&states, &times, tle.epoch)?;
             let rms = result.best_norm / ((3 * n) as f64).sqrt();
             assert!(rms < tol, "i = {inc}: fit RMS {rms} m");
+            assert!(
+                matches!(
+                    result.status,
+                    TleFitStatus::GradientConverged
+                        | TleFitStatus::StepConverged
+                        | TleFitStatus::CostConverged
+                ),
+                "i = {inc}: {} after {} iterations",
+                result.status,
+                result.n_iter
+            );
             assert!((fit.inclination - inc).abs() < 1e-4, "i = {inc}: {fit}");
             assert!(
                 (fit.mean_motion - tle.mean_motion).abs() < 1e-9,

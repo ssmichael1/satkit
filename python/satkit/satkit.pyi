@@ -463,12 +463,12 @@ class TLE:
             full IERS 2010 rotation.
             First and second derivatives of mean motion are ignored, as they are not used by SGP4.
 
-            Non-linear Levenberg-Marquardt optimization is performed to fit
-            inclination, eccentricity, RAAN, argument of perigee, mean anomaly,
-            mean motion, and drag (bstar) to the provided states. The solver
-            is built on top of the ``numeris`` linear algebra crate.
-            The fit is parameterized in equinoctial elements, which are not
-            singular for circular or equatorial (e.g. geostationary) orbits.
+            Non-linear Levenberg-Marquardt optimization fits the orbital
+            elements, mean motion and drag (bstar) to the provided states. The
+            solver is parameterized in equinoctial elements, which are not
+            singular for circular or equatorial (e.g. geostationary) orbits,
+            and converts to the classical TLE elements at the end. It is
+            built on top of the ``numeris`` linear algebra crate.
 
             The results dictionary includes the following keys:
             ``status`` (a :class:`tlefitstatus`), ``converged`` (bool),
