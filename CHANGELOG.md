@@ -2,7 +2,9 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.24.2 - 2026-11-02
+
+Results that change from 0.24.1 are marked "0.24.2" in [Migrating to 0.24](https://satkit.dev/migration/).
 
 ### Added
 
@@ -159,24 +161,3 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 ### Deprecated
 
 - Python: the `as_X` conversions on `time` and `quaternion` (`as_datetime`, `as_mjd`, `as_rotation_matrix`, …) are renamed `to_X` to pair with the `from_X` constructors; the old names emit `DeprecationWarning` and are removed in 0.25 ([#200](https://github.com/ssmichael1/satkit/pull/200))
-
-## 0.22.1 - 2026-09-20
-
-### Changed
-
-- **Breaking (Python):** `quaternion.conj` / `conjugate` are methods (`q.conj()`), and `quaternion.norm`, `tlefitstatus.converged`, `time.day_of_year` and `time.weekday` are properties; the property-vs-method rule is in CONTRIBUTING.md, enforced by a stub-parsing test ([#187](https://github.com/ssmichael1/satkit/pull/187))
-- The one-time "using the compiled-in copy of tab5.2a.txt" note is removed (it fired on every fresh install with nothing to act on); `SATKIT_QUIET=1` still silences the corrupt-table warning ([#194](https://github.com/ssmichael1/satkit/pull/194))
-- `Precomputed` stores its table behind an `Arc`, so cloning `PropSettings` (every Python `propagate` call) no longer copies it — 55 MB and ~2 ms per call for a one-year table ([#193](https://github.com/ssmichael1/satkit/pull/193), [#190](https://github.com/ssmichael1/satkit/issues/190))
-
-### Fixed
-
-- `TLE::fit_from_states` could return a negative eccentricity and stall on near-circular orbits: the damping is Marquardt-scaled, steps across e = 0 are mapped back, and the result is validated; `TLE::to_2line` rejects e outside [0, 1) ([#192](https://github.com/ssmichael1/satkit/pull/192))
-- Lockfile refreshed for the release (13 minor crate updates, no new dependencies) ([#197](https://github.com/ssmichael1/satkit/pull/197))
-- Lockfile: rustls 0.23.44 → 0.23.45 for [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285) (TLS 1.3 handshake, medium), reached through `ureq` by the data downloader in the published wheels ([#188](https://github.com/ssmichael1/satkit/pull/188))
-
-### Docs
-
-- Notebook stderr on satkit.dev renders as a neutral block with an amber edge instead of a red error background ([#191](https://github.com/ssmichael1/satkit/pull/191))
-- README: conda-forge version and download badges ([#185](https://github.com/ssmichael1/satkit/pull/185))
-- satkit is on conda-forge (`conda install -c conda-forge satkit`, [conda-forge/satkit-feedstock](https://github.com/conda-forge/satkit-feedstock)); the installation docs say so and the in-repo recipe copy is removed ([#184](https://github.com/ssmichael1/satkit/pull/184))
-- `THIRDPARTY-DATA.md` states the source, citation, licence and truncation of every compiled-in dataset; it ships in the sdist and wheels and is linked from the README ([#182](https://github.com/ssmichael1/satkit/pull/182))
