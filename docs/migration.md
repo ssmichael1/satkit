@@ -324,6 +324,14 @@ nested lists.
   GCRF rotation. **Do this:** propagate fitted TLEs with the default
   `sgp4()`, or pass `gravconst=sgp4_gravconst.wgs84` (Rust:
   `fit_from_states_full`) to both.
+- **0.24.2: `TLE.fit_from_states()` fits in equinoctial elements.** Through
+  0.24.1 the classical-element fit of a near-equatorial arc at an epoch other
+  than its element set's collapsed the inclination to ~1e-10° and left the
+  node at its two-body seed (a re-epoched GOES-19 came back 3.9 km off; now
+  0.4 m). Other orbits give the same elements in fewer iterations; an
+  exactly equatorial arc now converges (8 cm) instead of ending with
+  `MaxIterations`. **Do this:** re-fit near-equatorial (e.g. geostationary)
+  TLEs.
 - **Editing a TLE or changing `gravconst` / `opsmode` takes effect.** SGP4
   re-initializes whenever the elements or the settings differ from those of
   its cached initialization; through 0.23 it kept the first one.
