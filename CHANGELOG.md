@@ -14,6 +14,7 @@ The one change in behaviour from 0.24.2 (text read as OMM CSV) is marked "0.24.3
 ### Fixed
 
 - Docs: a guide section on catalog numbers above 99,999 (Alpha-5, CelesTrak's 404 for TLEs, OMM as the format to use), troubleshooting entries for that 404 and for one bad line losing a TLE file, CSV in the OMM tutorial, and that tutorial's XML example, whose code cell had been overwritten with a copy of the next one ([#289](https://github.com/ssmichael1/satkit/pull/289))
+- CI: the docs check and docs deploy no longer install GEOS / PROJ with apt (cartopy, shapely and pyproj ship self-contained wheels), so an unreachable Ubuntu mirror cannot hang or fail them, and both jobs time out after 20 minutes ([#290](https://github.com/ssmichael1/satkit/pull/290))
 
 ## 0.24.2 - 2026-11-02
 
