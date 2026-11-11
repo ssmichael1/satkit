@@ -2,7 +2,9 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
-## Unreleased
+## 0.24.3 - 2026-11-11
+
+The one change in behaviour from 0.24.2 (text read as OMM CSV) is marked "0.24.3" in [Migrating to 0.24](https://satkit.dev/migration/).
 
 ### Added
 
@@ -154,21 +156,3 @@ Upgrading from 0.23: see [Migrating to 0.24](https://satkit.dev/migration/) for 
 
 - Cannonball solar radiation pressure scales the 1 AU pressure by `(AU / d)²` instead of holding it at 1 AU (up to ±3.4 %, a few metres per day at GPS); the 1367 W/m² reference is `consts::SOLAR_PRESSURE_1AU` / `consts.solar_pressure_1au` ([#207](https://github.com/ssmichael1/satkit/pull/207), [#206](https://github.com/ssmichael1/satkit/issues/206))
 - With `SATKIT_OFFLINE=1` (or without the `download` feature) a missing JPL ephemeris no longer prints a "downloading ..." notice before the offline error ([#208](https://github.com/ssmichael1/satkit/pull/208), [#205](https://github.com/ssmichael1/satkit/issues/205))
-
-## 0.23.0 - 2026-09-24
-
-### Added
-
-- Space weather from its primary sources (GFZ Potsdam observations, NOAA/SWPC 45-day and NASA MSFC MSAFE monthly forecasts) instead of CelesTrak's merged file, ending the silent `Ap = 4` fallback past the 45-day forecast; `isn` is now `-1`; `data_type`, `coverage()` / `status()` and one-time warnings mirror the EOP API. **Breaking:** `tle::Error` is `#[non_exhaustive]`, and `solar_cycle_forecast` / `spaceweather.predicted_f107()` are removed ([#203](https://github.com/ssmichael1/satkit/pull/203), [#202](https://github.com/ssmichael1/satkit/issues/202))
-
-### Changed
-
-- Lockfile refreshed for the release (4 minor crate updates, no new dependencies) ([#204](https://github.com/ssmichael1/satkit/pull/204))
-- **Breaking:** the default gravity model is EGM2008 (was EGM96) and the degree/order cap is 70 (was 40): default-model propagations shift by a few metres per day at LEO; pass `gravity_model=gravmodel.egm96` for old results; each acceleration costs about 3× the degree-40 one ([#201](https://github.com/ssmichael1/satkit/pull/201))
-- **Breaking:** EGM2008 is added (compiled in to degree 70) and ITU_GRACE16 is no longer compiled in (downloaded on first use, so offline with no copy is an error); solid Earth tides respect each model's tide system (no double-counted permanent tide for `jgm3` / `itugrace16`); the ICGEM parser reads `D` exponents and skips time-variable rows ([#196](https://github.com/ssmichael1/satkit/pull/196), [#195](https://github.com/ssmichael1/satkit/issues/195), [#183](https://github.com/ssmichael1/satkit/issues/183))
-- EOP and space-weather refreshes follow [CelesTrak's usage policy](https://celestrak.org/usage-policy.php): no request inside the file's publication cadence (3 h space weather, 24 h EOP) and a conditional `If-Modified-Since` request outside it; `update_datafiles(overwrite=True)` still forces a fetch; CI test jobs no longer refresh ([#199](https://github.com/ssmichael1/satkit/pull/199))
-- Earth orientation parameters come from IERS `finals2000A.all` (about a year of predictions instead of six months), with CelesTrak's `EOP-All.csv` as the fallback; `eop_source()` reports the loaded file. Fixed: the `EOP-All.csv` dX/dY celestial-pole offsets were applied 1000× too small (~1 cm LEO, ~5 cm GEO) ([#198](https://github.com/ssmichael1/satkit/pull/198), [#164](https://github.com/ssmichael1/satkit/issues/164))
-
-### Deprecated
-
-- Python: the `as_X` conversions on `time` and `quaternion` (`as_datetime`, `as_mjd`, `as_rotation_matrix`, …) are renamed `to_X` to pair with the `from_X` constructors; the old names emit `DeprecationWarning` and are removed in 0.25 ([#200](https://github.com/ssmichael1/satkit/pull/200))
