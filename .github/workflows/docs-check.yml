@@ -33,6 +33,8 @@ jobs:
   docs:
     name: doc examples + docs build (notebooks executed)
     runs-on: ubuntu-latest
+    # A normal run takes about four minutes
+    timeout-minutes: 20
 
     env:
       SATKIT_DATA: ${{ github.workspace }}/astro-data
@@ -70,8 +72,9 @@ jobs:
           pip install requests
           python python/test/download_data.py astro-data --refresh-only --max-age-hours 168
 
-      - name: Install system dependencies for cartopy
-        run: sudo apt-get update && sudo apt-get install -y libgeos-dev libproj-dev proj-data
+      # No system GEOS / PROJ: cartopy, shapely and pyproj install as
+      # self-contained manylinux wheels, so nothing here depends on apt (whose
+      # mirrors, when unreachable, hung this job for half an hour).
 
       - name: Install satkit and docs dependencies
         run: |
