@@ -21,7 +21,7 @@ The force model follows the treatment in [Montenbruck & Gill (2000)](references.
 | Earth gravity (spherical harmonics) | on | `gravity_degree`, `gravity_order`, `gravity_model` | $10^0$ m/s² |
 | Sun third-body | on | `use_sun_gravity` | $10^{-6}$ m/s² |
 | Moon third-body | on | `use_moon_gravity` | $10^{-6}$ m/s² |
-| Atmospheric drag (NRLMSISE-00) | when alt < 1,000 km | `use_spaceweather`, [`satproperties.cdaoverm`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
+| Atmospheric drag (NRLMSISE-00) | when `cdaoverm` > 0 and alt < 1,000 km | `use_spaceweather`, [`satproperties.cdaoverm`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
 | Solar radiation pressure (cannonball) | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
 | Solar radiation pressure (ECOM, experimental — see [Empirical SRP: ECOM](ecom.md)) | when `ecom` is set | [`satproperties.ecom`](../api/satprop.md) | $10^{-7}$ m/s² (D0), $10^{-9}$ (Y, B) |
 | Solid Earth tides (IERS 2010 §6.2.1 Step 1) | on | `tide_model` | $10^{-7}$ m/s² |
@@ -52,7 +52,7 @@ Coefficient files come from [ICGEM](https://icgem.gfz.de/) ([Ince et al. 2019](r
 
 The compiled-in models are truncated to degree 70, the evaluator's cap, so nothing is lost. At degree ≤ 40 the post-GRACE models agree with each other to ~10⁻¹¹ in the coefficients; the choice among them changes a one-day LEO propagation by a few metres and a GPS one by centimetres. Truncation matters more than the choice of model: at 400 km the terms from degree 41 to 70 are worth tens of metres per day, at 800 km a few metres, above 1200 km nothing.
 
-The `gravity_degree` and `gravity_order` parameters cap the expansion (default 4×4, maximum 70×70). For high-precision work, degree-8 to degree-20 is typical; gains beyond ~degree-20 are small for satellites above ~500 km (satkit's recommendation — see the order-of-magnitude discussion of gravity-model truncation in [Montenbruck & Gill 2000](references.md#montenbruck2000), §3.2). Order may be set lower than degree to zero out the longitudinal (tesseral) terms.
+The `gravity_degree` and `gravity_order` parameters cap the expansion (default 4×4, maximum 70×70). Choose the degree from the figures above: LEO precision work needs 40–70, and about 20 is enough above ~1,200 km (see also [Montenbruck & Gill 2000](references.md#montenbruck2000), §3.2). Order may be set lower than degree to zero out the longitudinal (tesseral) terms.
 
 ## Third-Body Gravity (Sun, Moon)
 

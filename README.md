@@ -34,7 +34,7 @@ pip install satkit
 
 Pre-built wheels are available for Linux (x86_64, aarch64), macOS (Apple silicon), and Windows (x86_64) on Python 3.11--3.15; Intel Macs build from source (`pip install --no-binary satkit satkit`) or use conda-forge.
 
-The IERS nutation tables and gravity models are compiled in, so frames, gravity, SGP4 and time work with no data files. The JPL ephemeris downloads on first use, and Earth orientation and space weather are fetched on first use and refreshed with `satkit.utils.update_datafiles()`. See [Data Files](https://satkit.dev/getting-started/datafiles/) for directories and offline use.
+The IERS nutation tables and gravity models are compiled in, so gravity, SGP4 and time work with no data files. The JPL ephemeris downloads on first use, and Earth orientation and space weather are fetched on first use and refreshed with `satkit.utils.update_datafiles()`. See [Data Files](https://satkit.dev/getting-started/datafiles/) for directories and offline use.
 
 ## Quick Examples
 
@@ -153,7 +153,7 @@ Seamless conversion between UTC, TAI, TT, TDB, UT1, and GPS time scales with ful
 SatKit uses [numeris](https://crates.io/crates/numeris) for all linear algebra (vectors, matrices, quaternions, ODE integration). If you also use nalgebra in your project, enable the `nalgebra` feature on numeris for zero-cost `From`/`Into` conversions between types:
 
 ```toml
-numeris = { version = "0.5.18", features = ["nalgebra"] }
+numeris = { version = "0.6", features = ["nalgebra"] }
 ```
 
 ### Cargo Features
@@ -178,7 +178,7 @@ The Rust and Python test suites run in CI on Linux, macOS and Windows.
 
 ### GMAT comparison
 
-The numerical propagator is regression-tested against 25 reference trajectories from NASA's General Mission Analysis Tool (GMAT R2026A), checked in under `tests/gmat/`: seven-day gravity / third-body / tides / relativity cases from LEO to cislunar distance, and three-day drag cases. With matched force models the two agree to 2–13 cm over 7 days (LEO to GEO), and with drag to 1–2 × 10⁻⁴ of the drag-induced displacement. Details and tolerances: the [GMAT validation page](https://satkit.dev/guide/gmat_validation/) and `tests/gmat/README.md`.
+The numerical propagator is regression-tested against 25 reference trajectories from NASA's General Mission Analysis Tool (GMAT R2026A), checked in under `tests/gmat/`: seven-day gravity / third-body / tides / relativity cases from LEO to cislunar distance, and three-day drag cases. With matched force models the two agree to 2–13 cm over 7 days (LEO to GEO), and with drag to about 2 × 10⁻⁴ of the drag-induced displacement with fixed space-weather indices and about 2 × 10⁻³ with the daily space-weather feed. Details and tolerances: the [GMAT validation page](https://satkit.dev/guide/gmat_validation/) and `tests/gmat/README.md`.
 
 To run the tests locally (data and test-vector downloads, environment variables), see [CONTRIBUTING.md](CONTRIBUTING.md#running-tests).
 

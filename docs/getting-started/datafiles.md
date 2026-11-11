@@ -17,7 +17,7 @@ Two caveats on "offline":
 
 ## The files
 
-- **linux_p1550p2650.440** — File containing the precise ephemerides of the planets and 400 large asteroids between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL) — the DE440 ephemeris of [Park et al. (2021)](../guide/references.md#park2021). Large (~100 MB); downloaded on first use. The smaller `lnxp1900p2053.421` (DE421, [Folkner et al. 2009](../guide/references.md#folkner2009), ~14 MB, 1900–2053) is an alternative — see [Selecting a JPL ephemeris file](datadirs.md#selecting-a-jpl-ephemeris-file).
+- **linux_p1550p2650.440** — File containing the precise ephemerides of the Sun, Moon and planets between the years 1550 and 2650, as modelled by the Jet Propulsion Laboratory (JPL) — the DE440 ephemeris of [Park et al. (2021)](../guide/references.md#park2021). Large (~100 MB); downloaded on first use. The smaller `lnxp1900p2053.421` (DE421, [Folkner et al. 2009](../guide/references.md#folkner2009), ~14 MB, 1900–2053) is an alternative — see [Selecting a JPL ephemeris file](datadirs.md#selecting-a-jpl-ephemeris-file).
 
 - **tab5.2a.txt**, **tab5.2b.txt**, **tab5.2d.txt** — Tables 5.2a, 5.2b and 5.2d of the IERS Conventions (2010), Technical Note 36 ([Petit & Luzum 2010](../guide/references.md#petit2010)): the CIP $X$, $Y$ and CIO-locator $s$ series used in the precise rotation between the inertial International Celestial Reference Frame and the Earth-fixed International Terrestrial Reference Frame. Compiled in.
 

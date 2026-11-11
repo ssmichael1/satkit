@@ -498,9 +498,10 @@ times = [tle.epoch + sk.duration.from_hours(h) for h in range(3)]
 p, v, err = sk.sgp4(tle, times, errflag=True)
 ```
 
-A TLE with ephemeris type 4 raises
-`RuntimeError: Ephemeris type 4 (SGP4-XP) is not supported ...` instead:
-satkit implements classic SGP4 only.
+Without `errflag=True`, a TLE with ephemeris type 4 raises
+`RuntimeError: Ephemeris type 4 (SGP4-XP) is not supported ...`: satkit
+implements classic SGP4 only. With it, the rows are NaN and the code is
+`sk.sgp4_error.unsupported`.
 
 ### My propagation disagrees with GMAT, STK or Orekit
 

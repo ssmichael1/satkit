@@ -72,16 +72,17 @@ settings = sk.propsettings(
     for arcs that contain one. Eclipse boundaries are fine, and the fixed
     grid makes the result a smooth function of the initial state, which
     matters when fitting ([ECOM: Practical notes](ecom.md#practical-notes)).
-    The integrator needs ≥ 9 steps of startup, so
-    propagations shorter than ~`9 × gj_step_seconds` will fail; use an
+    The integrator needs 8 steps of startup, so a propagation shorter than
+    `8 × gj_step_seconds` fails (reported as an ODE step error); use an
     adaptive RK integrator for such short intervals.
 
 ## Error Tolerances
 
-The adaptive RK integrators (and `rodas4`) accept a step when both:
-
-- the **absolute error** estimate falls below `abs_error` (default `1e-8`)
-- the **relative error** estimate falls below `rel_error` (default `1e-8`)
+The adaptive RK integrators (and `rodas4`) accept a step when the error
+estimate of every state component $y_i$ is below
+`abs_error + rel_error·|y_i|` (both default to `1e-8`). It is one combined
+test: for a position of ~7×10⁶ m the relative term dominates, and
+`abs_error` matters only for components near zero.
 
 For sub-meter precision over a day, tighten both to `1e-10` to `1e-13`. For coarse mission planning, `1e-6` to `1e-8` is usually fine.
 
