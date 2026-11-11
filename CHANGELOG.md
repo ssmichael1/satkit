@@ -2,6 +2,12 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
+## Unreleased
+
+### Fixed
+
+- Docs: the API reference gains `sgp4_error`, `sgp4_gravconst`, `sgp4_opsmode`, `tlefitstatus`, `weekday`, `geodetic`, `solarsystem` and `nrlmsise00`; the `TLE.from_url` stub documents `on_error` and `sgp4_opsmode`'s members are typed as `sgp4_opsmode`; wrong names and contradictions in the guide pages are corrected and repeated material is cut ([#291](https://github.com/ssmichael1/satkit/pull/291))
+
 ## 0.24.3 - 2026-11-11
 
 The one change in behaviour from 0.24.2 (text read as OMM CSV) is marked "0.24.3" in [Migrating to 0.24](https://satkit.dev/migration/).

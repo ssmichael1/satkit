@@ -10,7 +10,15 @@ API reference for the SGP4 analytic propagator and its inputs. For background, s
 
 ::: satkit.TLEWarning
 
+::: satkit.tlefitstatus
+
 ::: satkit.sgp4
+
+::: satkit.sgp4_error
+
+::: satkit.sgp4_gravconst
+
+::: satkit.sgp4_opsmode
 
 ::: satkit.omm_from_url
 

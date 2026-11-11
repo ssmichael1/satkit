@@ -1,11 +1,5 @@
 # Utility Functions
 
-Data-file management lives here. The short version — see [Data Files](../getting-started/datafiles.md) for the full search order per platform:
-
-- Frames and gravity need **no data files**: the IERS nutation tables and the gravity models are compiled in.
-- The JPL ephemeris is **downloaded on first use** (SHA-256 verified) into `datadir()` — the platform user-data directory, or `SATKIT_DATA` / `set_datadir()` if given. Nothing is ever written next to the extension module or inside `site-packages`.
-- Files are **looked up** across `data_search_dirs()`, which includes `add_search_dir()` directories and `/usr/share/satkit-data` (read-only), so a provisioned copy of the data files is picked up automatically.
-- `update_datafiles()` provisions everything up front and refreshes the daily Earth-orientation / space-weather files.
-- `SATKIT_OFFLINE=1` forbids downloads (a missing file raises `RuntimeError` naming its sources); `SATKIT_DATA_URL` names a mirror for the manifest-pinned files (not the EOP / space-weather refreshes); `SATKIT_JPLEPHEM_FILE` selects the ephemeris.
+Data-file management: where satkit looks for files and writes them (`datadir()`, `data_search_dirs()`, `add_search_dir()`, offline mode) is described in [Data Directories](../getting-started/datadirs.md), and `update_datafiles()` in [Downloads and Refresh](../getting-started/datadownloads.md). [Data Files](../getting-started/datafiles.md) lists what is compiled in and what is downloaded.
 
 ::: satkit.utils

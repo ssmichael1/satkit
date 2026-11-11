@@ -21,7 +21,7 @@ The force model follows the treatment in [Montenbruck & Gill (2000)](references.
 | Earth gravity (spherical harmonics) | on | `gravity_degree`, `gravity_order`, `gravity_model` | $10^0$ m/s² |
 | Sun third-body | on | `use_sun_gravity` | $10^{-6}$ m/s² |
 | Moon third-body | on | `use_moon_gravity` | $10^{-6}$ m/s² |
-| Atmospheric drag (NRLMSISE-00) | when alt < 1,000 km | `use_spaceweather`, [`satproperties.cd_a_over_m`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
+| Atmospheric drag (NRLMSISE-00) | when alt < 1,000 km | `use_spaceweather`, [`satproperties.cdaoverm`](../api/satprop.md) | $10^{-7}$ to $10^{-3}$ m/s² |
 | Solar radiation pressure (cannonball) | when `craoverm > 0` | [`satproperties.craoverm`](../api/satprop.md) | $10^{-8}$ to $10^{-7}$ m/s² |
 | Solar radiation pressure (ECOM, experimental — see [Empirical SRP: ECOM](ecom.md)) | when `ecom` is set | [`satproperties.ecom`](../api/satprop.md) | $10^{-7}$ m/s² (D0), $10^{-9}$ (Y, B) |
 | Solid Earth tides (IERS 2010 §6.2.1 Step 1) | on | `tide_model` | $10^{-7}$ m/s² |
@@ -79,7 +79,7 @@ Set with `tide_model`:
 | `tidemodel.none` | Disable solid tides (use for reproducibility with pre-tide versions) |
 
 !!! note "Tide system of the gravity model"
-    Step 1 includes the *permanent* tide (its time average, $A_0 H_0 k_{20} \approx -4.2\times10^{-9}$ in $\bar{C}_{20}$; [Petit & Luzum 2010](references.md#petit2010), §6.2.2). A **tide-free** model (`egm96`, `egm2008`, `jgm2`; $\bar{C}_{20} \approx -4.841654\times10^{-4}$) has that part removed from its coefficients, so Step 1 completes it. A **zero-tide** model (`jgm3`, `itugrace16`; $\bar{C}_{20} \approx -4.841695\times10^{-4}$) already carries it. satkit reads each model's tide system on load (from the ICGEM `tide_system` header, or from the $\bar{C}_{20}$ value for the older files that lack one) and, for a zero-tide model, removes the permanent part from the Step 1 correction (IERS 2010 Eq. 6.13) instead of counting it twice. The published coefficients are never altered, so with `tidemodel.none` every model propagates exactly as published — and a zero-tide model with tides off still differs from a tide-free one by the permanent tide, about 8 m/day at 500 km with J2 alone. Any model can therefore be paired with any tide setting; before 0.23, `jgm3` or `itugrace16` with `solid_step1` double-counted the permanent tide (3–12 m/day at LEO, 0.3 m/day at GPS).
+    Step 1 includes the *permanent* tide (its time average, $A_0 H_0 k_{20} \approx -4.2\times10^{-9}$ in $\bar{C}_{20}$; [Petit & Luzum 2010](references.md#petit2010), §6.2.2). A **tide-free** model (`egm96`, `egm2008`, `jgm2`; $\bar{C}_{20} \approx -4.841654\times10^{-4}$) has that part removed from its coefficients, so Step 1 completes it. A **zero-tide** model (`jgm3`, `itugrace16`; $\bar{C}_{20} \approx -4.841695\times10^{-4}$) already carries it. satkit reads each model's tide system on load (from the ICGEM `tide_system` header, or from the $\bar{C}_{20}$ value for the older files that lack one) and, for a zero-tide model, removes the permanent part from the Step 1 correction (IERS 2010 Eq. 6.13) instead of counting it twice. The published coefficients are never altered, so with `tidemodel.none` every model propagates exactly as published — and a zero-tide model with tides off still differs from a tide-free one by the permanent tide, about 8 m/day at 500 km with J2 alone. Any model can therefore be paired with any tide setting.
 
 ## Atmospheric Drag
 
@@ -93,7 +93,7 @@ with $C_d$ the drag coefficient (typically 1.5–3; [Montenbruck & Gill 2000](re
 
 Density comes from the [NRLMSISE-00](https://ccmc.gsfc.nasa.gov/models/NRLMSIS~00/) thermosphere model ([Picone et al. 2002](references.md#picone2002); a pure-Rust port of Dominik Brodowski's C implementation), which reads the space-weather indices from satkit's table (the GFZ Potsdam observed record, then the NOAA/SWPC 45-day and NASA MSAFE monthly forecasts — see [Data coverage](../getting-started/datacoverage.md#space-weather-coverage)) automatically, following the model's own interface: the observed F10.7 of the previous UTC day, the observed 81-day centred average F10.7A of the current day, and the 7-element 3-hourly geomagnetic history (the current day's daily Ap, the current 3-hourly ap and the three before it, and the 12–33 h and 36–57 h means — NRLMSISE-00 switch 9 = −1), which lets the density respond to a geomagnetic storm within hours rather than at the next UTC midnight. When that history cannot be assembled (a day missing from the table, or a monthly forecast row, whose single climatological Ap has no 3-hourly structure) the model falls back to the current day's daily Ap. Each index stands on its own: a day missing its F10.7 in the observed record takes the most recent measured flux up to three days back (else the 81-day average) and keeps its Ap; only an index the table cannot supply at all — before the table starts, or F10.7 before 1947 — takes the nominal value below, with a one-time warning. Disable space-weather lookup with `use_spaceweather=False` to fall back to fixed nominal indices (F10.7 = F10.7A = 150, Ap = 4).
 
-Drag is skipped more than 1,000 km above the equatorial radius — the upper limit of NRLMSISE-00's validity — regardless of settings. (Before 0.24 the cutoff was 700 km.)
+Drag is skipped more than 1,000 km above the equatorial radius — the upper limit of NRLMSISE-00's validity — regardless of settings.
 
 ## Solar Radiation Pressure
 
@@ -105,7 +105,7 @@ $$
 
 where $P_\text{sun} = 1367\,\text{W/m}^2 / c \approx 4.56 \times 10^{-6}$ N/m² is the radiation pressure at 1 AU (`consts.solar_pressure_1au`), $d$ is the satellite–Sun distance ($\hat{p}_\text{sun}$ is the satellite→Sun direction), $C_R A/m$ is the satellite's radiation susceptibility (the user-supplied `satproperties.craoverm`), and $\nu(\vec{p}, \vec{p}_\text{sun}) \in [0, 1]$ is a shadow function that vanishes when the satellite is in Earth's umbra — the conical umbra/penumbra model of [Montenbruck & Gill (2000)](references.md#montenbruck2000), §3.4.2; the cannonball force itself is their §3.4, Eq. 3.75.
 
-The $(\text{AU}/d)^2$ factor makes the flux follow Earth's eccentric orbit: it is 3.4 % above the 1 AU value at perihelion (early January) and 3.3 % below at aphelion (early July). satkit versions before 0.23.1 held it at the 1 AU value year-round.
+The $(\text{AU}/d)^2$ factor makes the flux follow Earth's eccentric orbit: it is 3.4 % above the 1 AU value at perihelion (early January) and 3.3 % below at aphelion (early July).
 
 !!! note "Solar constant: satkit uses 1367 W/m², not the measured 1361 W/m²"
     | Solar constant | $P_\text{sun}$ at 1 AU | Source |

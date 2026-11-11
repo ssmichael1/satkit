@@ -38,7 +38,7 @@ axis. That's where the subtlety lives.
 
 On a circular orbit ($\gamma = 0$) all three frames coincide up to sign
 conventions — RTN's radial is LVLH's $-\hat{z}$, NTW's tangent is RTN's
-$\hat{I}$, and so on. The axes overlap in the figure above. The difference
+$\hat{T}$, and so on. The axes overlap in the figure above. The difference
 only appears on eccentric orbits.
 
 ## The flight-path angle
@@ -96,7 +96,7 @@ class-level aliases that compare equal to `sk.frame.RTN`, so
 
 **When to use RTN for maneuvers:**
 
-- You're reading or generating **CCSDS OEM / OMM / ODM messages**, whose
+- You're reading or generating **CCSDS ODM messages** (OPM, OMM, OEM), whose
   covariance and delta-v blocks are standardised on the RTN frame.
 - You want to specify burn components in the "radial / along-track /
   cross-track" basis that's conventional for **relative motion**
@@ -105,16 +105,9 @@ class-level aliases that compare equal to `sk.frame.RTN`, so
 - You're translating formulas from Vallado (written as RSW) or the CCSDS
   spec (written as RTN).
 
-!!! note "Covariance convention in `satkit`"
-    `satkit`'s state-vector uncertainty API — `SatState.set_pos_uncertainty`
-    and `set_vel_uncertainty` — accepts any of `GCRF`, `RTN`, `NTW`, or
-    `LVLH` via a `frame` parameter. Pass `frame=sk.frame.RTN` if you're
-    loading covariance values from a CCSDS OEM or CDM (or use the
-    equivalent `sk.frame.RIC` / `sk.frame.RSW` aliases), or
-    `frame=sk.frame.NTW` if your along-track sigma is along the velocity.
-    The two differ by the flight-path angle on eccentric orbits; the
-    [Covariance Propagation](../tutorials/Covariance Propagation.ipynb)
-    tutorial compares them.
+The same frames label state uncertainties (`satstate.set_pos_uncertainty(..., frame=...)`):
+see [State Vectors, STM & Covariance](satstate.md) and the
+[Covariance Propagation](../tutorials/Covariance Propagation.ipynb) tutorial.
 
 **When *not* to use RTN:**
 
@@ -204,15 +197,12 @@ choice when you care about "energy added along velocity".
 
 ![Velocity-space view of NTW +T vs RTN +T burns on an eccentric orbit](../images/frames_burn_comparison.svg)
 
-The figure above shows a velocity-space view of the same eccentric state.
-The black arrow is the current velocity $\vec{v}$; the orange and blue
-arrows are two hypothetical 1.5 km/s $\Delta v$ burns (exaggerated from
-10 m/s for visibility) specified in NTW and RTN respectively. Both burns
-have the same nominal magnitude, but the NTW burn points *along* $\vec{v}$
-while the RTN burn points *perpendicular to the position vector* — and
-those are not the same direction on an eccentric orbit. The dotted
-circles show the resulting $|\vec{v}|$ after each burn; the NTW circle is
-farther from the origin, meaning it added more speed.
+Velocity-space view of the same eccentric state. The black arrow is the
+current velocity $\vec{v}$; the orange and blue arrows are $\Delta v$ burns
+of equal magnitude (exaggerated from 10 m/s to 1.5 km/s) in NTW and RTN.
+The NTW burn points along $\vec{v}$, the RTN burn perpendicular to the
+position vector, and the dotted circles show the resulting $|\vec{v}|$:
+the NTW burn added more speed.
 
 ## Cheat sheet
 
@@ -223,13 +213,9 @@ farther from the origin, meaning it added more speed.
   (`sat.add_radial(time, 1.0)`), or RTN +R if you want strict outward-r.
 - **"I want a cross-track burn of 0.5 m/s"** → NTW +W or RTN +N — they're
   the same axis.
-- **"I'm porting code from CCSDS OEM that uses RTN"** → RTN
-  (`frame.RTN` in Python; `Frame::RTN` in Rust).
-- **"I'm porting code from Vallado that uses RSW"** → use `frame.RSW` /
-  `Frame::RSW` — it's an alias for the same frame as RTN.
-- **"I'm porting code from the Clohessy-Wiltshire / relative-motion
-  literature that uses RIC"** → use `frame.RIC` / `Frame::RIC` — also
-  an alias for the same frame.
+- **"I'm porting code that uses RTN (CCSDS), RSW (Vallado) or RIC
+  (Clohessy-Wiltshire, relative motion)"** → `frame.RTN`, `frame.RSW` or
+  `frame.RIC` (Rust `Frame::RTN`, ...): three names for the same frame.
 - **"My delta-v vector is already in ECI / J2000 inertial"** → GCRF.
 - **"I'm porting GN&C code written in LVLH"** → LVLH.
 
@@ -241,14 +227,9 @@ farther from the origin, meaning it added more speed.
 | Prograde axis parallel to $\hat{v}$? | — | Only if $\gamma = 0$ | **Always** | Only if $\gamma = 0$ |
 | Cross-track axis | — | $+\hat{h}$ | $+\hat{h}$ | $-\hat{h}$ |
 | Radial-out axis | — | $+\hat{R}$ | $+\hat{N}$ (only on circular) | $-\hat{z}$ |
-| `satkit` covariance uncertainty API | **Yes** | **Yes** | **Yes** | **Yes** |
 | CCSDS OEM covariance convention | No | **Yes** (as RTN) | No | No |
-| Natural for prograde burns | No | Only on circular | **Yes** | Only on circular |
 | Natural for crewed-flight GN&C | No | No | No | **Yes** |
 
 ## References
 
-- [Vallado (2013)](references.md#vallado2013), *Fundamentals of Astrodynamics and Applications*, 4th ed., §3.3 — definitions of the RSW and NTW frames.
-- [CCSDS 502.0-B-3 (2023)](references.md#ccsds502), *Orbit Data Messages* — the RTN frame used for covariance and maneuver components in OPM/OMM/OEM messages (keyword values in Annex B; conventions in Annex F).
-- [Clohessy & Wiltshire (1960)](references.md#clohessy1960) — origin of the radial / in-track / cross-track relative-motion frame.
-- [Markley & Crassidis (2014)](references.md#markley2014), *Fundamentals of Spacecraft Attitude Determination and Control* — LVLH and other body-pointing frame conventions.
+[Vallado (2013)](references.md#vallado2013), §3.3 (RSW and NTW); [CCSDS 502.0-B-3](references.md#ccsds502), Annexes B and F (RTN in OPM / OMM / OEM); [Clohessy & Wiltshire (1960)](references.md#clohessy1960) (radial / in-track / cross-track); [Markley & Crassidis (2014)](references.md#markley2014) (LVLH).

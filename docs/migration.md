@@ -2,91 +2,75 @@
 
 0.24 fixes a set of long-standing defects, and some of the fixes change
 results, exception types or return shapes. This page lists what to check when
-you upgrade from 0.23. Each item says what changed and what to do. The
+you upgrade from 0.23. Each item says what changed and what to do; items
+marked 0.24.1, 0.24.2 or 0.24.3 changed in that point release. The
 [CHANGELOG](https://github.com/ssmichael1/satkit/blob/main/CHANGELOG.md) links
 each change to its pull request, where the details are.
 
 ## Check old results first
 
-These changes move numbers. Each line says what was wrong or changed, which
-releases it affects, and whose results to re-check; the linked section has
-the details.
+These changes move numbers; re-check results that depend on them. They affect
+every release through 0.23.1 unless a range is given, and the linked sections
+have the details.
 
 **Wrong in earlier releases:**
 
 - **Quaternion × N×3 array** applied the *inverse* rotation (a single
-  3-vector was correct). 0.14.1–0.23.1. Re-check anything that rotated a
+  3-vector was correct), 0.14.1–0.23.1. Re-check anything that rotated a
   stacked N×3 array with one quaternion.
 - **`satproperties()` positional arguments** were read as
-  `(craoverm, cdaoverm)`, swapping drag and radiation pressure. Through
-  0.23.1. Re-check scripts that called `satproperties(a, b)`; it is now
+  `(craoverm, cdaoverm)`, swapping drag and radiation pressure. It is now
   [keyword-only](#python-api).
 - **`lambert`** was wrong for long-way (over 180°) and retrograde transfers,
   which missed `r2` by about 2r, and for hyperbolic and near-parabolic ones
-  (time of flight miscomputed). 0.14.1–0.23.1. Re-run Lambert targeting,
+  (time of flight miscomputed), 0.14.1–0.23.1. Re-run Lambert targeting,
   delta-v budgets and pork-chop plots.
 - **`kepler.from_pv`** at inclination exactly π (retrograde equatorial)
-  returned elements of a different orbit. Through 0.23.1. Recompute elements
-  of such orbits.
+  returned elements of a different orbit.
 - **SGP4 reused a stale initialization** after a TLE's elements were edited,
   or when `gravconst` / `opsmode` changed between calls on the same TLE
   (thousands of km after an edit, ~120 m at LEO after 3 days with another
-  gravity model). Through 0.23.1. Recompute results from such TLEs.
-- **Time strings with UTC offsets**: `from_rfc3339` ignored `±HHMM` and `±HH`
-  offsets, `strptime` applied `%z` with the wrong sign, and `from_string` read
-  a numeric offset as microseconds. Through 0.23.1. Re-check times parsed
-  from strings that carry offsets ([Time](#time)).
-- **Leap-second edges**: 00:00:00 UTC right after a leap second (for example
-  `time(2017, 1, 1)`) was built 1 s early, and UT1 was up to 0.5 s off on
-  the day before a leap second (~250 m in Earth-fixed positions at LEO).
-  Through 0.23.1. Re-check epochs and Earth-fixed results on those days.
-- **TDB** was off by up to 3.3 ms (TDB − TT had a ~57-year period instead of
-  one year), and the JPL ephemerides were evaluated at TT instead of TDB
-  (Moon ~2 m, geocentric Sun up to ~50 m). Through 0.23.1. Regenerate stored
-  TDB values and JPL-based reference results.
-- **`moon.pos_gcrf`** returned mean-of-date coordinates (0.7° off in 1950
-  and 2050), and **`planets.heliocentric_pos`** used the obliquity of date
-  and, outside 1800–2050, mis-scaled the Jupiter–Pluto terms (tens of
-  degrees). All releases through 0.23.1. Recompute stored low-precision Moon
-  and planet positions ([Ephemerides and frames](#ephemerides-and-frames)).
+  gravity model) ([SGP4 and TLEs](#sgp4-and-tles)).
+- **Time strings with UTC offsets** were mis-parsed by `from_rfc3339`,
+  `strptime` (`%z`) and `from_string` ([Time](#time)).
+- **Leap-second edges**: 00:00:00 UTC right after a leap second was built
+  1 s early, and UT1 was up to 0.5 s off on the day before one (~250 m in
+  Earth-fixed positions at LEO) ([Time](#time)).
+- **TDB** was off by up to 3.3 ms, and the JPL ephemerides were evaluated at
+  TT instead of TDB ([Time](#time)).
+- **`moon.pos_gcrf`** returned mean-of-date coordinates, and
+  **`planets.heliocentric_pos`** was off by up to tens of degrees outside
+  1800–2050 ([Ephemerides and frames](#ephemerides-and-frames)).
 - **`sun.rise_set`** returned the next day's events for about half of the
-  inputs. Through 0.23.1. Re-check rise/set tables.
-- **Density on the day after a missing F10.7** ran on the quiet-time
-  defaults (35–39 % low), and `density.nrlmsise()` ignored a `datetime` time
-  (up to 8× low in a storm) and read an integer latitude or longitude as 0.
-  Through 0.23.1. Re-check drag propagations over those days and direct
-  density calls ([Drag and density](#drag-and-density)).
+  inputs ([Ephemerides and frames](#ephemerides-and-frames)).
+- **Density** on the day after a missing F10.7 ran on the quiet-time
+  defaults, and `density.nrlmsise()` ignored a `datetime` time and integer
+  angles ([Drag and density](#drag-and-density)).
 - **Custom ICGEM gravity files with `norm unnormalized`** (Rust
-  `Gravity::parse`) were de-normalized twice. Through 0.23.1. Re-check
-  results from such files ([Rust API](#rust-api)).
+  `Gravity::parse`) were de-normalized twice ([Rust API](#rust-api)).
 
 **Changed by design:**
 
 - **Rust `sgp4()` uses WGS72 / AFSPC** (was WGS84 / IMPROVED), and
-  `TLE.fit_from_states()` fits under WGS72 (was WGS84). Through 0.23.1.
-  Rust SGP4 users and anyone fitting TLEs ([SGP4 and TLEs](#sgp4-and-tles)).
-- **Drag applies up to 1,000 km** altitude (was 700 km). All releases through
-  0.23.1. Orbits that reach 700–1,000 km: high LEO, and GTO or Molniya
-  perigee passes ([Drag and density](#drag-and-density)).
-- **Pre-1972 UTC** follows the 1961–1971 "rubber second" model, so pre-1972
-  labels convert up to 9.9 s differently. Through 0.23.1. Anyone with
-  pre-1972 epochs ([Time](#time)).
-- **No EOP before 1973-01-02** (CelesTrak's file, which covered 1962–1972, is
-  no longer read), so UT1 = UTC there: hundreds of metres in Earth-fixed
-  results. Through 0.23.1 when `EOP-All.csv` was present. Anyone with
-  pre-1973 Earth-fixed results ([EOP](#earth-orientation-eop-and-data-files)).
-- **ECOM coefficients (experimental)** are referred to 1 AU and scale by
-  $(\text{AU}/d)^2$. Through 0.23.1. Anyone with fitted ECOM coefficients
+  `TLE.fit_from_states()` fits under WGS72 (was WGS84)
+  ([SGP4 and TLEs](#sgp4-and-tles)).
+- **Drag applies up to 1,000 km** altitude (was 700 km)
+  ([Drag and density](#drag-and-density)).
+- **Pre-1972 UTC** follows the 1961–1971 "rubber second" model
+  ([Time](#time)).
+- **No EOP before 1973-01-02**, so UT1 = UTC there
+  ([EOP](#earth-orientation-eop-and-data-files)).
+- **ECOM coefficients (experimental)** are referred to 1 AU
   ([ECOM](#ecom-experimental)).
 - **Smaller shifts**: a more precise Earth rotation angle (1 cm LEO, 6 cm
   GEO), no stray polar motion in the approximate TEME → GCRF rotation
   (~19 m LEO), and float → microsecond conversions that round instead of
-  truncating (1 µs). Through 0.23.1. Tests that compare against 0.23 values
-  at those tolerances.
+  truncating (1 µs). These matter only to tests that compare against 0.23
+  values at those tolerances.
 
 ## Python API
 
-- **Python 3.11 or newer is required.** Python 3.10 reaches end of life in
+- **Python 3.11 or newer is required.** Python 3.10 reached end of life in
   October 2026; 0.24 ships wheels for CPython 3.11–3.15. **Do this:** stay on
   satkit 0.23.x for Python 3.10.
 - **`satproperties()` is keyword-only.** A positional call raises
@@ -122,7 +106,7 @@ the details.
   `list[TLE]`**, even for a single element set. Input with no TLEs still
   raises `ValueError`. **Do this:** `tle = sk.TLE.from_lines(lines)[0]`. See
   [Loading TLEs](guide/tle.md#loading-tles) for the located parse errors and
-  the new `check_checksum=True` option.
+  the `check_checksum=True` option.
 - **`TLE.from_url()` and `omm_from_url()` honour offline mode**
   (`SATKIT_OFFLINE=1` or `utils.set_offline(True)`) and raise `RuntimeError`.
   **Do this:** turn offline mode off in scripts that fetch element sets.
@@ -372,13 +356,12 @@ nested lists.
   and update exhaustive matches.
 - **`DataDirReadOnly` is now `DataDirReadOnly { path, reason }`** in
   `earth_orientation_params::Error`, `spaceweather::Error` and
-  `utils::update_data::Error`. These enums are not `#[non_exhaustive]`
-  (`earth_orientation_params::Error` becomes so in 0.24.2, below).
-  **Do this:** match `Error::DataDirReadOnly { .. }`.
+  `utils::update_data::Error`. **Do this:** match
+  `Error::DataDirReadOnly { .. }`.
 - **0.24.2: `earth_orientation_params::Error` is `#[non_exhaustive]` and
-  gains `InvalidTable`** (rows rejected by the new `set_table`). **Do this:**
-  add a wildcard arm to an exhaustive match; later variants will not break
-  it again.
+  gains `InvalidTable`** (rows rejected by the new `set_table`); the other
+  two enums are still exhaustive. **Do this:** add a wildcard arm to an
+  exhaustive match.
 - **`orbitprop::Error::EopCoverage` has new `span_start` and `table_start`
   fields.** **Do this:** use `EopCoverage { .. }` in patterns.
 - **`Instant` / `Duration` `+` and `-` saturate** at the ends of the
@@ -424,7 +407,5 @@ nested lists.
   file was de-normalized twice), and rejects a header without a positive
   `earth_gravity_constant` or `radius` (`Error::InvalidLine`); an unrecognised
   `tide_system` is classified from C̄20. Only custom files are affected.
-- **`utils::build_date()` is removed** (builds are reproducible now).
-  **Do this:** use `utils::githash()`, which is `"unknown"` for builds not
-  made from a satkit git checkout; the satkit version is in your
-  `Cargo.lock`.
+- **`utils::build_date()` is removed**, as in Python
+  ([Python API](#python-api)); the satkit version is in your `Cargo.lock`.

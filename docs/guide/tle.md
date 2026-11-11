@@ -1,25 +1,16 @@
 # SGP4, Two-Line Element Sets (TLEs), and Orbital Mean-Element Messages (OMMs)
 
-## Satellite Catalog
-
-The United States maintains a public catalog of Earth-orbiting objects, including active satellites, rocket bodies, and debris.
-
-There are multiple places to access the catalog, including:
-
-- <https://www.celestrak.org/>
-- <https://www.space-track.org/>
-
 ## SGP4
 
-**SGP4 (Simplified General Perturbations No. 4)** is an analytical orbital propagation model created in the **1960s-1970s by NORAD** to efficiently predict the motion of **Earth-orbiting satellites** from **Two-Line Element (TLE)** data.
+**SGP4 (Simplified General Perturbations No. 4)** is the analytical propagation model NORAD created in the 1960s–1970s to predict the motion of Earth-orbiting satellites from **Two-Line Element (TLE)** data: a fast, closed-form alternative to numerical integration that models Earth's oblateness (J2–J4), atmospheric drag through the TLE $B^*$ term, and the main secular and periodic perturbations. It remains the standard propagator for the public catalog of Earth-orbiting objects that the United States maintains, available from <https://www.space-track.org/> and <https://www.celestrak.org/>; its accuracy is limited by the quality of the element sets and by the model's simplifying assumptions.
 
-It was developed to support U.S. space surveillance as a fast, closed-form alternative to numerical integration, modeling Earth's oblateness (J2-J4), atmospheric drag via the TLE *B\** term, and key secular and periodic perturbations. The model is documented in Spacetrack Report No. 3 ([Hoots & Roehrich 1980](references.md#hoots1980)) and, in its modern reference form with test cases, in [Vallado et al. (2006)](references.md#vallado2006); satkit's implementation is a line-by-line Rust port of the C++ code accompanying the latter and is verified against its test vectors.
+The model is documented in Spacetrack Report No. 3 ([Hoots & Roehrich 1980](references.md#hoots1980)) and, in its modern reference form with test cases, in [Vallado et al. (2006)](references.md#vallado2006); satkit's implementation is a line-by-line Rust port of the C++ code accompanying the latter and is verified against its test vectors.
 
 satkit implements classic SGP4 only. Element sets flagged as **SGP4-XP** (ephemeris type 4 in TLE line 1, column 63, or `EPHEMERIS_TYPE: 4` in an OMM) parse normally, but `sgp4()` raises an error rather than propagating them: SGP4-XP is a different theory whose line 1 stores agom and a B term where a classic TLE stores nddot and $B^*$, and its reference implementation is distributed by the U.S. Space Force as binaries only. Such sets are rare in public catalogs.
 
 ### Gravity model, ops mode and time
 
-`satkit.sgp4()` and Rust `sgp4::sgp4()` use the WGS72 gravity model and the AFSPC ops mode by default, the model the catalog element sets are fitted with; pass `gravconst` / `opsmode` (Rust: `sgp4_full`) for the others. Before 0.24 the Rust `sgp4()` default was WGS84 with the IMPROVED ops mode (14 m apart at epoch and ~280 m after a week for the ISS). python-sgp4's `Satrec.twoline2rv` also uses WGS72, with the IMPROVED ops mode; the two ops modes differ only for deep-space orbits below about 11.5° inclination. `TLE.fit_from_states()` fits with the same defaults and takes the same keywords, so a fitted TLE should be propagated with the settings it was fitted with.
+`satkit.sgp4()` and Rust `sgp4::sgp4()` use the WGS72 gravity model and the AFSPC ops mode by default, the model the catalog element sets are fitted with; pass `gravconst` / `opsmode` (Rust: `sgp4_full`) for the others. (The Rust default changed in 0.24: see [Migrating to 0.24](../migration.md#sgp4-and-tles).) python-sgp4's `Satrec.twoline2rv` also uses WGS72, with the IMPROVED ops mode; the two ops modes differ only for deep-space orbits below about 11.5° inclination. `TLE.fit_from_states()` fits with the same defaults and takes the same keywords, so a fitted TLE should be propagated with the settings it was fitted with.
 
 The SGP4 initialization is cached in the TLE (or Rust `OMM`) after the first propagation, together with the elements, gravity model and ops mode it was built from; editing an element or passing another `gravconst` / `opsmode` rebuilds it, and TLE equality ignores it.
 
@@ -27,17 +18,13 @@ The time since epoch is the physical (SI) time elapsed between the element-set e
 
 A time at which propagation fails (e.g. the orbit has decayed) gives a NaN row, with its code in the error array when `errflag=True`. An element set that cannot be initialized at all raises `RuntimeError`, unless `errflag=True`: then its rows are NaN and its initialization error code is reported at every time, so one bad element set does not fail a list.
 
-Today, SGP4 is the standard propagator for TLEs published by organizations like NORAD and CelesTrak, and is widely used for satellite tracking, visualization, conjunction screening, and mission planning — though its accuracy is fundamentally limited by TLE quality and simplifying assumptions.
-
 ## Ephemeris Representation
 
 ### TLE
 
 A **Two-Line Element Set (TLE)** is a compact, legacy format (originally constrained by punch-card era line lengths) for describing satellite orbits. Despite its age, it remains widely used because it is easy to publish and often provides sufficient accuracy for many applications.
 
-In addition to the familiar (mean) Keplerian elements, TLEs include parameters related to perturbations (e.g., atmospheric drag via $B^*$, and derivatives of mean motion).
-
-TLEs are designed to be used with **SGP4**, an analytic model that produces orbital state vectors (position and velocity) from the augmented mean elements in the TLE. The perturbations modeled include Earth oblateness (which produces precession) and drag.
+In addition to the (mean) Keplerian elements, a TLE carries the drag term $B^*$ and the derivatives of the mean motion. The elements are SGP4 *mean* elements: they give a position and velocity only through SGP4, not through the two-body formulas.
 
 TLEs are often preceded by an additional "line 0" containing the satellite name. The field-by-field format is documented in [Vallado et al. (2006)](references.md#vallado2006), Appendix A, and in CelesTrak's [TLE format description](https://celestrak.org/NORAD/documentation/tle-fmt.php).
 
@@ -156,31 +143,16 @@ tle_lines = [
 starlink30477 = sk.TLE.from_lines(tle_lines)[0]
 
 # The state is output in the "TEME" frame
-pTEME, _vTEME = sk.sgp4(starlink30477, sk.time(2024, 4, 9, 12, 0, 0))
-
-# Rotate to Earth-fixed (ITRF) and get geodetic coordinates. Keyword
-# arguments make the direction explicit at first sight; the same call with
-# positional args is `rotation(sk.frame.TEME, sk.frame.ITRF, thetime)`.
 thetime = sk.time(2024, 4, 9, 12, 0, 0)
+pTEME, _vTEME = sk.sgp4(starlink30477, thetime)
+
+# Rotate to Earth-fixed (ITRF) and get geodetic coordinates
 pITRF = sk.frametransform.rotation(
     from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, tm=thetime,
 ) * pTEME
 coord = sk.itrfcoord(pITRF)
 print(coord)
 # ITRFCoord(lat:  29.3890 deg, lon: 170.8051 deg, hae: 560.11 km)
-```
-
-### SGP4 from a URL (TLE)
-
-<!-- skip-test: needs the network (CelesTrak) -->
-```python
-import satkit as sk
-
-# Load all space station TLEs directly from CelesTrak
-tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
-iss = tles[0]  # ISS is first
-
-pos, vel = sk.sgp4(iss, sk.time(2024, 6, 1))
 ```
 
 ### SGP4 from a URL (OMM)
@@ -204,13 +176,6 @@ pITRF = [
     for t, p in zip(time_array, pTEME)
 ]
 coord = [sk.itrfcoord(x) for x in pITRF]
-```
-
-XML format works the same way -- just change the URL:
-
-<!-- skip-test: needs the network (CelesTrak) -->
-```python
-omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=xml")
 ```
 
 ### OMM from a local file, and conversion to a TLE

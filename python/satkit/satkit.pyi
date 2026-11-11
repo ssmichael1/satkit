@@ -175,6 +175,7 @@ class TLE:
 
         Args:
             url (str): URL to fetch TLE data from
+            on_error (str, optional): as in :meth:`TLE.from_lines`
 
         Returns:
             list[TLE]: one TLE per element set in the response
@@ -183,7 +184,8 @@ class TLE:
             ValueError: if the response holds no TLEs
             RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
                 ``satkit.utils.set_offline(True)``; no connection is opened),
-                the request fails, or a record fails to parse
+                the request fails, or (with ``on_error="raise"``) a record
+                fails to parse
 
         Example:
             ```python
@@ -708,10 +710,10 @@ class sgp4_gravconst:
 class sgp4_opsmode:
     """Ops Mode for SGP4 Propagation"""
 
-    afspc: ClassVar[int]
+    afspc: ClassVar[sgp4_opsmode]
     """afspc (Air Force Space Command), the default"""
 
-    improved: ClassVar[int]
+    improved: ClassVar[sgp4_opsmode]
     """improved"""
 
 @final

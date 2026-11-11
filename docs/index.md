@@ -11,9 +11,9 @@
 
 📚 **API documentation:** [**Python**](api/index.md) on this site · [**Rust**](https://docs.rs/satkit) on docs.rs, with a [Rust guide](rust/index.md) on this site.
 
-SatKit is a high-performance orbital mechanics library written in Rust with complete Python bindings via PyO3. It handles coordinate transforms, orbit propagation, time systems, gravity models, atmospheric density, and JPL ephemerides -- everything needed for satellite astrodynamics work.
+SatKit is a high-performance orbital mechanics library written in Rust with complete Python bindings via PyO3. It handles coordinate transforms, orbit propagation, time systems, gravity models, atmospheric density, and JPL ephemerides — everything needed for satellite astrodynamics work.
 
-Pre-built wheels are available for **Linux** (x86_64, aarch64), **macOS** (Apple silicon), and **Windows** (x86_64) on Python 3.11--3.15; Intel Macs build from source or use conda-forge.
+Pre-built wheels are available for **Linux** (x86_64, aarch64), **macOS** (Apple silicon), and **Windows** (x86_64) on Python 3.11–3.15; Intel Macs build from source or use conda-forge.
 
 ## Quick Start
 
@@ -23,7 +23,7 @@ pip install satkit        # or: conda install -c conda-forge satkit
 
 For Rust, `cargo add satkit`; the [Rust section](rust/index.md) covers the Cargo features and has an example program per topic.
 
-Frames, gravity, SGP4 and time scales work straight away: the IERS nutation tables and gravity models are compiled into the package. The JPL ephemeris, Earth orientation and space weather are downloaded on first use — see [Data Files](getting-started/datafiles.md).
+Gravity, SGP4 and time scales work straight away: the IERS nutation tables and gravity models are compiled into the package. The JPL ephemeris, Earth orientation and space weather are downloaded on first use — see [Data Files](getting-started/datafiles.md).
 
 ```python
 import satkit as sk
@@ -51,7 +51,7 @@ pos, vel = sk.sgp4(tle, sk.time(2024, 1, 2))
 | | |
 |---|---|
 | **[Installation](getting-started/installation.md)** | Install from PyPI or build from source |
-| **[Data Files](getting-started/datafiles.md)** | Required data files for calculations |
+| **[Data Files](getting-started/datafiles.md)** | What is compiled in, what is downloaded, and when |
 | **[Learn](tutorials/index.md)** | Tutorials and theory — from basics to advanced topics |
 | **[API Reference](api/index.md)** | Full Python API documentation |
 | **[References](guide/references.md)** | Sources for every model and algorithm |
