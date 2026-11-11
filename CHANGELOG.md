@@ -7,7 +7,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Fixed
 
 - Docs: the API reference gains `sgp4_error`, `sgp4_gravconst`, `sgp4_opsmode`, `tlefitstatus`, `weekday`, `geodetic`, `solarsystem` and `nrlmsise00`; the `TLE.from_url` stub documents `on_error` and `sgp4_opsmode`'s members are typed as `sgp4_opsmode`; wrong names and contradictions in the guide pages are corrected and repeated material is cut ([#291](https://github.com/ssmichael1/satkit/pull/291))
-- Tutorials: the GPS example reads SP3 epochs as GPS time (the day-1 fit drops to 6 cm), the forces plot uses gravity degree instead of order and the right orbital speed, the ground-contacts example uses a UTC date, and wrong coordinates, labels and a stale Hohmann figure are corrected ([#292](https://github.com/ssmichael1/satkit/pull/292))
+- Tutorials and navigation: the GPS example reads SP3 epochs as GPS time (the day-1 fit drops to 6 cm), the forces plot uses gravity degree instead of order, the ground-contacts example uses a UTC date, and wrong coordinates and labels are corrected; the ECOM tutorial joins the navigation, the OMM tutorial moves beside the TLE one, and the API index lists `spaceweather`, `propresult`, `thrust`, the OMM readers and `TLEWarning` ([#292](https://github.com/ssmichael1/satkit/pull/292))
 
 ## 0.24.3 - 2026-11-11
 

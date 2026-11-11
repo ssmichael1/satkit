@@ -126,16 +126,18 @@ nav:
       - SGP4 Propagation:
           - "Theory: TLEs, SGP4 & OMMs": guide/tle.md
           - Two-Line Element Set: tutorials/Two-Line Element Set.ipynb
+          - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
           - TLE Fitting: tutorials/TLE Fitting.ipynb
           - SGP4 vs Numerical Propagation: tutorials/SGP4 vs Numerical Propagation.ipynb
       - Numerical Propagation:
           - "Theory: Force Model": guide/forces.md
-          - "Empirical SRP: ECOM": guide/ecom.md
+          - "Theory: Empirical SRP (ECOM)": guide/ecom.md
           - "Theory: ODE Integrators": guide/integrators.md
           - "Theory: State Vectors, STM & Covariance": guide/satstate.md
           - "Theory: Maneuver Coordinate Frames": guide/maneuver_frames.md
           - "Validation: GMAT Comparison": guide/gmat_validation.md
           - "GPS Example": tutorials/GPS Example.ipynb
+          - ECOM Solar Radiation Pressure: tutorials/ECOM Solar Radiation Pressure.ipynb
           - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
       - Applications:
           - Plots: tutorials/Plots.ipynb
@@ -149,7 +151,6 @@ nav:
           - Planetary Ephemerides: tutorials/Planetary Ephemerides.ipynb
           - Atmospheric Density: tutorials/Atmospheric Density.ipynb
           - Covariance Propagation: tutorials/Covariance Propagation.ipynb
-          - Orbital Mean-Element Message: tutorials/Orbital Mean-Element Message.ipynb
       - References: guide/references.md
   - API Reference:
       - api/index.md

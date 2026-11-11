@@ -6,7 +6,7 @@ Interactive tutorials and reference material for the `satkit` package, organized
 
 Core concepts that underpin the rest of the library.
 
-| Tutorial | Description |
+| Page | Description |
 |----------|-------------|
 | [Time Systems](Time%20Systems.ipynb) | UTC, TAI, TT, TDB, UT1, GPS conversions and why they matter |
 | [Quaternions](Quaternions.ipynb) | Constructing, composing, and interpolating 3D rotations |
@@ -19,10 +19,11 @@ Core concepts that underpin the rest of the library.
 
 Analytic mean-element propagation from TLEs and OMMs.
 
-| | Description |
+| Page | Description |
 |----------|-------------|
-| [Theory: TLEs, SGP4 & OMMs](../guide/tle.md) | TLE/OMM formats, SGP4 history, and mean-element ephemeris concepts |
+| [Theory: TLEs, SGP4 & OMMs](../guide/tle.md) | SGP4, the TLE and OMM formats, loading element sets, catalog numbers above 99,999 |
 | [Two-Line Element Set](Two-Line%20Element%20Set.ipynb) | Loading and using TLEs with SGP4 |
+| [Orbital Mean-Element Message](Orbital%20Mean-Element%20Message.ipynb) | Loading OMMs (JSON, XML, CSV) for SGP4; the format for catalog numbers above 99,999 |
 | [TLE Fitting](TLE%20Fitting.ipynb) | Fitting TLEs from state vectors |
 | [SGP4 vs Numerical Propagation](SGP4%20vs%20Numerical%20Propagation.ipynb) | Comparing analytical and numerical orbit propagation |
 
@@ -30,21 +31,22 @@ Analytic mean-element propagation from TLEs and OMMs.
 
 High-fidelity force-model propagation with Runge-Kutta and Gauss-Jackson integrators.
 
-| | Description |
+| Page | Description |
 |----------|-------------|
 | [Theory: Force Model](../guide/forces.md) | Modeled forces: gravity, third-body, drag, SRP, solid Earth tides, GR |
-| [Empirical SRP: ECOM](../guide/ecom.md) | The experimental ECOM solar-radiation-pressure model: DYB frame, coefficients, conventions, measured accuracy, and a [worked fit to IGS GPS orbits](ECOM%20Solar%20Radiation%20Pressure.ipynb) |
+| [Theory: Empirical SRP (ECOM)](../guide/ecom.md) | The experimental ECOM solar-radiation-pressure model: DYB frame, coefficients, measured accuracy |
 | [Theory: ODE Integrators](../guide/integrators.md) | RKV / GJ8 integrators, step-size selection, tolerances |
 | [Theory: State Vectors, STM & Covariance](../guide/satstate.md) | satstate class, state transition matrix, covariance, maneuvers |
 | [Theory: Maneuver Coordinate Frames](../guide/maneuver_frames.md) | RTN / NTW / LVLH definitions and when to use each |
 | [GPS Example](GPS%20Example.ipynb) | GPS orbit fit against ESA SP3 truth, integrator comparison |
+| [ECOM Solar Radiation Pressure](ECOM%20Solar%20Radiation%20Pressure.ipynb) | ECOM fit to IGS GPS orbits, 30-day prediction and constellation benchmark |
 | [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Impulsive maneuvers, frame choice, low-thrust orbit raising |
 
 ## Applications
 
 Common tasks built on top of the core library.
 
-| Tutorial | Description |
+| Page | Description |
 |----------|-------------|
 | [Plots](Plots.ipynb) | Plotting satellite orbits and ground tracks |
 | [Satellite Ground Contacts](Satellite%20Ground%20Contacts.ipynb) | Computing satellite ground contacts and visibility |
@@ -56,11 +58,10 @@ Common tasks built on top of the core library.
 
 Specialized capabilities for mission analysis and design.
 
-| | Description |
+| Page | Description |
 |----------|-------------|
 | [Theory: Lambert's Problem](../guide/lambert.md) | Algorithm details: Izzo's method, Lancaster-Blanchard parameterization, multi-revolution solutions |
 | [Lambert Targeting](Lambert%20Targeting.ipynb) | Orbit transfer design with delta-v computation and pork-chop plots |
 | [Planetary Ephemerides](Planetary%20Ephemerides.ipynb) | JPL DE440 and low-precision Sun/Moon/planet positions |
 | [Atmospheric Density](Atmospheric%20Density.ipynb) | NRLMSISE-00 density profiles, solar activity effects, and drag |
 | [Covariance Propagation](Covariance%20Propagation.ipynb) | State transition matrix, uncertainty growth, and orbital frame analysis |
-| [Orbital Mean-Element Message](Orbital%20Mean-Element%20Message.ipynb) | Working with OMM records |
