@@ -58,6 +58,14 @@ A message whose `MEAN_ELEMENT_THEORY` is not SGP4, whose `TIME_SYSTEM` is not UT
 
 In Rust the same message is the `satkit::omm::OMM` struct, which implements `SGP4Source`, serializes back to JSON with `serde`, and converts with `OMM::from_tle` / `OMM::to_tle`.
 
+## Catalog numbers above 99,999
+
+The satellite catalog passed 99,999 in July 2026, and every object catalogued since has a six-digit number. A TLE has five columns for it, so:
+
+- **Alpha-5 TLEs** (served by Space-Track) write the first two digits as a letter: `A0000` is 100000 and `Z9999` is 339999, with `I` and `O` unused. satkit reads these, `TLE.satnum` is the plain integer, and `TLE.to_2line()` writes them. A number above 339999 cannot be written as a TLE, and `to_2line()` raises rather than emit a malformed line.
+- **CelesTrak serves no TLE at all for these objects.** A TLE request for one answers HTTP 404 with the text `No GP data found`, so `TLE.from_url()` raises. Ask for an OMM instead (`FORMAT=json`, `xml` or `csv`) and load it with `satkit.omm_from_url()`.
+- **OMMs carry the catalog number as an integer** of any size, in every format. For new code, and for anything launched since mid-2026, OMM is the format to use.
+
 ## Loading TLEs
 
 `TLE.from_lines()`, `TLE.from_file()` and `TLE.from_url()` accept 2-line and 3-line (named) element sets, any number of them, and always return a `list[TLE]`, even for a single element set. Input with no element sets raises `ValueError`.
@@ -126,6 +134,8 @@ omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=statio
 # OMMs work directly with sgp4()
 pos, vel = sk.sgp4(omms[0], sk.time(2024, 6, 1))
 ```
+
+A CelesTrak GP query with no `FORMAT` answers in CSV, which `omm_from_url()` reads; `TLE.from_url()` needs `FORMAT=tle` (or `3le` / `2le`), and gets HTTP 404 for an object numbered above 99,999 (see [Catalog numbers above 99,999](#catalog-numbers-above-99999)). CelesTrak rate-limits repeated identical queries, so save the response and reload it from disk rather than fetching on every run.
 
 ## Example Usage
 

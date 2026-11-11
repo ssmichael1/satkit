@@ -262,6 +262,25 @@ need newer elements. satkit's own data refreshes do not contribute to this:
 they go to the IERS, GFZ, NOAA and NASA servers and are rate-limited to each
 file's publication cadence.
 
+### HTTP 404 from CelesTrak for a recently launched object
+
+```
+RuntimeError: http status: 404
+```
+
+**Cause.** `sk.TLE.from_url(...)` was given a CelesTrak query for an object
+(or a group made only of objects) with a catalog number above 99,999.
+CelesTrak serves no TLE for these: the five-column catalog field cannot hold
+the number, and it answers HTTP 404 with the text `No GP data found`. Every
+object catalogued since July 2026 is affected.
+
+**Fix.** Request an OMM and load it with `sk.omm_from_url(...)`: use
+`FORMAT=json`, `xml` or `csv`, or leave `FORMAT` out (CelesTrak then answers
+in CSV). `sk.sgp4()` takes the OMM dictionaries directly, and
+`sk.TLE.from_omm()` converts one to a `TLE` where a number up to 339999
+allows it. See
+[Catalog numbers above 99,999](../guide/tle.md#catalog-numbers-above-99999).
+
 ### Running offline or air-gapped
 
 Everything compiled in works with no network. The JPL ephemeris, the EOP and
@@ -353,6 +372,30 @@ See [Migrating to 0.24](../migration.md).
 even for one element set (since 0.24). Take the first one:
 `tle = sk.TLE.from_lines(lines)[0]`. See
 [Loading TLEs](../guide/tle.md#loading-tles).
+
+### One bad line in a TLE file loses every element set in it
+
+```
+RuntimeError: TLE record starting at line 4 (sat 69999 "VANGUARD DEB"): Could not parse day of year: invalid float literal
+```
+
+**Cause.** `sk.TLE.from_lines()`, `from_file()` and `from_url()` stop at the
+first record that fails to parse, so nothing is returned, not even the good
+records around it.
+
+**Fix.** Pass `on_error="warn"` to keep the records that parse and get one
+`satkit.TLEWarning` for each one left out (the same message, with the line
+and satellite), or `on_error="skip"` to leave them out silently:
+
+<!-- skip-test: reads a catalog file from disk -->
+```python
+import warnings
+
+with warnings.catch_warnings(record=True) as skipped:
+    warnings.simplefilter("always", sk.TLEWarning)
+    tles = sk.TLE.from_file("catalog.txt", on_error="warn")
+print(len(tles), "loaded;", len(skipped), "skipped")
+```
 
 ### `TypeError: 'float' object is not callable` (or `'int'`, or `'satkit.weekday'`)
 
