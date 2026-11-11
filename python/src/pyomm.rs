@@ -206,7 +206,9 @@ fn omms_to_pylist(py: Python<'_>, omms: &[OMM]) -> PyResult<Py<PyAny>> {
 
 /// Load OMM(s) from a URL as a list of dictionaries
 ///
-/// Fetches the content at the given URL and auto-detects JSON vs XML format.
+/// Fetches the content at the given URL and auto-detects the format (JSON,
+/// XML or CSV), as ``omm_from_text`` does. A CelesTrak GP query with no
+/// ``FORMAT`` answers in CSV.
 /// Returns a list of dictionaries that can be passed directly to ``satkit.sgp4()``.
 ///
 /// Args:
@@ -230,13 +232,14 @@ pub fn omm_from_url(py: Python<'_>, url: String) -> Result<Py<PyAny>> {
     Ok(omms_to_pylist(py, &omms)?)
 }
 
-/// Load OMM(s) from a JSON or XML file as a list of dictionaries
+/// Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
 ///
-/// The format is detected from the content, not the file extension.
+/// The format is detected from the content, not the file extension, as
+/// ``omm_from_text`` does.
 ///
 /// Args:
 ///     filename (str): Path to a file holding one OMM or an array of them
-///         (JSON), or a CCSDS NDM/XML document
+///         (JSON), a CCSDS NDM/XML document, or a CSV table
 ///
 /// Returns:
 ///     list[dict]: One dict per message, see ``satkit.OMMDict``
@@ -246,16 +249,23 @@ pub fn omm_from_file(py: Python<'_>, filename: String) -> Result<Py<PyAny>> {
     Ok(omms_to_pylist(py, &omms)?)
 }
 
-/// Parse OMM(s) from JSON or XML text as a list of dictionaries
+/// Parse OMM(s) from JSON, XML or CSV text as a list of dictionaries
 ///
 /// Text starting with ``[`` or ``{`` is parsed as JSON, text starting with
-/// ``<`` as XML.
+/// ``<`` as XML, and text whose first line holds a comma as CSV: a header
+/// row of OMM keywords and one row per message, as CelesTrak and Space-Track
+/// serve it. KVN is not supported.
 ///
 /// Args:
-///     text (str): One OMM or an array of them (JSON), or a CCSDS NDM/XML document
+///     text (str): One OMM or an array of them (JSON), a CCSDS NDM/XML
+///         document, or a CSV table
 ///
 /// Returns:
 ///     list[dict]: One dict per message, see ``satkit.OMMDict``
+///
+/// Raises:
+///     RuntimeError: if the text is none of the three formats or is
+///         malformed; for CSV the message gives the line of the bad row
 #[pyfunction]
 pub fn omm_from_text(py: Python<'_>, text: String) -> Result<Py<PyAny>> {
     let omms = py.detach(|| OMM::from_text(&text))?;

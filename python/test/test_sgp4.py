@@ -172,6 +172,59 @@ class TestSGP4:
         _p, _v = sk.sgp4(omm_list[0], epoch)
         _p, _v = sk.sgp4(omm_list[0:3], epoch)
 
+    def test_omm_csv(self, testvec_dir, tmp_path):
+        """
+        CSV: the Space-Track JSON records written as a CSV table, every field
+        quoted as Space-Track does, load as the same dictionaries
+        """
+        import csv
+        import io
+
+        basedir = testvec_dir + os.path.sep + "omm" + os.path.sep
+        with open(basedir + "spacetrack_omm.json") as fh:
+            raw = json.load(fh)[:200]
+        ref = sk.omm_from_file(basedir + "spacetrack_omm.json")[:200]
+
+        buf = io.StringIO()
+        w = csv.writer(buf, quoting=csv.QUOTE_ALL)
+        cols = list(raw[0])
+        w.writerow(cols)
+        for rec in raw:
+            w.writerow(["" if rec[c] is None else rec[c] for c in cols])
+        omms = sk.omm_from_text(buf.getvalue())
+        assert omms == ref
+        assert isinstance(omms[0]["MEAN_MOTION"], float)
+        assert omms[0]["RCS_SIZE"] is None
+
+        f = tmp_path / "gp.csv"
+        f.write_text(buf.getvalue())
+        assert sk.omm_from_file(str(f)) == ref
+        # A CSV record propagates like the JSON one
+        t = sk.time(omms[0]["EPOCH"])
+        np.testing.assert_array_equal(sk.sgp4(omms[0], t)[0], sk.sgp4(ref[0], t)[0])
+
+        # CelesTrak's layout: unquoted, no metadata columns, leading-dot numbers
+        celestrak = (
+            "OBJECT_NAME,OBJECT_ID,EPOCH,MEAN_MOTION,ECCENTRICITY,INCLINATION,RA_OF_ASC_NODE,"
+            "ARG_OF_PERICENTER,MEAN_ANOMALY,EPHEMERIS_TYPE,CLASSIFICATION_TYPE,NORAD_CAT_ID,"
+            "ELEMENT_SET_NO,REV_AT_EPOCH,BSTAR,MEAN_MOTION_DOT,MEAN_MOTION_DDOT\r\n"
+            "ISS (ZARYA),1998-067A,2026-11-11T04:58:11.303328,15.49310717,.00073162,51.6322,"
+            "292.5559,12.7435,347.3737,0,U,25544,999,59454,.17362007E-3,.9235E-4,0\r\n"
+        )
+        (iss,) = sk.omm_from_text(celestrak)
+        assert iss["NORAD_CAT_ID"] == 25544
+        assert iss["BSTAR"] == 0.17362007e-3
+        assert "CENTER_NAME" not in iss
+        assert sk.TLE.from_omm(iss).satnum == 25544
+
+        # A header alone is an empty table; a bad row is located; a CSV that
+        # is not a table of OMMs is refused
+        assert sk.omm_from_text(celestrak.splitlines()[0]) == []
+        with pytest.raises(RuntimeError, match="line 3"):
+            sk.omm_from_text(celestrak + "ISS (ZARYA),1998-067A\r\n")
+        with pytest.raises(RuntimeError, match="no EPOCH column"):
+            sk.omm_from_text('NORAD_CAT_ID,CURRENT_NAME\n"85","SCOUT X-1 DEB"\n')
+
     def test_omm_loaders(self, testvec_dir):
         """
         omm_from_file / omm_from_text: JSON and XML, Space-Track and CelesTrak,

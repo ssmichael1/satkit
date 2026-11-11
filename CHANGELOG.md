@@ -2,6 +2,12 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
+## Unreleased
+
+### Added
+
+- OMM CSV: `omm_from_text`, `omm_from_file` and `omm_from_url` (Rust `OMM::from_text`, `from_file`, `from_url`, and the new `OMM::from_csv_string`) read the header-row-plus-one-row-per-object table CelesTrak and Space-Track serve, which is what a CelesTrak GP query returns when no `FORMAT` is given ([#288](https://github.com/ssmichael1/satkit/pull/288))
+
 ## 0.24.2 - 2026-11-02
 
 Results that change from 0.24.1 are marked "0.24.2" in [Migrating to 0.24](https://satkit.dev/migration/).

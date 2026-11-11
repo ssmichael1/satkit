@@ -4897,7 +4897,9 @@ def propagate(
 def omm_from_url(url: str) -> list[OMMDict]:
     """Load OMM(s) from a URL as a list of dictionaries
 
-    Fetches the content at the given URL and auto-detects JSON vs XML format.
+    Fetches the content at the given URL and auto-detects the format (JSON,
+    XML or CSV), as :func:`omm_from_text` does. A CelesTrak GP query with no
+    ``FORMAT`` answers in CSV.
     Returns a list of dictionaries that can be passed directly to :func:`sgp4`.
 
     Args:
@@ -4922,11 +4924,13 @@ def omm_from_url(url: str) -> list[OMMDict]:
     ...
 
 def omm_from_file(filename: str) -> list[OMMDict]:
-    """Load OMM(s) from a JSON or XML file as a list of dictionaries
+    """Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
 
-    The format is detected from the content, not the file extension: a file
-    starting with ``[`` or ``{`` is JSON (one message or an array of them), one
-    starting with ``<`` is a CCSDS NDM/XML document. KVN is not supported.
+    The format is detected from the content, not the file extension, as
+    :func:`omm_from_text` does: a file starting with ``[`` or ``{`` is JSON
+    (one message or an array of them), one starting with ``<`` is a CCSDS
+    NDM/XML document, and one whose first line holds a comma is a CSV table.
+    KVN is not supported.
 
     Args:
         filename (str): path to the file
@@ -4945,17 +4949,29 @@ def omm_from_file(filename: str) -> list[OMMDict]:
     ...
 
 def omm_from_text(text: str) -> list[OMMDict]:
-    """Parse OMM(s) from JSON or XML text as a list of dictionaries
+    """Parse OMM(s) from JSON, XML or CSV text as a list of dictionaries
 
     Text starting with ``[`` or ``{`` is parsed as JSON (one message or an
-    array of them), text starting with ``<`` as a CCSDS NDM/XML document.
-    KVN is not supported.
+    array of them), text starting with ``<`` as a CCSDS NDM/XML document, and
+    text whose first line holds a comma as CSV. KVN is not supported.
+
+    The CSV form is a header row of OMM keywords and one row per message, as
+    CelesTrak (its default for GP queries) and Space-Track serve it. Fields
+    may be quoted and columns may come in any order. An empty cell is an
+    absent field, except ``OBJECT_NAME`` and ``OBJECT_ID``, which stay empty
+    strings; columns that are not OMM fields are kept as strings (``None``
+    where empty).
 
     Args:
         text (str): the document
 
     Returns:
         list[OMMDict]: one dictionary per message (see :class:`OMMDict`)
+
+    Raises:
+        RuntimeError: if the text is none of the three formats or is
+            malformed; for CSV the message gives the line of the bad row, and
+            a table with no ``EPOCH`` or ``MEAN_MOTION`` column is refused
 
     Example:
         ```python
