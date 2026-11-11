@@ -199,7 +199,7 @@ impl TLE {
     ///
     /// Stops at the first record that fails to parse, returning its
     /// [`Error::Record`]. To keep the good records of a file with a few bad
-    /// ones, iterate [`Self::records`] instead.
+    /// ones, iterate [`Self::records`] instead (`records_from_url` for a URL).
     pub fn from_lines(lines: &[String]) -> Result<Vec<Self>> {
         Self::records(lines).collect()
     }
@@ -277,6 +277,30 @@ impl TLE {
     /// ```
     #[cfg(feature = "download")]
     pub fn from_url(url: &str) -> Result<Vec<Self>> {
+        Self::records_from_url(url)?.into_iter().collect()
+    }
+
+    /// Load TLE(s) from a URL, one result per record
+    ///
+    /// Fetches `url` as [`Self::from_url`] does (same feature, offline check
+    /// and request errors, which are the outer `Result`) and parses the
+    /// response with [`Self::records`]: a record that fails to parse is an
+    /// `Err` item and the records after it are still read.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use satkit::TLE;
+    ///
+    /// # #[cfg(feature = "download")]
+    /// let tles: Vec<TLE> = TLE::records_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
+    ///     .unwrap()
+    ///     .into_iter()
+    ///     .filter_map(Result::ok)
+    ///     .collect();
+    /// ```
+    #[cfg(feature = "download")]
+    pub fn records_from_url(url: &str) -> Result<Vec<Result<Self>>> {
         // The same offline check (and reason) as the data downloads
         if let Some(reason) = crate::utils::download::offline_reason() {
             return Err(Error::Offline {
@@ -293,7 +317,7 @@ impl TLE {
                 },
             )?;
         let body = resp.body_mut().read_to_string()?;
-        Self::records(body.lines()).collect()
+        Ok(Self::records(body.lines()).collect())
     }
 
     ///

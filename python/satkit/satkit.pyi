@@ -11,7 +11,7 @@ import numpy as np
 import datetime
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Optional, TypeAlias, Union, final, overload
+from typing import Any, ClassVar, Literal, Optional, TypeAlias, Union, final, overload
 from typing_extensions import deprecated
 
 from ._types import OMMDict
@@ -39,6 +39,13 @@ TimeArrayLike: TypeAlias = (
     "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
+
+class TLEWarning(UserWarning):
+    """Warning for a TLE record skipped by a loader called with ``on_error="warn"``
+
+    The message is the one ``on_error="raise"`` raises as ``RuntimeError``: it gives
+    the input line the record starts on, its satellite and what failed to parse.
+    """
 
 @final
 class TLE:
@@ -73,12 +80,18 @@ class TLE:
     """
 
     @staticmethod
-    def from_file(filename: str, *, check_checksum: bool = False) -> list[TLE]:
+    def from_file(
+        filename: str,
+        *,
+        check_checksum: bool = False,
+        on_error: Literal["raise", "warn", "skip"] = "raise",
+    ) -> list[TLE]:
         """Load TLEs from a text file, parsed as :meth:`TLE.from_lines` does
 
         Args:
             filename (str): name of the text file holding the TLE lines
             check_checksum (bool, optional): as in :meth:`TLE.from_lines`
+            on_error (str, optional): as in :meth:`TLE.from_lines`
 
         Returns:
             list[TLE]: one TLE per element set in the file
@@ -97,7 +110,12 @@ class TLE:
         ...
 
     @staticmethod
-    def from_lines(lines: Sequence[str], *, check_checksum: bool = False) -> list[TLE]:
+    def from_lines(
+        lines: Sequence[str],
+        *,
+        check_checksum: bool = False,
+        on_error: Literal["raise", "warn", "skip"] = "raise",
+    ) -> list[TLE]:
         """Load TLEs from a list of lines
 
         :meth:`TLE.from_file` and :meth:`TLE.from_url` parse their text the
@@ -109,20 +127,48 @@ class TLE:
                 e.g. list or tuple)
             check_checksum (bool, optional): also verify the checksum digit
                 (column 69) of every data line. Default False.
+            on_error (str, optional): what to do with a record that fails to
+                parse: ``"raise"`` (default) raises ``RuntimeError`` at the
+                first one; ``"warn"`` leaves it out and emits a
+                :class:`TLEWarning` with the same message; ``"skip"`` leaves
+                it out silently
 
         Returns:
-            list[TLE]: one TLE per element set, even if there is only one
+            list[TLE]: one TLE per element set, even if there is only one.
+            With ``on_error="warn"`` or ``"skip"``, one per element set that
+            parsed, which is an empty list if none did.
 
         Raises:
-            ValueError: if the lines hold no TLEs
-            RuntimeError: if a record fails to parse (or, with
-                ``check_checksum``, has a wrong checksum); the message gives
-                the line the record starts on and its satellite
+            ValueError: if the lines hold no TLEs, or ``on_error`` is not one
+                of the three values
+            RuntimeError: with ``on_error="raise"``, if a record fails to
+                parse (or, with ``check_checksum``, has a wrong checksum); the
+                message gives the line the record starts on and its satellite
+
+        Example:
+            ```python
+            import warnings
+
+            lines = [
+                "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
+                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+                # A letter O in the epoch day
+                "1 49140U 21082L   24O30.39663557  .00000076  00000-0  14180-4 0  9995",
+                "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
+            ]
+            with warnings.catch_warnings(record=True) as skipped:
+                warnings.simplefilter("always")
+                tles = satkit.TLE.from_lines(lines, on_error="warn")
+            print(len(tles), len(skipped))
+            # 1 1
+            ```
         """
         ...
 
     @staticmethod
-    def from_url(url: str) -> list[TLE]:
+    def from_url(
+        url: str, *, on_error: Literal["raise", "warn", "skip"] = "raise"
+    ) -> list[TLE]:
         """Load TLEs from a URL, parsing the response as :meth:`TLE.from_lines` does
 
         Works with any URL that returns plain-text TLE data.

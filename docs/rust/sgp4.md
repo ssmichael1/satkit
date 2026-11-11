@@ -6,7 +6,7 @@ The [TLEs, SGP4 & OMMs](../guide/tle.md) guide covers the model, the element-set
 
 - `TLE::load_3line(name, line1, line2)` and `TLE::load_2line(line1, line2)` parse one element set.
 - `TLE::records(lines)` iterates over a catalog (any iterator of `&str` or `String`, such as `text.lines()`), yielding a `Result<TLE, tle::Error>` per record, so a malformed record can be skipped or reported with its line number; `.check_checksums(true)` also verifies column 69. `TLE::from_lines(&[String])` collects it and stops at the first bad record.
-- `TLE::from_url` fetches a catalog (`download` feature). CelesTrak rate-limits repeated requests; cache the text rather than fetching it on every run.
+- `TLE::from_url` fetches a catalog (`download` feature), stopping at the first bad record; `TLE::records_from_url` returns one `Result` per record instead. CelesTrak rate-limits repeated requests; cache the text rather than fetching it on every run.
 - `satkit::omm::OMM` is a CCSDS Orbit Mean-Elements Message: `OMM::from_json_string`, `from_xml_string` (`omm-xml` feature), `from_csv_string`, `from_text` / `from_file` (format detected from the content) and `from_url`. `OMM::from_tle` and `OMM::to_tle` convert, and `OMM` serializes with `serde`.
 
 ## Propagating
