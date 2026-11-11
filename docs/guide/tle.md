@@ -50,8 +50,9 @@ OMMs are commonly published as:
 - JSON
 - XML
 - KVN (key-value notation)
+- CSV: a header row of the OMM keywords and one row per object. CCSDS defines only KVN and XML, but CSV is the most compact form, and it is what a CelesTrak GP query returns when no `FORMAT` is given
 
-satkit reads the JSON and XML forms (KVN is not supported). In Python an OMM is a plain dictionary keyed by the CCSDS field names: `satkit.omm_from_url()`, `satkit.omm_from_file()` and `satkit.omm_from_text()` return a list of them, with every field the source provided (Space-Track's catalog extras such as `OBJECT_TYPE` and `RCS_SIZE` included) and numbers converted from Space-Track's quoted strings. `satkit.sgp4()` accepts these dictionaries directly, as well as the raw output of `json.load` on a CelesTrak or Space-Track response. `satkit.TLE.from_omm()` and `satkit.TLE.to_omm()` convert between the two representations.
+satkit reads the JSON, XML and CSV forms (KVN is not supported). In CSV an empty cell is an absent field, columns that are not OMM fields (`RMS`, `DATA_SOURCE`, Space-Track's extras) are kept as strings, and a row that fails to parse raises `RuntimeError` naming its line. In Python an OMM is a plain dictionary keyed by the CCSDS field names: `satkit.omm_from_url()`, `satkit.omm_from_file()` and `satkit.omm_from_text()` return a list of them, with every field the source provided (Space-Track's catalog extras such as `OBJECT_TYPE` and `RCS_SIZE` included) and numbers converted from Space-Track's quoted strings. `satkit.sgp4()` accepts these dictionaries directly, as well as the raw output of `json.load` on a CelesTrak or Space-Track response. `satkit.TLE.from_omm()` and `satkit.TLE.to_omm()` convert between the two representations.
 
 A message whose `MEAN_ELEMENT_THEORY` is not SGP4, whose `TIME_SYSTEM` is not UTC, whose `REF_FRAME` is not TEME, whose `CENTER_NAME` is not EARTH, or whose `EPHEMERIS_TYPE` is 4 (SGP4-XP, which Space-Track distributes alongside classic SGP4 sets) is rejected rather than propagated with the wrong theory. `EPOCH` may be an RFC 3339 date-time or the CCSDS day-of-year form `YYYY-DDDThh:mm:ss`.
 
@@ -119,7 +120,7 @@ import satkit as sk
 # Load TLEs from a URL
 tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
 
-# Load OMMs from a URL (auto-detects JSON vs XML)
+# Load OMMs from a URL (auto-detects JSON, XML or CSV)
 omms = sk.omm_from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json")
 
 # OMMs work directly with sgp4()
@@ -218,7 +219,7 @@ with open("gp.json", "w") as f:
 ```python
 import satkit as sk
 
-# JSON or XML, detected from the content; one dict per message
+# JSON, XML or CSV, detected from the content; one dict per message
 omms = sk.omm_from_file("gp.json")
 
 # Everything the source provided is in the dict

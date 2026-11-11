@@ -412,6 +412,10 @@ nested lists.
   every `TLE::from_lines` / `from_url` error is wrapped in `Record` with its
   line number and satellite. `omm::Error` gains `UnsupportedRefFrame`,
   `UnsupportedCenter` and `Offline`. Both enums are `#[non_exhaustive]`.
+- **After 0.24.2: `OMM::from_text`, `from_file` and `from_url` read CSV**, and
+  `omm::Error` gains `Csv`. Text whose first line holds a comma used to fail
+  with `UnrecognizedFormat`; it is now read as a CSV table of OMMs, and fails
+  with `Csv` if it is not one. In Python both are `RuntimeError`.
 - **`TLE` has a new public `classification: char` field** (line 1, column 8;
   defaults to `'U'`), so a `TLE` struct literal must set it. It is parsed by
   `load_2line` / `load_3line`, written back by `to_2line`, and carried

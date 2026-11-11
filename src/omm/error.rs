@@ -50,9 +50,15 @@ pub enum Error {
     UnexpectedJsonShape(&'static str),
 
     /// Text handed to [`OMM::from_text`](crate::omm::OMM::from_text) starts
-    /// with neither a JSON bracket nor an XML tag.
-    #[error("Input is neither JSON (starts with '[' or '{{') nor XML (starts with '<'); KVN is not supported")]
+    /// with neither a JSON bracket nor an XML tag, and its first line is not
+    /// a CSV header row.
+    #[error("Input is neither JSON (starts with '[' or '{{'), XML (starts with '<') nor CSV (a comma-separated header row); KVN is not supported")]
     UnrecognizedFormat,
+
+    /// CSV text is not a table of OMMs, or one of its records is malformed.
+    /// `line` is the 1-based line the record (or the header row) starts on.
+    #[error("OMM CSV, line {line}: {message}")]
+    Csv { line: usize, message: String },
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),

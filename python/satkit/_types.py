@@ -32,7 +32,8 @@ class OMMDict(TypedDict, total=False):
     as strings in its JSON; :func:`sgp4` accepts either), ``EPOCH`` as an
     RFC 3339 string, absent optional fields omitted, and every key that is not
     a CCSDS field (Space-Track's ``OBJECT_TYPE``, ``RCS_SIZE``, ``LAUNCH_DATE``,
-    ``TLE_LINE1``, ...; XML ``USER_DEFINED`` parameters) kept verbatim.
+    ``TLE_LINE1``, ...; XML ``USER_DEFINED`` parameters; extra CSV columns, as
+    strings) kept verbatim.
     """
 
     CCSDS_OMM_VERS: str

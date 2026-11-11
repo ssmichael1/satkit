@@ -3,7 +3,9 @@
 //! An OMM carries one SGP4 mean-element set plus catalog metadata, as
 //! specified in CCSDS 502.0-B-3 (Orbit Data Messages), Tables 4-1 to 4-3:
 //! <https://ccsds.org/Pubs/502x0b3e1.pdf>. Space-Track and CelesTrak publish
-//! OMMs in JSON and XML: <https://www.space-track.org/documentation#/omm>.
+//! OMMs in JSON, XML and CSV: <https://www.space-track.org/documentation#/omm>.
+//! All three are read here ([`OMM::from_text`] detects which); the CCSDS KVN
+//! encoding is not.
 //!
 //! Real-world producers deviate from the standard: numeric fields may arrive
 //! as quoted strings, mandatory metadata (`CCSDS_OMM_VERS`, `CENTER_NAME`,
@@ -24,6 +26,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
+mod csv;
 mod error;
 
 pub use error::{Error, Result};
@@ -693,7 +696,9 @@ impl OMM {
     /// Deserializes OMM records from text, detecting the format.
     ///
     /// Text starting with `[` or `{` is parsed as JSON, text starting with
-    /// `<` as XML (requires the `omm-xml` feature). KVN is not supported.
+    /// `<` as XML (requires the `omm-xml` feature), and text whose first
+    /// line holds a comma as CSV ([`from_csv_string`](Self::from_csv_string)).
+    /// KVN is not supported.
     ///
     /// # Errors
     ///
@@ -712,12 +717,14 @@ impl OMM {
             {
                 Err(Error::XmlFeatureDisabled)
             }
+        } else if trimmed.lines().next().is_some_and(|l| l.contains(',')) {
+            Self::from_csv_string(trimmed)
         } else {
             Err(Error::UnrecognizedFormat)
         }
     }
 
-    /// Deserializes OMM records from a JSON or XML file, detecting the format
+    /// Deserializes OMM records from a JSON, XML or CSV file, detecting the format
     /// from the content (not the extension) as [`from_text`](Self::from_text).
     ///
     /// # Errors
@@ -728,9 +735,11 @@ impl OMM {
         Self::from_text(&std::fs::read_to_string(path)?)
     }
 
-    /// Load OMM(s) from a URL, detecting JSON vs XML from the response body.
+    /// Load OMM(s) from a URL, detecting JSON, XML or CSV from the response
+    /// body as [`from_text`](Self::from_text) does.
     ///
-    /// Works with CelesTrak and Space-Track API endpoints.
+    /// Works with CelesTrak and Space-Track API endpoints, including a
+    /// CelesTrak GP query with no `FORMAT` (which answers in CSV).
     ///
     /// Requires the `download` Cargo feature. Returns [`Error::Offline`] without
     /// opening a connection when offline mode is on ([`crate::utils::set_offline`]
