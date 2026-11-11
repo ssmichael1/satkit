@@ -124,7 +124,7 @@ To send them elsewhere, configure logging as usual, e.g.
 `logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")` or a
 handler on the `satkit` logger. The first-use JPL ephemeris download is
 announced as a warning, so it shows by default; the per-file "Downloading …"
-notices from `utils.download_file` are logged at INFO and appear only when
+notices (logger `satkit.utils.download`) are logged at INFO and appear only when
 logging is configured at that level: `logging.basicConfig(level=logging.INFO)`.
 
 **Rust.** The records go through the [`log`](https://docs.rs/log) facade with

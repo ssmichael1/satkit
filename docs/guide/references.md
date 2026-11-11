@@ -11,7 +11,7 @@ code follows where that is useful.
 - **Vallado, D. A. (2013).** *Fundamentals of Astrodynamics and Applications*,
   4th ed. Microcosm Press, Hawthorne, CA. ISBN 978-1881883180. Companion
   software and errata: <https://celestrak.org/software/vallado-sw.php>.
-  Used for: SGP4 reference implementation (the C++ code satkit's port follows),
+  Used for:
   GMST (Algorithm 15, Eq. 3-45), the approximate (`_approx`) reduction (§3.7, Eqs. 3-88 to
   3-90), TEME (§3.7.3), RSW/NTW frames (§3.3, Eq. 3-31), Kepler's equation
   (Algorithm 2), sunrise/sunset (Algorithm 30, §5.3.1), Moon position (Algorithm 31, §5.2.3), Hohmann

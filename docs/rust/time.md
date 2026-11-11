@@ -13,7 +13,7 @@ Every function in the crate that takes a time is generic over the `TimeLike` tra
 - `Instant::from_rfc3339` for RFC 3339 / ISO 8601 (`2024-06-15T12:00:00.25Z`, with or without an offset).
 - `Instant::from_string` for free-form dates (`"June 15 2024 13:30"`, `"2024-06-15 13:30:00"`); it tries RFC 3339 first. Locale-ordered numeric dates such as `06/15/2024` are ambiguous and not supported; use `strptime` for those.
 - `Instant::strptime(s, fmt)` with an explicit format (`%Y %m %d %H %M %S %f %z %b %B`).
-- `Display` and `as_rfc3339()` print `2024-06-15T12:00:00.000000Z`; `strftime` formats with the same codes plus weekday names.
+- `Display` and `as_rfc3339()` print `2024-06-15T12:00:00.000000Z`; `strftime` formats with the same codes except `%z`, plus the weekday codes `%A`, `%a` and `%w`.
 
 Parse failures are `InstantError`.
 

@@ -18,7 +18,7 @@ SHA-256 and lists where it may be downloaded from, in order of preference:
    ephemerides, IERS for the `tab5.2*` tables.
 4. The legacy `storage.googleapis.com/astrokit-astro-data` bucket (transitional).
 
-A download is streamed to `<name>.part`, hashed as it goes, and only renamed
+A download is streamed to a temporary file (`<name>.part.<pid>.<seq>`), hashed as it goes, and only renamed
 into place when both size and SHA-256 match the manifest; otherwise it is
 discarded and the next source is tried. A file already present with the right
 hash is never re-downloaded. The manifest is therefore what makes a given

@@ -1,9 +1,10 @@
 # ODE Integrators
 
-The numerical propagator integrates the equations of motion forward (or backward) in time using one of two families of solvers:
+The numerical propagator integrates the equations of motion forward (or backward) in time using one of three kinds of solvers:
 
-1. **Adaptive Runge-Kutta** (default) — embedded error estimation, PID step-size controller, accept/reject logic. Butcher tableaux from [Verner (2010)](references.md#verner2010) — the `RKV98.IIa.Efficient`, `RKV87.IIa.Robust` and `RKV65.IIIXb.Efficient` sets published on his *delightful* [web page](https://www.sfu.ca/~jverner/) — plus [Tsitouras (2011)](references.md#tsitouras2011) for `rkts54` and the RODAS4 Rosenbrock method of [Hairer & Wanner (1996)](references.md#hairer1996), §IV.7, for `rodas4`.
-2. **Gauss-Jackson 8** — 8th-order fixed-step multistep predictor-corrector specialised for 2nd-order ODEs ([Berry & Healy 2004](references.md#berry2004)), the integrator used for the U.S. Space Surveillance Network catalog. For smooth long-duration propagation it needs several times fewer force evaluations than `rkv98` at comparable accuracy (satkit benchmarks show 3–10× on GEO and MEO arcs).
+1. **Adaptive Runge-Kutta** (default) — embedded error estimation, PID step-size controller, accept/reject logic. Butcher tableaux from [Verner (2010)](references.md#verner2010) — the `RKV98.IIa.Efficient`, `RKV87.IIa.Robust` and `RKV65.IIIXb.Efficient` sets published on his *delightful* [web page](https://www.sfu.ca/~jverner/) — plus [Tsitouras (2011)](references.md#tsitouras2011) for `rkts54`.
+2. **Rosenbrock** — `rodas4`, the linearly implicit RODAS4 method of [Hairer & Wanner (1996)](references.md#hairer1996), §IV.7, with the same adaptive step control; for stiff problems.
+3. **Gauss-Jackson 8** — 8th-order fixed-step multistep predictor-corrector specialised for 2nd-order ODEs ([Berry & Healy 2004](references.md#berry2004)), the integrator used for the U.S. Space Surveillance Network catalog. For smooth long-duration propagation it needs several times fewer force evaluations than `rkv98` at comparable accuracy (satkit benchmarks show 3–10× on GEO and MEO arcs).
 
 ## Integrator Choices
 
