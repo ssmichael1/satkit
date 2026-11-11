@@ -43,28 +43,14 @@ epoch falls in decides how much the density model actually knows:
 |---|---|---|---|---|
 | observed | GFZ Potsdam | daily, 1932 → about yesterday | 3-hourly | 3-hourly + daily |
 | daily predicted | NOAA/SWPC 45-day forecast | daily, ~45 days | — | daily $A_p$, held across the eight slots |
-| monthly predicted | NASA MSAFE | monthly, decades | — | daily $A_p$ (13-month-smoothed climatology), held across the eight slots |
+| monthly predicted | NASA MSAFE | monthly, ~15 years | — | daily $A_p$ (13-month-smoothed climatology), held across the eight slots |
 
-Through satkit 0.22 the table was CelesTrak's merged space-weather file, whose
-monthly rows carry $F_{10.7}$ but **no** geomagnetic data, so past the 45-day
-forecast NRLMSISE-00 silently fell back to a quiet-time $A_p = 4$. Geomagnetic activity
-is not a small correction — taking the 2024-05-11 Gannon storm ($A_p = 271$)
-against 2024-05-14 ($A_p = 6$), with $F_{10.7}$ almost matched so the
-geomagnetic term is isolated:
-
-| altitude | storm | quiet | ratio |
-|---|---|---|---|
-| 300 km | 7.53e-11 | 4.51e-11 | 1.67x |
-| 400 km | 1.80e-11 | 9.68e-12 | 1.86x |
-| 550 km | 2.88e-12 | 1.35e-12 | 2.14x |
-
-MSAFE closes that gap: its monthly rows carry a climatological $A_p$, so a
-long-horizon drag run past the daily data runs on the expected level of
-activity for that point in the solar cycle rather than on the quiet floor.
-What it cannot give is storm timing — that is unknowable months ahead — and
-the model has no 3-hourly structure past the observed record, so
-`predicted_daily` and `predicted_monthly` are honest labels for the answer's
-quality, not just the row's origin.
+The monthly MSAFE rows carry a climatological $A_p$, so a long-horizon drag
+run past the daily data uses the expected level of activity for that point in
+the solar cycle, not a quiet floor. Storm timing and 3-hourly structure are
+not available past the observed record, and they matter: at matched
+$F_{10.7}$, the 2024-05-11 Gannon storm ($A_p = 271$) raised the density over
+a quiet day ($A_p = 6$) by 1.7× at 300 km and 2.1× at 550 km.
 
 | `satkit.spaceweather.status(t)` | meaning | what satkit does |
 |---|---|---|
@@ -89,7 +75,7 @@ if sk.spaceweather.status(t_end) != "observed":
 ```
 
 Refreshing moves `last_observed` to about yesterday and `last_daily` about 45
-days past it; `last` is decades out and never the binding constraint.
+days past it; `last` is about 15 years out and never the binding constraint.
 
 Every record carries its provenance in `data_type` — `"OBS"` measured and
 definitive, `"OBS-P"` measured but still preliminary (GFZ's nowcast, the last
