@@ -8,6 +8,8 @@ API reference for the SGP4 analytic propagator and its inputs. For background, s
 
 ::: satkit.TLE
 
+::: satkit.TLEWarning
+
 ::: satkit.sgp4
 
 ::: satkit.omm_from_url

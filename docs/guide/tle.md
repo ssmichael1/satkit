@@ -83,7 +83,24 @@ except RuntimeError as e:
 # invalid float literal (line 3 is 70 characters; a TLE line is 69, so its columns may be shifted)
 ```
 
-In Rust, `TLE::from_lines` stops at the first bad record in the same way. To keep the good records of a large catalog file and skip the malformed ones, iterate `TLE::records` instead, optionally with `.check_checksums(true)`:
+To keep the good records of a large catalog file and leave out the malformed ones, pass `on_error="warn"` or `on_error="skip"` to any of the three loaders. `"warn"` emits one `satkit.TLEWarning` per record left out, with the message `RuntimeError` would have carried; `"skip"` is silent. The result may then be an empty list (every record was bad); input with no records at all still raises `ValueError`.
+
+```python
+import warnings
+
+catalog = lines + bad
+with warnings.catch_warnings(record=True) as skipped:
+    warnings.simplefilter("always", sk.TLEWarning)
+    tles = sk.TLE.from_lines(catalog, on_error="warn")
+print(len(tles), "loaded;", len(skipped), "skipped")
+for w in skipped:
+    print(w.message)
+# 1 loaded; 1 skipped
+# TLE record starting at line 4 (sat 49140 "STARLINK-3118"): Could not parse mean anomaly:
+# invalid float literal (line 6 is 70 characters; a TLE line is 69, so its columns may be shifted)
+```
+
+In Rust, `TLE::from_lines` and `TLE::from_url` stop at the first bad record in the same way. To keep the good records, iterate `TLE::records` instead, optionally with `.check_checksums(true)`, or use `TLE::records_from_url`:
 
 ```rust
 let tles: Vec<satkit::TLE> = satkit::TLE::records(&lines).filter_map(Result::ok).collect();
