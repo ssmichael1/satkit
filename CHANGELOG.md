@@ -2,6 +2,12 @@
 
 Only recent releases are listed. Older entries are in this file's git history (`git show vX.Y.Z:CHANGELOG.md`) and on the [GitHub Releases](https://github.com/ssmichael1/satkit/releases) page.
 
+## Unreleased
+
+### Added
+
+- `TLE.from_lines`, `TLE.from_file` and `TLE.from_url` take `on_error="raise" | "warn" | "skip"`: `"warn"` and `"skip"` keep the good element sets of a file with bad ones, `"warn"` reporting each one left out as a `satkit.TLEWarning`; Rust gains `TLE::records_from_url`, the per-record form of `from_url` ([#287](https://github.com/ssmichael1/satkit/pull/287))
+
 ## 0.24.2 - 2026-11-02
 
 Results that change from 0.24.1 are marked "0.24.2" in [Migrating to 0.24](https://satkit.dev/migration/).

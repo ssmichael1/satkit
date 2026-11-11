@@ -43,22 +43,72 @@ use std::io::BufRead;
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
 
-/// The parsed TLEs as a list, or `ValueError` when there are none; `what`
-/// names the source in the error
-fn tle_list(tles: Vec<TLE>, what: &str) -> PyResult<Vec<PyTLE>> {
-    if tles.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "No valid TLEs found in {what}"
-        )));
-    }
-    Ok(tles.into_iter().map(PyTLE).collect())
+pyo3::create_exception!(
+    satkit,
+    TLEWarning,
+    pyo3::exceptions::PyUserWarning,
+    "Warning for a TLE record skipped by a loader called with ``on_error=\"warn\"``\n\nThe message is the one ``on_error=\"raise\"`` raises as ``RuntimeError``: it gives\nthe input line the record starts on, its satellite and what failed to parse."
+);
+
+/// What a TLE loader does with a record that fails to parse (`on_error`)
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OnError {
+    Raise,
+    Warn,
+    Skip,
 }
 
-/// Parse `lines` into TLEs, stopping at the first bad record
-fn parse_lines(lines: &[String], check_checksum: bool) -> satkit::tle::Result<Vec<TLE>> {
+impl OnError {
+    fn parse(s: &str) -> PyResult<Self> {
+        match s {
+            "raise" => Ok(Self::Raise),
+            "warn" => Ok(Self::Warn),
+            "skip" => Ok(Self::Skip),
+            _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "on_error must be \"raise\", \"warn\" or \"skip\", not {s:?}"
+            ))),
+        }
+    }
+}
+
+/// Parse `lines`, one result per record
+fn parse_records(lines: &[String], check_checksum: bool) -> Vec<satkit::tle::Result<TLE>> {
     TLE::records(lines)
         .check_checksums(check_checksum)
         .collect()
+}
+
+/// The TLEs of `records` as a list, treating failed records as `on_error`
+/// says. `ValueError` when there are no records at all, or (with
+/// `on_error="raise"`) no TLEs; `what` names the source in that error.
+fn tle_list(
+    py: Python<'_>,
+    records: Vec<satkit::tle::Result<TLE>>,
+    on_error: OnError,
+    what: &str,
+) -> Result<Vec<PyTLE>> {
+    if records.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "No valid TLEs found in {what}"
+        ))
+        .into());
+    }
+    let mut tles = Vec::with_capacity(records.len());
+    for rec in records {
+        match rec {
+            Ok(tle) => tles.push(PyTLE(tle)),
+            Err(e) if on_error == OnError::Raise => return Err(e.into()),
+            Err(e) if on_error == OnError::Warn => {
+                // Stack level 1 is the Python line that called the loader. An
+                // interior NUL cannot be in a C string; it never occurs in
+                // these messages, but must not panic.
+                let msg = std::ffi::CString::new(e.to_string().replace('\0', " "))?;
+                PyErr::warn(py, py.get_type::<TLEWarning>().as_any(), &msg, 1)?;
+            }
+            Err(_) => {}
+        }
+    }
+    Ok(tles)
 }
 
 #[pymethods]
@@ -68,6 +118,7 @@ impl PyTLE {
     /// Args:
     ///     filename (str): name of the text file holding the TLE lines
     ///     check_checksum (bool, optional): as in ``TLE.from_lines``
+    ///     on_error (str, optional): as in ``TLE.from_lines``
     ///
     /// Returns:
     ///     list[TLE]: one TLE per element set in the file
@@ -76,15 +127,26 @@ impl PyTLE {
     ///     ValueError: if the file holds no TLEs
     ///     RuntimeError: if a record fails to parse; see ``TLE.from_lines``
     #[staticmethod]
-    #[pyo3(signature = (filename, *, check_checksum=false))]
-    fn from_file(filename: String, check_checksum: bool) -> Result<Vec<Self>> {
+    #[pyo3(signature = (filename, *, check_checksum=false, on_error="raise"))]
+    fn from_file(
+        py: Python<'_>,
+        filename: String,
+        check_checksum: bool,
+        on_error: &str,
+    ) -> Result<Vec<Self>> {
+        let on_error = OnError::parse(on_error)?;
         let file = File::open(std::path::PathBuf::from(&filename))?;
 
         let lines: Vec<String> = io::BufReader::new(file)
             .lines()
             .collect::<std::result::Result<_, _>>()?;
 
-        Ok(tle_list(parse_lines(&lines, check_checksum)?, &filename)?)
+        tle_list(
+            py,
+            parse_records(&lines, check_checksum),
+            on_error,
+            &filename,
+        )
     }
 
     #[new]
@@ -101,19 +163,51 @@ impl PyTLE {
     ///         any number of element sets)
     ///     check_checksum (bool, optional): also verify the checksum digit
     ///         (column 69) of every data line. Default False.
+    ///     on_error (str, optional): what to do with a record that fails to
+    ///         parse: ``"raise"`` (default) raises ``RuntimeError`` at the
+    ///         first one; ``"warn"`` leaves it out and emits a
+    ///         ``satkit.TLEWarning`` with the same message; ``"skip"`` leaves
+    ///         it out silently
     ///
     /// Returns:
-    ///     list[TLE]: one TLE per element set, even if there is only one
+    ///     list[TLE]: one TLE per element set, even if there is only one.
+    ///     With ``on_error="warn"`` or ``"skip"``, one per element set that
+    ///     parsed, which is an empty list if none did.
     ///
     /// Raises:
-    ///     ValueError: if the lines hold no TLEs
-    ///     RuntimeError: if a record fails to parse (or, with
-    ///         ``check_checksum``, has a wrong checksum); the message gives
-    ///         the line the record starts on and its satellite
+    ///     ValueError: if the lines hold no TLEs, or ``on_error`` is not one
+    ///         of the three values
+    ///     RuntimeError: with ``on_error="raise"``, if a record fails to
+    ///         parse (or, with ``check_checksum``, has a wrong checksum); the
+    ///         message gives the line the record starts on and its satellite
+    ///
+    /// Example:
+    ///     ```python
+    ///     import warnings
+    ///
+    ///     lines = [
+    ///         "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
+    ///         "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+    ///         # A letter O in the epoch day
+    ///         "1 49140U 21082L   24O30.39663557  .00000076  00000-0  14180-4 0  9995",
+    ///         "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
+    ///     ]
+    ///     with warnings.catch_warnings(record=True) as skipped:
+    ///         warnings.simplefilter("always")
+    ///         tles = satkit.TLE.from_lines(lines, on_error="warn")
+    ///     print(len(tles), len(skipped))
+    ///     # 1 1
+    ///     ```
     #[staticmethod]
-    #[pyo3(signature = (lines, *, check_checksum=false))]
-    fn from_lines(lines: Vec<String>, check_checksum: bool) -> Result<Vec<Self>> {
-        Ok(tle_list(parse_lines(&lines, check_checksum)?, "input")?)
+    #[pyo3(signature = (lines, *, check_checksum=false, on_error="raise"))]
+    fn from_lines(
+        py: Python<'_>,
+        lines: Vec<String>,
+        check_checksum: bool,
+        on_error: &str,
+    ) -> Result<Vec<Self>> {
+        let on_error = OnError::parse(on_error)?;
+        tle_list(py, parse_records(&lines, check_checksum), on_error, "input")
     }
 
     /// Load TLEs from a URL, parsing the response as ``TLE.from_lines`` does
@@ -122,6 +216,7 @@ impl PyTLE {
     ///
     /// Args:
     ///     url (str): URL to fetch TLE data from
+    ///     on_error (str, optional): as in ``TLE.from_lines``
     ///
     /// Returns:
     ///     list[TLE]: one TLE per element set in the response
@@ -130,16 +225,19 @@ impl PyTLE {
     ///     ValueError: if the response holds no TLEs
     ///     RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
     ///         ``satkit.utils.set_offline(True)``; no connection is opened),
-    ///         the request fails, or a record fails to parse
+    ///         the request fails, or (with ``on_error="raise"``) a record
+    ///         fails to parse
     ///
     /// Example:
     ///     ```python
     ///     tles = sk.TLE.from_url("https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle")
     ///     ```
     #[staticmethod]
-    fn from_url(py: Python, url: String) -> Result<Vec<Self>> {
-        let tles = py.detach(|| TLE::from_url(&url))?;
-        Ok(tle_list(tles, "response")?)
+    #[pyo3(signature = (url, *, on_error="raise"))]
+    fn from_url(py: Python, url: String, on_error: &str) -> Result<Vec<Self>> {
+        let on_error = OnError::parse(on_error)?;
+        let records = py.detach(|| TLE::records_from_url(&url))?;
+        tle_list(py, records, on_error, "response")
     }
 
     /// Satellite NORAD Catalog Number

@@ -140,3 +140,92 @@ class TestNonContiguousInput:
         with pytest.raises(RuntimeError, match="entries"):
             s.precompute_terms(t0, t0 + sk.duration.from_hours(1), 1e-6)
 
+
+
+class TestTleOnError:
+    """`on_error` of the TLE loaders: keep the good records of a bad file"""
+
+    GOOD_A = [
+        "0 ISS (ZARYA)",
+        "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
+        "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+    ]
+    # A letter O in the epoch day
+    BAD = [
+        "0 STARLINK-3118",
+        "1 49140U 21082L   24O30.39663557  .00000076  00000-0  14180-4 0  9995",
+        "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
+    ]
+    GOOD_B = [
+        "1 49140U 21082L   24030.39663557  .00000076  00000-0  14180-4 0  9995",
+        "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
+    ]
+    LINES = GOOD_A + BAD + GOOD_B
+
+    def test_raise_is_default(self):
+        with pytest.raises(RuntimeError, match="line 4"):
+            sk.TLE.from_lines(self.LINES)
+        with pytest.raises(RuntimeError, match="line 4"):
+            sk.TLE.from_lines(self.LINES, on_error="raise")
+
+    def test_skip(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            tles = sk.TLE.from_lines(self.LINES, on_error="skip")
+        assert [t.satnum for t in tles] == [25544, 49140]
+
+    def test_warn(self):
+        with pytest.warns(sk.TLEWarning) as rec:
+            tles = sk.TLE.from_lines(self.LINES, on_error="warn")
+        assert [t.satnum for t in tles] == [25544, 49140]
+        assert len(rec) == 1
+        msg = str(rec[0].message)
+        assert msg.startswith('TLE record starting at line 4 (sat 49140 "STARLINK-3118")')
+        # The same text on_error="raise" raises
+        with pytest.raises(RuntimeError) as exc:
+            sk.TLE.from_lines(self.LINES)
+        assert str(exc.value) == msg
+        # Attributed to the calling line, and a UserWarning
+        assert rec[0].filename == __file__
+        assert issubclass(sk.TLEWarning, UserWarning)
+
+    def test_warning_as_error(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", sk.TLEWarning)
+            with pytest.raises(sk.TLEWarning):
+                sk.TLE.from_lines(self.LINES, on_error="warn")
+
+    def test_checksum_failures_are_skipped_too(self):
+        # Line 1 of GOOD_A carries a wrong checksum digit (1, not 6)
+        lines = self.GOOD_B + self.GOOD_A
+        assert len(sk.TLE.from_lines(lines, on_error="skip")) == 2
+        with pytest.warns(sk.TLEWarning, match="checksum"):
+            tles = sk.TLE.from_lines(lines, check_checksum=True, on_error="warn")
+        assert [t.satnum for t in tles] == [49140]
+
+    def test_all_bad_is_an_empty_list(self):
+        assert sk.TLE.from_lines(self.BAD, on_error="skip") == []
+
+    def test_no_records_still_raises(self):
+        for mode in ("raise", "warn", "skip"):
+            with pytest.raises(ValueError):
+                sk.TLE.from_lines([], on_error=mode)
+            with pytest.raises(ValueError):
+                sk.TLE.from_lines(["not a tle"], on_error=mode)
+
+    def test_invalid_on_error(self):
+        with pytest.raises(ValueError, match="on_error"):
+            sk.TLE.from_lines(self.GOOD_A, on_error="ignore")
+
+    def test_from_file(self, tmp_path):
+        f = tmp_path / "cat.txt"
+        f.write_text("\n".join(self.LINES) + "\n")
+        with pytest.raises(RuntimeError):
+            sk.TLE.from_file(str(f))
+        assert len(sk.TLE.from_file(str(f), on_error="skip")) == 2
+        with pytest.warns(sk.TLEWarning):
+            assert len(sk.TLE.from_file(str(f), on_error="warn")) == 2

@@ -30,6 +30,7 @@ __all__ = [
     "density",
     "solarsystem",
     "TLE",
+    "TLEWarning",
     "itrfcoord",
     "geodetic",
     "kepler",
