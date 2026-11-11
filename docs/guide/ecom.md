@@ -2,7 +2,6 @@
 
 The [cannonball](forces.md#solar-radiation-pressure) is satkit's default solar-radiation-pressure model. For GNSS-class precise orbits the empirical **CODE Orbit Model (ECOM)** is available as an addition to it: a small set of constant and harmonic accelerations in a Sun-oriented frame whose coefficients are *estimated* in orbit determination rather than derived from a surface model.
 
-
 !!! warning "Experimental"
     The ECOM interface (`EcomParams` / `ecomparams`, `satproperties(ecom=...)`, `SatProperties::srp_ecom`) is new and marked **experimental**: it may be reshaped in a minor release (for example into a general empirical-acceleration hook) as it finds users. The physics and conventions below are stable; the API surface is not yet covered by the usual compatibility promise.
 
@@ -30,6 +29,8 @@ B(\varphi) &= B_0 + B_c\cos\varphi + B_s\sin\varphi
 \end{aligned}
 $$
 
+where $d$ is the satellite–Sun distance ([Sun-distance scaling](#sun-distance-scaling)) and $\nu$ is the same shadow function as the cannonball term, applied to all three axes — the CODE/Bernese convention ("the acceleration due to the solar radiation pressure is switched off when the satellite is in the Earth's shadow", [Bernese GNSS Software v5.2](references.md#dach2015) §2.2.2.3), so coefficients taken from CODE products keep their meaning.
+
 ## Coefficients
 
 | Coefficient | Axis | Term | In which model | Typical size (GPS, nm/s²) | Field name |
@@ -47,14 +48,14 @@ The constructors set the fields for you: `reduced(d0, y0, b0, bc, bs)`, `ecom1(d
 
 ## Conventions
 
-where $d$ is the satellite–Sun distance ([Sun-distance scaling](#sun-distance-scaling)) and $\nu$ is the same shadow function as the cannonball term, applied to all three axes — the CODE/Bernese convention ("the acceleration due to the solar radiation pressure is switched off when the satellite is in the Earth's shadow", [Bernese GNSS Software v5.2](references.md#dach2015) §2.2.2.3), so coefficients taken from CODE products keep their meaning. The argument $\varphi$ is selected by `sun_relative`:
+The argument $\varphi$ is selected by `sun_relative`:
 
 | `sun_relative` | $\varphi$ | Model family |
 |---|---|---|
 | `False` | argument of latitude $u$ from the ascending node (x-axis projection for an equatorial orbit) | ECOM1 ([Beutler 1994](references.md#beutler1994)), reduced ECOM ([Springer 1999](references.md#springer1999)) |
 | `True` | $\Delta u = u - u_\odot$ measured from *orbit noon* — zero at the point closest to the Sun's projection into the orbit plane, $\pi$ at midnight; computed node-free and regular at all inclinations | ECOM2 ([Arnold 2015](references.md#arnold2015)) |
 
-Because $\hat{e}_D$ points at the Sun, the physical $D_0$ is **negative** — about $-1\times10^{-7}$ m/s² for a GPS satellite ($C_R A/m \approx 0.02$ m²/kg), and 10–30 nm/s² when ECOM is applied as a residual on top of an a-priori model. $Y_0$ and the B terms are typically $\sim10^{-9}$ m/s². The coefficients are *estimated* in orbit determination; satkit propagates with the values you supply and adds the ECOM term to the cannonball, so use `craoverm=0` for a pure ECOM model:
+Because $\hat{e}_D$ points at the Sun, the physical $D_0$ is **negative** — about $-1\times10^{-7}$ m/s² for a GPS satellite ($C_R A/m \approx 0.02$ m²/kg), and 10–30 nm/s² when ECOM is applied as a residual on top of an a-priori model. $Y_0$ and the B terms are typically $\sim10^{-9}$ m/s². The coefficients are *estimated* in orbit determination; satkit propagates with the values you supply and adds the ECOM term to the cannonball, so use `craoverm=0` for a pure ECOM model (see [Usage](#usage)).
 
 ## Sun-distance scaling
 
@@ -62,7 +63,7 @@ The whole ECOM acceleration is scaled by $(\text{AU}/d)^2$, with $d$ the satelli
 
 The effect shows up in long predictions. For GPS G20, the reduced ECOM was re-fitted on rolling 3-day windows from January to March 2024. Unscaled, $D_0$ drifted by +1.5 nm/s² (1.4 %), and three-quarters of that was the $1/d^2$ change in flux. With the scaling, the error of a 60-day prediction from a 3-day fit drops by 11 % (622 → 551 m), and the best single coefficient set for the whole two months fits twice as well (9.0 → 4.2 m RMS). The remaining drift follows the Sun elevation β over the orbit plane, which constant coefficients cannot capture.
 
-Public descriptions of ECOM ([Bernese GNSS Software v5.2](references.md#dach2015) §2.2.2.3; [Arnold et al. 2015](references.md#arnold2015)) write the model without a distance factor, and implementations differ: Orekit's `ECOM2` applies none, while Ginan scales the D/Y/B terms by $(\text{AU}/d)^2$ as satkit does. Over the 1–3-day arcs on which ECOM is normally estimated the factor changes by ≤ 0.1 %, so the choice only matters when coefficients move between programs or are used over long spans. To use coefficients estimated with an unscaled implementation, multiply them by $(d/\text{AU})^2$ at the arc epoch. satkit 0.23.1 and earlier applied ECOM coefficients unscaled.
+Public descriptions of ECOM ([Bernese GNSS Software v5.2](references.md#dach2015) §2.2.2.3; [Arnold et al. 2015](references.md#arnold2015)) write the model without a distance factor, and implementations differ: Orekit's `ECOM2` applies none, while Ginan scales the D/Y/B terms by $(\text{AU}/d)^2$ as satkit does. Over the 1–3-day arcs on which ECOM is normally estimated the factor changes by ≤ 0.1 %, so the choice only matters when coefficients move between programs or are used over long spans. To use coefficients estimated with an unscaled implementation, multiply them by $(d/\text{AU})^2$ at the arc epoch. (satkit 0.23.1 and earlier were unscaled: see [Migrating to 0.24](../migration.md#ecom-experimental).)
 
 ## Usage
 
@@ -92,11 +93,11 @@ Rust users can also implement `SatProperties::srp_ecom(&self, tm, state) -> Opti
 
 ## What to expect
 
- Fitting an initial state plus the reduced 5-parameter ECOM to 3 days of IGS final GPS orbits (`python/examples/ecom_gps_validation.py`, 12×12 gravity, no a-priori box-wing) reproduces the orbit at the accuracy of the IGS product itself — 5 cm 3D RMS versus 3.8 m for the cannonball — and predicts the next 24 h to a median 6–7 cm 3D across the constellation (2-day fits, ten satellites), against ~5 cm for the IGS ultra-rapid predicted product and 8–10 cm reported by [Duan & Hugentobler (2021)](references.md#duan2021) from 3-day arcs with a full analysis-centre force model. Beyond a few days the error grows along-track roughly as $t^2$: ~0.9 m at 7 days, 10 m after ~12 days and ~95 m at 30 days from a 3-day fit (~15 days and ~60 m from a 7-day fit), because the true coefficients drift with the Sun elevation angle β over weeks — which is exactly why analysis centres re-estimate them every day. Constant ECOM coefficients are a short-arc (days) model, not a month-long one. The [worked example notebook](../tutorials/ECOM%20Solar%20Radiation%20Pressure.ipynb) walks through the fit, the prediction and the constellation benchmark with plots.
+Fitting an initial state plus the reduced 5-parameter ECOM to 3 days of IGS final GPS orbits (`python/examples/ecom_gps_validation.py`, 12×12 gravity, no a-priori box-wing) reproduces the orbit at the accuracy of the IGS product itself — 5 cm 3D RMS versus 3.8 m for the cannonball — and predicts the next 24 h to a median 6–7 cm 3D across the constellation (2-day fits, ten satellites), against ~5 cm for the IGS ultra-rapid predicted product and 8–10 cm reported by [Duan & Hugentobler (2021)](references.md#duan2021) from 3-day arcs with a full analysis-centre force model. Beyond a few days the error grows along-track roughly as $t^2$: ~0.9 m at 7 days, 10 m after ~12 days and ~95 m at 30 days from a 3-day fit (~15 days and ~60 m from a 7-day fit), because the true coefficients drift with the Sun elevation angle β over weeks — which is exactly why analysis centres re-estimate them every day. Constant ECOM coefficients are a short-arc (days) model, not a month-long one. The [worked example notebook](../tutorials/ECOM%20Solar%20Radiation%20Pressure.ipynb) walks through the fit, the prediction and the constellation benchmark with plots.
 
 ## Practical notes
 
- SP3 epochs are in GPS time (`scale=timescale.GPS`), not UTC — reading them as UTC rotates the truth by 18 s of Earth rotation relative to the Sun/Moon geometry and quadruples the fit residual. And for fits whose arcs cross Earth's shadow, use `integrator = gauss_jackson8`. The adaptive Runge–Kutta steppers integrate through eclipses without trouble, but where their steps fall relative to the shadow edges shifts with every small change of the initial state, so the propagated orbit is not a smooth function of it: over 3 days of G08 (7 % in shadow) at 1e-11 tolerance the end position wanders by ~4 cm, against 0.003 mm on the fixed Gauss–Jackson grid or without eclipses. That noise corrupts finite-difference Jacobians (an `rkv98` fit of G08 stalls at 5.6 m RMS), while Gauss–Jackson 8 fits the eclipsing satellite as well as any other (4.7 cm fit, 5.6 cm at 24 h). Plain propagation through eclipses is fine with either integrator.
+SP3 epochs are in GPS time (`scale=timescale.GPS`), not UTC — reading them as UTC rotates the truth by 18 s of Earth rotation relative to the Sun/Moon geometry and quadruples the fit residual. And for fits whose arcs cross Earth's shadow, use `integrator = gauss_jackson8`. The adaptive Runge–Kutta steppers integrate through eclipses without trouble, but where their steps fall relative to the shadow edges shifts with every small change of the initial state, so the propagated orbit is not a smooth function of it: over 3 days of G08 (7 % in shadow) at 1e-11 tolerance the end position wanders by ~4 cm, against 0.003 mm on the fixed Gauss–Jackson grid or without eclipses. That noise corrupts finite-difference Jacobians (an `rkv98` fit of G08 stalls at 5.6 m RMS), while Gauss–Jackson 8 fits the eclipsing satellite as well as any other (4.7 cm fit, 5.6 cm at 24 h). Plain propagation through eclipses is fine with either integrator.
 
 ## See Also
 

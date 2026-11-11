@@ -131,15 +131,7 @@ print(f"Delta-v at arrival:   {dv2:.1f} m/s")
 print(f"Total delta-v:        {dv1 + dv2:.1f} m/s")
 ```
 
-### Parameters
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `r1` | array (3,) | *required* | Departure position vector (meters) |
-| `r2` | array (3,) | *required* | Arrival position vector (meters) |
-| `tof` | float | *required* | Time of flight (seconds), must be positive |
-| `mu` | float | Earth $\mu$ | Gravitational parameter (m$^3$/s$^2$) |
-| `prograde` | bool | `True` | Prograde (counterclockwise) or retrograde transfer |
+The arguments are documented in the [API reference](../api/lambert.md).
 
 ### Return Value
 
@@ -147,17 +139,6 @@ A list of `(v1, v2)` tuples, where `v1` and `v2` are 3-element numpy arrays repr
 
 `ValueError` is raised for a NaN or infinite input, a non-positive `tof` or `mu`, a zero position, `r1 == r2` (the transfer is undefined), or if the zero-revolution iteration does not converge. In Rust these are the variants of `lambert::Error`.
 
-## Applications
-
-- **Orbit transfer design**: compute the delta-v budget for orbit maneuvers
-- **Rendezvous planning**: determine phasing and approach trajectories
-- **Interplanetary trajectories**: by using the Sun's $\mu$ and heliocentric positions
-- **Pork-chop plots**: sweep over departure/arrival dates to find optimal launch windows
-- **Initial orbit determination**: given multiple position observations, estimate the orbit
-
 ## References
 
-- [Izzo, D. (2015)](references.md#izzo2015), "Revisiting Lambert's problem," *Celestial Mechanics and Dynamical Astronomy*, 121(1), 1–15. <https://doi.org/10.1007/s10569-014-9587-y>
-- [Lancaster, E. R., & Blanchard, R. C. (1969)](references.md#lancaster1969), *A Unified Form of Lambert's Theorem*, NASA TN D-5368.
-- [Battin, R. H. (1999)](references.md#battin1999), *An Introduction to the Mathematics and Methods of Astrodynamics*, revised ed., AIAA Education Series. <https://doi.org/10.2514/4.861543>
-- [Vallado, D. A. (2013)](references.md#vallado2013), *Fundamentals of Astrodynamics and Applications*, 4th ed., Microcosm Press, Chapter 7.
+[Izzo (2015)](references.md#izzo2015), the algorithm; [Lancaster & Blanchard (1969)](references.md#lancaster1969) and [Battin (1999)](references.md#battin1999), the formulation; [Vallado (2013)](references.md#vallado2013), Chapter 7.

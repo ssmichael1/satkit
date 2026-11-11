@@ -6,8 +6,6 @@ This page covers the state representation used by satkit's numerical propagator,
 
 The propagator integrates a 6-dimensional state $\vec{s} = (\vec{p}, \vec{v})$ — position and velocity in the GCRF (inertial) frame, in SI units. The free function [`satkit.propagate()`](../api/satprop.md) operates directly on these 6-vectors.
 
-For most workflows the higher-level [`satstate`](../api/satstate.md) class is more ergonomic — it bundles state with time, optional covariance, optional maneuvers, and a `propagate()` method that handles everything automatically.
-
 ## State Transition Matrix
 
 The state transition matrix $\Phi$ describes the partial derivative of propagated state with respect to initial state:
@@ -26,7 +24,7 @@ Pass `output_phi=True` to [`satkit.propagate()`](../api/satprop.md) to compute i
 
 ## The `satstate` Class
 
-Compare:
+For most workflows the higher-level [`satstate`](../api/satstate.md) class is more ergonomic than the free function: it bundles state with time, optional covariance, optional maneuvers, and a `propagate()` method that handles everything automatically. Compare:
 
 | Feature | `propagate()` | `satstate.propagate()` |
 |---|---|---|
@@ -85,7 +83,7 @@ diagonal in one is not diagonal in the other. The
 [Covariance Propagation](../tutorials/Covariance Propagation.ipynb) tutorial
 compares them on an eccentric orbit.
 
-Supported uncertainty frames are `GCRF`, `RTN` (= RSW = RIC), `NTW`, and `LVLH`. See the [Maneuver Coordinate Frames](maneuver_frames.md) guide for a side-by-side comparison and guidance on which to use.
+Uncertainties and maneuvers accept `GCRF`, `RTN` (= RSW = RIC), `NTW` and `LVLH`; the [Maneuver Coordinate Frames](maneuver_frames.md) guide compares them and says which to use.
 
 ### Impulsive Maneuvers
 
@@ -111,13 +109,6 @@ new_state = sat.propagate(sat.time + sk.duration.from_hours(3))
 ```
 
 Multiple maneuvers can be added and will be applied in chronological order. Backward propagation reverses the maneuvers automatically.
-
-Supported maneuver frames are `frame.GCRF`, `frame.RTN` (a.k.a. RSW, RIC),
-`frame.NTW`, and `frame.LVLH`. For circular orbits the three non-inertial
-frames are equivalent; for eccentric orbits they differ by the flight-path
-angle in ways that matter for precision maneuver planning. See the
-[Maneuver Coordinate Frames](maneuver_frames.md) guide for a detailed
-comparison and recommendations on which frame to use.
 
 ## See Also
 

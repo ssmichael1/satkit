@@ -57,10 +57,8 @@ earlier may hold only CelesTrak's `EOP-All.csv`, which satkit no longer reads;
 it does not count as an EOP file.
 
 **Impact.** Polar motion, $\Delta UT1$ and the celestial-pole offsets are
-treated as zero. $\Delta UT1$ is kept within 0.9 s (up to ~13″ of Earth
-rotation) and polar motion is up to ~0.6″, so Earth-fixed frame transforms are
-off by up to ~12″ over the file's history (~10″ since 2000, typically ~3″),
-i.e. hundreds of metres at LEO.
+treated as zero, so Earth-fixed frame transforms are off by up to ~12″
+(typically ~3″), i.e. hundreds of metres at LEO.
 `propagate()` refuses to run rather than integrate with a mis-oriented
 gravity field (`RuntimeError: no Earth Orientation Parameters (EOP) table is loaded ...`).
 
@@ -112,8 +110,8 @@ and `python -W ignore` have no effect.
 **Python.** The records go to the `logging` module, as children of the
 `satkit` logger. With logging not configured, WARNING records reach stderr
 through `logging`'s last-resort handler (the message alone; in Jupyter a
-stderr block under the cell), as they did before 0.24. To silence them all, or
-only those of one module:
+stderr block under the cell). To silence them all, or only those of one
+module:
 
 ```python
 import logging
@@ -143,7 +141,7 @@ sk.frametransform.disable_eop_time_warning()
 sk.spaceweather.disable_space_weather_time_warning()
 ```
 
-and `SATKIT_QUIET=1` still suppresses the gravity-model and IERS-table
+and `SATKIT_QUIET=1` suppresses the gravity-model and IERS-table
 warnings. Silencing a warning does not change the result: prefer refreshing
 the data, or checking `eop_status(t)` / `spaceweather.status(t)` explicitly.
 
@@ -157,12 +155,9 @@ ages from the day it was written.
 
 **Fix.** Run `sk.utils.update_datafiles()` periodically (it is cheap: see
 [below](#update_datafiles-says-no-request-made-how-do-i-force-a-refresh)).
-The fresh files go to `sk.utils.datadir()`. When several copies of one of
-these files exist across the search directories, satkit uses the one whose
-table runs latest (for `finals2000A.all`, the latest observed row), so an old
-copy elsewhere does not shadow the refreshed one. The GFZ / SWPC / MSAFE files
-are also preferred over an older CelesTrak `SW-All.csv`. See
-[Data Directories](datadirs.md).
+The fresh files go to `sk.utils.datadir()`, and an older copy in another
+search directory does not shadow them. See
+[Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
 
 ## Data files and downloads
 
@@ -172,16 +167,11 @@ Downloads are written to exactly one directory, `sk.utils.datadir()`:
 `SATKIT_DATA` if set, else the directory given to `sk.utils.set_datadir()`,
 else the platform user-data directory (`~/Library/Application Support/satkit-data`
 on macOS, `~/.local/share/satkit-data` on Linux, `%LOCALAPPDATA%\satkit-data`
-on Windows). Files are looked up across `sk.utils.data_search_dirs()` and used
-from the first directory that contains them — except the Earth-orientation and
-space-weather files, where the copy whose data runs latest is used, so a stale
-copy in an earlier directory (an `add_search_dir()` directory, say) does not
-shadow a refreshed one in `datadir()`. Nothing is ever written inside `site-packages`. Full table: [Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
-
-What needs no data directory at all: the IERS nutation tables and the EGM96 /
-EGM2008 / JGM-2 / JGM-3 gravity models are compiled in, so SGP4, time scales,
-gravity, Keplerian propagation and Lambert targeting work straight after install.
-See [Data Files](datafiles.md).
+on Windows). Files are looked up across `sk.utils.data_search_dirs()`; the
+order, and which copy wins when there are several, is in
+[Data Directories](datadirs.md#where-satkit-looks-for-data-and-where-it-writes).
+Nothing is ever written inside `site-packages`, and much of satkit needs no
+data directory at all: see [Data Files](datafiles.md).
 
 ### The first `propagate()` or ephemeris query takes a long time
 
@@ -317,7 +307,7 @@ Pre-built wheels exist for CPython 3.11–3.15 on Linux x86_64 and aarch64
 builds the source distribution, which needs a stable Rust toolchain
 ([rustup](https://rustup.rs)): Intel Macs (use conda-forge, or
 `pip install --no-binary satkit satkit`), Alpine and other musl images, and
-Python 3.9 or older, which is not supported. See [Installation](installation.md).
+Python 3.10 or older, which is not supported (satkit 0.23.x is the last release for 3.10). See [Installation](installation.md).
 
 ### Should I use pip or conda?
 
@@ -329,22 +319,18 @@ behaves identically, and it also builds for Intel Macs. See
 
 ### `DeprecationWarning: time.as_mjd() is deprecated since 0.23 ...`
 
-In 0.23 the Python `as_*` conversion methods were renamed `to_*`, to pair with
-the `from_*` constructors. The old names still work but warn. The deprecated
-names below that are **removed in 0.25**:
-
-| deprecated | use |
-|---|---|
-| `time.as_date()`, `as_gregorian()`, `as_datetime()`, `as_mjd()`, `as_jd()`, `as_unixtime()`, `as_iso8601()`, `as_rfc3339()` | `to_date()`, `to_gregorian()`, `to_datetime()`, `to_mjd()`, `to_jd()`, `to_unixtime()`, `to_iso8601()`, `to_rfc3339()` |
-| `quaternion.as_rotation_matrix()`, `as_euler()` | `to_rotation_matrix()`, `to_euler()` |
-| `frametransform.eop_source()` (deprecated in 0.24; the table is always `finals2000A.all`) | `frametransform.eop_coverage()`, which is `None` when no table is loaded |
+In 0.23 the Python `as_*` conversion methods of `time` and `quaternion` were
+renamed `to_*`, to pair with the `from_*` constructors. The old names still
+work but warn, and are **removed in 0.25**, as is
+`frametransform.eop_source()` (use `eop_coverage()`); the full list is in
+[Migrating to 0.24](../migration.md#python-api).
 
 These warn but have no removal date:
 
 | deprecated | use |
 |---|---|
 | `time.datetime()` | `time.to_datetime()` |
-| `kepler.w` (property) | `kepler.argp` (`w` is kept indefinitely, with a warning attributed to your line) |
+| `kepler.w` (property) | `kepler.argp` |
 
 Python hides `DeprecationWarning` outside `__main__` by default; run with
 `python -W error::DeprecationWarning` to find every remaining call.
@@ -356,20 +342,18 @@ TypeError: satproperties() takes keyword arguments only: cdaoverm=, craoverm=, t
 TypeError: propsettings.__new__() got an unexpected keyword argument 'gravity_degre'
 ```
 
-Since 0.24 `satproperties()` is keyword-only: write
+`satproperties()` is keyword-only: write
 `sk.satproperties(cdaoverm=..., craoverm=...)`. Through 0.23 two positional
-arguments were bound as `(craoverm, cdaoverm)`, the reverse of the docs, so
-results from old positional calls had drag and radiation pressure swapped and
-are worth re-checking. The keyword arguments of `duration()`, `propsettings()`,
-`itrfcoord()`, `sgp4()`, `propagate()`, `satstate.propagate()`, `gravity()`,
-`gravity_and_partials()` and `nrlmsise00()` are real Python keyword arguments
-too, so a misspelt one raises `TypeError` (it was `ValueError` through 0.23).
-See [Migrating to 0.24](../migration.md).
+arguments were bound as `(craoverm, cdaoverm)`, so results from old
+positional calls had drag and radiation pressure swapped and are worth
+re-checking. A misspelt keyword to any satkit function raises `TypeError` (it
+was `ValueError` through 0.23). See
+[Migrating to 0.24](../migration.md#python-api).
 
 ### `AttributeError: 'list' object has no attribute 'epoch'` after loading a TLE
 
 `TLE.from_lines()`, `TLE.from_file()` and `TLE.from_url()` return a list,
-even for one element set (since 0.24). Take the first one:
+even for one element set. Take the first one:
 `tle = sk.TLE.from_lines(lines)[0]`. See
 [Loading TLEs](../guide/tle.md#loading-tles).
 
@@ -400,9 +384,9 @@ print(len(tles), "loaded;", len(skipped), "skipped")
 ### `TypeError: 'float' object is not callable` (or `'int'`, or `'satkit.weekday'`)
 
 A zero-argument member that describes the object is a **property** — call it
-without parentheses. Since 0.22.1 this includes `quaternion.norm`,
-`time.day_of_year`, `time.weekday` and `tlefitstatus.converged`, alongside
-`quaternion.angle` and `propresult.can_interp`:
+without parentheses. This includes `quaternion.norm`, `quaternion.angle`,
+`time.day_of_year`, `time.weekday`, `tlefitstatus.converged` and
+`propresult.can_interp`:
 
 ```python
 q = sk.quaternion.rotz(0.1)
@@ -410,7 +394,7 @@ t = sk.time(2024, 1, 1)
 q.norm, t.day_of_year, t.weekday   # not q.norm(), t.day_of_year(), t.weekday()
 ```
 
-The reverse also changed: `quaternion.conj` and `quaternion.conjugate` are
+Conversely, `quaternion.conj` and `quaternion.conjugate` are
 **methods** (`q.conj()`), like `q.inverse()`. Without the parentheses you get
 the bound method, and using it fails with
 `TypeError: unsupported operand type(s) for *: 'builtin_function_or_method' and ...`.
@@ -529,7 +513,7 @@ defaults are a quick, not a high-fidelity, configuration:
 - **Drag and solar radiation pressure** are only applied when you pass
   `satproperties=sk.satproperties(cdaoverm=..., craoverm=...)`; without it
   neither force is included. Drag is skipped above ~1,000 km altitude.
-- **Space weather and EOP** follow the tables above: past their coverage the
+- **Space weather and EOP**: past their [coverage](datacoverage.md) the
   inputs are forecasts or held constant.
 
 See the [Force Model](../guide/forces.md) guide and

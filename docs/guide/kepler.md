@@ -24,13 +24,12 @@ parameter of the body they orbit:
 The size and shape of the ellipse are $a$ and $e$; the orientation of the
 orbital plane and of the ellipse within it are $i$, $\Omega$ and $\omega$; and
 $\nu$ locates the satellite along the ellipse at the epoch of the elements.
-The semiparameter (semi-latus rectum) $p = a(1 - e^2)$ is available as a
-derived property, but the class is constructed from $a$, not $p$.
+The class is constructed from $a$, not from the semiparameter $p$, which is
+a [derived property](#derived-quantities).
 
 In Python the inclination property is spelled `inclination`; the constructor
-argument and the Rust field are `incl`. The argument of periapsis was called
-`w` before 0.22; in Python `w` still works as a constructor keyword and as a
-property (kept indefinitely), with a `DeprecationWarning`. Angles returned by `from_pv` are
+argument and the Rust field are `incl`. In Python the old name `w` for
+`argp` still works, with a `DeprecationWarning`. Angles returned by `from_pv` are
 reduced to $[0, 2\pi)$; angles you set are stored as given.
 
 ### Validation
@@ -72,13 +71,13 @@ set, taken as GCRF at `time`.
 Three angles can locate the satellite in its orbit
 ([Vallado 2013](references.md#vallado2013), §2.2):
 
-- **True anomaly** $\nu$ — the angle at the focus (Earth's center) from
-  perigee to the satellite. This is what is stored (`nu`).
+- **True anomaly** $\nu$ — the angle at the focus from periapsis to the
+  satellite. This is what is stored (`nu`).
 - **Eccentric anomaly** $E$ — the angle at the *center* of the ellipse to the
   point on the auxiliary circle above the satellite. Related to $\nu$ by
   $\tan\frac{\nu}{2} = \sqrt{\frac{1+e}{1-e}}\tan\frac{E}{2}$.
 - **Mean anomaly** $M$ — the angle that advances uniformly in time,
-  $M = M_0 + n\,(t - t_0)$ with mean motion $n = \sqrt{\mu / a^3}$. Related to
+  $M = M_0 + n\,(t - t_0)$ with mean motion $n$. Related to
   $E$ by Kepler's equation $M = E - e\sin E$.
 
 Converting $M \to E$ requires solving Kepler's equation iteratively. `satkit`
@@ -114,7 +113,7 @@ state produces elements that are numerically valid but physically
 meaningless.
 
 **Central body.** Each element set carries its own $\mu$. By default it is
-the Earth's, [`consts.MU_EARTH`](../api/consts.md) ($3.986004418 \times
+the Earth's, [`consts.mu_earth`](../api/consts.md) ($3.986004418 \times
 10^{14}$ m³ s⁻²), and it is used everywhere: in the `from_pv` energy
 equation, in `to_pv`, and in the mean motion, period and `propagate`. For a
 lunar or heliocentric orbit pass `mu=` to the constructor or to `from_pv`
@@ -125,9 +124,8 @@ state read with Earth's $\mu$ yields a valid-looking but wrong ellipse.
 
 **Closed orbits only.** `from_pv` returns an error (Python: `ValueError`)
 for parabolic or hyperbolic states ($e \ge 1$) and for rectilinear states
-(zero angular momentum, where the orbital plane is undefined). The Python
-constructor and `Kepler::try_new` reject $e \ge 1$ up front (see
-[Validation](#validation)).
+(zero angular momentum, where the orbital plane is undefined); see
+[Validation](#validation) for the constructors.
 
 **Singular cases.** $\Omega$ is undefined for an equatorial orbit and $\omega$
 for a circular one. `from_pv` follows the conventions of
@@ -195,35 +193,8 @@ combinations directly in every case.
 
 === "Rust"
 
-    ```rust
-    use satkit::kepler::{Anomaly, Kepler};
-    use satkit::Duration;
-
-    let k = Kepler::new(
-        7000.0e3,                 // a, m
-        0.001,                    // eccen
-        98.0_f64.to_radians(),    // incl
-        45.0_f64.to_radians(),    // raan
-        0.0,                      // argp
-        Anomaly::Mean(30.0_f64.to_radians()),
-    );
-    println!("period = {:.2} min, nu = {:.3} deg",
-             k.period() / 60.0, k.nu.to_degrees());
-
-    // Elements -> state -> elements
-    let (r, v) = k.to_pv();
-    let k2 = Kepler::from_pv(r, v)?;
-    assert!((k2.a - k.a).abs() < 1e-3);
-
-    // Two-body propagation by a quarter period
-    let k3 = k.propagate(&Duration::from_seconds(k.period() / 4.0));
-    println!("M after T/4 = {:.3} deg", k3.mean_anomaly().to_degrees());
-    # Ok::<(), satkit::kepler::Error>(())
-    ```
-
     A complete program, with Lambert targeting: [Kepler and Lambert](../rust/kepler-lambert.md).
 
 ## References
 
-- [Vallado, D. A. (2013)](references.md#vallado2013), *Fundamentals of Astrodynamics and Applications*, 4th ed., Microcosm Press. Algorithm 2 (Kepler's equation), Algorithm 9 (RV2COE), Algorithm 10 (COE2RV); §2.2–2.5.
-- [Danby, J. M. A. (1987)](references.md#danby1987), "The solution of Kepler's equation, III," *Celestial Mechanics*, 40, 303–312. <https://doi.org/10.1007/BF01235847>
+[Vallado (2013)](references.md#vallado2013), §2.2–2.5 and Algorithms 2 (Kepler's equation), 9 (RV2COE) and 10 (COE2RV); [Danby (1987)](references.md#danby1987) for the starting value.

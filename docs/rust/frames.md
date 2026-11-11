@@ -4,7 +4,7 @@ Rotations between frames are unit quaternions (`satkit::Quaternion`); applying o
 
 ## Rotations: `frametransform`
 
-The `Frame` enum names the frames: `ITRF`, `TIRS`, `CIRS`, `GCRF`, `EME2000`, `ICRF`, `TEME`, and the orbit-local `RTN`, `NTW` and `LVLH`. Three functions in [`frametransform`](https://docs.rs/satkit/latest/satkit/frametransform/) cover every pair:
+The `Frame` enum names the frames: `ITRF`, `TIRS`, `CIRS`, `GCRF`, `EME2000`, `ICRF`, `TEME`, and the orbit-local `RTN`, `NTW` and `LVLH`. Four functions in [`frametransform`](https://docs.rs/satkit/latest/satkit/frametransform/) cover every pair:
 
 | Function | Frames | Returns |
 |---|---|---|

@@ -50,3 +50,5 @@ sk.frametransform.gmst(np.datetime64("2024-01-01T12:00:00.5"))  # scalars work t
 ::: satkit.time
 
 ::: satkit.duration
+
+::: satkit.weekday
