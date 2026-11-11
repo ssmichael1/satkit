@@ -197,7 +197,9 @@ class TestSGP4:
         assert omms[0]["RCS_SIZE"] is None
 
         f = tmp_path / "gp.csv"
-        f.write_text(buf.getvalue())
+        # newline="": the csv module already wrote CRLF line ends
+        with open(f, "w", newline="") as fh:
+            fh.write(buf.getvalue())
         assert sk.omm_from_file(str(f)) == ref
         # A CSV record propagates like the JSON one
         t = sk.time(omms[0]["EPOCH"])
