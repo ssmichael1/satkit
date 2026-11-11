@@ -9,6 +9,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 - `TLE.from_lines`, `TLE.from_file` and `TLE.from_url` take `on_error="raise" | "warn" | "skip"`: `"warn"` and `"skip"` keep the good element sets of a file with bad ones, `"warn"` reporting each one left out as a `satkit.TLEWarning`; Rust gains `TLE::records_from_url`, the per-record form of `from_url` ([#287](https://github.com/ssmichael1/satkit/pull/287))
 - OMM CSV: `omm_from_text`, `omm_from_file` and `omm_from_url` (Rust `OMM::from_text`, `from_file`, `from_url`, and the new `OMM::from_csv_string`) read the header-row-plus-one-row-per-object table CelesTrak and Space-Track serve, which is what a CelesTrak GP query returns when no `FORMAT` is given ([#288](https://github.com/ssmichael1/satkit/pull/288))
 
+### Fixed
+
+- Docs: a guide section on catalog numbers above 99,999 (Alpha-5, CelesTrak's 404 for TLEs, OMM as the format to use), troubleshooting entries for that 404 and for one bad line losing a TLE file, CSV in the OMM tutorial, and that tutorial's XML example, whose code cell had been overwritten with a copy of the next one ([#289](https://github.com/ssmichael1/satkit/pull/289))
+
 ## 0.24.2 - 2026-11-02
 
 Results that change from 0.24.1 are marked "0.24.2" in [Migrating to 0.24](https://satkit.dev/migration/).
