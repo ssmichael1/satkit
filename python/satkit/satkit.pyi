@@ -86,19 +86,19 @@ class TLE:
         check_checksum: bool = False,
         on_error: Literal["raise", "warn", "skip"] = "raise",
     ) -> list[TLE]:
-        """Load TLEs from a text file, parsed as :meth:`TLE.from_lines` does
+        """Load TLEs from a text file, parsed as ``TLE.from_lines`` does
 
         Args:
             filename (str): name of the text file holding the TLE lines
-            check_checksum (bool, optional): as in :meth:`TLE.from_lines`
-            on_error (str, optional): as in :meth:`TLE.from_lines`
+            check_checksum (bool, optional): as in ``TLE.from_lines``
+            on_error (str, optional): as in ``TLE.from_lines``
 
         Returns:
             list[TLE]: one TLE per element set in the file
 
         Raises:
             ValueError: if the file holds no TLEs
-            RuntimeError: if a record fails to parse; see :meth:`TLE.from_lines`
+            RuntimeError: if a record fails to parse; see ``TLE.from_lines``
 
         Example:
             ```python
@@ -118,7 +118,7 @@ class TLE:
     ) -> list[TLE]:
         """Load TLEs from a list of lines
 
-        :meth:`TLE.from_file` and :meth:`TLE.from_url` parse their text the
+        ``TLE.from_file`` and ``TLE.from_url`` parse their text the
         same way. See the class docstring for an example.
 
         Args:
@@ -130,7 +130,7 @@ class TLE:
             on_error (str, optional): what to do with a record that fails to
                 parse: ``"raise"`` (default) raises ``RuntimeError`` at the
                 first one; ``"warn"`` leaves it out and emits a
-                :class:`TLEWarning` with the same message; ``"skip"`` leaves
+                ``TLEWarning`` with the same message; ``"skip"`` leaves
                 it out silently
 
         Returns:
@@ -169,13 +169,13 @@ class TLE:
     def from_url(
         url: str, *, on_error: Literal["raise", "warn", "skip"] = "raise"
     ) -> list[TLE]:
-        """Load TLEs from a URL, parsing the response as :meth:`TLE.from_lines` does
+        """Load TLEs from a URL, parsing the response as ``TLE.from_lines`` does
 
         Works with any URL that returns plain-text TLE data.
 
         Args:
             url (str): URL to fetch TLE data from
-            on_error (str, optional): as in :meth:`TLE.from_lines`
+            on_error (str, optional): as in ``TLE.from_lines``
 
         Returns:
             list[TLE]: one TLE per element set in the response
@@ -393,8 +393,8 @@ class TLE:
     def from_omm(omm: OMMDict) -> TLE:
         """Build a TLE from an OMM (Orbital Mean-Element Message) dictionary
 
-        The dictionary is the same shape :func:`sgp4` accepts: the flat CCSDS
-        keys of a Space-Track / CelesTrak JSON record (see :class:`OMMDict`),
+        The dictionary is the same shape ``sgp4`` accepts: the flat CCSDS
+        keys of a Space-Track / CelesTrak JSON record (see ``OMMDict``),
         or the nested ``meanElements`` / ``tleParameters`` groups of an
         XML-derived dict. Numbers may be strings.
 
@@ -422,9 +422,9 @@ class TLE:
     def to_omm(self) -> OMMDict:
         """Render this TLE as an OMM (Orbital Mean-Element Message) dictionary
 
-        The result uses the flat CCSDS keys (see :class:`OMMDict`) with
+        The result uses the flat CCSDS keys (see ``OMMDict``) with
         ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
-        revolutions per day, and can be passed back to :func:`sgp4` or
+        revolutions per day, and can be passed back to ``sgp4`` or
         serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
         international designator (``98067A`` becomes ``1998-067A``), and
         ``CLASSIFICATION_TYPE`` is the TLE's classification letter.
@@ -446,7 +446,7 @@ class TLE:
             2 canonical TLE Lines
 
         Raises:
-            ValueError: if ``sat_num`` is 340000 or above: Alpha-5 (used for
+            ValueError: if ``satnum`` is 340000 or above: Alpha-5 (used for
                 the 5-character satellite number field) ends at ``Z9999``
                 (339999), so the catalog number cannot be written to a TLE.
                 Use ``to_omm()`` instead.
@@ -496,16 +496,16 @@ class TLE:
             epoch: Epoch time for the TLE. Must be within range of times.
 
         Keyword Args:
-            gravconst: gravity model SGP4 uses in the fit.  Default is gravconst.wgs72
-            opsmode: SGP4 ops mode used in the fit.  Default is opsmode.afspc
+            gravconst: gravity model SGP4 uses in the fit.  Default is sgp4_gravconst.wgs72
+            opsmode: SGP4 ops mode used in the fit.  Default is sgp4_opsmode.afspc
 
         Returns:
             Fitted TLE and fitting results in a dictionary
 
         Notes:
             SGP4 propagator is used to match TLE to the states. The fitted TLE
-            reproduces the states when propagated with :func:`sgp4` under the same
-            ``gravconst`` and ``opsmode``; the defaults match :func:`sgp4`'s.
+            reproduces the states when propagated with ``sgp4`` under the same
+            ``gravconst`` and ``opsmode``; the defaults match ``sgp4``'s.
             satkit before 0.24 fitted with WGS84.
             Input GCRF states are rotated into TEME frame used by SGP4, with the
             full IERS 2010 rotation.
@@ -519,7 +519,7 @@ class TLE:
             built on top of the ``numeris`` linear algebra crate.
 
             The results dictionary includes the following keys:
-            ``status`` (a :class:`tlefitstatus`), ``converged`` (bool),
+            ``status`` (a ``tlefitstatus``), ``converged`` (bool),
             ``orig_norm``, ``best_norm``, ``grad_norm``, ``n_iter``,
             ``n_res_evals``.
 
@@ -582,14 +582,14 @@ def sgp4(
 
     Args:
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
-            ``TLE`` object, an OMM dictionary (see :class:`OMMDict`), or a list of either
+            ``TLE`` object, an OMM dictionary (see ``OMMDict``), or a list of either
             (or mixing both). Must be a ``list``; tuples and other sequences are not accepted
         time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity.
-            A naive ``datetime`` is local time, not UTC (see :meth:`time.from_datetime`)
+            A naive ``datetime`` is local time, not UTC (see ``time.from_datetime``)
 
     Keyword Args:
-        gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
-        opsmode (satkit.sgp4_opsmode): opsmode.afspc (Air Force Space Command) or opsmode.improved.  Default is opsmode.afspc
+        gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is sgp4_gravconst.wgs72
+        opsmode (satkit.sgp4_opsmode): sgp4_opsmode.afspc (Air Force Space Command) or sgp4_opsmode.improved.  Default is sgp4_opsmode.afspc
         errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
                         (this is likely rarely needed, but can be useful for debugging)
 
@@ -608,7 +608,7 @@ def sgp4(
             array of error codes, one per TLE and time — shape ``(1,)`` for a single
             TLE and time, ``(Ntime,)``, ``(Ntle,)`` or ``(Ntle, Ntime)`` otherwise.
             ``0`` is success. The codes are the integer values of
-            :class:`sgp4_error`, so comparing against the enum works
+            ``sgp4_error``, so comparing against the enum works
             elementwise: ``err == satkit.sgp4_error.success`` is a boolean array.
 
     Notes:
@@ -619,8 +619,8 @@ def sgp4(
         - **OMM dictionaries:** any dict with the CCSDS keys ``EPOCH``, ``MEAN_MOTION``,
           ``ECCENTRICITY``, ``INCLINATION``, ``RA_OF_ASC_NODE``, ``ARG_OF_PERICENTER`` and
           ``MEAN_ANOMALY`` (plus optional ``BSTAR``, ``MEAN_MOTION_DOT``, ``MEAN_MOTION_DDOT``)
-          is accepted, whether it came from :func:`omm_from_url` / :func:`omm_from_file` /
-          :func:`omm_from_text`, from ``json.load`` on a CelesTrak or Space-Track response
+          is accepted, whether it came from ``omm_from_url`` / ``omm_from_file`` /
+          ``omm_from_text``, from ``json.load`` on a CelesTrak or Space-Track response
           (numbers may be strings), or from ``xmltodict`` on the XML form (the nested
           ``meanElements`` / ``tleParameters`` groups are understood). ``EPOCH`` may be an
           RFC 3339 string, a CCSDS day-of-year string (``YYYY-DDDThh:mm:ss``), a ``satkit.time`` or a
@@ -964,7 +964,7 @@ class weekday:
 class tlefitstatus:
     """
     Termination status of the TLE non-linear least-squares fit performed by
-    :meth:`TLE.fit_from_states`.
+    ``TLE.fit_from_states``.
 
     Values:
 
@@ -1144,7 +1144,7 @@ class frame:
     RSW: ClassVar[frame]
     """Alias for ``frame.RTN`` — Vallado's name for the same orbital
     frame (Radial / S=Ŵ×R̂ / W=ĥ). ``frame.RSW == frame.RTN`` is True.
-    See [`RTN`][frame.RTN] for the axis definition.
+    See [`RTN`][satkit.frame.RTN] for the axis definition.
     """
 
     RIC: ClassVar[frame]
@@ -1152,7 +1152,7 @@ class frame:
     (Radial / In-track / Cross-track). ``frame.RIC == frame.RTN`` is
     True. Kept for backward compatibility with code written against
     earlier satkit versions where ``RIC`` was the canonical name. See
-    [`RTN`][frame.RTN] for the axis definition.
+    [`RTN`][satkit.frame.RTN] for the axis definition.
     """
 
     NTW: ClassVar[frame]
@@ -1290,11 +1290,11 @@ class time:
         """
         Create a "time" object from a string, guessing its format
 
-        RFC 3339 is tried first (see :meth:`from_rfc3339`). Otherwise the
+        RFC 3339 is tried first (see ``from_rfc3339``). Otherwise the
         numbers in the string are read in year, month, day, hour, minute,
         second order, so ISO-ordered strings (``"2024-01-04 13:14:12.123"``)
         and month-name strings (``"March 4 2024"``) work, but locale-ordered
-        dates such as ``MM/DD/YYYY`` are not supported: use :meth:`strptime`
+        dates such as ``MM/DD/YYYY`` are not supported: use ``strptime``
         for those.
 
         Args:
@@ -1313,7 +1313,7 @@ class time:
               ``UTC``, ...) are ignored, so a zone *name* is not applied:
               without a numeric offset the time is UTC.
             - This is probably not what you want. Use with caution, and prefer
-              :meth:`from_rfc3339` or :meth:`strptime` when the format is known.
+              ``from_rfc3339`` or ``strptime`` when the format is known.
 
         Returns:
             Time object representing input string
@@ -1351,7 +1351,7 @@ class time:
               requires one).
             - The year is four digits, or a sign and at least four digits
               (ISO 8601 expanded years such as ``-0001`` or ``+10000``, as
-              :meth:`to_rfc3339` writes them outside 0000-9999).
+              ``to_rfc3339`` writes them outside 0000-9999).
 
         Returns:
             Time object representing input RFC 3339 string
@@ -1388,7 +1388,7 @@ class time:
             - Format Codes:
                 - %Y - year: exactly four digits, or a sign and at least four
                   digits (ISO 8601 expanded years such as ``-0044`` or
-                  ``+10000``, as :meth:`strftime` writes them outside 0000-9999)
+                  ``+10000``, as ``strftime`` writes them outside 0000-9999)
                 - %m - month, exactly two digits (01-12)
                 - %d - day of month, exactly two digits (01-31)
                 - %H - hour, exactly two digits (00-23)
@@ -1466,7 +1466,7 @@ class time:
         """Return a time object representing input unixtime
 
         Args:
-            ut (float): unixtime, UTC seconds since Jan 1, 1970 00:00:00
+            unixtime (float): UTC seconds since Jan 1, 1970 00:00:00
                         (leap seconds are not included); rounded to the
                         nearest microsecond
 
@@ -1541,7 +1541,7 @@ class time:
 
     @deprecated("use to_date()")
     def as_date(self) -> tuple[int, int, int]:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_date`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_date``."""
         ...
 
     def to_gregorian(
@@ -1558,7 +1558,7 @@ class time:
 
     @deprecated("use to_gregorian()")
     def as_gregorian(self) -> tuple[int, int, int, int, int, float]:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_gregorian`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_gregorian``."""
         ...
 
     @staticmethod
@@ -1620,7 +1620,7 @@ class time:
         Args:
             utc (bool, optional): If True (default), return an aware datetime in UTC.
                 If False, return a naive datetime in the machine's local time zone,
-                which round-trips through :meth:`time.from_datetime`.
+                which round-trips through ``time.from_datetime``.
 
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object
@@ -1640,18 +1640,18 @@ class time:
 
     @deprecated("use to_datetime()")
     def as_datetime(self, utc: bool = True) -> datetime.datetime:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_datetime`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_datetime``."""
         ...
 
     def datetime(self, utc: bool = True) -> datetime.datetime:
-        """Deprecated: use :meth:`satkit.time.to_datetime`.
+        """Deprecated: use ``satkit.time.to_datetime``.
 
         Convert object to "datetime.datetime" object representing same instant in time.
 
         Args:
             utc (bool, optional): If True (default), return an aware datetime in UTC.
                 If False, return a naive datetime in the machine's local time zone,
-                which round-trips through :meth:`time.from_datetime`.
+                which round-trips through ``time.from_datetime``.
 
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object
@@ -1697,7 +1697,7 @@ class time:
 
     @deprecated("use to_mjd()")
     def as_mjd(self, scale: timescale = timescale.UTC) -> float:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_mjd`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_mjd``."""
         ...
 
     def to_jd(self, scale: timescale = timescale.UTC) -> float:
@@ -1714,7 +1714,7 @@ class time:
 
     @deprecated("use to_jd()")
     def as_jd(self, scale: timescale = timescale.UTC) -> float:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_jd`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_jd``."""
         ...
 
     def to_unixtime(self) -> float:
@@ -1732,7 +1732,7 @@ class time:
 
     @deprecated("use to_unixtime()")
     def as_unixtime(self) -> float:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_unixtime`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_unixtime``."""
         ...
 
     def to_iso8601(self) -> str:
@@ -1740,13 +1740,13 @@ class time:
         Represent time as ISO 8601 string
 
         Returns:
-            ISO 8601 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
+            ISO 8601 string representation of time: "YYYY-MM-DDTHH:MM:SS.ssssssZ"
         """
         ...
 
     @deprecated("use to_iso8601()")
     def as_iso8601(self) -> str:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_iso8601`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_iso8601``."""
         ...
 
     def to_rfc3339(self) -> str:
@@ -1754,13 +1754,13 @@ class time:
         Represent time as RFC 3339 string
 
         Returns:
-            RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.sssZ"
+            RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.ssssssZ"
         """
         ...
 
     @deprecated("use to_rfc3339()")
     def as_rfc3339(self) -> str:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`time.to_rfc3339`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``time.to_rfc3339``."""
         ...
 
     def strftime(self, format: str) -> str:
@@ -2100,7 +2100,7 @@ class duration:
         """Create duration object representing input number of seconds
 
         Args:
-            s (float): Number of seconds
+            seconds (float): Number of seconds
 
         Returns:
             Duration object representing input number of seconds
@@ -2119,7 +2119,7 @@ class duration:
         """Create duration object representing input number of minutes
 
         Args:
-            m (float): Number of minutes
+            minutes (float): Number of minutes
 
         Returns:
             Duration object representing input number of minutes
@@ -2131,7 +2131,7 @@ class duration:
         """Create duration object representing input number of hours
 
         Args:
-            h (float): Number of hours
+            hours (float): Number of hours
 
         Returns:
             Duration object representing input number of hours
@@ -2395,14 +2395,13 @@ class quaternion:
     computationally efficient way of representing 3D rotations.
     They can also be multiplied together and easily renormalized to
     avoid problems with floating-point precision eventually causing
-    changes in the rotated vecdtor norm.
+    changes in the rotated vector norm.
 
     For details, see:
 
     <https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation>
 
     Notes:
-        - Under the hood, this is using the "UnitQuaternion" object in the rust "nalgebra" crate.
     """
 
     @overload
@@ -2452,7 +2451,7 @@ class quaternion:
         """Return quaternion representing identical rotation to input 3x3 rotation matrix
 
         Args:
-            mat (npt.ArrayLike[np.float64]): 3x3 rotation matrix
+            dcm (npt.ArrayLike[np.float64]): 3x3 rotation matrix
 
         Returns:
             Quaternion representing identical rotation to input 3x3 rotation matrix
@@ -2464,7 +2463,7 @@ class quaternion:
         """Quaternion representing right-handed rotation of vector by "theta" radians about the xhat unit vector
 
         Args:
-            theta (float): angle of rotation in radians
+            theta_rad (float): angle of rotation in radians
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the xhat unit vector
@@ -2482,7 +2481,7 @@ class quaternion:
         """Quaternion representing right-handed rotation of vector by "theta" radians about the yhat unit vector
 
         Args:
-            theta (float): angle of rotation in radians
+            theta_rad (float): angle of rotation in radians
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the yhat unit vector
@@ -2501,7 +2500,7 @@ class quaternion:
         """Quaternion representing right-handed rotation of vector by "theta" radians about the zhat unit vector
 
         Args:
-            theta (float): angle of rotation in radians
+            theta_rad (float): angle of rotation in radians
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the zhat unit vector
@@ -2549,11 +2548,11 @@ class quaternion:
 
     @deprecated("use to_rotation_matrix()")
     def as_rotation_matrix(self) -> npt.NDArray[np.float64]:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`quaternion.to_rotation_matrix`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``quaternion.to_rotation_matrix``."""
         ...
 
     def to_euler(self) -> tuple[float, float, float]:
-        """Return equivalent rotation as intrinsic ZYX Euler angles (yaw, pitch, roll).
+        """Return equivalent rotation as intrinsic ZYX Euler angles, returned as (roll, pitch, yaw).
 
         The decomposition follows the aerospace convention (Tait-Bryan angles):
         the rotation is equivalent to first rotating by yaw about Z,
@@ -2572,7 +2571,7 @@ class quaternion:
 
     @deprecated("use to_euler()")
     def as_euler(self) -> tuple[float, float, float]:
-        """Deprecated since 0.23, removed in 0.25. Use :meth:`quaternion.to_euler`."""
+        """Deprecated since 0.23, removed in 0.25. Use ``quaternion.to_euler``."""
         ...
 
     @staticmethod
@@ -3356,7 +3355,7 @@ class consts:
     """Some constants that are useful for satellite dynamics"""
 
     wgs84_a: ClassVar[float]
-    """WGS-84 semiparameter, in meters"""
+    """WGS-84 semi-major axis (equatorial radius), in meters"""
 
     wgs84_f: ClassVar[float]
     """WGS-84 flattening, unitless"""
@@ -3409,7 +3408,7 @@ class consts:
     """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
 
     jgm3_a: ClassVar[float]
-    """Earth semiparameter from JGM3 gravity model, m"""
+    """Earth equatorial radius of the JGM3 gravity model, m"""
 
     jgm3_j2: ClassVar[float]
     """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
@@ -3423,7 +3422,7 @@ class satstate:
 
     Bundles a GCRF position/velocity with optional 6x6 covariance and a list
     of impulsive maneuvers into a single propagatable object. Use ``satstate``
-    instead of the free :func:`propagate` function when you need:
+    instead of the free ``propagate`` function when you need:
 
     - **Covariance propagation** -- attach uncertainty and it propagates
       automatically via the state transition matrix.
@@ -3433,7 +3432,7 @@ class satstate:
       the original state (maneuvers are reversed).
 
     For simple state-vector propagation without covariance or maneuvers,
-    :func:`propagate` is more direct.
+    ``propagate`` is more direct.
 
     This class supports ``pickle`` serialization (all fields including
     covariance and maneuvers are preserved).
@@ -3609,7 +3608,7 @@ class satstate:
     ) -> None:
         """Set 1-sigma velocity uncertainty in a satellite-local or inertial frame.
 
-        Analogous to :meth:`set_pos_uncertainty`, but for the velocity
+        Analogous to ``set_pos_uncertainty``, but for the velocity
         block of the 6x6 state covariance. Any existing position
         covariance is preserved.
 
@@ -3656,8 +3655,8 @@ class satstate:
                 documentation for a side-by-side comparison.
 
         See Also:
-            :meth:`add_prograde`, :meth:`add_retrograde`, :meth:`add_radial`,
-            :meth:`add_normal` for scalar-magnitude helpers that pick the frame
+            ``add_prograde``, ``add_retrograde``, ``add_radial``,
+            ``add_normal`` for scalar-magnitude helpers that pick the frame
             for you.
 
         Example:
@@ -4193,11 +4192,19 @@ class ecomparams:
         """Create ECOM coefficients (m/s² at 1 AU); all default to zero.
 
         Args:
-            d0, y0, b0 (float): constant D, Y, B terms
-            dc, ds (float): D cos φ, D sin φ
-            yc, ys (float): Y cos φ, Y sin φ
-            bc, bs (float): B cos φ, B sin φ
-            d2c, d2s, d4c, d4s (float): even D harmonics (ECOM2)
+            d0 (float): constant D term
+            y0 (float): constant Y term
+            b0 (float): constant B term
+            dc (float): D cos φ term
+            ds (float): D sin φ term
+            yc (float): Y cos φ term
+            ys (float): Y sin φ term
+            bc (float): B cos φ term
+            bs (float): B sin φ term
+            d2c (float): D cos 2φ term (ECOM2)
+            d2s (float): D sin 2φ term (ECOM2)
+            d4c (float): D cos 4φ term (ECOM2)
+            d4s (float): D sin 4φ term (ECOM2)
             sun_relative (bool): False → φ = argument of latitude (ECOM1);
                 True → φ = Δu from orbit noon (ECOM2)
         """
@@ -4257,7 +4264,7 @@ class ecomparams:
 
     @staticmethod
     def from_dict(d: dict[str, float | bool]) -> ecomparams:
-        """Build from a dict as produced by :meth:`to_dict`; missing keys default to zero / False"""
+        """Build from a dict as produced by ``to_dict``; missing keys default to zero / False"""
         ...
 
     def __eq__(self, other: object) -> bool: ...
@@ -4277,7 +4284,7 @@ class satproperties:
         thrusts (list[thrust]): List of continuous thrust arcs
         ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
             coefficients, added to the cannonball term (use ``craoverm=0``
-            for a pure ECOM model). See :class:`ecomparams` for the
+            for a pure ECOM model). See ``ecomparams`` for the
             conventions and the "ECOM Solar Radiation Pressure" tutorial
             for a fit against IGS GPS orbits.
 
@@ -4351,7 +4358,7 @@ class satproperties:
     def ecom(self) -> ecomparams | None:
         """ECOM solar-radiation-pressure coefficients, or None
 
-        When set, the ECOM acceleration (see :class:`ecomparams` for the
+        When set, the ECOM acceleration (see ``ecomparams`` for the
         DYB frame, sign and eclipse conventions) is added to the cannonball
         term ``craoverm``; use ``craoverm=0`` for a pure ECOM model. The
         "ECOM Solar Radiation Pressure" tutorial shows how to fit the
@@ -4492,7 +4499,7 @@ class propsettings:
             - integrator: integrator.rkv98
             - gj_step_seconds: 60.0
             - max_steps: 1_000_000
-        - enable_interp enables high-precision interpolation of state between begin and end times via the returned function,
+        - enable_interp enables high-precision interpolation of state between begin and end times via ``propresult.interp``,
           it is enabled by default.  There is a small increase in computational efficiency if set to false
 
     """
@@ -4946,16 +4953,16 @@ def omm_from_url(url: str) -> list[OMMDict]:
     """Load OMM(s) from a URL as a list of dictionaries
 
     Fetches the content at the given URL and auto-detects the format (JSON,
-    XML or CSV), as :func:`omm_from_text` does. A CelesTrak GP query with no
+    XML or CSV), as ``omm_from_text`` does. A CelesTrak GP query with no
     ``FORMAT`` answers in CSV.
-    Returns a list of dictionaries that can be passed directly to :func:`sgp4`.
+    Returns a list of dictionaries that can be passed directly to ``sgp4``.
 
     Args:
         url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
 
     Returns:
         list[OMMDict]: one dictionary per message, with every CCSDS field the
-            source provided plus its extra keys (see :class:`OMMDict`)
+            source provided plus its extra keys (see ``OMMDict``)
 
     Raises:
         RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
@@ -4975,7 +4982,7 @@ def omm_from_file(filename: str) -> list[OMMDict]:
     """Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
 
     The format is detected from the content, not the file extension, as
-    :func:`omm_from_text` does: a file starting with ``[`` or ``{`` is JSON
+    ``omm_from_text`` does: a file starting with ``[`` or ``{`` is JSON
     (one message or an array of them), one starting with ``<`` is a CCSDS
     NDM/XML document, and one whose first line holds a comma is a CSV table.
     KVN is not supported.
@@ -4984,7 +4991,7 @@ def omm_from_file(filename: str) -> list[OMMDict]:
         filename (str): path to the file
 
     Returns:
-        list[OMMDict]: one dictionary per message (see :class:`OMMDict`)
+        list[OMMDict]: one dictionary per message (see ``OMMDict``)
 
     Example:
         ```python
@@ -5014,7 +5021,7 @@ def omm_from_text(text: str) -> list[OMMDict]:
         text (str): the document
 
     Returns:
-        list[OMMDict]: one dictionary per message (see :class:`OMMDict`)
+        list[OMMDict]: one dictionary per message (see ``OMMDict``)
 
     Raises:
         RuntimeError: if the text is none of the three formats or is

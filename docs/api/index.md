@@ -9,6 +9,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`time`](time.md) | Representation of an instant in time with multiple time scales |
 | [`duration`](time.md#satkit.duration) | Time duration for arithmetic with `time` objects |
 | [`timescale`](time.md#satkit.timescale) | Enumeration of supported time scales (UTC, TAI, TT, etc.) |
+| [`weekday`](time.md#satkit.weekday) | Day of the week, as returned by `time.weekday` |
 
 ## Attitude & Coordinates
 
@@ -16,6 +17,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 |--------|-------------|
 | [`quaternion`](quaternion.md) | Unit quaternion for 3D rotations |
 | [`itrfcoord`](itrfcoord.md) | ITRF coordinate with geodetic ↔ Cartesian conversion |
+| [`geodetic`](itrfcoord.md#satkit.geodetic) | Geodetic latitude, longitude and height with named fields |
 | [`frame`](frame.md) | Coordinate reference frame identifier (GCRF, ITRF, RTN, NTW, LVLH, …) |
 | [`frametransform`](frametransform.md) | Coordinate frame rotation functions |
 
@@ -25,11 +27,16 @@ Python API documentation for satkit, auto-generated from type stubs.
 |--------|-------------|
 | [`TLE`](tle.md) | Two-Line Element set representation |
 | [`sgp4`](tle.md#satkit.sgp4) | SGP4 orbit propagation from TLE/OMM |
+| [`sgp4_error`](tle.md#satkit.sgp4_error), [`sgp4_gravconst`](tle.md#satkit.sgp4_gravconst), [`sgp4_opsmode`](tle.md#satkit.sgp4_opsmode) | SGP4 error codes, gravity constants and ops modes |
+| [`tlefitstatus`](tle.md#satkit.tlefitstatus) | Termination status of `TLE.fit_from_states` |
+| [`OMMDict`](tle.md#satkit.OMMDict) | The keys of an OMM dictionary |
 | [`omm_from_url`, `omm_from_file`, `omm_from_text`](tle.md#satkit.omm_from_url) | Read OMMs (JSON, XML, CSV) as dictionaries |
 | [`TLEWarning`](tle.md#satkit.TLEWarning) | Warning for a TLE record skipped with `on_error="warn"` |
 | [`propagate`](satprop.md) | High-precision numerical orbit propagation |
 | [`propresult`](satprop.md#satkit.propresult) | Propagation result: final state, dense-output interpolation, statistics |
 | [`propsettings`](satprop.md#satkit.propsettings) | Propagator configuration |
+| [`integrator`](satprop.md#satkit.integrator), [`tidemodel`](satprop.md#satkit.tidemodel) | Integrator and solid-tide model selection |
+| [`propstats`](satprop.md#satkit.propstats) | Step and force-evaluation counts of a propagation |
 | [`satproperties`](satprop.md#satkit.satproperties) | Drag, radiation-pressure (cannonball / ECOM) and thrust properties |
 | [`ecomparams`](satprop.md#satkit.ecomparams) | ECOM empirical solar-radiation-pressure coefficients |
 | [`thrust`](satprop.md#satkit.thrust) | Continuous-thrust arc |
@@ -48,6 +55,9 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`spaceweather`](spaceweather.md) | Space-weather indices ($F_{10.7}$, $A_p$) and their coverage |
 | [`gravity`](gravity.md) | Earth gravity acceleration |
 | [`gravmodel`](gravity.md#satkit.gravmodel) | Gravity model selection enum |
+| [`gravity_and_partials`](gravity.md#satkit.gravity_and_partials) | Gravity acceleration and its 3×3 position gradient |
+| [`nrlmsise00`](density.md#satkit.nrlmsise00) | NRLMSISE-00 density from altitude (km) and latitude / longitude (degrees) |
+| [`solarsystem`](jplephem.md#satkit.solarsystem) | Solar-system bodies for `jplephem` queries |
 | [`jplephem`](jplephem.md) | High-precision JPL planetary ephemerides |
 
 ## Utilities

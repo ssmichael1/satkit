@@ -10,7 +10,7 @@ pub struct Consts {}
 #[allow(non_upper_case_globals)]
 impl Consts {
     #[classattr]
-    ///  WGS-84 semiparameter, in meters
+    ///  WGS-84 semi-major axis (equatorial radius), in meters
     const wgs84_a: f64 = cconsts::WGS84_A;
 
     #[classattr]
@@ -73,7 +73,7 @@ impl Consts {
     #[classattr]
     const jgm3_mu: f64 = cconsts::JGM3_MU;
 
-    /// Earth semiparameter per JGM3 gravity model, meters
+    /// Earth equatorial radius of the JGM3 gravity model, meters
     #[classattr]
     const jgm3_a: f64 = cconsts::JGM3_A;
 

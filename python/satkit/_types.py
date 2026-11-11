@@ -14,12 +14,12 @@ __all__ = ["OMMDict"]
 class OMMDict(TypedDict, total=False):
     """An Orbital Mean-Element Message (OMM) as a plain dictionary
 
-    This is the shape returned by :func:`omm_from_url`, :func:`omm_from_file`,
-    :func:`omm_from_text` and :meth:`TLE.to_omm`, and accepted by :func:`sgp4`
-    and :meth:`TLE.from_omm`. It is an ordinary ``dict`` (this class exists for
+    This is the shape returned by ``omm_from_url``, ``omm_from_file``,
+    ``omm_from_text`` and ``TLE.to_omm``, and accepted by ``sgp4``
+    and ``TLE.from_omm``. It is an ordinary ``dict`` (this class exists for
     type checking only): the keys are the CCSDS 502.0-B-3 field names, so
     ``json.load`` on a Space-Track or CelesTrak JSON response produces one
-    directly. Every key is optional in the type; :func:`sgp4` needs ``EPOCH``
+    directly. Every key is optional in the type; ``sgp4`` needs ``EPOCH``
     and the six mean elements.
 
     Units follow the TLE convention: angles in degrees, ``MEAN_MOTION`` in
@@ -29,7 +29,7 @@ class OMMDict(TypedDict, total=False):
     m², ``BTERM`` and ``AGOM`` in m²/kg.
 
     The loaders return numbers as ``float`` / ``int`` (Space-Track quotes them
-    as strings in its JSON; :func:`sgp4` accepts either), ``EPOCH`` as an
+    as strings in its JSON; ``sgp4`` accepts either), ``EPOCH`` as an
     RFC 3339 string, absent optional fields omitted, and every key that is not
     a CCSDS field (Space-Track's ``OBJECT_TYPE``, ``RCS_SIZE``, ``LAUNCH_DATE``,
     ``TLE_LINE1``, ...; XML ``USER_DEFINED`` parameters; extra CSV columns, as

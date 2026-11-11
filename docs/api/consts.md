@@ -8,6 +8,7 @@
 | `mu_earth`, `mu_moon`, `mu_sun`, `GM`, `jgm3_mu` | m³/s² |
 | `omega_earth` | rad/s |
 | `c` | m/s |
+| `solar_pressure_1au` | N/m² |
 | `wgs84_f`, `earth_moon_mass_ratio`, `jgm3_j2` | unitless |
 
 ::: satkit.consts

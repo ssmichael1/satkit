@@ -74,7 +74,7 @@ def barycentric_pos(
     Notes:
      - Positions for all bodies are natively relative to solar system barycenter,
        with exception of moon, which is computed in Geocentric system
-     - EMB (2) is the Earth-Moon barycenter
+     - EMB is the Earth-Moon barycenter
      - The sun position is relative to the solar system barycenter
        (it will be close to origin)
     """
@@ -120,7 +120,7 @@ def barycentric_state(
     Notes:
      - Positions for all bodies are natively relative to solar system barycenter,
        with exception of moon, which is computed in Geocentric system
-     - EMB (2) is the Earth-Moon barycenter
+     - EMB is the Earth-Moon barycenter
      - The sun position is relative to the solar system barycenter
        (it will be close to origin)
 

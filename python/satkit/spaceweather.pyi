@@ -47,7 +47,7 @@ def get(time: TimeScalar) -> dict:
 
         Fields not yet published for predicted (future) rows are ``-1``.
         MSAFE ``"PRM"`` rows carry a climatological daily Ap in every ``ap``
-        slot and ``-1`` for ``kp``. Use :func:`coverage` / :func:`status` to
+        slot and ``-1`` for ``kp``. Use ``coverage`` / ``status`` to
         check which regime an epoch is in before propagating.
 
     Raises:
@@ -81,7 +81,7 @@ def init_from_path(path: str | os.PathLike) -> None:
 def init_from_bytes(data: bytes) -> None:
     """Load the space-weather table from bytes, replacing whatever is loaded
 
-    Same formats as :func:`init_from_path`.
+    Same formats as ``init_from_path``.
 
     Args:
         data (bytes): File contents
@@ -128,7 +128,7 @@ def disable_space_weather_time_warning() -> None:
     NRLMSISE-00 has to take its default for (an epoch before the table starts,
     or F10.7 before 1947). Each is shown at most once per process; this
     suppresses all of them. They are logged to the ``satkit.spaceweather``
-    logger; silencing that logger (or ``satkit``) with :mod:`logging` works
+    logger; silencing that logger (or ``satkit``) with ``logging`` works
     too.
     """
     ...

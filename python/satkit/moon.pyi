@@ -16,7 +16,7 @@ class moonphase:
     """
     Enum representing moon phases
 
-    Each value covers a range of the moon phase angle (see :func:`phase`),
+    Each value covers a range of the moon phase angle (see ``phase``),
     given here in degrees.
     """
 
