@@ -93,19 +93,83 @@ class TLE:
         ```
     """
 
-    def __init__(self) -> None:
-        """An empty element set, to be filled in through the properties
+    def __init__(
+        self,
+        *,
+        name: str | None = None,
+        satnum: int | None = None,
+        intl_desig: str | None = None,
+        classification: str | None = None,
+        epoch: TimeScalar | None = None,
+        inclination: float | None = None,
+        raan: float | None = None,
+        eccen: float | None = None,
+        arg_of_perigee: float | None = None,
+        mean_anomaly: float | None = None,
+        mean_motion: float | None = None,
+        mean_motion_dot: float | None = None,
+        mean_motion_dot_dot: float | None = None,
+        bstar: float | None = None,
+        ephem_type: int | None = None,
+        element_num: int | None = None,
+        rev_num: int | None = None,
+    ) -> None:
+        """An element set built from keyword arguments, or an empty one to fill in
 
-        ``TLE()`` takes no arguments. The result has the name ``"none"``,
+        Every argument is keyword-only and optional, and is the property of
+        the same name: it is checked exactly as setting that property is, so
+        a bad value raises the setter's exception. An argument left out (or
+        ``None``) keeps the value of an empty ``TLE()``: the name ``"none"``,
         satellite number 0, a blank international designator, classification
         ``"U"``, the epoch J2000 (2000-01-01 12:00:00 TT) and every element
-        zero, so it cannot be propagated until at least ``mean_motion`` and
-        ``epoch`` are set. Element sets are normally loaded with
-        ``TLE.from_lines``, ``TLE.from_file``, ``TLE.from_url`` or
-        ``TLE.from_omm``, or fitted with ``TLE.fit_from_states``.
+        zero. An empty element set cannot be propagated until at least
+        ``mean_motion`` and ``epoch`` are set. Element sets are normally
+        loaded with ``TLE.from_lines``, ``TLE.from_file``, ``TLE.from_url``
+        or ``TLE.from_omm``, or fitted with ``TLE.fit_from_states``.
+
+        The designator is given whole as ``intl_desig``; ``desig_year``,
+        ``desig_launch`` and ``desig_piece`` are parts of it and are not
+        arguments.
+
+        Args:
+            name: satellite name (``"none"`` if absent)
+            satnum: satellite (NORAD catalog) number, 0 to 999999999
+            intl_desig: international designator, e.g. ``"98067A"``
+            classification: a single ASCII letter, usually ``"U"``
+            epoch: epoch, a single ``time``, ``datetime.datetime`` or ``numpy.datetime64``
+            inclination: inclination, degrees
+            raan: right ascension of the ascending node, degrees
+            eccen: eccentricity, in [0, 1)
+            arg_of_perigee: argument of perigee, degrees
+            mean_anomaly: mean anomaly, degrees
+            mean_motion: mean motion, revs / day, not negative
+            mean_motion_dot: half the first derivative of mean motion, revs / day^2
+            mean_motion_dot_dot: one sixth of the second derivative of mean motion, revs / day^3
+            bstar: drag term B*, 1 / Earth radii
+            ephem_type: ephemeris type, 0 to 255
+            element_num: element set number
+            rev_num: revolution number at epoch
+
+        Raises:
+            ValueError: if a value is out of the range its property accepts
+                (see each property)
+            TypeError: if a value has the wrong type, e.g. ``epoch`` is not a
+                single time
+            OverflowError: if ``ephem_type`` is outside 0..255, or an integer
+                does not fit 32 bits
 
         Example:
             ```python
+            tle = satkit.TLE(
+                name="ISS (ZARYA)", satnum=25544, intl_desig="98067A",
+                epoch=satkit.time(2021, 9, 21, 12, 25, 40.104192),
+                inclination=51.6442, raan=208.5856, eccen=0.0001458,
+                arg_of_perigee=47.2277, mean_anomaly=50.1624,
+                mean_motion=15.48919419, bstar=5.868e-5,
+            )
+            pos, vel = satkit.sgp4(tle, tle.epoch)
+
+            # Or start empty and set the properties
             tle = satkit.TLE()
             tle.satnum = 99999
             tle.epoch = satkit.time(2024, 1, 1)
@@ -410,8 +474,22 @@ class TLE:
         ...
 
     @property
+    def eccentricity(self) -> float:
+        """Orbit eccentricity, unitless, in range [0, 1)
+
+        ``eccentricity`` is the same value under its full name; ``eccen`` is
+        an alias of it, kept for existing code.
+        """
+        ...
+
+    @eccentricity.setter
+    def eccentricity(self, value: float) -> None:
+        """Set the orbit eccentricity; ``ValueError`` unless 0 <= value < 1"""
+        ...
+
+    @property
     def eccen(self) -> float:
-        """Satellite eccentricity, unitless, in range [0, 1)"""
+        """Orbit eccentricity, unitless, in range [0, 1); an alias of ``eccentricity``"""
         ...
 
     @eccen.setter
@@ -547,7 +625,8 @@ class TLE:
         optional ones become zero when absent. ``OBJECT_NAME`` becomes the
         name, and the unnamed-TLE name ``"none"`` when it is absent, empty or
         ``UNKNOWN``. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
-        international designator (``1998-067A`` gives ``98067A``); any other
+        international designator (``1998-067A`` gives ``98067A``, and
+        ``1998-067``, with no piece, gives ``98067``); any other
         form leaves the designator empty. ``CLASSIFICATION_TYPE`` becomes the
         classification, ``"U"`` unless it is a single ASCII letter. Other
         metadata is dropped.
@@ -582,8 +661,8 @@ class TLE:
         ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
         revolutions per day, and can be passed back to ``sgp4`` or
         serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
-        international designator (``98067A`` becomes ``1998-067A``, a blank
-        one ``UNKNOWN``), ``OBJECT_NAME`` is the name (``UNKNOWN`` for an
+        international designator (``98067A`` becomes ``1998-067A``, ``98067``
+        ``1998-067``, a blank one ``UNKNOWN``), ``OBJECT_NAME`` is the name (``UNKNOWN`` for an
         unnamed TLE), and ``CLASSIFICATION_TYPE`` is the TLE's classification
         letter. A negative ``satnum``, ``element_num`` or ``rev_num`` and an
         ``ephem_type`` above 9 have no OMM form and are left out.
@@ -651,6 +730,9 @@ class TLE:
         *,
         gravconst: sgp4_gravconst = ...,
         opsmode: sgp4_opsmode = ...,
+        satnum: int | None = None,
+        name: str | None = None,
+        intl_desig: str | None = None,
     ) -> tuple[TLE, TLEFitResult]:
         """
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
@@ -664,18 +746,27 @@ class TLE:
         Keyword Args:
             gravconst: gravity model SGP4 uses in the fit.  Default is sgp4_gravconst.wgs72
             opsmode: SGP4 ops mode used in the fit.  Default is sgp4_opsmode.afspc
+            satnum: satellite number of the fitted TLE (0 if omitted); checked
+                as setting the ``satnum`` property is
+            name: name of the fitted TLE (``"none"`` if omitted)
+            intl_desig: international designator of the fitted TLE (blank if
+                omitted); checked as setting the ``intl_desig`` property is
 
         Returns:
             Fitted TLE and the fit results, a dictionary (see ``TLEFitResult``).
-            The fitted TLE has the name ``"none"``, satellite number 0 and a
-            blank international designator; set them afterwards if needed.
+            The fitted TLE has the ``satnum``, ``name`` and ``intl_desig``
+            given; those left out are satellite number 0, the name ``"none"``
+            and a blank international designator.
 
         Raises:
             TypeError: if ``states`` is not a sequence of 6-element vectors,
                 ``times`` or ``epoch`` is not a time (``epoch`` must be a single
                 time, not a list), or ``gravconst`` / ``opsmode`` is not the enum
             ValueError: if ``states`` is empty, ``states`` and ``times`` differ in
-                length, or ``epoch`` is outside the range of ``times``
+                length, ``epoch`` is outside the range of ``times``, or
+                ``satnum`` or ``intl_desig`` is a value its property refuses
+                (checked before the fit)
+            OverflowError: if ``satnum`` does not fit 32 bits
             RuntimeError: if the fit itself fails (SGP4 cannot evaluate the
                 elements, singular normal equations, or it ends on elements a
                 TLE cannot hold)
@@ -816,13 +907,17 @@ def sgp4(
           frame: its axes are the true equator and the mean equinox of date, i.e. of each output time (not of the
           TLE epoch), so the frame itself moves with precession and nutation. Rotate to GCRF with
           ``frametransform.rotation(frame.TEME, frame.GCRF, time)``.
-        - **Errors:** a time at which propagation fails (e.g. the orbit has decayed) gives a NaN row,
-          with its code in the error array when ``errflag`` is True. An element set that cannot be
-          initialized at all (e.g. decayed or eccentricity out of range at epoch, or an SGP4-XP set)
-          raises ``RuntimeError`` when ``errflag`` is False; for a list, the message gives its index.
-          When ``errflag`` is True it does not raise: its rows are NaN at every time and every time
-          carries its init code (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata SGP4
-          cannot use), so one bad element set does not fail a list.
+        - **Errors** are reported per element set and per time, in two ways.
+          A time at which propagation fails (e.g. the orbit has decayed by then) never raises,
+          with or without ``errflag``: its position and velocity rows are NaN, and with
+          ``errflag`` True its code is in the error array. Without ``errflag``, check the output
+          for NaN. An element set that cannot be initialized at all (e.g. zero mean motion or an
+          eccentricity out of range at epoch, an SGP4-XP set, or OMM metadata SGP4 cannot use)
+          raises ``RuntimeError`` when ``errflag`` is False; for a list, the message names its
+          index (``element set 1 of the list: ...``) and nothing is returned for the others.
+          With ``errflag`` True it does not raise: its rows are NaN at every time and every time
+          carries its init code (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata
+          SGP4 cannot use), so one bad element set does not fail a list.
         - **Leap seconds:** the time since epoch is the physical (SI) time elapsed. Across a leap second
           this is one second more than the difference of the UTC labels that Vallado's reference code
           and python-sgp4 use, so satkit differs from them by 1 s of along-track motion (~7.6 km at
@@ -894,7 +989,8 @@ class sgp4_gravconst:
     ``sgp4`` and ``TLE.fit_from_states``) is the one that reproduces the
     orbit a TLE or OMM describes.
 
-    Members compare equal to their integer value (``int(m)``).
+    Members compare equal to their integer value (``int(m)``), and
+    ``sgp4_gravconst(value)`` turns a value back into a member.
     """
 
     wgs72: ClassVar[sgp4_gravconst]
@@ -905,6 +1001,16 @@ class sgp4_gravconst:
 
     wgs84: ClassVar[sgp4_gravconst]
     """WGS-84 (value 2)"""
+
+    def __new__(cls, value: int) -> sgp4_gravconst:
+        """The member with integer value ``value``
+
+        For example ``satkit.sgp4_gravconst(2)`` is ``sgp4_gravconst.wgs84``.
+
+        Raises:
+            ValueError: if ``value`` is not one of the values 0 to 2
+        """
+        ...
 
     def __int__(self) -> int:
         """The member's integer value"""
@@ -926,7 +1032,8 @@ class sgp4_opsmode:
     only for deep-space element sets (period of 225 minutes or more), in how
     the ascending node is wrapped in the lunar-solar periodic terms.
 
-    Members compare equal to their integer value (``int(m)``).
+    Members compare equal to their integer value (``int(m)``), and
+    ``sgp4_opsmode(value)`` turns a value back into a member.
     """
 
     afspc: ClassVar[sgp4_opsmode]
@@ -934,6 +1041,16 @@ class sgp4_opsmode:
 
     improved: ClassVar[sgp4_opsmode]
     """Vallado's "improved" mode (value 1)"""
+
+    def __new__(cls, value: int) -> sgp4_opsmode:
+        """The member with integer value ``value``
+
+        For example ``satkit.sgp4_opsmode(1)`` is ``sgp4_opsmode.improved``.
+
+        Raises:
+            ValueError: if ``value`` is not 0 or 1
+        """
+        ...
 
     def __int__(self) -> int:
         """The member's integer value"""
@@ -1301,7 +1418,8 @@ class tlefitstatus:
     - ``MaxIterations``: maximum number of iterations reached
     - ``DampingSaturated``: Levenberg-Marquardt damping parameter saturated
 
-    ``str(status)`` is a one-line description. Members compare equal to
+    their integer value (``int(m)``, 0 to 4 in the order above), and
+    ``tlefitstatus(value)`` turns a value back into a member.
     their integer value (``int(m)``, 0 to 4 in the order above).
     """
 
@@ -1319,6 +1437,16 @@ class tlefitstatus:
 
     DampingSaturated: ClassVar[tlefitstatus]
     """Levenberg-Marquardt damping parameter saturated"""
+
+    def __new__(cls, value: int) -> tlefitstatus:
+        """The member with integer value ``value``
+
+        For example ``satkit.tlefitstatus(3)`` is ``tlefitstatus.MaxIterations``.
+
+        Raises:
+            ValueError: if ``value`` is not one of the values 0 to 4
+        """
+        ...
 
     @property
     def converged(self) -> bool:

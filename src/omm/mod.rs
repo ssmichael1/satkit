@@ -547,8 +547,8 @@ impl OMM {
     ///
     /// Inverse of [`from_tle`](Self::from_tle): `OMM::from_tle(&tle).to_tle()
     /// == tle` for a TLE read from two or three lines. `OBJECT_ID` in
-    /// `YYYY-NNNP` form becomes the TLE international designator; any other
-    /// form leaves the designator empty. An empty or `UNKNOWN` `OBJECT_NAME`
+    /// `YYYY-NNNP` form (or `YYYY-NNN`, with no piece) becomes the TLE
+    /// international designator; any other form leaves the designator empty. An empty or `UNKNOWN` `OBJECT_NAME`
     /// becomes `none`, the name of an unnamed TLE. Absent optional fields
     /// become zero;
     /// `CLASSIFICATION_TYPE` becomes `U` if it is absent or is not a single
@@ -787,14 +787,15 @@ impl From<&OMM> for TLE {
     }
 }
 
-/// `98067A` → `1998-067A`. Empty input → `UNKNOWN`; anything that is not
-/// `YYNNNP` is returned unchanged.
+/// `98067A` → `1998-067A`, and `98067` (no piece) → `1998-067`. Empty
+/// input → `UNKNOWN`; anything that is not `YYNNN` plus an optional piece is
+/// returned unchanged.
 fn object_id_from_intl_desig(desig: &str) -> String {
     let desig = desig.trim();
     if desig.is_empty() {
         return "UNKNOWN".to_string();
     }
-    if desig.len() >= 6 && desig.is_char_boundary(2) && desig.is_char_boundary(5) {
+    if desig.len() >= 5 && desig.is_char_boundary(2) && desig.is_char_boundary(5) {
         if let (Ok(yy), Ok(launch)) = (desig[..2].parse::<u32>(), desig[2..5].parse::<u32>()) {
             // Same century rule as TLE epochs: 57-99 → 1900s, 00-56 → 2000s.
             let year = if yy >= 57 { 1900 + yy } else { 2000 + yy };
@@ -804,17 +805,19 @@ fn object_id_from_intl_desig(desig: &str) -> String {
     desig.to_string()
 }
 
-/// `1998-067A` → `98067A`. `None` if the id is not `YYYY-NNNP`.
+/// `1998-067A` → `98067A`, and `1998-067` (no piece) → `98067`, the inverse
+/// of [`object_id_from_intl_desig`]. `None` if the id is not `YYYY-NNN`
+/// followed by an optional piece of letters.
 fn intl_desig_from_object_id(id: &str) -> Option<String> {
     let id = id.trim();
     let (year, rest) = id.split_once('-')?;
-    if year.len() != 4 || rest.len() < 4 || !rest.is_char_boundary(3) {
+    if year.len() != 4 || rest.len() < 3 || !rest.is_char_boundary(3) {
         return None;
     }
     let year: i32 = year.parse().ok()?;
     let launch: i32 = rest[..3].parse().ok()?;
     let piece = rest[3..].trim();
-    if piece.is_empty() || !piece.chars().all(|c| c.is_ascii_alphabetic()) {
+    if !piece.chars().all(|c| c.is_ascii_alphabetic()) {
         return None;
     }
     let yy = year.rem_euclid(100);
@@ -1183,7 +1186,14 @@ mod tests {
         assert_eq!(object_id_from_intl_desig("57001B"), "1957-001B");
         assert_eq!(object_id_from_intl_desig("T00001"), "T00001");
         assert!(intl_desig_from_object_id("UNKNOWN").is_none());
-        assert!(intl_desig_from_object_id("1998-067").is_none());
+        assert!(intl_desig_from_object_id("1998-06").is_none());
+        assert!(intl_desig_from_object_id("1998-067-").is_none());
+        // A designator with no piece round-trips
+        assert_eq!(object_id_from_intl_desig("98067"), "1998-067");
+        assert_eq!(
+            intl_desig_from_object_id("1998-067"),
+            Some("98067".to_string())
+        );
         assert_eq!(
             intl_desig_from_object_id("2023-146X"),
             Some("23146X".to_string())
