@@ -33,11 +33,14 @@ use numpy::PyArrayMethods;
 /// * TAI = International Atomic Time
 /// * GPS = Global Positioning System Time (epoch = 1/6/1980 00:00:00)
 /// * TDB = Barycentric Dynamical Time
+/// * Invalid = placeholder that is not a time scale; passing it as a
+///   ``scale`` argument raises ValueError
 ///
 #[derive(Clone, PartialEq, Eq)]
 #[pyclass(name = "timescale", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyTimeScale {
-    /// Invalid time scale
+    /// Placeholder that is not a time scale: every satkit.time method that
+    /// takes a ``scale`` raises ValueError when given it
     Invalid = TimeScale::Invalid as isize,
     /// Universal Time Coordinate
     #[allow(clippy::upper_case_acronyms)]
@@ -72,6 +75,7 @@ crate::enum_pickle!(PyTimeScale, "timescale");
 /// - `Thursday`
 /// - `Friday`
 /// - `Saturday`
+/// - `Invalid`: placeholder that is not a day; ``time.weekday`` never returns it
 #[pyclass(name = "weekday", module = "satkit", eq, eq_int, from_py_object)]
 pub enum PyWeekday {
     Sunday = 0,
@@ -151,23 +155,39 @@ impl From<PyTimeScale> for TimeScale {
 /// time representation is needed as the "datetime" object does not allow for
 /// conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
 ///
-/// Note: If no arguments are passed in, the created object represents the current time
-///
 /// Note: UTC before 1972 follows the "rubber second" model of USNO
 /// ``tai-utc.dat`` / ERFA ``dat`` from 1961-01-01 (TAI - UTC drifts and steps
 /// by fractions of a second); before 1961, UTC is taken to equal TAI.
 ///
+/// Accepted forms (the arguments are positional):
+///
+/// - ``time()``: the current time
+/// - ``time(string)``: parse a string, RFC 3339 first, then other common formats
+/// - ``time(year, month, day)``: midnight at the start of the day
+/// - ``time(year, month, day, hour, min, sec)``: all six components; the
+///   hour, minute and second are given together or not at all
+///
 /// Args:
-///     year (int): Gregorian year (e.g., 2024) (optional)
-///     month (int): Gregorian month (1 = January, 2 = February, ...) (optional)
-///     day (int): Day of month, beginning with 1 (optional)
-///     hour (int): Hour of day, in range [0,23] (optional), default is 0
-///     min (int): Minute of hour, in range [0,59] (optional), default is 0
-///     sec (float): floating point second of minute, in range [0,60) (optional), defialt is 0
-///     scale (satkit.timescale): Time scale (optional), default is satkit.timescale.UTC
+///     string (str): String representation of time
+///     year (int): Gregorian year (e.g., 2024)
+///     month (int): Gregorian month (1 = January, 2 = February, ...)
+///     day (int): Day of month, beginning with 1
+///     hour (int): Hour of day, in range [0,23]
+///     min (int): Minute of hour, in range [0,59]
+///     sec (float): floating point second of minute, in range [0,60); up to 61
+///         within a UTC leap second. Rounded to the nearest microsecond
+///     scale (satkit.timescale, optional): Time scale in which the Gregorian
+///         components are interpreted, default is satkit.timescale.UTC. Only
+///         for the component forms
 ///
 /// Returns:
 ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
+///
+/// Raises:
+///     TypeError: for a wrong number or type of arguments, or ``scale`` given
+///         with the string or no-argument form
+///     ValueError: if the string cannot be parsed, a component is out of
+///         range, or ``scale`` is satkit.timescale.Invalid
 #[pyclass(name = "time", module = "satkit", from_py_object)]
 #[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyInstant(pub Instant);
@@ -178,24 +198,6 @@ pub struct PyInstant(pub Instant);
 #[allow(clippy::wrong_self_convention)]
 #[pymethods]
 impl PyInstant {
-    /// Representation of an instant in time
-    ///
-    /// This has functionality similar to the "datetime" object, and in fact has
-    /// the ability to convert to an from the "datetime" object.  However, a separate
-    /// time representation is needed as the "datetime" object does not allow for
-    /// conversion between various time epochs (GPS, TAI, UTC, UT1, etc...)
-    ///
-    /// Args:
-    ///     year (int, optional): Gregorian year (e.g., 2024) (optional)
-    ///    month (int, optional): Gregorian month (1 = January, 2 = February, ...) (optional)
-    ///     day (int, optional): Day of month, beginning with 1 (optional)
-    ///    hour (int, optional): Hour of day, in range [0,23] (optional), default is 0
-    ///     min (int, optional): Minute of hour, in range [0,59] (optional), default is 0
-    ///     sec (float, optional): floating point second of minute, in range [0,60) (optional), defialt is 0
-    ///     string (str, optional): If this is only argument, attempt to parse time from string
-    ///
-    /// Note: If no arguments are passed in, the created object represents the current time
-    ///
     /// The J2000 epoch: 2000-01-01 12:00:00 TT
     #[classattr]
     #[allow(non_snake_case)]
@@ -232,13 +234,20 @@ impl PyInstant {
     ///         (year, month, day, hour, minute, second)
     ///     scale (satkit.timescale, optional): Time scale in which the Gregorian
     ///         components are interpreted. Default is satkit.timescale.UTC.
-    ///         Ignored when constructing from a string or with no arguments.
+    ///         Only for the component forms: giving it with a string or with
+    ///         no arguments raises TypeError.
     ///
     /// Returns:
     ///     satkit.time: Time object representing input date and time, or if no arguments, the current date and time
     ///
     /// Raises:
-    ///     ValueError: If the string form cannot be parsed
+    ///     TypeError: If the number of positional arguments is not 0, 1, 3 or
+    ///         6, a single argument is not a string, a component is not a
+    ///         number (the first five must be integers), or ``scale`` is
+    ///         given with the string or no-argument form
+    ///     ValueError: If the string form cannot be parsed, a component is
+    ///         out of range, the date is beyond about ±292,000 years, or
+    ///         ``scale`` is satkit.timescale.Invalid
     #[new]
     #[pyo3(signature=(*py_args, scale=&PyTimeScale::UTC))]
     fn py_new(py_args: &Bound<'_, PyTuple>, scale: &PyTimeScale) -> Result<Self> {
@@ -352,30 +361,34 @@ impl PyInstant {
             .map_err(parse_error)
     }
 
-    /// Format time object as string
+    /// Format time object (in UTC) as string
     ///
     /// Args:
-    ///  format (str): Format string
+    ///     format (str): Format string
     ///
     /// Returns:
-    /// str: String representing time in given format
+    ///     str: String representing time in given format
     ///
     /// Raises:
-    /// ValueError: If input string cannot be formatted
+    ///     ValueError: If the format has a code not listed below, or ends
+    ///         with a lone %
     ///
-    /// Format Codes:
-    /// %Y: Year with century as a decimal number
-    /// %m: Month as a zero-padded decimal number
-    /// %d: Day of the month as a zero-padded decimal number
-    /// %H: Hour (24-hour clock) as a zero-padded decimal number
-    /// %M: Minute as a zero-padded decimal number
-    /// %S: Second as a zero-padded decimal number
-    /// %f: Microsecond as a decimal number, with possible trailing zeros (1 to 6 digits)
-    /// %z: UTC offset in the form +HHMM or -HHMM
-    /// %A: Weekday as locale’s full name
-    /// %b: Month as locale’s abbreviated name
-    /// %B: Month as locale’s full name
+    /// Format Codes (a subset of Python's; there is no %z, %j, %y or %p):
+    /// %Y: Year, four digits (0000-9999); outside that range a sign and at
+    ///     least four digits (-0044, +10000)
+    /// %m: Month as a zero-padded decimal number (01-12)
+    /// %d: Day of the month as a zero-padded decimal number (01-31)
+    /// %H: Hour (24-hour clock) as a zero-padded decimal number (00-23)
+    /// %M: Minute as a zero-padded decimal number (00-59)
+    /// %S: Second as a zero-padded decimal number (00-59, or 60 inside a
+    ///     leap second)
+    /// %f: Microsecond, always six digits (000000-999999)
+    /// %a: Abbreviated English weekday name (Sun, Mon, ...)
+    /// %A: Full English weekday name (Sunday, Monday, ...)
+    /// %b: Abbreviated English month name (Jan, Feb, ...)
+    /// %B: Full English month name (January, February, ...)
     /// %w: Weekday as a decimal number, where 0 is Sunday and 6 is Saturday
+    /// %%: A literal %
     ///
     fn strftime(&self, format: &str) -> Result<String> {
         self.0
@@ -422,11 +435,13 @@ impl PyInstant {
     /// Convert satkit.time object to RFC3339 string
     ///
     /// Returns:
-    /// str: String representing time in RFC3339 format : "YYYY-MM-DDTHH:MM:SS.ssssssZ"
+    ///     str: String representing time in RFC3339 format : "YYYY-MM-DDTHH:MM:SS.ssssssZ"
     ///
     /// Notes:
-    ///  RFC3339 is a standard for representing time in a string format
-    ///  Return string also matches ISO8601
+    ///     The fraction always has six digits (microseconds). Years outside
+    ///     0000-9999 are written with a sign and at least four digits, as in
+    ///     ISO 8601 expanded years (-0044-03-15T..., +10000-01-01T...).
+    ///     The same string as ``to_iso8601``.
     fn to_rfc3339(&self) -> String {
         self.0.as_rfc3339()
     }
@@ -434,11 +449,13 @@ impl PyInstant {
     /// Convert satkit.time object to ISO8601 string
     ///
     /// Returns:
-    /// str: String representing time in ISO8601 format : "YYYY-MM-DDTHH:MM:SS.ssssssZ"
+    ///     str: String representing time in ISO8601 format : "YYYY-MM-DDTHH:MM:SS.ssssssZ"
     ///
     /// Notes:
-    /// ISO8601 is a standard for representing time in a string format
-    /// Return string also matches RFC3339
+    ///     The fraction always has six digits (microseconds). Years outside
+    ///     0000-9999 are written with a sign and at least four digits, as in
+    ///     ISO 8601 expanded years (-0044-03-15T..., +10000-01-01T...).
+    ///     The same string as ``to_rfc3339``.
     fn to_iso8601(&self) -> String {
         self.0.as_iso8601()
     }
@@ -452,7 +469,7 @@ impl PyInstant {
         Self(Instant::now())
     }
 
-    /// Return time object representing input date
+    /// Return time object representing the start (midnight UTC) of the input date
     ///
     /// Args:
     ///     year (int): Gregorian year (e.g., 2024)
@@ -461,6 +478,11 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of input date
+    ///
+    /// Raises:
+    ///     TypeError: If an argument is not an integer
+    ///     ValueError: If the month or day is out of range, or the date is
+    ///         beyond about ±292,000 years
     #[staticmethod]
     fn from_date(year: i32, month: i32, day: i32) -> Result<Self> {
         Ok(Self(Instant::from_date(year, month, day)?))
@@ -474,6 +496,10 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of modified julian date with given scale
+    ///
+    /// Raises:
+    ///     ValueError: If ``mjd`` is NaN or infinite, or ``scale`` is satkit.timescale.Invalid
+    ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
     #[pyo3(signature=(mjd, scale=&PyTimeScale::UTC))]
     fn from_mjd(mjd: f64, scale: &PyTimeScale) -> Self {
@@ -484,10 +510,15 @@ impl PyInstant {
     /// since Jan 1, 1970 00:00:00 (not counting leap seconds)
     ///
     /// Args:
-    ///    unixtime (float): the unixtime, UTC seconds since 1970-01-01 00:00:00 (excluding leap seconds)
+    ///    unixtime (float): the unixtime, UTC seconds since 1970-01-01 00:00:00 (excluding leap seconds);
+    ///        rounded to the nearest microsecond
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of input unixtime
+    ///
+    /// Raises:
+    ///     ValueError: If ``unixtime`` is NaN or infinite
+    ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
     fn from_unixtime(unixtime: f64) -> Self {
         Self(Instant::from_unixtime(unixtime))
@@ -501,6 +532,10 @@ impl PyInstant {
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of julian date with given scale
+    ///
+    /// Raises:
+    ///     ValueError: If ``jd`` is NaN or infinite, or ``scale`` is satkit.timescale.Invalid
+    ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
     #[pyo3(signature=(jd, scale=&PyTimeScale::UTC))]
     fn from_jd(jd: f64, scale: &PyTimeScale) -> Self {
@@ -519,7 +554,9 @@ impl PyInstant {
     /// Convert time object to UTC Gregorian date and time, with fractional seconds
     ///
     /// Returns:
-    ///     (int, int, int, int, int, float): Tuple with 6 elements representing Gregorian year, month, day, hour, minute, and second
+    ///     (int, int, int, int, int, float): Tuple with 6 elements representing Gregorian year, month, day, hour, minute, and second.
+    ///     The second is the float nearest the exact (whole-microsecond) value,
+    ///     in [0, 60), or [60, 61) inside a leap second
     ///
     fn to_gregorian(&self) -> (i32, i32, i32, i32, i32, f64) {
         self.0.as_datetime()
@@ -544,11 +581,18 @@ impl PyInstant {
     ///     day (int): Day of month, beginning with 1
     ///     hour (int): Hour of day, in range [0,23]
     ///     min (int): Minute of hour, in range [0,59]
-    ///     sec (float): floating point second of minute, in range [0,60)
-    ///     scale (satkit.timescale, optional): Time scale, default is satkit.timescale.UTC
+    ///     sec (float): floating point second of minute, in range [0,60); up
+    ///         to 61 within a UTC leap second (23:59:60.5 on 2016-12-31) or a
+    ///         pre-1972 positive UTC step. Rounded to the nearest microsecond
     ///
     /// Returns:
     ///    satkit.time: satkit.time object representing input Gregorian date and time
+    ///
+    /// Raises:
+    ///     TypeError: If an argument is not a number (the first five must be integers)
+    ///     ValueError: If a component is out of range (including a second of
+    ///         60 or more where there is no leap second, and NaN), or the
+    ///         date is beyond about ±292,000 years
     #[staticmethod]
     #[pyo3(signature=(year, month, day, hour, min, sec))]
     fn from_gregorian(
@@ -591,11 +635,21 @@ impl PyInstant {
     /// Returns:
     ///     datetime.datetime:  datetime object matching the input satkit.time
     ///
+    /// Raises:
+    ///     OverflowError: If the time is outside the years 1 to 9999 that
+    ///         datetime.datetime can represent
+    ///
+    /// Notes:
+    ///     datetime.datetime has no leap seconds: a time inside one
+    ///     (23:59:60.5) comes back as 23:59:59.5, as with Unix time.
+    ///
     #[pyo3(signature = (utc=true))]
     fn to_datetime(&self, py: Python<'_>, utc: bool) -> PyResult<Py<PyAny>> {
         instant_to_datetime(py, &self.0, utc)
     }
 
+    /// Deprecated: use ``to_datetime()``.
+    ///
     /// Convert to Python datetime object
     ///
     /// Args:
@@ -622,6 +676,9 @@ impl PyInstant {
     ///
     /// Returns:
     ///     float: Modified Julian Date, days
+    ///
+    /// Raises:
+    ///     ValueError: If ``scale`` is satkit.timescale.Invalid
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn to_mjd(&self, scale: &PyTimeScale) -> f64 {
         self.0.as_mjd_with_scale(scale.into())
@@ -630,10 +687,13 @@ impl PyInstant {
     /// Convert to Julian date
     ///
     /// Args:
-    ///     scale (satkit.timescale, optional: Time scale to use for conversion, default is satkit.timescale.UTC
+    ///     scale (satkit.timescale, optional): Time scale to use for conversion, default is satkit.timescale.UTC
     ///
     /// Returns:
     ///     float: Julian Date, days
+    ///
+    /// Raises:
+    ///     ValueError: If ``scale`` is satkit.timescale.Invalid
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
     fn to_jd(&self, scale: &PyTimeScale) -> f64 {
         self.0.as_jd_with_scale(scale.into())
@@ -641,6 +701,9 @@ impl PyInstant {
 
     /// Convert to Unix time (seconds since 1970-01-01 00:00:00 UTC)
     /// Excludes leap seconds
+    ///
+    /// The result is the float nearest the exact (whole-microsecond) value.
+    /// Inside a leap second it repeats the last second of the day.
     ///
     /// Returns:
     ///     float: Unix time (seconds since 1970-01-01 00:00:00 UTC)
@@ -726,11 +789,17 @@ impl PyInstant {
     /// Return time object representing input GPS week and seconds of week
     ///
     /// Args:
-    ///     week (int): GPS week number
-    ///     seconds (float): GPS seconds of week, seconds
+    ///     week (int): GPS week number, counted from the GPS epoch
+    ///         (1980-01-06) without the 1024-week rollover
+    ///     seconds (float): GPS seconds of week, seconds; rounded to the
+    ///         nearest microsecond
     ///
     /// Returns:
     ///     satkit.time: Time object representing input GPS week and second
+    ///
+    /// Raises:
+    ///     ValueError: If ``seconds`` is NaN or infinite
+    ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
     fn from_gps_week_and_second(week: i32, seconds: f64) -> Self {
         Self(Instant::from_gps_week_and_second(week, seconds))
@@ -750,11 +819,14 @@ impl PyInstant {
     /// Args:
     ///     other (duration|list|numpy.ndarray|float): Duration or list of durations to add.
     ///         If type is float (or a list or real numeric 1-D numpy array of them), units are days
+    ///         of exactly 86400 elapsed seconds (``add_utc_days`` keeps the UTC time of day
+    ///         across a leap second instead). Sequences must be a list or a numpy array
     ///
     /// Returns:
     ///     satkit.time|numpy.ndarray: New time object or numpy array of time objects representing input time plus input duration(s)
     ///
     /// Raises:
+    ///     ValueError: if a number of days is NaN or infinite
     ///     OverflowError: if a result is beyond about ±292,000 years
     fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         self.shift(other, |t, d| t.checked_add(d))
@@ -771,6 +843,7 @@ impl PyInstant {
     ///     (a numpy array of duration objects for a list of time objects)
     ///
     /// Raises:
+    ///     ValueError: if a number of days is NaN or infinite
     ///     OverflowError: if a result is beyond about ±292,000 years
     fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = other.py();
@@ -823,19 +896,23 @@ impl PyInstant {
         self.0.raw as isize
     }
 
+    /// Add given number of UTC calendar days to a time object, and return the result
     ///
-    /// Add given number of UTC days to a time object, and return the result
+    /// The offset is applied to the UTC clock label (as with a Modified Julian
+    /// Date in UTC), so the time of day is kept: noon plus one UTC day is noon
+    /// of the next day, which is 86401 elapsed seconds later when a leap
+    /// second lies between the two. ``days`` may be fractional or negative.
+    /// To add exactly 86400 elapsed seconds per day, use ``t + days``.
     ///
     /// Args:
-    ///     days (float): Number of days to add
+    ///     days (float): Number of UTC days to add; rounded to the nearest microsecond
     ///
     /// Returns:
-    ///     satkit.time: Time object representing input time plus given number of days
+    ///     satkit.time: Time object representing input time plus given number of UTC days
     ///
-    /// Note:
-    ///
-    /// A UTC days is defined as being exactly 86400 seconds long.  This
-    /// avoids the ambiguity of adding a "day" to a time that has a leap second
+    /// Raises:
+    ///     ValueError: If ``days`` is NaN or infinite
+    ///     OverflowError: If the result is beyond about ±292,000 years
     fn add_utc_days(&self, days: f64) -> Self {
         Self(self.0.add_utc_days(days))
     }

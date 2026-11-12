@@ -50,18 +50,21 @@ pub(crate) fn arithmetic_overflow(what: &str) -> PyErr {
     ))
 }
 
-/// Class representing durations of times, allowing for representation
-/// via common measures of duration (years, days, hours, minutes, seconds)
+/// Class representing durations of time, allowing for representation
+/// via common measures of duration (days, hours, minutes, seconds,
+/// microseconds)
 ///
-/// This enum can be added to and subtracted from "satkit.time" objects to
-/// represent new "satkit" objects, and is also returned when
-/// two "satkit" objects are subtracted from one anothre
+/// A duration is an integer number of microseconds. It can be added to and
+/// subtracted from "satkit.time" objects to give new "satkit.time" objects,
+/// and is also returned when two "satkit.time" objects are subtracted from
+/// one another
 ///
 /// Keyword Arguments:
-///     days (float): Duration in days
-///     seconds (float): Duration in seconds
-///     minutes (float): Duration in minutes
+///     days (float): Duration in days (of 86400 seconds)
 ///     hours (float): Duration in hours
+///     minutes (float): Duration in minutes
+///     seconds (float): Duration in seconds
+///     microseconds (int): Duration in microseconds
 ///
 /// Example:
 ///
@@ -69,7 +72,7 @@ pub(crate) fn arithmetic_overflow(what: &str) -> PyErr {
 /// >>> d = duration(seconds=3.0)
 /// >>> d2 = duration(minutes=4.0)
 /// >>> print(d + d2)
-/// Duration: 4 minutes, 3.000 seconds
+/// 4 minutes 3.000000 seconds
 ///
 /// >>> from satkit import duration, time
 /// >>> instant = satkit.time(2023, 3, 5)
@@ -96,6 +99,13 @@ impl PyDuration {
     ///     minutes (float): Duration in minutes
     ///     hours (float): Duration in hours
     ///     microseconds (int): Duration in microseconds
+    ///
+    /// Raises:
+    ///     TypeError: If an argument is not a real number, or ``microseconds``
+    ///         is not an integer
+    ///     ValueError: If an argument is NaN or infinite
+    ///     OverflowError: If an argument, or the sum, is too large for a
+    ///         duration (beyond about ±292,000 years)
     ///
     /// Example:
     ///
@@ -249,6 +259,10 @@ impl PyDuration {
     ///
     /// Returns:
     ///     duration: New duration object representing the scaled duration
+    ///
+    /// Raises:
+    ///     ValueError: if ``other`` is NaN or infinite
+    ///     OverflowError: if the result is out of range (beyond about ±292,000 years)
     fn __mul__(&self, other: f64) -> PyResult<Self> {
         let secs = self.0.as_seconds() * other;
         check_duration_value(secs, US_PER_SECOND, "scaled duration (seconds)")?;
@@ -263,6 +277,11 @@ impl PyDuration {
     /// Returns:
     ///     duration|float: The scaled duration, or the dimensionless ratio
     ///     for a duration divisor
+    ///
+    /// Raises:
+    ///     ZeroDivisionError: if ``other`` is zero or a zero duration
+    ///     ValueError: if ``other`` is NaN
+    ///     OverflowError: if the result is out of range (beyond about ±292,000 years)
     fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         if other.is_instance_of::<Self>() {
             let dur = other

@@ -11,15 +11,22 @@ import numpy as np
 import datetime
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, Optional, TypeAlias, Union, final, overload
+from typing import Any, ClassVar, Final, Literal, Optional, TypeAlias, Union, final, overload
 from typing_extensions import deprecated
 
 from ._types import OMMDict
 
-# Time inputs are polymorphic: anywhere a ``satkit.time`` is accepted, a
-# ``datetime.datetime`` is accepted interchangeably (and, for the vectorized
-# functions, a list or numpy array of either). These aliases capture that so
-# the individual signatures stay readable.
+# Time inputs are polymorphic: a function or method argument annotated with one
+# of these aliases takes a ``satkit.time``, a ``datetime.datetime`` or a
+# ``numpy.datetime64`` interchangeably (and, for the vectorized functions, a
+# list or numpy array of them). These aliases capture that so the individual
+# signatures stay readable.
+#
+# This applies to arguments only where the alias is written. The ``time``
+# class itself is narrower: its arithmetic and comparison operators take
+# ``satkit.time`` / ``satkit.duration`` (plus ``datetime.timedelta`` and
+# day counts for ``+`` and ``-``), not ``datetime.datetime``. Convert first
+# with ``time(dt)`` or ``time.from_datetime(dt)``.
 #
 # A ``datetime.datetime`` is converted with Python's own convention
 # (``datetime.timestamp()``): a naive datetime is the machine's local time, an
@@ -934,6 +941,7 @@ class weekday:
     - `Thursday`
     - `Friday`
     - `Saturday`
+    - `Invalid`: placeholder that is not a day; ``time.weekday`` never returns it
     """
 
     Sunday: ClassVar[weekday]
@@ -958,7 +966,7 @@ class weekday:
     """Saturday"""
 
     Invalid: ClassVar[weekday]
-    """Invalid weekday"""
+    """Placeholder that is not a day of the week; ``time.weekday`` never returns it"""
 
 @final
 class tlefitstatus:
@@ -1012,7 +1020,8 @@ class timescale:
 
     Values:
 
-    - `Invalid`: Invalid time scale
+    - `Invalid`: placeholder that is not a time scale. Passing it as a
+      ``scale`` argument raises ``ValueError``
     - `UTC`: Universal Time Coordinate
     - `TT`: Terrestrial Time
     - `UT1`: UT1
@@ -1022,7 +1031,11 @@ class timescale:
     """
 
     Invalid: ClassVar[timescale]
-    """Invalid time scale"""
+    """Placeholder that is not a time scale
+
+    Every ``satkit.time`` method that takes a ``scale`` raises ``ValueError``
+    when given it.
+    """
 
     UTC: ClassVar[timescale]
     """Universal Time Coordinate"""
@@ -1198,17 +1211,17 @@ class time:
 
     """
 
-    J2000: ClassVar[time]
-    """The J2000 epoch: 2000-01-01 12:00:00 TT"""
+    J2000: Final[time]
+    """The J2000 epoch: 2000-01-01 12:00:00 TT (class constant, read-only)"""
 
-    GPS_EPOCH: ClassVar[time]
-    """The GPS epoch: 1980-01-06 00:00:00 UTC"""
+    GPS_EPOCH: Final[time]
+    """The GPS epoch: 1980-01-06 00:00:00 UTC (class constant, read-only)"""
 
-    MJD_EPOCH: ClassVar[time]
-    """The Modified Julian Date epoch: 1858-11-17 00:00:00 UTC"""
+    MJD_EPOCH: Final[time]
+    """The Modified Julian Date epoch: 1858-11-17 00:00:00 UTC (class constant, read-only)"""
 
-    UNIX_EPOCH: ClassVar[time]
-    """The Unix epoch: 1970-01-01 00:00:00 UTC"""
+    UNIX_EPOCH: Final[time]
+    """The Unix epoch: 1970-01-01 00:00:00 UTC (class constant, read-only)"""
 
     @overload
     def __init__(self) -> None: ...
@@ -1258,11 +1271,20 @@ class time:
                 nearest microsecond, so the seconds from ``to_gregorian()``
                 round-trip exactly
             scale: Time scale in which the Gregorian components are
-                interpreted, default is satkit.timescale.UTC. Ignored for the
-                string and no-argument forms.
+                interpreted, default is satkit.timescale.UTC. Only for the
+                ``(year, month, day)`` and six-component forms: giving it
+                with the string or no-argument form raises ``TypeError``.
 
         Raises:
-            ValueError: If the string form cannot be parsed
+            TypeError: If the number of positional arguments is not 0, 1, 3
+                or 6; if a single argument is not a string; if a component is
+                not a number (the first five must be integers); or if
+                ``scale`` is given with the string or no-argument form
+            ValueError: If the string form cannot be parsed, if a component
+                is out of range (month 13, hour 25, a second of 60 where
+                there is no leap second, NaN, ...), if the date is beyond
+                about ±292,000 years, or if ``scale`` is
+                ``timescale.Invalid``
 
         Example:
             ```python
@@ -1433,6 +1455,11 @@ class time:
         Returns:
             Time object representing the start of the input day (midnight)
 
+        Raises:
+            TypeError: If an argument is not an integer
+            ValueError: If the month or day is out of range, or the date is
+                beyond about ±292,000 years
+
         Example:
             ```python
             t = satkit.time.from_date(2023, 6, 15)
@@ -1452,6 +1479,11 @@ class time:
 
         Returns:
             Time object representing input Julian date and time scale
+
+        Raises:
+            ValueError: If ``jd`` is NaN or infinite, or ``scale`` is
+                ``timescale.Invalid``
+            OverflowError: If the result is beyond about ±292,000 years
 
         Example:
             ```python
@@ -1473,6 +1505,10 @@ class time:
         Returns:
             Time object representing input unixtime
 
+        Raises:
+            ValueError: If ``unixtime`` is NaN or infinite
+            OverflowError: If the result is beyond about ±292,000 years
+
         Example:
             ```python
             t = satkit.time.from_unixtime(1700000000)
@@ -1487,11 +1523,18 @@ class time:
         """Return a time object representing input GPS week and second
 
         Args:
-            week: GPS week number
-            seconds: GPS seconds of week, seconds
+            week: GPS week number, counted from the GPS epoch
+                (1980-01-06) without the 1024-week rollover
+            seconds: GPS seconds of week, seconds; rounded to the nearest
+                microsecond. Not limited to one week: 604800 is the start
+                of the next week
 
         Returns:
             Time object representing input GPS week and second
+
+        Raises:
+            ValueError: If ``seconds`` is NaN or infinite
+            OverflowError: If the result is beyond about ±292,000 years
         """
         ...
 
@@ -1519,6 +1562,11 @@ class time:
 
         Returns:
             Time object representing input modified Julian date and time scale
+
+        Raises:
+            ValueError: If ``mjd`` is NaN or infinite, or ``scale`` is
+                ``timescale.Invalid``
+            OverflowError: If the result is beyond about ±292,000 years
 
         Example:
             ```python
@@ -1553,6 +1601,8 @@ class time:
             Tuple with 6 elements representing the Gregorian year, month, day, hour, minute, and second of the time object.
                 Month is in range [1,12].
                 Day is in range [1,31].
+                The second is the float nearest the exact (whole-microsecond)
+                value, in [0, 60); inside a leap second it is in [60, 61).
         """
         ...
 
@@ -1578,10 +1628,20 @@ class time:
             day (int): Day of month, beginning with 1
             hour (int): Hour of day, in range [0,23]
             min (int): Minute of hour, in range [0,59]
-            sec (float): floating point second of minute, in range [0,60)
+            sec (float): floating point second of minute, in range [0,60);
+                up to 61 within a UTC leap second (e.g. ``23:59:60.5`` on
+                2016-12-31) or a pre-1972 positive UTC step. Rounded to the
+                nearest microsecond
 
         Returns:
             Time object representing input UTC Gregorian time
+
+        Raises:
+            TypeError: If an argument is not a number (the first five must
+                be integers)
+            ValueError: If a component is out of range (including a second
+                of 60 or more where there is no leap second, and NaN), or
+                the date is beyond about ±292,000 years
 
         Example:
             ```python
@@ -1625,6 +1685,14 @@ class time:
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object
 
+        Raises:
+            OverflowError: If the time is outside the years 1 to 9999 that
+                ``datetime.datetime`` can represent
+
+        Notes:
+            ``datetime.datetime`` has no leap seconds: a time inside one
+            (``23:59:60.5``) comes back as ``23:59:59.5``, as with Unix time.
+
         Example:
             ```python
             dt = satkit.time(2023, 6, 3, 6, 19, 34).to_datetime(True)
@@ -1643,6 +1711,7 @@ class time:
         """Deprecated since 0.23, removed in 0.25. Use ``time.to_datetime``."""
         ...
 
+    @deprecated("use to_datetime()")
     def datetime(self, utc: bool = True) -> datetime.datetime:
         """Deprecated: use ``satkit.time.to_datetime``.
 
@@ -1670,16 +1739,36 @@ class time:
         ...
 
     def add_utc_days(self, days: float) -> time:
-        """Return a new time offset by a whole number of UTC days.
+        """Return a new time offset by a number of UTC calendar days.
 
-        A UTC day is defined as exactly 86400 seconds, avoiding the ambiguity of
-        adding a "day" across a leap second.
+        The offset is applied to the UTC clock label (as with a Modified
+        Julian Date in UTC), so the time of day is kept: noon plus one UTC
+        day is noon of the next day, which is 86401 elapsed seconds later
+        when a leap second lies between the two. ``days`` may be fractional
+        (a fraction of 86400 s on the label) or negative.
+
+        To add exactly 86400 elapsed seconds per day instead, use
+        ``t + days`` or ``t + satkit.duration(days=days)``.
 
         Args:
-            days (float): Number of UTC days to add
+            days (float): Number of UTC days to add; rounded to the nearest
+                microsecond
 
         Returns:
             satkit.time: Time object offset by the given number of UTC days
+
+        Raises:
+            ValueError: If ``days`` is NaN or infinite
+            OverflowError: If the result is beyond about ±292,000 years
+
+        Example:
+            ```python
+            t = satkit.time(2016, 12, 31, 12, 0, 0)  # a leap second follows
+            print(t.add_utc_days(1))
+            # 2017-01-01T12:00:00.000000Z
+            print(t + 1)
+            # 2017-01-01T11:59:59.000000Z
+            ```
         """
         ...
 
@@ -1692,6 +1781,9 @@ class time:
 
         Returns:
             float: Modified Julian Date, days
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
         """
         ...
 
@@ -1709,6 +1801,9 @@ class time:
 
         Returns:
             float: Julian Date, days
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
         """
         ...
 
@@ -1723,7 +1818,11 @@ class time:
 
         (seconds since Jan 1, 1970 UTC, excluding leap seconds)
 
-        Includes fractional component of seconds
+        Includes fractional component of seconds. The result is the float
+        nearest the exact (whole-microsecond) value, so it prints as the
+        decimal it was built from: ``time.from_unixtime(1678014225.453)``
+        gives back ``1678014225.453``. Inside a leap second it repeats the
+        last second of the day.
 
         Returns:
             float: Unix time, seconds
@@ -1739,6 +1838,11 @@ class time:
         """
         Represent time as ISO 8601 string
 
+        The fraction always has six digits (microseconds). Years outside
+        0000-9999 are written with a sign and at least four digits, as in
+        ISO 8601 expanded years: ``-0044-03-15T...``, ``+10000-01-01T...``.
+        ``to_iso8601`` and ``to_rfc3339`` return the same string.
+
         Returns:
             ISO 8601 string representation of time: "YYYY-MM-DDTHH:MM:SS.ssssssZ"
         """
@@ -1752,6 +1856,11 @@ class time:
     def to_rfc3339(self) -> str:
         """
         Represent time as RFC 3339 string
+
+        The fraction always has six digits (microseconds). Years outside
+        0000-9999 are written with a sign and at least four digits, as in
+        ISO 8601 expanded years: ``-0044-03-15T...``, ``+10000-01-01T...``.
+        ``to_iso8601`` and ``to_rfc3339`` return the same string.
 
         Returns:
             RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.ssssssZ"
@@ -1771,22 +1880,30 @@ class time:
             format (str): format of the string
 
         Notes:
-            Format Codes:
+            The time is written in UTC. Format codes (a subset of
+            Python's; there is no ``%z``, ``%j``, ``%y`` or ``%p``):
 
-            - %Y - year
+            - %Y - year, four digits (0000-9999); outside that range a sign
+              and at least four digits (``-0044``, ``+10000``)
             - %m - month with leading zeros (01-12)
             - %d - day of month with leading zeros (01-31)
             - %H - hour with leading zeros (00-23)
             - %M - minute with leading zeros (00-59)
-            - %S - second with leading zeros (00-59)
-            - %f - microsecond, allowing for trailing zeros
+            - %S - second with leading zeros (00-59, or 60 inside a leap second)
+            - %f - microsecond, always six digits (000000-999999)
             - %b - abbreviated month name (Jan, Feb, ...)
             - %B - full month name (January, February, ...)
+            - %a - abbreviated weekday name (Sun, Mon, ...)
             - %A - full weekday name (Sunday, Monday, ...)
             - %w - weekday as a decimal number (0=Sunday, 1=Monday, ...)
+            - %% - a literal ``%``
 
         Returns:
             string representation of time
+
+        Raises:
+            ValueError: If the format has a code not listed above, or ends
+                with a lone ``%``
 
         Example:
             ```python
@@ -1818,6 +1935,10 @@ class time:
         """
         Return a time object representing the input number of days added to the current time
 
+        Each day is exactly 86400 elapsed seconds, so across a leap second
+        the UTC time of day shifts by one second; ``add_utc_days`` keeps the
+        UTC time of day instead.
+
         Args:
             other (float): number of days to add to the current time
 
@@ -1838,10 +1959,13 @@ class time:
         Return a numpy array of time objects, with each object representing an element-wise addition of days to the "self" time object
 
         Args:
-            other (list[duration]): array-like structure containing days to add to the current time
+            other (list[duration]): list of durations to add to the current time (a list, not any sequence: a tuple is refused)
+
+        Raises:
+            OverflowError: if a result is beyond about ±292,000 years
 
         Returns:
-            Array of time objects representing the element-wise addition of days to the current time
+            Object array of time objects, ``self + other[i]`` for each element
         """
         ...
 
@@ -1964,6 +2088,10 @@ class time:
         Args:
             other (time): time to subtract from the current time
 
+        Raises:
+            OverflowError: if the difference is beyond about ±292,000 years
+                (only for times near the two ends of the range)
+
         Returns:
             Duration object representing the difference between the two times
 
@@ -2000,6 +2128,11 @@ class time:
         Args:
             other (npt.NDArray[np.floating] | npt.NDArray[np.integer] | list[float]): 1-D array or list of days to subtract from the current time (integer and float32 arrays are converted to float64)
 
+        Raises:
+            ValueError: if an element is NaN or infinite
+            OverflowError: if an element is too large for a duration, or a
+                result is beyond about ±292,000 years
+
         Returns:
             Object array of time objects representing the element-wise subtraction of days from the current time
 
@@ -2012,10 +2145,13 @@ class time:
         Return a numpy array of time objects, with each object representing an element-wise subtraction of duration from the "self" time object
 
         Args:
-            other (list[duration]): array-like structure containing durations to subtract from the current time
+            other (list[duration]): list of durations to subtract from the current time (a list, not any sequence: a tuple is refused)
+
+        Raises:
+            OverflowError: if a result is beyond about ±292,000 years
 
         Returns:
-            Array of time objects representing the element-wise subtraction of durations from the current time
+            Object array of time objects, ``self - other[i]`` for each element
         """
         ...
 
@@ -2025,7 +2161,10 @@ class time:
         Return a numpy array of duration objects, with each object representing an element-wise subtraction of time from the "self" time object
 
         Args:
-            other (list[time]): times to subtract from the current time
+            other (list[time]): list of times to subtract from the current time (a list, not any sequence)
+
+        Raises:
+            OverflowError: if a difference is beyond about ±292,000 years
 
         Returns:
             Object array of duration objects, ``self - other[i]`` for each element
@@ -2060,17 +2199,26 @@ class duration:
             - If no arguments are passed in, the created object represents a duration of 0 seconds
             - A duration is an integer number of microseconds; each floating-point
               argument is rounded to the nearest microsecond
-            - A NaN or infinite argument raises ``ValueError``, and one too large for
-              a duration (beyond about ±292,000 years) raises ``OverflowError``; the
-              same holds for the ``from_*`` constructors, and for arguments that fit
-              one by one but not summed
             - Adding or subtracting durations and times raises ``OverflowError``
-              when the result is beyond that range (it used to wrap around)
+              when the result is beyond about ±292,000 years (it used to wrap around)
+            - ``str()`` of a duration of a second or more lists the non-zero
+              days, hours and minutes, then the seconds with six decimals;
+              a shorter (or negative) one prints as whole microseconds
+              (``500000 usec``)
+
+        Raises:
+            TypeError: If an argument is not a real number, or
+                ``microseconds`` is not an integer (the ``from_*``
+                constructors do the same)
+            ValueError: If an argument is NaN or infinite
+            OverflowError: If an argument is too large for a duration
+                (beyond about ±292,000 years), or the arguments fit one by
+                one but not summed
 
         Example:
             ```python
             print(satkit.duration(days=1, hours=2, minutes=3, seconds=4.5))
-            # Duration: 1 days, 2 hours, 3 minutes, 4.500 seconds
+            # 1 days 2 hours 3 minutes 4.500000 seconds
             ```
 
         """
@@ -2166,7 +2314,7 @@ class duration:
         Example:
             ```python
             print(satkit.duration.from_hours(1) + satkit.duration.from_minutes(1))
-            # Duration: 1 hours, 1 minutes, 0.000 seconds
+            # 1 hours 1 minutes 0.000000 seconds
             ```
         """
         ...
@@ -2207,7 +2355,7 @@ class duration:
         Example:
             ```python
             print(satkit.duration.from_hours(1) - satkit.duration.from_minutes(1))
-            # Duration: 59 minutes, 0.000 seconds
+            # 59 minutes 0.000000 seconds
             ```
         """
         ...
@@ -2215,16 +2363,25 @@ class duration:
     def __mul__(self, other: float) -> duration:
         """Multiply (or scale) duration by given value
 
+        The product is computed exactly from the duration's integer
+        microseconds and rounded once to the nearest microsecond, so an
+        integer factor is exact for any duration.
+
         Args:
-            other (float): value by which to multiply duration
+            other (float): value by which to multiply duration (any real
+                number: ``int``, ``float`` or a numpy scalar)
 
         Returns:
             Duration object representing the input duration scaled by the input value
 
+        Raises:
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if the result is beyond about ±292,000 years
+
         Example:
             ```python
             print(satkit.duration.from_days(1) * 2.5)
-            # Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
+            # 2 days 12 hours 0.000000 seconds
             ```
         """
         ...
@@ -2242,11 +2399,18 @@ class duration:
         Raises:
             ZeroDivisionError: if ``other`` is zero
             ValueError: if ``other`` is NaN
+            OverflowError: if the result is beyond about ±292,000 years
+                (division by a very small number)
+
+        Notes:
+            The quotient is computed exactly from the duration's integer
+            microseconds and rounded once to the nearest microsecond.
+            Dividing by infinity gives a zero duration.
 
         Example:
             ```python
             print(satkit.duration.from_days(1) / 2)
-            # Duration: 12 hours, 0 minutes, 0.000 seconds
+            # 12 hours 0.000000 seconds
             ```
         """
         ...
