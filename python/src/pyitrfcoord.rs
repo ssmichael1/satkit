@@ -19,7 +19,7 @@ use crate::pyutils::*;
 ///     height_m (float): Height above WGS84 ellipsoid in meters
 ///     latitude_deg (float): Latitude in degrees
 ///     longitude_deg (float): Longitude in degrees
-#[pyclass(name = "geodetic", module = "satkit", get_all, from_py_object)]
+#[pyclass(name = "geodetic", module = "satkit", get_all, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug)]
 pub struct PyGeodet {
     /// Latitude in radians
@@ -65,6 +65,21 @@ impl PyGeodet {
 
     fn __repr__(&self) -> String {
         self.__str__()
+    }
+
+    /// True when ``other`` is a geodetic with exactly the same latitude,
+    /// longitude and height (no tolerance)
+    fn __eq__(&self, other: &Self) -> bool {
+        self.latitude_rad == other.latitude_rad
+            && self.longitude_rad == other.longitude_rad
+            && self.height_m == other.height_m
+    }
+
+    /// Hash of the three fields, consistent with ``==``
+    fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
+        (self.latitude_rad, self.longitude_rad, self.height_m)
+            .into_pyobject(py)?
+            .hash()
     }
 
     /// Rebuild a geodetic from its three fields. Used internally by

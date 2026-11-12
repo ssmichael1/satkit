@@ -100,3 +100,10 @@ satkit\.satkit\.TimeArrayLike
 # has none. The extension module has one; satkit.pyi doesn't.
 satkit\.__all__
 satkit\.satkit\.__all__
+
+# --- Overlapping positional forms ----------------------------------------------
+# density.nrlmsise(itrf, time) / (altitude, latitude, longitude, time), where
+# the time may take the place of the latitude or longitude: one positional-only
+# runtime signature serves overloads whose second and third parameters have
+# different names, which stubtest reports although the names cannot be used.
+satkit\.density\.nrlmsise

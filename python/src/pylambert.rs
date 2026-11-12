@@ -1,7 +1,7 @@
-use numpy::{PyArray1, PyArrayMethods, PyUntypedArrayMethods};
+use numpy::PyArray1;
 use pyo3::prelude::*;
 
-use satkit::mathtypes::Vector3;
+use crate::pyutils::to_vector3;
 
 type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 
@@ -45,25 +45,17 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 #[pyo3(signature = (r1, r2, tof, mu=None, prograde=None))]
 pub fn lambert(
     py: Python,
-    r1: &Bound<'_, PyArray1<f64>>,
-    r2: &Bound<'_, PyArray1<f64>>,
+    r1: &Bound<'_, PyAny>,
+    r2: &Bound<'_, PyAny>,
     tof: f64,
     mu: Option<f64>,
     prograde: Option<bool>,
 ) -> PyResult<Vec<LambertSolution>> {
-    if r1.len() != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "r1 must be a 3-element array",
-        ));
-    }
-    if r2.len() != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "r2 must be a 3-element array",
-        ));
-    }
-
-    let r1_vec = Vector3::from_slice(r1.readonly().as_slice()?);
-    let r2_vec = Vector3::from_slice(r2.readonly().as_slice()?);
+    // Any real numeric 3-element array-like (list, tuple, integer or
+    // non-contiguous array): `TypeError` for a non-numeric input,
+    // `ValueError` for the wrong shape
+    let r1_vec = to_vector3(r1, "r1")?;
+    let r2_vec = to_vector3(r2, "r2")?;
 
     let mu_val = mu.unwrap_or(satkit::consts::MU_EARTH);
     let prograde_val = prograde.unwrap_or(true);

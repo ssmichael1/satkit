@@ -257,3 +257,69 @@ def test_gravity_shapes():
     assert g2 == pytest.approx(g)
     assert partials.shape == (3, 3)
     assert sk.gravity((7000000, 0, 0)) == pytest.approx(sk.gravity(np.array([7.0e6, 0, 0])))
+
+
+# --- additions: hashable enums, __eq__, immutable consts, array-likes ----------
+
+
+def test_frame_and_gravmodel_hashable():
+    assert {sk.frame.GCRF: 1, sk.frame.RTN: 2}[sk.frame.RIC] == 2
+    assert hash(sk.frame.RSW) == hash(sk.frame.RTN)
+    assert len({sk.gravmodel.jgm3, sk.gravmodel.egm96, sk.gravmodel.jgm3}) == 2
+    assert int(sk.frame.GCRF) == sk.frame.GCRF
+    assert sk.gravmodel.__module__ == "satkit" and sk.frame.__module__ == "satkit"
+    assert pickle.loads(pickle.dumps(sk.gravmodel.egm96)) == sk.gravmodel.egm96
+    assert pickle.loads(pickle.dumps(sk.frame.NTW)) == sk.frame.NTW
+
+
+def test_consts_not_reassignable():
+    assert sk.consts.__module__ == "satkit"
+    with pytest.raises((TypeError, AttributeError)):
+        sk.consts.wgs84_a = 5.0
+    assert sk.consts.wgs84_a == 6378137.0
+
+
+def test_quaternion_and_geodetic_eq_hash():
+    q = sk.quaternion.rotz(0.3)
+    assert q == sk.quaternion.rotz(0.3)
+    assert q != sk.quaternion.rotz(0.3000001)
+    assert q != 3 and q != None  # noqa: E711
+    assert hash(q) == hash(sk.quaternion.rotz(0.3))
+    assert q.conj() == q.conjugate()
+    c = sk.itrfcoord(latitude_deg=10, longitude_deg=20, altitude=30)
+    assert c.geodetic == c.geodetic
+    assert hash(c.geodetic) == hash(c.geodetic)
+    assert c.geodetic != sk.itrfcoord(latitude_deg=10, longitude_deg=21).geodetic
+    assert pickle.loads(pickle.dumps(c.geodetic)) == c.geodetic
+
+
+def test_lambert_accepts_array_likes():
+    ref = sk.lambert(np.array([7000e3, 0, 0]), np.array([0, 7000e3, 0]), 3600.0)
+    for r1, r2 in [
+        ([7000e3, 0, 0], [0, 7000e3, 0]),
+        ((7000000, 0, 0), (0, 7000000, 0)),
+        (np.array([7000000, 0, 0]), np.array([0, 9, 7.0e6, 9, 0, 9])[::2]),
+    ]:
+        sol = sk.lambert(r1, r2, 3600)
+        assert sol[0][0] == pytest.approx(ref[0][0])
+        assert sol[0][1] == pytest.approx(ref[0][1])
+    with pytest.raises(TypeError):
+        sk.lambert("abc", [0, 7e6, 0], 3600.0)
+    with pytest.raises(ValueError):
+        sk.lambert(np.zeros(4), [0, 7e6, 0], 3600.0)
+
+
+def test_density_module_doc_and_signature():
+    assert "NRL MSISE-00" in sk.density.__doc__
+    assert sk.density.nrlmsise.__text_signature__ != "(*args)"
+    t = sk.time(2024, 1, 1)
+    c = sk.itrfcoord(latitude_deg=0, longitude_deg=0, altitude=400e3)
+    ref = sk.density.nrlmsise(c, t)
+    assert sk.density.nrlmsise(400e3, 0.0, 0.0, t) == pytest.approx(ref, rel=1e-9)
+    assert sk.density.nrlmsise(400e3, t) == pytest.approx(ref, rel=1e-9)
+    assert sk.density.nrlmsise(400e3, 0.0, t) == pytest.approx(ref, rel=1e-9)
+    assert sk.density.nrlmsise(400e3, None) == sk.density.nrlmsise(400e3)
+    with pytest.raises(TypeError):
+        sk.density.nrlmsise()
+    with pytest.raises(TypeError):
+        sk.density.nrlmsise(400e3, t, 0.1)

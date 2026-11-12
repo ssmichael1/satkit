@@ -3,7 +3,10 @@ use pyo3::prelude::*;
 use satkit::consts as cconsts;
 
 /// Some constants that are useful for satellite dynamics
-#[pyclass(name = "consts")]
+///
+/// The class is a namespace: it cannot be instantiated and its attributes
+/// cannot be reassigned.
+#[pyclass(name = "consts", module = "satkit", frozen, immutable_type)]
 pub struct Consts {}
 
 #[pymethods]

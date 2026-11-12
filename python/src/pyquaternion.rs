@@ -400,6 +400,20 @@ impl PyQuaternion {
         self.0.dot(&other.0)
     }
 
+    /// True when ``other`` is a quaternion with exactly the same four
+    /// components (no tolerance). ``q`` and ``-q`` are the same rotation but
+    /// compare unequal.
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    /// Hash of the four components, consistent with ``==``
+    fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
+        (self.0.w, self.0.x, self.0.y, self.0.z)
+            .into_pyobject(py)?
+            .hash()
+    }
+
     fn __str__(&self) -> Result<String> {
         let (ax, angle) = self.0.to_axis_angle();
         let n = ax.norm();

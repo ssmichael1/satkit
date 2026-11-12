@@ -95,8 +95,16 @@ fn gravity_args(
 /// other by value, and cannot be constructed.
 ///
 #[allow(non_camel_case_types)]
-#[pyclass(name = "gravmodel", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+#[pyclass(
+    name = "gravmodel",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum GravModel {
     jgm3 = GravityModel::JGM3 as isize,
     jgm2 = GravityModel::JGM2 as isize,

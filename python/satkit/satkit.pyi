@@ -11,7 +11,7 @@ import numpy as np
 import datetime
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, Optional, TypeAlias, Union, final, overload
+from typing import Any, ClassVar, Final, Literal, Optional, TypeAlias, Union, final, overload
 from typing_extensions import deprecated
 
 from ._types import OMMDict
@@ -768,6 +768,10 @@ class gravmodel:
     Compiled in (truncated to degree 70). Default for the orbit propagator.
     """
 
+    def __int__(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 def nrlmsise00(
     alt_km: float,
     *,
@@ -1205,6 +1209,10 @@ class frame:
     The natural frame for prograde/retrograde maneuvers: a pure +T delta-v
     of magnitude Δv adds *exactly* Δv to |v|, regardless of orbit eccentricity.
     """
+
+    def __int__(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class time:
@@ -2816,6 +2824,21 @@ class quaternion:
 
         Raises:
             ValueError: ``frac`` is NaN or infinite
+        """
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a quaternion with exactly the same four
+        components (no tolerance)
+
+        ``q`` and ``-q`` are the same rotation but compare unequal; so do two
+        quaternions that differ by rounding. To compare rotations use
+        ``abs(q1.dot(q2))``, which is 1 for the same rotation.
+        """
+        ...
+
+    def __hash__(self) -> int:
+        """Hash of the four components, consistent with ``==``
 
         Example:
             ```python
@@ -3231,6 +3254,14 @@ class geodetic:
         """Longitude in degrees"""
         ...
 
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a geodetic with exactly the same latitude,
+        longitude and height (no tolerance)"""
+        ...
+
+    def __hash__(self) -> int:
+        """Hash of the three fields, consistent with ``==``"""
+        ...
 
 @final
 class itrfcoord:
@@ -3528,41 +3559,41 @@ class consts:
     cannot be reassigned.
     """
 
-    wgs84_a: ClassVar[float]
+    wgs84_a: Final[float]
     """WGS-84 semi-major axis (equatorial radius), in meters"""
 
-    wgs84_f: ClassVar[float]
+    wgs84_f: Final[float]
     """WGS-84 flattening, unitless"""
 
-    earth_radius: ClassVar[float]
+    earth_radius: Final[float]
     """WGS-84 equatorial Earth radius, meters (same value as ``wgs84_a``)"""
 
-    mu_earth: ClassVar[float]
+    mu_earth: Final[float]
     """Gravitational parameter of Earth, m^3/s^2 (WGS-84)"""
 
-    mu_moon: ClassVar[float]
+    mu_moon: Final[float]
     """Gravitational parameter of Moon, m^3/s^2 (JPL DE440)"""
 
-    mu_sun: ClassVar[float]
+    mu_sun: Final[float]
     """Gravitational parameter of sun, m^3/s^2 (JPL DE440)"""
 
-    GM: ClassVar[float]
+    GM: Final[float]
     """Gravitational parameter of Earth, m^3/s^2 (same value as ``mu_earth``)"""
 
-    omega_earth: ClassVar[float]
+    omega_earth: Final[float]
     """Scalar Earth rotation rate, rad/s"""
 
-    c: ClassVar[float]
+    c: Final[float]
     """Speed of light, m/s"""
 
-    au: ClassVar[float]
+    au: Final[float]
     """Astronomical unit, meters: the exact defined constant of IAU 2012
     Resolution B1 (149 597 870 700 m), close to the mean Earth-Sun distance"""
 
-    sun_radius: ClassVar[float]
+    sun_radius: Final[float]
     """Radius of sun, meters"""
 
-    solar_pressure_1au: ClassVar[float]
+    solar_pressure_1au: Final[float]
     """Solar radiation pressure at 1 AU (1367 W/m^2 / c), N/m^2.
 
     The cannonball SRP force scales this by (AU / d)^2, with d the
@@ -3570,10 +3601,10 @@ class consts:
     (Kopp & Lean 2011; IAU 2015 Resolution B3); 1367 matches GMAT and STK.
     """
 
-    moon_radius: ClassVar[float]
+    moon_radius: Final[float]
     """Radius of moon, meters"""
 
-    earth_moon_mass_ratio: ClassVar[float]
+    earth_moon_mass_ratio: Final[float]
     """Earth mass over Moon mass, unitless
 
     The ratio of the JPL DE440 gravitational parameters. It differs from
@@ -3581,17 +3612,17 @@ class consts:
     WGS-84 value.
     """
 
-    geo_r: ClassVar[float]
+    geo_r: Final[float]
     """Radius of a circular geosynchronous orbit (its semi-major axis),
     meters from the Earth's center: ``(mu_earth / omega_earth^2)^(1/3)``"""
 
-    jgm3_mu: ClassVar[float]
+    jgm3_mu: Final[float]
     """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
 
-    jgm3_a: ClassVar[float]
+    jgm3_a: Final[float]
     """Earth equatorial radius of the JGM3 gravity model, m"""
 
-    jgm3_j2: ClassVar[float]
+    jgm3_j2: Final[float]
     """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
 # Alias so `time` resolves to the class inside bodies that define a `time` member
@@ -5001,8 +5032,8 @@ class propsettings:
         ...
 
 def lambert(
-    r1: npt.NDArray[np.float64],
-    r2: npt.NDArray[np.float64],
+    r1: npt.ArrayLike,
+    r2: npt.ArrayLike,
     tof: float,
     mu: float | None = None,
     prograde: bool | None = None,

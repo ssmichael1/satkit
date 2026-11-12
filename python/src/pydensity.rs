@@ -54,11 +54,33 @@ fn time_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<Instant>> {
 ///         latitude is NaN or outside [-pi/2, pi/2], or the longitude is NaN
 ///         or infinite
 #[pyfunction(name = "nrlmsise")]
-#[pyo3(signature=(*args))]
-fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
-    let Ok(first) = args.get_item(0) else {
-        return Err(PyTypeError::new_err("Invalid number of arguments"));
-    };
+#[pyo3(signature=(itrf_or_altitude_meters, latitude_rad=None, longitude_rad=None, time=None, /))]
+fn pynrlmsise<'py>(
+    py: Python<'py>,
+    itrf_or_altitude_meters: &Bound<'py, PyAny>,
+    latitude_rad: Option<&Bound<'py, PyAny>>,
+    longitude_rad: Option<&Bound<'py, PyAny>>,
+    time: Option<&Bound<'py, PyAny>>,
+) -> PyResult<(f64, f64)> {
+    // The positional forms overlap (the time may take the place of the
+    // latitude or the longitude), so the arguments are read back as the
+    // sequence that was passed: trailing omitted ones dropped, an explicit
+    // `None` in the middle kept.
+    let mut rest = vec![latitude_rad, longitude_rad, time];
+    while matches!(rest.last(), Some(None)) {
+        rest.pop();
+    }
+    let mut items = vec![itrf_or_altitude_meters.clone()];
+    items.extend(
+        rest.into_iter()
+            .map(|a| a.cloned().unwrap_or_else(|| py.None().into_bound(py))),
+    );
+    let args = PyTuple::new(py, items)?;
+    nrlmsise_args(&args)
+}
+
+fn nrlmsise_args(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
+    let first = args.get_item(0)?;
     if first.is_instance_of::<PyITRFCoord>() {
         let itrf = first.extract::<PyITRFCoord>()?.0;
         let time = match args.len() {
