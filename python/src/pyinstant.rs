@@ -268,7 +268,7 @@ impl PyInstant {
                 hour,
                 min,
                 sec,
-                scale.into(),
+                valid_scale(scale)?,
             )?))
         } else if py_args.len() == 1 {
             let item = py_args.get_item(0)?;
@@ -502,8 +502,10 @@ impl PyInstant {
     ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
     #[pyo3(signature=(mjd, scale=&PyTimeScale::UTC))]
-    fn from_mjd(mjd: f64, scale: &PyTimeScale) -> Self {
-        Self(Instant::from_mjd_with_scale(mjd, scale.into()))
+    fn from_mjd(mjd: f64, scale: &PyTimeScale) -> PyResult<Self> {
+        let scale = valid_scale(scale)?;
+        finite_time_value(mjd, mjd * US_PER_DAY, "mjd")?;
+        Ok(Self(Instant::from_mjd_with_scale(mjd, scale)))
     }
 
     /// Return time object representing input unix time, which is UTC seconds
@@ -520,8 +522,9 @@ impl PyInstant {
     ///     ValueError: If ``unixtime`` is NaN or infinite
     ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
-    fn from_unixtime(unixtime: f64) -> Self {
-        Self(Instant::from_unixtime(unixtime))
+    fn from_unixtime(unixtime: f64) -> PyResult<Self> {
+        finite_time_value(unixtime, unixtime * 1.0e6, "unixtime")?;
+        Ok(Self(Instant::from_unixtime(unixtime)))
     }
 
     /// Return time object representing input Julian date and time scale
@@ -538,8 +541,10 @@ impl PyInstant {
     ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
     #[pyo3(signature=(jd, scale=&PyTimeScale::UTC))]
-    fn from_jd(jd: f64, scale: &PyTimeScale) -> Self {
-        Self(Instant::from_jd_with_scale(jd, scale.into()))
+    fn from_jd(jd: f64, scale: &PyTimeScale) -> PyResult<Self> {
+        let scale = valid_scale(scale)?;
+        finite_time_value(jd, (jd - 2_400_000.5) * US_PER_DAY, "jd")?;
+        Ok(Self(Instant::from_jd_with_scale(jd, scale)))
     }
 
     /// Convert time object to UTC Gregorian date
@@ -680,8 +685,8 @@ impl PyInstant {
     /// Raises:
     ///     ValueError: If ``scale`` is satkit.timescale.Invalid
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
-    fn to_mjd(&self, scale: &PyTimeScale) -> f64 {
-        self.0.as_mjd_with_scale(scale.into())
+    fn to_mjd(&self, scale: &PyTimeScale) -> PyResult<f64> {
+        Ok(self.0.as_mjd_with_scale(valid_scale(scale)?))
     }
 
     /// Convert to Julian date
@@ -695,8 +700,8 @@ impl PyInstant {
     /// Raises:
     ///     ValueError: If ``scale`` is satkit.timescale.Invalid
     #[pyo3(signature=(scale=&PyTimeScale::UTC))]
-    fn to_jd(&self, scale: &PyTimeScale) -> f64 {
-        self.0.as_jd_with_scale(scale.into())
+    fn to_jd(&self, scale: &PyTimeScale) -> PyResult<f64> {
+        Ok(self.0.as_jd_with_scale(valid_scale(scale)?))
     }
 
     /// Convert to Unix time (seconds since 1970-01-01 00:00:00 UTC)
@@ -764,7 +769,7 @@ impl PyInstant {
             py,
             c"time.as_mjd() is deprecated since 0.23 and will be removed in 0.25; use time.to_mjd()",
         )?;
-        Ok(self.to_mjd(scale))
+        self.to_mjd(scale)
     }
 
     /// Deprecated since 0.23, removed in 0.25. Use ``to_jd()``.
@@ -774,7 +779,7 @@ impl PyInstant {
             py,
             c"time.as_jd() is deprecated since 0.23 and will be removed in 0.25; use time.to_jd()",
         )?;
-        Ok(self.to_jd(scale))
+        self.to_jd(scale)
     }
 
     /// Deprecated since 0.23, removed in 0.25. Use ``to_unixtime()``.
@@ -801,8 +806,14 @@ impl PyInstant {
     ///     ValueError: If ``seconds`` is NaN or infinite
     ///     OverflowError: If the result is beyond about ±292,000 years
     #[staticmethod]
-    fn from_gps_week_and_second(week: i32, seconds: f64) -> Self {
-        Self(Instant::from_gps_week_and_second(week, seconds))
+    fn from_gps_week_and_second(week: i32, seconds: f64) -> PyResult<Self> {
+        // The week count is exact in f64 (|week| < 2^31, times 6.048e11)
+        finite_time_value(
+            seconds,
+            (week as f64).mul_add(604_800.0e6, seconds * 1.0e6),
+            "seconds",
+        )?;
+        Ok(Self(Instant::from_gps_week_and_second(week, seconds)))
     }
 
     /// Day of the week (UTC)
@@ -913,8 +924,16 @@ impl PyInstant {
     /// Raises:
     ///     ValueError: If ``days`` is NaN or infinite
     ///     OverflowError: If the result is beyond about ±292,000 years
-    fn add_utc_days(&self, days: f64) -> Self {
-        Self(self.0.add_utc_days(days))
+    fn add_utc_days(&self, days: f64) -> PyResult<Self> {
+        // The shift itself, then the shifted UTC-basis count (exact enough
+        // in f64 for a range check with 700 years of margin)
+        finite_time_value(days, days * US_PER_DAY, "days")?;
+        finite_time_value(
+            days,
+            days.mul_add(US_PER_DAY, self.0.as_unixtime_microseconds() as f64),
+            "days",
+        )?;
+        Ok(Self(self.0.add_utc_days(days)))
     }
 
     fn __str__(&self) -> PyResult<String> {
@@ -1017,6 +1036,42 @@ fn time_difference(a: &Instant, b: &Instant) -> PyResult<satkit::Duration> {
 /// constructor; `from_rfc3339` adds its own prefix)
 fn parse_error(e: satkit::InstantError) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(e.to_string())
+}
+
+const US_PER_DAY: f64 = 86_400.0e6;
+
+/// The core time scale for a `scale` argument; `timescale.Invalid` is
+/// `ValueError`. The core maps it to `Instant::INVALID` (which prints as the
+/// year −290308) on the way in and to NaN on the way out.
+fn valid_scale(scale: &PyTimeScale) -> PyResult<TimeScale> {
+    match scale {
+        PyTimeScale::Invalid => Err(pyo3::exceptions::PyValueError::new_err(
+            "satkit.timescale.Invalid is not a time scale",
+        )),
+        s => Ok(s.into()),
+    }
+}
+
+/// Check a float that is about to become a time: `value` is the argument as
+/// given (named `what`) and `us` the microsecond count it leads to. NaN and
+/// infinities are `ValueError`; a count beyond about ±292,000 years is
+/// `OverflowError`. The core constructors map NaN to their epoch and
+/// saturate the rest, so `time.from_mjd(nan)` was 1858-11-17 and
+/// `time.from_unixtime(inf)` the year 294247.
+fn finite_time_value(value: f64, us: f64, what: &str) -> PyResult<()> {
+    if !value.is_finite() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{what} must be finite, got {value}"
+        )));
+    }
+    // 2^63 is 9.223e18; the margin (about 700 years) covers the epoch and
+    // TAI − UTC offsets the constructors add to the count
+    if us.abs() > 9.2e18 {
+        return Err(crate::pyduration::arithmetic_overflow(&format!(
+            "time for {what} = {value}"
+        )));
+    }
+    Ok(())
 }
 
 /// A duration of `days` days, refusing NaN and infinities with `ValueError`

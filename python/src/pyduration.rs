@@ -263,10 +263,23 @@ impl PyDuration {
     /// Raises:
     ///     ValueError: if ``other`` is NaN or infinite
     ///     OverflowError: if the result is out of range (beyond about ±292,000 years)
-    fn __mul__(&self, other: f64) -> PyResult<Self> {
-        let secs = self.0.as_seconds() * other;
-        check_duration_value(secs, US_PER_SECOND, "scaled duration (seconds)")?;
-        Ok(Self(Duration::from_seconds(secs)))
+    fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let py = other.py();
+        let usec = match Factor::extract(other)? {
+            // Not a real number: Python raises its own TypeError
+            None => return Ok(py.NotImplemented()),
+            Some(Factor::Int(k)) => i64::try_from(self.0.usec as i128 * k as i128).ok(),
+            Some(Factor::Float(f)) => {
+                if !f.is_finite() {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "duration factor must be finite, got {f}"
+                    )));
+                }
+                mul_exact(self.0.usec, f)
+            }
+        };
+        let usec = usec.ok_or_else(|| arithmetic_overflow("scaled duration"))?;
+        Self(Duration::from_microseconds(usec)).into_py_any(py)
     }
 
     /// Divide a duration by a real number (scale it) or by another duration
@@ -292,19 +305,33 @@ impl PyDuration {
                     "division by a zero duration",
                 ));
             }
-            (self.0.as_seconds() / dur.0.as_seconds()).into_py_any(other.py())
-        } else if let Ok(scalar) = other.extract::<f64>() {
-            // Any real number: Python float or int, or a numpy scalar
-            if scalar == 0.0 {
-                return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
-                    "duration division by zero",
-                ));
-            }
-            let secs = self.0.as_seconds() / scalar;
-            check_duration_value(secs, US_PER_SECOND, "scaled duration (seconds)")?;
-            PyDuration(Duration::from_seconds(secs)).into_py_any(other.py())
+            // The microsecond counts directly: one rounding, not three
+            (self.0.usec as f64 / dur.0.usec as f64).into_py_any(other.py())
         } else {
-            Ok(other.py().NotImplemented())
+            // Any real number: Python float or int, or a numpy scalar
+            let zero =
+                || pyo3::exceptions::PyZeroDivisionError::new_err("duration division by zero");
+            let usec = match Factor::extract(other)? {
+                None => return Ok(other.py().NotImplemented()),
+                Some(Factor::Int(0)) => return Err(zero()),
+                Some(Factor::Int(k)) => {
+                    let (n, d) = (self.0.usec as i128, k as i128);
+                    i64::try_from(div_round(n * d.signum(), d.abs())).ok()
+                }
+                Some(Factor::Float(f)) => {
+                    if f == 0.0 {
+                        return Err(zero());
+                    }
+                    if f.is_nan() {
+                        return Err(pyo3::exceptions::PyValueError::new_err(
+                            "duration divisor must not be NaN",
+                        ));
+                    }
+                    div_exact(self.0.usec, f)
+                }
+            };
+            let usec = usec.ok_or_else(|| arithmetic_overflow("scaled duration"))?;
+            PyDuration(Duration::from_microseconds(usec)).into_py_any(other.py())
         }
     }
 
@@ -401,4 +428,109 @@ impl PyDuration {
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         PyBytes::new(py, i64::to_le_bytes(self.0.usec).as_slice()).into_py_any(py)
     }
+}
+
+/// A real-number operand of `duration * x` / `duration / x`
+enum Factor {
+    /// Anything with `__index__` that fits an i64 (Python `int`, `bool`,
+    /// numpy integer scalars): the arithmetic is exact
+    Int(i64),
+    /// Anything else with `__float__`
+    Float(f64),
+}
+
+impl Factor {
+    /// `None` if `obj` is not a real number (the operator then returns
+    /// `NotImplemented`); errors other than a wrong type are passed on
+    /// (`OverflowError` for a Python int too large for a float)
+    fn extract(obj: &Bound<'_, PyAny>) -> PyResult<Option<Self>> {
+        if !obj.is_instance_of::<pyo3::types::PyFloat>() {
+            if let Ok(k) = obj.extract::<i64>() {
+                return Ok(Some(Self::Int(k)));
+            }
+        }
+        match obj.extract::<f64>() {
+            Ok(f) => Ok(Some(Self::Float(f))),
+            Err(e) if e.is_instance_of::<pyo3::exceptions::PyTypeError>(obj.py()) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// `n / d` rounded to the nearest integer, halves away from zero (as
+/// `f64::round`, which every float → microsecond conversion uses). `d > 0`.
+fn div_round(n: i128, d: i128) -> i128 {
+    let (q, r) = (n.div_euclid(d), n.rem_euclid(d));
+    if 2 * r > d || (2 * r == d && n >= 0) {
+        q + 1
+    } else {
+        q
+    }
+}
+
+/// A finite `f` as `m * 2^e` with integer `|m| < 2^53`, exactly
+fn decompose(f: f64) -> (i128, i32) {
+    let bits = f.to_bits();
+    let exp = ((bits >> 52) & 0x7ff) as i32;
+    let frac = (bits & 0x000f_ffff_ffff_ffff) as i128;
+    let (m, e) = if exp == 0 {
+        (frac, -1074)
+    } else {
+        (frac | (1 << 52), exp - 1075)
+    };
+    (if bits >> 63 == 0 { m } else { -m }, e)
+}
+
+/// `usec * f` rounded once to the nearest microsecond, from the exact
+/// product; `None` if it does not fit an i64. `f` is finite.
+///
+/// Going through float seconds (`usec / 1e6 * f`, then back) rounded three
+/// times and lost a microsecond above 2^53 µs (285 years), even for `f = 1`.
+fn mul_exact(usec: i64, f: f64) -> Option<i64> {
+    let (m, e) = decompose(f);
+    // |usec| <= 2^63 and |m| < 2^53, so the product fits an i128
+    let p = usec as i128 * m;
+    let r = if p == 0 {
+        0
+    } else if e >= 0 {
+        // p != 0, so anything beyond 2^64 is out of range anyway
+        if e > 64 {
+            return None;
+        }
+        p.checked_mul(1i128 << e)?
+    } else if e <= -126 {
+        // |p| < 2^116: less than half a microsecond
+        0
+    } else {
+        div_round(p, 1i128 << -e)
+    };
+    i64::try_from(r).ok()
+}
+
+/// `usec / f` rounded once to the nearest microsecond, from the exact
+/// quotient; `None` if it does not fit an i64. `f` is not zero or NaN
+/// (an infinite `f` gives 0).
+fn div_exact(usec: i64, f: f64) -> Option<i64> {
+    if usec == 0 || f.is_infinite() {
+        return Some(0);
+    }
+    // usec / (m 2^e), with the sign moved to the numerator
+    let (m, e) = decompose(f);
+    let n = usec as i128 * m.signum();
+    let m = m.abs();
+    let r = if e <= 0 {
+        // n 2^-e / m. Beyond 2^120 the quotient exceeds 2^63 (m < 2^53),
+        // as it does when the shifted numerator overflows an i128
+        if e < -120 {
+            return None;
+        }
+        div_round(n.checked_mul(1i128 << -e)?, m)
+    } else if e > 60 {
+        // e > 0 means a normal number, m >= 2^52: the divisor is beyond
+        // 2^112 and the quotient less than half a microsecond
+        0
+    } else {
+        div_round(n, m << e)
+    };
+    i64::try_from(r).ok()
 }

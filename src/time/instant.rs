@@ -425,9 +425,15 @@ impl Instant {
     /// # Note
     /// Unixtime is the number of non-leap seconds since
     /// 1970-01-01 00:00:00 UTC.
+    ///
+    /// The result is the `f64` nearest the exact (whole-microsecond) value,
+    /// so `from_unixtime(1678014225.453).as_unixtime()` is `1678014225.453`.
     pub fn as_unixtime(&self) -> f64 {
-        // Subtract TAI − UTC since unixtime ignores it
-        (self.raw - microleapseconds(self.raw)) as f64 * 1.0e-6
+        // Divide rather than multiply by 1.0e-6: the microsecond count and
+        // 1.0e6 are both exact in f64, so the quotient is correctly rounded,
+        // while 1.0e-6 is not exact and the product can be one ulp off
+        // (1678014225.453 came back as 1678014225.4529998)
+        self.as_unixtime_microseconds() as f64 / 1.0e6
     }
 
     /// J2000 epoch is 2000-01-01 12:00:00 TT
@@ -759,7 +765,8 @@ impl Instant {
     /// # Returns
     /// (year, month, day, hour, minute, second), UTC
     ///
-    /// `second` is an exact number of microseconds converted to `f64`, so
+    /// `second` is the `f64` nearest the exact number of microseconds (a
+    /// time built with 45.453 s reads back as 45.453), so
     /// passing it back to [`Self::from_datetime`] (which rounds to the
     /// nearest microsecond) reproduces the instant exactly from 1972 on and
     /// before 1961. From 1961 to 1971 it is within 1 µs: a pre-1972 UTC
@@ -768,7 +775,9 @@ impl Instant {
     /// as its neighbour (see the `utc_pre1972` module).
     pub fn as_datetime(&self) -> (i32, i32, i32, i32, i32, f64) {
         let (year, month, day, hour, minute, second_us) = self.as_datetime_us();
-        (year, month, day, hour, minute, second_us as f64 * 1.0e-6)
+        // Divided, not multiplied by 1.0e-6, so that it is correctly rounded
+        // (see `as_unixtime`)
+        (year, month, day, hour, minute, second_us as f64 / 1.0e6)
     }
 
     /// Gregorian UTC date and time with the seconds as integer microseconds:
