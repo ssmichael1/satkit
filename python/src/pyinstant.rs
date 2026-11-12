@@ -422,7 +422,7 @@ impl PyInstant {
     /// Convert satkit.time object to RFC3339 string
     ///
     /// Returns:
-    /// str: String representing time in RFC3339 format : "YYYY-MM-DDTHH:MM:SS.sssZ"
+    /// str: String representing time in RFC3339 format : "YYYY-MM-DDTHH:MM:SS.ssssssZ"
     ///
     /// Notes:
     ///  RFC3339 is a standard for representing time in a string format
@@ -434,7 +434,7 @@ impl PyInstant {
     /// Convert satkit.time object to ISO8601 string
     ///
     /// Returns:
-    /// str: String representing time in ISO8601 format : "YYYY-MM-DDTHH:MM:SS.sssZ"
+    /// str: String representing time in ISO8601 format : "YYYY-MM-DDTHH:MM:SS.ssssssZ"
     ///
     /// Notes:
     /// ISO8601 is a standard for representing time in a string format

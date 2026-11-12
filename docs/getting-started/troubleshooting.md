@@ -124,7 +124,7 @@ To send them elsewhere, configure logging as usual, e.g.
 `logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")` or a
 handler on the `satkit` logger. The first-use JPL ephemeris download is
 announced as a warning, so it shows by default; the per-file "Downloading …"
-notices from `utils.download_file` are logged at INFO and appear only when
+notices (logger `satkit.utils.download`) are logged at INFO and appear only when
 logging is configured at that level: `logging.basicConfig(level=logging.INFO)`.
 
 **Rust.** The records go through the [`log`](https://docs.rs/log) facade with
@@ -498,9 +498,10 @@ times = [tle.epoch + sk.duration.from_hours(h) for h in range(3)]
 p, v, err = sk.sgp4(tle, times, errflag=True)
 ```
 
-A TLE with ephemeris type 4 raises
-`RuntimeError: Ephemeris type 4 (SGP4-XP) is not supported ...` instead:
-satkit implements classic SGP4 only.
+Without `errflag=True`, a TLE with ephemeris type 4 raises
+`RuntimeError: Ephemeris type 4 (SGP4-XP) is not supported ...`: satkit
+implements classic SGP4 only. With it, the rows are NaN and the code is
+`sk.sgp4_error.unsupported`.
 
 ### My propagation disagrees with GMAT, STK or Orekit
 

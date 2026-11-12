@@ -101,7 +101,7 @@ usual. The averages skip days before the first measured flux, so before 1947
 they are `-1` and the density model runs on $F_{10.7} = F_{10.7A} = 150$ with
 the measured $A_p$, after a one-time warning.
 
-`satkit.spaceweather.init_from_path()` loads a GFZ table directly, for a
+`satkit.spaceweather.init_from_path()` loads a GFZ table or a CelesTrak `SW-All.csv` directly, for a
 comparison that must pin against one fixed input file. The MSAFE percentile bands are in the file but not yet exposed
 through the API. The warnings can be silenced with
 `satkit.spaceweather.disable_space_weather_time_warning()`.

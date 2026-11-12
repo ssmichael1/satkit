@@ -20,7 +20,7 @@ This 6×6 matrix is computed by augmenting the ODE integration with the variatio
 - **State estimation** — linearization for least-squares fits and Kalman filters
 - **Sensitivity analysis** — "how does the orbit at time $t$ change if I nudge the initial state?"
 
-Pass `output_phi=True` to [`satkit.propagate()`](../api/satprop.md) to compute it. (`rodas4` and `gauss_jackson8` integrators do **not** support STM propagation — use one of the `rkv*` family.)
+Pass `output_phi=True` to [`satkit.propagate()`](../api/satprop.md) to compute it. (`rodas4` and `gauss_jackson8` integrators do **not** support STM propagation — use any of the adaptive Runge-Kutta integrators: `rkv98`, `rkv87`, `rkv65` or `rkts54`.)
 
 ## The `satstate` Class
 

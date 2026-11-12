@@ -44,7 +44,7 @@ passes above 10 deg elevation over the next day:
 
 OMM vs TLE at epoch: 0.000 m apart
 
-fit: Converged (step size tolerance) after 10 iterations, residual norm 0.000 m
+fit: Converged (step size tolerance) after 5 iterations, residual norm 0.000 m
   mean motion 15.48915330 rev/day (was 15.48915330), bstar 1.0270e-4 (was 1.0270e-4)
   1 25544U 98067A   24001.50000000  .00000000  00000-0  10270-3 0    08
   2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330    02

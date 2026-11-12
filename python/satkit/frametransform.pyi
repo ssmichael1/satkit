@@ -55,7 +55,7 @@ def gmst(
         - GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 
     Args:
-        tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
+        tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): scalar, list, or numpy array of satkit.time or datetime.datetime representing time at which to calculate output
 
     Returns:
         float | npt.ArrayLike[np.float]: Greenwich Mean Sidereal Time, radians, at input time(s)
@@ -74,7 +74,7 @@ def eqeq(tm: TimeScalar) -> float:
           - 1.3" sin(2L) (Vallado 2013, §3.7.3). Against the IAU 1994
           equation of the equinoxes with the full IAU 1980 nutation (ERFA
           ``eqeq94``) it is good to about 0.6" (0.65" max, 43 ms of time,
-          over 1950-2100); use :func:`rotation` for the full reduction.
+          over 1950-2100); use ``rotation`` for the full reduction.
 
     Args:
         tm (satkit.time | datetime.datetime): scalar time at which to calculate output
@@ -105,11 +105,11 @@ def gast(
     """Greenwich Apparent Sidereal Time
 
     GMST (IAU 1982) plus the two-term equation of the equinoxes
-    (:func:`eqeq`), so good to about 0.6" (0.65" max, 43 ms of time,
+    (``eqeq``), so good to about 0.6" (0.65" max, 43 ms of time,
     over 1950-2100) against ERFA ``gst94``.
 
     Args:
-        tm (satkit.time): scalar, list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
+        tm (satkit.time): scalar, list, or numpy array of satkit.time or datetime.datetime representing time at which to calculate output
 
     Returns:
         float : Greenwich apparent sidereal time, radians, at input time(s)
@@ -129,7 +129,7 @@ def gast(
     """Greenwich Apparent Sidereal Time
 
     Args:
-        tm (npt.ArrayLike[datetime.datetime] | npt.ArrayLike[time]): list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
+        tm (npt.ArrayLike[datetime.datetime] | npt.ArrayLike[time]): list, or numpy array of satkit.time or datetime.datetime representing time at which to calculate output
 
     Returns:
         npt.ArrayLike[np.float]: Greenwich apparent sidereal time, radians, at input time(s)
@@ -177,7 +177,7 @@ def earth_rotation_angle(
             - ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0)
 
     Args:
-        tm (npt.ArrayLike[datetime.datetime] | npt.ArrayLike[time]): list, or numpy array of astro.time or datetime.datetime representing time at which to calculate output
+        tm (npt.ArrayLike[datetime.datetime] | npt.ArrayLike[time]): list, or numpy array of satkit.time or datetime.datetime representing time at which to calculate output
 
     Returns:
         npt.ArrayLike[np.float]: Earth Rotation Angle at input time[s] in radians
@@ -188,7 +188,7 @@ def earth_rotation_angle(
 def qitrf2tirs(
     tm: TimeScalar,
 ) -> quaternion:
-    """Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
+    """Rotation from the ITRF to the Terrestrial Intermediate Reference System (polar motion)
 
     Args:
         tm (satkit.time | npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -202,7 +202,7 @@ def qitrf2tirs(
 def qitrf2tirs(
     tm: TimeArrayLike,
 ) -> list[quaternion]:
-    """Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
+    """Rotation from the ITRF to the Terrestrial Intermediate Reference System (polar motion)
 
     Args:
         tm (npt.ArrayLike[satkit.time] | datetime.datetime | npt.ArrayLike[datetime.datetime]): Time[s] at which to calculate the quaternion
@@ -222,7 +222,7 @@ def qteme2gcrf(
         - **Approximate**: the same as ``rotation_approx(TEME, GCRF)``, not
           ``rotation(TEME, GCRF)``. TEME (a quasi-inertial frame) is rotated
           to PEF by GMST82 alone, then to GCRF by the approximate chain of
-          :func:`qitrf2gcrf_approx` (two-term equation of the equinoxes and
+          ``qitrf2gcrf_approx`` (two-term equation of the equinoxes and
           nutation, IAU 2006 precession, no frame bias). No polar motion is
           involved. Accurate to 0.55" max against the full IERS 2010
           reduction (1973-2026): ~19 m at LEO, ~110 m at GEO.
@@ -327,16 +327,16 @@ def qgcrf2itrf_approx(
         - Accurate to about 1 arcsec (1.0" max against the full IERS 2010
           reduction, 1973-2026; ~35 m at LEO), of which up to 0.6" is polar
           motion, which this chain neglects
-        - The chain is GAST (GMST82 + the two-term :func:`eqeq`), the
-          two-term nutation of :func:`qtod2mod_approx` and the IAU 2006
-          precession of :func:`qmod2gcrf` (no frame bias). It is often
+        - The chain is GAST (GMST82 + the two-term ``eqeq``), the
+          two-term nutation of ``qtod2mod_approx`` and the IAU 2006
+          precession of ``qmod2gcrf`` (no frame bias). It is often
           labelled "IAU-76/FK5", but it is neither the IAU 1976 precession
           nor the 106-term IAU 1980 nutation series
         - **Velocity transforms**: this quaternion rotates *position* vectors
           between GCRF and ITRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
           picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`gcrf_to_itrf_state` / :func:`itrf_to_gcrf_state` for
+          Use ``gcrf_to_itrf_state`` / ``itrf_to_gcrf_state`` for
           full state (position + velocity) transforms.
 
     Args:
@@ -374,16 +374,16 @@ def qitrf2gcrf_approx(
         - Accurate to about 1 arcsec (1.0" max against the full IERS 2010
           reduction, 1973-2026; ~35 m at LEO), of which up to 0.6" is polar
           motion, which this chain neglects
-        - The chain is GAST (GMST82 + the two-term :func:`eqeq`), the
-          two-term nutation of :func:`qtod2mod_approx` and the IAU 2006
-          precession of :func:`qmod2gcrf` (no frame bias). It is often
+        - The chain is GAST (GMST82 + the two-term ``eqeq``), the
+          two-term nutation of ``qtod2mod_approx`` and the IAU 2006
+          precession of ``qmod2gcrf`` (no frame bias). It is often
           labelled "IAU-76/FK5", but it is neither the IAU 1976 precession
           nor the 106-term IAU 1980 nutation series
         - **Velocity transforms**: this quaternion rotates *position* vectors
           between ITRF and GCRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
           picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          Use ``itrf_to_gcrf_state`` / ``gcrf_to_itrf_state`` for
           full state (position + velocity) transforms.
 
     Args:
@@ -426,7 +426,7 @@ def qgcrf2itrf(
           between ITRF and GCRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
           picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          Use ``itrf_to_gcrf_state`` / ``gcrf_to_itrf_state`` for
           full state (position + velocity) transforms.
 
     Args:
@@ -464,7 +464,7 @@ def qgcrf2itrf(
           between ITRF and GCRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
           picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          Use ``itrf_to_gcrf_state`` / ``gcrf_to_itrf_state`` for
           full state (position + velocity) transforms.
 
     Args:
@@ -490,7 +490,7 @@ def qitrf2gcrf(
           between ITRF and GCRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
           picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          Use ``itrf_to_gcrf_state`` / ``gcrf_to_itrf_state`` for
           full state (position + velocity) transforms.
 
     Args:
@@ -521,7 +521,7 @@ def qitrf2gcrf(
           between ITRF and GCRF but **is not sufficient for velocity** on
           its own. ITRF is a rotating frame, so the velocity transform
           picks up an extra ``omega_earth x r`` term (~470 m/s at LEO).
-          Use :func:`itrf_to_gcrf_state` / :func:`gcrf_to_itrf_state` for
+          Use ``itrf_to_gcrf_state`` / ``gcrf_to_itrf_state`` for
           full state (position + velocity) transforms.
 
     Args:
@@ -608,7 +608,7 @@ def earth_orientation_params(
     Notes:
         - Returns None if the time is before the range of available EOP data, or if no EOP table is loaded
         - For times after the last available EOP data, the last entry's values are returned (constant
-          extrapolation) and a one-time warning is logged; use :func:`eop_status` / :func:`eop_coverage` to check
+          extrapolation) and a one-time warning is logged; use ``eop_status`` / ``eop_coverage`` to check
         - EOP data is available from 1973-01-02 (IERS ``finals2000A.all``) to current, with
           predictions up to a year ahead; refresh with ``satkit.utils.update_datafiles()``
         - See: <https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop.html>
@@ -629,7 +629,7 @@ def qmod2gcrf(tm: TimeScalar) -> quaternion:
     """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given time.
 
     Mean-of-Date accounts for precession but not nutation. For the
-    precession+nutation pair see :func:`qcirs2gcrf` or :func:`qitrf2gcrf`.
+    precession+nutation pair see ``qcirs2gcrf`` or ``qitrf2gcrf``.
 
     Notes:
         - Precession only: the IAU 2006 angles zeta_A, z_A, theta_A
@@ -685,11 +685,11 @@ def to_gcrf(
 
     - ``frame.GCRF`` — returns the 3x3 identity matrix (trivial case)
     - ``frame.LVLH`` — Local Vertical / Local Horizontal
-    - ``frame.RTN``  — Radial / In-track / Cross-track (= RSW = RTN)
+    - ``frame.RTN``  — Radial / In-track / Cross-track (= RSW = RIC)
     - ``frame.NTW``  — Normal-to-velocity / Tangent / Cross-track
 
     For an arbitrary frame-to-frame rotation, compose with
-    :func:`from_gcrf`::
+    ``from_gcrf``::
 
         # NTW -> RIC
         dcm = sk.frametransform.from_gcrf(sk.frame.RTN, pos, vel) @ \\
@@ -707,8 +707,8 @@ def to_gcrf(
         RuntimeError: if ``frame`` is not a satellite-local orbital frame.
             Time-dependent frames (the Earth-fixed ITRF, the quasi-inertial
             TEME, EME2000, etc.) need a time argument for their rotation to GCRF and must use the
-            dedicated quaternion helpers (:func:`qitrf2gcrf`,
-            :func:`qteme2gcrf`, etc.) instead.
+            dedicated quaternion helpers (``qitrf2gcrf``,
+            ``qteme2gcrf``, etc.) instead.
 
     Example:
         ```python
@@ -731,7 +731,7 @@ def itrf_to_gcrf_state(
     (``pos``/``vel`` are shape ``(N, 3)`` arrays and ``time`` is a length-``N``
     array/list of times). The output shape matches the input.
 
-    Unlike the raw :func:`qitrf2gcrf` quaternion, this function correctly
+    Unlike the raw ``qitrf2gcrf`` quaternion, this function correctly
     handles the Earth-rotation contribution to velocity. A point at rest
     on Earth's surface has zero velocity in ITRF but ~465 m/s in GCRF at
     the equator, and this function accounts for that term.
@@ -791,7 +791,7 @@ def gcrf_to_itrf_state(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Transform a satellite state (position + velocity) from GCRF to ITRF.
 
-    Inverse of :func:`itrf_to_gcrf_state`. Rotates the state through
+    Inverse of ``itrf_to_gcrf_state``. Rotates the state through
     GCRF → CIRS → TIRS, subtracts the Earth-rotation ``omega_earth x r``
     term **in TIRS** (where Earth's rotation axis is exactly along +z),
     then applies inverse polar motion to reach ITRF. A geostationary
@@ -821,12 +821,12 @@ def itrf_to_gcrf_state_approx(
     time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Approximate ITRF → GCRF state transform using the approximate
-    reduction of :func:`qitrf2gcrf_approx` (accurate to ~1 arcsec on position).
+    reduction of ``qitrf2gcrf_approx`` (accurate to ~1 arcsec on position).
 
-    Faster alternative to :func:`itrf_to_gcrf_state` when the full IERS
+    Faster alternative to ``itrf_to_gcrf_state`` when the full IERS
     2010 precision is not required. Neglects polar motion, so the
     Earth-rotation sweep ``omega_earth x r`` is evaluated in ITRF directly.
-    Accepts scalar or batched inputs like :func:`itrf_to_gcrf_state`.
+    Accepts scalar or batched inputs like ``itrf_to_gcrf_state``.
 
     Args:
         pos_itrf: ``(3,)`` or ``(N, 3)`` position vector in ITRF, meters
@@ -844,7 +844,7 @@ def gcrf_to_itrf_state_approx(
     time: TimeInput,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Approximate GCRF → ITRF state transform using the approximate
-    reduction of :func:`qgcrf2itrf_approx`. Inverse of :func:`itrf_to_gcrf_state_approx`; accurate to
+    reduction of ``qgcrf2itrf_approx``. Inverse of ``itrf_to_gcrf_state_approx``; accurate to
     ~1 arcsec on position. Accepts scalar or batched inputs.
 
     Args:
@@ -866,7 +866,7 @@ def from_gcrf(
     """Return the 3x3 DCM that transforms a vector from GCRF into a
     satellite-local orbital frame at the current state.
 
-    Transpose of :func:`to_gcrf`. See that function for the list of
+    Transpose of ``to_gcrf``. See that function for the list of
     supported frames, composition examples, and error conditions.
 
     Args:
@@ -898,7 +898,7 @@ def disable_eop_time_warning() -> None:
           over 30 days, and no EOP table loaded at all (zeros used).
         - Each is shown at most once per process; this call suppresses all of them.
         - They are logged to the ``satkit.earth_orientation_params`` logger; silencing that
-          logger (or ``satkit``) with :mod:`logging` works too.
+          logger (or ``satkit``) with ``logging`` works too.
     """
     ...
 
@@ -909,7 +909,7 @@ def eop_coverage() -> tuple[time, time, time] | None:
         (satkit.time, satkit.time, satkit.time) | None: ``(first, last_observed, last)`` — the first
         row, the last *observed* row (rows after it are IERS predictions), and the last row of the
         table; ``None`` if no EOP table is loaded. Epochs after ``last`` use that row's values held
-        constant (see :func:`eop_status`); refresh with ``satkit.utils.update_datafiles()``.
+        constant (see ``eop_status``); refresh with ``satkit.utils.update_datafiles()``.
 
     Example:
         >>> first, last_observed, last = satkit.frametransform.eop_coverage()
@@ -919,7 +919,7 @@ def eop_coverage() -> tuple[time, time, time] | None:
 @deprecated("the EOP table is always finals2000A.all; use eop_coverage()")
 def eop_source() -> str | None:
     """Deprecated since 0.24, removed in 0.25: the EOP table is always IERS
-    ``finals2000A.all``. Use :func:`eop_coverage` to check whether a table is loaded.
+    ``finals2000A.all``. Use ``eop_coverage`` to check whether a table is loaded.
 
     Returns:
         str | None: ``"finals2000A"`` when a table is loaded, ``None`` otherwise.
@@ -955,7 +955,7 @@ def rotation(
     Uses the shortest path through the frame graph for each pair (does not
     always pivot through GCRF). Pairs involving orbit-dependent frames
     (``LVLH``, ``RTN``, ``NTW``) require state and are not supported here —
-    use :func:`to_gcrf` / :func:`from_gcrf` for those.
+    use ``to_gcrf`` / ``from_gcrf`` for those.
 
     Args:
         from_frame: Source frame
@@ -999,10 +999,10 @@ def rotation_with_state(
     ``ICRF``) and the orbit-dependent frames (``LVLH``, ``RTN``, ``NTW``), in a
     single call.
 
-    Unlike :func:`rotation` (which rejects the orbit frames) and :func:`to_gcrf`
+    Unlike ``rotation`` (which rejects the orbit frames) and ``to_gcrf``
     (which rejects the Earth frames), this accepts any pair. It does **not**
     always pivot through GCRF: a purely Earth-frame pair delegates to
-    :func:`rotation`, which takes the shortest path through the frame graph;
+    ``rotation``, which takes the shortest path through the frame graph;
     only pairs involving an orbit-dependent frame compose through GCRF. The
     orbit state (``pos``, ``vel``, both in GCRF) is only consulted when an
     orbit-dependent frame is involved.
@@ -1026,9 +1026,9 @@ def rotation_approx(
     tm: TimeScalar,
 ) -> quaternion:
     """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
-    the approximate reduction of :func:`qitrf2gcrf_approx` (~1 arcsec;
-    TEME <-> GCRF / EME2000 / ICRF 0.55", as :func:`qteme2gcrf`; TEME <-> ITRF
-    is exact, as :func:`qteme2itrf`).
+    the approximate reduction of ``qitrf2gcrf_approx`` (~1 arcsec;
+    TEME <-> GCRF / EME2000 / ICRF 0.55", as ``qteme2gcrf``; TEME <-> ITRF
+    is exact, as ``qteme2itrf``).
 
     Only valid between ``ITRF`` and the inertial cluster (``GCRF``,
     ``EME2000``, ``ICRF``, ``TEME``). ``TIRS`` and ``CIRS`` are defined by
@@ -1090,8 +1090,8 @@ def transform_state_approx(
     vel: npt.ArrayLike,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """State transform using the approximate reduction of
-    :func:`rotation_approx`. Same supported-pair set as
-    :func:`transform_state`; TEME <-> ITRF does not use the approximate chain
+    ``rotation_approx``. Same supported-pair set as
+    ``transform_state``; TEME <-> ITRF does not use the approximate chain
     and equals the full transform.
 
     Args:

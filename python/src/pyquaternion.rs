@@ -27,7 +27,7 @@ use anyhow::{bail, Result};
 /// computationally efficient way of representing 3D rotations.
 /// They can also be multipled together and easily renormalized to
 /// avoid problems with floating-point precision eventually causing
-/// changes in the rotated vecdtor norm.
+/// changes in the rotated vector norm.
 ///
 /// For details, see:
 ///

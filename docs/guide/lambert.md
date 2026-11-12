@@ -75,7 +75,7 @@ $$
 Velocities are decomposed into radial and tangential components using the solution $x$:
 
 $$
-v_{r,1} = \frac{\gamma}{r_1}\left[(\lambda y - x) - \rho(\lambda y + x)\right], \quad v_{t} = \frac{\gamma \sigma (y + \lambda x)}{r}
+v_{r,1} = \frac{\gamma}{r_1}\left[(\lambda y - x) - \rho(\lambda y + x)\right], \quad v_{r,2} = -\frac{\gamma}{r_2}\left[(\lambda y - x) + \rho(\lambda y + x)\right], \quad v_{t} = \frac{\gamma \sigma (y + \lambda x)}{r}
 $$
 
 where $\gamma = \sqrt{\mu s / 2}$, $\rho = (r_1 - r_2)/c$, and $\sigma = \sqrt{1 - \rho^2}$. Angular momentum conservation is guaranteed by construction since the tangential momentum $r \cdot v_t = \gamma \sigma (y + \lambda x)$ is the same at both endpoints.

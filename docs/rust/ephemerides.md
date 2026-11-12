@@ -16,7 +16,7 @@ satkit has two sources of solar-system positions: the JPL Development Ephemeride
 
 ```text
 $ cargo run --example sun_moon
-Sun  distance = 1.016219 AU
+Sun  distance = 1.016172 AU
 Moon distance = 386478 km
 Moon phase 160.9 deg (Full Moon), 97.3% illuminated
 Boston sunrise 09:07 UTC, sunset 00:24 UTC
@@ -39,7 +39,7 @@ Moon: 386605 km away, moving at 1.021 km/s
 Venus: 0.7165 AU from the barycenter
 Mars: 1.3874 AU from the barycenter
 Jupiter: 5.0174 AU from the barycenter
-low-precision Sun:  17 arcsec from DE440
+low-precision Sun:  22 arcsec from DE440
 low-precision Moon: 306 arcsec from DE440
 AU in the DE440 header: 149597870.7 km
 ```

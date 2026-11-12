@@ -254,8 +254,8 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     time (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
 ///
 /// Keyword Args:
-///     gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is gravconst.wgs72
-///     opsmode (satkit.sgp4_opsmode): opsmode.afspc (Air Force Space Command) or opsmode.improved.  Default is opsmode.afspc
+///     gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is sgp4_gravconst.wgs72
+///     opsmode (satkit.sgp4_opsmode): sgp4_opsmode.afspc (Air Force Space Command) or sgp4_opsmode.improved.  Default is sgp4_opsmode.afspc
 ///     errflag (bool): whether or not to output error conditions for each TLE and time output.  Default is False
 ///
 /// Returns:

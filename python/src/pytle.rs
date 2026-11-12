@@ -545,7 +545,7 @@ impl PyTLE {
     /// catalog TLEs roll the revolution counter over.
     ///
     /// Raises:
-    ///     ValueError: if ``sat_num`` is 340000 or above: Alpha-5 (used for
+    ///     ValueError: if ``satnum`` is 340000 or above: Alpha-5 (used for
     ///         the 5-character satellite number field) ends at ``Z9999``
     ///         (339999), so the catalog number cannot be written to a TLE.
     ///         Use ``to_omm()`` instead.
@@ -573,8 +573,8 @@ impl PyTLE {
     ///     epoch (satkit.time): Epoch time for the TLE. Must be within range of times
     ///
     /// Keyword Args:
-    ///     gravconst (satkit.sgp4_gravconst): gravity model SGP4 uses in the fit.  Default is gravconst.wgs72
-    ///     opsmode (satkit.sgp4_opsmode): SGP4 ops mode used in the fit.  Default is opsmode.afspc
+    ///     gravconst (satkit.sgp4_gravconst): gravity model SGP4 uses in the fit.  Default is sgp4_gravconst.wgs72
+    ///     opsmode (satkit.sgp4_opsmode): SGP4 ops mode used in the fit.  Default is sgp4_opsmode.afspc
     ///
     /// Returns:
     ///     tuple[TLE, dict]: Fitted TLE and fitting results in a dictionary

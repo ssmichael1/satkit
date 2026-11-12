@@ -82,6 +82,11 @@ plugins:
             show_bases: false
             members_order: source
             docstring_style: google
+            # Returns sections are written "type: description", one value
+            # per section, with unindented continuation lines.
+            docstring_options:
+              returns_named_value: false
+              returns_multiple_items: false
             show_root_heading: true
             show_root_full_path: false
             heading_level: 2

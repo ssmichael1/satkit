@@ -88,7 +88,7 @@
 //! - **Rust**: Native library available on [crates.io](https://crates.io/crates/satkit)
 //! - **Python**: Complete Python bindings via PyO3, available on [PyPI](https://pypi.org/project/satkit/)
 //!   - Binary wheels for Windows (x86_64), macOS (Apple silicon), and Linux (x86_64 & ARM64)
-//!   - Python versions 3.10 through 3.14
+//!   - Python versions 3.11 through 3.15
 //!   - Documentation at <https://satkit.dev/>
 //!
 //! ## Linear Algebra
@@ -115,8 +115,8 @@
 //! ## Data Files
 //!
 //! The IERS nutation tables and the EGM96 / EGM2008 / JGM-2 / JGM-3 gravity
-//! models are compiled in, so frame transforms, gravity, SGP4 and time scales
-//! need no files. The JPL ephemeris (and ITU_GRACE16, if selected) is
+//! models are compiled in, so gravity, SGP4 and time scales need no files
+//! (Earth-fixed frame transforms also read the Earth orientation table). The JPL ephemeris (and ITU_GRACE16, if selected) is
 //! downloaded on first use and SHA-256 verified; the Earth orientation and
 //! space-weather tables are fetched on first use and refreshed by
 //! `utils::update_datafiles` (the `download` feature, on by default). See
