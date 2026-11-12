@@ -4,7 +4,15 @@ use satkit::Frame;
 #[derive(Clone, PartialEq, Eq)]
 /// Coordinate reference frame
 ///
-/// Used to specify the frame for thrust vectors and maneuvers.
+/// Names the frame of a vector: for ``satkit.frametransform`` (``to_gcrf``,
+/// ``from_gcrf``, ``rotation``, ``transform_state`` and the other
+/// frame-pair functions), for impulsive maneuvers and for continuous
+/// thrust. Not every function accepts every frame: a thrust or maneuver
+/// must be in ``GCRF``, ``RTN``, ``NTW`` or ``LVLH``, and each
+/// ``frametransform`` function lists the frames it supports.
+///
+/// Members are hashable, compare equal to their integer value and to each
+/// other by value, and cannot be constructed (``frame(3)`` is a ``TypeError``).
 ///
 /// Available frames:
 ///

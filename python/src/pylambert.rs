@@ -11,8 +11,9 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 /// arrival velocity vectors for the transfer orbit connecting them.
 ///
 /// Args:
-///     r1 (numpy.ndarray): Initial position vector, 3-element array (meters)
-///     r2 (numpy.ndarray): Final position vector, 3-element array (meters)
+///     r1 (array-like): Initial position vector, meters: any real numeric
+///         3-element array-like (numpy array, list or tuple)
+///     r2 (array-like): Final position vector, meters (likewise)
 ///     tof (float): Time of flight in seconds (must be positive)
 ///     mu (float, optional): Gravitational parameter in m³/s² (default: Earth μ)
 ///     prograde (bool, optional): If True (default), use prograde transfer
@@ -26,9 +27,11 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 ///         zero-revolution solution.
 ///
 /// Raises:
-///     ValueError: If inputs are invalid (non-finite values, tof or mu not
-///         positive, zero position, r1 == r2), or if the solver fails to
-///         converge
+///     TypeError: If ``r1`` or ``r2`` is not a real numeric array-like, or
+///         ``tof`` / ``mu`` is not a number
+///     ValueError: If inputs are invalid (``r1`` or ``r2`` not 3 elements,
+///         non-finite values, tof or mu not positive, zero position,
+///         r1 == r2), or if the solver fails to converge
 ///
 /// Example:
 ///     >>> import satkit
