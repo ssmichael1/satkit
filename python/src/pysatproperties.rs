@@ -2,22 +2,40 @@ use satkit::orbitprop::SatPropertiesSimple;
 
 use crate::pyecom::{ecom_from_block, encode_ecom_block, PyEcomParams, ECOM_BLOCK_LEN};
 use crate::pythrust::{py_thrusts_to_profile, PyThrust};
-use crate::pyutils::invalid_value;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
-crate::arg_extractor!(cdaoverm_arg: f64, |_| invalid_value("cdaoverm"));
-crate::arg_extractor!(craoverm_arg: f64, |_| invalid_value("craoverm"));
+// An argument of the wrong type is a `TypeError` (these were `ValueError`,
+// or `RuntimeError` for `ecom`, when the keywords were parsed by hand)
+crate::arg_extractor!(cdaoverm_arg: f64, |e| {
+    pyo3::exceptions::PyTypeError::new_err(format!("cdaoverm must be a number: {e}"))
+});
+crate::arg_extractor!(craoverm_arg: f64, |e| {
+    pyo3::exceptions::PyTypeError::new_err(format!("craoverm must be a number: {e}"))
+});
 crate::arg_extractor!(ecom_arg: Option<PyEcomParams>, |e| {
-    pyo3::exceptions::PyRuntimeError::new_err(format!("ecom must be a satkit.ecomparams: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!("ecom must be a satkit.ecomparams: {e}"))
 });
 // `satproperties=` of `propagate` and `satstate.propagate`
 crate::arg_extractor!(pub(crate) satproperties_arg: Option<PySatProperties>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!(
+        "satproperties must be a satkit.satproperties: {e}"
+    ))
 });
+
+/// Cd A / m scales the drag deceleration; a negative one would accelerate
+/// the satellite along its velocity
+fn check_cdaoverm(v: f64) -> PyResult<f64> {
+    if v.is_nan() || v < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "cdaoverm must not be negative or NaN, got {v}"
+        )));
+    }
+    Ok(v)
+}
 
 /// Satellite properties relevant for drag, radiation pressure, and thrust
 ///
@@ -25,9 +43,9 @@ crate::arg_extractor!(pub(crate) satproperties_arg: Option<PySatProperties>, |e|
 /// and thrust parameters be set for duration of propagation.
 ///
 /// Attributes:
-///     cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
+///     cdaoverm (float): Coefficient of drag times area over mass in m^2/kg; not negative
 ///     craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
-///     thrusts (list[thrust]): List of continuous thrust arcs
+///     thrusts (list[thrust]): List of continuous thrust arcs (a copy; assign a list to change them)
 ///     ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
 ///         coefficients, added to the cannonball term (use ``craoverm=0``
 ///         for a pure ECOM model). See :class:`ecomparams` for the
@@ -56,10 +74,12 @@ impl PySatProperties {
     ///         pure ECOM model). Default None
     ///
     /// Raises:
-    ///     TypeError: if any argument is passed positionally. (Releases before
-    ///         this change read positional arguments as (craoverm, cdaoverm),
+    ///     TypeError: if any argument is passed positionally (releases before
+    ///         this check read positional arguments as (craoverm, cdaoverm),
     ///         the reverse of the documented order, so positional calls are
-    ///         refused rather than reinterpreted.)
+    ///         refused rather than reinterpreted), or an argument has the
+    ///         wrong type
+    ///     ValueError: if cdaoverm is negative or NaN
     ///
     #[new]
     // `*args` only catches positional calls to refuse them with the message
@@ -85,7 +105,7 @@ impl PySatProperties {
                 if args.len() == 1 { "" } else { "s" }
             )));
         }
-        let mut props = SatPropertiesSimple::new(cdaoverm, craoverm);
+        let mut props = SatPropertiesSimple::new(check_cdaoverm(cdaoverm)?, craoverm);
         if let Some(thrusts) = thrusts {
             props = props.with_thrust(py_thrusts_to_profile(thrusts));
         }
@@ -125,13 +145,18 @@ impl PySatProperties {
     /// Set the satellite's susceptibility to drag
     ///
     /// Args:
-    ///     cdaoverm (float): Cd A / m (m^2/kg)
+    ///     cdaoverm (float): Cd A / m (m^2/kg); ``ValueError`` if negative or NaN
     #[setter]
-    fn set_cdaoverm(&mut self, cdaoverm: f64) {
-        self.0.cdaoverm = cdaoverm;
+    fn set_cdaoverm(&mut self, cdaoverm: f64) -> PyResult<()> {
+        self.0.cdaoverm = check_cdaoverm(cdaoverm)?;
+        Ok(())
     }
 
-    /// Get the list of thrust arcs
+    /// The continuous thrust arcs
+    ///
+    /// A new list on every access: appending to it or removing from it does
+    /// not change the properties. Assign a whole list to change the arcs
+    /// (``props.thrusts = props.thrusts + [arc]``).
     ///
     /// Returns:
     ///     list[satkit.thrust]: List of continuous thrust arcs
@@ -155,6 +180,9 @@ impl PySatProperties {
     }
 
     /// Get the ECOM solar-radiation-pressure coefficients, or None
+    ///
+    /// A copy on every access: setting a coefficient on it does not change
+    /// the properties; assign the modified ``ecomparams`` back.
     ///
     /// When set, the ECOM acceleration (see satkit.ecomparams for the DYB
     /// frame, sign and eclipse conventions) is added to the cannonball term
@@ -301,5 +329,39 @@ impl PySatProperties {
 
     fn __str__(&self) -> String {
         self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        let thrusts: Vec<String> = self
+            .0
+            .thrust
+            .thrusts
+            .iter()
+            .map(|t| PyThrust(t.clone()).__repr__())
+            .collect();
+        format!(
+            "satproperties(cdaoverm={:?}, craoverm={:?}, thrusts=[{}], ecom={})",
+            self.0.cdaoverm,
+            self.0.craoverm,
+            thrusts.join(", "),
+            self.0
+                .ecom
+                .map_or_else(|| "None".to_string(), |e| PyEcomParams(e).__repr__()),
+        )
+    }
+
+    /// Equal when the drag and radiation-pressure coefficients, the thrust
+    /// arcs (in order) and the ECOM coefficients are all equal
+    fn __eq__(&self, other: &Self) -> bool {
+        let (a, b) = (&self.0, &other.0);
+        a.cdaoverm == b.cdaoverm
+            && a.craoverm == b.craoverm
+            && a.ecom == b.ecom
+            && a.thrust.thrusts.len() == b.thrust.thrusts.len()
+            && a.thrust
+                .thrusts
+                .iter()
+                .zip(&b.thrust.thrusts)
+                .all(|(x, y)| crate::pythrust::thrust_eq(x, y))
     }
 }

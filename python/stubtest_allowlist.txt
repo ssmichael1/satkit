@@ -64,7 +64,6 @@ satkit\.satkit\.quaternion\.__new__
 # Emitted for pickling; not user-facing API.
 satkit\.satkit\.itrfcoord\.__getnewargs_ex__
 satkit\.satkit\.kepler\.__getnewargs_ex__
-satkit\.satkit\.propresult\.__getnewargs_ex__
 satkit\.satkit\.propsettings\.__getnewargs_ex__
 satkit\.satkit\.satstate\.__getnewargs_ex__
 satkit\.satkit\.time\.__getnewargs_ex__

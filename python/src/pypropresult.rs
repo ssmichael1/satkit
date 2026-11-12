@@ -3,10 +3,9 @@ use pyo3::prelude::*;
 use crate::pyinstant::{PyInstant, ToTimeVec};
 use crate::pyutils::*;
 
-use pyo3::types::{PyBytes, PyDict, PyTuple};
+use pyo3::types::PyBytes;
 use pyo3::IntoPyObjectExt;
 
-use satkit::mathtypes::*;
 use satkit::orbitprop::PropagationResult;
 use satkit::Instant;
 
@@ -30,25 +29,30 @@ pub enum PyPropResultType {
 
 /// Propagation statistics
 ///
-/// This class holds statistics about the result of a high-precision orbit propagation
+/// The step and force-evaluation counts of a high-precision orbit propagation,
+/// for whichever integrator ran it (the adaptive Runge-Kutta pairs, RODAS4 or
+/// the fixed-step Gauss-Jackson 8). Returned by ``propresult.stats``; not
+/// constructed directly.
 ///
 #[pyclass(name = "propstats", module = "satkit")]
 pub struct PyPropStats {
-    /// Number of function evaluations
+    /// Number of force-model (derivative) evaluations
     ///
     /// Returns:
-    ///     int: number of derivative function evalations used in propagation
+    ///     int: number of derivative function evaluations used in propagation
     #[pyo3(get)]
     num_eval: u32,
 
-    /// Number of accepted steps
+    /// Number of accepted integrator steps (for the fixed-step
+    /// ``integrator.gauss_jackson8``, the number of steps taken)
     ///
     /// Returns:
     ///     int: number of accepted steps in propagation
     #[pyo3(get)]
     num_accept: u32,
 
-    /// Number of rejected steps
+    /// Number of steps the adaptive step-size control rejected and retried
+    /// (always 0 for the fixed-step ``integrator.gauss_jackson8``)
     ///
     /// Returns:
     ///    int: number of rejected steps in propagation
@@ -61,6 +65,13 @@ impl PyPropStats {
     fn __str__(&self) -> String {
         format!("Propagation Statistics:\n  Function Evals: {}\n  Accepted Steps: {}\n  Rejected Steps: {}",
     self.num_eval, self.num_accept, self.num_reject)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "propstats(num_eval={}, num_accept={}, num_reject={})",
+            self.num_eval, self.num_accept, self.num_reject
+        )
     }
 
     /// Rebuild the statistics from their three counts. Used internally by
@@ -90,13 +101,18 @@ impl PyPropStats {
 /// The result includes the final state of the satellite, the time at which the state was computed,
 /// and statistics about the propagation
 ///
-/// The result may also include a dense ODE solution that can be used for interpolation of states
-/// between the begin and end times
+/// The result also includes dense output that can be used for interpolation of states
+/// between the begin and end times (``interp``), unless ``propsettings.enable_interp``
+/// was False or the integrator has none (``integrator.rodas4``,
+/// ``integrator.rkv98_nointerp``); ``can_interp`` says which.
+///
+/// Returned by ``satkit.propagate``; not constructed directly.
 ///
 /// Attributes:
 ///
 ///    time_begin: satkit.time object representing the time at which the propagation began
 ///          time: satkit.time object representing the time at which the propagation ended
+///                (same as time_end)
 ///         stats: satkit.propstats object with statistics about the propagation
 ///           pos: 3-element numpy array representing the final position of the satellite in GCRF meters
 ///           vel: 3-element numpy array representing the final velocity of the satellite in GCRF m/s
@@ -105,9 +121,8 @@ impl PyPropStats {
 ///           phi: 6x6 numpy array representing the state transition matrix between
 ///                the begin and end times, if requested (maps a begin-state perturbation
 ///                in meters, m/s to the end state in meters, m/s)
-///    can_interp: boolean indicating whether the result includes a dense ODE
-///                solution that can be used for interpolation
-///                of states between the begin and end times
+///    can_interp: boolean indicating whether the result includes dense output,
+///                so that ``interp`` works between the begin and end times
 ///
 #[pyclass(name = "propresult", module = "satkit", from_py_object)]
 #[derive(Debug, Clone)]
@@ -131,47 +146,35 @@ fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
     s.push_str(format!("       Function Evaluations: {}\n", r.num_eval).as_str());
     s.push_str(format!("             Accepted Steps: {}\n", r.accepted_steps).as_str());
     s.push_str(format!("             Rejected Steps: {}\n", r.rejected_steps).as_str());
-    s.push_str(format!("   Can Interp: {}\n", r.odesol.is_some()).as_str());
-    if r.odesol.is_some() {
-        s.push_str(format!("        Begin Time: {}", r.time_begin).as_str());
-    }
+    s.push_str(format!("   Can Interp: {}\n", r.can_interp()).as_str());
+    s.push_str(format!("        Begin Time: {}", r.time_begin).as_str());
     s
 }
 
 #[pymethods]
 impl PyPropResult {
-    #[new]
-    /// This should never be called and is here only for pickle support
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self(PyPropResultType::R1(Box::new(PropagationResult::<1> {
-            time_begin: Instant::INVALID,
-            state_begin: Vector::<6>::zeros(),
-            time_end: Instant::INVALID,
-            state_end: Vector::<6>::zeros(),
-            num_eval: 0,
-            accepted_steps: 0,
-            rejected_steps: 0,
-            next_step_secs: 0.0,
-            odesol: None,
-            gj_dense: None,
-            integrator: satkit::orbitprop::Integrator::default(),
-        })))
-    }
-
-    /// Get the begin time (time at which state_begin is valid)
+    /// Time at which the propagation began
+    ///
+    /// Returns:
+    ///     satkit.time: time at which ``state_begin`` is valid
     #[getter]
     fn time_begin(&self) -> PyInstant {
         PyInstant(each!(&self.0, r => r.time_begin))
     }
 
-    /// Get the end time
+    /// Time of the end state (same as time_end)
+    ///
+    /// Returns:
+    ///     satkit.time: time at which ``state`` / ``pos`` / ``vel`` are valid
     #[getter]
     fn time(&self) -> PyInstant {
         self.time_end()
     }
 
-    /// Get the end time
+    /// Time of the end state
+    ///
+    /// Returns:
+    ///     satkit.time: time at which ``state_end`` is valid
     #[getter]
     fn time_end(&self) -> PyInstant {
         PyInstant(each!(&self.0, r => r.time_end))
@@ -275,26 +278,59 @@ impl PyPropResult {
         }
     }
 
-    /// Whether this result supports interpolation (dense output is available)
+    fn __repr__(&self) -> String {
+        let s = self.end6();
+        format!(
+            "propresult(time_begin={}, time_end={}, pos=[{:?}, {:?}, {:?}], \
+             vel=[{:?}, {:?}, {:?}], phi={}, can_interp={})",
+            each!(&self.0, r => r.time_begin),
+            each!(&self.0, r => r.time_end),
+            s[0],
+            s[1],
+            s[2],
+            s[3],
+            s[4],
+            s[5],
+            match self.0 {
+                PyPropResultType::R1(_) => "None",
+                PyPropResultType::R7(_) => "6x6",
+            },
+            if self.can_interp() { "True" } else { "False" },
+        )
+    }
+
+    /// Whether ``interp`` works on this result: True when the propagation
+    /// stored dense output.
+    ///
+    /// False when ``propsettings.enable_interp`` was False, for
+    /// ``integrator.rodas4`` and ``integrator.rkv98_nointerp`` (which have no
+    /// interpolant) and for a zero-duration propagation; ``interp`` then
+    /// raises ``ValueError``.
+    ///
+    /// Returns:
+    ///     bool: whether dense output is available for interpolation
     #[getter]
-    const fn can_interp(&self) -> bool {
-        each!(&self.0, r => r.odesol.is_some() || r.gj_dense.is_some())
+    fn can_interp(&self) -> bool {
+        each!(&self.0, r => r.can_interp())
     }
 
-    fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new(py);
-        let tp = PyTuple::empty(py);
-        (tp, d)
+    /// Rebuild a result from its pickled byte state. Used internally by
+    /// `__reduce__`; not part of the public API.
+    #[staticmethod]
+    fn _from_pickle(state: &[u8]) -> PyResult<Self> {
+        Ok(Self(serde_pickle_from_slice(state, "propresult")?))
     }
 
-    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        self.0 = serde_pickle_from_slice(state.as_bytes(py), "propresult")?;
-        Ok(())
-    }
-
-    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        let p = serde_pickle_to_vec(&self.0, "propresult")?;
-        PyBytes::new(py, p.as_slice()).into_py_any(py)
+    /// Pickle (and `copy.deepcopy`) support. `propresult` has no `__new__`
+    /// (a result only comes from `propagate`), so it is rebuilt through the
+    /// private `_from_pickle` staticmethod from a serde byte payload.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyBytes>,))> {
+        let bytes = serde_pickle_to_vec(&self.0, "propresult")?;
+        let ctor = py.get_type::<Self>().getattr("_from_pickle")?;
+        Ok((ctor, (PyBytes::new(py, &bytes),)))
     }
 
     /// Interpolate the GCRF state at one or more times between the begin and end times
@@ -311,9 +347,12 @@ impl PyPropResult {
     ///     list of times
     ///
     /// Raises:
-    ///     ValueError: if output_phi is True but the propagation did not compute
-    ///         the state transition matrix (``propagate(..., output_phi=True)``),
-    ///         or a time is outside the interpolation range
+    ///     ValueError: if the result has no dense output (``can_interp`` is
+    ///         False), a time is outside the begin-to-end range, or output_phi
+    ///         is True but the propagation did not compute the state transition
+    ///         matrix (``propagate(..., output_phi=True)``)
+    ///     TypeError: if time is not a time or a list / array of times (a
+    ///         ``RuntimeError`` for a tuple, a number or a string)
     #[pyo3(signature=(time, output_phi=false))]
     fn interp(&self, py: Python, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
         // Without the STM there is no phi to return; this used to hand back
@@ -327,6 +366,16 @@ impl PyPropResult {
         // A list or array of times (including a datetime64 array, which
         // used to be read as a single time) gives one result per time
         let input = (&time).to_time_input()?;
+        // `can_interp` and `interp` agree: without dense output nothing is
+        // interpolated, not even the begin time (which the core hands back
+        // as a special case) or an empty list
+        if !self.can_interp() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "this result has no dense output to interpolate (can_interp is False): \
+                 propagate over a non-zero span with propsettings.enable_interp=True and an \
+                 integrator other than rodas4 or rkv98_nointerp",
+            ));
+        }
         let times = input.times;
 
         if input.scalar {
@@ -386,7 +435,19 @@ mod test {
 
     #[test]
     fn test_ser() {
-        let sol = PyPropResult::new();
+        let sol = PyPropResult(PyPropResultType::R1(Box::new(PropagationResult::<1> {
+            time_begin: Instant::INVALID,
+            state_begin: satkit::mathtypes::Vector::<6>::zeros(),
+            time_end: Instant::INVALID,
+            state_end: satkit::mathtypes::Vector::<6>::zeros(),
+            num_eval: 0,
+            accepted_steps: 0,
+            rejected_steps: 0,
+            next_step_secs: 0.0,
+            odesol: None,
+            gj_dense: None,
+            integrator: satkit::orbitprop::Integrator::default(),
+        })));
         println!("sol = {:?}", sol);
         let v = serde_pickle::to_vec(&sol.0, serde_pickle::SerOptions::default()).unwrap();
         let sol2 = PyPropResult(

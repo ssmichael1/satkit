@@ -1,20 +1,46 @@
 use pyo3::prelude::*;
 
 use crate::pygravity::GravModel;
-use crate::{PyDuration, PyInstant};
+use crate::pyinstant::TimeArg;
+use crate::PyDuration;
 use satkit::orbitprop::{Integrator, PropSettings, TideModel};
 
 use pyo3::types::{PyBytes, PyDelta, PyDeltaAccess, PyDict, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 /// Choice of ODE integrator for orbit propagation
+///
+/// Members:
+///
+/// * ``rkv98``: Verner 9(8), 8th-degree dense output, 21 stages (default)
+/// * ``rkv98_nointerp``: Verner 9(8), 16 stages, never any dense output. The
+///   same as ``rkv98`` with ``propsettings.enable_interp=False``, which already
+///   runs this tableau; kept for scripts that name it
+/// * ``rkv87``: Verner 8(7), 7th-degree dense output, 17 stages
+/// * ``rkv65``: Verner 6(5), 6th-degree dense output, 10 stages
+/// * ``rkts54``: Tsitouras 5(4) with FSAL, 7 stages
+/// * ``rodas4``: RODAS4 L-stable Rosenbrock 4(3), 6 stages, for stiff problems.
+///   No dense output, no state transition matrix
+/// * ``gauss_jackson8``: Gauss-Jackson 8, fixed-step multistep
+///   predictor-corrector with step ``propsettings.gj_step_seconds`` (its
+///   magnitude is used). Dense output (quintic Hermite); no state transition
+///   matrix; the span must cover at least 8 steps
 #[allow(non_camel_case_types)]
-#[pyclass(name = "integrator", module = "satkit", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+#[pyclass(
+    name = "integrator",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PyIntegrator {
     /// Verner 9(8) with 8th-degree dense output, 21 stages (16 + 5 for the interpolant; default)
     rkv98 = 0,
-    /// Verner 9(8) without interpolation, 16 stages
+    /// Verner 9(8) without interpolation, 16 stages. Equivalent to `rkv98`
+    /// with `enable_interp = false`; a result never has dense output.
     rkv98_nointerp = 1,
     /// Verner 8(7) with 7th-degree dense output, 17 stages (13 + 4 for the interpolant)
     rkv87 = 2,
@@ -25,9 +51,10 @@ pub enum PyIntegrator {
     /// RODAS4 — L-stable Rosenbrock 4(3), 6 stages. For stiff problems.
     rodas4 = 5,
     /// Gauss-Jackson 8 — 8th-order fixed-step multistep predictor-corrector
-    /// for high-precision orbit propagation. Requires setting
-    /// `gj_step_seconds` on the propsettings. Supports dense output
-    /// (quintic Hermite interpolation); no STM support.
+    /// for high-precision orbit propagation. Uses the fixed step
+    /// `gj_step_seconds` of the propsettings (default 60 s) and needs a span
+    /// of at least 8 steps. Supports dense output (quintic Hermite
+    /// interpolation); no STM support.
     gauss_jackson8 = 6,
 }
 
@@ -61,10 +88,26 @@ impl From<Integrator> for PyIntegrator {
     }
 }
 
-/// Solid Earth tide model selector.
+/// Solid Earth tide model selector (IERS Conventions 2010, Chapter 6).
+///
+/// Members:
+///
+/// * ``none``: no solid Earth tide correction
+/// * ``solid_step1``: IERS 2010 section 6.2.1 Step 1, the frequency-independent
+///   Love-number response; about 99% of the solid-tide signal (default)
+/// * ``solid_full``: Step 1 plus the frequency-dependent Step 2 corrections.
+///   Step 2 is not yet implemented; currently behaves as ``solid_step1``
 #[allow(non_camel_case_types)]
-#[pyclass(name = "tidemodel", module = "satkit", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+#[pyclass(
+    name = "tidemodel",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PyTideModel {
     /// No solid Earth tide correction.
     none = 0,
@@ -105,17 +148,20 @@ impl From<TideModel> for PyTideModel {
 ///         units of the state (meters for position elements, m/s for velocity elements). Default 1e-8
 ///     rel_error (float): Maximum relative error of any element in the propagated state, unitless. Default 1e-8
 ///     gravity_degree (int): Maximum degree of spherical harmonic gravity model (at most 70). Default 4
-///     gravity_order (int): Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (``ValueError`` otherwise). Default same as gravity_degree
+///     gravity_order (int | None): Maximum order of spherical harmonic gravity model. Must be <= gravity_degree
+///         (``ValueError`` otherwise). Default None: the order equals gravity_degree and follows it when
+///         gravity_degree is assigned later, until gravity_order is assigned
 ///     gravity_model (satkit.gravmodel): Gravity model. Default gravmodel.egm2008
 ///     use_spaceweather (bool): Use space weather data for atmospheric density. Default True
 ///     use_sun_gravity (bool): Include sun third-body gravity. Default True
 ///     use_moon_gravity (bool): Include moon third-body gravity. Default True
 ///     tide_model (satkit.tidemodel): Solid Earth tide model. Default tidemodel.solid_step1
 ///     use_relativistic_correction (bool): Include general-relativistic acceleration. Default True
-///     enable_interp (bool): Store dense output for interpolation. Default True. False also runs
+///     enable_interp (bool): Store dense output so that propresult.interp works. Default True. False also runs
 ///         integrator.rkv98 as its 16-stage no-interpolant tableau (24% fewer force evaluations per step)
 ///     integrator (satkit.integrator): ODE integrator. Default integrator.rkv98
-///     gj_step_seconds (float): Fixed step size for integrator.gauss_jackson8, seconds. Default 60.0
+///     gj_step_seconds (float): Fixed step size for integrator.gauss_jackson8, seconds (the magnitude is
+///         used; the span must cover at least 8 steps). Default 60.0
 ///     max_steps (int): Maximum number of integrator steps. Default 1_000_000
 ///     require_eop_coverage (bool): Raise if the span is not inside the EOP table (past its end or before 1973-01-02). Default False
 ///     initial_step_secs (float | None): First step the adaptive integrators attempt, seconds.
@@ -123,7 +169,12 @@ impl From<TideModel> for PyTideModel {
 ///         Set to a previous result's ``next_step_secs`` to warm-start a follow-on arc.
 #[pyclass(name = "propsettings", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PyPropSettings(pub PropSettings);
+pub struct PyPropSettings(
+    pub PropSettings,
+    /// Whether `gravity_order` follows `gravity_degree`: true until an order
+    /// is given to the constructor or assigned
+    bool,
+);
 
 /// Reject degrees the evaluator cannot honour (it would otherwise silently
 /// evaluate at the maximum). Mirrors `PropSettings::set_gravity`.
@@ -137,21 +188,34 @@ fn check_gravity_degree(val: u16) -> PyResult<u16> {
     Ok(val)
 }
 
+// `TypeError`, as the property setters raise for the same mistake (the
+// constructor used to raise `ValueError`)
 crate::arg_extractor!(gravity_model_arg: GravModel, |_| {
-    pyo3::exceptions::PyValueError::new_err(
+    pyo3::exceptions::PyTypeError::new_err(
         "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.egm96)",
     )
 });
 crate::arg_extractor!(integrator_arg: PyIntegrator, |_| {
-    pyo3::exceptions::PyValueError::new_err(
+    pyo3::exceptions::PyTypeError::new_err(
         "integrator must be a satkit.integrator enum value (e.g. satkit.integrator.rkv98)",
     )
 });
 crate::arg_extractor!(tide_model_arg: PyTideModel, |_| {
-    pyo3::exceptions::PyValueError::new_err(
+    pyo3::exceptions::PyTypeError::new_err(
         "tide_model must be a satkit.tidemodel enum value (e.g. satkit.tidemodel.solid_step1)",
     )
 });
+
+/// An error tolerance is a magnitude: negative or NaN is refused (zero is
+/// allowed, leaving the other tolerance in control)
+fn check_tolerance(name: &str, val: f64) -> PyResult<f64> {
+    if val.is_nan() || val < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} must not be negative or NaN, got {val}"
+        )));
+    }
+    Ok(val)
+}
 
 #[pymethods]
 impl PyPropSettings {
@@ -194,9 +258,10 @@ impl PyPropSettings {
         require_eop_coverage: bool,
         initial_step_secs: Option<f64>,
     ) -> PyResult<Self> {
+        let order_follows_degree = gravity_order.is_none();
         let mut ps = PropSettings::default();
-        ps.abs_error = abs_error;
-        ps.rel_error = rel_error;
+        ps.abs_error = check_tolerance("abs_error", abs_error)?;
+        ps.rel_error = check_tolerance("rel_error", rel_error)?;
         ps.gravity_degree = check_gravity_degree(gravity_degree)?;
         // The order defaults to the degree; a larger one is refused, as by
         // the setter (it used to be clamped silently)
@@ -222,7 +287,7 @@ impl PyPropSettings {
         ps.max_steps = max_steps;
         ps.require_eop_coverage = require_eop_coverage;
         ps.initial_step_secs = initial_step_secs;
-        Ok(Self(ps))
+        Ok(Self(ps, order_follows_degree))
     }
 
     /// Maximum absolute error of any element in the propagated state, in the units
@@ -234,7 +299,7 @@ impl PyPropSettings {
 
     #[setter(abs_error)]
     fn set_abs_error(&mut self, val: f64) -> PyResult<()> {
-        self.0.abs_error = val;
+        self.0.abs_error = check_tolerance("abs_error", val)?;
         Ok(())
     }
 
@@ -246,10 +311,16 @@ impl PyPropSettings {
 
     #[setter(rel_error)]
     fn set_rel_error(&mut self, val: f64) -> PyResult<()> {
-        self.0.rel_error = val;
+        self.0.rel_error = check_tolerance("rel_error", val)?;
         Ok(())
     }
 
+    /// Maximum degree of the spherical-harmonic gravity model, at most 70
+    /// (``ValueError`` above that). Default 4.
+    ///
+    /// Assigning it also sets ``gravity_order`` to the same value, unless
+    /// ``gravity_order`` was given to the constructor or assigned, in which
+    /// case the order is kept (lowered to the new degree if it exceeds it).
     #[getter]
     fn get_gravity_degree(&self) -> u16 {
         self.0.gravity_degree
@@ -258,12 +329,19 @@ impl PyPropSettings {
     #[setter(gravity_degree)]
     fn set_gravity_degree(&mut self, val: u16) -> PyResult<()> {
         self.0.gravity_degree = check_gravity_degree(val)?;
-        if self.0.gravity_order > val {
+        // The order follows the degree until it is chosen explicitly (it
+        // used to stay at its old value, so `gravity_degree = 20` alone gave
+        // a 20x4 field); an explicit order is only lowered to stay valid
+        if self.1 || self.0.gravity_order > val {
             self.0.gravity_order = val;
         }
         Ok(())
     }
 
+    /// Maximum order of the spherical-harmonic gravity model. Must be <=
+    /// ``gravity_degree`` (``ValueError`` otherwise). Default: the same as
+    /// ``gravity_degree``, which it follows until it is assigned (or was
+    /// given to the constructor).
     #[getter]
     fn get_gravity_order(&self) -> u16 {
         self.0.gravity_order
@@ -278,9 +356,11 @@ impl PyPropSettings {
             ));
         }
         self.0.gravity_order = val;
+        self.1 = false;
         Ok(())
     }
 
+    /// Include the Sun's third-body gravity. Default True
     #[getter]
     fn get_use_sun_gravity(&self) -> bool {
         self.0.use_sun_gravity
@@ -292,6 +372,7 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Include the Moon's third-body gravity. Default True
     #[getter]
     fn get_use_moon_gravity(&self) -> bool {
         self.0.use_moon_gravity
@@ -318,6 +399,9 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Use space weather data (F10.7, Ap) when computing atmospheric density
+    /// for drag. Only matters when ``satproperties.cdaoverm`` is non-zero.
+    /// Default True
     #[getter]
     fn get_use_spaceweather(&self) -> bool {
         self.0.use_spaceweather
@@ -329,6 +413,7 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Earth gravity model (``satkit.gravmodel``). Default ``gravmodel.egm2008``
     #[getter]
     fn get_gravity_model(&self) -> GravModel {
         self.0.gravity_model.into()
@@ -340,6 +425,7 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// ODE integrator (``satkit.integrator``). Default ``integrator.rkv98``
     #[getter]
     fn get_integrator(&self) -> PyIntegrator {
         self.0.integrator.into()
@@ -351,8 +437,10 @@ impl PyPropSettings {
         Ok(())
     }
 
-    /// Fixed step size used by integrator.gauss_jackson8, seconds. Ignored by
-    /// adaptive integrators. Default 60.0
+    /// Fixed step size used by integrator.gauss_jackson8, seconds. Its
+    /// magnitude is used (the propagation direction sets the sign), and the
+    /// span must cover at least 8 steps. Ignored by adaptive integrators.
+    /// Default 60.0
     #[getter]
     fn get_gj_step_seconds(&self) -> f64 {
         self.0.gj_step_seconds
@@ -364,6 +452,8 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Maximum number of integrator steps before ``propagate`` fails with
+    /// ``RuntimeError``. Applies to every integrator. Default 1_000_000
     #[getter]
     fn get_max_steps(&self) -> usize {
         self.0.max_steps
@@ -375,6 +465,8 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Solid Earth tide model (``satkit.tidemodel``). Default
+    /// ``tidemodel.solid_step1``; ``tidemodel.none`` disables the correction
     #[getter]
     fn get_tide_model(&self) -> PyTideModel {
         self.0.tide_model.into()
@@ -386,6 +478,8 @@ impl PyPropSettings {
         Ok(())
     }
 
+    /// Include the general-relativistic acceleration of IERS 2010 Eq. 10.12
+    /// (Schwarzschild, geodesic precession, Lense-Thirring). Default True
     #[getter]
     fn get_use_relativistic_correction(&self) -> bool {
         self.0.use_relativistic_correction
@@ -443,6 +537,28 @@ impl PyPropSettings {
         self.__str__()
     }
 
+    /// Equal when every setting is equal. The table stored by
+    /// `precompute_terms` is a cache and is not compared.
+    fn __eq__(&self, other: &Self) -> bool {
+        let (a, b) = (&self.0, &other.0);
+        a.gravity_degree == b.gravity_degree
+            && a.gravity_order == b.gravity_order
+            && a.gravity_model == b.gravity_model
+            && a.abs_error == b.abs_error
+            && a.rel_error == b.rel_error
+            && a.use_spaceweather == b.use_spaceweather
+            && a.use_sun_gravity == b.use_sun_gravity
+            && a.use_moon_gravity == b.use_moon_gravity
+            && a.tide_model == b.tide_model
+            && a.use_relativistic_correction == b.use_relativistic_correction
+            && a.enable_interp == b.enable_interp
+            && a.integrator == b.integrator
+            && a.gj_step_seconds == b.gj_step_seconds
+            && a.max_steps == b.max_steps
+            && a.require_eop_coverage == b.require_eop_coverage
+            && a.initial_step_secs == b.initial_step_secs
+    }
+
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
         (PyTuple::empty(py), PyDict::new(py))
     }
@@ -450,27 +566,60 @@ impl PyPropSettings {
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
         // The `precomputed` cache is intentionally skipped (see PropSettings);
         // a restored settings object recomputes it lazily.
+        // State: (serde bytes, order-follows-degree flag)
         let bytes = crate::pyutils::serde_pickle_to_vec(&self.0, "propsettings")?;
-        PyBytes::new(py, &bytes).into_py_any(py)
+        (PyBytes::new(py, &bytes), self.1).into_py_any(py)
     }
 
-    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        self.0 = crate::pyutils::serde_pickle_from_slice(state.as_bytes(py), "propsettings")?;
+    fn __setstate__(&mut self, state: &Bound<'_, PyAny>) -> PyResult<()> {
+        // satkit <= 0.24.3 pickled the bare bytes, with no flag: there the
+        // order follows the degree if the two are equal
+        let (bytes, follows): (Bound<'_, PyBytes>, Option<bool>) =
+            if let Ok(b) = state.cast::<PyBytes>() {
+                (b.clone(), None)
+            } else {
+                let (b, f): (Bound<'_, PyBytes>, bool) = state.extract().map_err(|_| {
+                    pyo3::exceptions::PyValueError::new_err("invalid propsettings pickle")
+                })?;
+                (b, Some(f))
+            };
+        self.0 = crate::pyutils::serde_pickle_from_slice(bytes.as_bytes(), "propsettings")?;
+        self.1 = follows.unwrap_or(self.0.gravity_order == self.0.gravity_degree);
         Ok(())
     }
 
-    /// Precompute sun/moon terms for fast propagation of many satellites over the same span
+    /// Tabulate the time-only terms of the force model once, for propagating
+    /// many satellites over the same span
+    ///
+    /// Stores in these settings a table, at ``step`` intervals from ``begin``
+    /// to ``end`` (in either order, padded by a few minutes), of the Sun and
+    /// Moon positions and the GCRF-to-ITRF rotation used for Earth gravity.
+    /// ``propagate`` with these settings interpolates the table instead of
+    /// building its own on every call, whenever its span lies inside the
+    /// tabulated one; otherwise the table is ignored. It is unrelated to
+    /// ``enable_interp`` and to ``propresult.interp``. A new call replaces the
+    /// table, and a pickle of the settings does not carry it.
     ///
     /// Args:
-    ///     begin (satkit.time): Begin time of propagation
-    ///     end (satkit.time): End time of propagation
+    ///     begin (satkit.time | datetime.datetime | numpy.datetime64): one end of the span
+    ///     end (satkit.time | datetime.datetime | numpy.datetime64): the other end of the span
     ///     step (satkit.duration | float | datetime.timedelta, optional): Table step;
     ///         a float is interpreted as seconds. Default 60 seconds
+    ///
+    /// Returns:
+    ///     None
+    ///
+    /// Raises:
+    ///     ValueError: if step is zero, negative or not finite
+    ///     TypeError: if begin or end is not a time, or step is not a duration,
+    ///         a float or a timedelta
+    ///     RuntimeError: if the table cannot be built (missing JPL ephemeris or
+    ///         Earth-orientation data, or a span and step needing too many entries)
     #[pyo3(signature=(begin, end, step=None))]
     fn precompute_terms(
         &mut self,
-        begin: &PyInstant,
-        end: &PyInstant,
+        begin: TimeArg,
+        end: TimeArg,
         step: Option<Bound<'_, PyAny>>,
     ) -> PyResult<()> {
         let step_secs: Option<f64> = match step {
@@ -498,6 +647,10 @@ impl PyPropSettings {
             None => self.0.precompute_terms(&begin.0, &end.0),
         };
         match result {
+            // A bad step is a bad argument value, not a runtime failure
+            Err(e @ satkit::orbitprop::Error::InvalidPrecomputeStep { .. }) => {
+                Err(pyo3::exceptions::PyValueError::new_err(e.to_string()))
+            }
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
             Ok(_) => Ok(()),
         }
@@ -512,6 +665,6 @@ impl From<&PyPropSettings> for PropSettings {
 
 impl From<&PropSettings> for PyPropSettings {
     fn from(item: &PropSettings) -> Self {
-        Self(item.clone())
+        Self(item.clone(), item.gravity_order == item.gravity_degree)
     }
 }
