@@ -316,7 +316,11 @@ impl PyEcomParams {
         self.0.sun_relative = v;
     }
 
-    /// Coefficients as a dict (13 floats plus ``sun_relative``).
+    /// Coefficients as a dict: the 13 coefficients (float, m/s² at 1 AU)
+    /// keyed by name, plus ``sun_relative`` (bool).
+    ///
+    /// Returns:
+    ///     dict[str, float | bool]: 14 entries
     fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let d = PyDict::new(py);
         for (name, v) in FIELDS.iter().zip(self.values()) {
@@ -328,6 +332,19 @@ impl PyEcomParams {
 
     /// Build from a dict as produced by :meth:`to_dict`; missing keys default
     /// to zero / ``False``.
+    ///
+    /// Args:
+    ///     d (dict): coefficient names (``d0``, ``y0``, ``b0``, ``dc``, ``ds``,
+    ///         ``yc``, ``ys``, ``bc``, ``bs``, ``d2c``, ``d2s``, ``d4c``,
+    ///         ``d4s``) to floats, and optionally ``sun_relative`` to a bool
+    ///
+    /// Returns:
+    ///     satkit.ecomparams: the coefficients
+    ///
+    /// Raises:
+    ///     ValueError: if the dict has a key that is not one of the above (a
+    ///         misspelt coefficient would otherwise be silently zero)
+    ///     TypeError: if d is not a dict, or a value has the wrong type
     #[staticmethod]
     fn from_dict(d: &Bound<'_, PyDict>) -> PyResult<Self> {
         let mut v = [0.0f64; 13];

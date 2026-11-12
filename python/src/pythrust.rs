@@ -10,7 +10,13 @@ use satkit::Frame;
 
 use anyhow::Result;
 
-/// Python wrapper for ContinuousThrust
+/// Continuous thrust: a constant acceleration over a time window
+///
+/// The acceleration vector is fixed in GCRF (inertial), RTN (radial /
+/// tangential / normal, a.k.a. RSW, RIC), NTW (velocity-aligned) or LVLH, and
+/// is applied by the propagator from ``start`` to ``end``, both inclusive.
+/// Build one with ``thrust.constant`` and pass a list of them as
+/// ``satproperties(thrusts=[...])``. A thrust object is immutable.
 #[pyclass(name = "thrust", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PyThrust(pub ContinuousThrust);
@@ -21,8 +27,8 @@ impl PyThrust {
     ///
     /// Args:
     ///     accel (array-like): 3-element acceleration vector [m/s^2]
-    ///     start (satkit.time): Start time of thrust arc
-    ///     end (satkit.time): End time of thrust arc
+    ///     start (satkit.time | datetime.datetime | numpy.datetime64): Start time of thrust arc
+    ///     end (satkit.time | datetime.datetime | numpy.datetime64): End time of thrust arc; not before start
     ///     frame (satkit.frame): Coordinate frame. Supported values:
     ///
     ///         - ``frame.GCRF`` — inertial Cartesian
@@ -32,6 +38,15 @@ impl PyThrust {
     ///         - ``frame.LVLH`` — Local Vertical / Local Horizontal
     ///
     ///     The frame argument is required — there is no default.
+    ///
+    /// Returns:
+    ///     satkit.thrust: the thrust arc
+    ///
+    /// Raises:
+    ///     ValueError: if accel does not have 3 elements or has a NaN or
+    ///         infinite element, end is before start, or the frame is not one
+    ///         of the four above
+    ///     TypeError: if accel is not numeric, or start or end is not a time
     #[staticmethod]
     fn constant(
         accel: &Bound<PyAny>,
@@ -47,28 +62,38 @@ impl PyThrust {
         )?))
     }
 
-    /// Get the acceleration vector
+    /// Acceleration vector in the thrust's frame
     ///
     /// Returns:
-    ///     list[float]: 3-element acceleration vector in the thrust's frame [m/s^2]
+    ///     numpy.ndarray: 3-element acceleration vector in ``frame`` [m/s^2]
+    ///     (a new array on each access)
     #[getter]
     fn get_accel(&self) -> [f64; 3] {
         [self.0.accel[0], self.0.accel[1], self.0.accel[2]]
     }
 
-    /// Get the frame
+    /// Coordinate frame of the acceleration vector
+    ///
+    /// Returns:
+    ///     satkit.frame: frame.GCRF, frame.RTN, frame.NTW or frame.LVLH
     #[getter]
     fn get_frame(&self) -> PyFrame {
         PyFrame::from(self.0.frame)
     }
 
-    /// Get the start time
+    /// Start time of the thrust arc (the thrust is on at this instant)
+    ///
+    /// Returns:
+    ///     satkit.time: start time
     #[getter]
     fn get_start(&self) -> PyInstant {
         PyInstant(self.0.start)
     }
 
-    /// Get the end time
+    /// End time of the thrust arc (the thrust is still on at this instant)
+    ///
+    /// Returns:
+    ///     satkit.time: end time
     #[getter]
     fn get_end(&self) -> PyInstant {
         PyInstant(self.0.end)

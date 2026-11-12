@@ -3415,6 +3415,22 @@ class consts:
 
 # Alias so `time` resolves to the class inside bodies that define a `time` member
 _Time = time
+# Likewise for `frame`
+_Frame = frame
+
+class _ManeuverDict(typing.TypedDict):
+    """One entry of ``satstate.maneuvers``: an impulsive maneuver as a plain dict
+
+    A stub-only type (it does not exist at runtime, where the entries are
+    ordinary ``dict`` objects).
+    """
+
+    time: _Time
+    """Time at which the delta-v is applied"""
+    delta_v: npt.NDArray[np.float64]
+    """3-element delta-v, m/s, along the axes of ``frame``"""
+    frame: _Frame
+    """Frame of ``delta_v``: ``frame.GCRF``, ``frame.RTN``, ``frame.NTW`` or ``frame.LVLH``"""
 
 @final
 class satstate:
@@ -3466,11 +3482,17 @@ class satstate:
         """Create a new satellite state
 
         Args:
-            time (satkit.time): Epoch of the state
-            pos (npt.NDArray[np.float64]): Position in meters, GCRF frame
-            vel (npt.NDArray[np.float64]): Velocity in m/s, GCRF frame
-            cov (npt.NDArray[np.float64]|None, optional): 6x6 covariance matrix in GCRF
+            time (satkit.time | datetime.datetime | numpy.datetime64): Epoch of the state
+            pos (array-like): 3-element position in meters, GCRF frame
+            vel (array-like): 3-element velocity in m/s, GCRF frame
+            cov (array-like | None, optional): symmetric 6x6 covariance matrix in GCRF
                 (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Defaults to None.
+
+        Raises:
+            TypeError: if ``time`` is not a time, or ``pos``, ``vel`` or ``cov`` is not a
+                real numeric array-like
+            ValueError: if ``pos`` or ``vel`` does not have 3 elements, or ``cov`` is not
+                a symmetric 6x6 matrix
 
         Example:
             ```python
@@ -3542,19 +3564,25 @@ class satstate:
     def cov(self) -> npt.NDArray[np.float64] | None:
         """6x6 state covariance matrix in GCRF, or None if not set
 
-        Upper-left 3x3 is position covariance (m^2), lower-right 3x3 is
-        velocity covariance ((m/s)^2), off-diagonal blocks are cross-covariance.
+        Element ``[i, j]`` is the covariance of elements ``i`` and ``j`` of the
+        state ``[x, y, z, vx, vy, vz]``: the upper-left 3x3 block is the position
+        covariance (m^2), the lower-right 3x3 the velocity covariance ((m/s)^2),
+        and the off-diagonal blocks the position-velocity cross-covariance (m^2/s).
+
+        The getter returns a new array on every access, holding exactly what was
+        assigned (or what ``propagate`` computed, ``Phi @ cov @ Phi.T``), so
+        modifying the returned array does not change the state: assign a matrix
+        to set the covariance, or ``None`` to remove it.
+
+        Raises:
+            ValueError: on assignment, if the matrix is not 6x6 or not symmetric
+            TypeError: on assignment, if the value is not a real numeric array-like
+                or ``None``
         """
         ...
 
     @cov.setter
-    def cov(self, value: npt.NDArray[np.float64]) -> None:
-        """Set the full 6x6 state covariance matrix
-
-        Args:
-            value: 6x6 numpy array with state covariance for position (m) and velocity (m/s)
-        """
-        ...
+    def cov(self, value: npt.NDArray[np.float64]) -> None: ...
 
     @property
     def time(self) -> _Time:
@@ -3571,10 +3599,11 @@ class satstate:
         Constructs a diagonal 3x3 covariance from the given 1-sigma values
         (interpreted along the ``frame``'s axes), rotates it into GCRF,
         and stores it as the position block of the 6x6 state covariance.
-        Any existing velocity covariance is preserved.
+        Any existing velocity covariance is preserved; the position-velocity
+        cross blocks are cleared.
 
         Args:
-            sigma: 3-element numpy array of 1-sigma position components
+            sigma: 3-element array-like of 1-sigma position components
                 along the frame's axes. Units: meters.
             frame: Coordinate frame — **required**, no default (matching
                 the Rust API). Supported values:
@@ -3588,7 +3617,9 @@ class satstate:
                   axes relabeled: x = T, y = -N, z = -R)
 
         Raises:
-            RuntimeError: if the frame is not one of the supported frames.
+            ValueError: if ``sigma`` does not have 3 elements, or the frame is
+                not one of the supported frames.
+            TypeError: if ``sigma`` is not a real numeric array-like
 
         Example:
             ```python
@@ -3610,17 +3641,20 @@ class satstate:
 
         Analogous to ``set_pos_uncertainty``, but for the velocity
         block of the 6x6 state covariance. Any existing position
-        covariance is preserved.
+        covariance is preserved; the position-velocity cross blocks are
+        cleared.
 
         Args:
-            sigma: 3-element numpy array of 1-sigma velocity components
+            sigma: 3-element array-like of 1-sigma velocity components
                 along the frame's axes. Units: m/s.
             frame: Coordinate frame — **required**, no default (matching
                 the Rust API). Supported values: ``frame.GCRF``,
                 ``frame.RTN``, ``frame.NTW``, ``frame.LVLH``.
 
         Raises:
-            RuntimeError: if the frame is not one of the supported frames.
+            ValueError: if ``sigma`` does not have 3 elements, or the frame is
+                not one of the supported frames.
+            TypeError: if ``sigma`` is not a real numeric array-like
         """
         ...
 
@@ -3633,7 +3667,7 @@ class satstate:
         """Add an impulsive maneuver (instantaneous delta-v)
 
         Args:
-            time (satkit.time): Time at which to apply the maneuver
+            time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to apply the maneuver
             delta_v (array-like): 3-element delta-v vector [m/s]
             frame (satkit.frame): Coordinate frame — **required**, no
                 default (matching the Rust API). Supported frames:
@@ -3653,6 +3687,12 @@ class satstate:
 
                 See the "Theory: Maneuver Coordinate Frames" guide in the satkit
                 documentation for a side-by-side comparison.
+
+        Raises:
+            ValueError: if ``delta_v`` does not have 3 elements, or ``frame`` is
+                not one of the four above (an Earth-fixed or other inertial
+                frame is refused here, not later by ``propagate``)
+            TypeError: if ``time`` is not a time, or ``delta_v`` is not numeric
 
         See Also:
             ``add_prograde``, ``add_retrograde``, ``add_radial``,
@@ -3728,8 +3768,11 @@ class satstate:
         ...
 
     @property
-    def maneuvers(self) -> list[dict]:
-        """The scheduled impulsive maneuvers.
+    def maneuvers(self) -> list[_ManeuverDict]:
+        """The scheduled impulsive maneuvers, in the order they were added.
+
+        A new list of new dicts on every access: changing it does not change
+        the state. Add maneuvers with the ``add_*`` methods.
 
         Returns:
             list[dict]: One dict per maneuver with keys ``"time"``
@@ -3749,16 +3792,30 @@ class satstate:
 
         If covariance is set, it is propagated via the state transition matrix.
         If maneuvers are scheduled between the current and target time, propagation
-        automatically segments at each maneuver epoch and applies the delta-v.
-        Maneuvers are preserved on the returned state.
+        automatically segments at each maneuver epoch and applies the delta-v
+        (subtracts it when propagating backward). A maneuver at time ``t`` is
+        applied when ``start <= t < target`` (``target <= t < start`` backward):
+        the state at a maneuver's own time is the state just before the burn, so
+        a maneuver at the current time is applied and one exactly at the target
+        time is not. Maneuvers are preserved on the returned state.
 
         Args:
-            timedur (satkit.time|datetime.datetime|satkit.duration): Target time, or duration from current time
-            propsettings (satkit.propsettings, optional): Propagation settings
+            timedur (satkit.time|datetime.datetime|numpy.datetime64|satkit.duration): Target time, or duration from current time
+            propsettings (satkit.propsettings, optional): Propagation settings. Default: ``propsettings()``
             satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
 
         Returns:
             satstate: New state at the target time
+
+        Raises:
+            TypeError: if ``timedur`` is not a time or a ``satkit.duration`` (a
+                float or a ``datetime.timedelta`` is refused), or ``propsettings``
+                / ``satproperties`` has the wrong type
+            ValueError: if the position is all zeros
+            RuntimeError: if the propagation fails (see ``satkit.propagate``). A
+                covariance needs the state transition matrix, which
+                ``integrator.rodas4`` and ``integrator.gauss_jackson8`` cannot
+                propagate
 
         Example:
             ```python
@@ -3771,34 +3828,44 @@ class satstate:
 
 @final
 class propstats:
-    """Statistics of a satellite propagation"""
+    """Statistics of a satellite propagation
+
+    The step and force-evaluation counts of the integrator that ran it (an
+    adaptive Runge-Kutta pair, RODAS4 or the fixed-step Gauss-Jackson 8).
+    Returned by ``propresult.stats``; not constructed directly.
+    """
 
     @property
     def num_eval(self) -> int:
-        """Number of function evaluations"""
+        """Number of force-model (derivative) evaluations"""
         ...
 
     @property
     def num_accept(self) -> int:
-        """Number of accepted steps in adaptive RK integrator"""
+        """Number of accepted integrator steps (for the fixed-step
+        ``integrator.gauss_jackson8``, the number of steps taken)"""
         ...
 
     @property
     def num_reject(self) -> int:
-        """Number of rejected steps in adaptive RK integrator"""
+        """Number of steps the adaptive step-size control rejected and retried
+        (always 0 for the fixed-step ``integrator.gauss_jackson8``)"""
         ...
 
 @final
 class propresult:
     """Results of a satellite propagation
 
-    This class lets the user access results of the satellite propagation
+    This class lets the user access results of the satellite propagation.
+    It is returned by ``satkit.propagate`` and is not constructed directly.
 
     Notes:
-        If ``enable_interp`` is set to True in the propagation settings,
-        the propresult object can be used to interpolate solutions at any
-        time between the begin and end times of the propagation via the
-        ``interp`` method.
+        Unless ``enable_interp`` is set to False in the propagation settings
+        (it is True by default), the propresult object can be used to
+        interpolate solutions at any time between the begin and end times of
+        the propagation via the ``interp`` method. ``can_interp`` tells
+        whether it can: ``integrator.rodas4`` and ``integrator.rkv98_nointerp``
+        never store the dense output this needs.
     """
 
     @property
@@ -3851,22 +3918,25 @@ class propresult:
 
     @property
     def time(self) -> _Time:
-        """Time at which state is valid
+        """Time of the end state, at which ``state``, ``pos`` and ``vel`` are valid
+
+        Notes:
+        - This is identical to the "time_end" property
 
         Returns:
-            Time at which state is valid
+            Time at which the end state is valid
         """
         ...
 
     @property
     def time_end(self) -> _Time:
-        """Time at which state is valid
+        """Time of the end state, at which ``state_end`` is valid
 
         Notes:
         - This is identical to "time" property
 
         Returns:
-            Time at which state is valid
+            Time at which the end state is valid
         """
         ...
 
@@ -3902,7 +3972,12 @@ class propresult:
 
     @property
     def can_interp(self) -> bool:
-        """Whether this result supports interpolation
+        """Whether ``interp`` works on this result
+
+        True when the propagation stored dense output. False when
+        ``propsettings.enable_interp`` was False, for ``integrator.rodas4``
+        and ``integrator.rkv98_nointerp`` (which have no interpolant) and for
+        a zero-duration propagation; ``interp`` then raises ``ValueError``.
 
         Returns:
             True if dense output is available for interpolation
@@ -4025,9 +4100,12 @@ class propresult:
                 of times
 
         Raises:
-            ValueError: if ``output_phi`` is True but the propagation did not
-                compute the state transition matrix (propagate with
-                ``output_phi=True``), or a time is outside the interpolation range
+            ValueError: if the result has no dense output (``can_interp`` is
+                False), a time is outside the begin-to-end range, or
+                ``output_phi`` is True but the propagation did not compute the
+                state transition matrix (propagate with ``output_phi=True``)
+            TypeError: if ``time`` is not a time or a list / array of times (a
+                ``RuntimeError`` for a tuple, a number or a string)
         """
         ...
 
@@ -4037,7 +4115,10 @@ class thrust:
 
     Represents a constant thrust acceleration over a time window,
     specified in GCRF (inertial), RTN (CCSDS-standard orbital frame,
-    also known as RSW or RIC), NTW (velocity-aligned), or LVLH.
+    also known as RSW or RIC), NTW (velocity-aligned), or LVLH. The
+    thrust is on from ``start`` to ``end``, both inclusive. Build one
+    with ``thrust.constant`` and pass a list of them as
+    ``satproperties(thrusts=[...])``; a thrust object is immutable.
 
     RTN components are [R, T, N] where R = radial (outward from Earth
     centre), T = tangential / in-track, N = normal / cross-track (along
@@ -4070,8 +4151,8 @@ class thrust:
 
         Args:
             accel (array-like): 3-element acceleration vector [m/s^2]
-            start (satkit.time): Start time of thrust arc
-            end (satkit.time): End time of thrust arc
+            start (satkit.time | datetime.datetime | numpy.datetime64): Start time of thrust arc
+            end (satkit.time | datetime.datetime | numpy.datetime64): End time of thrust arc; not before ``start``
             frame (satkit.frame): Coordinate frame — **required**, no
                 default (matching the Rust API). Supported values:
 
@@ -4083,27 +4164,34 @@ class thrust:
 
         Returns:
             thrust: Thrust object
+
+        Raises:
+            ValueError: if ``accel`` does not have 3 elements or has a NaN or
+                infinite element, ``end`` is before ``start``, or ``frame`` is
+                not one of the four above
+            TypeError: if ``accel`` is not numeric, or ``start`` or ``end`` is
+                not a time
         """
         ...
 
     @property
     def accel(self) -> list[float]:
-        """Acceleration vector [m/s^2]"""
+        """Acceleration vector in ``frame`` [m/s^2]"""
         ...
 
     @property
     def frame(self) -> frame:
-        """Coordinate frame"""
+        """Coordinate frame of the acceleration vector"""
         ...
 
     @property
     def start(self) -> time:
-        """Start time of thrust arc"""
+        """Start time of thrust arc (the thrust is on at this instant)"""
         ...
 
     @property
     def end(self) -> time:
-        """End time of thrust arc"""
+        """End time of thrust arc (the thrust is still on at this instant)"""
         ...
 
 @final
@@ -4264,7 +4352,21 @@ class ecomparams:
 
     @staticmethod
     def from_dict(d: dict[str, float | bool]) -> ecomparams:
-        """Build from a dict as produced by ``to_dict``; missing keys default to zero / False"""
+        """Build from a dict as produced by ``to_dict``; missing keys default to zero / False
+
+        Args:
+            d: coefficient names (``d0``, ``y0``, ``b0``, ``dc``, ``ds``, ``yc``,
+                ``ys``, ``bc``, ``bs``, ``d2c``, ``d2s``, ``d4c``, ``d4s``) to
+                floats, and optionally ``sun_relative`` to a bool
+
+        Returns:
+            ecomparams: the coefficients
+
+        Raises:
+            ValueError: if the dict has a key that is not one of the above (a
+                misspelt coefficient would otherwise be silently zero)
+            TypeError: if ``d`` is not a dict, or a value has the wrong type
+        """
         ...
 
     def __eq__(self, other: object) -> bool: ...
@@ -4279,9 +4381,9 @@ class satproperties:
     and thrust parameters be set for duration of propagation.
 
     Attributes:
-        cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
+        cdaoverm (float): Coefficient of drag times area over mass in m^2/kg; not negative
         craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
-        thrusts (list[thrust]): List of continuous thrust arcs
+        thrusts (list[thrust]): List of continuous thrust arcs (a copy; assign a list to change them)
         ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
             coefficients, added to the cannonball term (use ``craoverm=0``
             for a pure ECOM model). See ``ecomparams`` for the
@@ -4311,6 +4413,10 @@ class satproperties:
             thrusts (list[thrust], optional): List of continuous thrust arcs
             ecom (ecomparams, optional): ECOM solar-radiation-pressure coefficients
 
+        Raises:
+            TypeError: if an argument is passed positionally or has the wrong type
+            ValueError: if ``cdaoverm`` is negative or NaN
+
         Example:
 
         ```python
@@ -4333,7 +4439,10 @@ class satproperties:
 
     @property
     def cdaoverm(self) -> float:
-        """Coefficient of drag times area over mass.  Units are m^2/kg"""
+        """Coefficient of drag times area over mass.  Units are m^2/kg
+
+        Assigning a negative or NaN value raises ``ValueError``.
+        """
         ...
 
     @cdaoverm.setter
@@ -4348,7 +4457,12 @@ class satproperties:
 
     @property
     def thrusts(self) -> list[thrust]:
-        """List of continuous thrust arcs"""
+        """List of continuous thrust arcs
+
+        A new list on every access: appending to it or removing from it does
+        not change the properties. Assign a whole list to change the arcs
+        (``props.thrusts = props.thrusts + [arc]``).
+        """
         ...
 
     @thrusts.setter
@@ -4363,6 +4477,9 @@ class satproperties:
         term ``craoverm``; use ``craoverm=0`` for a pure ECOM model. The
         "ECOM Solar Radiation Pressure" tutorial shows how to fit the
         coefficients to IGS GPS orbits.
+
+        A copy on every access: setting a coefficient on it does not change
+        the properties; assign the modified ``ecomparams`` back.
         """
         ...
 
@@ -4376,7 +4493,8 @@ class integrator:
     Available integrators, from highest to lowest order:
 
     - ``rkv98`` - Verner 9(8) with 8th-degree dense output, 21 stages (default)
-    - ``rkv98_nointerp`` - Verner 9(8) without interpolation, 16 stages
+    - ``rkv98_nointerp`` - Verner 9(8) without interpolation, 16 stages. The same as
+      ``rkv98`` with ``propsettings.enable_interp=False``
     - ``rkv87`` - Verner 8(7) with 7th-degree dense output, 17 stages
     - ``rkv65`` - Verner 6(5) with 6th-degree dense output, 10 stages
     - ``rkts54`` - Tsitouras 5(4) with FSAL, 7 stages
@@ -4392,9 +4510,12 @@ class integrator:
     ``rodas4`` is recommended. For long-duration high-precision propagation
     of smooth orbits, ``gauss_jackson8`` typically uses 3-10× fewer force
     evaluations than ``rkv98`` at comparable accuracy — but it requires a
-    user-chosen fixed step size (``gj_step_seconds``), does not handle
-    discontinuities such as impulsive maneuvers, and needs ≥9 steps of
-    startup, so it's unsuitable for very short propagations.
+    user-chosen fixed step size (``gj_step_seconds``), cannot step across a
+    discontinuity, and needs a span of at least 8 steps (``RuntimeError``
+    below that), so it's unsuitable for very short propagations.
+    ``satstate.propagate`` still handles impulsive maneuvers with it, by
+    restarting the integrator at each one; every segment between maneuvers
+    must then cover 8 steps.
     """
 
     rkv98: ClassVar[integrator]
@@ -4406,8 +4527,13 @@ class integrator:
     rkv98_nointerp: ClassVar[integrator]
     """Verner 9(8) without interpolation, 16 stages
 
-    Same stepping accuracy as ``rkv98`` but skips interpolation stages.
-    Slightly faster when dense output is not needed (``enable_interp=False``).
+    The 16-stage tableau behind ``rkv98``, without the five extra stages that
+    only build the interpolant: the same order and error control, and a result
+    that never supports ``propresult.interp``, whatever ``enable_interp`` says.
+
+    ``rkv98`` with ``enable_interp=False`` already runs this tableau, so
+    choosing this member gains nothing over it (the two take the same number
+    of force evaluations); it remains for scripts that name it.
     """
 
     rkv87: ClassVar[integrator]
@@ -4438,11 +4564,16 @@ class integrator:
     Typically uses 3-10× fewer force evaluations than ``rkv98`` at
     comparable accuracy on smooth long-duration orbit propagation.
 
-    Uses a fixed step size set via ``propsettings.gj_step_seconds``.
+    Uses a fixed step size set via ``propsettings.gj_step_seconds`` (its
+    magnitude; the direction of propagation sets the sign). The span must
+    cover at least 8 steps (``RuntimeError`` otherwise).
     Supports dense output interpolation (quintic Hermite, 5th-order).
-    Does not support state transition matrix (``output_phi``) propagation.
+    Does not support state transition matrix (``output_phi``) propagation,
+    and so cannot propagate a ``satstate`` that has a covariance.
     Not recommended for highly eccentric orbits or integration across
-    discontinuities (eclipse boundaries, impulsive maneuvers).
+    discontinuities (eclipse boundaries). ``satstate.propagate`` restarts
+    it at each impulsive maneuver, so maneuvers work as long as every
+    segment between them covers 8 steps.
     """
 
 @final
@@ -4488,7 +4619,7 @@ class propsettings:
             - abs_error: 1e-8
             - rel_error: 1e-8
             - gravity_degree: 4
-            - gravity_order: 4
+            - gravity_order: same as gravity_degree
             - gravity_model: gravmodel.egm2008
             - use_spaceweather: True
             - use_sun_gravity: True
@@ -4499,8 +4630,12 @@ class propsettings:
             - integrator: integrator.rkv98
             - gj_step_seconds: 60.0
             - max_steps: 1_000_000
-        - enable_interp enables high-precision interpolation of state between begin and end times via ``propresult.interp``,
-          it is enabled by default.  There is a small increase in computational efficiency if set to false
+            - require_eop_coverage: False
+            - initial_step_secs: None (derived from the state and tolerances)
+        - enable_interp stores the dense output that ``propresult.interp`` needs to interpolate the state between the begin
+          and end times; it is enabled by default.  Setting it to False saves the memory and, with the default
+          ``integrator.rkv98``, 24% of the force evaluations per step; ``propresult.can_interp`` is then False
+        - The object compares equal (``==``) to another with the same settings
 
     """
 
@@ -4528,10 +4663,14 @@ class propsettings:
 
         Args:
             abs_error: Maximum absolute value of error for any element in propagated state following ODE integration,
-                in the units of the state (meters for position elements, m/s for velocity elements). Default is 1e-8
-            rel_error: Maximum relative error of any element in propagated state following ODE integration, unitless. Default is 1e-8
+                in the units of the state (meters for position elements, m/s for velocity elements). Not negative
+                (``ValueError``). Default is 1e-8
+            rel_error: Maximum relative error of any element in propagated state following ODE integration, unitless.
+                Not negative (``ValueError``). Default is 1e-8
             gravity_degree: Maximum degree of spherical harmonic gravity model, at most 70 (``ValueError`` above that). Default is 4
-            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 70; ``ValueError`` otherwise). Default is same as gravity_degree
+            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 70;
+                ``ValueError`` otherwise). Default is None: the order is the same as gravity_degree, and keeps following it
+                when ``gravity_degree`` is assigned later, until ``gravity_order`` is assigned
             gravity_model: Gravity model to use. Default is gravmodel.egm2008
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
@@ -4546,11 +4685,12 @@ class propsettings:
                 Its position effect depends on the orbit, propagation arc, and
                 fitted parameters (~1 m/day at GPS altitude if omitted; the
                 geodesic term dominates beyond ~100,000 km); cost is negligible.
-            enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True.
-                When False, no dense output is stored and ``integrator.rkv98`` runs its 16-stage
+            enable_interp: Store the dense output that lets ``propresult.interp`` interpolate the state between begin and end times. Default is True.
+                When False, no dense output is stored (``propresult.can_interp`` is False) and ``integrator.rkv98`` runs its 16-stage
                 no-interpolant tableau (same order and error control, 24% fewer force evaluations per step).
             integrator: ODE integrator to use. Default is integrator.rkv98
-            gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
+            gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``; its
+                magnitude is used, and the span must cover at least 8 steps.
                 Ignored by adaptive integrators. Typical values: 30-120 s for LEO, 60-300 s
                 for MEO, 300-600 s for GEO. Default is 60.0.
             max_steps: Maximum number of integrator steps before the propagator aborts with
@@ -4569,8 +4709,10 @@ class propsettings:
                 settled stride). Set it to a previous ``propresult.next_step_secs`` to warm-start a
                 follow-on arc at full stride. Ignored by ``integrator.gauss_jackson8``.
 
-        Returns:
-            propsettings: New propsettings object with default settings
+        Raises:
+            TypeError: if an argument is passed positionally or has the wrong type
+            ValueError: if ``gravity_degree`` is above 70, ``gravity_order`` is above
+                ``gravity_degree``, or ``abs_error`` / ``rel_error`` is negative or NaN
 
         Example:
             ```python
@@ -4589,6 +4731,8 @@ class propsettings:
     def abs_error(self) -> float:
         """Maximum absolute value of error for any element in propagated state following ODE integration
 
+        Assigning a negative or NaN value raises ``ValueError``.
+
         Returns:
             Maximum absolute value of error for any element in propagated state following ODE integration,
                 in the units of the state (meters for position elements, m/s for velocity elements); default is 1e-8
@@ -4601,6 +4745,8 @@ class propsettings:
     def rel_error(self) -> float:
         """Maximum relative error of any element in propagated state following ODE integration
 
+        Assigning a negative or NaN value raises ``ValueError``.
+
         Returns:
             Maximum relative error of any element in propagated state following ODE integration, unitless; default is 1e-8
 
@@ -4611,7 +4757,11 @@ class propsettings:
     def rel_error(self, value: float) -> None: ...
     @property
     def gravity_degree(self) -> int:
-        """Maximum degree of spherical harmonic gravity model
+        """Maximum degree of spherical harmonic gravity model, at most 70 (``ValueError`` above that)
+
+        Assigning it also sets ``gravity_order`` to the same value, unless
+        ``gravity_order`` was given to the constructor or has been assigned; the
+        order is then kept, lowered to the new degree if it exceeds it.
 
         Returns:
             Maximum degree of spherical harmonic gravity model, default is 4
@@ -4624,6 +4774,10 @@ class propsettings:
     @property
     def gravity_order(self) -> int:
         """Maximum order of spherical harmonic gravity model
+
+        Must be <= ``gravity_degree`` (``ValueError`` otherwise). Until it is
+        assigned (or given to the constructor) it equals ``gravity_degree`` and
+        follows it: ``ps.gravity_degree = 20`` alone gives a 20x20 field.
 
         Returns:
             Maximum order of spherical harmonic gravity model, default is same as gravity_degree
@@ -4743,11 +4897,13 @@ class propsettings:
     def initial_step_secs(self, value: float | None) -> None: ...
     @property
     def enable_interp(self) -> bool:
-        """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times.
+        """Store the dense output that lets ``propresult.interp`` interpolate the state between begin and end times. Default True.
 
-        When False, no dense output is stored and ``integrator.rkv98`` runs its
-        16-stage no-interpolant tableau (same order and error control, 24% fewer
-        force evaluations per step).
+        When False, no dense output is stored (``propresult.can_interp`` is
+        False and ``interp`` raises) and ``integrator.rkv98`` runs its 16-stage
+        no-interpolant tableau (same order and error control, 24% fewer force
+        evaluations per step). ``integrator.rodas4`` and
+        ``integrator.rkv98_nointerp`` never store dense output.
         """
         ...
 
@@ -4781,6 +4937,9 @@ class propsettings:
     def gj_step_seconds(self) -> float:
         """Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
 
+        Its magnitude is used (the direction of propagation sets the sign), and
+        the span must cover at least 8 steps (``RuntimeError`` from
+        ``propagate`` otherwise).
         Ignored by adaptive integrators. Typical values: 30-120 s for LEO,
         60-300 s for MEO, 300-600 s for GEO.
 
@@ -4806,16 +4965,43 @@ class propsettings:
 
     @max_steps.setter
     def max_steps(self, value: int) -> None: ...
-    def precompute_terms(self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None):
-        """Precompute terms for fast interpolation of state between begin and end times
+    def precompute_terms(
+        self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None
+    ) -> None:
+        """Tabulate the time-only terms of the force model once, for propagating many satellites over the same span
 
-        This can be used, for example, to compute sun and moon positions only once if propagating many satellites over the same time period
+        Stores in these settings a table, at ``step`` intervals from ``begin`` to
+        ``end`` (in either order, padded by a few minutes), of the Sun and Moon
+        positions and the GCRF-to-ITRF rotation used for Earth gravity.
+        ``propagate`` with these settings then interpolates the table instead of
+        building its own on every call, whenever its span lies inside the
+        tabulated one; otherwise the table is ignored. It is unrelated to
+        ``enable_interp`` and ``propresult.interp``. A new call replaces the
+        table, and a pickle of the settings does not carry it.
 
         Args:
-            begin (satkit.time): Begin time of propagation
-            end (satkit.time): End time of propagation
-            step (satkit.duration | float | datetime.timedelta, optional): Step size for interpolation.  Default = 60 seconds.  float is interpreted as seconds.
+            begin (satkit.time | datetime.datetime | numpy.datetime64): One end of the span
+            end (satkit.time | datetime.datetime | numpy.datetime64): The other end of the span
+            step (satkit.duration | float | datetime.timedelta, optional): Table step.  Default = 60 seconds.  float is interpreted as seconds.
 
+        Raises:
+            ValueError: if ``step`` is zero, negative or not finite
+            TypeError: if ``begin`` or ``end`` is not a time, or ``step`` is not a
+                duration, a float or a timedelta
+            RuntimeError: if the table cannot be built (missing JPL ephemeris or
+                Earth-orientation data, or a span and step needing too many entries)
+
+        Example:
+            ```python
+            t0 = satkit.time(2024, 1, 1)
+            settings = satkit.propsettings()
+            settings.precompute_terms(t0, t0 + satkit.duration(days=1))
+            for state in (
+                np.array([6.781e6, 0, 0, 0, 7.5e3, 0]),
+                np.array([7.0e6, 0, 0, 0, 0, 7.5e3]),
+            ):
+                result = satkit.propagate(state, t0, duration_days=1, propsettings=settings)
+            ```
         """
         ...
 
@@ -4879,33 +5065,50 @@ def propagate(
 ) -> propresult:
     """High-precision orbit propagator
 
-    Propagate orbits with high-precision force modeling via adaptive Runge-Kutta methods (default is order 9/8).
+    Propagate orbits with high-precision force modeling. The default integrator is the adaptive
+    Verner 9(8) Runge-Kutta pair; ``propsettings.integrator`` selects the others (lower-order
+    Runge-Kutta pairs, the RODAS4 Rosenbrock method, fixed-step Gauss-Jackson 8).
 
     Args:
-        state: 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second.
+        state: 6-element array-like representing satellite GCRF position and velocity in meters and meters/second.
             Required unless ``pos`` and ``vel`` are given
         begin: Time at which satellite is at input state. Required (``TypeError`` if omitted); its
             ``None`` default only lets ``state`` be omitted in favour of ``pos`` and ``vel``
+        end: Time at which new position and velocity will be computed. May be before ``begin``
+            (backward propagation)
 
     Keyword Args:
-        end: Time at which new position and velocity will be computed
         duration: Duration from ``begin`` at which new position & velocity will be computed
         duration_secs: Duration in seconds from ``begin`` at which new position and velocity will be computed
         duration_days: Duration in days from ``begin`` at which new position and velocity will be computed
         output_phi: Output 6x6 state transition matrix between begin and end times. Default is False
         propsettings: Settings for the propagation; if omitted, defaults are used
-        satproperties: Drag and radiation pressure susceptibility of satellite
-        pos: GCRF position in meters; replaces the first three elements of ``state``,
-            or stands in for ``state`` together with ``vel``
-        vel: GCRF velocity in meters/second; replaces the last three elements of ``state``
+        satproperties: Drag, radiation pressure and thrust properties of the satellite; if omitted,
+            none of the three is modeled
+        pos: 3-element GCRF position in meters. Give it together with ``vel``, in place of ``state``
+        vel: 3-element GCRF velocity in meters/second. Give it together with ``pos``
 
     Returns:
         propresult: Propagation result object holding state outputs, statistics,
-            and dense output if requested
+            and dense output for ``propresult.interp`` unless ``propsettings.enable_interp``
+            is False
+
+    Raises:
+        TypeError: if ``state`` (or ``pos`` and ``vel``) or ``begin`` is missing, ``pos`` is
+            given without ``vel`` or the reverse, none or more than one of ``end``,
+            ``duration``, ``duration_secs``, ``duration_days`` is given, an argument has the
+            wrong type, or an unknown keyword is passed
+        ValueError: if ``state`` does not have 6 elements (``pos`` / ``vel`` 3), the position
+            is all zeros, or ``duration_secs`` / ``duration_days`` is NaN or infinite
+        RuntimeError: if the propagation fails: a required data file is missing, the
+            integrator does not converge or exceeds ``max_steps``, ``output_phi`` is used
+            with ``integrator.rodas4`` or ``integrator.gauss_jackson8``, the span is shorter
+            than 8 steps of ``integrator.gauss_jackson8``, or ``require_eop_coverage`` is set
+            and the span is outside the Earth-orientation table
 
     Notes:
         Propagates satellite ephemeris (position, velocity in GCRF & time) to new time and
-        outputs new position and velocity via Runge-Kutta integration.
+        outputs new position and velocity via numerical integration.
         Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF).
 
         Included forces:
@@ -4918,9 +5121,9 @@ def propagate(
         - Radiation pressure
         - Atmospheric drag: NRL-MSISE 2000 density model, with option to include space weather effects
 
-        An end time is required: pass ``end`` or one of ``duration``, ``duration_secs``,
-        ``duration_days`` (``TypeError`` if none is given; ``ValueError`` for a NaN or
-        infinite ``duration_secs`` / ``duration_days``).
+        An end time is required: pass exactly one of ``end``, ``duration``, ``duration_secs``
+        and ``duration_days`` (``TypeError`` if none or more than one is given; ``ValueError``
+        for a NaN or infinite ``duration_secs`` / ``duration_days``).
 
         For future propagation (beyond available data files):
 

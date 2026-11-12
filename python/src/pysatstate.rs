@@ -48,11 +48,15 @@ crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |e| {
 /// Satellite state: GCRF position, velocity, optional covariance, and maneuvers
 ///
 /// Args:
-///     time (satkit.time): Epoch of the state
-///     pos (numpy.ndarray): 3-element GCRF position, meters
-///     vel (numpy.ndarray): 3-element GCRF velocity, m/s
-///     cov (numpy.ndarray, optional): 6x6 GCRF state covariance
+///     time (satkit.time | datetime.datetime | numpy.datetime64): Epoch of the state
+///     pos (array-like): 3-element GCRF position, meters
+///     vel (array-like): 3-element GCRF velocity, m/s
+///     cov (array-like, optional): symmetric 6x6 GCRF state covariance
 ///         (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Default None.
+///
+/// Raises:
+///     TypeError: if time is not a time, or pos, vel or cov is not a real numeric array-like
+///     ValueError: if pos or vel does not have 3 elements, or cov is not a symmetric 6x6 matrix
 #[pyclass(name = "satstate", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySatState(SatState);
@@ -115,10 +119,11 @@ impl PySatState {
     /// The uncertainty is interpreted as a diagonal 3x3 covariance in the
     /// given ``frame`` (axes aligned with the frame), rotated into GCRF,
     /// and stored in the position block of the 6x6 state covariance. Any
-    /// existing velocity covariance is preserved.
+    /// existing velocity covariance is preserved; the position-velocity
+    /// cross blocks are cleared.
     ///
     /// Args:
-    ///     sigma (numpy.ndarray): 3-element array of 1-sigma position
+    ///     sigma (array-like): 3 1-sigma position
     ///         components along the frame's axes. Units: meters.
     ///     frame (satkit.frame): Coordinate frame — **required**, no
     ///         default (matching the Rust API). Supported values:
@@ -126,8 +131,9 @@ impl PySatState {
     ///         ``frame.LVLH``.
     ///
     /// Raises:
-    ///     RuntimeError: if the frame is not one of the supported
-    ///         orbital / inertial frames above.
+    ///     ValueError: if sigma does not have 3 elements, or the frame is
+    ///         not one of the supported orbital / inertial frames above.
+    ///     TypeError: if sigma is not a real numeric array-like
     fn set_pos_uncertainty(
         &mut self,
         sigma: &Bound<'_, np::PyArray1<f64>>,
@@ -142,18 +148,20 @@ impl PySatState {
     ///
     /// Analogous to :meth:`set_pos_uncertainty`, but for the velocity
     /// block of the 6x6 state covariance. Any existing position
-    /// covariance is preserved.
+    /// covariance is preserved; the position-velocity cross blocks are
+    /// cleared.
     ///
     /// Args:
-    ///     sigma (numpy.ndarray): 3-element array of 1-sigma velocity
+    ///     sigma (array-like): 3 1-sigma velocity
     ///         components along the frame's axes. Units: m/s.
     ///     frame (satkit.frame): Coordinate frame — **required**, no
     ///         default (matching the Rust API). Supported values:
     ///         ``frame.GCRF``, ``frame.RTN``, ``frame.NTW``, ``frame.LVLH``.
     ///
     /// Raises:
-    ///     RuntimeError: if the frame is not one of the supported
-    ///         orbital / inertial frames above.
+    ///     ValueError: if sigma does not have 3 elements, or the frame is
+    ///         not one of the supported orbital / inertial frames above.
+    ///     TypeError: if sigma is not a real numeric array-like
     fn set_vel_uncertainty(
         &mut self,
         sigma: &Bound<'_, np::PyArray1<f64>>,
@@ -164,14 +172,15 @@ impl PySatState {
         Ok(())
     }
 
-    /// Set full 6x6 state covariance matrix
+    /// Set the full 6x6 state covariance matrix, or clear it with None
     ///
     /// Args:
-    ///     cov (numpy.ndarray): 6x6 numpy array with GCRF state covariance for position (meters) and velocity (m/s):
-    ///         position block m^2, velocity block (m/s)^2, cross blocks m^2/s
+    ///     cov (array-like | None): symmetric 6x6 GCRF state covariance for position (meters) and velocity (m/s):
+    ///         position block m^2, velocity block (m/s)^2, cross blocks m^2/s. None removes the covariance
     ///
-    /// Returns:
-    ///     None
+    /// Raises:
+    ///     ValueError: if cov is not 6x6, or is not symmetric
+    ///     TypeError: if cov is not a real numeric array-like or None
     #[setter]
     fn set_cov(&mut self, cov: &Bound<'_, np::PyArray2<f64>>) -> PyResult<()> {
         let cov =
@@ -207,11 +216,17 @@ impl PySatState {
         slice2py1d(py, &self.0.pv.as_slice()[3..6])
     }
 
-    /// Get full 6x6 state covariance matrix
+    /// Full 6x6 state covariance matrix in GCRF, or None if not set
+    ///
+    /// Element [i, j] is the covariance of state elements i and j of
+    /// [x, y, z, vx, vy, vz]: the upper-left 3x3 block is position (m^2), the
+    /// lower-right velocity ((m/s)^2), the off-diagonal blocks the
+    /// position-velocity cross-covariance (m^2/s). The getter returns a new
+    /// array each time, exactly as assigned (or as propagated); modify the
+    /// state by assigning a matrix, or None to clear it.
     ///
     /// Returns:
-    ///     numpy.ndarray: 6x6 numpy array with GCRF state covariance for position (meters) and velocity (m/s):
-    ///     position block m^2, velocity block (m/s)^2, cross blocks m^2/s. None if not set
+    ///     numpy.ndarray | None: 6x6 covariance, or None if not set
     #[getter]
     fn get_cov(&self, py: Python) -> PyResult<Py<PyAny>> {
         match self.0.cov {
@@ -252,7 +267,7 @@ impl PySatState {
     /// Add an impulsive maneuver (instantaneous delta-v) to the state
     ///
     /// Args:
-    ///     time (satkit.time): Time at which to apply the maneuver
+    ///     time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to apply the maneuver
     ///     delta_v (array-like): 3-element delta-v vector [m/s]
     ///     frame (satkit.frame): Coordinate frame — **required**, no
     ///         default (matching the Rust API). Supported frames:
@@ -270,6 +285,11 @@ impl PySatState {
     ///
     /// Returns:
     ///     None
+    ///
+    /// Raises:
+    ///     ValueError: if delta_v does not have 3 elements, or the frame is
+    ///         not one of the four above
+    ///     TypeError: if time is not a time, or delta_v is not numeric
     ///
     /// See also:
     ///     :meth:`add_prograde`, :meth:`add_retrograde`, :meth:`add_radial`,
@@ -340,16 +360,20 @@ impl PySatState {
             .add_maneuver(ImpulsiveManeuver::normal(time.0, dv_mps));
     }
 
-    /// Get the list of maneuvers
+    /// Number of impulsive maneuvers scheduled on this state
     ///
     /// Returns:
-    ///     int: Number of impulsive maneuvers
+    ///     int: Number of impulsive maneuvers (``len(maneuvers)``)
     #[getter]
     fn get_num_maneuvers(&self) -> usize {
         self.0.maneuvers.len()
     }
 
-    /// The scheduled impulsive maneuvers
+    /// The scheduled impulsive maneuvers, in the order they were added
+    ///
+    /// A new list of new dicts on every access: changing it does not change
+    /// the state. Use the ``add_*`` methods to add maneuvers and
+    /// ``clear_maneuvers`` to remove them.
     ///
     /// Returns:
     ///     list[dict]: One dict per maneuver with keys "time" (satkit.time),
@@ -372,16 +396,32 @@ impl PySatState {
 
     /// Propagate state to a new time
     ///
-    /// Automatically segments propagation at impulsive maneuver times.
+    /// The covariance, if set, is propagated with the state transition
+    /// matrix. Propagation is split at each scheduled maneuver whose time t
+    /// satisfies ``start <= t < target`` (``target <= t < start`` when
+    /// propagating backward, which subtracts the delta-v): a state at a
+    /// maneuver's own time is the state just before the burn, so a maneuver
+    /// at the current time is applied and one at the target time is not. The
+    /// maneuver list is carried over to the returned state unchanged.
     ///
     /// Args:
-    ///     timedur (satkit.time|datetime.datetime|satkit.duration): Time for which to compute new state or alternatively
-    ///         a duration to propagate from the current time
-    ///     propsettings (satkit.propsettings, optional): Propagation settings
+    ///     timedur (satkit.time | datetime.datetime | numpy.datetime64 | satkit.duration): Time for which to
+    ///         compute the new state, or a duration to propagate from the current time
+    ///     propsettings (satkit.propsettings, optional): Propagation settings. Default: ``propsettings()``
     ///     satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
     ///
     /// Returns:
     ///     satkit.satstate: New state at input time
+    ///
+    /// Raises:
+    ///     TypeError: if timedur is not a time or a satkit.duration (a float
+    ///         or a datetime.timedelta is refused), or propsettings /
+    ///         satproperties has the wrong type
+    ///     ValueError: if the position is all zeros
+    ///     RuntimeError: if the propagation fails (see ``satkit.propagate``).
+    ///         A covariance needs the state transition matrix, which
+    ///         ``integrator.rodas4`` and ``integrator.gauss_jackson8`` cannot
+    ///         propagate
     #[pyo3(signature=(timedur, *, propsettings=None, satproperties=None))]
     fn propagate(
         &self,

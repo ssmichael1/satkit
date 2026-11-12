@@ -36,74 +36,68 @@ crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |_| invalid_valu
 
 /// High-precision orbit propagator
 ///
-/// Propagate statellite ephemeris (position, velocity in gcrs & time) to new time via adaptive Runge-Kutta 9/8 ordinary differential equation (ODE) integration
+/// Propagate a satellite state (GCRF position and velocity) from ``begin`` to a
+/// new time by numerical integration of the force model. The default integrator
+/// is the adaptive Verner 9(8) Runge-Kutta pair; ``propsettings.integrator``
+/// selects the others (lower-order Runge-Kutta pairs, the RODAS4 Rosenbrock
+/// method, fixed-step Gauss-Jackson 8).
 ///
 /// Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF)
 ///
-/// Inputs:
+/// Args:
+///     state (array-like): 6-element GCRF position (meters) and velocity
+///         (meters/second). Required unless ``pos`` and ``vel`` are given
+///     begin (satkit.time | datetime.datetime | numpy.datetime64): time of ``state``. Required
+///     end (satkit.time | datetime.datetime | numpy.datetime64, optional): time to propagate to
 ///
-///      state (npt.ArrayLike[float]): 6-element numpy array representing satellite GCRF position & velocity, in meters and meters/second
-///      begin (satkit.time): Begin time of propagation, time of "state"
-///        end (satkit.time, optional): End time of propagation
+/// Keyword Args:
+///     duration (satkit.duration, optional): duration from ``begin`` to propagate
+///     duration_secs (float, optional): duration from ``begin``, seconds
+///     duration_days (float, optional): duration from ``begin``, days
+///     pos (array-like, optional): 3-element GCRF position, meters. Give it
+///         together with ``vel``, in place of ``state``
+///     vel (array-like, optional): 3-element GCRF velocity, meters/second. Give
+///         it together with ``pos``
+///     output_phi (bool): also compute the 6x6 state transition matrix between
+///         ``begin`` and the end time. Default False
+///     propsettings (satkit.propsettings, optional): settings for the
+///         propagation. Default: ``propsettings()``
+///     satproperties (satkit.satproperties, optional): drag, radiation pressure
+///         and thrust properties of the satellite. Default: none of the three
 ///
-///
-/// Optional keyword arguments:
-///
-///
-/// 4 ways of setting propagation end:
-/// (one of these must be used)
-///
-///              end: (satkit.time, optional): instant at which new position and
-///                   velocity will be computed
-///    duration_secs: (float, optional): duration in seconds from "tm" for at which new
-///                   position and velocity will be computed.
-///    duration_days: (float, optional): duration in days from "tm" at which new position and
-///                   velocity will be computed.
-///         duration: (satkit.duration, optional): An astro.duration object setting duration
-///                   from "tm" at which new position & velocity will be computed.
-///
-///  Other keywords:
-///
-///
-///              pos (npt.ArrayLike[float], optional): GCRF position, meters; replaces
-///                   the first three elements of "state" (or stands in for it with "vel")
-///              vel (npt.ArrayLike[float], optional): GCRF velocity, meters/second; replaces
-///                   the last three elements of "state"
-///       output_phi (bool): boolean inticating Output 6x6 state transition matrix
-///                   between "begintime" and "endtime"
-///                   default is False
-///     propsettings (satkit.propsettings): Settings for
-///                   the propagation. if left out, default will be used.
-///    satproperties (satkit.satproperties): object with drag,
-///                   radiation pressure, and thrust properties of satellite.
-///                   If left out, drag, radiation pressure, and thrust are neglected
-///
+/// Exactly one of ``end``, ``duration``, ``duration_secs`` and ``duration_days``
+/// sets the end time. It may be before ``begin`` (backward propagation).
 ///
 /// Returns:
-///
-///    satkit.propresult: object with new GCRF position (meters) and velocity (meters/second), and possibly
-///                       state transition matrix between "begintime" and "endtime",
-///                       and dense ODE solution that allow for interpolation, if requested
+///     satkit.propresult: the GCRF position (meters) and velocity (meters/second)
+///     at the end time, the state transition matrix if requested, and dense
+///     output for interpolation between the two times (``propresult.interp``)
+///     unless ``propsettings.enable_interp`` is False
 ///
 /// Raises:
+///     TypeError: if ``state`` (or ``pos`` and ``vel``) or ``begin`` is missing,
+///         ``pos`` is given without ``vel`` or the reverse, none or more than one
+///         of ``end``, ``duration``, ``duration_secs``, ``duration_days`` is given,
+///         an argument has the wrong type, or an unknown keyword is passed
+///     ValueError: if ``state`` does not have 6 elements (``pos`` / ``vel`` 3),
+///         the position is all zeros, or ``duration_secs`` / ``duration_days``
+///         is NaN or infinite
+///     RuntimeError: if the propagation fails: a required data file is missing,
+///         the integrator does not converge or exceeds ``max_steps``,
+///         ``output_phi`` is used with ``integrator.rodas4`` or
+///         ``integrator.gauss_jackson8``, the span is shorter than 8 steps of
+///         ``integrator.gauss_jackson8``, or ``require_eop_coverage`` is set and
+///         the span is outside the Earth-orientation table
 ///
-///   RuntimeError: If "pos" or "vel" are not 3-element numpy arrays
-///   TypeError: If none of "end", "duration", "duration_secs" or "duration_days" is set
-///   ValueError: If "duration_secs" or "duration_days" is NaN or infinite
-///   TypeError: If an unknown keyword argument is passed, or "state" or "begin" is missing
+/// Notes:
+///     Forces included:
 ///
-///
-///    Notes:
-///        * Propagator uses advanced Runge-Kutta integrators and includes the following forces:
-///            * Earth gravity with higher-order spherical-harmonic terms
-///            * Sun, Moon gravity
-///            * Solid Earth tides (IERS 2010 Step 1; configurable via propsettings.tide_model)
-///            * General relativity (IERS 2010 Eq. 10.12: Schwarzschild, geodesic precession, Lense-Thirring)
-///            * Radiation pressure
-///            * Atmospheric drag: NRLMSISE-00 density model, with option to include space weather effects (can be large)
-///        * End time must be set by keyword argument, either explicitly or by duration
-///        * Dense-output interpolation is controlled by propsettings.enable_interp
-///          (default True); use propresult.interp to query interpolated states
+///     * Earth gravity with higher-order spherical-harmonic terms
+///     * Sun, Moon gravity
+///     * Solid Earth tides (IERS 2010 Step 1; configurable via propsettings.tide_model)
+///     * General relativity (IERS 2010 Eq. 10.12: Schwarzschild, geodesic precession, Lense-Thirring)
+///     * Radiation pressure
+///     * Atmospheric drag: NRLMSISE-00 density model, with option to include space weather effects (can be large)
 ///
 // `state` and `begin` take `None` defaults only so the undocumented
 // `pos=` / `vel=` keywords can replace `state`; a missing `begin` is refused

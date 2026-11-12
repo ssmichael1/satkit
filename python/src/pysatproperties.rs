@@ -25,9 +25,9 @@ crate::arg_extractor!(pub(crate) satproperties_arg: Option<PySatProperties>, |e|
 /// and thrust parameters be set for duration of propagation.
 ///
 /// Attributes:
-///     cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
+///     cdaoverm (float): Coefficient of drag times area over mass in m^2/kg; not negative
 ///     craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
-///     thrusts (list[thrust]): List of continuous thrust arcs
+///     thrusts (list[thrust]): List of continuous thrust arcs (a copy; assign a list to change them)
 ///     ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
 ///         coefficients, added to the cannonball term (use ``craoverm=0``
 ///         for a pure ECOM model). See :class:`ecomparams` for the
@@ -56,10 +56,12 @@ impl PySatProperties {
     ///         pure ECOM model). Default None
     ///
     /// Raises:
-    ///     TypeError: if any argument is passed positionally. (Releases before
-    ///         this change read positional arguments as (craoverm, cdaoverm),
+    ///     TypeError: if any argument is passed positionally (releases before
+    ///         this check read positional arguments as (craoverm, cdaoverm),
     ///         the reverse of the documented order, so positional calls are
-    ///         refused rather than reinterpreted.)
+    ///         refused rather than reinterpreted), or an argument has the
+    ///         wrong type
+    ///     ValueError: if cdaoverm is negative or NaN
     ///
     #[new]
     // `*args` only catches positional calls to refuse them with the message
@@ -125,13 +127,17 @@ impl PySatProperties {
     /// Set the satellite's susceptibility to drag
     ///
     /// Args:
-    ///     cdaoverm (float): Cd A / m (m^2/kg)
+    ///     cdaoverm (float): Cd A / m (m^2/kg); ``ValueError`` if negative or NaN
     #[setter]
     fn set_cdaoverm(&mut self, cdaoverm: f64) {
         self.0.cdaoverm = cdaoverm;
     }
 
-    /// Get the list of thrust arcs
+    /// The continuous thrust arcs
+    ///
+    /// A new list on every access: appending to it or removing from it does
+    /// not change the properties. Assign a whole list to change the arcs
+    /// (``props.thrusts = props.thrusts + [arc]``).
     ///
     /// Returns:
     ///     list[satkit.thrust]: List of continuous thrust arcs
@@ -155,6 +161,9 @@ impl PySatProperties {
     }
 
     /// Get the ECOM solar-radiation-pressure coefficients, or None
+    ///
+    /// A copy on every access: setting a coefficient on it does not change
+    /// the properties; assign the modified ``ecomparams`` back.
     ///
     /// When set, the ECOM acceleration (see satkit.ecomparams for the DYB
     /// frame, sign and eclipse conventions) is added to the cannonball term

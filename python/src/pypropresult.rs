@@ -30,25 +30,30 @@ pub enum PyPropResultType {
 
 /// Propagation statistics
 ///
-/// This class holds statistics about the result of a high-precision orbit propagation
+/// The step and force-evaluation counts of a high-precision orbit propagation,
+/// for whichever integrator ran it (the adaptive Runge-Kutta pairs, RODAS4 or
+/// the fixed-step Gauss-Jackson 8). Returned by ``propresult.stats``; not
+/// constructed directly.
 ///
 #[pyclass(name = "propstats", module = "satkit")]
 pub struct PyPropStats {
-    /// Number of function evaluations
+    /// Number of force-model (derivative) evaluations
     ///
     /// Returns:
-    ///     int: number of derivative function evalations used in propagation
+    ///     int: number of derivative function evaluations used in propagation
     #[pyo3(get)]
     num_eval: u32,
 
-    /// Number of accepted steps
+    /// Number of accepted integrator steps (for the fixed-step
+    /// ``integrator.gauss_jackson8``, the number of steps taken)
     ///
     /// Returns:
     ///     int: number of accepted steps in propagation
     #[pyo3(get)]
     num_accept: u32,
 
-    /// Number of rejected steps
+    /// Number of steps the adaptive step-size control rejected and retried
+    /// (always 0 for the fixed-step ``integrator.gauss_jackson8``)
     ///
     /// Returns:
     ///    int: number of rejected steps in propagation
@@ -90,13 +95,18 @@ impl PyPropStats {
 /// The result includes the final state of the satellite, the time at which the state was computed,
 /// and statistics about the propagation
 ///
-/// The result may also include a dense ODE solution that can be used for interpolation of states
-/// between the begin and end times
+/// The result also includes dense output that can be used for interpolation of states
+/// between the begin and end times (``interp``), unless ``propsettings.enable_interp``
+/// was False or the integrator has none (``integrator.rodas4``,
+/// ``integrator.rkv98_nointerp``); ``can_interp`` says which.
+///
+/// Returned by ``satkit.propagate``; not constructed directly.
 ///
 /// Attributes:
 ///
 ///    time_begin: satkit.time object representing the time at which the propagation began
 ///          time: satkit.time object representing the time at which the propagation ended
+///                (same as time_end)
 ///         stats: satkit.propstats object with statistics about the propagation
 ///           pos: 3-element numpy array representing the final position of the satellite in GCRF meters
 ///           vel: 3-element numpy array representing the final velocity of the satellite in GCRF m/s
@@ -105,9 +115,8 @@ impl PyPropStats {
 ///           phi: 6x6 numpy array representing the state transition matrix between
 ///                the begin and end times, if requested (maps a begin-state perturbation
 ///                in meters, m/s to the end state in meters, m/s)
-///    can_interp: boolean indicating whether the result includes a dense ODE
-///                solution that can be used for interpolation
-///                of states between the begin and end times
+///    can_interp: boolean indicating whether the result includes dense output,
+///                so that ``interp`` works between the begin and end times
 ///
 #[pyclass(name = "propresult", module = "satkit", from_py_object)]
 #[derive(Debug, Clone)]
@@ -159,19 +168,28 @@ impl PyPropResult {
         })))
     }
 
-    /// Get the begin time (time at which state_begin is valid)
+    /// Time at which the propagation began
+    ///
+    /// Returns:
+    ///     satkit.time: time at which ``state_begin`` is valid
     #[getter]
     fn time_begin(&self) -> PyInstant {
         PyInstant(each!(&self.0, r => r.time_begin))
     }
 
-    /// Get the end time
+    /// Time of the end state (same as time_end)
+    ///
+    /// Returns:
+    ///     satkit.time: time at which ``state`` / ``pos`` / ``vel`` are valid
     #[getter]
     fn time(&self) -> PyInstant {
         self.time_end()
     }
 
-    /// Get the end time
+    /// Time of the end state
+    ///
+    /// Returns:
+    ///     satkit.time: time at which ``state_end`` is valid
     #[getter]
     fn time_end(&self) -> PyInstant {
         PyInstant(each!(&self.0, r => r.time_end))
@@ -275,7 +293,16 @@ impl PyPropResult {
         }
     }
 
-    /// Whether this result supports interpolation (dense output is available)
+    /// Whether ``interp`` works on this result: True when the propagation
+    /// stored dense output.
+    ///
+    /// False when ``propsettings.enable_interp`` was False, for
+    /// ``integrator.rodas4`` and ``integrator.rkv98_nointerp`` (which have no
+    /// interpolant) and for a zero-duration propagation; ``interp`` then
+    /// raises ``ValueError``.
+    ///
+    /// Returns:
+    ///     bool: whether dense output is available for interpolation
     #[getter]
     const fn can_interp(&self) -> bool {
         each!(&self.0, r => r.odesol.is_some() || r.gj_dense.is_some())
@@ -311,9 +338,12 @@ impl PyPropResult {
     ///     list of times
     ///
     /// Raises:
-    ///     ValueError: if output_phi is True but the propagation did not compute
-    ///         the state transition matrix (``propagate(..., output_phi=True)``),
-    ///         or a time is outside the interpolation range
+    ///     ValueError: if the result has no dense output (``can_interp`` is
+    ///         False), a time is outside the begin-to-end range, or output_phi
+    ///         is True but the propagation did not compute the state transition
+    ///         matrix (``propagate(..., output_phi=True)``)
+    ///     TypeError: if time is not a time or a list / array of times (a
+    ///         ``RuntimeError`` for a tuple, a number or a string)
     #[pyo3(signature=(time, output_phi=false))]
     fn interp(&self, py: Python, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
         // Without the STM there is no phi to return; this used to hand back
