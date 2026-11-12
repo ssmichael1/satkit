@@ -87,6 +87,26 @@ impl PyKepler {
     }
 }
 
+/// A time span given as a `satkit.duration`, a `datetime.timedelta` or a
+/// real number of seconds. `TypeError` for anything else; `ValueError` for
+/// a NaN or infinite number; `OverflowError` beyond the duration range.
+pub(crate) fn duration_arg(obj: &Bound<'_, PyAny>, name: &str) -> PyResult<satkit::Duration> {
+    if let Ok(d) = obj.extract::<PyDuration>() {
+        return Ok(d.0);
+    }
+    if let Ok(td) = obj.cast::<pyo3::types::PyDelta>() {
+        return crate::pyduration::timedelta_to_duration(td);
+    }
+    let secs = obj.extract::<f64>().map_err(|_| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "{name} must be a satkit.duration, a datetime.timedelta or a number of seconds"
+        ))
+    })?;
+    // Duration::from_seconds maps NaN to zero and saturates infinities
+    crate::pyduration::check_duration_value(secs, 1.0e6, name)?;
+    Ok(satkit::Duration::from_seconds(secs))
+}
+
 #[pymethods]
 impl PyKepler {
     #[new]
@@ -147,13 +167,25 @@ impl PyKepler {
     }
 
     #[getter]
-    /// Eccentricity, unitless
+    /// Eccentricity, unitless (short alias of ``eccentricity``)
     fn get_eccen(&self) -> f64 {
         self.0.eccen
     }
 
     #[setter(eccen)]
     fn set_eccen(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.eccen = val)
+    }
+
+    #[getter]
+    /// Eccentricity, unitless (0 <= eccentricity < 1; ``ValueError``
+    /// otherwise). ``eccen`` is the same attribute under its short name.
+    fn get_eccentricity(&self) -> f64 {
+        self.0.eccen
+    }
+
+    #[setter(eccentricity)]
+    fn set_eccentricity(&mut self, val: f64) -> PyResult<()> {
         self.set_validated(|k| k.eccen = val)
     }
 
@@ -274,33 +306,19 @@ impl PyKepler {
     /// Propagate the elements forward (or backward) in time
     ///
     /// Args:
-    ///     dt (duration | float | int): time to propagate; a number is
-    ///         interpreted as seconds
+    ///     dt (duration | datetime.timedelta | float | int): time to
+    ///         propagate; a number is interpreted as seconds
     ///
     /// Returns:
     ///     kepler: new element set
     ///
     /// Raises:
-    ///     TypeError: ``dt`` is neither a duration nor a number
+    ///     TypeError: ``dt`` is neither a duration, a timedelta nor a number
     ///     ValueError: ``dt`` is a NaN or infinite number of seconds
     ///     OverflowError: ``dt`` is too large for a duration
     fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(dt) = dt.extract::<PyDuration>() {
-            Ok(Self(self.0.propagate(&dt.0)))
-        } else {
-            let secs = dt.extract::<f64>().map_err(|_| {
-                pyo3::exceptions::PyTypeError::new_err(
-                    "dt must be a satkit.duration or a number of seconds",
-                )
-            })?;
-            // Duration::from_seconds maps NaN to zero and saturates
-            // infinities, which silently made this a no-op or a garbage
-            // propagation.
-            crate::pyduration::check_duration_value(secs, 1.0e6, "dt")?;
-            Ok(Self(
-                self.0.propagate(&satkit::Duration::from_seconds(secs)),
-            ))
-        }
+        let dt = duration_arg(dt, "dt")?;
+        Ok(Self(self.0.propagate(&dt)))
     }
 
     /// Return the eccentric anomaly of the satellite in radians
@@ -417,18 +435,24 @@ impl PyKepler {
         Ok(())
     }
 
-    /// Return the true anomaly of the satellite in radians (read-only
-    /// alias of ``nu``)
+    /// Return the true anomaly of the satellite in radians (the same
+    /// attribute as ``nu``; assigning it sets ``nu``, finite or
+    /// ``ValueError``)
     ///
     /// The value is stored as given, not reduced to one revolution; the
-    /// anomaly setters, ``propagate`` and ``from_pv`` produce a value in
-    /// (-pi, pi] or [0, 2 pi).
+    /// eccentric and mean anomaly setters, ``propagate`` and ``from_pv``
+    /// produce a value in (-pi, pi] or [0, 2 pi).
     ///
     /// Returns:
     ///   float: True Anomaly, radians
     #[getter]
     fn true_anomaly(&self) -> f64 {
         self.0.nu
+    }
+
+    #[setter(true_anomaly)]
+    fn set_true_anomaly(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.nu = val)
     }
 
     fn __str__(&self) -> String {

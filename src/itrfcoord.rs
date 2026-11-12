@@ -565,7 +565,8 @@ impl ITRFCoord {
     }
 
     /// Compute location when moving a given Distance at a given heading along the Earth's surface
-    /// Altitude assumed to be zero
+    /// The path follows the WGS-84 ellipsoid: the starting height is ignored
+    /// and the returned coordinate has zero height above the ellipsoid.
     ///
     /// # Arguments:
     /// * `distance_m` - Distance in meters to travel along surface of Earth

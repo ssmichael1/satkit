@@ -3420,7 +3420,118 @@ class quaternion:
 
         ``q`` and ``-q`` are the same rotation but compare unequal; so do two
         quaternions that differ by rounding. To compare rotations use
-        ``abs(q1.dot(q2))``, which is 1 for the same rotation.
+        ``q1.isclose(q2)`` or ``q1.angle_to(q2)``.
+        """
+        ...
+
+    def angle_to(self, other: quaternion) -> float:
+        """Rotation angle between this orientation and another, radians in [0, pi]
+
+        The angle of the rotation ``self.conj() * other`` that takes one to
+        the other. ``q`` and ``-q`` are the same rotation, so
+        ``q.angle_to(-q)`` is 0.
+
+        Args:
+            other (quaternion): The other orientation
+
+        Returns:
+            float: Angle between the two rotations, radians in [0, pi]
+
+        Example:
+            ```python
+            import math
+            q1 = satkit.quaternion.rotz(math.radians(10))
+            q2 = satkit.quaternion.rotz(math.radians(40))
+            print(math.degrees(q1.angle_to(q2)))
+            # 30.0 (to rounding)
+            ```
+        """
+        ...
+
+    def isclose(self, other: quaternion, *, atol: float = 1e-12) -> bool:
+        """True when ``other`` is the same rotation to within ``atol`` radians
+
+        Compares rotations, not components: ``q`` and ``-q`` are the same
+        rotation and are close (unlike ``==``, which compares the four
+        components exactly).
+
+        Args:
+            other (quaternion): The rotation to compare with
+            atol (float): Largest ``angle_to(other)``, radians, still counted
+                as the same rotation. Default 1e-12
+
+        Returns:
+            bool: ``self.angle_to(other) <= atol``
+
+        Raises:
+            ValueError: ``atol`` is negative, NaN or infinite
+
+        Example:
+            ```python
+            q = satkit.quaternion.rotx(0.3)
+            print(q.isclose(satkit.quaternion(-q.w, -q.x, -q.y, -q.z)))
+            # True
+            ```
+        """
+        ...
+
+    def to_axis_angle(self) -> tuple[npt.NDArray[np.float64], float]:
+        """Rotation axis and angle, the inverse of ``from_axis_angle``
+
+        The same values as the ``axis`` and ``angle`` properties:
+        ``quaternion.from_axis_angle(*q.to_axis_angle())`` is ``q``.
+
+        Returns:
+            tuple[numpy.ndarray, float]: Unit rotation axis (3-element array;
+            ``[1, 0, 0]`` for the identity) and the right-handed angle about
+            it in radians, in [0, 2 pi)
+
+        Example:
+            ```python
+            axis, angle = satkit.quaternion.rotz(0.5).to_axis_angle()
+            ```
+        """
+        ...
+
+    def to_array(self) -> npt.NDArray[np.float64]:
+        """The four components as an array in the order ``[w, x, y, z]``
+        (scalar first), the inverse of ``from_array``
+
+        Returns:
+            numpy.ndarray: 4-element float64 array ``[w, x, y, z]``
+
+        Example:
+            ```python
+            print(satkit.quaternion().to_array())
+            # [1. 0. 0. 0.]
+            ```
+        """
+        ...
+
+    @staticmethod
+    def from_array(arr: npt.ArrayLike) -> quaternion:
+        """Quaternion from an array of its four components in the order
+        ``[w, x, y, z]`` (scalar first), the inverse of ``to_array``
+
+        The same as ``quaternion(w, x, y, z)``: the components are scaled to
+        unit norm.
+
+        Args:
+            arr (npt.ArrayLike): 4 components ``[w, x, y, z]`` (any real
+                numeric array-like: numpy array, list or tuple)
+
+        Returns:
+            quaternion: Unit quaternion along ``arr``
+
+        Raises:
+            TypeError: ``arr`` is not a real numeric array-like
+            ValueError: ``arr`` does not have 4 elements, holds a NaN or
+                infinity, or is all zeros
+
+        Example:
+            ```python
+            q = satkit.quaternion.from_array([1.0, 0.0, 0.0, 0.0])
+            ```
         """
         ...
 
@@ -3550,14 +3661,15 @@ class kepler:
         """
         ...
 
-    def propagate(self, dt: duration | float | int) -> kepler:
+    def propagate(self, dt: duration | datetime.timedelta | float | int) -> kepler:
         """Propagate Keplerian element set by input duration
 
         Two-body (unperturbed) propagation: only the anomaly changes.
 
         Args:
-            dt (duration | float | int): Duration by which to propagate the
-                Keplerian element set. A number is interpreted as seconds.
+            dt (duration | datetime.timedelta | float | int): Duration by
+                which to propagate the Keplerian element set. A number is
+                interpreted as seconds.
 
         Returns:
             Keplerian element set object after propagation
@@ -3571,7 +3683,8 @@ class kepler:
             ```
 
         Raises:
-            TypeError: if ``dt`` is neither a duration nor a number.
+            TypeError: if ``dt`` is neither a duration, a timedelta nor a
+                number.
             ValueError: if ``dt`` is a NaN or infinite number of seconds.
             OverflowError: if ``dt`` is too large for a duration.
         """
@@ -3584,11 +3697,15 @@ class kepler:
 
     @property
     def true_anomaly(self) -> float:
-        """True anomaly, radians (read-only alias of ``nu``)
+        """True anomaly, radians: the same attribute as ``nu``
 
-        Stored as given, not reduced to one revolution.
+        Stored as given, not reduced to one revolution. Assigning it sets
+        ``nu`` (finite; ``ValueError`` otherwise).
         """
         ...
+
+    @true_anomaly.setter
+    def true_anomaly(self, value: float) -> None: ...
 
     @property
     def eccentric_anomaly(self) -> float:
@@ -3704,11 +3821,22 @@ class kepler:
     def a(self, value: float) -> None: ...
     @property
     def eccen(self) -> float:
-        """Eccentricity, unitless (0 <= eccen < 1; ``ValueError`` otherwise)"""
+        """Eccentricity, unitless (0 <= eccen < 1; ``ValueError`` otherwise)
+
+        Short alias of ``eccentricity``.
+        """
         ...
 
     @eccen.setter
     def eccen(self, value: float) -> None: ...
+    @property
+    def eccentricity(self) -> float:
+        """Eccentricity, unitless (0 <= eccentricity < 1; ``ValueError``
+        otherwise). ``eccen`` is the same attribute under its short name."""
+        ...
+
+    @eccentricity.setter
+    def eccentricity(self, value: float) -> None: ...
     @property
     def inclination(self) -> float:
         """Inclination, radians (0 <= incl <= pi; ``ValueError`` otherwise)"""
@@ -3918,11 +4046,91 @@ class itrfcoord:
                 ``latitude_rad``, ``longitude_deg`` with ``longitude_rad``,
                 ``altitude`` with ``height``); latitude or longitude missing;
                 the positional argument is not a real numeric array-like or
-                three numbers
+                three numbers; a keyword that is not a real number
             ValueError: latitude outside [-90, 90] degrees; a NaN or infinite
                 latitude, longitude, height or Cartesian component; a
-                positional array that does not have 3 elements; a keyword
-                that is not a number
+                positional array that does not have 3 elements
+
+        Notes:
+            The named constructors ``itrfcoord.from_vector`` and
+            ``itrfcoord.from_geodetic`` do the same.
+        """
+        ...
+
+    @overload
+    @staticmethod
+    def from_geodetic(
+        *,
+        latitude_deg: float,
+        longitude_deg: float,
+        height: float | None = None,
+    ) -> itrfcoord: ...
+    @overload
+    @staticmethod
+    def from_geodetic(
+        *,
+        latitude_rad: float,
+        longitude_rad: float,
+        height: float | None = None,
+    ) -> itrfcoord:
+        """Create an ITRF coordinate from a geodetic position
+
+        The named-constructor form of ``itrfcoord(latitude_deg=...,
+        longitude_deg=..., altitude=...)``, with the same checks. Give a
+        latitude and a longitude, each in degrees or in radians, and
+        optionally the height; all arguments are keyword-only.
+
+        Args:
+            latitude_deg: Geodetic latitude in degrees, in [-90, 90]
+            longitude_deg: Longitude in degrees
+            latitude_rad: Geodetic latitude in radians, in [-pi/2, pi/2]
+            longitude_rad: Longitude in radians
+            height: Height above the WGS84 ellipsoid, meters. Default is 0
+
+        Returns:
+            itrfcoord: New ITRF coordinate
+
+        Raises:
+            TypeError: latitude or longitude missing; the same quantity given
+                in both units (``latitude_deg`` with ``latitude_rad``,
+                ``longitude_deg`` with ``longitude_rad``); an argument that
+                is not a real number
+            ValueError: latitude outside [-90, 90] degrees; a NaN or infinite
+                latitude, longitude or height
+
+        Example:
+            ```python
+            coord = satkit.itrfcoord.from_geodetic(latitude_deg=42.44, longitude_deg=-71.15, height=100)
+            print(coord)
+            # ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+            ```
+        """
+        ...
+
+    @staticmethod
+    def from_vector(vec: npt.ArrayLike) -> itrfcoord:
+        """Create an ITRF coordinate from a Cartesian position
+
+        The named-constructor form of ``itrfcoord(vec)``; the inverse of the
+        ``vector`` property.
+
+        Args:
+            vec: ITRF Cartesian position in meters: any real numeric
+                3-element array-like (numpy array, list or tuple)
+
+        Returns:
+            itrfcoord: New ITRF coordinate
+
+        Raises:
+            TypeError: ``vec`` is not a real numeric array-like
+            ValueError: ``vec`` does not have 3 elements, or holds a NaN or
+                infinity
+
+        Example:
+            ```python
+            coord = satkit.itrfcoord.from_vector([1523128.63570828, -4461395.28873207, 4281865.94218203])
+            print(coord.vector)
+            ```
         """
         ...
 
@@ -5884,7 +6092,7 @@ class propsettings:
 def lambert(
     r1: npt.ArrayLike,
     r2: npt.ArrayLike,
-    tof: float,
+    tof: float | duration | datetime.timedelta,
     mu: float | None = None,
     prograde: bool | None = None,
 ) -> list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
@@ -5897,7 +6105,8 @@ def lambert(
         r1: Departure position, meters: any real numeric 3-element
             array-like (numpy array, list or tuple)
         r2: Arrival position, meters (likewise)
-        tof: Time of flight in seconds (must be positive)
+        tof: Time of flight, must be positive: a number of seconds, a
+            ``satkit.duration`` or a ``datetime.timedelta``
         mu: Gravitational parameter in m³/s² (default: Earth µ = 3.986e14)
         prograde: If True (default), prograde transfer (angular momentum
             h_z >= 0); if False, retrograde (h_z <= 0). This picks the short
@@ -5909,8 +6118,9 @@ def lambert(
         elements are multi-revolution solutions if they exist.
 
     Raises:
-        TypeError: If ``r1`` or ``r2`` is not a real numeric array-like, or
-            ``tof`` / ``mu`` is not a number
+        TypeError: If ``r1`` or ``r2`` is not a real numeric array-like,
+            ``tof`` is not a number, duration or timedelta, or ``mu`` is not
+            a number
         ValueError: If inputs are invalid (``r1`` or ``r2`` not 3 elements,
             non-finite values, tof or mu not positive, zero position,
             r1 == r2), or if the solver fails to converge
