@@ -75,10 +75,9 @@ satkit\.satkit\._enum_member
 # __add__/__sub__/__mul__/__truediv__ also exposes the reflected wrapper. Only
 # the forward forms are API: # other operand type (e.g. `2 * duration` raises TypeError). mypy >= 2.4 reports
 # them.
-satkit\.satkit\.duration\.__r(add|sub|truediv)__
+satkit\.satkit\.duration\.__r(add|sub|truediv|floordiv|mod)__
 satkit\.satkit\.itrfcoord\.__rsub__
 satkit\.satkit\.quaternion\.__rmul__
-satkit\.satkit\.time\.__rsub__
 
 # --- Native submodules ---------------------------------------------------------
 # Attributes of the compiled extension, each documented in its own top-level

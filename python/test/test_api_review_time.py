@@ -358,7 +358,12 @@ class TestTimeOperators:
         import datetime
 
         t = sk.time(2024, 1, 1)
-        for other in ("x", None, (1.0, 2.0), datetime.datetime(2024, 1, 1), 1j):
+        # A datetime.datetime orders against and subtracts from a time (API
+        # review round 2), but is still foreign to + and ==
+        dt = datetime.datetime(2024, 1, 1)
+        assert t.__add__(dt) is NotImplemented
+        assert (t == dt) is False and (t != dt) is True
+        for other in ("x", None, (1.0, 2.0), 1j):
             assert t.__add__(other) is NotImplemented
             assert t.__sub__(other) is NotImplemented
             for op in ("__lt__", "__le__", "__gt__", "__ge__"):

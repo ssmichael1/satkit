@@ -45,6 +45,25 @@ pos, vel = sk.sgp4(tle, times)  # one day at one-minute steps, shape (1440, 3)
 sk.frametransform.gmst(np.datetime64("2024-01-01T12:00:00.5"))  # scalars work too
 ```
 
+## Arithmetic, comparisons and formatting
+
+A `satkit.time` orders against a `datetime.datetime` or `numpy.datetime64` on either side (`<`, `<=`, `>`, `>=`), and subtracting one from the other gives a `satkit.duration`; the other operand is converted as `time(other)` would convert it. `==` is `True` only between two `satkit.time` objects, since a `time` and a `datetime` could not hash alike: convert first with `time(dt)`. Durations can be a `satkit.duration`, `datetime.timedelta` or `numpy.timedelta64` (scalar or 1-D array, any fixed unit, exact to the microsecond). An f-string format spec is a `strftime` format.
+
+```python
+import datetime
+import numpy as np
+import satkit as sk
+
+t = sk.time(2024, 1, 1, 12, 0, 0)
+t < np.datetime64("2024-01-02")                                      # True
+t - datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)      # 12 hours
+t + np.timedelta64(90, "s")                                          # 2024-01-01T12:01:30.000000Z
+f"{t:%Y-%m-%d %H:%M}"                                                # '2024-01-01 12:00'
+sk.duration.from_hours(5) // sk.duration.from_hours(2)               # 2
+t.to_gregorian(scale=sk.timescale.TAI)                               # (2024, 1, 1, 12, 0, 37.0)
+t.to_gps_week_and_second()                                           # (2295, 129618.0)
+```
+
 ::: satkit.timescale
 
 ::: satkit.time

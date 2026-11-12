@@ -812,6 +812,55 @@ impl Instant {
         (year, month, day, hour as i32, minute as i32, second_us)
     }
 
+    /// Return the Gregorian date and time in the given time scale
+    ///
+    /// The inverse of [`Self::from_datetime_with_scale`]. For
+    /// [`TimeScale::UTC`] this is [`Self::as_datetime`], leap seconds
+    /// included. The uniform scales (TAI, TT, GPS) have no leap seconds, so
+    /// their second is in `[0, 60)`; their labels are exact. UT1 and TDB are
+    /// offset from TAI in floating point, rounded to the nearest microsecond.
+    /// [`TimeScale::Invalid`] gives the labels of [`Self::INVALID`] in UTC.
+    ///
+    /// # Returns
+    /// (year, month, day, hour, minute, second) in `scale`
+    pub fn as_datetime_with_scale(&self, scale: TimeScale) -> (i32, i32, i32, i32, i32, f64) {
+        // Microseconds of the label past MJD 0 in `scale`
+        let mjd_us = match scale {
+            TimeScale::UTC => return self.as_datetime(),
+            TimeScale::Invalid => return Self::INVALID.as_datetime(),
+            TimeScale::TAI => self.tai_mjd_us(),
+            TimeScale::TT => self.tai_mjd_us().saturating_add(32_184_000),
+            // GPS = TAI - 19 seconds
+            TimeScale::GPS => self.tai_mjd_us().saturating_sub(19_000_000),
+            TimeScale::UT1 => {
+                // As in `as_mjd_with_scale`, in integer microseconds
+                let dut1 =
+                    crate::earth_orientation_params::eop_from_mjd_utc_or_zero(self.as_mjd_utc())[0];
+                let utc = self.raw.saturating_sub(microleapseconds(self.raw));
+                self.tai_mjd_us()
+                    .saturating_sub(utc_microleapseconds(utc))
+                    .saturating_add(round_us(dut1 * 1.0e6))
+            }
+            TimeScale::TDB => {
+                let (day, frac) = self.mjd_tdb_split();
+                day.saturating_mul(US_PER_DAY)
+                    .saturating_add(round_us(frac * US_PER_DAY as f64))
+            }
+        };
+        // 1970-01-01 is MJD 40587
+        let unix_day = mjd_us.div_euclid(US_PER_DAY) - 40_587;
+        let us_of_day = mjd_us.rem_euclid(US_PER_DAY);
+        let (year, month, day) = civil_from_unix_day(unix_day);
+        (
+            year,
+            month,
+            day,
+            (us_of_day / 3_600_000_000) as i32,
+            ((us_of_day % 3_600_000_000) / 60_000_000) as i32,
+            (us_of_day % 60_000_000) as f64 / 1.0e6,
+        )
+    }
+
     /// Construct an instant from a given UTC date
     ///
     /// # Arguments
