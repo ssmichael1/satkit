@@ -53,7 +53,7 @@ def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
     from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
 
     Args:
-        time (satkit.time): time at which to compute position
+        time (satkit.time | datetime.datetime | numpy.datetime64): time at which to compute position
 
     Returns:
         npt.NDArray[np.float64]: 3-element numpy array representing moon position in GCRF frame
@@ -85,8 +85,8 @@ def pos_gcrf(
     from MOD to GCRF via Equations 3-88 and 3-89 in Vallado
 
     Args:
-        time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time
-            for which to compute position
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times
+            (satkit.time, datetime.datetime or numpy.datetime64) at which to compute position
 
     Returns:
         npt.NDArray[np.float64]: Nx3 numpy array representing moon position in GCRF frame
@@ -109,7 +109,7 @@ def pos_mod(time: TimeScalar) -> npt.NDArray[np.float64]:
     ``pos_gcrf(t) = satkit.frametransform.qmod2gcrf(t) * pos_mod(t)``
 
     Args:
-        time (satkit.time): time at which to compute position
+        time (satkit.time | datetime.datetime | numpy.datetime64): time at which to compute position
 
     Returns:
         npt.NDArray[np.float64]: 3-element numpy array representing moon position in MOD frame
@@ -145,8 +145,8 @@ def pos_mod(
     ``pos_gcrf(t) = satkit.frametransform.qmod2gcrf(t) * pos_mod(t)``
 
     Args:
-        time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time
-            for which to compute position
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times
+            (satkit.time, datetime.datetime or numpy.datetime64) at which to compute position
 
     Returns:
         npt.NDArray[np.float64]: Nx3 numpy array representing moon position in MOD frame
@@ -200,11 +200,16 @@ def phase(time: TimeScalar) -> float:
     """
     Phase of moon in radians
 
+    The phase angle is the Moon's geocentric ecliptic longitude minus the
+    Sun's (built-in analytic models; Vallado section 5.2.3), in [0, 2π):
+    0 is New Moon, π/2 First Quarter, π Full Moon and 3π/2 Last Quarter.
+    ``illumination`` is ``(1 - cos(phase)) / 2``.
+
     Args:
-        time (satkit.time | datetime.datetime): scalar time at which to compute phase
+        time (satkit.time | datetime.datetime | numpy.datetime64): scalar time at which to compute phase
 
     Returns:
-        float: moon phase in radians at the given time
+        float: moon phase in radians at the given time, in [0, 2π)
     """
     ...
 
@@ -265,7 +270,8 @@ def rise_set(
     To get the events of a *local* date, pass a timezone-aware datetime at
     local noon: for time zones UTC-11 to UTC+11 local noon falls on the same
     UTC date, while local midnight falls on the previous UTC date east of
-    Greenwich.
+    Greenwich.  A *naive* ``datetime.datetime`` (no ``tzinfo``) is taken as
+    local time, and the UTC date of that instant selects the day.
 
     The Moon rises about 50 minutes later each day, so about once a month
     there is no moonrise on a date (and on another no moonset): that event
@@ -300,7 +306,8 @@ def rise_set(
         if it does not happen that day
 
     Raises:
-        RuntimeError: with use_jpl, if the JPL ephemeris is unavailable or does not cover the date
+        RuntimeError: with use_jpl, if the JPL ephemeris is unavailable or does not cover the
+            date (about 1550 to 2650 for DE440)
 
     Example:
         ```python

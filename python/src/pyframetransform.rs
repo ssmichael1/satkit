@@ -20,7 +20,9 @@ use anyhow::{bail, Result};
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GMST
 ///
 /// Returns:
-///     float|numpy.array: GMST at input time[s] in radians
+///     float|numpy.array: GMST at input time[s] in radians. Not normalised to
+///     [0, 2π): the value lies in (-2π, 2π) and is negative for most epochs
+///     before J2000; use ``gmst(t) % (2 * math.pi)`` for an angle in [0, 2π)
 #[pyfunction]
 pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::gmst, tm)
@@ -57,7 +59,8 @@ pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GAST
 ///
 /// Returns:
-///     float|numpy.array: GAST at input time[s] in radians
+///     float|numpy.array: GAST at input time[s] in radians. Like ``gmst`` it is
+///     not normalised to [0, 2π): it is negative for most epochs before J2000
 #[pyfunction]
 pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
     py_func_of_time_arr(ft::gast, tm)
@@ -73,7 +76,7 @@ pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate Earth Rotation Angle
 ///
 /// Returns:
-///     float|numpy.array: Earth Rotation Angle at input time[s] in radians
+///     float|numpy.array: Earth Rotation Angle at input time[s] in radians, in [0, 2π)
 ///
 /// Calculation Details
 ///
@@ -246,7 +249,7 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// Get Earth Orientation Parameters at given instant
 ///
 /// Args:
-///     tm (satkit.time):   Instant at which to query parameters
+///     time (satkit.time):   Instant at which to query parameters
 ///
 /// Returns:
 ///     (float, float, float, float, float, float): tuple with following elements:
@@ -291,11 +294,16 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
 ///     numpy.ndarray: 3x3 rotation matrix (frame -> GCRF)
 ///
 /// Raises:
-///     RuntimeError: if the frame is not a satellite-local orbital frame.
-///         Time-dependent frames (the Earth-fixed ITRF, the quasi-inertial
-///         TEME, EME2000, etc.) need
-///         the time-based quaternion helpers instead (qitrf2gcrf,
-///         qteme2gcrf, ...).
+///     RuntimeError: if the frame is not GCRF or a satellite-local orbital
+///         frame (LVLH, RTN, NTW). Every other frame raises, including the
+///         inertial EME2000 and ICRF: use ``rotation(frame, frame.GCRF, time)``
+///         (or ``rotation_with_state``) for ITRF, TIRS, CIRS, TEME, EME2000
+///         and ICRF.
+///     ValueError: if pos or vel is not a 3-element vector, holds a
+///         non-finite value, or (for LVLH / RTN / NTW) the two do not define
+///         an orbit plane: either is zero or they are parallel.
+///     TypeError: if pos or vel is not a real numeric array-like (e.g. a
+///         complex array).
 #[pyfunction]
 pub fn to_gcrf(
     py: Python,
@@ -329,7 +337,10 @@ pub fn to_gcrf(
 ///     numpy.ndarray: 3x3 rotation matrix (GCRF -> frame)
 ///
 /// Raises:
-///     RuntimeError: if the frame is not a satellite-local orbital frame.
+///     RuntimeError: if the frame is not GCRF, LVLH, RTN or NTW.
+///     ValueError: if pos or vel is not a 3-element vector, holds a
+///         non-finite value, or does not define an orbit plane (see ``to_gcrf``).
+///     TypeError: if pos or vel is not a real numeric array-like.
 #[pyfunction]
 pub fn from_gcrf(
     py: Python,
@@ -692,19 +703,26 @@ fn rotation_dispatch_batch(
 /// at time ``tm``. Properly handles the Earth-rotation sweep term when
 /// transitioning between rotating (ITRF) and inertial frames.
 ///
-/// Currently supported pairs: identity, ITRF↔{GCRF, EME2000, ICRF, TEME},
-/// and within-inertial pairs. Other pairs raise RuntimeError.
+/// Supported pairs: any two of the time-parameterised Earth frames ITRF,
+/// TIRS, CIRS, GCRF, TEME, EME2000 and ICRF (the identity included). A pair
+/// involving an orbit-dependent frame (LVLH, RTN, NTW) raises RuntimeError.
 ///
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
-///     pos (numpy.ndarray): 3-element position vector [m]
-///     vel (numpy.ndarray): 3-element velocity vector [m/s]
+///     tm (satkit.time|datetime.datetime|numpy.datetime64): Epoch (a single time; a list, even of one element, raises TypeError)
+///     pos (array-like): 3-element position vector [m]
+///     vel (array-like): 3-element velocity vector [m/s]
 ///
 /// Returns:
 ///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``:
 ///     position in meters, velocity in m/s.
+///
+/// Raises:
+///     RuntimeError: if either frame is LVLH, RTN or NTW.
+///     TypeError: if tm is not a single time, or pos / vel is not a real
+///         numeric array-like.
+///     ValueError: if pos or vel is not a 3-element vector.
 #[pyfunction]
 pub fn transform_state(
     from_frame: crate::pyframes::PyFrame,
@@ -723,19 +741,32 @@ pub fn transform_state(
 }
 
 /// State transform using the approximate reduction of :func:`rotation_approx`.
-/// Same supported-pair set as :func:`transform_state`; TEME <-> ITRF does not
-/// use the approximate chain and equals the full transform.
+/// TEME <-> ITRF does not use the approximate chain and equals the full
+/// transform.
+///
+/// Supported pairs: those of :func:`rotation_approx`, a smaller set than
+/// :func:`transform_state`: any two of ITRF, GCRF, TEME, EME2000 and ICRF.
+/// TIRS and CIRS have no analogue in the approximate chain and raise
+/// RuntimeError (except paired with themselves), as do the orbit-dependent
+/// frames.
 ///
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
-///     pos (numpy.ndarray): 3-element position vector, meters
-///     vel (numpy.ndarray): 3-element velocity vector, m/s
+///     tm (satkit.time|datetime.datetime|numpy.datetime64): Epoch (a single time; a list, even of one element, raises TypeError)
+///     pos (array-like): 3-element position vector, meters
+///     vel (array-like): 3-element velocity vector, m/s
 ///
 /// Returns:
 ///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``:
 ///     position in meters, velocity in m/s.
+///
+/// Raises:
+///     RuntimeError: if either frame is TIRS / CIRS (and the two differ), or
+///         LVLH / RTN / NTW.
+///     TypeError: if tm is not a single time, or pos / vel is not a real
+///         numeric array-like.
+///     ValueError: if pos or vel is not a 3-element vector.
 #[pyfunction]
 pub fn transform_state_approx(
     from_frame: crate::pyframes::PyFrame,
@@ -768,12 +799,19 @@ pub fn transform_state_approx(
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
-///     pos (numpy.ndarray): 3-element GCRF position vector [m]
-///     vel (numpy.ndarray): 3-element GCRF velocity vector [m/s]
+///     tm (satkit.time|datetime.datetime|numpy.datetime64): Epoch (a single time; a list, even of one element, raises TypeError)
+///     pos (array-like): 3-element GCRF position vector [m]
+///     vel (array-like): 3-element GCRF velocity vector [m/s]
 ///
 /// Returns:
 ///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+///
+/// Raises:
+///     ValueError: if an orbit-dependent frame is involved and pos / vel do
+///         not define an orbit plane (either is zero, non-finite, or they
+///         are parallel), or either is not a 3-element vector.
+///     TypeError: if tm is not a single time, or pos / vel is not a real
+///         numeric array-like.
 #[pyfunction]
 pub fn rotation_with_state(
     from_frame: crate::pyframes::PyFrame,
@@ -848,7 +886,7 @@ pub fn eop_source(py: Python<'_>) -> PyResult<Option<&'static str>> {
 /// Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.
 ///
 /// Args:
-///     tm (satkit.time): Epoch to classify
+///     tm (satkit.time): Epoch to classify (a satkit.time only)
 ///
 /// Returns:
 ///     str: one of

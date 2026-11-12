@@ -19,7 +19,7 @@ def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:
     and 3-89); see ``pos_mod`` for the model
 
     Args:
-        time (satkit.time): time at which to compute position
+        time (satkit.time | datetime.datetime | numpy.datetime64): time at which to compute position
 
     Returns:
         npt.NDArray[np.float64]: 3-element numpy array representing sun position in GCRF frame
@@ -54,8 +54,8 @@ def pos_gcrf(
     and 3-89); see ``pos_mod`` for the model
 
     Args:
-        time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time objects
-            representing times at which to compute position
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times
+            (satkit.time, datetime.datetime or numpy.datetime64) at which to compute position
 
     Returns:
         npt.NDArray[np.float64]: Nx3 numpy array representing sun position in GCRF frame
@@ -79,7 +79,7 @@ def pos_mod(time: TimeScalar) -> npt.NDArray[np.float64]:
     Mean equator and equinox of date; see the notes for the model
 
     Args:
-        time (satkit.time): time at which to compute position
+        time (satkit.time | datetime.datetime | numpy.datetime64): time at which to compute position
 
     Returns:
         npt.NDArray[np.float64]: 3-element numpy array representing sun position in MOD frame
@@ -111,8 +111,8 @@ def pos_mod(
     Mean equator and equinox of date; see the notes for the model
 
     Args:
-        time (npt.ArrayLike | list[satkit.time]): list or numpy array of satkit.time objects,
-             representing times at which to compute positions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times
+            (satkit.time, datetime.datetime or numpy.datetime64) at which to compute positions
 
     Returns:
         npt.NDArray[np.float64]: Nx3 numpy array representing sun position in MOD frame
@@ -155,6 +155,12 @@ def rise_set(
     UTC date, while local midnight falls on the previous UTC date east of
     Greenwich.
 
+    A *naive* ``datetime.datetime`` (no ``tzinfo``) is taken as local time,
+    as everywhere in satkit, and it is the UTC date of that instant that
+    selects the day: naive ``datetime(2024, 1, 1, 23, 30)`` on a machine at
+    UTC-5 is 2024-01-02 04:30 UTC and selects 2 January.  satkit has no
+    time-zone support of its own.
+
     Raises RuntimeError if the Sun stays above the threshold all day (polar
     day) or below it all day (polar night).
 
@@ -182,9 +188,10 @@ def rise_set(
           it, pass ``sigma = 90.0 + (50.0 + 1.76 * math.sqrt(h)) / 60.0``.
 
     Args:
-        time (satkit.time | datetime.datetime): time whose UTC calendar date selects the day
+        time (satkit.time | datetime.datetime | numpy.datetime64): time whose UTC calendar date selects the day
         coord (satkit.itrfcoord): location for which to compute sunrise & sunset
-        sigma (float, optional): angle in degrees between noon & rise/set.
+        sigma (float, optional): zenith distance of the Sun's centre at rise/set,
+            degrees; must be finite and in the open interval (0, 180).
             Common Values:
                         "Standard": 90 deg, 50 arcmin (90.0+50.0/60.0)
                     "Civil Twilight": 96 deg
@@ -201,6 +208,7 @@ def rise_set(
         tuple[satkit.time, satkit.time]: (sunrise, sunset)
 
     Raises:
+        ValueError: if ``sigma`` is NaN, infinite, or not in (0, 180)
         RuntimeError: for polar day or night, or, with ``use_jpl``, if the JPL
             ephemeris is unavailable or does not cover the date (there is no
             fallback to the built-in model)
@@ -224,15 +232,14 @@ def rise_set(
     """
     ...
 
-def shadowfunc(
-    sunpos: npt.NDArray[np.float64], satpos: npt.NDArray[np.float64]
-) -> float:
+def shadowfunc(sunpos: npt.ArrayLike, satpos: npt.ArrayLike) -> float:
     """
     Is satellite in Earth shadow given sun position
 
     Args:
-        sunpos (npt.NDArray[np.float64]): geocentric Sun position, meters
-        satpos (npt.NDArray[np.float64]): geocentric satellite position, meters
+        sunpos (npt.ArrayLike): 3-element geocentric Sun position, meters (any real
+            numeric array-like: a numpy array, list or tuple)
+        satpos (npt.ArrayLike): 3-element geocentric satellite position, meters
 
     Notes:
         - See algorithm in Section 3.4.2 of Montenbruck and Gill for calculation
@@ -244,6 +251,11 @@ def shadowfunc(
 
     Returns:
         float: number in range [0,1] indicating no sun or full sun (no occlusion) hitting satellite
+
+    Raises:
+        TypeError: if an argument is not a real numeric array-like (e.g. a
+            complex array or a string)
+        ValueError: if an argument does not have exactly 3 elements
 
     Example:
         ```python

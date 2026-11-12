@@ -15,17 +15,20 @@ use satkit::spaceweather;
 /// reproduce the propagator's density inputs.
 ///
 /// Args:
-///     time (satkit.time|datetime.datetime): Time for which to return the record
+///     time (satkit.time|datetime.datetime|numpy.datetime64): Time for which to return
+///         the record (a single time; a list, even of one element, raises TypeError)
 ///
 /// Returns:
 ///     dict: Space-weather record with the following keys:
 ///
 ///         * ``date`` (satkit.time) — date of the record
-///         * ``kp`` (list[int]) — eight 3-hourly Kp indices (x10)
-///         * ``kp_sum`` (int) — daily Kp sum
+///         * ``kp`` (list[int]) — eight 3-hourly Kp indices, each x10 (``33`` is Kp 3+)
+///         * ``kp_sum`` (int) — daily Kp sum, x10 like ``kp`` (``153`` is 15+)
 ///         * ``ap`` (list[int]) — eight 3-hourly Ap indices
 ///         * ``ap_avg`` (int) — daily average Ap
-///         * ``f10p7_obs`` (float) — observed F10.7 solar flux, sfu (10^-22 W m^-2 Hz^-1)
+///         * ``f10p7_obs`` (float) — observed F10.7 solar flux, sfu (10^-22 W m^-2 Hz^-1).
+///           The F10.7 record starts in 1947: this and the five other
+///           ``f10p7_*`` fields are ``-1.0`` for earlier dates
 ///         * ``f10p7_adj`` (float) — F10.7 adjusted to 1 AU, sfu
 ///         * ``f10p7_obs_c81`` / ``f10p7_obs_l81`` (float) — 81-day centered / last-81-day observed averages, sfu
 ///         * ``f10p7_adj_c81`` / ``f10p7_adj_l81`` (float) — 81-day centered / last-81-day adjusted averages, sfu
@@ -47,6 +50,7 @@ use satkit::spaceweather;
 ///
 /// Raises:
 ///     RuntimeError: If no space-weather record is available for the date
+///     TypeError: If ``time`` is not a single time
 #[pyfunction]
 pub fn get(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
     let tm = instant_from_pyany(time)?;
@@ -117,7 +121,8 @@ pub fn coverage() -> Option<(
 /// Where a time falls relative to the loaded space-weather table
 ///
 /// Args:
-///     time (satkit.time|datetime.datetime): Time to classify
+///     time (satkit.time|datetime.datetime|numpy.datetime64): Time to classify (a
+///         single time; a list, even of one element, raises TypeError)
 ///
 /// Returns:
 ///     str: One of ``"observed"`` (measured), ``"predicted_daily"`` (inside
@@ -164,6 +169,9 @@ pub fn disable_space_weather_time_warning() {
 ///
 /// Args:
 ///     path (str | os.PathLike): File to load
+///
+/// Raises:
+///     RuntimeError: If the file cannot be read or is not a GFZ table
 #[pyfunction]
 pub fn init_from_path(path: std::path::PathBuf) -> anyhow::Result<()> {
     Ok(spaceweather::init_from_path(&path)?)

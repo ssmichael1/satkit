@@ -211,7 +211,7 @@ fn githash() -> String {
 
 /// Version of satkit
 ///
-/// The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.0"``).
+/// The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.3"``).
 ///
 /// Returns:
 ///    str: Version of satkit

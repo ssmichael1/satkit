@@ -855,7 +855,16 @@ def gravity_and_partials(
 
 @final
 class solarsystem:
-    """Solar system bodies for which high-precision ephemeris can be computed"""
+    """Solar system bodies for which the JPL ephemeris (``satkit.jplephem``)
+    and the low-precision planetary ephemeris (``satkit.planets``) can be
+    computed
+
+    Notes:
+        - ``EMB`` is the Earth-Moon barycenter; there is no ``Earth`` member
+          (see ``satkit.jplephem.barycentric_pos`` for the Earth's position)
+        - Members compare equal to their integer value
+          (``int(solarsystem.Sun)`` is 10), the body's index in the JPL DE files
+    """
 
     Mercury: ClassVar[solarsystem]
     """Mercury"""
