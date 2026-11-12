@@ -215,11 +215,14 @@ fn omms_to_pylist(py: Python<'_>, omms: &[OMM]) -> PyResult<Py<PyAny>> {
 ///     url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
 ///
 /// Returns:
-///     list[dict]: One dict per message, see ``satkit.OMMDict``
+///     list[dict]: one dict per message, with every CCSDS field the source
+///     provided (the keys of ``satkit.OMMDict``) plus the source's extra keys
 ///
 /// Raises:
 ///     RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-///         ``satkit.utils.set_offline(True)``); no connection is opened
+///         ``satkit.utils.set_offline(True)``; no connection is opened) or
+///         the request fails
+///     ValueError: if the response is not JSON, XML or CSV, or is malformed
 ///
 /// Example:
 ///     ```python
@@ -238,11 +241,16 @@ pub fn omm_from_url(py: Python<'_>, url: String) -> Result<Py<PyAny>> {
 /// ``omm_from_text`` does.
 ///
 /// Args:
-///     filename (str): Path to a file holding one OMM or an array of them
-///         (JSON), a CCSDS NDM/XML document, or a CSV table
+///     filename (str | os.PathLike): path to a file holding one OMM or an
+///         array of them (JSON), a CCSDS NDM/XML document, or a CSV table
 ///
 /// Returns:
-///     list[dict]: One dict per message, see ``satkit.OMMDict``
+///     list[dict]: one dict per message, as ``omm_from_text`` returns
+///
+/// Raises:
+///     FileNotFoundError: if the file does not exist; the exception names
+///         the path. Another I/O failure raises the matching ``OSError``
+///     ValueError: if the content is none of the three formats or is malformed
 #[pyfunction]
 pub fn omm_from_file(py: Python<'_>, filename: String) -> Result<Py<PyAny>> {
     let omms = py.detach(|| OMM::from_file(&filename))?;
@@ -261,11 +269,16 @@ pub fn omm_from_file(py: Python<'_>, filename: String) -> Result<Py<PyAny>> {
 ///         document, or a CSV table
 ///
 /// Returns:
-///     list[dict]: One dict per message, see ``satkit.OMMDict``
+///     list[dict]: one dict per message. The CCSDS fields have the keys and
+///     value types of ``satkit.OMMDict``, with ``EPOCH`` an RFC 3339 string;
+///     keys that are not CCSDS fields (Space-Track's ``OBJECT_TYPE``,
+///     ``TLE_LINE1``, ...; XML ``USER_DEFINED`` parameters; extra CSV
+///     columns) are kept as the source gave them.
 ///
 /// Raises:
-///     RuntimeError: if the text is none of the three formats or is
-///         malformed; for CSV the message gives the line of the bad row
+///     ValueError: if the text is none of the three formats or is
+///         malformed; for CSV the message gives the line of the bad row, and
+///         a table with no ``EPOCH`` or ``MEAN_MOTION`` column is refused
 #[pyfunction]
 pub fn omm_from_text(py: Python<'_>, text: String) -> Result<Py<PyAny>> {
     let omms = py.detach(|| OMM::from_text(&text))?;

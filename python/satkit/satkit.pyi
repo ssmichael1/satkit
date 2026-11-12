@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from typing import Any, ClassVar, Literal, Optional, TypeAlias, Union, final, overload
 from typing_extensions import deprecated
 
-from ._types import OMMDict
+from ._types import OMMDict, TLEFitResult
 
 # Time inputs are polymorphic: anywhere a ``satkit.time`` is accepted, a
 # ``datetime.datetime`` is accepted interchangeably (and, for the vectorized
@@ -43,8 +43,10 @@ TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 class TLEWarning(UserWarning):
     """Warning for a TLE record skipped by a loader called with ``on_error="warn"``
 
-    The message is the one ``on_error="raise"`` raises as ``RuntimeError``: it gives
+    The message is the one ``on_error="raise"`` raises as ``ValueError``: it gives
     the input line the record starts on, its satellite and what failed to parse.
+    With ``on_error="warn"``, input that holds no element sets at all also gets
+    one, saying so.
     """
 
 @final
@@ -71,13 +73,48 @@ class TLE:
         ```python
         tle = satkit.TLE.from_lines([
             "0 ISS (ZARYA)",
-            "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
-            "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+            "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9996",
+            "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302874",
         ])[0]
         print(tle.name)
         # ISS (ZARYA)
         ```
     """
+
+    def __init__(self) -> None:
+        """An empty element set, to be filled in through the properties
+
+        ``TLE()`` takes no arguments. The result has the name ``"none"``,
+        satellite number 0, a blank international designator, classification
+        ``"U"``, the epoch J2000 (2000-01-01 12:00:00 TT) and every element
+        zero, so it cannot be propagated until at least ``mean_motion`` and
+        ``epoch`` are set. Element sets are normally loaded with
+        ``TLE.from_lines``, ``TLE.from_file``, ``TLE.from_url`` or
+        ``TLE.from_omm``, or fitted with ``TLE.fit_from_states``.
+
+        Example:
+            ```python
+            tle = satkit.TLE()
+            tle.satnum = 99999
+            tle.epoch = satkit.time(2024, 1, 1)
+            tle.inclination = 51.6
+            tle.mean_motion = 15.5
+            pos, vel = satkit.sgp4(tle, tle.epoch)
+            ```
+        """
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """True if ``other`` is a TLE with the same name and element set
+
+        Every field is compared exactly. The SGP4 initialization that
+        ``sgp4`` caches in the object is not part of the comparison, so a TLE
+        equals its copy or pickle whether or not it has been propagated.
+        A TLE is mutable, so it is not hashable.
+        """
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
 
     @staticmethod
     def from_file(
@@ -89,7 +126,7 @@ class TLE:
         """Load TLEs from a text file, parsed as ``TLE.from_lines`` does
 
         Args:
-            filename (str): name of the text file holding the TLE lines
+            filename (str | os.PathLike): path of the text file holding the TLE lines
             check_checksum (bool, optional): as in ``TLE.from_lines``
             on_error (str, optional): as in ``TLE.from_lines``
 
@@ -97,8 +134,11 @@ class TLE:
             list[TLE]: one TLE per element set in the file
 
         Raises:
-            ValueError: if the file holds no TLEs
-            RuntimeError: if a record fails to parse; see ``TLE.from_lines``
+            FileNotFoundError: if the file does not exist; the exception
+                names the path. Another I/O failure raises the matching
+                ``OSError`` (``PermissionError``, ``IsADirectoryError``, ...)
+            ValueError: with ``on_error="raise"``, if a record fails to parse
+                or the file holds no TLEs; see ``TLE.from_lines``
 
         Example:
             ```python
@@ -127,31 +167,37 @@ class TLE:
                 e.g. list or tuple)
             check_checksum (bool, optional): also verify the checksum digit
                 (column 69) of every data line. Default False.
-            on_error (str, optional): what to do with a record that fails to
-                parse: ``"raise"`` (default) raises ``RuntimeError`` at the
-                first one; ``"warn"`` leaves it out and emits a
-                ``TLEWarning`` with the same message; ``"skip"`` leaves
-                it out silently
+            on_error (str, optional): what to do with input that is not a
+                valid element set. ``"raise"`` (default) raises ``ValueError``
+                at the first record that fails to parse, and also if the
+                lines hold no element sets at all. ``"warn"`` leaves a bad
+                record out and emits a ``TLEWarning`` with the same message
+                (one more if the lines hold no element sets at all).
+                ``"skip"`` leaves bad records out silently. Only ``"raise"``
+                raises for what the lines contain: ``"warn"`` and ``"skip"``
+                always return a list
 
         Returns:
             list[TLE]: one TLE per element set, even if there is only one.
             With ``on_error="warn"`` or ``"skip"``, one per element set that
-            parsed, which is an empty list if none did.
+            parsed: an empty list if none did, or if the lines (empty, or
+            text that is not TLE data) held none to begin with.
 
         Raises:
-            ValueError: if the lines hold no TLEs, or ``on_error`` is not one
-                of the three values
-            RuntimeError: with ``on_error="raise"``, if a record fails to
-                parse (or, with ``check_checksum``, has a wrong checksum); the
-                message gives the line the record starts on and its satellite
+            ValueError: with ``on_error="raise"``, if a record fails to parse
+                (or, with ``check_checksum``, has a wrong checksum), where the
+                message gives the line the record starts on and its
+                satellite, or if the lines hold no element sets; with any
+                ``on_error``, if it is not one of the three values
+            TypeError: if ``lines`` is not a sequence of strings
 
         Example:
             ```python
             import warnings
 
             lines = [
-                "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
-                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+                "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9996",
+                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302874",
                 # A letter O in the epoch day
                 "1 49140U 21082L   24O30.39663557  .00000076  00000-0  14180-4 0  9995",
                 "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
@@ -181,11 +227,11 @@ class TLE:
             list[TLE]: one TLE per element set in the response
 
         Raises:
-            ValueError: if the response holds no TLEs
+            ValueError: with ``on_error="raise"``, if a record fails to parse
+                or the response holds no TLEs; see ``TLE.from_lines``
             RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-                ``satkit.utils.set_offline(True)``; no connection is opened),
-                the request fails, or (with ``on_error="raise"``) a record
-                fails to parse
+                ``satkit.utils.set_offline(True)``; no connection is opened)
+                or the request fails
 
         Example:
             ```python
@@ -196,42 +242,98 @@ class TLE:
 
     @property
     def satnum(self) -> int:
-        """Satellite number, or equivalently the NORAD ID"""
+        """Satellite number, or equivalently the NORAD catalog number
+
+        A number above 339999 (the end of the Alpha-5 scheme) is allowed, as
+        OMM carries up to nine digits, but cannot be written by ``to_2line``.
+        """
         ...
 
     @satnum.setter
     def satnum(self, value: int) -> None:
-        """Set the satellite number (NORAD ID)"""
+        """Set the satellite number; ``ValueError`` unless 0 <= value <= 999999999"""
         ...
 
     @property
     def intl_desig(self) -> str:
-        """International designator (e.g. "98067A": launch year, launch number, piece)"""
+        """International designator as written in the TLE (line 1, columns 10-17)
+
+        For example ``"98067A"``: the last two digits of the launch year,
+        the three-digit launch number of that year and the piece of the
+        launch (one to three letters). An empty string if the element set
+        has none, as for an analyst object or a new ``TLE()``.
+
+        This string is the stored value: ``to_2line`` writes it and
+        ``to_omm`` derives ``OBJECT_ID`` from it. ``desig_year``,
+        ``desig_launch`` and ``desig_piece`` are read from it, and setting
+        any of them rewrites it.
+        """
         ...
 
     @intl_desig.setter
-    def intl_desig(self, value: str) -> None: ...
+    def intl_desig(self, value: str) -> None:
+        """Set the international designator
+
+        ``ValueError`` if it is longer than the 8 columns of the TLE field or
+        holds anything but printable ASCII. Surrounding spaces are removed.
+        """
+        ...
+
     @property
-    def desig_year(self) -> int:
-        """Launch year from the international designator (2-digit, as in the TLE)"""
+    def desig_year(self) -> int | None:
+        """Launch year from the international designator, two digits as in the TLE
+
+        The first two characters of ``intl_desig`` (98 for ``"98067A"``):
+        57-99 are 1957-1999 and 0-56 are 2000-2056. ``None`` if the
+        designator is blank or does not start with two digits.
+        """
         ...
 
     @desig_year.setter
-    def desig_year(self, value: int) -> None: ...
+    def desig_year(self, value: int) -> None:
+        """Set the two-digit launch year, rewriting ``intl_desig``
+
+        ``ValueError`` unless 0 <= value <= 99. A launch number the
+        designator does not have yet is written as ``000``.
+        """
+        ...
+
     @property
-    def desig_launch(self) -> int:
-        """Launch number of the year from the international designator"""
+    def desig_launch(self) -> int | None:
+        """Launch number of the year from the international designator
+
+        Characters 3-5 of ``intl_desig`` (67 for ``"98067A"``). ``None`` if
+        the designator is blank or does not hold three digits there.
+        """
         ...
 
     @desig_launch.setter
-    def desig_launch(self, value: int) -> None: ...
+    def desig_launch(self, value: int) -> None:
+        """Set the launch number of the year, rewriting ``intl_desig``
+
+        ``ValueError`` unless 0 <= value <= 999. A launch year the
+        designator does not have yet is written as ``00``.
+        """
+        ...
+
     @property
     def desig_piece(self) -> str:
-        """Piece of the launch from the international designator (e.g. "A")"""
+        """Piece of the launch from the international designator (e.g. "A")
+
+        What follows the year and launch number in ``intl_desig``; an empty
+        string if the designator is blank or has no piece.
+        """
         ...
 
     @desig_piece.setter
-    def desig_piece(self, value: str) -> None: ...
+    def desig_piece(self, value: str) -> None:
+        """Set the piece of the launch, rewriting ``intl_desig``
+
+        ``ValueError`` unless it is at most three ASCII letters. A launch
+        year and number the designator does not have yet are written as zeros.
+        """
+        ...
+
     @property
     def classification(self) -> str:
         """Classification (line 1, column 8): "U", "C" or "S" in practice, but any single ASCII letter round-trips"""
@@ -248,21 +350,29 @@ class TLE:
         ...
 
     @ephem_type.setter
-    def ephem_type(self, value: int) -> None: ...
+    def ephem_type(self, value: int) -> None:
+        """Set the ephemeris type; ``OverflowError`` unless 0 <= value <= 255 (``to_2line`` writes a value above 9 as 0)"""
+        ...
+
     @property
     def element_num(self) -> int:
         """Element set number"""
         ...
 
     @element_num.setter
-    def element_num(self, value: int) -> None: ...
+    def element_num(self, value: int) -> None:
+        """Set the element set number (``to_2line`` writes it modulo 10,000, a negative value as 0)"""
+        ...
+
     @property
     def rev_num(self) -> int:
         """Revolution number at epoch"""
         ...
 
     @rev_num.setter
-    def rev_num(self, value: int) -> None: ...
+    def rev_num(self, value: int) -> None:
+        """Set the revolution number at epoch (``to_2line`` writes it modulo 100,000, a negative value as 0)"""
+        ...
 
     @property
     def raan(self) -> float:
@@ -271,17 +381,17 @@ class TLE:
 
     @raan.setter
     def raan(self, value: float) -> None:
-        """Set the Right Ascension of Ascending Node, in degrees"""
+        """Set the Right Ascension of Ascending Node, in degrees; ``ValueError`` if not finite"""
         ...
 
     @property
     def eccen(self) -> float:
-        """Satellite eccentricity, unitless, in range [0,1]"""
+        """Satellite eccentricity, unitless, in range [0, 1)"""
         ...
 
     @eccen.setter
     def eccen(self, value: float) -> None:
-        """Set the satellite eccentricity, unitless, in range [0,1]"""
+        """Set the satellite eccentricity; ``ValueError`` unless 0 <= value < 1"""
         ...
 
     @property
@@ -291,7 +401,7 @@ class TLE:
 
     @mean_anomaly.setter
     def mean_anomaly(self, value: float) -> None:
-        """Set the satellite mean anomaly, degrees"""
+        """Set the satellite mean anomaly, degrees; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -301,7 +411,7 @@ class TLE:
 
     @mean_motion.setter
     def mean_motion(self, value: float) -> None:
-        """Set the satellite mean motion, revs / day"""
+        """Set the satellite mean motion, revs / day; ``ValueError`` if negative or not finite"""
         ...
 
     @property
@@ -311,7 +421,7 @@ class TLE:
 
     @inclination.setter
     def inclination(self, value: float) -> None:
-        """Set the satellite inclination, degrees"""
+        """Set the satellite inclination, degrees; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -321,7 +431,11 @@ class TLE:
 
     @epoch.setter
     def epoch(self, value: TimeScalar) -> None:
-        """Set the TLE epoch"""
+        """Set the TLE epoch: a single ``time``, ``datetime.datetime`` or ``numpy.datetime64``
+
+        ``TypeError`` for anything else, including a list of times.
+        ``to_2line`` can only write an epoch in the years 1957-2056.
+        """
         ...
 
     @property
@@ -331,7 +445,7 @@ class TLE:
 
     @arg_of_perigee.setter
     def arg_of_perigee(self, value: float) -> None:
-        """Set the argument of perigee, degrees"""
+        """Set the argument of perigee, degrees; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -345,7 +459,7 @@ class TLE:
 
     @mean_motion_dot.setter
     def mean_motion_dot(self, value: float) -> None:
-        """Set the 1/2 of first derivative of mean motion, in revs/day^2"""
+        """Set the 1/2 of first derivative of mean motion, in revs/day^2; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -360,12 +474,16 @@ class TLE:
 
     @mean_motion_dot_dot.setter
     def mean_motion_dot_dot(self, value: float) -> None:
-        """Set the 1/6 of 2nd derivative of mean motion, in revs/day^3"""
+        """Set the 1/6 of 2nd derivative of mean motion, in revs/day^3; ``ValueError`` if not finite"""
         ...
 
     @property
     def name(self) -> str:
-        """The name of the satellite"""
+        """The name of the satellite: the name line of a 3-line element set
+
+        ``"none"`` for an element set that has no name (one read from two
+        lines, or a new ``TLE()``).
+        """
         ...
 
     @name.setter
@@ -386,29 +504,42 @@ class TLE:
 
     @bstar.setter
     def bstar(self, value: float) -> None:
-        """Set the drag term (B*) of the satellite, in units of 1 / Earth radii"""
+        """Set the drag term (B*) of the satellite, in units of 1 / Earth radii; ``ValueError`` if not finite"""
         ...
 
     @staticmethod
-    def from_omm(omm: OMMDict) -> TLE:
+    def from_omm(omm: OMMDict | dict[str, Any]) -> TLE:
         """Build a TLE from an OMM (Orbital Mean-Element Message) dictionary
 
         The dictionary is the same shape ``sgp4`` accepts: the flat CCSDS
         keys of a Space-Track / CelesTrak JSON record (see ``OMMDict``),
-        or the nested ``meanElements`` / ``tleParameters`` groups of an
-        XML-derived dict. Numbers may be strings.
+        or the nested groups of an ``xmltodict`` rendering of the XML form.
+        Numbers may be strings.
 
         The six mean elements, epoch, ``BSTAR``, ``MEAN_MOTION_DOT``,
         ``MEAN_MOTION_DDOT``, ``NORAD_CAT_ID``, ``ELEMENT_SET_NO``,
-        ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; absent optional
-        values become zero. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
-        international designator. Other metadata is dropped.
+        ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; of these, the
+        optional ones become zero when absent. ``OBJECT_NAME`` becomes the
+        name, and the unnamed-TLE name ``"none"`` when it is absent, empty or
+        ``UNKNOWN``. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
+        international designator (``1998-067A`` gives ``98067A``); any other
+        form leaves the designator empty. ``CLASSIFICATION_TYPE`` becomes the
+        classification, ``"U"`` unless it is a single ASCII letter. Other
+        metadata is dropped.
+
+        This inverts ``to_omm``: ``TLE.from_omm(tle.to_omm()) == tle`` for a
+        TLE read from two or three lines.
 
         Args:
-            omm (OMMDict): OMM dictionary
+            omm (OMMDict | dict): OMM dictionary
 
         Returns:
             TLE: the equivalent two-line element set
+
+        Raises:
+            TypeError: if ``omm`` is not a dict
+            ValueError: if a required key (``EPOCH`` or one of the six mean
+                elements) is missing or a value cannot be read
 
         Example:
             ```python
@@ -426,8 +557,11 @@ class TLE:
         ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
         revolutions per day, and can be passed back to ``sgp4`` or
         serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
-        international designator (``98067A`` becomes ``1998-067A``), and
-        ``CLASSIFICATION_TYPE`` is the TLE's classification letter.
+        international designator (``98067A`` becomes ``1998-067A``, a blank
+        one ``UNKNOWN``), ``OBJECT_NAME`` is the name (``UNKNOWN`` for an
+        unnamed TLE), and ``CLASSIFICATION_TYPE`` is the TLE's classification
+        letter. A negative ``satnum``, ``element_num`` or ``rev_num`` and an
+        ``ephem_type`` above 9 have no OMM form and are left out.
 
         Returns:
             OMMDict: OMM dictionary
@@ -446,10 +580,12 @@ class TLE:
             2 canonical TLE Lines
 
         Raises:
-            ValueError: if ``satnum`` is 340000 or above: Alpha-5 (used for
-                the 5-character satellite number field) ends at ``Z9999``
-                (339999), so the catalog number cannot be written to a TLE.
-                Use ``to_omm()`` instead.
+            ValueError: if the element set does not fit the format:
+                ``satnum`` is 340000 or above (Alpha-5, used for the
+                5-character satellite number field, ends at ``Z9999`` =
+                339999; use ``to_omm()`` instead) or negative, ``eccen`` is
+                outside [0, 1), or the epoch year is outside 1957-2056 (the
+                span of the two-digit year)
 
         Example:
             ```python
@@ -467,7 +603,11 @@ class TLE:
         Output as 2 canonical TLE lines preceded by a name line (3-line element set)
 
         Returns:
-            3-line element set, name line then 2 canonical TLE lines
+            3-line element set: the name (``"none"`` for an unnamed TLE),
+            then the 2 canonical TLE lines of ``to_2line``
+
+        Raises:
+            ValueError: as ``to_2line``
 
         Example:
             ```python
@@ -481,26 +621,39 @@ class TLE:
     @staticmethod
     def fit_from_states(
         states: npt.ArrayLike,
-        times: TimeArrayLike,
+        times: TimeInput,
         epoch: TimeScalar,
         *,
         gravconst: sgp4_gravconst = ...,
         opsmode: sgp4_opsmode = ...,
-    ) -> tuple[TLE, dict]:
+    ) -> tuple[TLE, TLEFitResult]:
         """
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
 
         Args:
             states: GCRF states to fit to: an Nx6 array, or a list of 6-element vectors. The first 3 values are positions in meters. The last 3 values are velocities in meters / second.
-            times: List of times corresponding to the states
-            epoch: Epoch time for the TLE. Must be within range of times.
+            times: Times corresponding to the states, one per state: a list or
+                array of times (a single time is accepted for a single state)
+            epoch: Epoch time for the TLE: a single time, within the range of ``times``
 
         Keyword Args:
             gravconst: gravity model SGP4 uses in the fit.  Default is sgp4_gravconst.wgs72
             opsmode: SGP4 ops mode used in the fit.  Default is sgp4_opsmode.afspc
 
         Returns:
-            Fitted TLE and fitting results in a dictionary
+            Fitted TLE and the fit results, a dictionary (see ``TLEFitResult``).
+            The fitted TLE has the name ``"none"``, satellite number 0 and a
+            blank international designator; set them afterwards if needed.
+
+        Raises:
+            TypeError: if ``states`` is not a sequence of 6-element vectors,
+                ``times`` or ``epoch`` is not a time (``epoch`` must be a single
+                time, not a list), or ``gravconst`` / ``opsmode`` is not the enum
+            ValueError: if ``states`` is empty, ``states`` and ``times`` differ in
+                length, or ``epoch`` is outside the range of ``times``
+            RuntimeError: if the fit itself fails (SGP4 cannot evaluate the
+                elements, singular normal equations, or it ends on elements a
+                TLE cannot hold)
 
         Notes:
             SGP4 propagator is used to match TLE to the states. The fitted TLE
@@ -518,10 +671,10 @@ class TLE:
             and converts to the classical TLE elements at the end. It is
             built on top of the ``numeris`` linear algebra crate.
 
-            The results dictionary includes the following keys:
+            The results dictionary (``TLEFitResult``) has the keys
             ``status`` (a ``tlefitstatus``), ``converged`` (bool),
-            ``orig_norm``, ``best_norm``, ``grad_norm``, ``n_iter``,
-            ``n_res_evals``.
+            ``orig_norm``, ``best_norm``, ``grad_norm`` (floats), ``n_iter``
+            and ``n_res_evals`` (ints).
 
         Example:
             ```python
@@ -541,7 +694,7 @@ class TLE:
 
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -550,7 +703,7 @@ def sgp4(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]: ...
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -559,7 +712,7 @@ def sgp4(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -575,17 +728,19 @@ def sgp4(
     output satellite position and velocity at given time
     in the "TEME" coordinate system.
 
-    A detailed description is in Vallado, Crawford, Hujsak & Kelso,
-    "Revisiting Spacetrack Report #3", AIAA 2006-6753:
-    <https://doi.org/10.2514/6.2006-6753>
-    <https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev3.pdf>
+    A detailed description is in Vallado, Crawford, Hujsak and Kelso,
+    "Revisiting Spacetrack Report #3", AIAA 2006-6753 (AIAA/AAS Astrodynamics
+    Specialist Conference, 2006).
 
     Args:
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
             ``TLE`` object, an OMM dictionary (see ``OMMDict``), or a list of either
             (or mixing both). Must be a ``list``; tuples and other sequences are not accepted
-        time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity.
-            A naive ``datetime`` is local time, not UTC (see ``time.from_datetime``)
+        time (time | datetime.datetime | numpy.datetime64 | list | numpy.ndarray): time(s) at
+            which to compute position and velocity: a single time, a list of times, a 1-D
+            numpy object array of times or a 1-D ``datetime64`` array. A tuple is not accepted.
+            A naive ``datetime`` is local time, not UTC (see ``time.from_datetime``); a
+            ``numpy.datetime64`` is UTC
 
     Keyword Args:
         gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is sgp4_gravconst.wgs72
@@ -621,10 +776,14 @@ def sgp4(
           ``MEAN_ANOMALY`` (plus optional ``BSTAR``, ``MEAN_MOTION_DOT``, ``MEAN_MOTION_DDOT``)
           is accepted, whether it came from ``omm_from_url`` / ``omm_from_file`` /
           ``omm_from_text``, from ``json.load`` on a CelesTrak or Space-Track response
-          (numbers may be strings), or from ``xmltodict`` on the XML form (the nested
-          ``meanElements`` / ``tleParameters`` groups are understood). ``EPOCH`` may be an
-          RFC 3339 string, a CCSDS day-of-year string (``YYYY-DDDThh:mm:ss``), a ``satkit.time`` or a
-          ``datetime`` (naive = local time). Other keys are ignored,
+          (numbers may be strings), or from ``xmltodict.parse`` on the XML form: the whole
+          result (root key ``omm``, or ``ndm`` holding one ``omm``) or any node below it, the
+          nested ``header`` / ``body`` / ``segment`` / ``metadata`` / ``data`` /
+          ``meanElements`` / ``tleParameters`` groups being understood. An ``ndm`` holding
+          several messages is not one element set: pass ``sgp4`` the list
+          ``[{"omm": m} for m in d["ndm"]["omm"]]``. ``EPOCH`` may be an
+          RFC 3339 string, a CCSDS day-of-year string (``YYYY-DDDThh:mm:ss``), a ``satkit.time``, a
+          ``datetime`` (naive = local time) or a ``numpy.datetime64`` (UTC). Other keys are ignored,
           except that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be
           ``UTC``, ``REF_FRAME`` must be ``TEME``, ``CENTER_NAME`` must be ``EARTH`` and
           ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
@@ -644,6 +803,15 @@ def sgp4(
           and python-sgp4 use, so satkit differs from them by 1 s of along-track motion (~7.6 km at
           LEO) per leap second between epoch and time. This is deliberate: the satellite really flies
           86,401 s over such a day, and the SGP4 mean motion is per SI day.
+
+    Raises:
+        TypeError: if ``tle`` is not a ``TLE``, a dict or a list of them, ``time`` is not a
+            time or a list / array of times, or ``gravconst`` / ``opsmode`` is not a member of
+            its enum
+        ValueError: if an OMM dictionary lacks a required key or holds a value that cannot be
+            read
+        RuntimeError: with ``errflag`` False, if an element set cannot be initialized (see
+            **Errors** above)
 
     Example:
         ```python
@@ -695,26 +863,56 @@ def sgp4(
 
 @final
 class sgp4_gravconst:
-    """Gravity constant to use for SGP4 propagation"""
+    """Gravity constants (Earth radius, mu, J2-J4) used by SGP4 propagation
+
+    Element sets are generated with WGS-72, so ``wgs72`` (the default of
+    ``sgp4`` and ``TLE.fit_from_states``) is the one that reproduces the
+    orbit a TLE or OMM describes.
+
+    Members compare equal to their integer value (``int(m)``).
+    """
 
     wgs72: ClassVar[sgp4_gravconst]
-    """WGS-72"""
+    """WGS-72, the default (value 0)"""
 
     wgs72old: ClassVar[sgp4_gravconst]
-    """WGS-72 Old"""
+    """WGS-72 with the older, lower-precision constants of the original Spacetrack Report #3 code (value 1)"""
 
     wgs84: ClassVar[sgp4_gravconst]
-    """WGS-84"""
+    """WGS-84 (value 2)"""
+
+    def __int__(self) -> int:
+        """The member's integer value"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer value"""
+        ...
 
 @final
 class sgp4_opsmode:
-    """Ops Mode for SGP4 Propagation"""
+    """Ops mode for SGP4 propagation
+
+    Selects between the two variants of Vallado's SGP4 code. They differ
+    only for deep-space element sets (period of 225 minutes or more), in how
+    the ascending node is wrapped in the lunar-solar periodic terms.
+
+    Members compare equal to their integer value (``int(m)``).
+    """
 
     afspc: ClassVar[sgp4_opsmode]
-    """afspc (Air Force Space Command), the default"""
+    """Reproduces the Air Force Space Command code that generates TLEs; the default (value 0)"""
 
     improved: ClassVar[sgp4_opsmode]
-    """improved"""
+    """Vallado's "improved" mode (value 1)"""
+
+    def __int__(self) -> int:
+        """The member's integer value"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer value"""
+        ...
 
 @final
 class gravmodel:
@@ -892,33 +1090,54 @@ class solarsystem:
 
 @final
 class sgp4_error:
-    """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""
+    """Error codes of SGP4 propagation, as in the error array of ``sgp4(..., errflag=True)``
+
+    That array holds plain ``int32`` codes; a member compares equal to its
+    code, so ``err == satkit.sgp4_error.success`` works elementwise, and
+    ``satkit.sgp4_error(code)`` turns one code back into a member.
+
+    Example:
+        ```python
+        print(int(satkit.sgp4_error.orbit_decay))
+        # 6
+        print(satkit.sgp4_error.orbit_decay == 6)
+        # True
+        ```
+    """
 
     success: ClassVar[sgp4_error]
-    """Success"""
+    """Success (code 0)"""
 
     eccen: ClassVar[sgp4_error]
-    """Eccentricity < 0 or > 1"""
+    """Mean eccentricity at the requested time is 1 or more, or below -0.001 (code 1)"""
 
     mean_motion: ClassVar[sgp4_error]
-    """Mean motion (revs / day) < 0"""
+    """Mean motion is zero or negative (code 2)"""
 
     perturb_eccen: ClassVar[sgp4_error]
-    """Perturbed eccentricity < 0 or > 1"""
+    """Perturbed eccentricity outside [0, 1] (code 3)"""
 
     semi_latus_rectum: ClassVar[sgp4_error]
-    """Semi-Latus Rectum < 0"""
+    """Semi-latus rectum negative (code 4)"""
 
     unused: ClassVar[sgp4_error]
-    """Unused, but in base code, so keeping for completeness"""
+    """Not produced (code 5); kept because the reference code numbers it"""
 
     orbit_decay: ClassVar[sgp4_error]
-    """Orbit decayed"""
+    """Orbit decayed: the computed radius is less than one Earth radius (code 6)"""
 
     unsupported: ClassVar[sgp4_error]
     """Only in the error array of ``sgp4(..., errflag=True)``: the element set cannot be
     propagated by classic SGP4 at all (an SGP4-XP set, or OMM metadata naming another theory,
-    time system, frame or center)"""
+    time system, frame or center) (code 7)"""
+
+    def __int__(self) -> int:
+        """The member's integer code"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer code"""
+        ...
 
 @final
 class weekday:
@@ -973,6 +1192,9 @@ class tlefitstatus:
     - ``CostConverged``: converged on relative cost change tolerance
     - ``MaxIterations``: maximum number of iterations reached
     - ``DampingSaturated``: Levenberg-Marquardt damping parameter saturated
+
+    ``str(status)`` is a one-line description. Members compare equal to
+    their integer value (``int(m)``, 0 to 4 in the order above).
     """
 
     GradientConverged: ClassVar[tlefitstatus]
@@ -992,7 +1214,15 @@ class tlefitstatus:
 
     @property
     def converged(self) -> bool:
-        """True if the fit converged successfully."""
+        """True for the three ``...Converged`` members, False for ``MaxIterations`` and ``DampingSaturated``"""
+        ...
+
+    def __int__(self) -> int:
+        """The member's integer value"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer value"""
         ...
 
 @final
@@ -4949,7 +5179,7 @@ def propagate(
     """
     ...
 
-def omm_from_url(url: str) -> list[OMMDict]:
+def omm_from_url(url: str) -> list[dict[str, Any]]:
     """Load OMM(s) from a URL as a list of dictionaries
 
     Fetches the content at the given URL and auto-detects the format (JSON,
@@ -4961,12 +5191,14 @@ def omm_from_url(url: str) -> list[OMMDict]:
         url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
 
     Returns:
-        list[OMMDict]: one dictionary per message, with every CCSDS field the
-            source provided plus its extra keys (see ``OMMDict``)
+        list[dict[str, Any]]: one dictionary per message, with every CCSDS field the
+            source provided (the keys of ``OMMDict``) plus the source's extra keys
 
     Raises:
         RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-            ``satkit.utils.set_offline(True)``); no connection is opened
+            ``satkit.utils.set_offline(True)``; no connection is opened) or the
+            request fails
+        ValueError: if the response is not JSON, XML or CSV, or is malformed
 
     Example:
         ```python
@@ -4978,7 +5210,7 @@ def omm_from_url(url: str) -> list[OMMDict]:
     """
     ...
 
-def omm_from_file(filename: str) -> list[OMMDict]:
+def omm_from_file(filename: str) -> list[dict[str, Any]]:
     """Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
 
     The format is detected from the content, not the file extension, as
@@ -4988,10 +5220,15 @@ def omm_from_file(filename: str) -> list[OMMDict]:
     KVN is not supported.
 
     Args:
-        filename (str): path to the file
+        filename (str | os.PathLike): path to the file
 
     Returns:
-        list[OMMDict]: one dictionary per message (see ``OMMDict``)
+        list[dict[str, Any]]: one dictionary per message, as ``omm_from_text`` returns
+
+    Raises:
+        FileNotFoundError: if the file does not exist; the exception names
+            the path. Another I/O failure raises the matching ``OSError``
+        ValueError: if the content is none of the three formats or is malformed
 
     Example:
         ```python
@@ -5003,7 +5240,7 @@ def omm_from_file(filename: str) -> list[OMMDict]:
     """
     ...
 
-def omm_from_text(text: str) -> list[OMMDict]:
+def omm_from_text(text: str) -> list[dict[str, Any]]:
     """Parse OMM(s) from JSON, XML or CSV text as a list of dictionaries
 
     Text starting with ``[`` or ``{`` is parsed as JSON (one message or an
@@ -5021,10 +5258,15 @@ def omm_from_text(text: str) -> list[OMMDict]:
         text (str): the document
 
     Returns:
-        list[OMMDict]: one dictionary per message (see ``OMMDict``)
+        list[dict[str, Any]]: one dictionary per message. The CCSDS fields
+            have the keys and value types of ``OMMDict``, with ``EPOCH`` an
+            RFC 3339 string; keys that are not CCSDS fields (Space-Track's
+            ``OBJECT_TYPE``, ``TLE_LINE1``, ...; XML ``USER_DEFINED``
+            parameters; extra CSV columns) are kept as the source gave them,
+            which is why the type is a plain ``dict`` and not ``OMMDict``
 
     Raises:
-        RuntimeError: if the text is none of the three formats or is
+        ValueError: if the text is none of the three formats or is
             malformed; for CSV the message gives the line of the bad row, and
             a table with no ``EPOCH`` or ``MEAN_MOTION`` column is refused
 

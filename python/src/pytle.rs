@@ -34,12 +34,20 @@ use std::io::BufRead;
 ///     ```python
 ///     tle = satkit.TLE.from_lines([
 ///         "0 ISS (ZARYA)",
-///         "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
-///         "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+///         "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9996",
+///         "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302874",
 ///     ])[0]
 ///     print(tle.name)
 ///     # ISS (ZARYA)
 ///     ```
+///
+/// ``TLE()`` takes no arguments and gives an empty element set to fill in
+/// through the properties: name ``"none"``, satellite number 0, a blank
+/// international designator, classification ``"U"``, epoch J2000 and every
+/// element zero.
+///
+/// Two TLEs are equal (``==``) when their names and every element are
+/// equal; a TLE is mutable, so it is not hashable.
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
 
@@ -47,7 +55,7 @@ pyo3::create_exception!(
     satkit,
     TLEWarning,
     pyo3::exceptions::PyUserWarning,
-    "Warning for a TLE record skipped by a loader called with ``on_error=\"warn\"``\n\nThe message is the one ``on_error=\"raise\"`` raises as ``RuntimeError``: it gives\nthe input line the record starts on, its satellite and what failed to parse."
+    "Warning for a TLE record skipped by a loader called with ``on_error=\"warn\"``\n\nThe message is the one ``on_error=\"raise\"`` raises as ``ValueError``: it gives\nthe input line the record starts on, its satellite and what failed to parse.\nWith ``on_error=\"warn\"``, input that holds no element sets at all also gets\none, saying so."
 );
 
 /// What a TLE loader does with a record that fails to parse (`on_error`)
@@ -116,7 +124,7 @@ impl PyTLE {
     /// Load TLEs from a text file, parsed as ``TLE.from_lines`` does
     ///
     /// Args:
-    ///     filename (str): name of the text file holding the TLE lines
+    ///     filename (str | os.PathLike): path of the text file holding the TLE lines
     ///     check_checksum (bool, optional): as in ``TLE.from_lines``
     ///     on_error (str, optional): as in ``TLE.from_lines``
     ///
@@ -124,8 +132,11 @@ impl PyTLE {
     ///     list[TLE]: one TLE per element set in the file
     ///
     /// Raises:
-    ///     ValueError: if the file holds no TLEs
-    ///     RuntimeError: if a record fails to parse; see ``TLE.from_lines``
+    ///     FileNotFoundError: if the file does not exist; the exception
+    ///         names the path. Another I/O failure raises the matching
+    ///         ``OSError`` (``PermissionError``, ``IsADirectoryError``, ...)
+    ///     ValueError: with ``on_error="raise"``, if a record fails to parse
+    ///         or the file holds no TLEs; see ``TLE.from_lines``
     #[staticmethod]
     #[pyo3(signature = (filename, *, check_checksum=false, on_error="raise"))]
     fn from_file(
@@ -163,31 +174,37 @@ impl PyTLE {
     ///         any number of element sets)
     ///     check_checksum (bool, optional): also verify the checksum digit
     ///         (column 69) of every data line. Default False.
-    ///     on_error (str, optional): what to do with a record that fails to
-    ///         parse: ``"raise"`` (default) raises ``RuntimeError`` at the
-    ///         first one; ``"warn"`` leaves it out and emits a
-    ///         ``satkit.TLEWarning`` with the same message; ``"skip"`` leaves
-    ///         it out silently
+    ///     on_error (str, optional): what to do with input that is not a
+    ///         valid element set. ``"raise"`` (default) raises ``ValueError``
+    ///         at the first record that fails to parse, and also if the
+    ///         lines hold no element sets at all. ``"warn"`` leaves a bad
+    ///         record out and emits a ``satkit.TLEWarning`` with the same
+    ///         message (one more if the lines hold no element sets at all).
+    ///         ``"skip"`` leaves bad records out silently. Only ``"raise"``
+    ///         raises for what the lines contain: ``"warn"`` and ``"skip"``
+    ///         always return a list
     ///
     /// Returns:
     ///     list[TLE]: one TLE per element set, even if there is only one.
     ///     With ``on_error="warn"`` or ``"skip"``, one per element set that
-    ///     parsed, which is an empty list if none did.
+    ///     parsed: an empty list if none did, or if the lines (empty, or
+    ///     text that is not TLE data) held none to begin with.
     ///
     /// Raises:
-    ///     ValueError: if the lines hold no TLEs, or ``on_error`` is not one
-    ///         of the three values
-    ///     RuntimeError: with ``on_error="raise"``, if a record fails to
-    ///         parse (or, with ``check_checksum``, has a wrong checksum); the
-    ///         message gives the line the record starts on and its satellite
+    ///     ValueError: with ``on_error="raise"``, if a record fails to parse
+    ///         (or, with ``check_checksum``, has a wrong checksum), where the
+    ///         message gives the line the record starts on and its
+    ///         satellite, or if the lines hold no element sets; with any
+    ///         ``on_error``, if it is not one of the three values
+    ///     TypeError: if ``lines`` is not a sequence of strings
     ///
     /// Example:
     ///     ```python
     ///     import warnings
     ///
     ///     lines = [
-    ///         "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
-    ///         "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+    ///         "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9996",
+    ///         "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302874",
     ///         # A letter O in the epoch day
     ///         "1 49140U 21082L   24O30.39663557  .00000076  00000-0  14180-4 0  9995",
     ///         "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
@@ -222,11 +239,11 @@ impl PyTLE {
     ///     list[TLE]: one TLE per element set in the response
     ///
     /// Raises:
-    ///     ValueError: if the response holds no TLEs
+    ///     ValueError: with ``on_error="raise"``, if a record fails to parse
+    ///         or the response holds no TLEs; see ``TLE.from_lines``
     ///     RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-    ///         ``satkit.utils.set_offline(True)``; no connection is opened),
-    ///         the request fails, or (with ``on_error="raise"``) a record
-    ///         fails to parse
+    ///         ``satkit.utils.set_offline(True)``; no connection is opened)
+    ///         or the request fails
     ///
     /// Example:
     ///     ```python
@@ -240,7 +257,11 @@ impl PyTLE {
         tle_list(py, records, on_error, "response")
     }
 
-    /// Satellite NORAD Catalog Number
+    /// Satellite number, or equivalently the NORAD catalog number
+    ///
+    /// Setting it raises ``ValueError`` unless 0 <= value <= 999999999. A
+    /// number above 339999 (the end of the Alpha-5 scheme) is allowed, as
+    /// OMM carries up to nine digits, but cannot be written by ``to_2line``.
     #[getter(satnum)]
     const fn get_satnum(&self) -> i32 {
         self.0.sat_num
@@ -252,7 +273,21 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// International designator (e.g. "98067A": launch year, launch number, piece)
+    /// International designator as written in the TLE (line 1, columns 10-17)
+    ///
+    /// For example ``"98067A"``: the last two digits of the launch year,
+    /// the three-digit launch number of that year and the piece of the
+    /// launch (one to three letters). An empty string if the element set
+    /// has none, as for an analyst object or a new ``TLE()``.
+    ///
+    /// This string is the stored value: ``to_2line`` writes it and
+    /// ``to_omm`` derives ``OBJECT_ID`` from it. ``desig_year``,
+    /// ``desig_launch`` and ``desig_piece`` are read from it, and setting
+    /// any of them rewrites it.
+    ///
+    /// Setting it raises ``ValueError`` if the value is longer than the 8
+    /// columns of the TLE field or holds anything but printable ASCII.
+    /// Surrounding spaces are removed.
     #[getter(intl_desig)]
     fn get_intl_desig(&self) -> String {
         self.0.intl_desig.clone()
@@ -264,7 +299,15 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Launch year from the international designator (2-digit, as in the TLE)
+    /// Launch year from the international designator, two digits as in the TLE
+    ///
+    /// The first two characters of ``intl_desig`` (98 for ``"98067A"``):
+    /// 57-99 are 1957-1999 and 0-56 are 2000-2056. ``None`` if the
+    /// designator is blank or does not start with two digits.
+    ///
+    /// Setting it rewrites ``intl_desig`` and raises ``ValueError`` unless
+    /// 0 <= value <= 99. A launch number the designator does not have yet
+    /// is written as ``000``.
     #[getter(desig_year)]
     const fn get_desig_year(&self) -> i32 {
         self.0.desig_year
@@ -277,6 +320,13 @@ impl PyTLE {
     }
 
     /// Launch number of the year from the international designator
+    ///
+    /// Characters 3-5 of ``intl_desig`` (67 for ``"98067A"``). ``None`` if
+    /// the designator is blank or does not hold three digits there.
+    ///
+    /// Setting it rewrites ``intl_desig`` and raises ``ValueError`` unless
+    /// 0 <= value <= 999. A launch year the designator does not have yet
+    /// is written as ``00``.
     #[getter(desig_launch)]
     const fn get_desig_launch(&self) -> i32 {
         self.0.desig_launch
@@ -289,6 +339,13 @@ impl PyTLE {
     }
 
     /// Piece of the launch from the international designator (e.g. "A")
+    ///
+    /// What follows the year and launch number in ``intl_desig``; an empty
+    /// string if the designator is blank or has no piece.
+    ///
+    /// Setting it rewrites ``intl_desig`` and raises ``ValueError`` unless
+    /// it is at most three ASCII letters. A launch year and number the
+    /// designator does not have yet are written as zeros.
     #[getter(desig_piece)]
     fn get_desig_piece(&self) -> String {
         self.0.desig_piece.clone()
@@ -324,7 +381,11 @@ impl PyTLE {
         }
     }
 
-    /// Ephemeris type (usually 0)
+    /// Ephemeris type (usually 0). A value of 4 marks an SGP4-XP element
+    /// set, which ``satkit.sgp4`` rejects: satkit implements classic SGP4 only.
+    ///
+    /// Must be in 0..255 (``OverflowError`` otherwise); ``to_2line`` writes
+    /// a value above 9 as 0.
     #[getter(ephem_type)]
     const fn get_ephem_type(&self) -> u8 {
         self.0.ephem_type
@@ -336,7 +397,7 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Element set number
+    /// Element set number (``to_2line`` writes it modulo 10,000, a negative value as 0)
     #[getter(element_num)]
     const fn get_element_num(&self) -> i32 {
         self.0.element_num
@@ -348,7 +409,7 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Revolution number at epoch
+    /// Revolution number at epoch (``to_2line`` writes it modulo 100,000, a negative value as 0)
     #[getter(rev_num)]
     const fn get_rev_num(&self) -> i32 {
         self.0.rev_num
@@ -360,7 +421,9 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Orbit eccentricity, unitless, in range [0,1]
+    /// Orbit eccentricity, unitless, in range [0, 1)
+    ///
+    /// Setting it raises ``ValueError`` unless 0 <= value < 1.
     #[getter(eccen)]
     const fn get_eccen(&self) -> f64 {
         self.0.eccen
@@ -372,7 +435,7 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Mean anomaly in degrees
+    /// Mean anomaly in degrees (setting a value that is not finite raises ``ValueError``)
     #[getter(mean_anomaly)]
     const fn get_mean_anomaly(&self) -> f64 {
         self.0.mean_anomaly
@@ -383,7 +446,7 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Mean motion in revs / day
+    /// Mean motion in revs / day (setting a negative or non-finite value raises ``ValueError``)
     #[getter(mean_motion)]
     const fn get_mean_motion(&self) -> f64 {
         self.0.mean_motion
@@ -394,7 +457,7 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// inclination in degrees
+    /// Inclination in degrees (setting a value that is not finite raises ``ValueError``)
     #[getter(inclination)]
     const fn get_inclination(&self) -> f64 {
         self.0.inclination
@@ -406,6 +469,11 @@ impl PyTLE {
     }
 
     /// Epoch time of TLE
+    ///
+    /// Set it with a single ``satkit.time``, ``datetime.datetime`` or
+    /// ``numpy.datetime64``; anything else, including a list of times,
+    /// raises ``TypeError``. ``to_2line`` can only write an epoch in the
+    /// years 1957-2056.
     #[getter(epoch)]
     fn get_epoch(&self) -> crate::pyinstant::PyInstant {
         crate::pyinstant::PyInstant(self.0.epoch)
@@ -419,7 +487,7 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// argument of perigee, degrees
+    /// Argument of perigee, degrees (setting a value that is not finite raises ``ValueError``)
     #[getter(arg_of_perigee)]
     const fn get_arg_of_perigee(&self) -> f64 {
         self.0.arg_of_perigee
@@ -431,6 +499,7 @@ impl PyTLE {
     }
 
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
+    /// (the TLE stores the half; setting a value that is not finite raises ``ValueError``)
     #[getter(mean_motion_dot)]
     const fn get_mean_motion_dot(&self) -> f64 {
         self.0.mean_motion_dot
@@ -442,6 +511,7 @@ impl PyTLE {
     }
 
     /// One sixth of 2nd derivative of mean motion wrt time, in revs/day^3
+    /// (the TLE stores the sixth; setting a value that is not finite raises ``ValueError``)
     #[getter(mean_motion_dot_dot)]
     const fn get_mean_motion_dot_dot(&self) -> f64 {
         self.0.mean_motion_dot_dot
@@ -452,7 +522,7 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Right Ascension of the Ascending Node, degrees
+    /// Right Ascension of the Ascending Node, degrees (setting a value that is not finite raises ``ValueError``)
     #[getter(raan)]
     const fn get_raan(&self) -> f64 {
         self.0.raan
@@ -463,7 +533,10 @@ impl PyTLE {
         self.0.reset_cache();
     }
 
-    /// Name of satellite
+    /// Name of the satellite: the name line of a 3-line element set
+    ///
+    /// ``"none"`` for an element set that has no name (one read from two
+    /// lines, or a new ``TLE()``).
     #[getter(name)]
     fn name(&self) -> String {
         self.0.name.clone()
@@ -475,6 +548,7 @@ impl PyTLE {
     }
 
     /// Drag term (B*) of the satellite, in units of 1 / Earth radii
+    /// (setting a value that is not finite raises ``ValueError``)
     #[getter(bstar)]
     const fn bstar(&self) -> f64 {
         self.0.bstar
@@ -503,20 +577,33 @@ impl PyTLE {
     ///
     /// The dictionary is the same shape ``satkit.sgp4`` accepts: the flat
     /// CCSDS keys of a Space-Track / CelesTrak JSON record (see
-    /// ``satkit.OMMDict``), or the nested ``meanElements`` / ``tleParameters``
-    /// groups of an XML-derived dict. Numbers may be strings.
+    /// ``satkit.OMMDict``), or the nested groups of an ``xmltodict``
+    /// rendering of the XML form. Numbers may be strings.
     ///
     /// The six mean elements, epoch, ``BSTAR``, ``MEAN_MOTION_DOT``,
     /// ``MEAN_MOTION_DDOT``, ``NORAD_CAT_ID``, ``ELEMENT_SET_NO``,
-    /// ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; absent optional
-    /// values become zero. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
-    /// international designator. Other metadata is dropped.
+    /// ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; of these, the
+    /// optional ones become zero when absent. ``OBJECT_NAME`` becomes the
+    /// name, and the unnamed-TLE name ``"none"`` when it is absent, empty or
+    /// ``UNKNOWN``. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
+    /// international designator (``1998-067A`` gives ``98067A``); any other
+    /// form leaves the designator empty. ``CLASSIFICATION_TYPE`` becomes the
+    /// classification, ``"U"`` unless it is a single ASCII letter. Other
+    /// metadata is dropped.
+    ///
+    /// This inverts ``to_omm``: ``TLE.from_omm(tle.to_omm()) == tle`` for a
+    /// TLE read from two or three lines.
     ///
     /// Args:
     ///     omm (dict): OMM dictionary
     ///
     /// Returns:
     ///     TLE: the equivalent two-line element set
+    ///
+    /// Raises:
+    ///     TypeError: if ``omm`` is not a dict
+    ///     ValueError: if a required key (``EPOCH`` or one of the six mean
+    ///         elements) is missing or a value cannot be read
     #[staticmethod]
     fn from_omm(omm: &Bound<'_, pyo3::types::PyDict>) -> Result<Self> {
         let omm = crate::pyomm::omm_from_pydict(omm)?;
@@ -529,8 +616,11 @@ impl PyTLE {
     /// ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
     /// revolutions per day, and can be passed back to ``satkit.sgp4`` or
     /// serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
-    /// international designator (``98067A`` becomes ``1998-067A``), and
-    /// ``CLASSIFICATION_TYPE`` is the TLE's classification letter.
+    /// international designator (``98067A`` becomes ``1998-067A``, a blank
+    /// one ``UNKNOWN``), ``OBJECT_NAME`` is the name (``UNKNOWN`` for an
+    /// unnamed TLE), and ``CLASSIFICATION_TYPE`` is the TLE's classification
+    /// letter. A negative ``satnum``, ``element_num`` or ``rev_num`` and an
+    /// ``ephem_type`` above 9 have no OMM form and are left out.
     ///
     /// Returns:
     ///     dict: OMM dictionary
@@ -544,11 +634,16 @@ impl PyTLE {
     /// written modulo 10,000 and 100,000, so a larger value wraps around the way
     /// catalog TLEs roll the revolution counter over.
     ///
+    /// Returns:
+    ///     list[str]: the 2 canonical TLE lines
+    ///
     /// Raises:
-    ///     ValueError: if ``satnum`` is 340000 or above: Alpha-5 (used for
-    ///         the 5-character satellite number field) ends at ``Z9999``
-    ///         (339999), so the catalog number cannot be written to a TLE.
-    ///         Use ``to_omm()`` instead.
+    ///     ValueError: if the element set does not fit the format:
+    ///         ``satnum`` is 340000 or above (Alpha-5, used for the
+    ///         5-character satellite number field, ends at ``Z9999`` =
+    ///         339999; use ``to_omm()`` instead) or negative, ``eccen`` is
+    ///         outside [0, 1), or the epoch year is outside 1957-2056 (the
+    ///         span of the two-digit year)
     fn to_2line(&self) -> PyResult<[String; 2]> {
         self.0.to_2line().map_err(|e| match e {
             satkit::tle::Error::SatNumTooLargeForAlpha5 => {
@@ -559,6 +654,13 @@ impl PyTLE {
     }
 
     /// Output as 2 canonical TLE lines preceded by a name line (3-line element set)
+    ///
+    /// Returns:
+    ///     list[str]: the name (``"none"`` for an unnamed TLE), then the 2
+    ///     canonical TLE lines of ``to_2line``
+    ///
+    /// Raises:
+    ///     ValueError: as ``to_2line``
     fn to_3line(&self) -> Result<[String; 3]> {
         Ok(self.0.to_3line()?)
     }
@@ -569,15 +671,29 @@ impl PyTLE {
     ///     states (list[numpy.ndarray]): List of GCRF states to fit to. Each state is a
     ///         6-element vector: the first 3 values are position in meters, the last 3
     ///         values are velocity in meters / second
-    ///     times (list[satkit.time]): Times corresponding to the states
-    ///     epoch (satkit.time): Epoch time for the TLE. Must be within range of times
+    ///     times (list[satkit.time]): Times corresponding to the states, one per state
+    ///         (a single time is accepted for a single state)
+    ///     epoch (satkit.time): Epoch time for the TLE: a single time, within the range of times
     ///
     /// Keyword Args:
     ///     gravconst (satkit.sgp4_gravconst): gravity model SGP4 uses in the fit.  Default is sgp4_gravconst.wgs72
     ///     opsmode (satkit.sgp4_opsmode): SGP4 ops mode used in the fit.  Default is sgp4_opsmode.afspc
     ///
     /// Returns:
-    ///     tuple[TLE, dict]: Fitted TLE and fitting results in a dictionary
+    ///     tuple[TLE, dict]: Fitted TLE and the fit results, a dictionary with the keys
+    ///     ``status`` (a ``satkit.tlefitstatus``), ``converged`` (bool), ``orig_norm``,
+    ///     ``best_norm``, ``grad_norm`` (floats), ``n_iter`` and ``n_res_evals`` (ints).
+    ///     The fitted TLE has the name ``"none"``, satellite number 0 and a blank
+    ///     international designator; set them afterwards if needed.
+    ///
+    /// Raises:
+    ///     TypeError: if ``states`` is not a sequence of 6-element vectors, ``times`` or
+    ///         ``epoch`` is not a time (``epoch`` must be a single time, not a list), or
+    ///         ``gravconst`` / ``opsmode`` is not the enum
+    ///     ValueError: if ``states`` is empty, ``states`` and ``times`` differ in length,
+    ///         or ``epoch`` is outside the range of ``times``
+    ///     RuntimeError: if the fit itself fails (SGP4 cannot evaluate the elements,
+    ///         singular normal equations, or it ends on elements a TLE cannot hold)
     ///
     /// Note:
     ///     The fitted TLE reproduces the states when propagated with ``satkit.sgp4`` under

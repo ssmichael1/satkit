@@ -13,7 +13,19 @@ use anyhow::{bail, Result};
 
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
-/// Represent errors from SGP-4 propagation of two-line element sets (TLEs)
+/// Error codes of SGP4 propagation, as in the error array of ``sgp4(..., errflag=True)``
+///
+/// That array holds plain ``int32`` codes; a member compares equal to its
+/// code, so ``err == satkit.sgp4_error.success`` works elementwise, and
+/// ``satkit.sgp4_error(code)`` turns one code back into a member.
+///
+/// Members: ``success`` (0), ``eccen`` (1: mean eccentricity at the
+/// requested time is 1 or more, or below -0.001), ``mean_motion`` (2: mean
+/// motion zero or negative), ``perturb_eccen`` (3: perturbed eccentricity
+/// outside [0, 1]), ``semi_latus_rectum`` (4: negative), ``unused`` (5: not
+/// produced), ``orbit_decay`` (6: the computed radius is less than one
+/// Earth radius) and ``unsupported`` (7: the element set cannot be
+/// propagated by classic SGP4 at all).
 #[pyclass(name = "sgp4_error", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PySGP4Error {
@@ -33,7 +45,15 @@ pub enum PySGP4Error {
 crate::enum_pickle!(PySGP4Error, "sgp4_error");
 
 #[allow(non_camel_case_types)]
-/// Gravity constant to use for SGP4 propagation
+/// Gravity constants (Earth radius, mu, J2-J4) used by SGP4 propagation
+///
+/// Element sets are generated with WGS-72, so ``wgs72`` (the default of
+/// ``satkit.sgp4`` and ``TLE.fit_from_states``) is the one that reproduces
+/// the orbit a TLE or OMM describes.
+///
+/// Members: ``wgs72`` (0), ``wgs72old`` (1: WGS-72 with the older,
+/// lower-precision constants of the original Spacetrack Report #3 code) and
+/// ``wgs84`` (2). Each compares equal to its integer value.
 #[pyclass(name = "sgp4_gravconst", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum GravConst {
@@ -55,7 +75,15 @@ impl From<GravConst> for psgp4::GravConst {
 }
 
 #[allow(non_camel_case_types)]
-/// Ops Mode for SGP4 Propagation
+/// Ops mode for SGP4 propagation
+///
+/// Selects between the two variants of Vallado's SGP4 code. They differ
+/// only for deep-space element sets (period of 225 minutes or more), in how
+/// the ascending node is wrapped in the lunar-solar periodic terms.
+///
+/// Members: ``afspc`` (0: reproduces the Air Force Space Command code that
+/// generates TLEs; the default) and ``improved`` (1). Each compares equal
+/// to its integer value.
 #[pyclass(name = "sgp4_opsmode", eq, eq_int, from_py_object)]
 #[derive(Clone, Eq, PartialEq)]
 pub enum OpsMode {
@@ -246,12 +274,18 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     in the "TEME" coordinate system
 ///
 /// Note:
-///     A detailed description is at:
-///     https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
+///     A detailed description is in Vallado, Crawford, Hujsak and Kelso,
+///     "Revisiting Spacetrack Report #3", AIAA 2006-6753 (AIAA/AAS Astrodynamics
+///     Specialist Conference, 2006).
 ///
 /// Args:
-///     tle (TLE | list[TLE] | dict): TLE or OMM dictionary (or list of TLEs) on which to operate
-///     time (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
+///     tle (TLE | dict | list[TLE | dict]): element set(s) to propagate: a ``TLE`` object, an
+///         OMM dictionary (see ``satkit.OMMDict``), or a list of either (or mixing both). Must
+///         be a ``list``; tuples and other sequences are not accepted
+///     time (time | datetime.datetime | numpy.datetime64 | list | numpy.ndarray): time(s) at
+///         which to compute position and velocity: a single time, a list of times, a 1-D
+///         numpy object array of times or a 1-D ``datetime64`` array. A tuple is not accepted.
+///         A naive ``datetime`` is local time, not UTC; a ``numpy.datetime64`` is UTC
 ///
 /// Keyword Args:
 ///     gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is sgp4_gravconst.wgs72
@@ -269,6 +303,29 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     If errflag is True, a third element is returned: an int32 numpy array of error
 ///     codes for each TLE and time (0 = success). The codes are the integer values of
 ///     ``sgp4_error``, so ``err == satkit.sgp4_error.success`` compares elementwise.
+///
+/// Raises:
+///     TypeError: if ``tle`` is not a ``TLE``, a dict or a list of them, ``time`` is not a
+///         time or a list / array of times, or ``gravconst`` / ``opsmode`` is not a member
+///         of its enum
+///     ValueError: if an OMM dictionary lacks a required key or holds a value that cannot
+///         be read
+///     RuntimeError: with ``errflag`` False, if an element set cannot be initialized (see
+///         "Errors" below)
+///
+/// Note:
+///     OMM dictionaries: any dict with the CCSDS keys ``EPOCH``, ``MEAN_MOTION``,
+///     ``ECCENTRICITY``, ``INCLINATION``, ``RA_OF_ASC_NODE``, ``ARG_OF_PERICENTER`` and
+///     ``MEAN_ANOMALY`` (plus optional ``BSTAR``, ``MEAN_MOTION_DOT``, ``MEAN_MOTION_DDOT``)
+///     is accepted, whether it came from ``omm_from_url`` / ``omm_from_file`` /
+///     ``omm_from_text``, from ``json.load`` on a CelesTrak or Space-Track response (numbers
+///     may be strings), or from ``xmltodict.parse`` on the XML form: the whole result (root
+///     key ``omm``, or ``ndm`` holding one ``omm``) or any node below it. ``EPOCH`` may be
+///     an RFC 3339 string, a CCSDS day-of-year string, a ``satkit.time``, a ``datetime``
+///     (naive = local time) or a ``numpy.datetime64`` (UTC). Other keys are ignored, except
+///     that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be ``UTC``,
+///     ``REF_FRAME`` must be ``TEME``, ``CENTER_NAME`` must be ``EARTH`` and
+///     ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
 ///
 /// Note:
 ///     Errors: a time at which propagation fails (e.g. the orbit has decayed) gives a

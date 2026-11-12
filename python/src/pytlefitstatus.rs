@@ -2,10 +2,17 @@ use satkit::tle::TleFitStatus;
 
 use pyo3::prelude::*;
 
-///
 /// Termination status of the TLE non-linear least-squares fit performed by
-/// [`satkit.TLE.fit_from_states`].
+/// ``TLE.fit_from_states``
 ///
+/// Members: ``GradientConverged`` (0: converged on gradient norm tolerance),
+/// ``StepConverged`` (1: converged on relative step size tolerance),
+/// ``CostConverged`` (2: converged on relative cost change tolerance),
+/// ``MaxIterations`` (3: maximum number of iterations reached) and
+/// ``DampingSaturated`` (4: Levenberg-Marquardt damping parameter saturated).
+///
+/// ``str(status)`` is a one-line description, and each member compares
+/// equal to its integer value.
 #[derive(PartialEq, Eq, Clone, Copy)]
 #[pyclass(name = "tlefitstatus", eq, eq_int)]
 pub enum PyTleFitStatus {
@@ -46,7 +53,7 @@ impl PyTleFitStatus {
         }
     }
 
-    /// True if the fit converged successfully.
+    /// True for the three ``...Converged`` members, False for ``MaxIterations`` and ``DampingSaturated``
     #[getter]
     pub fn converged(&self) -> bool {
         matches!(
