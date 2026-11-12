@@ -1,4 +1,4 @@
-# The extension registers its eight native submodules (density,
+# The extension registers its nine native submodules (density, eop,
 # frametransform, jplephem, moon, planets, spaceweather, sun, utils) in
 # ``sys.modules`` as ``satkit.<name>`` when it is imported, so
 # ``import satkit.sun`` and ``from satkit.sun import pos_gcrf`` work.

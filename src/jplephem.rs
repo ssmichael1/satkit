@@ -877,6 +877,17 @@ pub fn consts(s: &str) -> Option<&f64> {
     jplephem_singleton().as_ref().ok()?.consts(s)
 }
 
+/// The whole table of named constants of the loaded ephemeris file, as
+/// [`consts`] looks them up one at a time: `"AU"` (km), `"EMRAT"`, the GM
+/// values (au³/day²), and the rest of the DE header's constant table.
+///
+/// # Errors
+///
+/// [`Error::LoadFailed`] if the ephemeris file cannot be loaded.
+pub fn constants() -> Result<&'static std::collections::HashMap<String, f64>> {
+    Ok(&jpl()?.consts)
+}
+
 /// Return the position of the given body in the Barycentric
 /// coordinate system (origin is solarsystem barycenter)
 ///

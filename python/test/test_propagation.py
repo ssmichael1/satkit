@@ -780,8 +780,8 @@ class TestImpulsiveManeuver:
             dcm_inv = sk.frametransform.from_gcrf(frm, pos, vel)
             assert np.allclose(dcm @ dcm_inv, np.eye(3), atol=1e-12)
 
-        # Unsupported frames raise
-        for bad in [sk.frame.ITRF, sk.frame.TEME, sk.frame.ICRF]:
+        # Unsupported (time-dependent) frames raise
+        for bad in [sk.frame.ITRF, sk.frame.TEME, sk.frame.CIRS]:
             with pytest.raises(Exception):
                 sk.frametransform.to_gcrf(bad, pos, vel)
 

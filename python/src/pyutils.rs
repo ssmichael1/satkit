@@ -26,6 +26,76 @@ pub fn warn_deprecated(py: Python<'_>, msg: &std::ffi::CStr) -> PyResult<()> {
     PyErr::warn(py, warning_type.as_any(), msg, 1)
 }
 
+/// The `OSError` subclass Python raises for `err` (`FileNotFoundError`,
+/// `PermissionError`, `IsADirectoryError`, else `OSError`), with `path` as its
+/// `filename`, so the message names the file:
+/// `[Errno 2] No such file or directory: 'x.txt'`.
+pub fn io_error_with_path(err: &std::io::Error, path: &std::path::Path) -> PyErr {
+    use pyo3::exceptions::{
+        PyFileNotFoundError, PyIsADirectoryError, PyOSError, PyPermissionError,
+    };
+    use std::io::ErrorKind;
+    let filename = path.to_string_lossy().into_owned();
+    // POSIX errno values; set explicitly (not `raw_os_error`) so the
+    // exception and its errno agree on every platform
+    match err.kind() {
+        ErrorKind::NotFound => {
+            PyFileNotFoundError::new_err((2, "No such file or directory", filename))
+        }
+        ErrorKind::PermissionDenied => {
+            PyPermissionError::new_err((13, "Permission denied", filename))
+        }
+        ErrorKind::IsADirectory => PyIsADirectoryError::new_err((21, "Is a directory", filename)),
+        _ => PyOSError::new_err((err.raw_os_error().unwrap_or(0), err.to_string(), filename)),
+    }
+}
+
+/// Resolve a function's time argument during the `tm` → `time` rename:
+/// `time` is the parameter, `tm` its deprecated keyword alias. Passing `tm`
+/// emits a `DeprecationWarning`; passing both, or neither, is a `TypeError`
+/// as for any duplicated or missing argument. `func` names the function in
+/// the messages.
+pub fn time_or_deprecated_tm<'a, 'py>(
+    func: &str,
+    time: Option<&'a Bound<'py, PyAny>>,
+    tm: Option<&'a Bound<'py, PyAny>>,
+) -> PyResult<&'a Bound<'py, PyAny>> {
+    match (time, tm) {
+        (Some(t), None) => Ok(t),
+        (None, Some(t)) => {
+            let msg = std::ffi::CString::new(format!(
+                "{func}(): the keyword 'tm' is deprecated; use 'time'"
+            ))
+            .expect("message has no NUL");
+            warn_deprecated(t.py(), &msg)?;
+            Ok(t)
+        }
+        (Some(_), Some(_)) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "{func}() got both 'time' and its deprecated alias 'tm'"
+        ))),
+        // Also an explicit `time=None`, which the signature cannot tell apart
+        (None, None) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "{func}() missing required argument: 'time' (a satkit.time, datetime.datetime \
+             or numpy.datetime64, or a list / array of them where accepted)"
+        ))),
+    }
+}
+
+/// An argument that the signature must declare optional only because it
+/// follows the optional `time` of [`time_or_deprecated_tm`]: missing (or
+/// None) is the `TypeError` a missing required argument has always been.
+pub fn required_arg<'a, 'py>(
+    func: &str,
+    name: &str,
+    arg: Option<&'a Bound<'py, PyAny>>,
+) -> PyResult<&'a Bound<'py, PyAny>> {
+    arg.ok_or_else(|| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "{func}() missing required argument: '{name}'"
+        ))
+    })
+}
+
 /// Convert any real numeric array-like (a numpy array of any integer or
 /// floating dtype, a numpy scalar, or a nested list / tuple of numbers) to a
 /// float64 numpy array, as `numpy.asarray(obj, dtype=float)` would.

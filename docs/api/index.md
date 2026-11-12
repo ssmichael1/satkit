@@ -54,6 +54,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`planets`](planets.md) | Low-precision planetary ephemerides |
 | [`density`](density.md) | NRLMSISE-00 atmospheric density model |
 | [`spaceweather`](spaceweather.md) | Space-weather indices ($F_{10.7}$, $A_p$) and their coverage |
+| [`eop`](eop.md) | Earth Orientation Parameters (UT1 − UTC, polar motion) and their coverage |
 | [`gravity`](gravity.md) | Earth gravity acceleration |
 | [`gravmodel`](gravity.md#satkit.gravmodel) | Gravity model selection enum |
 | [`gravity_and_partials`](gravity.md#satkit.gravity_and_partials) | Gravity acceleration and its 3×3 position gradient |

@@ -15,6 +15,9 @@ as **local time**, as Python's own ``datetime.timestamp()`` does; pass an aware
 datetime (``tzinfo=datetime.timezone.utc``) or a ``satkit.time`` for UTC.
 ``numpy.datetime64`` values are UTC. Functions that take several times accept a
 list, a tuple, or a 1-D numpy array of ``datetime64`` or of time objects.
+
+The time parameter is named ``time``. Its old keyword spelling ``tm=`` still
+works but emits a ``DeprecationWarning``; positional calls are unaffected.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from typing_extensions import deprecated
 from .satkit import time, quaternion, frame, TimeScalar, TimeArrayLike, TimeInput
 
 @typing.overload
-def gmst(tm: TimeScalar) -> float:
+def gmst(time: TimeScalar) -> float:
     """Greenwich Mean Sidereal Time
 
     Notes:
@@ -36,7 +39,7 @@ def gmst(tm: TimeScalar) -> float:
         - GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): scalar time at which to calculate output
+        time (satkit.time | datetime.datetime | numpy.datetime64): scalar time at which to calculate output
 
     Returns:
         float: Greenwich Mean Sidereal Time, radians, at input time. Not normalised to
@@ -56,7 +59,7 @@ def gmst(tm: TimeScalar) -> float:
 
 @typing.overload
 def gmst(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> npt.NDArray[np.float64]:
     """Greenwich Mean Sidereal Time
 
@@ -66,7 +69,7 @@ def gmst(
         - GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
         npt.NDArray[np.float64]: Greenwich Mean Sidereal Time, radians, one per input
@@ -76,7 +79,14 @@ def gmst(
     ...
 
 @typing.overload
-def eqeq(tm: TimeScalar) -> float:
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def gmst(
+    *,
+    tm: TimeInput,
+) -> float | npt.NDArray[np.float64]: ...
+
+@typing.overload
+def eqeq(time: TimeScalar) -> float:
     """Equation of the Equinoxes
 
     The equation of the equinoxes is the difference between apparent and mean
@@ -90,7 +100,7 @@ def eqeq(tm: TimeScalar) -> float:
           over 1950-2100); use ``rotation`` for the full reduction.
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): scalar time at which to calculate output
+        time (satkit.time | datetime.datetime | numpy.datetime64): scalar time at which to calculate output
 
     Returns:
         float: Equation of the equinoxes, radians, at input time
@@ -99,12 +109,12 @@ def eqeq(tm: TimeScalar) -> float:
 
 @typing.overload
 def eqeq(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> npt.NDArray[np.float64]:
     """Equation of the Equinoxes
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
         npt.NDArray[np.float64]: Equation of the equinoxes, radians, one per input
@@ -113,8 +123,15 @@ def eqeq(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def eqeq(
+    *,
+    tm: TimeInput,
+) -> float | npt.NDArray[np.float64]: ...
+
+@typing.overload
 def gast(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> float:
     """Greenwich Apparent Sidereal Time
 
@@ -123,7 +140,7 @@ def gast(
     over 1950-2100) against ERFA ``gst94``.
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): scalar time at which to calculate output
+        time (satkit.time | datetime.datetime | numpy.datetime64): scalar time at which to calculate output
 
     Returns:
         float: Greenwich apparent sidereal time, radians, at input time. Like ``gmst``
@@ -140,12 +157,12 @@ def gast(
 
 @typing.overload
 def gast(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> npt.NDArray[np.float64]:
     """Greenwich Apparent Sidereal Time
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
         npt.NDArray[np.float64]: Greenwich apparent sidereal time, radians, one per
@@ -154,8 +171,15 @@ def gast(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def gast(
+    *,
+    tm: TimeInput,
+) -> float | npt.NDArray[np.float64]: ...
+
+@typing.overload
 def earth_rotation_angle(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> float:
     """Earth Rotation Angle
 
@@ -167,7 +191,7 @@ def earth_rotation_angle(
             - ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0))
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate Earth Rotation Angle
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate Earth Rotation Angle
 
     Returns:
         float: Earth Rotation Angle at the input time, radians, in [0, 2π)
@@ -182,7 +206,7 @@ def earth_rotation_angle(
 
 @typing.overload
 def earth_rotation_angle(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> npt.NDArray[np.float64]:
     """Earth Rotation Angle
 
@@ -194,7 +218,7 @@ def earth_rotation_angle(
             - ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0)
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
         npt.NDArray[np.float64]: Earth Rotation Angle, radians, in [0, 2π), one per
@@ -203,13 +227,20 @@ def earth_rotation_angle(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def earth_rotation_angle(
+    *,
+    tm: TimeInput,
+) -> float | npt.NDArray[np.float64]: ...
+
+@typing.overload
 def qitrf2tirs(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Rotation from the ITRF to the Terrestrial Intermediate Reference System (polar motion)
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from ITRF to TIRS at the input time
@@ -218,12 +249,12 @@ def qitrf2tirs(
 
 @typing.overload
 def qitrf2tirs(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Rotation from the ITRF to the Terrestrial Intermediate Reference System (polar motion)
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from ITRF to TIRS, one per input time
@@ -232,8 +263,15 @@ def qitrf2tirs(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qitrf2tirs(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qteme2gcrf(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
 
@@ -251,7 +289,7 @@ def qteme2gcrf(
         - TEME is the output frame of the SGP4 propagator
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from TEME to GCRF at the input time
@@ -266,14 +304,14 @@ def qteme2gcrf(
 
 @typing.overload
 def qteme2gcrf(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Rotation from True Equator Mean Equinox (TEME) to Geocentric Celestial Reference Frame (GCRF)
 
     Approximate (0.55" max); see the scalar overload.
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from TEME to GCRF, one per input time
@@ -282,13 +320,20 @@ def qteme2gcrf(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qteme2gcrf(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qcirs2gcrf(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from CIRS to GCRF at the input time
@@ -297,12 +342,12 @@ def qcirs2gcrf(
 
 @typing.overload
 def qcirs2gcrf(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from CIRS to GCRF, one per input time
@@ -311,13 +356,20 @@ def qcirs2gcrf(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qcirs2gcrf(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qtirs2cirs(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Rotation from Terrestrial Intermediate Reference System (TIRS) to the Celestial Intermediate Reference System (CIRS)
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from TIRS to CIRS at the input time
@@ -326,12 +378,12 @@ def qtirs2cirs(
 
 @typing.overload
 def qtirs2cirs(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Rotation from Terrestrial Intermediate Reference System (TIRS) to the Celestial Intermediate Reference System (CIRS)
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from TIRS to CIRS, one per input time
@@ -340,8 +392,15 @@ def qtirs2cirs(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qtirs2cirs(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qgcrf2itrf_approx(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -362,7 +421,7 @@ def qgcrf2itrf_approx(
           full state (position + velocity) transforms.
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from GCRF to ITRF at the input time
@@ -371,7 +430,7 @@ def qgcrf2itrf_approx(
 
 @typing.overload
 def qgcrf2itrf_approx(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Quaternion representing approximate rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -379,7 +438,7 @@ def qgcrf2itrf_approx(
         - Accurate to about 1 arcsec; see the scalar overload
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from GCRF to ITRF, one per input time
@@ -388,8 +447,15 @@ def qgcrf2itrf_approx(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qgcrf2itrf_approx(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qitrf2gcrf_approx(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
@@ -410,7 +476,7 @@ def qitrf2gcrf_approx(
           full state (position + velocity) transforms.
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from ITRF to GCRF at the input time
@@ -419,7 +485,7 @@ def qitrf2gcrf_approx(
 
 @typing.overload
 def qitrf2gcrf_approx(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Quaternion representing approximate rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
@@ -427,7 +493,7 @@ def qitrf2gcrf_approx(
         - Accurate to about 1 arcsec; see the scalar overload
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from ITRF to GCRF, one per input time
@@ -436,8 +502,15 @@ def qitrf2gcrf_approx(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qitrf2gcrf_approx(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qgcrf2itrf(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -454,7 +527,7 @@ def qgcrf2itrf(
           full state (position + velocity) transforms.
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from GCRF to ITRF at the input time
@@ -475,7 +548,7 @@ def qgcrf2itrf(
 
 @typing.overload
 def qgcrf2itrf(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Quaternion representing rotation from the Geocentric Celestial Reference Frame (GCRF) to the International Terrestrial Reference Frame (ITRF)
 
@@ -492,7 +565,7 @@ def qgcrf2itrf(
           full state (position + velocity) transforms.
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from GCRF to ITRF, one per input time
@@ -501,8 +574,15 @@ def qgcrf2itrf(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qgcrf2itrf(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qitrf2gcrf(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
@@ -519,7 +599,7 @@ def qitrf2gcrf(
           full state (position + velocity) transforms.
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
     Returns:
         quaternion: Quaternion representing rotation from ITRF to GCRF at the input time
 
@@ -533,7 +613,7 @@ def qitrf2gcrf(
 
 @typing.overload
 def qitrf2gcrf(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Quaternion representing rotation from the International Terrestrial Reference Frame (ITRF) to the Geocentric Celestial Reference Frame (GCRF)
 
@@ -550,7 +630,7 @@ def qitrf2gcrf(
           full state (position + velocity) transforms.
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from ITRF to GCRF, one per input time
@@ -559,8 +639,15 @@ def qitrf2gcrf(
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qitrf2gcrf(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def qteme2itrf(
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
 
@@ -573,7 +660,7 @@ def qteme2itrf(
         - TEME is the output frame of the SGP4 propagator used to compute position from two-line element sets.
 
     Args:
-        tm (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to calculate the quaternion
 
     Returns:
         quaternion: Quaternion representing rotation from TEME to ITRF at the input time
@@ -594,7 +681,7 @@ def qteme2itrf(
 
 @typing.overload
 def qteme2itrf(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Quaternion representing rotation from the True Equator Mean Equinox (TEME) frame to the International Terrestrial Reference Frame (ITRF)
 
@@ -607,7 +694,7 @@ def qteme2itrf(
         - TEME is the output frame of the SGP4 propagator used to compute position from two-line element sets.
 
     Args:
-        tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate the quaternions
 
     Returns:
         list[quaternion]: Quaternions representing rotation from TEME to ITRF, one per input time
@@ -615,14 +702,25 @@ def qteme2itrf(
     """
     ...
 
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qteme2itrf(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
 def earth_orientation_params(
-    time: time,
+    time: TimeScalar,
 ) -> tuple[float, float, float, float, float, float] | None:
     """Get Earth Orientation Parameters at given instant
 
+    ``satkit.eop`` is the home for EOP queries: this is the same as
+    ``satkit.eop.get``.
+
     Args:
-        time (satkit.time): Instant at which to query parameters (a ``satkit.time`` only;
-            ``datetime.datetime`` and ``numpy.datetime64`` raise ``TypeError``)
+        time (satkit.time | datetime.datetime | numpy.datetime64): Instant at which to
+            query parameters (a single time; a list, even of one element, raises
+            ``TypeError``)
 
     Returns:
         (float, float, float, float, float, float) | None: Tuple with following elements:
@@ -653,7 +751,7 @@ def earth_orientation_params(
     ...
 
 @typing.overload
-def qmod2gcrf(tm: TimeScalar) -> quaternion:
+def qmod2gcrf(time: TimeScalar) -> quaternion:
     """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given time.
 
     Mean-of-Date accounts for precession but not nutation. For the
@@ -673,13 +771,20 @@ def qmod2gcrf(tm: TimeScalar) -> quaternion:
 
 @typing.overload
 def qmod2gcrf(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Quaternion rotating Mean-of-Date (MOD) → GCRF at the given times."""
     ...
 
 @typing.overload
-def qtod2mod_approx(tm: TimeScalar) -> quaternion:
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qmod2gcrf(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
+def qtod2mod_approx(time: TimeScalar) -> quaternion:
     """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at the
     given time. Accounts for nutation only.
 
@@ -693,12 +798,19 @@ def qtod2mod_approx(tm: TimeScalar) -> quaternion:
 
 @typing.overload
 def qtod2mod_approx(
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Approximate True-of-Date (TOD) → Mean-of-Date (MOD) rotation at
     the given times. Accounts for nutation only.
     """
     ...
+
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def qtod2mod_approx(
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
 
 def to_gcrf(
     frame: frame,
@@ -706,7 +818,7 @@ def to_gcrf(
     vel: npt.ArrayLike,
 ) -> npt.NDArray[np.float64]:
     """Return the 3x3 DCM that transforms a vector from a satellite-local
-    orbital frame into GCRF at the current state.
+    orbital frame (or an inertial frame) into GCRF at the current state.
 
     This is the unified dispatch for satellite-local orbital frames.
     Supported values:
@@ -715,6 +827,12 @@ def to_gcrf(
     - ``frame.LVLH`` — Local Vertical / Local Horizontal
     - ``frame.RTN``  — Radial / In-track / Cross-track (= RSW = RIC)
     - ``frame.NTW``  — Normal-to-velocity / Tangent / Cross-track
+    - ``frame.ICRF`` — the 3x3 identity (GCRF has the ICRF axes)
+    - ``frame.EME2000`` — the constant IERS 2010 frame bias (about 23 mas),
+      the same rotation as ``rotation(frame.EME2000, frame.GCRF, time)`` at
+      any time
+
+    ``pos`` and ``vel`` are used only by ``LVLH``, ``RTN`` and ``NTW``.
 
     For an arbitrary frame-to-frame rotation, compose with
     ``from_gcrf``::
@@ -732,12 +850,9 @@ def to_gcrf(
         numpy.ndarray: 3x3 rotation matrix (frame → GCRF)
 
     Raises:
-        RuntimeError: if ``frame`` is not ``GCRF`` or a satellite-local orbital
-            frame (``LVLH``, ``RTN``, ``NTW``). Every other frame raises,
-            including the inertial ``EME2000`` and ``ICRF``: use
-            ``rotation(frame, satkit.frame.GCRF, time)`` (or
-            ``rotation_with_state``) for ``ITRF``, ``TIRS``, ``CIRS``, ``TEME``,
-            ``EME2000`` and ``ICRF``.
+        RuntimeError: if ``frame`` is time-dependent (``ITRF``, ``TIRS``,
+            ``CIRS``, ``TEME``): use ``rotation(frame, satkit.frame.GCRF, time)``
+            (or ``rotation_with_state``) for those.
         ValueError: if ``pos`` or ``vel`` is not a 3-element vector, holds a
             non-finite value, or (for ``LVLH`` / ``RTN`` / ``NTW``) the two do
             not define an orbit plane: either is zero or they are parallel.
@@ -915,7 +1030,8 @@ def from_gcrf(
         numpy.ndarray: 3x3 rotation matrix (GCRF → frame)
 
     Raises:
-        RuntimeError: if ``frame`` is not ``GCRF``, ``LVLH``, ``RTN`` or ``NTW``.
+        RuntimeError: if ``frame`` is time-dependent (``ITRF``, ``TIRS``,
+            ``CIRS``, ``TEME``).
         ValueError: if ``pos`` or ``vel`` is not a 3-element vector, holds a
             non-finite value, or does not define an orbit plane (see ``to_gcrf``).
         TypeError: if ``pos`` or ``vel`` is not a real numeric array-like.
@@ -932,6 +1048,9 @@ def from_gcrf(
 def disable_eop_time_warning() -> None:
     """Disable the warnings about Earth Orientation Parameters (EOP) availability.
 
+    ``satkit.eop`` is the home for EOP queries (``get``, ``coverage``,
+    ``status``, ``update``, ``init_from_path``); this switch stays here.
+
     Notes:
         - Four one-time warnings exist: epoch before the EOP table, epoch after the table end
           (last values held constant), epoch in the predictions of a table not refreshed for
@@ -944,6 +1063,9 @@ def disable_eop_time_warning() -> None:
 
 def eop_coverage() -> tuple[time, time, time] | None:
     """Time bounds of the loaded Earth Orientation Parameters (EOP) table.
+
+    ``satkit.eop`` is the home for EOP queries: this is the same as
+    ``satkit.eop.coverage``.
 
     Returns:
         (satkit.time, satkit.time, satkit.time) | None: ``(first, last_observed, last)`` — the first
@@ -965,15 +1087,21 @@ def eop_source() -> str | None:
         str | None: ``"finals2000A"`` when a table is loaded, ``None`` otherwise.
     """
 
+@typing.overload
 def eop_status(
-    tm: time,
+    time: TimeScalar,
 ) -> typing.Literal[
     "observed", "predicted", "extrapolated", "before_table", "not_loaded"
 ]:
     """Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.
 
+    ``satkit.eop`` is the home for EOP queries: this is the same as
+    ``satkit.eop.status``.
+
     Args:
-        tm (satkit.time): Epoch to classify (a ``satkit.time`` only)
+        time (satkit.time | datetime.datetime | numpy.datetime64): Epoch to classify (a
+            single time; a list, even of one element, raises ``TypeError``). The
+            keyword ``tm=`` is a deprecated alias of ``time=``.
 
     Returns:
         str: one of ``"observed"`` (inside the table, on or before the last observed row),
@@ -982,8 +1110,20 @@ def eop_status(
         months, refresh the data files), ``"before_table"`` (before the table's first row — 1973-01-02 for
         ``finals2000A.all`` — zeros used, so UT1 = UTC), or
         ``"not_loaded"`` (no EOP table loaded; zeros used).
+
+    Raises:
+        TypeError: if ``time`` is not a single time
     """
     ...
+
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def eop_status(
+    *,
+    tm: TimeScalar,
+) -> typing.Literal[
+    "observed", "predicted", "extrapolated", "before_table", "not_loaded"
+]: ...
 
 # ── Frame-enum dispatch (new in 0.17.0) ─────────────────────────────────
 
@@ -991,10 +1131,10 @@ def eop_status(
 def rotation(
     from_frame: frame,
     to_frame: frame,
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` at
-    ``tm``. Full IERS 2010 reduction.
+    ``time``. Full IERS 2010 reduction.
 
     Uses the shortest path through the frame graph for each pair (does not
     always pivot through GCRF). Pairs involving orbit-dependent frames
@@ -1004,10 +1144,10 @@ def rotation(
     Args:
         from_frame: Source frame
         to_frame: Destination frame
-        tm: Epoch
+        time: Epoch
 
     Returns:
-        Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+        Rotation from ``from_frame`` to ``to_frame`` at ``time``.
 
     Raises:
         RuntimeError: if the pair involves LVLH / RTN / NTW.
@@ -1018,10 +1158,10 @@ def rotation(
 def rotation(
     from_frame: frame,
     to_frame: frame,
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Quaternions rotating a vector from ``from_frame`` to ``to_frame`` at
-    each of the times ``tm``. Full IERS 2010 reduction; see the scalar
+    each of the times ``time``. Full IERS 2010 reduction; see the scalar
     overload.
 
     Returns:
@@ -1030,10 +1170,20 @@ def rotation(
     """
     ...
 
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def rotation(
+    from_frame: frame,
+    to_frame: frame,
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def rotation_with_state(
     from_frame: frame,
     to_frame: frame,
-    tm: TimeScalar,
+    time: TimeScalar,
     pos: npt.ArrayLike,
     vel: npt.ArrayLike,
 ) -> quaternion:
@@ -1054,27 +1204,38 @@ def rotation_with_state(
     Args:
         from_frame: Source frame
         to_frame: Destination frame
-        tm: Epoch (a single time; a list, even of one element, raises ``TypeError``)
+        time: Epoch (a single time; a list, even of one element, raises ``TypeError``)
         pos: 3-element GCRF position vector [m]
         vel: 3-element GCRF velocity vector [m/s]
 
     Returns:
-        Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+        Rotation from ``from_frame`` to ``to_frame`` at ``time``.
 
     Raises:
         ValueError: if an orbit-dependent frame is involved and ``pos`` /
             ``vel`` do not define an orbit plane (either is zero, non-finite,
             or they are parallel), or either is not a 3-element vector.
-        TypeError: if ``tm`` is not a single time, or ``pos`` / ``vel`` is
+        TypeError: if ``time`` is not a single time, or ``pos`` / ``vel`` is
             not a real numeric array-like.
     """
     ...
 
 @typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def rotation_with_state(
+    from_frame: frame,
+    to_frame: frame,
+    *,
+    tm: TimeScalar,
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> quaternion: ...
+
+@typing.overload
 def rotation_approx(
     from_frame: frame,
     to_frame: frame,
-    tm: TimeScalar,
+    time: TimeScalar,
 ) -> quaternion:
     """Quaternion rotating a vector from ``from_frame`` to ``to_frame`` using
     the approximate reduction of ``qitrf2gcrf_approx`` (~1 arcsec;
@@ -1095,10 +1256,10 @@ def rotation_approx(
 def rotation_approx(
     from_frame: frame,
     to_frame: frame,
-    tm: TimeArrayLike,
+    time: TimeArrayLike,
 ) -> list[quaternion]:
     """Approximate rotations from ``from_frame`` to ``to_frame`` at each of
-    the times ``tm``; see the scalar overload.
+    the times ``time``; see the scalar overload.
 
     Returns:
         One rotation per input time (a one-element list for a one-element
@@ -1106,15 +1267,25 @@ def rotation_approx(
     """
     ...
 
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def rotation_approx(
+    from_frame: frame,
+    to_frame: frame,
+    *,
+    tm: TimeInput,
+) -> quaternion | list[quaternion]: ...
+
+@typing.overload
 def transform_state(
     from_frame: frame,
     to_frame: frame,
-    tm: TimeScalar,
+    time: TimeScalar,
     pos: npt.ArrayLike,
     vel: npt.ArrayLike,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """State (position + velocity) transform from ``from_frame`` to
-    ``to_frame`` at ``tm``. Properly handles the Earth-rotation sweep term
+    ``to_frame`` at ``time``. Properly handles the Earth-rotation sweep term
     when transitioning between rotating (ITRF) and inertial frames.
 
     Supported pairs: any two of the time-parameterised Earth frames
@@ -1125,7 +1296,7 @@ def transform_state(
     Args:
         from_frame: Source frame
         to_frame: Destination frame
-        tm: Epoch (a single time; a list, even of one element, raises ``TypeError``)
+        time: Epoch (a single time; a list, even of one element, raises ``TypeError``)
         pos: 3-element position vector [m]
         vel: 3-element velocity vector [m/s]
 
@@ -1134,16 +1305,28 @@ def transform_state(
 
     Raises:
         RuntimeError: if either frame is ``LVLH``, ``RTN`` or ``NTW``.
-        TypeError: if ``tm`` is not a single time, or ``pos`` / ``vel`` is not
+        TypeError: if ``time`` is not a single time, or ``pos`` / ``vel`` is not
             a real numeric array-like.
         ValueError: if ``pos`` or ``vel`` is not a 3-element vector.
     """
     ...
 
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def transform_state(
+    from_frame: frame,
+    to_frame: frame,
+    *,
+    tm: TimeScalar,
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+
+@typing.overload
 def transform_state_approx(
     from_frame: frame,
     to_frame: frame,
-    tm: TimeScalar,
+    time: TimeScalar,
     pos: npt.ArrayLike,
     vel: npt.ArrayLike,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -1160,7 +1343,7 @@ def transform_state_approx(
     Args:
         from_frame: Source frame
         to_frame: Destination frame
-        tm: Epoch (a single time; a list, even of one element, raises ``TypeError``)
+        time: Epoch (a single time; a list, even of one element, raises ``TypeError``)
         pos: 3-element position vector, meters
         vel: 3-element velocity vector, m/s
 
@@ -1170,8 +1353,19 @@ def transform_state_approx(
     Raises:
         RuntimeError: if either frame is ``TIRS`` / ``CIRS`` (and the two
             differ), or ``LVLH`` / ``RTN`` / ``NTW``.
-        TypeError: if ``tm`` is not a single time, or ``pos`` / ``vel`` is not
+        TypeError: if ``time`` is not a single time, or ``pos`` / ``vel`` is not
             a real numeric array-like.
         ValueError: if ``pos`` or ``vel`` is not a 3-element vector.
     """
     ...
+
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def transform_state_approx(
+    from_frame: frame,
+    to_frame: frame,
+    *,
+    tm: TimeScalar,
+    pos: npt.ArrayLike,
+    vel: npt.ArrayLike,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...

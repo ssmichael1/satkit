@@ -88,9 +88,9 @@ satkit\.satkit\.quaternion\.__rmul__
 # --- Native submodules ---------------------------------------------------------
 # Attributes of the compiled extension, each documented in its own top-level
 # .pyi, which satkit.pyi therefore doesn't redeclare.
-satkit\.satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)
+satkit\.satkit\.(density|eop|frametransform|jplephem|moon|planets|spaceweather|sun|utils)
 # PyO3 gives each submodule an `__all__`; the stubs list names explicitly.
-satkit\.(density|frametransform|jplephem|moon|planets|spaceweather|sun|utils)\.__all__
+satkit\.(density|eop|frametransform|jplephem|moon|planets|spaceweather|sun|utils)\.__all__
 
 # --- Stub-only type aliases ----------------------------------------------------
 # TypeAliases used across the stubs; intentionally have no runtime object.
@@ -110,3 +110,15 @@ satkit\.satkit\.__all__
 # runtime signature serves overloads whose second and third parameters have
 # different names, which stubtest reports although the names cannot be used.
 satkit\.density\.nrlmsise
+
+# --- `tm` -> `time` rename (deprecated keyword alias) --------------------------
+# These take `time`, with `tm=` as a deprecated keyword-only alias. At runtime
+# both are optional (`time=None, *, tm=None`; passing neither or both raises
+# TypeError), which the stubs express as one overload per spelling, the `tm=`
+# one @deprecated. stubtest reports the runtime None defaults as incompatible
+# with the overloads' time types (and, where `pos` / `vel` follow the time,
+# their None defaults too). Delete when the `tm` alias is removed.
+satkit\.frametransform\.(eop_status|gmst|eqeq|gast|earth_rotation_angle)
+satkit\.frametransform\.q(itrf2tirs|tirs2cirs|cirs2gcrf|itrf2gcrf|gcrf2itrf|itrf2gcrf_approx|gcrf2itrf_approx|teme2itrf|teme2gcrf|mod2gcrf|tod2mod_approx)
+satkit\.frametransform\.(rotation|rotation_approx|rotation_with_state|transform_state|transform_state_approx)
+satkit\.jplephem\.(geocentric|barycentric)_(pos|state)

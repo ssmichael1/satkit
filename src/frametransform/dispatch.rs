@@ -86,7 +86,7 @@ const FRAME_BIAS_ETA0_AS: f64 = -0.006819;
 /// Implements `B^T = R3(-dα0) · R2(-ξ0) · R1(η0)` in IERS notation. In
 /// numeris' active-rotation convention this is `rotz(dα0) · roty(ξ0) ·
 /// rotx(-η0)` (each axis-angle negated relative to the passive form).
-fn qeme2000_to_gcrf() -> Quaternion {
+pub(crate) fn qeme2000_to_gcrf() -> Quaternion {
     let dalpha0 = FRAME_BIAS_DALPHA0_AS * ASEC2RAD;
     let xi0 = FRAME_BIAS_XI0_AS * ASEC2RAD;
     let eta0 = FRAME_BIAS_ETA0_AS * ASEC2RAD;

@@ -468,7 +468,7 @@ state_gcrf = np.concatenate([q * p_teme, q * v_teme])
 res = sk.propagate(state_gcrf, tle.epoch, duration_days=1.0)
 ```
 
-`sk.frametransform.rotation(from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, tm=t)`
+`sk.frametransform.rotation(from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, time=t)`
 gives the rotation to the Earth-fixed frame. Remember that a TLE holds SGP4
 *mean* elements, which are not osculating Keplerian elements. See
 [TLEs, SGP4 & OMMs](../guide/tle.md).

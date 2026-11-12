@@ -27,20 +27,20 @@ vel_itrf = np.array([0.0, 7600.0, 0.0])  # m/s, in ITRF
 
 # Full IERS 2010 reduction. Keyword arguments are recommended at the call
 # site so the source / destination direction is unambiguous; positional
-# args work too once you know the order (from, to, tm).
+# args work too once you know the order (from, to, time).
 q = sk.frametransform.rotation(
-    from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, tm=t,
+    from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, time=t,
 )
 
 # Approximate reduction (~1 arcsec), inertial cluster + ITRF only
 q_approx = sk.frametransform.rotation_approx(
-    from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, tm=t,
+    from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF, time=t,
 )
 
 # Position + velocity (handles the Earth-rotation sweep term)
 pos_gcrf, vel_gcrf = sk.frametransform.transform_state(
     from_frame=sk.frame.ITRF, to_frame=sk.frame.GCRF,
-    tm=t, pos=pos_itrf, vel=vel_itrf,
+    time=t, pos=pos_itrf, vel=vel_itrf,
 )
 ```
 
@@ -58,7 +58,7 @@ There are three related quaternion entry points; pick by what your frames need:
 | Function | Frames it handles | Extra arguments | Returns |
 |---|---|---|---|
 | [`rotation`](#satkit.frametransform.rotation) | Earth chain only (`ITRF`, `TIRS`, `CIRS`, `GCRF`, `TEME`, `EME2000`, `ICRF`) | — | `quaternion` |
-| [`to_gcrf`](#satkit.frametransform.to_gcrf) / [`from_gcrf`](#satkit.frametransform.from_gcrf) | Orbit frames only (`LVLH`, `RTN`, `NTW`) | `pos`, `vel` (GCRF) | 3×3 matrix |
+| [`to_gcrf`](#satkit.frametransform.to_gcrf) / [`from_gcrf`](#satkit.frametransform.from_gcrf) | Orbit frames (`LVLH`, `RTN`, `NTW`), plus the constant `ICRF` / `EME2000` rotations | `pos`, `vel` (GCRF) | 3×3 matrix |
 | [`rotation_with_state`](#satkit.frametransform.rotation_with_state) | **All** frames (Earth *and* orbit) | `pos`, `vel` (GCRF) | `quaternion` |
 
 Use [`rotation_with_state`](#satkit.frametransform.rotation_with_state) when a
@@ -76,12 +76,12 @@ consulted when an orbit frame is involved:
 # the orbit state is given in GCRF.
 q = sk.frametransform.rotation_with_state(
     from_frame=sk.frame.TEME, to_frame=sk.frame.RTN,
-    tm=t, pos=pos_gcrf, vel=vel_gcrf,
+    time=t, pos=pos_gcrf, vel=vel_gcrf,
 )
 ```
 
 Any of these functions accept a `satkit.time`, a `datetime.datetime` or a
-`numpy.datetime64` for the `tm` argument (see [Time](time.md#numpy-datetime64)).
+`numpy.datetime64` for the `time` argument (see [Time](time.md#numpy-datetime64)); its old keyword spelling `tm=` still works but emits a `DeprecationWarning`.
 
 The per-pair functions below (`qitrf2gcrf`, `qteme2itrf`, `qcirs2gcrf`, …)
 remain available for direct use when the source / destination pair is

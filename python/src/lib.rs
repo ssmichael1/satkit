@@ -6,6 +6,7 @@ mod pyconsts;
 mod pydensity;
 mod pyduration;
 mod pyecom;
+mod pyeop;
 mod pyframes;
 mod pyframetransform;
 mod pygravity;
@@ -63,6 +64,19 @@ fn spaceweather(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Earth Orientation Parameters (EOP): query, check and load the IERS table
+/// behind UT1 and the ITRF frame transforms
+#[pymodule]
+fn eop(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(pyeop::get, m)?)?;
+    m.add_function(wrap_pyfunction!(pyeop::coverage, m)?)?;
+    m.add_function(wrap_pyfunction!(pyeop::status, m)?)?;
+    m.add_function(wrap_pyfunction!(pyeop::update, m)?)?;
+    m.add_function(wrap_pyfunction!(pyeop::init_from_path, m)?)?;
+    m.add_function(wrap_pyfunction!(pyeop::init_from_bytes, m)?)?;
+    Ok(())
+}
+
 /// JPL Ephemeris Sub-Module
 #[pymodule]
 fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -71,6 +85,7 @@ fn jplephem(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyjplephem::barycentric_pos, m)?)?;
     m.add_function(wrap_pyfunction!(pyjplephem::barycentric_state, m)?)?;
     m.add_function(wrap_pyfunction!(pyjplephem::consts, m)?)?;
+    m.add_function(wrap_pyfunction!(pyjplephem::constants, m)?)?;
 
     Ok(())
 }
@@ -222,8 +237,9 @@ pub fn satkit(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyomm::omm_from_file, m)?)?;
     m.add_function(wrap_pyfunction!(pyomm::omm_from_text, m)?)?;
 
-    // The eight native submodules, importable as `satkit.<name>`
+    // The nine native submodules, importable as `satkit.<name>`
     for sub in [
+        wrap_pymodule!(eop)(py),
         wrap_pymodule!(frametransform)(py),
         wrap_pymodule!(jplephem)(py),
         wrap_pymodule!(sun)(py),

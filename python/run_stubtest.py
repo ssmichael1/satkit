@@ -1,6 +1,6 @@
 """Run ``mypy.stubtest`` over every satkit stub file, native submodules included.
 
-The compiled extension creates ``density``, ``frametransform``, ``jplephem``,
+The compiled extension creates ``density``, ``eop``, ``frametransform``, ``jplephem``,
 ``moon``, ``planets``, ``spaceweather``, ``sun`` and ``utils`` as attributes of
 ``satkit.satkit`` and registers them in ``sys.modules`` as ``satkit.<name>``
 when ``satkit`` is imported. This wrapper registers them again (harmless)
