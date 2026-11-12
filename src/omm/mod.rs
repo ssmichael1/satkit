@@ -545,9 +545,12 @@ impl OMM {
 
     /// Converts this message to a [`TLE`].
     ///
-    /// Inverse of [`from_tle`](Self::from_tle). `OBJECT_ID` in `YYYY-NNNP`
-    /// form becomes the TLE international designator; any other form leaves
-    /// the designator empty. Absent optional fields become zero;
+    /// Inverse of [`from_tle`](Self::from_tle): `OMM::from_tle(&tle).to_tle()
+    /// == tle` for a TLE read from two or three lines. `OBJECT_ID` in
+    /// `YYYY-NNNP` form becomes the TLE international designator; any other
+    /// form leaves the designator empty. An empty or `UNKNOWN` `OBJECT_NAME`
+    /// becomes `none`, the name of an unnamed TLE. Absent optional fields
+    /// become zero;
     /// `CLASSIFICATION_TYPE` becomes `U` if it is absent or is not a single
     /// ASCII letter. Metadata that has no TLE column (`ORIGINATOR`,
     /// `COMMENT`, `extra_fields`, ...)
@@ -558,15 +561,12 @@ impl OMM {
     /// is not checked either (propagating the OMM itself does check it).
     pub fn to_tle(&self) -> TLE {
         let mut tle = TLE::new();
-        tle.name = self.object_name.clone();
-        if let Some((desig, year, launch, piece)) = intl_desig_from_object_id(&self.object_id) {
-            tle.intl_desig = desig;
-            tle.desig_year = year;
-            tle.desig_launch = launch;
-            tle.desig_piece = piece;
-        } else {
-            tle.intl_desig = String::new();
-        }
+        // `from_tle` writes the unnamed-TLE placeholder as UNKNOWN
+        tle.name = match self.object_name.trim() {
+            "" | "UNKNOWN" => "none".to_string(),
+            _ => self.object_name.clone(),
+        };
+        tle.intl_desig = intl_desig_from_object_id(&self.object_id).unwrap_or_default();
         tle.sat_num = self
             .norad_cat_id
             .and_then(|n| i32::try_from(n).ok())
@@ -804,8 +804,8 @@ fn object_id_from_intl_desig(desig: &str) -> String {
     desig.to_string()
 }
 
-/// `1998-067A` → (`98067A`, 98, 67, `A`). `None` if the id is not `YYYY-NNNP`.
-fn intl_desig_from_object_id(id: &str) -> Option<(String, i32, i32, String)> {
+/// `1998-067A` → `98067A`. `None` if the id is not `YYYY-NNNP`.
+fn intl_desig_from_object_id(id: &str) -> Option<String> {
     let id = id.trim();
     let (year, rest) = id.split_once('-')?;
     if year.len() != 4 || rest.len() < 4 || !rest.is_char_boundary(3) {
@@ -818,12 +818,7 @@ fn intl_desig_from_object_id(id: &str) -> Option<(String, i32, i32, String)> {
         return None;
     }
     let yy = year.rem_euclid(100);
-    Some((
-        format!("{yy:02}{launch:03}{piece}"),
-        yy,
-        launch,
-        piece.to_string(),
-    ))
+    Some(format!("{yy:02}{launch:03}{piece}"))
 }
 
 impl SGP4Source for OMM {
@@ -1164,9 +1159,9 @@ mod tests {
 
         let back = omm.to_tle();
         assert_eq!(back.intl_desig, "98067A");
-        assert_eq!(back.desig_year, 98);
-        assert_eq!(back.desig_launch, 67);
-        assert_eq!(back.desig_piece, "A");
+        assert_eq!(back.desig_year(), Some(98));
+        assert_eq!(back.desig_launch(), Some(67));
+        assert_eq!(back.desig_piece(), "A");
         assert_eq!(back.sat_num, 25544);
         assert_eq!(back.epoch, tle.epoch);
         assert_eq!(back.mean_motion, tle.mean_motion);
@@ -1191,8 +1186,25 @@ mod tests {
         assert!(intl_desig_from_object_id("1998-067").is_none());
         assert_eq!(
             intl_desig_from_object_id("2023-146X"),
-            Some(("23146X".to_string(), 23, 146, "X".to_string()))
+            Some("23146X".to_string())
         );
+    }
+
+    #[test]
+    fn test_tle_round_trips_through_omm() {
+        let l1 = "1 25544U 98067A   21275.59097222  .00016717  00000-0  10270-3 0  9003";
+        let l2 = "2 25544  51.6432 351.4697 0007417 130.5364 329.6482 15.48915330299357";
+        // Unnamed (name "none" <-> OBJECT_NAME UNKNOWN) and named
+        let unnamed = TLE::load_2line(l1, l2).unwrap();
+        assert_eq!(OMM::from_tle(&unnamed).object_name, "UNKNOWN");
+        assert_eq!(OMM::from_tle(&unnamed).to_tle(), unnamed);
+        let named = TLE::load_3line("0 ISS (ZARYA)", l1, l2).unwrap();
+        assert_eq!(OMM::from_tle(&named).to_tle(), named);
+        // A blank designator and an empty element set
+        let blank = TLE::load_2line(&l1.replace("98067A", "      "), l2).unwrap();
+        assert_eq!(blank.intl_desig, "");
+        assert_eq!(OMM::from_tle(&blank).to_tle(), blank);
+        assert_eq!(OMM::from_tle(&TLE::new()).to_tle(), TLE::new());
     }
 
     #[test]

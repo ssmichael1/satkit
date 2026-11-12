@@ -13,8 +13,29 @@ use anyhow::{bail, Result};
 
 // Thin Python wrapper around SGP4 Error
 #[allow(non_camel_case_types)]
-/// Represent errors from SGP-4 propagation of two-line element sets (TLEs)
-#[pyclass(name = "sgp4_error", eq, eq_int, from_py_object)]
+/// Error codes of SGP4 propagation, as in the error array of ``sgp4(..., errflag=True)``
+///
+/// That array holds plain ``int32`` codes; a member compares equal to its
+/// code, so ``err == satkit.sgp4_error.success`` works elementwise, and
+/// ``satkit.sgp4_error(code)`` turns one code back into a member.
+///
+/// Members: ``success`` (0), ``eccen`` (1: mean eccentricity at the
+/// requested time is 1 or more, or below -0.001), ``mean_motion`` (2: mean
+/// motion zero or negative), ``perturb_eccen`` (3: perturbed eccentricity
+/// outside [0, 1]), ``semi_latus_rectum`` (4: negative), ``unused`` (5: not
+/// produced), ``orbit_decay`` (6: the computed radius is less than one
+/// Earth radius) and ``unsupported`` (7: the element set cannot be
+/// propagated by classic SGP4 at all).
+///
+/// Members are hashable and immutable.
+#[pyclass(
+    name = "sgp4_error",
+    module = "satkit",
+    eq,
+    eq_int,
+    frozen,
+    from_py_object
+)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PySGP4Error {
     success = psgp4::SGP4Error::SGP4Success as isize,
@@ -30,19 +51,90 @@ pub enum PySGP4Error {
     unsupported = 7,
 }
 
-crate::enum_pickle!(PySGP4Error, "sgp4_error");
+#[pymethods]
+impl PySGP4Error {
+    // The member with integer code `code`, e.g. one element of the error
+    // array of `sgp4(..., errflag=True)` (documented on the class)
+    #[new]
+    fn new(code: i32) -> PyResult<Self> {
+        Ok(match code {
+            0 => Self::success,
+            1 => Self::eccen,
+            2 => Self::mean_motion,
+            3 => Self::perturb_eccen,
+            4 => Self::semi_latus_rectum,
+            5 => Self::unused,
+            6 => Self::orbit_decay,
+            7 => Self::unsupported,
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "{code} is not an sgp4_error code (0 to 7)"
+                )))
+            }
+        })
+    }
+
+    // A member equals its integer code (`eq_int`), so it must hash like it:
+    // PyO3's `hash` option hashes the Rust value instead, which would make
+    // `{0: ...}[sgp4_error.success]` a KeyError although `success == 0`.
+    const fn __hash__(&self) -> isize {
+        *self as isize
+    }
+
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
+        crate::pyutils::enum_reduce(slf.as_any(), "sgp4_error")
+    }
+}
+
+/// `__hash__` and `__reduce__` for an enum pyclass with `eq_int` and no
+/// other `#[pymethods]` block: a member hashes like the integer it equals
+/// (see `PySGP4Error::__hash__`).
+macro_rules! int_enum_methods {
+    ($ty:ty, $path:literal) => {
+        #[pymethods]
+        impl $ty {
+            const fn __hash__(&self) -> isize {
+                *self as isize
+            }
+
+            fn __reduce__<'py>(
+                slf: &Bound<'py, Self>,
+            ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
+                crate::pyutils::enum_reduce(slf.as_any(), $path)
+            }
+        }
+    };
+}
 
 #[allow(non_camel_case_types)]
-/// Gravity constant to use for SGP4 propagation
-#[pyclass(name = "sgp4_gravconst", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+/// Gravity constants (Earth radius, mu, J2-J4) used by SGP4 propagation
+///
+/// Element sets are generated with WGS-72, so ``wgs72`` (the default of
+/// ``satkit.sgp4`` and ``TLE.fit_from_states``) is the one that reproduces
+/// the orbit a TLE or OMM describes.
+///
+/// Members: ``wgs72`` (0), ``wgs72old`` (1: WGS-72 with the older,
+/// lower-precision constants of the original Spacetrack Report #3 code) and
+/// ``wgs84`` (2). Each compares equal to its integer value, and is hashable
+/// and immutable.
+#[pyclass(
+    name = "sgp4_gravconst",
+    module = "satkit",
+    eq,
+    eq_int,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GravConst {
     wgs72 = psgp4::GravConst::WGS72 as isize,
     wgs72old = psgp4::GravConst::WGS72OLD as isize,
     wgs84 = psgp4::GravConst::WGS84 as isize,
 }
 
-crate::enum_pickle!(GravConst, "sgp4_gravconst");
+int_enum_methods!(GravConst, "sgp4_gravconst");
 
 impl From<GravConst> for psgp4::GravConst {
     fn from(f: GravConst) -> Self {
@@ -55,15 +147,30 @@ impl From<GravConst> for psgp4::GravConst {
 }
 
 #[allow(non_camel_case_types)]
-/// Ops Mode for SGP4 Propagation
-#[pyclass(name = "sgp4_opsmode", eq, eq_int, from_py_object)]
-#[derive(Clone, Eq, PartialEq)]
+/// Ops mode for SGP4 propagation
+///
+/// Selects between the two variants of Vallado's SGP4 code. They differ
+/// only for deep-space element sets (period of 225 minutes or more), in how
+/// the ascending node is wrapped in the lunar-solar periodic terms.
+///
+/// Members: ``afspc`` (0: reproduces the Air Force Space Command code that
+/// generates TLEs; the default) and ``improved`` (1). Each compares equal
+/// to its integer value, and is hashable and immutable.
+#[pyclass(
+    name = "sgp4_opsmode",
+    module = "satkit",
+    eq,
+    eq_int,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum OpsMode {
     afspc = psgp4::OpsMode::AFSPC as isize,
     improved = psgp4::OpsMode::IMPROVED as isize,
 }
 
-crate::enum_pickle!(OpsMode, "sgp4_opsmode");
+int_enum_methods!(OpsMode, "sgp4_opsmode");
 
 impl From<OpsMode> for psgp4::OpsMode {
     fn from(f: OpsMode) -> Self {
@@ -107,8 +214,25 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
         // numpy.datetime64 (a UTC label)
         Ok(val.extract::<crate::pyinstant::TimeArg>()?.0)
     } else {
-        bail!("Invalid epoch type");
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "EPOCH must be a str, satkit.time, datetime.datetime or numpy.datetime64, not {}",
+            val.get_type()
+        ))
+        .into())
     }
+}
+
+/// The time argument of `sgp4` / `TLE.fit_from_states`: a single time, or a
+/// list / array of them. A value that is not a time is a `TypeError` (the
+/// shared conversion reports it as `RuntimeError`).
+pub(crate) fn time_input(time: &Bound<'_, PyAny>) -> PyResult<crate::pyinstant::TimeInput> {
+    time.to_time_input().map_err(|e| {
+        if e.is_instance_of::<pyo3::exceptions::PyRuntimeError>(time.py()) {
+            pyo3::exceptions::PyTypeError::new_err(e.value(time.py()).to_string())
+        } else {
+            e
+        }
+    })
 }
 
 /// The integer error code reported, at every time, for an element set that
@@ -217,7 +341,7 @@ fn sgp4_one(
     let crate::pyinstant::TimeInput {
         times: tmvec,
         scalar: time_scalar,
-    } = time.to_time_input()?;
+    } = time_input(time)?;
     let res = py.detach(|| psgp4::sgp4_full(src, tmvec.as_slice(), gravconst, opsmode));
     if !errflag {
         if let Err(e) = res {
@@ -232,10 +356,14 @@ fn sgp4_one(
 }
 
 crate::arg_extractor!(pub(crate) gravconst_arg: GravConst, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid gravconst: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!(
+        "gravconst must be a satkit.sgp4_gravconst: {e}"
+    ))
 });
 crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid opsmode: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!(
+        "opsmode must be a satkit.sgp4_opsmode: {e}"
+    ))
 });
 
 /// SGP-4 propagator for TLE
@@ -246,12 +374,18 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     in the "TEME" coordinate system
 ///
 /// Note:
-///     A detailed description is at:
-///     https://celestrak.org/publications/AIAA/2008-6770/AIAA-2008-6770.pdf
+///     A detailed description is in Vallado, Crawford, Hujsak and Kelso,
+///     "Revisiting Spacetrack Report #3", AIAA 2006-6753 (AIAA/AAS Astrodynamics
+///     Specialist Conference, 2006).
 ///
 /// Args:
-///     tle (TLE | list[TLE] | dict): TLE or OMM dictionary (or list of TLEs) on which to operate
-///     time (time | list[time] | npt.ArrayLike[time]): time(s) at which to compute position and velocity
+///     tle (TLE | dict | list[TLE | dict]): element set(s) to propagate: a ``TLE`` object, an
+///         OMM dictionary (see ``satkit.OMMDict``), or a list of either (or mixing both). Must
+///         be a ``list``; tuples and other sequences are not accepted
+///     time (time | datetime.datetime | numpy.datetime64 | list | numpy.ndarray): time(s) at
+///         which to compute position and velocity: a single time, a list of times, a 1-D
+///         numpy object array of times or a 1-D ``datetime64`` array. A tuple is not accepted.
+///         A naive ``datetime`` is local time, not UTC; a ``numpy.datetime64`` is UTC
 ///
 /// Keyword Args:
 ///     gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is sgp4_gravconst.wgs72
@@ -269,6 +403,29 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     If errflag is True, a third element is returned: an int32 numpy array of error
 ///     codes for each TLE and time (0 = success). The codes are the integer values of
 ///     ``sgp4_error``, so ``err == satkit.sgp4_error.success`` compares elementwise.
+///
+/// Raises:
+///     TypeError: if ``tle`` is not a ``TLE``, a dict or a list of them, ``time`` is not a
+///         time or a list / array of times, or ``gravconst`` / ``opsmode`` is not a member
+///         of its enum
+///     ValueError: if an OMM dictionary lacks a required key or holds a value that cannot
+///         be read
+///     RuntimeError: with ``errflag`` False, if an element set cannot be initialized (see
+///         "Errors" below)
+///
+/// Note:
+///     OMM dictionaries: any dict with the CCSDS keys ``EPOCH``, ``MEAN_MOTION``,
+///     ``ECCENTRICITY``, ``INCLINATION``, ``RA_OF_ASC_NODE``, ``ARG_OF_PERICENTER`` and
+///     ``MEAN_ANOMALY`` (plus optional ``BSTAR``, ``MEAN_MOTION_DOT``, ``MEAN_MOTION_DDOT``)
+///     is accepted, whether it came from ``omm_from_url`` / ``omm_from_file`` /
+///     ``omm_from_text``, from ``json.load`` on a CelesTrak or Space-Track response (numbers
+///     may be strings), or from ``xmltodict.parse`` on the XML form: the whole result (root
+///     key ``omm``, or ``ndm`` holding one ``omm``) or any node below it. ``EPOCH`` may be
+///     an RFC 3339 string, a CCSDS day-of-year string, a ``satkit.time``, a ``datetime``
+///     (naive = local time) or a ``numpy.datetime64`` (UTC). Other keys are ignored, except
+///     that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be ``UTC``,
+///     ``REF_FRAME`` must be ``TEME``, ``CENTER_NAME`` must be ``EARTH`` and
+///     ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
 ///
 /// Note:
 ///     Errors: a time at which propagation fails (e.g. the orbit has decayed) gives a
@@ -354,10 +511,7 @@ pub fn sgp4(
         out
     }
     // Handle input as dict
-    else if tle.is_instance_of::<PyDict>() {
-        let dict: &Bound<'_, PyDict> = tle.cast().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE dictionary: {}", e))
-        })?;
+    else if let Ok(dict) = tle.cast::<PyDict>() {
         let mut omm = omm_from_pydict(dict)?;
         sgp4_one(py, &mut omm, time, gravconst, opsmode, errflag)
     } else if tle.is_instance_of::<PyList>() {
@@ -365,7 +519,7 @@ pub fn sgp4(
         let crate::pyinstant::TimeInput {
             times: tmarray,
             scalar: time_scalar,
-        } = time.to_time_input()?;
+        } = time_input(time)?;
 
         // Sources for the SGP4 computation, extracted with the GIL held;
         // the computation itself runs below with the GIL released.
@@ -379,24 +533,22 @@ pub fn sgp4(
 
         let mut sources: Vec<Sgp4Source> = plist
             .iter()
-            .map(|item| -> Result<Sgp4Source> {
+            .enumerate()
+            .map(|(i, item)| -> PyResult<Sgp4Source> {
                 if let Ok(pytle) = item.cast::<PyTLE>() {
                     let snapshot = Box::new(snapshot_tle(pytle)?);
                     let rtle = snapshot.clone();
                     Ok(Sgp4Source::Tle(pytle.clone().unbind(), rtle, snapshot))
-                } else if item.is_instance_of::<PyDict>() {
-                    let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
-                        pyo3::exceptions::PyValueError::new_err(format!(
-                            "Invalid TLE dictionary: {}",
-                            e
-                        ))
-                    })?;
+                } else if let Ok(dict) = item.cast::<PyDict>() {
                     Ok(Sgp4Source::Omm(Box::new(omm_from_pydict(dict)?)))
                 } else {
-                    bail!("Invalid TLE in list");
+                    Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                        "element {i} of the list must be a TLE or an OMM dict, not {}",
+                        item.get_type()
+                    )))
                 }
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<PyResult<Vec<_>>>()?;
 
         // Honor the gravconst / opsmode kwargs on the list path too (previously
         // this called the default-config `sgp4`, silently ignoring them).
@@ -461,6 +613,10 @@ pub fn sgp4(
         };
         pack_sgp4_result(py, flat, errflag, dims, edims)
     } else {
-        bail!("Invalid input type for argument 1");
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "tle must be a TLE, an OMM dict or a list of them, not {}",
+            tle.get_type()
+        ))
+        .into())
     }
 }

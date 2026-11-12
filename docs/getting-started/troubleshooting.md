@@ -360,7 +360,7 @@ even for one element set. Take the first one:
 ### One bad line in a TLE file loses every element set in it
 
 ```
-RuntimeError: TLE record starting at line 4 (sat 69999 "VANGUARD DEB"): Could not parse day of year: invalid float literal
+ValueError: TLE record starting at line 4 (sat 69999 "VANGUARD DEB"): Could not parse day of year: invalid float literal
 ```
 
 **Cause.** `sk.TLE.from_lines()`, `from_file()` and `from_url()` stop at the
