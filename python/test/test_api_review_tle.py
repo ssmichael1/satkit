@@ -508,12 +508,13 @@ class TestExceptionTypes:
                 load(arg)
             assert exc.value.filename == str(missing)
             assert exc.value.errno == 2
-            assert str(missing) in str(exc.value)
+            assert missing.name in str(exc.value)
             assert "os error" not in str(exc.value)
 
     def test_other_io_errors_are_oserror(self, tmp_path):
         for load in (sk.TLE.from_file, sk.omm_from_file):
-            with pytest.raises(IsADirectoryError) as exc:
+            # IsADirectoryError on POSIX, PermissionError on Windows
+            with pytest.raises(OSError) as exc:
                 load(tmp_path)
             assert exc.value.filename == str(tmp_path)
         binary = tmp_path / "binary.dat"

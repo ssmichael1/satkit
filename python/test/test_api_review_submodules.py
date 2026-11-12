@@ -521,7 +521,7 @@ def _stub_functions():
                 yield fname, prefix + node.name, node
 
     for path in sorted(STUB_DIR.glob("*.pyi")):
-        tree = ast.parse(path.read_text(), filename=str(path))
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         yield from walk(path.name, tree.body, "")
 
 
@@ -746,7 +746,7 @@ class TestStubReturnTypes:
 
     @staticmethod
     def _literal(stub: str, func: str) -> set[str]:
-        tree = ast.parse((STUB_DIR / stub).read_text())
+        tree = ast.parse((STUB_DIR / stub).read_text(encoding="utf-8"))
         fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == func)
         ret = fn.returns
         assert isinstance(ret, ast.Subscript) and ast.unparse(ret.value).endswith("Literal")
@@ -778,7 +778,7 @@ class TestStubReturnTypes:
         assert got <= lit
 
     def test_spaceweather_record_keys(self):
-        tree = ast.parse((STUB_DIR / "spaceweather.pyi").read_text())
+        tree = ast.parse((STUB_DIR / "spaceweather.pyi").read_text(encoding="utf-8"))
         cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "SpaceWeatherRecord")
         keys = [n.target.id for n in cls.body if isinstance(n, ast.AnnAssign)]
         rec = sk.spaceweather.get(T0)
