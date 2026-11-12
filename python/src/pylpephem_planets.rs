@@ -30,6 +30,15 @@ use anyhow::Result;
 ///   TypeError: if time is not a time or a list / array of times
 #[pyfunction]
 pub fn heliocentric_pos(planet: &SolarSystem, time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+    // A body the table does not hold is a bad argument value, not a runtime
+    // failure (the core's `Error::InvalidBody`, which was RuntimeError)
+    if matches!(planet, SolarSystem::Sun | SolarSystem::Moon) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Invalid body: heliocentric_pos supports Mercury through Pluto and the \
+             Earth-Moon barycenter (EMB), not the Sun or the Moon",
+        )
+        .into());
+    }
     pyutils::py_vec3_of_time_result_arr(
         &|t| lpephem::heliocentric_pos(planet.into(), t).map_err(anyhow::Error::from),
         time,

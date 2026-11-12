@@ -1307,7 +1307,7 @@ fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
         let v = obj
             .extract::<numpy::PyReadonlyArray1<Py<PyAny>>>()
             .map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                pyo3::exceptions::PyTypeError::new_err(format!(
                     "Invalid satkit.time, datetime.datetime or numpy.datetime64 input: {e}"
                 ))
             })?;
@@ -1317,14 +1317,18 @@ fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
             .map(|p| p.bind(py).extract::<TimeArg>().map(|t| t.0))
             .collect::<PyResult<Vec<_>>>()
             .map_err(|_| {
-                pyo3::exceptions::PyRuntimeError::new_err(
+                pyo3::exceptions::PyTypeError::new_err(
                     "Invalid satkit.time input: numpy array must have dtype datetime64, \
                      or contain satkit.time, datetime.datetime or numpy.datetime64 elements",
                 )
             })
     } else {
-        Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Invalid satkit.time, datetime.datetime or numpy.datetime64 input",
-        ))
+        // Not a time at all (a float, a string, a float array, ...): the
+        // wrong type, so TypeError (this was RuntimeError)
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "expected a time (satkit.time, datetime.datetime or numpy.datetime64) or a \
+             list, tuple or 1-D numpy array of times, got {}",
+            obj.get_type()
+        )))
     }
 }

@@ -57,7 +57,7 @@ def gmst(tm: TimeScalar) -> float:
 @typing.overload
 def gmst(
     tm: TimeArrayLike,
-) -> list[float]:
+) -> npt.NDArray[np.float64]:
     """Greenwich Mean Sidereal Time
 
     Notes:
@@ -69,7 +69,9 @@ def gmst(
         tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
-        float | npt.ArrayLike[np.float]: Greenwich Mean Sidereal Time, radians, at input time(s)
+        npt.NDArray[np.float64]: Greenwich Mean Sidereal Time, radians, one per input
+        time, as a 1-D array (a list up to 0.24.3). Not normalised to [0, 2π); see the
+        scalar overload
     """
     ...
 
@@ -98,14 +100,15 @@ def eqeq(tm: TimeScalar) -> float:
 @typing.overload
 def eqeq(
     tm: TimeArrayLike,
-) -> list[float]:
+) -> npt.NDArray[np.float64]:
     """Equation of the Equinoxes
 
     Args:
         tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
-        npt.NDArray[np.float64]: Equation of the equinoxes, radians, at input times
+        npt.NDArray[np.float64]: Equation of the equinoxes, radians, one per input
+        time, as a 1-D array (a list up to 0.24.3)
     """
     ...
 
@@ -138,14 +141,15 @@ def gast(
 @typing.overload
 def gast(
     tm: TimeArrayLike,
-) -> list[float]:
+) -> npt.NDArray[np.float64]:
     """Greenwich Apparent Sidereal Time
 
     Args:
         tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
-        npt.ArrayLike[np.float]: Greenwich apparent sidereal time, radians, at input time(s)
+        npt.NDArray[np.float64]: Greenwich apparent sidereal time, radians, one per
+        input time, as a 1-D array (a list up to 0.24.3). Not normalised to [0, 2π)
     """
     ...
 
@@ -179,7 +183,7 @@ def earth_rotation_angle(
 @typing.overload
 def earth_rotation_angle(
     tm: TimeArrayLike,
-) -> list[float]:
+) -> npt.NDArray[np.float64]:
     """Earth Rotation Angle
 
     Notes:
@@ -193,7 +197,8 @@ def earth_rotation_angle(
         tm (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times (satkit.time, datetime.datetime or numpy.datetime64) at which to calculate output
 
     Returns:
-        npt.ArrayLike[np.float]: Earth Rotation Angle at input time[s] in radians
+        npt.NDArray[np.float64]: Earth Rotation Angle, radians, in [0, 2π), one per
+        input time, as a 1-D array (a list up to 0.24.3)
     """
     ...
 

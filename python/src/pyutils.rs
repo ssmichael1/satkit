@@ -309,6 +309,26 @@ pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> Resu
     Ok(m)
 }
 
+/// A float for a scalar time, or a 1-D float64 numpy array for a list /
+/// array of times (the GIL is released over the array)
+pub fn py_f64_of_time_arr(
+    cfunc: fn(&Instant) -> f64,
+    tmarr: &Bound<'_, PyAny>,
+) -> Result<Py<PyAny>> {
+    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
+    let py = tmarr.py();
+    match scalar {
+        true => Ok(cfunc(&tm[0]).into_py_any(py)?),
+        false => {
+            let vals: Vec<f64> = py.detach(|| tm.iter().map(cfunc).collect());
+            Ok(PyArray1::from_vec(py, vals).into_py_any(py)?)
+        }
+    }
+}
+
+/// `cfunc` of a scalar time, or a Python list of its results for a list /
+/// array of times (for results that are not numbers; see
+/// [`py_f64_of_time_arr`] for those)
 pub fn py_func_of_time_arr<'a, T: IntoPyObject<'a> + Send>(
     cfunc: fn(&Instant) -> T,
     tmarr: &Bound<'a, PyAny>,

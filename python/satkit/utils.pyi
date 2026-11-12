@@ -178,7 +178,7 @@ def set_datadir(datadir: str | os.PathLike[str]) -> None:
         datadir (str | os.PathLike): Path to the data directory
 
     Raises:
-        RuntimeError: If the directory does not exist
+        FileNotFoundError: If the path is not an existing directory
     """
     ...
 

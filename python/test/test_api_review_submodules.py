@@ -597,3 +597,195 @@ class TestStubDocstringArgs:
             if sorted(found.get(k, [])) != sorted(v)
         }
         assert not stale, f"entries of KNOWN_ARGS_MISMATCHES to update or delete: {stale}"
+
+
+# ═══════════════ changes of return type and exception type ═══════════════
+
+# ───────────── scalar functions of time return ndarray for arrays ─────────────
+
+FLOAT_OF_TIME = [
+    ("gmst", sk.frametransform.gmst),
+    ("gast", sk.frametransform.gast),
+    ("eqeq", sk.frametransform.eqeq),
+    ("earth_rotation_angle", sk.frametransform.earth_rotation_angle),
+    ("moon.phase", sk.moon.phase),
+    ("moon.illumination", sk.moon.illumination),
+]
+
+
+class TestFloatOfTimeReturnsArray:
+    times = [T0 + sk.duration(hours=7 * i) for i in range(5)]
+
+    @pytest.mark.parametrize("fn", [f for _, f in FLOAT_OF_TIME], ids=[n for n, _ in FLOAT_OF_TIME])
+    def test_scalar_in_float_out(self, fn):
+        for t in (T0, T0.to_datetime(), np.datetime64("2024-03-01T06:00:00")):
+            out = fn(t)
+            assert type(out) is float
+        assert fn(T0) == fn(np.datetime64("2024-03-01T06:00:00"))
+
+    @pytest.mark.parametrize("fn", [f for _, f in FLOAT_OF_TIME], ids=[n for n, _ in FLOAT_OF_TIME])
+    def test_array_in_ndarray_out(self, fn):
+        expect = np.array([fn(t) for t in self.times])
+        d64 = np.array([t.to_datetime().replace(tzinfo=None) for t in self.times], dtype="datetime64[us]")
+        for arg in (self.times, tuple(self.times), np.array(self.times, dtype=object), d64):
+            out = fn(arg)
+            assert isinstance(out, np.ndarray)
+            assert out.dtype == np.float64 and out.shape == (5,)
+            np.testing.assert_array_equal(out, expect)
+        one = fn([T0])
+        assert isinstance(one, np.ndarray) and one.shape == (1,) and one[0] == fn(T0)
+        empty = fn([])
+        assert isinstance(empty, np.ndarray) and empty.shape == (0,) and empty.dtype == np.float64
+
+    def test_ranges_are_not_normalised_for_sidereal_time(self):
+        """gmst / gast keep their sign: negative before J2000 (documented)"""
+        before, after = sk.time(1990, 1, 1), sk.time(2024, 1, 1)
+        g = sk.frametransform.gmst([before, after])
+        assert g[0] == pytest.approx(-4.531136705964937, abs=1e-9)
+        assert g[0] % (2 * math.pi) == pytest.approx(1.7520486012146493, abs=1e-9)
+        assert 0 < g[1] < 2 * math.pi
+        assert sk.frametransform.gast(before) < 0
+        era = sk.frametransform.earth_rotation_angle([before, after])
+        assert np.all((era >= 0) & (era < 2 * math.pi))
+
+    def test_moon_phase_range(self):
+        days = [sk.time(2024, 1, 1) + sk.duration(days=d) for d in range(60)]
+        ph = sk.moon.phase(days)
+        assert np.all((ph >= 0) & (ph < 2 * math.pi))
+        np.testing.assert_allclose(sk.moon.illumination(days), 0.5 * (1 - np.cos(ph)), atol=1e-15)
+        new = sk.moon.next_phase(sk.time(2024, 1, 1), sk.moon.moonphase.NewMoon)
+        full = sk.moon.next_phase(sk.time(2024, 1, 1), sk.moon.moonphase.FullMoon)
+        assert min(sk.moon.phase(new), 2 * math.pi - sk.moon.phase(new)) < 1e-6
+        assert sk.moon.phase(full) == pytest.approx(math.pi, abs=1e-6)
+
+    def test_phase_name_is_still_a_list(self):
+        names = sk.moon.phase_name(self.times)
+        assert isinstance(names, list) and len(names) == 5
+
+
+# ───────────────────────── exception types ─────────────────────────
+
+
+class TestTimeArgumentTypeErrors:
+    """Something that is not a time is a TypeError (it was RuntimeError)."""
+
+    @pytest.mark.parametrize(
+        "bad",
+        [5, 5.0, "2024-01-01", None, np.array([1.0, 2.0]), np.float64(3.0), {"t": 1},
+         np.array([5, "a"], dtype=object)],
+        ids=["int", "float", "str", "None", "floatarray", "npfloat", "dict", "objarray"],
+    )
+    @pytest.mark.parametrize(
+        "call",
+        [
+            sk.frametransform.gmst,
+            sk.frametransform.qitrf2gcrf_approx,
+            sk.sun.pos_gcrf,
+            sk.moon.pos_gcrf,
+            sk.moon.phase,
+            lambda t: sk.planets.heliocentric_pos(sk.solarsystem.Mars, t),
+            lambda t: sk.jplephem.geocentric_pos(sk.solarsystem.Sun, t),
+            lambda t: sk.jplephem.barycentric_state(sk.solarsystem.Sun, t),
+            lambda t: sk.frametransform.rotation(sk.frame.ITRF, sk.frame.GCRF, t),
+            lambda t: sk.frametransform.transform_state(sk.frame.ITRF, sk.frame.GCRF, t, POS, VEL),
+            sk.spaceweather.status,
+            sk.spaceweather.get,
+        ],
+    )
+    def test_not_a_time(self, call, bad):
+        with pytest.raises(TypeError, match="numpy.datetime64"):
+            call(bad)
+
+    def test_value_errors_are_kept(self):
+        """A time of the right type but a bad value is not a TypeError"""
+        with pytest.raises(ValueError, match="NaT"):
+            sk.frametransform.gmst(np.datetime64("NaT", "s"))
+        with pytest.raises(ValueError, match="1-D"):
+            sk.frametransform.gmst(np.zeros((2, 2), dtype="datetime64[s]"))
+
+
+class TestSubmoduleExceptionTypes:
+    @pytest.mark.parametrize("body", [sk.solarsystem.Sun, sk.solarsystem.Moon])
+    def test_planets_invalid_body(self, body):
+        for t in (T0, [T0, T0]):
+            with pytest.raises(ValueError, match="Invalid body"):
+                sk.planets.heliocentric_pos(body, t)
+
+    def test_planets_time_out_of_range_is_runtime(self):
+        with pytest.raises(RuntimeError, match="Time out of range"):
+            sk.planets.heliocentric_pos(sk.solarsystem.Mars, sk.time(3500, 1, 1))
+        assert sk.planets.heliocentric_pos(sk.solarsystem.EMB, T0).shape == (3,)
+
+    def test_jplephem_outside_span_is_runtime(self):
+        """Documented: a time outside the loaded DE file's span is RuntimeError"""
+        for fn in (sk.jplephem.geocentric_pos, sk.jplephem.barycentric_pos,
+                   sk.jplephem.geocentric_state, sk.jplephem.barycentric_state):
+            with pytest.raises(RuntimeError, match="Invalid Julian date"):
+                fn(sk.solarsystem.Moon, sk.time(3000, 1, 1))
+
+    def test_set_datadir_missing(self, tmp_path):
+        missing = tmp_path / "no" / "such" / "dir"
+        for arg in (missing, str(missing)):
+            with pytest.raises(FileNotFoundError, match="does not exist") as e:
+                sk.utils.set_datadir(arg)
+            assert str(missing) in str(e.value)
+            assert isinstance(e.value, OSError)
+        # a file is not a directory either
+        f = tmp_path / "file.txt"
+        f.write_text("x")
+        with pytest.raises(FileNotFoundError):
+            sk.utils.set_datadir(f)
+
+
+# ───────────────────────── stub return types ─────────────────────────
+
+
+class TestStubReturnTypes:
+    """The fixed sets of strings the stubs declare as Literal are the sets
+    the functions can return (read from the stub, compared with the binding)."""
+
+    @staticmethod
+    def _literal(stub: str, func: str) -> set[str]:
+        tree = ast.parse((STUB_DIR / stub).read_text())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == func)
+        ret = fn.returns
+        assert isinstance(ret, ast.Subscript) and ast.unparse(ret.value).endswith("Literal")
+        return {c.value for c in ast.walk(ret.slice) if isinstance(c, ast.Constant)}
+
+    def test_eop_status(self):
+        lit = self._literal("frametransform.pyi", "eop_status")
+        assert lit == {"observed", "predicted", "extrapolated", "before_table", "not_loaded"}
+        first, last_obs, last = sk.frametransform.eop_coverage()
+        got = {
+            sk.frametransform.eop_status(t)
+            for t in (first - sk.duration(days=10), first, last_obs, last, last + sk.duration(days=10))
+        }
+        assert got == {"before_table", "observed", "predicted", "extrapolated"}
+        assert got <= lit
+
+    def test_spaceweather_status(self):
+        lit = self._literal("spaceweather.pyi", "status")
+        assert lit == {
+            "observed", "predicted_daily", "predicted_monthly", "extrapolated",
+            "before_table", "not_loaded",
+        }
+        first, last_obs, last_daily, last = sk.spaceweather.coverage()
+        got = {
+            sk.spaceweather.status(t)
+            for t in (first - sk.duration(days=10), last_obs, last + sk.duration(days=40))
+        }
+        assert got == {"before_table", "observed", "extrapolated"}
+        assert got <= lit
+
+    def test_spaceweather_record_keys(self):
+        tree = ast.parse((STUB_DIR / "spaceweather.pyi").read_text())
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "SpaceWeatherRecord")
+        keys = [n.target.id for n in cls.body if isinstance(n, ast.AnnAssign)]
+        rec = sk.spaceweather.get(T0)
+        assert list(rec) == keys and len(keys) == 17
+        assert isinstance(rec["date"], sk.time)
+        assert len(rec["kp"]) == len(rec["ap"]) == 8
+        # kp_sum is the sum of the x10 Kp values, to rounding of the thirds
+        assert abs(rec["kp_sum"] - sum(rec["kp"])) <= 8
+        assert sk.spaceweather.get(sk.time(1940, 1, 1))["f10p7_obs"] == -1.0
+        assert not hasattr(sk.spaceweather, "SpaceWeatherRecord")  # type-check only

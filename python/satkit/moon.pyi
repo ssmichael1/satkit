@@ -193,15 +193,17 @@ def illumination(time: TimeScalar) -> float:
     ...
 
 @typing.overload
-def illumination(time: TimeArrayLike) -> list[float]:
+def illumination(time: TimeArrayLike) -> npt.NDArray[np.float64]:
     """
     Fractional illumination of moon
 
     Args:
-        time (TimeArrayLike): list or numpy array of times at which to compute illumination
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times
+            (satkit.time, datetime.datetime or numpy.datetime64) at which to compute illumination
 
     Returns:
-        list[float]: fractional illumination of moon at each given time, unitless, range 0.0 to 1.0
+        npt.NDArray[np.float64]: fractional illumination of moon at each given time, unitless,
+        range 0.0 to 1.0, as a 1-D array (a list up to 0.24.3)
     """
     ...
 
@@ -224,15 +226,19 @@ def phase(time: TimeScalar) -> float:
     ...
 
 @typing.overload
-def phase(time: TimeArrayLike) -> list[float]:
+def phase(time: TimeArrayLike) -> npt.NDArray[np.float64]:
     """
     Phase of moon in radians
 
+    In [0, 2π), 0 at New Moon and π at Full Moon; see the scalar overload.
+
     Args:
-        time (TimeArrayLike): list or numpy array of times at which to compute phase
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times
+            (satkit.time, datetime.datetime or numpy.datetime64) at which to compute phase
 
     Returns:
-        list[float]: moon phase in radians at each given time
+        npt.NDArray[np.float64]: moon phase in radians at each given time, as a 1-D
+        array (a list up to 0.24.3)
     """
     ...
 
@@ -255,7 +261,8 @@ def phase_name(time: TimeArrayLike) -> list[moonphase]:
     Phase name of moon
 
     Args:
-        time (TimeArrayLike): list or numpy array of times at which to compute phase name
+        time (list | tuple | numpy.ndarray): list, tuple or 1-D numpy array of times
+            (satkit.time, datetime.datetime or numpy.datetime64) at which to compute phase name
 
     Returns:
         list[moonphase]: moon phase name at each given time

@@ -108,10 +108,10 @@ pub fn pos_mod(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
 ///     time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute phase
 ///
 /// Returns:
-///     float|numpy.ndarray: scalar or numpy array representing moon phase at input time[s].  Units are radians, in [0, 2π)
+///     float|numpy.ndarray: moon phase in radians, in [0, 2π): a float for a single time, a 1-D float64 array for a list / array of times
 #[pyfunction]
 pub fn phase(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
-    pyutils::py_func_of_time_arr(moon::phase, time)
+    pyutils::py_f64_of_time_arr(moon::phase, time)
 }
 
 /// Moon phase name
@@ -132,10 +132,10 @@ pub fn phase_name(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
 ///    time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute illumination
 ///
 /// Returns:
-///    float|numpy.ndarray: scalar or numpy array representing fraction of moon illuminated at input time[s].  Range is 0.0 to 1.0
+///    float|numpy.ndarray: fraction of moon illuminated, 0.0 to 1.0: a float for a single time, a 1-D float64 array for a list / array of times
 #[pyfunction]
 pub fn illumination(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
-    pyutils::py_func_of_time_arr(moon::illumination, time)
+    pyutils::py_f64_of_time_arr(moon::illumination, time)
 }
 
 /// Moonrise and moonset times on a calendar date at the given location.

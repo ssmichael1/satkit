@@ -20,12 +20,13 @@ use anyhow::{bail, Result};
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GMST
 ///
 /// Returns:
-///     float|numpy.array: GMST at input time[s] in radians. Not normalised to
+///     float|numpy.ndarray: GMST in radians: a float for a single time, a 1-D
+///     float64 array for a list / array of times. Not normalised to
 ///     [0, 2π): the value lies in (-2π, 2π) and is negative for most epochs
 ///     before J2000; use ``gmst(t) % (2 * math.pi)`` for an angle in [0, 2π)
 #[pyfunction]
 pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::gmst, tm)
+    py_f64_of_time_arr(ft::gmst, tm)
 }
 
 /// Equation of the Equinoxes
@@ -43,10 +44,11 @@ pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate output
 ///
 /// Returns:
-///     float|numpy.array: Equation of the equinoxes at input time[s] in radians
+///     float|numpy.ndarray: Equation of the equinoxes in radians: a float for a
+///     single time, a 1-D float64 array for a list / array of times
 #[pyfunction]
 pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::eqeq, tm)
+    py_f64_of_time_arr(ft::eqeq, tm)
 }
 
 /// Greenwich apparent sidereal time, radians
@@ -59,11 +61,12 @@ pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GAST
 ///
 /// Returns:
-///     float|numpy.array: GAST at input time[s] in radians. Like ``gmst`` it is
+///     float|numpy.ndarray: GAST in radians: a float for a single time, a 1-D
+///     float64 array for a list / array of times. Like ``gmst`` it is
 ///     not normalised to [0, 2π): it is negative for most epochs before J2000
 #[pyfunction]
 pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::gast, tm)
+    py_f64_of_time_arr(ft::gast, tm)
 }
 
 /// Earth Rotation Angle
@@ -76,7 +79,8 @@ pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate Earth Rotation Angle
 ///
 /// Returns:
-///     float|numpy.array: Earth Rotation Angle at input time[s] in radians, in [0, 2π)
+///     float|numpy.ndarray: Earth Rotation Angle in radians, in [0, 2π): a float
+///     for a single time, a 1-D float64 array for a list / array of times
 ///
 /// Calculation Details
 ///
@@ -86,7 +90,7 @@ pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///
 #[pyfunction]
 pub fn earth_rotation_angle(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::earth_rotation_angle, tm)
+    py_f64_of_time_arr(ft::earth_rotation_angle, tm)
 }
 
 /// Rotation from International Terrestrial Reference Frame (ITRF) to the Terrestrial Intermediate Reference System (TIRS)

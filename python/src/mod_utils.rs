@@ -177,10 +177,19 @@ fn is_offline() -> bool {
 ///   None
 ///
 /// Raises:
-///  RuntimeError: If the directory does not exist
+///  FileNotFoundError: If the path is not an existing directory
 ///
 #[pyfunction]
 fn set_datadir(datadir: PathBuf) -> Result<()> {
+    // Checked here for an OSError subclass carrying the path (the core's
+    // "Data directory does not exist" was a RuntimeError without it)
+    if !datadir.is_dir() {
+        return Err(pyo3::exceptions::PyFileNotFoundError::new_err(format!(
+            "Data directory does not exist: {}",
+            datadir.display()
+        ))
+        .into());
+    }
     Ok(satkit::utils::set_datadir(&datadir)?)
 }
 
