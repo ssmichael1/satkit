@@ -73,10 +73,27 @@ pub fn time_or_deprecated_tm<'a, 'py>(
         (Some(_), Some(_)) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
             "{func}() got both 'time' and its deprecated alias 'tm'"
         ))),
+        // Also an explicit `time=None`, which the signature cannot tell apart
         (None, None) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
-            "{func}() missing required argument: 'time'"
+            "{func}() missing required argument: 'time' (a satkit.time, datetime.datetime \
+             or numpy.datetime64, or a list / array of them where accepted)"
         ))),
     }
+}
+
+/// An argument that the signature must declare optional only because it
+/// follows the optional `time` of [`time_or_deprecated_tm`]: missing (or
+/// None) is the `TypeError` a missing required argument has always been.
+pub fn required_arg<'a, 'py>(
+    func: &str,
+    name: &str,
+    arg: Option<&'a Bound<'py, PyAny>>,
+) -> PyResult<&'a Bound<'py, PyAny>> {
+    arg.ok_or_else(|| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "{func}() missing required argument: '{name}'"
+        ))
+    })
 }
 
 /// Convert any real numeric array-like (a numpy array of any integer or

@@ -148,7 +148,7 @@ pTEME, _vTEME = sk.sgp4(starlink30477, thetime)
 
 # Rotate to Earth-fixed (ITRF) and get geodetic coordinates
 pITRF = sk.frametransform.rotation(
-    from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, tm=thetime,
+    from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, time=thetime,
 ) * pTEME
 coord = sk.itrfcoord(pITRF)
 print(coord)

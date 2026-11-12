@@ -4,10 +4,13 @@ module, ``TimeScalar`` for the frametransform EOP queries, ``to_gcrf`` /
 ``init_from_path`` loaders, ``jplephem.constants`` and the ``tm`` -> ``time``
 parameter rename."""
 
+import ast
 import datetime
+import inspect
 import pathlib
 import subprocess
 import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -256,3 +259,125 @@ def test_jplephem_constants():
 def test_stub_files_exist():
     stub_dir = pathlib.Path(sk.__file__).parent
     assert (stub_dir / "eop.pyi").is_file()
+
+
+# ───────────────────────── tm -> time (deprecated alias) ─────────────────────────
+
+ft = sk.frametransform
+_P = np.array([7.0e6, 0.0, 0.0])
+_V = np.array([0.0, 7.5e3, 0.0])
+_FR = (sk.frame.ITRF, sk.frame.GCRF)
+
+# name -> (function, positional arguments before the time, keyword arguments after it)
+RENAMED = {
+    **{
+        f"frametransform.{n}": (getattr(ft, n), (), {})
+        for n in (
+            "gmst", "eqeq", "gast", "earth_rotation_angle", "qitrf2tirs", "qtirs2cirs",
+            "qcirs2gcrf", "qitrf2gcrf", "qgcrf2itrf", "qgcrf2itrf_approx",
+            "qitrf2gcrf_approx", "qteme2itrf", "qteme2gcrf", "qmod2gcrf",
+            "qtod2mod_approx", "eop_status",
+        )
+    },
+    "frametransform.rotation": (ft.rotation, _FR, {}),
+    "frametransform.rotation_approx": (ft.rotation_approx, _FR, {}),
+    **{
+        f"frametransform.{n}": (getattr(ft, n), _FR, {"pos": _P, "vel": _V})
+        for n in ("rotation_with_state", "transform_state", "transform_state_approx")
+    },
+    **{
+        f"jplephem.{n}": (getattr(sk.jplephem, n), (sk.solarsystem.Sun,), {})
+        for n in ("geocentric_pos", "geocentric_state", "barycentric_pos", "barycentric_state")
+    },
+}
+
+
+def _same(a, b):
+    if isinstance(a, tuple):
+        assert len(a) == len(b)
+        for x, y in zip(a, b):
+            _same(x, y)
+    elif isinstance(a, sk.quaternion):
+        v = np.array([1.0, 2.0, 3.0])
+        np.testing.assert_array_equal(a * v, b * v)
+    elif isinstance(a, np.ndarray):
+        np.testing.assert_array_equal(a, b)
+    else:
+        assert a == b
+
+
+@pytest.mark.parametrize("name", sorted(RENAMED))
+class TestTmRenamedToTime:
+    def test_signature(self, name):
+        f, _, _ = RENAMED[name]
+        params = inspect.signature(f).parameters
+        assert "time" in params
+        assert params["tm"].kind is inspect.Parameter.KEYWORD_ONLY
+
+    def test_positional_and_time_keyword_do_not_warn(self, name):
+        f, pre, post = RENAMED[name]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            a = f(*pre, T, **post)
+            b = f(*pre, time=T, **post)
+        _same(a, b)
+
+    def test_tm_keyword_warns_and_works(self, name):
+        f, pre, post = RENAMED[name]
+        with pytest.warns(DeprecationWarning, match="'tm' is deprecated; use 'time'"):
+            c = f(*pre, tm=T, **post)
+        _same(c, f(*pre, T, **post))
+
+    def test_both_is_type_error(self, name):
+        f, pre, post = RENAMED[name]
+        with pytest.raises(TypeError, match="both 'time' and its deprecated alias 'tm'"):
+            f(*pre, time=T, tm=T, **post)
+        with pytest.raises(TypeError, match="both"):
+            f(*pre, T, tm=T, **post)
+
+    def test_missing_is_type_error(self, name):
+        f, pre, post = RENAMED[name]
+        with pytest.raises(TypeError, match="missing required argument: 'time'"):
+            f(*pre, **post)
+
+    def test_docstring_names_time(self, name):
+        f, _, _ = RENAMED[name]
+        assert "tm (" not in f.__doc__
+        assert "time (" in f.__doc__
+
+
+@pytest.mark.parametrize("name", ["rotation_with_state", "transform_state", "transform_state_approx"])
+def test_state_functions_still_require_pos_vel(name):
+    f = getattr(ft, name)
+    with pytest.raises(TypeError, match="missing required argument: 'pos'"):
+        f(*_FR, T)
+    with pytest.raises(TypeError, match="missing required argument: 'vel'"):
+        f(*_FR, T, _P)
+
+
+def test_time_list_by_keyword():
+    ts = [T, T + sk.duration.from_hours(1)]
+    np.testing.assert_array_equal(ft.gmst(time=ts), ft.gmst(ts))
+    with pytest.warns(DeprecationWarning):
+        np.testing.assert_array_equal(ft.gmst(tm=ts), ft.gmst(ts))
+
+
+@pytest.mark.parametrize("stub, expected", [("frametransform.pyi", 21), ("jplephem.pyi", 4)])
+def test_stub_tm_only_in_deprecated_overloads(stub, expected):
+    path = pathlib.Path(sk.__file__).parent / stub
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    seen = 0
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        a = node.args
+        names = [x.arg for x in a.posonlyargs + a.args + a.kwonlyargs]
+        if "tm" not in names:
+            continue
+        seen += 1
+        assert any(
+            isinstance(d, ast.Call) and getattr(d.func, "id", "") == "deprecated"
+            for d in node.decorator_list
+        ), f"{stub}: {node.name} has a non-deprecated 'tm'"
+        assert a.kwonlyargs[0].arg == "tm" and "time" not in names
+    assert seen == expected
