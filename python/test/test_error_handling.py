@@ -15,7 +15,7 @@ class TestInvalidInputRaises:
     def test_propagate_wrong_size_state(self):
         t0 = sk.time(2015, 3, 20)
         t1 = t0 + sk.duration.from_minutes(30)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.propagate(np.zeros(5), t0, t1)
 
     def test_kepler_from_pv_wrong_sizes(self):

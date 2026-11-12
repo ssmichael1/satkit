@@ -16,23 +16,62 @@ use pyo3::prelude::*;
 
 use anyhow::Result;
 
+// An argument of the wrong type is a `TypeError` (these were `ValueError`
+// when the keywords were parsed by hand)
 crate::arg_extractor!(begin_arg: Option<TimeArg>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!("Invalid begin time: {e}"))
 });
 crate::arg_extractor!(end_arg: Option<TimeArg>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!("Invalid end time: {e}"))
 });
 crate::arg_extractor!(duration_arg: Option<PyDuration>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!("duration must be a satkit.duration: {e}"))
 });
 crate::arg_extractor!(duration_secs_arg: Option<f64>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_secs: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!("duration_secs must be a number: {e}"))
 });
 crate::arg_extractor!(duration_days_arg: Option<f64>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid duration_days: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!("duration_days must be a number: {e}"))
 });
-crate::arg_extractor!(output_phi_arg: bool, |_| invalid_value("output_phi"));
-crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |_| invalid_value("propsettings"));
+crate::arg_extractor!(output_phi_arg: bool, |e| {
+    pyo3::exceptions::PyTypeError::new_err(format!("output_phi must be a bool: {e}"))
+});
+crate::arg_extractor!(pub(crate) propsettings_arg: Option<PyPropSettings>, |e| {
+    pyo3::exceptions::PyTypeError::new_err(format!(
+        "propsettings must be a satkit.propsettings: {e}"
+    ))
+});
+
+/// The 6-element state from any real numeric array-like: `TypeError` if it
+/// is not numeric, `ValueError` if it does not have 6 elements
+fn state6(obj: &Bound<'_, PyAny>) -> PyResult<Vector6> {
+    use numpy::PyArrayMethods;
+    let arr = to_f64_ndarray(obj)?;
+    let ro = arr.readonly();
+    let a = ro.as_array();
+    if !matches!(a.shape(), [6] | [6, 1] | [1, 6]) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "state must be a 6-element vector (GCRF position and velocity), got shape {:?}",
+            a.shape()
+        )));
+    }
+    let mut v = Vector6::zeros();
+    for (dst, src) in v.as_mut_slice().iter_mut().zip(a.iter()) {
+        *dst = *src;
+    }
+    Ok(v)
+}
+
+/// A position at the Earth's centre has no defined gravity: the integrator
+/// used to fail on it with "step error is not finite"
+pub(crate) fn check_position(pos: &[f64]) -> PyResult<()> {
+    if pos.iter().all(|x| *x == 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "cannot propagate a state whose position is all zeros",
+        ));
+    }
+    Ok(())
+}
 
 /// High-precision orbit propagator
 ///
@@ -155,22 +194,23 @@ pub fn propagate(
     };
 
     let mut state0 = match state {
-        Some(s) => py_to_smatrix(s)?,
+        Some(s) => state6(s)?,
         None => Vector6::zeros(),
     };
     // `pos=` / `vel=` overwrite the corresponding half of `state`
     if let Some(p) = pos {
-        let p = py_to_smatrix::<3, 1>(p)?;
+        let p = to_vector3(p, "pos")?;
         state0[0] = p[0];
         state0[1] = p[1];
         state0[2] = p[2];
     }
     if let Some(v) = vel {
-        let v = py_to_smatrix::<3, 1>(v)?;
+        let v = to_vector3(v, "vel")?;
         state0[3] = v[0];
         state0[4] = v[1];
         state0[5] = v[2];
     }
+    check_position(&state0.as_slice()[0..3])?;
 
     // Without any of these the end time used to be `Instant::INVALID`, which
     // surfaced as an obscure "Precomputed table would need N entries" error

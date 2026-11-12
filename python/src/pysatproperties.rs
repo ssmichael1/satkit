@@ -2,22 +2,40 @@ use satkit::orbitprop::SatPropertiesSimple;
 
 use crate::pyecom::{ecom_from_block, encode_ecom_block, PyEcomParams, ECOM_BLOCK_LEN};
 use crate::pythrust::{py_thrusts_to_profile, PyThrust};
-use crate::pyutils::invalid_value;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
 
-crate::arg_extractor!(cdaoverm_arg: f64, |_| invalid_value("cdaoverm"));
-crate::arg_extractor!(craoverm_arg: f64, |_| invalid_value("craoverm"));
+// An argument of the wrong type is a `TypeError` (these were `ValueError`,
+// or `RuntimeError` for `ecom`, when the keywords were parsed by hand)
+crate::arg_extractor!(cdaoverm_arg: f64, |e| {
+    pyo3::exceptions::PyTypeError::new_err(format!("cdaoverm must be a number: {e}"))
+});
+crate::arg_extractor!(craoverm_arg: f64, |e| {
+    pyo3::exceptions::PyTypeError::new_err(format!("craoverm must be a number: {e}"))
+});
 crate::arg_extractor!(ecom_arg: Option<PyEcomParams>, |e| {
-    pyo3::exceptions::PyRuntimeError::new_err(format!("ecom must be a satkit.ecomparams: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!("ecom must be a satkit.ecomparams: {e}"))
 });
 // `satproperties=` of `propagate` and `satstate.propagate`
 crate::arg_extractor!(pub(crate) satproperties_arg: Option<PySatProperties>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid satproperties: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!(
+        "satproperties must be a satkit.satproperties: {e}"
+    ))
 });
+
+/// Cd A / m scales the drag deceleration; a negative one would accelerate
+/// the satellite along its velocity
+fn check_cdaoverm(v: f64) -> PyResult<f64> {
+    if v.is_nan() || v < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "cdaoverm must not be negative or NaN, got {v}"
+        )));
+    }
+    Ok(v)
+}
 
 /// Satellite properties relevant for drag, radiation pressure, and thrust
 ///
@@ -87,7 +105,7 @@ impl PySatProperties {
                 if args.len() == 1 { "" } else { "s" }
             )));
         }
-        let mut props = SatPropertiesSimple::new(cdaoverm, craoverm);
+        let mut props = SatPropertiesSimple::new(check_cdaoverm(cdaoverm)?, craoverm);
         if let Some(thrusts) = thrusts {
             props = props.with_thrust(py_thrusts_to_profile(thrusts));
         }
@@ -129,8 +147,9 @@ impl PySatProperties {
     /// Args:
     ///     cdaoverm (float): Cd A / m (m^2/kg); ``ValueError`` if negative or NaN
     #[setter]
-    fn set_cdaoverm(&mut self, cdaoverm: f64) {
-        self.0.cdaoverm = cdaoverm;
+    fn set_cdaoverm(&mut self, cdaoverm: f64) -> PyResult<()> {
+        self.0.cdaoverm = check_cdaoverm(cdaoverm)?;
+        Ok(())
     }
 
     /// The continuous thrust arcs

@@ -506,7 +506,7 @@ class TestThrustPickle:
             th = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=frm)
             restored = pickle.loads(pickle.dumps(th))
             assert restored.frame == frm
-            assert restored.accel == [
+            assert list(restored.accel) == [
                 pytest.approx(1e-4),
                 pytest.approx(2e-4),
                 pytest.approx(3e-4),
@@ -545,9 +545,9 @@ class TestSatPropertiesPickle:
         assert len(restored.thrusts) == 4
         # All four frames must round-trip (NTW/LVLH used to become GCRF).
         assert restored.thrusts[0].frame == sk.frame.RTN
-        assert restored.thrusts[0].accel == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
+        assert list(restored.thrusts[0].accel) == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
         assert restored.thrusts[1].frame == sk.frame.GCRF
-        assert restored.thrusts[1].accel == [pytest.approx(0), pytest.approx(0), pytest.approx(5e-3)]
+        assert list(restored.thrusts[1].accel) == [pytest.approx(0), pytest.approx(0), pytest.approx(5e-3)]
         assert restored.thrusts[2].frame == sk.frame.NTW
         assert restored.thrusts[3].frame == sk.frame.LVLH
 
@@ -595,7 +595,7 @@ class TestThrust:
         thrust = sk.thrust.constant([1e-4, 2e-4, 3e-4], t0, t1, frame=sk.frame.RTN)
 
         assert thrust.frame == sk.frame.RTN
-        assert thrust.accel == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
+        assert list(thrust.accel) == [pytest.approx(1e-4), pytest.approx(2e-4), pytest.approx(3e-4)]
 
     def test_multiple_thrust_arcs(self):
         """Test multiple thrust arcs"""

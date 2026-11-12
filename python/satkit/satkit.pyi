@@ -4203,8 +4203,8 @@ class thrust:
         ...
 
     @property
-    def accel(self) -> list[float]:
-        """Acceleration vector in ``frame`` [m/s^2]"""
+    def accel(self) -> npt.NDArray[np.float64]:
+        """Acceleration vector in ``frame`` [m/s^2]: a new 3-element numpy array on each access"""
         ...
 
     @property

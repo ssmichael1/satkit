@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 
 use crate::pyframes::PyFrame;
 use crate::pyinstant::{PyInstant, TimeArg};
-use crate::pyutils::py_to_smatrix;
+use crate::pyutils::{slice2py1d, to_vector3};
 
 use satkit::mathtypes::*;
 use satkit::orbitprop::{ContinuousThrust, ThrustProfile};
@@ -54,8 +54,9 @@ impl PyThrust {
         end: TimeArg,
         frame: PyFrame,
     ) -> Result<Self> {
-        let accel_vec: Vector3 = py_to_smatrix(accel)?;
+        let accel_vec: Vector3 = to_vector3(accel, "accel")?;
         let rust_frame: Frame = frame.into();
+        crate::pysatstate::check_local_frame(rust_frame, "thrust")?;
         if accel_vec.as_slice().iter().any(|a| !a.is_finite()) {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "thrust acceleration must be finite (no NaN or infinity)",
@@ -71,7 +72,6 @@ impl PyThrust {
             ))
             .into());
         }
-        // Frame validation happens in ContinuousThrust::new.
         Ok(Self(ContinuousThrust::new(
             accel_vec, rust_frame, start.0, end.0,
         )?))
@@ -83,8 +83,8 @@ impl PyThrust {
     ///     numpy.ndarray: 3-element acceleration vector in ``frame`` [m/s^2]
     ///     (a new array on each access)
     #[getter]
-    fn get_accel(&self) -> [f64; 3] {
-        [self.0.accel[0], self.0.accel[1], self.0.accel[2]]
+    fn get_accel(&self, py: Python) -> PyResult<Py<PyAny>> {
+        slice2py1d(py, self.0.accel.as_slice())
     }
 
     /// Coordinate frame of the acceleration vector

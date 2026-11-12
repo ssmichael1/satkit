@@ -188,21 +188,34 @@ fn check_gravity_degree(val: u16) -> PyResult<u16> {
     Ok(val)
 }
 
+// `TypeError`, as the property setters raise for the same mistake (the
+// constructor used to raise `ValueError`)
 crate::arg_extractor!(gravity_model_arg: GravModel, |_| {
-    pyo3::exceptions::PyValueError::new_err(
+    pyo3::exceptions::PyTypeError::new_err(
         "gravity_model must be a satkit.gravmodel enum value (e.g. satkit.gravmodel.egm96)",
     )
 });
 crate::arg_extractor!(integrator_arg: PyIntegrator, |_| {
-    pyo3::exceptions::PyValueError::new_err(
+    pyo3::exceptions::PyTypeError::new_err(
         "integrator must be a satkit.integrator enum value (e.g. satkit.integrator.rkv98)",
     )
 });
 crate::arg_extractor!(tide_model_arg: PyTideModel, |_| {
-    pyo3::exceptions::PyValueError::new_err(
+    pyo3::exceptions::PyTypeError::new_err(
         "tide_model must be a satkit.tidemodel enum value (e.g. satkit.tidemodel.solid_step1)",
     )
 });
+
+/// An error tolerance is a magnitude: negative or NaN is refused (zero is
+/// allowed, leaving the other tolerance in control)
+fn check_tolerance(name: &str, val: f64) -> PyResult<f64> {
+    if val.is_nan() || val < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} must not be negative or NaN, got {val}"
+        )));
+    }
+    Ok(val)
+}
 
 #[pymethods]
 impl PyPropSettings {
@@ -247,8 +260,8 @@ impl PyPropSettings {
     ) -> PyResult<Self> {
         let order_follows_degree = gravity_order.is_none();
         let mut ps = PropSettings::default();
-        ps.abs_error = abs_error;
-        ps.rel_error = rel_error;
+        ps.abs_error = check_tolerance("abs_error", abs_error)?;
+        ps.rel_error = check_tolerance("rel_error", rel_error)?;
         ps.gravity_degree = check_gravity_degree(gravity_degree)?;
         // The order defaults to the degree; a larger one is refused, as by
         // the setter (it used to be clamped silently)
@@ -286,7 +299,7 @@ impl PyPropSettings {
 
     #[setter(abs_error)]
     fn set_abs_error(&mut self, val: f64) -> PyResult<()> {
-        self.0.abs_error = val;
+        self.0.abs_error = check_tolerance("abs_error", val)?;
         Ok(())
     }
 
@@ -298,7 +311,7 @@ impl PyPropSettings {
 
     #[setter(rel_error)]
     fn set_rel_error(&mut self, val: f64) -> PyResult<()> {
-        self.0.rel_error = val;
+        self.0.rel_error = check_tolerance("rel_error", val)?;
         Ok(())
     }
 
@@ -634,6 +647,10 @@ impl PyPropSettings {
             None => self.0.precompute_terms(&begin.0, &end.0),
         };
         match result {
+            // A bad step is a bad argument value, not a runtime failure
+            Err(e @ satkit::orbitprop::Error::InvalidPrecomputeStep { .. }) => {
+                Err(pyo3::exceptions::PyValueError::new_err(e.to_string()))
+            }
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
             Ok(_) => Ok(()),
         }

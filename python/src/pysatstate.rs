@@ -17,19 +17,13 @@ use satkit::mathtypes::*;
 use satkit::orbitprop::{ImpulsiveManeuver, SatState, StateCov};
 use satkit::{Frame, Instant};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 /// A 3-vector from any real numeric array-like (numpy array of any numeric
-/// dtype, list, tuple); `what` names it in the error message. A wrong length
-/// is still the `RuntimeError` it was when only float64 arrays were accepted.
+/// dtype, list, tuple); `what` names it in the error message. `TypeError` if
+/// it is not numeric, `ValueError` for a wrong length.
 fn vec3(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vector3> {
-    crate::pyutils::to_vector3(obj, what).map_err(|e| {
-        if e.is_instance_of::<pyo3::exceptions::PyValueError>(obj.py()) {
-            pyo3::exceptions::PyRuntimeError::new_err(e.value(obj.py()).to_string())
-        } else {
-            e
-        }
-    })
+    crate::pyutils::to_vector3(obj, what)
 }
 
 /// A 6x6 state covariance from any real numeric array-like (element by
@@ -38,10 +32,11 @@ fn vec3(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vector3> {
 fn cov6(cov: &Bound<'_, PyAny>) -> Result<Matrix6> {
     let arr = crate::pyutils::to_f64_ndarray(cov)?;
     if arr.shape() != [6, 6] {
-        bail!(
-            "Covariance must be a 6x6 matrix, got shape {:?}",
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "covariance must be a 6x6 matrix, got shape {:?}",
             arr.shape()
-        );
+        ))
+        .into());
     }
     let m = crate::pyutils::py_to_smatrix::<6, 6>(arr.as_any())?;
     check_symmetric(&m)?;
@@ -68,21 +63,20 @@ fn check_symmetric(m: &Matrix6) -> PyResult<()> {
     Ok(())
 }
 
-/// Maneuvers are resolved in the satellite-local frames or GCRF only
-fn check_maneuver_frame(frame: Frame) -> PyResult<()> {
+/// Maneuvers, thrust and uncertainties (`what`) are resolved in the
+/// satellite-local frames or GCRF only
+pub(crate) fn check_local_frame(frame: Frame, what: &str) -> PyResult<()> {
     match frame {
         Frame::GCRF | Frame::RTN | Frame::NTW | Frame::LVLH => Ok(()),
         Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME | Frame::EME2000 | Frame::ICRF => {
             Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "unsupported frame for maneuver: {frame}. Must be GCRF, RTN (RIC), NTW, or LVLH"
+                "unsupported frame for {what}: {frame}. Must be GCRF, RTN (RIC), NTW, or LVLH"
             )))
         }
     }
 }
 
-crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid propsettings: {e}"))
-});
+use crate::pypropagate::propsettings_arg;
 
 /// Satellite state: GCRF position, velocity, optional covariance, and maneuvers
 ///
@@ -160,7 +154,9 @@ impl PySatState {
     ///     TypeError: if sigma is not a real numeric array-like
     fn set_pos_uncertainty(&mut self, sigma: &Bound<'_, PyAny>, frame: PyFrame) -> Result<()> {
         let sigma = vec3(sigma, "position uncertainty")?;
-        self.0.set_pos_uncertainty(&sigma, frame.into())?;
+        let frame: Frame = frame.into();
+        check_local_frame(frame, "uncertainty")?;
+        self.0.set_pos_uncertainty(&sigma, frame)?;
         Ok(())
     }
 
@@ -184,7 +180,9 @@ impl PySatState {
     ///     TypeError: if sigma is not a real numeric array-like
     fn set_vel_uncertainty(&mut self, sigma: &Bound<'_, PyAny>, frame: PyFrame) -> Result<()> {
         let sigma = vec3(sigma, "velocity uncertainty")?;
-        self.0.set_vel_uncertainty(&sigma, frame.into())?;
+        let frame: Frame = frame.into();
+        check_local_frame(frame, "uncertainty")?;
+        self.0.set_vel_uncertainty(&sigma, frame)?;
         Ok(())
     }
 
@@ -318,11 +316,11 @@ impl PySatState {
         delta_v: &Bound<'_, PyAny>,
         frame: PyFrame,
     ) -> Result<()> {
-        let dv: Vector3 = crate::pyutils::py_to_smatrix(delta_v)?;
+        let dv: Vector3 = vec3(delta_v, "delta_v")?;
         let rust_frame: Frame = frame.into();
         // Refused here rather than by a later `propagate` (which only
         // checked the maneuvers inside its span) or by `pickle.dumps`
-        check_maneuver_frame(rust_frame)?;
+        check_local_frame(rust_frame, "maneuver")?;
         self.0
             .add_maneuver(ImpulsiveManeuver::new(time.0, dv, rust_frame));
         Ok(())
@@ -472,6 +470,9 @@ impl PySatState {
             }
         };
         let propsettings = propsettings.map(|p| p.0);
+        if time != self.0.time {
+            crate::pypropagate::check_position(&self.0.pv.as_slice()[0..3])?;
+        }
 
         let satprops_ref = satproperties
             .as_ref()
