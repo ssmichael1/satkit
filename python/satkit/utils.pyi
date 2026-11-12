@@ -124,7 +124,7 @@ def data_search_dirs() -> list[str]:
     """
     ...
 
-def add_search_dir(path: str) -> None:
+def add_search_dir(path: str | os.PathLike[str]) -> None:
     """Add a read-only directory to the data-file search list
 
     Tried after ``SATKIT_DATA`` / ``set_datadir`` and before the platform
@@ -132,7 +132,7 @@ def add_search_dir(path: str) -> None:
     provisioned copy of the data files.
 
     Args:
-        path (str): Directory to search
+        path (str | os.PathLike): Directory to search
     """
     ...
 
@@ -168,17 +168,17 @@ def is_offline() -> bool:
     """
     ...
 
-def set_datadir(datadir: str) -> None:
+def set_datadir(datadir: str | os.PathLike[str]) -> None:
     """Set the data directory
 
     The directory becomes the first search location (after ``SATKIT_DATA``)
     and the location downloads are written to.
 
     Args:
-        datadir (str): Path to the data directory
+        datadir (str | os.PathLike): Path to the data directory
 
     Raises:
-        RuntimeError: If the directory does not exist
+        FileNotFoundError: If the path is not an existing directory
     """
     ...
 
@@ -218,7 +218,7 @@ def githash() -> str:
 def version() -> str:
     """Version of satkit
 
-    The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.0"``).
+    The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.3"``).
 
     Returns:
         str: Version of satkit

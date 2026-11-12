@@ -43,10 +43,16 @@ def geocentric_pos(
 
     Args:
         body (satkit.solarsystem): Solar system body for which to return position
-        tm (satkit.time|numpy.ndarray|list): Time[s] at which to return position
+        tm (satkit.time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): Time, or list / tuple / 1-D numpy array of times, at which to return position
 
     Returns:
         numpy.ndarray: 3-vector of cartesian Geocentric position in meters. If input is list or numpy array of N times, then r will be Nx3 array
+
+    Raises:
+        RuntimeError: if a time is outside the span of the loaded ephemeris
+            (``"Invalid Julian date"``; about 1550 to 2650 for DE440), or
+            the ephemeris file is unavailable (see the module documentation)
+        TypeError: if ``tm`` is not a time or a list / array of times
 
     Example:
         ```python
@@ -66,15 +72,27 @@ def barycentric_pos(
 
     Args:
         body (satkit.solarsystem): Solar system body for which to return position
-        tm (satkit.time|numpy.ndarray|list): Time[s] at which to return position
+        tm (satkit.time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): Time, or list / tuple / 1-D numpy array of times, at which to return position
 
     Returns:
         numpy.ndarray: 3-vector of Cartesian position in meters, with the origin at the solar system barycenter. If input is list or numpy array of N times, then r will be Nx3 array
 
+    Raises:
+        RuntimeError: if a time is outside the span of the loaded ephemeris
+            (``"Invalid Julian date"``; about 1550 to 2650 for DE440), or
+            the ephemeris file is unavailable (see the module documentation)
+        TypeError: if ``tm`` is not a time or a list / array of times
+
     Notes:
-     - Positions for all bodies are natively relative to solar system barycenter,
-       with exception of moon, which is computed in Geocentric system
-     - EMB is the Earth-Moon barycenter
+     - Every body, the Moon included, is returned relative to the solar system
+       barycenter, in the ICRF axes. (The DE files tabulate the Moon
+       geocentrically; it is combined with the Earth-Moon barycenter here.
+       Releases up to 0.24.3 returned the geocentric Moon from this function:
+       use ``geocentric_pos`` / ``geocentric_state`` for that.)
+     - EMB is the Earth-Moon barycenter; there is no ``Earth`` member. The
+       Earth is ``barycentric(EMB) - geocentric(Moon) / (1 + EMRAT)``, with
+       ``EMRAT = satkit.jplephem.consts("EMRAT")``, or equivalently
+       ``barycentric(body) - geocentric(body)`` for any body
      - The sun position is relative to the solar system barycenter
        (it will be close to origin)
     """
@@ -88,10 +106,16 @@ def geocentric_state(
 
     Args:
         body (satkit.solarsystem): Solar system body for which to return position
-        tm (satkit.time|numpy.ndarray|list): Time[s] at which to return position
+        tm (satkit.time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): Time, or list / tuple / 1-D numpy array of times, at which to return position
 
     Returns:
         tuple: (r, v) where r is the position in meters and v is the velocity in meters / second.  If input is list or numpy array of N times, then r and v will be Nx3 arrays
+
+    Raises:
+        RuntimeError: if a time is outside the span of the loaded ephemeris
+            (``"Invalid Julian date"``; about 1550 to 2650 for DE440), or
+            the ephemeris file is unavailable (see the module documentation)
+        TypeError: if ``tm`` is not a time or a list / array of times
 
     Example:
         ```python
@@ -112,15 +136,27 @@ def barycentric_state(
 
     Args:
         body (satkit.solarsystem): Solar system body for which to return position
-        tm (satkit.time|numpy.ndarray|list): Time[s] at which to return position
+        tm (satkit.time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): Time, or list / tuple / 1-D numpy array of times, at which to return position
 
     Returns:
         tuple: (r, v) where r is the position in meters and v is the velocity in meters / second, with the origin at the solar system barycenter.  If input is list or numpy array of N times, then r and v will be Nx3 arrays
 
+    Raises:
+        RuntimeError: if a time is outside the span of the loaded ephemeris
+            (``"Invalid Julian date"``; about 1550 to 2650 for DE440), or
+            the ephemeris file is unavailable (see the module documentation)
+        TypeError: if ``tm`` is not a time or a list / array of times
+
     Notes:
-     - Positions for all bodies are natively relative to solar system barycenter,
-       with exception of moon, which is computed in Geocentric system
-     - EMB is the Earth-Moon barycenter
+     - Every body, the Moon included, is returned relative to the solar system
+       barycenter, in the ICRF axes. (The DE files tabulate the Moon
+       geocentrically; it is combined with the Earth-Moon barycenter here.
+       Releases up to 0.24.3 returned the geocentric Moon from this function:
+       use ``geocentric_pos`` / ``geocentric_state`` for that.)
+     - EMB is the Earth-Moon barycenter; there is no ``Earth`` member. The
+       Earth is ``barycentric(EMB) - geocentric(Moon) / (1 + EMRAT)``, with
+       ``EMRAT = satkit.jplephem.consts("EMRAT")``, or equivalently
+       ``barycentric(body) - geocentric(body)`` for any body
      - The sun position is relative to the solar system barycenter
        (it will be close to origin)
 
@@ -139,5 +175,6 @@ def consts(name: str) -> float | None:
 
     Returns:
         float | None: The constant's value, or None if the name is not present
+        (or the ephemeris file could not be loaded)
     """
     ...

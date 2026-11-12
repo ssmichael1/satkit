@@ -145,8 +145,34 @@ fn frametransform(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Add a native submodule to the extension as the importable module
+/// `satkit.<name>`.
+///
+/// PyO3 creates a nested `#[pymodule]` as a bare attribute: named `sun`
+/// rather than `satkit.sun`, and absent from `sys.modules`, so
+/// `import satkit.sun` and `from satkit.sun import pos_gcrf` failed although
+/// the stubs (and `satkit.sun.pos_gcrf`) said they work, and its functions
+/// could not be pickled (`pos_gcrf.__module__` was `"sun"`). This gives the
+/// module and its functions their qualified name and registers the module.
+/// Classes get theirs from `#[pyclass(module = ...)]`.
+fn add_native_submodule(m: &Bound<'_, PyModule>, sub: Bound<'_, PyModule>) -> PyResult<()> {
+    let short: String = sub.name()?.extract()?;
+    let full = format!("satkit.{short}");
+    sub.setattr("__name__", &full)?;
+    for (_, obj) in sub.dict().iter() {
+        if obj.cast::<pyo3::types::PyCFunction>().is_ok() {
+            obj.setattr("__module__", &full)?;
+        }
+    }
+    m.py()
+        .import("sys")?
+        .getattr("modules")?
+        .set_item(&full, &sub)?;
+    m.add(short.as_str(), sub)
+}
+
 #[pymodule]
-pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn satkit(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Forward satkit's warnings and notices (Rust `log` records) to
     // Python's `logging`, as loggers `satkit.<module>`.
     pylogging::init();
@@ -196,15 +222,19 @@ pub fn satkit(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pyomm::omm_from_file, m)?)?;
     m.add_function(wrap_pyfunction!(pyomm::omm_from_text, m)?)?;
 
-    m.add_wrapped(wrap_pymodule!(frametransform))?;
-    m.add_wrapped(wrap_pymodule!(jplephem))?;
-    m.add_wrapped(wrap_pymodule!(sun))?;
-    m.add_wrapped(wrap_pymodule!(moon))?;
-    m.add_wrapped(wrap_pymodule!(planets))?;
-    m.add_wrapped(wrap_pymodule!(spaceweather))?;
-
-    m.add_wrapped(wrap_pymodule!(mod_utils::utils))?;
-    m.add_wrapped(wrap_pymodule!(pydensity::density))?;
+    // The eight native submodules, importable as `satkit.<name>`
+    for sub in [
+        wrap_pymodule!(frametransform)(py),
+        wrap_pymodule!(jplephem)(py),
+        wrap_pymodule!(sun)(py),
+        wrap_pymodule!(moon)(py),
+        wrap_pymodule!(planets)(py),
+        wrap_pymodule!(spaceweather)(py),
+        wrap_pymodule!(mod_utils::utils)(py),
+        wrap_pymodule!(pydensity::density)(py),
+    ] {
+        add_native_submodule(m, sub.into_bound(py))?;
+    }
 
     Ok(())
 }

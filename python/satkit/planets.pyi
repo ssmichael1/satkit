@@ -21,7 +21,7 @@ def heliocentric_pos(
     Axes are ICRF (J2000 equatorial).
 
     Note: Valid bodies are Mercury through Pluto and the Earth-Moon barycenter
-    (``satkit.solarsystem.EMB``); the Sun and the Moon raise ``RuntimeError``
+    (``satkit.solarsystem.EMB``); the Sun and the Moon raise ``ValueError``
 
     Note: Valid from 3000 BC to 3000 AD, with a more accurate element set for 1800 AD to 2050 AD
 
@@ -35,11 +35,16 @@ def heliocentric_pos(
 
     Args:
         planet (satkit.solarsystem): Mercury through Pluto, or EMB
-        time (satkit.time|numpy.ndarray|list): Time[s] at which to return position
+        time (satkit.time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): Time, or list / tuple / 1-D numpy array of times, at which to return position
 
     Returns:
         numpy.ndarray: 3-vector of Cartesian position in meters, with the origin at the Sun.
                        If input is list or numpy array of N times, then r will be Nx3 array
+
+    Raises:
+        ValueError: if ``planet`` is the Sun or the Moon
+        RuntimeError: if a time is outside 3000 BC to 3000 AD (``"Time out of range"``)
+        TypeError: if ``time`` is not a time or a list / array of times
 
     Example:
         ```python

@@ -724,15 +724,49 @@ impl JPLEphem {
         Ok(pos * 1.0e3)
     }
 
-    /// Barycentric position; see the public [`barycentric_pos`].
-    fn barycentric_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
+    /// Position as the DE file tabulates it: relative to the solar-system
+    /// barycenter for every body except the Moon, which is geocentric.
+    fn native_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
         let setup = self.cheby_setup(body, et)?;
         dispatch_ncoeff!(self, body_pos_optimized, &setup)
     }
-    /// Barycentric position and velocity; see the public [`barycentric_state`].
-    fn barycentric_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
+    /// Position and velocity as the DE file tabulates them; see
+    /// [`native_pos`](Self::native_pos).
+    fn native_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
         let setup = self.cheby_setup(body, et)?;
         dispatch_ncoeff!(self, body_state_optimized, &setup)
+    }
+
+    /// Fraction of the geocentric Moon vector from the Earth-Moon
+    /// barycenter to the Moon: `EMRAT / (1 + EMRAT)` (the Earth is the
+    /// remaining `1 / (1 + EMRAT)` on the other side)
+    #[inline]
+    fn emb_to_moon(&self) -> f64 {
+        self.emrat / (1.0 + self.emrat)
+    }
+
+    /// Barycentric position; see the public [`barycentric_pos`].
+    fn barycentric_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
+        if body == SolarSystem::Moon {
+            // The file's Moon is geocentric: Earth = EMB - moon / (1 + EMRAT),
+            // so Moon = Earth + moon = EMB + moon * EMRAT / (1 + EMRAT)
+            let emb = self.native_pos(SolarSystem::EMB, et)?;
+            let moon = self.native_pos(SolarSystem::Moon, et)?;
+            Ok(emb + moon * self.emb_to_moon())
+        } else {
+            self.native_pos(body, et)
+        }
+    }
+    /// Barycentric position and velocity; see the public [`barycentric_state`].
+    fn barycentric_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
+        if body == SolarSystem::Moon {
+            let emb = self.native_state(SolarSystem::EMB, et)?;
+            let moon = self.native_state(SolarSystem::Moon, et)?;
+            let k = self.emb_to_moon();
+            Ok((emb.0 + moon.0 * k, emb.1 + moon.1 * k))
+        } else {
+            self.native_state(body, et)
+        }
     }
 
     fn body_state_optimized<const N: usize>(
@@ -773,11 +807,11 @@ impl JPLEphem {
     /// Geocentric position; see the public [`geocentric_pos`].
     fn geocentric_pos(&self, body: SolarSystem, et: &EphemTime) -> Result<Vector3> {
         if body == SolarSystem::Moon {
-            self.barycentric_pos(body, et)
+            self.native_pos(body, et)
         } else {
-            let emb: Vector3 = self.barycentric_pos(SolarSystem::EMB, et)?;
-            let moon: Vector3 = self.barycentric_pos(SolarSystem::Moon, et)?;
-            let b: Vector3 = self.barycentric_pos(body, et)?;
+            let emb: Vector3 = self.native_pos(SolarSystem::EMB, et)?;
+            let moon: Vector3 = self.native_pos(SolarSystem::Moon, et)?;
+            let b: Vector3 = self.native_pos(body, et)?;
 
             // Compute the position of the body relative to the Earth-moon
             // barycenter, then "correct" to Earth-center by accounting
@@ -789,11 +823,11 @@ impl JPLEphem {
     /// Geocentric position and velocity; see the public [`geocentric_state`].
     fn geocentric_state(&self, body: SolarSystem, et: &EphemTime) -> Result<(Vector3, Vector3)> {
         if body == SolarSystem::Moon {
-            self.barycentric_state(body, et)
+            self.native_state(body, et)
         } else {
-            let emb: (Vector3, Vector3) = self.barycentric_state(SolarSystem::EMB, et)?;
-            let moon: (Vector3, Vector3) = self.barycentric_state(SolarSystem::Moon, et)?;
-            let b: (Vector3, Vector3) = self.barycentric_state(body, et)?;
+            let emb: (Vector3, Vector3) = self.native_state(SolarSystem::EMB, et)?;
+            let moon: (Vector3, Vector3) = self.native_state(SolarSystem::Moon, et)?;
+            let b: (Vector3, Vector3) = self.native_state(body, et)?;
 
             // Compute the position of the body relative to the Earth-moon
             // barycenter, then "correct" to Earth-center by accounting
@@ -811,9 +845,9 @@ impl JPLEphem {
     /// three lookups (Sun, EMB, Moon) of the Sun state, with the Moon
     /// position taken from the Moon lookup it already makes.
     fn geocentric_sun_state_moon_pos(&self, et: &EphemTime) -> Result<SunMoon> {
-        let emb = self.barycentric_state(SolarSystem::EMB, et)?;
-        let moon = self.barycentric_state(SolarSystem::Moon, et)?;
-        let sun = self.barycentric_state(SolarSystem::Sun, et)?;
+        let emb = self.native_state(SolarSystem::EMB, et)?;
+        let moon = self.native_state(SolarSystem::Moon, et)?;
+        let sun = self.native_state(SolarSystem::Sun, et)?;
         Ok(SunMoon {
             sun_pos: sun.0 - emb.0 + moon.0 / (1.0 + self.emrat),
             sun_vel: sun.1 - emb.1 + moon.1 / (1.0 + self.emrat),
@@ -855,9 +889,14 @@ pub fn consts(s: &str) -> Option<&f64> {
 ///
 ///
 /// # Notes:
-///  * Positions for all bodies are natively relative to solar system barycenter,
-///    with exception of moon, which is computed in Geocentric system
-///  * EMB (2) is the Earth-Moon barycenter
+///  * Every body, the Moon included, is returned relative to the solar
+///    system barycenter. The DE files tabulate the Moon geocentrically; it
+///    is combined with the Earth-Moon barycenter here
+///    (`EMB + moon * EMRAT / (1 + EMRAT)`). Releases up to 0.24.3 returned
+///    the geocentric Moon from this function: use [`geocentric_pos`] /
+///    [`geocentric_state`] for that.
+///  * EMB (2) is the Earth-Moon barycenter; the Earth itself is
+///    `barycentric(body) - geocentric(body)` for any body
 ///  * The sun position is relative to the solar system barycenter
 ///    (it will be close to origin)
 pub fn barycentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3> {
@@ -912,9 +951,14 @@ pub fn geocentric_pos<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<Vector3>
 ///
 ///
 /// # Notes:
-///  * Positions for all bodies are natively relative to solar system barycenter,
-///    with exception of moon, which is computed in Geocentric system
-///  * EMB (2) is the Earth-Moon barycenter
+///  * Every body, the Moon included, is returned relative to the solar
+///    system barycenter. The DE files tabulate the Moon geocentrically; it
+///    is combined with the Earth-Moon barycenter here
+///    (`EMB + moon * EMRAT / (1 + EMRAT)`). Releases up to 0.24.3 returned
+///    the geocentric Moon from this function: use [`geocentric_pos`] /
+///    [`geocentric_state`] for that.
+///  * EMB (2) is the Earth-Moon barycenter; the Earth itself is
+///    `barycentric(body) - geocentric(body)` for any body
 ///  * The sun position is relative to the solar system barycenter
 ///    (it will be close to origin)
 pub fn barycentric_state<T: TimeLike>(body: SolarSystem, tm: &T) -> Result<(Vector3, Vector3)> {
@@ -928,6 +972,40 @@ mod tests {
     use crate::utils::test;
     use crate::TimeScale;
     use std::io::{self, BufRead};
+
+    /// The barycentric Moon is the true barycentric one (EMB plus the
+    /// geocentric Moon scaled by EMRAT / (1 + EMRAT)), consistent with the
+    /// Earth every other body's geocentric position implies; the geocentric
+    /// Moon is unchanged.
+    #[test]
+    fn barycentric_moon_is_barycentric() {
+        let jpl = jplephem_singleton().as_ref().unwrap();
+        let t = Instant::from_datetime(2024, 3, 1, 6, 0, 0.0).unwrap();
+        let emrat = *consts("EMRAT").unwrap();
+
+        let (moon_b, moon_bv) = barycentric_state(SolarSystem::Moon, &t).unwrap();
+        let (moon_g, moon_gv) = geocentric_state(SolarSystem::Moon, &t).unwrap();
+        let (emb, emb_v) = barycentric_state(SolarSystem::EMB, &t).unwrap();
+
+        // The geocentric Moon is the file's native record
+        let et = EphemTime::new(&t);
+        assert_eq!(moon_g, jpl.native_pos(SolarSystem::Moon, &et).unwrap());
+        assert!((moon_g.norm() - 3.8e8).abs() < 0.3e8);
+
+        let k = emrat / (1.0 + emrat);
+        assert!((moon_b - (emb + moon_g * k)).norm() < 1e-3);
+        assert!((moon_bv - (emb_v + moon_gv * k)).norm() < 1e-9);
+        assert_eq!(moon_b, barycentric_pos(SolarSystem::Moon, &t).unwrap());
+        // About 1 au from the barycenter, not 384,000 km
+        assert!((moon_b.norm() / crate::consts::AU - 1.0).abs() < 0.03);
+
+        // Earth from the Moon agrees with Earth from the Sun and from EMB
+        let earth = moon_b - moon_g;
+        let (sun_b, _) = barycentric_state(SolarSystem::Sun, &t).unwrap();
+        let sun_g = geocentric_pos(SolarSystem::Sun, &t).unwrap();
+        assert!((earth - (sun_b - sun_g)).norm() < 1e-3);
+        assert!((earth - (emb - moon_g / (1.0 + emrat))).norm() < 1e-3);
+    }
 
     /// A manifest-pinned ephemeris name whose on-disk bytes do not match the
     /// pinned hash is refused (not silently loaded); under offline mode the

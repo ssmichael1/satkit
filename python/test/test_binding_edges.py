@@ -116,7 +116,7 @@ class TestOneElementTimeLists:
         np.testing.assert_array_equal(out[0], scalar)
 
     def test_empty_list(self):
-        assert sk.frametransform.gmst([]) == []
+        assert sk.frametransform.gmst([]).shape == (0,)
         assert sk.sun.pos_gcrf([]).shape == (0, 3)
 
 

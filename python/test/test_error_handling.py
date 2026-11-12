@@ -56,9 +56,9 @@ class TestInvalidInputRaises:
     def test_heliocentric_pos_invalid_body(self):
         # Sun/Moon have no heliocentric position; must raise, not panic
         # (the array-of-times path used to panic with the GIL released)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError, match="Invalid body"):
             sk.planets.heliocentric_pos(sk.solarsystem.Moon, sk.time.now())
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError, match="Invalid body"):
             sk.planets.heliocentric_pos(
                 sk.solarsystem.Sun, [sk.time.now(), sk.time.now()]
             )

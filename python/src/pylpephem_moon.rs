@@ -14,12 +14,12 @@ fn moon_err(e: moon::Error) -> PyErr {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Hash)]
 /// Enum representing moon phases
 ///
 /// Each value covers a range of the moon phase angle (see :func:`phase`),
 /// given here in degrees.
-#[pyclass(name = "moonphase", eq, eq_int)]
+#[pyclass(name = "moonphase", module = "satkit.moon", eq, eq_int, hash, frozen)]
 pub enum MoonPhase {
     NewMoon = moon::MoonPhase::NewMoon as isize,
     WaxingCrescent = moon::MoonPhase::WaxingCrescent as isize,
@@ -70,7 +70,7 @@ impl From<moon::MoonPhase> for MoonPhase {
 ///   * Valid with accuracy of about 0.3 degree in ecliptic longitude (0.36 degree worst case against JPL DE440 over 1950-2100), 0.2 degree in ecliptic latitude, and 1275 km in range
 ///
 /// Args:
-///     time (satkit.time|numpy.ndarray|list): time[s] at which to compute position
+///     time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute position
 ///
 /// Returns:
 ///     numpy.ndarray: 3-element numpy array or Nx3 numpy array representing moon position in GCRF frame at input time[s].  Units are meters
@@ -88,7 +88,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
 ///   * Useful when comparing with Vallado's worked examples, which are given in MOD coordinates
 ///
 /// Args:
-///     time (satkit.time|numpy.ndarray|list): time[s] at which to compute position
+///     time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute position
 ///
 /// Returns:
 ///     numpy.ndarray: 3-element numpy array or Nx3 numpy array representing moon position in MOD frame at input time[s].  Units are meters
@@ -99,23 +99,28 @@ pub fn pos_mod(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
 
 /// Approximate Moon phase angle
 ///
+/// The phase angle is the Moon's geocentric ecliptic longitude minus the
+/// Sun's (built-in analytic models; Vallado section 5.2.3), in [0, 2π):
+/// 0 is New Moon, π/2 First Quarter, π Full Moon and 3π/2 Last Quarter.
+/// ``illumination`` is ``(1 - cos(phase)) / 2``.
+///
 /// Args:
-///     time (satkit.time|numpy.ndarray|list): time[s] at which to compute phase
+///     time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute phase
 ///
 /// Returns:
-///     float|numpy.ndarray: scalar or numpy array representing moon phase at input time[s].  Units are radians
+///     float|numpy.ndarray: moon phase in radians, in [0, 2π): a float for a single time, a 1-D float64 array for a list / array of times
 #[pyfunction]
 pub fn phase(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
-    pyutils::py_func_of_time_arr(moon::phase, time)
+    pyutils::py_f64_of_time_arr(moon::phase, time)
 }
 
 /// Moon phase name
 ///
 /// Args:
-///     time (satkit.time|numpy.ndarray|list): time[s] at which to compute phase name
+///     time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute phase name
 ///
 /// Returns:
-///     str|list: phase name string or list of phase name strings (e.g., "New Moon", "Waxing Crescent", etc.)
+///     satkit.moon.moonphase|list: the phase (e.g. ``moonphase.WaxingCrescent``), or a list of them, one per input time
 #[pyfunction]
 pub fn phase_name(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
     pyutils::py_func_of_time_arr(|t: &Instant| MoonPhase::from(moon::phase_name(t)), time)
@@ -124,13 +129,13 @@ pub fn phase_name(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
 /// Fraction of moon illuminated
 ///
 /// Args:
-///    time (satkit.time|numpy.ndarray|list): time[s] at which to
+///    time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute illumination
 ///
 /// Returns:
-///    float|numpy.ndarray: scalar or numpy array representing fraction of moon illuminated at input time[s].  Range is 0.0 to 1.0
+///    float|numpy.ndarray: fraction of moon illuminated, 0.0 to 1.0: a float for a single time, a 1-D float64 array for a list / array of times
 #[pyfunction]
 pub fn illumination(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
-    pyutils::py_func_of_time_arr(moon::illumination, time)
+    pyutils::py_f64_of_time_arr(moon::illumination, time)
 }
 
 /// Moonrise and moonset times on a calendar date at the given location.
@@ -146,7 +151,8 @@ pub fn illumination(time: &Bound<'_, PyAny>) -> anyhow::Result<Py<PyAny>> {
 /// To get the events of a *local* date, pass a timezone-aware datetime at
 /// local noon: for time zones UTC-11 to UTC+11 local noon falls on the same
 /// UTC date, while local midnight falls on the previous UTC date east of
-/// Greenwich.
+/// Greenwich.  A *naive* ``datetime.datetime`` (no ``tzinfo``) is taken as
+/// local time, and the UTC date of that instant selects the day.
 ///
 /// The Moon rises about 50 minutes later each day, so about once a month
 /// there is no moonrise on a date (and on another no moonset): that event

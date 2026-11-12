@@ -1,3 +1,7 @@
+# The extension registers its eight native submodules (density,
+# frametransform, jplephem, moon, planets, spaceweather, sun, utils) in
+# ``sys.modules`` as ``satkit.<name>`` when it is imported, so
+# ``import satkit.sun`` and ``from satkit.sun import pos_gcrf`` work.
 from .satkit import *  # type: ignore
 from ._types import OMMDict
 from .satkit import __version__
