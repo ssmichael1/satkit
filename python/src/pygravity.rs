@@ -43,6 +43,13 @@ fn gravity_args(
         ))
         .into());
     }
+    // The evaluator would silently truncate the order to the degree
+    if order > degree {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "gravity order {order} exceeds the degree ({degree})"
+        ))
+        .into());
+    }
     ensure_loaded(&model)?;
 
     let v: Vector3 = if pos.is_instance_of::<PyITRFCoord>() {
@@ -56,6 +63,20 @@ fn gravity_args(
         // input, `ValueError` for the wrong length
         to_vector3(pos, "pos")?
     };
+    // The field is singular at the origin (and NaN propagates): refuse both
+    // rather than return an all-NaN acceleration
+    if !v.iter().all(|x| x.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "pos must be finite (no NaN or infinity)",
+        )
+        .into());
+    }
+    if v.norm() == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "pos is the origin, where the gravity field is singular",
+        )
+        .into());
+    }
     Ok((v, degree, order, model.into()))
 }
 
@@ -70,9 +91,20 @@ fn gravity_args(
 /// (tide-free / zero-tide) is read on load and the propagator's solid-tide
 /// correction accounts for it.
 ///
+/// Members are hashable, compare equal to their integer value and to each
+/// other by value, and cannot be constructed.
+///
 #[allow(non_camel_case_types)]
-#[pyclass(name = "gravmodel", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+#[pyclass(
+    name = "gravmodel",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum GravModel {
     jgm3 = GravityModel::JGM3 as isize,
     jgm2 = GravityModel::JGM2 as isize,
@@ -114,15 +146,20 @@ impl From<GravityModel> for GravModel {
 ///     pos (satkit.itrfcoord|array-like): position at which to compute acceleration.  itrfcoord, or 3-element Cartesian ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 ///
 /// Returns:
-///     numpy.ndarray: 3-element numpy array representing acceleration due to Earth gravity at input position.  Units are m/s^2
+///     numpy.ndarray: 3-element numpy array (shape ``(3,)``) representing acceleration due to Earth gravity at input position, in the ITRF.  Units are m/s^2.  The centrifugal acceleration of the rotating frame is not included
 ///
 /// Keyword Args:
 ///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm2008
-///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 70
-///     order (int): maximum order of gravity model to use.  Default is same as degree
+///     degree (int): maximum degree of gravity model to use, 0 to 70.  Default is 6.  0 and 1 both give the point-mass field
+///     order (int): maximum order of gravity model to use, 0 to ``degree``.  Default is same as degree
+///
+/// Raises:
+///     TypeError: ``pos`` is not an itrfcoord or a real numeric array-like; ``model`` is not a ``gravmodel``; ``degree`` or ``order`` is not an integer
+///     ValueError: ``pos`` does not have 3 elements, holds a NaN or infinity, or is the origin; ``degree`` is negative or above 70; ``order`` is negative or above ``degree``
+///     RuntimeError: the coefficient file of ``gravmodel.itugrace16`` is not in the data directory and cannot be downloaded
 ///
 /// Notes:
-///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
+///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000.
 #[pyfunction]
 #[pyo3(signature=(pos, *, model=GravModel::egm2008, degree=6, order=None))]
 pub fn gravity(
@@ -143,15 +180,20 @@ pub fn gravity(
 ///     pos (satkit.itrfcoord|array-like): position at which to compute acceleration.  itrfcoord, or 3-element Cartesian ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 ///
 /// Returns:
-///     (numpy.ndarray, numpy.ndarray): tuple of 3-element numpy array representing acceleration due to Earth gravity at input position and 3x3 numpy array of partials of acceleration with respect to position.  Units are m/s^2 for gravity and m/s^2/m for partials
+///     (numpy.ndarray, numpy.ndarray): tuple of 3-element numpy array (shape ``(3,)``) representing acceleration due to Earth gravity at input position and 3x3 numpy array (shape ``(3, 3)``) of partials of acceleration with respect to ITRF position, ``partials[i, j] = d a_i / d r_j``.  Units are m/s^2 for gravity and m/s^2/m (1/s^2) for partials
 ///
 /// Keyword Args:
 ///     model (satkit.gravmodel): gravity model to use.  Default is satkit.gravmodel.egm2008
-///     degree (int): maximum degree of gravity model to use.  Default is 6, maximum is 70
-///     order (int): maximum order of gravity model to use.  Default is same as degree
+///     degree (int): maximum degree of gravity model to use, 0 to 70.  Default is 6.  0 and 1 both give the point-mass field
+///     order (int): maximum order of gravity model to use, 0 to ``degree``.  Default is same as degree
+///
+/// Raises:
+///     TypeError: ``pos`` is not an itrfcoord or a real numeric array-like; ``model`` is not a ``gravmodel``; ``degree`` or ``order`` is not an integer
+///     ValueError: ``pos`` does not have 3 elements, holds a NaN or infinity, or is the origin; ``degree`` is negative or above 70; ``order`` is negative or above ``degree``
+///     RuntimeError: the coefficient file of ``gravmodel.itugrace16`` is not in the data directory and cannot be downloaded
 ///
 /// Notes:
-///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and B. Gill, Springer, 2012.
+///     * For details of calculation, see Chapter 3.2 of "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000.
 ///
 #[pyfunction]
 #[pyo3(signature=(pos, *, model=GravModel::egm2008, degree=6, order=None))]

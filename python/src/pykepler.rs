@@ -207,7 +207,7 @@ impl PyKepler {
     }
 
     #[getter]
-    /// True Anomaly, radians
+    /// True Anomaly, radians. Stored as given (not reduced to one revolution)
     fn get_nu(&self) -> f64 {
         self.0.nu
     }
@@ -241,8 +241,9 @@ impl PyKepler {
     /// Convert Cartesian elements to kepler
     ///
     /// Args:
-    ///     pos: 3-element position vector, meters
-    ///     vel: 3-element velocity vector, meters/second
+    ///     pos: 3-element position vector, meters (any real numeric
+    ///         array-like: numpy array, list or tuple)
+    ///     vel: 3-element velocity vector, meters/second (likewise)
     ///
     /// Keyword Args:
     ///     mu: Gravitational parameter of the central body, m^3/s^2
@@ -251,8 +252,9 @@ impl PyKepler {
     /// Raises:
     ///     ValueError: open (eccen >= 1) or rectilinear (zero angular
     ///         momentum) state, a NaN or infinity in ``pos`` or ``vel``,
-    ///         or ``mu`` not positive and finite
-    ///     RuntimeError: inputs that are not 3-element vectors
+    ///         ``pos`` or ``vel`` not a 3-element vector, or ``mu`` not
+    ///         positive and finite
+    ///     TypeError: ``pos`` or ``vel`` is not a real numeric array-like
     #[staticmethod]
     #[pyo3(signature = (pos, vel, *, mu=None))]
     fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>, mu: Option<f64>) -> PyResult<Self> {
@@ -303,8 +305,11 @@ impl PyKepler {
 
     /// Return the eccentric anomaly of the satellite in radians
     ///
+    /// Computed from the true anomaly and reduced to (-pi, pi], however many
+    /// revolutions ``nu`` holds.
+    ///
     /// Returns:
-    ///     float: Eccentric Anomaly, radians
+    ///     float: Eccentric Anomaly, radians in (-pi, pi]
     #[getter]
     fn eccentric_anomaly(&self) -> f64 {
         self.0.eccentric_anomaly()
@@ -392,8 +397,11 @@ impl PyKepler {
 
     /// Return the mean anomaly of the satellite in radians
     ///
+    /// Computed from the true anomaly and reduced to (-pi, pi], however many
+    /// revolutions ``nu`` holds.
+    ///
     /// Returns:
-    ///     float: Mean Anomaly, radians
+    ///     float: Mean Anomaly, radians in (-pi, pi]
     #[getter]
     fn mean_anomaly(&self) -> f64 {
         self.0.mean_anomaly()
@@ -409,7 +417,12 @@ impl PyKepler {
         Ok(())
     }
 
-    /// Return the true anomaly of the satellite in radians
+    /// Return the true anomaly of the satellite in radians (read-only
+    /// alias of ``nu``)
+    ///
+    /// The value is stored as given, not reduced to one revolution; the
+    /// anomaly setters, ``propagate`` and ``from_pv`` produce a value in
+    /// (-pi, pi] or [0, 2 pi).
     ///
     /// Returns:
     ///   float: True Anomaly, radians

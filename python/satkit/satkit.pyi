@@ -961,6 +961,9 @@ class gravmodel:
     ``tidemodel.solid_step1`` correction accounts for it, so any model can
     be combined with any tide model without double-counting the permanent
     tide.
+
+    Members are hashable, compare equal to their integer value and to each
+    other by value, and cannot be constructed.
     """
 
     jgm3: ClassVar[gravmodel]
@@ -996,6 +999,10 @@ class gravmodel:
     Compiled in (truncated to degree 70). Default for the orbit propagator.
     """
 
+    def __int__(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 def nrlmsise00(
     alt_km: float,
     *,
@@ -1006,25 +1013,44 @@ def nrlmsise00(
 ) -> tuple[float, float]:
     """NRL-MSISE00 atmospheric density model
 
+    ``satkit.density.nrlmsise`` is the same model taking an ``itrfcoord``,
+    or meters and radians.
+
     Args:
-        alt_km (float): Altitude in kilometers
+        alt_km (float): Altitude above the WGS-84 ellipsoid in kilometers
+            (-1 or above; the model runs from the ground to the exosphere)
 
     Keyword Args:
-        latitude_deg (float): Latitude in degrees
-        longitude_deg (float): Longitude in degrees
-        time (satkit.time | datetime.datetime, optional): Time at which to
-            evaluate the model; space-weather data at this time is used when
-            ``use_spaceweather`` is True
-        use_spaceweather (bool): Use the space-weather database in the
-            calculation. Default is True
+        latitude_deg (float): Geodetic latitude in degrees, in [-90, 90].
+            Default is 0
+        longitude_deg (float): Longitude in degrees. Default is 0
+        time (satkit.time | datetime.datetime | numpy.datetime64, optional):
+            Time at which to evaluate the model. Without a time the model is
+            evaluated for 00:00 UT on 1 January, on default indices
+            (F10.7 = F10.7A = 150, Ap = 4)
+        use_spaceweather (bool): Look up F10.7 and Ap in the space-weather
+            data at ``time``. Default is True. It has no effect without a
+            ``time``; with False, or for a time the data does not cover, the
+            default indices are used
 
     Returns:
-        tuple[float, float]: Density (kg/m^3) and temperature (K)
+        tuple[float, float]: Mass density (kg/m^3) and temperature (K)
+
+    Raises:
+        TypeError: ``time`` is not a single time value, or a number is expected
+        ValueError: ``alt_km`` is NaN, infinite or below -1; ``latitude_deg``
+            is NaN or outside [-90, 90]; ``longitude_deg`` is NaN or infinite
+
+    Example:
+        ```python
+        rho, temp = satkit.nrlmsise00(400.0, latitude_deg=30.0, longitude_deg=-70.0)
+        print(f"{rho:.2e} kg/m^3, {temp:.0f} K")
+        ```
     """
     ...
 
 def gravity(
-    pos: list[float] | itrfcoord | npt.ArrayLike,
+    pos: itrfcoord | npt.ArrayLike,
     *,
     model: gravmodel = ...,
     degree: int = 6,
@@ -1033,16 +1059,20 @@ def gravity(
     """Return acceleration due to Earth gravity at the input position
 
     Args:
-        pos (list[float] | satkit.itrfcoord | npt.ArrayLike[np.float]): Position as ITRF coordinate or numpy 3-vector representing ITRF position in meters
+        pos (satkit.itrfcoord | npt.ArrayLike): Position as ITRF coordinate, or 3-element ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 
     Keyword Args:
         model (gravmodel): The gravity model to use.  Default is gravmodel.egm2008
-        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 70
-        order (int): Maximum order of gravity model to use.  Default is same as degree
+        degree (int): Maximum degree of gravity model to use, 0 to 70.  Default is 6.  0 and 1 both give the point-mass field
+        order (int): Maximum order of gravity model to use, 0 to ``degree``.  Default is same as degree
 
     Returns:
-        acceleration in m/s^2 in the International Terrestrial Reference Frame (ITRF)
+        3-element array (shape ``(3,)``): acceleration in m/s^2 in the International Terrestrial Reference Frame (ITRF). The centrifugal acceleration of the rotating frame is not included
 
+    Raises:
+        TypeError: ``pos`` is not an itrfcoord or a real numeric array-like; ``model`` is not a ``gravmodel``; ``degree`` or ``order`` is not an integer
+        ValueError: ``pos`` does not have 3 elements, holds a NaN or infinity, or is the origin; ``degree`` is negative or above 70; ``order`` is negative or above ``degree``
+        RuntimeError: the coefficient file of ``gravmodel.itugrace16`` is not in the data directory and cannot be downloaded
 
     Notes:
         - For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000 (https://doi.org/10.1007/978-3-642-58351-3).
@@ -1067,16 +1097,20 @@ def gravity_and_partials(
     """Gravity and partial derivatives of gravity with respect to Cartesian coordinates
 
     Args:
-        pos (itrfcoord | npt.ArrayLike[np.float]): Position as ITRF coordinate or numpy 3-vector representing ITRF position in meters
-
+        pos (satkit.itrfcoord | npt.ArrayLike): Position as ITRF coordinate, or 3-element ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 
     Keyword Args:
         model (gravmodel): The gravity model to use.  Default is gravmodel.egm2008
-        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 70
-        order (int): Maximum order of gravity model to use.  Default is same as degree
+        degree (int): Maximum degree of gravity model to use, 0 to 70.  Default is 6.  0 and 1 both give the point-mass field
+        order (int): Maximum order of gravity model to use, 0 to ``degree``.  Default is same as degree
 
     Returns:
-        acceleration in m/s^2 and partial derivative of acceleration with respect to ITRF Cartesian coordinate in m/s^2 / m
+        Tuple of the acceleration in m/s^2 in the ITRF (shape ``(3,)``) and its partial derivatives with respect to ITRF position (shape ``(3, 3)``, ``partials[i, j] = d a_i / d r_j``) in m/s^2 / m
+
+    Raises:
+        TypeError: ``pos`` is not an itrfcoord or a real numeric array-like; ``model`` is not a ``gravmodel``; ``degree`` or ``order`` is not an integer
+        ValueError: ``pos`` does not have 3 elements, holds a NaN or infinity, or is the origin; ``degree`` is negative or above 70; ``order`` is negative or above ``degree``
+        RuntimeError: the coefficient file of ``gravmodel.itugrace16`` is not in the data directory and cannot be downloaded
 
 
     For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000 (https://doi.org/10.1007/978-3-642-58351-3).
@@ -1368,7 +1402,15 @@ class timescale:
 class frame:
     """Coordinate reference frame
 
-    Used to specify the frame for thrust vectors and maneuvers.
+    Names the frame of a vector: for ``satkit.frametransform`` (``to_gcrf``,
+    ``from_gcrf``, ``rotation``, ``transform_state`` and the other
+    frame-pair functions), for impulsive maneuvers and for continuous
+    thrust. Not every function accepts every frame: a thrust or maneuver
+    must be in ``GCRF``, ``RTN``, ``NTW`` or ``LVLH``, and each
+    ``frametransform`` function lists the frames it supports.
+
+    Members are hashable, compare equal to their integer value and to each
+    other by value, and cannot be constructed (``frame(3)`` is a ``TypeError``).
 
     Available frames:
 
@@ -1487,6 +1529,10 @@ class frame:
     The natural frame for prograde/retrograde maneuvers: a pure +T delta-v
     of magnitude Δv adds *exactly* Δv to |v|, regardless of orbit eccentricity.
     """
+
+    def __int__(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class time:
@@ -2989,22 +3035,32 @@ class quaternion:
     <https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation>
 
     Notes:
+        A quaternion is always a unit quaternion (a rotation): every
+        constructor normalizes its result, so ``norm`` is 1 to rounding.
+        ``q`` and ``-q`` are the same rotation but are different quaternions.
     """
 
     @overload
     def __init__(self) -> None: ...
     @overload
     def __init__(self, w: float, x: float, y: float, z: float, /) -> None:
-        """Return quaternion with input (w,x,y,z) values
+        """Return the unit quaternion along the input (w,x,y,z) values
 
         With no arguments, return the identity quaternion. Otherwise pass all
-        four components positionally (keywords are not accepted).
+        four components positionally (keywords are not accepted); they are
+        scaled to unit norm, so ``quaternion(2, 0, 0, 0)`` is the identity.
 
         Args:
             w: Scalar component of the quaternion
             x: X component of the quaternion
             y: Y component of the quaternion
             z: Z component of the quaternion
+
+        Raises:
+            TypeError: the number of arguments is neither 0 nor 4, or a
+                component is not a real number
+            ValueError: all four components are zero, or one is NaN or
+                infinite
 
         Example:
             ```python
@@ -3023,11 +3079,18 @@ class quaternion:
         """Quaternion representing right-handed rotation of vector by "angle" radians about the given axis
 
         Args:
-            axis (npt.ArrayLike[np.float64]): 3-element array representing axis of rotation (unitless direction; need not be normalized)
+            axis (npt.ArrayLike): 3-element array representing axis of rotation (unitless direction; need not be normalized)
             angle (float): angle of rotation in radians
 
         Returns:
-            Quaternion representing rotation by "angle" radians about the given axis
+            Quaternion representing rotation by "angle" radians about the given axis.
+            If the axis has (near-)zero length (norm < 1e-9) the identity is
+            returned, whatever the angle
+
+        Raises:
+            TypeError: ``axis`` is not a real numeric array-like
+            ValueError: ``axis`` does not have 3 elements, or ``axis`` or
+                ``angle`` holds a NaN or infinity
         """
         ...
 
@@ -3038,10 +3101,18 @@ class quaternion:
         """Return quaternion representing identical rotation to input 3x3 rotation matrix
 
         Args:
-            dcm (npt.ArrayLike[np.float64]): 3x3 rotation matrix
+            dcm (npt.ArrayLike): 3x3 rotation matrix (any real numeric
+                array-like): orthonormal, with determinant +1
 
         Returns:
-            Quaternion representing identical rotation to input 3x3 rotation matrix
+            Unit quaternion representing identical rotation to input 3x3 rotation matrix
+
+        Raises:
+            TypeError: ``dcm`` is not a real numeric array-like
+            ValueError: ``dcm`` is not 3x3, holds a NaN or infinity, or is not
+                a rotation matrix (``dcm @ dcm.T`` differs from the identity
+                by more than 1e-6 in any element, or the determinant is
+                negative)
         """
         ...
 
@@ -3054,6 +3125,9 @@ class quaternion:
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the xhat unit vector
+
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
 
         Notes:
             Equivalent rotation matrix:
@@ -3072,6 +3146,9 @@ class quaternion:
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the yhat unit vector
+
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
 
 
         Notes:
@@ -3092,6 +3169,9 @@ class quaternion:
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the zhat unit vector
 
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
+
         Notes:
             Equivalent rotation matrix:
             |  cos(theta)     -sin(theta)   0|
@@ -3111,7 +3191,15 @@ class quaternion:
             v2 (npt.ArrayLike): 3-element vector rotating to (any real numeric array-like)
 
         Returns:
-            Quaternion that rotates from v1 to v2
+            Quaternion of the shortest rotation from v1 to v2 (about the axis
+            ``v1 x v2``; the vectors need not be unit length)
+
+        Raises:
+            TypeError: an input is not a real numeric array-like
+            ValueError: an input does not have 3 elements or holds a NaN or
+                infinity, either vector has (near-)zero length, or the
+                vectors point in opposite directions (the rotation axis is
+                then not unique)
 
         Example:
             ```python
@@ -3173,6 +3261,9 @@ class quaternion:
 
         Returns:
             quaternion: Quaternion representing the input euler-angle rotation
+
+        Raises:
+            ValueError: an angle is NaN or infinite
         """
         ...
 
@@ -3183,17 +3274,21 @@ class quaternion:
 
     @property
     def norm(self) -> float:
-        """Quaternion norm (Euclidean length of the 4 components; 1 for a
-        unit rotation quaternion)"""
+        """Quaternion norm (Euclidean length of the 4 components).
+        Quaternions are kept unit, so this is 1 to rounding."""
         ...
 
     def normalize(self) -> quaternion:
-        """Return this quaternion normalized to unit length"""
+        """Return this quaternion normalized to unit length
+
+        Quaternions are already unit; this only removes rounding error
+        accumulated over a long chain of products.
+        """
         ...
 
     def inverse(self) -> quaternion:
-        """Quaternion inverse. Equals the conjugate for a unit (rotation)
-        quaternion."""
+        """Quaternion inverse: the opposite rotation. Same as ``conj()`` and
+        ``conjugate()``, quaternions being unit."""
         ...
 
     def dot(self, other: quaternion) -> float:
@@ -3202,7 +3297,11 @@ class quaternion:
 
     @property
     def angle(self) -> float:
-        """Return the angle in radians of the rotation
+        """Return the angle in radians of the rotation, in [0, 2 pi)
+
+        The angle is measured about ``axis``, right-handed. It exceeds pi
+        when the scalar component ``w`` is negative; the same rotation is
+        then the angle ``2 pi - angle`` about ``-axis``.
 
         Returns:
             Angle in radians of the rotation
@@ -3212,6 +3311,9 @@ class quaternion:
     @property
     def axis(self) -> npt.NDArray[np.float64]:
         """Return the axis of rotation as a unit vector
+
+        The identity (no rotation) has no axis; ``[1, 0, 0]`` is returned
+        for it.
 
         Returns:
             3-element array representing the axis of rotation as a unit vector
@@ -3238,38 +3340,22 @@ class quaternion:
 
     @property
     def x(self) -> float:
-        """X component of the quaternion
-
-        Returns:
-            X component of the quaternion
-        """
+        """X component of the vector part"""
         ...
 
     @property
     def y(self) -> float:
-        """Y component of the quaternion
-
-        Returns:
-            Y component of the quaternion
-        """
+        """Y component of the vector part"""
         ...
 
     @property
     def z(self) -> float:
-        """Z component of the quaternion
-
-        Returns:
-            Z component of the quaternion
-        """
+        """Z component of the vector part"""
         ...
 
     @property
     def w(self) -> float:
-        """Scalar component of the quaternion
-
-        Returns:
-            Scalar component of the quaternion
-        """
+        """Scalar component (cosine of half the rotation angle)"""
         ...
 
     @typing.overload
@@ -3314,10 +3400,32 @@ class quaternion:
 
         Args:
             other (quaternion): Quaternion to perform interpolation to
-            frac (float): fractional amount of interpolation, in range [0,1]
+            frac (float): fractional distance from self (0) to other (1).
+                It is not clamped: a value outside [0, 1] extrapolates along
+                the same arc
 
         Returns:
-            Quaternion representing interpolation between self and other
+            Quaternion representing interpolation between self and other,
+            along the shorter of the two arcs (``other`` and ``-other`` are
+            the same rotation; the nearer one is used)
+
+        Raises:
+            ValueError: ``frac`` is NaN or infinite
+        """
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a quaternion with exactly the same four
+        components (no tolerance)
+
+        ``q`` and ``-q`` are the same rotation but compare unequal; so do two
+        quaternions that differ by rounding. To compare rotations use
+        ``abs(q1.dot(q2))``, which is 1 for the same rotation.
+        """
+        ...
+
+    def __hash__(self) -> int:
+        """Hash of the four components, consistent with ``==``
 
         Example:
             ```python
@@ -3476,12 +3584,19 @@ class kepler:
 
     @property
     def true_anomaly(self) -> float:
-        """True anomaly, radians"""
+        """True anomaly, radians (read-only alias of ``nu``)
+
+        Stored as given, not reduced to one revolution.
+        """
         ...
 
     @property
     def eccentric_anomaly(self) -> float:
-        """Eccentric anomaly, radians"""
+        """Eccentric anomaly, radians in (-pi, pi]
+
+        Computed from the true anomaly and reduced to (-pi, pi], however
+        many revolutions ``nu`` holds.
+        """
         ...
 
     @eccentric_anomaly.setter
@@ -3494,7 +3609,11 @@ class kepler:
         ...
     @property
     def mean_anomaly(self) -> float:
-        """Mean anomaly, radians"""
+        """Mean anomaly, radians in (-pi, pi]
+
+        Computed from the true anomaly and reduced to (-pi, pi], however
+        many revolutions ``nu`` holds.
+        """
         ...
 
     @mean_anomaly.setter
@@ -3606,7 +3725,13 @@ class kepler:
     def raan(self, value: float) -> None: ...
     @property
     def nu(self) -> float:
-        """True anomaly, radians (finite; ``ValueError`` otherwise)"""
+        """True anomaly, radians (finite; ``ValueError`` otherwise)
+
+        Stored as given, not reduced to one revolution: the constructor and
+        this setter keep the value passed, while the anomaly setters and
+        ``propagate`` store a value in (-pi, pi] and ``from_pv`` one in
+        [0, 2 pi).
+        """
         ...
 
     @nu.setter
@@ -3629,18 +3754,26 @@ class kepler:
 
     @w.setter
     def w(self, value: float) -> None: ...
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a ``kepler`` with exactly the same six
+        elements and ``mu`` (no tolerance, no reduction of angles)"""
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+
     @staticmethod
     def from_pv(
-        pos: npt.NDArray[np.float64],
-        vel: npt.NDArray[np.float64],
+        pos: npt.ArrayLike,
+        vel: npt.ArrayLike,
         *,
         mu: float | None = None,
     ) -> kepler:
         """Create Keplerian element set from input position and velocity vectors
 
         Args:
-            pos: 3-element position vector, meters
-            vel: 3-element velocity vector, meters/second
+            pos: 3-element position vector, meters (any real numeric
+                array-like: numpy array, list or tuple)
+            vel: 3-element velocity vector, meters/second (likewise)
             mu: Gravitational parameter of the central body, m^3/s^2
                 (default ``satkit.consts.mu_earth``); the returned element
                 set carries it, so its period and ``to_pv`` refer to the same
@@ -3662,15 +3795,18 @@ class kepler:
         Raises:
             ValueError: if the state is hyperbolic/parabolic (eccen >= 1) or
                 rectilinear (zero angular momentum), if ``pos`` or ``vel``
-                holds a NaN or infinity, or if ``mu`` is not positive and
-                finite.
-            RuntimeError: if the inputs are not 3-element vectors.
+                holds a NaN or infinity or is not a 3-element vector, or if
+                ``mu`` is not positive and finite.
+            TypeError: if ``pos`` or ``vel`` is not a real numeric array-like.
         """
         ...
 
 @final
 class geodetic:
     """Geodetic coordinates with named fields
+
+    Returned by ``itrfcoord.geodetic``; it has no constructor and its fields
+    are read-only.
 
     Attributes:
         latitude_rad (float): Latitude in radians
@@ -3680,9 +3816,20 @@ class geodetic:
         longitude_deg (float): Longitude in degrees (computed)
     """
 
-    latitude_rad: float
-    longitude_rad: float
-    height_m: float
+    @property
+    def latitude_rad(self) -> float:
+        """Latitude in radians"""
+        ...
+
+    @property
+    def longitude_rad(self) -> float:
+        """Longitude in radians"""
+        ...
+
+    @property
+    def height_m(self) -> float:
+        """Height above WGS84 ellipsoid in meters"""
+        ...
 
     @property
     def latitude_deg(self) -> float:
@@ -3694,6 +3841,14 @@ class geodetic:
         """Longitude in degrees"""
         ...
 
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a geodetic with exactly the same latitude,
+        longitude and height (no tolerance)"""
+        ...
+
+    def __hash__(self) -> int:
+        """Hash of the three fields, consistent with ``==``"""
+        ...
 
 @final
 class itrfcoord:
@@ -3719,37 +3874,55 @@ class itrfcoord:
     """
 
     @overload
-    def __init__(self, vec: npt.NDArray[np.float64] | list[float] | list[int], /) -> None: ...
+    def __init__(self, vec: npt.ArrayLike, /) -> None: ...
     @overload
     def __init__(self, x: float, y: float, z: float, /) -> None: ...
     @overload
     def __init__(
         self,
         *,
-        latitude_deg: float | None = None,
-        longitude_deg: float | None = None,
-        latitude_rad: float | None = None,
-        longitude_rad: float | None = None,
+        latitude_deg: float,
+        longitude_deg: float,
+        altitude: float | None = None,
+        height: float | None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        latitude_rad: float,
+        longitude_rad: float,
         altitude: float | None = None,
         height: float | None = None,
     ) -> None:
         """Create ITRF coordinate from Cartesian vector or geodetic parameters.
 
         Pass the Cartesian position positionally, either as one 3-element
-        numpy array or list, or as three floats; or pass the geodetic
-        position as keywords (latitude and longitude are required).
+        array-like or as three floats; or pass the geodetic position as
+        keywords: a latitude and a longitude, both required, each in degrees
+        or in radians, and optionally a height. The two forms cannot be mixed.
 
         Args:
-            vec: ITRF Cartesian location in meters (3-element numpy array or list)
-            latitude_deg: Latitude in degrees
+            vec: ITRF Cartesian location in meters (any real numeric
+                3-element array-like: numpy array, list or tuple)
+            latitude_deg: Geodetic latitude in degrees, in [-90, 90]
             longitude_deg: Longitude in degrees
-            latitude_rad: Latitude in radians
+            latitude_rad: Geodetic latitude in radians, in [-pi/2, pi/2]
             longitude_rad: Longitude in radians
             altitude: Height above ellipsoid, meters. Default is 0
-            height: Height above ellipsoid, meters (alias for altitude; wins if both are given)
+            height: Height above ellipsoid, meters (alias of ``altitude``)
 
-        Any geodetic keyword selects the geodetic form. ``latitude_rad`` /
-        ``longitude_rad`` win over ``latitude_deg`` / ``longitude_deg``.
+        Raises:
+            TypeError: no position given; positional and keyword forms
+                mixed; the same quantity given twice (``latitude_deg`` with
+                ``latitude_rad``, ``longitude_deg`` with ``longitude_rad``,
+                ``altitude`` with ``height``); latitude or longitude missing;
+                the positional argument is not a real numeric array-like or
+                three numbers
+            ValueError: latitude outside [-90, 90] degrees; a NaN or infinite
+                latitude, longitude, height or Cartesian component; a
+                positional array that does not have 3 elements; a keyword
+                that is not a number
         """
         ...
 
@@ -3879,12 +4052,38 @@ class itrfcoord:
         """
         ...
 
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is an ``itrfcoord`` with exactly the same
+        Cartesian components (no tolerance)"""
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+
     def geodesic_distance(self, other: itrfcoord) -> tuple[float, float, float]:
-        """Use Vincenty's inverse formula to compute geodesic distance
-        (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>):
+        """Geodesic (shortest path on the WGS-84 ellipsoid) from this
+        coordinate to another: distance and headings
+
+        Args:
+            other (itrfcoord): ITRF coordinate to measure to
 
         Returns:
             (distance in meters, initial heading in radians, heading at destination in radians)
+
+        Notes:
+            - Both points are projected onto the ellipsoid: heights are ignored
+            - Vincenty's inverse formula, iterated to convergence
+              (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>).
+              For nearly antipodal points, where that iteration does not
+              converge, the same series are solved for the initial heading
+              by bisection. Accurate to better than a millimeter for any
+              pair of points
+            - Headings are clockwise from north, in (-pi, pi]. The heading
+              at the destination is the direction of travel on arrival (add
+              pi for the back azimuth)
+            - For coincident points all three values are 0. Between exactly
+              antipodal points, or from a pole, the shortest path is not
+              unique: the distance is well defined, the headings are those
+              of one of the shortest paths
 
         Example:
             ```python
@@ -3900,7 +4099,8 @@ class itrfcoord:
         """Geodesic distance in meters between this coordinate and another
 
         Convenience wrapper around ``geodesic_distance`` returning only the
-        distance (shortest distance along the Earth's surface).
+        distance (shortest distance along the WGS-84 ellipsoid; heights are
+        ignored).
 
         Args:
             other (itrfcoord): ITRF coordinate to measure distance to
@@ -3918,7 +4118,8 @@ class itrfcoord:
             heading_rad (float): Initial heading in radians
 
         Notes:
-            Altitude is assumed to be zero
+            The path follows the ellipsoid: the starting height is ignored
+            and the result has zero height
 
             Use Vincenty's direct formula to compute position
             (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>)
@@ -3939,42 +4140,47 @@ class itrfcoord:
 
 @final
 class consts:
-    """Some constants that are useful for satellite dynamics"""
+    """Some constants that are useful for satellite dynamics
 
-    wgs84_a: ClassVar[float]
+    The class is a namespace: it cannot be instantiated and its attributes
+    cannot be reassigned.
+    """
+
+    wgs84_a: Final[float]
     """WGS-84 semi-major axis (equatorial radius), in meters"""
 
-    wgs84_f: ClassVar[float]
+    wgs84_f: Final[float]
     """WGS-84 flattening, unitless"""
 
-    earth_radius: ClassVar[float]
-    """Earth radius along major axis, meters"""
+    earth_radius: Final[float]
+    """WGS-84 equatorial Earth radius, meters (same value as ``wgs84_a``)"""
 
-    mu_earth: ClassVar[float]
-    """Gravitational parameter of Earth, m^3/s^2"""
+    mu_earth: Final[float]
+    """Gravitational parameter of Earth, m^3/s^2 (WGS-84)"""
 
-    mu_moon: ClassVar[float]
-    """Gravitational parameter of Moon, m^3/s^2"""
+    mu_moon: Final[float]
+    """Gravitational parameter of Moon, m^3/s^2 (JPL DE440)"""
 
-    mu_sun: ClassVar[float]
-    """Gravitational parameter of sun, m^3/s^2"""
+    mu_sun: Final[float]
+    """Gravitational parameter of sun, m^3/s^2 (JPL DE440)"""
 
-    GM: ClassVar[float]
-    """Gravitational parameter of Earth, m^3/s^2"""
+    GM: Final[float]
+    """Gravitational parameter of Earth, m^3/s^2 (same value as ``mu_earth``)"""
 
-    omega_earth: ClassVar[float]
+    omega_earth: Final[float]
     """Scalar Earth rotation rate, rad/s"""
 
-    c: ClassVar[float]
+    c: Final[float]
     """Speed of light, m/s"""
 
-    au: ClassVar[float]
-    """Astronomical Unit, mean Earth-Sun distance, meters"""
+    au: Final[float]
+    """Astronomical unit, meters: the exact defined constant of IAU 2012
+    Resolution B1 (149 597 870 700 m), close to the mean Earth-Sun distance"""
 
-    sun_radius: ClassVar[float]
+    sun_radius: Final[float]
     """Radius of sun, meters"""
 
-    solar_pressure_1au: ClassVar[float]
+    solar_pressure_1au: Final[float]
     """Solar radiation pressure at 1 AU (1367 W/m^2 / c), N/m^2.
 
     The cannonball SRP force scales this by (AU / d)^2, with d the
@@ -3982,22 +4188,28 @@ class consts:
     (Kopp & Lean 2011; IAU 2015 Resolution B3); 1367 matches GMAT and STK.
     """
 
-    moon_radius: ClassVar[float]
+    moon_radius: Final[float]
     """Radius of moon, meters"""
 
-    earth_moon_mass_ratio: ClassVar[float]
-    """Earth mass over Moon mass, unitless"""
+    earth_moon_mass_ratio: Final[float]
+    """Earth mass over Moon mass, unitless
 
-    geo_r: ClassVar[float]
-    """Distance to Geosynchronous orbit from Earth center, meters"""
+    The ratio of the JPL DE440 gravitational parameters. It differs from
+    ``mu_earth / mu_moon`` in the eighth digit, because ``mu_earth`` is the
+    WGS-84 value.
+    """
 
-    jgm3_mu: ClassVar[float]
+    geo_r: Final[float]
+    """Radius of a circular geosynchronous orbit (its semi-major axis),
+    meters from the Earth's center: ``(mu_earth / omega_earth^2)^(1/3)``"""
+
+    jgm3_mu: Final[float]
     """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
 
-    jgm3_a: ClassVar[float]
+    jgm3_a: Final[float]
     """Earth equatorial radius of the JGM3 gravity model, m"""
 
-    jgm3_j2: ClassVar[float]
+    jgm3_j2: Final[float]
     """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
 # Alias so `time` resolves to the class inside bodies that define a `time` member
@@ -5670,8 +5882,8 @@ class propsettings:
         ...
 
 def lambert(
-    r1: npt.NDArray[np.float64],
-    r2: npt.NDArray[np.float64],
+    r1: npt.ArrayLike,
+    r2: npt.ArrayLike,
     tof: float,
     mu: float | None = None,
     prograde: bool | None = None,
@@ -5682,8 +5894,9 @@ def lambert(
     for transfer orbits connecting them.
 
     Args:
-        r1: 3-element numpy array — departure position (meters)
-        r2: 3-element numpy array — arrival position (meters)
+        r1: Departure position, meters: any real numeric 3-element
+            array-like (numpy array, list or tuple)
+        r2: Arrival position, meters (likewise)
         tof: Time of flight in seconds (must be positive)
         mu: Gravitational parameter in m³/s² (default: Earth µ = 3.986e14)
         prograde: If True (default), prograde transfer (angular momentum
@@ -5696,9 +5909,11 @@ def lambert(
         elements are multi-revolution solutions if they exist.
 
     Raises:
-        ValueError: If inputs are invalid (non-finite values, tof or mu not
-            positive, zero position, r1 == r2), or if the solver fails to
-            converge
+        TypeError: If ``r1`` or ``r2`` is not a real numeric array-like, or
+            ``tof`` / ``mu`` is not a number
+        ValueError: If inputs are invalid (``r1`` or ``r2`` not 3 elements,
+            non-finite values, tof or mu not positive, zero position,
+            r1 == r2), or if the solver fails to converge
 
     Example:
         ```python

@@ -147,6 +147,225 @@ impl std::convert::From<ITRFCoord> for Vector3 {
     }
 }
 
+/// WGS-84 semi-minor axis, meters
+const WGS84_B: f64 = (1.0 - WGS84_F) * WGS84_A;
+
+/// Convergence tolerance on the auxiliary-sphere longitude, radians
+/// (6e-7 m on the ground)
+const VINCENTY_TOL: f64 = 1.0e-13;
+
+/// Iteration cap for Vincenty's formulas. Away from the antipode the inverse
+/// converges in a handful of iterations and the direct in fewer.
+const VINCENTY_MAX_ITER: usize = 100;
+
+/// Vincenty's longitude correction: the difference `λ - L` between the
+/// longitude difference on the auxiliary sphere and on the ellipsoid, for a
+/// geodesic of equatorial azimuth `α` (given as `sinalpha` and `cos²α`),
+/// arc length `σ` and midpoint argument `cos 2σₘ`.
+fn vincenty_dlon(
+    sinalpha: f64,
+    cossqalpha: f64,
+    sigma: f64,
+    sinsigma: f64,
+    cossigma: f64,
+    cos2sm: f64,
+) -> f64 {
+    let c = WGS84_F / 16.0 * cossqalpha * WGS84_F.mul_add(3.0f64.mul_add(-cossqalpha, 4.0), 4.0);
+    (1.0 - c)
+        * WGS84_F
+        * sinalpha
+        * (c * sinsigma).mul_add(
+            (c * cossigma).mul_add(2.0f64.mul_add(cos2sm.powi(2), -1.0), cos2sm),
+            sigma,
+        )
+}
+
+/// Vincenty's distance series: the length in meters of a geodesic arc `σ`
+/// on the auxiliary sphere.
+fn vincenty_arc(cossqalpha: f64, sigma: f64, sinsigma: f64, cossigma: f64, cos2sm: f64) -> f64 {
+    let usq = cossqalpha * (WGS84_A / WGS84_B).mul_add(WGS84_A / WGS84_B, -1.0);
+    let biga = (usq / 16384.0).mul_add(
+        usq.mul_add(usq.mul_add(175.0f64.mul_add(-usq, 320.0), -768.0), 4096.0),
+        1.0,
+    );
+    let bigb = usq / 1024.0 * usq.mul_add(usq.mul_add(47.0f64.mul_add(-usq, 74.0), -128.0), 256.0);
+    let dsigma = bigb
+        * sinsigma
+        * (0.25 * bigb).mul_add(
+            cossigma.mul_add(
+                2.0f64.mul_add(cos2sm.powi(2), -1.0),
+                -(bigb / 6.0
+                    * cos2sm
+                    * 4.0f64.mul_add(sinsigma.powi(2), -3.0)
+                    * 4.0f64.mul_add(cos2sm.powi(2), -3.0)),
+            ),
+            cos2sm,
+        );
+    WGS84_B * biga * (sigma - dsigma)
+}
+
+/// Vincenty's inverse formula between two points given by the sine and
+/// cosine of their reduced latitudes and their longitude difference `londiff`
+/// in (-π, π]. Returns `(distance, initial heading, final heading)`, or
+/// `None` when the fixed-point iteration does not settle on the shortest
+/// path (nearly antipodal points): it fails to converge within
+/// [`VINCENTY_MAX_ITER`] iterations, or leaves the half-turn `|λ| <= π`.
+fn vincenty_inverse(
+    su1: f64,
+    cu1: f64,
+    su2: f64,
+    cu2: f64,
+    londiff: f64,
+) -> Option<(f64, f64, f64)> {
+    let mut lam = londiff;
+    for _ in 0..VINCENTY_MAX_ITER {
+        let (sinlam, coslam) = lam.sin_cos();
+        let north = cu1 * su2 - su1 * cu2 * coslam;
+        let sinsigma = (cu2 * sinlam).hypot(north);
+        let cossigma = su1 * su2 + cu1 * cu2 * coslam;
+        if sinsigma < 1.0e-15 {
+            // Coincident to rounding (zero distance), or antipodal (left to
+            // the bisection, which does not divide by sin σ).
+            return (cossigma > 0.0).then_some((0.0, 0.0, 0.0));
+        }
+        let sigma = f64::atan2(sinsigma, cossigma);
+        let sinalpha = cu1 * cu2 * sinlam / sinsigma;
+        let cossqalpha = sinalpha.mul_add(-sinalpha, 1.0);
+        // On the equator cos²α = 0 and cos 2σₘ is undefined; it multiplies
+        // zero below and is conventionally taken as zero.
+        let cos2sm = if cossqalpha == 0.0 {
+            0.0
+        } else {
+            cossigma - 2.0 * su1 * su2 / cossqalpha
+        };
+        let lam_new =
+            londiff + vincenty_dlon(sinalpha, cossqalpha, sigma, sinsigma, cossigma, cos2sm);
+        if lam_new.is_nan() || lam_new.abs() > PI {
+            return None;
+        }
+        if (lam_new - lam).abs() < VINCENTY_TOL {
+            let s = vincenty_arc(cossqalpha, sigma, sinsigma, cossigma, cos2sm);
+            let alpha1 = f64::atan2(cu2 * sinlam, north);
+            let alpha2 = f64::atan2(cu1 * sinlam, cu1 * su2 * coslam - su1 * cu2);
+            return Some((s, alpha1, alpha2));
+        }
+        lam = lam_new;
+    }
+    None
+}
+
+/// The geodesic leaving reduced latitude β₁ (`sb1`, `cb1`; β₁ <= 0) at
+/// azimuth α₁ (`sa1`, `ca1`) and ending at reduced latitude β₂ (`sb2`, `cb2`;
+/// |β₂| <= -β₁) on its northbound leg. Returns the longitude difference on
+/// the ellipsoid, the distance in meters, and sin α₂, cos α₂.
+///
+/// With these conventions the longitude difference increases monotonically
+/// from 0 to π as α₁ goes from 0 to π (Karney 2013, section 5), which is what
+/// makes the bisection in [`bisection_inverse`] safe.
+fn geodesic_from_azimuth(
+    sb1: f64,
+    cb1: f64,
+    sb2: f64,
+    cb2: f64,
+    sa1: f64,
+    ca1: f64,
+) -> (f64, f64, f64, f64) {
+    // α₀: azimuth at the equator crossing (Clairaut's relation)
+    let salp0 = sa1 * cb1;
+    let cossqalpha = ca1.mul_add(ca1, (sa1 * sb1).powi(2));
+    // Arc lengths σ and longitudes ω on the auxiliary sphere, measured from
+    // the northbound equator crossing: tan σ = sin β / (cos α cos β),
+    // tan ω = sin α₀ sin β / (cos α cos β)
+    let csig1 = ca1 * cb1;
+    let sa2 = if cb2 == cb1 { sa1 } else { salp0 / cb2 };
+    let ca2 = if cb2 != cb1 || sb2.abs() != -sb1 {
+        // cos²α₂ cos²β₂ = cos²α₁ cos²β₁ + (cos²β₂ - cos²β₁), with the
+        // difference taken in whichever form does not cancel
+        let dcos = if cb1 < -sb1 {
+            (cb2 - cb1) * (cb1 + cb2)
+        } else {
+            (sb1 - sb2) * (sb1 + sb2)
+        };
+        (csig1.mul_add(csig1, dcos)).max(0.0).sqrt() / cb2
+    } else {
+        ca1.abs()
+    };
+    let csig2 = ca2 * cb2;
+    // A difference that is zero to rounding must be +0, not -0, or atan2
+    // returns -π instead of π
+    let positive = |x: f64| if x > 0.0 { x } else { 0.0 };
+    let sigma = f64::atan2(
+        positive(csig1 * sb2 - sb1 * csig2),
+        csig1.mul_add(csig2, sb1 * sb2),
+    );
+    let (somg1, somg2) = (salp0 * sb1, salp0 * sb2);
+    let omega = f64::atan2(
+        positive(csig1 * somg2 - somg1 * csig2),
+        csig1.mul_add(csig2, somg1 * somg2),
+    );
+    let (sinsigma, cossigma) = sigma.sin_cos();
+    let cos2sm = (f64::atan2(sb1, csig1) + f64::atan2(sb2, csig2)).cos();
+    let lon = omega - vincenty_dlon(salp0, cossqalpha, sigma, sinsigma, cossigma, cos2sm);
+    let s = vincenty_arc(cossqalpha, sigma, sinsigma, cossigma, cos2sm);
+    (lon, s, sa2, ca2)
+}
+
+/// Inverse geodesic problem solved for the initial azimuth by bisection, for
+/// the point pairs on which [`vincenty_inverse`] fails. Same arguments and
+/// return value. It uses the same series, so the two agree where both work;
+/// it is slower (about 60 evaluations) but cannot fail to converge.
+fn bisection_inverse(su1: f64, cu1: f64, su2: f64, cu2: f64, londiff: f64) -> (f64, f64, f64) {
+    // Reduce to the canonical configuration of Karney (2013): β₁ <= 0,
+    // β₁ <= β₂ <= -β₁ and 0 <= λ₁₂ <= π, by swapping the end points and
+    // mirroring in the equator and in the meridian, and remember how to map
+    // the azimuths back.
+    let mut lonsign = if londiff >= 0.0 { 1.0 } else { -1.0 };
+    let lam12 = londiff.abs();
+    let (mut sb1, mut cb1, mut sb2, mut cb2) = (su1, cu1, su2, cu2);
+    let swapp = if sb1.abs() < sb2.abs() { -1.0 } else { 1.0 };
+    if swapp < 0.0 {
+        lonsign = -lonsign;
+        std::mem::swap(&mut sb1, &mut sb2);
+        std::mem::swap(&mut cb1, &mut cb2);
+    }
+    let latsign = if sb1 < 0.0 { 1.0 } else { -1.0 };
+    sb1 *= latsign;
+    sb2 *= latsign;
+    // A pole has cos β = 0 exactly only in exact arithmetic; keep it positive
+    cb1 = cb1.max(f64::MIN_POSITIVE.sqrt());
+    cb2 = cb2.max(f64::MIN_POSITIVE.sqrt());
+
+    let (s, mut sa1, mut ca1, mut sa2, mut ca2) = if sb1 == 0.0 && lam12 <= (1.0 - WGS84_F) * PI {
+        // Both points on the equator and close enough that the equator
+        // itself is the shortest path (beyond that it leaves the equator)
+        (WGS84_A * lam12, 1.0, 0.0, 1.0, 0.0)
+    } else {
+        let (mut lo, mut hi) = (0.0_f64, PI);
+        for _ in 0..64 {
+            let mid = 0.5 * (lo + hi);
+            let (sa, ca) = mid.sin_cos();
+            if geodesic_from_azimuth(sb1, cb1, sb2, cb2, sa, ca).0 < lam12 {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        let (sa1, ca1) = (0.5 * (lo + hi)).sin_cos();
+        let (_, s, sa2, ca2) = geodesic_from_azimuth(sb1, cb1, sb2, cb2, sa1, ca1);
+        (s, sa1, ca1, sa2, ca2)
+    };
+
+    if swapp < 0.0 {
+        std::mem::swap(&mut sa1, &mut sa2);
+        std::mem::swap(&mut ca1, &mut ca2);
+    }
+    sa1 *= swapp * lonsign;
+    ca1 *= swapp * latsign;
+    sa2 *= swapp * lonsign;
+    ca2 *= swapp * latsign;
+    (s, f64::atan2(sa1, ca1), f64::atan2(sa2, ca2))
+}
+
 impl ITRFCoord {
     /// Returns an ITRF Coordinate given the geodetic inputs
     ///   with degree units for latitude & longitude.
@@ -356,7 +575,7 @@ impl ITRFCoord {
     /// * ITRFCoord representing final position
     ///
     /// # References:
-    /// * Uses Vincenty's inverse formula: T. Vincenty, "Direct and Inverse
+    /// * Uses Vincenty's direct formula, iterated to convergence: T. Vincenty, "Direct and Inverse
     ///   Solutions of Geodesics on the Ellipsoid with Application of Nested
     ///   Equations", Survey Review 23(176), 88–93, 1975,
     ///   <https://doi.org/10.1179/sre.1975.23.176.88>
@@ -380,7 +599,7 @@ impl ITRFCoord {
             usq / 1024.0 * usq.mul_add(usq.mul_add(47.0f64.mul_add(-usq, 74.0), -128.0), 256.0);
         let mut sigma = distance_m / b / big_a;
         let mut costwosigmam = 0.0;
-        for _ in 0..5 {
+        for _ in 0..VINCENTY_MAX_ITER {
             costwosigmam = 2.0f64.mul_add(sigma1, sigma).cos();
             let dsigma = big_b
                 * sigma.sin()
@@ -394,7 +613,12 @@ impl ITRFCoord {
                     ),
                     costwosigmam,
                 );
-            sigma = distance_m / b / big_a + dsigma;
+            let sigma_new = distance_m / b / big_a + dsigma;
+            let converged = (sigma_new - sigma).abs() < VINCENTY_TOL;
+            sigma = sigma_new;
+            if converged {
+                break;
+            }
         }
         let phi2 = f64::atan2(
             u1.sin()
@@ -442,8 +666,9 @@ impl ITRFCoord {
 
     /// Geodesic distance between two coordinates
     ///
-    /// Return Geodesic distance (shortest distance along Earth's surface) in meters
-    /// between self and another ITRF coordinate
+    /// Return Geodesic distance (shortest distance along the WGS-84
+    /// ellipsoid) in meters between self and another ITRF coordinate. Both
+    /// points are projected onto the ellipsoid: heights are ignored.
     ///
     /// Also returns initial and final heading
     ///
@@ -455,101 +680,51 @@ impl ITRFCoord {
     ///   Tuple with following values
     ///
     /// * `0` - Distance in meters
-    /// * `1` - Starting heading (at self) in radians
-    /// * `2` - Final heading (at other) in radians
+    /// * `1` - Starting heading (at self) in radians, clockwise from north,
+    ///   in (-π, π]
+    /// * `2` - Final heading (at other) in radians: the direction of travel
+    ///   on arrival (add π for the back azimuth)
     ///
     /// # Accuracy
-    /// Coincident points return `(0, 0, 0)`. Vincenty's inverse is
-    /// ill-conditioned for near-antipodal point pairs: in that regime the
-    /// iteration does not converge to full precision and the returned distance
-    /// may be off by kilometers. The result is always finite (never NaN), but
-    /// callers needing antipodal accuracy should use a Karney-style solver.
+    /// Vincenty's inverse formula is iterated to convergence, which gives
+    /// the distance to better than a millimeter. For nearly antipodal
+    /// points that iteration does not converge (or converges on a path that
+    /// is not the shortest); the same series are then solved for the
+    /// initial heading by bisection, which always converges, in the manner
+    /// of Karney (2013). Coincident points return `(0, 0, 0)`. Between
+    /// exactly antipodal points, or from a pole, the shortest path is not
+    /// unique: the distance is well defined and the headings are those of
+    /// one of the shortest paths.
     ///
     /// # References
-    /// * Vincenty's formula inverse
-    ///   See: <https://en.wikipedia.org/wiki/Vincenty%27s_formulae>
-    ///   See: <https://geodesyapps.ga.gov.au/vincenty-inverse>
+    /// * T. Vincenty, "Direct and Inverse Solutions of Geodesics on the
+    ///   Ellipsoid with Application of Nested Equations", Survey Review
+    ///   23(176), 88–93, 1975, <https://doi.org/10.1179/sre.1975.23.176.88>
+    /// * C. F. F. Karney, "Algorithms for geodesics", J. Geodesy 87, 43–55,
+    ///   2013, <https://doi.org/10.1007/s00190-012-0578-z> (the canonical
+    ///   configuration and the monotonic longitude function used near the
+    ///   antipode)
     ///
     pub fn geodesic_distance(&self, other: &Self) -> (f64, f64, f64) {
-        #[allow(non_upper_case_globals)]
-        const a: f64 = WGS84_A;
-        #[allow(non_upper_case_globals)]
-        const b: f64 = (1.0 - WGS84_F) * WGS84_A;
-
         let (lata, lona, _) = self.to_geodetic_rad();
         let (latb, lonb, _) = other.to_geodetic_rad();
-        let u1 = ((1.0 - WGS84_F) * lata.tan()).atan();
-        let u2 = ((1.0 - WGS84_F) * latb.tan()).atan();
-        let londiff = lonb - lona;
-        let mut lam = londiff;
-        let mut cossqalpha = 0.0;
-        let mut sinsigma = 0.0;
-        let mut cossigma = 0.0;
-        let mut cos2sm = 0.0;
-        let mut sigma = 0.0;
-        for _ in 0..5 {
-            sinsigma = (u2.cos() * lam.sin()).hypot(
-                u1.cos()
-                    .mul_add(u2.sin(), -(u1.sin() * u2.cos() * lam.cos())),
-            );
-            if sinsigma == 0.0 {
-                // Coincident points: distance and both headings are zero.
-                // Avoids the 0/0 in sin(alpha) below that would yield NaN.
-                return (0.0, 0.0, 0.0);
-            }
-            cossigma = u1.sin().mul_add(u2.sin(), u1.cos() * u2.cos() * lam.cos());
-            sigma = f64::atan2(sinsigma, cossigma);
-            let sinalpha = (u1.cos() * u2.cos() * lam.sin()) / sigma.sin();
-            cossqalpha = sinalpha.mul_add(-sinalpha, 1.0);
-            // On the equatorial line cossqalpha == 0 and cos(2σₘ) is undefined;
-            // it is conventionally taken as zero (avoids a divide-by-zero NaN).
-            cos2sm = if cossqalpha == 0.0 {
-                0.0
-            } else {
-                sigma.cos() - (2.0 * u1.sin() * u2.sin()) / cossqalpha
-            };
-            let c = WGS84_F / 16.0
-                * cossqalpha
-                * WGS84_F.mul_add(3.0f64.mul_add(-cossqalpha, 4.0), 4.0);
-            lam = ((1.0 - c) * WGS84_F * sinalpha).mul_add(
-                (c * sinsigma).mul_add(
-                    (c * cossigma).mul_add(2.0f64.mul_add(cos2sm.powi(2), -1.0), cos2sm),
-                    sigma,
-                ),
-                londiff,
-            );
+        // Longitude difference reduced to (-π, π]
+        let mut londiff = (lonb - lona) % (2.0 * PI);
+        if londiff > PI {
+            londiff -= 2.0 * PI;
+        } else if londiff <= -PI {
+            londiff += 2.0 * PI;
         }
-
-        let usq = cossqalpha * (a / b).mul_add(a / b, -1.0);
-        let biga = (usq / 16384.0).mul_add(
-            usq.mul_add(usq.mul_add(175.0f64.mul_add(-usq, 320.0), -768.0), 4096.0),
-            1.0,
-        );
-        let bigb =
-            usq / 1024.0 * usq.mul_add(usq.mul_add(47.0f64.mul_add(-usq, 74.0), -128.0), 256.0);
-        let dsigma = bigb
-            * sinsigma
-            * (0.25 * bigb).mul_add(
-                cossigma.mul_add(
-                    2.0f64.mul_add(cos2sm.powi(2), -1.0),
-                    -(bigb / 6.0
-                        * cos2sm
-                        * 4.0f64.mul_add(sinsigma.powi(2), -3.0)
-                        * 4.0f64.mul_add(cos2sm.powi(2), -3.0)),
-                ),
-                cos2sm,
-            );
-        let s = b * biga * (sigma - dsigma);
-        let alpha1 = f64::atan2(
-            u2.cos() * lam.sin(),
-            u1.cos()
-                .mul_add(u2.sin(), -(u1.sin() * u2.cos() * lam.cos())),
-        );
-        let alpha2 = f64::atan2(
-            u1.cos() * lam.sin(),
-            (-u1.sin()).mul_add(u2.cos(), u1.cos() * u2.sin() * lam.cos()),
-        );
-        (s, alpha1, alpha2)
+        // Coincident points: zero distance, headings defined as zero. (The
+        // general formulas would divide rounding noise by rounding noise.)
+        if lata == latb && londiff == 0.0 {
+            return (0.0, 0.0, 0.0);
+        }
+        // Reduced latitudes
+        let (su1, cu1) = ((1.0 - WGS84_F) * lata.tan()).atan().sin_cos();
+        let (su2, cu2) = ((1.0 - WGS84_F) * latb.tan()).atan().sin_cos();
+        vincenty_inverse(su1, cu1, su2, cu2, londiff)
+            .unwrap_or_else(|| bisection_inverse(su1, cu1, su2, cu2, londiff))
     }
 
     /// Return quaternion representing rotation from the
@@ -734,30 +909,196 @@ mod tests {
 
     #[test]
     fn test_geodesic_coincident() {
-        // Identical points must give (near-)zero distance and finite headings,
-        // not NaN (the sin(alpha) denominator vanishes for coincident points).
-        let p = ITRFCoord::from_geodetic_deg(0.0, 0.0, 0.0);
-        let (dist, h0, h1) = p.geodesic_distance(&p);
-        assert!(dist.is_finite() && dist.abs() < 1.0e-6);
-        assert!(h0.is_finite() && h1.is_finite());
+        // Identical points give exactly zero distance and zero headings, at
+        // any latitude (rounding in sin σ used to leave a heading of π away
+        // from the equator).
+        for (lat, lon) in [(0.0, 0.0), (42.0, -71.0), (-89.0, 179.0), (90.0, 0.0)] {
+            let p = ITRFCoord::from_geodetic_deg(lat, lon, 0.0);
+            assert_eq!(p.geodesic_distance(&p), (0.0, 0.0, 0.0), "{lat} {lon}");
+            assert_eq!(p.distance_to(&p), 0.0);
+        }
+        // The same ground point at another height is also coincident
+        let lo = ITRFCoord::from_geodetic_deg(0.0, 10.0, 0.0);
+        let hi = ITRFCoord::from_geodetic_deg(0.0, 10.0, 1000.0);
+        assert_eq!(lo.distance_to(&hi), 0.0);
+    }
 
-        // Also at a non-equatorial location.
-        let q = ITRFCoord::from_geodetic_deg(42.0, -71.0, 0.0);
-        let d = q.distance_to(&q);
-        assert!(d.is_finite() && d.abs() < 1.0e-6);
+    /// Reference geodesics from GeographicLib 2.x (Karney 2013), WGS-84:
+    /// (lat1, lon1, lat2, lon2, distance m, azimuth 1 deg, azimuth 2 deg)
+    const GEODESIC_REFERENCE: [(f64, f64, f64, f64, f64, f64, f64); 9] = [
+        // Boston - New York
+        (
+            42.36,
+            -71.06,
+            40.71,
+            -74.01,
+            306867.9261,
+            -125.678572512,
+            -127.635097300,
+        ),
+        // Greenwich - Sydney
+        (
+            51.4778,
+            -0.0015,
+            -33.8568,
+            151.2153,
+            16982642.2418,
+            60.560478098,
+            139.170422320,
+        ),
+        // Wellington - Salamanca: nearly antipodal (Karney's example)
+        (
+            -41.32,
+            174.81,
+            40.96,
+            -5.5,
+            19959679.2674,
+            161.067669986,
+            18.825195123,
+        ),
+        (
+            35.0,
+            139.0,
+            -35.0,
+            -40.0,
+            19935220.3916,
+            -90.144894470,
+            -90.144894470,
+        ),
+        // A quarter of the equator
+        (0.0, 0.0, 0.0, 90.0, 10018754.1714, 90.0, 90.0),
+        // The last equatorial pair whose shortest path is the equator
+        (0.0, 0.0, 0.0, 179.0, 19926188.8520, 90.0, 90.0),
+        // Nearly antipodal: Vincenty's iteration does not converge on these
+        (
+            0.0,
+            0.0,
+            0.5,
+            179.7,
+            19944127.4208,
+            15.556882793,
+            164.442513891,
+        ),
+        (
+            30.0,
+            0.0,
+            -29.9,
+            179.95,
+            19992657.1400,
+            4.496427384,
+            175.508078616,
+        ),
+        // Close to a pole, across it
+        (89.0, 10.0, 89.0, -170.0, 223387.7298, 0.0, 180.0),
+    ];
+
+    #[test]
+    fn test_geodesic_reference_values() {
+        let wrap = |a: f64| (a + PI).rem_euclid(2.0 * PI) - PI;
+        for (lat1, lon1, lat2, lon2, dist, az1, az2) in GEODESIC_REFERENCE {
+            let p1 = ITRFCoord::from_geodetic_deg(lat1, lon1, 0.0);
+            let p2 = ITRFCoord::from_geodetic_deg(lat2, lon2, 0.0);
+            let (s, h1, h2) = p1.geodesic_distance(&p2);
+            let what = format!("({lat1}, {lon1}) -> ({lat2}, {lon2})");
+            assert_abs_diff_eq!(s, dist, epsilon = 1.0e-3);
+            assert!(
+                wrap(h1 - az1.to_radians()).abs() < 1.0e-7,
+                "{what}: initial heading {} deg, expected {az1}",
+                h1.to_degrees()
+            );
+            assert!(
+                wrap(h2 - az2.to_radians()).abs() < 1.0e-7,
+                "{what}: final heading {} deg, expected {az2}",
+                h2.to_degrees()
+            );
+            // The same path travelled backwards
+            let (sr, hr1, hr2) = p2.geodesic_distance(&p1);
+            assert_abs_diff_eq!(sr, dist, epsilon = 1.0e-3);
+            assert!(wrap(hr1 - h2 - PI).abs() < 1.0e-7, "{what}: reversed");
+            assert!(wrap(hr2 - h1 - PI).abs() < 1.0e-7, "{what}: reversed");
+        }
     }
 
     #[test]
-    fn test_geodesic_near_antipodal_is_finite() {
-        // Near-antipodal pairs are the ill-conditioned regime for Vincenty's
-        // inverse. We do not claim GeographicLib accuracy here, but the result
-        // must remain finite (never NaN/inf) and physically plausible — roughly
-        // half the Earth's circumference.
-        let a = ITRFCoord::from_geodetic_deg(0.0, 0.0, 0.0);
-        let b = ITRFCoord::from_geodetic_deg(0.5, 179.7, 0.0);
-        let dist = a.distance_to(&b);
-        assert!(dist.is_finite());
-        assert!((19.0e6..20.1e6).contains(&dist));
+    fn test_geodesic_antipodal() {
+        // Exactly antipodal points: every meridian is a shortest path, of
+        // length half the meridian ellipse (20003931.4586 m, GeographicLib).
+        // The 5-iteration Vincenty returned 19903593.39 m for the first.
+        const HALF_MERIDIAN: f64 = 20003931.4586;
+        for (lat1, lon1, lat2, lon2) in [
+            (0.0, 0.0, 0.0, 180.0),
+            (10.0, 0.0, -10.0, 180.0),
+            (-90.0, 0.0, 90.0, 0.0),
+            (-33.0, 151.0, 33.0, -29.0),
+        ] {
+            let p1 = ITRFCoord::from_geodetic_deg(lat1, lon1, 0.0);
+            let p2 = ITRFCoord::from_geodetic_deg(lat2, lon2, 0.0);
+            let (s, h1, h2) = p1.geodesic_distance(&p2);
+            assert_abs_diff_eq!(s, HALF_MERIDIAN, epsilon = 1.0e-3);
+            assert!(h1.is_finite() && h2.is_finite());
+        }
+        // Equatorial points past (1 - f) * 180 deg of longitude: the shortest
+        // path leaves the equator. Distance must grow with separation (the
+        // old result for 179.5 deg was less than for 179 deg).
+        let origin = ITRFCoord::from_geodetic_deg(0.0, 0.0, 0.0);
+        let d = |lon: f64| origin.distance_to(&ITRFCoord::from_geodetic_deg(0.0, lon, 0.0));
+        assert_abs_diff_eq!(d(179.5), 19980861.9089, epsilon = 1.0e-3);
+        let mut last = 0.0;
+        for i in 0..=400 {
+            let dist = d(178.0 + 0.005 * i as f64);
+            assert!(dist > last, "not increasing at step {i}");
+            last = dist;
+        }
+        assert_abs_diff_eq!(last, HALF_MERIDIAN, epsilon = 1.0e-3);
+    }
+
+    #[test]
+    fn test_geodesic_bisection_matches_vincenty() {
+        // Where Vincenty's iteration converges, the bisection solver (used
+        // only when it does not) must give the same geodesic.
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let wrap = |a: f64| (a + PI).rem_euclid(2.0 * PI) - PI;
+        let mut compared = 0;
+        for _ in 0..2000 {
+            let lat1 = rng.random_range(-89.0..89.0_f64).to_radians();
+            let lat2 = rng.random_range(-89.0..89.0_f64).to_radians();
+            let londiff = rng.random_range(-179.0..179.0_f64).to_radians();
+            let (su1, cu1) = ((1.0 - WGS84_F) * lat1.tan()).atan().sin_cos();
+            let (su2, cu2) = ((1.0 - WGS84_F) * lat2.tan()).atan().sin_cos();
+            let Some((s, h1, h2)) = vincenty_inverse(su1, cu1, su2, cu2, londiff) else {
+                continue;
+            };
+            let (sb, hb1, hb2) = bisection_inverse(su1, cu1, su2, cu2, londiff);
+            assert_abs_diff_eq!(s, sb, epsilon = 1.0e-4);
+            // Headings are ill-conditioned for very short and nearly
+            // antipodal paths
+            if s > 1.0e3 && s < 19.0e6 {
+                assert!(wrap(h1 - hb1).abs() < 1.0e-6, "h1 {h1} vs {hb1}");
+                assert!(wrap(h2 - hb2).abs() < 1.0e-6, "h2 {h2} vs {hb2}");
+            }
+            compared += 1;
+        }
+        assert!(compared > 1500);
+    }
+
+    #[test]
+    fn test_move_with_heading_long() {
+        // Direct then inverse over long paths (5 fixed iterations of the
+        // direct formula were not always enough)
+        let start = ITRFCoord::from_geodetic_deg(-41.32, 174.81, 0.0);
+        for (dist, heading_deg) in [
+            (1.0e3, 10.0),
+            (5.0e6, 123.0),
+            (15.0e6, -80.0),
+            (19.0e6, 40.0),
+        ] {
+            let heading = f64::to_radians(heading_deg);
+            let end = start.move_with_heading(dist, heading);
+            let (s, h1, _) = start.geodesic_distance(&end);
+            assert_abs_diff_eq!(s, dist, epsilon = 1.0e-3);
+            assert_abs_diff_eq!(h1, heading, epsilon = 1.0e-9);
+        }
     }
 
     #[test]
