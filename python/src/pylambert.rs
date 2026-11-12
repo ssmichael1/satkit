@@ -14,7 +14,8 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 ///     r1 (array-like): Initial position vector, meters: any real numeric
 ///         3-element array-like (numpy array, list or tuple)
 ///     r2 (array-like): Final position vector, meters (likewise)
-///     tof (float): Time of flight in seconds (must be positive)
+///     tof (float | duration | datetime.timedelta): Time of flight, must be
+///         positive; a number is in seconds
 ///     mu (float, optional): Gravitational parameter in m³/s² (default: Earth μ)
 ///     prograde (bool, optional): If True (default), use prograde transfer
 ///         (angular momentum h_z >= 0); if False, use retrograde transfer
@@ -24,11 +25,13 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 ///     list[tuple[numpy.ndarray, numpy.ndarray]]: List of (v1, v2) solution pairs.
 ///         Each v1 is the departure velocity and v2 is the arrival velocity
 ///         (3-element numpy arrays in m/s). The first element is the
-///         zero-revolution solution.
+///         zero-revolution solution; additional elements are
+///         multi-revolution solutions if they exist.
 ///
 /// Raises:
 ///     TypeError: If ``r1`` or ``r2`` is not a real numeric array-like, or
-///         ``tof`` / ``mu`` is not a number
+///         ``tof`` is not a number, duration or timedelta, or ``mu`` is not
+///         a number
 ///     ValueError: If inputs are invalid (``r1`` or ``r2`` not 3 elements,
 ///         non-finite values, tof or mu not positive, zero position,
 ///         r1 == r2), or if the solver fails to converge
@@ -47,7 +50,7 @@ pub fn lambert(
     py: Python,
     r1: &Bound<'_, PyAny>,
     r2: &Bound<'_, PyAny>,
-    tof: f64,
+    tof: &Bound<'_, PyAny>,
     mu: Option<f64>,
     prograde: Option<bool>,
 ) -> PyResult<Vec<LambertSolution>> {
@@ -56,6 +59,13 @@ pub fn lambert(
     // `ValueError` for the wrong shape
     let r1_vec = to_vector3(r1, "r1")?;
     let r2_vec = to_vector3(r2, "r2")?;
+
+    // A number of seconds is passed on as given (the solver checks it); a
+    // duration or timedelta is converted to seconds
+    let tof = match tof.extract::<f64>() {
+        Ok(secs) => secs,
+        Err(_) => crate::pykepler::duration_arg(tof, "tof")?.as_seconds(),
+    };
 
     let mu_val = mu.unwrap_or(satkit::consts::MU_EARTH);
     let prograde_val = prograde.unwrap_or(true);

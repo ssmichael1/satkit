@@ -416,7 +416,7 @@ impl PyQuaternion {
 
     /// True when ``other`` is a quaternion with exactly the same four
     /// components (no tolerance). ``q`` and ``-q`` are the same rotation but
-    /// compare unequal.
+    /// compare unequal; use ``isclose`` to compare rotations.
     fn __eq__(&self, other: &Self) -> bool {
         self.0 == other.0
     }
@@ -527,6 +527,133 @@ impl PyQuaternion {
     #[getter]
     fn w(&self) -> f64 {
         self.0.w
+    }
+
+    /// Rotation angle between this orientation and another, radians in [0, pi]
+    ///
+    /// The angle of the rotation ``self.conj() * other`` that takes one to
+    /// the other. ``q`` and ``-q`` are the same rotation, so
+    /// ``q.angle_to(-q)`` is 0.
+    ///
+    /// Args:
+    ///     other (quaternion): The other orientation
+    ///
+    /// Returns:
+    ///     float: Angle between the two rotations, radians in [0, pi]
+    ///
+    /// Example:
+    ///     >>> import math
+    ///     >>> q1 = satkit.quaternion.rotz(math.radians(10))
+    ///     >>> q2 = satkit.quaternion.rotz(math.radians(40))
+    ///     >>> round(math.degrees(q1.angle_to(q2)), 6)
+    ///     30.0
+    fn angle_to(&self, other: &Self) -> f64 {
+        let r = self.0.conjugate() * other.0;
+        // atan2 of the half-angle sine and cosine keeps full precision for
+        // small angles, where 2 acos(|dot|) loses half the digits; |w| folds
+        // q and -q together
+        let s = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt();
+        2.0 * s.atan2(r.w.abs())
+    }
+
+    /// True when ``other`` is the same rotation to within ``atol`` radians
+    ///
+    /// Compares rotations, not components: ``q`` and ``-q`` are the same
+    /// rotation and are close (unlike ``==``, which compares the four
+    /// components exactly).
+    ///
+    /// Args:
+    ///     other (quaternion): The rotation to compare with
+    ///
+    /// Keyword Args:
+    ///     atol (float): Largest ``angle_to(other)``, radians, still counted
+    ///         as the same rotation. Default 1e-12
+    ///
+    /// Returns:
+    ///     bool: ``self.angle_to(other) <= atol``
+    ///
+    /// Raises:
+    ///     ValueError: ``atol`` is negative, NaN or infinite
+    ///
+    /// Example:
+    ///     >>> q = satkit.quaternion.rotx(0.3)
+    ///     >>> q.isclose(satkit.quaternion(-q.w, -q.x, -q.y, -q.z))
+    ///     True
+    #[pyo3(signature = (other, *, atol=1.0e-12))]
+    fn isclose(&self, other: &Self, atol: f64) -> PyResult<bool> {
+        if !(atol.is_finite() && atol >= 0.0) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "atol must be finite and non-negative, got {atol}"
+            )));
+        }
+        Ok(self.angle_to(other) <= atol)
+    }
+
+    /// Rotation axis and angle, the inverse of ``from_axis_angle``
+    ///
+    /// The same values as the ``axis`` and ``angle`` properties:
+    /// ``quaternion.from_axis_angle(*q.to_axis_angle())`` is ``q``.
+    ///
+    /// Returns:
+    ///     tuple[numpy.ndarray, float]: Unit rotation axis (3-element array;
+    ///     ``[1, 0, 0]`` for the identity) and the right-handed angle about
+    ///     it in radians, in [0, 2 pi)
+    ///
+    /// Example:
+    ///     >>> axis, angle = satkit.quaternion.rotz(0.5).to_axis_angle()
+    fn to_axis_angle(&self, py: Python) -> PyResult<(Py<PyAny>, f64)> {
+        Ok((self.axis(py)?, self.angle()))
+    }
+
+    /// The four components as an array in the order ``[w, x, y, z]``
+    /// (scalar first), the inverse of ``from_array``
+    ///
+    /// Returns:
+    ///     numpy.ndarray: 4-element float64 array ``[w, x, y, z]``
+    ///
+    /// Example:
+    ///     >>> satkit.quaternion().to_array()
+    ///     array([1., 0., 0., 0.])
+    fn to_array(&self, py: Python) -> PyResult<Py<PyAny>> {
+        Ok(
+            np::PyArray1::from_slice(py, &[self.0.w, self.0.x, self.0.y, self.0.z])
+                .into_any()
+                .unbind(),
+        )
+    }
+
+    /// Quaternion from an array of its four components in the order
+    /// ``[w, x, y, z]`` (scalar first), the inverse of ``to_array``
+    ///
+    /// The same as ``quaternion(w, x, y, z)``: the components are scaled to
+    /// unit norm.
+    ///
+    /// Args:
+    ///     arr (array-like): 4 components ``[w, x, y, z]`` (any real numeric
+    ///         array-like: numpy array, list or tuple)
+    ///
+    /// Returns:
+    ///     quaternion: Unit quaternion along ``arr``
+    ///
+    /// Raises:
+    ///     TypeError: ``arr`` is not a real numeric array-like
+    ///     ValueError: ``arr`` does not have 4 elements, holds a NaN or
+    ///         infinity, or is all zeros
+    ///
+    /// Example:
+    ///     >>> q = satkit.quaternion.from_array([1.0, 0.0, 0.0, 0.0])
+    #[staticmethod]
+    fn from_array(arr: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let arr = to_f64_ndarray(arr)?;
+        let ro = arr.readonly();
+        let a = ro.as_array();
+        if a.ndim() != 1 || a.len() != 4 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "quaternion array must have 4 elements [w, x, y, z], got shape {:?}",
+                a.shape()
+            )));
+        }
+        Ok(unit_quaternion(a[0], a[1], a[2], a[3])?.into())
     }
 
     /// Spherical linear interpolation between self and other quaternion

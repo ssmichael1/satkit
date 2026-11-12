@@ -53,6 +53,10 @@ satkit\.satkit\.satstate\.__new__
 # against `*args` (test_stub_signatures.py checks the keywords).
 satkit\.satkit\.itrfcoord\.__init__
 satkit\.satkit\.itrfcoord\.__new__
+# Keyword-only `latitude_*`/`longitude_*` default to None at runtime (one
+# runtime signature for both units); the stub's deg and rad overloads make
+# each pair a required float, so stubtest reports the None defaults.
+satkit\.satkit\.itrfcoord\.from_geodetic
 satkit\.satkit\.time\.__init__
 satkit\.satkit\.time\.__new__
 # #[new] takes bare `*args`, so the runtime has no signature to compare

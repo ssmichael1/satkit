@@ -73,13 +73,6 @@ pub fn to_vector3(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vector3> {
     Ok(numeris::vector![a[0], a[1], a[2]])
 }
 
-/// The `ValueError` a keyword of the wrong type has always raised for the
-/// keywords that were once parsed from `**kwargs` by hand (see
-/// [`arg_extractor!`](crate::arg_extractor))
-pub fn invalid_value(name: &str) -> PyErr {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid value for {name}"))
-}
-
 /// Define `$vis fn $f(&Bound<PyAny>) -> PyResult<$t>` for
 /// `#[pyo3(from_py_with = $f)]`: it extracts a `$t` and maps a failure
 /// through `$err` (a closure taking the extraction error), so an argument of
