@@ -214,8 +214,25 @@ pub(crate) fn epoch_from_val(val: &Bound<'_, PyAny>) -> Result<satkit::Instant> 
         // numpy.datetime64 (a UTC label)
         Ok(val.extract::<crate::pyinstant::TimeArg>()?.0)
     } else {
-        bail!("Invalid epoch type");
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "EPOCH must be a str, satkit.time, datetime.datetime or numpy.datetime64, not {}",
+            val.get_type()
+        ))
+        .into())
     }
+}
+
+/// The time argument of `sgp4` / `TLE.fit_from_states`: a single time, or a
+/// list / array of them. A value that is not a time is a `TypeError` (the
+/// shared conversion reports it as `RuntimeError`).
+pub(crate) fn time_input(time: &Bound<'_, PyAny>) -> PyResult<crate::pyinstant::TimeInput> {
+    time.to_time_input().map_err(|e| {
+        if e.is_instance_of::<pyo3::exceptions::PyRuntimeError>(time.py()) {
+            pyo3::exceptions::PyTypeError::new_err(e.value(time.py()).to_string())
+        } else {
+            e
+        }
+    })
 }
 
 /// The integer error code reported, at every time, for an element set that
@@ -324,7 +341,7 @@ fn sgp4_one(
     let crate::pyinstant::TimeInput {
         times: tmvec,
         scalar: time_scalar,
-    } = time.to_time_input()?;
+    } = time_input(time)?;
     let res = py.detach(|| psgp4::sgp4_full(src, tmvec.as_slice(), gravconst, opsmode));
     if !errflag {
         if let Err(e) = res {
@@ -339,10 +356,14 @@ fn sgp4_one(
 }
 
 crate::arg_extractor!(pub(crate) gravconst_arg: GravConst, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid gravconst: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!(
+        "gravconst must be a satkit.sgp4_gravconst: {e}"
+    ))
 });
 crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid opsmode: {e}"))
+    pyo3::exceptions::PyTypeError::new_err(format!(
+        "opsmode must be a satkit.sgp4_opsmode: {e}"
+    ))
 });
 
 /// SGP-4 propagator for TLE
@@ -490,10 +511,7 @@ pub fn sgp4(
         out
     }
     // Handle input as dict
-    else if tle.is_instance_of::<PyDict>() {
-        let dict: &Bound<'_, PyDict> = tle.cast().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid TLE dictionary: {}", e))
-        })?;
+    else if let Ok(dict) = tle.cast::<PyDict>() {
         let mut omm = omm_from_pydict(dict)?;
         sgp4_one(py, &mut omm, time, gravconst, opsmode, errflag)
     } else if tle.is_instance_of::<PyList>() {
@@ -501,7 +519,7 @@ pub fn sgp4(
         let crate::pyinstant::TimeInput {
             times: tmarray,
             scalar: time_scalar,
-        } = time.to_time_input()?;
+        } = time_input(time)?;
 
         // Sources for the SGP4 computation, extracted with the GIL held;
         // the computation itself runs below with the GIL released.
@@ -515,24 +533,22 @@ pub fn sgp4(
 
         let mut sources: Vec<Sgp4Source> = plist
             .iter()
-            .map(|item| -> Result<Sgp4Source> {
+            .enumerate()
+            .map(|(i, item)| -> PyResult<Sgp4Source> {
                 if let Ok(pytle) = item.cast::<PyTLE>() {
                     let snapshot = Box::new(snapshot_tle(pytle)?);
                     let rtle = snapshot.clone();
                     Ok(Sgp4Source::Tle(pytle.clone().unbind(), rtle, snapshot))
-                } else if item.is_instance_of::<PyDict>() {
-                    let dict: &Bound<'_, PyDict> = item.cast().map_err(|e| {
-                        pyo3::exceptions::PyValueError::new_err(format!(
-                            "Invalid TLE dictionary: {}",
-                            e
-                        ))
-                    })?;
+                } else if let Ok(dict) = item.cast::<PyDict>() {
                     Ok(Sgp4Source::Omm(Box::new(omm_from_pydict(dict)?)))
                 } else {
-                    bail!("Invalid TLE in list");
+                    Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                        "element {i} of the list must be a TLE or an OMM dict, not {}",
+                        item.get_type()
+                    )))
                 }
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<PyResult<Vec<_>>>()?;
 
         // Honor the gravconst / opsmode kwargs on the list path too (previously
         // this called the default-config `sgp4`, silently ignoring them).
@@ -597,6 +613,10 @@ pub fn sgp4(
         };
         pack_sgp4_result(py, flat, errflag, dims, edims)
     } else {
-        bail!("Invalid input type for argument 1");
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "tle must be a TLE, an OMM dict or a list of them, not {}",
+            tle.get_type()
+        ))
+        .into())
     }
 }

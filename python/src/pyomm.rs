@@ -12,7 +12,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use satkit::omm::OMM;
 use serde_json::{Map, Value};
 
@@ -177,18 +177,34 @@ fn flatten(map: &mut Map<String, Value>, dict: &Bound<'_, PyDict>) -> Result<()>
 
 /// Builds a Rust `OMM` from a Python dict.
 ///
-/// Used by `satkit.sgp4` for dict inputs and by `TLE.from_omm`.
-pub fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<OMM> {
+/// Used by `satkit.sgp4` for dict inputs and by `TLE.from_omm`. A dict that
+/// is not an OMM (a required key missing, a value that cannot be read) is a
+/// `ValueError`.
+pub fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> PyResult<OMM> {
     let mut map = Map::new();
     flatten(&mut map, dict)?;
     serde_json::from_value::<OMM>(Value::Object(map)).map_err(|e| {
-        anyhow!(
+        pyo3::exceptions::PyValueError::new_err(format!(
             "Invalid OMM dictionary: {e}. Expected the CCSDS keys EPOCH, MEAN_MOTION, \
              ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER and MEAN_ANOMALY \
              (as in Space-Track/CelesTrak JSON), or the nested meanElements/tleParameters \
              groups of an XML-derived dict"
-        )
+        ))
     })
+}
+
+/// The Python exception for an OMM loader error: `ValueError` for content
+/// that is not an OMM document, the matching `OSError` for an I/O failure,
+/// and `RuntimeError` for what fails at run time (a download, offline mode).
+fn omm_err(e: satkit::omm::Error) -> PyErr {
+    use satkit::omm::Error as E;
+    match e {
+        E::Io(e) => e.into(),
+        E::Http(_) | E::HttpThrottled(_) | E::Offline { .. } | E::XmlFeatureDisabled => {
+            pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
+        }
+        e => pyo3::exceptions::PyValueError::new_err(e.to_string()),
+    }
 }
 
 fn json_to_py<'py>(py: Python<'py>, v: &Value) -> PyResult<Bound<'py, PyAny>> {
@@ -266,9 +282,9 @@ fn omms_to_pylist(py: Python<'_>, omms: &[OMM]) -> PyResult<Py<PyAny>> {
 ///     pos, vel = sk.sgp4(omms[0], sk.time(2024, 1, 1))
 ///     ```
 #[pyfunction]
-pub fn omm_from_url(py: Python<'_>, url: String) -> Result<Py<PyAny>> {
-    let omms = py.detach(|| OMM::from_url(&url))?;
-    Ok(omms_to_pylist(py, &omms)?)
+pub fn omm_from_url(py: Python<'_>, url: String) -> PyResult<Py<PyAny>> {
+    let omms = py.detach(|| OMM::from_url(&url)).map_err(omm_err)?;
+    omms_to_pylist(py, &omms)
 }
 
 /// Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
@@ -288,9 +304,14 @@ pub fn omm_from_url(py: Python<'_>, url: String) -> Result<Py<PyAny>> {
 ///         the path. Another I/O failure raises the matching ``OSError``
 ///     ValueError: if the content is none of the three formats or is malformed
 #[pyfunction]
-pub fn omm_from_file(py: Python<'_>, filename: std::path::PathBuf) -> Result<Py<PyAny>> {
-    let omms = py.detach(|| OMM::from_file(&filename))?;
-    Ok(omms_to_pylist(py, &omms)?)
+pub fn omm_from_file(py: Python<'_>, filename: std::path::PathBuf) -> PyResult<Py<PyAny>> {
+    let omms = py.detach(|| {
+        // Read here, not with `OMM::from_file`, to name the path in the error
+        let text =
+            std::fs::read_to_string(&filename).map_err(|e| crate::pytle::io_err(e, &filename))?;
+        OMM::from_text(&text).map_err(omm_err)
+    })?;
+    omms_to_pylist(py, &omms)
 }
 
 /// Parse OMM(s) from JSON, XML or CSV text as a list of dictionaries
@@ -316,7 +337,7 @@ pub fn omm_from_file(py: Python<'_>, filename: std::path::PathBuf) -> Result<Py<
 ///         malformed; for CSV the message gives the line of the bad row, and
 ///         a table with no ``EPOCH`` or ``MEAN_MOTION`` column is refused
 #[pyfunction]
-pub fn omm_from_text(py: Python<'_>, text: String) -> Result<Py<PyAny>> {
-    let omms = py.detach(|| OMM::from_text(&text))?;
-    Ok(omms_to_pylist(py, &omms)?)
+pub fn omm_from_text(py: Python<'_>, text: String) -> PyResult<Py<PyAny>> {
+    let omms = py.detach(|| OMM::from_text(&text)).map_err(omm_err)?;
+    omms_to_pylist(py, &omms)
 }

@@ -45,7 +45,7 @@ class TestInvalidInputRaises:
     def test_tle_huge_day_of_year(self):
         line1 = "1 26900U 01039A   06-99999999999  .00000045  00000-0  10000-3 0  8290"
         line2 = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.TLE.from_lines([line1, line2])
 
     def test_sgp4_empty_list(self):
@@ -163,9 +163,9 @@ class TestTleOnError:
     LINES = GOOD_A + BAD + GOOD_B
 
     def test_raise_is_default(self):
-        with pytest.raises(RuntimeError, match="line 4"):
+        with pytest.raises(ValueError, match="line 4"):
             sk.TLE.from_lines(self.LINES)
-        with pytest.raises(RuntimeError, match="line 4"):
+        with pytest.raises(ValueError, match="line 4"):
             sk.TLE.from_lines(self.LINES, on_error="raise")
 
     def test_skip(self):
@@ -184,7 +184,7 @@ class TestTleOnError:
         msg = str(rec[0].message)
         assert msg.startswith('TLE record starting at line 4 (sat 49140 "STARLINK-3118")')
         # The same text on_error="raise" raises
-        with pytest.raises(RuntimeError) as exc:
+        with pytest.raises(ValueError) as exc:
             sk.TLE.from_lines(self.LINES)
         assert str(exc.value) == msg
         # Attributed to the calling line, and a UserWarning
@@ -231,7 +231,7 @@ class TestTleOnError:
     def test_from_file(self, tmp_path):
         f = tmp_path / "cat.txt"
         f.write_text("\n".join(self.LINES) + "\n")
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.TLE.from_file(str(f))
         assert len(sk.TLE.from_file(str(f), on_error="skip")) == 2
         with pytest.warns(sk.TLEWarning):

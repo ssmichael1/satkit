@@ -39,7 +39,7 @@ OMMs are commonly published as:
 - KVN (key-value notation)
 - CSV: a header row of the OMM keywords and one row per object. CCSDS defines only KVN and XML, but CSV is the most compact form, and it is what a CelesTrak GP query returns when no `FORMAT` is given
 
-satkit reads the JSON, XML and CSV forms (KVN is not supported). In CSV an empty cell is an absent field, columns that are not OMM fields (`RMS`, `DATA_SOURCE`, Space-Track's extras) are kept as strings, and a row that fails to parse raises `RuntimeError` naming its line. In Python an OMM is a plain dictionary keyed by the CCSDS field names: `satkit.omm_from_url()`, `satkit.omm_from_file()` and `satkit.omm_from_text()` return a list of them, with every field the source provided (Space-Track's catalog extras such as `OBJECT_TYPE` and `RCS_SIZE` included) and numbers converted from Space-Track's quoted strings. `satkit.sgp4()` accepts these dictionaries directly, as well as the raw output of `json.load` on a CelesTrak or Space-Track response. `satkit.TLE.from_omm()` and `satkit.TLE.to_omm()` convert between the two representations.
+satkit reads the JSON, XML and CSV forms (KVN is not supported). In CSV an empty cell is an absent field, columns that are not OMM fields (`RMS`, `DATA_SOURCE`, Space-Track's extras) are kept as strings, and a row that fails to parse raises `ValueError` naming its line. In Python an OMM is a plain dictionary keyed by the CCSDS field names: `satkit.omm_from_url()`, `satkit.omm_from_file()` and `satkit.omm_from_text()` return a list of them, with every field the source provided (Space-Track's catalog extras such as `OBJECT_TYPE` and `RCS_SIZE` included) and numbers converted from Space-Track's quoted strings. `satkit.sgp4()` accepts these dictionaries directly, as well as the raw output of `json.load` on a CelesTrak or Space-Track response. `satkit.TLE.from_omm()` and `satkit.TLE.to_omm()` convert between the two representations.
 
 A message whose `MEAN_ELEMENT_THEORY` is not SGP4, whose `TIME_SYSTEM` is not UTC, whose `REF_FRAME` is not TEME, whose `CENTER_NAME` is not EARTH, or whose `EPHEMERIS_TYPE` is 4 (SGP4-XP, which Space-Track distributes alongside classic SGP4 sets) is rejected rather than propagated with the wrong theory. `EPOCH` may be an RFC 3339 date-time or the CCSDS day-of-year form `YYYY-DDDThh:mm:ss`.
 
@@ -57,7 +57,7 @@ The satellite catalog passed 99,999 in July 2026, and every object catalogued si
 
 `TLE.from_lines()`, `TLE.from_file()` and `TLE.from_url()` accept 2-line and 3-line (named) element sets, any number of them, and always return a `list[TLE]`, even for a single element set. Input with no element sets raises `ValueError`.
 
-A record that fails to parse raises `RuntimeError` naming the input line the record starts on and its satellite. So does a line 1 whose line 2 does not follow it, and a line 1 and line 2 with different satellite numbers. A line that is almost a data line (68 characters, or a leading space) is read as a satellite name, and the error then says so; a UTF-8 byte-order mark at the start of the input is ignored. A data line longer than the standard 69 characters is accepted (the extra columns are ignored), but if a field of such a record then fails to parse, the message says so: a field written one column too wide shifts every later column of the line. Checksums (column 69) are not verified unless requested with `check_checksum=True` (`from_lines` and `from_file`).
+A record that fails to parse raises `ValueError` naming the input line the record starts on and its satellite. So does a line 1 whose line 2 does not follow it, and a line 1 and line 2 with different satellite numbers. A line that is almost a data line (68 characters, or a leading space) is read as a satellite name, and the error then says so; a UTF-8 byte-order mark at the start of the input is ignored. A data line longer than the standard 69 characters is accepted (the extra columns are ignored), but if a field of such a record then fails to parse, the message says so: a field written one column too wide shifts every later column of the line. Checksums (column 69) are not verified unless requested with `check_checksum=True` (`from_lines` and `from_file`).
 
 ```python
 import satkit as sk
@@ -73,13 +73,13 @@ tle = sk.TLE.from_lines(lines, check_checksum=True)[0]
 bad = lines[:2] + [lines[2].replace(" 0002663 ", " 00026630 ")]
 try:
     sk.TLE.from_lines(bad)
-except RuntimeError as e:
+except ValueError as e:
     print(e)
 # TLE record starting at line 1 (sat 49140 "STARLINK-3118"): Could not parse mean anomaly:
 # invalid float literal (line 3 is 70 characters; a TLE line is 69, so its columns may be shifted)
 ```
 
-To keep the good records of a large catalog file and leave out the malformed ones, pass `on_error="warn"` or `on_error="skip"` to any of the three loaders. `"warn"` emits one `satkit.TLEWarning` per record left out, with the message `RuntimeError` would have carried; `"skip"` is silent. Only the default `on_error="raise"` raises for what the input contains: with the other two the result may be an empty list, when every record was bad or the input held no records at all (`"warn"` then emits one warning saying so).
+To keep the good records of a large catalog file and leave out the malformed ones, pass `on_error="warn"` or `on_error="skip"` to any of the three loaders. `"warn"` emits one `satkit.TLEWarning` per record left out, with the message `ValueError` would have carried; `"skip"` is silent. Only the default `on_error="raise"` raises for what the input contains: with the other two the result may be an empty list, when every record was bad or the input held no records at all (`"warn"` then emits one warning saying so).
 
 ```python
 import warnings

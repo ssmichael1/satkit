@@ -3,8 +3,7 @@ use pyo3::IntoPyObjectExt;
 
 use satkit::tle::TLE;
 
-use crate::pyinstant::ToTimeVec;
-use anyhow::{bail, Result};
+use pyo3::exceptions::{PyOSError, PyRuntimeError, PyValueError};
 
 use crate::pytlefitstatus::PyTleFitStatus;
 
@@ -107,11 +106,11 @@ fn tle_list(
     records: Vec<satkit::tle::Result<TLE>>,
     on_error: OnError,
     what: &str,
-) -> Result<Vec<PyTLE>> {
+) -> PyResult<Vec<PyTLE>> {
     if records.is_empty() {
         let msg = format!("No valid TLEs found in {what}");
         match on_error {
-            OnError::Raise => return Err(pyo3::exceptions::PyValueError::new_err(msg).into()),
+            OnError::Raise => return Err(PyValueError::new_err(msg)),
             OnError::Warn => tle_warning(py, &msg)?,
             OnError::Skip => {}
         }
@@ -120,7 +119,7 @@ fn tle_list(
     for rec in records {
         match rec {
             Ok(tle) => tles.push(PyTLE(tle)),
-            Err(e) if on_error == OnError::Raise => return Err(e.into()),
+            Err(e) if on_error == OnError::Raise => return Err(tle_err(e)),
             Err(e) if on_error == OnError::Warn => tle_warning(py, &e.to_string())?,
             Err(_) => {}
         }
@@ -151,15 +150,66 @@ fn check_intl_desig(value: &str) -> PyResult<()> {
     }
 }
 
-/// The Python exception for an error of `to_2line` / `to_3line`:
-/// `ValueError` for a satellite number with no Alpha-5 form or a designator
-/// that does not fit its field, `RuntimeError` otherwise.
-fn format_err(e: satkit::tle::Error) -> PyErr {
+/// The Python exception for a TLE error: `ValueError` for input that is not
+/// a valid element set (text that does not parse, an element set that does
+/// not fit the two-line format, fit inputs that do not match), the matching
+/// `OSError` for an I/O failure, and `RuntimeError` for what fails at run
+/// time (a download, offline mode, the fit itself).
+pub(crate) fn tle_err(e: satkit::tle::Error) -> PyErr {
+    use satkit::tle::Error as E;
     match e {
-        satkit::tle::Error::SatNumTooLargeForAlpha5 | satkit::tle::Error::InvalidIntlDesig(_) => {
-            pyo3::exceptions::PyValueError::new_err(e.to_string())
+        E::Io(e) => e.into(),
+        E::InvalidLineLengths { .. }
+        | E::LineTooShort { .. }
+        | E::NonAscii { .. }
+        | E::ParseField { .. }
+        | E::ChecksumMismatch { .. }
+        | E::Record { .. }
+        | E::SatNumMismatch { .. }
+        | E::MissingLine2
+        | E::MissingLine1
+        | E::YearOutOfRange(_)
+        | E::InvalidSatNum(_)
+        | E::InvalidFirstDigit(_)
+        | E::EmptySatNum
+        | E::SatNumTooLargeForAlpha5
+        | E::InvalidSatNumValue
+        | E::InvalidEpoch(_)
+        | E::StatesTimesLengthMismatch
+        | E::EmptyStates
+        | E::EpochOutOfRange { .. }
+        | E::EccentricityOutOfRange(_)
+        | E::InvalidIntlDesig(_) => PyValueError::new_err(e.to_string()),
+        e => PyRuntimeError::new_err(e.to_string()),
+    }
+}
+
+/// The Python exception for a failure to read the file `path`: the
+/// `OSError` subclass of its errno (`FileNotFoundError`, `PermissionError`,
+/// ...) with the path as its `filename`, or `ValueError` for content that
+/// is not text (no errno).
+pub(crate) fn io_err(e: std::io::Error, path: &std::path::Path) -> PyErr {
+    let path = path.display().to_string();
+    match e.raw_os_error() {
+        Some(errno) => {
+            // "No such file or directory (os error 2)" without the suffix
+            let msg = e.to_string();
+            let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+            // OSError(errno, strerror, filename) picks the subclass itself
+            PyOSError::new_err((errno, msg, path))
         }
-        e => anyhow::Error::from(e).into(),
+        None => PyValueError::new_err(format!("{path}: {e}")),
+    }
+}
+
+/// `value`, or `ValueError` if it is NaN or infinite
+fn finite(name: &str, value: f64) -> PyResult<f64> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(PyValueError::new_err(format!(
+            "{name} must be finite, got {value}"
+        )))
     }
 }
 
@@ -188,13 +238,14 @@ impl PyTLE {
         filename: std::path::PathBuf,
         check_checksum: bool,
         on_error: &str,
-    ) -> Result<Vec<Self>> {
+    ) -> PyResult<Vec<Self>> {
         let on_error = OnError::parse(on_error)?;
-        let file = File::open(&filename)?;
+        let file = File::open(&filename).map_err(|e| io_err(e, &filename))?;
 
         let lines: Vec<String> = io::BufReader::new(file)
             .lines()
-            .collect::<std::result::Result<_, _>>()?;
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| io_err(e, &filename))?;
 
         tle_list(
             py,
@@ -266,7 +317,7 @@ impl PyTLE {
         lines: Vec<String>,
         check_checksum: bool,
         on_error: &str,
-    ) -> Result<Vec<Self>> {
+    ) -> PyResult<Vec<Self>> {
         let on_error = OnError::parse(on_error)?;
         tle_list(py, parse_records(&lines, check_checksum), on_error, "input")
     }
@@ -295,9 +346,9 @@ impl PyTLE {
     ///     ```
     #[staticmethod]
     #[pyo3(signature = (url, *, on_error="raise"))]
-    fn from_url(py: Python, url: String, on_error: &str) -> Result<Vec<Self>> {
+    fn from_url(py: Python, url: String, on_error: &str) -> PyResult<Vec<Self>> {
         let on_error = OnError::parse(on_error)?;
-        let records = py.detach(|| TLE::records_from_url(&url))?;
+        let records = py.detach(|| TLE::records_from_url(&url)).map_err(tle_err)?;
         tle_list(py, records, on_error, "response")
     }
 
@@ -312,9 +363,16 @@ impl PyTLE {
     }
 
     #[setter(satnum)]
-    fn set_satnum(&mut self, value: i32) {
+    fn set_satnum(&mut self, value: i32) -> PyResult<()> {
+        // OMM's NORAD_CAT_ID holds up to nine digits
+        if !(0..=999_999_999).contains(&value) {
+            return Err(PyValueError::new_err(format!(
+                "satnum must be between 0 and 999999999, got {value}"
+            )));
+        }
         self.0.sat_num = value;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// International designator as written in the TLE (line 1, columns 10-17)
@@ -488,9 +546,16 @@ impl PyTLE {
     }
 
     #[setter(eccen)]
-    fn set_eccen(&mut self, value: f64) {
+    fn set_eccen(&mut self, value: f64) -> PyResult<()> {
+        // Also refuses NaN
+        if !(0.0..1.0).contains(&value) {
+            return Err(PyValueError::new_err(format!(
+                "eccen must be in [0, 1), got {value}"
+            )));
+        }
         self.0.eccen = value;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// Mean anomaly in degrees (setting a value that is not finite raises ``ValueError``)
@@ -499,9 +564,10 @@ impl PyTLE {
         self.0.mean_anomaly
     }
     #[setter(mean_anomaly)]
-    fn set_mean_anomaly(&mut self, value: f64) {
-        self.0.mean_anomaly = value;
+    fn set_mean_anomaly(&mut self, value: f64) -> PyResult<()> {
+        self.0.mean_anomaly = finite("mean_anomaly", value)?;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// Mean motion in revs / day (setting a negative or non-finite value raises ``ValueError``)
@@ -510,9 +576,15 @@ impl PyTLE {
         self.0.mean_motion
     }
     #[setter(mean_motion)]
-    fn set_mean_motion(&mut self, value: f64) {
+    fn set_mean_motion(&mut self, value: f64) -> PyResult<()> {
+        if finite("mean_motion", value)? < 0.0 {
+            return Err(PyValueError::new_err(format!(
+                "mean_motion must not be negative, got {value}"
+            )));
+        }
         self.0.mean_motion = value;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// Inclination in degrees (setting a value that is not finite raises ``ValueError``)
@@ -521,9 +593,10 @@ impl PyTLE {
         self.0.inclination
     }
     #[setter(inclination)]
-    fn set_inclination(&mut self, value: f64) {
-        self.0.inclination = value;
+    fn set_inclination(&mut self, value: f64) -> PyResult<()> {
+        self.0.inclination = finite("inclination", value)?;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// Epoch time of TLE
@@ -551,9 +624,10 @@ impl PyTLE {
         self.0.arg_of_perigee
     }
     #[setter(arg_of_perigee)]
-    fn set_arg_of_perigee(&mut self, value: f64) {
-        self.0.arg_of_perigee = value;
+    fn set_arg_of_perigee(&mut self, value: f64) -> PyResult<()> {
+        self.0.arg_of_perigee = finite("arg_of_perigee", value)?;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
@@ -563,9 +637,10 @@ impl PyTLE {
         self.0.mean_motion_dot
     }
     #[setter(mean_motion_dot)]
-    fn set_mean_motion_dot(&mut self, value: f64) {
-        self.0.mean_motion_dot = value;
+    fn set_mean_motion_dot(&mut self, value: f64) -> PyResult<()> {
+        self.0.mean_motion_dot = finite("mean_motion_dot", value)?;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// One sixth of 2nd derivative of mean motion wrt time, in revs/day^3
@@ -575,9 +650,10 @@ impl PyTLE {
         self.0.mean_motion_dot_dot
     }
     #[setter(mean_motion_dot_dot)]
-    fn set_mean_motion_dot_dot(&mut self, value: f64) {
-        self.0.mean_motion_dot_dot = value;
+    fn set_mean_motion_dot_dot(&mut self, value: f64) -> PyResult<()> {
+        self.0.mean_motion_dot_dot = finite("mean_motion_dot_dot", value)?;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// Right Ascension of the Ascending Node, degrees (setting a value that is not finite raises ``ValueError``)
@@ -586,9 +662,10 @@ impl PyTLE {
         self.0.raan
     }
     #[setter(raan)]
-    fn set_raan(&mut self, value: f64) {
-        self.0.raan = value;
+    fn set_raan(&mut self, value: f64) -> PyResult<()> {
+        self.0.raan = finite("raan", value)?;
         self.0.reset_cache();
+        Ok(())
     }
 
     /// Name of the satellite: the name line of a 3-line element set
@@ -612,9 +689,10 @@ impl PyTLE {
         self.0.bstar
     }
     #[setter(bstar)]
-    fn set_bstar(&mut self, value: f64) {
-        self.0.bstar = value;
+    fn set_bstar(&mut self, value: f64) -> PyResult<()> {
+        self.0.bstar = finite("bstar", value)?;
         self.0.reset_cache();
+        Ok(())
     }
 
     fn __str__(&self) -> String {
@@ -666,7 +744,7 @@ impl PyTLE {
     ///     ValueError: if a required key (``EPOCH`` or one of the six mean
     ///         elements) is missing or a value cannot be read
     #[staticmethod]
-    fn from_omm(omm: &Bound<'_, pyo3::types::PyDict>) -> Result<Self> {
+    fn from_omm(omm: &Bound<'_, pyo3::types::PyDict>) -> PyResult<Self> {
         let omm = crate::pyomm::omm_from_pydict(omm)?;
         Ok(Self(omm.to_tle()))
     }
@@ -706,7 +784,7 @@ impl PyTLE {
     ///         outside [0, 1), or the epoch year is outside 1957-2056 (the
     ///         span of the two-digit year)
     fn to_2line(&self) -> PyResult<[String; 2]> {
-        self.0.to_2line().map_err(format_err)
+        self.0.to_2line().map_err(tle_err)
     }
 
     /// Output as 2 canonical TLE lines preceded by a name line (3-line element set)
@@ -718,7 +796,7 @@ impl PyTLE {
     /// Raises:
     ///     ValueError: as ``to_2line``
     fn to_3line(&self) -> PyResult<[String; 3]> {
-        self.0.to_3line().map_err(format_err)
+        self.0.to_3line().map_err(tle_err)
     }
 
     /// Perform non-linear least squares fit of TLE parameters to a list of GCRF states
@@ -762,19 +840,17 @@ impl PyTLE {
         py: Python,
         states: Vec<[f64; 6]>,
         times: &Bound<'_, PyAny>,
-        epoch: &Bound<'_, PyAny>,
+        // A single time; a list of times (even of one) is a TypeError
+        epoch: crate::pyinstant::TimeArg,
         #[pyo3(from_py_with = crate::pysgp4::gravconst_arg)] gravconst: crate::pysgp4::GravConst,
         #[pyo3(from_py_with = crate::pysgp4::opsmode_arg)] opsmode: crate::pysgp4::OpsMode,
-    ) -> Result<(Self, Py<PyAny>)> {
-        let times = times.to_time_vec()?;
-        let epoch = epoch.to_time_vec()?;
-        if epoch.len() != 1 {
-            bail!("epoch must be a single time value");
-        }
+    ) -> PyResult<(Self, Py<PyAny>)> {
+        let times = crate::pysgp4::time_input(times)?.times;
         // Release the GIL during the (potentially long-running) fit
         let (gravconst, opsmode) = (gravconst.into(), opsmode.into());
-        let (tle, result) =
-            py.detach(|| TLE::fit_from_states_full(&states, &times, epoch[0], gravconst, opsmode))?;
+        let (tle, result) = py
+            .detach(|| TLE::fit_from_states_full(&states, &times, epoch.0, gravconst, opsmode))
+            .map_err(tle_err)?;
 
         let stats = {
             let dict = pyo3::types::PyDict::new(py);

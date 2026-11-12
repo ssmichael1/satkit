@@ -417,3 +417,204 @@ class TestFitResult:
         times64 = np.array([t.to_datetime().replace(tzinfo=None) for t in times], "datetime64[us]")
         fitted64, _ = sk.TLE.fit_from_states(np.array(states), times64, tle.epoch)
         assert abs(fitted64.mean_motion - fitted.mean_motion) < 1e-9
+
+
+class TestExceptionTypes:
+    """Review 4.1: TypeError for a wrong type, ValueError for a bad value,
+    OSError for I/O; RuntimeError is left for SGP4 itself failing."""
+
+    def test_sgp4_argument_types(self):
+        tle = _iss()
+        t = tle.epoch
+        for bad in (3, "tle", None, (tle,)):
+            with pytest.raises(TypeError, match="tle must be a TLE"):
+                sk.sgp4(bad, t)  # type: ignore[call-overload]
+        with pytest.raises(TypeError, match="element 1 of the list"):
+            sk.sgp4([tle, 3], t)  # type: ignore[list-item]
+        for bad in ("2021-09-22", 3.0, None, (t,)):
+            with pytest.raises(TypeError):
+                sk.sgp4(tle, bad)  # type: ignore[call-overload]
+            with pytest.raises(TypeError):
+                sk.sgp4([tle], bad)  # type: ignore[call-overload]
+
+    def test_gravconst_and_opsmode_types(self):
+        tle = _iss()
+        with pytest.raises(TypeError, match="gravconst must be a satkit.sgp4_gravconst"):
+            sk.sgp4(tle, tle.epoch, gravconst=0)  # type: ignore[call-overload]
+        with pytest.raises(TypeError, match="opsmode must be a satkit.sgp4_opsmode"):
+            sk.sgp4(tle, tle.epoch, opsmode="afspc")  # type: ignore[call-overload]
+        with pytest.raises(TypeError, match="gravconst"):
+            sk.TLE.fit_from_states([], [], tle.epoch, gravconst="wgs72")  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="opsmode"):
+            sk.TLE.fit_from_states([], [], tle.epoch, opsmode=1)  # type: ignore[arg-type]
+
+    def test_omm_dict_errors(self):
+        t = sk.time(2021, 9, 22)
+        omm = _iss().to_omm()
+        with pytest.raises(ValueError, match="EPOCH"):
+            sk.sgp4({}, t)
+        with pytest.raises(ValueError, match="MEAN_MOTION"):
+            sk.sgp4({**omm, "MEAN_MOTION": "fast"}, t)
+        with pytest.raises(ValueError, match='EPOCH "yesterday"'):
+            sk.sgp4({**omm, "EPOCH": "yesterday"}, t)
+        with pytest.raises(ValueError, match="EPOCH"):
+            sk.TLE.from_omm({"OBJECT_NAME": "X"})
+        with pytest.raises(TypeError):
+            sk.TLE.from_omm([omm])  # type: ignore[arg-type]
+        # SGP4 refusing a well-formed element set is still a RuntimeError
+        with pytest.raises(RuntimeError, match="MEAN_ELEMENT_THEORY"):
+            sk.sgp4({**omm, "MEAN_ELEMENT_THEORY": "DSST"}, t)
+        _, _, err = sk.sgp4({**omm, "MEAN_ELEMENT_THEORY": "DSST"}, t, errflag=True)
+        assert err[0] == sk.sgp4_error.unsupported
+
+    def test_tle_parse_errors_are_value_errors(self, tmp_path):
+        bad = [ISS[0], ISS[1].replace("51.6442", "51.6x42")]
+        with pytest.raises(ValueError, match="TLE record starting at line 1") as exc:
+            sk.TLE.from_lines(bad)
+        assert not isinstance(exc.value, sk.TLEWarning)
+        with pytest.raises(ValueError, match="checksum"):
+            sk.TLE.from_lines([ISS[0][:68] + "0", ISS[1]], check_checksum=True)
+        path = tmp_path / "bad.tle"
+        path.write_text("\n".join(bad))
+        with pytest.raises(ValueError, match="TLE record starting at line 1"):
+            sk.TLE.from_file(path)
+        with pytest.raises(TypeError):
+            sk.TLE.from_lines(3)  # type: ignore[arg-type]
+        # The warning carries the text the error would
+        with pytest.warns(sk.TLEWarning) as rec:
+            sk.TLE.from_lines(bad, on_error="warn")
+        assert str(rec[0].message) == str(exc.value)
+
+    def test_omm_text_errors_are_value_errors(self):
+        for text, what in [
+            ("CCSDS_OMM_VERS = 3.0", "KVN"),
+            ("garbage", "neither JSON"),
+            ('{"EPOCH": "2021-09-21T12:00:00"}', "MEAN_MOTION"),
+            ("[1, 2]", None),
+            ("<omm><body>", None),
+            ("NORAD_CAT_ID,CURRENT_NAME\n85,X\n", "no EPOCH column"),
+        ]:
+            with pytest.raises(ValueError, match=what):
+                sk.omm_from_text(text)
+        with pytest.raises(TypeError):
+            sk.omm_from_text(b"[]")  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("as_path", [False, True])
+    def test_missing_file_names_the_path(self, tmp_path, as_path):
+        missing = tmp_path / "no such file.txt"
+        arg = missing if as_path else str(missing)
+        for load in (sk.TLE.from_file, sk.omm_from_file):
+            with pytest.raises(FileNotFoundError) as exc:
+                load(arg)
+            assert exc.value.filename == str(missing)
+            assert exc.value.errno == 2
+            assert str(missing) in str(exc.value)
+            assert "os error" not in str(exc.value)
+
+    def test_other_io_errors_are_oserror(self, tmp_path):
+        for load in (sk.TLE.from_file, sk.omm_from_file):
+            with pytest.raises(IsADirectoryError) as exc:
+                load(tmp_path)
+            assert exc.value.filename == str(tmp_path)
+        binary = tmp_path / "binary.dat"
+        binary.write_bytes(b"\xff\xfe\x00\x01" * 8)
+        for load in (sk.TLE.from_file, sk.omm_from_file):
+            with pytest.raises(ValueError, match="binary.dat"):
+                load(binary)
+
+    def test_omm_file_content_errors(self, tmp_path):
+        path = tmp_path / "kvn.txt"
+        path.write_text("CCSDS_OMM_VERS = 3.0\n")
+        with pytest.raises(ValueError, match="KVN"):
+            sk.omm_from_file(path)
+
+    def test_to_2line_and_to_3line_raise_value_error(self):
+        cases = []
+        tle = _iss()
+        tle.epoch = sk.time(2060, 1, 1)
+        cases.append((tle, "Year out of range"))
+        tle = _iss()
+        tle.satnum = 340000
+        cases.append((tle, "Alpha-5"))
+        for tle, what in cases:
+            with pytest.raises(ValueError, match=what):
+                tle.to_2line()
+            with pytest.raises(ValueError, match=what):
+                tle.to_3line()
+
+    def test_fit_from_states_errors(self):
+        tle = _iss()
+        t = [tle.epoch, tle.epoch + sk.duration(minutes=10)]
+        states = [np.array([7e6, 0, 0, 0, 7.5e3, 0.0])] * 2
+        with pytest.raises(ValueError, match="must not be empty"):
+            sk.TLE.fit_from_states([], [], tle.epoch)
+        with pytest.raises(ValueError, match="same length"):
+            sk.TLE.fit_from_states(states, t[:1], tle.epoch)
+        with pytest.raises(ValueError, match="Epoch is out of range"):
+            sk.TLE.fit_from_states(states, t, tle.epoch + sk.duration(days=1))
+        # epoch is one time, not a list of one (review 2.12)
+        with pytest.raises(TypeError):
+            sk.TLE.fit_from_states(states, t, [tle.epoch])  # type: ignore[arg-type]
+        with pytest.raises(TypeError):
+            sk.TLE.fit_from_states(states, "now", tle.epoch)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="length 6"):
+            sk.TLE.fit_from_states([[1.0, 2.0]], t[:1], tle.epoch)
+
+
+class TestSetterValidation:
+    """Review 4.4: setters refuse values no element set can hold."""
+
+    FLOATS = [
+        "eccen", "inclination", "raan", "arg_of_perigee", "mean_anomaly", "mean_motion",
+        "mean_motion_dot", "mean_motion_dot_dot", "bstar",
+    ]  # fmt: skip
+
+    @pytest.mark.parametrize("name", FLOATS)
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+    def test_non_finite(self, name, bad):
+        tle = _iss()
+        with pytest.raises(ValueError, match=name):
+            setattr(tle, name, bad)
+        assert tle == _iss()
+
+    @pytest.mark.parametrize("name", FLOATS)
+    def test_wrong_type(self, name):
+        with pytest.raises(TypeError):
+            setattr(_iss(), name, "1.0")
+
+    @pytest.mark.parametrize("bad", [-1e-9, 1.0, 1.5])
+    def test_eccentricity_range(self, bad):
+        tle = _iss()
+        with pytest.raises(ValueError, match=r"eccen must be in \[0, 1\)"):
+            tle.eccen = bad
+        assert tle.eccen == 0.0001458
+        tle.eccen = 0.0
+        tle.eccen = 0.9999999
+
+    def test_mean_motion_not_negative(self):
+        tle = _iss()
+        with pytest.raises(ValueError, match="mean_motion must not be negative"):
+            tle.mean_motion = -1.0
+        tle.mean_motion = 0.0
+
+    def test_satnum_range(self):
+        tle = _iss()
+        for bad in (-1, 1_000_000_000):
+            with pytest.raises(ValueError, match="satnum must be between 0 and 999999999"):
+                tle.satnum = bad
+        with pytest.raises(OverflowError):
+            tle.satnum = 2**40
+        assert tle.satnum == 25544
+        # Above Alpha-5: fine for OMM, refused by to_2line
+        tle.satnum = 999_999_999
+        assert tle.to_omm()["NORAD_CAT_ID"] == 999_999_999
+
+    def test_valid_values_still_propagate(self):
+        tle = sk.TLE()
+        tle.satnum = 99999
+        tle.epoch = sk.time(2024, 1, 1)
+        tle.inclination = 51.6
+        tle.eccen = 0.001
+        tle.mean_motion = 15.5
+        pos, _ = sk.sgp4(tle, tle.epoch)
+        assert 6.6e6 < np.linalg.norm(pos) < 6.9e6
