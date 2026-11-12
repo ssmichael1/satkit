@@ -131,7 +131,7 @@ class TestOrbitFrameDegenerate:
 
     @pytest.mark.parametrize("func", ["to_gcrf", "from_gcrf"])
     @pytest.mark.parametrize(
-        "frame", [sk.frame.ITRF, sk.frame.TEME, sk.frame.EME2000, sk.frame.ICRF]
+        "frame", [sk.frame.ITRF, sk.frame.TEME, sk.frame.TIRS, sk.frame.CIRS]
     )
     def test_unsupported_frame_message_names_the_function(self, func, frame):
         with pytest.raises(RuntimeError) as e:
@@ -276,6 +276,7 @@ import types
 
 NATIVE_SUBMODULES = [
     "density",
+    "eop",
     "frametransform",
     "jplephem",
     "moon",

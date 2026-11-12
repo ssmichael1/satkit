@@ -171,10 +171,19 @@ pub fn disable_space_weather_time_warning() {
 ///     path (str | os.PathLike): File to load
 ///
 /// Raises:
-///     RuntimeError: If the file cannot be read or is not a GFZ table
+///     FileNotFoundError: If the file does not exist (the message names it)
+///     RuntimeError: If the file cannot be read otherwise or is not a GFZ table
 #[pyfunction]
-pub fn init_from_path(path: std::path::PathBuf) -> anyhow::Result<()> {
-    Ok(spaceweather::init_from_path(&path)?)
+pub fn init_from_path(path: std::path::PathBuf) -> PyResult<()> {
+    match spaceweather::init_from_path(&path) {
+        Ok(()) => Ok(()),
+        // Only a missing file changes exception type; other read errors
+        // stay the RuntimeError they have always been
+        Err(spaceweather::Error::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(crate::pyutils::io_error_with_path(&e, &path))
+        }
+        Err(e) => Err(anyhow::Error::from(e).into()),
+    }
 }
 
 /// Load the space-weather table from bytes, replacing whatever is loaded

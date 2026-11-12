@@ -173,6 +173,7 @@ nav:
       - JPL Ephemerides: api/jplephem.md
       - Density: api/density.md
       - Space Weather: api/spaceweather.md
+      - Earth Orientation: api/eop.md
       - Gravity: api/gravity.md
       - Kepler: api/kepler.md
       - Lambert: api/lambert.md

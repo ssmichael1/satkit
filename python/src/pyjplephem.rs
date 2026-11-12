@@ -151,3 +151,27 @@ pub fn barycentric_pos(
 pub fn consts(name: &str) -> Option<f64> {
     jplephem::consts(name).copied()
 }
+
+/// All named constants of the loaded JPL ephemeris file
+///
+/// The DE file header's whole constant table, as ``consts`` looks it up one
+/// name at a time: e.g. "AU" (astronomical unit, km), "EMRAT" (Earth/Moon
+/// mass ratio), "GM1".."GM9" and "GMS"/"GMB" (GM values in au^3/day^2).
+/// A missing name is a ``KeyError`` on the returned dict, where ``consts``
+/// returns None.
+///
+/// Returns:
+///     dict[str, float]: Constant name (as in the DE file header) to value;
+///     a new dict on each call
+///
+/// Raises:
+///     RuntimeError: if the ephemeris file is unavailable
+///
+/// Example:
+///     >>> c = satkit.jplephem.constants()
+///     >>> c["EMRAT"] == satkit.jplephem.consts("EMRAT")
+///     True
+#[pyfunction]
+pub fn constants() -> Result<std::collections::HashMap<String, f64>> {
+    Ok(jplephem::constants()?.clone())
+}

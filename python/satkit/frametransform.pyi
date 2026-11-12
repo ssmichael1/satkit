@@ -616,13 +616,17 @@ def qteme2itrf(
     ...
 
 def earth_orientation_params(
-    time: time,
+    time: TimeScalar,
 ) -> tuple[float, float, float, float, float, float] | None:
     """Get Earth Orientation Parameters at given instant
 
+    ``satkit.eop`` is the home for EOP queries: this is the same as
+    ``satkit.eop.get``.
+
     Args:
-        time (satkit.time): Instant at which to query parameters (a ``satkit.time`` only;
-            ``datetime.datetime`` and ``numpy.datetime64`` raise ``TypeError``)
+        time (satkit.time | datetime.datetime | numpy.datetime64): Instant at which to
+            query parameters (a single time; a list, even of one element, raises
+            ``TypeError``)
 
     Returns:
         (float, float, float, float, float, float) | None: Tuple with following elements:
@@ -706,7 +710,7 @@ def to_gcrf(
     vel: npt.ArrayLike,
 ) -> npt.NDArray[np.float64]:
     """Return the 3x3 DCM that transforms a vector from a satellite-local
-    orbital frame into GCRF at the current state.
+    orbital frame (or an inertial frame) into GCRF at the current state.
 
     This is the unified dispatch for satellite-local orbital frames.
     Supported values:
@@ -715,6 +719,12 @@ def to_gcrf(
     - ``frame.LVLH`` — Local Vertical / Local Horizontal
     - ``frame.RTN``  — Radial / In-track / Cross-track (= RSW = RIC)
     - ``frame.NTW``  — Normal-to-velocity / Tangent / Cross-track
+    - ``frame.ICRF`` — the 3x3 identity (GCRF has the ICRF axes)
+    - ``frame.EME2000`` — the constant IERS 2010 frame bias (about 23 mas),
+      the same rotation as ``rotation(frame.EME2000, frame.GCRF, time)`` at
+      any time
+
+    ``pos`` and ``vel`` are used only by ``LVLH``, ``RTN`` and ``NTW``.
 
     For an arbitrary frame-to-frame rotation, compose with
     ``from_gcrf``::
@@ -732,12 +742,9 @@ def to_gcrf(
         numpy.ndarray: 3x3 rotation matrix (frame → GCRF)
 
     Raises:
-        RuntimeError: if ``frame`` is not ``GCRF`` or a satellite-local orbital
-            frame (``LVLH``, ``RTN``, ``NTW``). Every other frame raises,
-            including the inertial ``EME2000`` and ``ICRF``: use
-            ``rotation(frame, satkit.frame.GCRF, time)`` (or
-            ``rotation_with_state``) for ``ITRF``, ``TIRS``, ``CIRS``, ``TEME``,
-            ``EME2000`` and ``ICRF``.
+        RuntimeError: if ``frame`` is time-dependent (``ITRF``, ``TIRS``,
+            ``CIRS``, ``TEME``): use ``rotation(frame, satkit.frame.GCRF, time)``
+            (or ``rotation_with_state``) for those.
         ValueError: if ``pos`` or ``vel`` is not a 3-element vector, holds a
             non-finite value, or (for ``LVLH`` / ``RTN`` / ``NTW``) the two do
             not define an orbit plane: either is zero or they are parallel.
@@ -915,7 +922,8 @@ def from_gcrf(
         numpy.ndarray: 3x3 rotation matrix (GCRF → frame)
 
     Raises:
-        RuntimeError: if ``frame`` is not ``GCRF``, ``LVLH``, ``RTN`` or ``NTW``.
+        RuntimeError: if ``frame`` is time-dependent (``ITRF``, ``TIRS``,
+            ``CIRS``, ``TEME``).
         ValueError: if ``pos`` or ``vel`` is not a 3-element vector, holds a
             non-finite value, or does not define an orbit plane (see ``to_gcrf``).
         TypeError: if ``pos`` or ``vel`` is not a real numeric array-like.
@@ -932,6 +940,9 @@ def from_gcrf(
 def disable_eop_time_warning() -> None:
     """Disable the warnings about Earth Orientation Parameters (EOP) availability.
 
+    ``satkit.eop`` is the home for EOP queries (``get``, ``coverage``,
+    ``status``, ``update``, ``init_from_path``); this switch stays here.
+
     Notes:
         - Four one-time warnings exist: epoch before the EOP table, epoch after the table end
           (last values held constant), epoch in the predictions of a table not refreshed for
@@ -944,6 +955,9 @@ def disable_eop_time_warning() -> None:
 
 def eop_coverage() -> tuple[time, time, time] | None:
     """Time bounds of the loaded Earth Orientation Parameters (EOP) table.
+
+    ``satkit.eop`` is the home for EOP queries: this is the same as
+    ``satkit.eop.coverage``.
 
     Returns:
         (satkit.time, satkit.time, satkit.time) | None: ``(first, last_observed, last)`` — the first
@@ -965,15 +979,21 @@ def eop_source() -> str | None:
         str | None: ``"finals2000A"`` when a table is loaded, ``None`` otherwise.
     """
 
+@typing.overload
 def eop_status(
-    tm: time,
+    time: TimeScalar,
 ) -> typing.Literal[
     "observed", "predicted", "extrapolated", "before_table", "not_loaded"
 ]:
     """Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.
 
+    ``satkit.eop`` is the home for EOP queries: this is the same as
+    ``satkit.eop.status``.
+
     Args:
-        tm (satkit.time): Epoch to classify (a ``satkit.time`` only)
+        time (satkit.time | datetime.datetime | numpy.datetime64): Epoch to classify (a
+            single time; a list, even of one element, raises ``TypeError``). The
+            keyword ``tm=`` is a deprecated alias of ``time=``.
 
     Returns:
         str: one of ``"observed"`` (inside the table, on or before the last observed row),
@@ -982,8 +1002,20 @@ def eop_status(
         months, refresh the data files), ``"before_table"`` (before the table's first row — 1973-01-02 for
         ``finals2000A.all`` — zeros used, so UT1 = UTC), or
         ``"not_loaded"`` (no EOP table loaded; zeros used).
+
+    Raises:
+        TypeError: if ``time`` is not a single time
     """
     ...
+
+@typing.overload
+@deprecated("the keyword 'tm' is deprecated; use 'time'")
+def eop_status(
+    *,
+    tm: TimeScalar,
+) -> typing.Literal[
+    "observed", "predicted", "extrapolated", "before_table", "not_loaded"
+]: ...
 
 # ── Frame-enum dispatch (new in 0.17.0) ─────────────────────────────────
 

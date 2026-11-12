@@ -58,7 +58,7 @@ There are three related quaternion entry points; pick by what your frames need:
 | Function | Frames it handles | Extra arguments | Returns |
 |---|---|---|---|
 | [`rotation`](#satkit.frametransform.rotation) | Earth chain only (`ITRF`, `TIRS`, `CIRS`, `GCRF`, `TEME`, `EME2000`, `ICRF`) | — | `quaternion` |
-| [`to_gcrf`](#satkit.frametransform.to_gcrf) / [`from_gcrf`](#satkit.frametransform.from_gcrf) | Orbit frames only (`LVLH`, `RTN`, `NTW`) | `pos`, `vel` (GCRF) | 3×3 matrix |
+| [`to_gcrf`](#satkit.frametransform.to_gcrf) / [`from_gcrf`](#satkit.frametransform.from_gcrf) | Orbit frames (`LVLH`, `RTN`, `NTW`), plus the constant `ICRF` / `EME2000` rotations | `pos`, `vel` (GCRF) | 3×3 matrix |
 | [`rotation_with_state`](#satkit.frametransform.rotation_with_state) | **All** frames (Earth *and* orbit) | `pos`, `vel` (GCRF) | `quaternion` |
 
 Use [`rotation_with_state`](#satkit.frametransform.rotation_with_state) when a

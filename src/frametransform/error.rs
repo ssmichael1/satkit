@@ -18,7 +18,7 @@ pub enum Error {
     /// ([`qitrf2gcrf`](super::qitrf2gcrf),
     /// [`qteme2gcrf`](super::qteme2gcrf), …).
     #[error(
-        "to_gcrf: frame {frame} is not a satellite-local orbital frame; use the \
+        "to_gcrf: frame {frame} is time-dependent; use rotation or the \
          time-based quaternion helpers (qitrf2gcrf, qteme2gcrf, etc.) instead"
     )]
     UnsupportedFrame { frame: Frame },

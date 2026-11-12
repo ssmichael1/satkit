@@ -106,7 +106,8 @@ def init_from_path(path: str | os.PathLike[str]) -> None:
         path (str | os.PathLike): File to load
 
     Raises:
-        RuntimeError: If the file cannot be read or is not a GFZ table
+        FileNotFoundError: If the file does not exist (the message names it)
+        RuntimeError: If the file cannot be read otherwise or is not a GFZ table
     """
     ...
 
