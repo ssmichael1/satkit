@@ -36,8 +36,16 @@ use numpy::PyArrayMethods;
 /// * Invalid = placeholder that is not a time scale; passing it as a
 ///   ``scale`` argument raises ValueError
 ///
-#[derive(Clone, PartialEq, Eq)]
-#[pyclass(name = "timescale", module = "satkit", eq, eq_int, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+#[pyclass(
+    name = "timescale",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
 pub enum PyTimeScale {
     /// Placeholder that is not a time scale: every satkit.time method that
     /// takes a ``scale`` raises ValueError when given it
@@ -64,7 +72,7 @@ pub enum PyTimeScale {
 
 crate::enum_pickle!(PyTimeScale, "timescale");
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 /// Represent the day of the week
 ///
 /// Values:
@@ -76,7 +84,15 @@ crate::enum_pickle!(PyTimeScale, "timescale");
 /// - `Friday`
 /// - `Saturday`
 /// - `Invalid`: placeholder that is not a day; ``time.weekday`` never returns it
-#[pyclass(name = "weekday", module = "satkit", eq, eq_int, from_py_object)]
+#[pyclass(
+    name = "weekday",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
 pub enum PyWeekday {
     Sunday = 0,
     Monday = 1,
@@ -163,6 +179,8 @@ impl From<PyTimeScale> for TimeScale {
 ///
 /// - ``time()``: the current time
 /// - ``time(string)``: parse a string, RFC 3339 first, then other common formats
+/// - ``time(t)``: the instant of a satkit.time, datetime.datetime (a naive
+///   one is local time, as in ``from_datetime``) or numpy.datetime64 (UTC)
 /// - ``time(year, month, day)``: midnight at the start of the day
 /// - ``time(year, month, day, hour, min, sec)``: all six components; the
 ///   hour, minute and second are given together or not at all
@@ -229,7 +247,8 @@ impl PyInstant {
     /// Create a satkit.time object
     ///
     /// Args:
-    ///     *args: Either no arguments (current time), a single string, or
+    ///     *args: Either no arguments (current time), a single string, a
+    ///         single satkit.time, datetime.datetime or numpy.datetime64, or
     ///         Gregorian components (year, month, day) or
     ///         (year, month, day, hour, minute, second)
     ///     scale (satkit.timescale, optional): Time scale in which the Gregorian
@@ -242,7 +261,7 @@ impl PyInstant {
     ///
     /// Raises:
     ///     TypeError: If the number of positional arguments is not 0, 1, 3 or
-    ///         6, a single argument is not a string, a component is not a
+    ///         6, a single argument is not a string or a time, a component is not a
     ///         number (the first five must be integers), or ``scale`` is
     ///         given with the string or no-argument form
     ///     ValueError: If the string form cannot be parsed, a component is
@@ -272,11 +291,21 @@ impl PyInstant {
             )?))
         } else if py_args.len() == 1 {
             let item = py_args.get_item(0)?;
-            let s = item.extract::<&str>()?;
-
-            // Input is a string: `from_string` tries RFC 3339 first, then
-            // the looser formats, and raises ValueError if neither parses
-            Ok(Self::from_string(s)?)
+            if let Ok(s) = item.extract::<&str>() {
+                // Input is a string: `from_string` tries RFC 3339 first, then
+                // the looser formats, and raises ValueError if neither parses
+                return Ok(Self::from_string(s)?);
+            }
+            if is_time_scalar(&item) {
+                // satkit.time, datetime.datetime or numpy.datetime64
+                return Ok(Self(item.extract::<TimeArg>()?.0));
+            }
+            Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "a single argument must be a str, satkit.time, datetime.datetime \
+                 or numpy.datetime64, got {}",
+                item.get_type()
+            ))
+            .into())
         } else {
             bail!("Must pass in year, month, day or year, month, day, hour, min, sec");
         }
@@ -828,7 +857,7 @@ impl PyInstant {
     /// Add to satkit time a duration or list or numpy array of durations
     ///
     /// Args:
-    ///     other (duration|list|numpy.ndarray|float): Duration or list of durations to add.
+    ///     other (duration|datetime.timedelta|list|numpy.ndarray|float): Duration or list of durations to add.
     ///         If type is float (or a list or real numeric 1-D numpy array of them), units are days
     ///         of exactly 86400 elapsed seconds (``add_utc_days`` keeps the UTC time of day
     ///         across a leap second instead). Sequences must be a list or a numpy array
@@ -843,10 +872,20 @@ impl PyInstant {
         self.shift(other, |t, d| t.checked_add(d))
     }
 
+    /// ``datetime.timedelta + time``: the reflected form exists for
+    /// timedelta only (``duration + time`` is the duration's own ``+``)
+    fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        if other.is_instance_of::<PyDelta>() {
+            self.shift(other, |t, d| t.checked_add(d))
+        } else {
+            Ok(other.py().NotImplemented())
+        }
+    }
+
     /// Subtract duration or take difference in times
     ///
     /// Args:
-    ///     other (duration|list|numpy.ndarray|float|satkit.time): Duration or list of durations to subtract, or time object to take difference.
+    ///     other (duration|datetime.timedelta|list|numpy.ndarray|float|satkit.time): Duration or list of durations to subtract, or time object to take difference.
     ///         If type is float, units are days
     ///
     /// Returns:
@@ -1011,10 +1050,15 @@ impl PyInstant {
             return Self(op(self.0, days(other.extract::<f64>()?)?)?).into_py_any(py);
         } else if let Ok(d) = other.cast::<PyDuration>() {
             return Self(op(self.0, d.borrow().0)?).into_py_any(py);
+        } else if let Ok(td) = other.cast::<PyDelta>() {
+            // datetime.timedelta: exact, it is a microsecond count too
+            let d = crate::pyduration::timedelta_to_duration(td)?;
+            return Self(op(self.0, d)?).into_py_any(py);
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "Invalid type for rhs",
-            ));
+            // Not a supported operand: Python raises its standard
+            // `TypeError: unsupported operand type(s)` (after giving the
+            // other operand's reflected method a chance)
+            return Ok(py.NotImplemented());
         };
         let objs = durs
             .into_iter()

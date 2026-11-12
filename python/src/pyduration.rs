@@ -4,6 +4,7 @@ use crate::pyinstant::PyInstant;
 use crate::pyutils::invalid_value;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use pyo3::types::{PyDelta, PyDeltaAccess};
 use pyo3::IntoPyObjectExt;
 
 use anyhow::{bail, Result};
@@ -208,6 +209,42 @@ impl PyDuration {
         Ok(Self(Duration::from_milliseconds(d)))
     }
 
+    /// Create new duration object from a datetime.timedelta (exact: both
+    /// count whole microseconds)
+    ///
+    /// Args:
+    ///     td (datetime.timedelta): The time difference
+    ///
+    /// Returns:
+    ///     duration: New duration object
+    ///
+    /// Raises:
+    ///     OverflowError: If ``td`` is beyond the range of a duration (about
+    ///         ±292,000 years; a timedelta reaches ±2.7 million)
+    #[staticmethod]
+    fn from_timedelta(td: &Bound<'_, PyDelta>) -> PyResult<Self> {
+        timedelta_to_duration(td).map(Self)
+    }
+
+    /// Convert to a datetime.timedelta (exact: both count whole microseconds)
+    ///
+    /// Returns:
+    ///     datetime.timedelta: The same duration as a timedelta
+    fn to_timedelta<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDelta>> {
+        // Normalised as timedelta does: days of any sign, then seconds and
+        // microseconds that are not negative. An i64 of microseconds is at
+        // most 1.07e8 days, well inside timedelta's 1e9.
+        const US_PER_DAY: i64 = 86_400_000_000;
+        let rem = self.0.usec.rem_euclid(US_PER_DAY);
+        PyDelta::new(
+            py,
+            self.0.usec.div_euclid(US_PER_DAY) as i32,
+            (rem / 1_000_000) as i32,
+            (rem % 1_000_000) as i32,
+            false,
+        )
+    }
+
     /// Add durations or add duration to satkit.time
     ///
     /// Args:
@@ -280,6 +317,40 @@ impl PyDuration {
         };
         let usec = usec.ok_or_else(|| arithmetic_overflow("scaled duration"))?;
         Self(Duration::from_microseconds(usec)).into_py_any(py)
+    }
+
+    /// Multiply a scalar by a duration: ``2 * d`` is ``d * 2``
+    fn __rmul__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        self.__mul__(other)
+    }
+
+    /// The duration with its sign reversed
+    ///
+    /// Raises:
+    ///     OverflowError: for the most negative duration (-2^63 microseconds)
+    fn __neg__(&self) -> PyResult<Self> {
+        self.0
+            .usec
+            .checked_neg()
+            .map(|us| Self(Duration::from_microseconds(us)))
+            .ok_or_else(|| arithmetic_overflow("duration"))
+    }
+
+    /// The duration itself
+    fn __pos__(&self) -> Self {
+        self.clone()
+    }
+
+    /// The duration without its sign
+    ///
+    /// Raises:
+    ///     OverflowError: for the most negative duration (-2^63 microseconds)
+    fn __abs__(&self) -> PyResult<Self> {
+        self.0
+            .usec
+            .checked_abs()
+            .map(|us| Self(Duration::from_microseconds(us)))
+            .ok_or_else(|| arithmetic_overflow("duration"))
     }
 
     /// Divide a duration by a real number (scale it) or by another duration
@@ -428,6 +499,16 @@ impl PyDuration {
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
         PyBytes::new(py, i64::to_le_bytes(self.0.usec).as_slice()).into_py_any(py)
     }
+}
+
+/// A `datetime.timedelta` as a duration, exactly; `OverflowError` if it is
+/// beyond the ±2^63-microsecond range (a timedelta reaches ±1e9 days)
+pub(crate) fn timedelta_to_duration(td: &Bound<'_, PyDelta>) -> PyResult<Duration> {
+    let us = (td.get_days() as i128 * 86_400 + td.get_seconds() as i128) * 1_000_000
+        + td.get_microseconds() as i128;
+    i64::try_from(us)
+        .map(Duration::from_microseconds)
+        .map_err(|_| arithmetic_overflow("datetime.timedelta"))
 }
 
 /// A real-number operand of `duration * x` / `duration / x`

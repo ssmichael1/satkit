@@ -248,3 +248,181 @@ class TestDurationScaling:
             bottom * -1
         with pytest.raises(OverflowError):
             bottom / -1.0
+
+
+# ───────────────────────────── enums ─────────────────────────────────────────
+
+
+class TestTimeEnums:
+    @pytest.mark.parametrize("enum", [sk.timescale, sk.weekday])
+    def test_hashable(self, enum):
+        members = [v for k, v in vars(enum).items() if isinstance(v, enum)]
+        assert len(members) >= 7
+        assert len(set(members)) == len(members)
+        assert {m: i for i, m in enumerate(members)}[members[2]] == 2
+        for m in members:
+            assert hash(m) == hash(m)
+            assert m == int(m)  # int-comparable, as before
+
+    def test_values(self):
+        assert int(sk.timescale.UTC) == 1 and int(sk.timescale.TDB) == 6
+        assert int(sk.weekday.Sunday) == 0 and int(sk.weekday.Saturday) == 6
+        assert sk.timescale.UTC != sk.timescale.TAI
+        assert sk.time(2024, 1, 1).weekday in {sk.weekday.Monday}
+
+    @pytest.mark.parametrize("enum", [sk.timescale, sk.weekday])
+    def test_module(self, enum):
+        assert enum.__module__ == "satkit"
+
+    def test_pickle(self):
+        import pickle
+
+        for m in (sk.timescale.TT, sk.weekday.Friday):
+            assert pickle.loads(pickle.dumps(m)) == m
+
+
+# ─────────────────────── duration operators, timedelta ───────────────────────
+
+
+class TestDurationOperators:
+    def test_rmul(self):
+        d = sk.duration(hours=1)
+        assert 2 * d == d * 2 == sk.duration(hours=2)
+        assert 0.5 * d == sk.duration(minutes=30)
+        assert np.float64(3) * d == sk.duration(hours=3)
+        with pytest.raises(TypeError):
+            "a" * d
+        with pytest.raises(ValueError):
+            math.nan * d
+
+    def test_neg_pos_abs(self):
+        d = sk.duration(hours=1, microseconds=1)
+        assert (-d).microseconds == -3_600_000_001
+        assert -(-d) == d
+        assert +d == d
+        assert abs(-d) == d and abs(d) == d
+        assert d + -d == sk.duration()
+        bottom = sk.duration(microseconds=-(2**63))
+        with pytest.raises(OverflowError):
+            -bottom
+        with pytest.raises(OverflowError):
+            abs(bottom)
+        assert +bottom == bottom
+
+    def test_timedelta_round_trip(self):
+        import datetime
+
+        for us in (0, 1, -1, 3_600_000_001, -86_400_000_001, 2**63 - 1, -(2**63)):
+            d = sk.duration(microseconds=us)
+            td = d.to_timedelta()
+            assert isinstance(td, datetime.timedelta)
+            assert td == datetime.timedelta(microseconds=us)
+            assert sk.duration.from_timedelta(td) == d
+
+    def test_from_timedelta_errors(self):
+        import datetime
+
+        with pytest.raises(OverflowError):
+            sk.duration.from_timedelta(datetime.timedelta.max)
+        with pytest.raises(OverflowError):
+            sk.duration.from_timedelta(datetime.timedelta.min)
+        with pytest.raises(TypeError):
+            sk.duration.from_timedelta(3600.0)
+
+    def test_comparisons_with_foreign_types(self):
+        d = sk.duration(hours=1)
+        assert (d == 3600) is False and (d != 3600) is True
+        assert d.__lt__(5) is NotImplemented
+        for op in ("__lt__", "__le__", "__gt__", "__ge__", "__sub__", "__add__"):
+            assert getattr(d, op)("x") is NotImplemented
+        with pytest.raises(TypeError, match="not supported between"):
+            d < 5
+
+
+class TestTimeOperators:
+    def test_timedelta(self):
+        import datetime
+
+        t = sk.time(2024, 1, 1)
+        td = datetime.timedelta(days=1, microseconds=1)
+        assert t + td == t + sk.duration(days=1, microseconds=1)
+        assert td + t == t + td
+        assert t - td == t - sk.duration(days=1, microseconds=1)
+        assert (t + td) - t == sk.duration.from_timedelta(td)
+        with pytest.raises(OverflowError):
+            t + datetime.timedelta.max
+        with pytest.raises(TypeError):
+            td - t
+
+    def test_foreign_types_return_not_implemented(self):
+        import datetime
+
+        t = sk.time(2024, 1, 1)
+        for other in ("x", None, (1.0, 2.0), datetime.datetime(2024, 1, 1), 1j):
+            assert t.__add__(other) is NotImplemented
+            assert t.__sub__(other) is NotImplemented
+            for op in ("__lt__", "__le__", "__gt__", "__ge__"):
+                assert getattr(t, op)(other) is NotImplemented
+            assert (t == other) is False and (t != other) is True
+            with pytest.raises(TypeError, match="unsupported operand"):
+                t + other
+            with pytest.raises(TypeError, match="unsupported operand"):
+                t - other
+            with pytest.raises(TypeError, match="not supported between"):
+                t < other
+        assert t.__radd__(1.0) is NotImplemented
+        with pytest.raises(TypeError):
+            1.0 + t
+
+    def test_reflected_operator_of_other_type_gets_its_chance(self):
+        class Later:
+            def __radd__(self, other):
+                return ("radd", other)
+
+            def __rsub__(self, other):
+                return ("rsub", other)
+
+        t = sk.time(2024, 1, 1)
+        assert t + Later() == ("radd", t)
+        assert t - Later() == ("rsub", t)
+
+    def test_existing_operands_unchanged(self):
+        t = sk.time(2024, 1, 1)
+        assert t + 1 == t + sk.duration(days=1) == sk.duration(days=1) + t
+        assert (t + [1.0, 2.0])[1] == t + 2
+        assert (t - np.array([1, 2]))[0] == t - 1
+        assert t - (t - 1) == sk.duration(days=1)
+        with pytest.raises(TypeError, match="Invalid types in list"):
+            t + ["a"]
+
+
+class TestTimeFromTimeLike:
+    def test_datetime(self):
+        import datetime
+
+        aware = datetime.datetime(2024, 5, 6, 7, 8, 9, 123456, tzinfo=datetime.timezone.utc)
+        assert sk.time(aware) == sk.time(2024, 5, 6, 7, 8, 9.123456)
+        offset = aware.astimezone(datetime.timezone(datetime.timedelta(hours=5)))
+        assert sk.time(offset) == sk.time(aware)
+        naive = datetime.datetime(2024, 5, 6, 7, 8, 9)
+        assert sk.time(naive) == sk.time.from_datetime(naive)
+
+    def test_datetime64(self):
+        assert sk.time(np.datetime64("2024-05-06T07:08:09.123456")) == sk.time(2024, 5, 6, 7, 8, 9.123456)
+        assert sk.time(np.datetime64("2024-05-06")) == sk.time(2024, 5, 6)
+        with pytest.raises(ValueError, match="NaT"):
+            sk.time(np.datetime64("NaT", "s"))
+
+    def test_time(self):
+        t = sk.time(2024, 5, 6, 7, 8, 9.5)
+        assert sk.time(t) == t and sk.time(t) is not t
+
+    def test_string_still_parsed(self):
+        assert sk.time("2024-05-06T07:08:09Z") == sk.time(2024, 5, 6, 7, 8, 9)
+        with pytest.raises(ValueError):
+            sk.time("not a time")
+
+    @pytest.mark.parametrize("bad", [5, 5.0, None, [sk.time(2024, 1, 1)], b"2024-01-01", np.array(["2024-01-01"], dtype="M8[D]")])
+    def test_other_single_argument_is_type_error(self, bad):
+        with pytest.raises(TypeError):
+            sk.time(bad)

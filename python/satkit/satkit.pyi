@@ -47,6 +47,10 @@ TimeArrayLike: TypeAlias = (
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 
+# ``datetime.timedelta``, for use inside ``class time``, whose deprecated
+# ``datetime()`` method hides the module name there
+_TimeDelta: TypeAlias = datetime.timedelta
+
 class TLEWarning(UserWarning):
     """Warning for a TLE record skipped by a loader called with ``on_error="warn"``
 
@@ -968,6 +972,13 @@ class weekday:
     Invalid: ClassVar[weekday]
     """Placeholder that is not a day of the week; ``time.weekday`` never returns it"""
 
+    def __int__(self) -> int:
+        """The integer value of the member (members also compare equal to it)"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 @final
 class tlefitstatus:
     """
@@ -1056,6 +1067,13 @@ class timescale:
 
     TDB: ClassVar[timescale]
     """Barycentric Dynamical Time"""
+
+    def __int__(self) -> int:
+        """The integer value of the member (members also compare equal to it)"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class frame:
@@ -1228,6 +1246,8 @@ class time:
     @overload
     def __init__(self, string: str, /) -> None: ...
     @overload
+    def __init__(self, t: time | datetime.datetime | np.datetime64, /) -> None: ...
+    @overload
     def __init__(self, year: int, month: int, day: int, /, *, scale: timescale = ...) -> None: ...
     @overload
     def __init__(
@@ -1254,11 +1274,17 @@ class time:
         - ``time()``: the current time
         - ``time(string)``: parse a string, RFC 3339 first (e.g.
           ``"2023-03-05T11:03:45.453Z"``), then other common formats
+        - ``time(t)``: the instant of another ``satkit.time``, a
+          ``datetime.datetime`` or a ``numpy.datetime64``
         - ``time(year, month, day)``: midnight at the start of the day
         - ``time(year, month, day, hour, min, sec)``: all six components
 
         Args:
             string: String representation of time
+            t: A ``satkit.time`` (copied), a ``datetime.datetime`` (as in
+                ``from_datetime``: a naive one is the machine's local time,
+                an aware one uses its own offset) or a ``numpy.datetime64``
+                (a UTC label; ``NaT`` raises ``ValueError``)
             year: Gregorian year (e.g., 2024)
             month: Gregorian month (1 = January, 2 = February, ...)
             day: Day of month, beginning with 1
@@ -1277,7 +1303,7 @@ class time:
 
         Raises:
             TypeError: If the number of positional arguments is not 0, 1, 3
-                or 6; if a single argument is not a string; if a component is
+                or 6; if a single argument is not a string or a time; if a component is
                 not a number (the first five must be integers); or if
                 ``scale`` is given with the string or no-argument form
             ValueError: If the string form cannot be parsed, if a component
@@ -1292,6 +1318,10 @@ class time:
             # 2023-03-05T11:03:45.453000Z
 
             print(satkit.time(2023, 3, 5))
+            # 2023-03-05T00:00:00.000000Z
+
+            import datetime
+            print(satkit.time(datetime.datetime(2023, 3, 5, tzinfo=datetime.timezone.utc)))
             # 2023-03-05T00:00:00.000000Z
             ```
         """
@@ -1914,12 +1944,14 @@ class time:
         ...
 
     @typing.overload
-    def __add__(self, other: duration) -> time:
+    def __add__(self, other: duration | _TimeDelta) -> time:
         """
         Return a time object representing the input duration added to the current time
 
         Args:
-            other (duration): duration to add to the current time
+            other (duration | datetime.timedelta): duration to add to the
+                current time (a ``timedelta`` is exact; ``timedelta + time``
+                works too)
 
         Raises:
             OverflowError: if the result is beyond about ±292,000 years
@@ -1991,9 +2023,27 @@ class time:
         """
         ...
 
+    def __radd__(self, other: _TimeDelta) -> time:
+        """
+        ``datetime.timedelta + time``: the time ``other`` later
+
+        Args:
+            other (datetime.timedelta): time difference to add
+
+        Raises:
+            OverflowError: if the result is beyond about ±292,000 years
+
+        Returns:
+            Time object representing the current time plus the timedelta
+        """
+        ...
+
     def __le__(self, other: time) -> bool:
         """
         Compare two time objects for less than or equal to
+
+        Only another ``satkit.time`` can be compared: ordering against any
+        other type raises ``TypeError`` (``==`` is False, ``!=`` True).
 
         Args:
             other (time): time object to compare with
@@ -2064,12 +2114,13 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: duration) -> time:
+    def __sub__(self, other: duration | _TimeDelta) -> time:
         """
         Return a time object representing the input duration subtracted from the current time
 
         Args:
-            other (duration): duration to subtract from the current time
+            other (duration | datetime.timedelta): duration to subtract from
+                the current time (a ``timedelta`` is exact)
 
         Raises:
             OverflowError: if the result is beyond about ±292,000 years
@@ -2298,6 +2349,48 @@ class duration:
         """
         ...
 
+    @staticmethod
+    def from_timedelta(td: datetime.timedelta) -> duration:
+        """Create duration object from a ``datetime.timedelta``
+
+        Exact: both count whole microseconds.
+
+        Args:
+            td (datetime.timedelta): The time difference
+
+        Returns:
+            Duration object representing the same interval
+
+        Raises:
+            OverflowError: If ``td`` is beyond the range of a duration (about
+                ±292,000 years; a ``timedelta`` reaches ±2.7 million)
+
+        Example:
+            ```python
+            import datetime
+            d = satkit.duration.from_timedelta(datetime.timedelta(hours=1, microseconds=1))
+            print(d.microseconds)
+            # 3600000001
+            ```
+        """
+        ...
+
+    def to_timedelta(self) -> datetime.timedelta:
+        """Convert to a ``datetime.timedelta``
+
+        Exact: both count whole microseconds, and every duration fits.
+
+        Returns:
+            ``datetime.timedelta`` representing the same interval
+
+        Example:
+            ```python
+            print(satkit.duration(hours=1, seconds=0.5).to_timedelta())
+            # 1:00:00.500000
+            ```
+        """
+        ...
+
     @typing.overload
     def __add__(self, other: duration) -> duration:
         """Add a duration to another duration
@@ -2383,6 +2476,47 @@ class duration:
             print(satkit.duration.from_days(1) * 2.5)
             # 2 days 12 hours 0.000000 seconds
             ```
+        """
+        ...
+
+    def __rmul__(self, other: float) -> duration:
+        """Multiply (or scale) duration by given value: ``2 * d`` is ``d * 2``
+
+        Args:
+            other (float): value by which to multiply duration
+
+        Returns:
+            Duration object representing the input duration scaled by the input value
+
+        Raises:
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if the result is beyond about ±292,000 years
+        """
+        ...
+
+    def __neg__(self) -> duration:
+        """The duration with its sign reversed
+
+        Raises:
+            OverflowError: for the most negative duration (-2**63 microseconds)
+
+        Example:
+            ```python
+            print((-satkit.duration(hours=1)).hours)
+            # -1.0
+            ```
+        """
+        ...
+
+    def __pos__(self) -> duration:
+        """The duration itself"""
+        ...
+
+    def __abs__(self) -> duration:
+        """The duration without its sign
+
+        Raises:
+            OverflowError: for the most negative duration (-2**63 microseconds)
         """
         ...
 
