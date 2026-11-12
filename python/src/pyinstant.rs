@@ -242,6 +242,16 @@ impl PyInstant {
         Self(Instant::UNIX_EPOCH)
     }
 
+    /// Above numpy scalars (-1e6), below numpy arrays (0): a numpy scalar
+    /// operand (``numpy.datetime64(...) < t``, ``numpy.timedelta64(...) + t``)
+    /// defers to satkit.time's reflected operator instead of converting
+    /// itself to a naive datetime.datetime (which would be read as local
+    /// time), while numpy arrays keep their element-wise operators.
+    #[classattr]
+    const fn __array_priority__() -> f64 {
+        -1.0
+    }
+
     /// Create a satkit.time object
     ///
     /// Args:
@@ -507,23 +517,29 @@ impl PyInstant {
         Self(Instant::now())
     }
 
-    /// Return time object representing the start (midnight UTC) of the input date
+    /// Return time object representing the start (midnight) of the input date
     ///
     /// Args:
     ///     year (int): Gregorian year (e.g., 2024)
     ///     month (int): Gregorian month (1 = January, 2 = February, ...)
     ///     day (int): Day of month, beginning with 1
+    ///     scale (satkit.timescale, optional): Time scale in which the date
+    ///         is given (midnight in that scale). Default is
+    ///         satkit.timescale.UTC
     ///
     /// Returns:
     ///     satkit.time: Time object representing instant of input date
     ///
     /// Raises:
     ///     TypeError: If an argument is not an integer
-    ///     ValueError: If the month or day is out of range, or the date is
-    ///         beyond about ±292,000 years
+    ///     ValueError: If the month or day is out of range, the date is
+    ///         beyond about ±292,000 years, or ``scale`` is
+    ///         satkit.timescale.Invalid
     #[staticmethod]
-    fn from_date(year: i32, month: i32, day: i32) -> PyResult<Self> {
-        Instant::from_date(year, month, day)
+    #[pyo3(signature=(year, month, day, scale=&PyTimeScale::UTC))]
+    fn from_date(year: i32, month: i32, day: i32, scale: &PyTimeScale) -> PyResult<Self> {
+        let scale = valid_scale(scale)?;
+        Instant::from_datetime_with_scale(year, month, day, 0, 0, 0.0, scale)
             .map(Self)
             .map_err(parse_error)
     }
@@ -587,24 +603,42 @@ impl PyInstant {
         Ok(Self(Instant::from_jd_with_scale(jd, scale)))
     }
 
-    /// Convert time object to UTC Gregorian date
+    /// Convert time object to Gregorian date (UTC by default)
+    ///
+    /// Args:
+    ///     scale (satkit.timescale, optional): Time scale of the date.
+    ///         Default is satkit.timescale.UTC
     ///
     /// Returns:
     ///    (int, int, int): Tuple with 3 elements representing Gregorian year, month, and day
-    fn to_date(&self) -> (i32, i32, i32) {
-        let dt = self.0.as_datetime();
-        (dt.0, dt.1, dt.2)
+    ///
+    /// Raises:
+    ///     ValueError: If ``scale`` is satkit.timescale.Invalid
+    #[pyo3(signature=(scale=&PyTimeScale::UTC))]
+    fn to_date(&self, scale: &PyTimeScale) -> PyResult<(i32, i32, i32)> {
+        let dt = self.0.as_datetime_with_scale(valid_scale(scale)?);
+        Ok((dt.0, dt.1, dt.2))
     }
 
-    /// Convert time object to UTC Gregorian date and time, with fractional seconds
+    /// Convert time object to Gregorian date and time (UTC by default), with
+    /// fractional seconds
+    ///
+    /// Args:
+    ///     scale (satkit.timescale, optional): Time scale of the date and
+    ///         time. Default is satkit.timescale.UTC. The inverse of
+    ///         ``from_gregorian`` with the same scale: exact for UTC, TAI, TT
+    ///         and GPS; UT1 and TDB are rounded to the nearest microsecond
     ///
     /// Returns:
     ///     (int, int, int, int, int, float): Tuple with 6 elements representing Gregorian year, month, day, hour, minute, and second.
     ///     The second is the float nearest the exact (whole-microsecond) value,
-    ///     in [0, 60), or [60, 61) inside a leap second
+    ///     in [0, 60), or [60, 61) inside a UTC leap second
     ///
-    fn to_gregorian(&self) -> (i32, i32, i32, i32, i32, f64) {
-        self.0.as_datetime()
+    /// Raises:
+    ///     ValueError: If ``scale`` is satkit.timescale.Invalid
+    #[pyo3(signature=(scale=&PyTimeScale::UTC))]
+    fn to_gregorian(&self, scale: &PyTimeScale) -> PyResult<(i32, i32, i32, i32, i32, f64)> {
+        Ok(self.0.as_datetime_with_scale(valid_scale(scale)?))
     }
 
     /// Return the 1-based Gregorian day of the year (1 = January 1, 365 = December 31)
@@ -618,7 +652,7 @@ impl PyInstant {
         self.0.day_of_year()
     }
 
-    /// Create satkit.time representing input UTC Gregorian date and time
+    /// Create satkit.time representing input Gregorian date and time (UTC by default)
     ///
     /// Args:
     ///     year (int): Gregorian year (e.g., 2024)
@@ -629,6 +663,9 @@ impl PyInstant {
     ///     sec (float): floating point second of minute, in range [0,60); up
     ///         to 61 within a UTC leap second (23:59:60.5 on 2016-12-31) or a
     ///         pre-1972 positive UTC step. Rounded to the nearest microsecond
+    ///     scale (satkit.timescale, optional): Time scale in which the
+    ///         components are given, as for ``time(year, ..., sec, scale=...)``.
+    ///         Default is satkit.timescale.UTC. Only UTC has leap seconds
     ///
     /// Returns:
     ///    satkit.time: satkit.time object representing input Gregorian date and time
@@ -636,10 +673,11 @@ impl PyInstant {
     /// Raises:
     ///     TypeError: If an argument is not a number (the first five must be integers)
     ///     ValueError: If a component is out of range (including a second of
-    ///         60 or more where there is no leap second, and NaN), or the
-    ///         date is beyond about ±292,000 years
+    ///         60 or more where there is no leap second, and NaN), the
+    ///         date is beyond about ±292,000 years, or ``scale`` is
+    ///         satkit.timescale.Invalid
     #[staticmethod]
-    #[pyo3(signature=(year, month, day, hour, min, sec))]
+    #[pyo3(signature=(year, month, day, hour, min, sec, scale=&PyTimeScale::UTC))]
     fn from_gregorian(
         year: i32,
         month: i32,
@@ -647,8 +685,10 @@ impl PyInstant {
         hour: i32,
         min: i32,
         sec: f64,
+        scale: &PyTimeScale,
     ) -> PyResult<Self> {
-        Instant::from_datetime(year, month, day, hour, min, sec)
+        let scale = valid_scale(scale)?;
+        Instant::from_datetime_with_scale(year, month, day, hour, min, sec, scale)
             .map(Self)
             .map_err(parse_error)
     }
@@ -782,7 +822,7 @@ impl PyInstant {
             py,
             c"time.as_date() is deprecated since 0.23 and will be removed in 0.25; use time.to_date()",
         )?;
-        Ok(self.to_date())
+        self.to_date(&PyTimeScale::UTC)
     }
 
     /// Deprecated since 0.23, removed in 0.25. Use ``to_gregorian()``.
@@ -791,7 +831,7 @@ impl PyInstant {
             py,
             c"time.as_gregorian() is deprecated since 0.23 and will be removed in 0.25; use time.to_gregorian()",
         )?;
-        Ok(self.to_gregorian())
+        self.to_gregorian(&PyTimeScale::UTC)
     }
 
     /// Deprecated since 0.23, removed in 0.25. Use ``to_datetime()``.
@@ -858,6 +898,30 @@ impl PyInstant {
         Ok(Self(Instant::from_gps_week_and_second(week, seconds)))
     }
 
+    /// GPS week and seconds of week: the inverse of ``from_gps_week_and_second``
+    ///
+    /// Returns:
+    ///     (int, float): GPS week number, counted from the GPS epoch
+    ///     (1980-01-06) without the 1024-week rollover (negative before the
+    ///     epoch), and GPS seconds of week in [0, 604800), the float nearest
+    ///     the exact (whole-microsecond) value
+    ///
+    /// Example:
+    ///
+    /// >>> week, sow = satkit.time(2024, 1, 1).to_gps_week_and_second()
+    /// >>> (week, sow)
+    /// (2295, 86418.0)
+    fn to_gps_week_and_second(&self) -> (i64, f64) {
+        // GPS runs with TAI (19 s behind), so this is elapsed time since the
+        // epoch; i128 keeps the extreme (saturated) instants from overflowing
+        const US_PER_WEEK: i128 = 604_800_000_000;
+        let us = self.0.raw as i128 - Instant::GPS_EPOCH.raw as i128;
+        (
+            us.div_euclid(US_PER_WEEK) as i64,
+            us.rem_euclid(US_PER_WEEK) as f64 / 1.0e6,
+        )
+    }
+
     /// Day of the week (UTC)
     ///
     /// Returns:
@@ -885,10 +949,11 @@ impl PyInstant {
         self.shift(other, |t, d| t.checked_add(d))
     }
 
-    /// ``datetime.timedelta + time``: the reflected form exists for
-    /// timedelta only (``duration + time`` is the duration's own ``+``)
+    /// ``datetime.timedelta + time`` (or ``numpy.timedelta64 + time``): the
+    /// reflected form exists for these only (``duration + time`` is the
+    /// duration's own ``+``)
     fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        if other.is_instance_of::<PyDelta>() {
+        if other.is_instance_of::<PyDelta>() || is_timedelta64_scalar(other) {
             self.shift(other, |t, d| t.checked_add(d))
         } else {
             Ok(other.py().NotImplemented())
@@ -913,6 +978,11 @@ impl PyInstant {
         if let Ok(tm2) = other.cast::<Self>() {
             return PyDuration(time_difference(&self.0, &tm2.borrow().0)?).into_py_any(py);
         }
+        // datetime.datetime or numpy.datetime64, converted as `time(other)`
+        if is_time_scalar(other) {
+            let t2 = other.extract::<TimeArg>()?.0;
+            return PyDuration(time_difference(&self.0, &t2)?).into_py_any(py);
+        }
         // A non-empty list of times: element-wise differences, as an object
         // array of durations (an empty list is handled by `shift`, giving an
         // empty array like every other list operand)
@@ -931,22 +1001,40 @@ impl PyInstant {
         self.shift(other, |t, d| t.checked_sub(d))
     }
 
-    // Comparison operators are below
-
-    fn __le__(&self, other: &Self) -> bool {
-        self.0 <= other.0
+    /// ``datetime.datetime - time`` or ``numpy.datetime64 - time``: the
+    /// difference as a duration, the other operand converted as ``time(other)``
+    ///
+    /// Raises:
+    ///     ValueError: if ``other`` is NaT
+    ///     OverflowError: if the difference is beyond about ±292,000 years
+    fn __rsub__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let py = other.py();
+        // satkit.time itself never gets here (its own `-` handles it)
+        if is_time_scalar(other) && !other.is_instance_of::<Self>() {
+            let t2 = other.extract::<TimeArg>()?.0;
+            return PyDuration(time_difference(&t2, &self.0)?).into_py_any(py);
+        }
+        Ok(py.NotImplemented())
     }
 
-    fn __ge__(&self, other: &Self) -> bool {
-        self.0 >= other.0
+    // Comparison operators are below. Ordering takes a satkit.time,
+    // datetime.datetime or numpy.datetime64 (converted as `time(other)`);
+    // `==` stays satkit.time only, as `time == datetime` cannot hash alike.
+
+    fn __le__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        self.order(other, |a, b| a <= b)
     }
 
-    fn __lt__(&self, other: &Self) -> bool {
-        self.0 < other.0
+    fn __ge__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        self.order(other, |a, b| a >= b)
     }
 
-    fn __gt__(&self, other: &Self) -> bool {
-        self.0 > other.0
+    fn __lt__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        self.order(other, |a, b| a < b)
+    }
+
+    fn __gt__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        self.order(other, |a, b| a > b)
     }
 
     fn __eq__(&self, other: &Self) -> bool {
@@ -996,6 +1084,27 @@ impl PyInstant {
         self.__str__()
     }
 
+    /// Format the time for an f-string or ``format()``
+    ///
+    /// An empty spec gives ``str(t)``; any other spec is a ``strftime``
+    /// format, so ``f"{t:%Y-%m-%d}"`` is ``t.strftime("%Y-%m-%d")``.
+    ///
+    /// Args:
+    ///     format_spec (str): Format spec
+    ///
+    /// Returns:
+    ///     str: The formatted time
+    ///
+    /// Raises:
+    ///     ValueError: If the spec has a code ``strftime`` does not support
+    fn __format__(&self, format_spec: &str) -> PyResult<String> {
+        if format_spec.is_empty() {
+            self.__str__()
+        } else {
+            self.strftime(format_spec)
+        }
+    }
+
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
         let d = PyDict::new(py);
         let tp = PyTuple::empty(py);
@@ -1020,6 +1129,22 @@ impl PyInstant {
 }
 
 impl PyInstant {
+    /// An ordering comparison with a satkit.time, datetime.datetime or
+    /// numpy.datetime64; `NotImplemented` for anything else, so Python
+    /// raises its usual TypeError
+    fn order(
+        &self,
+        other: &Bound<'_, PyAny>,
+        cmp: fn(&Instant, &Instant) -> bool,
+    ) -> PyResult<Py<PyAny>> {
+        let py = other.py();
+        if !is_time_scalar(other) {
+            return Ok(py.NotImplemented());
+        }
+        let t2 = other.extract::<TimeArg>()?.0;
+        cmp(&self.0, &t2).into_py_any(py)
+    }
+
     /// `self (op) other` for a number of days, a duration, or a list / 1-D
     /// float array of either (element-wise, returning an object array).
     /// `op` is a checked operation: a result out of range is `OverflowError`
@@ -1033,7 +1158,14 @@ impl PyInstant {
             op(t, d).ok_or_else(|| crate::pyduration::arithmetic_overflow("time"))
         };
         let days = finite_days;
-        let durs: Vec<satkit::Duration> = if other.is_instance_of::<np::PyUntypedArray>() {
+        let durs: Vec<satkit::Duration> = if let Some(arr) = as_timedelta64_array(other) {
+            // numpy.timedelta64 array: exact, converted by its own unit
+            timedelta64_array_to_vec(arr, false)?
+        } else if is_timedelta64_scalar(other) {
+            let arr = other.call_method1("reshape", (1,))?;
+            let d = timedelta64_array_to_vec(arr.cast()?, true)?[0];
+            return Self(op(self.0, d)?).into_py_any(py);
+        } else if other.is_instance_of::<np::PyUntypedArray>() {
             // Any real numeric 1-D array, as days: float32 and integer
             // arrays are converted (they used to raise TypeError)
             let arr = crate::pyutils::to_f64_ndarray(other)?;
@@ -1369,7 +1501,7 @@ fn datetime64_array_to_vec(
     arr: &Bound<'_, numpy::PyUntypedArray>,
     scalar: bool,
 ) -> PyResult<Vec<Instant>> {
-    use numpy::{PyArrayDescrMethods, PyUntypedArrayMethods};
+    use numpy::PyUntypedArrayMethods;
     let py = arr.py();
     if arr.ndim() != 1 {
         return Err(pyo3::exceptions::PyValueError::new_err(format!(
@@ -1377,20 +1509,7 @@ fn datetime64_array_to_vec(
             arr.ndim()
         )));
     }
-    let dtype = arr.dtype();
-    let unit = datetime64_unit(&dtype)?;
-    // A byte-swapped array is converted to native order (a copy; rare)
-    let native = if dtype.is_native_byteorder() == Some(false) {
-        arr.call_method1("astype", (dtype.call_method1("newbyteorder", ("=",))?,))?
-    } else {
-        arr.clone().into_any()
-    };
-    let ints = native.call_method1("view", ("i8",))?;
-    let ints = ints.extract::<numpy::PyReadonlyArray1<i64>>()?;
-    // Copied out (strided or not) so the conversion can release the GIL
-    // without another thread changing the array underneath it
-    let counts = ints.as_array().to_vec();
-    drop(ints);
+    let (counts, unit) = datetime64_counts(arr)?;
     py.detach(|| datetime64_counts_to_instants(&counts, unit))
         .map_err(|e| {
             let what = |i: usize| {
@@ -1408,6 +1527,106 @@ fn datetime64_array_to_vec(
                 Datetime64Error::OutOfRange(i) => crate::pyduration::arithmetic_overflow(&what(i)),
             }
         })
+}
+
+/// The raw int64 counts of a 1-D `datetime64` or `timedelta64` array and
+/// their unit. The counts are read through a view, not element by element;
+/// a non-native byte order is first converted by numpy. Copied out (strided
+/// or not) so the conversion can release the GIL without another thread
+/// changing the array underneath it.
+fn datetime64_counts(
+    arr: &Bound<'_, numpy::PyUntypedArray>,
+) -> PyResult<(Vec<i64>, Datetime64Unit)> {
+    use numpy::{PyArrayDescrMethods, PyUntypedArrayMethods};
+    let dtype = arr.dtype();
+    let unit = datetime64_unit(&dtype)?;
+    // A byte-swapped array is converted to native order (a copy; rare)
+    let native = if dtype.is_native_byteorder() == Some(false) {
+        arr.call_method1("astype", (dtype.call_method1("newbyteorder", ("=",))?,))?
+    } else {
+        arr.clone().into_any()
+    };
+    let ints = native.call_method1("view", ("i8",))?;
+    let ints = ints.extract::<numpy::PyReadonlyArray1<i64>>()?;
+    let counts = ints.as_array().to_vec();
+    Ok((counts, unit))
+}
+
+/// The `numpy.timedelta64` scalar type, imported once
+fn timedelta64_type(py: Python<'_>) -> PyResult<&Bound<'_, pyo3::types::PyType>> {
+    static TIMEDELTA64: pyo3::sync::PyOnceLock<Py<pyo3::types::PyType>> =
+        pyo3::sync::PyOnceLock::new();
+    TIMEDELTA64.import(py, "numpy", "timedelta64")
+}
+
+/// Whether `obj` is a `numpy.timedelta64` scalar
+fn is_timedelta64_scalar(obj: &Bound<'_, PyAny>) -> bool {
+    timedelta64_type(obj.py()).is_ok_and(|t| obj.is_instance(t).unwrap_or(false))
+}
+
+/// A numpy array of dtype `timedelta64` (of any shape), if `obj` is one
+fn as_timedelta64_array<'a, 'py>(
+    obj: &'a Bound<'py, PyAny>,
+) -> Option<&'a Bound<'py, numpy::PyUntypedArray>> {
+    use numpy::{PyArrayDescrMethods, PyUntypedArrayMethods};
+    obj.cast::<numpy::PyUntypedArray>()
+        .ok()
+        .filter(|a| a.dtype().kind() == b'm')
+}
+
+/// Durations from a 1-D numpy `timedelta64` array of any fixed unit, exact
+/// for whole microseconds and rounded to the nearest microsecond for finer
+/// units (halves to the later one, as for `datetime64`). `scalar` only
+/// changes the wording of errors.
+///
+/// Raises `ValueError` for `NaT`, a 2-D or deeper array, or a calendar unit
+/// (`Y`, `M`: no fixed length), and `OverflowError` beyond ±2^63 µs.
+fn timedelta64_array_to_vec(
+    arr: &Bound<'_, numpy::PyUntypedArray>,
+    scalar: bool,
+) -> PyResult<Vec<satkit::Duration>> {
+    use numpy::PyUntypedArrayMethods;
+    if arr.ndim() != 1 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "numpy.timedelta64 arrays must be 1-D, got {} dimensions",
+            arr.ndim()
+        )));
+    }
+    let what = |i: usize| {
+        if scalar {
+            "numpy.timedelta64 value".to_string()
+        } else {
+            format!("numpy.timedelta64 value at index {i}")
+        }
+    };
+    let (counts, unit) = datetime64_counts(arr)?;
+    let Datetime64Unit::Fixed { num, den } = unit else {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "numpy.timedelta64 in years or months has no fixed length; \
+             convert it to a fixed unit (such as 'D' or 's') first",
+        ));
+    };
+    counts
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            if v == i64::MIN {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "{} is NaT (not a time)",
+                    what(i)
+                )));
+            }
+            // floor(v num / den + 1/2), as for datetime64
+            (v as i128)
+                .checked_mul(num)
+                .and_then(|x| x.checked_mul(2))
+                .and_then(|x2| x2.checked_add(den))
+                .map(|x| x.div_euclid(2 * den))
+                .and_then(|us| i64::try_from(us).ok())
+                .map(satkit::Duration::from_microseconds)
+                .ok_or_else(|| crate::pyduration::arithmetic_overflow(&what(i)))
+        })
+        .collect()
 }
 
 /// A numpy array of dtype `datetime64` (of any shape), if `obj` is one

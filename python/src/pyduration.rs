@@ -205,6 +205,23 @@ impl PyDuration {
         Ok(Self(Duration::from_milliseconds(d)))
     }
 
+    /// Create new duration object from a whole number of microseconds (exact)
+    ///
+    /// Args:
+    ///     microseconds (int): The number of microseconds
+    ///
+    /// Returns:
+    ///     duration: New duration object
+    ///
+    /// Raises:
+    ///     TypeError: If ``microseconds`` is not an integer
+    ///     OverflowError: If ``microseconds`` does not fit a signed 64-bit
+    ///         integer (about ±292,000 years)
+    #[staticmethod]
+    fn from_microseconds(microseconds: i64) -> Self {
+        Self(Duration::from_microseconds(microseconds))
+    }
+
     /// Create new duration object from a datetime.timedelta (exact: both
     /// count whole microseconds)
     ///
@@ -402,6 +419,84 @@ impl PyDuration {
         }
     }
 
+    /// Floor division: by a duration, the whole number of times it fits
+    /// (an int); by a real number, the duration scaled and rounded down to
+    /// a whole microsecond
+    ///
+    /// Exact integer-microsecond arithmetic, floored as Python's ``//``
+    /// (towards negative infinity), so ``a == (a // b) * b + a % b``.
+    ///
+    /// Args:
+    ///     other (duration|int|float): Duration or real-number divisor
+    ///
+    /// Returns:
+    ///     int|duration: ``floor(self / other)`` as an int for a duration
+    ///     divisor, else the duration ``floor(self / other)`` microseconds
+    ///
+    /// Raises:
+    ///     ZeroDivisionError: if ``other`` is zero or a zero duration
+    ///     ValueError: if ``other`` is NaN or infinite
+    ///     OverflowError: if the result is out of range (beyond about ±292,000 years)
+    fn __floordiv__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let py = other.py();
+        let zero = || pyo3::exceptions::PyZeroDivisionError::new_err("duration division by zero");
+        if let Ok(d) = other.cast::<Self>() {
+            let b = d.borrow().0.usec as i128;
+            if b == 0 {
+                return Err(zero());
+            }
+            // i128: i64::MIN // -1 does not fit an i64, but is a fine int
+            return floor_div(self.0.usec as i128, b).into_py_any(py);
+        }
+        let usec = match Factor::extract(other)? {
+            None => return Ok(py.NotImplemented()),
+            Some(Factor::Int(0)) => return Err(zero()),
+            Some(Factor::Int(k)) => i64::try_from(floor_div(self.0.usec as i128, k as i128)).ok(),
+            Some(Factor::Float(f)) => {
+                if f == 0.0 {
+                    return Err(zero());
+                }
+                if !f.is_finite() {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "duration divisor must be finite, got {f}"
+                    )));
+                }
+                div_floor_exact(self.0.usec, f)
+            }
+        };
+        let usec = usec.ok_or_else(|| arithmetic_overflow("scaled duration"))?;
+        Self(Duration::from_microseconds(usec)).into_py_any(py)
+    }
+
+    /// Remainder of floor division by a duration: ``self - (self // other) * other``
+    ///
+    /// Exact; like Python's ``%``, the result has the sign of ``other``
+    /// (or is zero).
+    ///
+    /// Args:
+    ///     other (duration): Duration divisor
+    ///
+    /// Returns:
+    ///     duration: The remainder
+    ///
+    /// Raises:
+    ///     ZeroDivisionError: if ``other`` is a zero duration
+    fn __mod__(&self, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let py = other.py();
+        let Ok(d) = other.cast::<Self>() else {
+            return Ok(py.NotImplemented());
+        };
+        let (a, b) = (self.0.usec as i128, d.borrow().0.usec as i128);
+        if b == 0 {
+            return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                "duration modulo by a zero duration",
+            ));
+        }
+        // |remainder| < |b|, so it fits an i64
+        let r = a - floor_div(a, b) * b;
+        Self(Duration::from_microseconds(r as i64)).into_py_any(py)
+    }
+
     // Backed by an exact microsecond count, so hashing the raw integer is
     // consistent with __eq__ (defining __eq__ alone would make duration unhashable).
     fn __hash__(&self) -> isize {
@@ -474,6 +569,17 @@ impl PyDuration {
         self.0.as_microseconds()
     }
 
+    /// Duration in units of milliseconds (the whole duration, like
+    /// ``seconds``; the float nearest the exact value)
+    ///
+    /// Returns:
+    ///     float: Duration in milliseconds
+    #[getter]
+    fn milliseconds(&self) -> f64 {
+        // Divided, not multiplied by 1e-3, so it is correctly rounded
+        self.0.as_microseconds() as f64 / 1.0e3
+    }
+
     fn __str__(&self) -> String {
         self.0.to_string()
     }
@@ -543,6 +649,44 @@ fn div_round(n: i128, d: i128) -> i128 {
     } else {
         q
     }
+}
+
+/// `floor(n / d)`, as Python's `//`. `d != 0`.
+fn floor_div(n: i128, d: i128) -> i128 {
+    let q = n / d;
+    if n % d != 0 && ((n < 0) != (d < 0)) {
+        q - 1
+    } else {
+        q
+    }
+}
+
+/// `floor(usec / f)` from the exact quotient; `None` if it does not fit an
+/// i64. `f` is finite and not zero.
+fn div_floor_exact(usec: i64, f: f64) -> Option<i64> {
+    // usec / (m 2^e), with the sign moved to the numerator
+    let (m, e) = decompose(f);
+    let n = usec as i128 * m.signum();
+    let m = m.abs();
+    let r = if e <= 0 {
+        // n 2^-e / m. Beyond 2^120 the quotient exceeds 2^63 (m < 2^53),
+        // as it does when the shifted numerator overflows an i128
+        if e < -120 {
+            return if n == 0 { Some(0) } else { None };
+        }
+        n.checked_mul(1i128 << -e)?.div_euclid(m)
+    } else if e > 60 {
+        // The divisor is beyond 2^112: |quotient| < 1, so the floor is 0
+        // or -1
+        if n < 0 {
+            -1
+        } else {
+            0
+        }
+    } else {
+        n.div_euclid(m << e)
+    };
+    i64::try_from(r).ok()
 }
 
 /// A finite `f` as `m * 2^e` with integer `|m| < 2^53`, exactly

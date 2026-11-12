@@ -24,10 +24,12 @@ from ._types import OMMDict, TLEFitResult
 # signatures stay readable.
 #
 # This applies to arguments only where the alias is written. The ``time``
-# class itself is narrower: its arithmetic and comparison operators take
-# ``satkit.time`` / ``satkit.duration`` (plus ``datetime.timedelta`` and
-# day counts for ``+`` and ``-``), not ``datetime.datetime``. Convert first
-# with ``time(dt)`` or ``time.from_datetime(dt)``.
+# class's own operators are listed on each: ``<``, ``<=``, ``>``, ``>=`` and
+# ``time - x`` / ``x - time`` take a ``TimeScalar`` on the other side, but
+# ``==`` is True only between two ``satkit.time`` objects (a ``time`` and a
+# ``datetime`` could not hash alike). ``+`` and ``-`` also take durations
+# (``satkit.duration``, ``datetime.timedelta``, ``numpy.timedelta64``) and
+# day counts.
 #
 # A ``datetime.datetime`` is converted with Python's own convention
 # (``datetime.timestamp()``): a naive datetime is the machine's local time, an
@@ -51,6 +53,7 @@ TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 # ``datetime.timedelta``, for use inside ``class time``, whose deprecated
 # ``datetime()`` method hides the module name there
 _TimeDelta: TypeAlias = datetime.timedelta
+_DateTime: TypeAlias = datetime.datetime
 
 class TLEWarning(UserWarning):
     """Warning for a TLE record skipped by a loader called with ``on_error="warn"``
@@ -1937,27 +1940,34 @@ class time:
         ...
 
     @staticmethod
-    def from_date(year: int, month: int, day: int) -> time:
+    def from_date(year: int, month: int, day: int, scale: timescale = timescale.UTC) -> time:
         """Return a time object representing the start of the input day (midnight)
 
         Args:
             year (int): Gregorian year (e.g., 2024)
             month (int): Gregorian month (1 = January, 2 = February, ...)
             day (int): Day of month, beginning with 1
+            scale (timescale, optional): Time scale in which the date is
+                given (midnight in that scale). Default is
+                satkit.timescale.UTC
 
         Returns:
             Time object representing the start of the input day (midnight)
 
         Raises:
             TypeError: If an argument is not an integer
-            ValueError: If the month or day is out of range, or the date is
-                beyond about ±292,000 years
+            ValueError: If the month or day is out of range, the date is
+                beyond about ±292,000 years, or ``scale`` is
+                ``timescale.Invalid``
 
         Example:
             ```python
             t = satkit.time.from_date(2023, 6, 15)
             print(t)
             # 2023-06-15T00:00:00.000000Z
+            # Midnight TAI is 37 s before midnight UTC
+            print(satkit.time.from_date(2023, 6, 15, scale=satkit.timescale.TAI))
+            # 2023-06-14T23:59:23.000000Z
             ```
         """
         ...
@@ -2031,6 +2041,24 @@ class time:
         """
         ...
 
+    def to_gps_week_and_second(self) -> tuple[int, float]:
+        """GPS week and seconds of week: the inverse of ``from_gps_week_and_second``
+
+        Returns:
+            Tuple of the GPS week number, counted from the GPS epoch
+            (1980-01-06) without the 1024-week rollover (negative before the
+            epoch), and the GPS seconds of week in [0, 604800), the float
+            nearest the exact (whole-microsecond) value
+
+        Example:
+            ```python
+            week, sow = satkit.time(2024, 1, 1).to_gps_week_and_second()
+            print(week, sow)
+            # 2295 86418.0
+            ```
+        """
+        ...
+
     @property
     def weekday(self) -> weekday:
         """
@@ -2069,14 +2097,21 @@ class time:
         """
         ...
 
-    def to_date(self) -> tuple[int, int, int]:
-        """Return tuple representing as UTC Gregorian date of the time object.
+    def to_date(self, scale: timescale = timescale.UTC) -> tuple[int, int, int]:
+        """Return tuple representing the Gregorian date of the time object (UTC by default).
+
+        Args:
+            scale (timescale, optional): Time scale of the date. Default is
+                satkit.timescale.UTC
 
         Returns:
             Tuple with 3 elements representing the Gregorian year, month, and day of the time object.
                 Fractional component of day are truncated.
                 Month is in range [1,12].
                 Day is in range [1,31].
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
         """
         ...
 
@@ -2087,15 +2122,33 @@ class time:
 
     def to_gregorian(
         self,
+        scale: timescale = timescale.UTC,
     ) -> tuple[int, int, int, int, int, float]:
-        """Return tuple representing as UTC Gregorian date and time of the time object.
+        """Return tuple representing the Gregorian date and time of the time object (UTC by default).
+
+        Args:
+            scale (timescale, optional): Time scale of the date and time.
+                Default is satkit.timescale.UTC. The inverse of
+                ``from_gregorian`` with the same scale: exact for UTC, TAI,
+                TT and GPS; UT1 and TDB are rounded to the nearest
+                microsecond
 
         Returns:
             Tuple with 6 elements representing the Gregorian year, month, day, hour, minute, and second of the time object.
                 Month is in range [1,12].
                 Day is in range [1,31].
                 The second is the float nearest the exact (whole-microsecond)
-                value, in [0, 60); inside a leap second it is in [60, 61).
+                value, in [0, 60); inside a UTC leap second it is in [60, 61).
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
+
+        Example:
+            ```python
+            t = satkit.time(2024, 1, 1)
+            print(t.to_gregorian(scale=satkit.timescale.TAI))
+            # (2024, 1, 1, 0, 0, 37.0)
+            ```
         """
         ...
 
@@ -2112,8 +2165,9 @@ class time:
         hour: int,
         min: int,
         sec: float,
+        scale: timescale = timescale.UTC,
     ) -> time:
-        """Create time object from 6 input arguments representing UTC Gregorian time.
+        """Create time object from 6 input arguments representing Gregorian time (UTC by default).
 
         Args:
             year (int): Gregorian year
@@ -2125,16 +2179,20 @@ class time:
                 up to 61 within a UTC leap second (e.g. ``23:59:60.5`` on
                 2016-12-31) or a pre-1972 positive UTC step. Rounded to the
                 nearest microsecond
+            scale (timescale, optional): Time scale in which the components
+                are given, as for ``time(year, ..., sec, scale=...)``.
+                Default is satkit.timescale.UTC. Only UTC has leap seconds
 
         Returns:
-            Time object representing input UTC Gregorian time
+            Time object representing input Gregorian time
 
         Raises:
             TypeError: If an argument is not a number (the first five must
                 be integers)
             ValueError: If a component is out of range (including a second
-                of 60 or more where there is no leap second, and NaN), or
-                the date is beyond about ±292,000 years
+                of 60 or more where there is no leap second, and NaN), the
+                date is beyond about ±292,000 years, or ``scale`` is
+                ``timescale.Invalid``
 
         Example:
             ```python
@@ -2406,17 +2464,50 @@ class time:
         """
         ...
 
+    def __format__(self, format_spec: str) -> str:
+        """
+        Format the time for an f-string or ``format()``
+
+        An empty spec gives ``str(t)``; any other spec is a ``strftime``
+        format (see ``strftime`` for the codes).
+
+        Args:
+            format_spec (str): format spec
+
+        Returns:
+            The formatted time
+
+        Raises:
+            ValueError: If the spec has a code ``strftime`` does not support
+
+        Example:
+            ```python
+            t = satkit.time(2023, 6, 3, 6, 19, 34)
+            print(f"{t:%Y-%m-%d}")
+            # 2023-06-03
+            print(f"{t}")
+            # 2023-06-03T06:19:34.000000Z
+            ```
+        """
+        ...
+
+    # Above numpy scalars, below numpy arrays: a numpy.datetime64 or
+    # numpy.timedelta64 scalar on the left defers to time's reflected operator
+    __array_priority__: ClassVar[float]
+
     @typing.overload
-    def __add__(self, other: duration | _TimeDelta) -> time:
+    def __add__(self, other: duration | _TimeDelta | np.timedelta64) -> time:
         """
         Return a time object representing the input duration added to the current time
 
         Args:
-            other (duration | datetime.timedelta): duration to add to the
-                current time (a ``timedelta`` is exact; ``timedelta + time``
-                works too)
+            other (duration | datetime.timedelta | numpy.timedelta64): duration
+                to add to the current time (a ``timedelta`` is exact, and so is
+                a ``timedelta64`` in whole microseconds or coarser; finer units
+                round to the nearest microsecond; ``timedelta + time`` works too)
 
         Raises:
+            ValueError: if a ``timedelta64`` is NaT or in years or months
             OverflowError: if the result is beyond about ±292,000 years
 
         Returns:
@@ -2449,14 +2540,19 @@ class time:
         ...
 
     @typing.overload
-    def __add__(self, other: list[duration]) -> npt.NDArray[Any]:
+    def __add__(self, other: list[duration] | npt.NDArray[np.timedelta64]) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise addition of days to the "self" time object
 
         Args:
-            other (list[duration]): list of durations to add to the current time (a list, not any sequence: a tuple is refused)
+            other (list[duration] | npt.NDArray[np.timedelta64]): list of
+                durations (a list, not any sequence: a tuple is refused), or a
+                1-D numpy ``timedelta64`` array of any fixed unit (exact to
+                the microsecond), to add to the current time
 
         Raises:
+            ValueError: if a ``timedelta64`` element is NaT, the array is not
+                1-D, or its unit is years or months
             OverflowError: if a result is beyond about ±292,000 years
 
         Returns:
@@ -2486,14 +2582,16 @@ class time:
         """
         ...
 
-    def __radd__(self, other: _TimeDelta) -> time:
+    def __radd__(self, other: _TimeDelta | np.timedelta64) -> time:
         """
-        ``datetime.timedelta + time``: the time ``other`` later
+        ``datetime.timedelta + time`` or ``numpy.timedelta64 + time``: the
+        time ``other`` later
 
         Args:
-            other (datetime.timedelta): time difference to add
+            other (datetime.timedelta | numpy.timedelta64): time difference to add
 
         Raises:
+            ValueError: if a ``timedelta64`` is NaT or in years or months
             OverflowError: if the result is beyond about ±292,000 years
 
         Returns:
@@ -2501,51 +2599,70 @@ class time:
         """
         ...
 
-    def __le__(self, other: time) -> bool:
+    def __le__(self, other: time | _DateTime | np.datetime64) -> bool:
         """
-        Compare two time objects for less than or equal to
+        Compare for less than or equal to
 
-        Only another ``satkit.time`` can be compared: ordering against any
-        other type raises ``TypeError`` (``==`` is False, ``!=`` True).
+        The ordering operators (``<``, ``<=``, ``>``, ``>=``) take a
+        ``satkit.time``, ``datetime.datetime`` or ``numpy.datetime64``,
+        converted as ``time(other)`` (a naive datetime is local time; a
+        ``datetime64`` is UTC), on either side. Ordering against any other
+        type raises ``TypeError``. ``==`` is True only between two
+        ``satkit.time`` objects.
 
         Args:
-            other (time): time object to compare with
+            other (time | datetime.datetime | numpy.datetime64): time to compare with
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is less than or equal to "other" time, False otherwise
         """
         ...
 
-    def __lt__(self, other: time) -> bool:
+    def __lt__(self, other: time | _DateTime | np.datetime64) -> bool:
         """
-        Compare two time objects for less than
+        Compare for less than
 
         Args:
-            other (time): time object to compare with
+            other (time | datetime.datetime | numpy.datetime64): time to
+                compare with, converted as ``time(other)``
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is less than "other" time, False otherwise
         """
         ...
 
-    def __ge__(self, other: time) -> bool:
+    def __ge__(self, other: time | _DateTime | np.datetime64) -> bool:
         """
-        Compare two time objects for greater than or equal to
+        Compare for greater than or equal to
 
         Args:
-            other (time): time object to compare with
+            other (time | datetime.datetime | numpy.datetime64): time to
+                compare with, converted as ``time(other)``
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is greater than or equal to "other" time, False otherwise
         """
         ...
 
-    def __gt__(self, other: time) -> bool:
+    def __gt__(self, other: time | _DateTime | np.datetime64) -> bool:
         """
-        Compare two time objects for greater than
+        Compare for greater than
 
         Args:
-            other (time): time object to compare with
+            other (time | datetime.datetime | numpy.datetime64): time to
+                compare with, converted as ``time(other)``
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is greater than "other" time, False otherwise
@@ -2555,6 +2672,10 @@ class time:
     def __eq__(self, value: object) -> bool:
         """
         Compare two time objects for equality
+
+        Only another ``satkit.time`` can be equal: ``time == datetime`` is
+        False even for the same instant, as the two could not hash alike.
+        Convert first with ``time(dt)``.
 
         Args:
             value (object): object to compare with
@@ -2577,15 +2698,17 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: duration | _TimeDelta) -> time:
+    def __sub__(self, other: duration | _TimeDelta | np.timedelta64) -> time:
         """
         Return a time object representing the input duration subtracted from the current time
 
         Args:
-            other (duration | datetime.timedelta): duration to subtract from
-                the current time (a ``timedelta`` is exact)
+            other (duration | datetime.timedelta | numpy.timedelta64): duration
+                to subtract from the current time (a ``timedelta`` is exact,
+                and so is a ``timedelta64`` in whole microseconds or coarser)
 
         Raises:
+            ValueError: if a ``timedelta64`` is NaT or in years or months
             OverflowError: if the result is beyond about ±292,000 years
 
         Returns:
@@ -2595,14 +2718,17 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: time) -> duration:
+    def __sub__(self, other: time | _DateTime | np.datetime64) -> duration:
         """
         Return a duration object representing the difference between the two times
 
         Args:
-            other (time): time to subtract from the current time
+            other (time | datetime.datetime | numpy.datetime64): time to
+                subtract from the current time, converted as ``time(other)``
+                (a naive datetime is local time; a ``datetime64`` is UTC)
 
         Raises:
+            ValueError: if ``other`` is NaT
             OverflowError: if the difference is beyond about ±292,000 years
                 (only for times near the two ends of the range)
 
@@ -2654,14 +2780,19 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: list[duration]) -> npt.NDArray[Any]:
+    def __sub__(self, other: list[duration] | npt.NDArray[np.timedelta64]) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise subtraction of duration from the "self" time object
 
         Args:
-            other (list[duration]): list of durations to subtract from the current time (a list, not any sequence: a tuple is refused)
+            other (list[duration] | npt.NDArray[np.timedelta64]): list of
+                durations (a list, not any sequence: a tuple is refused), or a
+                1-D numpy ``timedelta64`` array of any fixed unit, to
+                subtract from the current time
 
         Raises:
+            ValueError: if a ``timedelta64`` element is NaT, the array is not
+                1-D, or its unit is years or months
             OverflowError: if a result is beyond about ±292,000 years
 
         Returns:
@@ -2682,6 +2813,23 @@ class time:
 
         Returns:
             Object array of duration objects, ``self - other[i]`` for each element
+        """
+        ...
+
+    def __rsub__(self, other: _DateTime | np.datetime64) -> duration:
+        """
+        ``datetime.datetime - time`` or ``numpy.datetime64 - time``: the
+        difference, with ``other`` converted as ``time(other)``
+
+        Args:
+            other (datetime.datetime | numpy.datetime64): time to subtract from
+
+        Raises:
+            ValueError: if ``other`` is NaT
+            OverflowError: if the difference is beyond about ±292,000 years
+
+        Returns:
+            Duration ``time(other) - self``
         """
         ...
 
@@ -2809,6 +2957,30 @@ class duration:
 
         Returns:
             Duration object representing input number of milliseconds
+        """
+        ...
+
+    @staticmethod
+    def from_microseconds(microseconds: int) -> duration:
+        """Create duration object from a whole number of microseconds (exact)
+
+        Args:
+            microseconds (int): Number of microseconds
+
+        Returns:
+            Duration object representing input number of microseconds
+
+        Raises:
+            TypeError: If ``microseconds`` is not an integer
+            OverflowError: If ``microseconds`` does not fit a signed 64-bit
+                integer (about ±292,000 years)
+
+        Example:
+            ```python
+            d = satkit.duration.from_microseconds(1500)
+            print(d.milliseconds)
+            # 1.5
+            ```
         """
         ...
 
@@ -3033,6 +3205,79 @@ class duration:
         """
         ...
 
+    @typing.overload
+    def __floordiv__(self, other: duration) -> int:
+        """How many whole times ``other`` fits in the duration
+
+        Exact integer-microsecond arithmetic, floored as Python's ``//``
+        (towards negative infinity), so ``a == (a // b) * b + a % b``.
+
+        Args:
+            other (duration): duration divisor
+
+        Returns:
+            ``floor(self / other)`` as an int
+
+        Raises:
+            ZeroDivisionError: if ``other`` is a zero duration
+
+        Example:
+            ```python
+            print(satkit.duration.from_minutes(7) // satkit.duration.from_minutes(2))
+            # 3
+            ```
+        """
+        ...
+
+    @typing.overload
+    def __floordiv__(self, other: float) -> duration:
+        """Divide the duration by a real number, rounding down to a whole microsecond
+
+        The quotient is computed exactly from the duration's integer
+        microseconds and floored (towards negative infinity).
+
+        Args:
+            other (float): value by which to divide the duration
+
+        Returns:
+            Duration of ``floor(self / other)`` microseconds
+
+        Raises:
+            ZeroDivisionError: if ``other`` is zero
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if the result is beyond about ±292,000 years
+
+        Example:
+            ```python
+            print(satkit.duration(microseconds=7) // 2)
+            # 3 usec
+            ```
+        """
+        ...
+
+    def __mod__(self, other: duration) -> duration:
+        """Remainder of floor division by a duration: ``self - (self // other) * other``
+
+        Exact; like Python's ``%``, the result has the sign of ``other`` (or
+        is zero).
+
+        Args:
+            other (duration): duration divisor
+
+        Returns:
+            The remainder
+
+        Raises:
+            ZeroDivisionError: if ``other`` is a zero duration
+
+        Example:
+            ```python
+            print(satkit.duration.from_minutes(7) % satkit.duration.from_minutes(2))
+            # 1 minutes 0.000000 seconds
+            ```
+        """
+        ...
+
     def __gt__(self, other: duration) -> bool:
         """Compare two durations for greater than
 
@@ -3123,6 +3368,18 @@ class duration:
 
         Returns:
             Integer number of microseconds represented by duration
+        """
+        ...
+
+    @property
+    def milliseconds(self) -> float:
+        """Floating point number of milliseconds represented by duration
+
+        The whole duration, like ``seconds`` (the float nearest the exact
+        value), not a component of it.
+
+        Returns:
+            Floating point number of milliseconds represented by duration
         """
         ...
 

@@ -1140,3 +1140,51 @@ fn test_seconds_correctly_rounded() {
     let t = Instant::from_unixtime_microseconds(-631_152_000_123_456);
     assert_eq!(t.as_unixtime(), -631152000.123456);
 }
+
+#[test]
+fn test_as_datetime_with_scale_round_trip() {
+    // The inverse of `from_datetime_with_scale`: exact for UTC, TAI, TT and
+    // GPS, within a microsecond for UT1 and TDB
+    let comps = [
+        (2024, 3, 5, 12, 34, 56.789_012),
+        (1999, 12, 31, 23, 59, 59.999_999),
+        (1965, 6, 1, 0, 0, 0.5),
+        (-44, 3, 15, 11, 0, 0.0),
+    ];
+    for scale in [
+        TimeScale::UTC,
+        TimeScale::TAI,
+        TimeScale::TT,
+        TimeScale::GPS,
+        TimeScale::UT1,
+        TimeScale::TDB,
+    ] {
+        for (y, mo, d, h, mi, s) in comps {
+            let t = Instant::from_datetime_with_scale(y, mo, d, h, mi, s, scale).unwrap();
+            let (y2, mo2, d2, h2, mi2, s2) = t.as_datetime_with_scale(scale);
+            assert_eq!((y2, mo2, d2, h2, mi2), (y, mo, d, h, mi), "{scale:?}");
+            assert!((s2 - s).abs() <= 1.0e-6, "{scale:?}: {s2} vs {s}");
+            if matches!(
+                scale,
+                TimeScale::UTC | TimeScale::TAI | TimeScale::TT | TimeScale::GPS
+            ) {
+                assert_eq!(s2, s, "{scale:?}");
+            }
+        }
+    }
+    // TT label of the J2000 epoch
+    assert_eq!(
+        Instant::J2000.as_datetime_with_scale(TimeScale::TT),
+        (2000, 1, 1, 12, 0, 0.0)
+    );
+    // A leap second exists only in UTC; TAI is 37 s ahead
+    let t = Instant::from_datetime(2016, 12, 31, 23, 59, 60.5).unwrap();
+    assert_eq!(
+        t.as_datetime_with_scale(TimeScale::UTC),
+        (2016, 12, 31, 23, 59, 60.5)
+    );
+    assert_eq!(
+        t.as_datetime_with_scale(TimeScale::TAI),
+        (2017, 1, 1, 0, 0, 36.5)
+    );
+}
