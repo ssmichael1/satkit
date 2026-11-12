@@ -1,8 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use pyo3::types::{PyBytes, PyList, PyTuple};
-
-use numpy::{PyArray1, PyReadonlyArray1};
+use pyo3::types::{PyBytes, PyTuple};
 
 use satkit::itrfcoord::{Geodetic, ITRFCoord};
 
@@ -178,9 +176,35 @@ impl PyITRFCoord {
         #[pyo3(from_py_with = altitude_arg)] altitude: Option<f64>,
         #[pyo3(from_py_with = height_arg)] height: Option<f64>,
     ) -> PyResult<Self> {
-        // Any geodetic keyword selects the geodetic form (the positional
-        // arguments are then ignored); `*_rad` wins over `*_deg`, and
-        // `height` over `altitude`
+        use pyo3::exceptions::{PyTypeError, PyValueError};
+
+        // One value for a quantity that has two spellings; giving both is an
+        // error rather than a silent choice of one of them.
+        fn one_of(
+            a: Option<f64>,
+            aname: &str,
+            b: Option<f64>,
+            bname: &str,
+        ) -> PyResult<Option<(f64, bool)>> {
+            match (a, b) {
+                (Some(_), Some(_)) => Err(PyTypeError::new_err(format!(
+                    "give {aname} or {bname}, not both"
+                ))),
+                (Some(v), None) => Ok(Some((v, true))),
+                (None, Some(v)) => Ok(Some((v, false))),
+                (None, None) => Ok(None),
+            }
+        }
+        fn finite(name: &str, v: f64) -> PyResult<f64> {
+            if v.is_finite() {
+                Ok(v)
+            } else {
+                Err(PyValueError::new_err(format!(
+                    "{name} must be finite, got {v}"
+                )))
+            }
+        }
+
         let geodetic = [
             latitude_deg,
             longitude_deg,
@@ -190,57 +214,77 @@ impl PyITRFCoord {
             height,
         ];
         if geodetic.iter().any(Option::is_some) {
-            let latitude_deg = latitude_rad.map_or(latitude_deg, |v| Some(v.to_degrees()));
-            let longitude_deg = longitude_rad.map_or(longitude_deg, |v| Some(v.to_degrees()));
-            let (Some(latitude_deg), Some(longitude_deg)) = (latitude_deg, longitude_deg) else {
-                return Err(pyo3::exceptions::PyTypeError::new_err(
-                    "Must set latitude, longitude",
+            if !args.is_empty() {
+                return Err(PyTypeError::new_err(
+                    "give either a positional Cartesian position or geodetic keywords, not both",
+                ));
+            }
+            let lat = one_of(latitude_deg, "latitude_deg", latitude_rad, "latitude_rad")?;
+            let lon = one_of(
+                longitude_deg,
+                "longitude_deg",
+                longitude_rad,
+                "longitude_rad",
+            )?;
+            let hae = one_of(altitude, "altitude", height, "height")?;
+            let (Some((lat, lat_is_deg)), Some((lon, lon_is_deg))) = (lat, lon) else {
+                return Err(PyTypeError::new_err(
+                    "a geodetic position needs a latitude (latitude_deg or latitude_rad) \
+                     and a longitude (longitude_deg or longitude_rad)",
                 ));
             };
-            Ok(Self(ITRFCoord::from_geodetic_deg(
-                latitude_deg,
-                longitude_deg,
-                height.or(altitude).unwrap_or(0.0),
-            )))
-        } else if args.len() == 3 {
-            let x = args.get_item(0)?.extract::<f64>()?;
-            let y = args.get_item(1)?.extract::<f64>()?;
-            let z = args.get_item(2)?.extract::<f64>()?;
-            Ok(Self(ITRFCoord::from_slice(&[x, y, z]).unwrap()))
-        } else if args.len() == 1 {
-            if args.get_item(0)?.is_instance_of::<PyList>() {
-                match args.get_item(0)?.extract::<Vec<f64>>() {
-                    Ok(xl) => {
-                        if xl.len() != 3 {
-                            return Err(pyo3::exceptions::PyTypeError::new_err(
-                                "Invalid number of elements",
-                            ));
-                        }
-                        Ok(Self(ITRFCoord::from_slice(&xl).unwrap()))
-                    }
-                    Err(e) => Err(e),
-                }
-            } else if args.get_item(0)?.is_instance_of::<PyArray1<f64>>() {
-                let xv = args.get_item(0)?.extract::<PyReadonlyArray1<f64>>()?;
-                let xa = xv.as_array();
-                if xa.len() != 3 {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "Invalid number of elements",
-                    ));
-                }
-                ITRFCoord::from_slice(&[xa[0], xa[1], xa[2]])
-                    .map(Self)
-                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{e}")))
+            // The range is checked in the unit given, so that exactly 90
+            // degrees is accepted whatever its radian rounding
+            let (lat_name, lat_limit) = if lat_is_deg {
+                ("latitude_deg", 90.0)
             } else {
-                Err(pyo3::exceptions::PyTypeError::new_err(
-                "First input must be float, 3-element list of floats, or 3-element numpy array of float"
-            ))
+                ("latitude_rad", std::f64::consts::FRAC_PI_2)
+            };
+            if lat.is_nan() || lat.abs() > lat_limit {
+                return Err(PyValueError::new_err(format!(
+                    "{lat_name} must be in [-{lat_limit}, {lat_limit}], got {lat}"
+                )));
             }
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err(
-                "First input must be float, 3-element list of floats, or 3-element numpy array of float"
-            ))
+            let lon = finite(
+                if lon_is_deg {
+                    "longitude_deg"
+                } else {
+                    "longitude_rad"
+                },
+                lon,
+            )?;
+            let hae = match hae {
+                Some((h, is_altitude)) => {
+                    finite(if is_altitude { "altitude" } else { "height" }, h)?
+                }
+                None => 0.0,
+            };
+            let lat = if lat_is_deg { lat.to_radians() } else { lat };
+            let lon = if lon_is_deg { lon.to_radians() } else { lon };
+            return Ok(Self(ITRFCoord::from_geodetic_rad(lat, lon, hae)));
         }
+
+        let v = match args.len() {
+            // One array-like: any real numeric 3-element sequence
+            1 => to_vector3(&args.get_item(0)?, "the ITRF position")?,
+            3 => {
+                let mut v = [0.0; 3];
+                for (i, x) in v.iter_mut().enumerate() {
+                    *x = args.get_item(i)?.extract::<f64>()?;
+                }
+                numeris::vector![v[0], v[1], v[2]]
+            }
+            n => {
+                return Err(PyTypeError::new_err(format!(
+                    "itrfcoord takes one 3-element array-like, three numbers (x, y, z) \
+                     or geodetic keywords; got {n} positional arguments"
+                )))
+            }
+        };
+        for x in v.iter() {
+            finite("ITRF position component", *x)?;
+        }
+        Ok(Self(ITRFCoord::from_vector(&v)))
     }
 
     #[getter]

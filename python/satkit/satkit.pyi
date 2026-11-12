@@ -2494,7 +2494,8 @@ class quaternion:
 
         Raises:
             TypeError: ``axis`` is not a real numeric array-like
-            ValueError: ``axis`` does not have 3 elements
+            ValueError: ``axis`` does not have 3 elements, or ``axis`` or
+                ``angle`` holds a NaN or infinity
         """
         ...
 
@@ -2530,6 +2531,9 @@ class quaternion:
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the xhat unit vector
 
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
+
         Notes:
             Equivalent rotation matrix:
             | 1             0            0|
@@ -2547,6 +2551,9 @@ class quaternion:
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the yhat unit vector
+
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
 
 
         Notes:
@@ -2566,6 +2573,9 @@ class quaternion:
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the zhat unit vector
+
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
 
         Notes:
             Equivalent rotation matrix:
@@ -2591,9 +2601,10 @@ class quaternion:
 
         Raises:
             TypeError: an input is not a real numeric array-like
-            ValueError: an input does not have 3 elements, either vector has
-                (near-)zero length, or the vectors point in opposite
-                directions (the rotation axis is then not unique)
+            ValueError: an input does not have 3 elements or holds a NaN or
+                infinity, either vector has (near-)zero length, or the
+                vectors point in opposite directions (the rotation axis is
+                then not unique)
 
         Example:
             ```python
@@ -2655,6 +2666,9 @@ class quaternion:
 
         Returns:
             quaternion: Quaternion representing the input euler-angle rotation
+
+        Raises:
+            ValueError: an angle is NaN or infinite
         """
         ...
 
@@ -2799,6 +2813,9 @@ class quaternion:
             Quaternion representing interpolation between self and other,
             along the shorter of the two arcs (``other`` and ``-other`` are
             the same rotation; the nearer one is used)
+
+        Raises:
+            ValueError: ``frac`` is NaN or infinite
 
         Example:
             ```python

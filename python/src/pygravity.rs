@@ -43,6 +43,13 @@ fn gravity_args(
         ))
         .into());
     }
+    // The evaluator would silently truncate the order to the degree
+    if order > degree {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "gravity order {order} exceeds the degree ({degree})"
+        ))
+        .into());
+    }
     ensure_loaded(&model)?;
 
     let v: Vector3 = if pos.is_instance_of::<PyITRFCoord>() {
@@ -56,6 +63,20 @@ fn gravity_args(
         // input, `ValueError` for the wrong length
         to_vector3(pos, "pos")?
     };
+    // The field is singular at the origin (and NaN propagates): refuse both
+    // rather than return an all-NaN acceleration
+    if !v.iter().all(|x| x.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "pos must be finite (no NaN or infinity)",
+        )
+        .into());
+    }
+    if v.norm() == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "pos is the origin, where the gravity field is singular",
+        )
+        .into());
+    }
     Ok((v, degree, order, model.into()))
 }
 
