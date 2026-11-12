@@ -9,6 +9,7 @@ import numpy.typing as npt
 import numpy as np
 
 import datetime
+import os
 
 from collections.abc import Sequence
 from typing import Any, ClassVar, Literal, Optional, TypeAlias, Union, final, overload
@@ -116,9 +117,22 @@ class TLE:
 
     __hash__: ClassVar[None]  # type: ignore[assignment]
 
+    def __repr__(self) -> str:
+        """One line naming the satellite and epoch
+
+        For example ``TLE(name="ISS (ZARYA)", satnum=25544,
+        intl_desig="98067A", epoch=2021-09-21T12:25:40.104192Z)``.
+        ``str(tle)`` is the multi-line listing of every element.
+        """
+        ...
+
+    def __str__(self) -> str:
+        """Multi-line listing of the name, epoch and every element"""
+        ...
+
     @staticmethod
     def from_file(
-        filename: str,
+        filename: str | os.PathLike[str],
         *,
         check_checksum: bool = False,
         on_error: Literal["raise", "warn", "skip"] = "raise",
@@ -889,6 +903,10 @@ class sgp4_gravconst:
         """Equal to the same member, or to its integer value"""
         ...
 
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
+        ...
+
 @final
 class sgp4_opsmode:
     """Ops mode for SGP4 propagation
@@ -912,6 +930,10 @@ class sgp4_opsmode:
 
     def __eq__(self, other: object) -> bool:
         """Equal to the same member, or to its integer value"""
+        ...
+
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
         ...
 
 @final
@@ -1102,6 +1124,8 @@ class sgp4_error:
         # 6
         print(satkit.sgp4_error.orbit_decay == 6)
         # True
+        print(satkit.sgp4_error(6))
+        # sgp4_error.orbit_decay
         ```
     """
 
@@ -1131,12 +1155,27 @@ class sgp4_error:
     propagated by classic SGP4 at all (an SGP4-XP set, or OMM metadata naming another theory,
     time system, frame or center) (code 7)"""
 
+    def __new__(cls, code: int) -> sgp4_error:
+        """The member with integer code ``code``
+
+        For example ``satkit.sgp4_error(int(err[0]))`` for an element of the
+        error array of ``sgp4(..., errflag=True)``.
+
+        Raises:
+            ValueError: if ``code`` is not one of the codes 0 to 7
+        """
+        ...
+
     def __int__(self) -> int:
         """The member's integer code"""
         ...
 
     def __eq__(self, other: object) -> bool:
         """Equal to the same member, or to its integer code"""
+        ...
+
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
         ...
 
 @final
@@ -1223,6 +1262,10 @@ class tlefitstatus:
 
     def __eq__(self, other: object) -> bool:
         """Equal to the same member, or to its integer value"""
+        ...
+
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
         ...
 
 @final
@@ -5210,7 +5253,7 @@ def omm_from_url(url: str) -> list[dict[str, Any]]:
     """
     ...
 
-def omm_from_file(filename: str) -> list[dict[str, Any]]:
+def omm_from_file(filename: str | os.PathLike[str]) -> list[dict[str, Any]]:
     """Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
 
     The format is detected from the content, not the file extension, as

@@ -288,7 +288,7 @@ pub fn omm_from_url(py: Python<'_>, url: String) -> Result<Py<PyAny>> {
 ///         the path. Another I/O failure raises the matching ``OSError``
 ///     ValueError: if the content is none of the three formats or is malformed
 #[pyfunction]
-pub fn omm_from_file(py: Python<'_>, filename: String) -> Result<Py<PyAny>> {
+pub fn omm_from_file(py: Python<'_>, filename: std::path::PathBuf) -> Result<Py<PyAny>> {
     let omms = py.detach(|| OMM::from_file(&filename))?;
     Ok(omms_to_pylist(py, &omms)?)
 }

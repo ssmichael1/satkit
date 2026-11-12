@@ -47,7 +47,8 @@ use std::io::BufRead;
 /// element zero.
 ///
 /// Two TLEs are equal (``==``) when their names and every element are
-/// equal; a TLE is mutable, so it is not hashable.
+/// equal; a TLE is mutable, so it is not hashable. ``repr(tle)`` is one
+/// line naming the satellite and epoch; ``str(tle)`` lists every element.
 #[pyclass(name = "TLE", module = "satkit")]
 pub struct PyTLE(pub TLE);
 
@@ -184,12 +185,12 @@ impl PyTLE {
     #[pyo3(signature = (filename, *, check_checksum=false, on_error="raise"))]
     fn from_file(
         py: Python<'_>,
-        filename: String,
+        filename: std::path::PathBuf,
         check_checksum: bool,
         on_error: &str,
     ) -> Result<Vec<Self>> {
         let on_error = OnError::parse(on_error)?;
-        let file = File::open(std::path::PathBuf::from(&filename))?;
+        let file = File::open(&filename)?;
 
         let lines: Vec<String> = io::BufReader::new(file)
             .lines()
@@ -199,7 +200,7 @@ impl PyTLE {
             py,
             parse_records(&lines, check_checksum),
             on_error,
-            &filename,
+            &filename.display().to_string(),
         )
     }
 
@@ -621,7 +622,10 @@ impl PyTLE {
     }
 
     fn __repr__(&self) -> String {
-        self.__str__()
+        format!(
+            "TLE(name={:?}, satnum={}, intl_desig={:?}, epoch={})",
+            self.0.name, self.0.sat_num, self.0.intl_desig, self.0.epoch
+        )
     }
 
     // Compares the element sets; the cached SGP4 initialization is ignored,

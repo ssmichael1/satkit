@@ -26,7 +26,16 @@ use anyhow::{bail, Result};
 /// produced), ``orbit_decay`` (6: the computed radius is less than one
 /// Earth radius) and ``unsupported`` (7: the element set cannot be
 /// propagated by classic SGP4 at all).
-#[pyclass(name = "sgp4_error", eq, eq_int, from_py_object)]
+///
+/// Members are hashable and immutable.
+#[pyclass(
+    name = "sgp4_error",
+    module = "satkit",
+    eq,
+    eq_int,
+    frozen,
+    from_py_object
+)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PySGP4Error {
     success = psgp4::SGP4Error::SGP4Success as isize,
@@ -42,7 +51,62 @@ pub enum PySGP4Error {
     unsupported = 7,
 }
 
-crate::enum_pickle!(PySGP4Error, "sgp4_error");
+#[pymethods]
+impl PySGP4Error {
+    // The member with integer code `code`, e.g. one element of the error
+    // array of `sgp4(..., errflag=True)` (documented on the class)
+    #[new]
+    fn new(code: i32) -> PyResult<Self> {
+        Ok(match code {
+            0 => Self::success,
+            1 => Self::eccen,
+            2 => Self::mean_motion,
+            3 => Self::perturb_eccen,
+            4 => Self::semi_latus_rectum,
+            5 => Self::unused,
+            6 => Self::orbit_decay,
+            7 => Self::unsupported,
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "{code} is not an sgp4_error code (0 to 7)"
+                )))
+            }
+        })
+    }
+
+    // A member equals its integer code (`eq_int`), so it must hash like it:
+    // PyO3's `hash` option hashes the Rust value instead, which would make
+    // `{0: ...}[sgp4_error.success]` a KeyError although `success == 0`.
+    const fn __hash__(&self) -> isize {
+        *self as isize
+    }
+
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
+        crate::pyutils::enum_reduce(slf.as_any(), "sgp4_error")
+    }
+}
+
+/// `__hash__` and `__reduce__` for an enum pyclass with `eq_int` and no
+/// other `#[pymethods]` block: a member hashes like the integer it equals
+/// (see `PySGP4Error::__hash__`).
+macro_rules! int_enum_methods {
+    ($ty:ty, $path:literal) => {
+        #[pymethods]
+        impl $ty {
+            const fn __hash__(&self) -> isize {
+                *self as isize
+            }
+
+            fn __reduce__<'py>(
+                slf: &Bound<'py, Self>,
+            ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
+                crate::pyutils::enum_reduce(slf.as_any(), $path)
+            }
+        }
+    };
+}
 
 #[allow(non_camel_case_types)]
 /// Gravity constants (Earth radius, mu, J2-J4) used by SGP4 propagation
@@ -53,16 +117,24 @@ crate::enum_pickle!(PySGP4Error, "sgp4_error");
 ///
 /// Members: ``wgs72`` (0), ``wgs72old`` (1: WGS-72 with the older,
 /// lower-precision constants of the original Spacetrack Report #3 code) and
-/// ``wgs84`` (2). Each compares equal to its integer value.
-#[pyclass(name = "sgp4_gravconst", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+/// ``wgs84`` (2). Each compares equal to its integer value, and is hashable
+/// and immutable.
+#[pyclass(
+    name = "sgp4_gravconst",
+    module = "satkit",
+    eq,
+    eq_int,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GravConst {
     wgs72 = psgp4::GravConst::WGS72 as isize,
     wgs72old = psgp4::GravConst::WGS72OLD as isize,
     wgs84 = psgp4::GravConst::WGS84 as isize,
 }
 
-crate::enum_pickle!(GravConst, "sgp4_gravconst");
+int_enum_methods!(GravConst, "sgp4_gravconst");
 
 impl From<GravConst> for psgp4::GravConst {
     fn from(f: GravConst) -> Self {
@@ -83,15 +155,22 @@ impl From<GravConst> for psgp4::GravConst {
 ///
 /// Members: ``afspc`` (0: reproduces the Air Force Space Command code that
 /// generates TLEs; the default) and ``improved`` (1). Each compares equal
-/// to its integer value.
-#[pyclass(name = "sgp4_opsmode", eq, eq_int, from_py_object)]
-#[derive(Clone, Eq, PartialEq)]
+/// to its integer value, and is hashable and immutable.
+#[pyclass(
+    name = "sgp4_opsmode",
+    module = "satkit",
+    eq,
+    eq_int,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum OpsMode {
     afspc = psgp4::OpsMode::AFSPC as isize,
     improved = psgp4::OpsMode::IMPROVED as isize,
 }
 
-crate::enum_pickle!(OpsMode, "sgp4_opsmode");
+int_enum_methods!(OpsMode, "sgp4_opsmode");
 
 impl From<OpsMode> for psgp4::OpsMode {
     fn from(f: OpsMode) -> Self {

@@ -12,9 +12,9 @@ use pyo3::prelude::*;
 /// ``DampingSaturated`` (4: Levenberg-Marquardt damping parameter saturated).
 ///
 /// ``str(status)`` is a one-line description, and each member compares
-/// equal to its integer value.
+/// equal to its integer value. Members are hashable and immutable.
 #[derive(PartialEq, Eq, Clone, Copy)]
-#[pyclass(name = "tlefitstatus", eq, eq_int)]
+#[pyclass(name = "tlefitstatus", module = "satkit", eq, eq_int, frozen)]
 pub enum PyTleFitStatus {
     GradientConverged = 0,
     StepConverged = 1,
@@ -41,6 +41,12 @@ impl PyTleFitStatus {
         slf: &Bound<'py, Self>,
     ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {
         crate::pyutils::enum_reduce(slf.as_any(), "tlefitstatus")
+    }
+
+    // A member equals its integer value (`eq_int`), so it hashes like it
+    // (PyO3's `hash` option would hash the Rust value instead)
+    const fn __hash__(&self) -> isize {
+        *self as isize
     }
 
     pub fn __str__(&self) -> &str {

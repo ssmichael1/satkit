@@ -308,3 +308,112 @@ class TestOmmRoundTrip:
         omm = _iss(named=True).to_omm()
         del omm["OBJECT_NAME"]
         assert sk.TLE.from_omm(omm).name == "none"
+
+
+ENUMS = [sk.sgp4_error, sk.sgp4_gravconst, sk.sgp4_opsmode, sk.tlefitstatus]
+
+
+def _members(cls):
+    return [v for k, v in vars(cls).items() if not k.startswith("_") and isinstance(v, cls)]
+
+
+class TestEnums:
+    """Review 2.1, 2.15, 4.2: hashable, frozen, in module ``satkit``."""
+
+    @pytest.mark.parametrize("cls", ENUMS)
+    def test_hashable_int_and_module(self, cls):
+        members = _members(cls)
+        assert len(members) >= 2
+        assert cls.__module__ == "satkit"
+        assert len(set(members)) == len(members)
+        assert {m: int(m) for m in members}[members[1]] == int(members[1])
+        for m in members:
+            assert m == int(m) and hash(m) == hash(int(m))
+            assert pickle.loads(pickle.dumps(m)) == m
+        assert sorted(int(m) for m in members) == list(range(len(members)))
+
+    @pytest.mark.parametrize("cls", ENUMS)
+    def test_frozen(self, cls):
+        m = _members(cls)[0]
+        with pytest.raises(AttributeError):
+            m.value = 3
+
+    def test_sgp4_error_from_code(self):
+        for m in _members(sk.sgp4_error):
+            assert sk.sgp4_error(int(m)) == m
+        assert sk.sgp4_error(np.int32(6)) == sk.sgp4_error.orbit_decay
+        for bad in (-1, 8):
+            with pytest.raises(ValueError, match="sgp4_error code"):
+                sk.sgp4_error(bad)
+        with pytest.raises(TypeError):
+            sk.sgp4_error("eccen")
+
+    def test_error_array_maps_to_members(self):
+        tle = _iss()
+        _, _, err = sk.sgp4(tle, [tle.epoch, tle.epoch + sk.duration(days=1)], errflag=True)
+        assert [sk.sgp4_error(int(e)) for e in err] == [sk.sgp4_error.success] * 2
+
+    def test_fit_status_in_a_set(self):
+        converged = {
+            sk.tlefitstatus.GradientConverged,
+            sk.tlefitstatus.StepConverged,
+            sk.tlefitstatus.CostConverged,
+        }
+        for m in _members(sk.tlefitstatus):
+            assert (m in converged) == m.converged
+
+
+class TestReprAndPaths:
+    """Review 4.8 and 4.6."""
+
+    def test_repr_is_one_line(self):
+        tle = _iss(named=True)
+        assert repr(tle) == (
+            'TLE(name="ISS (ZARYA)", satnum=25544, intl_desig="98067A", '
+            "epoch=2021-09-21T12:25:40.104192Z)"
+        )
+        assert "\n" not in repr(sk.TLE())
+        # str() keeps the multi-line listing
+        assert "Inclination: 51.6442 deg" in str(tle)
+        assert str(tle).count("\n") > 10
+
+    def test_from_file_accepts_pathlike(self, tmp_path):
+        path = tmp_path / "iss.tle"
+        path.write_text("\n".join([ISS_NAME, *ISS]) + "\n")
+        assert sk.TLE.from_file(path) == sk.TLE.from_file(str(path)) == [_iss(named=True)]
+        with pytest.raises(TypeError):
+            sk.TLE.from_file(3)  # type: ignore[arg-type]
+
+    def test_omm_from_file_accepts_pathlike(self, tmp_path):
+        import json
+
+        path = tmp_path / "iss.json"
+        path.write_text(json.dumps([_iss(named=True).to_omm()]))
+        omms = sk.omm_from_file(path)
+        assert omms == sk.omm_from_file(str(path))
+        assert sk.TLE.from_omm(omms[0]) == _iss(named=True)
+        with pytest.raises(TypeError):
+            sk.omm_from_file(3)  # type: ignore[arg-type]
+
+
+class TestFitResult:
+    """Review 2.6 and 2.12: the result dict and the accepted time forms."""
+
+    def test_keys_match_the_typeddict(self):
+        from satkit._types import TLEFitResult
+
+        tle = _iss()
+        times = [tle.epoch + sk.duration(minutes=10 * i) for i in range(12)]
+        pos, vel = sk.sgp4(tle, times)
+        q = sk.frametransform.rotation(sk.frame.TEME, sk.frame.GCRF, times)
+        states = [np.hstack((qi * p, qi * v)) for qi, p, v in zip(q, pos, vel)]
+        fitted, result = sk.TLE.fit_from_states(states, times, tle.epoch)
+        assert set(result) == set(TLEFitResult.__annotations__)
+        assert isinstance(result["status"], sk.tlefitstatus)
+        assert result["converged"] is result["status"].converged
+        assert isinstance(result["n_iter"], int) and isinstance(result["best_norm"], float)
+        assert (fitted.name, fitted.satnum, fitted.intl_desig) == ("none", 0, "")
+        # times as a numpy datetime64 array
+        times64 = np.array([t.to_datetime().replace(tzinfo=None) for t in times], "datetime64[us]")
+        fitted64, _ = sk.TLE.fit_from_states(np.array(states), times64, tle.epoch)
+        assert abs(fitted64.mean_motion - fitted.mean_motion) < 1e-9
