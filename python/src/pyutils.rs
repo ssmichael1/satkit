@@ -179,8 +179,7 @@ pub fn serde_pickle_from_slice<T: serde::de::DeserializeOwned>(
 /// unpickling looks the member up by name. `path` is the class's attribute
 /// path from the `satkit.satkit` extension module (`"frame"`,
 /// `"moon.moonphase"`), which works for classes that live in a native
-/// submodule too (those are not importable, so pickle could not find the
-/// class itself by reference).
+/// submodule too (which predates those being importable as `satkit.<name>`).
 pub fn enum_reduce<'py>(
     slf: &Bound<'py, PyAny>,
     path: &'static str,

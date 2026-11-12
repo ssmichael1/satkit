@@ -899,6 +899,13 @@ class solarsystem:
     Sun: ClassVar[solarsystem]
     """Sun"""
 
+    def __int__(self) -> int:
+        """The member's integer value (members also compare equal to it)"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 @final
 class sgp4_error:
     """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""

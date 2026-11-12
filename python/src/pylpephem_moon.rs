@@ -14,12 +14,12 @@ fn moon_err(e: moon::Error) -> PyErr {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Hash)]
 /// Enum representing moon phases
 ///
 /// Each value covers a range of the moon phase angle (see :func:`phase`),
 /// given here in degrees.
-#[pyclass(name = "moonphase", eq, eq_int)]
+#[pyclass(name = "moonphase", module = "satkit.moon", eq, eq_int, hash, frozen)]
 pub enum MoonPhase {
     NewMoon = moon::MoonPhase::NewMoon as isize,
     WaxingCrescent = moon::MoonPhase::WaxingCrescent as isize,

@@ -11,8 +11,8 @@ use satkit::SolarSystem as SS;
 ///     (see ``satkit.jplephem.barycentric_pos`` for the Earth's position)
 ///   * Members compare equal to their integer value (``int(solarsystem.Sun)``
 ///     is 10), the body's index in the JPL DE files
-#[derive(PartialEq, Eq)]
-#[pyclass(name = "solarsystem", eq, eq_int)]
+#[derive(PartialEq, Eq, Hash)]
+#[pyclass(name = "solarsystem", module = "satkit", eq, eq_int, hash, frozen)]
 pub enum SolarSystem {
     Mercury = SS::Mercury as isize,
     Venus = SS::Venus as isize,

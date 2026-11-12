@@ -18,6 +18,9 @@ class moonphase:
 
     Each value covers a range of the moon phase angle (see ``phase``),
     given here in degrees.
+
+    Members are hashable (usable as dict keys and in sets) and compare equal
+    to their integer value, 0 (``NewMoon``) to 7 (``WaningCrescent``).
     """
 
     NewMoon: ClassVar[moonphase]
@@ -43,6 +46,13 @@ class moonphase:
 
     WaningCrescent: ClassVar[moonphase]
     """Waning Crescent (phase angle 292.5 - 337.5 degrees)"""
+
+    def __int__(self) -> int:
+        """The member's integer value (members also compare equal to it)"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @typing.overload
 def pos_gcrf(time: TimeScalar) -> npt.NDArray[np.float64]:

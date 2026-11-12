@@ -1281,17 +1281,26 @@ impl ToTimeVec for &Bound<'_, PyAny> {
     }
 }
 
-/// Times from a list or 1-D numpy object array of `satkit.time` /
+/// Times from a list, tuple or 1-D numpy object array of `satkit.time` /
 /// `datetime.datetime` / `numpy.datetime64` (a `datetime64` array is read by
 /// `datetime64_array_to_vec`)
 fn time_array_to_vec(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Instant>> {
-    if let Ok(list) = obj.cast::<pyo3::types::PyList>() {
-        list.iter()
+    // A tuple of times is accepted wherever a list is
+    let items: Option<Vec<Bound<'_, PyAny>>> = if let Ok(list) = obj.cast::<pyo3::types::PyList>() {
+        Some(list.iter().collect())
+    } else if let Ok(tuple) = obj.cast::<pyo3::types::PyTuple>() {
+        Some(tuple.iter().collect())
+    } else {
+        None
+    };
+    if let Some(items) = items {
+        items
+            .iter()
             .map(|item| item.extract::<TimeArg>().map(|t| t.0))
             .collect::<PyResult<Vec<_>>>()
             .map_err(|e| {
                 pyo3::exceptions::PyTypeError::new_err(format!(
-                    "Not a list of satkit.time, datetime.datetime or numpy.datetime64: {e}"
+                    "Not a list or tuple of satkit.time, datetime.datetime or numpy.datetime64: {e}"
                 ))
             })
     } else if obj.is_instance_of::<numpy::PyArray1<Py<PyAny>>>() {

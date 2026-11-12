@@ -260,3 +260,340 @@ class TestSingleTime:
         p, _ = sk.frametransform.transform_state(sk.frame.ITRF, sk.frame.GCRF, t, POS, VEL)
         p0, _ = sk.frametransform.transform_state(sk.frame.ITRF, sk.frame.GCRF, T0, POS, VEL)
         np.testing.assert_array_equal(p, p0)
+
+
+# ═════════════════════════════ additions ═════════════════════════════
+
+# ─────────────────── native submodules are importable ───────────────────
+
+import importlib
+import os
+import pathlib
+import pickle
+import subprocess
+import sys
+import types
+
+NATIVE_SUBMODULES = [
+    "density",
+    "frametransform",
+    "jplephem",
+    "moon",
+    "planets",
+    "spaceweather",
+    "sun",
+    "utils",
+]
+
+
+class TestSubmodulesImportable:
+    def test_the_list_is_complete(self):
+        found = sorted(
+            n for n, m in vars(sk.satkit).items() if isinstance(m, types.ModuleType)
+        )
+        assert found == NATIVE_SUBMODULES
+
+    @pytest.mark.parametrize("name", NATIVE_SUBMODULES)
+    def test_import(self, name):
+        mod = importlib.import_module(f"satkit.{name}")
+        assert mod is getattr(sk, name)
+        assert mod is sys.modules[f"satkit.{name}"]
+        assert mod.__name__ == f"satkit.{name}"
+
+    @pytest.mark.parametrize("name", NATIVE_SUBMODULES)
+    def test_members_know_their_module(self, name):
+        mod = getattr(sk, name)
+        public = [n for n in dir(mod) if not n.startswith("_")]
+        assert public
+        for attr in public:
+            obj = getattr(mod, attr)
+            assert obj.__module__ == f"satkit.{name}", attr
+            # ... which is what makes them picklable (by reference)
+            assert pickle.loads(pickle.dumps(obj)) is obj
+
+    @pytest.mark.parametrize("name", NATIVE_SUBMODULES)
+    def test_from_import_in_a_fresh_interpreter(self, name):
+        """`import satkit.x` / `from satkit.x import y` as the first import"""
+        member = next(n for n in dir(getattr(sk, name)) if not n.startswith("_"))
+        code = (
+            f"import satkit.{name}\n"
+            f"from satkit.{name} import {member}\n"
+            f"import satkit\n"
+            f"assert {member} is satkit.{name}.{member}\n"
+            f"assert satkit.{name}.__name__ == 'satkit.{name}'\n"
+        )
+        subprocess.run([sys.executable, "-c", code], check=True)
+
+    def test_pickled_function_loads_in_a_fresh_interpreter(self):
+        blob = pickle.dumps((sk.sun.pos_gcrf, sk.moon.moonphase.FullMoon, sk.solarsystem.Mars))
+        code = (
+            "import pickle, sys\n"
+            "f, phase, body = pickle.loads(sys.stdin.buffer.read())\n"
+            "import satkit\n"
+            "assert f is satkit.sun.pos_gcrf\n"
+            "assert phase == satkit.moon.moonphase.FullMoon\n"
+            "assert body == satkit.solarsystem.Mars\n"
+            "assert f(satkit.time(2024, 1, 1)).shape == (3,)\n"
+        )
+        subprocess.run([sys.executable, "-c", code], input=blob, check=True)
+
+
+# ───────────────────────── enums: hash, module ─────────────────────────
+
+
+class TestSubmoduleEnums:
+    @pytest.mark.parametrize(
+        "cls, module, n",
+        [(sk.solarsystem, "satkit", 11), (sk.moon.moonphase, "satkit.moon", 8)],
+    )
+    def test_hashable_frozen_and_named(self, cls, module, n):
+        members = [
+            getattr(cls, a)
+            for a in dir(cls)
+            if not a.startswith("_") and isinstance(getattr(cls, a), cls)
+        ]
+        assert len(members) == n
+        assert cls.__module__ == module
+        assert len(set(members)) == n
+        assert {m: int(m) for m in members}[members[0]] == int(members[0])
+        for m in members:
+            assert m == int(m) and hash(m) == hash(pickle.loads(pickle.dumps(m)))
+            with pytest.raises(AttributeError):
+                m.x = 1
+
+    def test_values(self):
+        assert int(sk.solarsystem.Mercury) == 0
+        assert int(sk.solarsystem.EMB) == 2
+        assert int(sk.solarsystem.Sun) == 10
+        assert int(sk.moon.moonphase.NewMoon) == 0
+        assert int(sk.moon.moonphase.WaningCrescent) == 7
+        by_phase = {sk.moon.moonphase.FullMoon: "full"}
+        full = sk.moon.next_phase(T0, sk.moon.moonphase.FullMoon)
+        assert by_phase[sk.moon.phase_name(full)] == "full"
+
+
+# ───────────────────────── PathLike arguments ─────────────────────────
+
+
+class TestPathLike:
+    def test_utils_directories(self, tmp_path):
+        """In a child process: these change process-wide search state"""
+        code = (
+            "import pathlib, sys, satkit\n"
+            "d = pathlib.Path(sys.argv[1])\n"
+            "(d / 'a').mkdir(); (d / 'b').mkdir()\n"
+            "satkit.utils.add_search_dir(d / 'a')\n"
+            "satkit.utils.add_search_dir(str(d / 'a'))\n"
+            "assert str(d / 'a') in satkit.utils.data_search_dirs()\n"
+            "satkit.utils.set_datadir(d / 'b')\n"
+            "assert satkit.utils.datadir() == str(d / 'b')\n"
+            "satkit.utils.set_datadir(str(d / 'b'))\n"
+        )
+        env = {k: v for k, v in os.environ.items() if k != "SATKIT_DATA"}
+        subprocess.run([sys.executable, "-c", code, str(tmp_path)], check=True, env=env)
+
+    def test_not_a_path(self):
+        with pytest.raises(TypeError):
+            sk.spaceweather.init_from_path(5)
+        with pytest.raises(TypeError):
+            sk.utils.set_datadir(5)
+        with pytest.raises(TypeError):
+            sk.utils.add_search_dir(None)
+
+
+# ───────────────────────── tuples of times ─────────────────────────
+
+
+class TestTimeTuples:
+    times = [T0, T0 + sk.duration(hours=3), T0 + sk.duration(days=2)]
+
+    def test_tuple_equals_list(self):
+        tup = tuple(self.times)
+        np.testing.assert_array_equal(sk.sun.pos_gcrf(tup), sk.sun.pos_gcrf(self.times))
+        np.testing.assert_array_equal(sk.moon.pos_gcrf(tup), sk.moon.pos_gcrf(self.times))
+        np.testing.assert_array_equal(
+            sk.frametransform.gmst(tup), sk.frametransform.gmst(self.times)
+        )
+        np.testing.assert_array_equal(
+            sk.jplephem.geocentric_pos(sk.solarsystem.Sun, tup),
+            sk.jplephem.geocentric_pos(sk.solarsystem.Sun, self.times),
+        )
+        np.testing.assert_array_equal(
+            sk.planets.heliocentric_pos(sk.solarsystem.Mars, tup),
+            sk.planets.heliocentric_pos(sk.solarsystem.Mars, self.times),
+        )
+        qs = sk.frametransform.qitrf2gcrf_approx(tup)
+        assert isinstance(qs, list) and len(qs) == 3
+        assert sk.moon.phase_name(tup) == sk.moon.phase_name(self.times)
+
+    def test_mixed_and_batch(self):
+        mixed = (T0, T0.to_datetime(), np.datetime64("2024-03-01T06:00:00"))
+        pos = sk.sun.pos_gcrf(mixed)
+        np.testing.assert_allclose(pos[1], pos[0], rtol=1e-12)
+        np.testing.assert_array_equal(pos[2], pos[0])
+        p, v = sk.frametransform.itrf_to_gcrf_state(
+            np.tile(POS, (3, 1)), np.tile(VEL, (3, 1)), tuple(self.times)
+        )
+        assert p.shape == v.shape == (3, 3)
+
+    def test_one_element_and_empty_tuples_are_arrays(self):
+        assert sk.sun.pos_gcrf((T0,)).shape == (1, 3)
+        assert sk.sun.pos_gcrf(()).shape == (0, 3)
+        with pytest.raises(TypeError, match="single time"):
+            sk.spaceweather.status((T0,))
+
+    def test_tuple_of_non_times(self):
+        with pytest.raises(TypeError, match="list or tuple"):
+            sk.sun.pos_gcrf((1.0, 2.0))
+
+
+# ─────────────── stub docstrings: Args names are parameters ───────────────
+
+import ast
+import re
+
+STUB_DIR = pathlib.Path(__file__).resolve().parents[1] / "satkit"
+
+# Known failures: functions whose stub docstring documents an argument that
+# no overload of the function has. Each entry is
+# "<stub file>::<qualified name>": [names]. Empty at the time of writing:
+# every stub passes. Add an entry only for a mismatch that cannot be fixed
+# in the same change, and delete it with the fix
+# (test_known_mismatches_are_current fails for an entry that no longer
+# applies).
+KNOWN_ARGS_MISMATCHES: dict[str, list[str]] = {}
+
+_SECTION = re.compile(
+    r"^(\s*)(Args|Arguments|Parameters|Keyword Args|Keyword Arguments):\s*$"
+)
+_ENTRY = re.compile(r"^(\s*)\*{0,2}([A-Za-z_]\w*)\s*(\([^)]*\))?\s*:")
+
+
+def _documented_args(doc: str) -> list[str]:
+    """Names listed in the Google-style ``Args:`` sections of a docstring"""
+    names: list[str] = []
+    lines = doc.expandtabs().splitlines()
+    i = 0
+    while i < len(lines):
+        m = _SECTION.match(lines[i])
+        i += 1
+        if not m:
+            continue
+        base = len(m.group(1))
+        entry_indent = None
+        while i < len(lines):
+            line = lines[i]
+            if not line.strip():
+                i += 1
+                continue
+            indent = len(line) - len(line.lstrip())
+            if indent <= base:
+                break  # next section
+            if entry_indent is None:
+                entry_indent = indent
+            if indent == entry_indent:
+                e = _ENTRY.match(line)
+                if e:
+                    names.append(e.group(2))
+            i += 1
+    return names
+
+
+def _signature_names(fn) -> set[str]:
+    a = fn.args
+    names = {x.arg for x in a.posonlyargs + a.args + a.kwonlyargs}
+    if a.vararg:
+        names.add(a.vararg.arg)
+    if a.kwarg:
+        names.add(a.kwarg.arg)
+    return names
+
+
+def _stub_functions():
+    """(stub file name, qualified name, FunctionDef) for every function and
+    method in every stub, each overload separately"""
+
+    def walk(fname, body, prefix):
+        for node in body:
+            if isinstance(node, ast.ClassDef):
+                yield from walk(fname, node.body, prefix + node.name + ".")
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                yield fname, prefix + node.name, node
+
+    for path in sorted(STUB_DIR.glob("*.pyi")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        yield from walk(path.name, tree.body, "")
+
+
+def _args_mismatches() -> dict[str, list[str]]:
+    """Documented argument names that are not parameters. The overloads of a
+    function are taken together: one docstring often documents all the forms
+    (``time.__init__`` lists ``string`` and the calendar fields), so a name
+    is fine if any overload has it."""
+    params: dict[str, set[str]] = {}
+    for fname, qual, fn in _stub_functions():
+        params.setdefault(f"{fname}::{qual}", set()).update(_signature_names(fn))
+    out: dict[str, list[str]] = {}
+    for fname, qual, fn in _stub_functions():
+        key = f"{fname}::{qual}"
+        doc = ast.get_docstring(fn, clean=False)
+        if not doc:
+            continue
+        for n in _documented_args(doc):
+            if n not in params[key] and n not in out.setdefault(key, []):
+                out[key].append(n)
+    return {k: v for k, v in out.items() if v}
+
+
+class TestStubDocstringArgs:
+    """Every name in a stub docstring's ``Args:`` section is a parameter of
+    that function (the cross-cutting check from the API review: the stub and
+    the Rust ``///`` docstring are written separately and drift)."""
+
+    def test_parser(self):
+        doc = """Summary
+
+        Args:
+            a (int): first
+                continuation: not an entry
+            *rest: more
+            b: second
+
+        Returns:
+            c (int): not an argument
+        """
+        assert _documented_args(doc) == ["a", "rest", "b"]
+
+    def test_stubs_are_scanned(self):
+        seen = {f for f, _q, _fn in _stub_functions()}
+        assert {"satkit.pyi", "sun.pyi", "frametransform.pyi", "utils.pyi"} <= seen
+        documented = sum(
+            1
+            for _f, _q, fn in _stub_functions()
+            if _documented_args(ast.get_docstring(fn, clean=False) or "")
+        )
+        assert documented > 150
+
+    def test_a_stray_name_is_caught(self):
+        fn = ast.parse(
+            'def f(tm, *, use_jpl=False):\n    """S\n\n    Args:\n        time: t\n        use_jpl: u\n    """\n'
+        ).body[0]
+        doc = ast.get_docstring(fn, clean=False)
+        assert [n for n in _documented_args(doc) if n not in _signature_names(fn)] == ["time"]
+
+    def test_args_are_parameters(self):
+        found = _args_mismatches()
+        unexpected = {k: v for k, v in found.items() if k not in KNOWN_ARGS_MISMATCHES}
+        assert not unexpected, (
+            "stub docstrings document arguments that are not in the signature: "
+            f"{unexpected}"
+        )
+
+    def test_known_mismatches_are_current(self):
+        found = _args_mismatches()
+        stale = {
+            k: v
+            for k, v in KNOWN_ARGS_MISMATCHES.items()
+            if sorted(found.get(k, [])) != sorted(v)
+        }
+        assert not stale, f"entries of KNOWN_ARGS_MISMATCHES to update or delete: {stale}"
