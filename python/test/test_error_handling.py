@@ -210,12 +210,19 @@ class TestTleOnError:
     def test_all_bad_is_an_empty_list(self):
         assert sk.TLE.from_lines(self.BAD, on_error="skip") == []
 
-    def test_no_records_still_raises(self):
-        for mode in ("raise", "warn", "skip"):
+    def test_no_records_raises_only_with_raise(self):
+        # Only on_error="raise" raises for what the lines contain: input with
+        # no records at all is treated like a record that fails to parse
+        import warnings
+
+        for lines in ([], ["not a tle"]):
             with pytest.raises(ValueError):
-                sk.TLE.from_lines([], on_error=mode)
-            with pytest.raises(ValueError):
-                sk.TLE.from_lines(["not a tle"], on_error=mode)
+                sk.TLE.from_lines(lines, on_error="raise")
+            with pytest.warns(sk.TLEWarning, match="No valid TLEs"):
+                assert sk.TLE.from_lines(lines, on_error="warn") == []
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                assert sk.TLE.from_lines(lines, on_error="skip") == []
 
     def test_invalid_on_error(self):
         with pytest.raises(ValueError, match="on_error"):

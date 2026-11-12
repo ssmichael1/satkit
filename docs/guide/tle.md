@@ -79,7 +79,7 @@ except RuntimeError as e:
 # invalid float literal (line 3 is 70 characters; a TLE line is 69, so its columns may be shifted)
 ```
 
-To keep the good records of a large catalog file and leave out the malformed ones, pass `on_error="warn"` or `on_error="skip"` to any of the three loaders. `"warn"` emits one `satkit.TLEWarning` per record left out, with the message `RuntimeError` would have carried; `"skip"` is silent. The result may then be an empty list (every record was bad); input with no records at all still raises `ValueError`.
+To keep the good records of a large catalog file and leave out the malformed ones, pass `on_error="warn"` or `on_error="skip"` to any of the three loaders. `"warn"` emits one `satkit.TLEWarning` per record left out, with the message `RuntimeError` would have carried; `"skip"` is silent. Only the default `on_error="raise"` raises for what the input contains: with the other two the result may be an empty list, when every record was bad or the input held no records at all (`"warn"` then emits one warning saying so).
 
 ```python
 import warnings

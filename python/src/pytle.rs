@@ -86,9 +86,21 @@ fn parse_records(lines: &[String], check_checksum: bool) -> Vec<satkit::tle::Res
         .collect()
 }
 
-/// The TLEs of `records` as a list, treating failed records as `on_error`
-/// says. `ValueError` when there are no records at all, or (with
-/// `on_error="raise"`) no TLEs; `what` names the source in that error.
+/// Emit a `TLEWarning` attributed to the Python line that called the loader
+/// (stack level 1).
+fn tle_warning(py: Python<'_>, msg: &str) -> PyResult<()> {
+    // An interior NUL cannot be in a C string; it never occurs in these
+    // messages, but must not panic.
+    let msg = std::ffi::CString::new(msg.replace('\0', " "))
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    PyErr::warn(py, py.get_type::<TLEWarning>().as_any(), &msg, 1)
+}
+
+/// The TLEs of `records` as a list, treating input that is not a valid
+/// element set as `on_error` says: a record that fails to parse, and input
+/// with no records at all (`what` names the source in that message). Only
+/// `on_error="raise"` raises for either; `"warn"` and `"skip"` return the
+/// TLEs that parsed, which may be none.
 fn tle_list(
     py: Python<'_>,
     records: Vec<satkit::tle::Result<TLE>>,
@@ -96,27 +108,58 @@ fn tle_list(
     what: &str,
 ) -> Result<Vec<PyTLE>> {
     if records.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "No valid TLEs found in {what}"
-        ))
-        .into());
+        let msg = format!("No valid TLEs found in {what}");
+        match on_error {
+            OnError::Raise => return Err(pyo3::exceptions::PyValueError::new_err(msg).into()),
+            OnError::Warn => tle_warning(py, &msg)?,
+            OnError::Skip => {}
+        }
     }
     let mut tles = Vec::with_capacity(records.len());
     for rec in records {
         match rec {
             Ok(tle) => tles.push(PyTLE(tle)),
             Err(e) if on_error == OnError::Raise => return Err(e.into()),
-            Err(e) if on_error == OnError::Warn => {
-                // Stack level 1 is the Python line that called the loader. An
-                // interior NUL cannot be in a C string; it never occurs in
-                // these messages, but must not panic.
-                let msg = std::ffi::CString::new(e.to_string().replace('\0', " "))?;
-                PyErr::warn(py, py.get_type::<TLEWarning>().as_any(), &msg, 1)?;
-            }
+            Err(e) if on_error == OnError::Warn => tle_warning(py, &e.to_string())?,
             Err(_) => {}
         }
     }
     Ok(tles)
+}
+
+/// `ValueError` unless `value` is in `0..=max`
+fn check_desig_part(name: &str, value: i32, max: i32) -> PyResult<()> {
+    if (0..=max).contains(&value) {
+        Ok(())
+    } else {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} must be between 0 and {max}, got {value}"
+        )))
+    }
+}
+
+/// `ValueError` unless `value` fits the international designator field of a
+/// TLE (line 1, columns 10-17)
+fn check_intl_desig(value: &str) -> PyResult<()> {
+    if value.len() <= 8 && value.bytes().all(|b| (0x20..0x7f).contains(&b)) {
+        Ok(())
+    } else {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "intl_desig must be at most 8 printable ASCII characters, got {value:?}"
+        )))
+    }
+}
+
+/// The Python exception for an error of `to_2line` / `to_3line`:
+/// `ValueError` for a satellite number with no Alpha-5 form or a designator
+/// that does not fit its field, `RuntimeError` otherwise.
+fn format_err(e: satkit::tle::Error) -> PyErr {
+    match e {
+        satkit::tle::Error::SatNumTooLargeForAlpha5 | satkit::tle::Error::InvalidIntlDesig(_) => {
+            pyo3::exceptions::PyValueError::new_err(e.to_string())
+        }
+        e => anyhow::Error::from(e).into(),
+    }
 }
 
 #[pymethods]
@@ -294,9 +337,12 @@ impl PyTLE {
     }
 
     #[setter(intl_desig)]
-    fn set_intl_desig(&mut self, value: String) {
-        self.0.intl_desig = value;
+    fn set_intl_desig(&mut self, value: &str) -> PyResult<()> {
+        let value = value.trim();
+        check_intl_desig(value)?;
+        self.0.intl_desig = value.to_string();
         self.0.reset_cache();
+        Ok(())
     }
 
     /// Launch year from the international designator, two digits as in the TLE
@@ -309,14 +355,16 @@ impl PyTLE {
     /// 0 <= value <= 99. A launch number the designator does not have yet
     /// is written as ``000``.
     #[getter(desig_year)]
-    const fn get_desig_year(&self) -> i32 {
-        self.0.desig_year
+    fn get_desig_year(&self) -> Option<i32> {
+        self.0.desig_year()
     }
 
     #[setter(desig_year)]
-    fn set_desig_year(&mut self, value: i32) {
-        self.0.desig_year = value;
-        self.0.reset_cache();
+    fn set_desig_year(&mut self, value: i32) -> PyResult<()> {
+        check_desig_part("desig_year", value, 99)?;
+        let launch = self.0.desig_launch().unwrap_or(0);
+        self.set_desig_parts(value, launch, self.0.desig_piece().to_string());
+        Ok(())
     }
 
     /// Launch number of the year from the international designator
@@ -328,14 +376,16 @@ impl PyTLE {
     /// 0 <= value <= 999. A launch year the designator does not have yet
     /// is written as ``00``.
     #[getter(desig_launch)]
-    const fn get_desig_launch(&self) -> i32 {
-        self.0.desig_launch
+    fn get_desig_launch(&self) -> Option<i32> {
+        self.0.desig_launch()
     }
 
     #[setter(desig_launch)]
-    fn set_desig_launch(&mut self, value: i32) {
-        self.0.desig_launch = value;
-        self.0.reset_cache();
+    fn set_desig_launch(&mut self, value: i32) -> PyResult<()> {
+        check_desig_part("desig_launch", value, 999)?;
+        let year = self.0.desig_year().unwrap_or(0);
+        self.set_desig_parts(year, value, self.0.desig_piece().to_string());
+        Ok(())
     }
 
     /// Piece of the launch from the international designator (e.g. "A")
@@ -347,14 +397,21 @@ impl PyTLE {
     /// it is at most three ASCII letters. A launch year and number the
     /// designator does not have yet are written as zeros.
     #[getter(desig_piece)]
-    fn get_desig_piece(&self) -> String {
-        self.0.desig_piece.clone()
+    fn get_desig_piece(&self) -> &str {
+        self.0.desig_piece()
     }
 
     #[setter(desig_piece)]
-    fn set_desig_piece(&mut self, value: String) {
-        self.0.desig_piece = value;
-        self.0.reset_cache();
+    fn set_desig_piece(&mut self, value: &str) -> PyResult<()> {
+        if value.len() > 3 || !value.bytes().all(|b| b.is_ascii_alphabetic()) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "desig_piece must be at most 3 ASCII letters, got {value:?}"
+            )));
+        }
+        let year = self.0.desig_year().unwrap_or(0);
+        let launch = self.0.desig_launch().unwrap_or(0);
+        self.set_desig_parts(year, launch, value.to_string());
+        Ok(())
     }
 
     /// Classification (line 1, column 8): "U", "C" or "S" in practice, but
@@ -645,12 +702,7 @@ impl PyTLE {
     ///         outside [0, 1), or the epoch year is outside 1957-2056 (the
     ///         span of the two-digit year)
     fn to_2line(&self) -> PyResult<[String; 2]> {
-        self.0.to_2line().map_err(|e| match e {
-            satkit::tle::Error::SatNumTooLargeForAlpha5 => {
-                pyo3::exceptions::PyValueError::new_err(e.to_string())
-            }
-            e => anyhow::Error::from(e).into(),
-        })
+        self.0.to_2line().map_err(format_err)
     }
 
     /// Output as 2 canonical TLE lines preceded by a name line (3-line element set)
@@ -661,8 +713,8 @@ impl PyTLE {
     ///
     /// Raises:
     ///     ValueError: as ``to_2line``
-    fn to_3line(&self) -> Result<[String; 3]> {
-        Ok(self.0.to_3line()?)
+    fn to_3line(&self) -> PyResult<[String; 3]> {
+        self.0.to_3line().map_err(format_err)
     }
 
     /// Perform non-linear least squares fit of TLE parameters to a list of GCRF states
@@ -742,13 +794,17 @@ impl PyTLE {
         // a leading version byte, a 102-byte fixed field block (v2's
         // 101 bytes plus the classification letter), then three
         // length-prefixed UTF-8 strings (name, intl_desig, desig_piece).
+        // The designator year, launch number and piece are written for
+        // older readers of the format only: they are parts of intl_desig,
+        // and `__setstate__` reads that.
+        let desig_piece = self.0.desig_piece();
         let mut raw: Vec<u8> = Vec::with_capacity(
-            109 + self.0.name.len() + self.0.intl_desig.len() + self.0.desig_piece.len(),
+            109 + self.0.name.len() + self.0.intl_desig.len() + desig_piece.len(),
         );
         raw.push(3u8); // version
         raw.extend_from_slice(&self.0.sat_num.to_le_bytes());
-        raw.extend_from_slice(&self.0.desig_year.to_le_bytes());
-        raw.extend_from_slice(&self.0.desig_launch.to_le_bytes());
+        raw.extend_from_slice(&self.0.desig_year().unwrap_or(0).to_le_bytes());
+        raw.extend_from_slice(&self.0.desig_launch().unwrap_or(0).to_le_bytes());
         raw.extend_from_slice(&self.0.mean_motion_dot.to_le_bytes());
         raw.extend_from_slice(&self.0.mean_motion_dot_dot.to_le_bytes());
         raw.extend_from_slice(&self.0.bstar.to_le_bytes());
@@ -765,7 +821,7 @@ impl PyTLE {
         raw.push(self.0.ephem_type);
         raw.push(self.0.classification as u8);
 
-        for s in [&self.0.name, &self.0.intl_desig, &self.0.desig_piece] {
+        for s in [&self.0.name, &self.0.intl_desig, desig_piece] {
             raw.extend_from_slice(&(s.len() as u16).to_le_bytes());
             raw.extend_from_slice(s.as_bytes());
         }
@@ -804,8 +860,8 @@ impl PyTLE {
         let rd_f64 = |at: usize| f64::from_le_bytes(raw[at..at + 8].try_into().unwrap());
 
         self.0.sat_num = rd_i32(1);
-        self.0.desig_year = rd_i32(5);
-        self.0.desig_launch = rd_i32(9);
+        // Bytes 5..13 hold the designator year and launch number, which are
+        // parts of intl_desig (read below)
         self.0.mean_motion_dot = rd_f64(13);
         self.0.mean_motion_dot_dot = rd_f64(21);
         self.0.bstar = rd_f64(29);
@@ -857,10 +913,28 @@ impl PyTLE {
         };
         self.0.name = read_str(&mut cnt)?;
         self.0.intl_desig = read_str(&mut cnt)?;
-        self.0.desig_piece = read_str(&mut cnt)?;
+        // The piece is part of intl_desig. satkit <= 0.24.3 kept only the
+        // first two letters of a three-letter piece in intl_desig, but all
+        // of it here: restore the third.
+        let piece = read_str(&mut cnt)?;
+        if piece.len() == 3
+            && piece.is_ascii()
+            && self.0.intl_desig.len() == 7
+            && self.0.intl_desig.get(5..) == piece.get(..2)
+        {
+            self.0.intl_desig.push_str(&piece[2..]);
+        }
         self.0.reset_cache();
 
         Ok(())
+    }
+}
+
+impl PyTLE {
+    /// Rewrite `intl_desig` from its three parts (already validated)
+    fn set_desig_parts(&mut self, year: i32, launch: i32, piece: String) {
+        self.0.intl_desig = format!("{year:02}{launch:03}{piece}");
+        self.0.reset_cache();
     }
 }
 

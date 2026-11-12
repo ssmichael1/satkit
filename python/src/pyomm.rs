@@ -17,9 +17,12 @@ use satkit::omm::OMM;
 use serde_json::{Map, Value};
 
 /// Keys of xmltodict-style nested dicts whose children are hoisted to the
-/// top level. `body`/`segment`/`data` are the CCSDS XML structure; the rest
-/// are the field groups.
+/// top level. `ndm`/`omm` are the root elements of a CCSDS XML document
+/// (`xmltodict.parse` returns `{"omm": {...}}` or `{"ndm": {"omm": ...}}`),
+/// `body`/`segment`/`data` are its structure; the rest are the field groups.
 const GROUP_KEYS: &[&str] = &[
+    "ndm",
+    "omm",
     "body",
     "segment",
     "header",
@@ -111,14 +114,26 @@ fn merge_user_defined(map: &mut Map<String, Value>, obj: &Bound<'_, PyAny>) -> R
     Ok(())
 }
 
+/// xmltodict renders an element that has attributes, such as
+/// `<MEAN_MOTION units="rev/day">15.5</MEAN_MOTION>`, as
+/// `{"@units": "rev/day", "#text": "15.5"}`: the `#text` of such a dict.
+fn element_text<'py>(obj: &Bound<'py, PyAny>) -> Result<Option<Bound<'py, PyAny>>> {
+    match obj.cast::<PyDict>() {
+        Ok(d) => Ok(d.get_item("#text")?),
+        Err(_) => Ok(None),
+    }
+}
+
 /// Flattens a Python OMM dict into one JSON object with CCSDS keys.
 ///
 /// Accepts the flat Space-Track/CelesTrak JSON shape, and any level of the
-/// xmltodict rendering of the XML form (`omm`, `body`, `segment`, or `data`
-/// node): group children are hoisted, `@version` becomes `CCSDS_OMM_VERS`,
-/// other `@attr`/`#text` keys are dropped, and `userDefinedParameters` are
-/// keyed by their `parameter` attribute. A key that appears at more than one
-/// level keeps the last one seen.
+/// xmltodict rendering of the XML form (the whole document with its `omm`
+/// or `ndm` root key, or the `omm`, `body`, `segment`, or `data` node):
+/// group children are hoisted, `@version` becomes `CCSDS_OMM_VERS`, other
+/// `@attr`/`#text` keys are dropped, an element with attributes is its
+/// text, and `userDefinedParameters` are keyed by their `parameter`
+/// attribute. A key that appears at more than one level keeps the last one
+/// seen.
 fn flatten(map: &mut Map<String, Value>, dict: &Bound<'_, PyDict>) -> Result<()> {
     for (k, v) in dict.iter() {
         let key: String = k.extract()?;
@@ -129,9 +144,30 @@ fn flatten(map: &mut Map<String, Value>, dict: &Bound<'_, PyDict>) -> Result<()>
         } else if GROUP_KEYS.contains(&key.as_str()) {
             if let Ok(sub) = v.cast::<PyDict>() {
                 flatten(map, sub)?;
+            } else if let Ok(list) = v.cast::<PyList>() {
+                // xmltodict renders repeated elements (the `omm` messages of
+                // an `ndm`) as a list. One element set is one message.
+                match (list.len(), list.get_item(0)) {
+                    (1, Ok(only)) => {
+                        if let Ok(sub) = only.cast::<PyDict>() {
+                            flatten(map, sub)?;
+                        }
+                    }
+                    (n, _) => {
+                        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                            "Invalid OMM dictionary: \"{key}\" holds {n} messages, but one \
+                             dictionary is one element set; pass them one at a time, e.g. \
+                             [{{\"omm\": m}} for m in d[\"ndm\"][\"omm\"]]"
+                        ))
+                        .into());
+                    }
+                }
             }
         } else if key == "userDefinedParameters" {
             merge_user_defined(map, &v)?;
+        } else if let Some(text) = element_text(&v)? {
+            // An element with attributes, e.g. `<MEAN_MOTION units="rev/day">`
+            map.insert(key.clone(), py_to_json(&key, &text)?);
         } else {
             map.insert(key.clone(), py_to_json(&key, &v)?);
         }

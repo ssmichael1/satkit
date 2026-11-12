@@ -140,6 +140,15 @@ pub enum Error {
     #[error("Eccentricity {0} cannot be written to a TLE; it must be in [0, 1)")]
     EccentricityOutOfRange(f64),
 
+    /// [`TLE::to_2line`](crate::TLE::to_2line) refuses an international
+    /// designator that does not fit columns 10-17: more than 8 characters,
+    /// or anything but printable ASCII.
+    #[error(
+        "International designator {0:?} cannot be written to a TLE; it must be at most 8 \
+         printable ASCII characters"
+    )]
+    InvalidIntlDesig(String),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
