@@ -299,6 +299,34 @@ impl PyPropResult {
         )
     }
 
+    /// The end state as a ``satkit.satstate``
+    ///
+    /// A new ``satstate`` at ``time_end`` with the end GCRF position and
+    /// velocity, to continue from (``satstate.propagate``) or to schedule
+    /// maneuvers on. It has no covariance and no maneuvers: a result does not
+    /// carry them (``satstate.propagate`` propagates both).
+    ///
+    /// Returns:
+    ///     satkit.satstate: state at ``time_end``, GCRF position (meters) and
+    ///     velocity (meters/second)
+    ///
+    /// Example:
+    ///
+    /// >>> t0 = satkit.time(2024, 1, 1)
+    /// >>> res = satkit.propagate([7000e3, 0, 0, 0, 7.5e3, 0], t0, duration_secs=600.0)
+    /// >>> sat = res.to_satstate()
+    /// >>> sat.time == res.time_end
+    /// True
+    /// >>> later = sat.propagate(600.0)  # another 10 minutes
+    fn to_satstate(&self) -> crate::pysatstate::PySatState {
+        let s = self.end6();
+        crate::pysatstate::PySatState(satkit::orbitprop::SatState::from_pv(
+            &each!(&self.0, r => r.time_end),
+            &satkit::mathtypes::Vector3::from_slice(&s[0..3]),
+            &satkit::mathtypes::Vector3::from_slice(&s[3..6]),
+        ))
+    }
+
     /// Whether ``interp`` works on this result: True when the propagation
     /// stored dense output.
     ///
@@ -336,12 +364,12 @@ impl PyPropResult {
     /// Interpolate the GCRF state at one or more times between the begin and end times
     ///
     /// Args:
-    ///     time (satkit.time | datetime.datetime | numpy.datetime64 | list | numpy.ndarray): time(s) at which to interpolate
+    ///     time (satkit.time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): time(s) at which to interpolate
     ///     output_phi (bool): also return the 6x6 state transition matrix. Default False
     ///
     /// Returns:
     ///     numpy.ndarray: 6-element state [x, y, z, vx, vy, vz] in meters and m/s
-    ///     for a single time; for a list / array of N times, one (N, 6) array
+    ///     for a single time; for a list / tuple / array of N times, one (N, 6) array
     ///     ((0, 6) for an empty list). With output_phi=True, a (state, phi) tuple,
     ///     where phi is the 6x6 state transition matrix, or a list of them for a
     ///     list of times
@@ -351,8 +379,8 @@ impl PyPropResult {
     ///         False), a time is outside the begin-to-end range, or output_phi
     ///         is True but the propagation did not compute the state transition
     ///         matrix (``propagate(..., output_phi=True)``)
-    ///     TypeError: if time is not a time or a list / array of times (a
-    ///         ``RuntimeError`` for a tuple, a number or a string)
+    ///     TypeError: if time is not a time or a list, tuple or 1-D array of
+    ///         times (a number, a string, None or a float array)
     #[pyo3(signature=(time, output_phi=false))]
     fn interp(&self, py: Python, time: Bound<'_, PyAny>, output_phi: bool) -> PyResult<Py<PyAny>> {
         // Without the STM there is no phi to return; this used to hand back

@@ -48,6 +48,20 @@ new_state = sat.propagate(sat.time + sk.duration.from_hours(6))
 print(new_state.pos)  # position at t + 6h
 ```
 
+`satstate.propagate` takes a target time or a duration from the state's own
+time; a duration is a `satkit.duration`, a `datetime.timedelta` or a number of
+seconds, as for `satkit.propagate(duration=...)`. A `propresult` from the free
+function becomes a `satstate` with `to_satstate()`:
+
+```python
+import datetime
+
+later = new_state.propagate(datetime.timedelta(minutes=30))  # or 1800.0 seconds
+
+res = sk.propagate(np.array([r, 0, 0, 0, v, 0]), sk.time(2024, 1, 1), duration_secs=600.0)
+sat2 = res.to_satstate()  # state at res.time_end, no covariance or maneuvers
+```
+
 ### Covariance Propagation
 
 Attach position and/or velocity uncertainty and it will be propagated automatically via the STM. The `set_pos_uncertainty` and `set_vel_uncertainty` methods accept 1-sigma components along any supported satellite-local or inertial frame:

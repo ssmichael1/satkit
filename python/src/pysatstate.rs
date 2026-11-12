@@ -4,7 +4,6 @@ use crate::pypropsettings::PyPropSettings;
 use crate::pyquaternion::PyQuaternion;
 use crate::pysatproperties::{satproperties_arg, PySatProperties};
 use crate::pyutils::{slice2py1d, slice2py2d};
-use crate::PyDuration;
 
 use numpy as np;
 use numpy::PyUntypedArrayMethods;
@@ -92,7 +91,7 @@ use crate::pypropagate::propsettings_arg;
 ///     ValueError: if pos or vel does not have 3 elements, or cov is not a symmetric 6x6 matrix
 #[pyclass(name = "satstate", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PySatState(SatState);
+pub struct PySatState(pub SatState);
 
 #[pymethods]
 impl PySatState {
@@ -398,9 +397,12 @@ impl PySatState {
 
     /// The scheduled impulsive maneuvers, in the order they were added
     ///
-    /// A new list of new dicts on every access: changing it does not change
-    /// the state. Use the ``add_*`` methods to add maneuvers and
-    /// ``clear_maneuvers`` to remove them.
+    /// A copy: a new list of new dicts on every access, so changing it (or a
+    /// dict in it) does not change the state. To add a maneuver use
+    /// ``add_maneuver`` (or ``add_prograde``, ``add_retrograde``,
+    /// ``add_radial``, ``add_normal``); to remove them use
+    /// ``clear_maneuvers``. To remove or change only some, clear them and add
+    /// back the ones to keep, e.g. ``for m in kept: state.add_maneuver(**m)``.
     ///
     /// Returns:
     ///     list[dict]: One dict per maneuver with keys "time" (satkit.time),
@@ -432,8 +434,11 @@ impl PySatState {
     /// maneuver list is carried over to the returned state unchanged.
     ///
     /// Args:
-    ///     timedur (satkit.time | datetime.datetime | numpy.datetime64 | satkit.duration): Time for which to
-    ///         compute the new state, or a duration to propagate from the current time
+    ///     timedur (satkit.time | datetime.datetime | numpy.datetime64 | satkit.duration | datetime.timedelta | float):
+    ///         Time for which to compute the new state, or a duration to
+    ///         propagate from the current time: a ``satkit.duration``, a
+    ///         ``datetime.timedelta`` (converted exactly) or a number of
+    ///         seconds (as for ``satkit.propagate(duration=)``)
     ///     propsettings (satkit.propsettings, optional): Propagation settings. Default: ``propsettings()``
     ///     satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
     ///
@@ -441,10 +446,10 @@ impl PySatState {
     ///     satkit.satstate: New state at input time
     ///
     /// Raises:
-    ///     TypeError: if timedur is not a time or a satkit.duration (a float
-    ///         or a datetime.timedelta is refused), or propsettings /
+    ///     TypeError: if timedur is not a time or a duration, or propsettings /
     ///         satproperties has the wrong type
-    ///     ValueError: if the position is all zeros
+    ///     ValueError: if the position is all zeros, or timedur is a NaN or
+    ///         infinite number of seconds
     ///     RuntimeError: if the propagation fails (see ``satkit.propagate``).
     ///         A covariance needs the state transition matrix, which
     ///         ``integrator.rodas4`` and ``integrator.gauss_jackson8`` cannot
@@ -457,13 +462,17 @@ impl PySatState {
         #[pyo3(from_py_with = satproperties_arg)] satproperties: Option<PySatProperties>,
     ) -> Result<Self> {
         let time: Instant = {
-            if let Ok(dur) = timedur.cast::<PyDuration>() {
-                self.0.time + dur.borrow().0
+            // The same durations as `propagate(duration=)`: a satkit.duration,
+            // a datetime.timedelta (exact) or a float / int of seconds
+            if let Some(dur) = crate::pypropagate::duration_like(timedur, "timedur")? {
+                self.0.time + dur
             } else if let Ok(t) = timedur.extract::<TimeArg>() {
                 t.0
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(format!(
-                    "timedur must be satkit.time, datetime.datetime or satkit.duration, got {}",
+                    "timedur must be a time (satkit.time, datetime.datetime, numpy.datetime64) \
+                     or a duration (satkit.duration, datetime.timedelta, seconds as a number), \
+                     got {}",
                     timedur.get_type()
                 ))
                 .into());

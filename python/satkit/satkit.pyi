@@ -4583,9 +4583,12 @@ class satstate:
     def maneuvers(self) -> list[_ManeuverDict]:
         """The scheduled impulsive maneuvers, in the order they were added.
 
-        A new list of new dicts on every access: changing it does not change
-        the state. Add maneuvers with the ``add_*`` methods and remove them
-        with ``clear_maneuvers``.
+        A copy: a new list of new dicts on every access, so changing it (or a
+        dict in it) does not change the state. To add a maneuver use
+        ``add_maneuver`` (or ``add_prograde``, ``add_retrograde``,
+        ``add_radial``, ``add_normal``); to remove them use
+        ``clear_maneuvers``. To remove or change only some, clear them and add
+        back the ones to keep, e.g. ``for m in kept: state.add_maneuver(**m)``.
 
         Returns:
             list[dict]: One dict per maneuver with keys ``"time"``
@@ -4596,7 +4599,7 @@ class satstate:
 
     def propagate(
         self,
-        timedur: TimeScalar | duration,
+        timedur: TimeScalar | duration | datetime.timedelta | float,
         *,
         propsettings: propsettings | None = None,
         satproperties: satproperties | None = None,
@@ -4613,7 +4616,10 @@ class satstate:
         time is not. Maneuvers are preserved on the returned state.
 
         Args:
-            timedur (satkit.time|datetime.datetime|numpy.datetime64|satkit.duration): Target time, or duration from current time
+            timedur (satkit.time|datetime.datetime|numpy.datetime64|satkit.duration|datetime.timedelta|float):
+                Target time, or duration from the current time: a ``satkit.duration``, a
+                ``datetime.timedelta`` (converted exactly) or a number of seconds (as for
+                ``satkit.propagate(duration=)``)
             propsettings (satkit.propsettings, optional): Propagation settings. Default: ``propsettings()``
             satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
 
@@ -4621,10 +4627,10 @@ class satstate:
             satstate: New state at the target time
 
         Raises:
-            TypeError: if ``timedur`` is not a time or a ``satkit.duration`` (a
-                float or a ``datetime.timedelta`` is refused), or ``propsettings``
-                / ``satproperties`` has the wrong type
-            ValueError: if the position is all zeros
+            TypeError: if ``timedur`` is not a time or a duration, or
+                ``propsettings`` / ``satproperties`` has the wrong type
+            ValueError: if the position is all zeros, or ``timedur`` is a NaN or
+                infinite number of seconds
             RuntimeError: if the propagation fails (see ``satkit.propagate``). A
                 covariance needs the state transition matrix, which
                 ``integrator.rodas4`` and ``integrator.gauss_jackson8`` cannot
@@ -4789,6 +4795,28 @@ class propresult:
         """
         ...
 
+    def to_satstate(self) -> satstate:
+        """The end state as a ``satkit.satstate``
+
+        A new ``satstate`` at ``time_end`` with the end GCRF position and
+        velocity, to continue from (``satstate.propagate``) or to schedule
+        maneuvers on. It has no covariance and no maneuvers: a result does not
+        carry them (``satstate.propagate`` propagates both).
+
+        Returns:
+            satstate: state at ``time_end``, GCRF position (meters) and
+                velocity (meters/second)
+
+        Example:
+            >>> t0 = satkit.time(2024, 1, 1)
+            >>> res = satkit.propagate([7000e3, 0, 0, 0, 7.5e3, 0], t0, duration_secs=600.0)
+            >>> sat = res.to_satstate()
+            >>> sat.time == res.time_end
+            True
+            >>> later = sat.propagate(600.0)  # another 10 minutes
+        """
+        ...
+
     @property
     def can_interp(self) -> bool:
         """Whether ``interp`` works on this result
@@ -4906,8 +4934,8 @@ class propresult:
         """Interpolate the GCRF state at one or more times between the begin and end times
 
         Args:
-            time: time(s) at which to interpolate: a single time, or a list or
-                1-D array of times
+            time: time(s) at which to interpolate: a single time, or a list,
+                tuple or 1-D array of times
             output_phi: also return the 6x6 state transition matrix. Default False
 
         Returns:
@@ -4923,8 +4951,8 @@ class propresult:
                 False), a time is outside the begin-to-end range, or
                 ``output_phi`` is True but the propagation did not compute the
                 state transition matrix (propagate with ``output_phi=True``)
-            TypeError: if ``time`` is not a time or a list / array of times (a
-                ``RuntimeError`` for a tuple, a number or a string)
+            TypeError: if ``time`` is not a time or a list, tuple or 1-D array of
+                times (a number, a string, None or a float array)
         """
         ...
 
@@ -5216,7 +5244,7 @@ class satproperties:
 
     Attributes:
         cdaoverm (float): Coefficient of drag times area over mass in m^2/kg; not negative
-        craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
+        craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg; not negative
         thrusts (list[thrust]): List of continuous thrust arcs (a copy; assign a list to change them)
         ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
             coefficients, added to the cannonball term (use ``craoverm=0``
@@ -5243,13 +5271,14 @@ class satproperties:
 
         Keyword Args:
             cdaoverm (float, optional): Coefficient of drag times area over mass in m^2/kg
-            craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
+            craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg;
+                not negative
             thrusts (list[thrust], optional): List of continuous thrust arcs
             ecom (ecomparams, optional): ECOM solar-radiation-pressure coefficients
 
         Raises:
             TypeError: if an argument is passed positionally or has the wrong type
-            ValueError: if ``cdaoverm`` is negative or NaN
+            ValueError: if ``cdaoverm`` or ``craoverm`` is negative or NaN
 
         Example:
 
@@ -5283,7 +5312,10 @@ class satproperties:
     def cdaoverm(self, value: float) -> None: ...
     @property
     def craoverm(self) -> float:
-        """Coefficient of radiation pressure times area over mass.  Units are m^2/kg"""
+        """Coefficient of radiation pressure times area over mass.  Units are m^2/kg
+
+        Assigning a negative or NaN value raises ``ValueError``.
+        """
         ...
 
     @craoverm.setter
@@ -5935,7 +5967,7 @@ def propagate(
     *,
     pos: npt.ArrayLike | None = None,
     vel: npt.ArrayLike | None = None,
-    duration: duration | None = None,
+    duration: duration | datetime.timedelta | float | None = None,
     duration_secs: float | None = None,
     duration_days: float | None = None,
     output_phi: bool = False,
@@ -5957,7 +5989,8 @@ def propagate(
             (backward propagation)
 
     Keyword Args:
-        duration: Duration from ``begin`` at which new position & velocity will be computed
+        duration: Duration from ``begin`` at which new position & velocity will be computed: a
+            ``satkit.duration``, a ``datetime.timedelta`` (converted exactly) or a number of seconds
         duration_secs: Duration in seconds from ``begin`` at which new position and velocity will be computed
         duration_days: Duration in days from ``begin`` at which new position and velocity will be computed
         output_phi: Output 6x6 state transition matrix between begin and end times. Default is False
@@ -5965,6 +5998,7 @@ def propagate(
         satproperties: Drag, radiation pressure and thrust properties of the satellite; if omitted,
             none of the three is modeled
         pos: 3-element GCRF position in meters. Give it together with ``vel``, in place of ``state``
+            (``TypeError`` if ``state`` is also given)
         vel: 3-element GCRF velocity in meters/second. Give it together with ``pos``
 
     Returns:
@@ -5974,11 +6008,13 @@ def propagate(
 
     Raises:
         TypeError: if ``state`` (or ``pos`` and ``vel``) or ``begin`` is missing, ``pos`` is
-            given without ``vel`` or the reverse, none or more than one of ``end``,
+            given without ``vel`` or the reverse, ``state`` is given together with ``pos`` and
+            ``vel``, none or more than one of ``end``,
             ``duration``, ``duration_secs``, ``duration_days`` is given, an argument has the
             wrong type, or an unknown keyword is passed
         ValueError: if ``state`` does not have 6 elements (``pos`` / ``vel`` 3), the position
-            is all zeros, or ``duration_secs`` / ``duration_days`` is NaN or infinite
+            is all zeros, or ``duration`` (as a number), ``duration_secs`` or ``duration_days``
+            is NaN or infinite
         RuntimeError: if the propagation fails: a required data file is missing, the
             integrator does not converge or exceeds ``max_steps``, ``output_phi`` is used
             with ``integrator.rodas4`` or ``integrator.gauss_jackson8``, the span is shorter
@@ -6002,7 +6038,7 @@ def propagate(
 
         An end time is required: pass exactly one of ``end``, ``duration``, ``duration_secs``
         and ``duration_days`` (``TypeError`` if none or more than one is given; ``ValueError``
-        for a NaN or infinite ``duration_secs`` / ``duration_days``).
+        for a NaN or infinite number of seconds or days).
 
         For future propagation (beyond available data files):
 

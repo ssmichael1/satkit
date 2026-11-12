@@ -230,8 +230,8 @@ class TestDatetimeTimes:
 
     def test_bad_type(self):
         s = sk.satstate(T0, np.array([7e6, 0, 0]), np.array([0, 7.5e3, 0]))
-        with pytest.raises(TypeError, match="satkit.time, datetime.datetime or satkit.duration"):
-            s.propagate(60.0)
+        with pytest.raises(TypeError, match="a time .* or a duration"):
+            s.propagate("60.0")
 
 
 # ─────────────────────── offline URL fetches ───────────────────────

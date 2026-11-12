@@ -254,3 +254,174 @@ class TestRound1Values:
         # Propagating to its own time does nothing, so it is allowed
         s2 = s.propagate(T0)
         np.testing.assert_array_equal(s2.pos, np.zeros(3))
+
+
+class TestDurationConvention:
+    """``propagate(duration=)`` and ``satstate.propagate(timedur)`` take the
+    same durations: a satkit.duration, a datetime.timedelta or seconds."""
+
+    @pytest.mark.parametrize(
+        "dur",
+        [
+            secs(600.5),
+            datetime.timedelta(seconds=600, microseconds=500000),
+            600.5,
+            np.float64(600.5),
+        ],
+        ids=["duration", "timedelta", "float", "np.float64"],
+    )
+    def test_propagate_duration(self, dur):
+        ref = sk.propagate(STATE, T0, duration_secs=600.5)
+        r = sk.propagate(STATE, T0, duration=dur)
+        assert r.time_end == ref.time_end
+        np.testing.assert_array_equal(r.state, ref.state)
+
+    def test_propagate_duration_int_seconds(self):
+        r = sk.propagate(STATE, T0, duration=600)
+        assert r.time_end == T0 + secs(600)
+
+    def test_timedelta_is_exact(self):
+        td = datetime.timedelta(days=1, seconds=7, microseconds=3)
+        r = sk.propagate(STATE, T0, duration=td, propsettings=sk.propsettings(enable_interp=False))
+        assert (r.time_end - T0).microseconds == 86_407_000_003
+        s = sk.satstate(T0, POS, VEL).propagate(td)
+        assert (s.time - T0).microseconds == 86_407_000_003
+
+    def test_negative_timedelta(self):
+        r = sk.propagate(STATE, T0, duration=datetime.timedelta(seconds=-300))
+        assert r.time_end == T0 - secs(300)
+
+    @pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+    def test_non_finite_seconds(self, bad):
+        with pytest.raises(ValueError, match="finite"):
+            sk.propagate(STATE, T0, duration=bad)
+        with pytest.raises(ValueError, match="finite"):
+            sk.satstate(T0, POS, VEL).propagate(bad)
+
+    @pytest.mark.parametrize("bad", ["600", True, [600.0], T0])
+    def test_propagate_duration_wrong_type(self, bad):
+        with pytest.raises(TypeError, match="duration"):
+            sk.propagate(STATE, T0, duration=bad)
+
+    def test_duration_none_is_not_given(self):
+        r = sk.propagate(STATE, T0, duration=None, duration_secs=60.0)
+        assert r.time_end == T0 + secs(60)
+
+    @pytest.mark.parametrize(
+        "dur",
+        [secs(600.5), datetime.timedelta(seconds=600.5), 600.5, np.float64(600.5)],
+        ids=["duration", "timedelta", "float", "np.float64"],
+    )
+    def test_satstate_propagate(self, dur):
+        sat = sk.satstate(T0, POS, VEL)
+        ref = sat.propagate(T0 + secs(600.5))
+        s = sat.propagate(dur)
+        assert s.time == ref.time
+        np.testing.assert_array_equal(s.pos, ref.pos)
+        np.testing.assert_array_equal(s.vel, ref.vel)
+
+    def test_satstate_int_seconds(self):
+        s = sk.satstate(T0, POS, VEL).propagate(60)
+        assert s.time == T0 + secs(60)
+
+    def test_satstate_bool_refused(self):
+        with pytest.raises(TypeError, match="timedur"):
+            sk.satstate(T0, POS, VEL).propagate(True)
+
+    def test_satstate_and_propagate_agree(self):
+        s = sk.satstate(T0, POS, VEL).propagate(900.0)
+        r = sk.propagate(STATE, T0, duration=900.0)
+        assert s.time == r.time_end
+        np.testing.assert_array_equal(s.pos, r.pos)
+
+
+class TestToSatstate:
+    def test_end_state(self):
+        r = sk.propagate(STATE, T0, duration_secs=600.0)
+        s = r.to_satstate()
+        assert isinstance(s, sk.satstate)
+        assert s.time == r.time_end
+        np.testing.assert_array_equal(s.pos, r.pos)
+        np.testing.assert_array_equal(s.vel, r.vel)
+        assert s.cov is None
+        assert s.maneuvers == []
+
+    def test_with_phi(self):
+        r = sk.propagate(STATE, T0, duration_secs=600.0, output_phi=True)
+        s = r.to_satstate()
+        np.testing.assert_array_equal(s.pos, r.pos)
+        assert s.cov is None
+
+    def test_continue(self):
+        r = sk.propagate(STATE, T0, duration_secs=600.0)
+        s = r.to_satstate().propagate(600.0)
+        assert s.time == T0 + secs(1200)
+
+    def test_backward(self):
+        r = sk.propagate(STATE, T0, duration_secs=-600.0)
+        assert r.to_satstate().time == T0 - secs(600)
+
+    def test_is_a_method(self):
+        r = sk.propagate(STATE, T0, duration_secs=60.0)
+        assert callable(r.to_satstate)
+
+
+class TestStateWithPosVel:
+    def test_all_three_refused(self):
+        with pytest.raises(TypeError, match="not both"):
+            sk.propagate(STATE, T0, pos=POS, vel=VEL, duration_secs=60.0)
+
+    def test_state_with_one_refused(self):
+        with pytest.raises(TypeError):
+            sk.propagate(STATE, T0, pos=POS, duration_secs=60.0)
+        with pytest.raises(TypeError):
+            sk.propagate(STATE, T0, vel=VEL, duration_secs=60.0)
+
+
+class TestCraoverm:
+    @pytest.mark.parametrize("bad", [-0.01, math.nan, -math.inf])
+    def test_negative_or_nan(self, bad):
+        with pytest.raises(ValueError, match="craoverm"):
+            sk.satproperties(craoverm=bad)
+        p = sk.satproperties(craoverm=0.02)
+        with pytest.raises(ValueError, match="craoverm"):
+            p.craoverm = bad
+        assert p.craoverm == 0.02
+
+    def test_zero_allowed(self):
+        p = sk.satproperties(craoverm=0.0)
+        p.craoverm = 0.0
+        assert p.craoverm == 0.0
+
+
+class TestManeuversCopy:
+    def test_copy_and_rebuild(self):
+        s = sk.satstate(T0, POS, VEL)
+        s.add_maneuver(T0 + secs(60), [0.0, 1.0, 0.0], sk.frame.RTN)
+        s.add_prograde(T0 + secs(120), 2.0)
+        ms = s.maneuvers
+        ms.clear()
+        assert s.num_maneuvers == 2
+        # The documented way to drop one: clear and add back the rest
+        kept = s.maneuvers[1:]
+        s.clear_maneuvers()
+        for m in kept:
+            s.add_maneuver(**m)
+        assert s.num_maneuvers == 1
+        assert s.maneuvers[0]["time"] == T0 + secs(120)
+        assert s.maneuvers[0]["frame"] == sk.frame.NTW
+
+
+class TestInterpTimeTypes:
+    def setup_method(self):
+        self.r = sk.propagate(STATE, T0, duration_secs=600.0)
+
+    def test_tuple_is_a_list_of_times(self):
+        out = self.r.interp((T0 + secs(100), T0 + secs(200)))
+        assert out.shape == (2, 6)
+        np.testing.assert_array_equal(out, self.r.interp([T0 + secs(100), T0 + secs(200)]))
+
+    @pytest.mark.parametrize("bad", [60.0, 5, "2024-01-01", None, np.array([1.0]), [1.0]])
+    def test_type_error(self, bad):
+        with pytest.raises(TypeError):
+            self.r.interp(bad)

@@ -26,12 +26,13 @@ crate::arg_extractor!(pub(crate) satproperties_arg: Option<PySatProperties>, |e|
     ))
 });
 
-/// Cd A / m scales the drag deceleration; a negative one would accelerate
-/// the satellite along its velocity
-fn check_cdaoverm(v: f64) -> PyResult<f64> {
+/// Cd A / m scales the drag deceleration and Cr A / m the radiation
+/// pressure; a negative one would reverse the force (accelerating the
+/// satellite along its velocity, or pulling it toward the Sun)
+fn check_coefficient(name: &str, v: f64) -> PyResult<f64> {
     if v.is_nan() || v < 0.0 {
         return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "cdaoverm must not be negative or NaN, got {v}"
+            "{name} must not be negative or NaN, got {v}"
         )));
     }
     Ok(v)
@@ -44,7 +45,7 @@ fn check_cdaoverm(v: f64) -> PyResult<f64> {
 ///
 /// Attributes:
 ///     cdaoverm (float): Coefficient of drag times area over mass in m^2/kg; not negative
-///     craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
+///     craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg; not negative
 ///     thrusts (list[thrust]): List of continuous thrust arcs (a copy; assign a list to change them)
 ///     ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
 ///         coefficients, added to the cannonball term (use ``craoverm=0``
@@ -67,7 +68,7 @@ impl PySatProperties {
     /// Keyword Args:
     ///     cdaoverm (float): Cd A / m (m^2/kg), susceptibility to drag. Default 0
     ///     craoverm (float): Cr A / m (m^2/kg), susceptibility to radiation
-    ///         pressure. Default 0
+    ///         pressure; not negative. Default 0
     ///     thrusts (list[satkit.thrust] | None): continuous thrust arcs. Default None
     ///     ecom (satkit.ecomparams | None): ECOM empirical solar-radiation-pressure
     ///         coefficients, added to the cannonball term (use craoverm=0 for a
@@ -79,7 +80,7 @@ impl PySatProperties {
     ///         the reverse of the documented order, so positional calls are
     ///         refused rather than reinterpreted), or an argument has the
     ///         wrong type
-    ///     ValueError: if cdaoverm is negative or NaN
+    ///     ValueError: if cdaoverm or craoverm is negative or NaN
     ///
     #[new]
     // `*args` only catches positional calls to refuse them with the message
@@ -105,7 +106,10 @@ impl PySatProperties {
                 if args.len() == 1 { "" } else { "s" }
             )));
         }
-        let mut props = SatPropertiesSimple::new(check_cdaoverm(cdaoverm)?, craoverm);
+        let mut props = SatPropertiesSimple::new(
+            check_coefficient("cdaoverm", cdaoverm)?,
+            check_coefficient("craoverm", craoverm)?,
+        );
         if let Some(thrusts) = thrusts {
             props = props.with_thrust(py_thrusts_to_profile(thrusts));
         }
@@ -136,10 +140,11 @@ impl PySatProperties {
     /// Set the satellite's susceptibility to radiation pressure
     ///
     /// Args:
-    ///     craoverm (float): Cr A / m (m^2/kg)
+    ///     craoverm (float): Cr A / m (m^2/kg); ``ValueError`` if negative or NaN
     #[setter]
-    fn set_craoverm(&mut self, craoverm: f64) {
-        self.0.craoverm = craoverm;
+    fn set_craoverm(&mut self, craoverm: f64) -> PyResult<()> {
+        self.0.craoverm = check_coefficient("craoverm", craoverm)?;
+        Ok(())
     }
 
     /// Set the satellite's susceptibility to drag
@@ -148,7 +153,7 @@ impl PySatProperties {
     ///     cdaoverm (float): Cd A / m (m^2/kg); ``ValueError`` if negative or NaN
     #[setter]
     fn set_cdaoverm(&mut self, cdaoverm: f64) -> PyResult<()> {
-        self.0.cdaoverm = check_cdaoverm(cdaoverm)?;
+        self.0.cdaoverm = check_coefficient("cdaoverm", cdaoverm)?;
         Ok(())
     }
 

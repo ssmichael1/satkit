@@ -24,9 +24,41 @@ crate::arg_extractor!(begin_arg: Option<TimeArg>, |e| {
 crate::arg_extractor!(end_arg: Option<TimeArg>, |e| {
     pyo3::exceptions::PyTypeError::new_err(format!("Invalid end time: {e}"))
 });
-crate::arg_extractor!(duration_arg: Option<PyDuration>, |e| {
-    pyo3::exceptions::PyTypeError::new_err(format!("duration must be a satkit.duration: {e}"))
-});
+/// A duration from a `satkit.duration`, a `datetime.timedelta` (exact: both
+/// count whole microseconds) or a real number of seconds (rounded to the
+/// microsecond; `ValueError` if NaN or infinite). `None` if `obj` is none of
+/// these; a `bool` is not taken as a number.
+pub(crate) fn duration_like(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Option<Duration>> {
+    use pyo3::types::{PyBool, PyDelta, PyFloat, PyInt};
+    if let Ok(d) = obj.cast::<PyDuration>() {
+        return Ok(Some(d.borrow().0));
+    }
+    if let Ok(td) = obj.cast::<PyDelta>() {
+        return crate::pyduration::timedelta_to_duration(td).map(Some);
+    }
+    if !obj.is_instance_of::<PyBool>()
+        && (obj.is_instance_of::<PyFloat>() || obj.is_instance_of::<PyInt>())
+    {
+        let secs: f64 = obj.extract()?;
+        crate::pyduration::check_duration_value(secs, 1.0e6, what)?;
+        return Ok(Some(Duration::from_seconds(secs)));
+    }
+    Ok(None)
+}
+
+/// `duration=`: a `satkit.duration`, a `datetime.timedelta` or seconds
+fn duration_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<Duration>> {
+    if obj.is_none() {
+        return Ok(None);
+    }
+    duration_like(obj, "duration")?.map(Some).ok_or_else(|| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "duration must be a satkit.duration, a datetime.timedelta or a number of \
+             seconds, got {}",
+            obj.get_type()
+        ))
+    })
+}
 crate::arg_extractor!(duration_secs_arg: Option<f64>, |e| {
     pyo3::exceptions::PyTypeError::new_err(format!("duration_secs must be a number: {e}"))
 });
@@ -90,11 +122,13 @@ pub(crate) fn check_position(pos: &[f64]) -> PyResult<()> {
 ///     end (satkit.time | datetime.datetime | numpy.datetime64, optional): time to propagate to
 ///
 /// Keyword Args:
-///     duration (satkit.duration, optional): duration from ``begin`` to propagate
+///     duration (satkit.duration | datetime.timedelta | float, optional):
+///         duration from ``begin`` to propagate; a float is seconds. A
+///         ``datetime.timedelta`` converts exactly (both count microseconds)
 ///     duration_secs (float, optional): duration from ``begin``, seconds
 ///     duration_days (float, optional): duration from ``begin``, days
 ///     pos (array-like, optional): 3-element GCRF position, meters. Give it
-///         together with ``vel``, in place of ``state``
+///         together with ``vel``, in place of ``state`` (not with it)
 ///     vel (array-like, optional): 3-element GCRF velocity, meters/second. Give
 ///         it together with ``pos``
 ///     output_phi (bool): also compute the 6x6 state transition matrix between
@@ -115,12 +149,13 @@ pub(crate) fn check_position(pos: &[f64]) -> PyResult<()> {
 ///
 /// Raises:
 ///     TypeError: if ``state`` (or ``pos`` and ``vel``) or ``begin`` is missing,
-///         ``pos`` is given without ``vel`` or the reverse, none or more than one
+///         ``pos`` is given without ``vel`` or the reverse, ``state`` is given
+///         together with ``pos`` and ``vel``, none or more than one
 ///         of ``end``, ``duration``, ``duration_secs``, ``duration_days`` is given,
 ///         an argument has the wrong type, or an unknown keyword is passed
 ///     ValueError: if ``state`` does not have 6 elements (``pos`` / ``vel`` 3),
-///         the position is all zeros, or ``duration_secs`` / ``duration_days``
-///         is NaN or infinite
+///         the position is all zeros, or ``duration`` (as a float),
+///         ``duration_secs`` or ``duration_days`` is NaN or infinite
 ///     RuntimeError: if the propagation fails: a required data file is missing,
 ///         the integrator does not converge or exceeds ``max_steps``,
 ///         ``output_phi`` is used with ``integrator.rodas4`` or
@@ -162,7 +197,7 @@ pub fn propagate(
     #[pyo3(from_py_with = end_arg)] end: Option<TimeArg>,
     pos: Option<&Bound<'_, PyAny>>,
     vel: Option<&Bound<'_, PyAny>>,
-    #[pyo3(from_py_with = duration_arg)] duration: Option<PyDuration>,
+    #[pyo3(from_py_with = duration_arg)] duration: Option<Duration>,
     #[pyo3(from_py_with = duration_secs_arg)] duration_secs: Option<f64>,
     #[pyo3(from_py_with = duration_days_arg)] duration_days: Option<f64>,
     #[pyo3(from_py_with = output_phi_arg)] output_phi: bool,
@@ -193,11 +228,18 @@ pub fn propagate(
         .into());
     };
 
+    // `pos=` / `vel=` used to overwrite the corresponding half of `state`
+    if state.is_some() && pos.is_some() {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "propagate() takes either `state` or `pos` and `vel`, not both",
+        )
+        .into());
+    }
+
     let mut state0 = match state {
         Some(s) => state6(s)?,
         None => Vector6::zeros(),
     };
-    // `pos=` / `vel=` overwrite the corresponding half of `state`
     if let Some(p) = pos {
         let p = to_vector3(p, "pos")?;
         state0[0] = p[0];
@@ -243,7 +285,7 @@ pub fn propagate(
 
     let mut endtime = end.map_or(Instant::INVALID, |t| t.0);
     if let Some(d) = duration {
-        endtime = begintime + d.0;
+        endtime = begintime + d;
     }
     if let Some(d) = duration_days {
         crate::pyduration::check_duration_value(d, 86_400.0e6, "duration_days")?;
