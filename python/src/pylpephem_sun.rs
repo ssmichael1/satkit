@@ -126,6 +126,14 @@ pub fn rise_set(
     sigma: Option<f64>,
     use_jpl: bool,
 ) -> PyResult<(PyInstant, PyInstant)> {
+    // NaN gave (MJD 0, MJD 0) and a value past 180 a "sunset" on the next day
+    if let Some(s) = sigma {
+        if !(s.is_finite() && s > 0.0 && s < 180.0) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "sigma must be a finite angle in degrees with 0 < sigma < 180, got {s}"
+            )));
+        }
+    }
     let (rise, set) = sun::riseset_with(&time.0, &coord.0, sigma, use_jpl)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
     Ok((PyInstant(rise), PyInstant(set)))
@@ -153,7 +161,7 @@ pub fn rise_set(
 ///     ValueError: if an argument does not have exactly 3 elements
 #[pyfunction(signature=(sunpos, satpos))]
 pub fn shadowfunc(sunpos: Bound<'_, PyAny>, satpos: Bound<'_, PyAny>) -> Result<f64> {
-    let satpos = pyutils::py_to_smatrix::<3, 1>(&satpos)?;
-    let sunpos = pyutils::py_to_smatrix::<3, 1>(&sunpos)?;
+    let sunpos = pyutils::to_vector3(&sunpos, "sunpos")?;
+    let satpos = pyutils::to_vector3(&satpos, "satpos")?;
     Ok(sun::shadowfunc(&sunpos, &satpos))
 }

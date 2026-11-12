@@ -257,58 +257,55 @@ pub fn py_vec3_of_time_result_arr(
     }
 }
 
-/// Convert python object to fixed-size matrix
+/// Convert a real numeric array-like to a fixed-size matrix: `M * N`
+/// elements in a 1-D array-like (filled in storage order, so a 3-vector or a
+/// 6-vector reads as written) or an `M x N` 2-D one.
+///
+/// The input goes through [`to_f64_ndarray`], so any real numeric dtype, a
+/// list or a tuple works, and anything that is not real-numeric (a complex
+/// array, whose imaginary part used to be dropped with only a
+/// `ComplexWarning`; strings; bools) raises `TypeError`. A wrong shape is
+/// the `RuntimeError` it has always been; use [`to_vector3`] for a
+/// `ValueError` that names the argument.
 pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> Result<Matrix<M, N>> {
+    let arr = to_f64_ndarray(obj)?;
+    let ro = arr.readonly();
+    let arr = ro.as_array();
     let mut m: Matrix<M, N> = Matrix::<M, N>::zeros();
-    if obj.is_instance_of::<np::PyArray1<f64>>() {
-        let arr = obj.extract::<np::PyReadonlyArray1<f64>>().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid array shape: {}", e))
-        })?;
-        let arr = arr.as_array();
-        if arr.len() != M * N {
-            anyhow::bail!(
-                "Expected {} elements for {M}x{N} matrix, got {}",
-                M * N,
-                arr.len()
-            );
-        }
-        // Flat copy handles both contiguous and strided input
-        for (dst, src) in m.as_mut_slice().iter_mut().zip(arr.iter()) {
-            *dst = *src;
-        }
-    } else if obj.is_instance_of::<np::PyArray2<f64>>() {
-        let arr = obj.extract::<np::PyReadonlyArray2<f64>>().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid array shape: {}", e))
-        })?;
-        let arr = arr.as_array();
-        if arr.shape() != [M, N] {
-            anyhow::bail!(
-                "Expected {M}x{N} matrix, got {}x{}",
-                arr.shape()[0],
-                arr.shape()[1]
-            );
-        }
-        // Element-by-element to handle numpy row-major to numeris column-major
-        for row in 0..M {
-            for col in 0..N {
-                m[(row, col)] = arr[(row, col)];
+    match arr.ndim() {
+        1 => {
+            if arr.len() != M * N {
+                anyhow::bail!(
+                    "Expected {} elements for {M}x{N} matrix, got {}",
+                    M * N,
+                    arr.len()
+                );
+            }
+            // Flat copy handles both contiguous and strided input
+            for (dst, src) in m.as_mut_slice().iter_mut().zip(arr.iter()) {
+                *dst = *src;
             }
         }
-    } else {
-        // Fallback: try to extract as a flat sequence of floats (lists, tuples, etc.)
-        let vals: Vec<f64> = obj.extract().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "Cannot convert to {M}x{N} matrix: {e}"
-            ))
-        })?;
-        if vals.len() != M * N {
-            anyhow::bail!(
-                "Expected {} elements for {M}x{N} matrix, got {}",
-                M * N,
-                vals.len()
-            );
+        2 => {
+            if arr.shape() != [M, N] {
+                anyhow::bail!(
+                    "Expected {M}x{N} matrix, got {}x{}",
+                    arr.shape()[0],
+                    arr.shape()[1]
+                );
+            }
+            // Element-by-element to handle numpy row-major to numeris column-major
+            for row in 0..M {
+                for col in 0..N {
+                    m[(row, col)] = arr[[row, col]];
+                }
+            }
         }
-        m.as_mut_slice().copy_from_slice(&vals);
+        _ => anyhow::bail!(
+            "Expected {} elements for {M}x{N} matrix, got an array of shape {:?}",
+            M * N,
+            arr.shape()
+        ),
     }
     Ok(m)
 }
@@ -419,15 +416,20 @@ where
 
 /// Extract a single `satkit::Instant` from a Python object.
 ///
-/// Accepts `satkit.time` (PyInstant) or `datetime.datetime` (a naive datetime
-/// is local time, an aware one uses its own offset; see `datetime_to_instant`).
-/// Returns a `PyTypeError` if the object is neither.
+/// Accepts the stubs' `TimeScalar`: `satkit.time`, `datetime.datetime` (a
+/// naive datetime is local time, an aware one uses its own offset; see
+/// `datetime_to_instant`) or `numpy.datetime64`. A list or array of times is
+/// not a single time, even with one element: it raises `TypeError`, like
+/// anything else that is not a time.
 pub fn instant_from_pyany(obj: &Bound<'_, PyAny>) -> PyResult<Instant> {
-    let v = obj.to_time_vec()?;
-    if v.len() != 1 {
-        return Err(pyo3::exceptions::PyTypeError::new_err(
-            "Expected a single time value (satkit.time or datetime.datetime)",
-        ));
+    match obj.to_time_input()? {
+        TimeInput {
+            times,
+            scalar: true,
+        } => Ok(times[0]),
+        _ => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "expected a single time (satkit.time, datetime.datetime or numpy.datetime64), got {}",
+            obj.get_type()
+        ))),
     }
-    Ok(v[0])
 }

@@ -269,6 +269,78 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
     satkit::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
 }
 
+/// Whether `frame` is one of the orbit-dependent frames, whose axes are
+/// built from the position and velocity
+fn is_orbit_frame(frame: satkit::Frame) -> bool {
+    use satkit::Frame;
+    match frame {
+        Frame::LVLH | Frame::RTN | Frame::NTW => true,
+        Frame::GCRF
+        | Frame::ITRF
+        | Frame::TIRS
+        | Frame::CIRS
+        | Frame::TEME
+        | Frame::EME2000
+        | Frame::ICRF => false,
+    }
+}
+
+/// `ValueError` unless `pos` and `vel` define an orbit plane: both finite,
+/// neither zero, not parallel. The orbit-frame axes are built from
+/// `pos x vel`, so a degenerate state gave an all-NaN rotation.
+fn check_orbit_plane(func: &str, pos: &Vector3, vel: &Vector3) -> PyResult<()> {
+    let err = |what: &str| {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{func}: {what}; an orbit-dependent frame (LVLH, RTN, NTW) needs a position and \
+             a velocity that define an orbit plane"
+        )))
+    };
+    if !pos.iter().chain(vel.iter()).all(|x| x.is_finite()) {
+        return err("pos and vel must be finite");
+    }
+    let (r, v) = (pos.norm(), vel.norm());
+    if r == 0.0 {
+        return err("pos is zero");
+    }
+    if v == 0.0 {
+        return err("vel is zero");
+    }
+    if pos.cross(vel).norm() <= 1.0e-12 * r * v {
+        return err("pos and vel are parallel");
+    }
+    Ok(())
+}
+
+/// The state arguments of [`to_gcrf`] / [`from_gcrf`], validated: `frame`
+/// must be GCRF or an orbit-dependent frame (the error names `func`, so
+/// `from_gcrf` no longer reports itself as `to_gcrf`), `pos` and `vel` real
+/// 3-vectors that, for an orbit-dependent frame, define an orbit plane.
+fn orbit_frame_state(
+    func: &str,
+    frame: satkit::Frame,
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+) -> PyResult<(Vector3, Vector3)> {
+    if !is_orbit_frame(frame) && frame != satkit::Frame::GCRF {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+            "{func}: frame {frame} is not a satellite-local orbital frame (LVLH, RTN, NTW) \
+             or GCRF; use the time-based helpers (rotation, rotation_with_state, qitrf2gcrf, \
+             qteme2gcrf, etc.) instead"
+        )));
+    }
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
+    if !p.iter().chain(v.iter()).all(|x| x.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{func}: pos and vel must be finite"
+        )));
+    }
+    if is_orbit_frame(frame) {
+        check_orbit_plane(func, &p, &v)?;
+    }
+    Ok((p, v))
+}
+
 /// Return the DCM that transforms a 3-vector from the given satellite-
 /// local frame into GCRF at the current state.
 ///
@@ -311,9 +383,8 @@ pub fn to_gcrf(
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let pos_vec: Vector3 = py_to_smatrix(pos)?;
-    let vel_vec: Vector3 = py_to_smatrix(vel)?;
     let rust_frame: satkit::Frame = frame.into();
+    let (pos_vec, vel_vec) = orbit_frame_state("to_gcrf", rust_frame, pos, vel)?;
     let dcm = ft::to_gcrf(rust_frame, &pos_vec, &vel_vec)?;
     // numeris matrices are column-major while numpy's reshape is
     // row-major; flatten the transpose so the numpy array has the same
@@ -348,9 +419,8 @@ pub fn from_gcrf(
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let pos_vec: Vector3 = py_to_smatrix(pos)?;
-    let vel_vec: Vector3 = py_to_smatrix(vel)?;
     let rust_frame: satkit::Frame = frame.into();
+    let (pos_vec, vel_vec) = orbit_frame_state("from_gcrf", rust_frame, pos, vel)?;
     let dcm = ft::from_gcrf(rust_frame, &pos_vec, &vel_vec)?;
     // Column-major -> row-major via transpose; see `to_gcrf`.
     Ok(slice2py2d(py, dcm.transpose().as_slice(), 3, 3)?)
@@ -607,8 +677,8 @@ fn state_transform_batch(
         ));
     }
 
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
     let t = instant_from_pyany(time)?;
     let (po, vo) = cfunc(&p, &v, &t);
     let py = time.py();
@@ -733,8 +803,8 @@ pub fn transform_state(
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
     satkit::frametransform::ierstable::preload()?;
     let t = instant_from_pyany(tm)?;
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
     let (po, vo) = ft::transform_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
     let py = tm.py();
     Ok((vec2py(py, &po)?, vec2py(py, &vo)?))
@@ -776,8 +846,8 @@ pub fn transform_state_approx(
     vel: &Bound<'_, PyAny>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
     let t = instant_from_pyany(tm)?;
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
     let (po, vo) = ft::transform_state_approx(from_frame.into(), to_frame.into(), &t, &p, &v)?;
     let py = tm.py();
     Ok((vec2py(py, &po)?, vec2py(py, &vo)?))
@@ -822,9 +892,13 @@ pub fn rotation_with_state(
 ) -> Result<Py<PyAny>> {
     satkit::frametransform::ierstable::preload()?;
     let t = instant_from_pyany(tm)?;
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
-    let q = ft::rotation_with_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
+    let (from, to): (satkit::Frame, satkit::Frame) = (from_frame.into(), to_frame.into());
+    if from != to && (is_orbit_frame(from) || is_orbit_frame(to)) {
+        check_orbit_plane("rotation_with_state", &p, &v)?;
+    }
+    let q = ft::rotation_with_state(from, to, &t, &p, &v)?;
     Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(tm.py())?)
 }
 
