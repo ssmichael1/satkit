@@ -38,6 +38,7 @@ pub fn nrlmsise00(
     time: Option<&Bound<'_, PyAny>>,
     use_spaceweather: bool,
 ) -> anyhow::Result<(f64, f64)> {
+    check_inputs(alt_km, Some(latitude_deg), Some(longitude_deg))?;
     let tm: Option<Instant> = time.map(crate::pyutils::instant_from_pyany).transpose()?;
     Ok(nrlmsise::nrlmsise(
         alt_km,
@@ -46,4 +47,33 @@ pub fn nrlmsise00(
         tm.as_ref(),
         use_spaceweather,
     ))
+}
+
+/// Reject model inputs outside the range the model is defined for.
+pub fn check_inputs(
+    alt_km: f64,
+    latitude_deg: Option<f64>,
+    longitude_deg: Option<f64>,
+) -> PyResult<()> {
+    use pyo3::exceptions::PyValueError;
+    if !alt_km.is_finite() || alt_km < -1.0 {
+        return Err(PyValueError::new_err(format!(
+            "altitude must be finite and at least -1 km, got {alt_km} km"
+        )));
+    }
+    if let Some(lat) = latitude_deg {
+        if lat.is_nan() || lat.abs() > 90.0 + 1.0e-9 {
+            return Err(PyValueError::new_err(format!(
+                "latitude must be within [-90, 90] degrees, got {lat}"
+            )));
+        }
+    }
+    if let Some(lon) = longitude_deg {
+        if !lon.is_finite() {
+            return Err(PyValueError::new_err(format!(
+                "longitude must be finite, got {lon}"
+            )));
+        }
+    }
+    Ok(())
 }

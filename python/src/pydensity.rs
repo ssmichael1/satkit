@@ -134,6 +134,11 @@ fn nrlmsise_args(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
             ));
         }
     }
+    crate::pynrlmsise::check_inputs(
+        altitude / 1.0e3,
+        angles.first().copied(),
+        angles.get(1).copied(),
+    )?;
     Ok(nrlmsise::nrlmsise(
         altitude / 1.0e3,
         angles.first().copied(),

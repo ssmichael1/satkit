@@ -789,3 +789,24 @@ class TestStubReturnTypes:
         assert abs(rec["kp_sum"] - sum(rec["kp"])) <= 8
         assert sk.spaceweather.get(sk.time(1940, 1, 1))["f10p7_obs"] == -1.0
         assert not hasattr(sk.spaceweather, "SpaceWeatherRecord")  # type-check only
+
+
+def test_every_enum_hashes_like_its_integer_value():
+    """`member == int(member)` (eq_int), so the two must hash alike."""
+    import satkit as sk
+
+    enums = [
+        sk.frame, sk.timescale, sk.weekday, sk.integrator, sk.tidemodel,
+        sk.gravmodel, sk.solarsystem, sk.sgp4_error, sk.sgp4_gravconst,
+        sk.sgp4_opsmode, sk.tlefitstatus, sk.moon.moonphase,
+    ]
+    for enum in enums:
+        members = [
+            v for k, v in vars(enum).items()
+            if not k.startswith("_") and isinstance(v, enum)
+        ]
+        assert members, enum
+        for m in members:
+            assert m == int(m)
+            assert hash(m) == hash(int(m)), m
+            assert {int(m): "x"}[m] == "x"

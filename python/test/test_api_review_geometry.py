@@ -323,3 +323,66 @@ def test_density_module_doc_and_signature():
         sk.density.nrlmsise()
     with pytest.raises(TypeError):
         sk.density.nrlmsise(400e3, t, 0.1)
+
+
+# --- breaking: exception types and model-input validation ----------------------
+
+
+def test_quaternion_exception_types():
+    with pytest.raises(TypeError, match="0 or 4"):
+        sk.quaternion(1.0, 0.0)  # type: ignore[call-overload]
+    with pytest.raises(ValueError, match="3x3"):
+        sk.quaternion.from_rotation_matrix(np.eye(2))
+    with pytest.raises(ValueError):
+        sk.quaternion.rotation_between([1, 0, 0], [-1, 0, 0])
+    with pytest.raises(ValueError):
+        sk.quaternion.rotation_between([0, 0, 0], [1, 0, 0])
+
+
+def test_kepler_from_pv_exception_types():
+    with pytest.raises(ValueError, match="3-element"):
+        sk.kepler.from_pv(np.zeros(4), np.zeros(3))
+    with pytest.raises(ValueError, match="3-element"):
+        sk.kepler.from_pv(np.zeros((3, 1)), np.zeros(3))
+    with pytest.raises(TypeError):
+        sk.kepler.from_pv(["a", "b", "c"], [0, 7.5e3, 0])
+    k = sk.kepler.from_pv((7000e3, 0, 0), [0, 7500, 0])
+    assert k.a > 0
+
+
+def test_gravity_argument_types():
+    pos = [7000e3, 0.0, 0.0]
+    with pytest.raises(TypeError):
+        sk.gravity(pos, model="jgm3")  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        sk.gravity(pos, degree=2.5)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="negative"):
+        sk.gravity(pos, degree=-1)
+    with pytest.raises(TypeError):
+        sk.gravity_and_partials(pos, order="2")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        dict(alt_km=float("nan")),
+        dict(alt_km=float("inf")),
+        dict(alt_km=-2.0),
+        dict(alt_km=400.0, latitude_deg=91.0),
+        dict(alt_km=400.0, latitude_deg=float("nan")),
+        dict(alt_km=400.0, longitude_deg=float("inf")),
+    ],
+)
+def test_nrlmsise00_rejects_inputs_outside_the_model(kwargs):
+    alt = kwargs.pop("alt_km")
+    with pytest.raises(ValueError):
+        sk.nrlmsise00(alt, **kwargs)
+
+
+def test_density_nrlmsise_rejects_inputs_outside_the_model():
+    for args in [(float("nan"),), (-2000.0,), (400e3, 2.0), (400e3, 0.1, float("inf"))]:
+        with pytest.raises(ValueError):
+            sk.density.nrlmsise(*args)
+    rho, temp = sk.density.nrlmsise(400e3, 0.1, 0.2)
+    assert rho > 0 and temp > 0
+    assert sk.nrlmsise00(400.0, latitude_deg=-90.0)[0] > 0

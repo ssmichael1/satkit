@@ -19,7 +19,7 @@ class TestInvalidInputRaises:
             sk.propagate(np.zeros(5), t0, t1)
 
     def test_kepler_from_pv_wrong_sizes(self):
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.kepler.from_pv(np.zeros(4), np.zeros(3))
 
     def test_kepler_non_numeric_positional(self):

@@ -220,6 +220,14 @@ macro_rules! enum_pickle {
     ($ty:ty, $path:literal) => {
         #[pyo3::pymethods]
         impl $ty {
+            // A member equals its integer value (`eq_int`), so it hashes like
+            // it; PyO3's `hash` option would hash the Rust value instead and
+            // make `{0: x}[member]` a KeyError although `member == 0`
+            fn __hash__(slf: &pyo3::Bound<'_, Self>) -> pyo3::PyResult<isize> {
+                use pyo3::prelude::PyAnyMethods;
+                slf.as_any().call_method0("__int__")?.extract()
+            }
+
             fn __reduce__<'py>(
                 slf: &pyo3::Bound<'py, Self>,
             ) -> pyo3::PyResult<(pyo3::Bound<'py, pyo3::PyAny>, (&'static str, String))> {

@@ -38,13 +38,13 @@ from ._types import OMMDict, TLEFitResult
 # the nearest microsecond; ``NaT`` raises ``ValueError``.
 #
 # * ``TimeScalar``    — a single time value.
-# * ``TimeArrayLike`` — a list, a 1-D numpy object array of time values, or a
-#   1-D numpy ``datetime64`` array (not any array-like: a tuple, a float array
-#   or a string is refused).
+# * ``TimeArrayLike`` — a list or tuple, a 1-D numpy object array of time
+#   values, or a 1-D numpy ``datetime64`` array (not any array-like: a float
+#   array or a string is refused).
 # * ``TimeInput``     — either a scalar or an array of times.
 TimeScalar: TypeAlias = "time | datetime.datetime | np.datetime64"
 TimeArrayLike: TypeAlias = (
-    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
+    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | tuple[time | datetime.datetime | np.datetime64, ...] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
 
@@ -761,9 +761,9 @@ def sgp4(
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
             ``TLE`` object, an OMM dictionary (see ``OMMDict``), or a list of either
             (or mixing both). Must be a ``list``; tuples and other sequences are not accepted
-        time (time | datetime.datetime | numpy.datetime64 | list | numpy.ndarray): time(s) at
-            which to compute position and velocity: a single time, a list of times, a 1-D
-            numpy object array of times or a 1-D ``datetime64`` array. A tuple is not accepted.
+        time (time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): time(s) at
+            which to compute position and velocity: a single time, a list or tuple of times, a 1-D
+            numpy object array of times or a 1-D ``datetime64`` array.
             A naive ``datetime`` is local time, not UTC (see ``time.from_datetime``); a
             ``numpy.datetime64`` is UTC
 

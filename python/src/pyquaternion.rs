@@ -11,7 +11,7 @@ use satkit::mathtypes::*;
 
 use crate::pyutils::{slice2py2d, to_f64_ndarray, to_vector3, vec2py, warn_deprecated};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 ///
 /// Quaternion representing rotation of 3D Cartesian axes
@@ -103,7 +103,11 @@ impl PyQuaternion {
             let z = args.get_item(3)?.extract::<f64>()?;
             Ok(unit_quaternion(w, x, y, z)?.into())
         } else {
-            bail!("Invalid input.  Must be empty or 4 floats");
+            Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "quaternion() takes 0 or 4 positional arguments (w, x, y, z), got {}",
+                args.len()
+            ))
+            .into())
         }
     }
 
@@ -217,14 +221,20 @@ impl PyQuaternion {
         let n1 = finite_arg("v1 norm", v1.norm())?;
         let n2 = finite_arg("v2 norm", v2.norm())?;
         if n1 < 1.0e-9 || n2 < 1.0e-9 {
-            bail!("Norms are 0 or vectors are 180° apart");
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Norms are 0 or vectors are 180° apart",
+            )
+            .into());
         }
         let u1 = v1 * (1.0 / n1);
         let u2 = v2 * (1.0 / n2);
         let cross = u1.cross(&u2);
         let dot = u1.dot(&u2);
         if cross.norm() < 1.0e-9 && dot < 0.0 {
-            bail!("Norms are 0 or vectors are 180° apart");
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Norms are 0 or vectors are 180° apart",
+            )
+            .into());
         }
         // atan2 of the sine and cosine keeps full precision for nearly
         // parallel vectors, where acos(dot) loses half the digits
@@ -256,7 +266,11 @@ impl PyQuaternion {
         let dcm = dcm.readonly();
         let dcm = dcm.as_array();
         if dcm.shape() != [3, 3] {
-            bail!("Invalid DCM.  Must be 3x3 matrix");
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid DCM.  Must be 3x3 matrix, got shape {:?}",
+                dcm.shape()
+            ))
+            .into());
         }
         // numpy arrays are row-major, build Matrix3 row-by-row
         let mat = Matrix3::new([

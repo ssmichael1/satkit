@@ -17,15 +17,27 @@ fn ensure_loaded(model: &GravModel) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{e}"))
 }
 
-crate::arg_extractor!(model_arg: GravModel, |e| {
-    pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to extract gravity model: {e}"))
-});
-crate::arg_extractor!(degree_arg: usize, |e| {
-    pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to extract degree: {e}"))
-});
-crate::arg_extractor!(order_arg: Option<usize>, |e| {
-    pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to extract order: {e}"))
-});
+/// `TypeError` for an argument of the wrong type; `ValueError` for a negative
+/// integer (which fails the `usize` extraction with `OverflowError`)
+fn arg_error(name: &str, v: &Bound<'_, PyAny>, e: &PyErr) -> PyErr {
+    if e.is_instance_of::<pyo3::exceptions::PyOverflowError>(v.py()) {
+        pyo3::exceptions::PyValueError::new_err(format!("{name} must not be negative"))
+    } else {
+        pyo3::exceptions::PyTypeError::new_err(format!("invalid {name}: {e}"))
+    }
+}
+
+fn model_arg(v: &Bound<'_, PyAny>) -> PyResult<GravModel> {
+    v.extract::<GravModel>()
+        .map_err(|e| arg_error("gravity model", v, &e.into()))
+}
+fn degree_arg(v: &Bound<'_, PyAny>) -> PyResult<usize> {
+    v.extract::<usize>().map_err(|e| arg_error("degree", v, &e))
+}
+fn order_arg(v: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
+    v.extract::<Option<usize>>()
+        .map_err(|e| arg_error("order", v, &e))
+}
 
 /// Check the arguments shared by `gravity` and `gravity_and_partials`
 /// (loading the model's coefficients) and read the ITRF position, an
@@ -100,7 +112,6 @@ fn gravity_args(
     module = "satkit",
     eq,
     eq_int,
-    hash,
     frozen,
     from_py_object
 )]

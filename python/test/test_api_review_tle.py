@@ -431,7 +431,7 @@ class TestExceptionTypes:
                 sk.sgp4(bad, t)  # type: ignore[call-overload]
         with pytest.raises(TypeError, match="element 1 of the list"):
             sk.sgp4([tle, 3], t)  # type: ignore[list-item]
-        for bad in ("2021-09-22", 3.0, None, (t,)):
+        for bad in ("2021-09-22", 3.0, None):
             with pytest.raises(TypeError):
                 sk.sgp4(tle, bad)  # type: ignore[call-overload]
             with pytest.raises(TypeError):

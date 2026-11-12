@@ -178,8 +178,8 @@ class TestKepler:
         # Parallel r and v: zero angular momentum
         with pytest.raises(ValueError, match="angular momentum"):
             sk.kepler.from_pv(r, np.array([1000.0, 0.0, 0.0]))
-        # Malformed input is still a RuntimeError (shape, not physics)
-        with pytest.raises(RuntimeError):
+        # Malformed input (wrong shape) is a ValueError too
+        with pytest.raises(ValueError, match="3-element"):
             sk.kepler.from_pv(np.zeros(4), np.zeros(3))
 
     def test_kepler_argp_and_deprecated_w(self):

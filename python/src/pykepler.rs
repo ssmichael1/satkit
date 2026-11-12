@@ -6,7 +6,7 @@ use pyo3::types::PyTuple;
 use satkit::kepler::{Anomaly, Kepler};
 
 use crate::pyduration::PyDuration;
-use crate::pyutils::py_to_smatrix;
+use crate::pyutils::to_vector3;
 
 ///
 /// Representation of Keplerian orbital elements
@@ -258,8 +258,8 @@ impl PyKepler {
     #[staticmethod]
     #[pyo3(signature = (pos, vel, *, mu=None))]
     fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>, mu: Option<f64>) -> PyResult<Self> {
-        let pos = py_to_smatrix(pos)?;
-        let vel = py_to_smatrix(vel)?;
+        let pos = to_vector3(pos, "pos")?;
+        let vel = to_vector3(vel, "vel")?;
         let mu = mu.unwrap_or(satkit::consts::MU_EARTH);
         if !(mu.is_finite() && mu > 0.0) {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(

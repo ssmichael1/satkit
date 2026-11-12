@@ -31,7 +31,6 @@ use pyo3::IntoPyObjectExt;
     module = "satkit",
     eq,
     eq_int,
-    hash,
     frozen,
     from_py_object
 )]
@@ -103,7 +102,6 @@ impl From<Integrator> for PyIntegrator {
     module = "satkit",
     eq,
     eq_int,
-    hash,
     frozen,
     from_py_object
 )]

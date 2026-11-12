@@ -27,3 +27,5 @@ API reference for the SGP4 analytic propagator and its inputs. For background, s
 ::: satkit.omm_from_text
 
 ::: satkit.OMMDict
+
+::: satkit.TLEFitResult

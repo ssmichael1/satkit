@@ -12,7 +12,7 @@ use satkit::SolarSystem as SS;
 ///   * Members compare equal to their integer value (``int(solarsystem.Sun)``
 ///     is 10), the body's index in the JPL DE files
 #[derive(PartialEq, Eq, Hash)]
-#[pyclass(name = "solarsystem", module = "satkit", eq, eq_int, hash, frozen)]
+#[pyclass(name = "solarsystem", module = "satkit", eq, eq_int, frozen)]
 pub enum SolarSystem {
     Mercury = SS::Mercury as isize,
     Venus = SS::Venus as isize,

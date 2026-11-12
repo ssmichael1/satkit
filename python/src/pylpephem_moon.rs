@@ -19,7 +19,7 @@ fn moon_err(e: moon::Error) -> PyErr {
 ///
 /// Each value covers a range of the moon phase angle (see :func:`phase`),
 /// given here in degrees.
-#[pyclass(name = "moonphase", module = "satkit.moon", eq, eq_int, hash, frozen)]
+#[pyclass(name = "moonphase", module = "satkit.moon", eq, eq_int, frozen)]
 pub enum MoonPhase {
     NewMoon = moon::MoonPhase::NewMoon as isize,
     WaxingCrescent = moon::MoonPhase::WaxingCrescent as isize,

@@ -40,7 +40,6 @@ use numpy::PyArrayMethods;
     module = "satkit",
     eq,
     eq_int,
-    hash,
     frozen,
     immutable_type,
     from_py_object
@@ -88,7 +87,6 @@ crate::enum_pickle!(PyTimeScale, "timescale");
     module = "satkit",
     eq,
     eq_int,
-    hash,
     frozen,
     immutable_type,
     from_py_object
