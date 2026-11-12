@@ -67,6 +67,13 @@ impl PyPropStats {
     self.num_eval, self.num_accept, self.num_reject)
     }
 
+    fn __repr__(&self) -> String {
+        format!(
+            "propstats(num_eval={}, num_accept={}, num_reject={})",
+            self.num_eval, self.num_accept, self.num_reject
+        )
+    }
+
     /// Rebuild the statistics from their three counts. Used internally by
     /// `__reduce__`; not part of the public API.
     #[staticmethod]
@@ -269,6 +276,27 @@ impl PyPropResult {
             PyPropResultType::R1(r) => to_string::<1>(r),
             PyPropResultType::R7(r) => to_string::<7>(r),
         }
+    }
+
+    fn __repr__(&self) -> String {
+        let s = self.end6();
+        format!(
+            "propresult(time_begin={}, time_end={}, pos=[{:?}, {:?}, {:?}], \
+             vel=[{:?}, {:?}, {:?}], phi={}, can_interp={})",
+            each!(&self.0, r => r.time_begin),
+            each!(&self.0, r => r.time_end),
+            s[0],
+            s[1],
+            s[2],
+            s[3],
+            s[4],
+            s[5],
+            match self.0 {
+                PyPropResultType::R1(_) => "None",
+                PyPropResultType::R7(_) => "6x6",
+            },
+            if self.can_interp() { "True" } else { "False" },
+        )
     }
 
     /// Whether ``interp`` works on this result: True when the propagation

@@ -1,7 +1,8 @@
 use pyo3::prelude::*;
 
 use crate::pygravity::GravModel;
-use crate::{PyDuration, PyInstant};
+use crate::pyinstant::TimeArg;
+use crate::PyDuration;
 use satkit::orbitprop::{Integrator, PropSettings, TideModel};
 
 use pyo3::types::{PyBytes, PyDelta, PyDeltaAccess, PyDict, PyTuple};
@@ -25,8 +26,16 @@ use pyo3::IntoPyObjectExt;
 ///   magnitude is used). Dense output (quintic Hermite); no state transition
 ///   matrix; the span must cover at least 8 steps
 #[allow(non_camel_case_types)]
-#[pyclass(name = "integrator", module = "satkit", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+#[pyclass(
+    name = "integrator",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PyIntegrator {
     /// Verner 9(8) with 8th-degree dense output, 21 stages (16 + 5 for the interpolant; default)
     rkv98 = 0,
@@ -89,8 +98,16 @@ impl From<Integrator> for PyIntegrator {
 /// * ``solid_full``: Step 1 plus the frequency-dependent Step 2 corrections.
 ///   Step 2 is not yet implemented; currently behaves as ``solid_step1``
 #[allow(non_camel_case_types)]
-#[pyclass(name = "tidemodel", module = "satkit", eq, eq_int, from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+#[pyclass(
+    name = "tidemodel",
+    module = "satkit",
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PyTideModel {
     /// No solid Earth tide correction.
     none = 0,
@@ -507,6 +524,28 @@ impl PyPropSettings {
         self.__str__()
     }
 
+    /// Equal when every setting is equal. The table stored by
+    /// `precompute_terms` is a cache and is not compared.
+    fn __eq__(&self, other: &Self) -> bool {
+        let (a, b) = (&self.0, &other.0);
+        a.gravity_degree == b.gravity_degree
+            && a.gravity_order == b.gravity_order
+            && a.gravity_model == b.gravity_model
+            && a.abs_error == b.abs_error
+            && a.rel_error == b.rel_error
+            && a.use_spaceweather == b.use_spaceweather
+            && a.use_sun_gravity == b.use_sun_gravity
+            && a.use_moon_gravity == b.use_moon_gravity
+            && a.tide_model == b.tide_model
+            && a.use_relativistic_correction == b.use_relativistic_correction
+            && a.enable_interp == b.enable_interp
+            && a.integrator == b.integrator
+            && a.gj_step_seconds == b.gj_step_seconds
+            && a.max_steps == b.max_steps
+            && a.require_eop_coverage == b.require_eop_coverage
+            && a.initial_step_secs == b.initial_step_secs
+    }
+
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
         (PyTuple::empty(py), PyDict::new(py))
     }
@@ -566,8 +605,8 @@ impl PyPropSettings {
     #[pyo3(signature=(begin, end, step=None))]
     fn precompute_terms(
         &mut self,
-        begin: &PyInstant,
-        end: &PyInstant,
+        begin: TimeArg,
+        end: TimeArg,
         step: Option<Bound<'_, PyAny>>,
     ) -> PyResult<()> {
         let step_secs: Option<f64> = match step {

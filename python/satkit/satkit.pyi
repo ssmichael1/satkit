@@ -3475,9 +3475,9 @@ class satstate:
     def __init__(
         self,
         time: TimeScalar,
-        pos: npt.NDArray[np.float64],
-        vel: npt.NDArray[np.float64],
-        cov: npt.NDArray[np.float64] | None = None,
+        pos: npt.ArrayLike,
+        vel: npt.ArrayLike,
+        cov: npt.ArrayLike | None = None,
     ):
         """Create a new satellite state
 
@@ -3582,7 +3582,7 @@ class satstate:
         ...
 
     @cov.setter
-    def cov(self, value: npt.NDArray[np.float64] | None) -> None: ...
+    def cov(self, value: npt.ArrayLike | None) -> None: ...
 
     @property
     def time(self) -> _Time:
@@ -3591,7 +3591,7 @@ class satstate:
 
     def set_pos_uncertainty(
         self,
-        sigma: npt.NDArray[np.float64],
+        sigma: npt.ArrayLike,
         frame: frame,
     ) -> None:
         """Set 1-sigma position uncertainty in a satellite-local or inertial frame.
@@ -3634,7 +3634,7 @@ class satstate:
 
     def set_vel_uncertainty(
         self,
-        sigma: npt.NDArray[np.float64],
+        sigma: npt.ArrayLike,
         frame: frame,
     ) -> None:
         """Set 1-sigma velocity uncertainty in a satellite-local or inertial frame.
@@ -3865,6 +3865,12 @@ class propstats:
         """Number of steps the adaptive step-size control rejected and retried
         (always 0 for the fixed-step ``integrator.gauss_jackson8``)"""
         ...
+
+    def __repr__(self) -> str:
+        """One line: ``propstats(num_eval=48, num_accept=3, num_reject=0)``"""
+        ...
+
+    def __str__(self) -> str: ...
 
 @final
 class propresult:
@@ -4123,6 +4129,14 @@ class propresult:
         """
         ...
 
+    def __repr__(self) -> str:
+        """One line with the begin and end times, the end position (m) and
+        velocity (m/s), whether there is a state transition matrix, and
+        ``can_interp``; ``str()`` gives the multi-line summary"""
+        ...
+
+    def __str__(self) -> str: ...
+
 @final
 class thrust:
     """Continuous thrust acceleration for orbit maneuvers
@@ -4157,8 +4171,8 @@ class thrust:
     @staticmethod
     def constant(
         accel: npt.ArrayLike,
-        start: time,
-        end: time,
+        start: TimeScalar,
+        end: TimeScalar,
         frame: frame,
     ) -> thrust:
         """Create a constant thrust acceleration
@@ -4207,6 +4221,13 @@ class thrust:
     def end(self) -> time:
         """End time of thrust arc (the thrust is still on at this instant)"""
         ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal when acceleration, frame, start and end are all equal"""
+        ...
+
+    def __hash__(self) -> int: ...
+    def __repr__(self) -> str: ...
 
 @final
 class ecomparams:
@@ -4499,6 +4520,18 @@ class satproperties:
 
     @ecom.setter
     def ecom(self, value: ecomparams | None) -> None: ...
+    def __eq__(self, other: object) -> bool:
+        """Equal when ``cdaoverm``, ``craoverm``, the thrust arcs (in order) and
+        ``ecom`` are all equal. Being mutable and comparable by value, the
+        object is not hashable."""
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+    def __repr__(self) -> str:
+        """One line: ``satproperties(cdaoverm=..., craoverm=..., thrusts=[...], ecom=...)``"""
+        ...
+
+    def __str__(self) -> str: ...
 
 @final
 class integrator:
@@ -4590,6 +4623,16 @@ class integrator:
     segment between them covers 8 steps.
     """
 
+    def __int__(self) -> int:
+        """The member's integer value (``rkv98`` is 0, ... ``gauss_jackson8`` is 6)"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, and to its integer value"""
+        ...
+
+    def __hash__(self) -> int: ...
+
 @final
 class tidemodel:
     """Solid Earth tide model fidelity for high-precision orbit propagation.
@@ -4623,6 +4666,16 @@ class tidemodel:
     """IERS 2010 Step 1 + Step 2 (frequency-dependent corrections).
     Step 2 is not yet implemented; currently behaves as
     ``solid_step1``."""
+
+    def __int__(self) -> int:
+        """The member's integer value (``none`` is 0, ``solid_step1`` 1, ``solid_full`` 2)"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, and to its integer value"""
+        ...
+
+    def __hash__(self) -> int: ...
 
 @final
 class propsettings:
@@ -4979,8 +5032,18 @@ class propsettings:
 
     @max_steps.setter
     def max_steps(self, value: int) -> None: ...
+    def __eq__(self, other: object) -> bool:
+        """Equal when every setting is equal (the table stored by
+        ``precompute_terms`` is a cache and is not compared). Being mutable and
+        comparable by value, the object is not hashable."""
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
     def precompute_terms(
-        self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None
+        self,
+        begin: TimeScalar,
+        end: TimeScalar,
+        step: Optional[Union[duration, float, datetime.timedelta]] = None,
     ) -> None:
         """Tabulate the time-only terms of the force model once, for propagating many satellites over the same span
 
@@ -5065,8 +5128,8 @@ def lambert(
 
 def propagate(
     state: npt.ArrayLike | None = None,
-    begin: time | None = None,
-    end: time | None = None,
+    begin: TimeScalar | None = None,
+    end: TimeScalar | None = None,
     *,
     pos: npt.ArrayLike | None = None,
     vel: npt.ArrayLike | None = None,

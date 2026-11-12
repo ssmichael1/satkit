@@ -3,6 +3,7 @@
 ``ecomparams`` and ``satproperties``."""
 
 import copy
+import datetime
 import pickle
 
 import numpy as np
@@ -344,3 +345,196 @@ class TestPropResultConstruction:
                 np.testing.assert_array_equal(dup.phi, r.phi)
             else:
                 assert dup.phi is None
+
+
+# --- additions ---------------------------------------------------------------
+
+DT = datetime.datetime(2024, 1, 1, 12, tzinfo=datetime.timezone.utc)
+D64 = np.datetime64("2024-01-01T12:00:00")
+
+
+class TestEnums:
+    @pytest.mark.parametrize("enum", [sk.integrator, sk.tidemodel])
+    def test_module_hash_int_eq(self, enum):
+        assert enum.__module__ == "satkit"
+        members = [getattr(enum, n) for n in dir(enum) if not n.startswith("_")]
+        assert len(members) >= 3
+        assert len({m: None for m in members}) == len(members)
+        for m in members:
+            assert hash(m) == hash(m)
+            assert m == int(m) and m == m
+            assert pickle.loads(pickle.dumps(m)) == m
+
+    def test_usable_as_dict_key(self):
+        cost = {sk.integrator.rkv98: 21, sk.integrator.rkts54: 7}
+        assert cost[sk.propsettings().integrator] == 21
+        assert sk.tidemodel.none in {sk.tidemodel.none, sk.tidemodel.solid_step1}
+
+
+class TestTimeInputs:
+    """``datetime`` and ``numpy.datetime64`` wherever a ``satkit.time`` is taken"""
+
+    @pytest.mark.parametrize("t", [DT, D64], ids=["datetime", "datetime64"])
+    def test_propagate_begin_end(self, t):
+        ref = sk.propagate(STATE, T0, T0 + secs(600)).state
+        np.testing.assert_array_equal(sk.propagate(STATE, t, duration_secs=600).state, ref)
+        end = t + (datetime.timedelta(seconds=600) if t is DT else np.timedelta64(600, "s"))
+        np.testing.assert_array_equal(sk.propagate(STATE, T0, end).state, ref)
+        np.testing.assert_array_equal(sk.propagate(STATE, begin=t, end=end).state, ref)
+
+    @pytest.mark.parametrize("t", [DT, D64], ids=["datetime", "datetime64"])
+    def test_thrust_constant(self, t):
+        th = sk.thrust.constant([1e-4, 0, 0], t, T0 + secs(60), sk.frame.NTW)
+        assert th.start == T0 and isinstance(th.start, sk.time)
+        th = sk.thrust.constant([1e-4, 0, 0], T0 - secs(60), t, sk.frame.NTW)
+        assert th.end == T0
+
+    @pytest.mark.parametrize("t", [DT, D64], ids=["datetime", "datetime64"])
+    def test_precompute_terms(self, t):
+        ps = sk.propsettings()
+        assert ps.precompute_terms(t, T0 + secs(3600)) is None
+        assert "No Precomputed" not in str(ps)
+        ps.precompute_terms(T0 - secs(3600), t, 30.0)
+        ref = sk.propagate(STATE, T0 - secs(3600), duration_secs=1800)
+        got = sk.propagate(STATE, T0 - secs(3600), duration_secs=1800, propsettings=ps)
+        np.testing.assert_allclose(got.pos, ref.pos, atol=1e-3)
+
+
+class TestArrayLikeInputs:
+    def test_satstate_constructor(self):
+        ref = sk.satstate(T0, POS, VEL)
+        for pos, vel in (
+            (list(POS), list(VEL)),
+            (tuple(POS), tuple(VEL)),
+            ([7000000, 0, 0], np.array([0, 7500, 0])),  # ints
+            (POS.astype(np.float32), VEL.astype(np.float32)),
+        ):
+            s = sk.satstate(T0, pos, vel)
+            np.testing.assert_array_equal(s.pos, ref.pos)
+            np.testing.assert_array_equal(s.vel, ref.vel)
+
+    def test_satstate_cov_as_nested_list(self):
+        cov = sym_cov()
+        s = sk.satstate(T0, list(POS), list(VEL), cov.tolist())
+        np.testing.assert_array_equal(s.cov, cov)
+        s.cov = tuple(map(tuple, cov))
+        np.testing.assert_array_equal(s.cov, cov)
+
+    def test_uncertainty(self):
+        ref = sk.satstate(T0, POS, VEL)
+        ref.set_pos_uncertainty(np.array([10.0, 200.0, 30.0]), sk.frame.RTN)
+        ref.set_vel_uncertainty(np.array([0.1, 0.2, 0.3]), sk.frame.NTW)
+        for conv in (list, tuple):
+            s = sk.satstate(T0, POS, VEL)
+            s.set_pos_uncertainty(conv([10, 200, 30]), sk.frame.RTN)
+            s.set_vel_uncertainty(conv([0.1, 0.2, 0.3]), frame=sk.frame.NTW)
+            np.testing.assert_array_equal(s.cov, ref.cov)
+
+    def test_wrong_type_is_type_error(self):
+        for bad in ("abc", [1j, 0, 0], None):
+            with pytest.raises(TypeError):
+                sk.satstate(T0, bad, VEL)
+        with pytest.raises(TypeError):
+            sk.satstate(T0, POS, VEL).set_pos_uncertainty("abc", sk.frame.RTN)
+
+
+class TestReprAndEq:
+    def test_propstats_repr(self):
+        st = sk.propagate(STATE, T0, duration_secs=600).stats
+        assert repr(st) == (
+            f"propstats(num_eval={st.num_eval}, num_accept={st.num_accept}, "
+            f"num_reject={st.num_reject})"
+        )
+        assert "\n" in str(st)
+
+    def test_propresult_repr(self):
+        r = sk.propagate(STATE, T0, duration_secs=600)
+        rep = repr(r)
+        assert rep.startswith("propresult(time_begin=2024-01-01T12:00:00") and "\n" not in rep
+        assert "phi=None" in rep and "can_interp=True" in rep
+        r7 = sk.propagate(STATE, T0, duration_secs=0, output_phi=True)
+        assert "phi=6x6" in repr(r7) and "can_interp=False" in repr(r7)
+        assert "pos=[7000000.0, 0.0, 0.0], vel=[0.0, 7500.0, 0.0]" in repr(r7)
+        assert str(r).startswith("Propagation Results")
+
+    def test_satproperties_repr(self):
+        assert repr(sk.satproperties()) == (
+            "satproperties(cdaoverm=0.0, craoverm=0.0, thrusts=[], ecom=None)"
+        )
+        th = sk.thrust.constant([1e-4, 0, 0], T0, T0 + secs(60), sk.frame.NTW)
+        p = sk.satproperties(cdaoverm=0.01, thrusts=[th], ecom=sk.ecomparams(d0=-1e-7))
+        rep = repr(p)
+        assert "cdaoverm=0.01" in rep and repr(th) in rep and "ecomparams(d0=" in rep
+        assert "\n" not in rep and "\n" in str(p)
+
+    def test_thrust_eq_and_hash(self):
+        def mk(a=1e-4, f=sk.frame.NTW, t1=60):
+            return sk.thrust.constant([a, 0, 0], T0, T0 + secs(t1), f)
+
+        assert mk() == mk() and hash(mk()) == hash(mk())
+        assert mk() != mk(a=2e-4) and mk() != mk(f=sk.frame.RTN) and mk() != mk(t1=61)
+        assert mk() != "thrust" and mk() != None  # noqa: E711
+        assert len({mk(), mk(), mk(a=2e-4)}) == 2
+        assert pickle.loads(pickle.dumps(mk())) == mk()
+        zero = sk.thrust.constant([0.0, 0, 0], T0, T0, sk.frame.GCRF)
+        negzero = sk.thrust.constant([-0.0, 0, 0], T0, T0, sk.frame.GCRF)
+        assert zero == negzero and hash(zero) == hash(negzero)
+
+    def test_satproperties_eq(self):
+        th = sk.thrust.constant([1e-4, 0, 0], T0, T0 + secs(60), sk.frame.NTW)
+        th2 = sk.thrust.constant([2e-4, 0, 0], T0, T0 + secs(60), sk.frame.NTW)
+
+        def mk(**kw):
+            base = dict(cdaoverm=0.01, craoverm=0.02, thrusts=[th], ecom=sk.ecomparams(d0=-1e-7))
+            base.update(kw)
+            return sk.satproperties(**base)
+
+        assert mk() == mk()
+        assert sk.satproperties() == sk.satproperties()
+        for kw in (
+            {"cdaoverm": 0.02},
+            {"craoverm": 0.0},
+            {"thrusts": []},
+            {"thrusts": [th2]},
+            {"thrusts": [th, th]},
+            {"ecom": None},
+            {"ecom": sk.ecomparams(d0=-2e-7)},
+        ):
+            assert mk() != mk(**kw), kw
+        assert mk() != 3
+        assert pickle.loads(pickle.dumps(mk())) == mk()
+        with pytest.raises(TypeError, match="unhashable"):
+            hash(mk())
+
+    def test_propsettings_eq(self):
+        assert sk.propsettings() == sk.propsettings()
+        assert sk.propsettings() == sk.propsettings(gravity_order=4)
+        for kw in (
+            {"abs_error": 1e-9},
+            {"rel_error": 1e-9},
+            {"gravity_degree": 8},
+            {"gravity_degree": 8, "gravity_order": 4},
+            {"gravity_model": sk.gravmodel.jgm3},
+            {"use_spaceweather": False},
+            {"use_sun_gravity": False},
+            {"use_moon_gravity": False},
+            {"tide_model": sk.tidemodel.none},
+            {"use_relativistic_correction": False},
+            {"enable_interp": False},
+            {"integrator": sk.integrator.rkv87},
+            {"gj_step_seconds": 30.0},
+            {"max_steps": 10},
+            {"require_eop_coverage": True},
+            {"initial_step_secs": 10.0},
+        ):
+            assert sk.propsettings() != sk.propsettings(**kw), kw
+            assert sk.propsettings(**kw) == sk.propsettings(**kw), kw
+        ps = sk.propsettings()
+        assert pickle.loads(pickle.dumps(ps)) == ps and copy.deepcopy(ps) == ps
+        # the precomputed table is a cache, not a setting
+        pre = sk.propsettings()
+        pre.precompute_terms(T0, T0 + secs(600))
+        assert pre == ps
+        assert ps != "propsettings"
+        with pytest.raises(TypeError, match="unhashable"):
+            hash(ps)

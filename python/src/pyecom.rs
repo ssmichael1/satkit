@@ -377,7 +377,7 @@ impl PyEcomParams {
         self.0 == other.0
     }
 
-    fn __repr__(&self) -> String {
+    pub fn __repr__(&self) -> String {
         let mut parts: Vec<String> = FIELDS
             .iter()
             .zip(self.values())

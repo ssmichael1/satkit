@@ -1,5 +1,5 @@
 use crate::pyduration::PyDuration;
-use crate::pyinstant::PyInstant;
+use crate::pyinstant::TimeArg;
 use crate::pypropresult::{PyPropResult, PyPropResultType};
 use crate::pypropsettings::PyPropSettings;
 use crate::pysatproperties::{satproperties_arg, PySatProperties};
@@ -16,10 +16,10 @@ use pyo3::prelude::*;
 
 use anyhow::Result;
 
-crate::arg_extractor!(begin_arg: Option<PyInstant>, |e| {
+crate::arg_extractor!(begin_arg: Option<TimeArg>, |e| {
     pyo3::exceptions::PyValueError::new_err(format!("Invalid begin time: {e}"))
 });
-crate::arg_extractor!(end_arg: Option<PyInstant>, |e| {
+crate::arg_extractor!(end_arg: Option<TimeArg>, |e| {
     pyo3::exceptions::PyValueError::new_err(format!("Invalid end time: {e}"))
 });
 crate::arg_extractor!(duration_arg: Option<PyDuration>, |e| {
@@ -119,8 +119,8 @@ crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |_| invalid_valu
 pub fn propagate(
     py: Python,
     state: Option<&Bound<'_, PyAny>>,
-    #[pyo3(from_py_with = begin_arg)] begin: Option<PyInstant>,
-    #[pyo3(from_py_with = end_arg)] end: Option<PyInstant>,
+    #[pyo3(from_py_with = begin_arg)] begin: Option<TimeArg>,
+    #[pyo3(from_py_with = end_arg)] end: Option<TimeArg>,
     pos: Option<&Bound<'_, PyAny>>,
     vel: Option<&Bound<'_, PyAny>>,
     #[pyo3(from_py_with = duration_arg)] duration: Option<PyDuration>,
@@ -147,7 +147,7 @@ pub fn propagate(
         )
         .into());
     }
-    let Some(PyInstant(begintime)) = begin else {
+    let Some(TimeArg(begintime)) = begin else {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "propagate() missing required argument 'begin'",
         )

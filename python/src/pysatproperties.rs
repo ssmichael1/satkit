@@ -311,4 +311,38 @@ impl PySatProperties {
     fn __str__(&self) -> String {
         self.0.to_string()
     }
+
+    fn __repr__(&self) -> String {
+        let thrusts: Vec<String> = self
+            .0
+            .thrust
+            .thrusts
+            .iter()
+            .map(|t| PyThrust(t.clone()).__repr__())
+            .collect();
+        format!(
+            "satproperties(cdaoverm={:?}, craoverm={:?}, thrusts=[{}], ecom={})",
+            self.0.cdaoverm,
+            self.0.craoverm,
+            thrusts.join(", "),
+            self.0
+                .ecom
+                .map_or_else(|| "None".to_string(), |e| PyEcomParams(e).__repr__()),
+        )
+    }
+
+    /// Equal when the drag and radiation-pressure coefficients, the thrust
+    /// arcs (in order) and the ECOM coefficients are all equal
+    fn __eq__(&self, other: &Self) -> bool {
+        let (a, b) = (&self.0, &other.0);
+        a.cdaoverm == b.cdaoverm
+            && a.craoverm == b.craoverm
+            && a.ecom == b.ecom
+            && a.thrust.thrusts.len() == b.thrust.thrusts.len()
+            && a.thrust
+                .thrusts
+                .iter()
+                .zip(&b.thrust.thrusts)
+                .all(|(x, y)| crate::pythrust::thrust_eq(x, y))
+    }
 }

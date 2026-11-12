@@ -7,7 +7,6 @@ use crate::pyutils::{slice2py1d, slice2py2d};
 use crate::PyDuration;
 
 use numpy as np;
-use numpy::PyArrayMethods;
 use numpy::PyUntypedArrayMethods;
 
 use pyo3::prelude::*;
@@ -20,25 +19,31 @@ use satkit::{Frame, Instant};
 
 use anyhow::{bail, Result};
 
-/// A 3-element 1-sigma uncertainty from a 1-D numpy array; `what` names it
-/// in the error message
-fn sigma3(sigma: &Bound<'_, np::PyArray1<f64>>, what: &str) -> Result<Vector3> {
-    if sigma.len() != 3 {
-        bail!("{what} uncertainty must be 1-d numpy array with length 3");
-    }
-    let s = sigma.readonly();
-    let s = s.as_array();
-    Ok(Vector3::from_slice(&[s[0], s[1], s[2]]))
+/// A 3-vector from any real numeric array-like (numpy array of any numeric
+/// dtype, list, tuple); `what` names it in the error message. A wrong length
+/// is still the `RuntimeError` it was when only float64 arrays were accepted.
+fn vec3(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vector3> {
+    crate::pyutils::to_vector3(obj, what).map_err(|e| {
+        if e.is_instance_of::<pyo3::exceptions::PyValueError>(obj.py()) {
+            pyo3::exceptions::PyRuntimeError::new_err(e.value(obj.py()).to_string())
+        } else {
+            e
+        }
+    })
 }
 
-/// A 6x6 state covariance from a numpy array (element by element, so
-/// non-contiguous input such as Fortran-order arrays and views works)
-fn cov6(cov: &Bound<'_, np::PyArray2<f64>>) -> Result<Matrix6> {
-    let dims = cov.dims();
-    if dims[0] != 6 || dims[1] != 6 {
-        bail!("Covariance must be 6x6 numpy array");
+/// A 6x6 state covariance from any real numeric array-like (element by
+/// element, so non-contiguous input such as Fortran-order arrays and views
+/// works)
+fn cov6(cov: &Bound<'_, PyAny>) -> Result<Matrix6> {
+    let arr = crate::pyutils::to_f64_ndarray(cov)?;
+    if arr.shape() != [6, 6] {
+        bail!(
+            "Covariance must be a 6x6 matrix, got shape {:?}",
+            arr.shape()
+        );
     }
-    let m = crate::pyutils::py_to_smatrix::<6, 6>(cov.as_any())?;
+    let m = crate::pyutils::py_to_smatrix::<6, 6>(arr.as_any())?;
     check_symmetric(&m)?;
     Ok(m)
 }
@@ -101,27 +106,12 @@ impl PySatState {
     #[pyo3(signature=(time, pos, vel, cov=None))]
     fn py_new(
         time: TimeArg,
-        pos: &Bound<'_, np::PyArray1<f64>>,
-        vel: &Bound<'_, np::PyArray1<f64>>,
-        cov: Option<&Bound<'_, np::PyArray2<f64>>>,
+        pos: &Bound<'_, PyAny>,
+        vel: &Bound<'_, PyAny>,
+        cov: Option<&Bound<'_, PyAny>>,
     ) -> Result<Self> {
-        if pos.len() != 3 || vel.len() != 3 {
-            bail!("Position and velocity must be 1-d numpy arrays with length 3");
-        }
-
-        let mut state = SatState::from_pv(
-            &time.0,
-            &numeris::vector![
-                pos.get_owned(0).unwrap(),
-                pos.get_owned(1).unwrap(),
-                pos.get_owned(2).unwrap(),
-            ],
-            &numeris::vector![
-                vel.get_owned(0).unwrap(),
-                vel.get_owned(1).unwrap(),
-                vel.get_owned(2).unwrap(),
-            ],
-        );
+        let mut state =
+            SatState::from_pv(&time.0, &vec3(pos, "position")?, &vec3(vel, "velocity")?);
 
         if let Some(cov) = cov {
             state.set_cov(StateCov::PVCov(cov6(cov)?));
@@ -168,12 +158,8 @@ impl PySatState {
     ///     ValueError: if sigma does not have 3 elements, or the frame is
     ///         not one of the supported orbital / inertial frames above.
     ///     TypeError: if sigma is not a real numeric array-like
-    fn set_pos_uncertainty(
-        &mut self,
-        sigma: &Bound<'_, np::PyArray1<f64>>,
-        frame: PyFrame,
-    ) -> Result<()> {
-        let sigma = sigma3(sigma, "Position")?;
+    fn set_pos_uncertainty(&mut self, sigma: &Bound<'_, PyAny>, frame: PyFrame) -> Result<()> {
+        let sigma = vec3(sigma, "position uncertainty")?;
         self.0.set_pos_uncertainty(&sigma, frame.into())?;
         Ok(())
     }
@@ -196,12 +182,8 @@ impl PySatState {
     ///     ValueError: if sigma does not have 3 elements, or the frame is
     ///         not one of the supported orbital / inertial frames above.
     ///     TypeError: if sigma is not a real numeric array-like
-    fn set_vel_uncertainty(
-        &mut self,
-        sigma: &Bound<'_, np::PyArray1<f64>>,
-        frame: PyFrame,
-    ) -> Result<()> {
-        let sigma = sigma3(sigma, "Velocity")?;
+    fn set_vel_uncertainty(&mut self, sigma: &Bound<'_, PyAny>, frame: PyFrame) -> Result<()> {
+        let sigma = vec3(sigma, "velocity uncertainty")?;
         self.0.set_vel_uncertainty(&sigma, frame.into())?;
         Ok(())
     }
@@ -216,7 +198,7 @@ impl PySatState {
     ///     ValueError: if cov is not 6x6, or is not symmetric
     ///     TypeError: if cov is not a real numeric array-like or None
     #[setter]
-    fn set_cov(&mut self, cov: Option<&Bound<'_, np::PyArray2<f64>>>) -> Result<()> {
+    fn set_cov(&mut self, cov: Option<&Bound<'_, PyAny>>) -> Result<()> {
         self.0.cov = match cov {
             Some(cov) => StateCov::PVCov(cov6(cov)?),
             None => StateCov::None,

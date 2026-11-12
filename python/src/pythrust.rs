@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 use crate::pyframes::PyFrame;
-use crate::pyinstant::PyInstant;
+use crate::pyinstant::{PyInstant, TimeArg};
 use crate::pyutils::py_to_smatrix;
 
 use satkit::mathtypes::*;
@@ -50,8 +50,8 @@ impl PyThrust {
     #[staticmethod]
     fn constant(
         accel: &Bound<PyAny>,
-        start: PyInstant,
-        end: PyInstant,
+        start: TimeArg,
+        end: TimeArg,
         frame: PyFrame,
     ) -> Result<Self> {
         let accel_vec: Vector3 = py_to_smatrix(accel)?;
@@ -114,7 +114,7 @@ impl PyThrust {
         PyInstant(self.0.end)
     }
 
-    fn __repr__(&self) -> String {
+    pub fn __repr__(&self) -> String {
         format!(
             "thrust(accel=[{:.6e}, {:.6e}, {:.6e}], frame={}, start={}, end={})",
             self.0.accel[0],
@@ -124,6 +124,27 @@ impl PyThrust {
             self.0.start,
             self.0.end,
         )
+    }
+
+    /// Equal when acceleration, frame, start and end are all equal
+    fn __eq__(&self, other: &Self) -> bool {
+        thrust_eq(&self.0, &other.0)
+    }
+
+    /// A thrust is immutable, so it stays hashable alongside `__eq__`
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for a in self.0.accel.as_slice() {
+            // +0.0 and -0.0 compare equal, so they must hash alike
+            (if *a == 0.0 { 0.0f64 } else { *a }).to_bits().hash(&mut h);
+        }
+        crate::pyutils::maneuver_frame_to_u8(self.0.frame)
+            .unwrap_or(u8::MAX)
+            .hash(&mut h);
+        self.0.start.raw.hash(&mut h);
+        self.0.end.raw.hash(&mut h);
+        h.finish()
     }
 
     /// Reconstruct a thrust arc from its pickled byte state. Used internally by
@@ -150,6 +171,14 @@ impl PyThrust {
         let args = (pyo3::types::PyBytes::new(py, &bytes),).into_py_any(py)?;
         Ok((ctor.into_py_any(py)?, args))
     }
+}
+
+/// Field-by-field equality of two thrust arcs
+pub fn thrust_eq(a: &ContinuousThrust, b: &ContinuousThrust) -> bool {
+    a.accel.as_slice() == b.accel.as_slice()
+        && a.frame == b.frame
+        && a.start == b.start
+        && a.end == b.end
 }
 
 /// Convert a Python list of PyThrust objects to a ThrustProfile
