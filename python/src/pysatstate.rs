@@ -38,7 +38,41 @@ fn cov6(cov: &Bound<'_, np::PyArray2<f64>>) -> Result<Matrix6> {
     if dims[0] != 6 || dims[1] != 6 {
         bail!("Covariance must be 6x6 numpy array");
     }
-    crate::pyutils::py_to_smatrix::<6, 6>(cov.as_any())
+    let m = crate::pyutils::py_to_smatrix::<6, 6>(cov.as_any())?;
+    check_symmetric(&m)?;
+    Ok(m)
+}
+
+/// A covariance is symmetric; refuse one that is not (or that holds a NaN),
+/// rather than store a matrix whose two triangles disagree. Round-off level
+/// asymmetry, as left by `Phi @ P @ Phi.T`, is accepted and stored as given.
+fn check_symmetric(m: &Matrix6) -> PyResult<()> {
+    for i in 0..6 {
+        for j in 0..i {
+            let (a, b) = (m[(i, j)], m[(j, i)]);
+            let tol =
+                1.0e-9 * a.abs().max(b.abs()) + 1.0e-12 * (m[(i, i)] * m[(j, j)]).abs().sqrt();
+            let diff = (a - b).abs();
+            if diff.is_nan() || diff > tol {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "covariance must be symmetric: element [{i}, {j}] = {a} but [{j}, {i}] = {b}"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Maneuvers are resolved in the satellite-local frames or GCRF only
+fn check_maneuver_frame(frame: Frame) -> PyResult<()> {
+    match frame {
+        Frame::GCRF | Frame::RTN | Frame::NTW | Frame::LVLH => Ok(()),
+        Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME | Frame::EME2000 | Frame::ICRF => {
+            Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unsupported frame for maneuver: {frame}. Must be GCRF, RTN (RIC), NTW, or LVLH"
+            )))
+        }
+    }
 }
 
 crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |e| {
@@ -182,10 +216,11 @@ impl PySatState {
     ///     ValueError: if cov is not 6x6, or is not symmetric
     ///     TypeError: if cov is not a real numeric array-like or None
     #[setter]
-    fn set_cov(&mut self, cov: &Bound<'_, np::PyArray2<f64>>) -> PyResult<()> {
-        let cov =
-            cov6(cov).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        self.0.cov = StateCov::PVCov(cov);
+    fn set_cov(&mut self, cov: Option<&Bound<'_, np::PyArray2<f64>>>) -> Result<()> {
+        self.0.cov = match cov {
+            Some(cov) => StateCov::PVCov(cov6(cov)?),
+            None => StateCov::None,
+        };
         Ok(())
     }
 
@@ -231,9 +266,10 @@ impl PySatState {
     fn get_cov(&self, py: Python) -> PyResult<Py<PyAny>> {
         match self.0.cov {
             StateCov::None => Ok(py.None()),
-            // The column-major storage read row-major, as before (the
-            // covariance is symmetric)
-            StateCov::PVCov(cov) => slice2py2d(py, cov.as_slice(), 6, 6),
+            // Storage is column-major and numpy reads the slice row-major,
+            // hence the transpose (without it the getter returned the
+            // transpose of what was set)
+            StateCov::PVCov(cov) => slice2py2d(py, cov.transpose().as_slice(), 6, 6),
         }
     }
 
@@ -302,6 +338,9 @@ impl PySatState {
     ) -> Result<()> {
         let dv: Vector3 = crate::pyutils::py_to_smatrix(delta_v)?;
         let rust_frame: Frame = frame.into();
+        // Refused here rather than by a later `propagate` (which only
+        // checked the maneuvers inside its span) or by `pickle.dumps`
+        check_maneuver_frame(rust_frame)?;
         self.0
             .add_maneuver(ImpulsiveManeuver::new(time.0, dv, rust_frame));
         Ok(())
@@ -358,6 +397,14 @@ impl PySatState {
     fn add_normal(&mut self, time: TimeArg, dv_mps: f64) {
         self.0
             .add_maneuver(ImpulsiveManeuver::normal(time.0, dv_mps));
+    }
+
+    /// Remove every scheduled maneuver from this state
+    ///
+    /// Returns:
+    ///     None
+    fn clear_maneuvers(&mut self) {
+        self.0.maneuvers.clear();
     }
 
     /// Number of impulsive maneuvers scheduled on this state

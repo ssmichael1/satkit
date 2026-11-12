@@ -5,6 +5,8 @@ to use instead of it. Mechanically, for a zero-argument member of a class:
 
 * it returns another instance of the same class  -> method (``inverse()``)
 * its name starts with ``as_`` / ``to_``          -> method (a conversion)
+* it returns ``None``                             -> method (it changes the
+  object: ``clear_maneuvers()``)
 * otherwise                                       -> property
 
 ``mypy.stubtest`` (run in CI) pins the runtime bindings to the stub, so
@@ -61,9 +63,16 @@ def test_stub_has_members():
 def test_property_vs_method(cls, name, is_property, ret):
     returns_self = ret == cls
     is_conversion = name.startswith(CONVERSION_PREFIXES)
-    should_be_method = returns_self or is_conversion
+    is_mutator = ret == "None"
+    should_be_method = returns_self or is_conversion or is_mutator
     if should_be_method:
-        why = "returns its own type" if returns_self else "is a conversion"
+        why = (
+            "returns its own type"
+            if returns_self
+            else "is a conversion"
+            if is_conversion
+            else "returns None (it changes the object)"
+        )
         assert not is_property, f"{cls}.{name} {why}, so it must be a method"
     else:
         assert is_property, (

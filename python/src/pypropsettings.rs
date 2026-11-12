@@ -152,7 +152,12 @@ impl From<TideModel> for PyTideModel {
 ///         Set to a previous result's ``next_step_secs`` to warm-start a follow-on arc.
 #[pyclass(name = "propsettings", module = "satkit", from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PyPropSettings(pub PropSettings);
+pub struct PyPropSettings(
+    pub PropSettings,
+    /// Whether `gravity_order` follows `gravity_degree`: true until an order
+    /// is given to the constructor or assigned
+    bool,
+);
 
 /// Reject degrees the evaluator cannot honour (it would otherwise silently
 /// evaluate at the maximum). Mirrors `PropSettings::set_gravity`.
@@ -223,6 +228,7 @@ impl PyPropSettings {
         require_eop_coverage: bool,
         initial_step_secs: Option<f64>,
     ) -> PyResult<Self> {
+        let order_follows_degree = gravity_order.is_none();
         let mut ps = PropSettings::default();
         ps.abs_error = abs_error;
         ps.rel_error = rel_error;
@@ -251,7 +257,7 @@ impl PyPropSettings {
         ps.max_steps = max_steps;
         ps.require_eop_coverage = require_eop_coverage;
         ps.initial_step_secs = initial_step_secs;
-        Ok(Self(ps))
+        Ok(Self(ps, order_follows_degree))
     }
 
     /// Maximum absolute error of any element in the propagated state, in the units
@@ -293,7 +299,10 @@ impl PyPropSettings {
     #[setter(gravity_degree)]
     fn set_gravity_degree(&mut self, val: u16) -> PyResult<()> {
         self.0.gravity_degree = check_gravity_degree(val)?;
-        if self.0.gravity_order > val {
+        // The order follows the degree until it is chosen explicitly (it
+        // used to stay at its old value, so `gravity_degree = 20` alone gave
+        // a 20x4 field); an explicit order is only lowered to stay valid
+        if self.1 || self.0.gravity_order > val {
             self.0.gravity_order = val;
         }
         Ok(())
@@ -317,6 +326,7 @@ impl PyPropSettings {
             ));
         }
         self.0.gravity_order = val;
+        self.1 = false;
         Ok(())
     }
 
@@ -504,12 +514,25 @@ impl PyPropSettings {
     fn __getstate__(&self, py: Python) -> PyResult<Py<PyAny>> {
         // The `precomputed` cache is intentionally skipped (see PropSettings);
         // a restored settings object recomputes it lazily.
+        // State: (serde bytes, order-follows-degree flag)
         let bytes = crate::pyutils::serde_pickle_to_vec(&self.0, "propsettings")?;
-        PyBytes::new(py, &bytes).into_py_any(py)
+        (PyBytes::new(py, &bytes), self.1).into_py_any(py)
     }
 
-    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        self.0 = crate::pyutils::serde_pickle_from_slice(state.as_bytes(py), "propsettings")?;
+    fn __setstate__(&mut self, state: &Bound<'_, PyAny>) -> PyResult<()> {
+        // satkit <= 0.24.3 pickled the bare bytes, with no flag: there the
+        // order follows the degree if the two are equal
+        let (bytes, follows): (Bound<'_, PyBytes>, Option<bool>) =
+            if let Ok(b) = state.cast::<PyBytes>() {
+                (b.clone(), None)
+            } else {
+                let (b, f): (Bound<'_, PyBytes>, bool) = state.extract().map_err(|_| {
+                    pyo3::exceptions::PyValueError::new_err("invalid propsettings pickle")
+                })?;
+                (b, Some(f))
+            };
+        self.0 = crate::pyutils::serde_pickle_from_slice(bytes.as_bytes(), "propsettings")?;
+        self.1 = follows.unwrap_or(self.0.gravity_order == self.0.gravity_degree);
         Ok(())
     }
 
@@ -586,6 +609,6 @@ impl From<&PyPropSettings> for PropSettings {
 
 impl From<&PropSettings> for PyPropSettings {
     fn from(item: &PropSettings) -> Self {
-        Self(item.clone())
+        Self(item.clone(), item.gravity_order == item.gravity_degree)
     }
 }

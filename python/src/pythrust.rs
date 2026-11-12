@@ -56,6 +56,21 @@ impl PyThrust {
     ) -> Result<Self> {
         let accel_vec: Vector3 = py_to_smatrix(accel)?;
         let rust_frame: Frame = frame.into();
+        if accel_vec.as_slice().iter().any(|a| !a.is_finite()) {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "thrust acceleration must be finite (no NaN or infinity)",
+            )
+            .into());
+        }
+        // An arc that ends before it starts is never active: almost
+        // certainly swapped arguments
+        if end.0 < start.0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "thrust end ({}) is before start ({})",
+                end.0, start.0
+            ))
+            .into());
+        }
         // Frame validation happens in ContinuousThrust::new.
         Ok(Self(ContinuousThrust::new(
             accel_vec, rust_frame, start.0, end.0,

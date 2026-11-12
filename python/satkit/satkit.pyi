@@ -3582,7 +3582,7 @@ class satstate:
         ...
 
     @cov.setter
-    def cov(self, value: npt.NDArray[np.float64]) -> None: ...
+    def cov(self, value: npt.NDArray[np.float64] | None) -> None: ...
 
     @property
     def time(self) -> _Time:
@@ -3762,6 +3762,19 @@ class satstate:
         """
         ...
 
+    def clear_maneuvers(self) -> None:
+        """Remove every scheduled maneuver from this state
+
+        Example:
+            ```python
+            sat = sk.satstate(sk.time(2024, 1, 1), np.array([6.781e6, 0, 0]), np.array([0, 7.5e3, 0]))
+            sat.add_prograde(sat.time + sk.duration(hours=1), 10.0)
+            sat.clear_maneuvers()
+            assert sat.num_maneuvers == 0
+            ```
+        """
+        ...
+
     @property
     def num_maneuvers(self) -> int:
         """Number of impulsive maneuvers scheduled on this state"""
@@ -3772,7 +3785,8 @@ class satstate:
         """The scheduled impulsive maneuvers, in the order they were added.
 
         A new list of new dicts on every access: changing it does not change
-        the state. Add maneuvers with the ``add_*`` methods.
+        the state. Add maneuvers with the ``add_*`` methods and remove them
+        with ``clear_maneuvers``.
 
         Returns:
             list[dict]: One dict per maneuver with keys ``"time"``

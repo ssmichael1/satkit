@@ -3,10 +3,9 @@ use pyo3::prelude::*;
 use crate::pyinstant::{PyInstant, ToTimeVec};
 use crate::pyutils::*;
 
-use pyo3::types::{PyBytes, PyDict, PyTuple};
+use pyo3::types::PyBytes;
 use pyo3::IntoPyObjectExt;
 
-use satkit::mathtypes::*;
 use satkit::orbitprop::PropagationResult;
 use satkit::Instant;
 
@@ -140,34 +139,13 @@ fn to_string<const T: usize>(r: &PropagationResult<T>) -> String {
     s.push_str(format!("       Function Evaluations: {}\n", r.num_eval).as_str());
     s.push_str(format!("             Accepted Steps: {}\n", r.accepted_steps).as_str());
     s.push_str(format!("             Rejected Steps: {}\n", r.rejected_steps).as_str());
-    s.push_str(format!("   Can Interp: {}\n", r.odesol.is_some()).as_str());
-    if r.odesol.is_some() {
-        s.push_str(format!("        Begin Time: {}", r.time_begin).as_str());
-    }
+    s.push_str(format!("   Can Interp: {}\n", r.can_interp()).as_str());
+    s.push_str(format!("        Begin Time: {}", r.time_begin).as_str());
     s
 }
 
 #[pymethods]
 impl PyPropResult {
-    #[new]
-    /// This should never be called and is here only for pickle support
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self(PyPropResultType::R1(Box::new(PropagationResult::<1> {
-            time_begin: Instant::INVALID,
-            state_begin: Vector::<6>::zeros(),
-            time_end: Instant::INVALID,
-            state_end: Vector::<6>::zeros(),
-            num_eval: 0,
-            accepted_steps: 0,
-            rejected_steps: 0,
-            next_step_secs: 0.0,
-            odesol: None,
-            gj_dense: None,
-            integrator: satkit::orbitprop::Integrator::default(),
-        })))
-    }
-
     /// Time at which the propagation began
     ///
     /// Returns:
@@ -304,24 +282,27 @@ impl PyPropResult {
     /// Returns:
     ///     bool: whether dense output is available for interpolation
     #[getter]
-    const fn can_interp(&self) -> bool {
-        each!(&self.0, r => r.odesol.is_some() || r.gj_dense.is_some())
+    fn can_interp(&self) -> bool {
+        each!(&self.0, r => r.can_interp())
     }
 
-    fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {
-        let d = PyDict::new(py);
-        let tp = PyTuple::empty(py);
-        (tp, d)
+    /// Rebuild a result from its pickled byte state. Used internally by
+    /// `__reduce__`; not part of the public API.
+    #[staticmethod]
+    fn _from_pickle(state: &[u8]) -> PyResult<Self> {
+        Ok(Self(serde_pickle_from_slice(state, "propresult")?))
     }
 
-    fn __setstate__(&mut self, py: Python, state: Py<PyBytes>) -> PyResult<()> {
-        self.0 = serde_pickle_from_slice(state.as_bytes(py), "propresult")?;
-        Ok(())
-    }
-
-    fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
-        let p = serde_pickle_to_vec(&self.0, "propresult")?;
-        PyBytes::new(py, p.as_slice()).into_py_any(py)
+    /// Pickle (and `copy.deepcopy`) support. `propresult` has no `__new__`
+    /// (a result only comes from `propagate`), so it is rebuilt through the
+    /// private `_from_pickle` staticmethod from a serde byte payload.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyBytes>,))> {
+        let bytes = serde_pickle_to_vec(&self.0, "propresult")?;
+        let ctor = py.get_type::<Self>().getattr("_from_pickle")?;
+        Ok((ctor, (PyBytes::new(py, &bytes),)))
     }
 
     /// Interpolate the GCRF state at one or more times between the begin and end times
@@ -357,6 +338,16 @@ impl PyPropResult {
         // A list or array of times (including a datetime64 array, which
         // used to be read as a single time) gives one result per time
         let input = (&time).to_time_input()?;
+        // `can_interp` and `interp` agree: without dense output nothing is
+        // interpolated, not even the begin time (which the core hands back
+        // as a special case) or an empty list
+        if !self.can_interp() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "this result has no dense output to interpolate (can_interp is False): \
+                 propagate over a non-zero span with propsettings.enable_interp=True and an \
+                 integrator other than rodas4 or rkv98_nointerp",
+            ));
+        }
         let times = input.times;
 
         if input.scalar {
@@ -416,7 +407,19 @@ mod test {
 
     #[test]
     fn test_ser() {
-        let sol = PyPropResult::new();
+        let sol = PyPropResult(PyPropResultType::R1(Box::new(PropagationResult::<1> {
+            time_begin: Instant::INVALID,
+            state_begin: satkit::mathtypes::Vector::<6>::zeros(),
+            time_end: Instant::INVALID,
+            state_end: satkit::mathtypes::Vector::<6>::zeros(),
+            num_eval: 0,
+            accepted_steps: 0,
+            rejected_steps: 0,
+            next_step_secs: 0.0,
+            odesol: None,
+            gj_dense: None,
+            integrator: satkit::orbitprop::Integrator::default(),
+        })));
         println!("sol = {:?}", sol);
         let v = serde_pickle::to_vec(&sol.0, serde_pickle::SerOptions::default()).unwrap();
         let sol2 = PyPropResult(

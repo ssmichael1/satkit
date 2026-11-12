@@ -99,9 +99,8 @@ crate::arg_extractor!(propsettings_arg: Option<PyPropSettings>, |_| invalid_valu
 ///     * Radiation pressure
 ///     * Atmospheric drag: NRLMSISE-00 density model, with option to include space weather effects (can be large)
 ///
-// `state` and `begin` take `None` defaults only so the undocumented
-// `pos=` / `vel=` keywords can replace `state`; a missing `begin` is refused
-// below.
+// `state` and `begin` take `None` defaults only so the `pos=` / `vel=`
+// keywords can replace `state`; a missing `begin` is refused below.
 #[pyfunction(signature=(
     state=None,
     begin=None,
@@ -140,6 +139,14 @@ pub fn propagate(
         )
         .into());
     }
+    // `pos` alone used to leave the velocity at zero (and `vel` alone the
+    // position), or to overwrite half of `state`
+    if pos.is_some() != vel.is_some() {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "propagate() takes `pos` and `vel` together (or neither, with `state`)",
+        )
+        .into());
+    }
     let Some(PyInstant(begintime)) = begin else {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "propagate() missing required argument 'begin'",
@@ -167,16 +174,33 @@ pub fn propagate(
 
     // Without any of these the end time used to be `Instant::INVALID`, which
     // surfaced as an obscure "Precomputed table would need N entries" error
-    if end.is_none() && duration.is_none() && duration_secs.is_none() && duration_days.is_none() {
+    let given: Vec<&str> = [
+        ("end", end.is_some()),
+        ("duration", duration.is_some()),
+        ("duration_secs", duration_secs.is_some()),
+        ("duration_days", duration_days.is_some()),
+    ]
+    .iter()
+    .filter_map(|(name, set)| set.then_some(*name))
+    .collect();
+    if given.is_empty() {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "propagate() requires an end time: pass `end` or one of `duration`, \
              `duration_secs`, `duration_days`",
         )
         .into());
     }
+    // Several used to be accepted, with a silent precedence
+    // (duration_secs, then duration_days, duration, end)
+    if given.len() > 1 {
+        return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "propagate() takes one end time, but got {}: pass only one of `end`, \
+             `duration`, `duration_secs`, `duration_days`",
+            given.join(", ")
+        ))
+        .into());
+    }
 
-    // The end time: `end`, overridden by `duration`, then `duration_days`,
-    // then `duration_secs`
     let mut endtime = end.map_or(Instant::INVALID, |t| t.0);
     if let Some(d) = duration {
         endtime = begintime + d.0;

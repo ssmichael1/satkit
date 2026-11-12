@@ -347,6 +347,19 @@ impl PyEcomParams {
     ///     TypeError: if d is not a dict, or a value has the wrong type
     #[staticmethod]
     fn from_dict(d: &Bound<'_, PyDict>) -> PyResult<Self> {
+        // A misspelt coefficient used to be ignored, i.e. silently zero
+        for key in d.keys() {
+            let known = key
+                .extract::<String>()
+                .is_ok_and(|k| k == "sun_relative" || FIELDS.contains(&k.as_str()));
+            if !known {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "unknown ecomparams key {}; expected one of {}, sun_relative",
+                    key.repr()?,
+                    FIELDS.join(", ")
+                )));
+            }
+        }
         let mut v = [0.0f64; 13];
         for (slot, name) in v.iter_mut().zip(FIELDS) {
             if let Some(item) = d.get_item(name)? {
