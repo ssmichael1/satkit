@@ -48,6 +48,8 @@ satkit\.satkit\.satproperties\.__init__
 satkit\.satkit\.satproperties\.__new__
 satkit\.satkit\.satstate\.__init__
 satkit\.satkit\.satstate\.__new__
+satkit\.satkit\.TLE\.__init__
+satkit\.satkit\.TLE\.__new__
 # Declared runtime signature `(*args, <keywords>)`; the stub spells out the
 # positional forms as positional-only overloads, which stubtest cannot match
 # against `*args` (test_stub_signatures.py checks the keywords).

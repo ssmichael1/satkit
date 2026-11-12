@@ -88,13 +88,27 @@ impl PySGP4Error {
     }
 }
 
-/// `__hash__` and `__reduce__` for an enum pyclass with `eq_int` and no
-/// other `#[pymethods]` block: a member hashes like the integer it equals
-/// (see `PySGP4Error::__hash__`).
+/// The int → member constructor, `__hash__` and `__reduce__` for an enum
+/// pyclass with `eq_int` and no other `#[pymethods]` block: `ty(value)` is
+/// the member with that integer value (`ValueError` for any other), and a
+/// member hashes like the integer it equals (see `PySGP4Error::__hash__`).
 macro_rules! int_enum_methods {
-    ($ty:ty, $path:literal) => {
+    ($ty:ty, $path:literal, $range:literal, [$($member:ident),+ $(,)?]) => {
         #[pymethods]
         impl $ty {
+            #[new]
+            fn new(value: i32) -> PyResult<Self> {
+                $(
+                    if value == Self::$member as i32 {
+                        return Ok(Self::$member);
+                    }
+                )+
+                Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    concat!("{} is not an ", $path, " value (", $range, ")"),
+                    value
+                )))
+            }
+
             const fn __hash__(&self) -> isize {
                 *self as isize
             }
@@ -118,7 +132,8 @@ macro_rules! int_enum_methods {
 /// Members: ``wgs72`` (0), ``wgs72old`` (1: WGS-72 with the older,
 /// lower-precision constants of the original Spacetrack Report #3 code) and
 /// ``wgs84`` (2). Each compares equal to its integer value, and is hashable
-/// and immutable.
+/// and immutable. ``satkit.sgp4_gravconst(value)`` is the member with that
+/// integer value (``ValueError`` for any other).
 #[pyclass(
     name = "sgp4_gravconst",
     module = "satkit",
@@ -134,7 +149,12 @@ pub enum GravConst {
     wgs84 = psgp4::GravConst::WGS84 as isize,
 }
 
-int_enum_methods!(GravConst, "sgp4_gravconst");
+int_enum_methods!(
+    GravConst,
+    "sgp4_gravconst",
+    "0 to 2",
+    [wgs72, wgs72old, wgs84]
+);
 
 impl From<GravConst> for psgp4::GravConst {
     fn from(f: GravConst) -> Self {
@@ -156,6 +176,8 @@ impl From<GravConst> for psgp4::GravConst {
 /// Members: ``afspc`` (0: reproduces the Air Force Space Command code that
 /// generates TLEs; the default) and ``improved`` (1). Each compares equal
 /// to its integer value, and is hashable and immutable.
+/// ``satkit.sgp4_opsmode(value)`` is the member with that integer value
+/// (``ValueError`` for any other).
 #[pyclass(
     name = "sgp4_opsmode",
     module = "satkit",
@@ -170,7 +192,7 @@ pub enum OpsMode {
     improved = psgp4::OpsMode::IMPROVED as isize,
 }
 
-int_enum_methods!(OpsMode, "sgp4_opsmode");
+int_enum_methods!(OpsMode, "sgp4_opsmode", "0 or 1", [afspc, improved]);
 
 impl From<OpsMode> for psgp4::OpsMode {
     fn from(f: OpsMode) -> Self {
@@ -382,10 +404,11 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     tle (TLE | dict | list[TLE | dict]): element set(s) to propagate: a ``TLE`` object, an
 ///         OMM dictionary (see ``satkit.OMMDict``), or a list of either (or mixing both). Must
 ///         be a ``list``; tuples and other sequences are not accepted
-///     time (time | datetime.datetime | numpy.datetime64 | list | numpy.ndarray): time(s) at
-///         which to compute position and velocity: a single time, a list of times, a 1-D
-///         numpy object array of times or a 1-D ``datetime64`` array. A tuple is not accepted.
-///         A naive ``datetime`` is local time, not UTC; a ``numpy.datetime64`` is UTC
+///     time (time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): time(s) at
+///         which to compute position and velocity: a single time, a list or tuple of times, a 1-D
+///         numpy object array of times or a 1-D ``datetime64`` array.
+///         A naive ``datetime`` is local time, not UTC (see ``time.from_datetime``); a
+///         ``numpy.datetime64`` is UTC
 ///
 /// Keyword Args:
 ///     gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is sgp4_gravconst.wgs72
@@ -398,11 +421,16 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     "Ntime" input times and each of the "Ntle" tles. Shape is (3,) for a single TLE and
 ///     single time, (Ntime, 3) for a single TLE and multiple times, (Ntle, 3) for a list of
 ///     TLEs and a single time, and (Ntle, Ntime, 3) for a list of TLEs and multiple times.
-///     A list of TLEs keeps its TLE axis even with one element, and a list of times its
-///     time axis ("list in, list out"); empty lists give empty arrays, e.g. (Ntle, 0, 3).
-///     If errflag is True, a third element is returned: an int32 numpy array of error
-///     codes for each TLE and time (0 = success). The codes are the integer values of
-///     ``sgp4_error``, so ``err == satkit.sgp4_error.success`` compares elementwise.
+///     A list keeps its axis even with one element ("list in, list out"):
+///     ``sgp4([tle], t)`` is (1, 3) and ``sgp4([tle], [t])`` is (1, 1, 3).
+///     Empty lists give empty arrays of the matching shape, e.g.
+///     ``sgp4(tle, [])`` is (0, 3) and ``sgp4([tle], [])`` is (1, 0, 3).
+///     If errflag is True, a third element is returned: an ``int32`` numpy
+///     array of error codes, one per TLE and time — shape ``(1,)`` for a single
+///     TLE and time, ``(Ntime,)``, ``(Ntle,)`` or ``(Ntle, Ntime)`` otherwise.
+///     ``0`` is success. The codes are the integer values of
+///     ``sgp4_error``, so comparing against the enum works
+///     elementwise: ``err == satkit.sgp4_error.success`` is a boolean array.
 ///
 /// Raises:
 ///     TypeError: if ``tle`` is not a ``TLE``, a dict or a list of them, ``time`` is not a
@@ -428,14 +456,20 @@ crate::arg_extractor!(pub(crate) opsmode_arg: OpsMode, |e| {
 ///     ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
 ///
 /// Note:
-///     Errors: a time at which propagation fails (e.g. the orbit has decayed) gives a
-///     NaN row, with its code in the error array when errflag is True. An element set
-///     that cannot be initialized at all (e.g. decayed or eccentricity out of range at
-///     epoch, or an SGP4-XP set) raises ``RuntimeError`` when errflag is False; for a
-///     list, the message gives its index. When errflag is True it does not raise: its
-///     rows are NaN at every time and every time carries its init code
-///     (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata SGP4 cannot use),
-///     so one bad element set does not fail a list.
+///     Errors are reported per element set and per time, in two ways:
+///
+///     - A time at which propagation fails (e.g. the orbit has decayed by then) never
+///       raises, with or without ``errflag``: its position and velocity rows are NaN,
+///       and with ``errflag`` True its code is in the error array. Without ``errflag``,
+///       check the output for NaN.
+///     - An element set that cannot be initialized at all (e.g. zero mean motion or an
+///       eccentricity out of range at epoch, an SGP4-XP set, or OMM metadata SGP4
+///       cannot use) raises ``RuntimeError`` when ``errflag`` is False; for a list, the
+///       message names its index (``element set 1 of the list: ...``) and nothing is
+///       returned for the others. With ``errflag`` True it does not raise: its rows
+///       are NaN at every time and every time carries its init code
+///       (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata SGP4 cannot
+///       use), so one bad element set does not fail a list.
 ///
 /// Note:
 ///     Leap seconds: the time since epoch is the physical (SI) time elapsed. Across a

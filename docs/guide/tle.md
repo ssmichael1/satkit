@@ -104,6 +104,24 @@ let tles: Vec<satkit::TLE> = satkit::TLE::records(&lines).filter_map(Result::ok)
 
 [SGP4, TLEs and OMMs](../rust/sgp4.md) in the Rust section has a complete program: parsing, propagation, ground track, passes and fitting.
 
+## Building a TLE
+
+An element set can also be built in code. `sk.TLE()` takes its properties as keyword arguments, each checked as setting the property is, and any left out keep the values of an empty `TLE()` (name `"none"`, number 0, epoch J2000, elements zero). `TLE.fit_from_states()` takes `satnum`, `name` and `intl_desig` keywords for the identity of the fitted element set.
+
+```python
+import satkit as sk
+
+tle = sk.TLE(
+    name="ISS (ZARYA)", satnum=25544, intl_desig="98067A",
+    epoch=sk.time(2021, 9, 21, 12, 25, 40.104192),
+    inclination=51.6442, raan=208.5856, eccen=0.0001458,
+    arg_of_perigee=47.2277, mean_anomaly=50.1624,
+    mean_motion=15.48919419, bstar=5.868e-5,
+)
+print(tle.to_2line()[1])
+# 2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419    04
+```
+
 ## Loading from URLs
 
 Both TLEs and OMMs can be loaded directly from a URL:

@@ -40,10 +40,17 @@ use std::io::BufRead;
 ///     # ISS (ZARYA)
 ///     ```
 ///
-/// ``TLE()`` takes no arguments and gives an empty element set to fill in
+/// ``TLE()`` with no arguments gives an empty element set to fill in
 /// through the properties: name ``"none"``, satellite number 0, a blank
 /// international designator, classification ``"U"``, epoch J2000 and every
-/// element zero.
+/// element zero. The properties can also be given as keyword arguments,
+/// e.g. ``TLE(satnum=25544, epoch=t, mean_motion=15.5)``: ``name``,
+/// ``satnum``, ``intl_desig``, ``classification``, ``epoch``,
+/// ``inclination``, ``raan``, ``eccen``, ``arg_of_perigee``,
+/// ``mean_anomaly``, ``mean_motion``, ``mean_motion_dot``,
+/// ``mean_motion_dot_dot``, ``bstar``, ``ephem_type``, ``element_num`` and
+/// ``rev_num``. Each is checked as setting the property is, and one left
+/// out keeps the empty element set's value.
 ///
 /// Two TLEs are equal (``==``) when their names and every element are
 /// equal; a TLE is mutable, so it is not hashable. ``repr(tle)`` is one
@@ -255,9 +262,153 @@ impl PyTLE {
         )
     }
 
+    /// An element set built from keyword arguments
+    ///
+    /// Every argument is keyword-only and optional, and is the property of
+    /// the same name: it is checked exactly as setting that property is, so
+    /// a bad value raises the setter's exception. An argument left out (or
+    /// ``None``) keeps the value of an empty ``TLE()``: name ``"none"``, satellite
+    /// number 0, a blank international designator, classification ``"U"``,
+    /// epoch J2000 and every element zero.
+    ///
+    /// The designator is given whole as ``intl_desig``; ``desig_year``,
+    /// ``desig_launch`` and ``desig_piece`` are parts of it and are not
+    /// arguments.
+    ///
+    /// Args:
+    ///     name (str): satellite name (``"none"`` if absent)
+    ///     satnum (int): satellite (NORAD catalog) number, 0 to 999999999
+    ///     intl_desig (str): international designator, e.g. ``"98067A"``
+    ///     classification (str): a single ASCII letter, usually ``"U"``
+    ///     epoch (satkit.time | datetime.datetime | numpy.datetime64): epoch
+    ///     inclination (float): inclination, degrees
+    ///     raan (float): right ascension of the ascending node, degrees
+    ///     eccen (float): eccentricity, in [0, 1)
+    ///     arg_of_perigee (float): argument of perigee, degrees
+    ///     mean_anomaly (float): mean anomaly, degrees
+    ///     mean_motion (float): mean motion, revs / day, not negative
+    ///     mean_motion_dot (float): half the first derivative of mean motion, revs / day^2
+    ///     mean_motion_dot_dot (float): one sixth of the second derivative of mean motion, revs / day^3
+    ///     bstar (float): drag term B*, 1 / Earth radii
+    ///     ephem_type (int): ephemeris type, 0 to 255
+    ///     element_num (int): element set number
+    ///     rev_num (int): revolution number at epoch
+    ///
+    /// Raises:
+    ///     ValueError: if a value is out of the range its property accepts
+    ///         (see each property)
+    ///     TypeError: if a value has the wrong type, e.g. ``epoch`` is not a
+    ///         single time
+    ///     OverflowError: if ``ephem_type`` is outside 0..255, or an integer
+    ///         does not fit 32 bits
+    ///
+    /// Example:
+    ///     ```python
+    ///     tle = satkit.TLE(
+    ///         name="ISS (ZARYA)", satnum=25544, intl_desig="98067A",
+    ///         epoch=satkit.time(2021, 9, 21, 12, 25, 40.104192),
+    ///         inclination=51.6442, raan=208.5856, eccen=0.0001458,
+    ///         arg_of_perigee=47.2277, mean_anomaly=50.1624,
+    ///         mean_motion=15.48919419, bstar=5.868e-5,
+    ///     )
+    ///     pos, vel = satkit.sgp4(tle, tle.epoch)
+    ///     ```
     #[new]
-    fn new() -> Self {
-        Self(TLE::new())
+    #[pyo3(signature = (
+        *,
+        name=None,
+        satnum=None,
+        intl_desig=None,
+        classification=None,
+        epoch=None,
+        inclination=None,
+        raan=None,
+        eccen=None,
+        arg_of_perigee=None,
+        mean_anomaly=None,
+        mean_motion=None,
+        mean_motion_dot=None,
+        mean_motion_dot_dot=None,
+        bstar=None,
+        ephem_type=None,
+        element_num=None,
+        rev_num=None,
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        name: Option<String>,
+        satnum: Option<i32>,
+        intl_desig: Option<&str>,
+        classification: Option<&str>,
+        epoch: Option<crate::pyinstant::TimeArg>,
+        inclination: Option<f64>,
+        raan: Option<f64>,
+        eccen: Option<f64>,
+        arg_of_perigee: Option<f64>,
+        mean_anomaly: Option<f64>,
+        mean_motion: Option<f64>,
+        mean_motion_dot: Option<f64>,
+        mean_motion_dot_dot: Option<f64>,
+        bstar: Option<f64>,
+        ephem_type: Option<u8>,
+        element_num: Option<i32>,
+        rev_num: Option<i32>,
+    ) -> PyResult<Self> {
+        // Every value goes through its property setter, so it is checked
+        // exactly as setting the property afterwards would be
+        let mut t = Self(TLE::new());
+        if let Some(v) = name {
+            t.set_name(v);
+        }
+        if let Some(v) = satnum {
+            t.set_satnum(v)?;
+        }
+        if let Some(v) = intl_desig {
+            t.set_intl_desig(v)?;
+        }
+        if let Some(v) = classification {
+            t.set_classification(v)?;
+        }
+        if let Some(v) = epoch {
+            t.set_epoch(v);
+        }
+        if let Some(v) = inclination {
+            t.set_inclination(v)?;
+        }
+        if let Some(v) = raan {
+            t.set_raan(v)?;
+        }
+        if let Some(v) = eccen {
+            t.set_eccen(v)?;
+        }
+        if let Some(v) = arg_of_perigee {
+            t.set_arg_of_perigee(v)?;
+        }
+        if let Some(v) = mean_anomaly {
+            t.set_mean_anomaly(v)?;
+        }
+        if let Some(v) = mean_motion {
+            t.set_mean_motion(v)?;
+        }
+        if let Some(v) = mean_motion_dot {
+            t.set_mean_motion_dot(v)?;
+        }
+        if let Some(v) = mean_motion_dot_dot {
+            t.set_mean_motion_dot_dot(v)?;
+        }
+        if let Some(v) = bstar {
+            t.set_bstar(v)?;
+        }
+        if let Some(v) = ephem_type {
+            t.set_ephem_type(v);
+        }
+        if let Some(v) = element_num {
+            t.set_element_num(v);
+        }
+        if let Some(v) = rev_num {
+            t.set_rev_num(v);
+        }
+        Ok(t)
     }
 
     /// Load TLEs from a list of lines
@@ -539,6 +690,22 @@ impl PyTLE {
 
     /// Orbit eccentricity, unitless, in range [0, 1)
     ///
+    /// ``eccentricity`` is the same value under its full name; ``eccen`` is
+    /// an alias of it, kept for existing code.
+    ///
+    /// Setting it raises ``ValueError`` unless 0 <= value < 1.
+    #[getter(eccentricity)]
+    const fn get_eccentricity(&self) -> f64 {
+        self.0.eccen
+    }
+
+    #[setter(eccentricity)]
+    fn set_eccentricity(&mut self, value: f64) -> PyResult<()> {
+        self.set_eccen(value)
+    }
+
+    /// Orbit eccentricity, unitless, in range [0, 1); an alias of ``eccentricity``
+    ///
     /// Setting it raises ``ValueError`` unless 0 <= value < 1.
     #[getter(eccen)]
     const fn get_eccen(&self) -> f64 {
@@ -725,7 +892,8 @@ impl PyTLE {
     /// optional ones become zero when absent. ``OBJECT_NAME`` becomes the
     /// name, and the unnamed-TLE name ``"none"`` when it is absent, empty or
     /// ``UNKNOWN``. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
-    /// international designator (``1998-067A`` gives ``98067A``); any other
+    /// international designator (``1998-067A`` gives ``98067A``, and
+    /// ``1998-067``, with no piece, gives ``98067``); any other
     /// form leaves the designator empty. ``CLASSIFICATION_TYPE`` becomes the
     /// classification, ``"U"`` unless it is a single ASCII letter. Other
     /// metadata is dropped.
@@ -755,8 +923,8 @@ impl PyTLE {
     /// ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
     /// revolutions per day, and can be passed back to ``satkit.sgp4`` or
     /// serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
-    /// international designator (``98067A`` becomes ``1998-067A``, a blank
-    /// one ``UNKNOWN``), ``OBJECT_NAME`` is the name (``UNKNOWN`` for an
+    /// international designator (``98067A`` becomes ``1998-067A``, ``98067``
+    /// ``1998-067``, a blank one ``UNKNOWN``), ``OBJECT_NAME`` is the name (``UNKNOWN`` for an
     /// unnamed TLE), and ``CLASSIFICATION_TYPE`` is the TLE's classification
     /// letter. A negative ``satnum``, ``element_num`` or ``rev_num`` and an
     /// ``ephem_type`` above 9 have no OMM form and are left out.
@@ -812,20 +980,28 @@ impl PyTLE {
     /// Keyword Args:
     ///     gravconst (satkit.sgp4_gravconst): gravity model SGP4 uses in the fit.  Default is sgp4_gravconst.wgs72
     ///     opsmode (satkit.sgp4_opsmode): SGP4 ops mode used in the fit.  Default is sgp4_opsmode.afspc
+    ///     satnum (int, optional): satellite number of the fitted TLE (0 if omitted);
+    ///         checked as setting the ``satnum`` property is
+    ///     name (str, optional): name of the fitted TLE (``"none"`` if omitted)
+    ///     intl_desig (str, optional): international designator of the fitted TLE (blank
+    ///         if omitted); checked as setting the ``intl_desig`` property is
     ///
     /// Returns:
     ///     tuple[TLE, dict]: Fitted TLE and the fit results, a dictionary with the keys
     ///     ``status`` (a ``satkit.tlefitstatus``), ``converged`` (bool), ``orig_norm``,
     ///     ``best_norm``, ``grad_norm`` (floats), ``n_iter`` and ``n_res_evals`` (ints).
-    ///     The fitted TLE has the name ``"none"``, satellite number 0 and a blank
-    ///     international designator; set them afterwards if needed.
+    ///     The fitted TLE has the ``satnum``, ``name`` and ``intl_desig`` given;
+    ///     those left out are satellite number 0, the name ``"none"`` and a blank
+    ///     international designator.
     ///
     /// Raises:
     ///     TypeError: if ``states`` is not a sequence of 6-element vectors, ``times`` or
     ///         ``epoch`` is not a time (``epoch`` must be a single time, not a list), or
     ///         ``gravconst`` / ``opsmode`` is not the enum
     ///     ValueError: if ``states`` is empty, ``states`` and ``times`` differ in length,
-    ///         or ``epoch`` is outside the range of ``times``
+    ///         ``epoch`` is outside the range of ``times``, or ``satnum`` or ``intl_desig``
+    ///         is a value its property refuses (checked before the fit)
+    ///     OverflowError: if ``satnum`` does not fit 32 bits
     ///     RuntimeError: if the fit itself fails (SGP4 cannot evaluate the elements,
     ///         singular normal equations, or it ends on elements a TLE cannot hold)
     ///
@@ -835,7 +1011,8 @@ impl PyTLE {
     ///     satkit before 0.24 fitted with WGS84. The GCRF states are rotated to TEME with
     ///     the full IERS 2010 rotation.
     #[staticmethod]
-    #[pyo3(signature=(states, times, epoch, *, gravconst=crate::pysgp4::GravConst::wgs72, opsmode=crate::pysgp4::OpsMode::afspc))]
+    #[pyo3(signature=(states, times, epoch, *, gravconst=crate::pysgp4::GravConst::wgs72, opsmode=crate::pysgp4::OpsMode::afspc, satnum=None, name=None, intl_desig=None))]
+    #[allow(clippy::too_many_arguments)]
     fn fit_from_states(
         py: Python,
         states: Vec<[f64; 6]>,
@@ -844,7 +1021,22 @@ impl PyTLE {
         epoch: crate::pyinstant::TimeArg,
         #[pyo3(from_py_with = crate::pysgp4::gravconst_arg)] gravconst: crate::pysgp4::GravConst,
         #[pyo3(from_py_with = crate::pysgp4::opsmode_arg)] opsmode: crate::pysgp4::OpsMode,
+        satnum: Option<i32>,
+        name: Option<String>,
+        intl_desig: Option<&str>,
     ) -> PyResult<(Self, Py<PyAny>)> {
+        // The identity fields go through their property setters before the
+        // (possibly long) fit, so a bad value fails at once
+        let mut ident = Self(TLE::new());
+        if let Some(v) = satnum {
+            ident.set_satnum(v)?;
+        }
+        if let Some(v) = intl_desig {
+            ident.set_intl_desig(v)?;
+        }
+        if let Some(v) = name {
+            ident.set_name(v);
+        }
         let times = crate::pysgp4::time_input(times)?.times;
         // Release the GIL during the (potentially long-running) fit
         let (gravconst, opsmode) = (gravconst.into(), opsmode.into());
@@ -866,7 +1058,14 @@ impl PyTLE {
             dict.set_item("n_res_evals", result.n_res_evals)?;
             dict.into()
         };
-        Ok((Self(tle), stats))
+        // TLE::new() gives the same name, number and designator as the fit,
+        // so copying all three keeps the fit's value for those not given
+        let mut tle = Self(tle);
+        tle.0.sat_num = ident.0.sat_num;
+        tle.0.intl_desig = ident.0.intl_desig;
+        tle.0.name = ident.0.name;
+        tle.0.reset_cache();
+        Ok((tle, stats))
     }
 
     fn __getstate__(&mut self, py: Python) -> PyResult<Py<PyAny>> {
