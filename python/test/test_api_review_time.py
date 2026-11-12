@@ -426,3 +426,147 @@ class TestTimeFromTimeLike:
     def test_other_single_argument_is_type_error(self, bad):
         with pytest.raises(TypeError):
             sk.time(bad)
+
+
+# ───────────────────────────── exception types ───────────────────────────────
+
+
+class TestExceptionTypes:
+    """Wrong type or argument combination → TypeError; bad value → ValueError
+    (these were RuntimeError, or ValueError for a wrong type, through 0.24)"""
+
+    @pytest.mark.parametrize("args", [(2020, 1), (2020, 1, 1, 0), (2020, 1, 1, 0, 0), (2020, 1, 1, 0, 0, 0, 0)])
+    def test_constructor_argument_count(self, args):
+        with pytest.raises(TypeError, match=rf"positional arguments, got {len(args)}"):
+            sk.time(*args)
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            (2020, 13, 1),
+            (2020, 2, 30),
+            (2020, 1, 1, 24, 0, 0),
+            (2020, 1, 1, 0, 60, 0),
+            (2020, 1, 1, 0, 0, 60.0),
+            (2020, 1, 1, 0, 0, math.nan),
+            (2020, 1, 1, 0, 0, -1.0),
+            (400000, 1, 1),
+        ],
+    )
+    def test_constructor_bad_value(self, args):
+        with pytest.raises(ValueError):
+            sk.time(*args)
+        if len(args) == 6:
+            with pytest.raises(ValueError):
+                sk.time.from_gregorian(*args)
+        else:
+            with pytest.raises(ValueError):
+                sk.time.from_date(*args)
+
+    @pytest.mark.parametrize("args", [("a", 1, 1), (2020.5, 1, 1), (2020, 1, 1, 0, 0, "x"), (2020, 1, None)])
+    def test_constructor_wrong_type(self, args):
+        with pytest.raises(TypeError):
+            sk.time(*args)
+
+    def test_from_date_from_gregorian_wrong_type(self):
+        with pytest.raises(TypeError):
+            sk.time.from_date("a", 1, 1)
+        with pytest.raises(TypeError):
+            sk.time.from_gregorian(2020, 1, 1, 0, 0, "x")
+
+    def test_leap_second_still_accepted(self):
+        assert str(sk.time(2016, 12, 31, 23, 59, 60.5)) == "2016-12-31T23:59:60.500000Z"
+        assert sk.time.from_gregorian(2016, 12, 31, 23, 59, 60.5) == sk.time(2016, 12, 31, 23, 59, 60.5)
+        with pytest.raises(ValueError, match="leap second"):
+            sk.time(2017, 12, 31, 23, 59, 60.5)
+
+    @pytest.mark.parametrize("fmt", ["%Q", "%z", "%j", "abc%"])
+    def test_strftime(self, fmt):
+        with pytest.raises(ValueError, match="Could not format time string"):
+            sk.time(2024, 1, 1).strftime(fmt)
+
+    def test_strftime_documented_codes(self):
+        t = sk.time(2016, 12, 31, 23, 59, 60.25)
+        want = "2016-12-31 23:59:60.250000 Sat Saturday Dec December 6 %"
+        assert t.strftime("%Y-%m-%d %H:%M:%S.%f %a %A %b %B %w %%") == want
+        assert sk.time(-44, 3, 15).strftime("%Y") == "-0044"
+        assert sk.time(-44, 3, 15).to_iso8601() == "-0044-03-15T00:00:00.000000Z"
+        assert sk.time(10000, 1, 1).to_rfc3339() == "+10000-01-01T00:00:00.000000Z"
+
+    @pytest.mark.parametrize("kw", ["days", "hours", "minutes", "seconds", "microseconds"])
+    def test_duration_constructor_wrong_type(self, kw):
+        with pytest.raises(TypeError, match=kw):
+            sk.duration(**{kw: "a"})
+        with pytest.raises(TypeError, match=kw):
+            sk.duration(**{kw: None})
+
+    def test_duration_constructor_values(self):
+        with pytest.raises(TypeError, match="microseconds"):
+            sk.duration(microseconds=1.5)
+        with pytest.raises(OverflowError):
+            sk.duration(microseconds=2**63)
+        with pytest.raises(ValueError):
+            sk.duration(days=math.nan)
+        with pytest.raises(OverflowError):
+            sk.duration(days=1e300)
+        with pytest.raises(TypeError):
+            sk.duration(1.0)  # keyword-only
+        d = sk.duration(days=np.float64(1), hours=1, microseconds=np.int64(5))
+        assert d.microseconds == 90_000_000_005
+
+
+class TestScaleOnlyWithComponents:
+    def test_scale_with_string_or_nothing_raises(self):
+        import datetime
+
+        for args, what in (
+            ((), "no arguments"),
+            (("2024-01-01T00:00:00Z",), "a string"),
+            ((sk.time(2024, 1, 1),), "a time"),
+            ((datetime.datetime(2024, 1, 1),), "a time"),
+        ):
+            for scale in (sk.timescale.TAI, sk.timescale.UTC):
+                with pytest.raises(TypeError, match=f"scale is only for .* cannot be given with {what}"):
+                    sk.time(*args, scale=scale)
+
+    def test_scale_with_components(self):
+        tai = sk.time(2024, 1, 1, scale=sk.timescale.TAI)
+        assert sk.time(2024, 1, 1) - tai == sk.duration(seconds=37)
+        assert sk.time(2024, 1, 1, 0, 0, 0.0, scale=sk.timescale.TAI) == tai
+        assert sk.time(2024, 1, 1, scale=sk.timescale.UTC) == sk.time(2024, 1, 1)
+        with pytest.raises(TypeError):
+            sk.time(2024, 1, 1, scale=1)
+
+
+class TestClassConstantsReadOnly:
+    @pytest.mark.parametrize("name", ["J2000", "GPS_EPOCH", "MJD_EPOCH", "UNIX_EPOCH"])
+    def test_time_constants(self, name):
+        before = getattr(sk.time, name)
+        with pytest.raises(TypeError, match="immutable type"):
+            setattr(sk.time, name, 5)
+        with pytest.raises(TypeError, match="immutable type"):
+            delattr(sk.time, name)
+        assert getattr(sk.time, name) == before
+        with pytest.raises(AttributeError):
+            setattr(sk.time(2024, 1, 1), name, 5)
+
+    def test_values(self):
+        assert str(sk.time.J2000) == "2000-01-01T11:58:55.816000Z"
+        assert str(sk.time.GPS_EPOCH) == "1980-01-06T00:00:00.000000Z"
+        assert sk.time.MJD_EPOCH.to_mjd() == 0.0
+        assert sk.time.UNIX_EPOCH.to_unixtime() == 0.0
+
+    @pytest.mark.parametrize("enum, name", [(sk.timescale, "UTC"), (sk.weekday, "Monday")])
+    def test_enum_members(self, enum, name):
+        before = getattr(enum, name)
+        with pytest.raises(TypeError, match="immutable type"):
+            setattr(enum, name, 5)
+        assert getattr(enum, name) == before
+
+    def test_pickle_and_copy_still_work(self):
+        import copy
+        import pickle
+
+        t = sk.time(2024, 5, 6, 7, 8, 9.5)
+        assert pickle.loads(pickle.dumps(t)) == t
+        assert copy.deepcopy(t) == t

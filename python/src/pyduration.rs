@@ -1,7 +1,6 @@
 use satkit::Duration;
 
 use crate::pyinstant::PyInstant;
-use crate::pyutils::invalid_value;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::types::{PyDelta, PyDeltaAccess};
@@ -13,12 +12,6 @@ const US_PER_SECOND: f64 = 1.0e6;
 const US_PER_MINUTE: f64 = 60.0e6;
 const US_PER_HOUR: f64 = 3_600.0e6;
 const US_PER_DAY: f64 = 86_400.0e6;
-
-crate::arg_extractor!(days_arg: f64, |_| invalid_value("days"));
-crate::arg_extractor!(seconds_arg: f64, |_| invalid_value("seconds"));
-crate::arg_extractor!(minutes_arg: f64, |_| invalid_value("minutes"));
-crate::arg_extractor!(hours_arg: f64, |_| invalid_value("hours"));
-crate::arg_extractor!(microseconds_arg: i64, |_| invalid_value("microseconds"));
 
 /// Refuse a NaN or infinite count of `what` with `ValueError`, and one too
 /// large for a duration (beyond ±2^63 microseconds, about ±292,000 years)
@@ -120,12 +113,15 @@ impl PyDuration {
     #[new]
     #[pyo3(signature=(*, days=0.0, hours=0.0, minutes=0.0, seconds=0.0, microseconds=0))]
     fn py_new(
-        #[pyo3(from_py_with = days_arg)] days: f64,
-        #[pyo3(from_py_with = hours_arg)] hours: f64,
-        #[pyo3(from_py_with = minutes_arg)] minutes: f64,
-        #[pyo3(from_py_with = seconds_arg)] seconds: f64,
-        #[pyo3(from_py_with = microseconds_arg)] microseconds: i64,
+        days: f64,
+        hours: f64,
+        minutes: f64,
+        seconds: f64,
+        microseconds: i64,
     ) -> PyResult<Self> {
+        // Plain typed parameters: an argument of the wrong type is PyO3's
+        // TypeError naming the argument, as for the from_* constructors
+        // (through 0.24 it was `ValueError: Invalid value for days`)
         check_duration_value(days, US_PER_DAY, "days")?;
         check_duration_value(hours, US_PER_HOUR, "hours")?;
         check_duration_value(minutes, US_PER_MINUTE, "minutes")?;

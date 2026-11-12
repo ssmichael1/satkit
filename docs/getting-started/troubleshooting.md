@@ -429,7 +429,7 @@ t + sk.duration.from_seconds(60)
 t + sk.duration.from_hours(2)
 ```
 
-### `RuntimeError: Must pass in year, month, day or year, month, day, hour, min, sec`
+### `TypeError: time() takes 0, 1, 3 (year, month, day) or 6 (year, month, day, hour, min, sec) positional arguments`
 
 The `time` constructor takes either the date alone or all six fields:
 `sk.time(2024, 1, 1)` or `sk.time(2024, 1, 1, 12, 0, 0)`, not

@@ -12,8 +12,6 @@ use satkit::{Instant, TimeScale, Weekday};
 use crate::pyduration::PyDuration;
 use crate::pyutils::warn_deprecated;
 
-use anyhow::{bail, Result};
-
 use numpy as np;
 use numpy::PyArrayMethods;
 
@@ -44,6 +42,7 @@ use numpy::PyArrayMethods;
     eq_int,
     hash,
     frozen,
+    immutable_type,
     from_py_object
 )]
 pub enum PyTimeScale {
@@ -91,6 +90,7 @@ crate::enum_pickle!(PyTimeScale, "timescale");
     eq_int,
     hash,
     frozen,
+    immutable_type,
     from_py_object
 )]
 pub enum PyWeekday {
@@ -206,7 +206,7 @@ impl From<PyTimeScale> for TimeScale {
 ///         with the string or no-argument form
 ///     ValueError: if the string cannot be parsed, a component is out of
 ///         range, or ``scale`` is satkit.timescale.Invalid
-#[pyclass(name = "time", module = "satkit", from_py_object)]
+#[pyclass(name = "time", module = "satkit", immutable_type, from_py_object)]
 #[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Debug)]
 pub struct PyInstant(pub Instant);
 
@@ -268,9 +268,20 @@ impl PyInstant {
     ///         out of range, the date is beyond about ±292,000 years, or
     ///         ``scale`` is satkit.timescale.Invalid
     #[new]
-    #[pyo3(signature=(*py_args, scale=&PyTimeScale::UTC))]
-    fn py_new(py_args: &Bound<'_, PyTuple>, scale: &PyTimeScale) -> Result<Self> {
+    #[pyo3(signature=(*py_args, scale=None))]
+    fn py_new(py_args: &Bound<'_, PyTuple>, scale: Option<&PyTimeScale>) -> PyResult<Self> {
+        // `scale` applies to Gregorian components only. Accepting and
+        // ignoring it elsewhere made `time("2024-01-01T00:00:00", scale=TAI)`
+        // look like a TAI label when it was read as UTC.
+        let no_scale = |form: &str| match scale {
+            None => Ok(()),
+            Some(_) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "scale is only for the (year, month, day[, hour, min, sec]) forms; \
+                 it cannot be given with {form}"
+            ))),
+        };
         if py_args.is_empty() {
+            no_scale("no arguments (the current time)")?;
             Ok(Self(Instant::now()))
         } else if py_args.len() == 3 || py_args.len() == 6 {
             let int = |i: usize| py_args.get_item(i)?.extract::<i32>();
@@ -280,34 +291,34 @@ impl PyInstant {
             } else {
                 (0, 0, 0.0)
             };
-            Ok(Self(Instant::from_datetime_with_scale(
-                year,
-                month,
-                day,
-                hour,
-                min,
-                sec,
-                valid_scale(scale)?,
-            )?))
+            let scale = valid_scale(scale.unwrap_or(&PyTimeScale::UTC))?;
+            Instant::from_datetime_with_scale(year, month, day, hour, min, sec, scale)
+                .map(Self)
+                .map_err(parse_error)
         } else if py_args.len() == 1 {
             let item = py_args.get_item(0)?;
             if let Ok(s) = item.extract::<&str>() {
                 // Input is a string: `from_string` tries RFC 3339 first, then
                 // the looser formats, and raises ValueError if neither parses
-                return Ok(Self::from_string(s)?);
+                no_scale("a string")?;
+                return Self::from_string(s);
             }
             if is_time_scalar(&item) {
                 // satkit.time, datetime.datetime or numpy.datetime64
+                no_scale("a time")?;
                 return Ok(Self(item.extract::<TimeArg>()?.0));
             }
             Err(pyo3::exceptions::PyTypeError::new_err(format!(
                 "a single argument must be a str, satkit.time, datetime.datetime \
                  or numpy.datetime64, got {}",
                 item.get_type()
-            ))
-            .into())
+            )))
         } else {
-            bail!("Must pass in year, month, day or year, month, day, hour, min, sec");
+            Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "time() takes 0, 1, 3 (year, month, day) or 6 (year, month, day, hour, min, sec) \
+                 positional arguments, got {}",
+                py_args.len()
+            )))
         }
     }
 
@@ -419,10 +430,10 @@ impl PyInstant {
     /// %w: Weekday as a decimal number, where 0 is Sunday and 6 is Saturday
     /// %%: A literal %
     ///
-    fn strftime(&self, format: &str) -> Result<String> {
-        self.0
-            .strftime(format)
-            .map_err(|e| anyhow::anyhow!("Could not format time string: {}", e))
+    fn strftime(&self, format: &str) -> PyResult<String> {
+        self.0.strftime(format).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Could not format time string: {e}"))
+        })
     }
 
     /// Create satkit.time object from an RFC 3339 string
@@ -513,8 +524,10 @@ impl PyInstant {
     ///     ValueError: If the month or day is out of range, or the date is
     ///         beyond about ±292,000 years
     #[staticmethod]
-    fn from_date(year: i32, month: i32, day: i32) -> Result<Self> {
-        Ok(Self(Instant::from_date(year, month, day)?))
+    fn from_date(year: i32, month: i32, day: i32) -> PyResult<Self> {
+        Instant::from_date(year, month, day)
+            .map(Self)
+            .map_err(parse_error)
     }
 
     /// Return time object representing input modified Julian date and time scale
@@ -636,8 +649,10 @@ impl PyInstant {
         hour: i32,
         min: i32,
         sec: f64,
-    ) -> Result<Self> {
-        Ok(Instant::from_datetime(year, month, day, hour, min, sec).map(Self)?)
+    ) -> PyResult<Self> {
+        Instant::from_datetime(year, month, day, hour, min, sec)
+            .map(Self)
+            .map_err(parse_error)
     }
 
     /// Convert from Python datetime object
@@ -1075,9 +1090,11 @@ fn time_difference(a: &Instant, b: &Instant) -> PyResult<satkit::Duration> {
         .ok_or_else(|| crate::pyduration::arithmetic_overflow("time difference"))
 }
 
-/// A time-string parse failure as a Python `ValueError` carrying the
-/// parser's message (`from_string`, `strptime` and the `time(str)`
-/// constructor; `from_rfc3339` adds its own prefix)
+/// A bad time value as a Python `ValueError` carrying the core's message:
+/// a string that does not parse (`from_string`, `strptime` and the
+/// `time(str)` constructor; `from_rfc3339` adds its own prefix) or a
+/// Gregorian component out of range (the constructor, `from_date`,
+/// `from_gregorian`). These were `RuntimeError` through 0.24.
 fn parse_error(e: satkit::InstantError) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(e.to_string())
 }
