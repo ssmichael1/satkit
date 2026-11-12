@@ -469,7 +469,7 @@ below, catch the new type.
 
 | call | before | now |
 |---|---|---|
-| `propagate(pos=...)` without `vel`, or more than one of `end` / `duration` / `duration_secs` / `duration_days` | zero velocity; silent precedence | `TypeError` |
+| `propagate(pos=...)` without `vel`, `state` together with `pos` / `vel`, or more than one of `end` / `duration` / `duration_secs` / `duration_days` | zero velocity; silent precedence | `TypeError` |
 | `time("...", scale=...)`, `time(scale=...)` | scale ignored | `TypeError` |
 | a one-element list where one time is required (`spaceweather.get`, `transform_state`, `nrlmsise00(time=)`, `fit_from_states(epoch=)`, ...) | accepted | `TypeError` |
 | `itrfcoord(vec, latitude_deg=...)`, or the degree and radian form of one angle together | one silently ignored | `TypeError` |
@@ -482,7 +482,7 @@ below, catch the new type.
 | `satstate.add_maneuver` with an unsupported frame | failed later in `propagate` | `ValueError` |
 | `thrust.constant` with `end < start` or non-finite acceleration | accepted | `ValueError` |
 | `ecomparams.from_dict` with an unknown key | ignored | `ValueError` |
-| negative `abs_error`, `rel_error`, `cdaoverm`; all-zero position in `propagate` | accepted; `RuntimeError` | `ValueError` |
+| negative `abs_error`, `rel_error`, `cdaoverm`, `craoverm`; all-zero position in `propagate` | accepted; `RuntimeError` | `ValueError` |
 | TLE setters: `eccen` outside [0, 1), negative `mean_motion`, non-finite elements, out-of-range `satnum` or designator | accepted | `ValueError` |
 | complex, bool or string arrays as vectors | truncated with a warning, or `ValueError` | `TypeError` |
 | assigning to `time.J2000`, `consts.*` or an enum member | accepted | `TypeError` |
@@ -493,7 +493,7 @@ below, catch the new type.
 |---|---|---|
 | `time(...)`, `time.from_date`, `from_gregorian` with a bad component; `strftime` with an unknown code | `RuntimeError` | `ValueError` |
 | `time(...)` with the wrong number of arguments; `quaternion(...)` likewise | `RuntimeError` | `TypeError` |
-| `duration(days="a")` and other wrong-typed arguments | `ValueError` | `TypeError` |
+| `duration(days="a")`, `itrfcoord(latitude_deg="a")` and other wrong-typed arguments | `ValueError` | `TypeError` |
 | a time argument that is not a time, in every function | `RuntimeError` | `TypeError` |
 | wrong-length vectors: `propagate` state, `satstate` pos / vel / cov, `kepler.from_pv`, frame-transform states, `sun.shadowfunc`, `from_rotation_matrix` | `RuntimeError` | `ValueError` |
 | `quaternion.rotation_between` with zero or opposite vectors | `RuntimeError` | `ValueError` |
@@ -501,9 +501,18 @@ below, catch the new type.
 | wrong argument types to `propagate`, `satproperties`, `propsettings`, `sgp4` (`tle`, `gravconst`, `opsmode`) | `ValueError` or `RuntimeError` | `TypeError` |
 | unsupported frame in `thrust.constant`, `set_pos_uncertainty`, `set_vel_uncertainty`; `precompute_terms(step <= 0)` | `RuntimeError` | `ValueError` |
 | TLE and OMM parse errors, `to_2line` / `to_3line` format errors, `fit_from_states` with empty or mismatched input | `RuntimeError` | `ValueError` |
-| `TLE.from_file`, `omm_from_file`, `utils.set_datadir` on a missing path | `RuntimeError` | `FileNotFoundError` |
+| `TLE.from_file`, `omm_from_file`, `utils.set_datadir`, `spaceweather.init_from_path` on a missing path | `RuntimeError` | `FileNotFoundError` |
 | `planets.heliocentric_pos(Sun \| Moon)` | `RuntimeError` | `ValueError` |
 
 The stubs change too: `omm_from_*` return `list[dict[str, Any]]` (cast to
 `OMMDict` for key checking), and the enums are frozen and hashable, hashing
 like their integer value.
+
+### Deprecated
+
+- **The `tm=` keyword** of the `frametransform` functions (`gmst`, `gast`,
+  `qitrf2gcrf`, `rotation`, `transform_state`, ...) and of
+  `jplephem.geocentric_pos` / `geocentric_state` / `barycentric_pos` /
+  `barycentric_state` is now `time=`; `tm=` still works and emits a
+  `DeprecationWarning`. Positional calls are unaffected. **Do this:** write
+  `time=`.

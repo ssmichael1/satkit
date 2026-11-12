@@ -96,8 +96,8 @@ Thank you for your interest in contributing to Satkit! This document provides gu
   A method's result replaces the object, in one of two ways: another instance
   of the same type (`inverse()`, `conj()`, `normalize()`), or a re-encoding for
   something else to consume (`to_rotation_matrix()` for numpy, `to_iso8601()`
-  for a file, `to_omm()` for JSON). Re-encodings always return a non-satkit
-  type and are always named `to_*` (the deprecated `as_*` aliases aside), so
+  for a file, `to_omm()` for JSON). Re-encodings return a non-satkit
+  type (or, for `propresult.to_satstate()`, a different satkit type) and are always named `to_*` (the deprecated `as_*` aliases aside), so
   the call site reads as a conversion. Every zero-argument member is therefore a property unless it
   returns its own type or carries a conversion prefix; `test_api_shape.py`
   enforces this from the stub. Properties must be cheap and pure (no I/O, no

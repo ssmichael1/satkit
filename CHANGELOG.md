@@ -6,7 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Changed
 
-- **Breaking:** Python API review: wrong results fixed (near-antipodal `geodesic_distance`, barycentric Moon, `satstate.cov` transpose, `gravity_degree` setter, `can_interp`, TLE designator fields), silent misuse and non-finite input now raise, and `TypeError` / `ValueError` / `FileNotFoundError` replace `RuntimeError` for bad arguments; submodules are importable (`import satkit.sun`), enums hashable, `duration` / `time` gain `timedelta` interop, array functions return `ndarray`, and stubs and docstrings are corrected throughout. See [Migrating](https://satkit.dev/migration/) ([#295](https://github.com/ssmichael1/satkit/pull/295))
+- **Breaking:** Python API review: wrong results fixed (near-antipodal `geodesic_distance`, barycentric Moon, `satstate.cov` transpose, `gravity_degree` setter, `can_interp`, TLE designator fields), silent misuse and non-finite input now raise, and `TypeError` / `ValueError` / `FileNotFoundError` replace `RuntimeError` for bad arguments; submodules are importable (`import satkit.sun`), enums hashable, `duration` / `time` gain `timedelta` interop, array functions return `ndarray`, and stubs and docstrings are corrected throughout. New: `satkit.eop` module, `TLE(...)` keyword constructor, `time.to_gps_week_and_second`, `scale=` on the date conversions, `quaternion.angle_to` / `isclose` / `to_axis_angle`, `itrfcoord.from_geodetic`, `propresult.to_satstate`, `jplephem.constants`, durations accepted as `duration | timedelta | seconds`; the `tm=` keyword becomes `time=` (`tm=` deprecated). See [Migrating](https://satkit.dev/migration/) ([#295](https://github.com/ssmichael1/satkit/pull/295))
 
 ### Fixed
 
