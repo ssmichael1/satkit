@@ -11,26 +11,54 @@ NRLMSISE-00 density model consumes when ``use_spaceweather`` is enabled.
 from __future__ import annotations
 
 import os
+from typing import Literal, TypedDict, type_check_only
 
 from .satkit import time as _time, TimeScalar
 
-def get(time: TimeScalar) -> dict:
+@type_check_only
+class SpaceWeatherRecord(TypedDict):
+    """The dictionary returned by ``get`` (a plain ``dict`` at runtime; this
+    name exists for type checkers only, so import it under ``TYPE_CHECKING``)"""
+
+    date: _time
+    kp: list[int]
+    kp_sum: int
+    ap: list[int]
+    ap_avg: int
+    f10p7_obs: float
+    f10p7_adj: float
+    f10p7_obs_c81: float
+    f10p7_obs_l81: float
+    f10p7_adj_c81: float
+    f10p7_adj_l81: float
+    isn: int
+    cp: float
+    c9: int
+    bsrn: int
+    nd: int
+    data_type: str
+
+def get(time: TimeScalar) -> SpaceWeatherRecord:
     """Space-weather record for the given time
 
     Returns the daily record closest to and not after the given time.
 
     Args:
-        time (satkit.time | datetime.datetime): Time for which to return the record
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time for which to
+            return the record (a single time; a list, even of one element,
+            raises ``TypeError``)
 
     Returns:
         dict: Space-weather record with keys:
 
             * ``date`` (satkit.time) — date of the record
-            * ``kp`` (list[int]) — eight 3-hourly Kp indices (x10)
-            * ``kp_sum`` (int) — daily Kp sum
+            * ``kp`` (list[int]) — eight 3-hourly Kp indices, each x10 (``33`` is Kp 3+)
+            * ``kp_sum`` (int) — daily Kp sum, x10 like ``kp`` (``153`` is 15+)
             * ``ap`` (list[int]) — eight 3-hourly Ap indices
             * ``ap_avg`` (int) — daily average Ap
-            * ``f10p7_obs`` (float) — observed F10.7 solar flux, sfu (10^-22 W m^-2 Hz^-1)
+            * ``f10p7_obs`` (float) — observed F10.7 solar flux, sfu (10^-22 W m^-2 Hz^-1).
+              The F10.7 record starts in 1947: this and the five other
+              ``f10p7_*`` fields are ``-1.0`` for earlier dates
             * ``f10p7_adj`` (float) — F10.7 adjusted to 1 AU, sfu
             * ``f10p7_obs_c81`` / ``f10p7_obs_l81`` (float) — 81-day centered / last-81-day observed averages, sfu
             * ``f10p7_adj_c81`` / ``f10p7_adj_l81`` (float) — 81-day centered / last-81-day adjusted averages, sfu
@@ -52,6 +80,7 @@ def get(time: TimeScalar) -> dict:
 
     Raises:
         RuntimeError: If no space-weather record is available for the date
+        TypeError: If ``time`` is not a single time
     """
     ...
 
@@ -66,7 +95,7 @@ def update() -> None:
     """
     ...
 
-def init_from_path(path: str | os.PathLike) -> None:
+def init_from_path(path: str | os.PathLike[str]) -> None:
     """Load the space-weather table from a file, replacing whatever is loaded
 
     Accepts the GFZ ``Kp_ap_Ap_SN_F107_since_1932.txt`` table (observed only).
@@ -75,6 +104,10 @@ def init_from_path(path: str | os.PathLike) -> None:
 
     Args:
         path (str | os.PathLike): File to load
+
+    Raises:
+        FileNotFoundError: If the file does not exist (the message names it)
+        RuntimeError: If the file cannot be read otherwise or is not a GFZ table
     """
     ...
 
@@ -105,11 +138,21 @@ def coverage() -> tuple[_time, _time, _time, _time] | None:
     """
     ...
 
-def status(time: TimeScalar) -> str:
+def status(
+    time: TimeScalar,
+) -> Literal[
+    "observed",
+    "predicted_daily",
+    "predicted_monthly",
+    "extrapolated",
+    "before_table",
+    "not_loaded",
+]:
     """Where a time falls relative to the loaded space-weather table
 
     Args:
-        time (satkit.time | datetime.datetime): Time to classify
+        time (satkit.time | datetime.datetime | numpy.datetime64): Time to classify (a
+            single time; a list, even of one element, raises ``TypeError``)
 
     Returns:
         str: One of ``"observed"``, ``"predicted_daily"`` (inside the

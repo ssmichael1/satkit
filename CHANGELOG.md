@@ -4,6 +4,10 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** Python API review: wrong results fixed (near-antipodal `geodesic_distance`, barycentric Moon, `satstate.cov` transpose, `gravity_degree` setter, `can_interp`, TLE designator fields), silent misuse and non-finite input now raise, and `TypeError` / `ValueError` / `FileNotFoundError` replace `RuntimeError` for bad arguments; submodules are importable (`import satkit.sun`), enums hashable, `duration` / `time` gain `timedelta` interop, array functions return `ndarray`, and stubs and docstrings are corrected throughout. New: `satkit.eop` module, `TLE(...)` keyword constructor, `time.to_gps_week_and_second`, `scale=` on the date conversions, `quaternion.angle_to` / `isclose` / `to_axis_angle`, `itrfcoord.from_geodetic`, `propresult.to_satstate`, `jplephem.constants`, durations accepted as `duration | timedelta | seconds`; the `tm=` keyword becomes `time=` (`tm=` deprecated). See [Migrating](https://satkit.dev/migration/) ([#295](https://github.com/ssmichael1/satkit/pull/295))
+
 ### Fixed
 
 - Docs accuracy and API reference: statements that disagreed with the code are corrected (integrator step acceptance and Gauss-Jackson startup, GMAT drag figures, STM integrators, drag default, SGP4-XP with `errflag`, README and docs.rs landing page); wrong docstrings fixed (`qitrf2tirs`, `to_iso8601` / `to_rfc3339` precision, `wgs84_a`, `to_euler` order); reST roles no longer render as literal text, Returns sections render as one typed row, and `Args` names match the signatures; `pyproject.toml` gains project URLs ([#294](https://github.com/ssmichael1/satkit/pull/294))

@@ -9,17 +9,27 @@ import numpy.typing as npt
 import numpy as np
 
 import datetime
+import os
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, Optional, TypeAlias, Union, final, overload
+from typing import Any, ClassVar, Final, Literal, Optional, TypeAlias, Union, final, overload
 from typing_extensions import deprecated
 
-from ._types import OMMDict
+from ._types import OMMDict, TLEFitResult
 
-# Time inputs are polymorphic: anywhere a ``satkit.time`` is accepted, a
-# ``datetime.datetime`` is accepted interchangeably (and, for the vectorized
-# functions, a list or numpy array of either). These aliases capture that so
-# the individual signatures stay readable.
+# Time inputs are polymorphic: a function or method argument annotated with one
+# of these aliases takes a ``satkit.time``, a ``datetime.datetime`` or a
+# ``numpy.datetime64`` interchangeably (and, for the vectorized functions, a
+# list or numpy array of them). These aliases capture that so the individual
+# signatures stay readable.
+#
+# This applies to arguments only where the alias is written. The ``time``
+# class's own operators are listed on each: ``<``, ``<=``, ``>``, ``>=`` and
+# ``time - x`` / ``x - time`` take a ``TimeScalar`` on the other side, but
+# ``==`` is True only between two ``satkit.time`` objects (a ``time`` and a
+# ``datetime`` could not hash alike). ``+`` and ``-`` also take durations
+# (``satkit.duration``, ``datetime.timedelta``, ``numpy.timedelta64``) and
+# day counts.
 #
 # A ``datetime.datetime`` is converted with Python's own convention
 # (``datetime.timestamp()``): a naive datetime is the machine's local time, an
@@ -30,21 +40,28 @@ from ._types import OMMDict
 # the nearest microsecond; ``NaT`` raises ``ValueError``.
 #
 # * ``TimeScalar``    — a single time value.
-# * ``TimeArrayLike`` — a list, a 1-D numpy object array of time values, or a
-#   1-D numpy ``datetime64`` array (not any array-like: a tuple, a float array
-#   or a string is refused).
+# * ``TimeArrayLike`` — a list or tuple, a 1-D numpy object array of time
+#   values, or a 1-D numpy ``datetime64`` array (not any array-like: a float
+#   array or a string is refused).
 # * ``TimeInput``     — either a scalar or an array of times.
 TimeScalar: TypeAlias = "time | datetime.datetime | np.datetime64"
 TimeArrayLike: TypeAlias = (
-    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
+    "list[time] | list[datetime.datetime] | list[np.datetime64] | list[time | datetime.datetime | np.datetime64] | tuple[time | datetime.datetime | np.datetime64, ...] | npt.NDArray[np.object_] | npt.NDArray[np.datetime64]"
 )
 TimeInput: TypeAlias = "TimeScalar | TimeArrayLike"
+
+# ``datetime.timedelta``, for use inside ``class time``, whose deprecated
+# ``datetime()`` method hides the module name there
+_TimeDelta: TypeAlias = datetime.timedelta
+_DateTime: TypeAlias = datetime.datetime
 
 class TLEWarning(UserWarning):
     """Warning for a TLE record skipped by a loader called with ``on_error="warn"``
 
-    The message is the one ``on_error="raise"`` raises as ``RuntimeError``: it gives
+    The message is the one ``on_error="raise"`` raises as ``ValueError``: it gives
     the input line the record starts on, its satellite and what failed to parse.
+    With ``on_error="warn"``, input that holds no element sets at all also gets
+    one, saying so.
     """
 
 @final
@@ -71,17 +88,129 @@ class TLE:
         ```python
         tle = satkit.TLE.from_lines([
             "0 ISS (ZARYA)",
-            "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
-            "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+            "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9996",
+            "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302874",
         ])[0]
         print(tle.name)
         # ISS (ZARYA)
         ```
     """
 
+    def __init__(
+        self,
+        *,
+        name: str | None = None,
+        satnum: int | None = None,
+        intl_desig: str | None = None,
+        classification: str | None = None,
+        epoch: TimeScalar | None = None,
+        inclination: float | None = None,
+        raan: float | None = None,
+        eccen: float | None = None,
+        arg_of_perigee: float | None = None,
+        mean_anomaly: float | None = None,
+        mean_motion: float | None = None,
+        mean_motion_dot: float | None = None,
+        mean_motion_dot_dot: float | None = None,
+        bstar: float | None = None,
+        ephem_type: int | None = None,
+        element_num: int | None = None,
+        rev_num: int | None = None,
+    ) -> None:
+        """An element set built from keyword arguments, or an empty one to fill in
+
+        Every argument is keyword-only and optional, and is the property of
+        the same name: it is checked exactly as setting that property is, so
+        a bad value raises the setter's exception. An argument left out (or
+        ``None``) keeps the value of an empty ``TLE()``: the name ``"none"``,
+        satellite number 0, a blank international designator, classification
+        ``"U"``, the epoch J2000 (2000-01-01 12:00:00 TT) and every element
+        zero. An empty element set cannot be propagated until at least
+        ``mean_motion`` and ``epoch`` are set. Element sets are normally
+        loaded with ``TLE.from_lines``, ``TLE.from_file``, ``TLE.from_url``
+        or ``TLE.from_omm``, or fitted with ``TLE.fit_from_states``.
+
+        The designator is given whole as ``intl_desig``; ``desig_year``,
+        ``desig_launch`` and ``desig_piece`` are parts of it and are not
+        arguments.
+
+        Args:
+            name: satellite name (``"none"`` if absent)
+            satnum: satellite (NORAD catalog) number, 0 to 999999999
+            intl_desig: international designator, e.g. ``"98067A"``
+            classification: a single ASCII letter, usually ``"U"``
+            epoch: epoch, a single ``time``, ``datetime.datetime`` or ``numpy.datetime64``
+            inclination: inclination, degrees
+            raan: right ascension of the ascending node, degrees
+            eccen: eccentricity, in [0, 1)
+            arg_of_perigee: argument of perigee, degrees
+            mean_anomaly: mean anomaly, degrees
+            mean_motion: mean motion, revs / day, not negative
+            mean_motion_dot: half the first derivative of mean motion, revs / day^2
+            mean_motion_dot_dot: one sixth of the second derivative of mean motion, revs / day^3
+            bstar: drag term B*, 1 / Earth radii
+            ephem_type: ephemeris type, 0 to 255
+            element_num: element set number
+            rev_num: revolution number at epoch
+
+        Raises:
+            ValueError: if a value is out of the range its property accepts
+                (see each property)
+            TypeError: if a value has the wrong type, e.g. ``epoch`` is not a
+                single time
+            OverflowError: if ``ephem_type`` is outside 0..255, or an integer
+                does not fit 32 bits
+
+        Example:
+            ```python
+            tle = satkit.TLE(
+                name="ISS (ZARYA)", satnum=25544, intl_desig="98067A",
+                epoch=satkit.time(2021, 9, 21, 12, 25, 40.104192),
+                inclination=51.6442, raan=208.5856, eccen=0.0001458,
+                arg_of_perigee=47.2277, mean_anomaly=50.1624,
+                mean_motion=15.48919419, bstar=5.868e-5,
+            )
+            pos, vel = satkit.sgp4(tle, tle.epoch)
+
+            # Or start empty and set the properties
+            tle = satkit.TLE()
+            tle.satnum = 99999
+            tle.epoch = satkit.time(2024, 1, 1)
+            tle.inclination = 51.6
+            tle.mean_motion = 15.5
+            pos, vel = satkit.sgp4(tle, tle.epoch)
+            ```
+        """
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """True if ``other`` is a TLE with the same name and element set
+
+        Every field is compared exactly. The SGP4 initialization that
+        ``sgp4`` caches in the object is not part of the comparison, so a TLE
+        equals its copy or pickle whether or not it has been propagated.
+        A TLE is mutable, so it is not hashable.
+        """
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+
+    def __repr__(self) -> str:
+        """One line naming the satellite and epoch
+
+        For example ``TLE(name="ISS (ZARYA)", satnum=25544,
+        intl_desig="98067A", epoch=2021-09-21T12:25:40.104192Z)``.
+        ``str(tle)`` is the multi-line listing of every element.
+        """
+        ...
+
+    def __str__(self) -> str:
+        """Multi-line listing of the name, epoch and every element"""
+        ...
+
     @staticmethod
     def from_file(
-        filename: str,
+        filename: str | os.PathLike[str],
         *,
         check_checksum: bool = False,
         on_error: Literal["raise", "warn", "skip"] = "raise",
@@ -89,7 +218,7 @@ class TLE:
         """Load TLEs from a text file, parsed as ``TLE.from_lines`` does
 
         Args:
-            filename (str): name of the text file holding the TLE lines
+            filename (str | os.PathLike): path of the text file holding the TLE lines
             check_checksum (bool, optional): as in ``TLE.from_lines``
             on_error (str, optional): as in ``TLE.from_lines``
 
@@ -97,8 +226,11 @@ class TLE:
             list[TLE]: one TLE per element set in the file
 
         Raises:
-            ValueError: if the file holds no TLEs
-            RuntimeError: if a record fails to parse; see ``TLE.from_lines``
+            FileNotFoundError: if the file does not exist; the exception
+                names the path. Another I/O failure raises the matching
+                ``OSError`` (``PermissionError``, ``IsADirectoryError``, ...)
+            ValueError: with ``on_error="raise"``, if a record fails to parse
+                or the file holds no TLEs; see ``TLE.from_lines``
 
         Example:
             ```python
@@ -127,31 +259,37 @@ class TLE:
                 e.g. list or tuple)
             check_checksum (bool, optional): also verify the checksum digit
                 (column 69) of every data line. Default False.
-            on_error (str, optional): what to do with a record that fails to
-                parse: ``"raise"`` (default) raises ``RuntimeError`` at the
-                first one; ``"warn"`` leaves it out and emits a
-                ``TLEWarning`` with the same message; ``"skip"`` leaves
-                it out silently
+            on_error (str, optional): what to do with input that is not a
+                valid element set. ``"raise"`` (default) raises ``ValueError``
+                at the first record that fails to parse, and also if the
+                lines hold no element sets at all. ``"warn"`` leaves a bad
+                record out and emits a ``TLEWarning`` with the same message
+                (one more if the lines hold no element sets at all).
+                ``"skip"`` leaves bad records out silently. Only ``"raise"``
+                raises for what the lines contain: ``"warn"`` and ``"skip"``
+                always return a list
 
         Returns:
             list[TLE]: one TLE per element set, even if there is only one.
             With ``on_error="warn"`` or ``"skip"``, one per element set that
-            parsed, which is an empty list if none did.
+            parsed: an empty list if none did, or if the lines (empty, or
+            text that is not TLE data) held none to begin with.
 
         Raises:
-            ValueError: if the lines hold no TLEs, or ``on_error`` is not one
-                of the three values
-            RuntimeError: with ``on_error="raise"``, if a record fails to
-                parse (or, with ``check_checksum``, has a wrong checksum); the
-                message gives the line the record starts on and its satellite
+            ValueError: with ``on_error="raise"``, if a record fails to parse
+                (or, with ``check_checksum``, has a wrong checksum), where the
+                message gives the line the record starts on and its
+                satellite, or if the lines hold no element sets; with any
+                ``on_error``, if it is not one of the three values
+            TypeError: if ``lines`` is not a sequence of strings
 
         Example:
             ```python
             import warnings
 
             lines = [
-                "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9991",
-                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302878",
+                "1 25544U 98067A   21264.51782528  .00002893  00000-0  58680-4 0  9996",
+                "2 25544  51.6442 208.5856 0001458  47.2277  50.1624 15.48919419302874",
                 # A letter O in the epoch day
                 "1 49140U 21082L   24O30.39663557  .00000076  00000-0  14180-4 0  9995",
                 "2 49140  70.0008  34.1139 0002663 260.3521  99.7337 14.98327656131736",
@@ -181,11 +319,11 @@ class TLE:
             list[TLE]: one TLE per element set in the response
 
         Raises:
-            ValueError: if the response holds no TLEs
+            ValueError: with ``on_error="raise"``, if a record fails to parse
+                or the response holds no TLEs; see ``TLE.from_lines``
             RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-                ``satkit.utils.set_offline(True)``; no connection is opened),
-                the request fails, or (with ``on_error="raise"``) a record
-                fails to parse
+                ``satkit.utils.set_offline(True)``; no connection is opened)
+                or the request fails
 
         Example:
             ```python
@@ -196,42 +334,98 @@ class TLE:
 
     @property
     def satnum(self) -> int:
-        """Satellite number, or equivalently the NORAD ID"""
+        """Satellite number, or equivalently the NORAD catalog number
+
+        A number above 339999 (the end of the Alpha-5 scheme) is allowed, as
+        OMM carries up to nine digits, but cannot be written by ``to_2line``.
+        """
         ...
 
     @satnum.setter
     def satnum(self, value: int) -> None:
-        """Set the satellite number (NORAD ID)"""
+        """Set the satellite number; ``ValueError`` unless 0 <= value <= 999999999"""
         ...
 
     @property
     def intl_desig(self) -> str:
-        """International designator (e.g. "98067A": launch year, launch number, piece)"""
+        """International designator as written in the TLE (line 1, columns 10-17)
+
+        For example ``"98067A"``: the last two digits of the launch year,
+        the three-digit launch number of that year and the piece of the
+        launch (one to three letters). An empty string if the element set
+        has none, as for an analyst object or a new ``TLE()``.
+
+        This string is the stored value: ``to_2line`` writes it and
+        ``to_omm`` derives ``OBJECT_ID`` from it. ``desig_year``,
+        ``desig_launch`` and ``desig_piece`` are read from it, and setting
+        any of them rewrites it.
+        """
         ...
 
     @intl_desig.setter
-    def intl_desig(self, value: str) -> None: ...
+    def intl_desig(self, value: str) -> None:
+        """Set the international designator
+
+        ``ValueError`` if it is longer than the 8 columns of the TLE field or
+        holds anything but printable ASCII. Surrounding spaces are removed.
+        """
+        ...
+
     @property
-    def desig_year(self) -> int:
-        """Launch year from the international designator (2-digit, as in the TLE)"""
+    def desig_year(self) -> int | None:
+        """Launch year from the international designator, two digits as in the TLE
+
+        The first two characters of ``intl_desig`` (98 for ``"98067A"``):
+        57-99 are 1957-1999 and 0-56 are 2000-2056. ``None`` if the
+        designator is blank or does not start with two digits.
+        """
         ...
 
     @desig_year.setter
-    def desig_year(self, value: int) -> None: ...
+    def desig_year(self, value: int) -> None:
+        """Set the two-digit launch year, rewriting ``intl_desig``
+
+        ``ValueError`` unless 0 <= value <= 99. A launch number the
+        designator does not have yet is written as ``000``.
+        """
+        ...
+
     @property
-    def desig_launch(self) -> int:
-        """Launch number of the year from the international designator"""
+    def desig_launch(self) -> int | None:
+        """Launch number of the year from the international designator
+
+        Characters 3-5 of ``intl_desig`` (67 for ``"98067A"``). ``None`` if
+        the designator is blank or does not hold three digits there.
+        """
         ...
 
     @desig_launch.setter
-    def desig_launch(self, value: int) -> None: ...
+    def desig_launch(self, value: int) -> None:
+        """Set the launch number of the year, rewriting ``intl_desig``
+
+        ``ValueError`` unless 0 <= value <= 999. A launch year the
+        designator does not have yet is written as ``00``.
+        """
+        ...
+
     @property
     def desig_piece(self) -> str:
-        """Piece of the launch from the international designator (e.g. "A")"""
+        """Piece of the launch from the international designator (e.g. "A")
+
+        What follows the year and launch number in ``intl_desig``; an empty
+        string if the designator is blank or has no piece.
+        """
         ...
 
     @desig_piece.setter
-    def desig_piece(self, value: str) -> None: ...
+    def desig_piece(self, value: str) -> None:
+        """Set the piece of the launch, rewriting ``intl_desig``
+
+        ``ValueError`` unless it is at most three ASCII letters. A launch
+        year and number the designator does not have yet are written as zeros.
+        """
+        ...
+
     @property
     def classification(self) -> str:
         """Classification (line 1, column 8): "U", "C" or "S" in practice, but any single ASCII letter round-trips"""
@@ -248,21 +442,29 @@ class TLE:
         ...
 
     @ephem_type.setter
-    def ephem_type(self, value: int) -> None: ...
+    def ephem_type(self, value: int) -> None:
+        """Set the ephemeris type; ``OverflowError`` unless 0 <= value <= 255 (``to_2line`` writes a value above 9 as 0)"""
+        ...
+
     @property
     def element_num(self) -> int:
         """Element set number"""
         ...
 
     @element_num.setter
-    def element_num(self, value: int) -> None: ...
+    def element_num(self, value: int) -> None:
+        """Set the element set number (``to_2line`` writes it modulo 10,000, a negative value as 0)"""
+        ...
+
     @property
     def rev_num(self) -> int:
         """Revolution number at epoch"""
         ...
 
     @rev_num.setter
-    def rev_num(self, value: int) -> None: ...
+    def rev_num(self, value: int) -> None:
+        """Set the revolution number at epoch (``to_2line`` writes it modulo 100,000, a negative value as 0)"""
+        ...
 
     @property
     def raan(self) -> float:
@@ -271,17 +473,31 @@ class TLE:
 
     @raan.setter
     def raan(self, value: float) -> None:
-        """Set the Right Ascension of Ascending Node, in degrees"""
+        """Set the Right Ascension of Ascending Node, in degrees; ``ValueError`` if not finite"""
+        ...
+
+    @property
+    def eccentricity(self) -> float:
+        """Orbit eccentricity, unitless, in range [0, 1)
+
+        ``eccentricity`` is the same value under its full name; ``eccen`` is
+        an alias of it, kept for existing code.
+        """
+        ...
+
+    @eccentricity.setter
+    def eccentricity(self, value: float) -> None:
+        """Set the orbit eccentricity; ``ValueError`` unless 0 <= value < 1"""
         ...
 
     @property
     def eccen(self) -> float:
-        """Satellite eccentricity, unitless, in range [0,1]"""
+        """Orbit eccentricity, unitless, in range [0, 1); an alias of ``eccentricity``"""
         ...
 
     @eccen.setter
     def eccen(self, value: float) -> None:
-        """Set the satellite eccentricity, unitless, in range [0,1]"""
+        """Set the satellite eccentricity; ``ValueError`` unless 0 <= value < 1"""
         ...
 
     @property
@@ -291,7 +507,7 @@ class TLE:
 
     @mean_anomaly.setter
     def mean_anomaly(self, value: float) -> None:
-        """Set the satellite mean anomaly, degrees"""
+        """Set the satellite mean anomaly, degrees; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -301,7 +517,7 @@ class TLE:
 
     @mean_motion.setter
     def mean_motion(self, value: float) -> None:
-        """Set the satellite mean motion, revs / day"""
+        """Set the satellite mean motion, revs / day; ``ValueError`` if negative or not finite"""
         ...
 
     @property
@@ -311,7 +527,7 @@ class TLE:
 
     @inclination.setter
     def inclination(self, value: float) -> None:
-        """Set the satellite inclination, degrees"""
+        """Set the satellite inclination, degrees; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -321,7 +537,11 @@ class TLE:
 
     @epoch.setter
     def epoch(self, value: TimeScalar) -> None:
-        """Set the TLE epoch"""
+        """Set the TLE epoch: a single ``time``, ``datetime.datetime`` or ``numpy.datetime64``
+
+        ``TypeError`` for anything else, including a list of times.
+        ``to_2line`` can only write an epoch in the years 1957-2056.
+        """
         ...
 
     @property
@@ -331,7 +551,7 @@ class TLE:
 
     @arg_of_perigee.setter
     def arg_of_perigee(self, value: float) -> None:
-        """Set the argument of perigee, degrees"""
+        """Set the argument of perigee, degrees; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -345,7 +565,7 @@ class TLE:
 
     @mean_motion_dot.setter
     def mean_motion_dot(self, value: float) -> None:
-        """Set the 1/2 of first derivative of mean motion, in revs/day^2"""
+        """Set the 1/2 of first derivative of mean motion, in revs/day^2; ``ValueError`` if not finite"""
         ...
 
     @property
@@ -360,12 +580,16 @@ class TLE:
 
     @mean_motion_dot_dot.setter
     def mean_motion_dot_dot(self, value: float) -> None:
-        """Set the 1/6 of 2nd derivative of mean motion, in revs/day^3"""
+        """Set the 1/6 of 2nd derivative of mean motion, in revs/day^3; ``ValueError`` if not finite"""
         ...
 
     @property
     def name(self) -> str:
-        """The name of the satellite"""
+        """The name of the satellite: the name line of a 3-line element set
+
+        ``"none"`` for an element set that has no name (one read from two
+        lines, or a new ``TLE()``).
+        """
         ...
 
     @name.setter
@@ -386,29 +610,43 @@ class TLE:
 
     @bstar.setter
     def bstar(self, value: float) -> None:
-        """Set the drag term (B*) of the satellite, in units of 1 / Earth radii"""
+        """Set the drag term (B*) of the satellite, in units of 1 / Earth radii; ``ValueError`` if not finite"""
         ...
 
     @staticmethod
-    def from_omm(omm: OMMDict) -> TLE:
+    def from_omm(omm: OMMDict | dict[str, Any]) -> TLE:
         """Build a TLE from an OMM (Orbital Mean-Element Message) dictionary
 
         The dictionary is the same shape ``sgp4`` accepts: the flat CCSDS
         keys of a Space-Track / CelesTrak JSON record (see ``OMMDict``),
-        or the nested ``meanElements`` / ``tleParameters`` groups of an
-        XML-derived dict. Numbers may be strings.
+        or the nested groups of an ``xmltodict`` rendering of the XML form.
+        Numbers may be strings.
 
         The six mean elements, epoch, ``BSTAR``, ``MEAN_MOTION_DOT``,
         ``MEAN_MOTION_DDOT``, ``NORAD_CAT_ID``, ``ELEMENT_SET_NO``,
-        ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; absent optional
-        values become zero. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
-        international designator. Other metadata is dropped.
+        ``REV_AT_EPOCH`` and ``EPHEMERIS_TYPE`` carry over; of these, the
+        optional ones become zero when absent. ``OBJECT_NAME`` becomes the
+        name, and the unnamed-TLE name ``"none"`` when it is absent, empty or
+        ``UNKNOWN``. ``OBJECT_ID`` in ``YYYY-NNNP`` form becomes the
+        international designator (``1998-067A`` gives ``98067A``, and
+        ``1998-067``, with no piece, gives ``98067``); any other
+        form leaves the designator empty. ``CLASSIFICATION_TYPE`` becomes the
+        classification, ``"U"`` unless it is a single ASCII letter. Other
+        metadata is dropped.
+
+        This inverts ``to_omm``: ``TLE.from_omm(tle.to_omm()) == tle`` for a
+        TLE read from two or three lines.
 
         Args:
-            omm (OMMDict): OMM dictionary
+            omm (OMMDict | dict): OMM dictionary
 
         Returns:
             TLE: the equivalent two-line element set
+
+        Raises:
+            TypeError: if ``omm`` is not a dict
+            ValueError: if a required key (``EPOCH`` or one of the six mean
+                elements) is missing or a value cannot be read
 
         Example:
             ```python
@@ -426,8 +664,11 @@ class TLE:
         ``EPOCH`` as an RFC 3339 string, angles in degrees and mean motion in
         revolutions per day, and can be passed back to ``sgp4`` or
         serialized with ``json.dumps``. ``OBJECT_ID`` is derived from the
-        international designator (``98067A`` becomes ``1998-067A``), and
-        ``CLASSIFICATION_TYPE`` is the TLE's classification letter.
+        international designator (``98067A`` becomes ``1998-067A``, ``98067``
+        ``1998-067``, a blank one ``UNKNOWN``), ``OBJECT_NAME`` is the name (``UNKNOWN`` for an
+        unnamed TLE), and ``CLASSIFICATION_TYPE`` is the TLE's classification
+        letter. A negative ``satnum``, ``element_num`` or ``rev_num`` and an
+        ``ephem_type`` above 9 have no OMM form and are left out.
 
         Returns:
             OMMDict: OMM dictionary
@@ -446,10 +687,12 @@ class TLE:
             2 canonical TLE Lines
 
         Raises:
-            ValueError: if ``satnum`` is 340000 or above: Alpha-5 (used for
-                the 5-character satellite number field) ends at ``Z9999``
-                (339999), so the catalog number cannot be written to a TLE.
-                Use ``to_omm()`` instead.
+            ValueError: if the element set does not fit the format:
+                ``satnum`` is 340000 or above (Alpha-5, used for the
+                5-character satellite number field, ends at ``Z9999`` =
+                339999; use ``to_omm()`` instead) or negative, ``eccen`` is
+                outside [0, 1), or the epoch year is outside 1957-2056 (the
+                span of the two-digit year)
 
         Example:
             ```python
@@ -467,7 +710,11 @@ class TLE:
         Output as 2 canonical TLE lines preceded by a name line (3-line element set)
 
         Returns:
-            3-line element set, name line then 2 canonical TLE lines
+            3-line element set: the name (``"none"`` for an unnamed TLE),
+            then the 2 canonical TLE lines of ``to_2line``
+
+        Raises:
+            ValueError: as ``to_2line``
 
         Example:
             ```python
@@ -481,26 +728,51 @@ class TLE:
     @staticmethod
     def fit_from_states(
         states: npt.ArrayLike,
-        times: TimeArrayLike,
+        times: TimeInput,
         epoch: TimeScalar,
         *,
         gravconst: sgp4_gravconst = ...,
         opsmode: sgp4_opsmode = ...,
-    ) -> tuple[TLE, dict]:
+        satnum: int | None = None,
+        name: str | None = None,
+        intl_desig: str | None = None,
+    ) -> tuple[TLE, TLEFitResult]:
         """
         Perform non-linear least squares fit of TLE parameters to a list of GCRF states
 
         Args:
             states: GCRF states to fit to: an Nx6 array, or a list of 6-element vectors. The first 3 values are positions in meters. The last 3 values are velocities in meters / second.
-            times: List of times corresponding to the states
-            epoch: Epoch time for the TLE. Must be within range of times.
+            times: Times corresponding to the states, one per state: a list or
+                array of times (a single time is accepted for a single state)
+            epoch: Epoch time for the TLE: a single time, within the range of ``times``
 
         Keyword Args:
             gravconst: gravity model SGP4 uses in the fit.  Default is sgp4_gravconst.wgs72
             opsmode: SGP4 ops mode used in the fit.  Default is sgp4_opsmode.afspc
+            satnum: satellite number of the fitted TLE (0 if omitted); checked
+                as setting the ``satnum`` property is
+            name: name of the fitted TLE (``"none"`` if omitted)
+            intl_desig: international designator of the fitted TLE (blank if
+                omitted); checked as setting the ``intl_desig`` property is
 
         Returns:
-            Fitted TLE and fitting results in a dictionary
+            Fitted TLE and the fit results, a dictionary (see ``TLEFitResult``).
+            The fitted TLE has the ``satnum``, ``name`` and ``intl_desig``
+            given; those left out are satellite number 0, the name ``"none"``
+            and a blank international designator.
+
+        Raises:
+            TypeError: if ``states`` is not a sequence of 6-element vectors,
+                ``times`` or ``epoch`` is not a time (``epoch`` must be a single
+                time, not a list), or ``gravconst`` / ``opsmode`` is not the enum
+            ValueError: if ``states`` is empty, ``states`` and ``times`` differ in
+                length, ``epoch`` is outside the range of ``times``, or
+                ``satnum`` or ``intl_desig`` is a value its property refuses
+                (checked before the fit)
+            OverflowError: if ``satnum`` does not fit 32 bits
+            RuntimeError: if the fit itself fails (SGP4 cannot evaluate the
+                elements, singular normal equations, or it ends on elements a
+                TLE cannot hold)
 
         Notes:
             SGP4 propagator is used to match TLE to the states. The fitted TLE
@@ -518,10 +790,10 @@ class TLE:
             and converts to the classical TLE elements at the end. It is
             built on top of the ``numeris`` linear algebra crate.
 
-            The results dictionary includes the following keys:
+            The results dictionary (``TLEFitResult``) has the keys
             ``status`` (a ``tlefitstatus``), ``converged`` (bool),
-            ``orig_norm``, ``best_norm``, ``grad_norm``, ``n_iter``,
-            ``n_res_evals``.
+            ``orig_norm``, ``best_norm``, ``grad_norm`` (floats), ``n_iter``
+            and ``n_res_evals`` (ints).
 
         Example:
             ```python
@@ -541,7 +813,7 @@ class TLE:
 
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -550,7 +822,7 @@ def sgp4(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]: ...
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -559,7 +831,7 @@ def sgp4(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
 @overload
 def sgp4(
-    tle: TLE | OMMDict | list[TLE] | list[OMMDict] | list[TLE | OMMDict],
+    tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
     gravconst: sgp4_gravconst = ...,
@@ -575,17 +847,19 @@ def sgp4(
     output satellite position and velocity at given time
     in the "TEME" coordinate system.
 
-    A detailed description is in Vallado, Crawford, Hujsak & Kelso,
-    "Revisiting Spacetrack Report #3", AIAA 2006-6753:
-    <https://doi.org/10.2514/6.2006-6753>
-    <https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev3.pdf>
+    A detailed description is in Vallado, Crawford, Hujsak and Kelso,
+    "Revisiting Spacetrack Report #3", AIAA 2006-6753 (AIAA/AAS Astrodynamics
+    Specialist Conference, 2006).
 
     Args:
         tle (TLE | OMMDict | list[TLE | OMMDict]): element set(s) to propagate: a
             ``TLE`` object, an OMM dictionary (see ``OMMDict``), or a list of either
             (or mixing both). Must be a ``list``; tuples and other sequences are not accepted
-        time (time | list[time] | list[datetime.datetime] | npt.ArrayLike[time] | npt.ArrayLike[datetime.datetime]): time(s) at which to compute position and velocity.
-            A naive ``datetime`` is local time, not UTC (see ``time.from_datetime``)
+        time (time | datetime.datetime | numpy.datetime64 | list | tuple | numpy.ndarray): time(s) at
+            which to compute position and velocity: a single time, a list or tuple of times, a 1-D
+            numpy object array of times or a 1-D ``datetime64`` array.
+            A naive ``datetime`` is local time, not UTC (see ``time.from_datetime``); a
+            ``numpy.datetime64`` is UTC
 
     Keyword Args:
         gravconst (satkit.sgp4_gravconst): gravity constant to use.  Default is sgp4_gravconst.wgs72
@@ -621,10 +895,14 @@ def sgp4(
           ``MEAN_ANOMALY`` (plus optional ``BSTAR``, ``MEAN_MOTION_DOT``, ``MEAN_MOTION_DDOT``)
           is accepted, whether it came from ``omm_from_url`` / ``omm_from_file`` /
           ``omm_from_text``, from ``json.load`` on a CelesTrak or Space-Track response
-          (numbers may be strings), or from ``xmltodict`` on the XML form (the nested
-          ``meanElements`` / ``tleParameters`` groups are understood). ``EPOCH`` may be an
-          RFC 3339 string, a CCSDS day-of-year string (``YYYY-DDDThh:mm:ss``), a ``satkit.time`` or a
-          ``datetime`` (naive = local time). Other keys are ignored,
+          (numbers may be strings), or from ``xmltodict.parse`` on the XML form: the whole
+          result (root key ``omm``, or ``ndm`` holding one ``omm``) or any node below it, the
+          nested ``header`` / ``body`` / ``segment`` / ``metadata`` / ``data`` /
+          ``meanElements`` / ``tleParameters`` groups being understood. An ``ndm`` holding
+          several messages is not one element set: pass ``sgp4`` the list
+          ``[{"omm": m} for m in d["ndm"]["omm"]]``. ``EPOCH`` may be an
+          RFC 3339 string, a CCSDS day-of-year string (``YYYY-DDDThh:mm:ss``), a ``satkit.time``, a
+          ``datetime`` (naive = local time) or a ``numpy.datetime64`` (UTC). Other keys are ignored,
           except that ``MEAN_ELEMENT_THEORY`` must be ``SGP4``, ``TIME_SYSTEM`` must be
           ``UTC``, ``REF_FRAME`` must be ``TEME``, ``CENTER_NAME`` must be ``EARTH`` and
           ``EPHEMERIS_TYPE`` must not be 4 (SGP4-XP) when present.
@@ -632,18 +910,31 @@ def sgp4(
           frame: its axes are the true equator and the mean equinox of date, i.e. of each output time (not of the
           TLE epoch), so the frame itself moves with precession and nutation. Rotate to GCRF with
           ``frametransform.rotation(frame.TEME, frame.GCRF, time)``.
-        - **Errors:** a time at which propagation fails (e.g. the orbit has decayed) gives a NaN row,
-          with its code in the error array when ``errflag`` is True. An element set that cannot be
-          initialized at all (e.g. decayed or eccentricity out of range at epoch, or an SGP4-XP set)
-          raises ``RuntimeError`` when ``errflag`` is False; for a list, the message gives its index.
-          When ``errflag`` is True it does not raise: its rows are NaN at every time and every time
-          carries its init code (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata SGP4
-          cannot use), so one bad element set does not fail a list.
+        - **Errors** are reported per element set and per time, in two ways.
+          A time at which propagation fails (e.g. the orbit has decayed by then) never raises,
+          with or without ``errflag``: its position and velocity rows are NaN, and with
+          ``errflag`` True its code is in the error array. Without ``errflag``, check the output
+          for NaN. An element set that cannot be initialized at all (e.g. zero mean motion or an
+          eccentricity out of range at epoch, an SGP4-XP set, or OMM metadata SGP4 cannot use)
+          raises ``RuntimeError`` when ``errflag`` is False; for a list, the message names its
+          index (``element set 1 of the list: ...``) and nothing is returned for the others.
+          With ``errflag`` True it does not raise: its rows are NaN at every time and every time
+          carries its init code (``sgp4_error.unsupported`` for an SGP4-XP set or OMM metadata
+          SGP4 cannot use), so one bad element set does not fail a list.
         - **Leap seconds:** the time since epoch is the physical (SI) time elapsed. Across a leap second
           this is one second more than the difference of the UTC labels that Vallado's reference code
           and python-sgp4 use, so satkit differs from them by 1 s of along-track motion (~7.6 km at
           LEO) per leap second between epoch and time. This is deliberate: the satellite really flies
           86,401 s over such a day, and the SGP4 mean motion is per SI day.
+
+    Raises:
+        TypeError: if ``tle`` is not a ``TLE``, a dict or a list of them, ``time`` is not a
+            time or a list / array of times, or ``gravconst`` / ``opsmode`` is not a member of
+            its enum
+        ValueError: if an OMM dictionary lacks a required key or holds a value that cannot be
+            read
+        RuntimeError: with ``errflag`` False, if an element set cannot be initialized (see
+            **Errors** above)
 
     Example:
         ```python
@@ -695,26 +986,86 @@ def sgp4(
 
 @final
 class sgp4_gravconst:
-    """Gravity constant to use for SGP4 propagation"""
+    """Gravity constants (Earth radius, mu, J2-J4) used by SGP4 propagation
+
+    Element sets are generated with WGS-72, so ``wgs72`` (the default of
+    ``sgp4`` and ``TLE.fit_from_states``) is the one that reproduces the
+    orbit a TLE or OMM describes.
+
+    Members compare equal to their integer value (``int(m)``), and
+    ``sgp4_gravconst(value)`` turns a value back into a member.
+    """
 
     wgs72: ClassVar[sgp4_gravconst]
-    """WGS-72"""
+    """WGS-72, the default (value 0)"""
 
     wgs72old: ClassVar[sgp4_gravconst]
-    """WGS-72 Old"""
+    """WGS-72 with the older, lower-precision constants of the original Spacetrack Report #3 code (value 1)"""
 
     wgs84: ClassVar[sgp4_gravconst]
-    """WGS-84"""
+    """WGS-84 (value 2)"""
+
+    def __new__(cls, value: int) -> sgp4_gravconst:
+        """The member with integer value ``value``
+
+        For example ``satkit.sgp4_gravconst(2)`` is ``sgp4_gravconst.wgs84``.
+
+        Raises:
+            ValueError: if ``value`` is not one of the values 0 to 2
+        """
+        ...
+
+    def __int__(self) -> int:
+        """The member's integer value"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer value"""
+        ...
+
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
+        ...
 
 @final
 class sgp4_opsmode:
-    """Ops Mode for SGP4 Propagation"""
+    """Ops mode for SGP4 propagation
+
+    Selects between the two variants of Vallado's SGP4 code. They differ
+    only for deep-space element sets (period of 225 minutes or more), in how
+    the ascending node is wrapped in the lunar-solar periodic terms.
+
+    Members compare equal to their integer value (``int(m)``), and
+    ``sgp4_opsmode(value)`` turns a value back into a member.
+    """
 
     afspc: ClassVar[sgp4_opsmode]
-    """afspc (Air Force Space Command), the default"""
+    """Reproduces the Air Force Space Command code that generates TLEs; the default (value 0)"""
 
     improved: ClassVar[sgp4_opsmode]
-    """improved"""
+    """Vallado's "improved" mode (value 1)"""
+
+    def __new__(cls, value: int) -> sgp4_opsmode:
+        """The member with integer value ``value``
+
+        For example ``satkit.sgp4_opsmode(1)`` is ``sgp4_opsmode.improved``.
+
+        Raises:
+            ValueError: if ``value`` is not 0 or 1
+        """
+        ...
+
+    def __int__(self) -> int:
+        """The member's integer value"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer value"""
+        ...
+
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
+        ...
 
 @final
 class gravmodel:
@@ -730,6 +1081,9 @@ class gravmodel:
     ``tidemodel.solid_step1`` correction accounts for it, so any model can
     be combined with any tide model without double-counting the permanent
     tide.
+
+    Members are hashable, compare equal to their integer value and to each
+    other by value, and cannot be constructed.
     """
 
     jgm3: ClassVar[gravmodel]
@@ -765,6 +1119,10 @@ class gravmodel:
     Compiled in (truncated to degree 70). Default for the orbit propagator.
     """
 
+    def __int__(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 def nrlmsise00(
     alt_km: float,
     *,
@@ -775,25 +1133,44 @@ def nrlmsise00(
 ) -> tuple[float, float]:
     """NRL-MSISE00 atmospheric density model
 
+    ``satkit.density.nrlmsise`` is the same model taking an ``itrfcoord``,
+    or meters and radians.
+
     Args:
-        alt_km (float): Altitude in kilometers
+        alt_km (float): Altitude above the WGS-84 ellipsoid in kilometers
+            (-1 or above; the model runs from the ground to the exosphere)
 
     Keyword Args:
-        latitude_deg (float): Latitude in degrees
-        longitude_deg (float): Longitude in degrees
-        time (satkit.time | datetime.datetime, optional): Time at which to
-            evaluate the model; space-weather data at this time is used when
-            ``use_spaceweather`` is True
-        use_spaceweather (bool): Use the space-weather database in the
-            calculation. Default is True
+        latitude_deg (float): Geodetic latitude in degrees, in [-90, 90].
+            Default is 0
+        longitude_deg (float): Longitude in degrees. Default is 0
+        time (satkit.time | datetime.datetime | numpy.datetime64, optional):
+            Time at which to evaluate the model. Without a time the model is
+            evaluated for 00:00 UT on 1 January, on default indices
+            (F10.7 = F10.7A = 150, Ap = 4)
+        use_spaceweather (bool): Look up F10.7 and Ap in the space-weather
+            data at ``time``. Default is True. It has no effect without a
+            ``time``; with False, or for a time the data does not cover, the
+            default indices are used
 
     Returns:
-        tuple[float, float]: Density (kg/m^3) and temperature (K)
+        tuple[float, float]: Mass density (kg/m^3) and temperature (K)
+
+    Raises:
+        TypeError: ``time`` is not a single time value, or a number is expected
+        ValueError: ``alt_km`` is NaN, infinite or below -1; ``latitude_deg``
+            is NaN or outside [-90, 90]; ``longitude_deg`` is NaN or infinite
+
+    Example:
+        ```python
+        rho, temp = satkit.nrlmsise00(400.0, latitude_deg=30.0, longitude_deg=-70.0)
+        print(f"{rho:.2e} kg/m^3, {temp:.0f} K")
+        ```
     """
     ...
 
 def gravity(
-    pos: list[float] | itrfcoord | npt.ArrayLike,
+    pos: itrfcoord | npt.ArrayLike,
     *,
     model: gravmodel = ...,
     degree: int = 6,
@@ -802,16 +1179,20 @@ def gravity(
     """Return acceleration due to Earth gravity at the input position
 
     Args:
-        pos (list[float] | satkit.itrfcoord | npt.ArrayLike[np.float]): Position as ITRF coordinate or numpy 3-vector representing ITRF position in meters
+        pos (satkit.itrfcoord | npt.ArrayLike): Position as ITRF coordinate, or 3-element ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 
     Keyword Args:
         model (gravmodel): The gravity model to use.  Default is gravmodel.egm2008
-        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 70
-        order (int): Maximum order of gravity model to use.  Default is same as degree
+        degree (int): Maximum degree of gravity model to use, 0 to 70.  Default is 6.  0 and 1 both give the point-mass field
+        order (int): Maximum order of gravity model to use, 0 to ``degree``.  Default is same as degree
 
     Returns:
-        acceleration in m/s^2 in the International Terrestrial Reference Frame (ITRF)
+        3-element array (shape ``(3,)``): acceleration in m/s^2 in the International Terrestrial Reference Frame (ITRF). The centrifugal acceleration of the rotating frame is not included
 
+    Raises:
+        TypeError: ``pos`` is not an itrfcoord or a real numeric array-like; ``model`` is not a ``gravmodel``; ``degree`` or ``order`` is not an integer
+        ValueError: ``pos`` does not have 3 elements, holds a NaN or infinity, or is the origin; ``degree`` is negative or above 70; ``order`` is negative or above ``degree``
+        RuntimeError: the coefficient file of ``gravmodel.itugrace16`` is not in the data directory and cannot be downloaded
 
     Notes:
         - For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000 (https://doi.org/10.1007/978-3-642-58351-3).
@@ -836,16 +1217,20 @@ def gravity_and_partials(
     """Gravity and partial derivatives of gravity with respect to Cartesian coordinates
 
     Args:
-        pos (itrfcoord | npt.ArrayLike[np.float]): Position as ITRF coordinate or numpy 3-vector representing ITRF position in meters
-
+        pos (satkit.itrfcoord | npt.ArrayLike): Position as ITRF coordinate, or 3-element ITRF position in meters (numpy array, list or tuple; integers are converted to float)
 
     Keyword Args:
         model (gravmodel): The gravity model to use.  Default is gravmodel.egm2008
-        degree (int): Maximum degree of gravity model to use.  Default is 6, maximum is 70
-        order (int): Maximum order of gravity model to use.  Default is same as degree
+        degree (int): Maximum degree of gravity model to use, 0 to 70.  Default is 6.  0 and 1 both give the point-mass field
+        order (int): Maximum order of gravity model to use, 0 to ``degree``.  Default is same as degree
 
     Returns:
-        acceleration in m/s^2 and partial derivative of acceleration with respect to ITRF Cartesian coordinate in m/s^2 / m
+        Tuple of the acceleration in m/s^2 in the ITRF (shape ``(3,)``) and its partial derivatives with respect to ITRF position (shape ``(3, 3)``, ``partials[i, j] = d a_i / d r_j``) in m/s^2 / m
+
+    Raises:
+        TypeError: ``pos`` is not an itrfcoord or a real numeric array-like; ``model`` is not a ``gravmodel``; ``degree`` or ``order`` is not an integer
+        ValueError: ``pos`` does not have 3 elements, holds a NaN or infinity, or is the origin; ``degree`` is negative or above 70; ``order`` is negative or above ``degree``
+        RuntimeError: the coefficient file of ``gravmodel.itugrace16`` is not in the data directory and cannot be downloaded
 
 
     For details of calculation, see Chapter 3.2 of: "Satellite Orbits: Models, Methods, Applications", O. Montenbruck and E. Gill, Springer, 2000 (https://doi.org/10.1007/978-3-642-58351-3).
@@ -855,7 +1240,16 @@ def gravity_and_partials(
 
 @final
 class solarsystem:
-    """Solar system bodies for which high-precision ephemeris can be computed"""
+    """Solar system bodies for which the JPL ephemeris (``satkit.jplephem``)
+    and the low-precision planetary ephemeris (``satkit.planets``) can be
+    computed
+
+    Notes:
+        - ``EMB`` is the Earth-Moon barycenter; there is no ``Earth`` member
+          (see ``satkit.jplephem.barycentric_pos`` for the Earth's position)
+        - Members compare equal to their integer value
+          (``int(solarsystem.Sun)`` is 10), the body's index in the JPL DE files
+    """
 
     Mercury: ClassVar[solarsystem]
     """Mercury"""
@@ -890,35 +1284,80 @@ class solarsystem:
     Sun: ClassVar[solarsystem]
     """Sun"""
 
+    def __int__(self) -> int:
+        """The member's integer value (members also compare equal to it)"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 @final
 class sgp4_error:
-    """Represent errors from SGP-4 propagation of two-line element sets (TLEs)"""
+    """Error codes of SGP4 propagation, as in the error array of ``sgp4(..., errflag=True)``
+
+    That array holds plain ``int32`` codes; a member compares equal to its
+    code, so ``err == satkit.sgp4_error.success`` works elementwise, and
+    ``satkit.sgp4_error(code)`` turns one code back into a member.
+
+    Example:
+        ```python
+        print(int(satkit.sgp4_error.orbit_decay))
+        # 6
+        print(satkit.sgp4_error.orbit_decay == 6)
+        # True
+        print(satkit.sgp4_error(6))
+        # sgp4_error.orbit_decay
+        ```
+    """
 
     success: ClassVar[sgp4_error]
-    """Success"""
+    """Success (code 0)"""
 
     eccen: ClassVar[sgp4_error]
-    """Eccentricity < 0 or > 1"""
+    """Mean eccentricity at the requested time is 1 or more, or below -0.001 (code 1)"""
 
     mean_motion: ClassVar[sgp4_error]
-    """Mean motion (revs / day) < 0"""
+    """Mean motion is zero or negative (code 2)"""
 
     perturb_eccen: ClassVar[sgp4_error]
-    """Perturbed eccentricity < 0 or > 1"""
+    """Perturbed eccentricity outside [0, 1] (code 3)"""
 
     semi_latus_rectum: ClassVar[sgp4_error]
-    """Semi-Latus Rectum < 0"""
+    """Semi-latus rectum negative (code 4)"""
 
     unused: ClassVar[sgp4_error]
-    """Unused, but in base code, so keeping for completeness"""
+    """Not produced (code 5); kept because the reference code numbers it"""
 
     orbit_decay: ClassVar[sgp4_error]
-    """Orbit decayed"""
+    """Orbit decayed: the computed radius is less than one Earth radius (code 6)"""
 
     unsupported: ClassVar[sgp4_error]
     """Only in the error array of ``sgp4(..., errflag=True)``: the element set cannot be
     propagated by classic SGP4 at all (an SGP4-XP set, or OMM metadata naming another theory,
-    time system, frame or center)"""
+    time system, frame or center) (code 7)"""
+
+    def __new__(cls, code: int) -> sgp4_error:
+        """The member with integer code ``code``
+
+        For example ``satkit.sgp4_error(int(err[0]))`` for an element of the
+        error array of ``sgp4(..., errflag=True)``.
+
+        Raises:
+            ValueError: if ``code`` is not one of the codes 0 to 7
+        """
+        ...
+
+    def __int__(self) -> int:
+        """The member's integer code"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer code"""
+        ...
+
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
+        ...
 
 @final
 class weekday:
@@ -934,6 +1373,7 @@ class weekday:
     - `Thursday`
     - `Friday`
     - `Saturday`
+    - `Invalid`: placeholder that is not a day; ``time.weekday`` never returns it
     """
 
     Sunday: ClassVar[weekday]
@@ -958,7 +1398,14 @@ class weekday:
     """Saturday"""
 
     Invalid: ClassVar[weekday]
-    """Invalid weekday"""
+    """Placeholder that is not a day of the week; ``time.weekday`` never returns it"""
+
+    def __int__(self) -> int:
+        """The integer value of the member (members also compare equal to it)"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class tlefitstatus:
@@ -973,6 +1420,10 @@ class tlefitstatus:
     - ``CostConverged``: converged on relative cost change tolerance
     - ``MaxIterations``: maximum number of iterations reached
     - ``DampingSaturated``: Levenberg-Marquardt damping parameter saturated
+
+    their integer value (``int(m)``, 0 to 4 in the order above), and
+    ``tlefitstatus(value)`` turns a value back into a member.
+    their integer value (``int(m)``, 0 to 4 in the order above).
     """
 
     GradientConverged: ClassVar[tlefitstatus]
@@ -990,9 +1441,31 @@ class tlefitstatus:
     DampingSaturated: ClassVar[tlefitstatus]
     """Levenberg-Marquardt damping parameter saturated"""
 
+    def __new__(cls, value: int) -> tlefitstatus:
+        """The member with integer value ``value``
+
+        For example ``satkit.tlefitstatus(3)`` is ``tlefitstatus.MaxIterations``.
+
+        Raises:
+            ValueError: if ``value`` is not one of the values 0 to 4
+        """
+        ...
+
     @property
     def converged(self) -> bool:
-        """True if the fit converged successfully."""
+        """True for the three ``...Converged`` members, False for ``MaxIterations`` and ``DampingSaturated``"""
+        ...
+
+    def __int__(self) -> int:
+        """The member's integer value"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, or to its integer value"""
+        ...
+
+    def __hash__(self) -> int:
+        """Members are hashable and immutable; one hashes like the integer it equals"""
         ...
 
 @final
@@ -1012,7 +1485,8 @@ class timescale:
 
     Values:
 
-    - `Invalid`: Invalid time scale
+    - `Invalid`: placeholder that is not a time scale. Passing it as a
+      ``scale`` argument raises ``ValueError``
     - `UTC`: Universal Time Coordinate
     - `TT`: Terrestrial Time
     - `UT1`: UT1
@@ -1022,7 +1496,11 @@ class timescale:
     """
 
     Invalid: ClassVar[timescale]
-    """Invalid time scale"""
+    """Placeholder that is not a time scale
+
+    Every ``satkit.time`` method that takes a ``scale`` raises ``ValueError``
+    when given it.
+    """
 
     UTC: ClassVar[timescale]
     """Universal Time Coordinate"""
@@ -1044,11 +1522,26 @@ class timescale:
     TDB: ClassVar[timescale]
     """Barycentric Dynamical Time"""
 
+    def __int__(self) -> int:
+        """The integer value of the member (members also compare equal to it)"""
+        ...
+
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 @final
 class frame:
     """Coordinate reference frame
 
-    Used to specify the frame for thrust vectors and maneuvers.
+    Names the frame of a vector: for ``satkit.frametransform`` (``to_gcrf``,
+    ``from_gcrf``, ``rotation``, ``transform_state`` and the other
+    frame-pair functions), for impulsive maneuvers and for continuous
+    thrust. Not every function accepts every frame: a thrust or maneuver
+    must be in ``GCRF``, ``RTN``, ``NTW`` or ``LVLH``, and each
+    ``frametransform`` function lists the frames it supports.
+
+    Members are hashable, compare equal to their integer value and to each
+    other by value, and cannot be constructed (``frame(3)`` is a ``TypeError``).
 
     Available frames:
 
@@ -1168,6 +1661,10 @@ class frame:
     of magnitude Δv adds *exactly* Δv to |v|, regardless of orbit eccentricity.
     """
 
+    def __int__(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
 @final
 class time:
     """Representation of an instant in time
@@ -1198,22 +1695,24 @@ class time:
 
     """
 
-    J2000: ClassVar[time]
-    """The J2000 epoch: 2000-01-01 12:00:00 TT"""
+    J2000: Final[time]
+    """The J2000 epoch: 2000-01-01 12:00:00 TT (class constant, read-only)"""
 
-    GPS_EPOCH: ClassVar[time]
-    """The GPS epoch: 1980-01-06 00:00:00 UTC"""
+    GPS_EPOCH: Final[time]
+    """The GPS epoch: 1980-01-06 00:00:00 UTC (class constant, read-only)"""
 
-    MJD_EPOCH: ClassVar[time]
-    """The Modified Julian Date epoch: 1858-11-17 00:00:00 UTC"""
+    MJD_EPOCH: Final[time]
+    """The Modified Julian Date epoch: 1858-11-17 00:00:00 UTC (class constant, read-only)"""
 
-    UNIX_EPOCH: ClassVar[time]
-    """The Unix epoch: 1970-01-01 00:00:00 UTC"""
+    UNIX_EPOCH: Final[time]
+    """The Unix epoch: 1970-01-01 00:00:00 UTC (class constant, read-only)"""
 
     @overload
     def __init__(self) -> None: ...
     @overload
     def __init__(self, string: str, /) -> None: ...
+    @overload
+    def __init__(self, t: time | datetime.datetime | np.datetime64, /) -> None: ...
     @overload
     def __init__(self, year: int, month: int, day: int, /, *, scale: timescale = ...) -> None: ...
     @overload
@@ -1241,11 +1740,17 @@ class time:
         - ``time()``: the current time
         - ``time(string)``: parse a string, RFC 3339 first (e.g.
           ``"2023-03-05T11:03:45.453Z"``), then other common formats
+        - ``time(t)``: the instant of another ``satkit.time``, a
+          ``datetime.datetime`` or a ``numpy.datetime64``
         - ``time(year, month, day)``: midnight at the start of the day
         - ``time(year, month, day, hour, min, sec)``: all six components
 
         Args:
             string: String representation of time
+            t: A ``satkit.time`` (copied), a ``datetime.datetime`` (as in
+                ``from_datetime``: a naive one is the machine's local time,
+                an aware one uses its own offset) or a ``numpy.datetime64``
+                (a UTC label; ``NaT`` raises ``ValueError``)
             year: Gregorian year (e.g., 2024)
             month: Gregorian month (1 = January, 2 = February, ...)
             day: Day of month, beginning with 1
@@ -1258,11 +1763,20 @@ class time:
                 nearest microsecond, so the seconds from ``to_gregorian()``
                 round-trip exactly
             scale: Time scale in which the Gregorian components are
-                interpreted, default is satkit.timescale.UTC. Ignored for the
-                string and no-argument forms.
+                interpreted, default is satkit.timescale.UTC. Only for the
+                ``(year, month, day)`` and six-component forms: giving it
+                with the string or no-argument form raises ``TypeError``.
 
         Raises:
-            ValueError: If the string form cannot be parsed
+            TypeError: If the number of positional arguments is not 0, 1, 3
+                or 6; if a single argument is not a string or a time; if a component is
+                not a number (the first five must be integers); or if
+                ``scale`` is given with the string or no-argument form
+            ValueError: If the string form cannot be parsed, if a component
+                is out of range (month 13, hour 25, a second of 60 where
+                there is no leap second, NaN, ...), if the date is beyond
+                about ±292,000 years, or if ``scale`` is
+                ``timescale.Invalid``
 
         Example:
             ```python
@@ -1270,6 +1784,10 @@ class time:
             # 2023-03-05T11:03:45.453000Z
 
             print(satkit.time(2023, 3, 5))
+            # 2023-03-05T00:00:00.000000Z
+
+            import datetime
+            print(satkit.time(datetime.datetime(2023, 3, 5, tzinfo=datetime.timezone.utc)))
             # 2023-03-05T00:00:00.000000Z
             ```
         """
@@ -1422,22 +1940,34 @@ class time:
         ...
 
     @staticmethod
-    def from_date(year: int, month: int, day: int) -> time:
+    def from_date(year: int, month: int, day: int, scale: timescale = timescale.UTC) -> time:
         """Return a time object representing the start of the input day (midnight)
 
         Args:
             year (int): Gregorian year (e.g., 2024)
             month (int): Gregorian month (1 = January, 2 = February, ...)
             day (int): Day of month, beginning with 1
+            scale (timescale, optional): Time scale in which the date is
+                given (midnight in that scale). Default is
+                satkit.timescale.UTC
 
         Returns:
             Time object representing the start of the input day (midnight)
+
+        Raises:
+            TypeError: If an argument is not an integer
+            ValueError: If the month or day is out of range, the date is
+                beyond about ±292,000 years, or ``scale`` is
+                ``timescale.Invalid``
 
         Example:
             ```python
             t = satkit.time.from_date(2023, 6, 15)
             print(t)
             # 2023-06-15T00:00:00.000000Z
+            # Midnight TAI is 37 s before midnight UTC
+            print(satkit.time.from_date(2023, 6, 15, scale=satkit.timescale.TAI))
+            # 2023-06-14T23:59:23.000000Z
             ```
         """
         ...
@@ -1452,6 +1982,11 @@ class time:
 
         Returns:
             Time object representing input Julian date and time scale
+
+        Raises:
+            ValueError: If ``jd`` is NaN or infinite, or ``scale`` is
+                ``timescale.Invalid``
+            OverflowError: If the result is beyond about ±292,000 years
 
         Example:
             ```python
@@ -1473,6 +2008,10 @@ class time:
         Returns:
             Time object representing input unixtime
 
+        Raises:
+            ValueError: If ``unixtime`` is NaN or infinite
+            OverflowError: If the result is beyond about ±292,000 years
+
         Example:
             ```python
             t = satkit.time.from_unixtime(1700000000)
@@ -1487,11 +2026,36 @@ class time:
         """Return a time object representing input GPS week and second
 
         Args:
-            week: GPS week number
-            seconds: GPS seconds of week, seconds
+            week: GPS week number, counted from the GPS epoch
+                (1980-01-06) without the 1024-week rollover
+            seconds: GPS seconds of week, seconds; rounded to the nearest
+                microsecond. Not limited to one week: 604800 is the start
+                of the next week
 
         Returns:
             Time object representing input GPS week and second
+
+        Raises:
+            ValueError: If ``seconds`` is NaN or infinite
+            OverflowError: If the result is beyond about ±292,000 years
+        """
+        ...
+
+    def to_gps_week_and_second(self) -> tuple[int, float]:
+        """GPS week and seconds of week: the inverse of ``from_gps_week_and_second``
+
+        Returns:
+            Tuple of the GPS week number, counted from the GPS epoch
+            (1980-01-06) without the 1024-week rollover (negative before the
+            epoch), and the GPS seconds of week in [0, 604800), the float
+            nearest the exact (whole-microsecond) value
+
+        Example:
+            ```python
+            week, sow = satkit.time(2024, 1, 1).to_gps_week_and_second()
+            print(week, sow)
+            # 2295 86418.0
+            ```
         """
         ...
 
@@ -1520,6 +2084,11 @@ class time:
         Returns:
             Time object representing input modified Julian date and time scale
 
+        Raises:
+            ValueError: If ``mjd`` is NaN or infinite, or ``scale`` is
+                ``timescale.Invalid``
+            OverflowError: If the result is beyond about ±292,000 years
+
         Example:
             ```python
             t = satkit.time.from_mjd(60000.0)
@@ -1528,14 +2097,21 @@ class time:
         """
         ...
 
-    def to_date(self) -> tuple[int, int, int]:
-        """Return tuple representing as UTC Gregorian date of the time object.
+    def to_date(self, scale: timescale = timescale.UTC) -> tuple[int, int, int]:
+        """Return tuple representing the Gregorian date of the time object (UTC by default).
+
+        Args:
+            scale (timescale, optional): Time scale of the date. Default is
+                satkit.timescale.UTC
 
         Returns:
             Tuple with 3 elements representing the Gregorian year, month, and day of the time object.
                 Fractional component of day are truncated.
                 Month is in range [1,12].
                 Day is in range [1,31].
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
         """
         ...
 
@@ -1546,13 +2122,33 @@ class time:
 
     def to_gregorian(
         self,
+        scale: timescale = timescale.UTC,
     ) -> tuple[int, int, int, int, int, float]:
-        """Return tuple representing as UTC Gregorian date and time of the time object.
+        """Return tuple representing the Gregorian date and time of the time object (UTC by default).
+
+        Args:
+            scale (timescale, optional): Time scale of the date and time.
+                Default is satkit.timescale.UTC. The inverse of
+                ``from_gregorian`` with the same scale: exact for UTC, TAI,
+                TT and GPS; UT1 and TDB are rounded to the nearest
+                microsecond
 
         Returns:
             Tuple with 6 elements representing the Gregorian year, month, day, hour, minute, and second of the time object.
                 Month is in range [1,12].
                 Day is in range [1,31].
+                The second is the float nearest the exact (whole-microsecond)
+                value, in [0, 60); inside a UTC leap second it is in [60, 61).
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
+
+        Example:
+            ```python
+            t = satkit.time(2024, 1, 1)
+            print(t.to_gregorian(scale=satkit.timescale.TAI))
+            # (2024, 1, 1, 0, 0, 37.0)
+            ```
         """
         ...
 
@@ -1569,8 +2165,9 @@ class time:
         hour: int,
         min: int,
         sec: float,
+        scale: timescale = timescale.UTC,
     ) -> time:
-        """Create time object from 6 input arguments representing UTC Gregorian time.
+        """Create time object from 6 input arguments representing Gregorian time (UTC by default).
 
         Args:
             year (int): Gregorian year
@@ -1578,10 +2175,24 @@ class time:
             day (int): Day of month, beginning with 1
             hour (int): Hour of day, in range [0,23]
             min (int): Minute of hour, in range [0,59]
-            sec (float): floating point second of minute, in range [0,60)
+            sec (float): floating point second of minute, in range [0,60);
+                up to 61 within a UTC leap second (e.g. ``23:59:60.5`` on
+                2016-12-31) or a pre-1972 positive UTC step. Rounded to the
+                nearest microsecond
+            scale (timescale, optional): Time scale in which the components
+                are given, as for ``time(year, ..., sec, scale=...)``.
+                Default is satkit.timescale.UTC. Only UTC has leap seconds
 
         Returns:
-            Time object representing input UTC Gregorian time
+            Time object representing input Gregorian time
+
+        Raises:
+            TypeError: If an argument is not a number (the first five must
+                be integers)
+            ValueError: If a component is out of range (including a second
+                of 60 or more where there is no leap second, and NaN), the
+                date is beyond about ±292,000 years, or ``scale`` is
+                ``timescale.Invalid``
 
         Example:
             ```python
@@ -1625,6 +2236,14 @@ class time:
         Returns:
             "datetime.datetime" object representing the same instant in time as the "satkit.time" object
 
+        Raises:
+            OverflowError: If the time is outside the years 1 to 9999 that
+                ``datetime.datetime`` can represent
+
+        Notes:
+            ``datetime.datetime`` has no leap seconds: a time inside one
+            (``23:59:60.5``) comes back as ``23:59:59.5``, as with Unix time.
+
         Example:
             ```python
             dt = satkit.time(2023, 6, 3, 6, 19, 34).to_datetime(True)
@@ -1643,6 +2262,7 @@ class time:
         """Deprecated since 0.23, removed in 0.25. Use ``time.to_datetime``."""
         ...
 
+    @deprecated("use to_datetime()")
     def datetime(self, utc: bool = True) -> datetime.datetime:
         """Deprecated: use ``satkit.time.to_datetime``.
 
@@ -1670,16 +2290,36 @@ class time:
         ...
 
     def add_utc_days(self, days: float) -> time:
-        """Return a new time offset by a whole number of UTC days.
+        """Return a new time offset by a number of UTC calendar days.
 
-        A UTC day is defined as exactly 86400 seconds, avoiding the ambiguity of
-        adding a "day" across a leap second.
+        The offset is applied to the UTC clock label (as with a Modified
+        Julian Date in UTC), so the time of day is kept: noon plus one UTC
+        day is noon of the next day, which is 86401 elapsed seconds later
+        when a leap second lies between the two. ``days`` may be fractional
+        (a fraction of 86400 s on the label) or negative.
+
+        To add exactly 86400 elapsed seconds per day instead, use
+        ``t + days`` or ``t + satkit.duration(days=days)``.
 
         Args:
-            days (float): Number of UTC days to add
+            days (float): Number of UTC days to add; rounded to the nearest
+                microsecond
 
         Returns:
             satkit.time: Time object offset by the given number of UTC days
+
+        Raises:
+            ValueError: If ``days`` is NaN or infinite
+            OverflowError: If the result is beyond about ±292,000 years
+
+        Example:
+            ```python
+            t = satkit.time(2016, 12, 31, 12, 0, 0)  # a leap second follows
+            print(t.add_utc_days(1))
+            # 2017-01-01T12:00:00.000000Z
+            print(t + 1)
+            # 2017-01-01T11:59:59.000000Z
+            ```
         """
         ...
 
@@ -1692,6 +2332,9 @@ class time:
 
         Returns:
             float: Modified Julian Date, days
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
         """
         ...
 
@@ -1709,6 +2352,9 @@ class time:
 
         Returns:
             float: Julian Date, days
+
+        Raises:
+            ValueError: If ``scale`` is ``timescale.Invalid``
         """
         ...
 
@@ -1723,7 +2369,11 @@ class time:
 
         (seconds since Jan 1, 1970 UTC, excluding leap seconds)
 
-        Includes fractional component of seconds
+        Includes fractional component of seconds. The result is the float
+        nearest the exact (whole-microsecond) value, so it prints as the
+        decimal it was built from: ``time.from_unixtime(1678014225.453)``
+        gives back ``1678014225.453``. Inside a leap second it repeats the
+        last second of the day.
 
         Returns:
             float: Unix time, seconds
@@ -1739,6 +2389,11 @@ class time:
         """
         Represent time as ISO 8601 string
 
+        The fraction always has six digits (microseconds). Years outside
+        0000-9999 are written with a sign and at least four digits, as in
+        ISO 8601 expanded years: ``-0044-03-15T...``, ``+10000-01-01T...``.
+        ``to_iso8601`` and ``to_rfc3339`` return the same string.
+
         Returns:
             ISO 8601 string representation of time: "YYYY-MM-DDTHH:MM:SS.ssssssZ"
         """
@@ -1752,6 +2407,11 @@ class time:
     def to_rfc3339(self) -> str:
         """
         Represent time as RFC 3339 string
+
+        The fraction always has six digits (microseconds). Years outside
+        0000-9999 are written with a sign and at least four digits, as in
+        ISO 8601 expanded years: ``-0044-03-15T...``, ``+10000-01-01T...``.
+        ``to_iso8601`` and ``to_rfc3339`` return the same string.
 
         Returns:
             RFC 3339 string representation of time: "YYYY-MM-DDTHH:MM:SS.ssssssZ"
@@ -1771,22 +2431,30 @@ class time:
             format (str): format of the string
 
         Notes:
-            Format Codes:
+            The time is written in UTC. Format codes (a subset of
+            Python's; there is no ``%z``, ``%j``, ``%y`` or ``%p``):
 
-            - %Y - year
+            - %Y - year, four digits (0000-9999); outside that range a sign
+              and at least four digits (``-0044``, ``+10000``)
             - %m - month with leading zeros (01-12)
             - %d - day of month with leading zeros (01-31)
             - %H - hour with leading zeros (00-23)
             - %M - minute with leading zeros (00-59)
-            - %S - second with leading zeros (00-59)
-            - %f - microsecond, allowing for trailing zeros
+            - %S - second with leading zeros (00-59, or 60 inside a leap second)
+            - %f - microsecond, always six digits (000000-999999)
             - %b - abbreviated month name (Jan, Feb, ...)
             - %B - full month name (January, February, ...)
+            - %a - abbreviated weekday name (Sun, Mon, ...)
             - %A - full weekday name (Sunday, Monday, ...)
             - %w - weekday as a decimal number (0=Sunday, 1=Monday, ...)
+            - %% - a literal ``%``
 
         Returns:
             string representation of time
+
+        Raises:
+            ValueError: If the format has a code not listed above, or ends
+                with a lone ``%``
 
         Example:
             ```python
@@ -1796,15 +2464,50 @@ class time:
         """
         ...
 
+    def __format__(self, format_spec: str) -> str:
+        """
+        Format the time for an f-string or ``format()``
+
+        An empty spec gives ``str(t)``; any other spec is a ``strftime``
+        format (see ``strftime`` for the codes).
+
+        Args:
+            format_spec (str): format spec
+
+        Returns:
+            The formatted time
+
+        Raises:
+            ValueError: If the spec has a code ``strftime`` does not support
+
+        Example:
+            ```python
+            t = satkit.time(2023, 6, 3, 6, 19, 34)
+            print(f"{t:%Y-%m-%d}")
+            # 2023-06-03
+            print(f"{t}")
+            # 2023-06-03T06:19:34.000000Z
+            ```
+        """
+        ...
+
+    # Above numpy scalars, below numpy arrays: a numpy.datetime64 or
+    # numpy.timedelta64 scalar on the left defers to time's reflected operator
+    __array_priority__: ClassVar[float]
+
     @typing.overload
-    def __add__(self, other: duration) -> time:
+    def __add__(self, other: duration | _TimeDelta | np.timedelta64) -> time:
         """
         Return a time object representing the input duration added to the current time
 
         Args:
-            other (duration): duration to add to the current time
+            other (duration | datetime.timedelta | numpy.timedelta64): duration
+                to add to the current time (a ``timedelta`` is exact, and so is
+                a ``timedelta64`` in whole microseconds or coarser; finer units
+                round to the nearest microsecond; ``timedelta + time`` works too)
 
         Raises:
+            ValueError: if a ``timedelta64`` is NaT or in years or months
             OverflowError: if the result is beyond about ±292,000 years
 
         Returns:
@@ -1817,6 +2520,10 @@ class time:
     def __add__(self, other: float) -> time:
         """
         Return a time object representing the input number of days added to the current time
+
+        Each day is exactly 86400 elapsed seconds, so across a leap second
+        the UTC time of day shifts by one second; ``add_utc_days`` keeps the
+        UTC time of day instead.
 
         Args:
             other (float): number of days to add to the current time
@@ -1833,15 +2540,23 @@ class time:
         ...
 
     @typing.overload
-    def __add__(self, other: list[duration]) -> npt.NDArray[Any]:
+    def __add__(self, other: list[duration] | npt.NDArray[np.timedelta64]) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise addition of days to the "self" time object
 
         Args:
-            other (list[duration]): array-like structure containing days to add to the current time
+            other (list[duration] | npt.NDArray[np.timedelta64]): list of
+                durations (a list, not any sequence: a tuple is refused), or a
+                1-D numpy ``timedelta64`` array of any fixed unit (exact to
+                the microsecond), to add to the current time
+
+        Raises:
+            ValueError: if a ``timedelta64`` element is NaT, the array is not
+                1-D, or its unit is years or months
+            OverflowError: if a result is beyond about ±292,000 years
 
         Returns:
-            Array of time objects representing the element-wise addition of days to the current time
+            Object array of time objects, ``self + other[i]`` for each element
         """
         ...
 
@@ -1867,48 +2582,87 @@ class time:
         """
         ...
 
-    def __le__(self, other: time) -> bool:
+    def __radd__(self, other: _TimeDelta | np.timedelta64) -> time:
         """
-        Compare two time objects for less than or equal to
+        ``datetime.timedelta + time`` or ``numpy.timedelta64 + time``: the
+        time ``other`` later
 
         Args:
-            other (time): time object to compare with
+            other (datetime.timedelta | numpy.timedelta64): time difference to add
+
+        Raises:
+            ValueError: if a ``timedelta64`` is NaT or in years or months
+            OverflowError: if the result is beyond about ±292,000 years
+
+        Returns:
+            Time object representing the current time plus the timedelta
+        """
+        ...
+
+    def __le__(self, other: time | _DateTime | np.datetime64) -> bool:
+        """
+        Compare for less than or equal to
+
+        The ordering operators (``<``, ``<=``, ``>``, ``>=``) take a
+        ``satkit.time``, ``datetime.datetime`` or ``numpy.datetime64``,
+        converted as ``time(other)`` (a naive datetime is local time; a
+        ``datetime64`` is UTC), on either side. Ordering against any other
+        type raises ``TypeError``. ``==`` is True only between two
+        ``satkit.time`` objects.
+
+        Args:
+            other (time | datetime.datetime | numpy.datetime64): time to compare with
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is less than or equal to "other" time, False otherwise
         """
         ...
 
-    def __lt__(self, other: time) -> bool:
+    def __lt__(self, other: time | _DateTime | np.datetime64) -> bool:
         """
-        Compare two time objects for less than
+        Compare for less than
 
         Args:
-            other (time): time object to compare with
+            other (time | datetime.datetime | numpy.datetime64): time to
+                compare with, converted as ``time(other)``
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is less than "other" time, False otherwise
         """
         ...
 
-    def __ge__(self, other: time) -> bool:
+    def __ge__(self, other: time | _DateTime | np.datetime64) -> bool:
         """
-        Compare two time objects for greater than or equal to
+        Compare for greater than or equal to
 
         Args:
-            other (time): time object to compare with
+            other (time | datetime.datetime | numpy.datetime64): time to
+                compare with, converted as ``time(other)``
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is greater than or equal to "other" time, False otherwise
         """
         ...
 
-    def __gt__(self, other: time) -> bool:
+    def __gt__(self, other: time | _DateTime | np.datetime64) -> bool:
         """
-        Compare two time objects for greater than
+        Compare for greater than
 
         Args:
-            other (time): time object to compare with
+            other (time | datetime.datetime | numpy.datetime64): time to
+                compare with, converted as ``time(other)``
+
+        Raises:
+            ValueError: if ``other`` is NaT
 
         Returns:
             True if "self" time is greater than "other" time, False otherwise
@@ -1918,6 +2672,10 @@ class time:
     def __eq__(self, value: object) -> bool:
         """
         Compare two time objects for equality
+
+        Only another ``satkit.time`` can be equal: ``time == datetime`` is
+        False even for the same instant, as the two could not hash alike.
+        Convert first with ``time(dt)``.
 
         Args:
             value (object): object to compare with
@@ -1940,14 +2698,17 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: duration) -> time:
+    def __sub__(self, other: duration | _TimeDelta | np.timedelta64) -> time:
         """
         Return a time object representing the input duration subtracted from the current time
 
         Args:
-            other (duration): duration to subtract from the current time
+            other (duration | datetime.timedelta | numpy.timedelta64): duration
+                to subtract from the current time (a ``timedelta`` is exact,
+                and so is a ``timedelta64`` in whole microseconds or coarser)
 
         Raises:
+            ValueError: if a ``timedelta64`` is NaT or in years or months
             OverflowError: if the result is beyond about ±292,000 years
 
         Returns:
@@ -1957,12 +2718,19 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: time) -> duration:
+    def __sub__(self, other: time | _DateTime | np.datetime64) -> duration:
         """
         Return a duration object representing the difference between the two times
 
         Args:
-            other (time): time to subtract from the current time
+            other (time | datetime.datetime | numpy.datetime64): time to
+                subtract from the current time, converted as ``time(other)``
+                (a naive datetime is local time; a ``datetime64`` is UTC)
+
+        Raises:
+            ValueError: if ``other`` is NaT
+            OverflowError: if the difference is beyond about ±292,000 years
+                (only for times near the two ends of the range)
 
         Returns:
             Duration object representing the difference between the two times
@@ -2000,6 +2768,11 @@ class time:
         Args:
             other (npt.NDArray[np.floating] | npt.NDArray[np.integer] | list[float]): 1-D array or list of days to subtract from the current time (integer and float32 arrays are converted to float64)
 
+        Raises:
+            ValueError: if an element is NaN or infinite
+            OverflowError: if an element is too large for a duration, or a
+                result is beyond about ±292,000 years
+
         Returns:
             Object array of time objects representing the element-wise subtraction of days from the current time
 
@@ -2007,15 +2780,23 @@ class time:
         ...
 
     @typing.overload
-    def __sub__(self, other: list[duration]) -> npt.NDArray[Any]:
+    def __sub__(self, other: list[duration] | npt.NDArray[np.timedelta64]) -> npt.NDArray[Any]:
         """
         Return a numpy array of time objects, with each object representing an element-wise subtraction of duration from the "self" time object
 
         Args:
-            other (list[duration]): array-like structure containing durations to subtract from the current time
+            other (list[duration] | npt.NDArray[np.timedelta64]): list of
+                durations (a list, not any sequence: a tuple is refused), or a
+                1-D numpy ``timedelta64`` array of any fixed unit, to
+                subtract from the current time
+
+        Raises:
+            ValueError: if a ``timedelta64`` element is NaT, the array is not
+                1-D, or its unit is years or months
+            OverflowError: if a result is beyond about ±292,000 years
 
         Returns:
-            Array of time objects representing the element-wise subtraction of durations from the current time
+            Object array of time objects, ``self - other[i]`` for each element
         """
         ...
 
@@ -2025,10 +2806,30 @@ class time:
         Return a numpy array of duration objects, with each object representing an element-wise subtraction of time from the "self" time object
 
         Args:
-            other (list[time]): times to subtract from the current time
+            other (list[time]): list of times to subtract from the current time (a list, not any sequence)
+
+        Raises:
+            OverflowError: if a difference is beyond about ±292,000 years
 
         Returns:
             Object array of duration objects, ``self - other[i]`` for each element
+        """
+        ...
+
+    def __rsub__(self, other: _DateTime | np.datetime64) -> duration:
+        """
+        ``datetime.datetime - time`` or ``numpy.datetime64 - time``: the
+        difference, with ``other`` converted as ``time(other)``
+
+        Args:
+            other (datetime.datetime | numpy.datetime64): time to subtract from
+
+        Raises:
+            ValueError: if ``other`` is NaT
+            OverflowError: if the difference is beyond about ±292,000 years
+
+        Returns:
+            Duration ``time(other) - self``
         """
         ...
 
@@ -2060,17 +2861,26 @@ class duration:
             - If no arguments are passed in, the created object represents a duration of 0 seconds
             - A duration is an integer number of microseconds; each floating-point
               argument is rounded to the nearest microsecond
-            - A NaN or infinite argument raises ``ValueError``, and one too large for
-              a duration (beyond about ±292,000 years) raises ``OverflowError``; the
-              same holds for the ``from_*`` constructors, and for arguments that fit
-              one by one but not summed
             - Adding or subtracting durations and times raises ``OverflowError``
-              when the result is beyond that range (it used to wrap around)
+              when the result is beyond about ±292,000 years (it used to wrap around)
+            - ``str()`` of a duration of a second or more lists the non-zero
+              days, hours and minutes, then the seconds with six decimals;
+              a shorter (or negative) one prints as whole microseconds
+              (``500000 usec``)
+
+        Raises:
+            TypeError: If an argument is not a real number, or
+                ``microseconds`` is not an integer (the ``from_*``
+                constructors do the same)
+            ValueError: If an argument is NaN or infinite
+            OverflowError: If an argument is too large for a duration
+                (beyond about ±292,000 years), or the arguments fit one by
+                one but not summed
 
         Example:
             ```python
             print(satkit.duration(days=1, hours=2, minutes=3, seconds=4.5))
-            # Duration: 1 days, 2 hours, 3 minutes, 4.500 seconds
+            # 1 days 2 hours 3 minutes 4.500000 seconds
             ```
 
         """
@@ -2150,6 +2960,72 @@ class duration:
         """
         ...
 
+    @staticmethod
+    def from_microseconds(microseconds: int) -> duration:
+        """Create duration object from a whole number of microseconds (exact)
+
+        Args:
+            microseconds (int): Number of microseconds
+
+        Returns:
+            Duration object representing input number of microseconds
+
+        Raises:
+            TypeError: If ``microseconds`` is not an integer
+            OverflowError: If ``microseconds`` does not fit a signed 64-bit
+                integer (about ±292,000 years)
+
+        Example:
+            ```python
+            d = satkit.duration.from_microseconds(1500)
+            print(d.milliseconds)
+            # 1.5
+            ```
+        """
+        ...
+
+    @staticmethod
+    def from_timedelta(td: datetime.timedelta) -> duration:
+        """Create duration object from a ``datetime.timedelta``
+
+        Exact: both count whole microseconds.
+
+        Args:
+            td (datetime.timedelta): The time difference
+
+        Returns:
+            Duration object representing the same interval
+
+        Raises:
+            OverflowError: If ``td`` is beyond the range of a duration (about
+                ±292,000 years; a ``timedelta`` reaches ±2.7 million)
+
+        Example:
+            ```python
+            import datetime
+            d = satkit.duration.from_timedelta(datetime.timedelta(hours=1, microseconds=1))
+            print(d.microseconds)
+            # 3600000001
+            ```
+        """
+        ...
+
+    def to_timedelta(self) -> datetime.timedelta:
+        """Convert to a ``datetime.timedelta``
+
+        Exact: both count whole microseconds, and every duration fits.
+
+        Returns:
+            ``datetime.timedelta`` representing the same interval
+
+        Example:
+            ```python
+            print(satkit.duration(hours=1, seconds=0.5).to_timedelta())
+            # 1:00:00.500000
+            ```
+        """
+        ...
+
     @typing.overload
     def __add__(self, other: duration) -> duration:
         """Add a duration to another duration
@@ -2166,7 +3042,7 @@ class duration:
         Example:
             ```python
             print(satkit.duration.from_hours(1) + satkit.duration.from_minutes(1))
-            # Duration: 1 hours, 1 minutes, 0.000 seconds
+            # 1 hours 1 minutes 0.000000 seconds
             ```
         """
         ...
@@ -2207,7 +3083,7 @@ class duration:
         Example:
             ```python
             print(satkit.duration.from_hours(1) - satkit.duration.from_minutes(1))
-            # Duration: 59 minutes, 0.000 seconds
+            # 59 minutes 0.000000 seconds
             ```
         """
         ...
@@ -2215,17 +3091,67 @@ class duration:
     def __mul__(self, other: float) -> duration:
         """Multiply (or scale) duration by given value
 
+        The product is computed exactly from the duration's integer
+        microseconds and rounded once to the nearest microsecond, so an
+        integer factor is exact for any duration.
+
+        Args:
+            other (float): value by which to multiply duration (any real
+                number: ``int``, ``float`` or a numpy scalar)
+
+        Returns:
+            Duration object representing the input duration scaled by the input value
+
+        Raises:
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if the result is beyond about ±292,000 years
+
+        Example:
+            ```python
+            print(satkit.duration.from_days(1) * 2.5)
+            # 2 days 12 hours 0.000000 seconds
+            ```
+        """
+        ...
+
+    def __rmul__(self, other: float) -> duration:
+        """Multiply (or scale) duration by given value: ``2 * d`` is ``d * 2``
+
         Args:
             other (float): value by which to multiply duration
 
         Returns:
             Duration object representing the input duration scaled by the input value
 
+        Raises:
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if the result is beyond about ±292,000 years
+        """
+        ...
+
+    def __neg__(self) -> duration:
+        """The duration with its sign reversed
+
+        Raises:
+            OverflowError: for the most negative duration (-2**63 microseconds)
+
         Example:
             ```python
-            print(satkit.duration.from_days(1) * 2.5)
-            # Duration: 2 days, 12 hours, 0 minutes, 0.000 seconds
+            print((-satkit.duration(hours=1)).hours)
+            # -1.0
             ```
+        """
+        ...
+
+    def __pos__(self) -> duration:
+        """The duration itself"""
+        ...
+
+    def __abs__(self) -> duration:
+        """The duration without its sign
+
+        Raises:
+            OverflowError: for the most negative duration (-2**63 microseconds)
         """
         ...
 
@@ -2242,11 +3168,18 @@ class duration:
         Raises:
             ZeroDivisionError: if ``other`` is zero
             ValueError: if ``other`` is NaN
+            OverflowError: if the result is beyond about ±292,000 years
+                (division by a very small number)
+
+        Notes:
+            The quotient is computed exactly from the duration's integer
+            microseconds and rounded once to the nearest microsecond.
+            Dividing by infinity gives a zero duration.
 
         Example:
             ```python
             print(satkit.duration.from_days(1) / 2)
-            # Duration: 12 hours, 0 minutes, 0.000 seconds
+            # 12 hours 0.000000 seconds
             ```
         """
         ...
@@ -2268,6 +3201,79 @@ class duration:
             ```python
             print(satkit.duration.from_hours(1) / satkit.duration.from_minutes(30))
             # 2.0
+            ```
+        """
+        ...
+
+    @typing.overload
+    def __floordiv__(self, other: duration) -> int:
+        """How many whole times ``other`` fits in the duration
+
+        Exact integer-microsecond arithmetic, floored as Python's ``//``
+        (towards negative infinity), so ``a == (a // b) * b + a % b``.
+
+        Args:
+            other (duration): duration divisor
+
+        Returns:
+            ``floor(self / other)`` as an int
+
+        Raises:
+            ZeroDivisionError: if ``other`` is a zero duration
+
+        Example:
+            ```python
+            print(satkit.duration.from_minutes(7) // satkit.duration.from_minutes(2))
+            # 3
+            ```
+        """
+        ...
+
+    @typing.overload
+    def __floordiv__(self, other: float) -> duration:
+        """Divide the duration by a real number, rounding down to a whole microsecond
+
+        The quotient is computed exactly from the duration's integer
+        microseconds and floored (towards negative infinity).
+
+        Args:
+            other (float): value by which to divide the duration
+
+        Returns:
+            Duration of ``floor(self / other)`` microseconds
+
+        Raises:
+            ZeroDivisionError: if ``other`` is zero
+            ValueError: if ``other`` is NaN or infinite
+            OverflowError: if the result is beyond about ±292,000 years
+
+        Example:
+            ```python
+            print(satkit.duration(microseconds=7) // 2)
+            # 3 usec
+            ```
+        """
+        ...
+
+    def __mod__(self, other: duration) -> duration:
+        """Remainder of floor division by a duration: ``self - (self // other) * other``
+
+        Exact; like Python's ``%``, the result has the sign of ``other`` (or
+        is zero).
+
+        Args:
+            other (duration): duration divisor
+
+        Returns:
+            The remainder
+
+        Raises:
+            ZeroDivisionError: if ``other`` is a zero duration
+
+        Example:
+            ```python
+            print(satkit.duration.from_minutes(7) % satkit.duration.from_minutes(2))
+            # 1 minutes 0.000000 seconds
             ```
         """
         ...
@@ -2366,6 +3372,18 @@ class duration:
         ...
 
     @property
+    def milliseconds(self) -> float:
+        """Floating point number of milliseconds represented by duration
+
+        The whole duration, like ``seconds`` (the float nearest the exact
+        value), not a component of it.
+
+        Returns:
+            Floating point number of milliseconds represented by duration
+        """
+        ...
+
+    @property
     def minutes(self) -> float:
         """Floating point number of minutes represented by duration
 
@@ -2402,22 +3420,32 @@ class quaternion:
     <https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation>
 
     Notes:
+        A quaternion is always a unit quaternion (a rotation): every
+        constructor normalizes its result, so ``norm`` is 1 to rounding.
+        ``q`` and ``-q`` are the same rotation but are different quaternions.
     """
 
     @overload
     def __init__(self) -> None: ...
     @overload
     def __init__(self, w: float, x: float, y: float, z: float, /) -> None:
-        """Return quaternion with input (w,x,y,z) values
+        """Return the unit quaternion along the input (w,x,y,z) values
 
         With no arguments, return the identity quaternion. Otherwise pass all
-        four components positionally (keywords are not accepted).
+        four components positionally (keywords are not accepted); they are
+        scaled to unit norm, so ``quaternion(2, 0, 0, 0)`` is the identity.
 
         Args:
             w: Scalar component of the quaternion
             x: X component of the quaternion
             y: Y component of the quaternion
             z: Z component of the quaternion
+
+        Raises:
+            TypeError: the number of arguments is neither 0 nor 4, or a
+                component is not a real number
+            ValueError: all four components are zero, or one is NaN or
+                infinite
 
         Example:
             ```python
@@ -2436,11 +3464,18 @@ class quaternion:
         """Quaternion representing right-handed rotation of vector by "angle" radians about the given axis
 
         Args:
-            axis (npt.ArrayLike[np.float64]): 3-element array representing axis of rotation (unitless direction; need not be normalized)
+            axis (npt.ArrayLike): 3-element array representing axis of rotation (unitless direction; need not be normalized)
             angle (float): angle of rotation in radians
 
         Returns:
-            Quaternion representing rotation by "angle" radians about the given axis
+            Quaternion representing rotation by "angle" radians about the given axis.
+            If the axis has (near-)zero length (norm < 1e-9) the identity is
+            returned, whatever the angle
+
+        Raises:
+            TypeError: ``axis`` is not a real numeric array-like
+            ValueError: ``axis`` does not have 3 elements, or ``axis`` or
+                ``angle`` holds a NaN or infinity
         """
         ...
 
@@ -2451,10 +3486,18 @@ class quaternion:
         """Return quaternion representing identical rotation to input 3x3 rotation matrix
 
         Args:
-            dcm (npt.ArrayLike[np.float64]): 3x3 rotation matrix
+            dcm (npt.ArrayLike): 3x3 rotation matrix (any real numeric
+                array-like): orthonormal, with determinant +1
 
         Returns:
-            Quaternion representing identical rotation to input 3x3 rotation matrix
+            Unit quaternion representing identical rotation to input 3x3 rotation matrix
+
+        Raises:
+            TypeError: ``dcm`` is not a real numeric array-like
+            ValueError: ``dcm`` is not 3x3, holds a NaN or infinity, or is not
+                a rotation matrix (``dcm @ dcm.T`` differs from the identity
+                by more than 1e-6 in any element, or the determinant is
+                negative)
         """
         ...
 
@@ -2467,6 +3510,9 @@ class quaternion:
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the xhat unit vector
+
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
 
         Notes:
             Equivalent rotation matrix:
@@ -2485,6 +3531,9 @@ class quaternion:
 
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the yhat unit vector
+
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
 
 
         Notes:
@@ -2505,6 +3554,9 @@ class quaternion:
         Returns:
             Quaternion representing right-handed rotation of vector by "theta" radians about the zhat unit vector
 
+        Raises:
+            ValueError: ``theta_rad`` is NaN or infinite
+
         Notes:
             Equivalent rotation matrix:
             |  cos(theta)     -sin(theta)   0|
@@ -2524,7 +3576,15 @@ class quaternion:
             v2 (npt.ArrayLike): 3-element vector rotating to (any real numeric array-like)
 
         Returns:
-            Quaternion that rotates from v1 to v2
+            Quaternion of the shortest rotation from v1 to v2 (about the axis
+            ``v1 x v2``; the vectors need not be unit length)
+
+        Raises:
+            TypeError: an input is not a real numeric array-like
+            ValueError: an input does not have 3 elements or holds a NaN or
+                infinity, either vector has (near-)zero length, or the
+                vectors point in opposite directions (the rotation axis is
+                then not unique)
 
         Example:
             ```python
@@ -2586,6 +3646,9 @@ class quaternion:
 
         Returns:
             quaternion: Quaternion representing the input euler-angle rotation
+
+        Raises:
+            ValueError: an angle is NaN or infinite
         """
         ...
 
@@ -2596,17 +3659,21 @@ class quaternion:
 
     @property
     def norm(self) -> float:
-        """Quaternion norm (Euclidean length of the 4 components; 1 for a
-        unit rotation quaternion)"""
+        """Quaternion norm (Euclidean length of the 4 components).
+        Quaternions are kept unit, so this is 1 to rounding."""
         ...
 
     def normalize(self) -> quaternion:
-        """Return this quaternion normalized to unit length"""
+        """Return this quaternion normalized to unit length
+
+        Quaternions are already unit; this only removes rounding error
+        accumulated over a long chain of products.
+        """
         ...
 
     def inverse(self) -> quaternion:
-        """Quaternion inverse. Equals the conjugate for a unit (rotation)
-        quaternion."""
+        """Quaternion inverse: the opposite rotation. Same as ``conj()`` and
+        ``conjugate()``, quaternions being unit."""
         ...
 
     def dot(self, other: quaternion) -> float:
@@ -2615,7 +3682,11 @@ class quaternion:
 
     @property
     def angle(self) -> float:
-        """Return the angle in radians of the rotation
+        """Return the angle in radians of the rotation, in [0, 2 pi)
+
+        The angle is measured about ``axis``, right-handed. It exceeds pi
+        when the scalar component ``w`` is negative; the same rotation is
+        then the angle ``2 pi - angle`` about ``-axis``.
 
         Returns:
             Angle in radians of the rotation
@@ -2625,6 +3696,9 @@ class quaternion:
     @property
     def axis(self) -> npt.NDArray[np.float64]:
         """Return the axis of rotation as a unit vector
+
+        The identity (no rotation) has no axis; ``[1, 0, 0]`` is returned
+        for it.
 
         Returns:
             3-element array representing the axis of rotation as a unit vector
@@ -2651,38 +3725,22 @@ class quaternion:
 
     @property
     def x(self) -> float:
-        """X component of the quaternion
-
-        Returns:
-            X component of the quaternion
-        """
+        """X component of the vector part"""
         ...
 
     @property
     def y(self) -> float:
-        """Y component of the quaternion
-
-        Returns:
-            Y component of the quaternion
-        """
+        """Y component of the vector part"""
         ...
 
     @property
     def z(self) -> float:
-        """Z component of the quaternion
-
-        Returns:
-            Z component of the quaternion
-        """
+        """Z component of the vector part"""
         ...
 
     @property
     def w(self) -> float:
-        """Scalar component of the quaternion
-
-        Returns:
-            Scalar component of the quaternion
-        """
+        """Scalar component (cosine of half the rotation angle)"""
         ...
 
     @typing.overload
@@ -2727,10 +3785,143 @@ class quaternion:
 
         Args:
             other (quaternion): Quaternion to perform interpolation to
-            frac (float): fractional amount of interpolation, in range [0,1]
+            frac (float): fractional distance from self (0) to other (1).
+                It is not clamped: a value outside [0, 1] extrapolates along
+                the same arc
 
         Returns:
-            Quaternion representing interpolation between self and other
+            Quaternion representing interpolation between self and other,
+            along the shorter of the two arcs (``other`` and ``-other`` are
+            the same rotation; the nearer one is used)
+
+        Raises:
+            ValueError: ``frac`` is NaN or infinite
+        """
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a quaternion with exactly the same four
+        components (no tolerance)
+
+        ``q`` and ``-q`` are the same rotation but compare unequal; so do two
+        quaternions that differ by rounding. To compare rotations use
+        ``q1.isclose(q2)`` or ``q1.angle_to(q2)``.
+        """
+        ...
+
+    def angle_to(self, other: quaternion) -> float:
+        """Rotation angle between this orientation and another, radians in [0, pi]
+
+        The angle of the rotation ``self.conj() * other`` that takes one to
+        the other. ``q`` and ``-q`` are the same rotation, so
+        ``q.angle_to(-q)`` is 0.
+
+        Args:
+            other (quaternion): The other orientation
+
+        Returns:
+            float: Angle between the two rotations, radians in [0, pi]
+
+        Example:
+            ```python
+            import math
+            q1 = satkit.quaternion.rotz(math.radians(10))
+            q2 = satkit.quaternion.rotz(math.radians(40))
+            print(math.degrees(q1.angle_to(q2)))
+            # 30.0 (to rounding)
+            ```
+        """
+        ...
+
+    def isclose(self, other: quaternion, *, atol: float = 1e-12) -> bool:
+        """True when ``other`` is the same rotation to within ``atol`` radians
+
+        Compares rotations, not components: ``q`` and ``-q`` are the same
+        rotation and are close (unlike ``==``, which compares the four
+        components exactly).
+
+        Args:
+            other (quaternion): The rotation to compare with
+            atol (float): Largest ``angle_to(other)``, radians, still counted
+                as the same rotation. Default 1e-12
+
+        Returns:
+            bool: ``self.angle_to(other) <= atol``
+
+        Raises:
+            ValueError: ``atol`` is negative, NaN or infinite
+
+        Example:
+            ```python
+            q = satkit.quaternion.rotx(0.3)
+            print(q.isclose(satkit.quaternion(-q.w, -q.x, -q.y, -q.z)))
+            # True
+            ```
+        """
+        ...
+
+    def to_axis_angle(self) -> tuple[npt.NDArray[np.float64], float]:
+        """Rotation axis and angle, the inverse of ``from_axis_angle``
+
+        The same values as the ``axis`` and ``angle`` properties:
+        ``quaternion.from_axis_angle(*q.to_axis_angle())`` is ``q``.
+
+        Returns:
+            tuple[numpy.ndarray, float]: Unit rotation axis (3-element array;
+            ``[1, 0, 0]`` for the identity) and the right-handed angle about
+            it in radians, in [0, 2 pi)
+
+        Example:
+            ```python
+            axis, angle = satkit.quaternion.rotz(0.5).to_axis_angle()
+            ```
+        """
+        ...
+
+    def to_array(self) -> npt.NDArray[np.float64]:
+        """The four components as an array in the order ``[w, x, y, z]``
+        (scalar first), the inverse of ``from_array``
+
+        Returns:
+            numpy.ndarray: 4-element float64 array ``[w, x, y, z]``
+
+        Example:
+            ```python
+            print(satkit.quaternion().to_array())
+            # [1. 0. 0. 0.]
+            ```
+        """
+        ...
+
+    @staticmethod
+    def from_array(arr: npt.ArrayLike) -> quaternion:
+        """Quaternion from an array of its four components in the order
+        ``[w, x, y, z]`` (scalar first), the inverse of ``to_array``
+
+        The same as ``quaternion(w, x, y, z)``: the components are scaled to
+        unit norm.
+
+        Args:
+            arr (npt.ArrayLike): 4 components ``[w, x, y, z]`` (any real
+                numeric array-like: numpy array, list or tuple)
+
+        Returns:
+            quaternion: Unit quaternion along ``arr``
+
+        Raises:
+            TypeError: ``arr`` is not a real numeric array-like
+            ValueError: ``arr`` does not have 4 elements, holds a NaN or
+                infinity, or is all zeros
+
+        Example:
+            ```python
+            q = satkit.quaternion.from_array([1.0, 0.0, 0.0, 0.0])
+            ```
+        """
+        ...
+
+    def __hash__(self) -> int:
+        """Hash of the four components, consistent with ``==``
 
         Example:
             ```python
@@ -2855,14 +4046,15 @@ class kepler:
         """
         ...
 
-    def propagate(self, dt: duration | float | int) -> kepler:
+    def propagate(self, dt: duration | datetime.timedelta | float | int) -> kepler:
         """Propagate Keplerian element set by input duration
 
         Two-body (unperturbed) propagation: only the anomaly changes.
 
         Args:
-            dt (duration | float | int): Duration by which to propagate the
-                Keplerian element set. A number is interpreted as seconds.
+            dt (duration | datetime.timedelta | float | int): Duration by
+                which to propagate the Keplerian element set. A number is
+                interpreted as seconds.
 
         Returns:
             Keplerian element set object after propagation
@@ -2876,7 +4068,8 @@ class kepler:
             ```
 
         Raises:
-            TypeError: if ``dt`` is neither a duration nor a number.
+            TypeError: if ``dt`` is neither a duration, a timedelta nor a
+                number.
             ValueError: if ``dt`` is a NaN or infinite number of seconds.
             OverflowError: if ``dt`` is too large for a duration.
         """
@@ -2889,12 +4082,23 @@ class kepler:
 
     @property
     def true_anomaly(self) -> float:
-        """True anomaly, radians"""
+        """True anomaly, radians: the same attribute as ``nu``
+
+        Stored as given, not reduced to one revolution. Assigning it sets
+        ``nu`` (finite; ``ValueError`` otherwise).
+        """
         ...
+
+    @true_anomaly.setter
+    def true_anomaly(self, value: float) -> None: ...
 
     @property
     def eccentric_anomaly(self) -> float:
-        """Eccentric anomaly, radians"""
+        """Eccentric anomaly, radians in (-pi, pi]
+
+        Computed from the true anomaly and reduced to (-pi, pi], however
+        many revolutions ``nu`` holds.
+        """
         ...
 
     @eccentric_anomaly.setter
@@ -2907,7 +4111,11 @@ class kepler:
         ...
     @property
     def mean_anomaly(self) -> float:
-        """Mean anomaly, radians"""
+        """Mean anomaly, radians in (-pi, pi]
+
+        Computed from the true anomaly and reduced to (-pi, pi], however
+        many revolutions ``nu`` holds.
+        """
         ...
 
     @mean_anomaly.setter
@@ -2998,11 +4206,22 @@ class kepler:
     def a(self, value: float) -> None: ...
     @property
     def eccen(self) -> float:
-        """Eccentricity, unitless (0 <= eccen < 1; ``ValueError`` otherwise)"""
+        """Eccentricity, unitless (0 <= eccen < 1; ``ValueError`` otherwise)
+
+        Short alias of ``eccentricity``.
+        """
         ...
 
     @eccen.setter
     def eccen(self, value: float) -> None: ...
+    @property
+    def eccentricity(self) -> float:
+        """Eccentricity, unitless (0 <= eccentricity < 1; ``ValueError``
+        otherwise). ``eccen`` is the same attribute under its short name."""
+        ...
+
+    @eccentricity.setter
+    def eccentricity(self, value: float) -> None: ...
     @property
     def inclination(self) -> float:
         """Inclination, radians (0 <= incl <= pi; ``ValueError`` otherwise)"""
@@ -3019,7 +4238,13 @@ class kepler:
     def raan(self, value: float) -> None: ...
     @property
     def nu(self) -> float:
-        """True anomaly, radians (finite; ``ValueError`` otherwise)"""
+        """True anomaly, radians (finite; ``ValueError`` otherwise)
+
+        Stored as given, not reduced to one revolution: the constructor and
+        this setter keep the value passed, while the anomaly setters and
+        ``propagate`` store a value in (-pi, pi] and ``from_pv`` one in
+        [0, 2 pi).
+        """
         ...
 
     @nu.setter
@@ -3042,18 +4267,26 @@ class kepler:
 
     @w.setter
     def w(self, value: float) -> None: ...
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a ``kepler`` with exactly the same six
+        elements and ``mu`` (no tolerance, no reduction of angles)"""
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+
     @staticmethod
     def from_pv(
-        pos: npt.NDArray[np.float64],
-        vel: npt.NDArray[np.float64],
+        pos: npt.ArrayLike,
+        vel: npt.ArrayLike,
         *,
         mu: float | None = None,
     ) -> kepler:
         """Create Keplerian element set from input position and velocity vectors
 
         Args:
-            pos: 3-element position vector, meters
-            vel: 3-element velocity vector, meters/second
+            pos: 3-element position vector, meters (any real numeric
+                array-like: numpy array, list or tuple)
+            vel: 3-element velocity vector, meters/second (likewise)
             mu: Gravitational parameter of the central body, m^3/s^2
                 (default ``satkit.consts.mu_earth``); the returned element
                 set carries it, so its period and ``to_pv`` refer to the same
@@ -3075,15 +4308,18 @@ class kepler:
         Raises:
             ValueError: if the state is hyperbolic/parabolic (eccen >= 1) or
                 rectilinear (zero angular momentum), if ``pos`` or ``vel``
-                holds a NaN or infinity, or if ``mu`` is not positive and
-                finite.
-            RuntimeError: if the inputs are not 3-element vectors.
+                holds a NaN or infinity or is not a 3-element vector, or if
+                ``mu`` is not positive and finite.
+            TypeError: if ``pos`` or ``vel`` is not a real numeric array-like.
         """
         ...
 
 @final
 class geodetic:
     """Geodetic coordinates with named fields
+
+    Returned by ``itrfcoord.geodetic``; it has no constructor and its fields
+    are read-only.
 
     Attributes:
         latitude_rad (float): Latitude in radians
@@ -3093,9 +4329,20 @@ class geodetic:
         longitude_deg (float): Longitude in degrees (computed)
     """
 
-    latitude_rad: float
-    longitude_rad: float
-    height_m: float
+    @property
+    def latitude_rad(self) -> float:
+        """Latitude in radians"""
+        ...
+
+    @property
+    def longitude_rad(self) -> float:
+        """Longitude in radians"""
+        ...
+
+    @property
+    def height_m(self) -> float:
+        """Height above WGS84 ellipsoid in meters"""
+        ...
 
     @property
     def latitude_deg(self) -> float:
@@ -3107,6 +4354,14 @@ class geodetic:
         """Longitude in degrees"""
         ...
 
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is a geodetic with exactly the same latitude,
+        longitude and height (no tolerance)"""
+        ...
+
+    def __hash__(self) -> int:
+        """Hash of the three fields, consistent with ``==``"""
+        ...
 
 @final
 class itrfcoord:
@@ -3132,37 +4387,135 @@ class itrfcoord:
     """
 
     @overload
-    def __init__(self, vec: npt.NDArray[np.float64] | list[float] | list[int], /) -> None: ...
+    def __init__(self, vec: npt.ArrayLike, /) -> None: ...
     @overload
     def __init__(self, x: float, y: float, z: float, /) -> None: ...
     @overload
     def __init__(
         self,
         *,
-        latitude_deg: float | None = None,
-        longitude_deg: float | None = None,
-        latitude_rad: float | None = None,
-        longitude_rad: float | None = None,
+        latitude_deg: float,
+        longitude_deg: float,
+        altitude: float | None = None,
+        height: float | None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        latitude_rad: float,
+        longitude_rad: float,
         altitude: float | None = None,
         height: float | None = None,
     ) -> None:
         """Create ITRF coordinate from Cartesian vector or geodetic parameters.
 
         Pass the Cartesian position positionally, either as one 3-element
-        numpy array or list, or as three floats; or pass the geodetic
-        position as keywords (latitude and longitude are required).
+        array-like or as three floats; or pass the geodetic position as
+        keywords: a latitude and a longitude, both required, each in degrees
+        or in radians, and optionally a height. The two forms cannot be mixed.
 
         Args:
-            vec: ITRF Cartesian location in meters (3-element numpy array or list)
-            latitude_deg: Latitude in degrees
+            vec: ITRF Cartesian location in meters (any real numeric
+                3-element array-like: numpy array, list or tuple)
+            latitude_deg: Geodetic latitude in degrees, in [-90, 90]
             longitude_deg: Longitude in degrees
-            latitude_rad: Latitude in radians
+            latitude_rad: Geodetic latitude in radians, in [-pi/2, pi/2]
             longitude_rad: Longitude in radians
             altitude: Height above ellipsoid, meters. Default is 0
-            height: Height above ellipsoid, meters (alias for altitude; wins if both are given)
+            height: Height above ellipsoid, meters (alias of ``altitude``)
 
-        Any geodetic keyword selects the geodetic form. ``latitude_rad`` /
-        ``longitude_rad`` win over ``latitude_deg`` / ``longitude_deg``.
+        Raises:
+            TypeError: no position given; positional and keyword forms
+                mixed; the same quantity given twice (``latitude_deg`` with
+                ``latitude_rad``, ``longitude_deg`` with ``longitude_rad``,
+                ``altitude`` with ``height``); latitude or longitude missing;
+                the positional argument is not a real numeric array-like or
+                three numbers; a keyword that is not a real number
+            ValueError: latitude outside [-90, 90] degrees; a NaN or infinite
+                latitude, longitude, height or Cartesian component; a
+                positional array that does not have 3 elements
+
+        Notes:
+            The named constructors ``itrfcoord.from_vector`` and
+            ``itrfcoord.from_geodetic`` do the same.
+        """
+        ...
+
+    @overload
+    @staticmethod
+    def from_geodetic(
+        *,
+        latitude_deg: float,
+        longitude_deg: float,
+        height: float | None = None,
+    ) -> itrfcoord: ...
+    @overload
+    @staticmethod
+    def from_geodetic(
+        *,
+        latitude_rad: float,
+        longitude_rad: float,
+        height: float | None = None,
+    ) -> itrfcoord:
+        """Create an ITRF coordinate from a geodetic position
+
+        The named-constructor form of ``itrfcoord(latitude_deg=...,
+        longitude_deg=..., altitude=...)``, with the same checks. Give a
+        latitude and a longitude, each in degrees or in radians, and
+        optionally the height; all arguments are keyword-only.
+
+        Args:
+            latitude_rad: Geodetic latitude in radians, in [-pi/2, pi/2].
+                Give this or ``latitude_deg`` (degrees, in [-90, 90])
+            longitude_rad: Longitude in radians. Give this or
+                ``longitude_deg`` (degrees)
+            height: Height above the WGS84 ellipsoid, meters. Default is 0
+
+        Returns:
+            itrfcoord: New ITRF coordinate
+
+        Raises:
+            TypeError: latitude or longitude missing; the same quantity given
+                in both units (``latitude_deg`` with ``latitude_rad``,
+                ``longitude_deg`` with ``longitude_rad``); an argument that
+                is not a real number
+            ValueError: latitude outside [-90, 90] degrees; a NaN or infinite
+                latitude, longitude or height
+
+        Example:
+            ```python
+            coord = satkit.itrfcoord.from_geodetic(latitude_deg=42.44, longitude_deg=-71.15, height=100)
+            print(coord)
+            # ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+            ```
+        """
+        ...
+
+    @staticmethod
+    def from_vector(vec: npt.ArrayLike) -> itrfcoord:
+        """Create an ITRF coordinate from a Cartesian position
+
+        The named-constructor form of ``itrfcoord(vec)``; the inverse of the
+        ``vector`` property.
+
+        Args:
+            vec: ITRF Cartesian position in meters: any real numeric
+                3-element array-like (numpy array, list or tuple)
+
+        Returns:
+            itrfcoord: New ITRF coordinate
+
+        Raises:
+            TypeError: ``vec`` is not a real numeric array-like
+            ValueError: ``vec`` does not have 3 elements, or holds a NaN or
+                infinity
+
+        Example:
+            ```python
+            coord = satkit.itrfcoord.from_vector([1523128.63570828, -4461395.28873207, 4281865.94218203])
+            print(coord.vector)
+            ```
         """
         ...
 
@@ -3292,12 +4645,38 @@ class itrfcoord:
         """
         ...
 
+    def __eq__(self, other: object) -> bool:
+        """True when ``other`` is an ``itrfcoord`` with exactly the same
+        Cartesian components (no tolerance)"""
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+
     def geodesic_distance(self, other: itrfcoord) -> tuple[float, float, float]:
-        """Use Vincenty's inverse formula to compute geodesic distance
-        (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>):
+        """Geodesic (shortest path on the WGS-84 ellipsoid) from this
+        coordinate to another: distance and headings
+
+        Args:
+            other (itrfcoord): ITRF coordinate to measure to
 
         Returns:
             (distance in meters, initial heading in radians, heading at destination in radians)
+
+        Notes:
+            - Both points are projected onto the ellipsoid: heights are ignored
+            - Vincenty's inverse formula, iterated to convergence
+              (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>).
+              For nearly antipodal points, where that iteration does not
+              converge, the same series are solved for the initial heading
+              by bisection. Accurate to better than a millimeter for any
+              pair of points
+            - Headings are clockwise from north, in (-pi, pi]. The heading
+              at the destination is the direction of travel on arrival (add
+              pi for the back azimuth)
+            - For coincident points all three values are 0. Between exactly
+              antipodal points, or from a pole, the shortest path is not
+              unique: the distance is well defined, the headings are those
+              of one of the shortest paths
 
         Example:
             ```python
@@ -3313,7 +4692,8 @@ class itrfcoord:
         """Geodesic distance in meters between this coordinate and another
 
         Convenience wrapper around ``geodesic_distance`` returning only the
-        distance (shortest distance along the Earth's surface).
+        distance (shortest distance along the WGS-84 ellipsoid; heights are
+        ignored).
 
         Args:
             other (itrfcoord): ITRF coordinate to measure distance to
@@ -3331,7 +4711,8 @@ class itrfcoord:
             heading_rad (float): Initial heading in radians
 
         Notes:
-            Altitude is assumed to be zero
+            The path follows the ellipsoid: the starting height is ignored
+            and the result has zero height
 
             Use Vincenty's direct formula to compute position
             (T. Vincenty, Survey Review 23(176), 1975, <https://doi.org/10.1179/sre.1975.23.176.88>)
@@ -3352,42 +4733,47 @@ class itrfcoord:
 
 @final
 class consts:
-    """Some constants that are useful for satellite dynamics"""
+    """Some constants that are useful for satellite dynamics
 
-    wgs84_a: ClassVar[float]
+    The class is a namespace: it cannot be instantiated and its attributes
+    cannot be reassigned.
+    """
+
+    wgs84_a: Final[float]
     """WGS-84 semi-major axis (equatorial radius), in meters"""
 
-    wgs84_f: ClassVar[float]
+    wgs84_f: Final[float]
     """WGS-84 flattening, unitless"""
 
-    earth_radius: ClassVar[float]
-    """Earth radius along major axis, meters"""
+    earth_radius: Final[float]
+    """WGS-84 equatorial Earth radius, meters (same value as ``wgs84_a``)"""
 
-    mu_earth: ClassVar[float]
-    """Gravitational parameter of Earth, m^3/s^2"""
+    mu_earth: Final[float]
+    """Gravitational parameter of Earth, m^3/s^2 (WGS-84)"""
 
-    mu_moon: ClassVar[float]
-    """Gravitational parameter of Moon, m^3/s^2"""
+    mu_moon: Final[float]
+    """Gravitational parameter of Moon, m^3/s^2 (JPL DE440)"""
 
-    mu_sun: ClassVar[float]
-    """Gravitational parameter of sun, m^3/s^2"""
+    mu_sun: Final[float]
+    """Gravitational parameter of sun, m^3/s^2 (JPL DE440)"""
 
-    GM: ClassVar[float]
-    """Gravitational parameter of Earth, m^3/s^2"""
+    GM: Final[float]
+    """Gravitational parameter of Earth, m^3/s^2 (same value as ``mu_earth``)"""
 
-    omega_earth: ClassVar[float]
+    omega_earth: Final[float]
     """Scalar Earth rotation rate, rad/s"""
 
-    c: ClassVar[float]
+    c: Final[float]
     """Speed of light, m/s"""
 
-    au: ClassVar[float]
-    """Astronomical Unit, mean Earth-Sun distance, meters"""
+    au: Final[float]
+    """Astronomical unit, meters: the exact defined constant of IAU 2012
+    Resolution B1 (149 597 870 700 m), close to the mean Earth-Sun distance"""
 
-    sun_radius: ClassVar[float]
+    sun_radius: Final[float]
     """Radius of sun, meters"""
 
-    solar_pressure_1au: ClassVar[float]
+    solar_pressure_1au: Final[float]
     """Solar radiation pressure at 1 AU (1367 W/m^2 / c), N/m^2.
 
     The cannonball SRP force scales this by (AU / d)^2, with d the
@@ -3395,26 +4781,48 @@ class consts:
     (Kopp & Lean 2011; IAU 2015 Resolution B3); 1367 matches GMAT and STK.
     """
 
-    moon_radius: ClassVar[float]
+    moon_radius: Final[float]
     """Radius of moon, meters"""
 
-    earth_moon_mass_ratio: ClassVar[float]
-    """Earth mass over Moon mass, unitless"""
+    earth_moon_mass_ratio: Final[float]
+    """Earth mass over Moon mass, unitless
 
-    geo_r: ClassVar[float]
-    """Distance to Geosynchronous orbit from Earth center, meters"""
+    The ratio of the JPL DE440 gravitational parameters. It differs from
+    ``mu_earth / mu_moon`` in the eighth digit, because ``mu_earth`` is the
+    WGS-84 value.
+    """
 
-    jgm3_mu: ClassVar[float]
+    geo_r: Final[float]
+    """Radius of a circular geosynchronous orbit (its semi-major axis),
+    meters from the Earth's center: ``(mu_earth / omega_earth^2)^(1/3)``"""
+
+    jgm3_mu: Final[float]
     """Earth gravitational parameter from JGM3 gravity model, m^3/s^2"""
 
-    jgm3_a: ClassVar[float]
+    jgm3_a: Final[float]
     """Earth equatorial radius of the JGM3 gravity model, m"""
 
-    jgm3_j2: ClassVar[float]
+    jgm3_j2: Final[float]
     """ "J2" gravity due oblateness of Earth from JGM3 gravity model, unitless"""
 
 # Alias so `time` resolves to the class inside bodies that define a `time` member
 _Time = time
+# Likewise for `frame`
+_Frame = frame
+
+class _ManeuverDict(typing.TypedDict):
+    """One entry of ``satstate.maneuvers``: an impulsive maneuver as a plain dict
+
+    A stub-only type (it does not exist at runtime, where the entries are
+    ordinary ``dict`` objects).
+    """
+
+    time: _Time
+    """Time at which the delta-v is applied"""
+    delta_v: npt.NDArray[np.float64]
+    """3-element delta-v, m/s, along the axes of ``frame``"""
+    frame: _Frame
+    """Frame of ``delta_v``: ``frame.GCRF``, ``frame.RTN``, ``frame.NTW`` or ``frame.LVLH``"""
 
 @final
 class satstate:
@@ -3459,18 +4867,24 @@ class satstate:
     def __init__(
         self,
         time: TimeScalar,
-        pos: npt.NDArray[np.float64],
-        vel: npt.NDArray[np.float64],
-        cov: npt.NDArray[np.float64] | None = None,
+        pos: npt.ArrayLike,
+        vel: npt.ArrayLike,
+        cov: npt.ArrayLike | None = None,
     ):
         """Create a new satellite state
 
         Args:
-            time (satkit.time): Epoch of the state
-            pos (npt.NDArray[np.float64]): Position in meters, GCRF frame
-            vel (npt.NDArray[np.float64]): Velocity in m/s, GCRF frame
-            cov (npt.NDArray[np.float64]|None, optional): 6x6 covariance matrix in GCRF
+            time (satkit.time | datetime.datetime | numpy.datetime64): Epoch of the state
+            pos (array-like): 3-element position in meters, GCRF frame
+            vel (array-like): 3-element velocity in m/s, GCRF frame
+            cov (array-like | None, optional): symmetric 6x6 covariance matrix in GCRF
                 (position block m^2, velocity block (m/s)^2, cross blocks m^2/s). Defaults to None.
+
+        Raises:
+            TypeError: if ``time`` is not a time, or ``pos``, ``vel`` or ``cov`` is not a
+                real numeric array-like
+            ValueError: if ``pos`` or ``vel`` does not have 3 elements, or ``cov`` is not
+                a symmetric 6x6 matrix
 
         Example:
             ```python
@@ -3542,19 +4956,25 @@ class satstate:
     def cov(self) -> npt.NDArray[np.float64] | None:
         """6x6 state covariance matrix in GCRF, or None if not set
 
-        Upper-left 3x3 is position covariance (m^2), lower-right 3x3 is
-        velocity covariance ((m/s)^2), off-diagonal blocks are cross-covariance.
+        Element ``[i, j]`` is the covariance of elements ``i`` and ``j`` of the
+        state ``[x, y, z, vx, vy, vz]``: the upper-left 3x3 block is the position
+        covariance (m^2), the lower-right 3x3 the velocity covariance ((m/s)^2),
+        and the off-diagonal blocks the position-velocity cross-covariance (m^2/s).
+
+        The getter returns a new array on every access, holding exactly what was
+        assigned (or what ``propagate`` computed, ``Phi @ cov @ Phi.T``), so
+        modifying the returned array does not change the state: assign a matrix
+        to set the covariance, or ``None`` to remove it.
+
+        Raises:
+            ValueError: on assignment, if the matrix is not 6x6 or not symmetric
+            TypeError: on assignment, if the value is not a real numeric array-like
+                or ``None``
         """
         ...
 
     @cov.setter
-    def cov(self, value: npt.NDArray[np.float64]) -> None:
-        """Set the full 6x6 state covariance matrix
-
-        Args:
-            value: 6x6 numpy array with state covariance for position (m) and velocity (m/s)
-        """
-        ...
+    def cov(self, value: npt.ArrayLike | None) -> None: ...
 
     @property
     def time(self) -> _Time:
@@ -3563,7 +4983,7 @@ class satstate:
 
     def set_pos_uncertainty(
         self,
-        sigma: npt.NDArray[np.float64],
+        sigma: npt.ArrayLike,
         frame: frame,
     ) -> None:
         """Set 1-sigma position uncertainty in a satellite-local or inertial frame.
@@ -3571,10 +4991,11 @@ class satstate:
         Constructs a diagonal 3x3 covariance from the given 1-sigma values
         (interpreted along the ``frame``'s axes), rotates it into GCRF,
         and stores it as the position block of the 6x6 state covariance.
-        Any existing velocity covariance is preserved.
+        Any existing velocity covariance is preserved; the position-velocity
+        cross blocks are cleared.
 
         Args:
-            sigma: 3-element numpy array of 1-sigma position components
+            sigma: 3-element array-like of 1-sigma position components
                 along the frame's axes. Units: meters.
             frame: Coordinate frame — **required**, no default (matching
                 the Rust API). Supported values:
@@ -3588,7 +5009,9 @@ class satstate:
                   axes relabeled: x = T, y = -N, z = -R)
 
         Raises:
-            RuntimeError: if the frame is not one of the supported frames.
+            ValueError: if ``sigma`` does not have 3 elements, or the frame is
+                not one of the supported frames.
+            TypeError: if ``sigma`` is not a real numeric array-like
 
         Example:
             ```python
@@ -3603,24 +5026,27 @@ class satstate:
 
     def set_vel_uncertainty(
         self,
-        sigma: npt.NDArray[np.float64],
+        sigma: npt.ArrayLike,
         frame: frame,
     ) -> None:
         """Set 1-sigma velocity uncertainty in a satellite-local or inertial frame.
 
         Analogous to ``set_pos_uncertainty``, but for the velocity
         block of the 6x6 state covariance. Any existing position
-        covariance is preserved.
+        covariance is preserved; the position-velocity cross blocks are
+        cleared.
 
         Args:
-            sigma: 3-element numpy array of 1-sigma velocity components
+            sigma: 3-element array-like of 1-sigma velocity components
                 along the frame's axes. Units: m/s.
             frame: Coordinate frame — **required**, no default (matching
                 the Rust API). Supported values: ``frame.GCRF``,
                 ``frame.RTN``, ``frame.NTW``, ``frame.LVLH``.
 
         Raises:
-            RuntimeError: if the frame is not one of the supported frames.
+            ValueError: if ``sigma`` does not have 3 elements, or the frame is
+                not one of the supported frames.
+            TypeError: if ``sigma`` is not a real numeric array-like
         """
         ...
 
@@ -3633,7 +5059,7 @@ class satstate:
         """Add an impulsive maneuver (instantaneous delta-v)
 
         Args:
-            time (satkit.time): Time at which to apply the maneuver
+            time (satkit.time | datetime.datetime | numpy.datetime64): Time at which to apply the maneuver
             delta_v (array-like): 3-element delta-v vector [m/s]
             frame (satkit.frame): Coordinate frame — **required**, no
                 default (matching the Rust API). Supported frames:
@@ -3653,6 +5079,12 @@ class satstate:
 
                 See the "Theory: Maneuver Coordinate Frames" guide in the satkit
                 documentation for a side-by-side comparison.
+
+        Raises:
+            ValueError: if ``delta_v`` does not have 3 elements, or ``frame`` is
+                not one of the four above (an Earth-fixed or other inertial
+                frame is refused here, not later by ``propagate``)
+            TypeError: if ``time`` is not a time, or ``delta_v`` is not numeric
 
         See Also:
             ``add_prograde``, ``add_retrograde``, ``add_radial``,
@@ -3722,14 +5154,34 @@ class satstate:
         """
         ...
 
+    def clear_maneuvers(self) -> None:
+        """Remove every scheduled maneuver from this state
+
+        Example:
+            ```python
+            sat = sk.satstate(sk.time(2024, 1, 1), np.array([6.781e6, 0, 0]), np.array([0, 7.5e3, 0]))
+            sat.add_prograde(sat.time + sk.duration(hours=1), 10.0)
+            sat.clear_maneuvers()
+            assert sat.num_maneuvers == 0
+            ```
+        """
+        ...
+
     @property
     def num_maneuvers(self) -> int:
         """Number of impulsive maneuvers scheduled on this state"""
         ...
 
     @property
-    def maneuvers(self) -> list[dict]:
-        """The scheduled impulsive maneuvers.
+    def maneuvers(self) -> list[_ManeuverDict]:
+        """The scheduled impulsive maneuvers, in the order they were added.
+
+        A copy: a new list of new dicts on every access, so changing it (or a
+        dict in it) does not change the state. To add a maneuver use
+        ``add_maneuver`` (or ``add_prograde``, ``add_retrograde``,
+        ``add_radial``, ``add_normal``); to remove them use
+        ``clear_maneuvers``. To remove or change only some, clear them and add
+        back the ones to keep, e.g. ``for m in kept: state.add_maneuver(**m)``.
 
         Returns:
             list[dict]: One dict per maneuver with keys ``"time"``
@@ -3740,7 +5192,7 @@ class satstate:
 
     def propagate(
         self,
-        timedur: TimeScalar | duration,
+        timedur: TimeScalar | duration | datetime.timedelta | float,
         *,
         propsettings: propsettings | None = None,
         satproperties: satproperties | None = None,
@@ -3749,16 +5201,33 @@ class satstate:
 
         If covariance is set, it is propagated via the state transition matrix.
         If maneuvers are scheduled between the current and target time, propagation
-        automatically segments at each maneuver epoch and applies the delta-v.
-        Maneuvers are preserved on the returned state.
+        automatically segments at each maneuver epoch and applies the delta-v
+        (subtracts it when propagating backward). A maneuver at time ``t`` is
+        applied when ``start <= t < target`` (``target <= t < start`` backward):
+        the state at a maneuver's own time is the state just before the burn, so
+        a maneuver at the current time is applied and one exactly at the target
+        time is not. Maneuvers are preserved on the returned state.
 
         Args:
-            timedur (satkit.time|datetime.datetime|satkit.duration): Target time, or duration from current time
-            propsettings (satkit.propsettings, optional): Propagation settings
+            timedur (satkit.time|datetime.datetime|numpy.datetime64|satkit.duration|datetime.timedelta|float):
+                Target time, or duration from the current time: a ``satkit.duration``, a
+                ``datetime.timedelta`` (converted exactly) or a number of seconds (as for
+                ``satkit.propagate(duration=)``)
+            propsettings (satkit.propsettings, optional): Propagation settings. Default: ``propsettings()``
             satproperties (satkit.satproperties, optional): Satellite properties (drag, SRP, thrust)
 
         Returns:
             satstate: New state at the target time
+
+        Raises:
+            TypeError: if ``timedur`` is not a time or a duration, or
+                ``propsettings`` / ``satproperties`` has the wrong type
+            ValueError: if the position is all zeros, or ``timedur`` is a NaN or
+                infinite number of seconds
+            RuntimeError: if the propagation fails (see ``satkit.propagate``). A
+                covariance needs the state transition matrix, which
+                ``integrator.rodas4`` and ``integrator.gauss_jackson8`` cannot
+                propagate
 
         Example:
             ```python
@@ -3771,34 +5240,50 @@ class satstate:
 
 @final
 class propstats:
-    """Statistics of a satellite propagation"""
+    """Statistics of a satellite propagation
+
+    The step and force-evaluation counts of the integrator that ran it (an
+    adaptive Runge-Kutta pair, RODAS4 or the fixed-step Gauss-Jackson 8).
+    Returned by ``propresult.stats``; not constructed directly.
+    """
 
     @property
     def num_eval(self) -> int:
-        """Number of function evaluations"""
+        """Number of force-model (derivative) evaluations"""
         ...
 
     @property
     def num_accept(self) -> int:
-        """Number of accepted steps in adaptive RK integrator"""
+        """Number of accepted integrator steps (for the fixed-step
+        ``integrator.gauss_jackson8``, the number of steps taken)"""
         ...
 
     @property
     def num_reject(self) -> int:
-        """Number of rejected steps in adaptive RK integrator"""
+        """Number of steps the adaptive step-size control rejected and retried
+        (always 0 for the fixed-step ``integrator.gauss_jackson8``)"""
         ...
+
+    def __repr__(self) -> str:
+        """One line: ``propstats(num_eval=48, num_accept=3, num_reject=0)``"""
+        ...
+
+    def __str__(self) -> str: ...
 
 @final
 class propresult:
     """Results of a satellite propagation
 
-    This class lets the user access results of the satellite propagation
+    This class lets the user access results of the satellite propagation.
+    It is returned by ``satkit.propagate`` and is not constructed directly.
 
     Notes:
-        If ``enable_interp`` is set to True in the propagation settings,
-        the propresult object can be used to interpolate solutions at any
-        time between the begin and end times of the propagation via the
-        ``interp`` method.
+        Unless ``enable_interp`` is set to False in the propagation settings
+        (it is True by default), the propresult object can be used to
+        interpolate solutions at any time between the begin and end times of
+        the propagation via the ``interp`` method. ``can_interp`` tells
+        whether it can: ``integrator.rodas4`` and ``integrator.rkv98_nointerp``
+        never store the dense output this needs.
     """
 
     @property
@@ -3851,22 +5336,25 @@ class propresult:
 
     @property
     def time(self) -> _Time:
-        """Time at which state is valid
+        """Time of the end state, at which ``state``, ``pos`` and ``vel`` are valid
+
+        Notes:
+        - This is identical to the "time_end" property
 
         Returns:
-            Time at which state is valid
+            Time at which the end state is valid
         """
         ...
 
     @property
     def time_end(self) -> _Time:
-        """Time at which state is valid
+        """Time of the end state, at which ``state_end`` is valid
 
         Notes:
         - This is identical to "time" property
 
         Returns:
-            Time at which state is valid
+            Time at which the end state is valid
         """
         ...
 
@@ -3900,9 +5388,36 @@ class propresult:
         """
         ...
 
+    def to_satstate(self) -> satstate:
+        """The end state as a ``satkit.satstate``
+
+        A new ``satstate`` at ``time_end`` with the end GCRF position and
+        velocity, to continue from (``satstate.propagate``) or to schedule
+        maneuvers on. It has no covariance and no maneuvers: a result does not
+        carry them (``satstate.propagate`` propagates both).
+
+        Returns:
+            satstate: state at ``time_end``, GCRF position (meters) and
+                velocity (meters/second)
+
+        Example:
+            >>> t0 = satkit.time(2024, 1, 1)
+            >>> res = satkit.propagate([7000e3, 0, 0, 0, 7.5e3, 0], t0, duration_secs=600.0)
+            >>> sat = res.to_satstate()
+            >>> sat.time == res.time_end
+            True
+            >>> later = sat.propagate(600.0)  # another 10 minutes
+        """
+        ...
+
     @property
     def can_interp(self) -> bool:
-        """Whether this result supports interpolation
+        """Whether ``interp`` works on this result
+
+        True when the propagation stored dense output. False when
+        ``propsettings.enable_interp`` was False, for ``integrator.rodas4``
+        and ``integrator.rkv98_nointerp`` (which have no interpolant) and for
+        a zero-duration propagation; ``interp`` then raises ``ValueError``.
 
         Returns:
             True if dense output is available for interpolation
@@ -4012,8 +5527,8 @@ class propresult:
         """Interpolate the GCRF state at one or more times between the begin and end times
 
         Args:
-            time: time(s) at which to interpolate: a single time, or a list or
-                1-D array of times
+            time: time(s) at which to interpolate: a single time, or a list,
+                tuple or 1-D array of times
             output_phi: also return the 6x6 state transition matrix. Default False
 
         Returns:
@@ -4025,11 +5540,22 @@ class propresult:
                 of times
 
         Raises:
-            ValueError: if ``output_phi`` is True but the propagation did not
-                compute the state transition matrix (propagate with
-                ``output_phi=True``), or a time is outside the interpolation range
+            ValueError: if the result has no dense output (``can_interp`` is
+                False), a time is outside the begin-to-end range, or
+                ``output_phi`` is True but the propagation did not compute the
+                state transition matrix (propagate with ``output_phi=True``)
+            TypeError: if ``time`` is not a time or a list, tuple or 1-D array of
+                times (a number, a string, None or a float array)
         """
         ...
+
+    def __repr__(self) -> str:
+        """One line with the begin and end times, the end position (m) and
+        velocity (m/s), whether there is a state transition matrix, and
+        ``can_interp``; ``str()`` gives the multi-line summary"""
+        ...
+
+    def __str__(self) -> str: ...
 
 @final
 class thrust:
@@ -4037,7 +5563,10 @@ class thrust:
 
     Represents a constant thrust acceleration over a time window,
     specified in GCRF (inertial), RTN (CCSDS-standard orbital frame,
-    also known as RSW or RIC), NTW (velocity-aligned), or LVLH.
+    also known as RSW or RIC), NTW (velocity-aligned), or LVLH. The
+    thrust is on from ``start`` to ``end``, both inclusive. Build one
+    with ``thrust.constant`` and pass a list of them as
+    ``satproperties(thrusts=[...])``; a thrust object is immutable.
 
     RTN components are [R, T, N] where R = radial (outward from Earth
     centre), T = tangential / in-track, N = normal / cross-track (along
@@ -4062,16 +5591,16 @@ class thrust:
     @staticmethod
     def constant(
         accel: npt.ArrayLike,
-        start: time,
-        end: time,
+        start: TimeScalar,
+        end: TimeScalar,
         frame: frame,
     ) -> thrust:
         """Create a constant thrust acceleration
 
         Args:
             accel (array-like): 3-element acceleration vector [m/s^2]
-            start (satkit.time): Start time of thrust arc
-            end (satkit.time): End time of thrust arc
+            start (satkit.time | datetime.datetime | numpy.datetime64): Start time of thrust arc
+            end (satkit.time | datetime.datetime | numpy.datetime64): End time of thrust arc; not before ``start``
             frame (satkit.frame): Coordinate frame — **required**, no
                 default (matching the Rust API). Supported values:
 
@@ -4083,28 +5612,42 @@ class thrust:
 
         Returns:
             thrust: Thrust object
+
+        Raises:
+            ValueError: if ``accel`` does not have 3 elements or has a NaN or
+                infinite element, ``end`` is before ``start``, or ``frame`` is
+                not one of the four above
+            TypeError: if ``accel`` is not numeric, or ``start`` or ``end`` is
+                not a time
         """
         ...
 
     @property
-    def accel(self) -> list[float]:
-        """Acceleration vector [m/s^2]"""
+    def accel(self) -> npt.NDArray[np.float64]:
+        """Acceleration vector in ``frame`` [m/s^2]: a new 3-element numpy array on each access"""
         ...
 
     @property
     def frame(self) -> frame:
-        """Coordinate frame"""
+        """Coordinate frame of the acceleration vector"""
         ...
 
     @property
     def start(self) -> time:
-        """Start time of thrust arc"""
+        """Start time of thrust arc (the thrust is on at this instant)"""
         ...
 
     @property
     def end(self) -> time:
-        """End time of thrust arc"""
+        """End time of thrust arc (the thrust is still on at this instant)"""
         ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal when acceleration, frame, start and end are all equal"""
+        ...
+
+    def __hash__(self) -> int: ...
+    def __repr__(self) -> str: ...
 
 @final
 class ecomparams:
@@ -4264,7 +5807,21 @@ class ecomparams:
 
     @staticmethod
     def from_dict(d: dict[str, float | bool]) -> ecomparams:
-        """Build from a dict as produced by ``to_dict``; missing keys default to zero / False"""
+        """Build from a dict as produced by ``to_dict``; missing keys default to zero / False
+
+        Args:
+            d: coefficient names (``d0``, ``y0``, ``b0``, ``dc``, ``ds``, ``yc``,
+                ``ys``, ``bc``, ``bs``, ``d2c``, ``d2s``, ``d4c``, ``d4s``) to
+                floats, and optionally ``sun_relative`` to a bool
+
+        Returns:
+            ecomparams: the coefficients
+
+        Raises:
+            ValueError: if the dict has a key that is not one of the above (a
+                misspelt coefficient would otherwise be silently zero)
+            TypeError: if ``d`` is not a dict, or a value has the wrong type
+        """
         ...
 
     def __eq__(self, other: object) -> bool: ...
@@ -4279,9 +5836,9 @@ class satproperties:
     and thrust parameters be set for duration of propagation.
 
     Attributes:
-        cdaoverm (float): Coefficient of drag times area over mass in m^2/kg
-        craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg
-        thrusts (list[thrust]): List of continuous thrust arcs
+        cdaoverm (float): Coefficient of drag times area over mass in m^2/kg; not negative
+        craoverm (float): Coefficient of radiation pressure times area over mass in m^2/kg; not negative
+        thrusts (list[thrust]): List of continuous thrust arcs (a copy; assign a list to change them)
         ecom (ecomparams | None): ECOM empirical solar-radiation-pressure
             coefficients, added to the cannonball term (use ``craoverm=0``
             for a pure ECOM model). See ``ecomparams`` for the
@@ -4307,9 +5864,14 @@ class satproperties:
 
         Keyword Args:
             cdaoverm (float, optional): Coefficient of drag times area over mass in m^2/kg
-            craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg
+            craoverm (float, optional): Coefficient of radiation pressure times area over mass in m^2/kg;
+                not negative
             thrusts (list[thrust], optional): List of continuous thrust arcs
             ecom (ecomparams, optional): ECOM solar-radiation-pressure coefficients
+
+        Raises:
+            TypeError: if an argument is passed positionally or has the wrong type
+            ValueError: if ``cdaoverm`` or ``craoverm`` is negative or NaN
 
         Example:
 
@@ -4333,14 +5895,20 @@ class satproperties:
 
     @property
     def cdaoverm(self) -> float:
-        """Coefficient of drag times area over mass.  Units are m^2/kg"""
+        """Coefficient of drag times area over mass.  Units are m^2/kg
+
+        Assigning a negative or NaN value raises ``ValueError``.
+        """
         ...
 
     @cdaoverm.setter
     def cdaoverm(self, value: float) -> None: ...
     @property
     def craoverm(self) -> float:
-        """Coefficient of radiation pressure times area over mass.  Units are m^2/kg"""
+        """Coefficient of radiation pressure times area over mass.  Units are m^2/kg
+
+        Assigning a negative or NaN value raises ``ValueError``.
+        """
         ...
 
     @craoverm.setter
@@ -4348,7 +5916,12 @@ class satproperties:
 
     @property
     def thrusts(self) -> list[thrust]:
-        """List of continuous thrust arcs"""
+        """List of continuous thrust arcs
+
+        A new list on every access: appending to it or removing from it does
+        not change the properties. Assign a whole list to change the arcs
+        (``props.thrusts = props.thrusts + [arc]``).
+        """
         ...
 
     @thrusts.setter
@@ -4363,11 +5936,26 @@ class satproperties:
         term ``craoverm``; use ``craoverm=0`` for a pure ECOM model. The
         "ECOM Solar Radiation Pressure" tutorial shows how to fit the
         coefficients to IGS GPS orbits.
+
+        A copy on every access: setting a coefficient on it does not change
+        the properties; assign the modified ``ecomparams`` back.
         """
         ...
 
     @ecom.setter
     def ecom(self, value: ecomparams | None) -> None: ...
+    def __eq__(self, other: object) -> bool:
+        """Equal when ``cdaoverm``, ``craoverm``, the thrust arcs (in order) and
+        ``ecom`` are all equal. Being mutable and comparable by value, the
+        object is not hashable."""
+        ...
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+    def __repr__(self) -> str:
+        """One line: ``satproperties(cdaoverm=..., craoverm=..., thrusts=[...], ecom=...)``"""
+        ...
+
+    def __str__(self) -> str: ...
 
 @final
 class integrator:
@@ -4376,7 +5964,8 @@ class integrator:
     Available integrators, from highest to lowest order:
 
     - ``rkv98`` - Verner 9(8) with 8th-degree dense output, 21 stages (default)
-    - ``rkv98_nointerp`` - Verner 9(8) without interpolation, 16 stages
+    - ``rkv98_nointerp`` - Verner 9(8) without interpolation, 16 stages. The same as
+      ``rkv98`` with ``propsettings.enable_interp=False``
     - ``rkv87`` - Verner 8(7) with 7th-degree dense output, 17 stages
     - ``rkv65`` - Verner 6(5) with 6th-degree dense output, 10 stages
     - ``rkts54`` - Tsitouras 5(4) with FSAL, 7 stages
@@ -4392,9 +5981,12 @@ class integrator:
     ``rodas4`` is recommended. For long-duration high-precision propagation
     of smooth orbits, ``gauss_jackson8`` typically uses 3-10× fewer force
     evaluations than ``rkv98`` at comparable accuracy — but it requires a
-    user-chosen fixed step size (``gj_step_seconds``), does not handle
-    discontinuities such as impulsive maneuvers, and needs ≥9 steps of
-    startup, so it's unsuitable for very short propagations.
+    user-chosen fixed step size (``gj_step_seconds``), cannot step across a
+    discontinuity, and needs a span of at least 8 steps (``RuntimeError``
+    below that), so it's unsuitable for very short propagations.
+    ``satstate.propagate`` still handles impulsive maneuvers with it, by
+    restarting the integrator at each one; every segment between maneuvers
+    must then cover 8 steps.
     """
 
     rkv98: ClassVar[integrator]
@@ -4406,8 +5998,13 @@ class integrator:
     rkv98_nointerp: ClassVar[integrator]
     """Verner 9(8) without interpolation, 16 stages
 
-    Same stepping accuracy as ``rkv98`` but skips interpolation stages.
-    Slightly faster when dense output is not needed (``enable_interp=False``).
+    The 16-stage tableau behind ``rkv98``, without the five extra stages that
+    only build the interpolant: the same order and error control, and a result
+    that never supports ``propresult.interp``, whatever ``enable_interp`` says.
+
+    ``rkv98`` with ``enable_interp=False`` already runs this tableau, so
+    choosing this member gains nothing over it (the two take the same number
+    of force evaluations); it remains for scripts that name it.
     """
 
     rkv87: ClassVar[integrator]
@@ -4438,12 +6035,27 @@ class integrator:
     Typically uses 3-10× fewer force evaluations than ``rkv98`` at
     comparable accuracy on smooth long-duration orbit propagation.
 
-    Uses a fixed step size set via ``propsettings.gj_step_seconds``.
+    Uses a fixed step size set via ``propsettings.gj_step_seconds`` (its
+    magnitude; the direction of propagation sets the sign). The span must
+    cover at least 8 steps (``RuntimeError`` otherwise).
     Supports dense output interpolation (quintic Hermite, 5th-order).
-    Does not support state transition matrix (``output_phi``) propagation.
+    Does not support state transition matrix (``output_phi``) propagation,
+    and so cannot propagate a ``satstate`` that has a covariance.
     Not recommended for highly eccentric orbits or integration across
-    discontinuities (eclipse boundaries, impulsive maneuvers).
+    discontinuities (eclipse boundaries). ``satstate.propagate`` restarts
+    it at each impulsive maneuver, so maneuvers work as long as every
+    segment between them covers 8 steps.
     """
+
+    def __int__(self) -> int:
+        """The member's integer value (``rkv98`` is 0, ... ``gauss_jackson8`` is 6)"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, and to its integer value"""
+        ...
+
+    def __hash__(self) -> int: ...
 
 @final
 class tidemodel:
@@ -4479,6 +6091,16 @@ class tidemodel:
     Step 2 is not yet implemented; currently behaves as
     ``solid_step1``."""
 
+    def __int__(self) -> int:
+        """The member's integer value (``none`` is 0, ``solid_step1`` 1, ``solid_full`` 2)"""
+        ...
+
+    def __eq__(self, other: object) -> bool:
+        """Equal to the same member, and to its integer value"""
+        ...
+
+    def __hash__(self) -> int: ...
+
 @final
 class propsettings:
     """This class contains settings used in the high-precision orbit propagator part of the "satkit" python toolbox
@@ -4488,7 +6110,7 @@ class propsettings:
             - abs_error: 1e-8
             - rel_error: 1e-8
             - gravity_degree: 4
-            - gravity_order: 4
+            - gravity_order: same as gravity_degree
             - gravity_model: gravmodel.egm2008
             - use_spaceweather: True
             - use_sun_gravity: True
@@ -4499,8 +6121,12 @@ class propsettings:
             - integrator: integrator.rkv98
             - gj_step_seconds: 60.0
             - max_steps: 1_000_000
-        - enable_interp enables high-precision interpolation of state between begin and end times via ``propresult.interp``,
-          it is enabled by default.  There is a small increase in computational efficiency if set to false
+            - require_eop_coverage: False
+            - initial_step_secs: None (derived from the state and tolerances)
+        - enable_interp stores the dense output that ``propresult.interp`` needs to interpolate the state between the begin
+          and end times; it is enabled by default.  Setting it to False saves the memory and, with the default
+          ``integrator.rkv98``, 24% of the force evaluations per step; ``propresult.can_interp`` is then False
+        - The object compares equal (``==``) to another with the same settings
 
     """
 
@@ -4528,10 +6154,14 @@ class propsettings:
 
         Args:
             abs_error: Maximum absolute value of error for any element in propagated state following ODE integration,
-                in the units of the state (meters for position elements, m/s for velocity elements). Default is 1e-8
-            rel_error: Maximum relative error of any element in propagated state following ODE integration, unitless. Default is 1e-8
+                in the units of the state (meters for position elements, m/s for velocity elements). Not negative
+                (``ValueError``). Default is 1e-8
+            rel_error: Maximum relative error of any element in propagated state following ODE integration, unitless.
+                Not negative (``ValueError``). Default is 1e-8
             gravity_degree: Maximum degree of spherical harmonic gravity model, at most 70 (``ValueError`` above that). Default is 4
-            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 70; ``ValueError`` otherwise). Default is same as gravity_degree
+            gravity_order: Maximum order of spherical harmonic gravity model. Must be <= gravity_degree (and so at most 70;
+                ``ValueError`` otherwise). Default is None: the order is the same as gravity_degree, and keeps following it
+                when ``gravity_degree`` is assigned later, until ``gravity_order`` is assigned
             gravity_model: Gravity model to use. Default is gravmodel.egm2008
             use_spaceweather: Use space weather data when computing atmospheric density for drag forces. Default is True
             use_sun_gravity: Include sun third-body gravitational perturbation. Default is True
@@ -4546,11 +6176,12 @@ class propsettings:
                 Its position effect depends on the orbit, propagation arc, and
                 fitted parameters (~1 m/day at GPS altitude if omitted; the
                 geodesic term dominates beyond ~100,000 km); cost is negligible.
-            enable_interp: Store intermediate data that allows for fast high-precision interpolation of state between begin and end times. Default is True.
-                When False, no dense output is stored and ``integrator.rkv98`` runs its 16-stage
+            enable_interp: Store the dense output that lets ``propresult.interp`` interpolate the state between begin and end times. Default is True.
+                When False, no dense output is stored (``propresult.can_interp`` is False) and ``integrator.rkv98`` runs its 16-stage
                 no-interpolant tableau (same order and error control, 24% fewer force evaluations per step).
             integrator: ODE integrator to use. Default is integrator.rkv98
-            gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
+            gj_step_seconds: Fixed step size (seconds) used by ``integrator.gauss_jackson8``; its
+                magnitude is used, and the span must cover at least 8 steps.
                 Ignored by adaptive integrators. Typical values: 30-120 s for LEO, 60-300 s
                 for MEO, 300-600 s for GEO. Default is 60.0.
             max_steps: Maximum number of integrator steps before the propagator aborts with
@@ -4569,8 +6200,10 @@ class propsettings:
                 settled stride). Set it to a previous ``propresult.next_step_secs`` to warm-start a
                 follow-on arc at full stride. Ignored by ``integrator.gauss_jackson8``.
 
-        Returns:
-            propsettings: New propsettings object with default settings
+        Raises:
+            TypeError: if an argument is passed positionally or has the wrong type
+            ValueError: if ``gravity_degree`` is above 70, ``gravity_order`` is above
+                ``gravity_degree``, or ``abs_error`` / ``rel_error`` is negative or NaN
 
         Example:
             ```python
@@ -4589,6 +6222,8 @@ class propsettings:
     def abs_error(self) -> float:
         """Maximum absolute value of error for any element in propagated state following ODE integration
 
+        Assigning a negative or NaN value raises ``ValueError``.
+
         Returns:
             Maximum absolute value of error for any element in propagated state following ODE integration,
                 in the units of the state (meters for position elements, m/s for velocity elements); default is 1e-8
@@ -4601,6 +6236,8 @@ class propsettings:
     def rel_error(self) -> float:
         """Maximum relative error of any element in propagated state following ODE integration
 
+        Assigning a negative or NaN value raises ``ValueError``.
+
         Returns:
             Maximum relative error of any element in propagated state following ODE integration, unitless; default is 1e-8
 
@@ -4611,7 +6248,11 @@ class propsettings:
     def rel_error(self, value: float) -> None: ...
     @property
     def gravity_degree(self) -> int:
-        """Maximum degree of spherical harmonic gravity model
+        """Maximum degree of spherical harmonic gravity model, at most 70 (``ValueError`` above that)
+
+        Assigning it also sets ``gravity_order`` to the same value, unless
+        ``gravity_order`` was given to the constructor or has been assigned; the
+        order is then kept, lowered to the new degree if it exceeds it.
 
         Returns:
             Maximum degree of spherical harmonic gravity model, default is 4
@@ -4624,6 +6265,10 @@ class propsettings:
     @property
     def gravity_order(self) -> int:
         """Maximum order of spherical harmonic gravity model
+
+        Must be <= ``gravity_degree`` (``ValueError`` otherwise). Until it is
+        assigned (or given to the constructor) it equals ``gravity_degree`` and
+        follows it: ``ps.gravity_degree = 20`` alone gives a 20x20 field.
 
         Returns:
             Maximum order of spherical harmonic gravity model, default is same as gravity_degree
@@ -4743,11 +6388,13 @@ class propsettings:
     def initial_step_secs(self, value: float | None) -> None: ...
     @property
     def enable_interp(self) -> bool:
-        """Store intermediate data that allows for fast high-precision interpolation of state between begin and end times.
+        """Store the dense output that lets ``propresult.interp`` interpolate the state between begin and end times. Default True.
 
-        When False, no dense output is stored and ``integrator.rkv98`` runs its
-        16-stage no-interpolant tableau (same order and error control, 24% fewer
-        force evaluations per step).
+        When False, no dense output is stored (``propresult.can_interp`` is
+        False and ``interp`` raises) and ``integrator.rkv98`` runs its 16-stage
+        no-interpolant tableau (same order and error control, 24% fewer force
+        evaluations per step). ``integrator.rodas4`` and
+        ``integrator.rkv98_nointerp`` never store dense output.
         """
         ...
 
@@ -4781,6 +6428,9 @@ class propsettings:
     def gj_step_seconds(self) -> float:
         """Fixed step size (seconds) used by ``integrator.gauss_jackson8``.
 
+        Its magnitude is used (the direction of propagation sets the sign), and
+        the span must cover at least 8 steps (``RuntimeError`` from
+        ``propagate`` otherwise).
         Ignored by adaptive integrators. Typical values: 30-120 s for LEO,
         60-300 s for MEO, 300-600 s for GEO.
 
@@ -4806,23 +6456,60 @@ class propsettings:
 
     @max_steps.setter
     def max_steps(self, value: int) -> None: ...
-    def precompute_terms(self, begin: time, end: time, step: Optional[Union[duration, float, datetime.timedelta]] = None):
-        """Precompute terms for fast interpolation of state between begin and end times
+    def __eq__(self, other: object) -> bool:
+        """Equal when every setting is equal (the table stored by
+        ``precompute_terms`` is a cache and is not compared). Being mutable and
+        comparable by value, the object is not hashable."""
+        ...
 
-        This can be used, for example, to compute sun and moon positions only once if propagating many satellites over the same time period
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+    def precompute_terms(
+        self,
+        begin: TimeScalar,
+        end: TimeScalar,
+        step: Optional[Union[duration, float, datetime.timedelta]] = None,
+    ) -> None:
+        """Tabulate the time-only terms of the force model once, for propagating many satellites over the same span
+
+        Stores in these settings a table, at ``step`` intervals from ``begin`` to
+        ``end`` (in either order, padded by a few minutes), of the Sun and Moon
+        positions and the GCRF-to-ITRF rotation used for Earth gravity.
+        ``propagate`` with these settings then interpolates the table instead of
+        building its own on every call, whenever its span lies inside the
+        tabulated one; otherwise the table is ignored. It is unrelated to
+        ``enable_interp`` and ``propresult.interp``. A new call replaces the
+        table, and a pickle of the settings does not carry it.
 
         Args:
-            begin (satkit.time): Begin time of propagation
-            end (satkit.time): End time of propagation
-            step (satkit.duration | float | datetime.timedelta, optional): Step size for interpolation.  Default = 60 seconds.  float is interpreted as seconds.
+            begin (satkit.time | datetime.datetime | numpy.datetime64): One end of the span
+            end (satkit.time | datetime.datetime | numpy.datetime64): The other end of the span
+            step (satkit.duration | float | datetime.timedelta, optional): Table step.  Default = 60 seconds.  float is interpreted as seconds.
 
+        Raises:
+            ValueError: if ``step`` is zero, negative or not finite
+            TypeError: if ``begin`` or ``end`` is not a time, or ``step`` is not a
+                duration, a float or a timedelta
+            RuntimeError: if the table cannot be built (missing JPL ephemeris or
+                Earth-orientation data, or a span and step needing too many entries)
+
+        Example:
+            ```python
+            t0 = satkit.time(2024, 1, 1)
+            settings = satkit.propsettings()
+            settings.precompute_terms(t0, t0 + satkit.duration(days=1))
+            for state in (
+                np.array([6.781e6, 0, 0, 0, 7.5e3, 0]),
+                np.array([7.0e6, 0, 0, 0, 0, 7.5e3]),
+            ):
+                result = satkit.propagate(state, t0, duration_days=1, propsettings=settings)
+            ```
         """
         ...
 
 def lambert(
-    r1: npt.NDArray[np.float64],
-    r2: npt.NDArray[np.float64],
-    tof: float,
+    r1: npt.ArrayLike,
+    r2: npt.ArrayLike,
+    tof: float | duration | datetime.timedelta,
     mu: float | None = None,
     prograde: bool | None = None,
 ) -> list[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
@@ -4832,9 +6519,11 @@ def lambert(
     for transfer orbits connecting them.
 
     Args:
-        r1: 3-element numpy array — departure position (meters)
-        r2: 3-element numpy array — arrival position (meters)
-        tof: Time of flight in seconds (must be positive)
+        r1: Departure position, meters: any real numeric 3-element
+            array-like (numpy array, list or tuple)
+        r2: Arrival position, meters (likewise)
+        tof: Time of flight, must be positive: a number of seconds, a
+            ``satkit.duration`` or a ``datetime.timedelta``
         mu: Gravitational parameter in m³/s² (default: Earth µ = 3.986e14)
         prograde: If True (default), prograde transfer (angular momentum
             h_z >= 0); if False, retrograde (h_z <= 0). This picks the short
@@ -4846,9 +6535,12 @@ def lambert(
         elements are multi-revolution solutions if they exist.
 
     Raises:
-        ValueError: If inputs are invalid (non-finite values, tof or mu not
-            positive, zero position, r1 == r2), or if the solver fails to
-            converge
+        TypeError: If ``r1`` or ``r2`` is not a real numeric array-like,
+            ``tof`` is not a number, duration or timedelta, or ``mu`` is not
+            a number
+        ValueError: If inputs are invalid (``r1`` or ``r2`` not 3 elements,
+            non-finite values, tof or mu not positive, zero position,
+            r1 == r2), or if the solver fails to converge
 
     Example:
         ```python
@@ -4865,12 +6557,12 @@ def lambert(
 
 def propagate(
     state: npt.ArrayLike | None = None,
-    begin: time | None = None,
-    end: time | None = None,
+    begin: TimeScalar | None = None,
+    end: TimeScalar | None = None,
     *,
     pos: npt.ArrayLike | None = None,
     vel: npt.ArrayLike | None = None,
-    duration: duration | None = None,
+    duration: duration | datetime.timedelta | float | None = None,
     duration_secs: float | None = None,
     duration_days: float | None = None,
     output_phi: bool = False,
@@ -4879,33 +6571,54 @@ def propagate(
 ) -> propresult:
     """High-precision orbit propagator
 
-    Propagate orbits with high-precision force modeling via adaptive Runge-Kutta methods (default is order 9/8).
+    Propagate orbits with high-precision force modeling. The default integrator is the adaptive
+    Verner 9(8) Runge-Kutta pair; ``propsettings.integrator`` selects the others (lower-order
+    Runge-Kutta pairs, the RODAS4 Rosenbrock method, fixed-step Gauss-Jackson 8).
 
     Args:
-        state: 6-element numpy array representing satellite GCRF position and velocity in meters and meters/second.
+        state: 6-element array-like representing satellite GCRF position and velocity in meters and meters/second.
             Required unless ``pos`` and ``vel`` are given
         begin: Time at which satellite is at input state. Required (``TypeError`` if omitted); its
             ``None`` default only lets ``state`` be omitted in favour of ``pos`` and ``vel``
+        end: Time at which new position and velocity will be computed. May be before ``begin``
+            (backward propagation)
 
     Keyword Args:
-        end: Time at which new position and velocity will be computed
-        duration: Duration from ``begin`` at which new position & velocity will be computed
+        duration: Duration from ``begin`` at which new position & velocity will be computed: a
+            ``satkit.duration``, a ``datetime.timedelta`` (converted exactly) or a number of seconds
         duration_secs: Duration in seconds from ``begin`` at which new position and velocity will be computed
         duration_days: Duration in days from ``begin`` at which new position and velocity will be computed
         output_phi: Output 6x6 state transition matrix between begin and end times. Default is False
         propsettings: Settings for the propagation; if omitted, defaults are used
-        satproperties: Drag and radiation pressure susceptibility of satellite
-        pos: GCRF position in meters; replaces the first three elements of ``state``,
-            or stands in for ``state`` together with ``vel``
-        vel: GCRF velocity in meters/second; replaces the last three elements of ``state``
+        satproperties: Drag, radiation pressure and thrust properties of the satellite; if omitted,
+            none of the three is modeled
+        pos: 3-element GCRF position in meters. Give it together with ``vel``, in place of ``state``
+            (``TypeError`` if ``state`` is also given)
+        vel: 3-element GCRF velocity in meters/second. Give it together with ``pos``
 
     Returns:
         propresult: Propagation result object holding state outputs, statistics,
-            and dense output if requested
+            and dense output for ``propresult.interp`` unless ``propsettings.enable_interp``
+            is False
+
+    Raises:
+        TypeError: if ``state`` (or ``pos`` and ``vel``) or ``begin`` is missing, ``pos`` is
+            given without ``vel`` or the reverse, ``state`` is given together with ``pos`` and
+            ``vel``, none or more than one of ``end``,
+            ``duration``, ``duration_secs``, ``duration_days`` is given, an argument has the
+            wrong type, or an unknown keyword is passed
+        ValueError: if ``state`` does not have 6 elements (``pos`` / ``vel`` 3), the position
+            is all zeros, or ``duration`` (as a number), ``duration_secs`` or ``duration_days``
+            is NaN or infinite
+        RuntimeError: if the propagation fails: a required data file is missing, the
+            integrator does not converge or exceeds ``max_steps``, ``output_phi`` is used
+            with ``integrator.rodas4`` or ``integrator.gauss_jackson8``, the span is shorter
+            than 8 steps of ``integrator.gauss_jackson8``, or ``require_eop_coverage`` is set
+            and the span is outside the Earth-orientation table
 
     Notes:
         Propagates satellite ephemeris (position, velocity in GCRF & time) to new time and
-        outputs new position and velocity via Runge-Kutta integration.
+        outputs new position and velocity via numerical integration.
         Inputs and outputs are all in the Geocentric Celestial Reference Frame (GCRF).
 
         Included forces:
@@ -4918,9 +6631,9 @@ def propagate(
         - Radiation pressure
         - Atmospheric drag: NRL-MSISE 2000 density model, with option to include space weather effects
 
-        An end time is required: pass ``end`` or one of ``duration``, ``duration_secs``,
-        ``duration_days`` (``TypeError`` if none is given; ``ValueError`` for a NaN or
-        infinite ``duration_secs`` / ``duration_days``).
+        An end time is required: pass exactly one of ``end``, ``duration``, ``duration_secs``
+        and ``duration_days`` (``TypeError`` if none or more than one is given; ``ValueError``
+        for a NaN or infinite number of seconds or days).
 
         For future propagation (beyond available data files):
 
@@ -4949,7 +6662,7 @@ def propagate(
     """
     ...
 
-def omm_from_url(url: str) -> list[OMMDict]:
+def omm_from_url(url: str) -> list[dict[str, Any]]:
     """Load OMM(s) from a URL as a list of dictionaries
 
     Fetches the content at the given URL and auto-detects the format (JSON,
@@ -4961,12 +6674,14 @@ def omm_from_url(url: str) -> list[OMMDict]:
         url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
 
     Returns:
-        list[OMMDict]: one dictionary per message, with every CCSDS field the
-            source provided plus its extra keys (see ``OMMDict``)
+        list[dict[str, Any]]: one dictionary per message, with every CCSDS field the
+            source provided (the keys of ``OMMDict``) plus the source's extra keys
 
     Raises:
         RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-            ``satkit.utils.set_offline(True)``); no connection is opened
+            ``satkit.utils.set_offline(True)``; no connection is opened) or the
+            request fails
+        ValueError: if the response is not JSON, XML or CSV, or is malformed
 
     Example:
         ```python
@@ -4978,7 +6693,7 @@ def omm_from_url(url: str) -> list[OMMDict]:
     """
     ...
 
-def omm_from_file(filename: str) -> list[OMMDict]:
+def omm_from_file(filename: str | os.PathLike[str]) -> list[dict[str, Any]]:
     """Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
 
     The format is detected from the content, not the file extension, as
@@ -4988,10 +6703,15 @@ def omm_from_file(filename: str) -> list[OMMDict]:
     KVN is not supported.
 
     Args:
-        filename (str): path to the file
+        filename (str | os.PathLike): path to the file
 
     Returns:
-        list[OMMDict]: one dictionary per message (see ``OMMDict``)
+        list[dict[str, Any]]: one dictionary per message, as ``omm_from_text`` returns
+
+    Raises:
+        FileNotFoundError: if the file does not exist; the exception names
+            the path. Another I/O failure raises the matching ``OSError``
+        ValueError: if the content is none of the three formats or is malformed
 
     Example:
         ```python
@@ -5003,7 +6723,7 @@ def omm_from_file(filename: str) -> list[OMMDict]:
     """
     ...
 
-def omm_from_text(text: str) -> list[OMMDict]:
+def omm_from_text(text: str) -> list[dict[str, Any]]:
     """Parse OMM(s) from JSON, XML or CSV text as a list of dictionaries
 
     Text starting with ``[`` or ``{`` is parsed as JSON (one message or an
@@ -5021,10 +6741,15 @@ def omm_from_text(text: str) -> list[OMMDict]:
         text (str): the document
 
     Returns:
-        list[OMMDict]: one dictionary per message (see ``OMMDict``)
+        list[dict[str, Any]]: one dictionary per message. The CCSDS fields
+            have the keys and value types of ``OMMDict``, with ``EPOCH`` an
+            RFC 3339 string; keys that are not CCSDS fields (Space-Track's
+            ``OBJECT_TYPE``, ``TLE_LINE1``, ...; XML ``USER_DEFINED``
+            parameters; extra CSV columns) are kept as the source gave them,
+            which is why the type is a plain ``dict`` and not ``OMMDict``
 
     Raises:
-        RuntimeError: if the text is none of the three formats or is
+        ValueError: if the text is none of the three formats or is
             malformed; for CSV the message gives the line of the bad row, and
             a table with no ``EPOCH`` or ``MEAN_MOTION`` column is refused
 

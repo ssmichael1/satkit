@@ -206,8 +206,9 @@ class TestExceptionTypes:
 
     def test_satstate_propagate_non_time_is_type_error(self):
         st = sk.satstate(T0, STATE[:3], STATE[3:])
+        # A number is seconds (round 2); a string is neither a time nor a duration
         with pytest.raises(TypeError):
-            st.propagate(1.0)
+            st.propagate("1.0")
 
     def test_duration_invalid_operands(self):
         d = sk.duration(seconds=1)

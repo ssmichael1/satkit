@@ -12,14 +12,17 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use satkit::omm::OMM;
 use serde_json::{Map, Value};
 
 /// Keys of xmltodict-style nested dicts whose children are hoisted to the
-/// top level. `body`/`segment`/`data` are the CCSDS XML structure; the rest
-/// are the field groups.
+/// top level. `ndm`/`omm` are the root elements of a CCSDS XML document
+/// (`xmltodict.parse` returns `{"omm": {...}}` or `{"ndm": {"omm": ...}}`),
+/// `body`/`segment`/`data` are its structure; the rest are the field groups.
 const GROUP_KEYS: &[&str] = &[
+    "ndm",
+    "omm",
     "body",
     "segment",
     "header",
@@ -111,14 +114,26 @@ fn merge_user_defined(map: &mut Map<String, Value>, obj: &Bound<'_, PyAny>) -> R
     Ok(())
 }
 
+/// xmltodict renders an element that has attributes, such as
+/// `<MEAN_MOTION units="rev/day">15.5</MEAN_MOTION>`, as
+/// `{"@units": "rev/day", "#text": "15.5"}`: the `#text` of such a dict.
+fn element_text<'py>(obj: &Bound<'py, PyAny>) -> Result<Option<Bound<'py, PyAny>>> {
+    match obj.cast::<PyDict>() {
+        Ok(d) => Ok(d.get_item("#text")?),
+        Err(_) => Ok(None),
+    }
+}
+
 /// Flattens a Python OMM dict into one JSON object with CCSDS keys.
 ///
 /// Accepts the flat Space-Track/CelesTrak JSON shape, and any level of the
-/// xmltodict rendering of the XML form (`omm`, `body`, `segment`, or `data`
-/// node): group children are hoisted, `@version` becomes `CCSDS_OMM_VERS`,
-/// other `@attr`/`#text` keys are dropped, and `userDefinedParameters` are
-/// keyed by their `parameter` attribute. A key that appears at more than one
-/// level keeps the last one seen.
+/// xmltodict rendering of the XML form (the whole document with its `omm`
+/// or `ndm` root key, or the `omm`, `body`, `segment`, or `data` node):
+/// group children are hoisted, `@version` becomes `CCSDS_OMM_VERS`, other
+/// `@attr`/`#text` keys are dropped, an element with attributes is its
+/// text, and `userDefinedParameters` are keyed by their `parameter`
+/// attribute. A key that appears at more than one level keeps the last one
+/// seen.
 fn flatten(map: &mut Map<String, Value>, dict: &Bound<'_, PyDict>) -> Result<()> {
     for (k, v) in dict.iter() {
         let key: String = k.extract()?;
@@ -129,9 +144,30 @@ fn flatten(map: &mut Map<String, Value>, dict: &Bound<'_, PyDict>) -> Result<()>
         } else if GROUP_KEYS.contains(&key.as_str()) {
             if let Ok(sub) = v.cast::<PyDict>() {
                 flatten(map, sub)?;
+            } else if let Ok(list) = v.cast::<PyList>() {
+                // xmltodict renders repeated elements (the `omm` messages of
+                // an `ndm`) as a list. One element set is one message.
+                match (list.len(), list.get_item(0)) {
+                    (1, Ok(only)) => {
+                        if let Ok(sub) = only.cast::<PyDict>() {
+                            flatten(map, sub)?;
+                        }
+                    }
+                    (n, _) => {
+                        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                            "Invalid OMM dictionary: \"{key}\" holds {n} messages, but one \
+                             dictionary is one element set; pass them one at a time, e.g. \
+                             [{{\"omm\": m}} for m in d[\"ndm\"][\"omm\"]]"
+                        ))
+                        .into());
+                    }
+                }
             }
         } else if key == "userDefinedParameters" {
             merge_user_defined(map, &v)?;
+        } else if let Some(text) = element_text(&v)? {
+            // An element with attributes, e.g. `<MEAN_MOTION units="rev/day">`
+            map.insert(key.clone(), py_to_json(&key, &text)?);
         } else {
             map.insert(key.clone(), py_to_json(&key, &v)?);
         }
@@ -141,18 +177,34 @@ fn flatten(map: &mut Map<String, Value>, dict: &Bound<'_, PyDict>) -> Result<()>
 
 /// Builds a Rust `OMM` from a Python dict.
 ///
-/// Used by `satkit.sgp4` for dict inputs and by `TLE.from_omm`.
-pub fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> Result<OMM> {
+/// Used by `satkit.sgp4` for dict inputs and by `TLE.from_omm`. A dict that
+/// is not an OMM (a required key missing, a value that cannot be read) is a
+/// `ValueError`.
+pub fn omm_from_pydict(dict: &Bound<'_, PyDict>) -> PyResult<OMM> {
     let mut map = Map::new();
     flatten(&mut map, dict)?;
     serde_json::from_value::<OMM>(Value::Object(map)).map_err(|e| {
-        anyhow!(
+        pyo3::exceptions::PyValueError::new_err(format!(
             "Invalid OMM dictionary: {e}. Expected the CCSDS keys EPOCH, MEAN_MOTION, \
              ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER and MEAN_ANOMALY \
              (as in Space-Track/CelesTrak JSON), or the nested meanElements/tleParameters \
              groups of an XML-derived dict"
-        )
+        ))
     })
+}
+
+/// The Python exception for an OMM loader error: `ValueError` for content
+/// that is not an OMM document, the matching `OSError` for an I/O failure,
+/// and `RuntimeError` for what fails at run time (a download, offline mode).
+fn omm_err(e: satkit::omm::Error) -> PyErr {
+    use satkit::omm::Error as E;
+    match e {
+        E::Io(e) => e.into(),
+        E::Http(_) | E::HttpThrottled(_) | E::Offline { .. } | E::XmlFeatureDisabled => {
+            pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
+        }
+        e => pyo3::exceptions::PyValueError::new_err(e.to_string()),
+    }
 }
 
 fn json_to_py<'py>(py: Python<'py>, v: &Value) -> PyResult<Bound<'py, PyAny>> {
@@ -215,11 +267,14 @@ fn omms_to_pylist(py: Python<'_>, omms: &[OMM]) -> PyResult<Py<PyAny>> {
 ///     url (str): URL to fetch OMM data from (e.g. CelesTrak or Space-Track endpoint)
 ///
 /// Returns:
-///     list[dict]: One dict per message, see ``satkit.OMMDict``
+///     list[dict]: one dict per message, with every CCSDS field the source
+///     provided (the keys of ``satkit.OMMDict``) plus the source's extra keys
 ///
 /// Raises:
 ///     RuntimeError: if offline mode is on (``SATKIT_OFFLINE=1`` or
-///         ``satkit.utils.set_offline(True)``); no connection is opened
+///         ``satkit.utils.set_offline(True)``; no connection is opened) or
+///         the request fails
+///     ValueError: if the response is not JSON, XML or CSV, or is malformed
 ///
 /// Example:
 ///     ```python
@@ -227,9 +282,9 @@ fn omms_to_pylist(py: Python<'_>, omms: &[OMM]) -> PyResult<Py<PyAny>> {
 ///     pos, vel = sk.sgp4(omms[0], sk.time(2024, 1, 1))
 ///     ```
 #[pyfunction]
-pub fn omm_from_url(py: Python<'_>, url: String) -> Result<Py<PyAny>> {
-    let omms = py.detach(|| OMM::from_url(&url))?;
-    Ok(omms_to_pylist(py, &omms)?)
+pub fn omm_from_url(py: Python<'_>, url: String) -> PyResult<Py<PyAny>> {
+    let omms = py.detach(|| OMM::from_url(&url)).map_err(omm_err)?;
+    omms_to_pylist(py, &omms)
 }
 
 /// Load OMM(s) from a JSON, XML or CSV file as a list of dictionaries
@@ -238,15 +293,25 @@ pub fn omm_from_url(py: Python<'_>, url: String) -> Result<Py<PyAny>> {
 /// ``omm_from_text`` does.
 ///
 /// Args:
-///     filename (str): Path to a file holding one OMM or an array of them
-///         (JSON), a CCSDS NDM/XML document, or a CSV table
+///     filename (str | os.PathLike): path to a file holding one OMM or an
+///         array of them (JSON), a CCSDS NDM/XML document, or a CSV table
 ///
 /// Returns:
-///     list[dict]: One dict per message, see ``satkit.OMMDict``
+///     list[dict]: one dict per message, as ``omm_from_text`` returns
+///
+/// Raises:
+///     FileNotFoundError: if the file does not exist; the exception names
+///         the path. Another I/O failure raises the matching ``OSError``
+///     ValueError: if the content is none of the three formats or is malformed
 #[pyfunction]
-pub fn omm_from_file(py: Python<'_>, filename: String) -> Result<Py<PyAny>> {
-    let omms = py.detach(|| OMM::from_file(&filename))?;
-    Ok(omms_to_pylist(py, &omms)?)
+pub fn omm_from_file(py: Python<'_>, filename: std::path::PathBuf) -> PyResult<Py<PyAny>> {
+    let omms = py.detach(|| {
+        // Read here, not with `OMM::from_file`, to name the path in the error
+        let text =
+            std::fs::read_to_string(&filename).map_err(|e| crate::pytle::io_err(e, &filename))?;
+        OMM::from_text(&text).map_err(omm_err)
+    })?;
+    omms_to_pylist(py, &omms)
 }
 
 /// Parse OMM(s) from JSON, XML or CSV text as a list of dictionaries
@@ -261,13 +326,18 @@ pub fn omm_from_file(py: Python<'_>, filename: String) -> Result<Py<PyAny>> {
 ///         document, or a CSV table
 ///
 /// Returns:
-///     list[dict]: One dict per message, see ``satkit.OMMDict``
+///     list[dict]: one dict per message. The CCSDS fields have the keys and
+///     value types of ``satkit.OMMDict``, with ``EPOCH`` an RFC 3339 string;
+///     keys that are not CCSDS fields (Space-Track's ``OBJECT_TYPE``,
+///     ``TLE_LINE1``, ...; XML ``USER_DEFINED`` parameters; extra CSV
+///     columns) are kept as the source gave them.
 ///
 /// Raises:
-///     RuntimeError: if the text is none of the three formats or is
-///         malformed; for CSV the message gives the line of the bad row
+///     ValueError: if the text is none of the three formats or is
+///         malformed; for CSV the message gives the line of the bad row, and
+///         a table with no ``EPOCH`` or ``MEAN_MOTION`` column is refused
 #[pyfunction]
-pub fn omm_from_text(py: Python<'_>, text: String) -> Result<Py<PyAny>> {
-    let omms = py.detach(|| OMM::from_text(&text))?;
-    Ok(omms_to_pylist(py, &omms)?)
+pub fn omm_from_text(py: Python<'_>, text: String) -> PyResult<Py<PyAny>> {
+    let omms = py.detach(|| OMM::from_text(&text)).map_err(omm_err)?;
+    omms_to_pylist(py, &omms)
 }

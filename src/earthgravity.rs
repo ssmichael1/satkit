@@ -410,7 +410,8 @@ pub fn init_from_path(model: GravityModel, path: &std::path::Path) -> Result<()>
 ///   at 70 (the propagator rejects it instead).
 ///
 /// * `order` - The maximum order of the gravity model to use.
-///   Should be ≤ `degree`; a larger order is evaluated at `degree`.
+///   Should be ≤ `degree`; a larger order is clamped silently to `degree`
+///   (no error; the Python `satkit.gravity` raises `ValueError` instead).
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
@@ -444,7 +445,8 @@ pub fn accel(pos_itrf: &Vector3, degree: usize, order: usize, model: GravityMode
 ///   at 70 (the propagator rejects it instead).
 ///
 /// * `order` - The maximum order of the gravity model to use.
-///   Should be ≤ `degree`; a larger order is evaluated at `degree`.
+///   Should be ≤ `degree`; a larger order is clamped silently to `degree`
+///   (no error; the Python `satkit.gravity` raises `ValueError` instead).
 ///
 /// * `model` - The gravity model to use, of type "GravityModel"
 ///
@@ -512,6 +514,19 @@ macro_rules! dispatch_degree {
 /// See Equation 3.33 of Montenbruck & Gill (referenced above) for
 /// calculation details.
 impl Gravity {
+    /// Acceleration due to Earth gravity at ITRF position `pos` (meters),
+    /// in m/s^2 in ITRF, without the centrifugal term.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - ITRF position, meters
+    /// * `degree` - Maximum degree. Clamped silently to `[1, D]`, where `D`
+    ///   is the highest degree held by this model (70 for the built-in
+    ///   models)
+    /// * `order` - Maximum order. An order above the (clamped) degree is
+    ///   **clamped silently** to the degree: no error is returned. The
+    ///   Python bindings (`satkit.gravity`) raise `ValueError` for
+    ///   `order > degree` instead
     pub fn accel(&self, pos: &Vector3, degree: usize, order: usize) -> Vector3 {
         // Clamp to the stored coefficient table: a custom low-degree model
         // combined with a larger requested degree would index past the table.
@@ -597,6 +612,12 @@ impl Gravity {
         )
     }
 
+    /// Acceleration (as [`Gravity::accel`]) and its partial derivatives with
+    /// respect to ITRF position, d a / d r.
+    ///
+    /// `degree` and `order` are clamped silently exactly as in
+    /// [`Gravity::accel`]: an order above the degree is evaluated at the
+    /// degree, with no error.
     pub fn accel_and_partials(
         &self,
         pos: &Vector3,

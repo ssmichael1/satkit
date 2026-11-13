@@ -1,28 +1,28 @@
 /* -----------------------------------------------------------------------------
-*
-*                           function gstime_SGP4
-*
-*  this function finds the greenwich sidereal time.
-*
-*  author        : david vallado                  719-573-2600    1 mar 2001
-*
-*  inputs          description                    range / units
-*    jdut1       - julian date in ut1             days from 4713 bc
-*
-*  outputs       :
-*    gstime      - greenwich sidereal time        0 to 2pi rad
-*
-*  locals        :
-*    temp        - temporary variable for doubles   rad
-*    tut1        - julian centuries from the
-*                  jan 1, 2000 12 h epoch (ut1)
-*
-*  coupling      :
-*    none
-*
-*  references    :
-*    vallado       2013, 187, eq 3-45
-* --------------------------------------------------------------------------- */
+ *
+ *                           function gstime_SGP4
+ *
+ *  this function finds the greenwich sidereal time.
+ *
+ *  author        : david vallado                  719-573-2600    1 mar 2001
+ *
+ *  inputs          description                    range / units
+ *    jdut1       - julian date in ut1             days from 4713 bc
+ *
+ *  outputs       :
+ *    gstime      - greenwich sidereal time        0 to 2pi rad
+ *
+ *  locals        :
+ *    temp        - temporary variable for doubles   rad
+ *    tut1        - julian centuries from the
+ *                  jan 1, 2000 12 h epoch (ut1)
+ *
+ *  coupling      :
+ *    none
+ *
+ *  references    :
+ *    vallado       2013, 187, eq 3-45
+ * --------------------------------------------------------------------------- */
 
 /* c++ comment out
 double  gstime_SGP4

@@ -512,7 +512,7 @@ class TestDatetime64:
         )
         assert np.array_equal(sk.sun.pos_gcrf(ta), sk.sun.pos_gcrf(tl))
         assert np.array_equal(sk.moon.pos_gcrf(ta), sk.moon.pos_gcrf(tl))
-        assert ft.gmst(ta) == ft.gmst(tl)
+        assert np.array_equal(ft.gmst(ta), ft.gmst(tl))
         # A datetime64 array keeps its time axis, like a list
         assert sk.sgp4(tle, ta[:1])[0].shape == (1, 3)
         try:
@@ -533,7 +533,7 @@ class TestDatetime64:
         arr = np.array(src, dtype=f"datetime64[{unit}]")
         # numpy's own (exact) conversion to microseconds names the label
         expect = [sk.time.from_rfc3339(str(x) + "Z") for x in arr.astype("datetime64[us]")]
-        assert sk.frametransform.gmst(arr) == sk.frametransform.gmst(expect)
+        assert np.array_equal(sk.frametransform.gmst(arr), sk.frametransform.gmst(expect))
         assert [_as_time(x) for x in arr] == expect
 
     def test_unit_multiplier(self):
@@ -570,13 +570,13 @@ class TestDatetime64:
     def test_strided_and_byte_swapped(self):
         tl, ta = self.times(), self.array()
         gmst = sk.frametransform.gmst
-        assert gmst(ta[::2]) == gmst(tl[::2])
-        assert gmst(ta[::-1]) == gmst(tl[::-1])
+        assert np.array_equal(gmst(ta[::2]), gmst(tl[::2]))
+        assert np.array_equal(gmst(ta[::-1]), gmst(tl[::-1]))
         swapped = ta.astype(ta.dtype.newbyteorder("S"))
         assert not swapped.dtype.isnative
-        assert gmst(swapped) == gmst(tl)
-        assert gmst(swapped[::2]) == gmst(tl[::2])
-        assert gmst(np.array([], dtype="datetime64[us]")) == []
+        assert np.array_equal(gmst(swapped), gmst(tl))
+        assert np.array_equal(gmst(swapped[::2]), gmst(tl[::2]))
+        assert gmst(np.array([], dtype="datetime64[us]")).shape == (0,)
 
     def test_nat_raises_value_error(self):
         arr = self.array()
@@ -624,9 +624,9 @@ class TestDatetime64:
         assert sk.density.nrlmsise(coord, d64) == sk.density.nrlmsise(coord, t)
         assert sk.density.nrlmsise(400e3, d64) == sk.density.nrlmsise(400e3, t)
         # lists and object arrays of datetime64 scalars
-        assert sk.frametransform.gmst([d64, t]) == sk.frametransform.gmst([t, t])
+        assert np.array_equal(sk.frametransform.gmst([d64, t]), sk.frametransform.gmst([t, t]))
         obj = np.array([d64, d64], dtype=object)
-        assert sk.frametransform.gmst(obj) == sk.frametransform.gmst([t, t])
+        assert np.array_equal(sk.frametransform.gmst(obj), sk.frametransform.gmst([t, t]))
         # an OMM dict's EPOCH
         omm = tle.to_omm()
         omm64 = {**omm, "EPOCH": np.datetime64(omm["EPOCH"].rstrip("Z"), "us")}

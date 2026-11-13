@@ -21,9 +21,9 @@ fn test_weekday_try_from() {
     assert!(Weekday::try_from(-1).is_err());
 }
 
-// `as_datetime()` seconds are `µs as f64 * 1e-6`, so they equal a decimal
-// literal exactly unless that product rounds differently (55.816 → 55.815999…);
-// those cases compare the integer-µs `as_datetime_us()` instead.
+// `as_datetime()` seconds are `µs as f64 / 1e6`, correctly rounded, so they
+// equal the decimal literal of a whole number of microseconds exactly
+// (`test_seconds_correctly_rounded`); `as_datetime_us()` gives the integer.
 
 #[test]
 fn test_j2000() {
@@ -1112,4 +1112,79 @@ fn test_year_beyond_range_is_an_error() {
     assert!(Instant::from_rfc3339("+294247-01-10T04:00:54.775807-01:00").is_err());
     // A year well inside the range still works.
     assert!(Instant::from_rfc3339("+200000-01-01T00:00:00Z").is_ok());
+}
+
+#[test]
+fn test_seconds_correctly_rounded() {
+    // `µs as f64 * 1.0e-6` was one ulp off for many values:
+    // 1678014225.453 read back as 1678014225.4529998 and 45.453 s as
+    // 45.452999999999996
+    let t = Instant::from_unixtime(1678014225.453);
+    assert_eq!(t.as_unixtime(), 1678014225.453);
+    assert_eq!(t.as_datetime(), (2023, 3, 5, 11, 3, 45.453));
+    assert_eq!(Instant::J2000.as_datetime().5, 55.816);
+    // Every millisecond of a minute, and a spread of Unix times
+    for ms in 0..60_000i64 {
+        let t = Instant::from_datetime_us(2024, 2, 29, 13, 7, ms * 1000).unwrap();
+        let want: f64 = format!("{}.{:03}", ms / 1000, ms % 1000).parse().unwrap();
+        assert_eq!(t.as_datetime().5, want);
+    }
+    for k in 0..20_000i64 {
+        let us = 1_700_000_000_000_000 + k * 7_919_317;
+        let want: f64 = format!("{}.{:06}", us / 1_000_000, us % 1_000_000)
+            .parse()
+            .unwrap();
+        assert_eq!(Instant::from_unixtime_microseconds(us).as_unixtime(), want);
+    }
+    // Before 1970 too (1950, where UTC is taken as TAI)
+    let t = Instant::from_unixtime_microseconds(-631_152_000_123_456);
+    assert_eq!(t.as_unixtime(), -631152000.123456);
+}
+
+#[test]
+fn test_as_datetime_with_scale_round_trip() {
+    // The inverse of `from_datetime_with_scale`: exact for UTC, TAI, TT and
+    // GPS, within a microsecond for UT1 and TDB
+    let comps = [
+        (2024, 3, 5, 12, 34, 56.789_012),
+        (1999, 12, 31, 23, 59, 59.999_999),
+        (1965, 6, 1, 0, 0, 0.5),
+        (-44, 3, 15, 11, 0, 0.0),
+    ];
+    for scale in [
+        TimeScale::UTC,
+        TimeScale::TAI,
+        TimeScale::TT,
+        TimeScale::GPS,
+        TimeScale::UT1,
+        TimeScale::TDB,
+    ] {
+        for (y, mo, d, h, mi, s) in comps {
+            let t = Instant::from_datetime_with_scale(y, mo, d, h, mi, s, scale).unwrap();
+            let (y2, mo2, d2, h2, mi2, s2) = t.as_datetime_with_scale(scale);
+            assert_eq!((y2, mo2, d2, h2, mi2), (y, mo, d, h, mi), "{scale:?}");
+            assert!((s2 - s).abs() <= 1.0e-6, "{scale:?}: {s2} vs {s}");
+            if matches!(
+                scale,
+                TimeScale::UTC | TimeScale::TAI | TimeScale::TT | TimeScale::GPS
+            ) {
+                assert_eq!(s2, s, "{scale:?}");
+            }
+        }
+    }
+    // TT label of the J2000 epoch
+    assert_eq!(
+        Instant::J2000.as_datetime_with_scale(TimeScale::TT),
+        (2000, 1, 1, 12, 0, 0.0)
+    );
+    // A leap second exists only in UTC; TAI is 37 s ahead
+    let t = Instant::from_datetime(2016, 12, 31, 23, 59, 60.5).unwrap();
+    assert_eq!(
+        t.as_datetime_with_scale(TimeScale::UTC),
+        (2016, 12, 31, 23, 59, 60.5)
+    );
+    assert_eq!(
+        t.as_datetime_with_scale(TimeScale::TAI),
+        (2017, 1, 1, 0, 0, 36.5)
+    );
 }

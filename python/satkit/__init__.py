@@ -1,5 +1,9 @@
+# The extension registers its nine native submodules (density, eop,
+# frametransform, jplephem, moon, planets, spaceweather, sun, utils) in
+# ``sys.modules`` as ``satkit.<name>`` when it is imported, so
+# ``import satkit.sun`` and ``from satkit.sun import pos_gcrf`` work.
 from .satkit import *  # type: ignore
-from ._types import OMMDict
+from ._types import OMMDict, TLEFitResult
 from .satkit import __version__
 
 # The core data (IERS nutation tables, public-domain gravity models to degree 70) is

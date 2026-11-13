@@ -126,10 +126,10 @@ fn data_search_dirs() -> Vec<String> {
 /// provisioned copy of the data files.
 ///
 /// Args:
-///    path (str): Directory to search
+///    path (str | os.PathLike): Directory to search
 #[pyfunction]
-fn add_search_dir(path: String) {
-    satkit::utils::add_search_dir(&PathBuf::from(path));
+fn add_search_dir(path: PathBuf) {
+    satkit::utils::add_search_dir(&path);
 }
 
 /// Forbid (or re-allow) downloads for this process
@@ -171,18 +171,26 @@ fn is_offline() -> bool {
 /// and the location downloads are written to.
 ///
 /// Args:
-///    datadir (str): Path to the data directory
+///    datadir (str | os.PathLike): Path to the data directory
 ///
 /// Returns:
 ///   None
 ///
 /// Raises:
-///  RuntimeError: If the directory does not exist
+///  FileNotFoundError: If the path is not an existing directory
 ///
 #[pyfunction]
-fn set_datadir(datadir: String) -> Result<()> {
-    let d = PathBuf::from(datadir);
-    Ok(satkit::utils::set_datadir(&d)?)
+fn set_datadir(datadir: PathBuf) -> Result<()> {
+    // Checked here for an OSError subclass carrying the path (the core's
+    // "Data directory does not exist" was a RuntimeError without it)
+    if !datadir.is_dir() {
+        return Err(pyo3::exceptions::PyFileNotFoundError::new_err(format!(
+            "Data directory does not exist: {}",
+            datadir.display()
+        ))
+        .into());
+    }
+    Ok(satkit::utils::set_datadir(&datadir)?)
 }
 
 /// Check if data files are found
@@ -211,7 +219,7 @@ fn githash() -> String {
 
 /// Version of satkit
 ///
-/// The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.0"``).
+/// The release version, the same as ``satkit.__version__`` (e.g. ``"0.24.3"``).
 ///
 /// Returns:
 ///    str: Version of satkit

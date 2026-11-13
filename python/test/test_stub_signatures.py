@@ -73,7 +73,7 @@ def test_cases_found():
     assert expected <= set(CASES), f"missing: {sorted(expected - set(CASES))}"
 
 
-def _overload_problems(stub, runtime: inspect.Signature) -> list[str]:
+def _overload_problems(stub, runtime: inspect.Signature, overloaded: bool = False) -> list[str]:
     params = list(runtime.parameters.values())
     rt = {p.name: p for p in params if p.kind not in (P.VAR_POSITIONAL, P.VAR_KEYWORD)}
     rt_positional = [p for p in params if p.kind in (P.POSITIONAL_ONLY, P.POSITIONAL_OR_KEYWORD)]
@@ -96,6 +96,11 @@ def _overload_problems(stub, runtime: inspect.Signature) -> list[str]:
             problems.append(f"{name!r} is keyword-only at runtime")
         if kind is P.KEYWORD_ONLY and r.kind is P.POSITIONAL_ONLY:
             problems.append(f"{name!r} is positional-only at runtime")
+        # One runtime signature serves every overload, so a parameter that is
+        # optional at runtime may be required by an overload (itrfcoord's
+        # `latitude_deg`); the reverse is always an error.
+        if overloaded and not has_default:
+            continue
         if has_default != (r.default is not P.empty):
             problems.append(f"{name!r} default: stub {has_default}, runtime {r.default is not P.empty}")
     for name, r in rt.items():
@@ -110,7 +115,10 @@ def test_stub_init_matches_runtime(name):
     overloads = STUB_INITS[name]
     problems = []
     for n, stub in enumerate(overloads):
-        problems += [f"overload {n}: {p}" for p in _overload_problems(stub, runtime)]
+        problems += [
+            f"overload {n}: {p}"
+            for p in _overload_problems(stub, runtime, overloaded=len(overloads) > 1)
+        ]
     advertised = {p for stub in overloads for p, _, _ in stub}
     problems += [
         f"runtime parameter {p!r} is in no stub overload"

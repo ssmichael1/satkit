@@ -11,7 +11,7 @@ use satkit::mathtypes::*;
 
 use crate::pyutils::{slice2py2d, to_f64_ndarray, to_vector3, vec2py, warn_deprecated};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 ///
 /// Quaternion representing rotation of 3D Cartesian axes
@@ -33,6 +33,19 @@ use anyhow::{bail, Result};
 ///
 /// https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation
 ///
+/// Called with no arguments, the constructor returns the identity; called
+/// with four numbers ``(w, x, y, z)`` (scalar first, positional only) it
+/// returns that quaternion scaled to unit norm.
+///
+/// Notes:
+///     A quaternion is always a unit quaternion (a rotation): every
+///     constructor normalizes its result, so ``norm`` is 1 to rounding.
+///     ``q`` and ``-q`` are the same rotation but are different quaternions.
+///
+/// Raises:
+///     TypeError: the number of arguments is neither 0 nor 4, or a component
+///         is not a real number
+///     ValueError: all four components are zero, or one is NaN or infinite
 ///
 #[pyclass(name = "quaternion", module = "satkit", from_py_object)]
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -41,6 +54,34 @@ pub struct PyQuaternion(pub Quaternion);
 impl From<Quaternion> for PyQuaternion {
     fn from(q: Quaternion) -> Self {
         Self(q)
+    }
+}
+
+/// The unit quaternion along `(w, x, y, z)`: `ValueError` when the
+/// components are all zero or one is not finite, so a `quaternion` is always
+/// a rotation.
+fn unit_quaternion(w: f64, x: f64, y: f64, z: f64) -> PyResult<Quaternion> {
+    // Scale by the largest component first so that neither very large nor
+    // very small components overflow or underflow the norm.
+    // (`f64::max` skips a NaN, hence the separate test.)
+    let scale = w.abs().max(x.abs()).max(y.abs()).max(z.abs());
+    let finite = [w, x, y, z].iter().all(|c| c.is_finite());
+    if !finite || scale == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "quaternion components must be finite and not all zero, got ({w}, {x}, {y}, {z})"
+        )));
+    }
+    Ok(Quaternion::new(w / scale, x / scale, y / scale, z / scale).normalize())
+}
+
+/// `ValueError` for a NaN or infinite angle (or other scalar argument)
+fn finite_arg(name: &str, v: f64) -> PyResult<f64> {
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} must be finite, got {v}"
+        )))
     }
 }
 
@@ -60,9 +101,13 @@ impl PyQuaternion {
             let x = args.get_item(1)?.extract::<f64>()?;
             let y = args.get_item(2)?.extract::<f64>()?;
             let z = args.get_item(3)?.extract::<f64>()?;
-            Ok(Quaternion::new(w, x, y, z).into())
+            Ok(unit_quaternion(w, x, y, z)?.into())
         } else {
-            bail!("Invalid input.  Must be empty or 4 floats");
+            Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "quaternion() takes 0 or 4 positional arguments (w, x, y, z), got {}",
+                args.len()
+            ))
+            .into())
         }
     }
 
@@ -74,12 +119,15 @@ impl PyQuaternion {
     /// Returns:
     ///     quaternion: Quaternion representing rotation about xhat axis
     ///
+    /// Raises:
+    ///     ValueError: ``theta_rad`` is NaN or infinite
+    ///
     /// Notes:
     ///     This is a right-handed rotation of the vector
     ///     e.g. rotation of +xhat 90 degrees by +zhat gives +yhat
     #[staticmethod]
     fn rotx(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::rotx(theta_rad).into())
+        Ok(Quaternion::rotx(finite_arg("theta_rad", theta_rad)?).into())
     }
 
     /// Quaternion representing rotation about yhat axis by `theta_rad` radians
@@ -90,13 +138,16 @@ impl PyQuaternion {
     /// Returns:
     ///     quaternion: Quaternion representing rotation about yhat axis
     ///
+    /// Raises:
+    ///     ValueError: ``theta_rad`` is NaN or infinite
+    ///
     /// Notes:
     ///     This is a right-handed rotation of the vector
     ///     e.g. rotation of +xhat by +yhat 90 degrees gives -zhat
     ///
     #[staticmethod]
     fn roty(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::roty(theta_rad).into())
+        Ok(Quaternion::roty(finite_arg("theta_rad", theta_rad)?).into())
     }
 
     /// Quaternion representing rotation about zhat axis by `theta_rad` radians
@@ -107,12 +158,15 @@ impl PyQuaternion {
     /// Returns:
     ///     quaternion: Quaternion representing rotation about zhat axis
     ///
+    /// Raises:
+    ///     ValueError: ``theta_rad`` is NaN or infinite
+    ///
     /// Notes:
     ///     This is a right-handed rotation of the vector
     ///     e.g. rotation of +xhat 90 degrees by +zhat gives +yhat
     #[staticmethod]
     fn rotz(theta_rad: f64) -> Result<Self> {
-        Ok(Quaternion::rotz(theta_rad).into())
+        Ok(Quaternion::rotz(finite_arg("theta_rad", theta_rad)?).into())
     }
 
     /// Quaternion representing rotation about given axis by given angle in radians
@@ -122,18 +176,24 @@ impl PyQuaternion {
     ///     angle (float): Angle in radians to rotate about axis (right-handed rotation of vector)
     ///
     /// Returns:
-    ///     quaternion: Quaternion representing rotation about given axis by given angle.  If axis norm is < 1e-9,
-    ///     unit quaternion is returned
+    ///     quaternion: Quaternion representing rotation about given axis by given angle.  If the axis norm is < 1e-9
+    ///     (a zero axis), the identity quaternion is returned, whatever the angle
+    ///
+    /// Raises:
+    ///     TypeError: ``axis`` is not a real numeric array-like
+    ///     ValueError: ``axis`` does not have 3 elements, or ``axis`` or
+    ///         ``angle`` holds a NaN or infinity
     ///
     #[staticmethod]
     fn from_axis_angle(axis: &Bound<'_, PyAny>, angle: f64) -> Result<Self> {
         let v = to_vector3(axis, "axis")?;
-        let n = v.norm();
+        finite_arg("angle", angle)?;
+        let n = finite_arg("axis norm", v.norm())?;
         if n < 1.0e-9 {
             // If the axis is zero, return identity quaternion
             Ok(Quaternion::identity().into())
         } else {
-            Ok(Quaternion::from_axis_angle(v, angle).into())
+            Ok(Quaternion::from_axis_angle(v * (1.0 / n), angle).into())
         }
     }
 
@@ -144,43 +204,73 @@ impl PyQuaternion {
     ///     v2 (array-like): 3-element vector (any real numeric array-like) representing vector rotating to
     ///
     /// Returns:
-    ///     quaternion: Quaternion representing rotation from v1 to v2
+    ///     quaternion: Quaternion representing the shortest rotation from v1 to v2
+    ///     (about the axis ``v1 x v2``; the vectors need not be unit length)
+    ///
+    /// Raises:
+    ///     TypeError: an input is not a real numeric array-like
+    ///     ValueError: an input does not have 3 elements or holds a NaN or
+    ///         infinity, either vector has (near-)zero length, or the vectors
+    ///         point in opposite directions (the rotation axis is then not unique)
     #[staticmethod]
     fn rotation_between(v1: &Bound<'_, PyAny>, v2: &Bound<'_, PyAny>) -> Result<Self> {
         let v1 = to_vector3(v1, "v1")?;
         let v2 = to_vector3(v2, "v2")?;
 
         // Compute rotation between two vectors
-        let n1 = v1.norm();
-        let n2 = v2.norm();
+        let n1 = finite_arg("v1 norm", v1.norm())?;
+        let n2 = finite_arg("v2 norm", v2.norm())?;
         if n1 < 1.0e-9 || n2 < 1.0e-9 {
-            bail!("Norms are 0 or vectors are 180° apart");
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Norms are 0 or vectors are 180° apart",
+            )
+            .into());
         }
         let u1 = v1 * (1.0 / n1);
         let u2 = v2 * (1.0 / n2);
         let cross = u1.cross(&u2);
         let dot = u1.dot(&u2);
         if cross.norm() < 1.0e-9 && dot < 0.0 {
-            bail!("Norms are 0 or vectors are 180° apart");
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Norms are 0 or vectors are 180° apart",
+            )
+            .into());
         }
-        let q = Quaternion::from_axis_angle(cross, dot.clamp(-1.0, 1.0).acos());
-        Ok(q.into())
+        // atan2 of the sine and cosine keeps full precision for nearly
+        // parallel vectors, where acos(dot) loses half the digits
+        let sin = cross.norm();
+        if sin == 0.0 {
+            return Ok(Quaternion::identity().into());
+        }
+        let q = Quaternion::from_axis_angle(cross * (1.0 / sin), sin.atan2(dot));
+        Ok(q.normalize().into())
     }
 
     /// Return quaternion representing same rotation as input direction cosine matrix (3x3 rotation matrix)
     ///
     /// Args:
-    ///     dcm (array-like): 3x3 array representing rotation matrix
+    ///     dcm (array-like): 3x3 array representing a rotation matrix (any
+    ///         real numeric array-like): orthonormal, with determinant +1
     ///
     /// Returns:
-    ///     quaternion: Quaternion representing same rotation as input matrix
+    ///     quaternion: Unit quaternion representing same rotation as input matrix
+    ///
+    /// Raises:
+    ///     TypeError: ``dcm`` is not a real numeric array-like
+    ///     ValueError: ``dcm`` is not 3x3, holds a NaN or infinity, or is not
+    ///         a rotation matrix (``dcm @ dcm.T`` differs from the identity by
+    ///         more than 1e-6 in any element, or the determinant is negative)
     #[staticmethod]
     fn from_rotation_matrix(dcm: &Bound<'_, PyAny>) -> Result<Self> {
         let dcm = to_f64_ndarray(dcm)?;
         let dcm = dcm.readonly();
         let dcm = dcm.as_array();
         if dcm.shape() != [3, 3] {
-            bail!("Invalid DCM.  Must be 3x3 matrix");
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid DCM.  Must be 3x3 matrix, got shape {:?}",
+                dcm.shape()
+            ))
+            .into());
         }
         // numpy arrays are row-major, build Matrix3 row-by-row
         let mat = Matrix3::new([
@@ -188,7 +278,34 @@ impl PyQuaternion {
             [dcm[[1, 0]], dcm[[1, 1]], dcm[[1, 2]]],
             [dcm[[2, 0]], dcm[[2, 1]], dcm[[2, 2]]],
         ]);
-        Ok(Quaternion::from_rotation_matrix(&mat).into())
+        // A rotation matrix is orthonormal with determinant +1. Anything
+        // else (a scaled, sheared or reflected matrix, NaN) has no
+        // quaternion; converting it anyway used to give a non-unit one.
+        let rrt = mat * mat.transpose();
+        let mut err: f64 = 0.0;
+        for i in 0..3 {
+            for j in 0..3 {
+                let target = if i == j { 1.0 } else { 0.0 };
+                // NaN compares false below, so fold it into the error here
+                let e = (rrt[(i, j)] - target).abs();
+                err = if e.is_nan() {
+                    f64::INFINITY
+                } else {
+                    err.max(e)
+                };
+            }
+        }
+        let det = mat[(0, 0)] * (mat[(1, 1)] * mat[(2, 2)] - mat[(1, 2)] * mat[(2, 1)])
+            - mat[(0, 1)] * (mat[(1, 0)] * mat[(2, 2)] - mat[(1, 2)] * mat[(2, 0)])
+            + mat[(0, 2)] * (mat[(1, 0)] * mat[(2, 1)] - mat[(1, 1)] * mat[(2, 0)]);
+        if err > 1.0e-6 || det.is_nan() || det <= 0.0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "dcm is not a rotation matrix (orthonormal with determinant +1): \
+                 max |dcm @ dcm.T - I| = {err:.3e}, determinant = {det:.6}"
+            ))
+            .into());
+        }
+        Ok(Quaternion::from_rotation_matrix(&mat).normalize().into())
     }
 
     /// Return rotation matrix representing identical rotation to quaternion
@@ -237,9 +354,15 @@ impl PyQuaternion {
     ///
     /// Returns:
     ///     quaternion: Quaternion representing the input euler-angle rotation
+    ///
+    /// Raises:
+    ///     ValueError: an angle is NaN or infinite
     #[staticmethod]
-    fn from_euler(roll: f64, pitch: f64, yaw: f64) -> Self {
-        Quaternion::from_euler(roll, pitch, yaw).into()
+    fn from_euler(roll: f64, pitch: f64, yaw: f64) -> PyResult<Self> {
+        finite_arg("roll", roll)?;
+        finite_arg("pitch", pitch)?;
+        finite_arg("yaw", yaw)?;
+        Ok(Quaternion::from_euler(roll, pitch, yaw).into())
     }
 
     /// The identity (no-rotation) quaternion
@@ -251,8 +374,8 @@ impl PyQuaternion {
         Quaternion::identity().into()
     }
 
-    /// Quaternion norm (Euclidean length of the 4 components; 1 for a unit
-    /// rotation quaternion)
+    /// Quaternion norm (Euclidean length of the 4 components). Quaternions
+    /// are kept unit, so this is 1 to rounding.
     ///
     /// Returns:
     ///     float: Norm of the quaternion
@@ -261,7 +384,9 @@ impl PyQuaternion {
         self.0.norm()
     }
 
-    /// Return this quaternion normalized to unit length
+    /// Return this quaternion normalized to unit length. Quaternions are
+    /// already unit; this only removes rounding error accumulated over a long
+    /// chain of products.
     ///
     /// Returns:
     ///     quaternion: Normalized (unit) quaternion
@@ -269,9 +394,8 @@ impl PyQuaternion {
         self.0.normalize().into()
     }
 
-    /// Quaternion inverse. For a unit (rotation) quaternion this equals the
-    /// conjugate; for a non-unit quaternion the conjugate is scaled by the
-    /// squared norm.
+    /// Quaternion inverse: the opposite rotation. Same as ``conj()`` and
+    /// ``conjugate()``, quaternions being unit.
     ///
     /// Returns:
     ///     quaternion: Inverse quaternion
@@ -288,6 +412,20 @@ impl PyQuaternion {
     ///     float: Dot product
     fn dot(&self, other: &Self) -> f64 {
         self.0.dot(&other.0)
+    }
+
+    /// True when ``other`` is a quaternion with exactly the same four
+    /// components (no tolerance). ``q`` and ``-q`` are the same rotation but
+    /// compare unequal; use ``isclose`` to compare rotations.
+    fn __eq__(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+
+    /// Hash of the four components, consistent with ``==``
+    fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
+        (self.0.w, self.0.x, self.0.y, self.0.z)
+            .into_pyobject(py)?
+            .hash()
     }
 
     fn __str__(&self) -> Result<String> {
@@ -318,7 +456,11 @@ impl PyQuaternion {
         crate::pyutils::pack_f64s(py, &[self.0.w, self.0.x, self.0.y, self.0.z])
     }
 
-    /// Angle of rotation in radians
+    /// Angle of rotation in radians, in [0, 2 pi)
+    ///
+    /// The angle is measured about ``axis``, right-handed. It exceeds pi when
+    /// the scalar component ``w`` is negative; the same rotation is then the
+    /// angle ``2 pi - angle`` about ``-axis``.
     ///
     /// Returns:
     ///     float: Angle of rotation in radians
@@ -327,7 +469,9 @@ impl PyQuaternion {
         self.0.to_axis_angle().1
     }
 
-    /// Axis of rotation
+    /// Axis of rotation, a unit vector
+    ///
+    /// The identity (no rotation) has no axis; ``[1, 0, 0]`` is returned for it.
     ///
     /// Returns:
     ///     numpy.ndarray: 3-element numpy array representing axis of rotation
@@ -361,36 +505,174 @@ impl PyQuaternion {
         self.0.conjugate().into()
     }
 
+    /// X component of the vector part
     #[getter]
     fn x(&self) -> f64 {
         self.0.x
     }
 
+    /// Y component of the vector part
     #[getter]
     fn y(&self) -> f64 {
         self.0.y
     }
 
+    /// Z component of the vector part
     #[getter]
     fn z(&self) -> f64 {
         self.0.z
     }
 
+    /// Scalar component (cosine of half the rotation angle)
     #[getter]
     fn w(&self) -> f64 {
         self.0.w
+    }
+
+    /// Rotation angle between this orientation and another, radians in [0, pi]
+    ///
+    /// The angle of the rotation ``self.conj() * other`` that takes one to
+    /// the other. ``q`` and ``-q`` are the same rotation, so
+    /// ``q.angle_to(-q)`` is 0.
+    ///
+    /// Args:
+    ///     other (quaternion): The other orientation
+    ///
+    /// Returns:
+    ///     float: Angle between the two rotations, radians in [0, pi]
+    ///
+    /// Example:
+    ///     >>> import math
+    ///     >>> q1 = satkit.quaternion.rotz(math.radians(10))
+    ///     >>> q2 = satkit.quaternion.rotz(math.radians(40))
+    ///     >>> round(math.degrees(q1.angle_to(q2)), 6)
+    ///     30.0
+    fn angle_to(&self, other: &Self) -> f64 {
+        let r = self.0.conjugate() * other.0;
+        // atan2 of the half-angle sine and cosine keeps full precision for
+        // small angles, where 2 acos(|dot|) loses half the digits; |w| folds
+        // q and -q together
+        let s = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt();
+        2.0 * s.atan2(r.w.abs())
+    }
+
+    /// True when ``other`` is the same rotation to within ``atol`` radians
+    ///
+    /// Compares rotations, not components: ``q`` and ``-q`` are the same
+    /// rotation and are close (unlike ``==``, which compares the four
+    /// components exactly).
+    ///
+    /// Args:
+    ///     other (quaternion): The rotation to compare with
+    ///
+    /// Keyword Args:
+    ///     atol (float): Largest ``angle_to(other)``, radians, still counted
+    ///         as the same rotation. Default 1e-12
+    ///
+    /// Returns:
+    ///     bool: ``self.angle_to(other) <= atol``
+    ///
+    /// Raises:
+    ///     ValueError: ``atol`` is negative, NaN or infinite
+    ///
+    /// Example:
+    ///     >>> q = satkit.quaternion.rotx(0.3)
+    ///     >>> q.isclose(satkit.quaternion(-q.w, -q.x, -q.y, -q.z))
+    ///     True
+    #[pyo3(signature = (other, *, atol=1.0e-12))]
+    fn isclose(&self, other: &Self, atol: f64) -> PyResult<bool> {
+        if !(atol.is_finite() && atol >= 0.0) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "atol must be finite and non-negative, got {atol}"
+            )));
+        }
+        Ok(self.angle_to(other) <= atol)
+    }
+
+    /// Rotation axis and angle, the inverse of ``from_axis_angle``
+    ///
+    /// The same values as the ``axis`` and ``angle`` properties:
+    /// ``quaternion.from_axis_angle(*q.to_axis_angle())`` is ``q``.
+    ///
+    /// Returns:
+    ///     tuple[numpy.ndarray, float]: Unit rotation axis (3-element array;
+    ///     ``[1, 0, 0]`` for the identity) and the right-handed angle about
+    ///     it in radians, in [0, 2 pi)
+    ///
+    /// Example:
+    ///     >>> axis, angle = satkit.quaternion.rotz(0.5).to_axis_angle()
+    fn to_axis_angle(&self, py: Python) -> PyResult<(Py<PyAny>, f64)> {
+        Ok((self.axis(py)?, self.angle()))
+    }
+
+    /// The four components as an array in the order ``[w, x, y, z]``
+    /// (scalar first), the inverse of ``from_array``
+    ///
+    /// Returns:
+    ///     numpy.ndarray: 4-element float64 array ``[w, x, y, z]``
+    ///
+    /// Example:
+    ///     >>> satkit.quaternion().to_array()
+    ///     array([1., 0., 0., 0.])
+    fn to_array(&self, py: Python) -> PyResult<Py<PyAny>> {
+        Ok(
+            np::PyArray1::from_slice(py, &[self.0.w, self.0.x, self.0.y, self.0.z])
+                .into_any()
+                .unbind(),
+        )
+    }
+
+    /// Quaternion from an array of its four components in the order
+    /// ``[w, x, y, z]`` (scalar first), the inverse of ``to_array``
+    ///
+    /// The same as ``quaternion(w, x, y, z)``: the components are scaled to
+    /// unit norm.
+    ///
+    /// Args:
+    ///     arr (array-like): 4 components ``[w, x, y, z]`` (any real numeric
+    ///         array-like: numpy array, list or tuple)
+    ///
+    /// Returns:
+    ///     quaternion: Unit quaternion along ``arr``
+    ///
+    /// Raises:
+    ///     TypeError: ``arr`` is not a real numeric array-like
+    ///     ValueError: ``arr`` does not have 4 elements, holds a NaN or
+    ///         infinity, or is all zeros
+    ///
+    /// Example:
+    ///     >>> q = satkit.quaternion.from_array([1.0, 0.0, 0.0, 0.0])
+    #[staticmethod]
+    fn from_array(arr: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let arr = to_f64_ndarray(arr)?;
+        let ro = arr.readonly();
+        let a = ro.as_array();
+        if a.ndim() != 1 || a.len() != 4 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "quaternion array must have 4 elements [w, x, y, z], got shape {:?}",
+                a.shape()
+            )));
+        }
+        Ok(unit_quaternion(a[0], a[1], a[2], a[3])?.into())
     }
 
     /// Spherical linear interpolation between self and other quaternion
     ///
     /// Args:
     ///     other (quaternion): Quaternion to perform interpolation to
-    ///     frac (float): Number in range [0,1] representing fractional distance from self to other of result quaternion
+    ///     frac (float): Fractional distance from self (0) to other (1). It is
+    ///         not clamped: a value outside [0, 1] extrapolates along the same arc
     ///
     /// Returns:
-    ///     quaternion: Quaterion represention fracional spherical interpolation between self and other
+    ///     quaternion: Quaternion representing fractional spherical interpolation
+    ///     between self and other, along the shorter of the two arcs (``other``
+    ///     and ``-other`` are the same rotation; the nearer one is used)
+    ///
+    /// Raises:
+    ///     ValueError: ``frac`` is NaN or infinite
     fn slerp(&self, other: &Self, frac: f64) -> Result<Self> {
-        Ok(self.0.slerp(&other.0, frac).into())
+        finite_arg("frac", frac)?;
+        Ok(self.0.slerp(&other.0, frac).normalize().into())
     }
 
     fn __mul__(&self, other: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {

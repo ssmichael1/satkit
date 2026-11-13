@@ -30,6 +30,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`sgp4_error`](tle.md#satkit.sgp4_error), [`sgp4_gravconst`](tle.md#satkit.sgp4_gravconst), [`sgp4_opsmode`](tle.md#satkit.sgp4_opsmode) | SGP4 error codes, gravity constants and ops modes |
 | [`tlefitstatus`](tle.md#satkit.tlefitstatus) | Termination status of `TLE.fit_from_states` |
 | [`OMMDict`](tle.md#satkit.OMMDict) | The keys of an OMM dictionary |
+| [`TLEFitResult`](tle.md#satkit.TLEFitResult) | The fit summary returned by `TLE.fit_from_states` |
 | [`omm_from_url`, `omm_from_file`, `omm_from_text`](tle.md#satkit.omm_from_url) | Read OMMs (JSON, XML, CSV) as dictionaries |
 | [`TLEWarning`](tle.md#satkit.TLEWarning) | Warning for a TLE record skipped with `on_error="warn"` |
 | [`propagate`](satprop.md) | High-precision numerical orbit propagation |
@@ -53,6 +54,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`planets`](planets.md) | Low-precision planetary ephemerides |
 | [`density`](density.md) | NRLMSISE-00 atmospheric density model |
 | [`spaceweather`](spaceweather.md) | Space-weather indices ($F_{10.7}$, $A_p$) and their coverage |
+| [`eop`](eop.md) | Earth Orientation Parameters (UT1 − UTC, polar motion) and their coverage |
 | [`gravity`](gravity.md) | Earth gravity acceleration |
 | [`gravmodel`](gravity.md#satkit.gravmodel) | Gravity model selection enum |
 | [`gravity_and_partials`](gravity.md#satkit.gravity_and_partials) | Gravity acceleration and its 3×3 position gradient |

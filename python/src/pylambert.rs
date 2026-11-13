@@ -1,7 +1,7 @@
-use numpy::{PyArray1, PyArrayMethods, PyUntypedArrayMethods};
+use numpy::PyArray1;
 use pyo3::prelude::*;
 
-use satkit::mathtypes::Vector3;
+use crate::pyutils::to_vector3;
 
 type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 
@@ -11,9 +11,11 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 /// arrival velocity vectors for the transfer orbit connecting them.
 ///
 /// Args:
-///     r1 (numpy.ndarray): Initial position vector, 3-element array (meters)
-///     r2 (numpy.ndarray): Final position vector, 3-element array (meters)
-///     tof (float): Time of flight in seconds (must be positive)
+///     r1 (array-like): Initial position vector, meters: any real numeric
+///         3-element array-like (numpy array, list or tuple)
+///     r2 (array-like): Final position vector, meters (likewise)
+///     tof (float | duration | datetime.timedelta): Time of flight, must be
+///         positive; a number is in seconds
 ///     mu (float, optional): Gravitational parameter in m³/s² (default: Earth μ)
 ///     prograde (bool, optional): If True (default), use prograde transfer
 ///         (angular momentum h_z >= 0); if False, use retrograde transfer
@@ -23,12 +25,16 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 ///     list[tuple[numpy.ndarray, numpy.ndarray]]: List of (v1, v2) solution pairs.
 ///         Each v1 is the departure velocity and v2 is the arrival velocity
 ///         (3-element numpy arrays in m/s). The first element is the
-///         zero-revolution solution.
+///         zero-revolution solution; additional elements are
+///         multi-revolution solutions if they exist.
 ///
 /// Raises:
-///     ValueError: If inputs are invalid (non-finite values, tof or mu not
-///         positive, zero position, r1 == r2), or if the solver fails to
-///         converge
+///     TypeError: If ``r1`` or ``r2`` is not a real numeric array-like, or
+///         ``tof`` is not a number, duration or timedelta, or ``mu`` is not
+///         a number
+///     ValueError: If inputs are invalid (``r1`` or ``r2`` not 3 elements,
+///         non-finite values, tof or mu not positive, zero position,
+///         r1 == r2), or if the solver fails to converge
 ///
 /// Example:
 ///     >>> import satkit
@@ -42,25 +48,24 @@ type LambertSolution = (Py<PyArray1<f64>>, Py<PyArray1<f64>>);
 #[pyo3(signature = (r1, r2, tof, mu=None, prograde=None))]
 pub fn lambert(
     py: Python,
-    r1: &Bound<'_, PyArray1<f64>>,
-    r2: &Bound<'_, PyArray1<f64>>,
-    tof: f64,
+    r1: &Bound<'_, PyAny>,
+    r2: &Bound<'_, PyAny>,
+    tof: &Bound<'_, PyAny>,
     mu: Option<f64>,
     prograde: Option<bool>,
 ) -> PyResult<Vec<LambertSolution>> {
-    if r1.len() != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "r1 must be a 3-element array",
-        ));
-    }
-    if r2.len() != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "r2 must be a 3-element array",
-        ));
-    }
+    // Any real numeric 3-element array-like (list, tuple, integer or
+    // non-contiguous array): `TypeError` for a non-numeric input,
+    // `ValueError` for the wrong shape
+    let r1_vec = to_vector3(r1, "r1")?;
+    let r2_vec = to_vector3(r2, "r2")?;
 
-    let r1_vec = Vector3::from_slice(r1.readonly().as_slice()?);
-    let r2_vec = Vector3::from_slice(r2.readonly().as_slice()?);
+    // A number of seconds is passed on as given (the solver checks it); a
+    // duration or timedelta is converted to seconds
+    let tof = match tof.extract::<f64>() {
+        Ok(secs) => secs,
+        Err(_) => crate::pykepler::duration_arg(tof, "tof")?.as_seconds(),
+    };
 
     let mu_val = mu.unwrap_or(satkit::consts::MU_EARTH);
     let prograde_val = prograde.unwrap_or(true);

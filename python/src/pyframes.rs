@@ -1,10 +1,18 @@
 use pyo3::prelude::*;
 use satkit::Frame;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 /// Coordinate reference frame
 ///
-/// Used to specify the frame for thrust vectors and maneuvers.
+/// Names the frame of a vector: for ``satkit.frametransform`` (``to_gcrf``,
+/// ``from_gcrf``, ``rotation``, ``transform_state`` and the other
+/// frame-pair functions), for impulsive maneuvers and for continuous
+/// thrust. Not every function accepts every frame: a thrust or maneuver
+/// must be in ``GCRF``, ``RTN``, ``NTW`` or ``LVLH``, and each
+/// ``frametransform`` function lists the frames it supports.
+///
+/// Members are hashable, compare equal to their integer value and to each
+/// other by value, and cannot be constructed (``frame(3)`` is a ``TypeError``).
 ///
 /// Available frames:
 ///
@@ -30,7 +38,7 @@ use satkit::Frame;
 /// # Use RTN frame for in-track thrust (RSW and RIC are aliases and work too)
 /// t = sk.thrust.constant([0, 1e-4, 0], t0, t1, frame=sk.frame.RTN)
 /// ```
-#[pyclass(name = "frame", module = "satkit", eq, eq_int, from_py_object)]
+#[pyclass(name = "frame", module = "satkit", eq, eq_int, frozen, from_py_object)]
 pub enum PyFrame {
     /// International Terrestrial Reference Frame
     #[allow(clippy::upper_case_acronyms)]
@@ -80,6 +88,11 @@ pub enum PyFrame {
 
 #[pymethods]
 impl PyFrame {
+    // Hashes like the integer it equals (see `enum_pickle!`)
+    fn __hash__(slf: &Bound<'_, Self>) -> PyResult<isize> {
+        slf.as_any().call_method0("__int__")?.extract()
+    }
+
     fn __reduce__<'py>(
         slf: &Bound<'py, Self>,
     ) -> PyResult<(Bound<'py, PyAny>, (&'static str, String))> {

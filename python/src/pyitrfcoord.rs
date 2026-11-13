@@ -1,8 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use pyo3::types::{PyBytes, PyList, PyTuple};
-
-use numpy::{PyArray1, PyReadonlyArray1};
+use pyo3::types::{PyBytes, PyTuple};
 
 use satkit::itrfcoord::{Geodetic, ITRFCoord};
 
@@ -12,13 +10,16 @@ use crate::pyutils::*;
 
 /// Geodetic coordinates with named fields
 ///
+/// Returned by ``itrfcoord.geodetic``; it has no constructor and its fields
+/// are read-only.
+///
 /// Attributes:
 ///     latitude_rad (float): Latitude in radians
 ///     longitude_rad (float): Longitude in radians
 ///     height_m (float): Height above WGS84 ellipsoid in meters
 ///     latitude_deg (float): Latitude in degrees
 ///     longitude_deg (float): Longitude in degrees
-#[pyclass(name = "geodetic", module = "satkit", get_all, from_py_object)]
+#[pyclass(name = "geodetic", module = "satkit", get_all, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug)]
 pub struct PyGeodet {
     /// Latitude in radians
@@ -66,6 +67,21 @@ impl PyGeodet {
         self.__str__()
     }
 
+    /// True when ``other`` is a geodetic with exactly the same latitude,
+    /// longitude and height (no tolerance)
+    fn __eq__(&self, other: &Self) -> bool {
+        self.latitude_rad == other.latitude_rad
+            && self.longitude_rad == other.longitude_rad
+            && self.height_m == other.height_m
+    }
+
+    /// Hash of the three fields, consistent with ``==``
+    fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
+        (self.latitude_rad, self.longitude_rad, self.height_m)
+            .into_pyobject(py)?
+            .hash()
+    }
+
     /// Rebuild a geodetic from its three fields. Used internally by
     /// `__reduce__`; not part of the public API.
     #[staticmethod]
@@ -86,12 +102,126 @@ impl PyGeodet {
     }
 }
 
-crate::arg_extractor!(latitude_deg_arg: Option<f64>, |_| invalid_value("latitude_deg"));
-crate::arg_extractor!(longitude_deg_arg: Option<f64>, |_| invalid_value("longitude_deg"));
-crate::arg_extractor!(latitude_rad_arg: Option<f64>, |_| invalid_value("latitude_rad"));
-crate::arg_extractor!(longitude_rad_arg: Option<f64>, |_| invalid_value("longitude_rad"));
-crate::arg_extractor!(altitude_arg: Option<f64>, |_| invalid_value("altitude"));
-crate::arg_extractor!(height_arg: Option<f64>, |_| invalid_value("height"));
+/// Define `fn $f(&Bound<PyAny>) -> PyResult<Option<f64>>` for
+/// `#[pyo3(from_py_with = $f)]`: a geodetic keyword that is not a real
+/// number raises `TypeError` naming the keyword and the type given.
+macro_rules! real_keyword {
+    ($f:ident, $name:literal) => {
+        fn $f(v: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
+            v.extract::<Option<f64>>().map_err(|_| {
+                let tname = v
+                    .get_type()
+                    .name()
+                    .map_or_else(|_| "?".to_string(), |n| n.to_string());
+                pyo3::exceptions::PyTypeError::new_err(format!(
+                    "{} must be a real number, got {tname}",
+                    $name
+                ))
+            })
+        }
+    };
+}
+real_keyword!(latitude_deg_arg, "latitude_deg");
+real_keyword!(longitude_deg_arg, "longitude_deg");
+real_keyword!(latitude_rad_arg, "latitude_rad");
+real_keyword!(longitude_rad_arg, "longitude_rad");
+real_keyword!(altitude_arg, "altitude");
+real_keyword!(height_arg, "height");
+
+/// `ValueError` for a NaN or infinite value
+fn finite(name: &str, v: f64) -> PyResult<f64> {
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} must be finite, got {v}"
+        )))
+    }
+}
+
+/// One value for a quantity that has two spellings; giving both is a
+/// `TypeError` rather than a silent choice of one of them. The flag is true
+/// when the value came from the first spelling.
+fn one_of(
+    a: Option<f64>,
+    aname: &str,
+    b: Option<f64>,
+    bname: &str,
+) -> PyResult<Option<(f64, bool)>> {
+    match (a, b) {
+        (Some(_), Some(_)) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "give {aname} or {bname}, not both"
+        ))),
+        (Some(v), None) => Ok(Some((v, true))),
+        (None, Some(v)) => Ok(Some((v, false))),
+        (None, None) => Ok(None),
+    }
+}
+
+/// The ITRF coordinate of a geodetic position given by keywords, with the
+/// checks shared by the keyword constructor and `from_geodetic`: exactly one
+/// latitude and one longitude (`TypeError` otherwise), latitude within
+/// [-90, 90] degrees and finite longitude and height (`ValueError`).
+/// `hae` is the height and the keyword it came from (0 when not given).
+fn geodetic_keywords(
+    latitude_deg: Option<f64>,
+    longitude_deg: Option<f64>,
+    latitude_rad: Option<f64>,
+    longitude_rad: Option<f64>,
+    hae: Option<(f64, &str)>,
+) -> PyResult<ITRFCoord> {
+    use pyo3::exceptions::{PyTypeError, PyValueError};
+    let lat = one_of(latitude_deg, "latitude_deg", latitude_rad, "latitude_rad")?;
+    let lon = one_of(
+        longitude_deg,
+        "longitude_deg",
+        longitude_rad,
+        "longitude_rad",
+    )?;
+    let (Some((lat, lat_is_deg)), Some((lon, lon_is_deg))) = (lat, lon) else {
+        return Err(PyTypeError::new_err(
+            "a geodetic position needs a latitude (latitude_deg or latitude_rad) \
+             and a longitude (longitude_deg or longitude_rad)",
+        ));
+    };
+    // The range is checked in the unit given, so that exactly 90
+    // degrees is accepted whatever its radian rounding
+    let (lat_name, lat_limit) = if lat_is_deg {
+        ("latitude_deg", 90.0)
+    } else {
+        ("latitude_rad", std::f64::consts::FRAC_PI_2)
+    };
+    if lat.is_nan() || lat.abs() > lat_limit {
+        return Err(PyValueError::new_err(format!(
+            "{lat_name} must be in [-{lat_limit}, {lat_limit}], got {lat}"
+        )));
+    }
+    let lon = finite(
+        if lon_is_deg {
+            "longitude_deg"
+        } else {
+            "longitude_rad"
+        },
+        lon,
+    )?;
+    let hae = match hae {
+        Some((h, name)) => finite(name, h)?,
+        None => 0.0,
+    };
+    let lat = if lat_is_deg { lat.to_radians() } else { lat };
+    let lon = if lon_is_deg { lon.to_radians() } else { lon };
+    Ok(ITRFCoord::from_geodetic_rad(lat, lon, hae))
+}
+
+/// The ITRF coordinate of a Cartesian position: `TypeError` for a
+/// non-numeric input, `ValueError` for a wrong shape or a NaN or infinity
+fn cartesian_vector(obj: &Bound<'_, PyAny>) -> PyResult<ITRFCoord> {
+    let v = to_vector3(obj, "the ITRF position")?;
+    for x in v.iter() {
+        finite("ITRF position component", *x)?;
+    }
+    Ok(ITRFCoord::from_vector(&v))
+}
 
 ///
 /// Representation of a coordinate in the International Terrestrial Reference Frame (ITRF)
@@ -106,20 +236,39 @@ crate::arg_extractor!(height_arg: Option<f64>, |_| invalid_value("height"));
 /// quaternions to the East-North-Up frame
 /// and North-East-Down frame at this coordinate
 ///
+/// Give either the Cartesian position, positionally (one 3-element
+/// array-like, or three numbers ``x, y, z``), or the geodetic position, by
+/// keyword (a latitude and a longitude, each in degrees or in radians, and
+/// optionally a height). The two forms cannot be mixed. The named
+/// constructors ``itrfcoord.from_vector`` and ``itrfcoord.from_geodetic`` do
+/// the same.
+///
 /// Args:
-///     vec (numpy.ndarray, list, or 3-element tuple of floats, optional): ITRF Cartesian location in meters
+///     vec (array-like, optional): ITRF Cartesian location in meters: any real
+///         numeric 3-element array-like (numpy array, list or tuple)
 ///
 /// Keyword Args:
-///     latitude_deg (float, optional): Latitude in degrees
+///     latitude_deg (float, optional): Geodetic latitude in degrees, in [-90, 90]
 ///     longitude_deg (float, optional): Longitude in degrees
-///     latitude_rad (float, optional): Latitude in radians
+///     latitude_rad (float, optional): Geodetic latitude in radians, in [-pi/2, pi/2]
 ///     longitude_rad (float, optional): Longitude in radians
-///     altitude (float, optional): Height above ellipsoid, meters
-///     height (float, optional): Height above ellipsoid, meters
+///     altitude (float, optional): Height above ellipsoid, meters. Default is 0
+///     height (float, optional): Height above ellipsoid, meters (alias of ``altitude``)
 ///
 ///
 /// Returns:
 ///     itrfcoord: New ITRF coordinate
+///
+/// Raises:
+///     TypeError: no position given; positional and keyword forms mixed; the
+///         same quantity given twice (``latitude_deg`` with ``latitude_rad``,
+///         ``longitude_deg`` with ``longitude_rad``, ``altitude`` with
+///         ``height``); latitude or longitude missing; the positional
+///         argument is not a real numeric array-like or three numbers; a
+///         keyword that is not a real number
+///     ValueError: latitude outside [-90, 90] degrees; a NaN or infinite
+///         latitude, longitude, height or Cartesian component; a positional
+///         array that does not have 3 elements
 ///
 /// Example:
 ///     * Create ITRF coord from Cartesian
@@ -159,9 +308,8 @@ impl PyITRFCoord {
         #[pyo3(from_py_with = altitude_arg)] altitude: Option<f64>,
         #[pyo3(from_py_with = height_arg)] height: Option<f64>,
     ) -> PyResult<Self> {
-        // Any geodetic keyword selects the geodetic form (the positional
-        // arguments are then ignored); `*_rad` wins over `*_deg`, and
-        // `height` over `altitude`
+        use pyo3::exceptions::PyTypeError;
+
         let geodetic = [
             latitude_deg,
             longitude_deg,
@@ -171,57 +319,118 @@ impl PyITRFCoord {
             height,
         ];
         if geodetic.iter().any(Option::is_some) {
-            let latitude_deg = latitude_rad.map_or(latitude_deg, |v| Some(v.to_degrees()));
-            let longitude_deg = longitude_rad.map_or(longitude_deg, |v| Some(v.to_degrees()));
-            let (Some(latitude_deg), Some(longitude_deg)) = (latitude_deg, longitude_deg) else {
-                return Err(pyo3::exceptions::PyTypeError::new_err(
-                    "Must set latitude, longitude",
+            if !args.is_empty() {
+                return Err(PyTypeError::new_err(
+                    "give either a positional Cartesian position or geodetic keywords, not both",
                 ));
-            };
-            Ok(Self(ITRFCoord::from_geodetic_deg(
+            }
+            let hae = one_of(altitude, "altitude", height, "height")?
+                .map(|(h, is_altitude)| (h, if is_altitude { "altitude" } else { "height" }));
+            return geodetic_keywords(
                 latitude_deg,
                 longitude_deg,
-                height.or(altitude).unwrap_or(0.0),
-            )))
-        } else if args.len() == 3 {
-            let x = args.get_item(0)?.extract::<f64>()?;
-            let y = args.get_item(1)?.extract::<f64>()?;
-            let z = args.get_item(2)?.extract::<f64>()?;
-            Ok(Self(ITRFCoord::from_slice(&[x, y, z]).unwrap()))
-        } else if args.len() == 1 {
-            if args.get_item(0)?.is_instance_of::<PyList>() {
-                match args.get_item(0)?.extract::<Vec<f64>>() {
-                    Ok(xl) => {
-                        if xl.len() != 3 {
-                            return Err(pyo3::exceptions::PyTypeError::new_err(
-                                "Invalid number of elements",
-                            ));
-                        }
-                        Ok(Self(ITRFCoord::from_slice(&xl).unwrap()))
-                    }
-                    Err(e) => Err(e),
-                }
-            } else if args.get_item(0)?.is_instance_of::<PyArray1<f64>>() {
-                let xv = args.get_item(0)?.extract::<PyReadonlyArray1<f64>>()?;
-                let xa = xv.as_array();
-                if xa.len() != 3 {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "Invalid number of elements",
-                    ));
-                }
-                ITRFCoord::from_slice(&[xa[0], xa[1], xa[2]])
-                    .map(Self)
-                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{e}")))
-            } else {
-                Err(pyo3::exceptions::PyTypeError::new_err(
-                "First input must be float, 3-element list of floats, or 3-element numpy array of float"
-            ))
-            }
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err(
-                "First input must be float, 3-element list of floats, or 3-element numpy array of float"
-            ))
+                latitude_rad,
+                longitude_rad,
+                hae,
+            )
+            .map(Self);
         }
+
+        match args.len() {
+            // One array-like: any real numeric 3-element sequence
+            1 => cartesian_vector(&args.get_item(0)?).map(Self),
+            3 => {
+                let mut v = [0.0; 3];
+                for (i, x) in v.iter_mut().enumerate() {
+                    *x = args.get_item(i)?.extract::<f64>()?;
+                }
+                for x in &v {
+                    finite("ITRF position component", *x)?;
+                }
+                Ok(Self(ITRFCoord::from_vector(&numeris::vector![
+                    v[0], v[1], v[2]
+                ])))
+            }
+            n => Err(PyTypeError::new_err(format!(
+                "itrfcoord takes one 3-element array-like, three numbers (x, y, z) \
+                 or geodetic keywords; got {n} positional arguments"
+            ))),
+        }
+    }
+
+    /// Create an ITRF coordinate from a geodetic position
+    ///
+    /// The named-constructor form of ``itrfcoord(latitude_deg=...,
+    /// longitude_deg=..., altitude=...)``, with the same checks. Give a
+    /// latitude and a longitude, each in degrees or in radians, and
+    /// optionally the height; all arguments are keyword-only.
+    ///
+    /// Keyword Args:
+    ///     latitude_deg (float): Geodetic latitude in degrees, in [-90, 90]
+    ///     longitude_deg (float): Longitude in degrees
+    ///     latitude_rad (float): Geodetic latitude in radians, in [-pi/2, pi/2]
+    ///     longitude_rad (float): Longitude in radians
+    ///     height (float, optional): Height above the WGS84 ellipsoid, meters.
+    ///         Default is 0
+    ///
+    /// Returns:
+    ///     itrfcoord: New ITRF coordinate
+    ///
+    /// Raises:
+    ///     TypeError: latitude or longitude missing; the same quantity given
+    ///         in both units (``latitude_deg`` with ``latitude_rad``,
+    ///         ``longitude_deg`` with ``longitude_rad``); an argument that is
+    ///         not a real number
+    ///     ValueError: latitude outside [-90, 90] degrees; a NaN or infinite
+    ///         latitude, longitude or height
+    ///
+    /// Example:
+    ///     >>> coord = satkit.itrfcoord.from_geodetic(latitude_deg=42.44, longitude_deg=-71.15, height=100)
+    ///     >>> print(coord)
+    ///     ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+    #[staticmethod]
+    #[pyo3(signature = (*, latitude_deg=None, longitude_deg=None, latitude_rad=None, longitude_rad=None, height=None))]
+    fn from_geodetic(
+        #[pyo3(from_py_with = latitude_deg_arg)] latitude_deg: Option<f64>,
+        #[pyo3(from_py_with = longitude_deg_arg)] longitude_deg: Option<f64>,
+        #[pyo3(from_py_with = latitude_rad_arg)] latitude_rad: Option<f64>,
+        #[pyo3(from_py_with = longitude_rad_arg)] longitude_rad: Option<f64>,
+        #[pyo3(from_py_with = height_arg)] height: Option<f64>,
+    ) -> PyResult<Self> {
+        geodetic_keywords(
+            latitude_deg,
+            longitude_deg,
+            latitude_rad,
+            longitude_rad,
+            height.map(|h| (h, "height")),
+        )
+        .map(Self)
+    }
+
+    /// Create an ITRF coordinate from a Cartesian position
+    ///
+    /// The named-constructor form of ``itrfcoord(vec)``; the inverse of
+    /// the ``vector`` property.
+    ///
+    /// Args:
+    ///     vec (array-like): ITRF Cartesian position in meters: any real
+    ///         numeric 3-element array-like (numpy array, list or tuple)
+    ///
+    /// Returns:
+    ///     itrfcoord: New ITRF coordinate
+    ///
+    /// Raises:
+    ///     TypeError: ``vec`` is not a real numeric array-like
+    ///     ValueError: ``vec`` does not have 3 elements, or holds a NaN or
+    ///         infinity
+    ///
+    /// Example:
+    ///     >>> coord = satkit.itrfcoord.from_vector([1523128.63570828, -4461395.28873207, 4281865.94218203])
+    ///     >>> print(coord)
+    ///     ITRFCoord(lat:  42.4400 deg, lon: -71.1500 deg, hae:  0.10 km)
+    #[staticmethod]
+    fn from_vector(vec: &Bound<'_, PyAny>) -> PyResult<Self> {
+        cartesian_vector(vec).map(Self)
     }
 
     #[getter]
@@ -379,26 +588,29 @@ impl PyITRFCoord {
         )
     }
 
-    /// Compute geodesic distance:
+    /// Geodesic (shortest path on the WGS-84 ellipsoid) from this coordinate
+    /// to another: distance and headings
     ///
     /// Notes:
-    ///     Uses Vincenty formula to compute distance: https://en.wikipedia.org/wiki/Vincenty%27s_formulae
-    ///
+    ///     * Both points are projected onto the ellipsoid: heights are ignored
+    ///     * Vincenty's inverse formula, iterated to convergence:
+    ///       https://en.wikipedia.org/wiki/Vincenty%27s_formulae. For nearly
+    ///       antipodal points, where that iteration does not converge, the
+    ///       same series are solved for the initial heading by bisection.
+    ///       Accurate to better than a millimeter for any pair of points
+    ///     * Headings are clockwise from north, in (-pi, pi]. The heading at
+    ///       the destination is the direction of travel on arrival (add pi
+    ///       for the back azimuth)
+    ///     * For coincident points all three values are 0. Between exactly
+    ///       antipodal points, or from a pole, the shortest path is not
+    ///       unique: the distance is well defined, the headings are those of
+    ///       one of the shortest paths
     ///
     /// Args:
     ///     other (itrfcoord): ITRF coordinate for which to compute distance
     ///
     /// Returns:
     ///     tuple: (distance in meters, initial heading in radians, heading at destination in radians)
-    ///
-    /// Return a tuple with:
-    ///
-    ///  1: geodesic distance (shortest distance between two points)
-    ///  between this coordinate and given coordinate, in meters
-    ///
-    ///  2: initial heading, in radians
-    ///
-    ///  3. heading at destination, in radians
     ///
     fn geodesic_distance(&self, other: &Self) -> (f64, f64, f64) {
         self.0.geodesic_distance(&other.0)
@@ -407,7 +619,8 @@ impl PyITRFCoord {
     /// Geodesic distance in meters between this coordinate and another
     ///
     /// Convenience wrapper around `geodesic_distance` that returns only the
-    /// distance (shortest distance along the Earth's surface).
+    /// distance (shortest distance along the WGS-84 ellipsoid; heights are
+    /// ignored).
     ///
     /// Args:
     ///     other (itrfcoord): ITRF coordinate to measure distance to
@@ -423,7 +636,9 @@ impl PyITRFCoord {
     /// Notes:
     ///     * Heading is in radians, where 0 is North, pi/2 is East, pi is South, 3pi/2 is West
     ///     * Distance is in meters
-    ///     * Uses inverse Vincenty formula to compute new location
+    ///     * Uses Vincenty's direct formula to compute new location
+    ///     * The path follows the ellipsoid: the starting height is ignored
+    ///       and the result has zero height
     ///
     /// Args:
     ///     distance (float): Distance to move in meters

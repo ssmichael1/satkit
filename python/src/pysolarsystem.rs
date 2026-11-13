@@ -2,19 +2,17 @@ use pyo3::prelude::*;
 
 use satkit::SolarSystem as SS;
 
-/// Solar system bodies
-///
-/// Coordinates origin is the solar system barycenter
+/// Solar system bodies for which the JPL ephemeris (``satkit.jplephem``)
+/// and the low-precision planetary ephemeris (``satkit.planets``) can be
+/// computed
 ///
 /// Notes:
-///   * Positions for all bodies are natively relative to
-///     solar system barycenter, with exception of moon,
-///     which is computed in Geocentric system
-///   * EMB (2) is the Earth-Moon barycenter
-///   * The sun position is relative to the solar system barycenter
-///     (it will be close to origin)
-#[derive(PartialEq, Eq)]
-#[pyclass(name = "solarsystem", eq, eq_int)]
+///   * ``EMB`` is the Earth-Moon barycenter; there is no ``Earth`` member
+///     (see ``satkit.jplephem.barycentric_pos`` for the Earth's position)
+///   * Members compare equal to their integer value (``int(solarsystem.Sun)``
+///     is 10), the body's index in the JPL DE files
+#[derive(PartialEq, Eq, Hash)]
+#[pyclass(name = "solarsystem", module = "satkit", eq, eq_int, frozen)]
 pub enum SolarSystem {
     Mercury = SS::Mercury as isize,
     Venus = SS::Venus as isize,

@@ -6,7 +6,7 @@ use pyo3::types::PyTuple;
 use satkit::kepler::{Anomaly, Kepler};
 
 use crate::pyduration::PyDuration;
-use crate::pyutils::py_to_smatrix;
+use crate::pyutils::to_vector3;
 
 ///
 /// Representation of Keplerian orbital elements
@@ -87,6 +87,26 @@ impl PyKepler {
     }
 }
 
+/// A time span given as a `satkit.duration`, a `datetime.timedelta` or a
+/// real number of seconds. `TypeError` for anything else; `ValueError` for
+/// a NaN or infinite number; `OverflowError` beyond the duration range.
+pub(crate) fn duration_arg(obj: &Bound<'_, PyAny>, name: &str) -> PyResult<satkit::Duration> {
+    if let Ok(d) = obj.extract::<PyDuration>() {
+        return Ok(d.0);
+    }
+    if let Ok(td) = obj.cast::<pyo3::types::PyDelta>() {
+        return crate::pyduration::timedelta_to_duration(td);
+    }
+    let secs = obj.extract::<f64>().map_err(|_| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "{name} must be a satkit.duration, a datetime.timedelta or a number of seconds"
+        ))
+    })?;
+    // Duration::from_seconds maps NaN to zero and saturates infinities
+    crate::pyduration::check_duration_value(secs, 1.0e6, name)?;
+    Ok(satkit::Duration::from_seconds(secs))
+}
+
 #[pymethods]
 impl PyKepler {
     #[new]
@@ -147,13 +167,25 @@ impl PyKepler {
     }
 
     #[getter]
-    /// Eccentricity, unitless
+    /// Eccentricity, unitless (short alias of ``eccentricity``)
     fn get_eccen(&self) -> f64 {
         self.0.eccen
     }
 
     #[setter(eccen)]
     fn set_eccen(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.eccen = val)
+    }
+
+    #[getter]
+    /// Eccentricity, unitless (0 <= eccentricity < 1; ``ValueError``
+    /// otherwise). ``eccen`` is the same attribute under its short name.
+    fn get_eccentricity(&self) -> f64 {
+        self.0.eccen
+    }
+
+    #[setter(eccentricity)]
+    fn set_eccentricity(&mut self, val: f64) -> PyResult<()> {
         self.set_validated(|k| k.eccen = val)
     }
 
@@ -207,7 +239,7 @@ impl PyKepler {
     }
 
     #[getter]
-    /// True Anomaly, radians
+    /// True Anomaly, radians. Stored as given (not reduced to one revolution)
     fn get_nu(&self) -> f64 {
         self.0.nu
     }
@@ -241,8 +273,9 @@ impl PyKepler {
     /// Convert Cartesian elements to kepler
     ///
     /// Args:
-    ///     pos: 3-element position vector, meters
-    ///     vel: 3-element velocity vector, meters/second
+    ///     pos: 3-element position vector, meters (any real numeric
+    ///         array-like: numpy array, list or tuple)
+    ///     vel: 3-element velocity vector, meters/second (likewise)
     ///
     /// Keyword Args:
     ///     mu: Gravitational parameter of the central body, m^3/s^2
@@ -251,13 +284,14 @@ impl PyKepler {
     /// Raises:
     ///     ValueError: open (eccen >= 1) or rectilinear (zero angular
     ///         momentum) state, a NaN or infinity in ``pos`` or ``vel``,
-    ///         or ``mu`` not positive and finite
-    ///     RuntimeError: inputs that are not 3-element vectors
+    ///         ``pos`` or ``vel`` not a 3-element vector, or ``mu`` not
+    ///         positive and finite
+    ///     TypeError: ``pos`` or ``vel`` is not a real numeric array-like
     #[staticmethod]
     #[pyo3(signature = (pos, vel, *, mu=None))]
     fn from_pv(pos: &Bound<PyAny>, vel: &Bound<PyAny>, mu: Option<f64>) -> PyResult<Self> {
-        let pos = py_to_smatrix(pos)?;
-        let vel = py_to_smatrix(vel)?;
+        let pos = to_vector3(pos, "pos")?;
+        let vel = to_vector3(vel, "vel")?;
         let mu = mu.unwrap_or(satkit::consts::MU_EARTH);
         if !(mu.is_finite() && mu > 0.0) {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
@@ -272,39 +306,28 @@ impl PyKepler {
     /// Propagate the elements forward (or backward) in time
     ///
     /// Args:
-    ///     dt (duration | float | int): time to propagate; a number is
-    ///         interpreted as seconds
+    ///     dt (duration | datetime.timedelta | float | int): time to
+    ///         propagate; a number is interpreted as seconds
     ///
     /// Returns:
     ///     kepler: new element set
     ///
     /// Raises:
-    ///     TypeError: ``dt`` is neither a duration nor a number
+    ///     TypeError: ``dt`` is neither a duration, a timedelta nor a number
     ///     ValueError: ``dt`` is a NaN or infinite number of seconds
     ///     OverflowError: ``dt`` is too large for a duration
     fn propagate(&self, dt: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(dt) = dt.extract::<PyDuration>() {
-            Ok(Self(self.0.propagate(&dt.0)))
-        } else {
-            let secs = dt.extract::<f64>().map_err(|_| {
-                pyo3::exceptions::PyTypeError::new_err(
-                    "dt must be a satkit.duration or a number of seconds",
-                )
-            })?;
-            // Duration::from_seconds maps NaN to zero and saturates
-            // infinities, which silently made this a no-op or a garbage
-            // propagation.
-            crate::pyduration::check_duration_value(secs, 1.0e6, "dt")?;
-            Ok(Self(
-                self.0.propagate(&satkit::Duration::from_seconds(secs)),
-            ))
-        }
+        let dt = duration_arg(dt, "dt")?;
+        Ok(Self(self.0.propagate(&dt)))
     }
 
     /// Return the eccentric anomaly of the satellite in radians
     ///
+    /// Computed from the true anomaly and reduced to (-pi, pi], however many
+    /// revolutions ``nu`` holds.
+    ///
     /// Returns:
-    ///     float: Eccentric Anomaly, radians
+    ///     float: Eccentric Anomaly, radians in (-pi, pi]
     #[getter]
     fn eccentric_anomaly(&self) -> f64 {
         self.0.eccentric_anomaly()
@@ -392,8 +415,11 @@ impl PyKepler {
 
     /// Return the mean anomaly of the satellite in radians
     ///
+    /// Computed from the true anomaly and reduced to (-pi, pi], however many
+    /// revolutions ``nu`` holds.
+    ///
     /// Returns:
-    ///     float: Mean Anomaly, radians
+    ///     float: Mean Anomaly, radians in (-pi, pi]
     #[getter]
     fn mean_anomaly(&self) -> f64 {
         self.0.mean_anomaly()
@@ -409,13 +435,24 @@ impl PyKepler {
         Ok(())
     }
 
-    /// Return the true anomaly of the satellite in radians
+    /// Return the true anomaly of the satellite in radians (the same
+    /// attribute as ``nu``; assigning it sets ``nu``, finite or
+    /// ``ValueError``)
+    ///
+    /// The value is stored as given, not reduced to one revolution; the
+    /// eccentric and mean anomaly setters, ``propagate`` and ``from_pv``
+    /// produce a value in (-pi, pi] or [0, 2 pi).
     ///
     /// Returns:
     ///   float: True Anomaly, radians
     #[getter]
     fn true_anomaly(&self) -> f64 {
         self.0.nu
+    }
+
+    #[setter(true_anomaly)]
+    fn set_true_anomaly(&mut self, val: f64) -> PyResult<()> {
+        self.set_validated(|k| k.nu = val)
     }
 
     fn __str__(&self) -> String {

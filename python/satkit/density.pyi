@@ -1,7 +1,9 @@
 """
 Air density models
 
-Currently only contains NRL MSISE-00 air density model
+``nrlmsise`` evaluates the NRL MSISE-00 model at an ``itrfcoord`` or at an
+altitude in meters with latitude and longitude in radians;
+``satkit.nrlmsise00`` is the same model with kilometers and degrees.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ def nrlmsise(
     Args:
 
         itrf (satkit.itrfcoord):  position at which to compute density & temperature
+               (height 1000 m below the WGS-84 ellipsoid or above)
         time (satkit.time|datetime.datetime, optional):  Instant at which to compute
                density & temperature. "Space weather" data at this time will be
                used in model computation.  Note: at satellite altitudes, density can
@@ -37,6 +40,8 @@ def nrlmsise(
     Raises:
         TypeError: If ``time`` is not a ``satkit.time``, ``datetime.datetime``,
             ``numpy.datetime64`` or ``None``
+        ValueError: If the position is more than 1000 m below the ellipsoid
+            or holds a NaN
 
     Example:
         ```python
@@ -66,8 +71,10 @@ def nrlmsise(
     <https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2002JA009430>
 
     Args:
-        altitude_meters (float):  Altitude in meters
-        latitude_rad (float, optional):  Latitude in radians. Default is 0.
+        altitude_meters (float):  Altitude above the WGS-84 ellipsoid in meters
+               (-1000 or above; the model runs from the ground to the exosphere)
+        latitude_rad (float, optional):  Geodetic latitude in radians, in [-pi/2, pi/2].
+               Default is 0.
         longitude_rad (float, optional):  Longitude in radians.  Default is 0.
         time (satkit.time|datetime.datetime, optional):  Instant at which to compute
                density & temperature. "Space weather" data at this time will be
@@ -82,6 +89,9 @@ def nrlmsise(
     Raises:
         TypeError: If an angle is not a real number, or ``time`` is not a
             ``satkit.time``, ``datetime.datetime``, ``numpy.datetime64`` or ``None``
+        ValueError: If the altitude is NaN, infinite or below -1000 m, the
+            latitude is NaN or outside [-pi/2, pi/2], or the longitude is NaN
+            or infinite
     """
     ...
 

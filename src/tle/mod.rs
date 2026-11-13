@@ -75,16 +75,18 @@ const ALPHA5_MATCHING: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 pub struct TLE {
     /// Name of satellite
     pub name: String,
-    /// String describing launch
+    /// International designator as written in line 1, columns 10-17, without
+    /// the surrounding blanks: e.g. `98067A`, the two-digit launch year, the
+    /// three-digit launch number of that year and the piece of the launch
+    /// (one to three letters). Empty if the element set has none.
+    ///
+    /// This is the only stored form: [`to_2line`](Self::to_2line) writes it
+    /// back, and [`desig_year`](Self::desig_year),
+    /// [`desig_launch`](Self::desig_launch) and
+    /// [`desig_piece`](Self::desig_piece) read their part of it.
     pub intl_desig: String,
     /// Satellite NORAD number
     pub sat_num: i32,
-    /// Launch year
-    pub desig_year: i32,
-    /// Numbered launch of year
-    pub desig_launch: i32,
-    /// Piece of launch
-    pub desig_piece: String,
     /// TLE epoch
     pub epoch: Instant,
     /// One half of 1st derivative of mean motion wrt time, in revs/day^2
@@ -328,9 +330,6 @@ impl TLE {
             name: "none".to_string(),
             intl_desig: "".to_string(),
             sat_num: 0,
-            desig_year: 0,
-            desig_launch: 0,
-            desig_piece: "A".to_string(),
             epoch: Instant::J2000,
             mean_motion_dot: 0.0,
             mean_motion_dot_dot: 0.0,
@@ -347,6 +346,29 @@ impl TLE {
             rev_num: 0,
             satrec: SatRecCache(None),
         }
+    }
+
+    /// Launch year of the international designator, two digits as in the
+    /// TLE: the first two characters of [`intl_desig`](Self::intl_desig)
+    /// (98 for `98067A`). 57-99 are 1957-1999 and 0-56 are 2000-2056, as for
+    /// the epoch year. `None` if the designator is blank or does not start
+    /// with two digits.
+    pub fn desig_year(&self) -> Option<i32> {
+        desig_digits(&self.intl_desig, 0..2)
+    }
+
+    /// Launch number of the year of the international designator:
+    /// characters 3-5 of [`intl_desig`](Self::intl_desig) (67 for `98067A`).
+    /// `None` if the designator is blank or does not hold three digits there.
+    pub fn desig_launch(&self) -> Option<i32> {
+        desig_digits(&self.intl_desig, 2..5)
+    }
+
+    /// Piece of the launch of the international designator: what follows
+    /// the year and launch number in [`intl_desig`](Self::intl_desig) (`A`
+    /// for `98067A`). Empty if the designator is blank or has no piece.
+    pub fn desig_piece(&self) -> &str {
+        self.intl_desig.get(5..).map_or("", str::trim)
     }
 
     /// Discards the cached SGP4 initialization.
@@ -523,10 +545,9 @@ impl TLE {
                 message: e.to_string(),
             })?,
 
-            intl_desig: { line1[9..16].trim().to_string() },
-            desig_year: { line1[9..11].trim().parse().unwrap_or(70) },
-            desig_launch: { line1[11..14].trim().parse().unwrap_or_default() },
-            desig_piece: parse_field(line1[14..18].trim(), "desig_piece")?,
+            // Columns 10-17: two-digit year, three-digit launch number and
+            // a piece of up to three letters
+            intl_desig: { line1[9..17].trim().to_string() },
 
             epoch,
             mean_motion_dot: {
@@ -640,7 +661,12 @@ impl TLE {
 
         // International designator triplet.
         // Last 2 digits of launch year, 3-digit launch number within year, 3-character piece identifier.
-        // Never decoded, so no need to re-encode.
+        // Stored as written, so no need to re-encode; a longer or non-ASCII
+        // string would shift every column after it.
+        if self.intl_desig.len() > 8 || !self.intl_desig.bytes().all(|b| (0x20..0x7f).contains(&b))
+        {
+            return Err(Error::InvalidIntlDesig(self.intl_desig.clone()));
+        }
         let desig = format!("{:<8}", self.intl_desig); // cols 10-17
 
         let epoch = format!("{:0>2}{:012.8}", yy, doy); // cols 19-32
@@ -902,9 +928,11 @@ impl TLE {
             // Fall back to the raw number so Display never panics, even for a
             // sat_num that has no alpha5 representation.
             Self::int_to_alpha5(self.sat_num).unwrap_or_else(|_| self.sat_num.to_string()),
-            match self.desig_year > 50 {
-                true => self.desig_year + 1900,
-                false => self.desig_year + 2000,
+            // Same century rule as the epoch year: 57-99 are 1957-1999
+            match self.desig_year() {
+                Some(yy) if yy >= 57 => (yy + 1900).to_string(),
+                Some(yy) => (yy + 2000).to_string(),
+                None => "unknown".to_string(),
             },
             self.epoch,
             self.mean_motion_dot * 2.0,
@@ -918,6 +946,17 @@ impl TLE {
             self.mean_motion,
             self.rev_num,
         )
+    }
+}
+
+/// The number written in columns `cols` of an international designator, if
+/// they are all digits.
+fn desig_digits(desig: &str, cols: std::ops::Range<usize>) -> Option<i32> {
+    let s = desig.get(cols)?;
+    if s.bytes().all(|b| b.is_ascii_digit()) {
+        s.parse().ok()
+    } else {
+        None
     }
 }
 
@@ -1990,6 +2029,57 @@ mod tests {
     const ISS2: &str = "2 25544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487615";
     const PF1: &str = "1 45727U 20037E   24323.73967089  .00003818  00000+0  31595-3 0  9995";
     const PF2: &str = "2 45727  97.7798 139.6782 0011624 329.2427  30.8113 14.99451155239085";
+
+    #[test]
+    fn test_intl_desig_is_the_single_source() {
+        let l2 = "2 25544  51.6403 106.8969 0007877   6.1421 113.2479 15.50801739487613";
+        let line1 = |desig: &str| {
+            format!("1 25544U {desig:<8} 24356.58519896  .00014389  00000-0  25222-3 0  999")
+        };
+        let load = |desig: &str| {
+            let mut l1 = line1(desig);
+            l1.push(char::from(b'0' + tle_formatter::tle_checksum(&l1)));
+            (TLE::load_2line(&l1, l2).unwrap(), l1)
+        };
+
+        let (tle, _) = load("98067A");
+        assert_eq!(tle.intl_desig, "98067A");
+        assert_eq!(tle.desig_year(), Some(98));
+        assert_eq!(tle.desig_launch(), Some(67));
+        assert_eq!(tle.desig_piece(), "A");
+
+        // A three-letter piece fills the field and survives a round trip
+        // (it used to lose its last letter)
+        let (tle, l1) = load("98067ABC");
+        assert_eq!(tle.intl_desig, "98067ABC");
+        assert_eq!(tle.desig_piece(), "ABC");
+        assert_eq!(tle.to_2line().unwrap()[0], l1);
+
+        // A blank designator has no year (it used to read as year 70)
+        let (tle, l1) = load("");
+        assert_eq!(tle.intl_desig, "");
+        assert_eq!(tle.desig_year(), None);
+        assert_eq!(tle.desig_launch(), None);
+        assert_eq!(tle.desig_piece(), "");
+        assert_eq!(tle.to_2line().unwrap()[0], l1);
+        assert!(tle.to_pretty_string().contains("Launch Year: unknown"));
+
+        // Not year + launch number: kept as written, no parts
+        let (tle, l1) = load("ANALYST");
+        assert_eq!(tle.desig_year(), None);
+        assert_eq!(tle.desig_launch(), None);
+        assert_eq!(tle.to_2line().unwrap()[0], l1);
+
+        // Changing the designator changes what is written and read
+        let mut tle = TLE::new();
+        tle.epoch = Instant::from_date(2024, 1, 1).unwrap();
+        tle.intl_desig = "24001B".to_string();
+        assert_eq!(tle.desig_year(), Some(24));
+        assert_eq!(&tle.to_2line().unwrap()[0][9..17], "24001B  ");
+        // One that does not fit the field would shift the columns
+        tle.intl_desig = "2024-001AB".to_string();
+        assert!(matches!(tle.to_2line(), Err(Error::InvalidIntlDesig(_))));
+    }
 
     #[test]
     fn test_eq_ignores_sgp4_cache() {

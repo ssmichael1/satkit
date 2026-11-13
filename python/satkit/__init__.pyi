@@ -1,5 +1,5 @@
 from .satkit import *
-from ._types import OMMDict
+from ._types import OMMDict, TLEFitResult
 
 from . import jplephem
 from . import frametransform
@@ -9,6 +9,7 @@ from . import density
 from . import utils
 from . import planets
 from . import spaceweather
+from . import eop
 
 __version__: str
 
@@ -42,12 +43,15 @@ __all__ = [
     "sun",
     "planets",
     "spaceweather",
+    "eop",
     "satstate",
     "propagate",
     "lambert",
     "propsettings",
     "integrator",
+    "tidemodel",
     "satproperties",
+    "ecomparams",
     "thrust",
     "propresult",
     "propstats",
@@ -55,6 +59,7 @@ __all__ = [
     "omm_from_file",
     "omm_from_text",
     "OMMDict",
+    "TLEFitResult",
     "tlefitstatus",
     "__version__",
 ]

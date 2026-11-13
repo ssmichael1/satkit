@@ -409,3 +409,110 @@ nested lists.
   `tide_system` is classified from C̄20. Only custom files are affected.
 - **`utils::build_date()` is removed**, as in Python
   ([Python API](#python-api)); the satkit version is in your `Cargo.lock`.
+
+## After 0.24.3 (unreleased): Python API review
+
+These changes follow a review of the Python API
+([#295](https://github.com/ssmichael1/satkit/pull/295)). Most replace a
+silently wrong result with an exception, or a `RuntimeError` with the
+exception Python uses for that mistake: `TypeError` for a wrong type or
+argument combination, `ValueError` for a bad value or shape,
+`FileNotFoundError` for a missing file. `RuntimeError` remains for runtime
+failures (missing data files, integrator failure, a time outside an
+ephemeris). **Do this:** where you catch `RuntimeError` around the calls
+below, catch the new type.
+
+### Results that change
+
+- **`itrfcoord.geodesic_distance` / `distance_to`** iterate to convergence
+  and are correct for nearly antipodal points ((0°, 0°) to (0°, 180°) was
+  19 903 593 m, is 20 003 931 m); other distances move by less than a
+  millimetre. Identical points return `(0.0, 0.0, 0.0)`.
+- **`jplephem.barycentric_pos` / `barycentric_state(solarsystem.Moon)`**
+  (and Rust `jplephem::barycentric_*`) return the Moon relative to the
+  solar-system barycenter; they returned the geocentric Moon. **Do this:**
+  use `geocentric_pos` / `geocentric_state` for the old value.
+- **`propsettings.gravity_degree = N`** also sets `gravity_order` to `N`
+  unless the order was given explicitly (it stayed at 4). **Do this:** set
+  `gravity_order` yourself to keep a lower order.
+- **`satstate.cov`** returns the matrix that was set, not its transpose; a
+  non-symmetric matrix is a `ValueError`, and `cov = None` clears it.
+- **`propresult.can_interp`** is `False` without dense output
+  (`enable_interp=False`, `rodas4`, `rkv98_nointerp`, a zero-duration
+  result), and `interp()` then raises `ValueError`.
+- **`quaternion(w, x, y, z)`** normalizes to unit length; an all-zero or
+  non-finite quaternion, and a `from_rotation_matrix` argument that is not a
+  rotation, are `ValueError`. `quaternion` and `geodetic` compare by value.
+- **`time.to_unixtime()` and the seconds of `time.to_gregorian()`** are the
+  float nearest the exact microsecond value (one ulp for many values; Rust
+  `Instant::as_unixtime` too). `duration * x` and `duration / x` are exact
+  to the microsecond.
+- **TLE international designator**: `desig_year`, `desig_launch` and
+  `desig_piece` are views of `intl_desig`, and their setters rewrite it. A
+  blank designator gives `None`, `None`, `""` (was 70, 0, `"A"`); a
+  three-letter piece is kept. Rust: the three public fields become methods
+  `desig_year()`, `desig_launch()` (both `Option<i32>`) and `desig_piece()`.
+- **`TLE.from_omm`** names an object without `OBJECT_NAME` `"none"` (was
+  `"UNKNOWN"`), so `TLE.from_omm(t.to_omm()) == t`.
+- **`TLE.from_lines` / `from_file` / `from_url` with `on_error="skip"` or
+  `"warn"`** return `[]` for input holding no records (they raised
+  `ValueError`).
+- **`gmst`, `gast`, `eqeq`, `earth_rotation_angle`, `moon.phase`,
+  `moon.illumination`, `thrust.accel`** return a `numpy.ndarray` where they
+  returned a `list`. **Do this:** compare with `np.array_equal`, or call
+  `.tolist()`.
+- **`satproperties` and `propsettings`** compare by value and are no longer
+  hashable. `propresult()` cannot be constructed directly, and `propresult`
+  pickles written by 0.24.3 or earlier do not load.
+
+### Calls that now raise
+
+| call | before | now |
+|---|---|---|
+| `propagate(pos=...)` without `vel`, `state` together with `pos` / `vel`, or more than one of `end` / `duration` / `duration_secs` / `duration_days` | zero velocity; silent precedence | `TypeError` |
+| `time("...", scale=...)`, `time(scale=...)` | scale ignored | `TypeError` |
+| a one-element list where one time is required (`spaceweather.get`, `transform_state`, `nrlmsise00(time=)`, `fit_from_states(epoch=)`, ...) | accepted | `TypeError` |
+| `itrfcoord(vec, latitude_deg=...)`, or the degree and radian form of one angle together | one silently ignored | `TypeError` |
+| `itrfcoord` latitude outside ±90°, non-finite input | wrapped, or NaN | `ValueError` |
+| NaN / infinity in `time.from_jd`, `from_mjd`, `from_unixtime`, `from_gps_week_and_second`, `add_utc_days`; `timescale.Invalid` as a scale | epoch, no-op or garbage | `ValueError` (`OverflowError` beyond about ±292 000 years) |
+| `sun.rise_set(sigma)` outside (0, 180) | wrong times | `ValueError` |
+| `to_gcrf` / `from_gcrf` for RTN, NTW, LVLH with a zero or parallel state | NaN | `ValueError` |
+| `gravity(order > degree)`, zero position | clamped; NaN | `ValueError` |
+| `nrlmsise00` / `density.nrlmsise` altitude below −1 km, latitude outside ±90°, non-finite input | a number or NaN | `ValueError` |
+| `satstate.add_maneuver` with an unsupported frame | failed later in `propagate` | `ValueError` |
+| `thrust.constant` with `end < start` or non-finite acceleration | accepted | `ValueError` |
+| `ecomparams.from_dict` with an unknown key | ignored | `ValueError` |
+| negative `abs_error`, `rel_error`, `cdaoverm`, `craoverm`; all-zero position in `propagate` | accepted; `RuntimeError` | `ValueError` |
+| TLE setters: `eccen` outside [0, 1), negative `mean_motion`, non-finite elements, out-of-range `satnum` or designator | accepted | `ValueError` |
+| complex, bool or string arrays as vectors | truncated with a warning, or `ValueError` | `TypeError` |
+| assigning to `time.J2000`, `consts.*` or an enum member | accepted | `TypeError` |
+
+### Exception types that change
+
+| call | before | now |
+|---|---|---|
+| `time(...)`, `time.from_date`, `from_gregorian` with a bad component; `strftime` with an unknown code | `RuntimeError` | `ValueError` |
+| `time(...)` with the wrong number of arguments; `quaternion(...)` likewise | `RuntimeError` | `TypeError` |
+| `duration(days="a")`, `itrfcoord(latitude_deg="a")` and other wrong-typed arguments | `ValueError` | `TypeError` |
+| a time argument that is not a time, in every function | `RuntimeError` | `TypeError` |
+| wrong-length vectors: `propagate` state, `satstate` pos / vel / cov, `kepler.from_pv`, frame-transform states, `sun.shadowfunc`, `from_rotation_matrix` | `RuntimeError` | `ValueError` |
+| `quaternion.rotation_between` with zero or opposite vectors | `RuntimeError` | `ValueError` |
+| `gravity` `model` / `degree` / `order` of the wrong type | `RuntimeError` | `TypeError` (`ValueError` if negative) |
+| wrong argument types to `propagate`, `satproperties`, `propsettings`, `sgp4` (`tle`, `gravconst`, `opsmode`) | `ValueError` or `RuntimeError` | `TypeError` |
+| unsupported frame in `thrust.constant`, `set_pos_uncertainty`, `set_vel_uncertainty`; `precompute_terms(step <= 0)` | `RuntimeError` | `ValueError` |
+| TLE and OMM parse errors, `to_2line` / `to_3line` format errors, `fit_from_states` with empty or mismatched input | `RuntimeError` | `ValueError` |
+| `TLE.from_file`, `omm_from_file`, `utils.set_datadir`, `spaceweather.init_from_path` on a missing path | `RuntimeError` | `FileNotFoundError` |
+| `planets.heliocentric_pos(Sun \| Moon)` | `RuntimeError` | `ValueError` |
+
+The stubs change too: `omm_from_*` return `list[dict[str, Any]]` (cast to
+`OMMDict` for key checking), and the enums are frozen and hashable, hashing
+like their integer value.
+
+### Deprecated
+
+- **The `tm=` keyword** of the `frametransform` functions (`gmst`, `gast`,
+  `qitrf2gcrf`, `rotation`, `transform_state`, ...) and of
+  `jplephem.geocentric_pos` / `geocentric_state` / `barycentric_pos` /
+  `barycentric_state` is now `time=`; `tm=` still works and emits a
+  `DeprecationWarning`. Positional calls are unaffected. **Do this:** write
+  `time=`.

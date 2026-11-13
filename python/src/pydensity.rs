@@ -37,8 +37,8 @@ fn time_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<Instant>> {
 ///
 /// Args:
 ///     itrf (satkit.itrfcoord): position at which to compute density & temperature
-///     altitude_meters (float): Altitude in meters
-///     latitude_rad (float, optional): Latitude in radians. Default is 0.
+///     altitude_meters (float): Altitude above the WGS-84 ellipsoid in meters (-1000 or above)
+///     latitude_rad (float, optional): Geodetic latitude in radians, in [-pi/2, pi/2]. Default is 0.
 ///     longitude_rad (float, optional): Longitude in radians. Default is 0.
 ///     time (satkit.time|datetime.datetime, optional): Instant at which to compute
 ///         density & temperature, using the space weather at that time. Without a
@@ -50,12 +50,37 @@ fn time_arg(obj: &Bound<'_, PyAny>) -> PyResult<Option<Instant>> {
 /// Raises:
 ///     TypeError: If an angle is not a real number, or ``time`` is not a
 ///         ``satkit.time``, ``datetime.datetime``, ``numpy.datetime64`` or ``None``
+///     ValueError: If the altitude is NaN, infinite or below -1000 m, the
+///         latitude is NaN or outside [-pi/2, pi/2], or the longitude is NaN
+///         or infinite
 #[pyfunction(name = "nrlmsise")]
-#[pyo3(signature=(*args))]
-fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
-    let Ok(first) = args.get_item(0) else {
-        return Err(PyTypeError::new_err("Invalid number of arguments"));
-    };
+#[pyo3(signature=(itrf_or_altitude_meters, latitude_rad=None, longitude_rad=None, time=None, /))]
+fn pynrlmsise<'py>(
+    py: Python<'py>,
+    itrf_or_altitude_meters: &Bound<'py, PyAny>,
+    latitude_rad: Option<&Bound<'py, PyAny>>,
+    longitude_rad: Option<&Bound<'py, PyAny>>,
+    time: Option<&Bound<'py, PyAny>>,
+) -> PyResult<(f64, f64)> {
+    // The positional forms overlap (the time may take the place of the
+    // latitude or the longitude), so the arguments are read back as the
+    // sequence that was passed: trailing omitted ones dropped, an explicit
+    // `None` in the middle kept.
+    let mut rest = vec![latitude_rad, longitude_rad, time];
+    while matches!(rest.last(), Some(None)) {
+        rest.pop();
+    }
+    let mut items = vec![itrf_or_altitude_meters.clone()];
+    items.extend(
+        rest.into_iter()
+            .map(|a| a.cloned().unwrap_or_else(|| py.None().into_bound(py))),
+    );
+    let args = PyTuple::new(py, items)?;
+    nrlmsise_args(&args)
+}
+
+fn nrlmsise_args(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
+    let first = args.get_item(0)?;
     if first.is_instance_of::<PyITRFCoord>() {
         let itrf = first.extract::<PyITRFCoord>()?.0;
         let time = match args.len() {
@@ -109,6 +134,11 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
             ));
         }
     }
+    crate::pynrlmsise::check_inputs(
+        altitude / 1.0e3,
+        angles.first().copied(),
+        angles.get(1).copied(),
+    )?;
     Ok(nrlmsise::nrlmsise(
         altitude / 1.0e3,
         angles.first().copied(),
@@ -118,6 +148,11 @@ fn pynrlmsise(args: &Bound<'_, PyTuple>) -> PyResult<(f64, f64)> {
     ))
 }
 
+/// Air density models
+///
+/// ``nrlmsise`` evaluates the NRL MSISE-00 model at an ``itrfcoord`` or at an
+/// altitude in meters with latitude and longitude in radians;
+/// ``satkit.nrlmsise00`` is the same model with kilometers and degrees.
 #[pymodule]
 pub fn density(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pynrlmsise, m)?)?;

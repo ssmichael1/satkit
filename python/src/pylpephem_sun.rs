@@ -13,7 +13,7 @@ use satkit::lpephem::sun;
 ///    * Against JPL DE440 over 1900-2100: within 3.6 arcsec in ecliptic longitude (0.9 arcsec RMS) and 1600 km in distance.
 ///
 /// Args:
-///     time (satkit.time, numpy array, or list): time[s] at which to compute position
+///     time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute position
 ///
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in GCRF frame at input time[s].  Units are meters
@@ -30,7 +30,7 @@ pub fn pos_gcrf(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///    * Against JPL DE440 over 1900-2100: within 3.6 arcsec in ecliptic longitude (0.9 arcsec RMS), 1 arcsec in latitude and 1600 km in distance.
 ///
 /// Args:
-///     time (Instant, numpy array, or list): time[s] at which to compute position
+///     time (satkit.time|datetime.datetime|numpy.datetime64|list|tuple|numpy.ndarray): time, or list / tuple / 1-D numpy array of times, at which to compute position
 ///
 /// Returns:
 ///     numpy.ndarray: 3-element array or Nx3 array representing sun position in MOD frame at input time[s].  Units are meters
@@ -51,6 +51,12 @@ pub fn pos_mod(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// local noon: for time zones UTC-11 to UTC+11 local noon falls on the same
 /// UTC date, while local midnight falls on the previous UTC date east of
 /// Greenwich.
+///
+/// A *naive* ``datetime.datetime`` (no ``tzinfo``) is taken as local time,
+/// as everywhere in satkit, and it is the UTC date of that instant that
+/// selects the day: naive ``datetime(2024, 1, 1, 23, 30)`` on a machine at
+/// UTC-5 is 2024-01-02 04:30 UTC and selects 2 January.  satkit has no
+/// time-zone support of its own.
 ///
 /// Raises RuntimeError if the Sun stays above the threshold all day (polar
 /// day) or below it all day (polar night).
@@ -77,22 +83,23 @@ pub fn pos_mod(time: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///       dip ≈ 1.76' × sqrt(h), h in meters above the surrounding terrain or
 ///       sea, which makes sunrise earlier and sunset later.  To account for
 ///       it, pass ``sigma = 90.0 + (50.0 + 1.76 * math.sqrt(h)) / 60.0``.
-///     * Sigma is the angle between noon and rise/set.  Common values:
+///     * Sigma is the zenith distance of the Sun's centre at rise/set.  Common values:
 ///         * "Standard": 90 deg, 50 arcmin (90.0+50.0/60.0)
 ///         * "Civil Twilight": 96 deg
 ///         * "Nautical Twilight": 102 deg
 ///         * "Astronomical Twilight": 108 deg
 ///
 /// Args:
-///     time (satkit.time|datetime.datetime): time whose UTC calendar date selects the day
+///     time (satkit.time|datetime.datetime|numpy.datetime64): time whose UTC calendar date selects the day
 ///     coord (satkit.itrfcoord): location at which to compute sunrise and sunset
-///     sigma (float, optional): angle in degrees between noon and rise/set.  Default is 90.0+50.0/60.0 (Standard)
+///     sigma (float, optional): zenith distance of the Sun's centre at rise/set, degrees; must be finite and in the open interval (0, 180).  Default is 90.0+50.0/60.0 (Standard)
 ///     use_jpl (bool, optional): use the JPL ephemeris (apparent, topocentric) and the full IERS 2010 Earth orientation instead of the built-in analytic Sun.  The ephemeris is downloaded on first use.  Default False
 ///
 /// Returns:
 ///     (satkit.time, satkit.time): tuple of sunrise and sunset times
 ///
 /// Raises:
+///     ValueError: if sigma is NaN, infinite, or not in (0, 180)
 ///     RuntimeError: for polar day or night, or, with use_jpl, if the JPL ephemeris is unavailable or does not cover the date (there is no fallback to the built-in model)
 ///
 /// Example:
@@ -119,6 +126,14 @@ pub fn rise_set(
     sigma: Option<f64>,
     use_jpl: bool,
 ) -> PyResult<(PyInstant, PyInstant)> {
+    // NaN gave (MJD 0, MJD 0) and a value past 180 a "sunset" on the next day
+    if let Some(s) = sigma {
+        if !(s.is_finite() && s > 0.0 && s < 180.0) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "sigma must be a finite angle in degrees with 0 < sigma < 180, got {s}"
+            )));
+        }
+    }
     let (rise, set) = sun::riseset_with(&time.0, &coord.0, sigma, use_jpl)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
     Ok((PyInstant(rise), PyInstant(set)))
@@ -135,14 +150,18 @@ pub fn rise_set(
 ///       its local horizon plane; the Earth's center returns 0
 ///
 /// Args:
-///     sunpos (numpy.ndarray): 3-element geocentric Sun position, meters
-///     satpos (numpy.ndarray): 3-element geocentric satellite position, meters
+///     sunpos (array-like): 3-element geocentric Sun position, meters (any real numeric array-like: a numpy array, list or tuple)
+///     satpos (array-like): 3-element geocentric satellite position, meters
 ///
 /// Returns:
 ///     float: unitless number in range [0,1] indicating no sun (0) or full sun (1, no occlusion) hitting satellite
+///
+/// Raises:
+///     TypeError: if an argument is not a real numeric array-like (e.g. a complex array or a string)
+///     ValueError: if an argument does not have exactly 3 elements
 #[pyfunction(signature=(sunpos, satpos))]
 pub fn shadowfunc(sunpos: Bound<'_, PyAny>, satpos: Bound<'_, PyAny>) -> Result<f64> {
-    let satpos = pyutils::py_to_smatrix::<3, 1>(&satpos)?;
-    let sunpos = pyutils::py_to_smatrix::<3, 1>(&sunpos)?;
+    let sunpos = pyutils::to_vector3(&sunpos, "sunpos")?;
+    let satpos = pyutils::to_vector3(&satpos, "satpos")?;
     Ok(sun::shadowfunc(&sunpos, &satpos))
 }

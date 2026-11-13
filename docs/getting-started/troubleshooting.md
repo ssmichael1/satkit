@@ -360,7 +360,7 @@ even for one element set. Take the first one:
 ### One bad line in a TLE file loses every element set in it
 
 ```
-RuntimeError: TLE record starting at line 4 (sat 69999 "VANGUARD DEB"): Could not parse day of year: invalid float literal
+ValueError: TLE record starting at line 4 (sat 69999 "VANGUARD DEB"): Could not parse day of year: invalid float literal
 ```
 
 **Cause.** `sk.TLE.from_lines()`, `from_file()` and `from_url()` stop at the
@@ -429,7 +429,7 @@ t + sk.duration.from_seconds(60)
 t + sk.duration.from_hours(2)
 ```
 
-### `RuntimeError: Must pass in year, month, day or year, month, day, hour, min, sec`
+### `TypeError: time() takes 0, 1, 3 (year, month, day) or 6 (year, month, day, hour, min, sec) positional arguments`
 
 The `time` constructor takes either the date alone or all six fields:
 `sk.time(2024, 1, 1)` or `sk.time(2024, 1, 1, 12, 0, 0)`, not
@@ -468,7 +468,7 @@ state_gcrf = np.concatenate([q * p_teme, q * v_teme])
 res = sk.propagate(state_gcrf, tle.epoch, duration_days=1.0)
 ```
 
-`sk.frametransform.rotation(from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, tm=t)`
+`sk.frametransform.rotation(from_frame=sk.frame.TEME, to_frame=sk.frame.ITRF, time=t)`
 gives the rotation to the Earth-fixed frame. Remember that a TLE holds SGP4
 *mean* elements, which are not osculating Keplerian elements. See
 [TLEs, SGP4 & OMMs](../guide/tle.md).

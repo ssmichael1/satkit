@@ -120,7 +120,7 @@ class TestTLEFitting:
         tle = sk.TLE.from_lines(ISS_2021)[0]
         with pytest.raises(TypeError):
             sk.TLE.fit_from_states([], [], tle.epoch, sk.sgp4_gravconst.wgs72)  # type: ignore[misc]
-        with pytest.raises(ValueError, match="gravconst"):
+        with pytest.raises(TypeError, match="gravconst"):
             sk.TLE.fit_from_states([], [], tle.epoch, gravconst="wgs72")  # type: ignore[arg-type]
 
 
@@ -222,9 +222,9 @@ class TestSGP4:
         # A header alone is an empty table; a bad row is located; a CSV that
         # is not a table of OMMs is refused
         assert sk.omm_from_text(celestrak.splitlines()[0]) == []
-        with pytest.raises(RuntimeError, match="line 3"):
+        with pytest.raises(ValueError, match="line 3"):
             sk.omm_from_text(celestrak + "ISS (ZARYA),1998-067A\r\n")
-        with pytest.raises(RuntimeError, match="no EPOCH column"):
+        with pytest.raises(ValueError, match="no EPOCH column"):
             sk.omm_from_text('NORAD_CAT_ID,CURRENT_NAME\n"85","SCOUT X-1 DEB"\n')
 
     def test_omm_loaders(self, testvec_dir):
@@ -271,7 +271,7 @@ class TestSGP4:
         # A bare JSON object (not an array) is accepted too
         assert len(sk.omm_from_text(json.dumps(j))) == 1
         # KVN is not
-        with pytest.raises(RuntimeError, match="KVN"):
+        with pytest.raises(ValueError, match="KVN"):
             sk.omm_from_text("CCSDS_OMM_VERS = 3.0")
 
     def test_omm_matches_tle_lines(self, testvec_dir):
@@ -351,9 +351,9 @@ class TestSGP4:
                          "MEAN_ELEMENT_THEORY": " sgp4 "}, tm)
         assert np.linalg.norm(p - p_ref) < 1e3  # BSTAR gone: small drag change
 
-        with pytest.raises(RuntimeError, match="EPOCH"):
+        with pytest.raises(ValueError, match="EPOCH"):
             sk.sgp4({}, tm)
-        with pytest.raises(RuntimeError, match="MEAN_MOTION"):
+        with pytest.raises(ValueError, match="MEAN_MOTION"):
             sk.sgp4({**flat, "MEAN_MOTION": "fast"}, tm)
         with pytest.raises(RuntimeError, match="EPHEMERIS_TYPE 4"):
             sk.sgp4({**flat, "EPHEMERIS_TYPE": 4}, tm)
@@ -582,7 +582,7 @@ class TestTLELoaders:
         shifted = STARLINK_3118[1].replace(" 0002663 ", " 00026630 ")
         assert len(shifted) == 70
         lines = [ISS_NAME, *ISS_2021, "", "0 SHIFTED", STARLINK_3118[0], shifted]
-        with pytest.raises(RuntimeError) as exc:
+        with pytest.raises(ValueError) as exc:
             sk.TLE.from_lines(lines)
         msg = str(exc.value)
         assert "TLE record starting at line 5" in msg
@@ -596,7 +596,7 @@ class TestTLELoaders:
         assert len(sk.TLE.from_lines(ISS_2021, check_checksum=False)) == 1
         assert len(sk.TLE.from_lines(STARLINK_3118, check_checksum=True)) == 1
         with pytest.raises(
-            RuntimeError,
+            ValueError,
             match=r"starting at line 1 .*Line 1 checksum mismatch: column 69 is '3', but the line's checksum is 0",
         ):
             sk.TLE.from_lines(ISS_2021, check_checksum=True)
@@ -605,23 +605,23 @@ class TestTLELoaders:
         path = tmp_path / "bad.tle"
         path.write_text("\n".join([*STARLINK_3118, *ISS_2021]) + "\n")
         assert len(sk.TLE.from_file(str(path))) == 2
-        with pytest.raises(RuntimeError, match="starting at line 3 .*checksum mismatch"):
+        with pytest.raises(ValueError, match="starting at line 3 .*checksum mismatch"):
             sk.TLE.from_file(str(path), check_checksum=True)
 
     def test_mismatched_line_pair_raises(self):
         # line 1 of the ISS with line 2 of a Starlink (a line lost from a file)
-        with pytest.raises(RuntimeError, match="Satellite number differs"):
+        with pytest.raises(ValueError, match="Satellite number differs"):
             sk.TLE.from_lines([ISS_2021[0], STARLINK_3118[1]])
 
     def test_orphan_line1_raises(self):
         # A line 1 followed by another record, or by the end of the input
-        with pytest.raises(RuntimeError, match="line 1 .*Line 1 without a line 2"):
+        with pytest.raises(ValueError, match="line 1 .*Line 1 without a line 2"):
             sk.TLE.from_lines([ISS_2021[0], *STARLINK_3118])
-        with pytest.raises(RuntimeError, match='line 3 .*"LOST".*Line 1 without a line 2'):
+        with pytest.raises(ValueError, match='line 3 .*"LOST".*Line 1 without a line 2'):
             sk.TLE.from_lines([*STARLINK_3118, "0 LOST", ISS_2021[0]])
 
     def test_short_line_hint(self):
-        with pytest.raises(RuntimeError, match="looks like a line 1 but is 68 characters"):
+        with pytest.raises(ValueError, match="looks like a line 1 but is 68 characters"):
             sk.TLE.from_lines([ISS_2021[0][:68], ISS_2021[1]])
 
     def test_check_checksum_is_keyword_only(self):

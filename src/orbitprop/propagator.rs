@@ -68,6 +68,26 @@ impl<const T: usize> std::fmt::Debug for PropagationResult<T> {
 }
 
 impl<const T: usize> PropagationResult<T> {
+    /// Whether this result carries dense output, i.e. whether
+    /// [`interp`](Self::interp) and [`interp_batch`](Self::interp_batch) work
+    /// between `time_begin` and `time_end`.
+    ///
+    /// False when the propagation ran with `enable_interp = false`, for the
+    /// integrators that have no interpolant ([`Integrator::RODAS4`](super::settings::Integrator::RODAS4),
+    /// [`Integrator::RKV98NoInterp`](super::settings::Integrator::RKV98NoInterp))
+    /// and for a zero-duration propagation. (`interp` at exactly `time_begin`
+    /// still returns `state_begin` in every case.)
+    pub fn can_interp(&self) -> bool {
+        use super::settings::Integrator;
+        match self.integrator {
+            Integrator::GaussJackson8 => self.gj_dense.is_some(),
+            Integrator::RKV98NoInterp | Integrator::RODAS4 => false,
+            Integrator::RKV98 | Integrator::RKV87 | Integrator::RKV65 | Integrator::RKTS54 => {
+                self.odesol.as_ref().is_some_and(|s| s.dense.is_some())
+            }
+        }
+    }
+
     pub fn interp<U: TimeLike>(&self, time: &U) -> Result<Matrix<6, T>> {
         interp_propresult(self, time)
     }
@@ -535,7 +555,10 @@ pub fn propagate<const C: usize, T: TimeLike>(
     let odesettings = ode::AdaptiveSettings {
         abs_tol: settings.abs_error,
         rel_tol: settings.rel_error,
-        dense_output: settings.enable_interp,
+        // The 16-stage tableau has no interpolant: storing its steps would
+        // only cost memory (interpolation on them fails)
+        dense_output: settings.enable_interp
+            && settings.integrator != crate::orbitprop::Integrator::RKV98NoInterp,
         max_steps: settings.max_steps,
         initial_step: settings
             .initial_step_secs
@@ -1914,6 +1937,37 @@ mod tests {
         assert_eq!(b.integrator, crate::orbitprop::Integrator::RKV98);
         let pos_diff = (a.state_end.block::<3, 1>(0, 0) - b.state_end.block::<3, 1>(0, 0)).norm();
         assert!(pos_diff < 1e-2, "position diff = {pos_diff} m");
+
+        // `can_interp` says whether `interp` works: not without dense
+        // output, not for the integrators that have no interpolant (whatever
+        // `enable_interp` says), not for a zero-duration result
+        assert!(a.can_interp());
+        assert!(!b.can_interp());
+        let tmid = t0 + Duration::from_seconds(1800.0);
+        for integrator in [
+            crate::orbitprop::Integrator::RKV98NoInterp,
+            crate::orbitprop::Integrator::RODAS4,
+        ] {
+            let s = PropSettings {
+                integrator,
+                ..with.clone()
+            };
+            let c = propagate(&state, &t0, &t1, &s, None)?;
+            assert!(!c.can_interp(), "{integrator}");
+            assert!(c.interp(&tmid).is_err(), "{integrator}");
+        }
+        let gj = PropSettings {
+            integrator: crate::orbitprop::Integrator::GaussJackson8,
+            ..with.clone()
+        };
+        let c = propagate(&state, &t0, &t1, &gj, None)?;
+        assert!(c.can_interp() && c.interp(&tmid).is_ok());
+        let gj_no = PropSettings {
+            enable_interp: false,
+            ..gj
+        };
+        assert!(!propagate(&state, &t0, &t1, &gj_no, None)?.can_interp());
+        assert!(!propagate(&state, &t0, &t0, &with, None)?.can_interp());
         Ok(())
     }
 

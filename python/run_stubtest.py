@@ -1,12 +1,11 @@
 """Run ``mypy.stubtest`` over every satkit stub file, native submodules included.
 
-The compiled extension creates ``density``, ``frametransform``, ``jplephem``,
+The compiled extension creates ``density``, ``eop``, ``frametransform``, ``jplephem``,
 ``moon``, ``planets``, ``spaceweather``, ``sun`` and ``utils`` as attributes of
-``satkit.satkit`` without registering them in ``sys.modules``, so
-``import satkit.sun`` fails and plain ``python -m mypy.stubtest satkit`` can
-only report "failed to import" for their stubs. Registering them first, in
-this process only, lets stubtest check each ``python/satkit/<name>.pyi``
-against its runtime module. Nothing about the installed package changes.
+``satkit.satkit`` and registers them in ``sys.modules`` as ``satkit.<name>``
+when ``satkit`` is imported. This wrapper registers them again (harmless)
+and lists every stub explicitly, so stubtest checks each
+``python/satkit/<name>.pyi`` against its runtime module.
 
 Usage (from the repository root, after ``pip install -e ".[test]"``)::
 

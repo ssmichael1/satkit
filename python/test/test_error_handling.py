@@ -15,11 +15,11 @@ class TestInvalidInputRaises:
     def test_propagate_wrong_size_state(self):
         t0 = sk.time(2015, 3, 20)
         t1 = t0 + sk.duration.from_minutes(30)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.propagate(np.zeros(5), t0, t1)
 
     def test_kepler_from_pv_wrong_sizes(self):
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.kepler.from_pv(np.zeros(4), np.zeros(3))
 
     def test_kepler_non_numeric_positional(self):
@@ -45,7 +45,7 @@ class TestInvalidInputRaises:
     def test_tle_huge_day_of_year(self):
         line1 = "1 26900U 01039A   06-99999999999  .00000045  00000-0  10000-3 0  8290"
         line2 = "2 26900   0.0164 266.5378 0003319  86.1794 182.2590  1.00273847 16981   9300."
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.TLE.from_lines([line1, line2])
 
     def test_sgp4_empty_list(self):
@@ -56,9 +56,9 @@ class TestInvalidInputRaises:
     def test_heliocentric_pos_invalid_body(self):
         # Sun/Moon have no heliocentric position; must raise, not panic
         # (the array-of-times path used to panic with the GIL released)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError, match="Invalid body"):
             sk.planets.heliocentric_pos(sk.solarsystem.Moon, sk.time.now())
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError, match="Invalid body"):
             sk.planets.heliocentric_pos(
                 sk.solarsystem.Sun, [sk.time.now(), sk.time.now()]
             )
@@ -163,9 +163,9 @@ class TestTleOnError:
     LINES = GOOD_A + BAD + GOOD_B
 
     def test_raise_is_default(self):
-        with pytest.raises(RuntimeError, match="line 4"):
+        with pytest.raises(ValueError, match="line 4"):
             sk.TLE.from_lines(self.LINES)
-        with pytest.raises(RuntimeError, match="line 4"):
+        with pytest.raises(ValueError, match="line 4"):
             sk.TLE.from_lines(self.LINES, on_error="raise")
 
     def test_skip(self):
@@ -184,7 +184,7 @@ class TestTleOnError:
         msg = str(rec[0].message)
         assert msg.startswith('TLE record starting at line 4 (sat 49140 "STARLINK-3118")')
         # The same text on_error="raise" raises
-        with pytest.raises(RuntimeError) as exc:
+        with pytest.raises(ValueError) as exc:
             sk.TLE.from_lines(self.LINES)
         assert str(exc.value) == msg
         # Attributed to the calling line, and a UserWarning
@@ -210,12 +210,19 @@ class TestTleOnError:
     def test_all_bad_is_an_empty_list(self):
         assert sk.TLE.from_lines(self.BAD, on_error="skip") == []
 
-    def test_no_records_still_raises(self):
-        for mode in ("raise", "warn", "skip"):
+    def test_no_records_raises_only_with_raise(self):
+        # Only on_error="raise" raises for what the lines contain: input with
+        # no records at all is treated like a record that fails to parse
+        import warnings
+
+        for lines in ([], ["not a tle"]):
             with pytest.raises(ValueError):
-                sk.TLE.from_lines([], on_error=mode)
-            with pytest.raises(ValueError):
-                sk.TLE.from_lines(["not a tle"], on_error=mode)
+                sk.TLE.from_lines(lines, on_error="raise")
+            with pytest.warns(sk.TLEWarning, match="No valid TLEs"):
+                assert sk.TLE.from_lines(lines, on_error="warn") == []
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                assert sk.TLE.from_lines(lines, on_error="skip") == []
 
     def test_invalid_on_error(self):
         with pytest.raises(ValueError, match="on_error"):
@@ -224,7 +231,7 @@ class TestTleOnError:
     def test_from_file(self, tmp_path):
         f = tmp_path / "cat.txt"
         f.write_text("\n".join(self.LINES) + "\n")
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             sk.TLE.from_file(str(f))
         assert len(sk.TLE.from_file(str(f), on_error="skip")) == 2
         with pytest.warns(sk.TLEWarning):

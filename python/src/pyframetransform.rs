@@ -17,13 +17,18 @@ use anyhow::{bail, Result};
 ///     * Vallado algorithm 15:
 ///     * GMST = 67310.54841 + (876600ʰ + 8640184.812866) tᵤₜ₁ + 0.093104 tᵤₜ₁² − 6.2e−6 tᵤₜ₁³ (seconds of time; tᵤₜ₁ = Julian centuries of UT1 from J2000.0)
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GMST
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GMST
 ///
 /// Returns:
-///     float|numpy.array: GMST at input time[s] in radians
+///     float|numpy.ndarray: GMST in radians: a float for a single time, a 1-D
+///     float64 array for a list / array of times. Not normalised to
+///     [0, 2π): the value lies in (-2π, 2π) and is negative for most epochs
+///     before J2000; use ``gmst(t) % (2 * math.pi)`` for an angle in [0, 2π)
 #[pyfunction]
-pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::gmst, tm)
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn gmst(time: Option<&Bound<'_, PyAny>>, tm: Option<&Bound<'_, PyAny>>) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("gmst", time, tm)?;
+    py_f64_of_time_arr(ft::gmst, tm)
 }
 
 /// Equation of the Equinoxes
@@ -38,13 +43,16 @@ pub fn gmst(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///       over 1950-2100)
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate output
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate output
 ///
 /// Returns:
-///     float|numpy.array: Equation of the equinoxes at input time[s] in radians
+///     float|numpy.ndarray: Equation of the equinoxes in radians: a float for a
+///     single time, a 1-D float64 array for a list / array of times
 #[pyfunction]
-pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::eqeq, tm)
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn eqeq(time: Option<&Bound<'_, PyAny>>, tm: Option<&Bound<'_, PyAny>>) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("eqeq", time, tm)?;
+    py_f64_of_time_arr(ft::eqeq, tm)
 }
 
 /// Greenwich apparent sidereal time, radians
@@ -54,13 +62,17 @@ pub fn eqeq(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// against ERFA ``gst94``.
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GAST
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate GAST
 ///
 /// Returns:
-///     float|numpy.array: GAST at input time[s] in radians
+///     float|numpy.ndarray: GAST in radians: a float for a single time, a 1-D
+///     float64 array for a list / array of times. Like ``gmst`` it is
+///     not normalised to [0, 2π): it is negative for most epochs before J2000
 #[pyfunction]
-pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::gast, tm)
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn gast(time: Option<&Bound<'_, PyAny>>, tm: Option<&Bound<'_, PyAny>>) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("gast", time, tm)?;
+    py_f64_of_time_arr(ft::gast, tm)
 }
 
 /// Earth Rotation Angle
@@ -70,10 +82,11 @@ pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     * See: IERS Technical Note 36, Chapter 5, Equation 5.15
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate Earth Rotation Angle
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate Earth Rotation Angle
 ///
 /// Returns:
-///     float|numpy.array: Earth Rotation Angle at input time[s] in radians
+///     float|numpy.ndarray: Earth Rotation Angle in radians, in [0, 2π): a float
+///     for a single time, a 1-D float64 array for a list / array of times
 ///
 /// Calculation Details
 ///
@@ -82,44 +95,64 @@ pub fn gast(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 /// * ERA = 2𝜋 ((0.7790572732640 + f + 0.00273781191135448 * (t - 2451545.0))
 ///
 #[pyfunction]
-pub fn earth_rotation_angle(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
-    py_func_of_time_arr(ft::earth_rotation_angle, tm)
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn earth_rotation_angle(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("earth_rotation_angle", time, tm)?;
+    py_f64_of_time_arr(ft::earth_rotation_angle, tm)
 }
 
 /// Rotation from International Terrestrial Reference Frame (ITRF) to the Terrestrial Intermediate Reference System (TIRS)
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from ITRF to TIRS at input time[s]
 #[pyfunction]
-pub fn qitrf2tirs(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qitrf2tirs(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qitrf2tirs", time, tm)?;
     py_quat_from_time_arr(ft::qitrf2tirs, tm)
 }
 
 /// Rotation from Terrestrial Intermediate Reference System to Celestial Intermediate Reference Systems
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from TIRS to CIRS at input time[s]
 #[pyfunction]
-pub fn qtirs2cirs(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qtirs2cirs(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qtirs2cirs", time, tm)?;
     py_quat_from_time_arr(ft::qtirs2cirs, tm)
 }
 
 /// Rotation from Celestial Intermediate Reference System to Geocentric Celestial Reference Frame
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from CIRS to GCRF at input time[s]
 
 #[pyfunction]
-pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qcirs2gcrf(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qcirs2gcrf", time, tm)?;
     satkit::frametransform::ierstable::preload()?;
     py_quat_from_time_arr(ft::qcirs2gcrs, tm)
 }
@@ -131,13 +164,18 @@ pub fn qcirs2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///    * Very computationally expensive
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from ITRF to GCRF at input time[s]
 
 #[pyfunction]
-pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qitrf2gcrf(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qitrf2gcrf", time, tm)?;
     satkit::frametransform::ierstable::preload()?;
     py_quat_from_time_arr(ft::qitrf2gcrf, tm)
 }
@@ -149,12 +187,17 @@ pub fn qitrf2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///     * Very computationally expensive
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from GCRF to ITRF at input time[s]
 #[pyfunction]
-pub fn qgcrf2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qgcrf2itrf(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qgcrf2itrf", time, tm)?;
     satkit::frametransform::ierstable::preload()?;
     py_quat_from_time_arr(ft::qgcrf2itrf, tm)
 }
@@ -172,12 +215,17 @@ pub fn qgcrf2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///       precession nor the 106-term IAU 1980 nutation series
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from GCRF to ITRF at input time[s]
 #[pyfunction]
-pub fn qgcrf2itrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qgcrf2itrf_approx(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qgcrf2itrf_approx", time, tm)?;
     py_quat_from_time_arr(ft::qgcrf2itrf_approx, tm)
 }
 
@@ -194,12 +242,17 @@ pub fn qgcrf2itrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///       precession nor the 106-term IAU 1980 nutation series
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from ITRF to GCRF at input time[s]
 #[pyfunction]
-pub fn qitrf2gcrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qitrf2gcrf_approx(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qitrf2gcrf_approx", time, tm)?;
     py_quat_from_time_arr(ft::qitrf2gcrf_approx, tm)
 }
 
@@ -213,12 +266,17 @@ pub fn qitrf2gcrf_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///       rotation_approx(TEME, ITRF)
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing rotation from TEME to ITRF at input time[s]
 #[pyfunction]
-pub fn qteme2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qteme2itrf(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qteme2itrf", time, tm)?;
     py_quat_from_time_arr(ft::qteme2itrf, tm)
 }
 
@@ -233,20 +291,27 @@ pub fn qteme2itrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///    * rotation(TEME, GCRF) is the full reduction (matches ERFA to ~5 uas)
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///    satkit.quaternion|list: Quaternion or list of quaternions representing rotation from TEME to GCRF at input time[s]
 #[pyfunction]
-pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qteme2gcrf(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qteme2gcrf", time, tm)?;
     py_quat_from_time_arr(ft::qteme2gcrf, tm)
 }
 
-///
 /// Get Earth Orientation Parameters at given instant
 ///
+/// ``satkit.eop`` is the home for EOP queries: this is the same as
+/// ``satkit.eop.get``.
+///
 /// Args:
-///     tm (satkit.time):   Instant at which to query parameters
+///     time (satkit.time|datetime.datetime|numpy.datetime64): Instant at which to query parameters
 ///
 /// Returns:
 ///     (float, float, float, float, float, float): tuple with following elements:
@@ -261,13 +326,89 @@ pub fn qteme2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///    (EOP are available from 1973-01-02 (IERS finals2000A.all) to current, with predictions
 ///    up to a year ahead)
 ///
+/// Raises:
+///     TypeError: if ``time`` is not a single time
 #[pyfunction(name = "earth_orientation_params")]
-pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
-    satkit::earth_orientation_params::get(&time.0).map(|r| (r[0], r[1], r[2], r[3], r[4], r[5]))
+pub fn pyeop(time: &Bound<'_, PyAny>) -> PyResult<Option<crate::pyeop::EopTuple>> {
+    crate::pyeop::get(time)
+}
+
+/// Whether `frame` is one of the orbit-dependent frames, whose axes are
+/// built from the position and velocity
+fn is_orbit_frame(frame: satkit::Frame) -> bool {
+    use satkit::Frame;
+    match frame {
+        Frame::LVLH | Frame::RTN | Frame::NTW => true,
+        Frame::GCRF
+        | Frame::ITRF
+        | Frame::TIRS
+        | Frame::CIRS
+        | Frame::TEME
+        | Frame::EME2000
+        | Frame::ICRF => false,
+    }
+}
+
+/// `ValueError` unless `pos` and `vel` define an orbit plane: both finite,
+/// neither zero, not parallel. The orbit-frame axes are built from
+/// `pos x vel`, so a degenerate state gave an all-NaN rotation.
+fn check_orbit_plane(func: &str, pos: &Vector3, vel: &Vector3) -> PyResult<()> {
+    let err = |what: &str| {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{func}: {what}; an orbit-dependent frame (LVLH, RTN, NTW) needs a position and \
+             a velocity that define an orbit plane"
+        )))
+    };
+    if !pos.iter().chain(vel.iter()).all(|x| x.is_finite()) {
+        return err("pos and vel must be finite");
+    }
+    let (r, v) = (pos.norm(), vel.norm());
+    if r == 0.0 {
+        return err("pos is zero");
+    }
+    if v == 0.0 {
+        return err("vel is zero");
+    }
+    if pos.cross(vel).norm() <= 1.0e-12 * r * v {
+        return err("pos and vel are parallel");
+    }
+    Ok(())
+}
+
+/// The state arguments of [`to_gcrf`] / [`from_gcrf`], validated: `frame`
+/// must be GCRF, ICRF, EME2000 or an orbit-dependent frame (the error names
+/// `func`, so `from_gcrf` no longer reports itself as `to_gcrf`), `pos` and
+/// `vel` real 3-vectors that, for an orbit-dependent frame, define an orbit
+/// plane.
+fn orbit_frame_state(
+    func: &str,
+    frame: satkit::Frame,
+    pos: &Bound<'_, PyAny>,
+    vel: &Bound<'_, PyAny>,
+) -> PyResult<(Vector3, Vector3)> {
+    use satkit::Frame;
+    if !is_orbit_frame(frame) && !matches!(frame, Frame::GCRF | Frame::ICRF | Frame::EME2000) {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+            "{func}: frame {frame} is time-dependent (only LVLH, RTN, NTW, GCRF, ICRF and \
+             EME2000 are supported); use the time-based helpers (rotation, \
+             rotation_with_state, qitrf2gcrf, qteme2gcrf, etc.) instead"
+        )));
+    }
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
+    if !p.iter().chain(v.iter()).all(|x| x.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{func}: pos and vel must be finite"
+        )));
+    }
+    if is_orbit_frame(frame) {
+        check_orbit_plane(func, &p, &v)?;
+    }
+    Ok((p, v))
 }
 
 /// Return the DCM that transforms a 3-vector from the given satellite-
-/// local frame into GCRF at the current state.
+/// local or inertial frame into GCRF at the current state.
 ///
 /// Supported frames:
 ///
@@ -275,6 +416,11 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
 /// * ``frame.LVLH`` — Local Vertical / Local Horizontal
 /// * ``frame.RTN``  — Radial / Tangential / Normal (= RSW = RIC)
 /// * ``frame.NTW``  — Normal-to-velocity / Tangent / Cross-track
+/// * ``frame.ICRF`` — the 3x3 identity (GCRF has the ICRF axes)
+/// * ``frame.EME2000`` — the constant IERS 2010 frame bias (about 23 mas),
+///   the same rotation as ``rotation(frame.EME2000, frame.GCRF, time)`` at any time
+///
+/// ``pos`` and ``vel`` are used only by LVLH, RTN and NTW.
 ///
 /// For arbitrary frame-to-frame rotation, compose with ``from_gcrf``::
 ///
@@ -291,11 +437,14 @@ pub fn pyeop(time: &PyInstant) -> Option<(f64, f64, f64, f64, f64, f64)> {
 ///     numpy.ndarray: 3x3 rotation matrix (frame -> GCRF)
 ///
 /// Raises:
-///     RuntimeError: if the frame is not a satellite-local orbital frame.
-///         Time-dependent frames (the Earth-fixed ITRF, the quasi-inertial
-///         TEME, EME2000, etc.) need
-///         the time-based quaternion helpers instead (qitrf2gcrf,
-///         qteme2gcrf, ...).
+///     RuntimeError: if the frame is time-dependent (ITRF, TIRS, CIRS,
+///         TEME): use ``rotation(frame, frame.GCRF, time)`` (or
+///         ``rotation_with_state``) for those.
+///     ValueError: if pos or vel is not a 3-element vector, holds a
+///         non-finite value, or (for LVLH / RTN / NTW) the two do not define
+///         an orbit plane: either is zero or they are parallel.
+///     TypeError: if pos or vel is not a real numeric array-like (e.g. a
+///         complex array).
 #[pyfunction]
 pub fn to_gcrf(
     py: Python,
@@ -303,9 +452,8 @@ pub fn to_gcrf(
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let pos_vec: Vector3 = py_to_smatrix(pos)?;
-    let vel_vec: Vector3 = py_to_smatrix(vel)?;
     let rust_frame: satkit::Frame = frame.into();
+    let (pos_vec, vel_vec) = orbit_frame_state("to_gcrf", rust_frame, pos, vel)?;
     let dcm = ft::to_gcrf(rust_frame, &pos_vec, &vel_vec)?;
     // numeris matrices are column-major while numpy's reshape is
     // row-major; flatten the transpose so the numpy array has the same
@@ -329,7 +477,10 @@ pub fn to_gcrf(
 ///     numpy.ndarray: 3x3 rotation matrix (GCRF -> frame)
 ///
 /// Raises:
-///     RuntimeError: if the frame is not a satellite-local orbital frame.
+///     RuntimeError: if the frame is time-dependent (ITRF, TIRS, CIRS, TEME).
+///     ValueError: if pos or vel is not a 3-element vector, holds a
+///         non-finite value, or does not define an orbit plane (see ``to_gcrf``).
+///     TypeError: if pos or vel is not a real numeric array-like.
 #[pyfunction]
 pub fn from_gcrf(
     py: Python,
@@ -337,9 +488,8 @@ pub fn from_gcrf(
     pos: &Bound<'_, PyAny>,
     vel: &Bound<'_, PyAny>,
 ) -> Result<Py<PyAny>> {
-    let pos_vec: Vector3 = py_to_smatrix(pos)?;
-    let vel_vec: Vector3 = py_to_smatrix(vel)?;
     let rust_frame: satkit::Frame = frame.into();
+    let (pos_vec, vel_vec) = orbit_frame_state("from_gcrf", rust_frame, pos, vel)?;
     let dcm = ft::from_gcrf(rust_frame, &pos_vec, &vel_vec)?;
     // Column-major -> row-major via transpose; see `to_gcrf`.
     Ok(slice2py2d(py, dcm.transpose().as_slice(), 3, 3)?)
@@ -355,13 +505,18 @@ pub fn from_gcrf(
 ///       (EME2000), 23 mas from GCRF
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing
 ///     rotation from MOD to GCRF at input time[s]
 #[pyfunction]
-pub fn qmod2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qmod2gcrf(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qmod2gcrf", time, tm)?;
     py_quat_from_time_arr(ft::qmod2gcrf, tm)
 }
 
@@ -373,13 +528,18 @@ pub fn qmod2gcrf(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
 ///       over 1950-2100) against the IAU 2006/2000A nutation
 ///
 /// Args:
-///     tm (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
+///     time (satkit.time|datetime.datetime|list|numpy.array): Time[s] at which to calculate rotation
 ///
 /// Returns:
 ///     satkit.quaternion|list: Quaternion or list of quaternions representing
 ///     rotation from TOD to MOD at input time[s]
 #[pyfunction]
-pub fn qtod2mod_approx(tm: &Bound<'_, PyAny>) -> Result<Py<PyAny>> {
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn qtod2mod_approx(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("qtod2mod_approx", time, tm)?;
     py_quat_from_time_arr(ft::qtod2mod_approx, tm)
 }
 
@@ -596,8 +756,8 @@ fn state_transform_batch(
         ));
     }
 
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
     let t = instant_from_pyany(time)?;
     let (po, vo) = cfunc(&p, &v, &t);
     let py = time.py();
@@ -607,7 +767,7 @@ fn state_transform_batch(
 // ───── Frame-enum dispatch (new in 0.17.0) ─────────────────────────────
 
 /// Quaternion rotating a vector from ``from_frame`` to ``to_frame`` at time
-/// ``tm``. Full IERS 2010 reduction.
+/// ``time``. Full IERS 2010 reduction.
 ///
 /// Uses the shortest path through the frame graph for each pair (does not
 /// always pivot through GCRF). Pairs involving orbit-dependent frames
@@ -617,20 +777,23 @@ fn state_transform_batch(
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime|list): Epoch, or a list / numpy array of epochs
+///     time (satkit.time|datetime.datetime|list): Epoch, or a list / numpy array of epochs
 ///
 /// Returns:
-///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``tm``
+///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``time``
 ///     (a list of them for a list / array of epochs, including a one-element one).
 ///
 /// Raises:
 ///     RuntimeError: if the pair involves LVLH / RTN / NTW.
 #[pyfunction]
+#[pyo3(signature = (from_frame, to_frame, time=None, *, tm=None))]
 pub fn rotation(
     from_frame: crate::pyframes::PyFrame,
     to_frame: crate::pyframes::PyFrame,
-    tm: &Bound<'_, PyAny>,
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
 ) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("rotation", time, tm)?;
     satkit::frametransform::ierstable::preload()?;
     rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ false)
 }
@@ -647,7 +810,7 @@ pub fn rotation(
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime|list): Epoch, or a list / numpy array of epochs
+///     time (satkit.time|datetime.datetime|list): Epoch, or a list / numpy array of epochs
 ///
 /// Returns:
 ///     satkit.quaternion: Approximate rotation from ``from_frame`` to ``to_frame``
@@ -657,11 +820,14 @@ pub fn rotation(
 ///     RuntimeError: if either frame is TIRS / CIRS, or if the pair involves
 ///         LVLH / RTN / NTW.
 #[pyfunction]
+#[pyo3(signature = (from_frame, to_frame, time=None, *, tm=None))]
 pub fn rotation_approx(
     from_frame: crate::pyframes::PyFrame,
     to_frame: crate::pyframes::PyFrame,
-    tm: &Bound<'_, PyAny>,
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
 ) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("rotation_approx", time, tm)?;
     rotation_dispatch_batch(from_frame, to_frame, tm, /* approx = */ true)
 }
 
@@ -689,64 +855,94 @@ fn rotation_dispatch_batch(
 }
 
 /// State (position + velocity) transform from ``from_frame`` to ``to_frame``
-/// at time ``tm``. Properly handles the Earth-rotation sweep term when
+/// at time ``time``. Properly handles the Earth-rotation sweep term when
 /// transitioning between rotating (ITRF) and inertial frames.
 ///
-/// Currently supported pairs: identity, ITRF↔{GCRF, EME2000, ICRF, TEME},
-/// and within-inertial pairs. Other pairs raise RuntimeError.
+/// Supported pairs: any two of the time-parameterised Earth frames ITRF,
+/// TIRS, CIRS, GCRF, TEME, EME2000 and ICRF (the identity included). A pair
+/// involving an orbit-dependent frame (LVLH, RTN, NTW) raises RuntimeError.
 ///
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
-///     pos (numpy.ndarray): 3-element position vector [m]
-///     vel (numpy.ndarray): 3-element velocity vector [m/s]
+///     time (satkit.time|datetime.datetime|numpy.datetime64): Epoch (a single time; a list, even of one element, raises TypeError)
+///     pos (array-like): 3-element position vector [m]
+///     vel (array-like): 3-element velocity vector [m/s]
 ///
 /// Returns:
 ///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``:
 ///     position in meters, velocity in m/s.
+///
+/// Raises:
+///     RuntimeError: if either frame is LVLH, RTN or NTW.
+///     TypeError: if time is not a single time, or pos / vel is not a real
+///         numeric array-like.
+///     ValueError: if pos or vel is not a 3-element vector.
 #[pyfunction]
+#[pyo3(signature = (from_frame, to_frame, time=None, pos=None, vel=None, *, tm=None))]
 pub fn transform_state(
     from_frame: crate::pyframes::PyFrame,
     to_frame: crate::pyframes::PyFrame,
-    tm: &Bound<'_, PyAny>,
-    pos: &Bound<'_, PyAny>,
-    vel: &Bound<'_, PyAny>,
+    time: Option<&Bound<'_, PyAny>>,
+    pos: Option<&Bound<'_, PyAny>>,
+    vel: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    let tm = time_or_deprecated_tm("transform_state", time, tm)?;
+    let pos = required_arg("transform_state", "pos", pos)?;
+    let vel = required_arg("transform_state", "vel", vel)?;
     satkit::frametransform::ierstable::preload()?;
     let t = instant_from_pyany(tm)?;
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
     let (po, vo) = ft::transform_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
     let py = tm.py();
     Ok((vec2py(py, &po)?, vec2py(py, &vo)?))
 }
 
 /// State transform using the approximate reduction of :func:`rotation_approx`.
-/// Same supported-pair set as :func:`transform_state`; TEME <-> ITRF does not
-/// use the approximate chain and equals the full transform.
+/// TEME <-> ITRF does not use the approximate chain and equals the full
+/// transform.
+///
+/// Supported pairs: those of :func:`rotation_approx`, a smaller set than
+/// :func:`transform_state`: any two of ITRF, GCRF, TEME, EME2000 and ICRF.
+/// TIRS and CIRS have no analogue in the approximate chain and raise
+/// RuntimeError (except paired with themselves), as do the orbit-dependent
+/// frames.
 ///
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
-///     pos (numpy.ndarray): 3-element position vector, meters
-///     vel (numpy.ndarray): 3-element velocity vector, m/s
+///     time (satkit.time|datetime.datetime|numpy.datetime64): Epoch (a single time; a list, even of one element, raises TypeError)
+///     pos (array-like): 3-element position vector, meters
+///     vel (array-like): 3-element velocity vector, m/s
 ///
 /// Returns:
 ///     tuple[numpy.ndarray, numpy.ndarray]: (pos, vel) in ``to_frame``:
 ///     position in meters, velocity in m/s.
+///
+/// Raises:
+///     RuntimeError: if either frame is TIRS / CIRS (and the two differ), or
+///         LVLH / RTN / NTW.
+///     TypeError: if time is not a single time, or pos / vel is not a real
+///         numeric array-like.
+///     ValueError: if pos or vel is not a 3-element vector.
 #[pyfunction]
+#[pyo3(signature = (from_frame, to_frame, time=None, pos=None, vel=None, *, tm=None))]
 pub fn transform_state_approx(
     from_frame: crate::pyframes::PyFrame,
     to_frame: crate::pyframes::PyFrame,
-    tm: &Bound<'_, PyAny>,
-    pos: &Bound<'_, PyAny>,
-    vel: &Bound<'_, PyAny>,
+    time: Option<&Bound<'_, PyAny>>,
+    pos: Option<&Bound<'_, PyAny>>,
+    vel: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
 ) -> Result<(Py<PyAny>, Py<PyAny>)> {
+    let tm = time_or_deprecated_tm("transform_state_approx", time, tm)?;
+    let pos = required_arg("transform_state_approx", "pos", pos)?;
+    let vel = required_arg("transform_state_approx", "vel", vel)?;
     let t = instant_from_pyany(tm)?;
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
     let (po, vo) = ft::transform_state_approx(from_frame.into(), to_frame.into(), &t, &p, &v)?;
     let py = tm.py();
     Ok((vec2py(py, &po)?, vec2py(py, &vo)?))
@@ -768,29 +964,48 @@ pub fn transform_state_approx(
 /// Args:
 ///     from_frame (satkit.frame): Source frame
 ///     to_frame (satkit.frame): Destination frame
-///     tm (satkit.time|datetime.datetime): Epoch
-///     pos (numpy.ndarray): 3-element GCRF position vector [m]
-///     vel (numpy.ndarray): 3-element GCRF velocity vector [m/s]
+///     time (satkit.time|datetime.datetime|numpy.datetime64): Epoch (a single time; a list, even of one element, raises TypeError)
+///     pos (array-like): 3-element GCRF position vector [m]
+///     vel (array-like): 3-element GCRF velocity vector [m/s]
 ///
 /// Returns:
-///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``tm``.
+///     satkit.quaternion: Rotation from ``from_frame`` to ``to_frame`` at ``time``.
+///
+/// Raises:
+///     ValueError: if an orbit-dependent frame is involved and pos / vel do
+///         not define an orbit plane (either is zero, non-finite, or they
+///         are parallel), or either is not a 3-element vector.
+///     TypeError: if time is not a single time, or pos / vel is not a real
+///         numeric array-like.
 #[pyfunction]
+#[pyo3(signature = (from_frame, to_frame, time=None, pos=None, vel=None, *, tm=None))]
 pub fn rotation_with_state(
     from_frame: crate::pyframes::PyFrame,
     to_frame: crate::pyframes::PyFrame,
-    tm: &Bound<'_, PyAny>,
-    pos: &Bound<'_, PyAny>,
-    vel: &Bound<'_, PyAny>,
+    time: Option<&Bound<'_, PyAny>>,
+    pos: Option<&Bound<'_, PyAny>>,
+    vel: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
 ) -> Result<Py<PyAny>> {
+    let tm = time_or_deprecated_tm("rotation_with_state", time, tm)?;
+    let pos = required_arg("rotation_with_state", "pos", pos)?;
+    let vel = required_arg("rotation_with_state", "vel", vel)?;
     satkit::frametransform::ierstable::preload()?;
     let t = instant_from_pyany(tm)?;
-    let p: Vector3 = py_to_smatrix(pos)?;
-    let v: Vector3 = py_to_smatrix(vel)?;
-    let q = ft::rotation_with_state(from_frame.into(), to_frame.into(), &t, &p, &v)?;
+    let p = to_vector3(pos, "pos")?;
+    let v = to_vector3(vel, "vel")?;
+    let (from, to): (satkit::Frame, satkit::Frame) = (from_frame.into(), to_frame.into());
+    if from != to && (is_orbit_frame(from) || is_orbit_frame(to)) {
+        check_orbit_plane("rotation_with_state", &p, &v)?;
+    }
+    let q = ft::rotation_with_state(from, to, &t, &p, &v)?;
     Ok(crate::pyquaternion::PyQuaternion(q).into_py_any(tm.py())?)
 }
 
 /// Disable the warnings about Earth Orientation Parameters (EOP) availability.
+///
+/// ``satkit.eop`` is the home for EOP queries (``get``, ``coverage``,
+/// ``status``, ``update``, ``init_from_path``); this switch stays here.
 ///
 /// Notes:
 ///     - Four one-time warnings exist: epoch before the EOP table, epoch after the table end
@@ -809,6 +1024,9 @@ pub fn disable_eop_time_warning() {
 }
 
 /// Time bounds of the loaded Earth Orientation Parameters (EOP) table.
+///
+/// ``satkit.eop`` is the home for EOP queries: this is the same as
+/// ``satkit.eop.coverage``.
 ///
 /// Returns:
 ///     (satkit.time, satkit.time, satkit.time) | None: ``(first, last_observed, last)`` —
@@ -847,8 +1065,12 @@ pub fn eop_source(py: Python<'_>) -> PyResult<Option<&'static str>> {
 
 /// Classify an epoch against the loaded Earth Orientation Parameters (EOP) table.
 ///
+/// ``satkit.eop`` is the home for EOP queries: this is the same as
+/// ``satkit.eop.status``.
+///
 /// Args:
-///     tm (satkit.time): Epoch to classify
+///     time (satkit.time|datetime.datetime|numpy.datetime64): Epoch to classify
+///         (a single time; a list, even of one element, raises TypeError)
 ///
 /// Returns:
 ///     str: one of
@@ -861,14 +1083,14 @@ pub fn eop_source(py: Python<'_>) -> PyResult<Option<&'static str>> {
 ///     * ``"before_table"`` — before the table's first row (1973-01-02 for
 ///       ``finals2000A.all``): no EOP, zeros are used (UT1 = UTC)
 ///     * ``"not_loaded"`` — no EOP table loaded at all: zeros are used
+///
+/// Raises:
+///     TypeError: if ``time`` is not a single time
 #[pyfunction(name = "eop_status")]
-pub fn eop_status(tm: &PyInstant) -> &'static str {
-    use satkit::earth_orientation_params::EopStatus::*;
-    match satkit::earth_orientation_params::status(&tm.0) {
-        Observed => "observed",
-        Predicted => "predicted",
-        Extrapolated => "extrapolated",
-        BeforeTable => "before_table",
-        NotLoaded => "not_loaded",
-    }
+#[pyo3(signature = (time=None, *, tm=None))]
+pub fn eop_status(
+    time: Option<&Bound<'_, PyAny>>,
+    tm: Option<&Bound<'_, PyAny>>,
+) -> PyResult<&'static str> {
+    crate::pyeop::status(time_or_deprecated_tm("eop_status", time, tm)?)
 }

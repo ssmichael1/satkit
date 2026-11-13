@@ -26,6 +26,76 @@ pub fn warn_deprecated(py: Python<'_>, msg: &std::ffi::CStr) -> PyResult<()> {
     PyErr::warn(py, warning_type.as_any(), msg, 1)
 }
 
+/// The `OSError` subclass Python raises for `err` (`FileNotFoundError`,
+/// `PermissionError`, `IsADirectoryError`, else `OSError`), with `path` as its
+/// `filename`, so the message names the file:
+/// `[Errno 2] No such file or directory: 'x.txt'`.
+pub fn io_error_with_path(err: &std::io::Error, path: &std::path::Path) -> PyErr {
+    use pyo3::exceptions::{
+        PyFileNotFoundError, PyIsADirectoryError, PyOSError, PyPermissionError,
+    };
+    use std::io::ErrorKind;
+    let filename = path.to_string_lossy().into_owned();
+    // POSIX errno values; set explicitly (not `raw_os_error`) so the
+    // exception and its errno agree on every platform
+    match err.kind() {
+        ErrorKind::NotFound => {
+            PyFileNotFoundError::new_err((2, "No such file or directory", filename))
+        }
+        ErrorKind::PermissionDenied => {
+            PyPermissionError::new_err((13, "Permission denied", filename))
+        }
+        ErrorKind::IsADirectory => PyIsADirectoryError::new_err((21, "Is a directory", filename)),
+        _ => PyOSError::new_err((err.raw_os_error().unwrap_or(0), err.to_string(), filename)),
+    }
+}
+
+/// Resolve a function's time argument during the `tm` → `time` rename:
+/// `time` is the parameter, `tm` its deprecated keyword alias. Passing `tm`
+/// emits a `DeprecationWarning`; passing both, or neither, is a `TypeError`
+/// as for any duplicated or missing argument. `func` names the function in
+/// the messages.
+pub fn time_or_deprecated_tm<'a, 'py>(
+    func: &str,
+    time: Option<&'a Bound<'py, PyAny>>,
+    tm: Option<&'a Bound<'py, PyAny>>,
+) -> PyResult<&'a Bound<'py, PyAny>> {
+    match (time, tm) {
+        (Some(t), None) => Ok(t),
+        (None, Some(t)) => {
+            let msg = std::ffi::CString::new(format!(
+                "{func}(): the keyword 'tm' is deprecated; use 'time'"
+            ))
+            .expect("message has no NUL");
+            warn_deprecated(t.py(), &msg)?;
+            Ok(t)
+        }
+        (Some(_), Some(_)) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "{func}() got both 'time' and its deprecated alias 'tm'"
+        ))),
+        // Also an explicit `time=None`, which the signature cannot tell apart
+        (None, None) => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "{func}() missing required argument: 'time' (a satkit.time, datetime.datetime \
+             or numpy.datetime64, or a list / array of them where accepted)"
+        ))),
+    }
+}
+
+/// An argument that the signature must declare optional only because it
+/// follows the optional `time` of [`time_or_deprecated_tm`]: missing (or
+/// None) is the `TypeError` a missing required argument has always been.
+pub fn required_arg<'a, 'py>(
+    func: &str,
+    name: &str,
+    arg: Option<&'a Bound<'py, PyAny>>,
+) -> PyResult<&'a Bound<'py, PyAny>> {
+    arg.ok_or_else(|| {
+        pyo3::exceptions::PyTypeError::new_err(format!(
+            "{func}() missing required argument: '{name}'"
+        ))
+    })
+}
+
 /// Convert any real numeric array-like (a numpy array of any integer or
 /// floating dtype, a numpy scalar, or a nested list / tuple of numbers) to a
 /// float64 numpy array, as `numpy.asarray(obj, dtype=float)` would.
@@ -71,13 +141,6 @@ pub fn to_vector3(obj: &Bound<'_, PyAny>, what: &str) -> PyResult<Vector3> {
         )));
     }
     Ok(numeris::vector![a[0], a[1], a[2]])
-}
-
-/// The `ValueError` a keyword of the wrong type has always raised for the
-/// keywords that were once parsed from `**kwargs` by hand (see
-/// [`arg_extractor!`](crate::arg_extractor))
-pub fn invalid_value(name: &str) -> PyErr {
-    pyo3::exceptions::PyValueError::new_err(format!("Invalid value for {name}"))
 }
 
 /// Define `$vis fn $f(&Bound<PyAny>) -> PyResult<$t>` for
@@ -179,8 +242,7 @@ pub fn serde_pickle_from_slice<T: serde::de::DeserializeOwned>(
 /// unpickling looks the member up by name. `path` is the class's attribute
 /// path from the `satkit.satkit` extension module (`"frame"`,
 /// `"moon.moonphase"`), which works for classes that live in a native
-/// submodule too (those are not importable, so pickle could not find the
-/// class itself by reference).
+/// submodule too (which predates those being importable as `satkit.<name>`).
 pub fn enum_reduce<'py>(
     slf: &Bound<'py, PyAny>,
     path: &'static str,
@@ -221,6 +283,14 @@ macro_rules! enum_pickle {
     ($ty:ty, $path:literal) => {
         #[pyo3::pymethods]
         impl $ty {
+            // A member equals its integer value (`eq_int`), so it hashes like
+            // it; PyO3's `hash` option would hash the Rust value instead and
+            // make `{0: x}[member]` a KeyError although `member == 0`
+            fn __hash__(slf: &pyo3::Bound<'_, Self>) -> pyo3::PyResult<isize> {
+                use pyo3::prelude::PyAnyMethods;
+                slf.as_any().call_method0("__int__")?.extract()
+            }
+
             fn __reduce__<'py>(
                 slf: &pyo3::Bound<'py, Self>,
             ) -> pyo3::PyResult<(pyo3::Bound<'py, pyo3::PyAny>, (&'static str, String))> {
@@ -257,62 +327,79 @@ pub fn py_vec3_of_time_result_arr(
     }
 }
 
-/// Convert python object to fixed-size matrix
+/// Convert a real numeric array-like to a fixed-size matrix: `M * N`
+/// elements in a 1-D array-like (filled in storage order, so a 3-vector or a
+/// 6-vector reads as written) or an `M x N` 2-D one.
+///
+/// The input goes through [`to_f64_ndarray`], so any real numeric dtype, a
+/// list or a tuple works, and anything that is not real-numeric (a complex
+/// array, whose imaginary part used to be dropped with only a
+/// `ComplexWarning`; strings; bools) raises `TypeError`. A wrong shape is
+/// the `RuntimeError` it has always been; use [`to_vector3`] for a
+/// `ValueError` that names the argument.
 pub fn py_to_smatrix<const M: usize, const N: usize>(obj: &Bound<PyAny>) -> Result<Matrix<M, N>> {
+    let arr = to_f64_ndarray(obj)?;
+    let ro = arr.readonly();
+    let arr = ro.as_array();
     let mut m: Matrix<M, N> = Matrix::<M, N>::zeros();
-    if obj.is_instance_of::<np::PyArray1<f64>>() {
-        let arr = obj.extract::<np::PyReadonlyArray1<f64>>().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid array shape: {}", e))
-        })?;
-        let arr = arr.as_array();
-        if arr.len() != M * N {
-            anyhow::bail!(
-                "Expected {} elements for {M}x{N} matrix, got {}",
-                M * N,
-                arr.len()
-            );
-        }
-        // Flat copy handles both contiguous and strided input
-        for (dst, src) in m.as_mut_slice().iter_mut().zip(arr.iter()) {
-            *dst = *src;
-        }
-    } else if obj.is_instance_of::<np::PyArray2<f64>>() {
-        let arr = obj.extract::<np::PyReadonlyArray2<f64>>().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid array shape: {}", e))
-        })?;
-        let arr = arr.as_array();
-        if arr.shape() != [M, N] {
-            anyhow::bail!(
-                "Expected {M}x{N} matrix, got {}x{}",
-                arr.shape()[0],
-                arr.shape()[1]
-            );
-        }
-        // Element-by-element to handle numpy row-major to numeris column-major
-        for row in 0..M {
-            for col in 0..N {
-                m[(row, col)] = arr[(row, col)];
+    match arr.ndim() {
+        1 => {
+            if arr.len() != M * N {
+                anyhow::bail!(
+                    "Expected {} elements for {M}x{N} matrix, got {}",
+                    M * N,
+                    arr.len()
+                );
+            }
+            // Flat copy handles both contiguous and strided input
+            for (dst, src) in m.as_mut_slice().iter_mut().zip(arr.iter()) {
+                *dst = *src;
             }
         }
-    } else {
-        // Fallback: try to extract as a flat sequence of floats (lists, tuples, etc.)
-        let vals: Vec<f64> = obj.extract().map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "Cannot convert to {M}x{N} matrix: {e}"
-            ))
-        })?;
-        if vals.len() != M * N {
-            anyhow::bail!(
-                "Expected {} elements for {M}x{N} matrix, got {}",
-                M * N,
-                vals.len()
-            );
+        2 => {
+            if arr.shape() != [M, N] {
+                anyhow::bail!(
+                    "Expected {M}x{N} matrix, got {}x{}",
+                    arr.shape()[0],
+                    arr.shape()[1]
+                );
+            }
+            // Element-by-element to handle numpy row-major to numeris column-major
+            for row in 0..M {
+                for col in 0..N {
+                    m[(row, col)] = arr[[row, col]];
+                }
+            }
         }
-        m.as_mut_slice().copy_from_slice(&vals);
+        _ => anyhow::bail!(
+            "Expected {} elements for {M}x{N} matrix, got an array of shape {:?}",
+            M * N,
+            arr.shape()
+        ),
     }
     Ok(m)
 }
 
+/// A float for a scalar time, or a 1-D float64 numpy array for a list /
+/// array of times (the GIL is released over the array)
+pub fn py_f64_of_time_arr(
+    cfunc: fn(&Instant) -> f64,
+    tmarr: &Bound<'_, PyAny>,
+) -> Result<Py<PyAny>> {
+    let TimeInput { times: tm, scalar } = tmarr.to_time_input()?;
+    let py = tmarr.py();
+    match scalar {
+        true => Ok(cfunc(&tm[0]).into_py_any(py)?),
+        false => {
+            let vals: Vec<f64> = py.detach(|| tm.iter().map(cfunc).collect());
+            Ok(PyArray1::from_vec(py, vals).into_py_any(py)?)
+        }
+    }
+}
+
+/// `cfunc` of a scalar time, or a Python list of its results for a list /
+/// array of times (for results that are not numbers; see
+/// [`py_f64_of_time_arr`] for those)
 pub fn py_func_of_time_arr<'a, T: IntoPyObject<'a> + Send>(
     cfunc: fn(&Instant) -> T,
     tmarr: &Bound<'a, PyAny>,
@@ -419,15 +506,20 @@ where
 
 /// Extract a single `satkit::Instant` from a Python object.
 ///
-/// Accepts `satkit.time` (PyInstant) or `datetime.datetime` (a naive datetime
-/// is local time, an aware one uses its own offset; see `datetime_to_instant`).
-/// Returns a `PyTypeError` if the object is neither.
+/// Accepts the stubs' `TimeScalar`: `satkit.time`, `datetime.datetime` (a
+/// naive datetime is local time, an aware one uses its own offset; see
+/// `datetime_to_instant`) or `numpy.datetime64`. A list or array of times is
+/// not a single time, even with one element: it raises `TypeError`, like
+/// anything else that is not a time.
 pub fn instant_from_pyany(obj: &Bound<'_, PyAny>) -> PyResult<Instant> {
-    let v = obj.to_time_vec()?;
-    if v.len() != 1 {
-        return Err(pyo3::exceptions::PyTypeError::new_err(
-            "Expected a single time value (satkit.time or datetime.datetime)",
-        ));
+    match obj.to_time_input()? {
+        TimeInput {
+            times,
+            scalar: true,
+        } => Ok(times[0]),
+        _ => Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "expected a single time (satkit.time, datetime.datetime or numpy.datetime64), got {}",
+            obj.get_type()
+        ))),
     }
-    Ok(v[0])
 }

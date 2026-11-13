@@ -3,7 +3,10 @@ use pyo3::prelude::*;
 use satkit::consts as cconsts;
 
 /// Some constants that are useful for satellite dynamics
-#[pyclass(name = "consts")]
+///
+/// The class is a namespace: it cannot be instantiated and its attributes
+/// cannot be reassigned.
+#[pyclass(name = "consts", module = "satkit", frozen, immutable_type)]
 pub struct Consts {}
 
 #[pymethods]
@@ -18,22 +21,23 @@ impl Consts {
     const wgs84_f: f64 = cconsts::WGS84_F;
 
     #[classattr]
-    /// WGS-84 Earth radius, meters
+    /// WGS-84 equatorial Earth radius, meters (same value as ``wgs84_a``)
     const earth_radius: f64 = cconsts::EARTH_RADIUS;
 
-    ///  Gravitational parameter of Earth, m^3/s^2
+    ///  Gravitational parameter of Earth, m^3/s^2 (WGS-84)
     #[classattr]
     const mu_earth: f64 = cconsts::MU_EARTH;
 
-    /// Gravitational parameter of moon, m^3/s^2
+    /// Gravitational parameter of moon, m^3/s^2 (JPL DE440)
     #[classattr]
     const mu_moon: f64 = cconsts::MU_MOON;
 
-    /// Gravitational parameter of sun, m^3/s^2
+    /// Gravitational parameter of sun, m^3/s^2 (JPL DE440)
     #[classattr]
     const mu_sun: f64 = cconsts::MU_SUN;
 
     /// Alternative notation for gravitational parameter of Earth, m^3/s^2
+    /// (same value as ``mu_earth``)
     #[classattr]
     const GM: f64 = cconsts::GM;
 
@@ -45,7 +49,8 @@ impl Consts {
     #[classattr]
     const c: f64 = cconsts::C;
 
-    /// Mean distance Earth to Sun, meters
+    /// Astronomical unit, meters: the exact defined constant of IAU 2012
+    /// Resolution B1 (149 597 870 700 m), close to the mean Earth-Sun distance
     #[classattr]
     const au: f64 = cconsts::AU;
 
@@ -62,10 +67,15 @@ impl Consts {
     const moon_radius: f64 = cconsts::MOON_RADIUS;
 
     /// Earth-moon mass ratio (Earth mass over Moon mass), unitless
+    ///
+    /// The ratio of the JPL DE440 gravitational parameters. It differs from
+    /// ``mu_earth / mu_moon`` in the eighth digit, because ``mu_earth`` is
+    /// the WGS-84 value.
     #[classattr]
     const earth_moon_mass_ratio: f64 = cconsts::EARTH_MOON_MASS_RATIO;
 
-    /// Semiparameter for Geosynchronous orbits, meters
+    /// Radius of a circular geosynchronous orbit (its semi-major axis),
+    /// meters from the Earth's center: ``(mu_earth / omega_earth^2)^(1/3)``
     #[classattr]
     const geo_r: f64 = cconsts::GEO_R;
 

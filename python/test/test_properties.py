@@ -38,7 +38,7 @@ import numpy as np
 import pytest
 
 hypothesis = pytest.importorskip("hypothesis")
-from hypothesis import HealthCheck, example, given, settings  # noqa: E402
+from hypothesis import HealthCheck, assume, example, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
 import satkit as sk  # noqa: E402
@@ -325,6 +325,7 @@ class TestPickle:
     @_settings()
     @given(finite, finite, finite, finite)
     def test_quaternion(self, w, x, y, z):
+        assume(any((w, x, y, z)))  # the zero quaternion is not a rotation
         q = sk.quaternion(w, x, y, z)
         assert qtuple(roundtrip(q)) == qtuple(q)
 

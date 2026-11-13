@@ -908,21 +908,28 @@ pub fn gcrf_to_itrf_state_approx<T: TimeLike>(
 /// * [`Frame::LVLH`](crate::Frame::LVLH) — dispatches to [`lvlh_to_gcrf`]
 /// * [`Frame::RTN`](crate::Frame::RTN) (a.k.a. RSW, RIC) — dispatches to [`rtn_to_gcrf`]
 /// * [`Frame::NTW`](crate::Frame::NTW) — dispatches to [`ntw_to_gcrf`]
+/// * [`Frame::ICRF`](crate::Frame::ICRF) — the 3×3 identity (GCRF has the
+///   ICRF axes, as in [`rotation`])
+/// * [`Frame::EME2000`](crate::Frame::EME2000) — the constant IERS 2010
+///   frame bias (≈ 23 mas), the same rotation as [`rotation`] uses
+///
+/// `pos_gcrf` and `vel_gcrf` are used only by the orbit frames.
 ///
 /// # Errors
 ///
-/// Returns an error for frames that are not satellite-local orbital
-/// frames (ITRF, TIRS, CIRS, TEME, EME2000, ICRF). Those frames require
-/// a time argument for their rotation to GCRF and are handled by the
-/// dedicated quaternion helpers ([`qteme2gcrf`], [`qitrf2gcrf`], etc.).
+/// Returns an error for the time-dependent frames (ITRF, TIRS, CIRS,
+/// TEME): their rotation to GCRF needs a time and is handled by
+/// [`rotation`] and the dedicated quaternion helpers ([`qteme2gcrf`],
+/// [`qitrf2gcrf`], etc.).
 pub fn to_gcrf(frame: crate::Frame, pos_gcrf: &Vector3, vel_gcrf: &Vector3) -> Result<Matrix3> {
     use crate::Frame;
     match frame {
-        Frame::GCRF => Ok(Matrix3::eye()),
+        Frame::GCRF | Frame::ICRF => Ok(Matrix3::eye()),
+        Frame::EME2000 => Ok(dispatch::qeme2000_to_gcrf().to_rotation_matrix()),
         Frame::LVLH => Ok(lvlh_to_gcrf(pos_gcrf, vel_gcrf)),
         Frame::RTN => Ok(rtn_to_gcrf(pos_gcrf, vel_gcrf)),
         Frame::NTW => Ok(ntw_to_gcrf(pos_gcrf, vel_gcrf)),
-        Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME | Frame::EME2000 | Frame::ICRF => {
+        Frame::ITRF | Frame::TIRS | Frame::CIRS | Frame::TEME => {
             Err(Error::UnsupportedFrame { frame })
         }
     }
@@ -1254,5 +1261,34 @@ mod tests {
             "approx vs full velocity diff = {} m/s",
             vel_diff
         );
+    }
+
+    /// The inertial frames `to_gcrf` accepts give the same rotation as
+    /// `rotation` (constant in time); the time-dependent ones still error.
+    #[test]
+    fn test_to_gcrf_inertial_frames() {
+        use crate::Frame;
+        let pos = numeris::vector![7.0e6, 0.0, 0.0];
+        let vel = numeris::vector![0.0, 7.5e3, 0.0];
+        let t = Instant::from_datetime(2024, 1, 1, 0, 0, 0.0).unwrap();
+        for frame in [Frame::EME2000, Frame::ICRF] {
+            let dcm = to_gcrf(frame, &pos, &vel).unwrap();
+            let want = rotation(frame, Frame::GCRF, &t)
+                .unwrap()
+                .to_rotation_matrix();
+            for i in 0..3 {
+                for j in 0..3 {
+                    assert!((dcm[(i, j)] - want[(i, j)]).abs() < 1e-15);
+                }
+            }
+            let back = from_gcrf(frame, &pos, &vel).unwrap();
+            assert_eq!(back, dcm.transpose());
+        }
+        // EME2000 is the ~23 mas frame bias, not the identity
+        let b = to_gcrf(Frame::EME2000, &pos, &vel).unwrap();
+        assert!((b[(0, 1)]).abs() > 5.0e-8);
+        for frame in [Frame::ITRF, Frame::TIRS, Frame::CIRS, Frame::TEME] {
+            assert!(to_gcrf(frame, &pos, &vel).is_err());
+        }
     }
 }
