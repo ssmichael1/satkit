@@ -4466,10 +4466,10 @@ class itrfcoord:
         optionally the height; all arguments are keyword-only.
 
         Args:
-            latitude_deg: Geodetic latitude in degrees, in [-90, 90]
-            longitude_deg: Longitude in degrees
-            latitude_rad: Geodetic latitude in radians, in [-pi/2, pi/2]
-            longitude_rad: Longitude in radians
+            latitude_rad: Geodetic latitude in radians, in [-pi/2, pi/2].
+                Give this or ``latitude_deg`` (degrees, in [-90, 90])
+            longitude_rad: Longitude in radians. Give this or
+                ``longitude_deg`` (degrees)
             height: Height above the WGS84 ellipsoid, meters. Default is 0
 
         Returns:
