@@ -731,8 +731,8 @@ class TLE:
         times: TimeInput,
         epoch: TimeScalar,
         *,
-        gravconst: sgp4_gravconst = ...,
-        opsmode: sgp4_opsmode = ...,
+        gravconst: sgp4_gravconst = sgp4_gravconst.wgs72,
+        opsmode: sgp4_opsmode = sgp4_opsmode.afspc,
         satnum: int | None = None,
         name: str | None = None,
         intl_desig: str | None = None,
@@ -816,8 +816,8 @@ def sgp4(
     tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
-    gravconst: sgp4_gravconst = ...,
-    opsmode: sgp4_opsmode = ...,
+    gravconst: sgp4_gravconst = sgp4_gravconst.wgs72,
+    opsmode: sgp4_opsmode = sgp4_opsmode.afspc,
     errflag: typing.Literal[True],
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.int32]]: ...
 @overload
@@ -825,8 +825,8 @@ def sgp4(
     tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
-    gravconst: sgp4_gravconst = ...,
-    opsmode: sgp4_opsmode = ...,
+    gravconst: sgp4_gravconst = sgp4_gravconst.wgs72,
+    opsmode: sgp4_opsmode = sgp4_opsmode.afspc,
     errflag: typing.Literal[False] = False,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
 @overload
@@ -834,8 +834,8 @@ def sgp4(
     tle: TLE | OMMDict | dict[str, Any] | list[TLE] | list[OMMDict] | list[dict[str, Any]] | list[TLE | OMMDict | dict[str, Any]],
     time: TimeInput,
     *,
-    gravconst: sgp4_gravconst = ...,
-    opsmode: sgp4_opsmode = ...,
+    gravconst: sgp4_gravconst = sgp4_gravconst.wgs72,
+    opsmode: sgp4_opsmode = sgp4_opsmode.afspc,
     errflag: bool,
 ) -> (
     tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
@@ -1172,7 +1172,7 @@ def nrlmsise00(
 def gravity(
     pos: itrfcoord | npt.ArrayLike,
     *,
-    model: gravmodel = ...,
+    model: gravmodel = gravmodel.egm2008,
     degree: int = 6,
     order: int | None = None,
 ) -> npt.NDArray[np.float64]:
@@ -1210,7 +1210,7 @@ def gravity(
 def gravity_and_partials(
     pos: itrfcoord | npt.ArrayLike,
     *,
-    model: gravmodel = ...,
+    model: gravmodel = gravmodel.egm2008,
     degree: int = 6,
     order: int | None = None,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -1366,6 +1366,7 @@ class weekday:
     Represent the day of the week
 
     Values:
+
     - `Sunday`
     - `Monday`
     - `Tuesday`
@@ -1560,7 +1561,6 @@ class frame:
       T = along velocity, N = in-plane perpendicular to v, W = cross-track
 
     Example:
-
     ```python
     import satkit as sk
 
@@ -1714,7 +1714,7 @@ class time:
     @overload
     def __init__(self, t: time | datetime.datetime | np.datetime64, /) -> None: ...
     @overload
-    def __init__(self, year: int, month: int, day: int, /, *, scale: timescale = ...) -> None: ...
+    def __init__(self, year: int, month: int, day: int, /, *, scale: timescale = timescale.UTC) -> None: ...
     @overload
     def __init__(
         self,
@@ -1726,7 +1726,7 @@ class time:
         sec: float,
         /,
         *,
-        scale: timescale = ...,
+        scale: timescale = timescale.UTC,
     ) -> None:
         """Create a time object representing input date and time
 
@@ -3516,9 +3516,12 @@ class quaternion:
 
         Notes:
             Equivalent rotation matrix:
+
+            ```text
             | 1             0            0|
             | 0    cos(theta)  -sin(theta)|
             | 0    sin(theta)   cos(theta)|
+            ```
         """
         ...
 
@@ -3538,9 +3541,12 @@ class quaternion:
 
         Notes:
             Equivalent rotation matrix:
+
+            ```text
             |  cos(theta)     0    sin(theta)|
             |           0     1             0|
             | -sin(theta)     0    cos(theta)|
+            ```
         """
         ...
 
@@ -3559,9 +3565,12 @@ class quaternion:
 
         Notes:
             Equivalent rotation matrix:
+
+            ```text
             |  cos(theta)     -sin(theta)   0|
             |  sin(theta)      cos(theta)   0|
             |           0               0   1|
+            ```
         """
         ...
 
@@ -5401,12 +5410,14 @@ class propresult:
                 velocity (meters/second)
 
         Example:
-            >>> t0 = satkit.time(2024, 1, 1)
-            >>> res = satkit.propagate([7000e3, 0, 0, 0, 7.5e3, 0], t0, duration_secs=600.0)
-            >>> sat = res.to_satstate()
-            >>> sat.time == res.time_end
-            True
-            >>> later = sat.propagate(600.0)  # another 10 minutes
+            ```python
+            t0 = satkit.time(2024, 1, 1)
+            res = satkit.propagate([7000e3, 0, 0, 0, 7.5e3, 0], t0, duration_secs=600.0)
+            sat = res.to_satstate()
+            sat.time == res.time_end
+            # True
+            later = sat.propagate(600.0)  # another 10 minutes
+            ```
         """
         ...
 
@@ -5573,7 +5584,6 @@ class thrust:
     angular momentum, h = r × v).
 
     Example:
-
     ```python
     import satkit as sk
 
@@ -5678,12 +5688,14 @@ class ecomparams:
     - ``e_Y = unit(e_D × r̂)`` — solar-panel rotation axis
     - ``e_B = e_D × e_Y``
 
-    Model::
+    Model:
 
-        a = ν · (AU / d)² · [ D(φ)·e_D + Y(φ)·e_Y + B(φ)·e_B ]
-        D(φ) = d0 + dc cos φ + ds sin φ + d2c cos 2φ + d2s sin 2φ + d4c cos 4φ + d4s sin 4φ
-        Y(φ) = y0 + yc cos φ + ys sin φ
-        B(φ) = b0 + bc cos φ + bs sin φ
+    ```text
+    a = ν · (AU / d)² · [ D(φ)·e_D + Y(φ)·e_Y + B(φ)·e_B ]
+    D(φ) = d0 + dc cos φ + ds sin φ + d2c cos 2φ + d2s sin 2φ + d4c cos 4φ + d4s sin 4φ
+    Y(φ) = y0 + yc cos φ + ys sin φ
+    B(φ) = b0 + bc cos φ + bs sin φ
+    ```
 
     where ``ν`` is the Earth-shadow factor applied to all three axes (the
     CODE/Bernese convention: the whole ECOM acceleration is switched off in
@@ -5704,7 +5716,6 @@ class ecomparams:
     a pure ECOM model.
 
     Example:
-
     ```python
     import satkit as sk
 
@@ -5874,7 +5885,6 @@ class satproperties:
             ValueError: if ``cdaoverm`` or ``craoverm`` is negative or NaN
 
         Example:
-
         ```python
         import satkit as sk
 
@@ -6137,14 +6147,14 @@ class propsettings:
         rel_error: float = 1e-8,
         gravity_degree: int = 4,
         gravity_order: int | None = None,
-        gravity_model: gravmodel = ...,
+        gravity_model: gravmodel = gravmodel.egm2008,
         use_spaceweather: bool = True,
         use_sun_gravity: bool = True,
         use_moon_gravity: bool = True,
-        tide_model: tidemodel = ...,
+        tide_model: tidemodel = tidemodel.solid_step1,
         use_relativistic_correction: bool = True,
         enable_interp: bool = True,
-        integrator: integrator = ...,
+        integrator: integrator = integrator.rkv98,
         gj_step_seconds: float = 60.0,
         max_steps: int = 1_000_000,
         require_eop_coverage: bool = False,
@@ -6307,7 +6317,6 @@ class propsettings:
         """Use space weather data when computing atmospheric density for drag forces
 
         Notes:
-
         - Space weather data can have a large effect on the density of the atmosphere
         - This can be important for accurate drag force calculations
         - Space weather data is updated every 3 hours.  Most-recent data can be downloaded with ``satkit.utils.update_datafiles()``

@@ -49,7 +49,9 @@ def get(time: TimeScalar) -> tuple[float, float, float, float, float, float] | N
         TypeError: If ``time`` is not a single time
 
     Example:
-        >>> dut1, xp, yp, lod, dx, dy = satkit.eop.get(satkit.time(2024, 1, 1))
+        ```python
+        dut1, xp, yp, lod, dx, dy = satkit.eop.get(satkit.time(2024, 1, 1))
+        ```
     """
     ...
 
@@ -63,7 +65,9 @@ def coverage() -> tuple[_time, _time, _time] | None:
         after ``last`` use that row's values held constant.
 
     Example:
-        >>> first, last_obs, last = satkit.eop.coverage()
+        ```python
+        first, last_obs, last = satkit.eop.coverage()
+        ```
     """
     ...
 
@@ -88,8 +92,10 @@ def status(
         TypeError: If ``time`` is not a single time
 
     Example:
-        >>> satkit.eop.status(satkit.time(2024, 1, 1))
-        'observed'
+        ```python
+        satkit.eop.status(satkit.time(2024, 1, 1))
+        # 'observed'
+        ```
     """
     ...
 

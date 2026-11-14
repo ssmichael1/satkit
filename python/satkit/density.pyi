@@ -25,7 +25,6 @@ def nrlmsise(
     <https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2002JA009430>
 
     Args:
-
         itrf (satkit.itrfcoord):  position at which to compute density & temperature
                (height 1000 m below the WGS-84 ellipsoid or above)
         time (satkit.time|datetime.datetime, optional):  Instant at which to compute

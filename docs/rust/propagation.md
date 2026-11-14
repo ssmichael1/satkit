@@ -32,7 +32,7 @@ $ cargo run --release --example propagate_leo
 264 accepted steps, 5544 function evaluations
 after 1 day: |r| = 6871.383 km, |v| = 7.6096 km/s
 interpolated at 12 h: |r| = 6875.495 km
-drag vs no drag after 1 day: 7104.5 m apart
+with vs without drag and SRP after 1 day: 7104.5 m apart
 1 m/s prograde burn at 6 h: RTN offset after 1 day = [0.7, -192.5, 0.0] km
 1-sigma after 1 day (RTN): 56 m, 3830 m, 9 m
 ```

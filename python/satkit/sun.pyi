@@ -192,11 +192,12 @@ def rise_set(
         coord (satkit.itrfcoord): location for which to compute sunrise & sunset
         sigma (float, optional): zenith distance of the Sun's centre at rise/set,
             degrees; must be finite and in the open interval (0, 180).
-            Common Values:
-                        "Standard": 90 deg, 50 arcmin (90.0+50.0/60.0)
-                    "Civil Twilight": 96 deg
-                "Nautical Twilight": 102 deg
-            "Astronomical Twilight": 108 deg
+            Common values:
+
+            - "Standard": 90 deg 50 arcmin (``90.0 + 50.0 / 60.0``)
+            - "Civil Twilight": 96 deg
+            - "Nautical Twilight": 102 deg
+            - "Astronomical Twilight": 108 deg
 
             If None or not passed in, "Standard" is used (90.0 + 50.0/60.0)
         use_jpl (bool, optional): use the JPL ephemeris (apparent,
