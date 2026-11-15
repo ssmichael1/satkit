@@ -19,9 +19,8 @@ def update_datafiles(
     that will later be offline) or to refresh the daily files.
 
     Keyword Args:
-
-      overwrite (bool):  Re-download static files even when a verified copy is already present
-      dir (str | os.PathLike): Target directory for files.  Uses ``datadir()`` if not specified
+        overwrite (bool):  Re-download static files even when a verified copy is already present
+        dir (str | os.PathLike): Target directory for files.  Uses ``datadir()`` if not specified
 
     Raises:
         TypeError: for any other keyword argument (e.g. ``force=True``).

@@ -835,11 +835,12 @@ def to_gcrf(
     ``pos`` and ``vel`` are used only by ``LVLH``, ``RTN`` and ``NTW``.
 
     For an arbitrary frame-to-frame rotation, compose with
-    ``from_gcrf``::
+    ``from_gcrf`` (here NTW → RIC):
 
-        # NTW -> RIC
-        dcm = sk.frametransform.from_gcrf(sk.frame.RTN, pos, vel) @ \\
-              sk.frametransform.to_gcrf(sk.frame.NTW, pos, vel)
+    ```python
+    dcm = (satkit.frametransform.from_gcrf(satkit.frame.RTN, pos_gcrf, vel_gcrf)
+           @ satkit.frametransform.to_gcrf(satkit.frame.NTW, pos_gcrf, vel_gcrf))
+    ```
 
     Args:
         frame: Source satellite-local frame
@@ -1074,7 +1075,9 @@ def eop_coverage() -> tuple[time, time, time] | None:
         constant (see ``eop_status``); refresh with ``satkit.utils.update_datafiles()``.
 
     Example:
-        >>> first, last_observed, last = satkit.frametransform.eop_coverage()
+        ```python
+        first, last_observed, last = satkit.frametransform.eop_coverage()
+        ```
     """
     ...
 

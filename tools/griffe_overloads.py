@@ -8,10 +8,20 @@ function (``sgp4``, ``frametransform.gmst``, ``sun.pos_gcrf``,
 ``propresult.interp``, the ``time`` operators, ...) was left out of the
 API pages, and a direct ``::: satkit.sgp4`` failed the build.
 
-For each such name this adds a function built from the overload with the
-longest docstring (the general form, where there is one) and lists every
-overload under it; ``overloads_only`` in ``mkdocs.yml`` then shows just
-the overload signatures.
+For each such name this adds a function that lists every overload, with
+``overloads_only`` in ``mkdocs.yml`` showing just the overload signatures.
+Its docstring is chosen from the overloads that have one:
+
+1. the general form, if there is one: an overload whose docstring is at
+   least twice as long as the first documented overload's (``sgp4``,
+   ``time.__init__``, ``propresult.interp``);
+2. otherwise every documented overload under its own signature, when the
+   forms really differ: an operator, which dispatches on the type of its
+   operand (``time + duration`` and ``time + float``, ``quaternion * quaternion``
+   and ``quaternion * vector``), or forms that take different parameters
+   (``density.nrlmsise``);
+3. otherwise the first documented overload, which for the scalar / array
+   pairs (``frametransform.gmst``, ``sun.pos_gcrf``, ...) is the scalar form.
 
 Enabled in ``mkdocs.yml`` as ``tools/griffe_overloads.py:OverloadOnlyFunctions``.
 """
@@ -24,6 +34,52 @@ from typing import Any
 import griffe
 
 
+# The docstring options of mkdocs.yml, for the overloads parsed here.
+_OPTIONS = {"returns_named_value": False, "returns_multiple_items": False}
+
+
+def _names(f: griffe.Function) -> tuple[str, ...]:
+    return tuple(p.name for p in f.parameters if p.name not in ("self", "cls"))
+
+
+def _signature(name: str, f: griffe.Function) -> str:
+    params = []
+    for p in f.parameters:
+        if p.name in ("self", "cls"):
+            continue
+        text = p.name
+        if p.annotation is not None:
+            text += f": {p.annotation}"
+        if p.default is not None:
+            text += f" = {p.default}"
+        params.append(text)
+    ret = f" -> {f.returns}" if f.returns is not None else ""
+    return f"{name}({', '.join(params)}){ret}"
+
+
+def _combined(name: str, documented: list[griffe.Function], parent: griffe.Object) -> griffe.Docstring:
+    """One docstring holding each overload's, under that overload's signature.
+
+    Each overload's docstring is parsed against its own signature, so the
+    parameter and return types are that form's, and the sections are joined.
+    """
+    first = documented[0].docstring
+    sections: list[Any] = []
+    for f in documented:
+        sections.append(griffe.DocstringSectionText(f"```python\n{_signature(name, f)}\n```"))
+        sections.extend(f.docstring.parse("google", **(first.parser_options or _OPTIONS)))
+    doc = griffe.Docstring(
+        "\n\n".join(f.docstring.value.strip() for f in documented),
+        lineno=first.lineno,
+        endlineno=first.endlineno,
+        parent=parent,
+    )
+    # `parsed` is a cached property: the renderer reads these sections
+    # instead of parsing the joined text against one signature.
+    doc.__dict__["parsed"] = sections
+    return doc
+
+
 class OverloadOnlyFunctions(griffe.Extension):
     def on_members(self, *, node: ast.AST | griffe.ObjectNode, obj: griffe.Object, **kwargs: Any) -> None:
         if obj.kind not in (griffe.Kind.MODULE, griffe.Kind.CLASS):
@@ -31,17 +87,31 @@ class OverloadOnlyFunctions(griffe.Extension):
         for name, overloads in list(obj.overloads.items()):
             if not overloads or name in obj.members:
                 continue
-            main = max(overloads, key=lambda f: len(f.docstring.value) if f.docstring else 0)
+            documented = [f for f in overloads if f.docstring and f.docstring.value.strip()]
+            main = documented[0] if documented else overloads[0]
+            docstring = main.docstring
+            returns = main.returns
+            if len(documented) > 1:
+                longest = max(documented, key=lambda f: len(f.docstring.value))
+                operator = name.startswith("__") and name != "__init__"
+                if len(longest.docstring.value) >= 2 * len(main.docstring.value):
+                    main, docstring, returns = longest, longest.docstring, longest.returns
+                elif operator or len({_names(f) for f in documented}) > 1:
+                    # The return type differs between the forms; each block's
+                    # signature carries it.
+                    docstring, returns = None, None
             func = griffe.Function(
                 name,
                 lineno=main.lineno,
                 endlineno=main.endlineno,
                 parameters=main.parameters,
-                returns=main.returns,
+                returns=returns,
                 decorators=[d for d in main.decorators if "overload" not in d.callable_path],
-                docstring=main.docstring,
+                docstring=docstring,
                 parent=obj,
             )
+            if docstring is None:
+                func.docstring = _combined(name, documented, func)
             func.overloads = overloads
             obj.set_member(name, func)
             del obj.overloads[name]

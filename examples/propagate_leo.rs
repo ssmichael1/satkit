@@ -64,10 +64,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         mid.block::<3, 1>(0, 0).norm() / 1e3
     );
 
-    // Drag lowers the orbit: compare with a drag-free run
+    // Drag lowers the orbit: compare with a run without drag or radiation
+    // pressure (no satellite properties)
     let no_drag = propagate(&pv0, &t0, &t1, &settings, None)?;
     let sep = (res.state_end - no_drag.state_end).block::<3, 1>(0, 0);
-    println!("drag vs no drag after 1 day: {:.1} m apart", sep.norm());
+    println!(
+        "with vs without drag and SRP after 1 day: {:.1} m apart",
+        sep.norm()
+    );
 
     // `SatState` wraps the same propagation with maneuvers and covariance
     let mut sat = SatState::from_pv(&t0, &r0, &v0);

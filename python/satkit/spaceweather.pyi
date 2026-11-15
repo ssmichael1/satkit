@@ -134,7 +134,9 @@ def coverage() -> tuple[_time, _time, _time, _time] | None:
         space-weather table is loaded.
 
     Example:
-        >>> first, last_obs, last_daily, last = satkit.spaceweather.coverage()
+        ```python
+        first, last_obs, last_daily, last = satkit.spaceweather.coverage()
+        ```
     """
     ...
 

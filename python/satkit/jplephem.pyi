@@ -240,8 +240,10 @@ def constants() -> dict[str, float]:
         RuntimeError: if the ephemeris file is unavailable
 
     Example:
-        >>> c = satkit.jplephem.constants()
-        >>> c["EMRAT"] == satkit.jplephem.consts("EMRAT")
-        True
+        ```python
+        c = satkit.jplephem.constants()
+        c["EMRAT"] == satkit.jplephem.consts("EMRAT")
+        # True
+        ```
     """
     ...
