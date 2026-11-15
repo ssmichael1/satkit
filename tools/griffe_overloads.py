@@ -34,6 +34,10 @@ from typing import Any
 import griffe
 
 
+# The docstring options of mkdocs.yml, for the overloads parsed here.
+_OPTIONS = {"returns_named_value": False, "returns_multiple_items": False}
+
+
 def _names(f: griffe.Function) -> tuple[str, ...]:
     return tuple(p.name for p in f.parameters if p.name not in ("self", "cls"))
 
@@ -54,19 +58,26 @@ def _signature(name: str, f: griffe.Function) -> str:
 
 
 def _combined(name: str, documented: list[griffe.Function], parent: griffe.Object) -> griffe.Docstring:
-    """One docstring holding each overload's, under that overload's signature."""
-    parts = []
-    for f in documented:
-        parts.append(f"```python\n{_signature(name, f)}\n```\n\n{f.docstring.value.strip()}")
+    """One docstring holding each overload's, under that overload's signature.
+
+    Each overload's docstring is parsed against its own signature, so the
+    parameter and return types are that form's, and the sections are joined.
+    """
     first = documented[0].docstring
-    return griffe.Docstring(
-        "\n\n".join(parts),
+    sections: list[Any] = []
+    for f in documented:
+        sections.append(griffe.DocstringSectionText(f"```python\n{_signature(name, f)}\n```"))
+        sections.extend(f.docstring.parse("google", **(first.parser_options or _OPTIONS)))
+    doc = griffe.Docstring(
+        "\n\n".join(f.docstring.value.strip() for f in documented),
         lineno=first.lineno,
         endlineno=first.endlineno,
         parent=parent,
-        parser=first.parser,
-        parser_options=first.parser_options,
     )
+    # `parsed` is a cached property: the renderer reads these sections
+    # instead of parsing the joined text against one signature.
+    doc.__dict__["parsed"] = sections
+    return doc
 
 
 class OverloadOnlyFunctions(griffe.Extension):
