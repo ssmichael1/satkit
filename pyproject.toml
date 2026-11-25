@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "setuptools-rust"]
+requires = ["setuptools>=77.0.0", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,6 +11,7 @@ maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
 readme = "README.md"
 version = "0.24.3"
 license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRDPARTY-DATA.md"]
 description = "Satellite Orbital Dynamics Toolkit"
 keywords = [
     "satellite",
@@ -44,9 +45,6 @@ Issues = "https://github.com/ssmichael1/satkit/issues"
 
 [project.optional-dependencies]
 test = ["pytest", "mypy>=2.4", "scipy", "pyerfa", "hypothesis"]
-
-[tool.setuptools]
-license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRDPARTY-DATA.md"]
 
 [tool.setuptools.packages.find]
 where = ["python"]

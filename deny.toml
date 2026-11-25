@@ -10,7 +10,12 @@ all-features = true
 version = 2
 yanked = "deny"
 unmaintained = "workspace"
-ignore = []
+ignore = [
+    # chrono is an optional dependency behind the off-by-default `chrono`
+    # feature (conversions to and from satkit time types). The advisory reports
+    # no vulnerability; revisit when deciding whether to keep the feature.
+    { id = "RUSTSEC-2026-0543", reason = "optional interop feature; unmaintained notice only, no vulnerability" },
+]
 
 [licenses]
 # The satkit crate is MIT OR Apache-2.0; every dependency must be usable under
