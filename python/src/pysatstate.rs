@@ -2,7 +2,7 @@ use crate::pyframes::PyFrame;
 use crate::pyinstant::{PyInstant, TimeArg};
 use crate::pypropsettings::PyPropSettings;
 use crate::pyquaternion::PyQuaternion;
-use crate::pysatproperties::{satproperties_arg, PySatProperties};
+use crate::pysatproperties::{satproperties_arg, SatPropsArg};
 use crate::pyutils::{slice2py1d, slice2py2d};
 
 use numpy as np;
@@ -459,7 +459,7 @@ impl PySatState {
         &self,
         timedur: &Bound<'_, PyAny>,
         #[pyo3(from_py_with = propsettings_arg)] propsettings: Option<PyPropSettings>,
-        #[pyo3(from_py_with = satproperties_arg)] satproperties: Option<PySatProperties>,
+        #[pyo3(from_py_with = satproperties_arg)] satproperties: Option<SatPropsArg>,
     ) -> Result<Self> {
         let time: Instant = {
             // The same durations as `propagate(duration=)`: a satkit.duration,
@@ -483,15 +483,17 @@ impl PySatState {
             crate::pypropagate::check_position(&self.0.pv.as_slice()[0..3])?;
         }
 
-        let satprops_ref = satproperties
-            .as_ref()
-            .map(|s| &s.0 as &dyn satkit::orbitprop::SatProperties);
-
-        Ok(Self(self.0.propagate(
+        let res = self.0.propagate(
             &time,
             propsettings.as_ref(),
-            satprops_ref,
-        )?))
+            satproperties.as_ref().map(SatPropsArg::as_dyn),
+        );
+        // An exception raised by a satproperties subclass comes first: the
+        // propagation it interrupted is not a result
+        if let Some(p) = &satproperties {
+            p.check()?;
+        }
+        Ok(Self(res?))
     }
 
     fn __getnewargs_ex__<'a>(&self, py: Python<'a>) -> (Bound<'a, PyTuple>, Bound<'a, PyDict>) {

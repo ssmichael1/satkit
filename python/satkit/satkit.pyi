@@ -5856,6 +5856,35 @@ class satproperties:
             conventions and the "ECOM Solar Radiation Pressure" tutorial
             for a fit against IGS GPS orbits.
 
+    Subclass it to make any of these a function of time and state: override
+    ``thrust_accel`` (any additional acceleration, not only thrust),
+    ``cd_a_over_m``, ``cr_a_over_m`` or ``srp_ecom``. The propagator calls an
+    overridden method at every force evaluation; the methods a subclass leaves
+    alone are evaluated without calling into Python. An exception raised in an
+    override is raised by ``propagate``. The acceleration from
+    ``thrust_accel`` is not part of the state transition matrix.
+
+    Example:
+    ```python
+    import numpy as np
+    import satkit as sk
+
+    class Tangential(sk.satproperties):
+        # Constant acceleration along the velocity vector
+
+        def __init__(self, accel):
+            self.accel = accel
+
+        def thrust_accel(self, time, pos, vel):
+            return self.accel * vel / np.linalg.norm(vel)
+
+    r0 = sk.consts.earth_radius + 500e3
+    state = np.array([r0, 0, 0, 0, np.sqrt(sk.consts.mu_earth / r0), 0])
+    res = sk.propagate(
+        state, sk.time(2024, 1, 1), duration_secs=600, satproperties=Tangential(1e-4)
+    )
+    ```
+
     """
 
     def __init__(
@@ -5954,6 +5983,101 @@ class satproperties:
 
     @ecom.setter
     def ecom(self, value: ecomparams | None) -> None: ...
+    def cd_a_over_m(self, time: time, state: npt.NDArray[np.float64]) -> float:
+        """Drag susceptibility Cd A / m at a time and state
+
+        The propagator calls this at every force evaluation below 1,000 km.
+        The base class returns the stored ``cdaoverm``; override it in a
+        subclass to make the drag coefficient a function of time and state.
+
+        Args:
+            time (satkit.time): Time of the evaluation
+            state (npt.NDArray[np.float64]): 6-element GCRF position [m] and velocity [m/s]
+
+        Returns:
+            float: Cd A / m in m^2/kg. An override that returns a negative or
+            NaN value makes ``propagate`` raise ``ValueError``; one that does
+            not return a number, ``TypeError``
+        """
+        ...
+
+    def cr_a_over_m(self, time: time, state: npt.NDArray[np.float64]) -> float:
+        """Radiation-pressure susceptibility Cr A / m at a time and state
+
+        The propagator calls this at every force evaluation. The base class
+        returns the stored ``craoverm``; override it in a subclass to make
+        the coefficient a function of time and state.
+
+        Args:
+            time (satkit.time): Time of the evaluation
+            state (npt.NDArray[np.float64]): 6-element GCRF position [m] and velocity [m/s]
+
+        Returns:
+            float: Cr A / m in m^2/kg. An override that returns a negative or
+            NaN value makes ``propagate`` raise ``ValueError``; one that does
+            not return a number, ``TypeError``
+        """
+        ...
+
+    def srp_ecom(self, time: time, state: npt.NDArray[np.float64]) -> ecomparams | None:
+        """ECOM solar-radiation-pressure coefficients at a time and state
+
+        The base class returns the stored ``ecom``; override it in a subclass
+        to change the coefficients over the propagation (per-arc values, an
+        attitude-mode switch).
+
+        Args:
+            time (satkit.time): Time of the evaluation
+            state (npt.NDArray[np.float64]): 6-element GCRF position [m] and velocity [m/s]
+
+        Returns:
+            ecomparams | None: The coefficients, or None for no ECOM term
+        """
+        ...
+
+    def thrust_accel(
+        self, time: time, pos: npt.NDArray[np.float64], vel: npt.NDArray[np.float64]
+    ) -> npt.ArrayLike | None:
+        """Additional acceleration at a time and state, in GCRF
+
+        The propagator adds the returned vector to the acceleration at every
+        force evaluation. The base class returns the sum of the ``thrusts``
+        arcs active at ``time`` (None when there is none); override it in a
+        subclass to supply any acceleration as a function of time and state:
+        a guidance law, a solar sail, an empirical term. Call
+        ``super().thrust_accel(time, pos, vel)`` to keep the arcs as well.
+
+        The result must be in GCRF. ``satkit.frametransform.to_gcrf(frame,
+        pos, vel)`` gives the matrix that takes an RTN, NTW or LVLH vector
+        there.
+
+        Args:
+            time (satkit.time): Time of the evaluation
+            pos (npt.NDArray[np.float64]): 3-element GCRF position [m]
+            vel (npt.NDArray[np.float64]): 3-element GCRF velocity [m/s]
+
+        Returns:
+            npt.ArrayLike | None: 3-element acceleration in GCRF [m/s^2], or
+            None for no acceleration. An override that returns anything else,
+            or a non-finite value, makes ``propagate`` raise
+
+        Example:
+        ```python
+        import numpy as np
+        import satkit as sk
+
+        class Radial(sk.satproperties):
+            def thrust_accel(self, time, pos, vel):
+                # 1e-5 m/s^2 along the radial axis of the RTN frame
+                return sk.frametransform.to_gcrf(sk.frame.RTN, pos, vel) @ [1e-5, 0, 0]
+
+        r0 = sk.consts.earth_radius + 500e3
+        state = np.array([r0, 0, 0, 0, np.sqrt(sk.consts.mu_earth / r0), 0])
+        res = sk.propagate(state, sk.time(2024, 1, 1), duration_secs=600, satproperties=Radial())
+        ```
+        """
+        ...
+
     def __eq__(self, other: object) -> bool:
         """Equal when ``cdaoverm``, ``craoverm``, the thrust arcs (in order) and
         ``ecom`` are all equal. Being mutable and comparable by value, the
