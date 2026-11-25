@@ -6,7 +6,7 @@
 
 `TimeScale` has `UTC`, `TAI`, `TT`, `GPS`, `UT1` and `TDB`. Calendar constructors take UTC unless they say otherwise (`from_datetime_with_scale`), and the scale of a Julian date is always explicit: `as_mjd_with_scale`, `as_jd_with_scale`, `from_mjd_with_scale`, `from_jd_with_scale`, and the `_utc` shortcuts (`as_mjd_utc`, `from_jd_utc`, ...). UT1 uses the Earth orientation table (UT1 = UTC with a warning when it is not available).
 
-Every function in the crate that takes a time is generic over the `TimeLike` trait, implemented by `Instant` and, with the `chrono` feature, by `chrono::DateTime`.
+Every function in the crate that takes a time is generic over the `TimeLike` trait, implemented by `Instant` and, with the `chrono` or `jiff` feature, by `chrono::DateTime` or by `jiff::Timestamp` and `jiff::ZonedDateTime`.
 
 ## Parsing and formatting
 
@@ -56,6 +56,23 @@ from chrono: 2024-06-15T12:00:00.000000Z
 to chrono:   2024-06-15 13:30:00 UTC
 MJD (TT) = 60476.500801, Sun distance = 1.5196e11 m
 2016-12-31T23:59:60.500000Z -> 2016-12-31 23:59:59.500 UTC
+```
+
+## jiff interoperability
+
+With the `jiff` feature, `Instant` and `jiff::Timestamp` convert both ways with `From` / `Into`, a `jiff::ZonedDateTime` converts to an `Instant`, and either jiff type can be passed directly to any function that takes a time. jiff resolves nanoseconds and `Instant` microseconds, so a timestamp is rounded to the nearest microsecond. Like chrono, jiff has no leap seconds: `23:59:60.5` converts to `23:59:59.5`.
+
+```rust
+--8<-- "examples/jiff_interop.rs"
+```
+
+```text
+$ cargo run --example jiff_interop --features jiff
+from jiff: 2024-06-15T12:00:00.000000Z
+to jiff:   2024-06-15T13:30:00Z
+zoned:     2024-06-15T08:00:00-04:00[-04:00] -> 2024-06-15T12:00:00.000000Z
+MJD (TT) = 60476.500801, Sun distance = 1.5196e11 m
+2016-12-31T23:59:60.500000Z -> 2016-12-31T23:59:59.5Z
 ```
 
 ## See also

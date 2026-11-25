@@ -109,6 +109,8 @@
 //! - **omm-xml** (default): parses OMM XML.
 //! - **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
 //!   Activate with Cargo feature `chrono`.
+//! - **jiff**: Enables interoperability with `jiff::Timestamp` and `jiff::ZonedDateTime` by implementing the `TimeLike` trait.
+//!   Activate with Cargo feature `jiff`.
 //!
 //! See [Cargo features](https://satkit.dev/rust/#cargo-features).
 //!

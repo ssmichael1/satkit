@@ -6,7 +6,7 @@ use super::{Instant, TimeScale};
 /// for a given `TimeScale`, plus a conversion to satkit's `Instant` in UTC.
 ///
 /// This trait enables interoperability with external time types (for example
-/// `chrono::DateTime`) while preserving satkit's time-scale aware calculations.
+/// `chrono::DateTime` or `jiff::Timestamp`) while preserving satkit's time-scale aware calculations.
 ///
 /// # Examples
 ///
