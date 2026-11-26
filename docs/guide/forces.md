@@ -27,6 +27,7 @@ The force model follows the treatment in [Montenbruck & Gill (2000)](references.
 | Solid Earth tides (IERS 2010 §6.2.1 Step 1) | on | `tide_model` | $10^{-7}$ m/s² |
 | General relativity (IERS 2010 §10.3: Schwarzschild + geodesic + Lense–Thirring) | on | `use_relativistic_correction` | $10^{-9}$ m/s² (LEO) |
 | Continuous thrust | when configured | [`satproperties.thrusts`](../api/satprop.md) | user-specified |
+| User-defined (Python subclass / Rust trait, see [User-Defined Forces](#user-defined-forces)) | when a method is overridden | [`satproperties`](../api/satprop.md) methods | user-specified |
 
 The [Forces-vs-altitude plot](#forces-vs-altitude) at the bottom of this page shows how each contribution scales with orbital altitude.
 
@@ -138,6 +139,55 @@ Toggle with `use_relativistic_correction` (default `True`).
 ## Continuous Thrust
 
 Constant acceleration in a chosen frame (used to model low-thrust maneuvers or — in orbit-determination contexts — *empirical accelerations*: a fitted catch-all that absorbs un-modeled physics). See [`satkit.thrust`](../api/satprop.md) and the [GPS Example tutorial](../tutorials/GPS Example.ipynb) for usage.
+
+## User-Defined Forces
+
+In Python, subclass [`satkit.satproperties`](../api/satprop.md#satkit.satproperties) to make the drag coefficient, the radiation-pressure coefficient, the ECOM coefficients or an additional acceleration a function of time and state. In Rust, implement the `SatProperties` trait, which has the same four methods.
+
+| Method | Returns | Used for |
+|---|---|---|
+| `thrust_accel(time, pos, vel)` | 3-vector in GCRF [m/s²], or `None` | added to the acceleration as it is: any force, not only thrust |
+| `cd_a_over_m(time, state)` | $C_D A/m$ [m²/kg] | drag |
+| `cr_a_over_m(time, state)` | $C_R A/m$ [m²/kg] | cannonball radiation pressure |
+| `srp_ecom(time, state)` | `ecomparams` or `None` | ECOM radiation pressure |
+
+`pos` and `vel` are 3-element GCRF arrays and `state` is the two joined. The base-class methods return the stored `cdaoverm`, `craoverm`, `ecom` and the acceleration of the `thrusts` arcs, so an override can build on them through `super()`.
+
+```python
+import numpy as np
+import satkit as sk
+
+
+class SolarSail(sk.satproperties):
+    """Flat sail held face-on to the Sun; the Earth's shadow is ignored"""
+
+    def __init__(self, area_over_mass):
+        self.area_over_mass = area_over_mass  # m^2/kg
+
+    def thrust_accel(self, time, pos, vel):
+        to_sun = sk.sun.pos_gcrf(time) - pos
+        d = np.linalg.norm(to_sun)
+        p = sk.consts.solar_pressure_1au * (sk.consts.au / d) ** 2
+        return -2 * p * self.area_over_mass * to_sun / d
+
+
+r0 = sk.consts.geo_r
+state = np.array([r0, 0, 0, 0, np.sqrt(sk.consts.mu_earth / r0), 0])
+res = sk.propagate(
+    state, sk.time(2024, 1, 1), duration_secs=3600, satproperties=SolarSail(0.1)
+)
+```
+
+The [User-Defined Forces tutorial](../tutorials/User-Defined Forces.ipynb) works through an electric thruster whose acceleration grows as propellant is used, and checks it against the analytic spiral.
+
+Things to know:
+
+- **Frame.** `thrust_accel` must return GCRF. For a vector in RTN, NTW or LVLH, multiply by `sk.frametransform.to_gcrf(frame, pos, vel)`. A vector left in the wrong frame gives a plausible but wrong orbit.
+- **Cost.** Each overridden method is one Python call per force evaluation (the default integrator makes 16 to 21 per step), so a propagation with an override is much slower than one without. Methods a subclass does not override, and plain `satproperties`, are evaluated without calling into Python.
+- **Smoothness.** The adaptive integrators assume a smooth force. For a force that switches on or off, propagate up to the switch time and start a new propagation there, instead of switching inside the method.
+- **Errors.** An exception raised in an override is raised by `propagate` once the integrator returns. A coefficient that is negative or NaN, or an acceleration that is not a finite 3-vector, raises too.
+- **State transition matrix.** As for the built-in thrust arcs, the acceleration from `thrust_accel` contributes no partial derivatives, so the STM and a propagated covariance do not include its dependence on the state.
+- **Constructor and pickling.** A subclass can define an `__init__` with its own arguments; set `self.cdaoverm` and the other stored values there if needed. Instances pickle and copy with their attributes.
 
 ## Future Propagation
 

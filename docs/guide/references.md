@@ -122,6 +122,13 @@ code follows where that is useful.
 
 ## Papers and reports
 
+<a id="edelbaum1961"></a>
+- **Edelbaum, T. N. (1961).** "Propulsion Requirements for Controllable
+  Satellites." *ARS Journal*, 31(8), 1079–1089.
+  <https://doi.org/10.2514/8.5723>. Low-thrust transfer between circular
+  orbits: the Δv of a tangential-thrust spiral is the difference of the
+  circular speeds.
+
 <a id="hoots1980"></a>
 - **Hoots, F. R., & Roehrich, R. L. (1980).** *Models for Propagation of NORAD
   Element Sets*. Spacetrack Report No. 3, Aerospace Defense Command (reprinted

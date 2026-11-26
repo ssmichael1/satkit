@@ -2,13 +2,11 @@ use crate::pyduration::PyDuration;
 use crate::pyinstant::TimeArg;
 use crate::pypropresult::{PyPropResult, PyPropResultType};
 use crate::pypropsettings::PyPropSettings;
-use crate::pysatproperties::{satproperties_arg, PySatProperties};
+use crate::pysatproperties::{satproperties_arg, SatPropsArg};
 use crate::pyutils::*;
 use pyo3::IntoPyObjectExt;
 
 use satkit::mathtypes::*;
-use satkit::orbitprop::SatProperties;
-use satkit::orbitprop::SatPropertiesSimple;
 use satkit::Duration;
 use satkit::Instant;
 
@@ -202,10 +200,9 @@ pub fn propagate(
     #[pyo3(from_py_with = duration_days_arg)] duration_days: Option<f64>,
     #[pyo3(from_py_with = output_phi_arg)] output_phi: bool,
     #[pyo3(from_py_with = propsettings_arg)] propsettings: Option<PyPropSettings>,
-    #[pyo3(from_py_with = satproperties_arg)] satproperties: Option<PySatProperties>,
+    #[pyo3(from_py_with = satproperties_arg)] satproperties: Option<SatPropsArg>,
 ) -> Result<Py<PyAny>> {
     let propsettings = propsettings.map_or_else(Default::default, |p| p.0);
-    let satproperties: Option<SatPropertiesSimple> = satproperties.map(|p| p.0);
 
     if state.is_none() && pos.is_none() && vel.is_none() {
         return Err(pyo3::exceptions::PyTypeError::new_err(
@@ -307,9 +304,15 @@ pub fn propagate(
                 &begintime,
                 &endtime,
                 &propsettings,
-                satproperties.as_ref().map(|p| p as &dyn SatProperties),
+                satproperties.as_ref().map(SatPropsArg::as_dyn),
             )
-        })?;
+        });
+        // An exception raised by a satproperties subclass comes first: the
+        // propagation it interrupted is not a result
+        if let Some(p) = &satproperties {
+            p.check()?;
+        }
+        let res = res?;
         Ok(PyPropResult(PyPropResultType::R1(Box::new(res))).into_py_any(py)?)
     }
     // Propagate with state transition matrix
@@ -325,9 +328,15 @@ pub fn propagate(
                 &begintime,
                 &endtime,
                 &propsettings,
-                satproperties.as_ref().map(|p| p as &dyn SatProperties),
+                satproperties.as_ref().map(SatPropsArg::as_dyn),
             )
-        })?;
+        });
+        // An exception raised by a satproperties subclass comes first: the
+        // propagation it interrupted is not a result
+        if let Some(p) = &satproperties {
+            p.check()?;
+        }
+        let res = res?;
         Ok(PyPropResult(PyPropResultType::R7(Box::new(res))).into_py_any(py)?)
     }
 }
