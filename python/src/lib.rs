@@ -34,6 +34,7 @@ mod pypropsettings;
 mod pysatproperties;
 mod pythrust;
 
+mod pyoem;
 mod pyomm;
 mod pyutils;
 
@@ -233,6 +234,8 @@ pub fn satkit(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pypropresult::PyPropStats>()?;
     m.add_function(wrap_pyfunction!(pypropagate::propagate, m)?)?;
     m.add_function(wrap_pyfunction!(pylambert::lambert, m)?)?;
+    m.add_class::<pyoem::PyOEM>()?;
+    m.add_class::<pyoem::PyOEMSegment>()?;
     m.add_function(wrap_pyfunction!(pyomm::omm_from_url, m)?)?;
     m.add_function(wrap_pyfunction!(pyomm::omm_from_file, m)?)?;
     m.add_function(wrap_pyfunction!(pyomm::omm_from_text, m)?)?;

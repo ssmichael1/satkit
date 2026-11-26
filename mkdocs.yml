@@ -162,6 +162,7 @@ nav:
       - Time: api/time.md
       - Quaternion: api/quaternion.md
       - TLE & SGP4: api/tle.md
+      - OEM Ephemerides: api/oem.md
       - ITRF Coordinates: api/itrfcoord.md
       - Frame: api/frame.md
       - Frame Transforms: api/frametransform.md

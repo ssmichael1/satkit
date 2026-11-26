@@ -82,6 +82,7 @@
 //! - Keplerian orbital elements and conversions
 //! - Geodesic distance calculations
 //! - TLE parsing, generation, and orbit fitting
+//! - CCSDS OMM (mean elements) and OEM (ephemeris) message readers
 //!
 //! ## Language Bindings
 //!
@@ -106,7 +107,9 @@
 //!
 //! - **download** (default): downloads data files on first use, and
 //!   provides `utils::update_datafiles`, `TLE::from_url` and `OMM::from_url`.
-//! - **omm-xml** (default): parses OMM XML.
+//! - **omm-xml** (default): parses OMM XML, and OEM XML when `oem` is on.
+//! - **oem** (default): the [`oem`] module, a reader and interpolator for CCSDS
+//!   Orbit Ephemeris Messages.
 //! - **chrono**: Enables interoperability with `chrono::DateTime` by implementing the `TimeLike` trait.
 //!   Activate with Cargo feature `chrono`.
 //! - **jiff**: Enables interoperability with `jiff::Timestamp` and `jiff::ZonedDateTime` by implementing the `TimeLike` trait.
@@ -227,6 +230,10 @@ pub mod frames;
 // Orbital Mean-Element Messages
 pub mod omm;
 
+// CCSDS Orbit Ephemeris Messages: tabulated position and velocity
+#[cfg(feature = "oem")]
+pub mod oem;
+
 // Time and duration
 mod time;
 pub use time::{
@@ -266,6 +273,8 @@ pub mod prelude {
     pub use crate::itrfcoord::{Geodetic, ITRFCoord};
     pub use crate::kepler::{Anomaly, Kepler};
     pub use crate::lambert::lambert;
+    #[cfg(feature = "oem")]
+    pub use crate::oem::OEM;
     pub use crate::omm::OMM;
     pub use crate::solarsystem::SolarSystem;
     pub use crate::tle::TLE;

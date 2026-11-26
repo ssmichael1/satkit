@@ -1,5 +1,5 @@
 from .satkit import *
-from ._types import OMMDict, TLEFitResult
+from ._types import OEMCovariance, OMMDict, TLEFitResult
 
 from . import jplephem
 from . import frametransform
@@ -59,6 +59,9 @@ __all__ = [
     "omm_from_file",
     "omm_from_text",
     "OMMDict",
+    "OEM",
+    "OEMSegment",
+    "OEMCovariance",
     "TLEFitResult",
     "tlefitstatus",
     "__version__",

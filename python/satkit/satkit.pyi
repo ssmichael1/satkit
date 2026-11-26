@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from typing import Any, ClassVar, Final, Literal, Optional, TypeAlias, Union, final, overload
 from typing_extensions import deprecated
 
-from ._types import OMMDict, TLEFitResult
+from ._types import OEMCovariance, OMMDict, TLEFitResult
 
 # Time inputs are polymorphic: a function or method argument annotated with one
 # of these aliases takes a ``satkit.time``, a ``datetime.datetime`` or a
@@ -6670,6 +6670,446 @@ def propagate(
         ```
     """
     ...
+
+@final
+class OEM:
+    """CCSDS Orbit Ephemeris Message (OEM): a tabulated trajectory
+
+    An OEM is a table of position and velocity vectors of one object at a
+    sequence of times, with the reference frame, central body and time system
+    they are expressed in ([CCSDS 502.0-B](https://ccsds.org/Pubs/502x0b3e1.pdf)).
+    It is the usual format for exchanging ephemerides between operators and
+    agencies: NASA publishes the ISS trajectory as one, and Space-Track
+    accepts operator ephemerides in it.
+
+    Load one with ``OEM.from_file`` or ``OEM.from_text``; both read the KVN
+    (text) and XML encodings of message versions 1.0 to 3.0. The message is a
+    list of ``segments`` (``OEMSegment``), each with its own metadata and
+    states, and ``interp`` interpolates the state at any time a segment covers.
+    ``len(oem)`` is the number of segments.
+
+    The file gives kilometers and km/s; satkit returns **meters and m/s**, as
+    everywhere else. States stay in the frame the file names
+    (``OEMSegment.ref_frame``): nothing is rotated on reading. Epochs are
+    read in the segment's ``TIME_SYSTEM`` (UTC, TAI, TT, GPS, TDB or UT1) and
+    are ordinary ``satkit.time`` objects.
+
+    Example:
+        ```python
+        oem = satkit.OEM.from_text(
+            "CCSDS_OEM_VERS = 2.0\\n"
+            "CREATION_DATE = 2024-01-01T00:00:00\\n"
+            "ORIGINATOR = EXAMPLE\\n"
+            "META_START\\n"
+            "OBJECT_NAME = DEMOSAT\\n"
+            "OBJECT_ID = 2024-001A\\n"
+            "CENTER_NAME = EARTH\\n"
+            "REF_FRAME = EME2000\\n"
+            "TIME_SYSTEM = UTC\\n"
+            "START_TIME = 2024-01-01T00:00:00\\n"
+            "STOP_TIME = 2024-01-01T00:02:00\\n"
+            "META_STOP\\n"
+            "2024-01-01T00:00:00 7000.000    0.000 0.0  0.000000 7.546053 0.0\\n"
+            "2024-01-01T00:01:00 6985.363  452.448 0.0 -0.487742 7.530274 0.0\\n"
+            "2024-01-01T00:02:00 6941.512  903.003 0.0 -0.973444 7.483003 0.0\\n"
+        )
+        seg = oem.segments[0]
+        print(seg.object_name, seg.ref_frame, len(seg))
+        # DEMOSAT EME2000 3
+        state = oem.interp(satkit.time(2024, 1, 1, 0, 0, 30))
+        print(state[:3] / 1e3)  # position, km
+        # [6996.34...  226.34...    0.  ]
+        ```
+    """
+
+    @staticmethod
+    def from_file(filename: str | os.PathLike[str]) -> OEM:
+        """Load an OEM from a file
+
+        The encoding (KVN or XML) is detected from the content, not the file
+        extension, as ``from_text`` does.
+
+        Args:
+            filename: Path of the file
+
+        Returns:
+            OEM: the message
+
+        Raises:
+            FileNotFoundError: if the file does not exist; the exception names
+                the path. Another I/O failure raises the matching ``OSError``
+            ValueError: if the content is not a valid OEM (see ``from_text``)
+        """
+        ...
+
+    @staticmethod
+    def from_text(text: str) -> OEM:
+        """Parse an OEM from text
+
+        Text starting with ``CCSDS_OEM_VERS`` is read as KVN, text starting
+        with ``<`` as XML (a bare ``<oem>`` message, or the one inside an
+        ``<ndm>`` wrapper).
+
+        Args:
+            text: The content of an OEM file
+
+        Returns:
+            OEM: the message
+
+        Raises:
+            ValueError: if the text is neither encoding, a keyword does not
+                belong where it is, a mandatory keyword is missing, a value
+                cannot be read, a segment has no states or its epochs are not
+                strictly increasing, or ``TIME_SYSTEM`` is not one of UTC, TAI,
+                TT, GPS, TDB or UT1. For KVN the message gives the line
+        """
+        ...
+
+    @property
+    def version(self) -> str:
+        """``CCSDS_OEM_VERS``: version of the message format, e.g. ``"2.0"``"""
+        ...
+
+    @property
+    def comments(self) -> list[str]:
+        """``COMMENT`` lines of the header"""
+        ...
+
+    @property
+    def classification(self) -> str | None:
+        """``CLASSIFICATION`` of the header (version 3), or None"""
+        ...
+
+    @property
+    def creation_date(self) -> time:
+        """``CREATION_DATE``: when the message was written (UTC)"""
+        ...
+
+    @property
+    def originator(self) -> str:
+        """``ORIGINATOR``: who produced the message"""
+        ...
+
+    @property
+    def message_id(self) -> str | None:
+        """``MESSAGE_ID`` of the header (version 3), or None"""
+        ...
+
+    @property
+    def segments(self) -> list[OEMSegment]:
+        """The segments of the message, in file order; at least one"""
+        ...
+
+    @typing.overload
+    def interp(
+        self,
+        time: TimeScalar,
+        *,
+        method: typing.Literal["lagrange", "hermite"] | None = None,
+        degree: int | None = None,
+    ) -> npt.NDArray[np.float64]:
+        """Interpolate the state at a single time
+
+        Each time is interpolated in the first segment whose usable span
+        holds it, and the state is in that segment's frame. Segments are
+        never interpolated across, so a time in a gap between two of them is
+        out of range.
+
+        With no ``method`` or ``degree`` the interpolation is the one the file
+        recommends (``OEMSegment.interpolation`` and
+        ``interpolation_degree``). A file that names no method gets Hermite,
+        which uses the velocities and so holds its accuracy on sparse
+        ephemerides, and a missing degree is 7. A segment with fewer points
+        than the degree asks for uses all of them.
+
+        Args:
+            time: Time at which to interpolate
+            method: ``"lagrange"`` (a polynomial through ``degree + 1`` points,
+                position and velocity separately) or ``"hermite"`` (a polynomial
+                matching position and velocity at ``(degree + 1) / 2`` points).
+                Default: the file's, or Hermite if it names none
+            degree: Degree of the polynomial, at least 1. Default: the file's, or 7
+
+        Returns:
+            npt.NDArray[np.float64]: 6-element state [x, y, z, vx, vy, vz] in meters and m/s
+
+        Raises:
+            ValueError: if a time is outside every segment's usable span, the file
+                names an interpolation method satkit does not have and ``method``
+                is not given, ``method`` is not one of the two names, or
+                ``degree`` is 0
+            TypeError: if time is not a time or a list, tuple or 1-D array of times
+        """
+        ...
+
+    @typing.overload
+    def interp(
+        self,
+        time: TimeArrayLike,
+        *,
+        method: typing.Literal["lagrange", "hermite"] | None = None,
+        degree: int | None = None,
+    ) -> npt.NDArray[np.float64]:
+        """Interpolate the state at multiple times
+
+        Each time is interpolated in the first segment whose usable span
+        holds it, and the state is in that segment's frame. Segments are
+        never interpolated across, so a time in a gap between two of them is
+        out of range.
+
+        With no ``method`` or ``degree`` the interpolation is the one the file
+        recommends (``OEMSegment.interpolation`` and
+        ``interpolation_degree``). A file that names no method gets Hermite,
+        which uses the velocities and so holds its accuracy on sparse
+        ephemerides, and a missing degree is 7. A segment with fewer points
+        than the degree asks for uses all of them.
+
+        Args:
+            time: List or 1-D array of times at which to interpolate
+            method: ``"lagrange"`` (a polynomial through ``degree + 1`` points,
+                position and velocity separately) or ``"hermite"`` (a polynomial
+                matching position and velocity at ``(degree + 1) / 2`` points).
+                Default: the file's, or Hermite if it names none
+            degree: Degree of the polynomial, at least 1. Default: the file's, or 7
+
+        Returns:
+            npt.NDArray[np.float64]: (N, 6) array, one row [x, y, z, vx, vy, vz] in meters and m/s
+                per input time ((0, 6) for an empty list)
+
+        Raises:
+            ValueError: if a time is outside every segment's usable span, the file
+                names an interpolation method satkit does not have and ``method``
+                is not given, ``method`` is not one of the two names, or
+                ``degree`` is 0
+            TypeError: if time is not a time or a list, tuple or 1-D array of times
+        """
+        ...
+
+    def __len__(self) -> int:
+        """Number of segments"""
+        ...
+
+@final
+class OEMSegment:
+    """One segment of an OEM: a metadata block and the states under it
+
+    Obtained from ``OEM.segments``. A producer starts a new segment where the
+    states must not be interpolated across: a maneuver, or a change of frame
+    or central body.
+
+    Positions are in meters, velocities in m/s and accelerations in m/s², in
+    the frame ``ref_frame`` centered on ``center_name``. ``len(segment)`` is
+    the number of states.
+    """
+
+    @property
+    def object_name(self) -> str:
+        """``OBJECT_NAME``"""
+        ...
+
+    @property
+    def object_id(self) -> str:
+        """``OBJECT_ID``, normally the international designator (``"1998-067A"``)"""
+        ...
+
+    @property
+    def center_name(self) -> str:
+        """``CENTER_NAME``: the origin of the frame, e.g. ``"EARTH"``"""
+        ...
+
+    @property
+    def ref_frame(self) -> str:
+        """``REF_FRAME`` as written, e.g. ``"EME2000"``, ``"ITRF2000"``, ``"TEME"``"""
+        ...
+
+    @property
+    def frame(self) -> _Frame | None:
+        """The ``satkit.frame`` that ``ref_frame`` names, or None
+
+        ``EME2000``, ``GCRF``, ``ICRF`` and ``TEME`` map to the frame of the
+        same name and every ITRF realization (``ITRF2000``, ``ITRF-93``, ...)
+        to ``satkit.frame.ITRF``, satkit making no distinction between them.
+        Other frames (``TOD``, ``MCI``, ...) give None. The name alone does
+        not make the states Earth-centered: check ``center_name`` too.
+        """
+        ...
+
+    @property
+    def ref_frame_epoch(self) -> _Time | None:
+        """``REF_FRAME_EPOCH``: epoch of the frame, or None"""
+        ...
+
+    @property
+    def time_system(self) -> str:
+        """``TIME_SYSTEM`` as written, e.g. ``"UTC"``"""
+        ...
+
+    @property
+    def time_scale(self) -> timescale:
+        """The ``satkit.timescale`` that ``time_system`` names
+
+        Every epoch of the segment was read in it.
+        """
+        ...
+
+    @property
+    def start_time(self) -> _Time:
+        """``START_TIME``: epoch of the first state"""
+        ...
+
+    @property
+    def stop_time(self) -> _Time:
+        """``STOP_TIME``: epoch of the last state"""
+        ...
+
+    @property
+    def useable_start_time(self) -> _Time | None:
+        """``USEABLE_START_TIME``, or None
+
+        Start of the span the producer says is fit for interpolation.
+        """
+        ...
+
+    @property
+    def useable_stop_time(self) -> _Time | None:
+        """``USEABLE_STOP_TIME``: end of that span, or None"""
+        ...
+
+    @property
+    def usable_span(self) -> tuple[_Time, _Time]:
+        """The span ``interp`` accepts, as (start, stop)
+
+        The ``USEABLE_START_TIME`` to ``USEABLE_STOP_TIME`` span where the
+        file gives one, and never past the first and last state.
+        """
+        ...
+
+    @property
+    def interpolation(self) -> str | None:
+        """``INTERPOLATION`` as written, or None
+
+        The method the producer recommends: ``"LAGRANGE"``, ``"HERMITE"``, ...
+        """
+        ...
+
+    @property
+    def interpolation_degree(self) -> int | None:
+        """``INTERPOLATION_DEGREE``, or None"""
+        ...
+
+    @property
+    def metadata_comments(self) -> list[str]:
+        """``COMMENT`` lines of the metadata block"""
+        ...
+
+    @property
+    def comments(self) -> list[str]:
+        """``COMMENT`` lines at the start of the ephemeris data"""
+        ...
+
+    @property
+    def time(self) -> list[_Time]:
+        """Epochs of the states, in increasing order"""
+        ...
+
+    @property
+    def pos(self) -> npt.NDArray[np.float64]:
+        """Positions, an (N, 3) array in meters"""
+        ...
+
+    @property
+    def vel(self) -> npt.NDArray[np.float64]:
+        """Velocities, an (N, 3) array in m/s"""
+        ...
+
+    @property
+    def acc(self) -> npt.NDArray[np.float64] | None:
+        """Accelerations, an (N, 3) array in m/s², or None
+
+        None unless every state of the segment gives one.
+        """
+        ...
+
+    @property
+    def covariances(self) -> list[OEMCovariance]:
+        """Covariance matrices of the segment (empty if it has none)
+
+        Each is a dictionary with the keys ``time``, ``ref_frame``, ``cov``
+        (a symmetric (6, 6) array in m², m²/s and m²/s²) and ``comments``;
+        see ``OEMCovariance``.
+        """
+        ...
+
+    @typing.overload
+    def interp(
+        self,
+        time: TimeScalar,
+        *,
+        method: typing.Literal["lagrange", "hermite"] | None = None,
+        degree: int | None = None,
+    ) -> npt.NDArray[np.float64]:
+        """Interpolate the state at a single time within the segment
+
+        As ``OEM.interp``, restricted to this segment: a time outside
+        ``usable_span`` is a ``ValueError``.
+
+        Args:
+            time: Time at which to interpolate
+            method: ``"lagrange"`` (a polynomial through ``degree + 1`` points,
+                position and velocity separately) or ``"hermite"`` (a polynomial
+                matching position and velocity at ``(degree + 1) / 2`` points).
+                Default: the file's, or Hermite if it names none
+            degree: Degree of the polynomial, at least 1. Default: the file's, or 7
+
+        Returns:
+            npt.NDArray[np.float64]: 6-element state [x, y, z, vx, vy, vz] in meters and m/s
+
+        Raises:
+            ValueError: if a time is outside ``usable_span``, the file
+                names an interpolation method satkit does not have and ``method``
+                is not given, ``method`` is not one of the two names, or
+                ``degree`` is 0
+            TypeError: if time is not a time or a list, tuple or 1-D array of times
+        """
+        ...
+
+    @typing.overload
+    def interp(
+        self,
+        time: TimeArrayLike,
+        *,
+        method: typing.Literal["lagrange", "hermite"] | None = None,
+        degree: int | None = None,
+    ) -> npt.NDArray[np.float64]:
+        """Interpolate the state at multiple times within the segment
+
+        As ``OEM.interp``, restricted to this segment: a time outside
+        ``usable_span`` is a ``ValueError``.
+
+        Args:
+            time: List or 1-D array of times at which to interpolate
+            method: ``"lagrange"`` (a polynomial through ``degree + 1`` points,
+                position and velocity separately) or ``"hermite"`` (a polynomial
+                matching position and velocity at ``(degree + 1) / 2`` points).
+                Default: the file's, or Hermite if it names none
+            degree: Degree of the polynomial, at least 1. Default: the file's, or 7
+
+        Returns:
+            npt.NDArray[np.float64]: (N, 6) array, one row [x, y, z, vx, vy, vz] in meters and m/s
+                per input time ((0, 6) for an empty list)
+
+        Raises:
+            ValueError: if a time is outside ``usable_span``, the file
+                names an interpolation method satkit does not have and ``method``
+                is not given, ``method`` is not one of the two names, or
+                ``degree`` is 0
+            TypeError: if time is not a time or a list, tuple or 1-D array of times
+        """
+        ...
+
+    def __len__(self) -> int:
+        """Number of states"""
+        ...
 
 def omm_from_url(url: str) -> list[dict[str, Any]]:
     """Load OMM(s) from a URL as a list of dictionaries
