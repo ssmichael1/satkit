@@ -6,7 +6,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 
 ### Added
 
-- Python: `satkit.satproperties` can be subclassed to supply drag, radiation-pressure and ECOM coefficients and an arbitrary additional acceleration as functions of time and state (`cd_a_over_m`, `cr_a_over_m`, `srp_ecom`, `thrust_accel`), for `satkit.propagate` and `satstate.propagate` ([#301](https://github.com/ssmichael1/satkit/pull/301))
+- Python: `satkit.satproperties` can be subclassed to supply drag, radiation-pressure and ECOM coefficients and an arbitrary additional acceleration as functions of time and state (`cd_a_over_m`, `cr_a_over_m`, `srp_ecom`, `thrust_accel`), for `satkit.propagate` and `satstate.propagate`; new "User-Defined Forces" tutorial ([#301](https://github.com/ssmichael1/satkit/pull/301))
 
 ### Changed
 

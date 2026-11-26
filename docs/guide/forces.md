@@ -178,6 +178,8 @@ res = sk.propagate(
 )
 ```
 
+The [User-Defined Forces tutorial](../tutorials/User-Defined Forces.ipynb) works through an electric thruster whose acceleration grows as propellant is used, and checks it against the analytic spiral.
+
 Things to know:
 
 - **Frame.** `thrust_accel` must return GCRF. For a vector in RTN, NTW or LVLH, multiply by `sk.frametransform.to_gcrf(frame, pos, vel)`. A vector left in the wrong frame gives a plausible but wrong orbit.

@@ -41,6 +41,7 @@ High-fidelity force-model propagation with Runge-Kutta and Gauss-Jackson integra
 | [GPS Example](GPS%20Example.ipynb) | GPS orbit fit against ESA SP3 truth, integrator comparison |
 | [ECOM Solar Radiation Pressure](ECOM%20Solar%20Radiation%20Pressure.ipynb) | ECOM fit to IGS GPS orbits, 30-day prediction and constellation benchmark |
 | [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Impulsive maneuvers, frame choice, low-thrust orbit raising |
+| [User-Defined Forces](User-Defined%20Forces.ipynb) | Subclassing `satproperties`: an electric thruster with propellant use, checked against the analytic spiral |
 
 ## Applications
 
