@@ -163,6 +163,7 @@ numeris = { version = "0.6", features = ["nalgebra"] }
 | `omm-xml` | yes | XML OMM deserialization via `quick-xml` |
 | `download` | yes | Data-file downloader (`update_datafiles`) via `ureq` |
 | `chrono` | no | `TimeLike` impl for `chrono::DateTime` |
+| `jiff` | no | `TimeLike` impl for `jiff::Timestamp` and `jiff::ZonedDateTime` |
 
 ## Testing and Validation
 

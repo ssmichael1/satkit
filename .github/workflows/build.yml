@@ -172,7 +172,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Test
-        run: cargo test --features chrono
+        run: cargo test --features chrono,jiff
 
       # The build without the default features (no downloader, no OMM XML)
       # must pass its own unit tests, not just compile.
@@ -189,7 +189,7 @@ jobs:
         run: |
           d="$SATKIT_TESTVEC_ROOT/jplephem"
           if [ -f "$d/lnxp1900p2053.421" ] && [ -f "$d/testpo.421" ]; then
-            cargo test --features chrono --test jplephem_de421_testpo -- --ignored
+            cargo test --features chrono,jiff --test jplephem_de421_testpo -- --ignored
           else
             echo "::warning title=DE421 test not run::jplephem/lnxp1900p2053.421 and jplephem/testpo.421 are not in the test-vector bucket; tests/jplephem_de421_testpo.rs stays ignored until they are uploaded and listed in files.json."
           fi
@@ -204,8 +204,8 @@ jobs:
           SATKIT_OFFLINE: "1"
         run: |
           mkdir -p "$SATKIT_DATA"
-          cargo test --features chrono --lib offline_
-          cargo test --features chrono --test offline_smoke
+          cargo test --features chrono,jiff --lib offline_
+          cargo test --features chrono,jiff --test offline_smoke
 
       - name: Doc
         # Identical output on every OS; once is enough.

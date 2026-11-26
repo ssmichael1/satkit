@@ -34,7 +34,9 @@ sha2 = "0.10"
 # Inflates the compiled-in core data files (pure-Rust miniz_oxide backend).
 flate2 = "1"
 quick-xml = { version = "0.41", features = ["serialize"], optional = true }
-chrono = { version = "0.4", optional = true }
+# Interop only (`DateTime` conversions): no clock, time-zone database or wasm glue.
+chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
+jiff = { version = "1", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 anyhow = "1"
@@ -53,10 +55,15 @@ harness = false
 name = "chrono_interop"
 required-features = ["chrono"]
 
+[[example]]
+name = "jiff_interop"
+required-features = ["jiff"]
+
 [features]
 default = ["omm-xml", "download"]
 omm-xml = ["dep:quick-xml"]
 chrono = ["dep:chrono"]
+jiff = ["dep:jiff"]
 download = ["dep:ureq"]
 
 [workspace.metadata.release]
