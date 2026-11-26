@@ -2,6 +2,8 @@
 
 API reference for the reader of CCSDS Orbit Ephemeris Messages: tables of position and velocity at a sequence of times, as exchanged between operators and agencies ([CCSDS 502.0-B-3](../guide/references.md#ccsds502)).
 
+For a worked example, see the [Orbit Ephemeris Message](../tutorials/Orbit Ephemeris Message.ipynb) tutorial.
+
 An OEM differs from the [OMM](tle.md) of the same standard: an OMM is one set of mean elements that needs SGP4 to give a state, while an OEM is the trajectory itself and is only interpolated.
 
 - `OEM.from_file` and `OEM.from_text` read the KVN (text) and XML encodings, message versions 1.0 to 3.0.

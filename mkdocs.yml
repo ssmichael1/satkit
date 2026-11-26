@@ -144,6 +144,7 @@ nav:
           - "GPS Example": tutorials/GPS Example.ipynb
           - ECOM Solar Radiation Pressure: tutorials/ECOM Solar Radiation Pressure.ipynb
           - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
+          - Orbit Ephemeris Message: tutorials/Orbit Ephemeris Message.ipynb
       - Applications:
           - Plots: tutorials/Plots.ipynb
           - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
