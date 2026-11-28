@@ -33,7 +33,7 @@ Python API documentation for satkit, auto-generated from type stubs.
 | [`TLEFitResult`](tle.md#satkit.TLEFitResult) | The fit summary returned by `TLE.fit_from_states` |
 | [`omm_from_url`, `omm_from_file`, `omm_from_text`](tle.md#satkit.omm_from_url) | Read OMMs (JSON, XML, CSV) as dictionaries |
 | [`TLEWarning`](tle.md#satkit.TLEWarning) | Warning for a TLE record skipped with `on_error="warn"` |
-| [`OEM`](oem.md), [`OEMSegment`](oem.md#satkit.OEMSegment) | CCSDS Orbit Ephemeris Message reader and interpolator |
+| [`OEM`](oem.md), [`OEMSegment`](oem.md#satkit.OEMSegment) | CCSDS Orbit Ephemeris Message reader, writer and interpolator |
 | [`OEMCovariance`](oem.md#satkit.OEMCovariance) | The keys of an OEM covariance dictionary |
 | [`propagate`](satprop.md) | High-precision numerical orbit propagation |
 | [`propresult`](satprop.md#satkit.propresult) | Propagation result: final state, dense-output interpolation, statistics |

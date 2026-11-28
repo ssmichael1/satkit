@@ -6688,6 +6688,9 @@ class OEM:
     states, and ``interp`` interpolates the state at any time a segment covers.
     ``len(oem)`` is the number of segments.
 
+    ``OEM.from_propagation`` makes one from the result of ``satkit.propagate``,
+    and ``to_text`` and ``to_file`` write a message in the KVN encoding.
+
     The file gives kilometers and km/s; satkit returns **meters and m/s**, as
     everywhere else. States stay in the frame the file names
     (``OEMSegment.ref_frame``): nothing is rotated on reading. Epochs are
@@ -6762,6 +6765,92 @@ class OEM:
                 cannot be read, a segment has no states or its epochs are not
                 strictly increasing, or ``TIME_SYSTEM`` is not one of UTC, TAI,
                 TT, GPS, TDB or UT1. For KVN the message gives the line
+        """
+        ...
+
+    @staticmethod
+    def from_propagation(
+        result: propresult,
+        step: duration | datetime.timedelta | float,
+        *,
+        object_name: str,
+        object_id: str,
+        originator: str = "SATKIT",
+    ) -> OEM:
+        """An OEM of the trajectory of a high-precision propagation
+
+        The message has one segment, in the GCRF with UTC epochs, holding the
+        state at the earlier end of the propagation, every ``step`` after it,
+        and the later end (so the last interval is shorter when ``step`` does
+        not divide the span). The two end states are the propagation's own;
+        the others come from its dense output. The metadata recommends Hermite
+        interpolation of degree 7, which is what ``interp`` then uses. A state
+        transition matrix in the result is not written.
+
+        Args:
+            result: The result of ``satkit.propagate``. It must carry dense
+                output (``result.can_interp``), which it does unless
+                ``propsettings.enable_interp`` was turned off
+            step: Time between states; a number is seconds
+            object_name: ``OBJECT_NAME`` of the segment
+            object_id: ``OBJECT_ID`` of the segment, normally the international
+                designator (``"1998-067A"``)
+            originator: ``ORIGINATOR`` of the message: who made it
+
+        Returns:
+            OEM: the message
+
+        Raises:
+            ValueError: if ``step`` is not positive, or the result has no dense
+                output to sample
+            TypeError: if ``step`` is not a duration, a timedelta or a number
+
+        Example:
+            ```python
+            t0 = satkit.time(2024, 1, 1)
+            r = 42164.0e3
+            v = np.sqrt(satkit.consts.mu_earth / r)
+            result = satkit.propagate(
+                np.array([r, 0, 0, 0, v, 0]), t0, t0 + satkit.duration(hours=6)
+            )
+            oem = satkit.OEM.from_propagation(
+                result, 300, object_name="DEMOSAT", object_id="2024-001A"
+            )
+            print(len(oem.segments[0]))
+            # 73
+            print(oem.to_text().splitlines()[0])
+            # CCSDS_OEM_VERS = 2.0
+            ```
+        """
+        ...
+
+    def to_text(self) -> str:
+        """The message as text in the KVN ("keyword = value") encoding
+
+        Positions and velocities are written in the kilometers and km/s of the
+        format, to the micrometer and the nanometer per second, and epochs to
+        the microsecond in each segment's time system. Comments and
+        covariances are kept. A message read from XML is written as KVN too.
+
+        Returns:
+            str: the content of an OEM file, which ``OEM.from_text`` reads back
+
+        Raises:
+            ValueError: if the message holds a value that is not finite
+        """
+        ...
+
+    def to_file(self, filename: str | os.PathLike[str]) -> None:
+        """Write the message to a file in the KVN encoding
+
+        The content is that of ``to_text``. An existing file is replaced.
+
+        Args:
+            filename: Path of the file to write
+
+        Raises:
+            OSError: if the file cannot be written; the exception names the path
+            ValueError: if the message holds a value that is not finite
         """
         ...
 

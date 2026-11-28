@@ -41,7 +41,7 @@ High-fidelity force-model propagation with Runge-Kutta and Gauss-Jackson integra
 | [GPS Example](GPS%20Example.ipynb) | GPS orbit fit against ESA SP3 truth, integrator comparison |
 | [ECOM Solar Radiation Pressure](ECOM%20Solar%20Radiation%20Pressure.ipynb) | ECOM fit to IGS GPS orbits, 30-day prediction and constellation benchmark |
 | [Orbit Maneuvers](Orbit%20Maneuvers.ipynb) | Impulsive maneuvers, frame choice, low-thrust orbit raising |
-| [Orbit Ephemeris Message](Orbit%20Ephemeris%20Message.ipynb) | Reading CCSDS OEM ephemerides, interpolating them, segments and covariance |
+| [Orbit Ephemeris Message](Orbit%20Ephemeris%20Message.ipynb) | Writing a propagation as a CCSDS OEM, reading and interpolating ephemerides, segments and covariance |
 
 ## Applications
 
