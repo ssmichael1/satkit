@@ -60,8 +60,9 @@ name = "jiff_interop"
 required-features = ["jiff"]
 
 [features]
-default = ["omm-xml", "download"]
+default = ["omm-xml", "oem", "download"]
 omm-xml = ["dep:quick-xml"]
+oem = []
 chrono = ["dep:chrono"]
 jiff = ["dep:jiff"]
 download = ["dep:ureq"]

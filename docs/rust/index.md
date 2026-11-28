@@ -23,6 +23,7 @@ satkit builds on stable Rust. Its linear-algebra types (`Vector3`, `Matrix3`, `Q
 |---|---|---|
 | `download` | on | HTTP(S) downloads through `ureq`: fetching data files on first use, `utils::update_datafiles`, `TLE::from_url` and `OMM::from_url`. Without it, data files must already be on disk ([Provisioning up front](../getting-started/datadirs.md#provisioning-up-front)) and the URL loaders are not compiled |
 | `omm-xml` | on | Parsing OMM XML (`OMM::from_xml_string`, `from_xml_file`, and XML in `OMM::from_text` / `from_file`) through `quick-xml`. OMM JSON and CSV need no feature |
+| `oem` | on | The `oem` module: reading CCSDS Orbit Ephemeris Messages (KVN, and XML when `omm-xml` is also on) and interpolating their states. No extra dependencies |
 | `chrono` | off | Interoperability with [chrono](https://crates.io/crates/chrono): `From` conversions between `Instant` and `chrono::DateTime`, and `TimeLike` for `chrono::DateTime`, so chrono times can be passed to every satkit function that takes a time |
 | `jiff` | off | Interoperability with [jiff](https://crates.io/crates/jiff): `From` conversions between `Instant` and `jiff::Timestamp` (and from `jiff::ZonedDateTime`), and `TimeLike` for both, so jiff times can be passed to every satkit function that takes a time |
 

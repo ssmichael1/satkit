@@ -144,6 +144,7 @@ nav:
           - "GPS Example": tutorials/GPS Example.ipynb
           - ECOM Solar Radiation Pressure: tutorials/ECOM Solar Radiation Pressure.ipynb
           - Orbit Maneuvers: tutorials/Orbit Maneuvers.ipynb
+          - Orbit Ephemeris Message: tutorials/Orbit Ephemeris Message.ipynb
       - Applications:
           - Plots: tutorials/Plots.ipynb
           - Satellite Ground Contacts: tutorials/Satellite Ground Contacts.ipynb
@@ -162,6 +163,7 @@ nav:
       - Time: api/time.md
       - Quaternion: api/quaternion.md
       - TLE & SGP4: api/tle.md
+      - OEM Ephemerides: api/oem.md
       - ITRF Coordinates: api/itrfcoord.md
       - Frame: api/frame.md
       - Frame Transforms: api/frametransform.md

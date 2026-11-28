@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
     from .satkit import time, tlefitstatus
 
-__all__ = ["OMMDict", "TLEFitResult"]
+__all__ = ["OEMCovariance", "OMMDict", "TLEFitResult"]
 
 
 class OMMDict(TypedDict, total=False):
@@ -107,3 +107,21 @@ class TLEFitResult(TypedDict):
     """Number of iterations taken"""
     n_res_evals: int
     """Number of residual evaluations (SGP4 runs over all the states)"""
+
+
+class OEMCovariance(TypedDict):
+    """A covariance matrix of an OEM segment, an item of ``OEMSegment.covariances``
+
+    An ordinary ``dict`` (this class exists for type checking only).
+    """
+
+    time: time
+    """Epoch of the covariance"""
+    ref_frame: str | None
+    """``COV_REF_FRAME``: the frame of the matrix (for example ``"RTN"``), or
+    None for the segment's ``ref_frame``"""
+    cov: np.ndarray
+    """Symmetric (6, 6) covariance of [x, y, z, vx, vy, vz]: m² in the position
+    block, m²/s in the cross blocks and m²/s² in the velocity block"""
+    comments: list[str]
+    """``COMMENT`` lines of the covariance"""

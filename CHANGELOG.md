@@ -7,6 +7,7 @@ Only recent releases are listed. Older entries are in this file's git history (`
 ### Added
 
 - Rust: `jiff` feature (off by default) with `From` conversions between `Instant` and `jiff::Timestamp`, from `jiff::ZonedDateTime`, and `TimeLike` for both; the `chrono` feature no longer enables chrono's default features, dropping `iana-time-zone`, `js-sys` and `wasm-bindgen` from the dependency tree ([#302](https://github.com/ssmichael1/satkit/pull/302))
+- CCSDS Orbit Ephemeris Message (OEM) reader: `satkit.OEM.from_file` / `from_text` (Rust `satkit::oem::OEM`, behind the new default-on `oem` Cargo feature) read the KVN and XML encodings, with segments, metadata, states in meters and m/s, covariances, and Lagrange / Hermite interpolation; new tutorial *Orbit Ephemeris Message* ([#303](https://github.com/ssmichael1/satkit/pull/303))
 
 ### Changed
 
