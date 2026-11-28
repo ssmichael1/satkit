@@ -121,7 +121,7 @@ Plus satellite-local RTN, NTW, and LVLH frames (maneuvers, covariance), and ENU,
 
 - **Numerical** -- Selectable adaptive Runge-Kutta integrators (9(8), 8(7), 6(5), 5(4)) plus RODAS4 (stiff) and Gauss-Jackson 8 (fixed-step multistep for high-precision long-duration propagation), with dense output, state transition matrix, and configurable force models. With matched force models it agrees with NASA GMAT to a few centimetres over 7 days in LEO, MEO, and GEO (see [Testing and Validation](#testing-and-validation))
 - **SGP4** -- Standard TLE/OMM propagator with TLE fitting from precision states
-- **OEM** -- CCSDS Orbit Ephemeris Message reader (KVN and XML) with Lagrange / Hermite interpolation
+- **OEM** -- CCSDS Orbit Ephemeris Message reader (KVN and XML) with Lagrange / Hermite interpolation, and KVN writer, including straight from a propagation
 - **Keplerian** -- Analytical two-body propagation
 
 ### Orbit Maneuvers
@@ -162,7 +162,7 @@ numeris = { version = "0.6", features = ["nalgebra"] }
 | Feature | Default | Description |
 |---------|---------|-------------|
 | `omm-xml` | yes | XML OMM deserialization via `quick-xml` |
-| `oem` | yes | CCSDS Orbit Ephemeris Message reader (`satkit::oem`) |
+| `oem` | yes | CCSDS Orbit Ephemeris Message reader and writer (`satkit::oem`) |
 | `download` | yes | Data-file downloader (`update_datafiles`) via `ureq` |
 | `chrono` | no | `TimeLike` impl for `chrono::DateTime` |
 | `jiff` | no | `TimeLike` impl for `jiff::Timestamp` and `jiff::ZonedDateTime` |

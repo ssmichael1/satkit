@@ -1,6 +1,6 @@
 # Orbit Ephemeris Messages (OEM)
 
-API reference for the reader of CCSDS Orbit Ephemeris Messages: tables of position and velocity at a sequence of times, as exchanged between operators and agencies ([CCSDS 502.0-B-3](../guide/references.md#ccsds502)).
+API reference for the reader and writer of CCSDS Orbit Ephemeris Messages: tables of position and velocity at a sequence of times, as exchanged between operators and agencies ([CCSDS 502.0-B-3](../guide/references.md#ccsds502)).
 
 For a worked example, see the [Orbit Ephemeris Message](../tutorials/Orbit Ephemeris Message.ipynb) tutorial.
 
@@ -10,6 +10,7 @@ An OEM differs from the [OMM](tle.md) of the same standard: an OMM is one set of
 - Positions and velocities are converted from the file's kilometers to **meters and m/s**; covariances to m², m²/s and m²/s².
 - States stay in the frame the file names. `OEMSegment.frame` gives the matching `satkit.frame`, where there is one, for use with [`frametransform`](frametransform.md).
 - `interp` uses the method and degree the file recommends (Lagrange or Hermite), or the ones passed to it, and never interpolates across segments.
+- `OEM.from_propagation` samples the result of [`propagate`](satprop.md) into a message, and `to_text` and `to_file` write any message in the KVN encoding.
 
 ```python
 import satkit as sk
@@ -54,7 +55,25 @@ if seg.frame is not None and seg.center_name == "EARTH":
     )
 ```
 
-In Rust the reader is the [`satkit::oem`](https://docs.rs/satkit/latest/satkit/oem/) module, behind the `oem` Cargo feature (on by default).
+Writing one from a propagation:
+
+```python
+import numpy as np
+import satkit as sk
+
+t0 = sk.time(2024, 1, 1)
+r = 7.0e6
+state = np.array([r, 0, 0, 0, np.sqrt(sk.consts.mu_earth / r), 0])
+result = sk.propagate(state, t0, t0 + sk.duration(hours=2))
+
+# One state every 60 seconds, in the GCRF with UTC epochs
+oem = sk.OEM.from_propagation(result, 60, object_name="DEMOSAT", object_id="2024-001A")
+text = oem.to_text()  # or oem.to_file("demosat.oem")
+print(text.splitlines()[0])
+# CCSDS_OEM_VERS = 2.0
+```
+
+In Rust the reader and writer are the [`satkit::oem`](https://docs.rs/satkit/latest/satkit/oem/) module, behind the `oem` Cargo feature (on by default).
 
 ::: satkit.OEM
 

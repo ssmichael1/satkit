@@ -1,4 +1,4 @@
-"""CCSDS Orbit Ephemeris Message reader (``satkit.OEM``)."""
+"""CCSDS Orbit Ephemeris Message reader and writer (``satkit.OEM``)."""
 
 from __future__ import annotations
 
@@ -286,3 +286,111 @@ def test_parse_errors():
 def test_segments_outlive_the_message():
     seg = sk.OEM.from_text(kvn(n=3)).segments[0]
     assert seg.object_name == "CIRC" and seg.pos.shape == (3, 3)
+
+
+def test_to_text_round_trip():
+    oem = sk.OEM.from_text(kvn(n=5, meta="INTERPOLATION = LAGRANGE\nINTERPOLATION_DEGREE = 5", acc=True) + COV)
+    text = oem.to_text()
+    assert text.startswith("CCSDS_OEM_VERS = 2.0\nCOMMENT made by a test\n")
+    assert "\n2024-01-01T00:01:00.000000 " in text
+    back = sk.OEM.from_text(text)
+    assert back.to_text() == text
+    assert (back.comments, back.originator, back.creation_date) == (oem.comments, oem.originator, oem.creation_date)
+    a, b = oem.segments[0], back.segments[0]
+    for name in ("object_name", "object_id", "center_name", "ref_frame", "time_system", "start_time", "stop_time",
+                 "interpolation", "interpolation_degree", "metadata_comments", "comments", "time"):
+        assert getattr(a, name) == getattr(b, name), name
+    np.testing.assert_allclose(b.pos, a.pos, rtol=0, atol=1e-6)
+    np.testing.assert_allclose(b.vel, a.vel, rtol=0, atol=1e-9)
+    np.testing.assert_allclose(b.acc, a.acc, rtol=0, atol=1e-11)
+    assert len(b.covariances) == 1
+    assert b.covariances[0]["ref_frame"] == "RTN"
+    np.testing.assert_allclose(b.covariances[0]["cov"], a.covariances[0]["cov"], rtol=1e-13)
+
+
+def test_to_text_time_system():
+    text = sk.OEM.from_text(kvn(n=3, time_system="GPS")).to_text()
+    assert "TIME_SYSTEM = GPS\nSTART_TIME = 2024-01-01T00:00:00.000000\n" in text
+
+
+def test_to_file(tmp_path):
+    oem = sk.OEM.from_text(kvn(n=4))
+    path = tmp_path / "out.oem"
+    assert oem.to_file(path) is None
+    assert path.read_text() == oem.to_text()
+    assert len(sk.OEM.from_file(str(path)).segments[0]) == 4
+    with pytest.raises(OSError, match="nowhere"):
+        oem.to_file(tmp_path / "nowhere" / "out.oem")
+
+
+def _propagated(hours: float = 0.5, **settings):
+    state = circular(0.0)
+    return sk.propagate(
+        state, T0, T0 + sk.duration(hours=hours), propsettings=sk.propsettings(gravity_degree=4, **settings)
+    )
+
+
+def test_from_propagation():
+    res = _propagated()
+    oem = sk.OEM.from_propagation(res, 60, object_name="SAT", object_id="2024-001A")
+    assert oem.version == "2.0"
+    assert oem.originator == "SATKIT"
+    assert abs((oem.creation_date - sk.time.now()).seconds) < 60
+    assert len(oem) == 1
+    seg = oem.segments[0]
+    assert (seg.object_name, seg.object_id, seg.center_name) == ("SAT", "2024-001A", "EARTH")
+    assert seg.frame == sk.frame.GCRF
+    assert seg.time_scale == sk.timescale.UTC
+    assert (seg.interpolation, seg.interpolation_degree) == ("HERMITE", 7)
+    assert (seg.start_time, seg.stop_time) == (res.time_begin, res.time_end)
+    assert len(seg) == 31
+    # The ends are the propagation's own states
+    np.testing.assert_array_equal(np.concatenate([seg.pos[0], seg.vel[0]]), res.state_begin)
+    np.testing.assert_array_equal(np.concatenate([seg.pos[-1], seg.vel[-1]]), res.state_end)
+
+    # Written and read back, the table interpolates to the trajectory
+    back = sk.OEM.from_text(oem.to_text())
+    times = [T0 + sk.duration(seconds=s) for s in (17.0, 451.5, 1234.5, 1790.0)]
+    want = np.array([res.interp(t) for t in times])
+    got = back.interp(times)
+    np.testing.assert_allclose(got[:, :3], want[:, :3], rtol=0, atol=1e-3)
+    np.testing.assert_allclose(got[:, 3:], want[:, 3:], rtol=0, atol=1e-4)
+
+
+def test_from_propagation_step_and_originator():
+    res = _propagated()
+    offsets = lambda oem: [(t - T0).seconds for t in oem.segments[0].time]  # noqa: E731
+    kw = dict(object_name="S", object_id="I")
+    # The end is there even when the step does not divide the span
+    for step in (420, 420.0, sk.duration(minutes=7), datetime.timedelta(minutes=7)):
+        assert offsets(sk.OEM.from_propagation(res, step, **kw)) == [0, 420, 840, 1260, 1680, 1800]
+    assert offsets(sk.OEM.from_propagation(res, sk.duration(days=1), **kw)) == [0, 1800]
+    assert sk.OEM.from_propagation(res, 60, originator="ME", **kw).originator == "ME"
+
+    for bad in (0, -60, sk.duration(seconds=0)):
+        with pytest.raises(ValueError, match="step must be positive"):
+            sk.OEM.from_propagation(res, bad, **kw)
+    for bad in ("60", None, True):
+        with pytest.raises(TypeError, match="step must be"):
+            sk.OEM.from_propagation(res, bad, **kw)
+    with pytest.raises(TypeError):
+        sk.OEM.from_propagation(res, 60, "S", "I")  # names are keyword-only
+    with pytest.raises(TypeError):
+        sk.OEM.from_propagation(res, 60)
+
+
+def test_from_propagation_needs_dense_output():
+    res = _propagated(enable_interp=False)
+    assert not res.can_interp
+    with pytest.raises(ValueError):
+        sk.OEM.from_propagation(res, 60, object_name="S", object_id="I")
+
+
+def test_from_propagation_with_stm():
+    res = sk.propagate(
+        circular(0.0), T0, T0 + sk.duration(minutes=30), output_phi=True,
+        propsettings=sk.propsettings(gravity_degree=4),
+    )
+    seg = sk.OEM.from_propagation(res, 600, object_name="S", object_id="I").segments[0]
+    assert len(seg) == 4
+    np.testing.assert_array_equal(seg.pos[-1], res.state_end[:3])

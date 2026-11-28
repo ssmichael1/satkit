@@ -12,11 +12,16 @@
 //! own [`Metadata`], state vectors and optional covariance matrices.
 //! [`OEM::interp`] and [`Segment::interp`] interpolate the states.
 //!
+//! [`OEM::to_kvn_string`] and [`OEM::to_file`] write the KVN encoding.
+//! [`OEM::from_propagation`] builds a message from the trajectory of a
+//! [`propagate`](crate::orbitprop::propagate) call, and
+//! [`Segment::from_states`] with [`OEM::new`] from any list of states.
+//!
 //! # Units and time
 //!
 //! The file gives kilometers and km/s; this module converts to the SI units
 //! used in the rest of satkit: **meters, m/s and m/s²**, and covariances in
-//! m², m²/s and m²/s². Epochs are read in the segment's `TIME_SYSTEM` and
+//! m², m²/s and m²/s² (and back to kilometers on writing). Epochs are read in the segment's `TIME_SYSTEM` and
 //! held as [`Instant`]s, so they compare correctly across segments and with
 //! any other satkit time.
 //!
@@ -68,6 +73,7 @@
 mod error;
 mod interp;
 mod kvn;
+mod write;
 #[cfg(feature = "omm-xml")]
 mod xml;
 

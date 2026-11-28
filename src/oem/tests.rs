@@ -577,3 +577,298 @@ mod xml {
         assert!(matches!(OEM::from_text("<oem>"), Err(Error::Xml(_))));
     }
 }
+
+mod write {
+    use super::*;
+    use crate::orbitprop::{propagate, PropSettings, PropagationResult, SimpleState};
+
+    fn assert_close(a: &OEM, b: &OEM) {
+        assert_eq!(a.version, b.version);
+        assert_eq!(a.comments, b.comments);
+        assert_eq!(a.creation_date, b.creation_date);
+        assert_eq!(a.originator, b.originator);
+        assert_eq!(a.segments.len(), b.segments.len());
+        for (x, y) in a.segments.iter().zip(&b.segments) {
+            assert_eq!(x.metadata, y.metadata);
+            assert_eq!(x.comments, y.comments);
+            assert_eq!(x.states.len(), y.states.len());
+            for (s, t) in x.states.iter().zip(&y.states) {
+                assert_eq!(s.time, t.time);
+                assert_eq!(s.acc.is_some(), t.acc.is_some());
+                for k in 0..3 {
+                    assert!((s.pos[k] - t.pos[k]).abs() < 1e-6);
+                    assert!((s.vel[k] - t.vel[k]).abs() < 1e-9);
+                    if let (Some(p), Some(q)) = (&s.acc, &t.acc) {
+                        assert!((p[k] - q[k]).abs() < 1e-11);
+                    }
+                }
+            }
+            assert_eq!(x.covariances.len(), y.covariances.len());
+            for (c, d) in x.covariances.iter().zip(&y.covariances) {
+                assert_eq!(c.time, d.time);
+                assert_eq!(c.ref_frame, d.ref_frame);
+                assert_eq!(c.comments, d.comments);
+                for i in 0..6 {
+                    for j in 0..6 {
+                        let (p, q) = (c.matrix[(i, j)], d.matrix[(i, j)]);
+                        assert!((p - q).abs() <= 1e-13 * q.abs());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn kvn_round_trip() {
+        let oem = OEM::from_kvn_string(KVN).unwrap();
+        let text = oem.to_kvn_string().unwrap();
+        let back = OEM::from_text(&text).unwrap();
+        assert_close(&back, &oem);
+        // Writing what was read back changes nothing
+        assert_eq!(back.to_kvn_string().unwrap(), text);
+
+        assert!(text.starts_with("CCSDS_OEM_VERS = 2.0\nCOMMENT header comment\n"));
+        assert!(text.contains("CREATION_DATE = 1996-11-04T17:22:31.000000\n"));
+        assert!(text.contains("USEABLE_START_TIME = 1996-12-18T12:10:00.331000\n"));
+        assert!(text.contains("INTERPOLATION = HERMITE\nINTERPOLATION_DEGREE = 7\n"));
+        // Kilometers, and nine values where there is an acceleration
+        assert!(text.contains(
+            "\n1996-12-18T12:00:00.331000 2789.619000000 -280.045000000 -1746.755000000 \
+             4.733720000000 -2.495860000000 -1.041950000000\n"
+        ));
+        let acc_line = text
+            .lines()
+            .find(|l| l.starts_with("1996-12-28T21:29:07.267000"))
+            .unwrap();
+        assert_eq!(acc_line.split_whitespace().count(), 10);
+        assert_eq!(text.matches("COVARIANCE_START").count(), 1);
+        assert_eq!(text.matches("COV_REF_FRAME = RTN").count(), 1);
+    }
+
+    #[test]
+    fn epochs_are_written_in_the_time_system() {
+        let oem = OEM::from_kvn_string(&circular_kvn(60.0, 5, "", "GPS")).unwrap();
+        let text = oem.to_kvn_string().unwrap();
+        assert!(text.contains("TIME_SYSTEM = GPS\nSTART_TIME = 2024-01-01T00:00:00.000000\n"));
+        assert!(text.contains("\n2024-01-01T00:01:00.000000 "));
+        assert_close(&OEM::from_text(&text).unwrap(), &oem);
+    }
+
+    #[test]
+    fn file_round_trip() {
+        let oem = OEM::from_kvn_string(KVN).unwrap();
+        let path = std::env::temp_dir().join(format!("satkit_oem_{}.oem", std::process::id()));
+        oem.to_file(&path).unwrap();
+        let back = OEM::from_file(&path);
+        std::fs::remove_file(&path).unwrap();
+        assert_close(&back.unwrap(), &oem);
+    }
+
+    fn states(n: usize) -> Vec<State> {
+        let t0 = Instant::from_datetime(2024, 1, 1, 0, 0, 0.0).unwrap();
+        (0..n)
+            .map(|i| {
+                let t = i as f64 * 60.0;
+                let (p, v) = circular(t);
+                State {
+                    time: t0 + Duration::from_seconds(t),
+                    pos: numeris::vector![p[0], p[1], p[2]],
+                    vel: numeris::vector![v[0], v[1], v[2]],
+                    acc: None,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn built_from_states() {
+        let seg = Segment::from_states("CIRC", "2024-001A", "TEME", states(4)).unwrap();
+        let m = &seg.metadata;
+        assert_eq!(m.center_name, "EARTH");
+        assert_eq!(m.time_scale, TimeScale::UTC);
+        assert_eq!(m.frame(), Some(Frame::TEME));
+        assert_eq!(m.start_time, seg.states[0].time);
+        assert_eq!(m.stop_time, seg.states[3].time);
+        let oem = OEM::new("TEST", vec![seg]).unwrap();
+        assert_eq!(oem.version, "2.0");
+        let back = OEM::from_text(&oem.to_kvn_string().unwrap()).unwrap();
+        // The creation date is written to the microsecond it is held to
+        assert_close(&back, &oem);
+
+        assert!(matches!(
+            Segment::from_states("A", "B", "GCRF", Vec::new()),
+            Err(Error::Empty(_))
+        ));
+        let mut reversed = states(3);
+        reversed.reverse();
+        assert!(matches!(
+            Segment::from_states("A", "B", "GCRF", reversed),
+            Err(Error::EpochOrder(_))
+        ));
+        assert!(matches!(OEM::new("TEST", Vec::new()), Err(Error::Empty(_))));
+    }
+
+    #[test]
+    fn write_errors() {
+        let good = OEM::new(
+            "TEST",
+            vec![Segment::from_states("CIRC", "2024-001A", "GCRF", states(3)).unwrap()],
+        )
+        .unwrap();
+        assert!(good.to_kvn_string().is_ok());
+
+        let mut oem = good.clone();
+        oem.segments[0].metadata.object_name = "  ".to_string();
+        assert!(matches!(
+            oem.to_kvn_string(),
+            Err(Error::MissingField("OBJECT_NAME"))
+        ));
+
+        // The label and the scale the epochs are written in must agree
+        let mut oem = good.clone();
+        oem.segments[0].metadata.time_system = "TAI".to_string();
+        assert!(matches!(
+            oem.to_kvn_string(),
+            Err(Error::InvalidField {
+                field: "TIME_SYSTEM",
+                ..
+            })
+        ));
+        oem.segments[0].metadata.time_scale = TimeScale::TAI;
+        assert!(oem
+            .to_kvn_string()
+            .unwrap()
+            .contains("START_TIME = 2024-01-01T00:00:37.000000\n"));
+
+        let mut oem = good.clone();
+        oem.comments.push("two\nlines".to_string());
+        assert!(matches!(
+            oem.to_kvn_string(),
+            Err(Error::InvalidField {
+                field: "COMMENT",
+                ..
+            })
+        ));
+
+        let mut oem = good.clone();
+        oem.segments[0].states[1].vel[2] = f64::NAN;
+        assert!(matches!(
+            oem.to_kvn_string(),
+            Err(Error::InvalidField { .. })
+        ));
+
+        let mut oem = good.clone();
+        oem.segments[0].states.swap(0, 1);
+        assert!(matches!(oem.to_kvn_string(), Err(Error::EpochOrder(_))));
+
+        let mut oem = good;
+        oem.segments.clear();
+        assert!(matches!(oem.to_kvn_string(), Err(Error::Empty(_))));
+    }
+
+    fn propagated(minutes: f64, enable_interp: bool) -> PropagationResult<1> {
+        let start = Instant::from_datetime(2024, 1, 1, 0, 0, 0.0).unwrap();
+        let mut state = SimpleState::zeros();
+        state[0] = 7.0e6;
+        state[4] = (crate::consts::MU_EARTH / 7.0e6).sqrt() * 0.8;
+        state[5] = (crate::consts::MU_EARTH / 7.0e6).sqrt() * 0.6;
+        let settings = PropSettings {
+            gravity_degree: 4,
+            enable_interp,
+            ..Default::default()
+        };
+        let stop = start + Duration::from_minutes(minutes);
+        propagate(&state, &start, &stop, &settings, None).unwrap()
+    }
+
+    #[test]
+    fn from_propagation() {
+        let res = propagated(30.0, true);
+        let step = Duration::from_seconds(60.0);
+        let oem = OEM::from_propagation(&res, step, "SAT", "2024-001A", "TEST").unwrap();
+        assert_eq!(oem.originator, "TEST");
+        assert_eq!(oem.segments.len(), 1);
+        let seg = &oem.segments[0];
+        let m = &seg.metadata;
+        assert_eq!(
+            (m.object_name.as_str(), m.object_id.as_str()),
+            ("SAT", "2024-001A")
+        );
+        assert_eq!(m.frame(), Some(Frame::GCRF));
+        assert_eq!(m.time_scale, TimeScale::UTC);
+        assert_eq!((m.start_time, m.stop_time), (res.time_begin, res.time_end));
+        assert_eq!(seg.interpolation().unwrap(), (Interpolation::Hermite, 7));
+        assert_eq!(seg.states.len(), 31);
+        // The ends are the propagation's own states
+        let last = &seg.states[30];
+        for k in 0..3 {
+            assert!((seg.states[0].pos[k] - res.state_begin[k]).abs() < 1e-6);
+            assert!((last.pos[k] - res.state_end[k]).abs() < 1e-6);
+            assert!((last.vel[k] - res.state_end[k + 3]).abs() < 1e-9);
+        }
+
+        // Read back from text, the table interpolates to the trajectory
+        let back = OEM::from_text(&oem.to_kvn_string().unwrap()).unwrap();
+        for secs in [17.0, 451.5, 1234.5, 1790.0] {
+            let t = res.time_begin + Duration::from_seconds(secs);
+            let want = res.interp(&t).unwrap();
+            let (pos, vel) = back.interp(&t).unwrap();
+            for k in 0..3 {
+                assert!((pos[k] - want[k]).abs() < 1e-3, "pos {secs}");
+                assert!((vel[k] - want[k + 3]).abs() < 1e-4, "vel {secs}");
+            }
+        }
+    }
+
+    #[test]
+    fn from_propagation_sampling() {
+        let res = propagated(30.0, true);
+        let offsets = |oem: &OEM| -> Vec<f64> {
+            oem.segments[0]
+                .states
+                .iter()
+                .map(|s| (s.time - res.time_begin).as_seconds())
+                .collect()
+        };
+        // A step that does not divide the span: the end is still there
+        let step = Duration::from_minutes(7.0);
+        let oem = OEM::from_propagation(&res, step, "S", "I", "O").unwrap();
+        assert_eq!(offsets(&oem), [0.0, 420.0, 840.0, 1260.0, 1680.0, 1800.0]);
+        // A step longer than the span: the two ends
+        let oem = OEM::from_propagation(&res, Duration::from_days(1.0), "S", "I", "O").unwrap();
+        assert_eq!(offsets(&oem), [0.0, 1800.0]);
+
+        for step in [Duration::from_seconds(0.0), Duration::from_seconds(-60.0)] {
+            assert!(matches!(
+                OEM::from_propagation(&res, step, "S", "I", "O"),
+                Err(Error::InvalidStep)
+            ));
+        }
+        // No dense output, nothing to sample
+        let step = Duration::from_seconds(60.0);
+        assert!(matches!(
+            OEM::from_propagation(&propagated(30.0, false), step, "S", "I", "O"),
+            Err(Error::Propagation(_))
+        ));
+        // A zero-duration propagation is its one state
+        let oem = OEM::from_propagation(&propagated(0.0, true), step, "S", "I", "O").unwrap();
+        assert_eq!(oem.segments[0].states.len(), 1);
+    }
+
+    #[test]
+    fn from_backward_propagation() {
+        let res = propagated(-30.0, true);
+        assert!(res.time_end < res.time_begin);
+        let step = Duration::from_minutes(7.0);
+        let oem = OEM::from_propagation(&res, step, "S", "I", "O").unwrap();
+        let seg = &oem.segments[0];
+        assert_eq!(seg.states.len(), 6);
+        assert_eq!(seg.metadata.start_time, res.time_end);
+        assert_eq!(seg.metadata.stop_time, res.time_begin);
+        let (first, last) = (&seg.states[0], &seg.states[5]);
+        for k in 0..3 {
+            assert!((first.pos[k] - res.state_end[k]).abs() < 1e-6);
+            assert!((last.pos[k] - res.state_begin[k]).abs() < 1e-6);
+        }
+    }
+}

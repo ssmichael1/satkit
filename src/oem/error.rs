@@ -4,7 +4,8 @@ use thiserror::Error;
 
 use crate::Instant;
 
-/// Errors that can occur while parsing or interpolating an OEM.
+/// Errors that can occur while parsing, interpolating, building or writing
+/// an OEM.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -56,6 +57,15 @@ pub enum Error {
         start: Instant,
         stop: Instant,
     },
+
+    /// The sampling step of [`OEM::from_propagation`](super::OEM::from_propagation)
+    /// is zero or negative.
+    #[error("OEM sampling step must be positive")]
+    InvalidStep,
+
+    /// The propagation an OEM was to be built from cannot be interpolated.
+    #[error(transparent)]
+    Propagation(#[from] crate::orbitprop::Error),
 
     /// The text starts with neither `CCSDS_OEM_VERS` (KVN) nor an XML tag.
     #[error("Input is neither OEM KVN (starts with CCSDS_OEM_VERS) nor XML (starts with '<')")]
